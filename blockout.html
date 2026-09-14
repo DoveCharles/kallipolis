@@ -6744,6 +6744,35 @@
       .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += walkDelta*instanceWalk;');
     if (withNormals) shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = normalize(objectNormal + walkNormalDelta*instanceWalk);');
   }
+  // Smooth vertex normals for an indexed mesh whose vertices are split per face: vertices in the same place are grouped
+  // (or grouped as `groups` says, to reuse another pose's grouping), and each group gets the area-weighted average of the
+  // normals of every face touching it. Returns { normals, groups }.
+  function smoothVertexNormals(count, index, positionAt, groups) {
+    if (!groups) {
+      const ids = new Map();
+      groups = new Int32Array(count);
+      for (let i=0;i<count;i++) {
+        const [x, y, z] = positionAt(i), key = Math.round(x*1e4) + ',' + Math.round(y*1e4) + ',' + Math.round(z*1e4);
+        if (!ids.has(key)) ids.set(key, ids.size);
+        groups[i] = ids.get(key);
+      }
+    }
+    const sums = new Float32Array(count*3);
+    const corners = index ? index.count : count;
+    for (let t=0;t+2<corners;t+=3) {
+      const a = index ? index.getX(t) : t, b = index ? index.getX(t+1) : t+1, c = index ? index.getX(t+2) : t+2;
+      const pa = positionAt(a), pb = positionAt(b), pc = positionAt(c);
+      const ux = pb[0]-pa[0], uy = pb[1]-pa[1], uz = pb[2]-pa[2], vx = pc[0]-pa[0], vy = pc[1]-pa[1], vz = pc[2]-pa[2];
+      const nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx; // length is twice the face's area, so bigger faces count more
+      [a, b, c].forEach(v => { const g = groups[v]*3; sums[g] += nx; sums[g+1] += ny; sums[g+2] += nz; });
+    }
+    const normals = new Float32Array(count*3);
+    for (let i=0;i<count;i++) {
+      const g = groups[i]*3, len = Math.hypot(sums[g], sums[g+1], sums[g+2]) || 1;
+      normals[i*3] = sums[g]/len; normals[i*3+1] = sums[g+1]/len; normals[i*3+2] = sums[g+2]/len;
+    }
+    return { normals, groups };
+  }
   function loadPersonModel() {
     if (!THREE.GLTFLoader) return;
     const bytes = Uint8Array.from(atob(MAN_GLB_BASE64), c => c.charCodeAt(0));
@@ -6767,8 +6796,15 @@
         ['position', 'normal', 'uv'].forEach(name => { if (src.attributes[name]) geo.setAttribute(name, src.attributes[name]); });
         geo.setIndex(src.index);
         const morph = src.morphAttributes || {}, none = () => new THREE.Float32BufferAttribute(new Float32Array(count*3), 3);
-        geo.setAttribute('walkDelta', morph.position && morph.position[0] ? morph.position[0] : none());
-        geo.setAttribute('walkNormalDelta', morph.normal && morph.normal[0] ? morph.normal[0] : none());
+        const walkDelta = morph.position && morph.position[0] ? morph.position[0] : none();
+        geo.setAttribute('walkDelta', walkDelta);
+        // smooth shading: the model's normals are per face, so they're replaced with normals averaged over every face meeting
+        // at each point — worked out for the standing pose and for the full stride, so the walk stays smooth-shaded too
+        const pos = src.attributes.position;
+        const standing = smoothVertexNormals(count, src.index, i => [pos.getX(i), pos.getY(i), pos.getZ(i)], null);
+        const striding = smoothVertexNormals(count, src.index, i => [pos.getX(i) + walkDelta.getX(i), pos.getY(i) + walkDelta.getY(i), pos.getZ(i) + walkDelta.getZ(i)], standing.groups);
+        geo.setAttribute('normal', new THREE.Float32BufferAttribute(standing.normals, 3));
+        geo.setAttribute('walkNormalDelta', new THREE.Float32BufferAttribute(striding.normals.map((n, k) => n - standing.normals[k]), 3));
         geo.setAttribute('instanceWalk', walk);
         const mat = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.DoubleSide });
         mat.onBeforeCompile = shader => injectWalk(shader, true);
