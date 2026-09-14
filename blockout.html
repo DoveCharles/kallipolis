@@ -279,6 +279,15 @@
     <div id="world-tint-panel"></div>
     <div class="slider-row"><div class="row"><label>Grass noise strength</label><span class="val" id="dv-grassnoise">0.20</span></div>
       <input type="range" id="s-grassnoise" min="0" max="2.5" step="0.05" value="0.2"></div>
+    <div class="row" style="margin-top:11px;"><label>People</label><button class="toggle-switch" id="s-people"><span class="knob"></span></button></div>
+    <div id="people-settings" style="display:none;">
+      <div class="slider-row" style="margin-top:11px;"><div class="row"><label>Amount</label><span class="val" id="dv-peopleamount">300</span></div>
+        <input type="range" id="s-peopleamount" min="10" max="2000" step="10" value="300"></div>
+      <div class="slider-row"><div class="row"><label>Speed</label><span class="val" id="dv-peoplespeed">1.0</span></div>
+        <input type="range" id="s-peoplespeed" min="0.1" max="4" step="0.1" value="1"></div>
+      <div class="slider-row"><div class="row"><label>Size</label><span class="val" id="dv-peoplesize">1.0</span></div>
+        <input type="range" id="s-peoplesize" min="0.3" max="4" step="0.1" value="1"></div>
+    </div>
     <button class="btn" id="btn-save-project" style="margin-top:11px;">Save project</button>
     <button class="btn" id="btn-load-project">Load project</button>
     <input type="file" id="project-file-input" accept=".json,application/json" style="display:none;">
@@ -1564,6 +1573,7 @@
   let roadBridgeSources = [], pathBridgeSources = [];
   let roadBuildSeq = 0;  // bumped on every road rebuild, so rebuildWater knows its bridges are out of date
   let waterDirty = true; // set by anything that can change the water or what crosses it; animate() rebuilds it once per frame
+  let peopleNavDirty = true; // set whenever roads or zones change — see "people"
 
   // Half road width, curb width and sidewalk width for one line.
   function roadLineWidths(line) {
@@ -1959,6 +1969,7 @@
     landCutFootprint = riverFootprint.length ? clipPolygons(ctUnion, roadFootprint, riverFootprint) : roadFootprint;
     roadBuildSeq++;
     waterDirty = true;
+    peopleNavDirty = true;
     scene.add(roadMeshGroup);
     rebuildTrainMeshes();
     rebuildRoadMarkers();
@@ -3831,6 +3842,7 @@
         zone.buildingsGroup.add(buildFountain(best.p, r));
       }
     }
+    zone.fountainSpot = fountain; // so people hanging out here keep out of the pool (see "people")
     const clearOfFountain = (x, z, gap) => !fountain || Math.hypot(x-fountain.x, z-fountain.z) > fountain.r + gap;
     // lamp posts every PLAZA_LAMP_SPACING around the edge, with a bench facing inward halfway between each pair
     const furniture = createMeshBuilder(), lampHeads = createMeshBuilder();
@@ -4595,6 +4607,7 @@
     if (zone.buildingsGroup) { scene.remove(zone.buildingsGroup); disposeObject(zone.buildingsGroup); }
     zone.buildingsGroup = new THREE.Group();
     waterDirty = true; // any zone can cut into water, border it, or cross it
+    peopleNavDirty = true;
 
     if (zone.points.length>=3) {
       const poly = tessellateClosedPath(zone.points);
@@ -5970,6 +5983,10 @@
     document.getElementById('dv-grassnoise').textContent = globalGrassNoiseStrength.toFixed(2);
     zones.forEach(subdivideZone);
   });
+  document.getElementById('s-people').addEventListener('click', () => { peopleEnabled = !peopleEnabled; syncPeopleUI(); });
+  document.getElementById('s-peopleamount').addEventListener('input', (e) => { peopleAmount = parseFloat(e.target.value); syncPeopleUI(); });
+  document.getElementById('s-peoplespeed').addEventListener('input', (e) => { peopleSpeed = parseFloat(e.target.value); syncPeopleUI(); });
+  document.getElementById('s-peoplesize').addEventListener('input', (e) => { peopleSize = parseFloat(e.target.value); syncPeopleUI(); });
   document.getElementById('s-groundcolor').addEventListener('input', (e) => {
     groundMat.color.set(e.target.value);
   });
@@ -6491,7 +6508,8 @@
         treeTintPalette: TREE_TINT_COLORS.map(c => colorToHex(c)),
         globalParkTint: colorToHex(globalParkTint, PARK_TINT_COLORS[0]),
         globalTreeTint: colorToHex(globalTreeTint, TREE_TINT_COLORS[0]),
-        globalGrassNoiseStrength
+        globalGrassNoiseStrength,
+        people: { enabled: peopleEnabled, amount: peopleAmount, speed: peopleSpeed, size: peopleSize }
       },
       roads: {
         nodeSeq: roadNodeSeq, lineSeq: roadLineSeq, networkSeq: roadNetworkSeq,
@@ -6615,6 +6633,13 @@
     document.getElementById('s-grassnoise').value = globalGrassNoiseStrength;
     document.getElementById('dv-grassnoise').textContent = globalGrassNoiseStrength.toFixed(2);
     renderWorldTintPanel();
+    if (sc.people) {
+      peopleEnabled = !!sc.people.enabled;
+      if (sc.people.amount != null) peopleAmount = sc.people.amount;
+      if (sc.people.speed != null) peopleSpeed = sc.people.speed;
+      if (sc.people.size != null) peopleSize = sc.people.size;
+      syncPeopleUI();
+    }
 
     const rd = data.roads || {};
     const withY = (out, src) => src.y!=null ? { ...out, y:src.y } : out; // only train nodes and handles have a height
@@ -6678,6 +6703,311 @@
     if (file) loadProject(file);
     e.target.value = '';
   });
+
+  // ============================================================ people
+  // Lil people: tiny cuboids in random colors, all drawn as one instanced mesh. Most walk the walkways — the sidewalks either
+  // side of sidewalk roads, and paths — carrying on through junctions or turning off, and turning back at dead ends. They
+  // gather in plazas and parks: someone walking past one sometimes wanders in, drifts from spot to spot (often over to
+  // someone already there), stands around for a while, and eventually heads back out to the nearest walkway. The walkways
+  // are worked out again whenever the roads or zones change, and anyone whose walkway moved is set back on the nearest one.
+  const PEOPLE_MAX = 2000;
+  const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
+  const PEOPLE_NAV_SPACING = 4;    // walkways are resampled to a point at least this often, for entrances and re-seating
+  let peopleEnabled = false, peopleAmount = 300, peopleSpeed = 1, peopleSize = 1;
+  let peopleNav = null, peopleNavBuiltAt = -Infinity, lastPeopleTime = null;
+  const people = [];
+  const peopleRng = mulberry32(90210);
+  const peopleMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ roughness: 0.8 }), PEOPLE_MAX);
+  peopleMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  {
+    const color = new THREE.Color();
+    for (let i=0;i<PEOPLE_MAX;i++) peopleMesh.setColorAt(i, color.setHSL(peopleRng(), 0.45 + peopleRng()*0.4, 0.42 + peopleRng()*0.25));
+  }
+  peopleMesh.count = 0;
+  peopleMesh.frustumCulled = false;
+  peopleMesh.castShadow = true; peopleMesh.receiveShadow = true;
+  peopleMesh.visible = false;
+  peopleMesh.name = 'People';
+  scene.add(peopleMesh);
+
+  function syncPeopleUI() {
+    document.getElementById('s-people').classList.toggle('on', peopleEnabled);
+    document.getElementById('people-settings').style.display = peopleEnabled ? 'block' : 'none';
+    document.getElementById('s-peopleamount').value = peopleAmount;
+    document.getElementById('dv-peopleamount').textContent = Math.round(peopleAmount);
+    document.getElementById('s-peoplespeed').value = peopleSpeed;
+    document.getElementById('dv-peoplespeed').textContent = peopleSpeed.toFixed(1);
+    document.getElementById('s-peoplesize').value = peopleSize;
+    document.getElementById('dv-peoplesize').textContent = peopleSize.toFixed(1);
+  }
+
+  // The walkways ({ pts, cum, lateral, jitter, y… } per road or path line, with each point's junction links and park or
+  // plaza entrance) and the hangouts ({ inside, bounds, y, exits } per plaza and park).
+  function buildPeopleNav() {
+    const areas = [], lines = [];
+    zones.forEach(zone => {
+      if (zone.drawing || zone.points.length < 3 || (zone.zoneType !== 'plaza' && zone.zoneType !== 'park')) return;
+      const poly = tessellateClosedPath(zone.points);
+      const paths = offsetPaths(clipPolygons(ClipperLib.ClipType.ctDifference, [toClipperPath(poly)], zoneCutoutsNear(zone, poly)), -1.2, ClipperLib.JoinType.jtMiter);
+      const size = pathsArea(paths);
+      if (size < 20) return;
+      let minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
+      paths.forEach(path => path.forEach(p => { minX=Math.min(minX,p.X); maxX=Math.max(maxX,p.X); minZ=Math.min(minZ,p.Y); maxZ=Math.max(maxZ,p.Y); }));
+      const inArea = createRegionTester(paths), fountain = zone.zoneType==='plaza' ? zone.fountainSpot : null;
+      const inside = fountain ? (x, z) => inArea(x, z) && Math.hypot(x - fountain.x, z - fountain.z) > fountain.r + 0.8 : inArea;
+      areas.push({ inside, fountain, minX: minX/CLIPPER_SCALE, maxX: maxX/CLIPPER_SCALE, minZ: minZ/CLIPPER_SCALE, maxZ: maxZ/CLIPPER_SCALE,
+        size, y: zone.zoneType==='plaza' ? Y_PLAZA : Y_PARK, exits: [] });
+    });
+    const inWater = createRegionTester(getWaterRegion());
+    roadLines.forEach(line => {
+      if (isTrainLine(line) || isRiverLine(line)) return;
+      const nodes = tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean));
+      if (nodes.length < 2) return;
+      const pts = [nodes[0]];
+      for (let i=1;i<nodes.length;i++) {
+        const a = nodes[i-1], b = nodes[i], steps = Math.max(1, Math.ceil(Math.hypot(b.x-a.x, b.z-a.z)/PEOPLE_NAV_SPACING));
+        for (let k=1;k<=steps;k++) pts.push(k === steps ? b : { x: a.x + (b.x-a.x)*k/steps, z: a.z + (b.z-a.z)*k/steps });
+      }
+      const cum = [0];
+      for (let i=1;i<pts.length;i++) cum.push(cum[i-1] + Math.hypot(pts[i].x-pts[i-1].x, pts[i].z-pts[i-1].z));
+      if (cum[cum.length-1] < 1) return;
+      const path = isPathLine(line), { hw, cw, sw } = roadLineWidths(line);
+      lines.push({ pts, cum, total: cum[cum.length-1], path,
+        y: path ? Y_PATH : (cw + sw > 0 ? Y_SIDEWALK : Y_ROAD),
+        lateral: path ? hw*0.55 : hw + cw + sw*0.5, jitter: path ? 0 : Math.min(sw*0.3, 0.8),
+        overWater: path ? pts.map(p => inWater(p.x, p.z)) : null,
+        vertices: pts.map(() => ({ links: [], entrances: [] })) });
+    });
+    // junctions: points of different lines in the same place
+    const byPlace = new Map();
+    lines.forEach((nav, li) => nav.pts.forEach((p, vi) => {
+      const key = Math.round(p.x*2) + ',' + Math.round(p.z*2);
+      if (!byPlace.has(key)) byPlace.set(key, []);
+      byPlace.get(key).push({ li, vi });
+    }));
+    byPlace.forEach(list => { if (list.length > 1) list.forEach(a => { lines[a.li].vertices[a.vi].links = list.filter(b => b.li !== a.li); }); });
+    // entrances: points beside (or, for a path, in) a plaza or park; and a grid of every point, for finding the nearest
+    const grid = new Map(), CELL = 16;
+    lines.forEach((nav, li) => nav.pts.forEach((p, vi) => {
+      const key = Math.floor(p.x/CELL) + ',' + Math.floor(p.z/CELL);
+      if (!grid.has(key)) grid.set(key, []);
+      grid.get(key).push({ li, vi });
+      if (!areas.length) return;
+      const a = nav.pts[Math.max(0, vi-1)], b = nav.pts[Math.min(nav.pts.length-1, vi+1)], len = Math.hypot(b.x-a.x, b.z-a.z) || 1;
+      // look straight out from the walkway on each side (side is the sign of a walker's lateral offset), a few steps further
+      // each time — a zone's edge can sit well back from the sidewalk — and, for a path, at the path itself (running through a
+      // park). A road between a park and a plaza gets an entrance to each, one per side.
+      const nx = -(b.z-a.z)/len, nz = (b.x-a.x)/len, edge = nav.lateral + nav.jitter;
+      const areaAt = (x, z) => areas.findIndex(ar => x >= ar.minX && x <= ar.maxX && z >= ar.minZ && z <= ar.maxZ && ar.inside(x, z));
+      const entrances = nav.vertices[vi].entrances;
+      [1, -1].forEach(side => {
+        const offsets = (nav.path ? [0] : []).concat([2, 5, 9, 14].map(extra => side*(edge + extra)));
+        for (const off of offsets) {
+          const x = p.x + nx*off, z = p.z + nz*off, area = areaAt(x, z);
+          if (area >= 0) { entrances.push({ area, side, x, z }); if (!areas[area].exits.some(e => e.li === li && e.vi === vi)) areas[area].exits.push({ li, vi }); break; }
+        }
+      });
+    }));
+    return { areas, lines, grid, CELL };
+  }
+
+  function newPerson() {
+    return { x:0, y:0, z:0, heading: peopleRng()*Math.PI*2, stride: 0.8 + peopleRng()*0.4, height: 0.85 + peopleRng()*0.27, phase: peopleRng()*10,
+      mode: 'none', li: 0, u: 0, dir: 1, seg: 0, lat: 0, area: -1, tx: 0, tz: 0, wait: 0, exit: null, moving: false };
+  }
+  function pickWeighted(items, weightOf) {
+    const total = items.reduce((sum, item) => sum + weightOf(item), 0);
+    let r = peopleRng()*total;
+    for (let i=0;i<items.length;i++) { r -= weightOf(items[i]); if (r <= 0) return i; }
+    return items.length - 1;
+  }
+  // a random spot inside a hangout — near `near` if one can be found there
+  function randomSpotIn(area, near) {
+    for (let k=0;k<24;k++) {
+      const x = near && k < 12 ? near.x + (peopleRng()-0.5)*24 : area.minX + peopleRng()*(area.maxX-area.minX);
+      const z = near && k < 12 ? near.z + (peopleRng()-0.5)*24 : area.minZ + peopleRng()*(area.maxZ-area.minZ);
+      if (area.inside(x, z)) return { x, z };
+    }
+    return near ? { x: near.x, z: near.z } : { x: (area.minX+area.maxX)/2, z: (area.minZ+area.maxZ)/2 };
+  }
+  // puts a person on walkway `li` at distance u along it, heading `dir`, on a random side
+  function joinWalkway(p, li, u, dir) {
+    const nav = peopleNav.lines[li];
+    p.mode = 'line'; p.li = li; p.dir = dir; p.u = Math.max(0, Math.min(nav.total, u));
+    p.seg = 0;
+    while (p.seg < nav.pts.length-2 && nav.cum[p.seg+1] <= p.u) p.seg++;
+    p.lat = nav.path ? (peopleRng()-0.5)*2*nav.lateral : (peopleRng() < 0.5 ? -1 : 1)*(nav.lateral + (peopleRng()-0.5)*2*nav.jitter);
+  }
+  function wanderInto(p, areaIndex, near) {
+    const spot = randomSpotIn(peopleNav.areas[areaIndex], near);
+    p.mode = 'wander'; p.area = areaIndex; p.tx = spot.x; p.tz = spot.z; p.wait = 0;
+  }
+  function spawnPerson(p) {
+    const { areas, lines } = peopleNav;
+    if (areas.length && (!lines.length || peopleRng() < 0.45)) {
+      const ai = pickWeighted(areas, a => a.size), spot = randomSpotIn(areas[ai]);
+      p.x = spot.x; p.z = spot.z; p.y = areas[ai].y;
+      wanderInto(p, ai, spot);
+      p.wait = peopleRng()*6;
+    } else if (lines.length) {
+      const li = pickWeighted(lines, l => l.total);
+      joinWalkway(p, li, peopleRng()*lines[li].total, peopleRng() < 0.5 ? -1 : 1);
+      const at = walkwayPoint(p);
+      p.x = at.x; p.y = at.y; p.z = at.z;
+    } else {
+      p.mode = 'none';
+    }
+  }
+  // after the walkways are rebuilt: back into the hangout they're standing in, else onto the nearest walkway, else anywhere
+  function reseatPerson(p) {
+    const { areas, lines, grid, CELL } = peopleNav;
+    if (p.mode === 'wander' || p.mode === 'leaving') {
+      const ai = areas.findIndex(a => p.x >= a.minX && p.x <= a.maxX && p.z >= a.minZ && p.z <= a.maxZ && a.inside(p.x, p.z));
+      if (ai >= 0) { wanderInto(p, ai, p); return; }
+    }
+    if (p.mode !== 'none') {
+      let best = null;
+      const cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
+      for (let ox=-2;ox<=2;ox++) for (let oz=-2;oz<=2;oz++) (grid.get((cx+ox) + ',' + (cz+oz)) || []).forEach(({ li, vi }) => {
+        const q = lines[li].pts[vi], d = Math.hypot(q.x-p.x, q.z-p.z);
+        if (!best || d < best.d) best = { li, vi, d };
+      });
+      if (best) { joinWalkway(p, best.li, lines[best.li].cum[best.vi], p.dir || 1); return; }
+    }
+    spawnPerson(p);
+  }
+  // where a person on a walkway should be: the walkway's point at their distance along it, set off to their side
+  function walkwayPoint(p) {
+    const nav = peopleNav.lines[p.li];
+    const i = Math.max(0, Math.min(nav.pts.length-2, p.seg));
+    const a = nav.pts[i], b = nav.pts[i+1], segLen = (nav.cum[i+1] - nav.cum[i]) || 1;
+    const t = Math.max(0, Math.min(1, (p.u - nav.cum[i])/segLen));
+    const dx = (b.x-a.x)/segLen, dz = (b.z-a.z)/segLen;
+    const y = nav.path && nav.overWater[i] && nav.overWater[i+1] ? FOOTBRIDGE_TOP : nav.y;
+    return { x: a.x + (b.x-a.x)*t - dz*p.lat, y, z: a.z + (b.z-a.z)*t + dx*p.lat };
+  }
+  // moves a person `dist` along their walkway, dealing with each point they pass: maybe wandering into a hangout, maybe
+  // turning off at a junction, and turning back at a dead end
+  function walkAlong(p, dist) {
+    let nav = peopleNav.lines[p.li];
+    let u = p.u + p.dir*dist;
+    for (let guard=0; guard<64; guard++) {
+      const ahead = p.dir > 0 ? p.seg + 1 : p.seg;
+      const at = nav.cum[ahead];
+      if (p.dir > 0 ? u < at : u > at) break;
+      const vertex = nav.vertices[ahead], isEnd = ahead === 0 || ahead === nav.pts.length-1;
+      // someone on a sidewalk only turns in on their own side of the road; on a path, either side will do
+      const entrance = vertex.entrances.length ? vertex.entrances.find(e => e.side === Math.sign(p.lat)) || (nav.path ? vertex.entrances[0] : null) : null;
+      if (entrance && peopleRng() < 0.12) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
+      if (vertex.links.length && peopleRng() < (isEnd ? 0.85 : 0.3)) {
+        const link = vertex.links[Math.floor(peopleRng()*vertex.links.length)];
+        const other = peopleNav.lines[link.li], remaining = Math.abs(u - at);
+        const dir = link.vi === 0 ? 1 : link.vi === other.pts.length-1 ? -1 : (peopleRng() < 0.5 ? 1 : -1);
+        joinWalkway(p, link.li, other.cum[link.vi], dir);
+        p.seg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
+        nav = other;
+        u = p.u + dir*remaining;
+        continue;
+      }
+      if (isEnd) { p.dir = -p.dir; u = 2*at - u; continue; }
+      p.seg += p.dir;
+    }
+    p.u = Math.max(0, Math.min(nav.total, u));
+  }
+  function updatePeople(t) {
+    const dt = lastPeopleTime == null ? 0 : Math.min(0.1, Math.max(0, t - lastPeopleTime));
+    lastPeopleTime = t;
+    peopleMesh.visible = peopleEnabled;
+    if (!peopleEnabled) return;
+    if (!peopleNav || (peopleNavDirty && t - peopleNavBuiltAt > 0.25)) {
+      peopleNavDirty = false;
+      peopleNavBuiltAt = t;
+      peopleNav = buildPeopleNav();
+      people.forEach(reseatPerson);
+    }
+    const wanted = Math.min(PEOPLE_MAX, Math.round(peopleAmount));
+    while (people.length < wanted) { const p = newPerson(); spawnPerson(p); people.push(p); }
+    if (people.length > wanted) people.length = wanted;
+    peopleMesh.count = people.length;
+    const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    people.forEach((p, i) => {
+      if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
+      const speed = PERSON_WALK_SPEED*peopleSpeed*p.stride;
+      let goal = null;
+      if (p.mode === 'line') {
+        walkAlong(p, speed*dt);
+        if (p.mode === 'line') goal = walkwayPoint(p);
+      }
+      if (p.mode === 'wander') {
+        const area = peopleNav.areas[p.area];
+        if (p.wait > 0) {
+          p.wait -= dt;
+        } else if (Math.hypot(p.tx - p.x, p.tz - p.z) < 0.3) {
+          p.wait = 1 + peopleRng()*7;
+          const roll = peopleRng();
+          if (area.exits.length && roll < 0.22) {
+            // head for the nearest of a few of the hangout's entrances
+            let exit = null;
+            for (let k=0;k<6;k++) {
+              const e = area.exits[Math.floor(peopleRng()*area.exits.length)], q = peopleNav.lines[e.li].pts[e.vi], d = Math.hypot(q.x-p.x, q.z-p.z);
+              if (!exit || d < exit.d) exit = { ...e, d };
+            }
+            // they'll join that walkway where it passes the entrance, so that's where they walk to
+            joinWalkway(p, exit.li, peopleNav.lines[exit.li].cum[exit.vi], peopleRng() < 0.5 ? -1 : 1);
+            p.exit = walkwayPoint(p);
+            p.mode = 'leaving'; p.wait = 0;
+          } else if (roll < 0.6) {
+            // over to someone else hanging out here
+            let friend = null;
+            for (let k=0;k<8 && !friend;k++) { const q = people[Math.floor(peopleRng()*people.length)]; if (q !== p && q.mode === 'wander' && q.area === p.area) friend = q; }
+            const spot = friend ? { x: friend.tx + (peopleRng()-0.5)*3, z: friend.tz + (peopleRng()-0.5)*3 } : null;
+            if (spot && area.inside(spot.x, spot.z)) { p.tx = spot.x; p.tz = spot.z; } else { const s = randomSpotIn(area, p); p.tx = s.x; p.tz = s.z; }
+          } else {
+            const s = randomSpotIn(area); p.tx = s.x; p.tz = s.z;
+          }
+        }
+        if (p.mode === 'wander') goal = { x: p.tx, y: area.y, z: p.tz };
+      }
+      if (p.mode === 'leaving') {
+        // already placed on their walkway by joinWalkway; once they've reached it they carry on along it
+        goal = p.exit;
+        if (Math.hypot(p.exit.x - p.x, p.exit.z - p.z) < 0.5) p.mode = 'line';
+      }
+      // in a plaza, walk around its fountain rather than through the pool: while the straight line to where they're going
+      // passes over it, head instead for the point on its rim nearest that line — which moves round as they do
+      const hangout = (p.mode === 'wander' || p.mode === 'leaving') && p.area >= 0 ? peopleNav.areas[p.area] : null;
+      if (goal && hangout && hangout.fountain) {
+        const f = hangout.fountain, clearance = f.r + 1.2;
+        const c = closestPointOnSegment(f, p, goal);
+        let dx = c.x - f.x, dz = c.z - f.z;
+        const d = Math.hypot(dx, dz);
+        if (d < clearance) {
+          if (d < 1e-3) { dx = -(goal.z - p.z); dz = goal.x - p.x; }
+          const len = Math.hypot(dx, dz) || 1;
+          goal = { x: f.x + dx/len*(clearance + 0.3), y: goal.y, z: f.z + dz/len*(clearance + 0.3) };
+        }
+      }
+      // walk towards where they should be — faster if they've fallen behind (cutting across at a junction, say)
+      p.moving = false;
+      if (goal) {
+        const dx = goal.x - p.x, dz = goal.z - p.z, d = Math.hypot(dx, dz);
+        const step = speed*dt*(p.mode === 'line' ? 1 + Math.min(2, d*0.5) : 1);
+        if (d > 1e-4) {
+          const k = Math.min(1, step/d);
+          p.x += dx*k; p.z += dz*k;
+          if (d > 0.05) { p.heading += Math.atan2(Math.sin(Math.atan2(dx, dz) - p.heading), Math.cos(Math.atan2(dx, dz) - p.heading))*Math.min(1, dt*8); p.moving = true; }
+        }
+        p.y += (goal.y - p.y)*Math.min(1, dt*6);
+      }
+      if (p.moving) p.phase += dt*speed*5;
+      const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*peopleSize : 0;
+      rotation.setFromAxisAngle(up, p.heading);
+      if (p.mode === 'none') scale.set(0, 0, 0); else scale.set(0.5*peopleSize, 1.7*p.height*peopleSize, 0.34*peopleSize);
+      matrix.compose(position.set(p.x, p.y + bob, p.z), rotation, scale);
+      peopleMesh.setMatrixAt(i, matrix);
+    });
+    peopleMesh.instanceMatrix.needsUpdate = true;
+  }
 
   // ============================================================ OBJ export
   function exportOBJ() {
@@ -6751,6 +7081,7 @@
     shaderKeepAlive.add(mesh);
   });
   scene.add(shaderKeepAlive);
+  syncPeopleUI();
   function animate() {
     requestAnimationFrame(animate);
     controls.update(false);
@@ -6758,6 +7089,7 @@
     const t = performance.now()*0.001;
     updateTrainShuttles(t);
     if (waterDirty) rebuildWater();
+    updatePeople(t);
     WATER_TIME.value = t;
     scene.traverse(o => {
       if (o.userData && o.userData.isBlinkLight) {
