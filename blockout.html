@@ -283,6 +283,8 @@
     <div id="people-settings" style="display:none;">
       <div class="slider-row" style="margin-top:11px;"><div class="row"><label>Amount</label><span class="val" id="dv-peopleamount">300</span></div>
         <input type="range" id="s-peopleamount" min="10" max="2000" step="10" value="300"></div>
+      <div class="slider-row"><div class="row"><label>Traffic</label><span class="val" id="dv-traffic">150</span></div>
+        <input type="range" id="s-traffic" min="0" max="1000" step="10" value="150"></div>
       <div class="slider-row"><div class="row"><label>Speed</label><span class="val" id="dv-peoplespeed">1.0</span></div>
         <input type="range" id="s-peoplespeed" min="0.1" max="4" step="0.1" value="1"></div>
       <div class="slider-row"><div class="row"><label>Size</label><span class="val" id="dv-peoplesize">1.0</span></div>
@@ -1574,6 +1576,7 @@
   let roadBuildSeq = 0;  // bumped on every road rebuild, so rebuildWater knows its bridges are out of date
   let waterDirty = true; // set by anything that can change the water or what crosses it; animate() rebuilds it once per frame
   let peopleNavDirty = true; // set whenever roads or zones change — see "people"
+  let trafficNavDirty = true; // set whenever roads change — see "traffic"
 
   // Half road width, curb width and sidewalk width for one line.
   function roadLineWidths(line) {
@@ -1970,6 +1973,7 @@
     roadBuildSeq++;
     waterDirty = true;
     peopleNavDirty = true;
+    trafficNavDirty = true;
     scene.add(roadMeshGroup);
     rebuildTrainMeshes();
     rebuildRoadMarkers();
@@ -5987,6 +5991,7 @@
   document.getElementById('s-peopleamount').addEventListener('input', (e) => { peopleAmount = parseFloat(e.target.value); syncPeopleUI(); });
   document.getElementById('s-peoplespeed').addEventListener('input', (e) => { peopleSpeed = parseFloat(e.target.value); syncPeopleUI(); });
   document.getElementById('s-peoplesize').addEventListener('input', (e) => { peopleSize = parseFloat(e.target.value); syncPeopleUI(); });
+  document.getElementById('s-traffic').addEventListener('input', (e) => { trafficAmount = parseFloat(e.target.value); syncPeopleUI(); });
   document.getElementById('s-groundcolor').addEventListener('input', (e) => {
     groundMat.color.set(e.target.value);
   });
@@ -6509,7 +6514,7 @@
         globalParkTint: colorToHex(globalParkTint, PARK_TINT_COLORS[0]),
         globalTreeTint: colorToHex(globalTreeTint, TREE_TINT_COLORS[0]),
         globalGrassNoiseStrength,
-        people: { enabled: peopleEnabled, amount: peopleAmount, speed: peopleSpeed, size: peopleSize }
+        people: { enabled: peopleEnabled, amount: peopleAmount, speed: peopleSpeed, size: peopleSize, traffic: trafficAmount }
       },
       roads: {
         nodeSeq: roadNodeSeq, lineSeq: roadLineSeq, networkSeq: roadNetworkSeq,
@@ -6638,6 +6643,7 @@
       if (sc.people.amount != null) peopleAmount = sc.people.amount;
       if (sc.people.speed != null) peopleSpeed = sc.people.speed;
       if (sc.people.size != null) peopleSize = sc.people.size;
+      if (sc.people.traffic != null) trafficAmount = sc.people.traffic;
       syncPeopleUI();
     }
 
@@ -6888,6 +6894,8 @@
     document.getElementById('dv-peoplespeed').textContent = peopleSpeed.toFixed(1);
     document.getElementById('s-peoplesize').value = peopleSize;
     document.getElementById('dv-peoplesize').textContent = peopleSize.toFixed(1);
+    document.getElementById('s-traffic').value = trafficAmount;
+    document.getElementById('dv-traffic').textContent = Math.round(trafficAmount);
   }
 
   // The walkways ({ pts, cum, lateral, jitter, y… } per road or path line, with each point's junction links and park or
@@ -7179,6 +7187,229 @@
     else peopleMesh.instanceMatrix.needsUpdate = true;
   }
 
+  // ============================================================ traffic
+  // Cars, switched on and off with the people (World → People, with speed and size shared too). They drive the sidewalk
+  // roads — one lane each way, either side of the centerline — turning off at junctions now and then, U-turning at dead
+  // ends, slowing as they near a junction and keeping their distance from the car in front. The roads only take so many
+  // (one car per TRAFFIC_LANE_PER_CAR of lane), however many the slider asks for, so they don't gridlock. Like people
+  // they're instanced meshes sharing one set of instance matrices: body (in a random paint color), windows, wheels, and
+  // head- and taillights that come on after dark; each car is stretched a little differently, so they aren't all the same.
+  const TRAFFIC_MAX = 1000;
+  const CAR_SPEED = 9;               // world units per second at speed 1
+  const TRAFFIC_LANE_PER_CAR = 16;   // the most cars a road takes: one per this length of lane
+  const CAR_PAINTS = [[0xe9e9e6, 5], [0x1c1d20, 5], [0xa8adb3, 4], [0x5f646b, 3], [0x233a66, 2], [0x8f1f22, 2], [0x2f5d3a, 1],
+    [0xd8b12c, 1], [0xd26a1f, 1], [0x2a8a9a, 1], [0x6b3d7a, 0.5], [0xb8c9d8, 1]]; // [color, how common]
+  let trafficAmount = 150, trafficNav = null, trafficNavBuiltAt = -Infinity, lastTrafficTime = null;
+  const cars = [];
+  const trafficRng = mulberry32(31337);
+  // the car, built around its own origin on the ground, facing +Z: about 4.4 long, 1.8 wide and 1.5 tall
+  const carParts = (() => {
+    const body = createMeshBuilder(), glass = createMeshBuilder(), wheels = createMeshBuilder(), heads = createMeshBuilder(), tails = createMeshBuilder();
+    body.addBox(0, 0, 0, 1, 2.2, 0.9, 0.3, 0.95);           // lower body
+    body.addBox(0, -0.25, 0, 1, 1.08, 0.78, 1.38, 1.48);    // roof
+    glass.addBox(0, -0.25, 0, 1, 1.15, 0.76, 0.95, 1.38);   // cabin windows
+    [[-0.78, 1.35], [0.78, 1.35], [-0.78, -1.35], [0.78, -1.35]].forEach(([x, z]) => wheels.addBox(x, z, 0, 1, 0.34, 0.16, 0, 0.62));
+    [-0.55, 0.55].forEach(x => { heads.addBox(x, 2.2, 0, 1, 0.04, 0.2, 0.62, 0.8); tails.addBox(x, -2.2, 0, 1, 0.04, 0.2, 0.62, 0.8); });
+    const matrix = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*16), 16);
+    matrix.setUsage(THREE.DynamicDrawUsage);
+    const glow = (color, emissive, intensity) => {
+      const mat = new THREE.MeshStandardMaterial({ color, emissive, emissiveIntensity: intensity*computeWindowGlowFactor(sunElevation), roughness: 0.35 });
+      mat.userData.baseEmissiveIntensity = intensity; // lit after dark (see updateWindowGlowForSun)
+      return mat;
+    };
+    const make = (builder, material, shadows) => {
+      const mesh = new THREE.InstancedMesh(builder.build(), material, TRAFFIC_MAX);
+      mesh.instanceMatrix = matrix;
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      mesh.castShadow = shadows; mesh.receiveShadow = true;
+      mesh.visible = false;
+      mesh.name = 'Traffic';
+      scene.add(mesh);
+      return mesh;
+    };
+    const parts = {
+      body: make(body, new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8 }), true),
+      glass: make(glass, new THREE.MeshStandardMaterial({ color: 0x1f2a35, roughness: 0.15, metalness: 0.3, envMap: SKY_ENV_MAP }), true),
+      wheels: make(wheels, new THREE.MeshStandardMaterial({ color: 0x151617, roughness: 0.9 }), true),
+      heads: make(heads, glow(0xfff4d6, 0xffe3a3, 1.6), false),
+      tails: make(tails, glow(0x7a1010, 0xff2a1a, 1.2), false),
+    };
+    const paintTotal = CAR_PAINTS.reduce((sum, [, weight]) => sum + weight, 0), paintRng = mulberry32(2718), color = new THREE.Color();
+    parts.body.count = TRAFFIC_MAX; // the color buffer is sized by the count when it's first written
+    for (let i=0;i<TRAFFIC_MAX;i++) {
+      let r = paintRng()*paintTotal, k = 0;
+      while (k < CAR_PAINTS.length-1 && (r -= CAR_PAINTS[k][1]) > 0) k++;
+      parts.body.setColorAt(i, color.set(CAR_PAINTS[k][0]).multiplyScalar(0.92 + paintRng()*0.16));
+    }
+    parts.body.count = 0;
+    return { ...parts, all: Object.values(parts), matrix };
+  })();
+
+  // The lanes: one per sidewalk road line ({ pts, cum, total, lane (offset from the centerline), vertices with junction
+  // links }), plus a grid of their points for re-seating cars, and how many cars the roads take.
+  function buildTrafficNav() {
+    const lines = [];
+    roadLines.forEach(line => {
+      if (isTrainLine(line) || isPathLine(line) || isRiverLine(line)) return;
+      const nodes = tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean));
+      if (nodes.length < 2) return;
+      const pts = [nodes[0]];
+      for (let i=1;i<nodes.length;i++) {
+        const a = nodes[i-1], b = nodes[i], steps = Math.max(1, Math.ceil(Math.hypot(b.x-a.x, b.z-a.z)/PEOPLE_NAV_SPACING));
+        for (let k=1;k<=steps;k++) pts.push(k === steps ? b : { x: a.x + (b.x-a.x)*k/steps, z: a.z + (b.z-a.z)*k/steps });
+      }
+      const cum = [0];
+      for (let i=1;i<pts.length;i++) cum.push(cum[i-1] + Math.hypot(pts[i].x-pts[i-1].x, pts[i].z-pts[i-1].z));
+      if (cum[cum.length-1] < 4) return;
+      lines.push({ pts, cum, total: cum[cum.length-1], lane: Math.max(0.8, roadLineWidths(line).hw*0.5), vertices: pts.map(() => ({ links: [] })) });
+    });
+    const byPlace = new Map(), grid = new Map(), CELL = 16;
+    lines.forEach((nav, li) => nav.pts.forEach((p, vi) => {
+      const place = Math.round(p.x*2) + ',' + Math.round(p.z*2), cell = Math.floor(p.x/CELL) + ',' + Math.floor(p.z/CELL);
+      if (!byPlace.has(place)) byPlace.set(place, []);
+      byPlace.get(place).push({ li, vi });
+      if (!grid.has(cell)) grid.set(cell, []);
+      grid.get(cell).push({ li, vi });
+    }));
+    byPlace.forEach(list => { if (list.length > 1) list.forEach(a => { lines[a.li].vertices[a.vi].links = list.filter(b => b.li !== a.li); }); });
+    const capacity = Math.floor(lines.reduce((sum, nav) => sum + nav.total*2, 0)/TRAFFIC_LANE_PER_CAR);
+    return { lines, grid, CELL, capacity };
+  }
+  function newCar() {
+    return { x: 0, z: 0, heading: 0, li: -1, u: 0, dir: 1, seg: 0, speed: 0, ahead: null,
+      cruise: 0.8 + trafficRng()*0.4, length: 0.9 + trafficRng()*0.3, width: 0.95 + trafficRng()*0.12, height: 0.9 + trafficRng()*0.35 };
+  }
+  // puts a car in lane `li` at distance u along it, heading `dir`
+  function carJoinLane(car, li, u, dir) {
+    const nav = trafficNav.lines[li];
+    car.li = li; car.dir = dir; car.u = Math.max(0, Math.min(nav.total, u));
+    car.seg = 0;
+    while (car.seg < nav.pts.length-2 && nav.cum[car.seg+1] <= car.u) car.seg++;
+  }
+  // where a car should be: its lane's point at its distance along it, on the side for its direction, and which way that
+  // lane runs there
+  function lanePoint(car) {
+    const nav = trafficNav.lines[car.li];
+    const i = Math.max(0, Math.min(nav.pts.length-2, car.seg));
+    const a = nav.pts[i], b = nav.pts[i+1], segLen = (nav.cum[i+1] - nav.cum[i]) || 1;
+    const t = Math.max(0, Math.min(1, (car.u - nav.cum[i])/segLen));
+    const dx = (b.x-a.x)/segLen, dz = (b.z-a.z)/segLen, side = car.dir*nav.lane;
+    return { x: a.x + (b.x-a.x)*t - dz*side, z: a.z + (b.z-a.z)*t + dx*side, heading: Math.atan2(dx*car.dir, dz*car.dir) };
+  }
+  function spawnCar(car) {
+    const { lines } = trafficNav;
+    if (!lines.length) { car.li = -1; return; }
+    const li = pickWeighted(lines, nav => nav.total);
+    carJoinLane(car, li, trafficRng()*lines[li].total, trafficRng() < 0.5 ? -1 : 1);
+    const at = lanePoint(car);
+    car.x = at.x; car.z = at.z; car.heading = at.heading; car.speed = 0;
+  }
+  function reseatCar(car) {
+    const { lines, grid, CELL } = trafficNav;
+    if (car.li >= 0) {
+      let best = null;
+      const cx = Math.floor(car.x/CELL), cz = Math.floor(car.z/CELL);
+      for (let ox=-2;ox<=2;ox++) for (let oz=-2;oz<=2;oz++) (grid.get((cx+ox) + ',' + (cz+oz)) || []).forEach(({ li, vi }) => {
+        const q = lines[li].pts[vi], d = Math.hypot(q.x-car.x, q.z-car.z);
+        if (!best || d < best.d) best = { li, vi, d };
+      });
+      if (best) { carJoinLane(car, best.li, lines[best.li].cum[best.vi], car.dir); return; }
+    }
+    spawnCar(car);
+  }
+  // moves a car `dist` along its lane, dealing with each point it passes: at a junction it sometimes turns off (always, at
+  // the end of its road, if there's another road to take), and at a dead end it turns round into the other lane
+  function driveAlong(car, dist) {
+    let nav = trafficNav.lines[car.li], u = car.u + car.dir*dist;
+    for (let guard=0; guard<64; guard++) {
+      const ahead = car.dir > 0 ? car.seg + 1 : car.seg, at = nav.cum[ahead];
+      if (car.dir > 0 ? u < at : u > at) break;
+      const vertex = nav.vertices[ahead], isEnd = ahead === 0 || ahead === nav.pts.length-1;
+      if (vertex.links.length && trafficRng() < (isEnd ? 1 : 0.35)) {
+        const link = vertex.links[Math.floor(trafficRng()*vertex.links.length)], other = trafficNav.lines[link.li], remaining = Math.abs(u - at);
+        const dir = link.vi === 0 ? 1 : link.vi === other.pts.length-1 ? -1 : (trafficRng() < 0.5 ? 1 : -1);
+        carJoinLane(car, link.li, other.cum[link.vi], dir);
+        car.seg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
+        nav = other;
+        u = car.u + dir*remaining;
+        continue;
+      }
+      if (isEnd) { car.dir = -car.dir; u = 2*at - u; continue; }
+      car.seg += car.dir;
+    }
+    car.u = Math.max(0, Math.min(nav.total, u));
+  }
+  // how far a car is from the next junction or dead end ahead of it (looking a few points ahead), or Infinity
+  function distanceToJunction(car) {
+    const nav = trafficNav.lines[car.li];
+    let v = car.dir > 0 ? car.seg + 1 : car.seg;
+    for (let k=0; k<4 && v >= 0 && v < nav.pts.length; k++, v += car.dir) {
+      if (nav.vertices[v].links.length || v === 0 || v === nav.pts.length-1) return Math.abs(nav.cum[v] - car.u);
+    }
+    return Infinity;
+  }
+  function updateTraffic(t) {
+    const dt = lastTrafficTime == null ? 0 : Math.min(0.1, Math.max(0, t - lastTrafficTime));
+    lastTrafficTime = t;
+    carParts.all.forEach(mesh => { mesh.visible = peopleEnabled; });
+    if (!peopleEnabled) return;
+    if (!trafficNav || (trafficNavDirty && t - trafficNavBuiltAt > 0.25)) {
+      trafficNavDirty = false;
+      trafficNavBuiltAt = t;
+      trafficNav = buildTrafficNav();
+      cars.forEach(reseatCar);
+    }
+    const wanted = Math.min(TRAFFIC_MAX, Math.round(trafficAmount), trafficNav.capacity);
+    while (cars.length < wanted) { const car = newCar(); spawnCar(car); cars.push(car); }
+    if (cars.length > wanted) cars.length = wanted;
+    carParts.all.forEach(mesh => { mesh.count = cars.length; });
+    // who's in front of whom: cars in the same lane going the same way, in order along it
+    const lanes = new Map();
+    cars.forEach(car => {
+      if (car.li < 0 && trafficNav.lines.length) spawnCar(car);
+      car.ahead = null;
+      if (car.li < 0) return;
+      const key = car.li*2 + (car.dir > 0 ? 1 : 0);
+      if (!lanes.has(key)) lanes.set(key, []);
+      lanes.get(key).push(car);
+    });
+    lanes.forEach(list => {
+      list.sort((a, b) => (a.u - b.u)*a.dir);
+      for (let k=0;k<list.length-1;k++) list[k].ahead = list[k+1];
+    });
+    const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    cars.forEach((car, i) => {
+      if (car.li < 0) { matrix.makeScale(0, 0, 0); carParts.body.setMatrixAt(i, matrix); return; }
+      // cruise, but ease off for the car in front and slow down into junctions
+      const cruise = CAR_SPEED*car.cruise*peopleSpeed;
+      let target = cruise;
+      if (car.ahead) {
+        const gap = Math.abs(car.ahead.u - car.u) - 2.2*peopleSize*(car.length + car.ahead.length);
+        target = Math.min(target, Math.max(0, (gap - 2*peopleSize)*1.2*peopleSpeed));
+      }
+      const junction = distanceToJunction(car);
+      if (junction < 10) target = Math.min(target, cruise*(0.45 + 0.055*junction));
+      car.speed += Math.max(-18*peopleSpeed*dt, Math.min(5*peopleSpeed*dt, target - car.speed));
+      driveAlong(car, car.speed*dt);
+      // steer towards the lane — quicker when off it, as when swinging round a corner or into the other lane
+      const at = lanePoint(car);
+      const dx = at.x - car.x, dz = at.z - car.z, d = Math.hypot(dx, dz);
+      if (d > 1e-4) {
+        const step = Math.max(car.speed, 3*peopleSpeed)*dt*(1 + Math.min(3, d*0.3)), k = Math.min(1, step/d), mx = dx*k, mz = dz*k;
+        car.x += mx; car.z += mz;
+        if (Math.hypot(mx, mz) > 1e-3) {
+          const facing = Math.atan2(mx, mz);
+          car.heading += Math.atan2(Math.sin(facing - car.heading), Math.cos(facing - car.heading))*Math.min(1, dt*6);
+        }
+      }
+      rotation.setFromAxisAngle(up, car.heading);
+      matrix.compose(position.set(car.x, Y_ROAD, car.z), rotation, scale.set(car.width*peopleSize, car.height*peopleSize, car.length*peopleSize));
+      carParts.body.setMatrixAt(i, matrix);
+    });
+    carParts.matrix.needsUpdate = true;
+  }
+
   // ============================================================ OBJ export
   function exportOBJ() {
     const meshes = [];
@@ -7263,6 +7494,7 @@
     updateTrainShuttles(t);
     if (waterDirty) rebuildWater();
     updatePeople(t);
+    updateTraffic(t);
     WATER_TIME.value = t;
     scene.traverse(o => {
       if (o.userData && o.userData.isBlinkLight) {
