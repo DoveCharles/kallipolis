@@ -229,7 +229,7 @@
     <div class="hier-list" id="roads-list"></div>
     <div class="slider-row" style="margin-top:8px;">
       <div class="row"><label>Road width <span id="rw-context" style="font-weight:400;"></span></label><span class="val" id="v-roadwidth">8</span></div>
-      <input type="range" id="s-roadwidth" min="3" max="20" step="0.5" value="8">
+      <input type="range" id="s-roadwidth" min="3" max="40" step="0.5" value="8">
     </div>
     <div class="slider-row">
       <div class="row"><label>Sidewalk size <span id="sw-context" style="font-weight:400;"></span></label><span class="val" id="v-sidewalkwidth">3</span></div>
@@ -471,15 +471,20 @@
   }
   updateSun();
 
-  const groundGeo = new THREE.PlaneGeometry(3000, 3000);
+  // Water sits below the ground (see "water"). The ground mesh itself is rebuilt with holes where the water is, but a few
+  // things are drawn flat just above ground level across the whole map — the grid, map images, path sand — and those skip
+  // the water with the stencil buffer instead: rebuildWater draws the water's outline into the stencil first (an invisible
+  // mask at map-image height), and materials carrying these settings don't draw wherever it's marked.
+  const SKIP_OVER_WATER = { stencilWrite:true, stencilFunc:THREE.NotEqualStencilFunc, stencilRef:1 };
+  const GROUND_HALF_SIZE = 1500;
   const groundMat = new THREE.MeshStandardMaterial({ color:0x1b1e24, roughness:1 });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI/2;
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(GROUND_HALF_SIZE*2, GROUND_HALF_SIZE*2).rotateX(-Math.PI/2), groundMat);
   ground.receiveShadow = true;
   scene.add(ground);
 
   let gridHelper = new THREE.GridHelper(2000, 200, 0x33373f, 0x20232a);
   gridHelper.position.y = 0.02;
+  Object.assign(gridHelper.material, SKIP_OVER_WATER);
   scene.add(gridHelper);
   function setGridColor(hexStr) {
     // GridHelper bakes colors into its geometry (not a live material uniform), so recreate it.
@@ -490,6 +495,7 @@
     scene.remove(gridHelper); disposeObject(gridHelper);
     gridHelper = new THREE.GridHelper(2000, 200, mainColor.getHex(), dimColor.getHex());
     gridHelper.position.y = 0.02;
+    Object.assign(gridHelper.material, SKIP_OVER_WATER);
     scene.add(gridHelper);
   }
 
@@ -509,7 +515,7 @@
   });
 
   // Y-height layering (avoids coplanar z-fighting):
-  const Y_GRID=0.02, Y_MAP=0.03, Y_ZONE_GROUND=0.04, Y_WATER=0.05, Y_PARK=0.06, Y_PATH=0.1, Y_ZONE_FILL=0.2, Y_ROAD=0.35, Y_SIDEWALK=0.5, Y_ZONE_LINE=0.55, Y_PREVIEW=0.65;
+  const Y_GRID=0.02, Y_MAP=0.03, Y_ZONE_GROUND=0.04, Y_PARK=0.06, Y_PATH=0.1, Y_ZONE_FILL=0.2, Y_ROAD=0.35, Y_SIDEWALK=0.5, Y_ZONE_LINE=0.55, Y_PREVIEW=0.65;
 
   // ============================================================ camera controls (math only)
   const controls = {
@@ -1298,7 +1304,11 @@
   // shared "add/edit a custom palette color" row state: null (closed) | {mode:'add'} | {mode:'edit', index}
   let colorPickerState = null;
   const DEFAULT_ZONE_SETTINGS = { density:0.8, heightMin:4, heightMax:40, landmarkChance:0.08, lotCount:24, setback:1.5, windowsEnabled:true,
-    groundColor:BUILDING_GROUND_COLORS[0], borderSetback:0, treeDensity:0.5, treeSizeMin:1, treeSizeMax:2.2, treeSetback:3, colorVariationMin:0.25, colorVariationMax:0.25, windowScale:1, litWindowChance:0.8, specularWindows:true, parkTint:PARK_TINT_COLORS[0], treeTint:TREE_TINT_COLORS[0], customTint:false, grassNoiseStrength:DEFAULT_GRASS_NOISE_STRENGTH };
+    groundColor:BUILDING_GROUND_COLORS[0], borderSetback:0, treeDensity:0.5, treeSizeMin:1, treeSizeMax:2.2, treeSetback:3, colorVariationMin:0.25, colorVariationMax:0.25, windowScale:1, litWindowChance:0.8, specularWindows:true, parkTint:PARK_TINT_COLORS[0], treeTint:TREE_TINT_COLORS[0], customTint:false, grassNoiseStrength:DEFAULT_GRASS_NOISE_STRENGTH,
+    fence:true,                                                                       // park
+    pavingColor:0xb7b0a4, pavingPattern:'tiles', fountain:true, plazaTrees:0.35,      // plaza
+    fieldCount:14, hedgerows:true, farmsteads:true,                                   // farmland
+    industrialLots:10, industrialDensity:0.85, industrialHeightMin:5, industrialHeightMax:14, lotFences:true }; // industrial
   const MAX_TARGET_LOTS = 150; // slider max = this many lots; slider min (1) = "whole zone"
   const MIN_ZONE_TREES = 1, MAX_ZONE_TREES = 100; // tree count is a flat target regardless of zone size, not an area-scaled density
 
@@ -1330,7 +1340,7 @@
     const h = aspect>=1 ? targetSize/aspect : targetSize;
     const geo = new THREE.PlaneGeometry(w, h);
     const mat = new THREE.MeshBasicMaterial({ map:texture, transparent:true, side:THREE.DoubleSide,
-      polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 });
+      polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2, ...SKIP_OVER_WATER });
     const plane = new THREE.Mesh(geo, mat);
     plane.rotation.x = -Math.PI/2; // lay flat within the pivot's frame — fixed, never touched again
     plane.name = 'MapImage';
@@ -1546,6 +1556,14 @@
   // Paths' footprint (the track itself, not its fade), cached alongside by rebuildRoadMeshes — zones keep lots, buildings
   // and trees off it without cutting their ground (see "paths").
   let pathFootprint = [];
+  // Rivers' footprint (see "water"), and roads and rivers together — what cuts into every zone except water.
+  let riverFootprint = [], riverFootprintKey = '', riverSeq = 0;
+  let landCutFootprint = [];
+  // What rebuildWater needs to turn the parts of roads and paths over water into bridges, cached by rebuildRoadMeshes:
+  // each road network's share of the road outline ({ networkId, territory, strokes }) and each path network's centerlines.
+  let roadBridgeSources = [], pathBridgeSources = [];
+  let roadBuildSeq = 0;  // bumped on every road rebuild, so rebuildWater knows its bridges are out of date
+  let waterDirty = true; // set by anything that can change the water or what crosses it; animate() rebuilds it once per frame
 
   // Half road width, curb width and sidewalk width for one line.
   function roadLineWidths(line) {
@@ -1593,9 +1611,9 @@
       if (facing < 0) indices.push(a, c, b); else indices.push(a, b, c);
     };
     return {
-      // every polygon (with its holes) in a Clipper PolyTree, as flat upward-facing faces at height y
-      addTops(tree, y) {
-        const up = { x:0, y:1, z:0 };
+      // every polygon (with its holes) in a Clipper PolyTree, as flat faces at height y — facing up, or down if `facingDown`
+      addTops(tree, y, facingDown) {
+        const up = { x:0, y:facingDown ? -1 : 1, z:0 };
         const toVecs = path => path.map(p => new THREE.Vector2(p.X/CLIPPER_SCALE, p.Y/CLIPPER_SCALE));
         const addOutline = node => {
           const contour = toVecs(node.Contour());
@@ -1613,6 +1631,20 @@
         const px=p.X/CLIPPER_SCALE, pz=p.Y/CLIPPER_SCALE, qx=q.X/CLIPPER_SCALE, qz=q.Y/CLIPPER_SCALE;
         const a=vertex(px,y0,pz,outward), b=vertex(qx,y0,qz,outward), c=vertex(qx,y1,qz,outward), d=vertex(px,y1,pz,outward);
         triangle(a, b, c); triangle(a, c, d);
+      },
+      // a flat-shaded quad through four world-space corners ({x,y,z}, in order around it), facing `normal`
+      addQuad(p0, p1, p2, p3, normal) {
+        const a=vertex(p0.x,p0.y,p0.z,normal), b=vertex(p1.x,p1.y,p1.z,normal), c=vertex(p2.x,p2.y,p2.z,normal), d=vertex(p3.x,p3.y,p3.z,normal);
+        triangle(a, b, c); triangle(a, c, d);
+      },
+      // an upright box from y0 to y1 centered on (cx, cz), `halfLen` along the horizontal unit direction (dx, dz) and
+      // `halfWid` across it — its four sides and top (the bottom is never seen)
+      addBox(cx, cz, dx, dz, halfLen, halfWid, y0, y1) {
+        const ax = dx*halfLen, az = dz*halfLen, bx = -dz*halfWid, bz = dx*halfWid;
+        const corner = (s, t, y) => ({ x: cx + ax*s + bx*t, y, z: cz + az*s + bz*t });
+        const sides = [[1,-1, 1,1, { x:dx, y:0, z:dz }], [1,1, -1,1, { x:-dz, y:0, z:dx }], [-1,1, -1,-1, { x:-dx, y:0, z:-dz }], [-1,-1, 1,-1, { x:dz, y:0, z:-dx }]];
+        sides.forEach(([s0, t0, s1, t1, n]) => this.addQuad(corner(s0,t0,y0), corner(s1,t1,y0), corner(s1,t1,y1), corner(s0,t0,y1), n));
+        this.addQuad(corner(-1,-1,y1), corner(1,-1,y1), corner(1,1,y1), corner(-1,1,y1), { x:0, y:1, z:0 });
       },
       build() {
         if (!indices.length) return null;
@@ -1740,6 +1772,7 @@
   const PATH_COLOR_PALETTE = [PATH_COLOR]; // user-extendable palette; grows via the '+' swatch
   const PATH_MAX_SEGMENTS = 128; // fixed GLSL array size; a network's centerlines are simplified to fit
   function isPathLine(line) { return line.roadType === 'path'; }
+  function isRiverLine(line) { return line.roadType === 'river'; }
   // how far past its nominal edge a path's sand fades out
   function pathFadeWidth(halfWidth) { return Math.min(2.5, halfWidth*0.9); }
   // Ramer–Douglas–Peucker: the fewest of `points` that keep the line within `tolerance` of its original course
@@ -1802,6 +1835,21 @@
       diffuseColor = vec4(sand, diffuseColor.a*cover);
     }
   `;
+  function applyPathShader(mat, segments, halfWidth, fade) {
+    const segmentUniforms = segmentUniformArray(segments, PATH_MAX_SEGMENTS);
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uPathSegments = { value: segmentUniforms };
+      shader.uniforms.uPathSegmentCount = { value: segments.length };
+      shader.uniforms.uPathHalfWidth = { value: halfWidth };
+      shader.uniforms.uPathFade = { value: fade };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vPathWorldPos;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPathWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\n' + PATH_FRAGMENT_PARS)
+        .replace('#include <color_fragment>', '#include <color_fragment>\n' + PATH_COLOR_FRAGMENT);
+    };
+  }
   // One path network's mesh: the union of its lines stroked out to their full fade, shaded by distance to its centerlines.
   function buildPathMesh(lines, networkId) {
     const halfWidth = (lines[0].width || DEFAULT_ROAD_WIDTH)/2;
@@ -1815,21 +1863,8 @@
     builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, outline, [], true), Y_PATH);
     const geo = builder.build();
     if (!geo) return null;
-    const segments = pathSegmentsOf(lines);
-    const segmentUniforms = segmentUniformArray(segments, PATH_MAX_SEGMENTS);
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 1, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
-    mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uPathSegments = { value: segmentUniforms };
-      shader.uniforms.uPathSegmentCount = { value: segments.length };
-      shader.uniforms.uPathHalfWidth = { value: halfWidth };
-      shader.uniforms.uPathFade = { value: fade };
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vPathWorldPos;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPathWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\n' + PATH_FRAGMENT_PARS)
-        .replace('#include <color_fragment>', '#include <color_fragment>\n' + PATH_COLOR_FRAGMENT);
-    };
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 1, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, ...SKIP_OVER_WATER });
+    applyPathShader(mat, pathSegmentsOf(lines), halfWidth, fade);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     mesh.name = 'Path';
@@ -1842,7 +1877,7 @@
     roadMeshGroup = new THREE.Group(); roadMeshGroup.name='Roads';
     const networks = new Map(); // networkId -> [{ path, line, hw, cw, sw }]
     roadLines.forEach(line => {
-      if (isTrainLine(line) || isPathLine(line)) return; // built separately — see rebuildTrainMeshes and buildPathMesh
+      if (isTrainLine(line) || isPathLine(line) || isRiverLine(line)) return; // built separately — see rebuildTrainMeshes, buildPathMesh and rebuildWater
       const pts = line.nodeIds.map(id=>roadNodes[id]).filter(Boolean);
       if (pts.length<2) return;
       const path = tessellateOpenPath(pts).map(p => ({ X:Math.round(p.x*CLIPPER_SCALE), Y:Math.round(p.z*CLIPPER_SCALE) }));
@@ -1867,10 +1902,12 @@
     // layers inside its own footprint — minus whatever an earlier network already took — so the per-network
     // meshes (own colors, own selection highlight) never overlap each other either.
     let claimed = [];
+    roadBridgeSources = [];
     networks.forEach((strokes, netId) => {
       const footprint = unionRoadStrokes(strokes.map(s => ({ path:s.path, radius:s.hw+s.cw+s.sw })));
       const territory = claimed.length ? clipPolygons(ctDifference, footprint, claimed) : footprint;
       claimed = claimed.length ? clipPolygons(ctUnion, claimed, footprint) : footprint;
+      roadBridgeSources.push({ networkId: netId, territory, strokes });
       const { line } = strokes[0]; // colors are set per network in the details panel
       const road = createMeshBuilder(), curb = createMeshBuilder(), sidewalk = createMeshBuilder();
       road.addTops(clipPolygons(ctIntersection, roadOutline, territory, true), Y_ROAD);
@@ -1895,15 +1932,33 @@
       pathNetworks.get(line.networkId).push(line);
     });
     const pathStrokes = [];
+    pathBridgeSources = [];
     pathNetworks.forEach((lines, netId) => {
       const mesh = buildPathMesh(lines, netId);
       if (mesh) roadMeshGroup.add(mesh);
-      lines.forEach(line => pathStrokes.push({
+      const strokes = lines.map(line => ({
         path: toClipperPath(tessellateOpenPath(line.nodeIds.map(id=>roadNodes[id]).filter(Boolean))),
         radius: (line.width || DEFAULT_ROAD_WIDTH)/2,
       }));
+      pathStrokes.push(...strokes);
+      pathBridgeSources.push({ networkId: netId, strokes });
     });
     pathFootprint = unionRoadStrokes(pathStrokes);
+    // rivers: only their footprint is kept here (rebuildWater draws them) — recomputed only when a river actually changed,
+    // so editing an ordinary road doesn't make the water rebuild
+    const riverLines = roadLines.filter(line => isRiverLine(line) && line.nodeIds.filter(id => roadNodes[id]).length >= 2);
+    const riverKey = JSON.stringify(riverLines.map(line => [line.width, line.nodeIds.map(id => roadNodes[id])]));
+    if (riverKey !== riverFootprintKey) {
+      riverFootprintKey = riverKey;
+      riverFootprint = unionRoadStrokes(riverLines.map(line => ({
+        path: toClipperPath(tessellateOpenPath(line.nodeIds.map(id=>roadNodes[id]).filter(Boolean))),
+        radius: (line.width || DEFAULT_ROAD_WIDTH)/2,
+      })));
+      riverSeq++;
+    }
+    landCutFootprint = riverFootprint.length ? clipPolygons(ctUnion, roadFootprint, riverFootprint) : roadFootprint;
+    roadBuildSeq++;
+    waterDirty = true;
     scene.add(roadMeshGroup);
     rebuildTrainMeshes();
     rebuildRoadMarkers();
@@ -3599,7 +3654,7 @@
     const rng = mulberry32(zone.settings.seed>>>0);
     // where the park meets water, its grass turns to sand along that edge (see applyGrassNoiseShader)
     const ownArea = clipPolygons(ClipperLib.ClipType.ctDifference, [toClipperPath(poly)], cutouts);
-    const beach = sharedEdgeSegments(zone, ownArea, 'water', GRASS_MAX_BEACH_SEGMENTS);
+    const beach = sharedEdgeSegmentsWith(ownArea, getWaterRegion(), GRASS_MAX_BEACH_SEGMENTS);
     const floor = makeParkMesh(poly, resolveParkTint(zone), resolveGrassNoiseStrength(zone), cutouts, beach);
     if (floor) { floor.name = 'ParkFloor'; zone.buildingsGroup.add(floor); }
 
@@ -3638,17 +3693,442 @@
       tree.rotation.y = rng()*Math.PI*2;
       zone.buildingsGroup.add(tree);
     });
+    // a fence around the park's edge, open wherever a road, river or path runs into it, and not along the water
+    if (s.fence !== false) {
+      const fence = buildRailingMesh(zoneFenceLines(zone, poly, 0.5), Y_PARK, PARK_FENCE_STYLE, 'Fence');
+      if (fence) zone.buildingsGroup.add(fence);
+    }
   }
+  // ---------------------------------------------------------- plazas
+  // A plaza is a paved square: tiles or herringbone brick drawn by a shader in world space (so the pattern runs on unbroken
+  // across the whole plaza), edged with a darker band of paving. Lamp posts — lit after dark, like windows — stand around its
+  // edge with benches between them, trees grow in square planters, and a fountain sits at the most open spot, if there's
+  // room for one.
+  const PLAZA_COLORS = [0xb7b0a4, 0xc4a88a, 0x9c9fa4, 0xd6cfc0];
+  const Y_PLAZA = 0.07;
+  const PLAZA_LAMP_SPACING = 13;
+  const PAVING_FRAGMENT_PARS = `
+    varying vec3 vPaveWorldPos;
+    uniform int uPavePattern;
+    uniform float uPaveScale;
+    float paveHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
+  `;
+  const PAVING_COLOR_FRAGMENT = `
+    {
+      vec2 wp = vPaveWorldPos.xz;
+      float edgeDist = -1.0;
+      vec2 id = vec2(0.0);
+      if (uPavePattern == 1) {
+        // herringbone: 2:1 bricks laid at 45 degrees. In brick units, horizontal bricks cover [k, k+2] x [k+4m, k+4m+1] and
+        // vertical ones [k, k+1] x [k+4m+1, k+4m+3] — together they tile the plane, so a point is in exactly one of them.
+        float unit = 0.6*uPaveScale;
+        vec2 p = vec2(wp.x + wp.y, wp.y - wp.x)*0.70710678/unit;
+        float k1 = floor(p.x);
+        for (int j=0; j<2; j++) {
+          float k = k1 - float(j), t = p.y - k, m = floor(t/4.0), v = t - 4.0*m, u = p.x - k;
+          if (edgeDist < 0.0 && v < 1.0) { edgeDist = min(min(u, 2.0-u), min(v, 1.0-v)); id = vec2(k, m*2.0); }
+        }
+        if (edgeDist < 0.0) {
+          float t = p.y - k1 - 1.0, m = floor(t/4.0), v = t - 4.0*m, u = p.x - k1;
+          edgeDist = min(min(u, 1.0-u), min(v, 2.0-v)); id = vec2(k1, m*2.0 + 1.0);
+        }
+        edgeDist *= unit;
+      } else {
+        float size = 2.4*uPaveScale;
+        vec2 p = wp/size, f = fract(p);
+        id = floor(p);
+        edgeDist = min(min(f.x, 1.0-f.x), min(f.y, 1.0-f.y))*size;
+      }
+      float grout = smoothstep(0.03, 0.08, edgeDist);
+      float tint = 0.9 + 0.2*paveHash(id + 17.0);
+      diffuseColor.rgb *= mix(0.62, tint, grout);
+    }
+  `;
+  function applyPavingShader(mat, pattern, scale) {
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uPavePattern = { value: pattern };
+      shader.uniforms.uPaveScale = { value: scale || 1 };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vPaveWorldPos;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPaveWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\n' + PAVING_FRAGMENT_PARS)
+        .replace('#include <color_fragment>', '#include <color_fragment>\n' + PAVING_COLOR_FRAGMENT);
+    };
+  }
+  // A round stone fountain of radius r centered at c ({x,z}), standing on the plaza.
+  function buildFountain(c, r) {
+    const group = new THREE.Group();
+    group.name = 'Fountain';
+    const stone = new THREE.MeshStandardMaterial({ color: 0xa9a49b, roughness: 0.8, side: THREE.DoubleSide });
+    const rimH = 0.65, rimW = 0.35, inner = r - rimW;
+    const place = (mesh, y) => { mesh.position.set(c.x, Y_PLAZA + y, c.z); mesh.castShadow = true; mesh.receiveShadow = true; group.add(mesh); return mesh; };
+    place(new THREE.Mesh(new THREE.CylinderGeometry(r, r, rimH, 48, 1, true), stone), rimH/2);
+    place(new THREE.Mesh(new THREE.CylinderGeometry(inner, inner, rimH, 48, 1, true), stone), rimH/2);
+    place(new THREE.Mesh(new THREE.RingGeometry(inner, r, 48).rotateX(-Math.PI/2), stone), rimH);
+    // the pool: the water shader, with the basin's inner wall as its shore
+    const shore = [];
+    for (let i=0;i<32;i++) {
+      const a0 = i/32*Math.PI*2, a1 = (i+1)/32*Math.PI*2;
+      shore.push([c.x + Math.cos(a0)*inner, c.z + Math.sin(a0)*inner, c.x + Math.cos(a1)*inner, c.z + Math.sin(a1)*inner]);
+    }
+    const waterMat = new THREE.MeshStandardMaterial({ color: WATER_COLOR, roughness: 1 });
+    applyWaterShader(waterMat, shore, [], 0);
+    const pool = place(new THREE.Mesh(new THREE.CircleGeometry(inner, 48).rotateX(-Math.PI/2), waterMat), rimH - 0.15);
+    pool.castShadow = false;
+    // a pedestal in the middle holding up a smaller bowl, and a spout of water rising from it
+    place(new THREE.Mesh(new THREE.CylinderGeometry(r*0.1, r*0.15, 1.5, 16), stone), 0.75);
+    place(new THREE.Mesh(new THREE.CylinderGeometry(r*0.34, r*0.2, 0.28, 24), stone), 1.64);
+    place(new THREE.Mesh(new THREE.CylinderGeometry(r*0.05, r*0.08, 0.7, 12), stone), 2.1);
+    const spray = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.16, 1.4, 12, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0xe8f6ff, transparent: true, opacity: 0.55, roughness: 0.2, depthWrite: false }));
+    spray.position.set(c.x, Y_PLAZA + 3.1, c.z);
+    group.add(spray);
+    return group;
+  }
+  // `cutouts` are cut out of the paving; `blockers` (cut-outs plus paths) are where nothing's placed
+  function generatePlazaContent(zone, poly, cutouts, blockers) {
+    const s = zone.settings, rng = mulberry32(s.seed>>>0);
+    const { ctDifference } = ClipperLib.ClipType;
+    const { jtMiter, jtRound } = ClipperLib.JoinType;
+    const color = s.pavingColor!=null ? s.pavingColor : PLAZA_COLORS[0];
+    const pattern = s.pavingPattern==='herringbone' ? 1 : 0;
+    const floor = makeFlatZoneMesh(poly, color, Y_PLAZA, 'Plaza', mat => applyPavingShader(mat, pattern), cutouts);
+    if (!floor) return;
+    zone.buildingsGroup.add(floor);
+    const area = clipPolygons(ctDifference, [toClipperPath(poly)], cutouts);
+    // the border: a band of darker, smaller paving just inside the edge
+    const bandBuilder = createMeshBuilder();
+    bandBuilder.addTops(clipPolygons(ctDifference, area, offsetPaths(area, -1.2, jtMiter), true), Y_PLAZA + 0.01);
+    const bandGeo = bandBuilder.build();
+    if (bandGeo) {
+      const bandMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.72), roughness: 1, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+      applyPavingShader(bandMat, 0, 0.3);
+      const band = new THREE.Mesh(bandGeo, bandMat);
+      band.receiveShadow = true;
+      band.name = 'PlazaBorder';
+      zone.buildingsGroup.add(band);
+    }
+    const inArea = createRegionTester(area);
+    const blocked = createRegionTester(blockers.length ? offsetPaths(blockers, 1.2, jtRound) : []);
+    // the fountain goes at the most open spot: the sample point furthest from the plaza's edge and anything crossing it
+    const obstacles = edgeSegmentsOf(area.concat(blockers), 800);
+    const distToObstacle = p => obstacles.reduce((m, [ax, az, bx, bz]) => Math.min(m, distPointSegment(p, { x:ax, z:az }, { x:bx, z:bz })), Infinity);
+    let minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
+    poly.forEach(p => { minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minZ=Math.min(minZ,p.z); maxZ=Math.max(maxZ,p.z); });
+    let fountain = null;
+    if (s.fountain !== false) {
+      let best = null;
+      for (let i=0;i<24;i++) for (let j=0;j<24;j++) {
+        const p = { x: minX + (maxX-minX)*(i+0.5)/24, z: minZ + (maxZ-minZ)*(j+0.5)/24 };
+        if (!inArea(p.x, p.z) || blocked(p.x, p.z)) continue;
+        const d = distToObstacle(p);
+        if (!best || d > best.d) best = { p, d };
+      }
+      const r = best ? Math.min(7, best.d*0.45) : 0;
+      if (r >= 2.2) {
+        fountain = { x: best.p.x, z: best.p.z, r };
+        zone.buildingsGroup.add(buildFountain(best.p, r));
+      }
+    }
+    const clearOfFountain = (x, z, gap) => !fountain || Math.hypot(x-fountain.x, z-fountain.z) > fountain.r + gap;
+    // lamp posts every PLAZA_LAMP_SPACING around the edge, with a bench facing inward halfway between each pair
+    const furniture = createMeshBuilder(), lampHeads = createMeshBuilder();
+    const benchSide = createRegionTester(offsetPaths(area, -3.3, jtMiter));
+    offsetPaths(area, -2.2, jtMiter).forEach(path => {
+      const pts = fromClipperPath(path);
+      let untilNext = PLAZA_LAMP_SPACING/2, lamp = true;
+      pts.forEach((a, i) => {
+        const b = pts[(i+1)%pts.length], len = Math.hypot(b.x-a.x, b.z-a.z);
+        if (len < 1e-6) return;
+        const dx = (b.x-a.x)/len, dz = (b.z-a.z)/len;
+        let d = untilNext;
+        for (; d <= len; d += PLAZA_LAMP_SPACING/2, lamp = !lamp) {
+          const x = a.x + dx*d, z = a.z + dz*d;
+          if (blocked(x, z) || !clearOfFountain(x, z, 2)) continue;
+          if (lamp) {
+            furniture.addBox(x, z, dx, dz, 0.08, 0.08, Y_PLAZA, Y_PLAZA + 4.2);
+            furniture.addBox(x, z, dx, dz, 0.2, 0.2, Y_PLAZA, Y_PLAZA + 0.35);
+            lampHeads.addBox(x, z, dx, dz, 0.24, 0.24, Y_PLAZA + 4.2, Y_PLAZA + 4.7);
+          } else {
+            // which side of the edge line is the plaza's inside decides which way the bench faces
+            const side = benchSide(x - dz*1.1, z + dx*1.1) ? 1 : -1;
+            const bx = x - dz*1.1*side, bz = z + dx*1.1*side, nx = -dz*side, nz = dx*side;
+            if (blocked(bx, bz)) continue;
+            furniture.addBox(bx, bz, dx, dz, 0.95, 0.26, Y_PLAZA + 0.4, Y_PLAZA + 0.5);             // seat
+            furniture.addBox(bx - nx*0.22, bz - nz*0.22, dx, dz, 0.95, 0.05, Y_PLAZA + 0.5, Y_PLAZA + 0.95); // backrest, away from the plaza
+            [-0.8, 0.8].forEach(o => furniture.addBox(bx + dx*o, bz + dz*o, dx, dz, 0.05, 0.22, Y_PLAZA, Y_PLAZA + 0.4));
+          }
+        }
+        untilNext = d - len;
+      });
+    });
+    // trees in square planters, spread over the plaza's open middle
+    const deepInside = createRegionTester(offsetPaths(area, -4, jtMiter));
+    const planted = [], targetTrees = Math.round((s.plazaTrees!=null ? s.plazaTrees : 0.35)*16);
+    for (let attempt=0; attempt<targetTrees*40 && planted.length<targetTrees; attempt++) {
+      const x = minX + rng()*(maxX-minX), z = minZ + rng()*(maxZ-minZ);
+      if (!deepInside(x, z) || blocked(x, z) || !clearOfFountain(x, z, 3) || planted.some(p => Math.hypot(p.x-x, p.z-z) < 7)) continue;
+      planted.push({ x, z });
+      furniture.addBox(x, z, 1, 0, 0.95, 0.95, Y_PLAZA, Y_PLAZA + 0.55);
+      const tree = makeTreeMesh(1, 1.4 + rng()*0.7, rng, resolveTreeTint(zone));
+      tree.position.set(x, Y_PLAZA + 0.55, z);
+      tree.rotation.y = rng()*Math.PI*2;
+      zone.buildingsGroup.add(tree);
+    }
+    const furnitureGeo = furniture.build();
+    if (furnitureGeo) {
+      const mesh = new THREE.Mesh(furnitureGeo, new THREE.MeshStandardMaterial({ color: 0x4a4d52, roughness: 0.7, metalness: 0.2 }));
+      mesh.castShadow = true; mesh.receiveShadow = true; mesh.name = 'PlazaFurniture';
+      zone.buildingsGroup.add(mesh);
+    }
+    const headGeo = lampHeads.build();
+    if (headGeo) {
+      const glow = new THREE.MeshStandardMaterial({ color: 0xfff1d6, roughness: 0.4, emissive: 0xffd08a, emissiveIntensity: 1.6*computeWindowGlowFactor(sunElevation) });
+      glow.userData.baseEmissiveIntensity = 1.6; // lit after dark (see updateWindowGlowForSun)
+      const mesh = new THREE.Mesh(headGeo, glow);
+      mesh.name = 'PlazaLamps';
+      zone.buildingsGroup.add(mesh);
+    }
+  }
+
+  // ---------------------------------------------------------- farmland
+  // Farmland is split into fields, like lots, with dirt tracks between them. Each field grows a crop — drawn by a shader as
+  // rows running along the field's longer side, with slow patches of lighter and darker growth across it — and some are
+  // lined with hedgerows, as is the farmland's edge (with gaps where roads and paths come through). A farmstead — a barn with
+  // a silo and a shed — stands in some of the bigger fields.
+  const FARM_TRACK_COLOR = 0x8f7b5e;
+  const CROPS = [
+    { color:0xd9bc5c, spacing:0.9, contrast:0.16 },  // wheat
+    { color:0xcfc47e, spacing:0.8, contrast:0.14 },  // barley
+    { color:0x86ad48, spacing:1.4, contrast:0.3 },   // leafy crop
+    { color:0x9cbf5c, spacing:1.7, contrast:0.5 },   // young shoots, with soil showing between the rows
+    { color:0x7d5d3f, spacing:1.1, contrast:0.35 },  // ploughed soil
+    { color:0xd6c554, spacing:0.9, contrast:0.1 },   // rapeseed
+    { color:0x9588ad, spacing:1.8, contrast:0.4 },   // lavender
+    { color:0x93b862, spacing:3.0, contrast:0.06 },  // pasture
+  ];
+  const CROP_FRAGMENT_PARS = `
+    varying vec3 vCropWorldPos;
+    uniform vec2 uRowDir;
+    uniform float uRowSpacing;
+    uniform float uRowContrast;
+    float cropHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
+    float cropNoise(vec2 p) {
+      vec2 i = floor(p), f = fract(p);
+      float a = cropHash(i), b = cropHash(i+vec2(1.0,0.0)), c = cropHash(i+vec2(0.0,1.0)), d = cropHash(i+vec2(1.0,1.0));
+      vec2 u = f*f*(3.0-2.0*f);
+      return mix(a,b,u.x) + (c-a)*u.y*(1.0-u.x) + (d-b)*u.x*u.y;
+    }
+  `;
+  const CROP_COLOR_FRAGMENT = `
+    {
+      vec2 wp = vCropWorldPos.xz;
+      float ridge = smoothstep(0.15, 0.85, abs(fract(dot(wp, uRowDir)/uRowSpacing) - 0.5)*2.0);
+      float patches = cropNoise(wp*0.06)*0.6 + cropNoise(wp*0.23)*0.4;
+      vec3 c = diffuseColor.rgb*mix(1.0 - uRowContrast, 1.0 + uRowContrast*0.35, ridge);
+      c *= (0.86 + 0.28*patches)*(0.95 + 0.1*cropNoise(wp*2.7));
+      diffuseColor.rgb = c;
+    }
+  `;
+  // rows run across (dx, dz): the stripes are perpendicular to it
+  function applyCropShader(mat, dx, dz, spacing, contrast) {
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uRowDir = { value: new THREE.Vector2(dx, dz) };
+      shader.uniforms.uRowSpacing = { value: spacing };
+      shader.uniforms.uRowContrast = { value: contrast };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vCropWorldPos;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCropWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\n' + CROP_FRAGMENT_PARS)
+        .replace('#include <color_fragment>', '#include <color_fragment>\n' + CROP_COLOR_FRAGMENT);
+    };
+  }
+  // the long axis (unit vector) of a polygon's minimum-area bounding rectangle, with that rectangle
+  function longAxisOf(poly) {
+    const rect = minAreaRect(convexHull(poly));
+    const angle = rect.width >= rect.height ? rect.angle : rect.angle + Math.PI/2;
+    return { rect, dx: Math.cos(angle), dz: Math.sin(angle), halfLong: Math.max(rect.width, rect.height)/2, halfShort: Math.min(rect.width, rect.height)/2 };
+  }
+  // A mesh from a mesh builder, in a flat color — null if the builder's empty.
+  function builderMesh(builder, color, name, opts) {
+    const geo = builder.build();
+    if (!geo) return null;
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...(opts || {}) }));
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.name = name;
+    return mesh;
+  }
+  // a gable roof over the rectangle centered on (cx, cz) with half-length L along (dx, dz) and half-width W across it,
+  // its eaves at y0 and ridge `rise` above them; the sloped faces go in `roof`, the triangular gable ends in `walls`
+  function addGableRoof(roof, walls, cx, cz, dx, dz, L, W, y0, rise) {
+    const nx = -dz, nz = dx;
+    const at = (s, w, y) => ({ x: cx + dx*s + nx*w, y, z: cz + dz*s + nz*w });
+    [1, -1].forEach(side => {
+      const len = Math.hypot(rise, W);
+      roof.addQuad(at(-L, W*side, y0), at(L, W*side, y0), at(L, 0, y0+rise), at(-L, 0, y0+rise), { x: nx*side*rise/len, y: W/len, z: nz*side*rise/len });
+      walls.addQuad(at(L*side, -W, y0), at(L*side, W, y0), at(L*side, 0, y0+rise), at(L*side, 0, y0+rise), { x: dx*side, y: 0, z: dz*side });
+    });
+  }
+  function generateFarmlandContent(zone, poly, cutouts, blockers) {
+    const s = zone.settings, rng = mulberry32(s.seed>>>0);
+    const tracks = makeFlatZoneMesh(poly, FARM_TRACK_COLOR, Y_ZONE_GROUND, 'FarmTracks', null, cutouts);
+    if (tracks) zone.buildingsGroup.add(tracks);
+    const lots = [];
+    const targetFields = Math.max(1, Math.round(s.fieldCount!=null ? s.fieldCount : 14));
+    recursiveSubdivide(poly, 0, { minArea: Math.abs(polygonArea(poly))/targetFields, maxDepth: 9, jitter: 0.5, minSplitDim: 6 }, rng, lots);
+    const fields = [];
+    lots.forEach(lot => cutLotByCutouts(lot, blockers).pieces.forEach(piece => {
+      insetPolygonExact(piece, 0.9).forEach(field => { if (field.length >= 3 && Math.abs(polygonArea(field)) > 20) fields.push(field); });
+    }));
+    const inBlocker = createRegionTester(blockers.length ? offsetPaths(blockers, 0.8, ClipperLib.JoinType.jtRound) : []);
+    const hedges = createMeshBuilder();
+    // a hedgerow along a line: a chain of leafy blocks of slightly varying size, skipping any that would stand in a blocker
+    const hedgeAlong = line => {
+      for (let i=0;i<line.length-1;i++) {
+        const a = line[i], b = line[i+1], len = Math.hypot(b.x-a.x, b.z-a.z);
+        if (len < 0.2) continue;
+        const dx = (b.x-a.x)/len, dz = (b.z-a.z)/len, pieces = Math.max(1, Math.round(len/1.6));
+        for (let k=0;k<pieces;k++) {
+          const t = (k+0.5)/pieces, x = a.x + (b.x-a.x)*t, z = a.z + (b.z-a.z)*t;
+          if (inBlocker(x, z)) continue;
+          hedges.addBox(x, z, dx, dz, len/pieces/2 + 0.1, 0.4 + rng()*0.12, Y_PARK, Y_PARK + 0.9 + rng()*0.5);
+        }
+      }
+    };
+    fields.forEach(field => {
+      const crop = CROPS[Math.floor(rng()*CROPS.length)];
+      const axis = longAxisOf(field);
+      const across = rng() < 0.25; // most fields are ploughed along their length
+      const mesh = makeFlatZoneMesh(field, crop.color, Y_PARK, 'Field', mat => applyCropShader(mat, across ? axis.dx : -axis.dz, across ? axis.dz : axis.dx, crop.spacing, crop.contrast));
+      if (mesh) zone.buildingsGroup.add(mesh);
+      if (s.hedgerows !== false && rng() < 0.5) {
+        offsetPaths([toClipperPath(field)], 0.45, ClipperLib.JoinType.jtMiter).forEach(path => {
+          const loop = fromClipperPath(path);
+          // with a gateway left open somewhere along it
+          const gate = Math.floor(rng()*loop.length);
+          hedgeAlong(loop.slice(gate+1).concat(loop.slice(0, gate+1)));
+        });
+      }
+    });
+    if (s.hedgerows !== false) zoneFenceLines(zone, poly, 0.6).forEach(hedgeAlong);
+    const hedgeMesh = builderMesh(hedges, 0x4d6a33, 'Hedgerow', { roughness: 1 });
+    if (hedgeMesh) zone.buildingsGroup.add(hedgeMesh);
+    // farmsteads, in some of the larger fields
+    if (s.farmsteads !== false && fields.length) {
+      const bySize = fields.slice().sort((a, b) => Math.abs(polygonArea(b)) - Math.abs(polygonArea(a)));
+      const count = Math.max(1, Math.round(fields.length/9));
+      for (let i=0;i<count;i++) {
+        const field = bySize[Math.min(bySize.length-1, Math.floor(rng()*Math.min(bySize.length, count*3)))];
+        const spot = insetPolygonExact(field, 8)[0];
+        if (!spot) continue;
+        const c = centroid(spot);
+        if (!pointInPolygon(c, spot)) continue;
+        const { dx, dz } = longAxisOf(field), nx = -dz, nz = dx;
+        const group = new THREE.Group();
+        group.name = 'Building';
+        const yard = createMeshBuilder(), barn = createMeshBuilder(), roof = createMeshBuilder(), silo = createMeshBuilder();
+        yard.addBox(c.x, c.z, dx, dz, 10, 7.5, Y_PARK, Y_PARK + 0.04);
+        barn.addBox(c.x, c.z, dx, dz, 6, 3.6, Y_PARK, Y_PARK + 4.2);
+        addGableRoof(roof, barn, c.x, c.z, dx, dz, 6.3, 3.9, Y_PARK + 4.2, 2.6);
+        const shed = { x: c.x - nx*6.5 + dx*2, z: c.z - nz*6.5 + dz*2 };
+        barn.addBox(shed.x, shed.z, dx, dz, 2.4, 1.8, Y_PARK, Y_PARK + 2.4);
+        addGableRoof(roof, barn, shed.x, shed.z, dx, dz, 2.6, 2.0, Y_PARK + 2.4, 1.1);
+        [[yard, FARM_TRACK_COLOR, 'Farmyard'], [barn, 0x9d3d2f, 'Barn'], [roof, 0x4a4643, 'BarnRoof']].forEach(([builder, color, name]) => {
+          const mesh = builderMesh(builder, color, name);
+          if (mesh) group.add(mesh);
+        });
+        const siloMat = new THREE.MeshStandardMaterial({ color: 0xd3d6d8, roughness: 0.55, metalness: 0.1 });
+        const siloAt = { x: c.x + dx*8.4 + nx*1.2, z: c.z + dz*8.4 + nz*1.2 };
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 9, 20), siloMat);
+        body.position.set(siloAt.x, Y_PARK + 4.5, siloAt.z);
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(1.6, 20, 8, 0, Math.PI*2, 0, Math.PI/2), siloMat);
+        dome.position.set(siloAt.x, Y_PARK + 9, siloAt.z);
+        [body, dome].forEach(m => { m.castShadow = true; m.receiveShadow = true; m.name = 'Silo'; group.add(m); });
+        zone.buildingsGroup.add(group);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------- fences & railings
+  // Fences (around parks, industrial lots) and railings (along bridges) are all built the same way: rails running along a
+  // line, and posts spaced evenly along it — carried over from one segment to the next, so a curve made of many short
+  // segments still gets evenly spaced posts rather than one at every bend.
+  const PARK_FENCE_STYLE = { height:1.1, rails:[1.05, 0.6], railWidth:0.08, railHeight:0.08, postSize:0.14, postSpacing:2.5, color:0x3a3d38 };
+  // one segment a→b ({x,z}) of a railing standing at baseY; `state` carries the distance since the last post between calls
+  function addRailingSegment(builder, a, b, baseY, style, state) {
+    const len = Math.hypot(b.x-a.x, b.z-a.z);
+    if (len < 1e-3) return;
+    const dx = (b.x-a.x)/len, dz = (b.z-a.z)/len;
+    style.rails.forEach(h => builder.addBox((a.x+b.x)/2, (a.z+b.z)/2, dx, dz, len/2 + style.railWidth/2, style.railWidth/2, baseY+h-style.railHeight, baseY+h));
+    let s = style.postSpacing - (state.carry!=null ? state.carry : style.postSpacing);
+    for (; s <= len; s += style.postSpacing) builder.addBox(a.x+dx*s, a.z+dz*s, dx, dz, style.postSize/2, style.postSize/2, baseY, baseY+style.height);
+    state.carry = len - (s - style.postSpacing);
+  }
+  // a mesh of railings along polylines ({x,z}[]), each ending in a post
+  function buildRailingMesh(lines, baseY, style, name) {
+    const builder = createMeshBuilder();
+    lines.forEach(line => {
+      const state = {};
+      for (let i=0;i<line.length-1;i++) addRailingSegment(builder, line[i], line[i+1], baseY, style, state);
+      const end = line[line.length-1], prev = line[line.length-2];
+      const len = Math.hypot(end.x-prev.x, end.z-prev.z) || 1;
+      if (state.carry > style.postSpacing*0.25) builder.addBox(end.x, end.z, (end.x-prev.x)/len, (end.z-prev.z)/len, style.postSize/2, style.postSize/2, baseY, baseY+style.height);
+    });
+    const geo = builder.build();
+    if (!geo) return null;
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: style.color, roughness: style.roughness!=null ? style.roughness : 0.8, metalness: style.metalness || 0 }));
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.name = name;
+    return mesh;
+  }
+  // The lines a fence around `poly` (a zone's outline) should follow: the edge of its area — the outline minus the zones
+  // above it — pulled in by `inset`, with a gap wherever a road, river or path crosses it, and left off wherever it runs along
+  // water (that edge is a beach or an embankment instead).
+  function zoneFenceLines(zone, poly, inset) {
+    const { ctDifference, ctUnion, ctIntersection } = ClipperLib.ClipType;
+    const edge = offsetPaths(clipPolygons(ctDifference, [toClipperPath(poly)], zoneOutlinesAbove(zone)), -inset, ClipperLib.JoinType.jtMiter);
+    if (!edge.length) return [];
+    const loops = edge.map(path => path.concat([path[0]]));
+    const reach = offsetPaths([toClipperPath(poly)], ZONE_CUTOUT_REACH + inset, ClipperLib.JoinType.jtRound);
+    const crossings = clipPolygons(ctIntersection, clipPolygons(ctUnion, landCutFootprint, pathFootprint), reach);
+    const water = clipPolygons(ctIntersection, getWaterRegion(), reach);
+    const gaps = clipPolygons(ctUnion, crossings.length ? offsetPaths(crossings, 0.6, ClipperLib.JoinType.jtRound) : [],
+      water.length ? offsetPaths(water, inset + 0.6, ClipperLib.JoinType.jtRound) : []);
+    if (!gaps.length) return loops.map(fromClipperPath);
+    const clipper = new ClipperLib.Clipper();
+    clipper.AddPaths(loops, ClipperLib.PolyType.ptSubject, false);
+    clipper.AddPaths(gaps, ClipperLib.PolyType.ptClip, true);
+    const tree = new ClipperLib.PolyTree();
+    clipper.Execute(ctDifference, tree, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+    return ClipperLib.Clipper.OpenPathsFromPolyTree(tree).map(fromClipperPath).filter(line => line.length >= 2);
+  }
+
   // ---------------------------------------------------------- water
-  // A water zone is one animated surface: travelling waves (a few long swells plus drifting noise) tilt its normals so it
-  // glints in the sun and picks up the sky reflection, and it's colored by how far each point is from its shore — deep
-  // blue-green in the middle, lighter turquoise in the shallows, and a thin broken line of foam right at the water's
-  // edge. Where water meets a park, the shallows along that stretch take on a sandy tint while the park's grass turns to
-  // sand along the same edge (see applyGrassNoiseShader), so the two blend across the boundary — whichever of the two is
-  // higher in the zone list. Both shaders measure distance to shore edges passed in as fixed-size lists of segments.
+  // Water zones and rivers are one body of water: their areas are unioned, so a river running into a lake joins it without
+  // a seam. It sits sunk below the ground — the ground mesh has a hole cut where it is — at WATER_LEVEL, and it's edged by
+  // banks: a sandy beach sloping down into the water wherever it meets a park, and a stone embankment wall everywhere else.
+  // Roads and paths don't cut into it: where they cross, they're carried over on bridges (see "bridges").
+  // The surface is animated: travelling waves (a few long swells plus drifting noise) tilt its normals so it glints in the
+  // sun and picks up the sky reflection, and it's colored by how far each point is from the waterline — deep blue-green in
+  // the middle, lighter turquoise in the shallows, and a thin broken line of foam at the water's edge. Along a beach, the
+  // shallows take on a sandy tint while the park's grass turns to sand along the same edge (see applyGrassNoiseShader), so
+  // grass, sand and water blend into each other. Both shaders measure distance to shore edges passed in as fixed-size
+  // lists of segments; to keep those lists short, the surface is built in square tiles, each told only about the shore
+  // near it (see rebuildWater).
   const WATER_COLOR = 0x0d4a5a;       // deep water; the shallows are mixed in lighter by the shader
-  const WATER_MAX_SHORE_SEGMENTS = 96;
+  const WATER_LEVEL = -1.2;           // the water's surface, below ground level
+  const WATER_BANK_TOP = 0.05;        // banks start a hair above the ground, so zone floors meet them without a gap
+  const WATER_BANK_BOTTOM = -1.6;     // and reach down past the surface (which is opaque)
+  const BEACH_SLOPE_WIDTH = 3;        // how far out a beach slopes before it reaches the bottom of the bank
+  // how far out along a beach its slope goes under the water — where the waterline and its foam are
+  const BEACH_WATERLINE = BEACH_SLOPE_WIDTH*(WATER_BANK_TOP - WATER_LEVEL)/(WATER_BANK_TOP - WATER_BANK_BOTTOM);
+  const WATER_BANK_COLOR = 0x6f6c66, WATER_BEACH_COLOR = 0xc9b387;
+  const WATER_MAX_SHORE_SEGMENTS = 128;
   const WATER_MAX_BEACH_SEGMENTS = 64;
+  const WATER_TILE_SIZE = 96;         // world units per surface tile
+  const WATER_TILE_MARGIN = 12;       // shore this far outside a tile still counts for it — past the shallows' reach
   const PARK_BEACH_WIDTH = 5;         // roughly how far sand reaches into a park from the water's edge
   const WATER_TIME = { value: 0 };    // shared by every water material; advanced each frame in animate()
 
@@ -3679,15 +4159,12 @@
     }));
     return segments.slice(0, max);
   }
-  // The stretches of a zone's edge (`ownPaths`, its area after cut-outs) that border a zone of type `otherType` — where a
-  // park meets water, or water meets a park — as world-space segments, at most `max` of them. Each edge is sampled along
-  // its length, just either side of it, so a partly shared edge only contributes the part that's shared; if that makes
-  // too many, segments that join end to end are merged in pairs until they fit.
-  function sharedEdgeSegments(zone, ownPaths, otherType, max) {
-    const others = zones.filter(z => z !== zone && z.zoneType===otherType);
-    if (!others.length || !ownPaths.length) return [];
-    const otherArea = clipPolygons(ClipperLib.ClipType.ctUnion, others.flatMap(zoneEffectivePaths), []);
-    if (!otherArea.length) return [];
+  // The stretches of the edge of an area (`ownPaths`) that border another area (`otherArea`) — where a park meets water,
+  // or water meets a park — as world-space segments, at most `max` of them. Each edge is sampled along its length, just
+  // either side of it, so a partly shared edge only contributes the part that's shared; if that makes too many, segments
+  // that join end to end are merged in pairs until they fit.
+  function sharedEdgeSegmentsWith(ownPaths, otherArea, max) {
+    if (!ownPaths.length || !otherArea.length) return [];
     const inOther = createRegionTester(otherArea);
     let segments = [];
     edgeSegmentsOf(ownPaths, 1000).forEach(([ax, az, bx, bz]) => {
@@ -3729,6 +4206,7 @@
     uniform int uShoreCount;
     uniform vec4 uBeachSegments[WATER_MAX_BEACH];
     uniform int uBeachCount;
+    uniform float uBeachWaterline;
     float waterHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
     float waterNoise(vec2 p) {
       vec2 i = floor(p), f = fract(p);
@@ -3753,14 +4231,17 @@
   const WATER_COLOR_FRAGMENT = `
     {
       vec2 wp = vWaterWorldPos.xz;
-      float shoreDistance = 1e9;
-      for (int i=0; i<WATER_MAX_SHORE; i++) { if (i >= uShoreCount) break; shoreDistance = min(shoreDistance, waterSegmentDistance(wp, uShoreSegments[i])); }
+      // uShoreSegments are the edges walled by an embankment, uBeachSegments the ones with a beach sloping into the water
+      float wallDistance = 1e9;
+      for (int i=0; i<WATER_MAX_SHORE; i++) { if (i >= uShoreCount) break; wallDistance = min(wallDistance, waterSegmentDistance(wp, uShoreSegments[i])); }
       float beachDistance = 1e9;
       for (int i=0; i<WATER_MAX_BEACH; i++) { if (i >= uBeachCount) break; beachDistance = min(beachDistance, waterSegmentDistance(wp, uBeachSegments[i])); }
+      // the waterline is right at a wall, but part-way out from a beach's edge, where its slope goes under
+      float shoreDistance = min(wallDistance, abs(beachDistance - uBeachWaterline));
       vec3 deep = diffuseColor.rgb; // the material's own color is the deep water
       vec3 water = mix(deep, vec3(0.17, 0.56, 0.58), (1.0 - smoothstep(0.0, 9.0, shoreDistance))*0.85);
-      // sand showing through the last few units of water along a beach, with a slightly wavering edge
-      float sandy = 1.0 - smoothstep(0.0, 4.0, beachDistance + (waterNoise(wp*0.5) - 0.5)*1.5);
+      // sand showing through the first few units of water off a beach, with a slightly wavering edge
+      float sandy = 1.0 - smoothstep(0.0, 4.0, beachDistance - uBeachWaterline + (waterNoise(wp*0.5) - 0.5)*1.5);
       water = mix(water, vec3(0.55, 0.64, 0.52), sandy*0.65);
       // a thin, broken, slowly shifting line of foam right at the water's edge
       float foam = (1.0 - smoothstep(0.1, 0.9, shoreDistance))*smoothstep(0.35, 0.7, waterNoise(wp*1.6 + vec2(uWaterTime*0.25, -uWaterTime*0.18)));
@@ -3779,7 +4260,8 @@
       normal = normalize((viewMatrix * vec4(waterNormal, 0.0)).xyz);
     }
   `;
-  function applyWaterShader(mat, shoreSegments, beachSegments) {
+  // `shoreSegments`: walled edges; `beachSegments`: edges with a beach, whose waterline is `beachWaterline` out from them
+  function applyWaterShader(mat, shoreSegments, beachSegments, beachWaterline) {
     mat.roughness = 0.08;
     mat.metalness = 0;
     mat.envMap = SKY_ENV_MAP;
@@ -3792,6 +4274,7 @@
       shader.uniforms.uShoreCount = { value: Math.min(shoreSegments.length, WATER_MAX_SHORE_SEGMENTS) };
       shader.uniforms.uBeachSegments = { value: beach };
       shader.uniforms.uBeachCount = { value: Math.min(beachSegments.length, WATER_MAX_BEACH_SEGMENTS) };
+      shader.uniforms.uBeachWaterline = { value: beachWaterline || 0 };
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWaterWorldPos;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWaterWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -3801,12 +4284,183 @@
         .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n' + WATER_NORMAL_FRAGMENT);
     };
   }
-  function generateWaterContent(zone, poly, cutouts) {
-    const own = clipPolygons(ClipperLib.ClipType.ctDifference, [toClipperPath(poly)], cutouts);
-    const shore = edgeSegmentsOf(own, WATER_MAX_SHORE_SEGMENTS);
-    const beach = sharedEdgeSegments(zone, own, 'park', WATER_MAX_BEACH_SEGMENTS);
-    const surface = makeFlatZoneMesh(poly, WATER_COLOR, Y_WATER, 'Water', (mat) => applyWaterShader(mat, shore, beach), cutouts);
-    if (surface) zone.buildingsGroup.add(surface);
+  // The water region — every water zone minus the zones above it, plus every river, unioned — and the park area beside it
+  // (every park minus the zones above it, for beaches). Cached, and only worked out again when a zone or river changes.
+  const waterCache = { key: null, region: [], parkArea: [] };
+  function refreshWaterCache() {
+    const key = riverSeq + '|' + JSON.stringify(zones.map(z => (z.drawing || z.points.length < 3) ? null : [z.zoneType, z.points]));
+    if (key === waterCache.key) return;
+    waterCache.key = key;
+    const { ctUnion, ctDifference } = ClipperLib.ClipType;
+    const water = riverFootprint.slice(), parks = [];
+    zones.forEach(zone => {
+      if (zone.drawing || zone.points.length < 3 || (zone.zoneType !== 'water' && zone.zoneType !== 'park')) return;
+      const area = clipPolygons(ctDifference, [toClipperPath(tessellateClosedPath(zone.points))], zoneOutlinesAbove(zone));
+      (zone.zoneType === 'water' ? water : parks).push(...area);
+    });
+    waterCache.region = water.length ? clipPolygons(ctUnion, water, []) : [];
+    waterCache.parkArea = parks.length ? clipPolygons(ctUnion, parks, []) : [];
+  }
+  function getWaterRegion() { refreshWaterCache(); return waterCache.region; }
+
+  let waterGroup = new THREE.Group(); waterGroup.name = 'Water'; scene.add(waterGroup);
+  let builtWaterKey = null, builtBridgeKey = null;
+  // Brings the water, and the bridges over it, up to date — each only if what it depends on has changed. Called from
+  // animate() whenever waterDirty is set, so any number of zone and road rebuilds in one go cost one water rebuild.
+  function rebuildWater() {
+    waterDirty = false;
+    refreshWaterCache();
+    if (builtWaterKey !== waterCache.key) {
+      builtWaterKey = waterCache.key;
+      buildWaterBody(waterCache.region, waterCache.parkArea);
+    }
+    const bridgeKey = waterCache.key + '#' + roadBuildSeq;
+    if (builtBridgeKey !== bridgeKey) {
+      builtBridgeKey = bridgeKey;
+      buildBridges(waterCache.region);
+    }
+  }
+  // The ground: one big flat mesh at height 0, with a hole wherever there's water.
+  function rebuildGround(region) {
+    const S = GROUND_HALF_SIZE*CLIPPER_SCALE;
+    const builder = createMeshBuilder();
+    builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, [[{X:-S,Y:-S}, {X:S,Y:-S}, {X:S,Y:S}, {X:-S,Y:S}]], region, true), 0);
+    ground.geometry.dispose();
+    ground.geometry = builder.build() || new THREE.BufferGeometry();
+  }
+  function buildWaterBody(region, parkArea) {
+    scene.remove(waterGroup); disposeObject(waterGroup);
+    waterGroup = new THREE.Group(); waterGroup.name = 'Water';
+    rebuildGround(region);
+    if (region.length) {
+      const tree = clipPolygons(ClipperLib.ClipType.ctUnion, region, [], true);
+      const inPark = createRegionTester(parkArea);
+      const banks = createMeshBuilder(), beaches = createMeshBuilder();
+      const shaderSegments = []; // { a, b, beach } — the shore simplified, for the surface shader
+      const drop = WATER_BANK_TOP - WATER_BANK_BOTTOM;
+      const visit = node => {
+        const raw = node.Contour().map(p => ({ x:p.X/CLIPPER_SCALE, z:p.Y/CLIPPER_SCALE }));
+        let area2 = 0;
+        raw.forEach((a, i) => { const b = raw[(i+1)%raw.length]; area2 += a.x*b.z - b.x*a.z; });
+        const filledOnLeft = (area2 > 0) === !node.IsHole();
+        // the contour in pieces of at most 2 units, so a beach can start and stop part-way along an edge
+        const pts = [];
+        raw.forEach((a, i) => {
+          const b = raw[(i+1)%raw.length], steps = Math.max(1, Math.ceil(Math.hypot(b.x-a.x, b.z-a.z)/2));
+          for (let k=0;k<steps;k++) pts.push({ x: a.x+(b.x-a.x)*k/steps, z: a.z+(b.z-a.z)*k/steps });
+        });
+        const count = pts.length;
+        const edges = pts.map((a, i) => {
+          const b = pts[(i+1)%count], dx = b.x-a.x, dz = b.z-a.z, len = Math.hypot(dx, dz) || 1;
+          const out = filledOnLeft ? { x:dz/len, z:-dx/len } : { x:-dz/len, z:dx/len }; // pointing away from the water
+          return { a, b, dir: { x:dx/len, z:dz/len }, out, beach: inPark((a.x+b.x)/2 + out.x*0.4, (a.z+b.z)/2 + out.z*0.4) };
+        });
+        // where a beach's slope reaches out from the vertex at the start of edge i: mitered with the edge before it when that
+        // one's a beach too, so neighboring pieces of slope meet without gaps or overlaps
+        const reachAt = i => {
+          const e = edges[i], prev = edges[(i-1+count)%count];
+          const n1 = { x:-e.out.x, z:-e.out.z };
+          if (!prev.beach || !e.beach) return n1;
+          let mx = n1.x - prev.out.x, mz = n1.z - prev.out.z;
+          const ml = Math.hypot(mx, mz);
+          if (ml < 1e-3) return n1;
+          mx /= ml; mz /= ml;
+          const scale = 1/Math.max(0.5, mx*n1.x + mz*n1.z);
+          return { x: mx*scale, z: mz*scale };
+        };
+        edges.forEach((e, i) => {
+          const inward = { x:-e.out.x, y:0, z:-e.out.z };
+          if (!e.beach) {
+            banks.addQuad({ x:e.a.x, y:WATER_BANK_TOP, z:e.a.z }, { x:e.b.x, y:WATER_BANK_TOP, z:e.b.z },
+              { x:e.b.x, y:WATER_BANK_BOTTOM, z:e.b.z }, { x:e.a.x, y:WATER_BANK_BOTTOM, z:e.a.z }, inward);
+            return;
+          }
+          const ra = reachAt(i), next = edges[(i+1)%count];
+          const rb = next.beach ? reachAt((i+1)%count) : { x:-e.out.x, z:-e.out.z };
+          const W = BEACH_SLOPE_WIDTH;
+          const normalLen = Math.hypot(drop, W);
+          const slopeNormal = { x: inward.x*drop/normalLen, y: W/normalLen, z: inward.z*drop/normalLen };
+          const topA = { x:e.a.x, y:WATER_BANK_TOP, z:e.a.z }, topB = { x:e.b.x, y:WATER_BANK_TOP, z:e.b.z };
+          const lowA = { x:e.a.x + ra.x*W, y:WATER_BANK_BOTTOM, z:e.a.z + ra.z*W }, lowB = { x:e.b.x + rb.x*W, y:WATER_BANK_BOTTOM, z:e.b.z + rb.z*W };
+          beaches.addQuad(topA, topB, lowB, lowA, slopeNormal);
+          // close off the side of the slope where the beach gives way to a wall
+          const prev = edges[(i-1+count)%count];
+          if (!prev.beach) beaches.addQuad(topA, lowA, { x:e.a.x, y:WATER_BANK_BOTTOM, z:e.a.z }, topA, { x:-e.dir.x, y:0, z:-e.dir.z });
+          if (!next.beach) beaches.addQuad(topB, { x:e.b.x, y:WATER_BANK_BOTTOM, z:e.b.z }, lowB, topB, { x:e.dir.x, y:0, z:e.dir.z });
+        });
+        // the shore for the shader: runs of edges of the same kind merged while they stay within 0.25 of a straight line
+        let run = null;
+        const flush = () => { if (run) shaderSegments.push({ a: run.start, b: run.end, beach: run.beach }); run = null; };
+        edges.forEach(e => {
+          if (run && run.beach === e.beach && run.inner.length < 64) {
+            const inner = run.inner.concat([run.end]);
+            if (inner.every(p => distPointSegment(p, run.start, e.b) <= 0.25)) { run.inner = inner; run.end = e.b; return; }
+          }
+          flush();
+          run = { start: e.a, end: e.b, inner: [], beach: e.beach };
+        });
+        flush();
+        node.Childs().forEach(visit);
+      };
+      tree.Childs().forEach(visit);
+      const addBankMesh = (builder, color, name) => {
+        const geo = builder.build();
+        if (!geo) return;
+        const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.95 }));
+        mesh.receiveShadow = true;
+        mesh.name = name;
+        waterGroup.add(mesh);
+      };
+      addBankMesh(banks, WATER_BANK_COLOR, 'WaterBank');
+      addBankMesh(beaches, WATER_BEACH_COLOR, 'Beach');
+
+      // the surface, tile by tile: each tile is the region clipped to its square (rows first, so each square only clips a
+      // row's worth of outline), shaded with just the shore within WATER_TILE_MARGIN of it — nearest first if that's still
+      // more than the shader's lists hold
+      let minX=Infinity, minZ=Infinity, maxX=-Infinity, maxZ=-Infinity;
+      region.forEach(path => path.forEach(p => { minX=Math.min(minX,p.X); maxX=Math.max(maxX,p.X); minZ=Math.min(minZ,p.Y); maxZ=Math.max(maxZ,p.Y); }));
+      const T = WATER_TILE_SIZE*CLIPPER_SCALE;
+      const x0 = Math.floor(minX/T)*T, z0 = Math.floor(minZ/T)*T;
+      const rect = (ax, az, bx, bz) => [{X:ax,Y:az}, {X:bx,Y:az}, {X:bx,Y:bz}, {X:ax,Y:bz}];
+      const { ctIntersection } = ClipperLib.ClipType;
+      const segmentsNear = (list, cx, cz, half, max) => {
+        const reach = half + WATER_TILE_MARGIN;
+        const near = list.filter(s => Math.max(s.a.x, s.b.x) >= cx-reach && Math.min(s.a.x, s.b.x) <= cx+reach && Math.max(s.a.z, s.b.z) >= cz-reach && Math.min(s.a.z, s.b.z) <= cz+reach);
+        if (near.length > max) near.sort((s, t) => distPointSegment({ x:cx, z:cz }, s.a, s.b) - distPointSegment({ x:cx, z:cz }, t.a, t.b));
+        return near.slice(0, max).map(s => [s.a.x, s.a.z, s.b.x, s.b.z]);
+      };
+      const wallList = shaderSegments.filter(s => !s.beach), beachList = shaderSegments.filter(s => s.beach);
+      for (let rz = z0; rz < maxZ; rz += T) {
+        const row = clipPolygons(ctIntersection, region, [rect(x0, rz, maxX+1, rz+T)]);
+        if (!row.length) continue;
+        for (let rx = x0; rx < maxX; rx += T) {
+          const piece = clipPolygons(ctIntersection, row, [rect(rx, rz, rx+T, rz+T)], true);
+          if (!piece.Childs().length) continue;
+          const builder = createMeshBuilder();
+          builder.addTops(piece, WATER_LEVEL);
+          const geo = builder.build();
+          if (!geo) continue;
+          const cx = (rx + T/2)/CLIPPER_SCALE, cz = (rz + T/2)/CLIPPER_SCALE, half = WATER_TILE_SIZE/2;
+          const mat = new THREE.MeshStandardMaterial({ color: WATER_COLOR, roughness: 1 });
+          applyWaterShader(mat, segmentsNear(wallList, cx, cz, half, WATER_MAX_SHORE_SEGMENTS), segmentsNear(beachList, cx, cz, half, WATER_MAX_BEACH_SEGMENTS), BEACH_WATERLINE);
+          const surface = new THREE.Mesh(geo, mat);
+          surface.receiveShadow = true;
+          surface.name = 'Water';
+          waterGroup.add(surface);
+        }
+      }
+
+      // the stencil mask that keeps the grid, map images and path sand from being drawn over the water (see SKIP_OVER_WATER)
+      const maskBuilder = createMeshBuilder();
+      maskBuilder.addTops(tree, Y_MAP);
+      const mask = new THREE.Mesh(maskBuilder.build(), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false,
+        stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc, stencilRef: 1, stencilZPass: THREE.ReplaceStencilOp }));
+      mask.renderOrder = -10; // before anything that tests it
+      mask.name = 'WaterMask';
+      mask.userData.noExport = true;
+      waterGroup.add(mask);
+    }
+    scene.add(waterGroup);
   }
 
   // ---------------------------------------------------------- zone cut-outs
@@ -3851,19 +4505,26 @@
   }
   // Everything cut out of `zone` in and just around its outline `poly`: the road footprint, plus the outlines of the zones
   // above it in the list (not counting one still being drawn). Empty when nothing is near, which skips all cut-out handling.
+  // Water zones are the exception: roads cross them on bridges rather than cutting them, and rivers merge into them, so only
+  // the zones above cut into water.
   function zoneCutoutsNear(zone, poly) {
     const { ctUnion, ctIntersection } = ClipperLib.ClipType;
+    const linear = zone.zoneType==='water' ? [] : landCutFootprint; // roads and rivers
+    const zonesAbove = zoneOutlinesAbove(zone);
+    if (!linear.length && !zonesAbove.length) return [];
+    const reach = offsetPaths([toClipperPath(poly)], ZONE_CUTOUT_REACH, ClipperLib.JoinType.jtRound);
+    return clipPolygons(ctIntersection, clipPolygons(ctUnion, linear, zonesAbove), reach);
+  }
+  // The union of the outlines of every zone above `zone` in the list (not counting one still being drawn). The outlines are
+  // unioned on their own, so each one counts as filled whichever way round it was drawn, before being combined with
+  // anything that has holes of its own (like the road footprint).
+  function zoneOutlinesAbove(zone) {
     const above = [];
     for (const other of zones) {
       if (other === zone) break;
       if (!other.drawing && other.points.length >= 3) above.push(toClipperPath(tessellateClosedPath(other.points)));
     }
-    if (!roadFootprint.length && !above.length) return [];
-    // the zone outlines are unioned on their own first, so each one counts as filled whichever way round it was drawn,
-    // and only then combined with the road footprint (which has holes of its own)
-    const zonesAbove = above.length ? clipPolygons(ctUnion, above, []) : [];
-    const reach = offsetPaths([toClipperPath(poly)], ZONE_CUTOUT_REACH, ClipperLib.JoinType.jtRound);
-    return clipPolygons(ctIntersection, clipPolygons(ctUnion, roadFootprint, zonesAbove), reach);
+    return above.length ? clipPolygons(ClipperLib.ClipType.ctUnion, above, []) : [];
   }
   // The path footprint in and just around `poly`. Paths don't cut into a zone's ground (see "paths"), but its lots,
   // buildings and trees keep off them.
@@ -3933,6 +4594,8 @@
   function subdivideZone(zone) {
     if (zone.buildingsGroup) { scene.remove(zone.buildingsGroup); disposeObject(zone.buildingsGroup); }
     zone.buildingsGroup = new THREE.Group();
+    waterDirty = true; // any zone can cut into water, border it, or cross it
+
     if (zone.points.length>=3) {
       const poly = tessellateClosedPath(zone.points);
       const cutouts = zoneCutoutsNear(zone, poly); // roads, and the zones above this one
@@ -3942,7 +4605,13 @@
       if (zone.zoneType==='park') {
         generateParkContent(zone, poly, cutouts, blockers);
       } else if (zone.zoneType==='water') {
-        generateWaterContent(zone, poly, cutouts);
+        // nothing of its own: all water is built together, by rebuildWater
+      } else if (zone.zoneType==='plaza') {
+        generatePlazaContent(zone, poly, cutouts, blockers);
+      } else if (zone.zoneType==='farmland') {
+        generateFarmlandContent(zone, poly, cutouts, blockers);
+      } else if (zone.zoneType==='industrial') {
+        generateIndustrialContent(zone, poly, cutouts, blockers);
       } else if (zone.zoneType==='plain') {
         const ground = makeFlatZoneMesh(poly, zone.settings.groundColor!=null ? zone.settings.groundColor : BUILDING_GROUND_COLORS[0], Y_ZONE_GROUND, 'ZoneGround', null, cutouts);
         if (ground) zone.buildingsGroup.add(ground);
@@ -4010,7 +4679,7 @@
     subdivideZonesFromIndex(Math.max(0, zones.indexOf(zone)));
   }
   function subdivideZonesFromIndex(index) {
-    zones.forEach((z, i) => { if (i >= index || z.zoneType==='water' || z.zoneType==='park') subdivideZone(z); });
+    zones.forEach((z, i) => { if (i >= index || z.zoneType==='water' || z.zoneType==='park' || z.zoneType==='farmland') subdivideZone(z); });
   }
   // Moves a zone to just before (or after) another in the zone list. The order is priority — a zone cuts itself out of
   // every zone below it — so every zone is re-subdivided.
@@ -4025,6 +4694,284 @@
       zones.forEach(subdivideZone);
     }
     renderHierarchy();
+  }
+
+  // ---------------------------------------------------------- industrial
+  // An industrial zone is split into big lots, each paved as a yard behind a chain-link fence with a gate, and each holding
+  // one of: a warehouse (sawtooth or gable roof, loading doors down its sides), a factory with tall banded chimneys, a
+  // cluster of storage tanks, or a yard of stacked shipping containers. Anything a lot's shape is too irregular for falls
+  // back to a flat-roofed shed that follows its outline.
+  const Y_YARD = Y_ZONE_GROUND + 0.02;
+  const INDUSTRIAL_WALL_COLORS = [0xb9bcc0, 0xc8bea8, 0x8e9aa6, 0xa3a7ab, 0x9a8f80];
+  const INDUSTRIAL_ACCENT_COLORS = [0x2f6fae, 0xd2a23a, 0xb8412f, 0x3f8f5a];
+  const CONTAINER_COLORS = [0xb33a2e, 0x2e6fb3, 0xd9a13b, 0x3f8f5a, 0x8a8f96, 0xe07b2a, 0x6b4f8a];
+  const LOT_FENCE_STYLE = { height:2.0, rails:[2.0, 0.15], railWidth:0.06, railHeight:0.06, postSize:0.1, postSpacing:3, color:0x80868d, roughness:0.5, metalness:0.5 };
+  // an upright prism over any polygon ({x,z}[]), from y0 to y1
+  function addPrism(builder, poly, y0, y1) {
+    const tree = clipPolygons(ClipperLib.ClipType.ctUnion, [toClipperPath(poly)], [], true);
+    builder.addTops(tree, y1);
+    forEachPolyTreeEdge(tree, (p, q, outward) => builder.addWall(p, q, y0, y1, outward));
+  }
+  function generateIndustrialContent(zone, poly, cutouts, blockers) {
+    const s = zone.settings, rng = mulberry32(s.seed>>>0);
+    const groundColor = s.groundColor!=null ? s.groundColor : BUILDING_GROUND_COLORS[0];
+    const ground = makeFlatZoneMesh(poly, groundColor, Y_ZONE_GROUND, 'ZoneGround', null, cutouts);
+    if (ground) zone.buildingsGroup.add(ground);
+    const hMin = s.industrialHeightMin!=null ? s.industrialHeightMin : 5, hMax = s.industrialHeightMax!=null ? s.industrialHeightMax : 14;
+    const lots = [];
+    const target = Math.max(1, Math.round(s.industrialLots!=null ? s.industrialLots : 10));
+    recursiveSubdivide(poly, 0, { minArea: Math.abs(polygonArea(poly))/target, maxDepth: 9, jitter: 0.3, minSplitDim: 8 }, rng, lots);
+    const yards = createMeshBuilder(), fenceLines = [];
+    lots.forEach(lot => cutLotByCutouts(lot, blockers).pieces.forEach(piece => {
+      if (Math.abs(polygonArea(piece)) < 80) return;
+      const site = insetPolygonExact(piece, 1.2)[0];
+      if (!site || Math.abs(polygonArea(site)) < 50) return;
+      addPrism(yards, site, Y_ZONE_GROUND, Y_YARD);
+      if (s.lotFences !== false) {
+        // the fence goes all the way around, leaving a gate in the middle of the lot's longest side
+        let longest = 0;
+        site.forEach((p, i) => { const q = site[(i+1)%site.length]; if (Math.hypot(q.x-p.x, q.z-p.z) > Math.hypot(site[(longest+1)%site.length].x-site[longest].x, site[(longest+1)%site.length].z-site[longest].z)) longest = i; });
+        const a = site[longest], b = site[(longest+1)%site.length], len = Math.hypot(b.x-a.x, b.z-a.z);
+        const around = site.slice(longest+1).concat(site.slice(0, longest+1));
+        if (len > 10) {
+          const dx = (b.x-a.x)/len, dz = (b.z-a.z)/len, mx = (a.x+b.x)/2, mz = (a.z+b.z)/2;
+          fenceLines.push([{ x: mx + dx*3.5, z: mz + dz*3.5 }, ...around, { x: mx - dx*3.5, z: mz - dz*3.5 }]);
+        } else {
+          fenceLines.push(around.concat([around[0]]));
+        }
+      }
+      if (rng() > (s.industrialDensity!=null ? s.industrialDensity : 0.85)) return; // an empty yard
+      const inner = insetPolygonExact(site, 2.2)[0];
+      if (!inner || Math.abs(polygonArea(inner)) < 30) return;
+      const group = new THREE.Group();
+      group.name = 'Building';
+      const roll = rng();
+      if (roll < 0.4) buildWarehouse(group, inner, rng, lerp(hMin, (hMin+hMax)/2, rng()));
+      else if (roll < 0.6) buildFactory(group, inner, rng, lerp(hMin, hMax, rng()));
+      else if (roll < 0.8) buildTankFarm(group, inner, rng, lerp(hMin*0.8, hMax*0.8, rng()));
+      else buildContainerYard(group, inner, rng);
+      if (group.children.length) zone.buildingsGroup.add(group);
+    }));
+    const yardMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(groundColor).lerp(new THREE.Color(0x8c8c88), 0.55), roughness: 0.95 });
+    const yardGeo = yards.build();
+    if (yardGeo) { const mesh = new THREE.Mesh(yardGeo, yardMat); mesh.receiveShadow = true; mesh.name = 'Yard'; zone.buildingsGroup.add(mesh); }
+    const fence = buildRailingMesh(fenceLines, Y_YARD, LOT_FENCE_STYLE, 'LotFence');
+    if (fence) zone.buildingsGroup.add(fence);
+  }
+  // Whether a polygon is close enough to its bounding rectangle — and big enough — to build a rectangular building on.
+  function rectangularSite(poly, minShort) {
+    const axis = longAxisOf(poly);
+    return Math.abs(polygonArea(poly))/axis.rect.area > 0.85 && axis.halfShort*2 > minShort ? axis : null;
+  }
+  // Shared by warehouse and factory: a box on a rectangular site, or a prism following an irregular one. Returns the
+  // rectangle used ({ cx, cz, dx, dz, L, W }), or null for an irregular site.
+  function addMainBlock(walls, accent, site, h, withBand) {
+    const axis = rectangularSite(site, 7);
+    if (!axis) {
+      addPrism(walls, site, Y_YARD, Y_YARD + h);
+      return null;
+    }
+    const { rect, dx, dz } = axis, L = axis.halfLong - 0.3, W = axis.halfShort - 0.3;
+    walls.addBox(rect.center.x, rect.center.z, dx, dz, L, W, Y_YARD, Y_YARD + h);
+    if (withBand) accent.addBox(rect.center.x, rect.center.z, dx, dz, L + 0.06, W + 0.06, Y_YARD + h - 1.0, Y_YARD + h - 0.5);
+    return { cx: rect.center.x, cz: rect.center.z, dx, dz, L, W };
+  }
+  function buildWarehouse(group, site, rng, h) {
+    const walls = createMeshBuilder(), roof = createMeshBuilder(), accent = createMeshBuilder(), glass = createMeshBuilder(), doors = createMeshBuilder();
+    const wallColor = INDUSTRIAL_WALL_COLORS[Math.floor(rng()*INDUSTRIAL_WALL_COLORS.length)];
+    const box = addMainBlock(walls, accent, site, h, true);
+    if (box) {
+      const { cx, cz, dx, dz, L, W } = box, nx = -dz, nz = dx, top = Y_YARD + h;
+      const at = (s, w, y) => ({ x: cx + dx*s + nx*w, y, z: cz + dz*s + nz*w });
+      if (rng() < 0.5) {
+        // sawtooth: a row of sloped roof panels, each ending in a steep glazed face
+        const teeth = Math.max(2, Math.round(2*L/6)), t = 2*L/teeth, rise = Math.min(2.2, t*0.4), len = Math.hypot(rise, t);
+        for (let k=0;k<teeth;k++) {
+          const s0 = -L + k*t, s1 = s0 + t;
+          roof.addQuad(at(s0, -W, top), at(s0, W, top), at(s1, W, top+rise), at(s1, -W, top+rise), { x: -dx*rise/len, y: t/len, z: -dz*rise/len });
+          glass.addQuad(at(s1, -W, top), at(s1, W, top), at(s1, W, top+rise), at(s1, -W, top+rise), { x: dx, y: 0, z: dz });
+          [1, -1].forEach(side => walls.addQuad(at(s0, W*side, top), at(s1, W*side, top), at(s1, W*side, top+rise), at(s1, W*side, top+rise), { x: nx*side, y: 0, z: nz*side }));
+        }
+      } else {
+        addGableRoof(roof, walls, cx, cz, dx, dz, L + 0.3, W + 0.3, top, Math.min(2.5, W*0.3));
+      }
+      // loading doors down both long sides
+      const count = Math.floor(2*L/6.5);
+      for (let k=0;k<count;k++) {
+        const s = -L + (k + 0.5)*(2*L/count);
+        [1, -1].forEach(side => { const p = at(s, (W + 0.04)*side, 0); doors.addBox(p.x, p.z, dx, dz, 1.4, 0.06, Y_YARD, Y_YARD + Math.min(3.4, h*0.6)); });
+      }
+    } else {
+      // an irregular site: a flat roof with a few vents on top
+      const c = centroid(site);
+      for (let k=0;k<4;k++) {
+        const p = { x: c.x + (rng()-0.5)*6, z: c.z + (rng()-0.5)*6 };
+        if (pointInPolygon(p, site)) roof.addBox(p.x, p.z, 1, 0, 0.6, 0.6, Y_YARD + h, Y_YARD + h + 0.9);
+      }
+    }
+    [[walls, wallColor, 'Warehouse'], [roof, 0x6b7076, 'WarehouseRoof', { metalness: 0.3 }], [accent, INDUSTRIAL_ACCENT_COLORS[Math.floor(rng()*INDUSTRIAL_ACCENT_COLORS.length)], 'Stripe'],
+     [glass, 0x2c4a63, 'Skylights', { roughness: 0.2, metalness: 0.4 }], [doors, 0x3a3e44, 'LoadingDoors', { metalness: 0.4 }]].forEach(([builder, color, name, opts]) => {
+      const mesh = builderMesh(builder, color, name, opts);
+      if (mesh) group.add(mesh);
+    });
+  }
+  function buildFactory(group, site, rng, h) {
+    const walls = createMeshBuilder(), accent = createMeshBuilder(), roofGear = createMeshBuilder();
+    const brick = rng() < 0.5;
+    const box = addMainBlock(walls, accent, site, h, !brick);
+    const c = box ? { x: box.cx, z: box.cz } : centroid(site);
+    const dx = box ? box.dx : 1, dz = box ? box.dz : 0, L = box ? box.L : 4, W = box ? box.W : 4;
+    // a few boxes of plant on the roof
+    for (let k=0;k<3;k++) roofGear.addBox(c.x + dx*(rng()-0.5)*L + -dz*(rng()-0.5)*W, c.z + dz*(rng()-0.5)*L + dx*(rng()-0.5)*W, dx, dz, 0.8 + rng(), 0.6 + rng()*0.6, Y_YARD + h, Y_YARD + h + 1 + rng());
+    [[walls, brick ? 0x8a5a45 : INDUSTRIAL_WALL_COLORS[Math.floor(rng()*INDUSTRIAL_WALL_COLORS.length)], 'Factory'], [accent, INDUSTRIAL_ACCENT_COLORS[Math.floor(rng()*INDUSTRIAL_ACCENT_COLORS.length)], 'Stripe'],
+     [roofGear, 0x8b9095, 'RoofPlant', { metalness: 0.3 }]].forEach(([builder, color, name, opts]) => {
+      const mesh = builderMesh(builder, color, name, opts);
+      if (mesh) group.add(mesh);
+    });
+    // chimneys rise from the roof, each banded red near the top
+    const chimneyMat = new THREE.MeshStandardMaterial({ color: brick ? 0x7a4a38 : 0xd8d8d4, roughness: 0.8 });
+    const bandMat = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.6 });
+    const count = 1 + Math.floor(rng()*3);
+    for (let k=0;k<count;k++) {
+      const p = { x: c.x + dx*(k - (count-1)/2)*Math.min(4, L*0.5), z: c.z + dz*(k - (count-1)/2)*Math.min(4, L*0.5) };
+      if (!pointInPolygon(p, site)) continue;
+      const r = 0.8 + rng()*0.5, H = h + 14 + rng()*16;
+      const stack = new THREE.Mesh(new THREE.CylinderGeometry(r*0.7, r, H, 16), chimneyMat);
+      stack.position.set(p.x, Y_YARD + H/2, p.z);
+      stack.castShadow = true; stack.name = 'Chimney';
+      group.add(stack);
+      [H - 1.2, H - 3.8].forEach(y => {
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(r*0.76, r*0.78, 1.1, 16), bandMat);
+        band.position.set(p.x, Y_YARD + y, p.z);
+        band.name = 'Chimney';
+        group.add(band);
+      });
+    }
+  }
+  function buildTankFarm(group, site, rng, h) {
+    const { rect, dx, dz, halfLong, halfShort } = longAxisOf(site), nx = -dz, nz = dx;
+    const r = Math.min(2.2 + rng()*2.5, halfShort*0.9), gap = 1.4, step = 2*r + gap;
+    const tankMat = new THREE.MeshStandardMaterial({ color: 0xdfe2e4, roughness: 0.45, metalness: 0.35 });
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x70757b, roughness: 0.7 });
+    let placed = 0;
+    for (let i=-Math.floor(halfLong/step); i<=Math.floor(halfLong/step) && placed < 8; i++) {
+      for (let j=-Math.floor(halfShort/step); j<=Math.floor(halfShort/step) && placed < 8; j++) {
+        const x = rect.center.x + dx*i*step + nx*j*step, z = rect.center.z + dz*i*step + nz*j*step;
+        let inside = true;
+        for (let k=0;k<8 && inside;k++) inside = pointInPolygon({ x: x + Math.cos(k/8*Math.PI*2)*r, z: z + Math.sin(k/8*Math.PI*2)*r }, site);
+        if (!inside) continue;
+        placed++;
+        const tankH = h*(0.85 + rng()*0.3);
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, tankH, 28), tankMat);
+        body.position.set(x, Y_YARD + tankH/2, z);
+        const lid = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 6, 0, Math.PI*2, 0, Math.PI*0.3), tankMat);
+        lid.position.set(x, Y_YARD + tankH - r*Math.cos(Math.PI*0.3), z);
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.15, r + 0.15, 0.6, 28), baseMat);
+        base.position.set(x, Y_YARD + 0.3, z);
+        [body, lid, base].forEach(m => { m.castShadow = true; m.receiveShadow = true; m.name = 'Tank'; group.add(m); });
+      }
+    }
+  }
+  function buildContainerYard(group, site, rng) {
+    const { rect, dx, dz, halfLong, halfShort } = longAxisOf(site), nx = -dz, nz = dx;
+    const CL = 6.1, CW = 2.45, CH = 2.6;
+    const builders = new Map();
+    const builderFor = color => { if (!builders.has(color)) builders.set(color, createMeshBuilder()); return builders.get(color); };
+    const rowPitch = CW + 0.3;
+    for (let row=0, w=-halfShort + CW/2 + 0.5; w <= halfShort - CW/2 - 0.5; row++, w += rowPitch + (row % 2 === 0 ? 2.5 : 0)) {
+      for (let s = -halfLong + CL/2 + 0.5; s <= halfLong - CL/2 - 0.5; s += CL + 0.4) {
+        const x = rect.center.x + dx*s + nx*w, z = rect.center.z + dz*s + nz*w;
+        const corners = [[1,1], [1,-1], [-1,1], [-1,-1]].map(([a, b]) => ({ x: x + dx*a*CL/2 + nx*b*CW/2, z: z + dz*a*CL/2 + nz*b*CW/2 }));
+        if (!corners.every(p => pointInPolygon(p, site)) || rng() < 0.15) continue;
+        const stack = 1 + Math.floor(rng()*3);
+        for (let k=0;k<stack;k++) {
+          builderFor(CONTAINER_COLORS[Math.floor(rng()*CONTAINER_COLORS.length)]).addBox(x, z, dx, dz, CL/2 - 0.02, CW/2 - 0.02, Y_YARD + k*CH, Y_YARD + (k+1)*CH - 0.04);
+        }
+      }
+    }
+    builders.forEach((builder, color) => { const mesh = builderMesh(builder, color, 'Containers', { roughness: 0.7, metalness: 0.2 }); if (mesh) group.add(mesh); });
+  }
+
+  // ---------------------------------------------------------- bridges
+  // Where a road crosses water it carries on as a bridge: the road, curb and sidewalk surfaces are already there (they're
+  // built regardless of what's underneath), so what's added is the rest of a bridge — a concrete deck slab under them, its
+  // sides along the sidewalk's outer edge, railings along that edge, and piers standing in the water along the road's
+  // centerline. A path crossing water gets a wooden footbridge the width of its track, with a railing either side.
+  const BRIDGE_DECK_BOTTOM = -0.3;
+  const BRIDGE_COLOR = 0x8f8b83;
+  const BRIDGE_PIER_SPACING = 18;
+  const ROAD_RAILING_STYLE = { height:1.0, rails:[1.0, 0.55], railWidth:0.1, railHeight:0.1, postSize:0.14, postSpacing:2.2, inset:0.25, color:0x5b6068 };
+  const FOOTBRIDGE_TOP = 0.3, FOOTBRIDGE_THICKNESS = 0.25, FOOTBRIDGE_COLOR = 0x8a6a48;
+  const WOOD_RAILING_STYLE = { height:0.9, rails:[0.9, 0.5], railWidth:0.1, railHeight:0.1, postSize:0.16, postSpacing:2, inset:0.15, color:0x5e4630 };
+  let bridgeGroup = new THREE.Group(); bridgeGroup.name = 'Bridges'; scene.add(bridgeGroup);
+  function buildBridges(region) {
+    scene.remove(bridgeGroup); disposeObject(bridgeGroup);
+    bridgeGroup = new THREE.Group(); bridgeGroup.name = 'Bridges';
+    if (region.length && (roadBridgeSources.length || pathBridgeSources.length)) {
+      const { ctIntersection } = ClipperLib.ClipType;
+      const inWater = createRegionTester(region);
+      const pointAt = (p, q, t) => ({ X: p.X+(q.X-p.X)*t, Y: p.Y+(q.Y-p.Y)*t });
+      // a railing along the stretch p→q (Clipper points) of a deck edge, set in from it by the style's inset
+      const railAlong = (builder, p, q, outward, baseY, style, state) => {
+        const off = { x: -outward.x*style.inset, z: -outward.z*style.inset };
+        addRailingSegment(builder, { x: p.X/CLIPPER_SCALE + off.x, z: p.Y/CLIPPER_SCALE + off.z }, { x: q.X/CLIPPER_SCALE + off.x, z: q.Y/CLIPPER_SCALE + off.z }, baseY, style, state);
+      };
+      const deck = createMeshBuilder(), rails = createMeshBuilder();
+      const outerEdges = roadBridgeSources.length ? createEdgeIndex(roadFootprint) : null;
+      roadBridgeSources.forEach(({ territory, strokes }) => {
+        const over = clipPolygons(ctIntersection, territory, region, true);
+        if (!over.Childs().length) return;
+        deck.addTops(over, BRIDGE_DECK_BOTTOM, true);
+        const state = {};
+        forEachPolyTreeEdge(over, (p, q, outward) => {
+          outerEdges.coverage(p, q).forEach(([t0, t1]) => {
+            const a = pointAt(p, q, t0), b = pointAt(p, q, t1);
+            deck.addWall(a, b, BRIDGE_DECK_BOTTOM, 0, outward); // the sidewalk's own edge already covers 0 up to its top
+            railAlong(rails, a, b, outward, Y_SIDEWALK, ROAD_RAILING_STYLE, state);
+          });
+        });
+        // piers: a slab across the road every so often along its centerline, wherever that's well out over the water
+        strokes.forEach(({ path, hw }) => {
+          const pts = path.map(p => ({ x: p.X/CLIPPER_SCALE, z: p.Y/CLIPPER_SCALE }));
+          let untilNext = BRIDGE_PIER_SPACING/2;
+          for (let i=0;i<pts.length-1;i++) {
+            const a = pts[i], b = pts[i+1], len = Math.hypot(b.x-a.x, b.z-a.z);
+            if (len < 1e-6) continue;
+            const dx = (b.x-a.x)/len, dz = (b.z-a.z)/len;
+            let s = untilNext;
+            for (; s <= len; s += BRIDGE_PIER_SPACING) {
+              const x = a.x + dx*s, z = a.z + dz*s, across = hw + 1;
+              const clear = [[0,0], [dx*2.5, dz*2.5], [-dx*2.5, -dz*2.5], [-dz*across, dx*across], [dz*across, -dx*across]].every(([ox, oz]) => inWater(x+ox, z+oz));
+              if (clear) deck.addBox(x, z, -dz, dx, hw*0.7, 0.6, WATER_BANK_BOTTOM, BRIDGE_DECK_BOTTOM);
+            }
+            untilNext = s - len;
+          }
+        });
+      });
+      const wood = createMeshBuilder(), woodRails = createMeshBuilder();
+      pathBridgeSources.forEach(({ strokes }) => {
+        const outline = unionRoadStrokes(strokes);
+        const over = clipPolygons(ctIntersection, outline, region, true);
+        if (!over.Childs().length) return;
+        wood.addTops(over, FOOTBRIDGE_TOP);
+        wood.addTops(over, FOOTBRIDGE_TOP - FOOTBRIDGE_THICKNESS, true);
+        const trackEdges = createEdgeIndex(outline), state = {};
+        forEachPolyTreeEdge(over, (p, q, outward) => {
+          wood.addWall(p, q, FOOTBRIDGE_TOP - FOOTBRIDGE_THICKNESS, FOOTBRIDGE_TOP, outward);
+          trackEdges.coverage(p, q).forEach(([t0, t1]) => railAlong(woodRails, pointAt(p, q, t0), pointAt(p, q, t1), outward, FOOTBRIDGE_TOP, WOOD_RAILING_STYLE, state));
+        });
+      });
+      [[deck, BRIDGE_COLOR, 0.9, 0, 'Bridge'], [rails, ROAD_RAILING_STYLE.color, 0.45, 0.6, 'BridgeRailing'],
+       [wood, FOOTBRIDGE_COLOR, 0.9, 0, 'Footbridge'], [woodRails, WOOD_RAILING_STYLE.color, 0.9, 0, 'FootbridgeRailing']].forEach(([builder, color, roughness, metalness, name]) => {
+        const geo = builder.build();
+        if (!geo) return;
+        const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness, metalness }));
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        mesh.name = name;
+        bridgeGroup.add(mesh);
+      });
+    }
+    scene.add(bridgeGroup);
   }
 
   function roadHighlightColor(baseColorHex) {
@@ -4480,11 +5427,42 @@
       if (!zone) { panel.innerHTML = '<div class="empty">Select a road or zone from the list to see its settings.</div>'; return; }
       const s = zone.settings;
       const zoneType = zone.zoneType || 'buildings';
+      const toggleHtml = (id, label, on) => `<div class="row" style="margin-top:11px;"><label>${label}</label><button class="toggle-switch${on?' on':''}" id="${id}"><span class="knob"></span></button></div>`;
+      const seedHtml = `<div class="seed-row"><input type="number" id="ds-seed" value="${s.seed}"><button class="icon-btn" id="d-dice">&#127922;</button></div>`;
       const settingsHtml = zoneType==='water' ? `
-        <div class="empty" style="margin:6px 0 10px;">Animated water. Where it meets a park, the park's edge turns to sand.</div>
+        <div class="empty" style="margin:6px 0 10px;">Animated water, sunk below the ground. It joins any river running into it, roads cross it on bridges, and where it meets a park there's a sandy beach.</div>
+      ` : zoneType==='plaza' ? `
+        <div class="slider-row"><div class="row"><label>Paving</label></div>
+          <select id="ds-paving" class="select-input">
+            <option value="tiles" ${s.pavingPattern!=='herringbone'?'selected':''}>Tiles</option>
+            <option value="herringbone" ${s.pavingPattern==='herringbone'?'selected':''}>Herringbone</option>
+          </select></div>
+        <div class="section-label">Paving color</div>
+        ${colorSwatchRowHtml(PLAZA_COLORS, s.pavingColor!=null?s.pavingColor:PLAZA_COLORS[0], 'pavingcolor')}
+        ${toggleHtml('ds-fountain', 'Fountain', s.fountain!==false)}
+        <div class="slider-row" style="margin-top:11px;"><div class="row"><label>Trees</label><span class="val" id="dv-plazatrees">${(s.plazaTrees!=null?s.plazaTrees:0.35).toFixed(2)}</span></div>
+          <input type="range" id="ds-plazatrees" min="0" max="1" step="0.05" value="${s.plazaTrees!=null?s.plazaTrees:0.35}"></div>
+        ${seedHtml}
+      ` : zoneType==='farmland' ? `
+        <div class="slider-row"><div class="row"><label>Fields</label><span class="val" id="dv-fieldcount">${s.fieldCount!=null?s.fieldCount:14}</span></div>
+          <input type="range" id="ds-fieldcount" min="1" max="60" step="1" value="${s.fieldCount!=null?s.fieldCount:14}"></div>
+        ${toggleHtml('ds-hedgerows', 'Hedgerows', s.hedgerows!==false)}
+        ${toggleHtml('ds-farmsteads', 'Farmsteads', s.farmsteads!==false)}
+        <div style="margin-top:11px;">${seedHtml}</div>
+      ` : zoneType==='industrial' ? `
+        <div class="slider-row"><div class="row"><label>Lot count</label><span class="val" id="dv-industriallots">${s.industrialLots!=null?s.industrialLots:10}</span></div>
+          <input type="range" id="ds-industriallots" min="1" max="40" step="1" value="${s.industrialLots!=null?s.industrialLots:10}"></div>
+        <div class="slider-row"><div class="row"><label>Density</label><span class="val" id="dv-industrialdensity">${(s.industrialDensity!=null?s.industrialDensity:0.85).toFixed(2)}</span></div>
+          <input type="range" id="ds-industrialdensity" min="0.1" max="1" step="0.05" value="${s.industrialDensity!=null?s.industrialDensity:0.85}"></div>
+        ${rangeSliderHtml('indheight', 'Building height', 3, 40, 1, s.industrialHeightMin!=null?s.industrialHeightMin:5, s.industrialHeightMax!=null?s.industrialHeightMax:14)}
+        ${toggleHtml('ds-lotfences', 'Lot fences', s.lotFences!==false)}
+        <div class="section-label">Ground color</div>
+        ${colorSwatchRowHtml(BUILDING_GROUND_COLORS, s.groundColor!=null?s.groundColor:BUILDING_GROUND_COLORS[0], 'groundcolor')}
+        ${seedHtml}
       ` : zoneType==='park' ? `
         <div class="slider-row"><div class="row"><label>Tree density</label><span class="val" id="dv-treedensity">${s.treeDensity.toFixed(2)}</span></div>
           <input type="range" id="ds-treedensity" min="0" max="1" step="0.02" value="${s.treeDensity}"></div>
+        ${toggleHtml('ds-fence', 'Fence', s.fence!==false)}
         <div class="row" style="margin-top:11px;"><label>Custom color</label><button class="toggle-switch${s.customTint?' on':''}" id="ds-customtint"><span class="knob"></span></button></div>
         ${s.customTint ? `
           <div class="section-label">Grass tint</div>
@@ -4534,6 +5512,9 @@
             <option value="plain" ${zoneType==='plain'?'selected':''}>Plain</option>
             <option value="park" ${zoneType==='park'?'selected':''}>Park</option>
             <option value="water" ${zoneType==='water'?'selected':''}>Water</option>
+            <option value="plaza" ${zoneType==='plaza'?'selected':''}>Plaza</option>
+            <option value="farmland" ${zoneType==='farmland'?'selected':''}>Farmland</option>
+            <option value="industrial" ${zoneType==='industrial'?'selected':''}>Industrial</option>
           </select>
         </div>
         ${settingsHtml}
@@ -4544,9 +5525,41 @@
         subdivideZonesFrom(zone); // a new type can change the shorelines and beaches of the zones around it
         renderDetails();
       });
+      // an on/off setting (unset counts as on)
+      const wireToggle = (id, key) => document.getElementById(id).addEventListener('click', () => { s[key] = s[key]===false; subdivideZone(zone); renderDetails(); });
+      const wireNumber = (sliderId, valId, key, decimals) => document.getElementById(sliderId).addEventListener('input', (e) => {
+        s[key] = parseFloat(e.target.value);
+        document.getElementById(valId).textContent = decimals!=null ? s[key].toFixed(decimals) : s[key];
+        subdivideZone(zone);
+      });
+      const wireSwatches = (palette, key, swatchKey, fallback) => wireColorSwatchEvents(panel, palette, {
+        onPick: (hex) => { s[key] = hex; subdivideZone(zone); renderDetails(); },
+        onCommit: (hex, mode, oldHex) => {
+          if (mode==='edit') zones.forEach(z => { if (z.settings && z.settings[key]===oldHex) { z.settings[key]=hex; subdivideZone(z); } });
+          else { s[key] = hex; subdivideZone(zone); }
+        },
+        onRemove: (oldHex, replacement) => { zones.forEach(z => { if (z.settings && z.settings[key]===oldHex) { z.settings[key]=replacement; subdivideZone(z); } }); },
+        onPreview: (hex) => { s[key] = hex; subdivideZone(zone); }
+      }, swatchKey, renderDetails, s[key]!=null ? s[key] : fallback);
       if (zoneType==='water') {
         // water has no settings of its own
+      } else if (zoneType==='plaza') {
+        document.getElementById('ds-paving').addEventListener('change', (e) => { s.pavingPattern = e.target.value; subdivideZone(zone); });
+        wireSwatches(PLAZA_COLORS, 'pavingColor', 'pavingcolor', PLAZA_COLORS[0]);
+        wireToggle('ds-fountain', 'fountain');
+        wireNumber('ds-plazatrees', 'dv-plazatrees', 'plazaTrees', 2);
+      } else if (zoneType==='farmland') {
+        wireNumber('ds-fieldcount', 'dv-fieldcount', 'fieldCount');
+        wireToggle('ds-hedgerows', 'hedgerows');
+        wireToggle('ds-farmsteads', 'farmsteads');
+      } else if (zoneType==='industrial') {
+        wireNumber('ds-industriallots', 'dv-industriallots', 'industrialLots');
+        wireNumber('ds-industrialdensity', 'dv-industrialdensity', 'industrialDensity', 2);
+        wireRangeSlider('indheight', 3, 40, null, (lo, hi) => { s.industrialHeightMin = lo; s.industrialHeightMax = hi; subdivideZone(zone); });
+        wireToggle('ds-lotfences', 'lotFences');
+        wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);
       } else if (zoneType==='park') {
+        wireToggle('ds-fence', 'fence');
         const bindP = (sliderId,valId,key,decimals) => {
           document.getElementById(sliderId).addEventListener('input', (e)=>{
             const v = parseFloat(e.target.value);
@@ -4676,18 +5689,21 @@
       const curSidewalkColor = lines[0].sidewalkColor!=null ? lines[0].sidewalkColor : SIDEWALK_COLOR;
       const title = lines.length>1 ? netId : lines[0].id;
       const subtitle = lines.length>1 ? `${lines.length} branches · ${totalNodes} nodes` : `${totalNodes} nodes`;
-      const isPath = isPathLine(lines[0]);
+      const isPath = isPathLine(lines[0]), isRiver = isRiverLine(lines[0]);
       const curPathColor = lines[0].pathColor!=null ? lines[0].pathColor : PATH_COLOR;
       panel.innerHTML = `
         <div class="title-row"><span class="name">${title}</span><button class="close-x" id="d-close">deselect</button></div>
         <div class="empty" style="margin-bottom:10px;">${subtitle}</div>
         <div class="slider-row"><div class="row"><label>Road type</label></div>
           <select id="ds-roadtype" class="select-input">
-            <option value="sidewalk" ${!isPath?'selected':''}>Sidewalk</option>
+            <option value="sidewalk" ${!isPath&&!isRiver?'selected':''}>Sidewalk</option>
             <option value="path" ${isPath?'selected':''}>Path</option>
+            <option value="river" ${isRiver?'selected':''}>River</option>
           </select>
         </div>
-        ${isPath ? `
+        ${isRiver ? `
+        <div class="empty" style="margin:6px 0 10px;">Water, as wide as the road width. It joins any water zone it runs into, and roads and paths cross it on bridges.</div>
+        ` : isPath ? `
         <div class="section-label">Path color</div>
         ${colorSwatchRowHtml(PATH_COLOR_PALETTE, curPathColor, 'pathcolor')}
         ` : `
@@ -4721,7 +5737,7 @@
           onPreview: (hex) => { lines.forEach(l => { l.pathColor = hex; }); rebuildRoadMeshes(); }
         }, 'pathcolor', renderDetails, curPathColor);
       }
-      if (!isPath) {
+      if (!isPath && !isRiver) {
       wireColorSwatchEvents(panel, ROAD_COLOR_PALETTE, {
         onPick: (hex) => { lines.forEach(l => { l.color = hex; }); rebuildRoadMeshes(); renderDetails(); },
         onCommit: (hex, mode, oldHex) => {
@@ -5483,7 +6499,7 @@
         lines: finishedLines.map(l => ({ id:l.id, nodeIds:l.nodeIds.slice(), width:l.width,
           color: colorToHex(l.color, ROAD_COLOR), sidewalkWidth:l.sidewalkWidth,
           sidewalkColor: colorToHex(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId,
-          ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}), ...(isPathLine(l) ? { roadType:'path', pathColor: colorToHex(l.pathColor, PATH_COLOR) } : {}) }))
+          ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}), ...(isPathLine(l) ? { roadType:'path', pathColor: colorToHex(l.pathColor, PATH_COLOR) } : {}), ...(isRiverLine(l) ? { roadType:'river' } : {}) }))
       },
       zoneSeq,
       zones: zones.filter(z => !z.drawing && z.points.length>=3).map(z => ({
@@ -5612,7 +6628,8 @@
       color: hexToColor(l.color, ROAD_COLOR), sidewalkWidth: l.sidewalkWidth!=null ? l.sidewalkWidth : DEFAULT_SIDEWALK_WIDTH,
       sidewalkColor: hexToColor(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId, drawing:false,
       ...(l.kind==='train' ? { kind:'train', radius: l.radius!=null ? l.radius : TRAIN_DEFAULT_RADIUS } : {}),
-      ...(l.roadType==='path' ? { roadType:'path', pathColor: hexToColor(l.pathColor, PATH_COLOR) } : {}) }));
+      ...(l.roadType==='path' ? { roadType:'path', pathColor: hexToColor(l.pathColor, PATH_COLOR) } : {}),
+      ...(l.roadType==='river' ? { roadType:'river' } : {}) }));
     roadNodeSeq = rd.nodeSeq || 1; roadLineSeq = rd.lineSeq || 1; roadNetworkSeq = rd.networkSeq || 1;
     rebuildRoadMeshes();
 
@@ -5627,8 +6644,9 @@
       zone.settings.groundColor = hexToColor(zd.settings && zd.settings.groundColor, BUILDING_GROUND_COLORS[0]);
       zones.push(zone);
       rebuildZoneVisual(zone);
-      subdivideZone(zone);
     });
+    // only once every zone is in: a zone's beaches and fences depend on the zones below it too, not just the ones above
+    zones.forEach(subdivideZone);
     zoneSeq = data.zoneSeq || 1;
     mapImageSeq = data.mapImageSeq || 1;
 
@@ -5667,6 +6685,7 @@
     roadMeshGroup.traverse(o => { if (o.isMesh) meshes.push(o); });
     trainMeshGroup.traverse(o => { if (o.isMesh && !o.userData.isShuttle) meshes.push(o); }); // moving shuttles aren't part of the city
     zones.forEach(z => { if (z.buildingsGroup) z.buildingsGroup.traverse(o => { if (o.isMesh) meshes.push(o); }); });
+    [waterGroup, bridgeGroup].forEach(group => group.traverse(o => { if (o.isMesh && !o.userData.noExport) meshes.push(o); }));
     if (!meshes.length) { alert('Nothing to export yet — draw some roads or zones first.'); return; }
     let out = '# Blockout export\n';
     let offset = 1, n = 0;
@@ -5697,12 +6716,48 @@
   renderMapsList();
   renderWorldTintPanel();
   loadCarriageModel();
+  // Roads, zones and water are thrown away and rebuilt wholesale on every edit, and three.js deletes a shader program as soon
+  // as the last material using it is disposed — so a rebuild that replaces every material of one kind (every water tile,
+  // every road surface…) would compile that shader again from scratch: a hitch of up to a third of a second. One
+  // never-disposed mesh per kind of material (a single zero-size triangle, so it draws nothing) keeps each program alive.
+  const shaderKeepAlive = new THREE.Group();
+  shaderKeepAlive.name = 'ShaderKeepAlive';
+  const standardWith = (applyShader, params) => () => {
+    const mat = new THREE.MeshStandardMaterial({ roughness: 1, ...(params || {}) });
+    if (applyShader) applyShader(mat);
+    return mat;
+  };
+  [
+    standardWith(mat => applyWaterShader(mat, [], [], 0)),
+    standardWith(mat => applyGrassNoiseShader(mat, [{ x:0, z:0 }, { x:1, z:0 }, { x:0, z:1 }], 1, [])),
+    standardWith(mat => applyCropShader(mat, 1, 0, 1, 0.2)),
+    standardWith(mat => applyPavingShader(mat, 0)),
+    standardWith(mat => applyPathShader(mat, [], 1, 1), { transparent: true, depthWrite: false, ...SKIP_OVER_WATER }),
+    standardWith(null, { side: THREE.DoubleSide }),                                         // road surfaces, fountain stone
+    standardWith(null, { vertexColors: true, flatShading: true, side: THREE.DoubleSide }),  // building bodies
+    standardWith(null, { flatShading: true }),                                              // building details (greebles, ribs, canopies…)
+    standardWith(null, { flatShading: true, side: THREE.DoubleSide }),                      // landmark cone toppers
+    standardWith(null, { transparent: true, opacity: 0.5, depthWrite: false }),             // glass domes, fountain spray
+    () => createWindowMaterial(0x888888, mulberry32(1), true, 1, 1, true),                  // building windows, with and
+    () => createWindowMaterial(0x888888, mulberry32(1), true, 1, 1, false),                 // without reflections
+    () => new THREE.MeshBasicMaterial({ color: 0xffffff }),
+  ].forEach(makeMaterial => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([0,-10,0, 0,-10,0, 0,-10,0], 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute([0,1,0, 0,1,0, 0,1,0], 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute([1,1,1, 1,1,1, 1,1,1], 3));
+    const mesh = new THREE.Mesh(geo, makeMaterial());
+    mesh.frustumCulled = false;
+    shaderKeepAlive.add(mesh);
+  });
+  scene.add(shaderKeepAlive);
   function animate() {
     requestAnimationFrame(animate);
     controls.update(false);
     skyDome.position.copy(camera.position);
     const t = performance.now()*0.001;
     updateTrainShuttles(t);
+    if (waterDirty) rebuildWater();
     WATER_TIME.value = t;
     scene.traverse(o => {
       if (o.userData && o.userData.isBlinkLight) {
