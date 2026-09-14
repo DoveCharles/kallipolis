@@ -493,6 +493,8 @@
   // Weather, 0..1 each (see "weather") — here because it dims the light and greys the sky.
   let weatherRain = 0, weatherSnow = 0, weatherClouds = 0;
   const MOON_COLOR = new THREE.Color(0x9fb4d8);
+  // where the light sits relative to what it shines on — placeSunLight moves it (and its shadow camera) to follow the view
+  const sunOffset = new THREE.Vector3(150, 220, 100);
   // Points the light, sky and fog at the current sun position and weather. While the sun is up (or just below the horizon)
   // the light is the sun; once it's well down, the moon — opposite it, dim and cool — takes over, with the two fading
   // through a moment of near-darkness around -4° so the shadows don't jump. `quick` skips the costlier refreshes (the sky
@@ -508,12 +510,12 @@
     const ease = (a, b, x) => { const t = THREE.MathUtils.clamp((x - a)/(b - a), 0, 1); return t*t*(3 - 2*t); };
     const overcast = Math.min(1, weatherRain*0.9 + weatherSnow*0.6 + weatherClouds*0.25);
     if (sunElevation > -4) {
-      sun.position.set(dir.x*dist, Math.max(dir.y, 0.06)*dist, dir.z*dist);
+      sunOffset.set(dir.x*dist, Math.max(dir.y, 0.06)*dist, dir.z*dist);
       const elevClamped = Math.max(dir.y, 0), warmth = 1 - elevClamped;
       sun.intensity = ease(-4, 4, sunElevation)*(0.35 + elevClamped*0.95);
       sun.color.setRGB(1, 1-warmth*0.22, 1-warmth*0.5);
     } else {
-      sun.position.set(-dir.x*dist, Math.max(-dir.y, 0.2)*dist, -dir.z*dist);
+      sunOffset.set(-dir.x*dist, Math.max(-dir.y, 0.2)*dist, -dir.z*dist);
       sun.intensity = (1 - ease(-12, -4, sunElevation))*0.18;
       sun.color.copy(MOON_COLOR);
     }
@@ -7080,9 +7082,11 @@
     texture.repeat.set(5, 5);
     return texture;
   })();
+  const CLOUD_LAYER_SIZE = 4800, CLOUD_TILES = 10; // the pattern repeats every CLOUD_LAYER_SIZE/CLOUD_TILES units
   const cloudShadowMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, alphaMap: cloudTexture, alphaTest: 0.6 });
   // never seen, only its shadow — its own material carries the pattern too, since the shadow pass may take it from there
-  const cloudLayer = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400).rotateX(-Math.PI/2),
+  cloudTexture.repeat.set(CLOUD_TILES, CLOUD_TILES);
+  const cloudLayer = new THREE.Mesh(new THREE.PlaneGeometry(CLOUD_LAYER_SIZE, CLOUD_LAYER_SIZE).rotateX(-Math.PI/2),
     new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide, alphaMap: cloudTexture, alphaTest: 0.6 }));
   cloudLayer.customDepthMaterial = cloudShadowMaterial;
   cloudLayer.position.y = 140;
@@ -7091,6 +7095,28 @@
   cloudLayer.visible = false;
   cloudLayer.name = 'CloudShadows';
   scene.add(cloudLayer);
+  // Shadows come from a shadow map rendered from the sun, which only covers the box its shadow camera sees. Rather than a
+  // fixed box around the middle of the map, the light and its shadow camera follow the view every frame — centered on what
+  // the camera's looking at, and sized to how far out it's zoomed (so zoomed out, the same map covers more ground, a little
+  // softer). The box moves in whole shadow-map texels, so shadows don't shimmer as the view pans. The cloud layer follows
+  // along too, in whole tiles of its pattern, so the clouds themselves stay where they are.
+  function placeSunLight() {
+    const half = Math.round(THREE.MathUtils.clamp(controls.radius*1.6, 150, 1500)/10)*10, shadowCamera = sun.shadow.camera;
+    if (shadowCamera.right !== half) {
+      shadowCamera.left = -half; shadowCamera.right = half; shadowCamera.top = half; shadowCamera.bottom = -half;
+      shadowCamera.updateProjectionMatrix();
+    }
+    const texel = 2*half/sun.shadow.mapSize.x;
+    const x = Math.round(controls.target.x/texel)*texel, z = Math.round(controls.target.z/texel)*texel;
+    sun.target.position.set(x, 0, z);
+    sun.target.updateMatrixWorld();
+    sun.position.set(x + sunOffset.x, sunOffset.y, z + sunOffset.z);
+    if (cloudLayer.visible) {
+      const tile = CLOUD_LAYER_SIZE/CLOUD_TILES;
+      cloudLayer.position.x = Math.round(controls.target.x/tile)*tile;
+      cloudLayer.position.z = Math.round(controls.target.z/tile)*tile;
+    }
+  }
   function setWeather(kind, value) {
     if (kind === 'rain') weatherRain = value; else if (kind === 'snow') weatherSnow = value; else weatherClouds = value;
     cloudLayer.visible = weatherClouds > 0;
@@ -8116,6 +8142,7 @@
     updateTrafficLights(t);
     updateDayNight(t);
     updateWeather(t);
+    placeSunLight();
     WATER_TIME.value = t;
     scene.traverse(o => {
       if (o.userData && o.userData.isBlinkLight) {
