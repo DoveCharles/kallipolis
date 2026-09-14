@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
 <style>
   :root{
     --bg-viewport: #12141a;
@@ -206,6 +207,13 @@
   }
   #grid-toggle:hover { color:var(--text); border-color:var(--accent-dim); }
   #grid-toggle.active { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
+  #history-tools { position:fixed; top:16px; left:334px; display:flex; gap:6px; }
+  .canvas-tool {
+    width:34px; height:34px; padding:0; display:flex; align-items:center; justify-content:center;
+    background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; color:var(--text-dim); cursor:pointer;
+  }
+  .canvas-tool:hover:not(:disabled) { color:var(--text); border-color:var(--accent-dim); }
+  .canvas-tool:disabled { opacity:0.35; cursor:default; }
 </style>
 </head>
 <body>
@@ -293,11 +301,16 @@
     <button class="btn" id="btn-save-project" style="margin-top:11px;">Save project</button>
     <button class="btn" id="btn-load-project">Load project</button>
     <input type="file" id="project-file-input" accept=".json,application/json" style="display:none;">
+    <button class="btn" id="btn-export-glb">Export GLB (with materials)</button>
     <button class="btn" id="btn-export">Export OBJ</button>
     <button class="btn danger" id="btn-clear">Clear all</button>
   </div>
 </div>
 
+<div id="history-tools">
+  <button class="canvas-tool" id="btn-undo" title="Undo (Ctrl+Z)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+  <button class="canvas-tool" id="btn-redo" title="Redo (Ctrl+Shift+Z)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+</div>
 <div id="grid-toggle" title="Snap to grid">
   <svg width="15" height="15" viewBox="0 0 297 297" fill="currentColor"><path d="M276.289,0h-63.895c-5.557,0-10.062,4.505-10.062,10.062v149.087c0,14.549-5.714,28.181-16.089,38.384
 	c-10.373,10.2-24.091,15.729-38.668,15.44c-29.173-0.486-52.908-25.104-52.908-54.876V10.062C94.668,4.505,90.162,0,84.605,0
@@ -6141,6 +6154,9 @@
   });
 
   document.getElementById('btn-export').addEventListener('click', exportOBJ);
+  document.getElementById('btn-export-glb').addEventListener('click', exportGLB);
+  document.getElementById('btn-undo').addEventListener('click', undo);
+  document.getElementById('btn-redo').addEventListener('click', redo);
   document.getElementById('s-sunelev').addEventListener('input', (e) => {
     sunElevation = parseFloat(e.target.value);
     document.getElementById('dv-sunelev').textContent = sunElevation;
@@ -6482,6 +6498,15 @@
   dom.addEventListener('contextmenu', (e)=> e.preventDefault());
   dom.addEventListener('wheel', (e)=>{ e.preventDefault(); controls.zoom(e.deltaY); }, { passive:false });
   window.addEventListener('keydown', (e) => {
+    // undo / redo — everywhere except while typing into a text field (a slider or color input still being focused is fine)
+    const focused = document.activeElement;
+    const typing = focused && (focused.tagName === 'TEXTAREA' || (focused.tagName === 'INPUT' && !['range', 'checkbox', 'color', 'button', 'file'].includes(focused.type)));
+    const key = e.key.toLowerCase();
+    if (!typing && (e.ctrlKey || e.metaKey) && !e.altKey && (key === 'z' || key === 'y')) {
+      e.preventDefault();
+      if (key === 'y' || e.shiftKey) redo(); else undo();
+      return;
+    }
     if (document.activeElement && ['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) return;
     if (interactionMode==='maps') {
       const key = e.key.toLowerCase();
@@ -6748,13 +6773,15 @@
       } catch (err) { console.error('Blockout: failed to restore map image', im && im.name, err); }
     }
   }
-  async function loadProjectFromData(data) {
+  // `options.keepMaps`: leave the map images as they are (used by undo and redo, whose snapshots don't include them)
+  async function loadProjectFromData(data, options) {
+    const keepMaps = !!(options && options.keepMaps);
     // wipe current scene (roads, zones, map images, selection) before restoring
     cancelActiveDrawing();
     roadLines = []; Object.keys(roadNodes).forEach(k => delete roadNodes[k]);
     zones.forEach(z => { if (z.outlineGroup) { scene.remove(z.outlineGroup); disposeObject(z.outlineGroup); } if (z.buildingsGroup) { scene.remove(z.buildingsGroup); disposeObject(z.buildingsGroup); } });
     zones = [];
-    mapImages.slice().forEach(m => removeMapImage(m.id));
+    if (!keepMaps) mapImages.slice().forEach(m => removeMapImage(m.id));
     selection = { type:null, id:null };
     colorPickerState = null;
 
@@ -6848,9 +6875,11 @@
     // only once every zone is in: a zone's beaches and fences depend on the zones below it too, not just the ones above
     zones.forEach(subdivideZone);
     zoneSeq = data.zoneSeq || 1;
-    mapImageSeq = data.mapImageSeq || 1;
-
-    await restoreMapImages(data.mapImages);
+    if (!keepMaps) {
+      mapImageSeq = data.mapImageSeq || 1;
+      await restoreMapImages(data.mapImages);
+      scheduleHistory(0); // loading a project is a step you can undo
+    }
 
     applyModeVisibility();
     renderHierarchy();
@@ -6878,6 +6907,187 @@
     if (file) loadProject(file);
     e.target.value = '';
   });
+
+  // ============================================================ undo / redo
+  // History is a stack of project snapshots — the same JSON a saved project holds, less the map images (they're big, and
+  // importing, moving or removing map images isn't something undo covers). Whenever an interaction finishes — a pointer
+  // or key released, a dropdown or color changed, a zone dropped in the list — and shortly after a slider stops moving, a
+  // new snapshot is compared with the last one, so a whole drag or slide is one step; if anything changed, the last
+  // snapshot goes on the undo stack. Undo and redo restore a snapshot through the project loader, leaving the map images
+  // alone and keeping the selection if what was selected still exists. Undo while drawing just cancels the drawing.
+  const HISTORY_LIMIT = 100;
+  const undoStack = [], redoStack = [];
+  let historyCurrent = null, historyTimer = null, historyRestoring = false;
+  function historySnapshot() {
+    const data = serializeProject();
+    delete data.exportedAt; delete data.mapImages; delete data.mapImageSeq;
+    return JSON.stringify(data);
+  }
+  function syncHistoryButtons() {
+    document.getElementById('btn-undo').disabled = !undoStack.length;
+    document.getElementById('btn-redo').disabled = !redoStack.length;
+  }
+  function commitHistory() {
+    clearTimeout(historyTimer);
+    historyTimer = null;
+    if (historyRestoring || activeRoadLine || activeZone) return; // mid-restore, or mid-drawing: the step is taken once it's done
+    const snapshot = historySnapshot();
+    if (historyCurrent !== null && snapshot !== historyCurrent) {
+      undoStack.push(historyCurrent);
+      if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+      redoStack.length = 0;
+    }
+    historyCurrent = snapshot;
+    syncHistoryButtons();
+  }
+  function scheduleHistory(delay) {
+    clearTimeout(historyTimer);
+    historyTimer = setTimeout(commitHistory, delay);
+  }
+  // after the app's own handlers have run
+  window.addEventListener('pointerup', () => scheduleHistory(60), true);
+  window.addEventListener('keyup', () => scheduleHistory(60), true);
+  window.addEventListener('change', () => scheduleHistory(60), true);
+  window.addEventListener('drop', () => scheduleHistory(60), true);
+  window.addEventListener('dragend', () => scheduleHistory(60), true);
+  window.addEventListener('input', () => scheduleHistory(500), true);
+  async function restoreHistory(snapshot) {
+    historyRestoring = true;
+    const kept = { ...selection };
+    await loadProjectFromData(JSON.parse(snapshot), { keepMaps: true });
+    const stillThere = kept.type === 'zone' ? zones.some(z => z.id === kept.id) : kept.type ? roadLines.some(l => l.networkId === kept.id) : false;
+    if (stillThere) selectItem(kept.type, kept.id, true);
+    historyCurrent = historySnapshot(); // as the restored project serializes now
+    historyRestoring = false;
+    syncHistoryButtons();
+  }
+  function undo() {
+    if (historyRestoring) return;
+    if (activeRoadLine || activeZone) { cancelActiveDrawing(); return; }
+    commitHistory(); // anything not yet taken as a step becomes one first
+    if (!undoStack.length) return;
+    redoStack.push(historyCurrent);
+    restoreHistory(undoStack.pop());
+  }
+  function redo() {
+    if (historyRestoring || activeRoadLine || activeZone) return;
+    commitHistory();
+    if (!redoStack.length) return;
+    undoStack.push(historyCurrent);
+    restoreHistory(redoStack.pop());
+  }
+
+  // ============================================================ GLB export
+  // The city as a GLB with real materials, for Blender, Unity, Unreal and the like: the ground, roads, train lines, water,
+  // bridges and each zone's contents, as named nodes. Every mesh is baked into world space and merged with the others in its
+  // node that share its material, so the file stays lean. Materials keep their color, roughness, metalness, glow and vertex
+  // colors; a surface drawn by one of the app's shaders (water, grass, crops, paving, paths, building windows) comes out in
+  // its representative flat color, since a GLB can't carry the shader. Things that move (people, cars, train shuttles, signal
+  // lamps) and the editing overlays (node markers, zone outlines, the grid) are left out.
+  function exportLookOf(material) {
+    const shader = Object.prototype.hasOwnProperty.call(material, 'onBeforeCompile') ? String(material.onBeforeCompile) : '';
+    return shader.includes('uWaterTime') ? 'water' : shader.includes('uZoneEdgePoints') ? 'grass' : shader.includes('uRowDir') ? 'crop'
+      : shader.includes('uPavePattern') ? 'paving' : shader.includes('uPathSegments') ? 'path' : shader.includes('WINDOW_FRAGMENT_LAYOUT') ? 'windows' : 'plain';
+  }
+  function exportMaterialFor(material) {
+    const look = exportLookOf(material);
+    const color = material.color ? material.color.clone() : new THREE.Color(0xffffff);
+    if (look === 'water') color.setHex(0x1d6f7d);
+    else if (look === 'grass') color.multiplyScalar(0.6); // the grass shader shades its tint by a mid grey
+    const out = new THREE.MeshStandardMaterial({
+      color,
+      roughness: look === 'water' ? 0.1 : (material.roughness != null ? material.roughness : 1),
+      metalness: material.metalness != null ? material.metalness : 0,
+      vertexColors: !!material.vertexColors,
+      side: material.side,
+      transparent: !!material.transparent && look !== 'path',
+      opacity: look === 'path' ? 1 : material.opacity,
+    });
+    // glow only where it lights the whole surface — the window shader limits its glow to the windows, which a flat material can't
+    if (material.emissive && material.emissiveIntensity > 0 && look !== 'windows') { out.emissive.copy(material.emissive); out.emissiveIntensity = material.emissiveIntensity; }
+    out.name = (look === 'plain' ? '' : look + ' ') + '#' + color.getHexString();
+    const key = [out.name, out.roughness.toFixed(2), out.metalness.toFixed(2), out.vertexColors, out.side, out.transparent, out.opacity.toFixed(2), out.emissive.getHexString(), out.emissiveIntensity.toFixed(2)].join('|');
+    return { material: out, key };
+  }
+  // a mesh's geometry in world space, with just positions, normals and (if its material uses them) vertex colors
+  function exportGeometryOf(mesh, withColors) {
+    const src = mesh.geometry, position = src.attributes.position;
+    if (!position || !position.count) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', position.clone());
+    if (src.attributes.normal) geo.setAttribute('normal', src.attributes.normal.clone());
+    if (withColors) geo.setAttribute('color', src.attributes.color ? src.attributes.color.clone() : new THREE.Float32BufferAttribute(new Float32Array(position.count*3).fill(1), 3));
+    if (src.index) geo.setIndex(src.index.clone());
+    geo.applyMatrix4(mesh.matrixWorld);
+    if (!geo.attributes.normal) geo.computeVertexNormals();
+    return geo;
+  }
+  function mergeExportGeometries(geos) {
+    if (geos.length === 1) return geos[0];
+    let vertices = 0, corners = 0;
+    geos.forEach(g => { vertices += g.attributes.position.count; corners += g.index ? g.index.count : g.attributes.position.count; });
+    const withColors = !!geos[0].attributes.color;
+    const position = new Float32Array(vertices*3), normal = new Float32Array(vertices*3), color = withColors ? new Float32Array(vertices*3) : null;
+    const index = new Uint32Array(corners);
+    let v = 0, c = 0;
+    geos.forEach(g => {
+      const count = g.attributes.position.count, p = g.attributes.position, n = g.attributes.normal, col = g.attributes.color;
+      for (let i=0;i<count;i++) {
+        position[(v+i)*3] = p.getX(i); position[(v+i)*3+1] = p.getY(i); position[(v+i)*3+2] = p.getZ(i);
+        normal[(v+i)*3] = n.getX(i); normal[(v+i)*3+1] = n.getY(i); normal[(v+i)*3+2] = n.getZ(i);
+        if (color) { color[(v+i)*3] = col.getX(i); color[(v+i)*3+1] = col.getY(i); color[(v+i)*3+2] = col.getZ(i); }
+      }
+      if (g.index) for (let i=0;i<g.index.count;i++) index[c++] = g.index.getX(i) + v;
+      else for (let i=0;i<count;i++) index[c++] = v + i;
+      v += count;
+      g.dispose();
+    });
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(position, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
+    if (color) merged.setAttribute('color', new THREE.BufferAttribute(color, 3));
+    merged.setIndex(new THREE.BufferAttribute(index, 1));
+    return merged;
+  }
+  function exportGLB() {
+    if (!THREE.GLTFExporter) { alert('The GLB exporter didn\'t load — check your connection and reload the page.'); return; }
+    scene.updateMatrixWorld(true);
+    const sources = [['Ground', ground], ['Roads', roadMeshGroup], ['Trains', trainMeshGroup], ['Water', waterGroup], ['Bridges', bridgeGroup],
+      ...zones.filter(z => z.buildingsGroup).map(z => [z.name + ' (' + (z.zoneType || 'buildings') + ')', z.buildingsGroup])];
+    const exportScene = new THREE.Scene();
+    exportScene.name = 'Splinetopia';
+    const materials = new Map(); // shared across the whole file: one material per distinct look, however many nodes use it
+    let cityMeshes = 0;
+    sources.forEach(([name, root]) => {
+      const byMaterial = new Map();
+      root.traverse(o => {
+        if (!o.isMesh || o.isInstancedMesh || !o.visible || o.userData.noExport || o.userData.isShuttle || Array.isArray(o.material)) return;
+        const made = exportMaterialFor(o.material);
+        if (materials.has(made.key)) made.material.dispose(); else materials.set(made.key, made.material);
+        const material = materials.get(made.key), key = made.key;
+        const geo = exportGeometryOf(o, material.vertexColors);
+        if (!geo) return;
+        if (!byMaterial.has(key)) byMaterial.set(key, { material, geos: [] });
+        byMaterial.get(key).geos.push(geo);
+      });
+      if (!byMaterial.size) return;
+      const node = new THREE.Group();
+      node.name = name;
+      byMaterial.forEach(({ material, geos }) => {
+        const mesh = new THREE.Mesh(mergeExportGeometries(geos), material);
+        mesh.name = name + ' · ' + material.name;
+        node.add(mesh);
+        if (name !== 'Ground') cityMeshes++;
+      });
+      exportScene.add(node);
+    });
+    const cleanUp = () => exportScene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+    if (!cityMeshes) { cleanUp(); alert('Nothing to export yet — draw some roads or zones first.'); return; }
+    new THREE.GLTFExporter().parse(exportScene, (result) => {
+      downloadFile('splinetopia_city.glb', new Blob([result], { type: 'model/gltf-binary' }));
+      cleanUp();
+    }, { binary: true });
+  }
 
   // ============================================================ people
   // Lil people: tiny cuboids in random colors, all drawn as one instanced mesh. Most walk the walkways — the sidewalks either
@@ -7665,6 +7875,7 @@
   });
   scene.add(shaderKeepAlive);
   syncPeopleUI();
+  commitHistory(); // the starting point undo goes back to
   function animate() {
     requestAnimationFrame(animate);
     controls.update(false);
