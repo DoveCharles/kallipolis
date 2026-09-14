@@ -23,7 +23,7 @@ A little procedural city blockout tool that runs in the browser — a single HTM
   Roads cut through zones, and zones higher in the list cut into the ones below (drag to reorder).
 - **Trains** — glass solenoid tubes on smooth 3D paths, with stations and a shuttle running the line.
 - **People & traffic** — lil people walking the sidewalks and paths and gathering in plazas and parks, and cars driving the roads (toggle and tune them in World).
-- **World** — sun position, ground and grid colors, save/load projects as JSON, and GLB (with materials) or OBJ export.
+- **World** — sun position or a day/night cycle (with a realistic sun path, moonlight and stars), weather (rain, snow, cloud shadows), ground and grid colors, save/load projects as JSON, and GLB (with materials) or OBJ export.
 - **Undo/redo** — Ctrl+Z and Ctrl+Shift+Z (or Ctrl+Y), or the arrows at the top.
 
 ## Running it

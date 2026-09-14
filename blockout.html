@@ -282,6 +282,13 @@
       <input type="range" id="s-sunelev" min="-20" max="90" step="1" value="45"></div>
     <div class="slider-row"><div class="row"><label>Sun azimuth</label><span class="val" id="dv-sunazim">45</span></div>
       <input type="range" id="s-sunazim" min="0" max="360" step="1" value="45"></div>
+    <div class="row" style="margin-top:11px;"><label>Day/night cycle</label><button class="toggle-switch" id="s-daynight"><span class="knob"></span></button></div>
+    <div id="daynight-settings" style="display:none;">
+      <div class="slider-row" style="margin-top:11px;"><div class="row"><label>Time of day</label><span class="val" id="dv-timeofday">09:00</span></div>
+        <input type="range" id="s-timeofday" min="0" max="24" step="0.05" value="9"></div>
+      <div class="slider-row"><div class="row"><label>Day length (minutes)</label><span class="val" id="dv-daylength">4</span></div>
+        <input type="range" id="s-daylength" min="1" max="30" step="1" value="4"></div>
+    </div>
     <div class="row"><label>Ground color</label><input type="color" class="color-input" id="s-groundcolor" value="#1b1e24"></div>
     <div class="row"><label>Grid color</label><input type="color" class="color-input" id="s-gridcolor" value="#33373f"></div>
     <div id="world-tint-panel"></div>
@@ -298,6 +305,13 @@
       <div class="slider-row"><div class="row"><label>Size</label><span class="val" id="dv-peoplesize">1.0</span></div>
         <input type="range" id="s-peoplesize" min="0.3" max="4" step="0.1" value="1"></div>
     </div>
+    <div class="section-label" style="margin-top:14px;">Weather</div>
+    <div class="slider-row"><div class="row"><label>Rain</label><span class="val" id="dv-rain">0.00</span></div>
+      <input type="range" id="s-rain" min="0" max="1" step="0.05" value="0"></div>
+    <div class="slider-row"><div class="row"><label>Snow</label><span class="val" id="dv-snow">0.00</span></div>
+      <input type="range" id="s-snow" min="0" max="1" step="0.05" value="0"></div>
+    <div class="slider-row"><div class="row"><label>Cloud shadows</label><span class="val" id="dv-clouds">0.00</span></div>
+      <input type="range" id="s-clouds" min="0" max="1" step="0.05" value="0"></div>
     <button class="btn" id="btn-save-project" style="margin-top:11px;">Save project</button>
     <button class="btn" id="btn-load-project">Load project</button>
     <input type="file" id="project-file-input" accept=".json,application/json" style="display:none;">
@@ -368,6 +382,7 @@
       topColor: { value: new THREE.Color(0x2f7fd0) },
       horizonColor: { value: new THREE.Color(0xdfefff) },
       sunColor: { value: new THREE.Color(0xffffff) },
+      starAmount: { value: 0 },
     },
     vertexShader: `
       varying vec3 vDir;
@@ -382,6 +397,7 @@
       uniform vec3 topColor;
       uniform vec3 horizonColor;
       uniform vec3 sunColor;
+      uniform float starAmount;
       void main() {
         vec3 dir = normalize(vDir);
         float h = clamp(dir.y, -1.0, 1.0);
@@ -394,6 +410,12 @@
         float sunAmount = max(dot(dir, normalize(sunDirection)), 0.0);
         col += sunColor * pow(sunAmount, 380.0) * 2.0;
         col += sunColor * pow(sunAmount, 24.0) * 0.25;
+        // stars, once it's dark enough: a sparse scatter of directions, fading out towards the horizon
+        if (starAmount > 0.0 && h > 0.0) {
+          vec3 cell = floor(dir * 240.0);
+          float r = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+          col += vec3(step(0.9972, r) * starAmount * smoothstep(0.0, 0.3, h) * (0.6 + 0.4*fract(r*97.0)));
+        }
         gl_FragColor = vec4(col, 1.0);
       }
     `,
@@ -468,7 +490,14 @@
     const nyCtx = skyEnvFaces.ny.getContext('2d'); nyCtx.fillStyle = horizonHex; nyCtx.fillRect(0,0,SKY_ENV_FACE_SIZE,SKY_ENV_FACE_SIZE);
     SKY_ENV_MAP.needsUpdate = true;
   }
-  function updateSun() {
+  // Weather, 0..1 each (see "weather") — here because it dims the light and greys the sky.
+  let weatherRain = 0, weatherSnow = 0, weatherClouds = 0;
+  const MOON_COLOR = new THREE.Color(0x9fb4d8);
+  // Points the light, sky and fog at the current sun position and weather. While the sun is up (or just below the horizon)
+  // the light is the sun; once it's well down, the moon — opposite it, dim and cool — takes over, with the two fading
+  // through a moment of near-darkness around -4° so the shadows don't jump. `quick` skips the costlier refreshes (the sky
+  // reflection map and every lit window's glow), for the day/night cycle to call every frame.
+  function updateSun(quick) {
     const elevRad = sunElevation*Math.PI/180, azimRad = sunAzimuth*Math.PI/180;
     const dir = new THREE.Vector3(
       Math.cos(elevRad)*Math.sin(azimRad),
@@ -476,22 +505,41 @@
       Math.cos(elevRad)*Math.cos(azimRad)
     );
     const dist = 400;
-    const lightHeight = Math.max(dir.y, 0.06);
-    sun.position.set(dir.x*dist, lightHeight*dist, dir.z*dist);
-    const elevClamped = Math.max(dir.y, 0);
-    sun.intensity = 0.35 + elevClamped*0.95;
-    const warmth = 1-elevClamped;
-    sun.color.setRGB(1, 1-warmth*0.22, 1-warmth*0.5);
+    const ease = (a, b, x) => { const t = THREE.MathUtils.clamp((x - a)/(b - a), 0, 1); return t*t*(3 - 2*t); };
+    const overcast = Math.min(1, weatherRain*0.9 + weatherSnow*0.6 + weatherClouds*0.25);
+    if (sunElevation > -4) {
+      sun.position.set(dir.x*dist, Math.max(dir.y, 0.06)*dist, dir.z*dist);
+      const elevClamped = Math.max(dir.y, 0), warmth = 1 - elevClamped;
+      sun.intensity = ease(-4, 4, sunElevation)*(0.35 + elevClamped*0.95);
+      sun.color.setRGB(1, 1-warmth*0.22, 1-warmth*0.5);
+    } else {
+      sun.position.set(-dir.x*dist, Math.max(-dir.y, 0.2)*dist, -dir.z*dist);
+      sun.intensity = (1 - ease(-12, -4, sunElevation))*0.18;
+      sun.color.copy(MOON_COLOR);
+    }
+    sun.intensity *= 1 - overcast*0.6;
 
     const sky = computeSkyColors(sunElevation);
+    if (overcast > 0) {
+      const grey = new THREE.Color().setScalar(sky.horizon.r*0.3 + sky.horizon.g*0.59 + sky.horizon.b*0.11);
+      sky.top.lerp(grey.clone().multiplyScalar(0.85), overcast*0.8);
+      sky.horizon.lerp(grey, overcast*0.7);
+      sky.sun.multiplyScalar(1 - overcast*0.9);
+    }
     skyDomeMat.uniforms.sunDirection.value.copy(dir);
     skyDomeMat.uniforms.topColor.value.copy(sky.top);
     skyDomeMat.uniforms.horizonColor.value.copy(sky.horizon);
     skyDomeMat.uniforms.sunColor.value.copy(sky.sun);
+    skyDomeMat.uniforms.starAmount.value = (1 - ease(-12, -2, sunElevation))*(1 - overcast);
     scene.fog.color.copy(sky.horizon);
+    scene.fog.near = THREE.MathUtils.lerp(600, 90, overcast);
+    scene.fog.far = THREE.MathUtils.lerp(2800, 900, overcast);
     hemi.color.copy(sky.top).lerp(new THREE.Color(0xffffff), 0.35);
-    updateSkyEnvMap(sky);
-    updateWindowGlowForSun();
+    hemi.intensity = 0.9*THREE.MathUtils.lerp(0.3, 1, ease(-14, 6, sunElevation))*(1 - overcast*0.25);
+    if (!quick) {
+      updateSkyEnvMap(sky);
+      updateWindowGlowForSun();
+    }
   }
   updateSun();
 
@@ -6177,6 +6225,13 @@
   document.getElementById('s-peoplespeed').addEventListener('input', (e) => { peopleSpeed = parseFloat(e.target.value); syncPeopleUI(); });
   document.getElementById('s-peoplesize').addEventListener('input', (e) => { peopleSize = parseFloat(e.target.value); syncPeopleUI(); });
   document.getElementById('s-traffic').addEventListener('input', (e) => { trafficAmount = parseFloat(e.target.value); syncPeopleUI(); });
+  document.getElementById('s-daynight').addEventListener('click', () => {
+    dayNightEnabled = !dayNightEnabled;
+    if (dayNightEnabled) applyTimeOfDay(false); else syncSkyUI();
+  });
+  document.getElementById('s-timeofday').addEventListener('input', (e) => { timeOfDay = parseFloat(e.target.value) % 24; applyTimeOfDay(false); });
+  document.getElementById('s-daylength').addEventListener('input', (e) => { dayLengthMinutes = parseFloat(e.target.value); syncSkyUI(); });
+  ['rain', 'snow', 'clouds'].forEach(kind => document.getElementById('s-' + kind).addEventListener('input', (e) => setWeather(kind, parseFloat(e.target.value))));
   document.getElementById('s-groundcolor').addEventListener('input', (e) => {
     groundMat.color.set(e.target.value);
   });
@@ -6708,7 +6763,9 @@
         globalParkTint: colorToHex(globalParkTint, PARK_TINT_COLORS[0]),
         globalTreeTint: colorToHex(globalTreeTint, TREE_TINT_COLORS[0]),
         globalGrassNoiseStrength,
-        people: { enabled: peopleEnabled, amount: peopleAmount, speed: peopleSpeed, size: peopleSize, traffic: trafficAmount }
+        people: { enabled: peopleEnabled, amount: peopleAmount, speed: peopleSpeed, size: peopleSize, traffic: trafficAmount },
+        dayNight: { enabled: dayNightEnabled, dayLength: dayLengthMinutes, time: timeOfDay },
+        weather: { rain: weatherRain, snow: weatherSnow, clouds: weatherClouds }
       },
       roads: {
         nodeSeq: roadNodeSeq, lineSeq: roadLineSeq, networkSeq: roadNetworkSeq,
@@ -6842,6 +6899,17 @@
       if (sc.people.traffic != null) trafficAmount = sc.people.traffic;
       syncPeopleUI();
     }
+    if (sc.weather) {
+      weatherRain = sc.weather.rain || 0; weatherSnow = sc.weather.snow || 0;
+      setWeather('clouds', sc.weather.clouds || 0); // also applies the rain and snow to the light and sky
+    }
+    if (sc.dayNight) {
+      dayNightEnabled = !!sc.dayNight.enabled;
+      if (sc.dayNight.dayLength != null) dayLengthMinutes = sc.dayNight.dayLength;
+      if (sc.dayNight.time != null) timeOfDay = sc.dayNight.time;
+      if (dayNightEnabled) applyTimeOfDay(false);
+    }
+    syncSkyUI();
 
     const rd = data.roads || {};
     const withY = (out, src) => src.y!=null ? { ...out, y:src.y } : out; // only train nodes and handles have a height
@@ -6908,6 +6976,163 @@
     e.target.value = '';
   });
 
+  // ============================================================ day / night cycle
+  // With the cycle on, the clock runs — a whole day in dayLengthMinutes — and the sun follows the path it really takes over a
+  // mid-latitude city in late spring: rising in the east, arcing through the south to peak at 57°, and setting in the west,
+  // with world north along -Z and east along +X. (At night updateSun hands the light over to the moon.) The light moves
+  // every frame; the sky reflection, window glow and the World panel's sliders follow a couple of times a second.
+  const DAY_LATITUDE = 45, DAY_DECLINATION = 12; // degrees
+  let dayNightEnabled = false, dayLengthMinutes = 4, timeOfDay = 9; // hours
+  let lastDayNightTime = null, lastFullSunUpdate = -Infinity;
+  // the sun's elevation and azimuth, in updateSun's terms (degrees; azimuth measured from +Z towards +X), at a time of day
+  function sunPositionAt(hours) {
+    const rad = Math.PI/180, lat = DAY_LATITUDE*rad, dec = DAY_DECLINATION*rad, hourAngle = (hours - 12)*15*rad;
+    const elevation = Math.asin(Math.sin(lat)*Math.sin(dec) + Math.cos(lat)*Math.cos(dec)*Math.cos(hourAngle));
+    // the classic formula gives azimuth from south, positive towards the west; turned to clockwise from north, then to +Z-based
+    const fromSouth = Math.atan2(Math.sin(hourAngle), Math.cos(hourAngle)*Math.sin(lat) - Math.tan(dec)*Math.cos(lat));
+    const fromNorth = fromSouth + Math.PI;
+    return { elevation: elevation/rad, azimuth: (((180 - fromNorth/rad) % 360) + 360) % 360 };
+  }
+  function applyTimeOfDay(quick) {
+    const { elevation, azimuth } = sunPositionAt(timeOfDay);
+    sunElevation = elevation;
+    sunAzimuth = azimuth;
+    updateSun(quick);
+    if (!quick) syncSkyUI();
+  }
+  function updateDayNight(t) {
+    const dt = lastDayNightTime == null ? 0 : Math.min(0.25, Math.max(0, t - lastDayNightTime));
+    lastDayNightTime = t;
+    if (!dayNightEnabled) return;
+    timeOfDay = (timeOfDay + dt*24/(dayLengthMinutes*60)) % 24;
+    const full = t - lastFullSunUpdate > 0.5;
+    if (full) lastFullSunUpdate = t;
+    applyTimeOfDay(!full);
+  }
+  function syncSkyUI() {
+    const hours = Math.floor(timeOfDay), minutes = Math.floor((timeOfDay - hours)*60);
+    document.getElementById('s-daynight').classList.toggle('on', dayNightEnabled);
+    document.getElementById('daynight-settings').style.display = dayNightEnabled ? 'block' : 'none';
+    document.getElementById('s-timeofday').value = timeOfDay;
+    document.getElementById('dv-timeofday').textContent = String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+    document.getElementById('s-daylength').value = dayLengthMinutes;
+    document.getElementById('dv-daylength').textContent = dayLengthMinutes;
+    // the sun sliders follow the clock, and can't be dragged while it runs
+    [['s-sunelev', 'dv-sunelev', sunElevation], ['s-sunazim', 'dv-sunazim', sunAzimuth]].forEach(([sliderId, valueId, value]) => {
+      const slider = document.getElementById(sliderId);
+      slider.value = Math.round(value);
+      slider.disabled = dayNightEnabled;
+      document.getElementById(valueId).textContent = Math.round(value);
+    });
+    [['rain', weatherRain], ['snow', weatherSnow], ['clouds', weatherClouds]].forEach(([kind, value]) => {
+      document.getElementById('s-' + kind).value = value;
+      document.getElementById('dv-' + kind).textContent = value.toFixed(2);
+    });
+  }
+
+  // ============================================================ weather
+  // Rain and snow fall through a box of air around wherever the camera's looking — sized to how far out it's zoomed, and
+  // anchored to the world, so the drops don't slide along as the view moves (they wrap round the box instead). Each drop's
+  // place comes straight from its random seed and the clock, so there's nothing to simulate. Rain is streaks slanting a little
+  // in the wind; snow is soft flakes swaying as they drift down. Cloud shadows come from an invisible layer of cloud high over
+  // the city: it takes part only in the sun's shadow map, where a tiling noise texture cuts it into cloud shapes (more of
+  // them the higher the setting), drifting with the wind. Rain and snow also dim the light and grey the sky (see updateSun).
+  const RAIN_MAX = 6000, SNOW_MAX = 8000;
+  const RAIN_SPEED = 55, SNOW_SPEED = 4;
+  const rainSeeds = Float32Array.from({ length: RAIN_MAX*3 }, () => Math.random());
+  const snowSeeds = Float32Array.from({ length: SNOW_MAX*4 }, () => Math.random());
+  const rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(RAIN_MAX*6), 3).setUsage(THREE.DynamicDrawUsage));
+  const rainLines = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xaebfd0, transparent: true, opacity: 0.45, depthWrite: false }));
+  const snowGeo = new THREE.BufferGeometry();
+  snowGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SNOW_MAX*3), 3).setUsage(THREE.DynamicDrawUsage));
+  const snowFlake = (() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 32;
+    const ctx = canvas.getContext('2d'), gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gradient.addColorStop(0, 'rgba(255,255,255,1)'); gradient.addColorStop(0.5, 'rgba(255,255,255,0.8)'); gradient.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 32, 32);
+    return new THREE.CanvasTexture(canvas);
+  })();
+  const snowPoints = new THREE.Points(snowGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, map: snowFlake, transparent: true, depthWrite: false, alphaTest: 0.02 }));
+  [rainLines, snowPoints].forEach((object, i) => { object.frustumCulled = false; object.visible = false; object.name = i ? 'Snow' : 'Rain'; scene.add(object); });
+  // a tiling cloud pattern: four octaves of value noise, wrapped so the edges meet
+  const cloudTexture = (() => {
+    const size = 128, canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d'), image = ctx.createImageData(size, size), rng = mulberry32(9001);
+    const octaves = [[4, 0.5], [8, 0.25], [16, 0.15], [32, 0.1]].map(([cells, weight]) => ({ cells, weight, grid: Array.from({ length: cells*cells }, () => rng()) }));
+    for (let y=0;y<size;y++) for (let x=0;x<size;x++) {
+      let v = 0;
+      octaves.forEach(({ cells, weight, grid }) => {
+        const fx = x/size*cells, fy = y/size*cells, ix = Math.floor(fx), iy = Math.floor(fy);
+        const sx = (fx - ix)*(fx - ix)*(3 - 2*(fx - ix)), sy = (fy - iy)*(fy - iy)*(3 - 2*(fy - iy));
+        const at = (i, j) => grid[(j % cells)*cells + (i % cells)];
+        v += weight*((at(ix, iy)*(1 - sx) + at(ix+1, iy)*sx)*(1 - sy) + (at(ix, iy+1)*(1 - sx) + at(ix+1, iy+1)*sx)*sy);
+      });
+      const k = (y*size + x)*4, c = Math.round(Math.min(1, v)*255);
+      image.data[k] = image.data[k+1] = image.data[k+2] = c;
+      image.data[k+3] = 255;
+    }
+    ctx.putImageData(image, 0, 0);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(5, 5);
+    return texture;
+  })();
+  const cloudShadowMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, alphaMap: cloudTexture, alphaTest: 0.6 });
+  // never seen, only its shadow — its own material carries the pattern too, since the shadow pass may take it from there
+  const cloudLayer = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide, alphaMap: cloudTexture, alphaTest: 0.6 }));
+  cloudLayer.customDepthMaterial = cloudShadowMaterial;
+  cloudLayer.position.y = 140;
+  cloudLayer.castShadow = true;
+  cloudLayer.frustumCulled = false;
+  cloudLayer.visible = false;
+  cloudLayer.name = 'CloudShadows';
+  scene.add(cloudLayer);
+  function setWeather(kind, value) {
+    if (kind === 'rain') weatherRain = value; else if (kind === 'snow') weatherSnow = value; else weatherClouds = value;
+    cloudLayer.visible = weatherClouds > 0;
+    // more cover lets more of the pattern through as cloud
+    const threshold = +THREE.MathUtils.lerp(0.72, 0.36, weatherClouds).toFixed(2);
+    [cloudShadowMaterial, cloudLayer.material].forEach(material => {
+      if (material.alphaTest !== threshold) { material.alphaTest = threshold; material.needsUpdate = true; }
+    });
+    updateSun();
+    syncSkyUI();
+  }
+  function updateWeather(t) {
+    const wrap = (v, size) => ((v % size) + size) % size;
+    const W = THREE.MathUtils.clamp(controls.radius*1.4, 160, 800), H = Math.min(260, W*0.5);
+    const x0 = controls.target.x - W/2, z0 = controls.target.z - W/2, scale = W/300;
+    rainLines.visible = weatherRain > 0;
+    if (rainLines.visible) {
+      const count = Math.round(RAIN_MAX*weatherRain), pos = rainGeo.attributes.position.array;
+      const length = 1.4*scale + 0.6, slant = length*0.25, fall = t*RAIN_SPEED*(0.7 + scale*0.3), drift = t*6;
+      for (let i=0;i<count;i++) {
+        const x = x0 + wrap(rainSeeds[i*3]*W + drift - x0, W), z = z0 + wrap(rainSeeds[i*3+2]*W - z0, W), y = H - wrap(rainSeeds[i*3+1]*H + fall, H);
+        pos.set([x, y, z, x - slant, y + length, z], i*6);
+      }
+      rainGeo.setDrawRange(0, count*2);
+      rainGeo.attributes.position.needsUpdate = true;
+    }
+    snowPoints.visible = weatherSnow > 0;
+    if (snowPoints.visible) {
+      const count = Math.round(SNOW_MAX*weatherSnow), pos = snowGeo.attributes.position.array, fall = t*SNOW_SPEED;
+      for (let i=0;i<count;i++) {
+        const phase = snowSeeds[i*4+3]*Math.PI*2, sway = Math.sin(t*0.7 + phase)*1.5*scale;
+        pos[i*3] = x0 + wrap(snowSeeds[i*4]*W + sway + t*1.5 - x0, W);
+        pos[i*3+1] = H - wrap(snowSeeds[i*4+1]*H + fall*(0.7 + snowSeeds[i*4+3]*0.6), H);
+        pos[i*3+2] = z0 + wrap(snowSeeds[i*4+2]*W + Math.cos(t*0.5 + phase)*1.2*scale - z0, W);
+      }
+      snowPoints.material.size = 0.35 + scale*0.35;
+      snowGeo.setDrawRange(0, count);
+      snowGeo.attributes.position.needsUpdate = true;
+    }
+    if (cloudLayer.visible) cloudTexture.offset.set(t*0.0035, t*0.0018);
+  }
+
   // ============================================================ undo / redo
   // History is a stack of project snapshots — the same JSON a saved project holds, less the map images (they're big, and
   // importing, moving or removing map images isn't something undo covers). Whenever an interaction finishes — a pointer
@@ -6921,6 +7146,8 @@
   function historySnapshot() {
     const data = serializeProject();
     delete data.exportedAt; delete data.mapImages; delete data.mapImageSeq;
+    // with the day/night cycle running, the clock and the sun it moves change constantly — they aren't steps to undo
+    if (data.scene.dayNight && data.scene.dayNight.enabled) { delete data.scene.dayNight.time; delete data.scene.sunElevation; delete data.scene.sunAzimuth; }
     return JSON.stringify(data);
   }
   function syncHistoryButtons() {
@@ -7875,6 +8102,7 @@
   });
   scene.add(shaderKeepAlive);
   syncPeopleUI();
+  syncSkyUI();
   commitHistory(); // the starting point undo goes back to
   function animate() {
     requestAnimationFrame(animate);
@@ -7886,6 +8114,8 @@
     updatePeople(t);
     updateTraffic(t);
     updateTrafficLights(t);
+    updateDayNight(t);
+    updateWeather(t);
     WATER_TIME.value = t;
     scene.traverse(o => {
       if (o.userData && o.userData.isBlinkLight) {
