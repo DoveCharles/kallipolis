@@ -10,7 +10,7 @@ A little procedural city blockout tool that runs in the browser — a single HTM
   - **Path** — a sandy track with a soft, speckled edge
   - **River** — water, joining any water zone it runs into
 
-  Roads and paths crossing water become bridges.
+  Roads get lane markings, and junctions get zebra crossings and working traffic lights. Roads and paths crossing water become bridges.
 - **Zones** — draw areas and pick a type:
   - **Buildings** — lots and procedurally generated towers, with shader-drawn windows that light up at night
   - **Park** — grass, trees and a perimeter fence
