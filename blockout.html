@@ -276,8 +276,8 @@
     <div class="row"><label>Ground color</label><input type="color" class="color-input" id="s-groundcolor" value="#1b1e24"></div>
     <div class="row"><label>Grid color</label><input type="color" class="color-input" id="s-gridcolor" value="#33373f"></div>
     <div id="world-tint-panel"></div>
-    <div class="slider-row"><div class="row"><label>Grass noise strength</label><span class="val" id="dv-grassnoise">1.00</span></div>
-      <input type="range" id="s-grassnoise" min="0" max="2.5" step="0.05" value="1"></div>
+    <div class="slider-row"><div class="row"><label>Grass noise strength</label><span class="val" id="dv-grassnoise">0.20</span></div>
+      <input type="range" id="s-grassnoise" min="0" max="2.5" step="0.05" value="0.2"></div>
     <button class="btn" id="btn-save-project" style="margin-top:11px;">Save project</button>
     <button class="btn" id="btn-load-project">Load project</button>
     <input type="file" id="project-file-input" accept=".json,application/json" style="display:none;">
@@ -508,7 +508,7 @@
   });
 
   // Y-height layering (avoids coplanar z-fighting):
-  const Y_GRID=0.02, Y_MAP=0.03, Y_ZONE_GROUND=0.04, Y_WATER=0.05, Y_PARK=0.06, Y_ZONE_FILL=0.2, Y_ROAD=0.35, Y_SIDEWALK=0.5, Y_ZONE_LINE=0.55, Y_PREVIEW=0.65;
+  const Y_GRID=0.02, Y_MAP=0.03, Y_ZONE_GROUND=0.04, Y_WATER=0.05, Y_PARK=0.06, Y_PATH=0.1, Y_ZONE_FILL=0.2, Y_ROAD=0.35, Y_SIDEWALK=0.5, Y_ZONE_LINE=0.55, Y_PREVIEW=0.65;
 
   // ============================================================ camera controls (math only)
   const controls = {
@@ -835,8 +835,8 @@
   // Default starting swatch is a natural yellow-green rather than white — the material itself is
   // pure grayscale (see applyGrassNoiseShader / makeTreeMesh), so this is purely a starting
   // parameter value, saving a new project from starting on flat white until you pick a tint.
-  const PARK_TINT_COLORS = [0xa9c34b]; // rgb(169,195,75); user-extendable, multiplies over the grass's own procedural (grayscale) color
-  const TREE_TINT_COLORS = [0xa9c84b]; // rgb(169,200,75); user-extendable, multiplies over each tree's own rolled (grayscale) foliage color
+  const PARK_TINT_COLORS = [0xc4e57e]; // rgb(196,229,126); user-extendable, multiplies over the grass's own procedural (grayscale) color
+  const TREE_TINT_COLORS = [0xd6f75b]; // rgb(214,247,91); user-extendable, multiplies over each tree's own rolled (grayscale) foliage color
   // World-level default tint, applied to every park's grass and every tree in every zone (park
   // AND buildings zones' own unbuilt-lot grass patches) unless a park zone opts into its own
   // override via its "Custom color" toggle — see resolveParkTint/resolveTreeTint below.
@@ -857,10 +857,11 @@
   // Same World-default-with-per-park-override pattern as the tints above, but for how strongly
   // the grass's procedural noise pattern shows: 0 = flat, uniform color, 1 = the shader's normal
   // contrast, higher = a rougher, more mottled look.
-  let globalGrassNoiseStrength = 1;
+  const DEFAULT_GRASS_NOISE_STRENGTH = 0.2;
+  let globalGrassNoiseStrength = DEFAULT_GRASS_NOISE_STRENGTH;
   function resolveGrassNoiseStrength(zone) {
     if (zone && zone.zoneType==='park' && zone.settings.customTint) {
-      return zone.settings.grassNoiseStrength!=null ? zone.settings.grassNoiseStrength : 1;
+      return zone.settings.grassNoiseStrength!=null ? zone.settings.grassNoiseStrength : DEFAULT_GRASS_NOISE_STRENGTH;
     }
     return globalGrassNoiseStrength;
   }
@@ -1296,7 +1297,7 @@
   // shared "add/edit a custom palette color" row state: null (closed) | {mode:'add'} | {mode:'edit', index}
   let colorPickerState = null;
   const DEFAULT_ZONE_SETTINGS = { density:0.8, heightMin:4, heightMax:40, landmarkChance:0.08, lotCount:24, setback:1.5, windowsEnabled:true,
-    groundColor:BUILDING_GROUND_COLORS[0], borderSetback:0, treeDensity:0.5, treeSizeMin:1, treeSizeMax:2.2, treeSetback:3, colorVariationMin:0.25, colorVariationMax:0.25, windowScale:1, litWindowChance:0.8, specularWindows:true, parkTint:PARK_TINT_COLORS[0], treeTint:TREE_TINT_COLORS[0], customTint:false, grassNoiseStrength:1 };
+    groundColor:BUILDING_GROUND_COLORS[0], borderSetback:0, treeDensity:0.5, treeSizeMin:1, treeSizeMax:2.2, treeSetback:3, colorVariationMin:0.25, colorVariationMax:0.25, windowScale:1, litWindowChance:0.8, specularWindows:true, parkTint:PARK_TINT_COLORS[0], treeTint:TREE_TINT_COLORS[0], customTint:false, grassNoiseStrength:DEFAULT_GRASS_NOISE_STRENGTH };
   const MAX_TARGET_LOTS = 150; // slider max = this many lots; slider min (1) = "whole zone"
   const MIN_ZONE_TREES = 1, MAX_ZONE_TREES = 100; // tree count is a flat target regardless of zone size, not an area-scaled density
 
@@ -1541,6 +1542,9 @@
   // The whole road network's footprint (road + curb + sidewalk) as Clipper paths, cached by rebuildRoadMeshes for
   // zones to cut themselves with — see "zone cut-outs".
   let roadFootprint = [];
+  // Paths' footprint (the track itself, not its fade), cached alongside by rebuildRoadMeshes — zones keep lots, buildings
+  // and trees off it without cutting their ground (see "paths").
+  let pathFootprint = [];
 
   // Half road width, curb width and sidewalk width for one line.
   function roadLineWidths(line) {
@@ -1726,12 +1730,116 @@
     pos.needsUpdate = true;
     geometry.computeBoundingSphere();
   }
+  // ---------------------------------------------------------- paths
+  // A road network can be a path instead of a sidewalk road: no curb or raised sidewalk, just a sandy, speckled track laid
+  // over whatever's underneath, whose edge wanders in and out a little and fades away softly instead of stopping at a hard
+  // line. Paths don't cut holes in zone ground or park grass — the fade needs something beneath it to fade into — but
+  // lots, buildings and trees still keep off them (see pathFootprint).
+  const PATH_COLOR = 0xb09973; // kept near the grass's brightness, so a path reads as sand on the ground rather than a glowing stripe
+  const PATH_MAX_SEGMENTS = 128; // fixed GLSL array size; a network's centerlines are simplified to fit
+  function isPathLine(line) { return line.roadType === 'path'; }
+  // how far past its nominal edge a path's sand fades out
+  function pathFadeWidth(halfWidth) { return Math.min(2.5, halfWidth*0.9); }
+  // Ramer–Douglas–Peucker: the fewest of `points` that keep the line within `tolerance` of its original course
+  function simplifyPolyline(points, tolerance) {
+    if (points.length <= 2) return points;
+    const a = points[0], b = points[points.length-1];
+    let worst = 0, index = 0;
+    for (let i=1;i<points.length-1;i++) { const d = distPointSegment(points[i], a, b); if (d > worst) { worst = d; index = i; } }
+    if (worst <= tolerance) return [a, b];
+    return simplifyPolyline(points.slice(0, index+1), tolerance).slice(0, -1).concat(simplifyPolyline(points.slice(index), tolerance));
+  }
+  // a path network's centerlines as world-space segments [ax, az, bx, bz], simplified until they fit the shader's list
+  function pathSegmentsOf(lines) {
+    const polylines = lines.map(line => tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean)));
+    const countSegments = pls => pls.reduce((sum, pl) => sum + Math.max(0, pl.length-1), 0);
+    let simplified = polylines;
+    for (let tolerance = 0.1; countSegments(simplified) > PATH_MAX_SEGMENTS && tolerance < 64; tolerance *= 2) {
+      simplified = polylines.map(pl => simplifyPolyline(pl, tolerance));
+    }
+    const segments = [];
+    simplified.forEach(pl => { for (let i=0;i<pl.length-1;i++) segments.push([pl[i].x, pl[i].z, pl[i+1].x, pl[i+1].z]); });
+    return segments.slice(0, PATH_MAX_SEGMENTS);
+  }
+  const PATH_FRAGMENT_PARS = `
+    #define PATH_MAX_SEGMENTS ${PATH_MAX_SEGMENTS}
+    varying vec3 vPathWorldPos;
+    uniform vec4 uPathSegments[PATH_MAX_SEGMENTS];
+    uniform int uPathSegmentCount;
+    uniform float uPathHalfWidth;
+    uniform float uPathFade;
+    float pathHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
+    float pathNoise(vec2 p) {
+      vec2 i = floor(p), f = fract(p);
+      float a = pathHash(i), b = pathHash(i+vec2(1.0,0.0)), c = pathHash(i+vec2(0.0,1.0)), d = pathHash(i+vec2(1.0,1.0));
+      vec2 u = f*f*(3.0-2.0*f);
+      return mix(a,b,u.x) + (c-a)*u.y*(1.0-u.x) + (d-b)*u.x*u.y;
+    }
+  `;
+  const PATH_COLOR_FRAGMENT = `
+    {
+      vec2 wp = vPathWorldPos.xz;
+      float d = 1e9;
+      for (int i=0; i<PATH_MAX_SEGMENTS; i++) {
+        if (i >= uPathSegmentCount) break;
+        vec4 s = uPathSegments[i];
+        vec2 pa = wp - s.xy, ba = s.zw - s.xy;
+        float h = clamp(dot(pa, ba)/max(dot(ba, ba), 1e-6), 0.0, 1.0);
+        d = min(d, length(pa - ba*h));
+      }
+      float coarse = pathNoise(wp*0.3), grain = pathNoise(wp*3.1);
+      // The edge wanders in and out a little. Across the fade beyond it, the sand breaks up grain by grain rather than
+      // blurring: fine noise is compared against how far into the fade each point is, so the grains thin out and
+      // scatter into the ground. (fadeT runs a little past 0..1 so the core stays solid and the far side fully clear.)
+      float edge = uPathHalfWidth*(0.85 + 0.3*coarse);
+      float fadeT = smoothstep(edge - uPathFade*0.5, edge + uPathFade*0.5, d)*1.3 - 0.15;
+      float speckle = 0.7*pathNoise(wp*4.3) + 0.3*pathNoise(wp*11.0);
+      float cover = 1.0 - smoothstep(speckle - 0.12, speckle + 0.12, fadeT);
+      vec3 sand = diffuseColor.rgb*(0.88 + 0.18*coarse)*(0.92 + 0.16*grain);
+      sand *= mix(1.05, 0.95, smoothstep(0.0, edge, d)); // trodden a little lighter down the middle
+      diffuseColor = vec4(sand, diffuseColor.a*cover);
+    }
+  `;
+  // One path network's mesh: the union of its lines stroked out to their full fade, shaded by distance to its centerlines.
+  function buildPathMesh(lines, networkId) {
+    const halfWidth = (lines[0].width || DEFAULT_ROAD_WIDTH)/2;
+    const fade = pathFadeWidth(halfWidth);
+    const outline = unionRoadStrokes(lines.map(line => ({
+      path: toClipperPath(tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean))),
+      radius: halfWidth + fade,
+    })));
+    const builder = createMeshBuilder();
+    builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, outline, [], true), Y_PATH);
+    const geo = builder.build();
+    if (!geo) return null;
+    const segments = pathSegmentsOf(lines);
+    const segmentUniforms = segmentUniformArray(segments, PATH_MAX_SEGMENTS);
+    const mat = new THREE.MeshStandardMaterial({ color: PATH_COLOR, roughness: 1, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uPathSegments = { value: segmentUniforms };
+      shader.uniforms.uPathSegmentCount = { value: segments.length };
+      shader.uniforms.uPathHalfWidth = { value: halfWidth };
+      shader.uniforms.uPathFade = { value: fade };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vPathWorldPos;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPathWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\n' + PATH_FRAGMENT_PARS)
+        .replace('#include <color_fragment>', '#include <color_fragment>\n' + PATH_COLOR_FRAGMENT);
+    };
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    mesh.name = 'Path';
+    mesh.userData = { networkId, baseColor: PATH_COLOR };
+    return mesh;
+  }
+
   function rebuildRoadMeshes() {
     scene.remove(roadMeshGroup); disposeObject(roadMeshGroup);
     roadMeshGroup = new THREE.Group(); roadMeshGroup.name='Roads';
     const networks = new Map(); // networkId -> [{ path, line, hw, cw, sw }]
     roadLines.forEach(line => {
-      if (isTrainLine(line)) return; // built separately — see rebuildTrainMeshes
+      if (isTrainLine(line) || isPathLine(line)) return; // built separately — see rebuildTrainMeshes and buildPathMesh
       const pts = line.nodeIds.map(id=>roadNodes[id]).filter(Boolean);
       if (pts.length<2) return;
       const path = tessellateOpenPath(pts).map(p => ({ X:Math.round(p.x*CLIPPER_SCALE), Y:Math.round(p.z*CLIPPER_SCALE) }));
@@ -1776,6 +1884,23 @@
       addRoadLayerMesh(curb.build(), CURB_COLOR, 0.85, 'Curb', netId);
       addRoadLayerMesh(sidewalk.build(), line.sidewalkColor!=null ? line.sidewalkColor : SIDEWALK_COLOR, 0.9, 'Sidewalk', netId);
     });
+    // path networks: one soft-edged sandy mesh each, plus their combined footprint for zones to keep lots and trees off
+    const pathNetworks = new Map();
+    roadLines.forEach(line => {
+      if (!isPathLine(line) || line.nodeIds.map(id=>roadNodes[id]).filter(Boolean).length < 2) return;
+      if (!pathNetworks.has(line.networkId)) pathNetworks.set(line.networkId, []);
+      pathNetworks.get(line.networkId).push(line);
+    });
+    const pathStrokes = [];
+    pathNetworks.forEach((lines, netId) => {
+      const mesh = buildPathMesh(lines, netId);
+      if (mesh) roadMeshGroup.add(mesh);
+      lines.forEach(line => pathStrokes.push({
+        path: toClipperPath(tessellateOpenPath(line.nodeIds.map(id=>roadNodes[id]).filter(Boolean))),
+        radius: (line.width || DEFAULT_ROAD_WIDTH)/2,
+      }));
+    });
+    pathFootprint = unionRoadStrokes(pathStrokes);
     scene.add(roadMeshGroup);
     rebuildTrainMeshes();
     rebuildRoadMarkers();
@@ -3399,7 +3524,8 @@
     group.name = 'Tree';
     return group;
   }
-  function generateParkContent(zone, poly, cutouts) {
+  // `cutouts` are cut out of the park's grass; `blockers` (cut-outs plus paths) are where trees can't go
+  function generateParkContent(zone, poly, cutouts, blockers) {
     const rng = mulberry32(zone.settings.seed>>>0);
     // where the park meets water, its grass turns to sand along that edge (see applyGrassNoiseShader)
     const ownArea = clipPolygons(ClipperLib.ClipType.ctDifference, [toClipperPath(poly)], cutouts);
@@ -3408,9 +3534,10 @@
     if (floor) { floor.name = 'ParkFloor'; zone.buildingsGroup.add(floor); }
 
     const s = zone.settings;
-    // trees stand clear of the cut-outs (roads, zones above) by the canopy radius of the biggest tree this park can grow
+    // trees stand clear of roads, paths and zones above by the canopy radius of the biggest tree this park can grow
     // (the fir's bottom tier is the widest canopy, at 0.62 × tree scale)
-    const inCutout = createRegionTester(cutouts.length ? offsetPaths(cutouts, 0.62*s.treeSizeMax, ClipperLib.JoinType.jtRound) : []);
+    const treeBlockers = blockers || cutouts;
+    const inCutout = createRegionTester(treeBlockers.length ? offsetPaths(treeBlockers, 0.62*s.treeSizeMax, ClipperLib.JoinType.jtRound) : []);
     // …and off the sand along any water's edge
     const onBeach = (x, z) => beach.some(([ax, az, bx, bz]) => distPointSegment({ x, z }, { x:ax, z:az }, { x:bx, z:bz }) < PARK_BEACH_WIDTH*1.25 + 0.62*s.treeSizeMax);
     // Flat target count, independent of zone size: density 0 -> 1 tree, density 1 -> MAX_ZONE_TREES.
@@ -3668,6 +3795,13 @@
     const reach = offsetPaths([toClipperPath(poly)], ZONE_CUTOUT_REACH, ClipperLib.JoinType.jtRound);
     return clipPolygons(ctIntersection, clipPolygons(ctUnion, roadFootprint, zonesAbove), reach);
   }
+  // The path footprint in and just around `poly`. Paths don't cut into a zone's ground (see "paths"), but its lots,
+  // buildings and trees keep off them.
+  function pathFootprintNear(poly) {
+    if (!pathFootprint.length) return [];
+    const reach = offsetPaths([toClipperPath(poly)], ZONE_CUTOUT_REACH, ClipperLib.JoinType.jtRound);
+    return clipPolygons(ClipperLib.ClipType.ctIntersection, pathFootprint, reach);
+  }
   // Hole-free polygons ({x,z}[]) covering a Clipper PolyTree's filled area. Lots and building footprints need simple
   // shapes, so an outline with holes (a lot with a road loop, or a small zone above, entirely inside it) is cut in two by a vertical line through
   // its first hole — turning that hole into a notch in each half — and so on until no holes are left.
@@ -3732,8 +3866,11 @@
     if (zone.points.length>=3) {
       const poly = tessellateClosedPath(zone.points);
       const cutouts = zoneCutoutsNear(zone, poly); // roads, and the zones above this one
+      // lots, buildings and trees also keep off paths, which (unlike roads) leave the zone's ground whole
+      const pathsHere = pathFootprintNear(poly);
+      const blockers = pathsHere.length ? clipPolygons(ClipperLib.ClipType.ctUnion, cutouts, pathsHere) : cutouts;
       if (zone.zoneType==='park') {
-        generateParkContent(zone, poly, cutouts);
+        generateParkContent(zone, poly, cutouts, blockers);
       } else if (zone.zoneType==='water') {
         generateWaterContent(zone, poly, cutouts);
       } else if (zone.zoneType==='plain') {
@@ -3753,9 +3890,9 @@
         const lots = [];
         if (boundary.length>=3) recursiveSubdivide(boundary, 0, opts, rng, lots);
         // shrunk a hair so a building merely touching a cut-out's edge (setback 0) doesn't count as in it
-        const inCutout = createRegionTester(cutouts.length ? offsetPaths(cutouts, -0.01, ClipperLib.JoinType.jtMiter) : []);
+        const inCutout = createRegionTester(blockers.length ? offsetPaths(blockers, -0.01, ClipperLib.JoinType.jtMiter) : []);
         lots.forEach(lot => {
-          const { cut, pieces } = cutLotByCutouts(lot, cutouts);
+          const { cut, pieces } = cutLotByCutouts(lot, blockers);
           pieces.forEach(piece => {
             const larea = Math.abs(polygonArea(piece));
             if (larea < avgLotArea*0.12) return;
@@ -3778,12 +3915,12 @@
               const cv = lerp(cvMin, cvMax, rng());
               const buildOn = (fp, round, arch, crn) => makeBuildingMesh(fp,h,isLandmark,rng,zone.settings.windowsEnabled,cv,zone.settings.windowScale,round,arch,crn,zone.settings.litWindowChance,zone.settings.specularWindows);
               let building = buildOn(footprint, isRound, archetype, corners);
-              if (cutouts.length && buildingReachesCutout(building, footprint, cutouts, inCutout)) {
+              if (blockers.length && buildingReachesCutout(building, footprint, blockers, inCutout)) {
                 // it reached into a road or a zone above (a round footprint, canopy, balcony or podium): rebuild it as a
                 // plain footprint pulled back from the cut edge far enough that nothing attached to it can reach
                 const safer = insetPolygonExact(piece, setback + BUILDING_OVERHANG)[0];
                 building = safer ? buildOn(safer, false, 'rect', safer) : null;
-                if (building && buildingReachesCutout(building, safer, cutouts, inCutout)) building = null;
+                if (building && buildingReachesCutout(building, safer, blockers, inCutout)) building = null;
               }
               if (building) zone.buildingsGroup.add(building);
             } else {
@@ -4284,8 +4421,8 @@
           ${colorSwatchRowHtml(PARK_TINT_COLORS, s.parkTint!=null?s.parkTint:PARK_TINT_COLORS[0], 'parktint')}
           <div class="section-label">Tree tint</div>
           ${colorSwatchRowHtml(TREE_TINT_COLORS, s.treeTint!=null?s.treeTint:TREE_TINT_COLORS[0], 'treetint')}
-          <div class="slider-row"><div class="row"><label>Grass noise strength</label><span class="val" id="dv-grassnoisezone">${(s.grassNoiseStrength!=null?s.grassNoiseStrength:1).toFixed(2)}</span></div>
-            <input type="range" id="ds-grassnoisezone" min="0" max="2.5" step="0.05" value="${s.grassNoiseStrength!=null?s.grassNoiseStrength:1}"></div>
+          <div class="slider-row"><div class="row"><label>Grass noise strength</label><span class="val" id="dv-grassnoisezone">${(s.grassNoiseStrength!=null?s.grassNoiseStrength:DEFAULT_GRASS_NOISE_STRENGTH).toFixed(2)}</span></div>
+            <input type="range" id="ds-grassnoisezone" min="0" max="2.5" step="0.05" value="${s.grassNoiseStrength!=null?s.grassNoiseStrength:DEFAULT_GRASS_NOISE_STRENGTH}"></div>
         ` : ''}
         ${rangeSliderHtml('treesize', 'Tree size', 0.4, 5, 0.1, s.treeSizeMin, s.treeSizeMax, 1)}
         <div class="slider-row"><div class="row"><label>Border setback</label><span class="val" id="dv-treesetback">${s.treeSetback}</span></div>
@@ -4469,15 +4606,30 @@
       const curSidewalkColor = lines[0].sidewalkColor!=null ? lines[0].sidewalkColor : SIDEWALK_COLOR;
       const title = lines.length>1 ? netId : lines[0].id;
       const subtitle = lines.length>1 ? `${lines.length} branches · ${totalNodes} nodes` : `${totalNodes} nodes`;
+      const isPath = isPathLine(lines[0]);
       panel.innerHTML = `
         <div class="title-row"><span class="name">${title}</span><button class="close-x" id="d-close">deselect</button></div>
         <div class="empty" style="margin-bottom:10px;">${subtitle}</div>
+        <div class="slider-row"><div class="row"><label>Road type</label></div>
+          <select id="ds-roadtype" class="select-input">
+            <option value="sidewalk" ${!isPath?'selected':''}>Sidewalk</option>
+            <option value="path" ${isPath?'selected':''}>Path</option>
+          </select>
+        </div>
+        ${isPath ? '' : `
         <div class="section-label">Color</div>
         ${colorSwatchRowHtml(ROAD_COLOR_PALETTE, curColor, 'roadcolor')}
         <div class="section-label">Sidewalk color</div>
         ${colorSwatchRowHtml(SIDEWALK_COLOR_PALETTE, curSidewalkColor, 'sidewalkcolor')}
+        `}
         <button class="btn danger" id="d-delete">Delete road${lines.length>1?' network':''}</button>
       `;
+      document.getElementById('ds-roadtype').addEventListener('change', (e) => {
+        lines.forEach(l => { l.roadType = e.target.value; });
+        rebuildRoadMeshes(); zones.forEach(subdivideZone); renderDetails();
+      });
+      // paths are always sand-colored, so only sidewalk roads get color swatches
+      if (!isPath) {
       wireColorSwatchEvents(panel, ROAD_COLOR_PALETTE, {
         onPick: (hex) => { lines.forEach(l => { l.color = hex; }); rebuildRoadMeshes(); renderDetails(); },
         onCommit: (hex, mode, oldHex) => {
@@ -4510,6 +4662,7 @@
         },
         onPreview: (hex) => { lines.forEach(l => { l.sidewalkColor = hex; }); rebuildRoadMeshes(); }
       }, 'sidewalkcolor', renderDetails, curSidewalkColor);
+      }
       document.getElementById('d-delete').addEventListener('click', ()=> removeRoadNetwork(netId));
       document.getElementById('d-close').addEventListener('click', deselect);
     } else if (selection.type==='train') {
@@ -5086,7 +5239,8 @@
         const color = templateLine ? templateLine.color : ROAD_COLOR;
         const sidewalkWidth = templateLine && templateLine.sidewalkWidth!=null ? templateLine.sidewalkWidth : DEFAULT_SIDEWALK_WIDTH;
         const sidewalkColor = templateLine && templateLine.sidewalkColor!=null ? templateLine.sidewalkColor : SIDEWALK_COLOR;
-        const line={ id:'road-'+(roadLineSeq++), nodeIds:[id], drawing:true, width, color, sidewalkWidth, sidewalkColor, networkId:'net-'+(roadNetworkSeq++) };
+        const roadType = templateLine && templateLine.roadType ? templateLine.roadType : 'sidewalk';
+        const line={ id:'road-'+(roadLineSeq++), nodeIds:[id], drawing:true, width, color, sidewalkWidth, sidewalkColor, roadType, networkId:'net-'+(roadNetworkSeq++) };
         roadLines.push(line); activeRoadLine=line;
       }
       rebuildRoadMeshes(); zones.forEach(subdivideZone); renderHierarchy();
@@ -5235,7 +5389,7 @@
         lines: finishedLines.map(l => ({ id:l.id, nodeIds:l.nodeIds.slice(), width:l.width,
           color: colorToHex(l.color, ROAD_COLOR), sidewalkWidth:l.sidewalkWidth,
           sidewalkColor: colorToHex(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId,
-          ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}) }))
+          ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}), ...(isPathLine(l) ? { roadType:'path' } : {}) }))
       },
       zoneSeq,
       zones: zones.filter(z => !z.drawing && z.points.length>=3).map(z => ({
@@ -5343,7 +5497,7 @@
     }
     globalParkTint = hexToColor(sc.globalParkTint, PARK_TINT_COLORS[0]);
     globalTreeTint = hexToColor(sc.globalTreeTint, TREE_TINT_COLORS[0]);
-    globalGrassNoiseStrength = sc.globalGrassNoiseStrength!=null ? sc.globalGrassNoiseStrength : 1;
+    globalGrassNoiseStrength = sc.globalGrassNoiseStrength!=null ? sc.globalGrassNoiseStrength : DEFAULT_GRASS_NOISE_STRENGTH;
     document.getElementById('s-grassnoise').value = globalGrassNoiseStrength;
     document.getElementById('dv-grassnoise').textContent = globalGrassNoiseStrength.toFixed(2);
     renderWorldTintPanel();
@@ -5359,7 +5513,8 @@
     roadLines = (rd.lines||[]).map(l => ({ id:l.id, nodeIds:l.nodeIds.slice(), width:l.width,
       color: hexToColor(l.color, ROAD_COLOR), sidewalkWidth: l.sidewalkWidth!=null ? l.sidewalkWidth : DEFAULT_SIDEWALK_WIDTH,
       sidewalkColor: hexToColor(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId, drawing:false,
-      ...(l.kind==='train' ? { kind:'train', radius: l.radius!=null ? l.radius : TRAIN_DEFAULT_RADIUS } : {}) }));
+      ...(l.kind==='train' ? { kind:'train', radius: l.radius!=null ? l.radius : TRAIN_DEFAULT_RADIUS } : {}),
+      ...(l.roadType==='path' ? { roadType:'path' } : {}) }));
     roadNodeSeq = rd.nodeSeq || 1; roadLineSeq = rd.lineSeq || 1; roadNetworkSeq = rd.networkSeq || 1;
     rebuildRoadMeshes();
 
