@@ -48,8 +48,9 @@ scene.add(peopleMesh);
 // frames, and the shader between walking and standing idle. What makes each person themselves is kept in textures too, a
 // texel per person, as there aren't enough vertex attributes to go round: their body shape keys, their sex (a man's
 // eyelashes and lips aren't drawn) and the colors of their top, pants, shoes and hair. Their skin is always the model's
-// yellow. Only their animation — how far through the walk and the idle they are, how much they're walking, how far their
-// eyes are closed — changes from frame to frame, in one instanceAnim attribute.
+// yellow. Only what they're doing changes from frame to frame: their animation — how far through the walk and the idle
+// they are, how much they're walking, how far their eyes are closed — in the instanceAnim attribute, and which way they've
+// turned their head, in instanceLook.
 // Hairstyles (assets/models/Hair.glb, each its own mesh, placed on the model's head) ride on the head bone. Each style is an
 // instanced mesh of its own, holding just the people with that style, who carry a copy of their pose and their index into
 // the traits texture.
@@ -80,7 +81,9 @@ const PANTS_COLORS = [0x26344f, 0x3e5a82, 0x5a7aa6, 0x232326, 0x4d5057, 0x8f8f93
 const SHOE_COLORS = [0x151517, 0x2b2b2f, 0xeeeeea, 0x8f9298, 0x6b4a2f, 0x3b2a1e, 0x22304a, 0xb5a383];
 const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 0xc49a5a, 0xdcc08a, 0xb9b5ad, 0xe3ddd2]; // black to platinum
 const BLINK_DURATION = 0.5; // seconds for the eyes to close and open again
-let personModel = null; // { mesh, anim, hair, hairOf, hairSlot, height, minY, walk, idle, stride } once loaded
+// how far a person turns their head when they glance around: side to side, and up and down
+const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
+let personModel = null; // { mesh, anim, look, hair, hairOf, hairSlot, height, minY, walk, idle, stride } once loaded
 
 const PERSON_VERTEX_PARS = `
   uniform sampler2D personBones;
@@ -89,11 +92,15 @@ const PERSON_VERTEX_PARS = `
   uniform float personMorphsWidth;
   uniform float personMorphsRows;
   uniform sampler2D personTraits;
+  uniform float personHeadBone;
+  uniform vec3 personHeadPivot;
   attribute vec4 personJoints;
   attribute vec4 personWeights;
   attribute float personSlot;
   attribute float personMorphMask;
+  attribute float personHeadWeight;
   attribute vec4 instanceAnim;
+  attribute vec2 instanceLook;
   // which person this instance is: the instance itself for the body, and for a hairstyle (holding only some people) the
   // person it was given
   #ifdef PERSON_INDEX_ATTRIBUTE
@@ -127,6 +134,19 @@ const PERSON_VERTEX_PARS = `
     if (personWeights.z > 0.0) m += personBone(personJoints.z)*personWeights.z;
     if (personWeights.w > 0.0) m += personBone(personJoints.w)*personWeights.w;
     return m;
+  }
+  // a posed position with the head turned — everything moving with the head bone or the bones under it (personHeadWeight),
+  // about where the head meets the neck — by instanceLook: x side to side, y up and down
+  vec3 personLook(vec3 posed) {
+    vec3 looked = posed;
+    if (personHeadWeight > 0.0 && (instanceLook.x != 0.0 || instanceLook.y != 0.0)) {
+      vec3 pivot = (personBone(personHeadBone)*vec4(personHeadPivot, 1.0)).xyz, p = posed - pivot;
+      float ct = cos(instanceLook.x), st = sin(instanceLook.x), cn = cos(instanceLook.y), sn = sin(instanceLook.y);
+      p = vec3(p.x, p.y*cn - p.z*sn, p.y*sn + p.z*cn);
+      p = vec3(p.x*ct + p.z*st, p.y, p.z*ct - p.x*st);
+      looked = mix(posed, pivot + p, personHeadWeight);
+    }
+    return looked;
   }
   // this person's row of the traits texture: 0 their first four body shape keys, 1 x their fifth and y whether they're a man,
   // then the colors they have their own of
@@ -164,7 +184,7 @@ function injectPersonShader(shader, uniforms, look) {
     .replace('#include <common>', '#include <common>\n' + PERSON_VERTEX_PARS
       + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : ''))
     .replace('#include <begin_vertex>', `#include <begin_vertex>
-      transformed = (personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz;
+      transformed = personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz);
       int personSlotIndex = int(personSlot + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
@@ -196,6 +216,12 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute) {
   mesh.name = 'People';
   scene.add(mesh);
   return mesh;
+}
+// a per-instance attribute that changes every frame
+function dynamicInstanceAttribute(count, size) {
+  const attribute = new THREE.InstancedBufferAttribute(new Float32Array(count*size), size);
+  attribute.setUsage(THREE.DynamicDrawUsage);
+  return attribute;
 }
 
 async function loadGLB(url) {
@@ -229,12 +255,17 @@ function buildPersonModel(gltf, hairGltf) {
   });
   skeleton.pose();
   root.updateMatrixWorld(true);
+  // the head bone and every bone under it (the eyes', the lips') — what turns when a person looks around — and where it
+  // meets the neck
+  const headBone = boneByName.get('Head');
+  const inHead = bones.map(bone => { for (let b = bone; b; b = b.parent) if (headBone != null && b === bones[headBone]) return true; return false; });
+  const headPivot = headBone != null ? bones[headBone].getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
 
   // ---- the body, in the rest pose, as one mesh: every part's vertices with the bones moving them, which part they are,
   // and each shape key's offsets. A mesh riding on a bone rather than rigged (the head) moves with that bone alone. A mesh
   // that's only one side of the body — Blender's Mirror modifier isn't applied when the model's exported, as a mesh with
   // shape keys can't have its modifiers applied — gets its other side here, flipped across X onto the other side's bones.
-  const positions = [], joints = [], weights = [], slots = [], indices = [];
+  const positions = [], joints = [], weights = [], headWeights = [], slots = [], indices = [];
   const offsets = PERSON_SHAPE_KEYS.map(() => []);
   const toModel = new THREE.Matrix4(), toModelLinear = new THREE.Matrix3(), v = new THREE.Vector3();
   const palette = PERSON_SLOTS.map(() => new THREE.Color(0xffffff));
@@ -263,11 +294,15 @@ function buildPersonModel(gltf, hairGltf) {
       for (let i=0;i<count;i++) {
         v.set(pos.getX(i)*side, pos.getY(i), pos.getZ(i)).applyMatrix4(toModel);
         positions.push(v.x, v.y, v.z);
+        let headWeight = 0;
         for (let k=0;k<4;k++) {
-          const joint = mesh.isSkinnedMesh ? ownBones[skinIndex.getComponent(i, k)] : k === 0 ? boneIndex.get(bone) : 0;
-          joints.push(side < 0 ? mirrorBone[joint] : joint);
-          weights.push(mesh.isSkinnedMesh ? skinWeight.getComponent(i, k) : k === 0 ? 1 : 0);
+          const own = mesh.isSkinnedMesh ? ownBones[skinIndex.getComponent(i, k)] : k === 0 ? boneIndex.get(bone) : 0;
+          const joint = side < 0 ? mirrorBone[own] : own, weight = mesh.isSkinnedMesh ? skinWeight.getComponent(i, k) : k === 0 ? 1 : 0;
+          joints.push(joint);
+          weights.push(weight);
+          if (inHead[joint]) headWeight += weight;
         }
+        headWeights.push(Math.min(1, headWeight));
         slots.push(slot);
         keyTargets.forEach((target, key) => {
           if (target) v.set(target.getX(i)*side, target.getY(i), target.getZ(i)).applyMatrix3(toModelLinear); else v.set(0, 0, 0);
@@ -288,6 +323,7 @@ function buildPersonModel(gltf, hairGltf) {
   geometry.setIndex(indices);
   geometry.setAttribute('personJoints', new THREE.Float32BufferAttribute(joints, 4));
   geometry.setAttribute('personWeights', new THREE.Float32BufferAttribute(weights, 4));
+  geometry.setAttribute('personHeadWeight', new THREE.Float32BufferAttribute(headWeights, 1));
   geometry.setAttribute('personSlot', new THREE.Float32BufferAttribute(slots, 1));
   geometry.computeVertexNormals(); // (flat shading works its normals out per pixel; these are only for the shadows)
   geometry.computeBoundingBox();
@@ -348,7 +384,6 @@ function buildPersonModel(gltf, hairGltf) {
   // ---- the hairstyles, in the model's space, each riding on the head bone. The biggest part of each is the hair itself,
   // taking the person's hair color; anything else on it (a hair band) keeps its own color.
   const hairStyles = [], hairSlots = ['Hair'], hairPalette = [new THREE.Color(0xffffff)];
-  const headBone = boneByName.get('Head');
   if (hairGltf && headBone != null) {
     hairGltf.scene.updateMatrixWorld(true);
     hairGltf.scene.children.forEach(style => {
@@ -375,10 +410,11 @@ function buildPersonModel(gltf, hairGltf) {
       styleGeometry.setIndex(styleIndices);
       styleGeometry.setAttribute('personJoints', new THREE.Float32BufferAttribute(new Float32Array(count*4).map((_, k) => k % 4 === 0 ? headBone : 0), 4));
       styleGeometry.setAttribute('personWeights', new THREE.Float32BufferAttribute(new Float32Array(count*4).map((_, k) => k % 4 === 0 ? 1 : 0), 4));
+      styleGeometry.setAttribute('personHeadWeight', new THREE.Float32BufferAttribute(new Float32Array(count).fill(1), 1));
       styleGeometry.setAttribute('personSlot', new THREE.Float32BufferAttribute(styleSlots, 1));
       styleGeometry.setAttribute('personMorphMask', new THREE.BufferAttribute(new Float32Array(count), 1));
       styleGeometry.computeVertexNormals();
-      hairStyles.push({ name: style.name, geometry: styleGeometry, mesh: null, anim: null, members: [] });
+      hairStyles.push({ name: style.name, geometry: styleGeometry, mesh: null, anim: null, look: null, members: [] });
     });
     hairGltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
   }
@@ -417,6 +453,7 @@ function buildPersonModel(gltf, hairGltf) {
     personBones: { value: boneTexture }, personBonesSize: { value: new THREE.Vector2(boneWidth, boneRows) },
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
     personTraits: { value: traitTexture },
+    personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot },
   };
   const traitRow = part => 2 + PERSON_TRAIT_COLORS.indexOf(part);
   const bodyLook = {
@@ -424,17 +461,18 @@ function buildPersonModel(gltf, hairGltf) {
     traitColors: Object.fromEntries(['Top', 'Pants', 'Shoes'].map(part => [PERSON_SLOTS.indexOf(part), traitRow(part)])),
     femaleOnly: PERSON_FEMALE_ONLY.map(part => PERSON_SLOTS.indexOf(part)),
   };
-  const anim = new THREE.InstancedBufferAttribute(new Float32Array(PEOPLE_MAX*4), 4);
-  anim.setUsage(THREE.DynamicDrawUsage);
+  const anim = dynamicInstanceAttribute(PEOPLE_MAX, 4), look = dynamicInstanceAttribute(PEOPLE_MAX, 2);
   geometry.setAttribute('instanceAnim', anim);
+  geometry.setAttribute('instanceLook', look);
   const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
   const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair') }, femaleOnly: [] };
   hairStyles.forEach(style => {
     if (!style.members.length) { style.geometry.dispose(); return; }
     style.geometry.setAttribute('instancePerson', new THREE.InstancedBufferAttribute(Float32Array.from(style.members), 1));
-    style.anim = new THREE.InstancedBufferAttribute(new Float32Array(style.members.length*4), 4);
-    style.anim.setUsage(THREE.DynamicDrawUsage);
+    style.anim = dynamicInstanceAttribute(style.members.length, 4);
+    style.look = dynamicInstanceAttribute(style.members.length, 2);
     style.geometry.setAttribute('instanceAnim', style.anim);
+    style.geometry.setAttribute('instanceLook', style.look);
     style.mesh = makePersonMesh(style.geometry, uniforms, hairLook, style.members.length, true);
   });
   root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
@@ -442,7 +480,7 @@ function buildPersonModel(gltf, hairGltf) {
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, anim, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles,
+  return { mesh, anim, look, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles,
     height: box.max.y - box.min.y, minY: box.min.y, walk: clips[0], idle: clips[1], stride: footTravel*WALK_CYCLE_LENGTH };
 }
 
@@ -533,8 +571,10 @@ function newPerson() {
   return { x:0, y:0, z:0, heading: peopleRng()*Math.PI*2, stride: 0.8 + peopleRng()*0.4, height: 0.85 + peopleRng()*0.27, phase: peopleRng()*10,
     mode: 'none', li: 0, u: 0, dir: 1, seg: 0, lat: 0, area: -1, tx: 0, tz: 0, wait: 0, exit: null, moving: false, stepped: 0,
     // the model's animation: how far through the walk (in whole cycles) and the idle (in seconds) they are, how much they're
-    // walking rather than standing, and the time to their next blink and since their last
-    walkCycle: peopleRng(), idleTime: peopleRng()*10, walkBlend: 0, blinkIn: peopleRng()*6, blinkAge: BLINK_DURATION };
+    // walking rather than standing, the time to their next blink and since their last, and which way they're looking (their
+    // head turned and tilted, the way it's turning to, and the time until they glance somewhere else)
+    walkCycle: peopleRng(), idleTime: peopleRng()*10, walkBlend: 0, blinkIn: peopleRng()*6, blinkAge: BLINK_DURATION,
+    lookTurn: 0, lookTilt: 0, lookTurnTo: 0, lookTiltTo: 0, lookIn: peopleRng()*4 };
 }
 export function pickWeighted(items, weightOf) {
   const total = items.reduce((sum, item) => sum + weightOf(item), 0);
@@ -753,17 +793,29 @@ export function updatePeople(t) {
       p.blinkIn -= dt;
       p.blinkAge += dt;
       if (p.blinkIn <= 0) { p.blinkAge = 0; p.blinkIn = BLINK_DURATION + 1.5 + peopleRng()*5; }
-      const { walk, idle } = personModel, o = i*4, a = personModel.anim.array;
+      // every so often a glance somewhere else — not so far while walking — or back ahead, the head easing round to it
+      p.lookIn -= dt;
+      if (p.lookIn <= 0) {
+        p.lookIn = 1.5 + peopleRng()*4;
+        const ahead = peopleRng() < 0.35, reach = p.moving ? 0.6 : 1;
+        p.lookTurnTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TURN*reach;
+        p.lookTiltTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TILT;
+      }
+      p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, dt*4);
+      p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, dt*4);
+      const { walk, idle } = personModel, o = i*4, a = personModel.anim.array, lookArray = personModel.look.array;
       a[o] = walk.start + p.walkCycle*walk.frames;
       a[o+1] = idle.start + (p.idleTime*PERSON_BAKE_FPS) % idle.frames;
       a[o+2] = p.walkBlend;
       a[o+3] = p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0;
-      // their hairstyle's copy of where they are and how they're posed
+      lookArray[i*2] = p.lookTurn; lookArray[i*2+1] = p.lookTilt;
+      // their hairstyle's copy of where they are, how they're posed and which way they're looking
       const style = personModel.hairOf[i] >= 0 ? personModel.hairStyles[personModel.hairOf[i]] : null;
       if (style && style.mesh) {
         const slot = personModel.hairSlot[i];
         matrix.toArray(style.mesh.instanceMatrix.array, slot*16);
         for (let k=0;k<4;k++) style.anim.array[slot*4 + k] = a[o + k];
+        style.look.array[slot*2] = p.lookTurn; style.look.array[slot*2+1] = p.lookTilt;
       }
     } else {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
@@ -775,8 +827,7 @@ export function updatePeople(t) {
     }
   });
   if (personModel) {
-    personModel.mesh.instanceMatrix.needsUpdate = true; personModel.anim.needsUpdate = true;
-    personModel.hair.forEach(style => { style.mesh.instanceMatrix.needsUpdate = true; style.anim.needsUpdate = true; });
+    [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; });
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;
   }
