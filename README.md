@@ -1,5 +1,5 @@
 # Splinetopia
-A little procedural city blockout tool that runs in the browser — a single HTML file built on three.js.
+A little procedural city blockout tool that runs in the browser, built on three.js.
 <img width="1507" height="765" alt="Screenshot 2026-09-15 at 01 52 15" src="https://github.com/user-attachments/assets/f91fe7ea-cd2e-4b18-be13-8e46fc094d6a" />
 
 **Live:** https://splinetopia.netlify.app/ · **Repo:** https://github.com/DoveCharles/splinetopia
@@ -29,4 +29,21 @@ A little procedural city blockout tool that runs in the browser — a single HTM
 
 ## Running it
 
-Open `blockout.html` in a browser (it loads three.js and Clipper from CDNs, so it needs an internet connection), or use the live site. Pushing to `main` redeploys the site on Netlify.
+Use the live site, or serve the repo folder locally and open it in a browser — for example:
+
+```
+python -m http.server 8000
+```
+
+then visit http://localhost:8000. (The app is made of JavaScript modules, which browsers won't load from a file opened straight from disk.) three.js and Clipper come from CDNs, so it needs an internet connection. Pushing to `main` redeploys the site on Netlify.
+
+## How it's laid out
+
+- `index.html`, `style.css` — the page and its styles
+- `src/main.js` — startup and the render loop; it loads every other module in order
+- `src/core/` — the scene, camera controls, math and spline helpers, and `shared.js` (state shared between modules)
+- `src/roads/`, `src/trains/`, `src/water/`, `src/zones/`, `src/buildings/` — what gets built
+- `src/editor/`, `src/ui/` — input, tools and the side panel
+- `src/sky/`, `src/life/` — day/night and weather; people and traffic
+- `src/project/` — save/load, undo/redo, GLB and OBJ export
+- `assets/models/` — the Blender models (train carriage, person)

@@ -1,9 +1,9 @@
-# Netlify deploys this repository as-is: there's no build step, and the site is served from the repo root.
+# Netlify deploys this repository as-is: there's no build step, and the site is served from the repo root (index.html).
 [build]
   publish = "."
 
-# The app lives in blockout.html, so serve it at the site's root URL as well.
+# The app used to be a single file, blockout.html — send old links to the new page.
 [[redirects]]
-  from = "/"
-  to = "/blockout.html"
-  status = 200
+  from = "/blockout.html"
+  to = "/"
+  status = 301

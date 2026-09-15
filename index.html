@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blockout — procedural city generator</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/" } }
+</script>
+<script type="module" src="src/main.js"></script>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+
+<div id="panel">
+  <div class="toolbar" id="mode-toolbar" style="margin-top:0;">
+    <button class="tool-btn" data-mode="move"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><circle cx="8" cy="8" r="6.3"/><ellipse cx="8" cy="8" rx="2.6" ry="6.3"/><path d="M1.8 5.7 L14.2 5.7 M1.8 10.3 L14.2 10.3"/></svg>World</button>
+    <button class="tool-btn active" data-mode="node"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 12.5 L8 2.5 L13 12.5 Z"/><circle cx="3" cy="12.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="8" cy="2.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="13" cy="12.5" r="1.6" fill="currentColor" stroke="none"/></svg>Edit</button>
+    <button class="tool-btn" data-mode="maps"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/><circle cx="5.2" cy="6" r="1.2" fill="currentColor" stroke="none"/><path d="M2 12.2 L6.3 8 L8.8 10.3 L11.3 7.3 L14 10.5"/></svg>Maps</button>
+  </div>
+  <div class="toolbar" id="entity-toolbar" style="margin-top:6px;">
+    <button class="tool-btn active" data-entity="road">Road</button>
+    <button class="tool-btn" data-entity="zone">Zone</button>
+    <button class="tool-btn" data-entity="train">Train</button>
+  </div>
+
+  <div class="section" id="section-road">
+    <div class="section-label">Roads <span id="roads-count">0</span></div>
+    <div class="hier-list" id="roads-list"></div>
+    <div class="slider-row" style="margin-top:8px;">
+      <div class="row"><label>Road width <span id="rw-context" style="font-weight:400;"></span></label><span class="val" id="v-roadwidth">8</span></div>
+      <input type="range" id="s-roadwidth" min="3" max="40" step="0.5" value="8">
+    </div>
+    <div class="slider-row">
+      <div class="row"><label>Sidewalk size <span id="sw-context" style="font-weight:400;"></span></label><span class="val" id="v-sidewalkwidth">3</span></div>
+      <input type="range" id="s-sidewalkwidth" min="0" max="10" step="0.5" value="3">
+    </div>
+  </div>
+
+  <div class="section" id="section-zone" style="display:none;">
+    <div class="section-label">Zones <span id="zones-count">0</span></div>
+    <div class="hier-list" id="zones-list"></div>
+    <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Drag to reorder — a zone cuts into the zones below it.</div>
+  </div>
+
+  <div class="section" id="section-train" style="display:none;">
+    <div class="section-label">Train lines <span id="trains-count">0</span></div>
+    <div class="hier-list" id="trains-list"></div>
+    <div class="slider-row" style="margin-top:8px;">
+      <div class="row"><label>Tube radius <span id="tr-context" style="font-weight:400;"></span></label><span class="val" id="v-tuberadius">2.5</span></div>
+      <input type="range" id="s-tuberadius" min="1" max="6" step="0.25" value="2.5">
+    </div>
+    <div class="slider-row">
+      <div class="row"><label>Height <span style="font-weight:400;">· new lines</span></label><span class="val" id="v-trainheight">14</span></div>
+      <input type="range" id="s-trainheight" min="1" max="80" step="1" value="14">
+    </div>
+    <div class="slider-row">
+      <div class="row"><label>Coil frequency <span style="font-weight:400;">· turns per 10</span></label><span class="val" id="v-coilfreq">1.00</span></div>
+      <input type="range" id="s-coilfreq" min="0.1" max="5" step="0.05" value="1">
+    </div>
+  </div>
+
+  <div class="section" id="section-maps" style="display:none;">
+    <div class="section-label">Images <span id="maps-count">0</span></div>
+    <div class="hier-list" id="maps-list"></div>
+    <button class="btn" id="btn-import-image" style="margin-top:8px;">Import image</button>
+    <input type="file" id="map-file-input" accept="image/png,image/jpeg" style="display:none;">
+  </div>
+
+  <div id="details-panel"><div class="empty">Select a road or zone from the list to see its settings.</div></div>
+
+  <div class="section" id="section-move" style="display:none;">
+    <div class="slider-row"><div class="row"><label>Sun elevation</label><span class="val" id="dv-sunelev">45</span></div>
+      <input type="range" id="s-sunelev" min="-20" max="90" step="1" value="45"></div>
+    <div class="slider-row"><div class="row"><label>Sun azimuth</label><span class="val" id="dv-sunazim">45</span></div>
+      <input type="range" id="s-sunazim" min="0" max="360" step="1" value="45"></div>
+    <div class="row" style="margin-top:11px;"><label>Day/night cycle</label><button class="toggle-switch" id="s-daynight"><span class="knob"></span></button></div>
+    <div id="daynight-settings" style="display:none;">
+      <div class="slider-row" style="margin-top:11px;"><div class="row"><label>Time of day</label><span class="val" id="dv-timeofday">09:00</span></div>
+        <input type="range" id="s-timeofday" min="0" max="24" step="0.05" value="9"></div>
+      <div class="slider-row"><div class="row"><label>Day length (minutes)</label><span class="val" id="dv-daylength">4</span></div>
+        <input type="range" id="s-daylength" min="1" max="30" step="1" value="4"></div>
+    </div>
+    <div class="row"><label>Ground color</label><input type="color" class="color-input" id="s-groundcolor" value="#1b1e24"></div>
+    <div class="row"><label>Grid color</label><input type="color" class="color-input" id="s-gridcolor" value="#33373f"></div>
+    <div id="world-tint-panel"></div>
+    <div class="slider-row"><div class="row"><label>Grass noise strength</label><span class="val" id="dv-grassnoise">0.20</span></div>
+      <input type="range" id="s-grassnoise" min="0" max="2.5" step="0.05" value="0.2"></div>
+    <div class="row" style="margin-top:11px;"><label>People</label><button class="toggle-switch" id="s-people"><span class="knob"></span></button></div>
+    <div id="people-settings" style="display:none;">
+      <div class="slider-row" style="margin-top:11px;"><div class="row"><label>Amount</label><span class="val" id="dv-peopleamount">300</span></div>
+        <input type="range" id="s-peopleamount" min="10" max="2000" step="10" value="300"></div>
+      <div class="slider-row"><div class="row"><label>Traffic</label><span class="val" id="dv-traffic">150</span></div>
+        <input type="range" id="s-traffic" min="0" max="1000" step="10" value="150"></div>
+      <div class="slider-row"><div class="row"><label>Speed</label><span class="val" id="dv-peoplespeed">1.0</span></div>
+        <input type="range" id="s-peoplespeed" min="0.1" max="4" step="0.1" value="1"></div>
+      <div class="slider-row"><div class="row"><label>Size</label><span class="val" id="dv-peoplesize">1.0</span></div>
+        <input type="range" id="s-peoplesize" min="0.3" max="4" step="0.1" value="1"></div>
+    </div>
+    <div class="section-label" style="margin-top:14px;">Weather</div>
+    <div class="slider-row"><div class="row"><label>Rain</label><span class="val" id="dv-rain">0.00</span></div>
+      <input type="range" id="s-rain" min="0" max="1" step="0.05" value="0"></div>
+    <div class="slider-row"><div class="row"><label>Snow</label><span class="val" id="dv-snow">0.00</span></div>
+      <input type="range" id="s-snow" min="0" max="1" step="0.05" value="0"></div>
+    <div class="slider-row"><div class="row"><label>Cloud shadows</label><span class="val" id="dv-clouds">0.00</span></div>
+      <input type="range" id="s-clouds" min="0" max="1" step="0.05" value="0"></div>
+    <button class="btn" id="btn-save-project" style="margin-top:11px;">Save project</button>
+    <button class="btn" id="btn-load-project">Load project</button>
+    <input type="file" id="project-file-input" accept=".json,application/json" style="display:none;">
+    <button class="btn" id="btn-export-glb">Export GLB (with materials)</button>
+    <button class="btn" id="btn-export">Export OBJ</button>
+    <button class="btn danger" id="btn-clear">Clear all</button>
+  </div>
+</div>
+
+<div id="history-tools">
+  <button class="canvas-tool" id="btn-undo" title="Undo (Ctrl+Z)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+  <button class="canvas-tool" id="btn-redo" title="Redo (Ctrl+Shift+Z)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+</div>
+<div id="grid-toggle" title="Snap to grid">
+  <svg width="15" height="15" viewBox="0 0 297 297" fill="currentColor"><path d="M276.289,0h-63.895c-5.557,0-10.062,4.505-10.062,10.062v149.087c0,14.549-5.714,28.181-16.089,38.384
+	c-10.373,10.2-24.091,15.729-38.668,15.44c-29.173-0.486-52.908-25.104-52.908-54.876V10.062C94.668,4.505,90.162,0,84.605,0
+	H20.711c-5.557,0-10.062,4.505-10.062,10.062v149.087C10.649,235.16,72.489,297,148.5,297s137.851-61.84,137.851-137.851V10.062
+	C286.351,4.505,281.846,0,276.289,0z M30.773,20.124h43.77v43.77h-43.77V20.124z M266.226,159.149
+	c0.001,64.914-52.811,117.727-117.726,117.727S30.773,224.064,30.773,159.149v-75.13h43.77v74.079
+	c0,40.685,32.612,74.329,72.696,74.998c20.002,0.333,38.865-7.2,53.115-21.214c14.253-14.017,22.102-32.744,22.102-52.733v-75.13
+	h43.77V159.149z M266.227,63.894h-43.77v-43.77h43.77V63.894z"/></svg>
+</div>
+
+<div id="stats">zones <span id="stat-zones">0</span> · roads <span id="stat-roads">0</span><br>buildings <span id="stat-buildings">0</span></div>
+
+<div id="hint"></div>
+
+<div id="node-context-menu"></div>
+
+</body>
+</html>

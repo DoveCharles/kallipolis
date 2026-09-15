@@ -1,0 +1,223 @@
+import { S, App } from '../core/shared.js';
+import { scene, updateSun, groundMat, setGridColor } from '../core/scene.js';
+import { roadNodes, mapImages } from '../core/state.js';
+import { importMapImageFile, setSelectedMap, removeMapImage, previewLine } from '../maps/map-images.js';
+import { disposeObject } from '../roads/roads.js';
+import { rebuildRoadMeshes } from '../roads/paths.js';
+import { networkKindOf, rebuildTrainMeshes, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
+import { setHover, insertPreviewMarker } from './hover.js';
+import { rebuildZoneVisual } from '../zones/zone-visuals.js';
+import { subdivideZone, subdivideZonesFrom } from '../zones/cutouts.js';
+import { refreshHighlights, styleZoneVisual } from '../water/bridges.js';
+import { selectItem, renderHierarchy } from '../ui/panels.js';
+
+// ============================================================ tool switching / drawing lifecycle
+export function cancelActiveDrawing() {
+  S.lastGroundClick = null;
+  S.lastNodeClick = null;
+  if (S.activeRoadLine) {
+    S.roadLines = S.roadLines.filter(l=>l.id!==S.activeRoadLine.id);
+    cleanupOrphanRoadNodes();
+    S.activeRoadLine=null;
+    rebuildRoadMeshes();
+    S.zones.forEach(subdivideZone);
+  }
+  if (S.activeZone) {
+    S.zones = S.zones.filter(z=>z.id!==S.activeZone.id);
+    if (S.activeZone.outlineGroup) { scene.remove(S.activeZone.outlineGroup); disposeObject(S.activeZone.outlineGroup); }
+    S.activeZone=null;
+    renderHierarchy();
+  }
+  previewLine.visible=false;
+}
+export function closeActiveZone() {
+  S.activeZone.closed=true; S.activeZone.drawing=false;
+  const finished=S.activeZone; S.activeZone=null;
+  subdivideZonesFrom(finished);
+  previewLine.visible=false;
+  selectItem('zone', finished.id, true);
+}
+export function finishActiveDrawing() {
+  S.lastGroundClick = null;
+  if (S.activeRoadLine) {
+    if (S.activeRoadLine.nodeIds.length<2) { cancelActiveDrawing(); return; }
+    const finishedLine = S.activeRoadLine;
+    finishedLine.drawing=false;
+    S.activeRoadLine=null;
+    rebuildRoadMeshes();
+    previewLine.visible=false;
+    selectItem(networkKindOf(finishedLine), finishedLine.networkId, true);
+  }
+  if (S.activeZone) {
+    if (S.activeZone.points.length<3) return;
+    closeActiveZone();
+  }
+}
+function updateHint() {
+  let msg;
+  if (S.interactionMode==='move') {
+    msg = 'Left-drag to orbit · shift+left-drag to pan · scroll to zoom · 1/3/7 for view snaps';
+  } else if (S.interactionMode==='maps') {
+    if (S.mapTransform) {
+      const label = S.mapTransform.mode==='translate' ? 'Move' : S.mapTransform.mode==='rotate' ? 'Rotate' : 'Scale';
+      const snapHint = S.mapTransform.mode==='rotate' ? ' · hold shift to snap to 90°' : '';
+      msg = label+' — click or Enter to confirm · Esc or right-click to cancel'+snapHint;
+    } else {
+      msg = 'Click an image to select it · G move · R rotate · S scale · empty-ground drag orbits';
+    }
+  } else {
+    const hints = {
+      train: "Click to place nodes at the line's height · drag a node to move it in 3D (top view, key 7, moves it level) · alt+drag changes only its height · right-click a node to make it a station · double-click a node to delete it · double-click or Enter finishes · shift+click a line to insert a node · Esc cancels",
+      road:'Click ground to place nodes · click a node to select its road · double-click a node to delete it · drag to move · empty-ground drag orbits · double-click ground or Enter finishes · shift+click a road to insert a node · Esc cancels',
+      zone: 'Click ground for boundary points · click a point to select its zone · double-click a point to delete it · drag to move · empty-ground drag orbits · double-click ground, click first point, or Enter (3+ points) to close · shift+click an edge to insert a point · Esc cancels'
+    };
+    msg = hints[S.currentTool];
+  }
+  document.getElementById('hint').textContent = msg;
+}
+export function applyModeVisibility() {
+  App.hideContextMenu();
+  S.roadMarkerGroup.visible = (S.interactionMode==='node');
+  S.roadHandleGroup.visible = (S.interactionMode==='node');
+  S.zones.forEach(z => {
+    if (z.outlineGroup) z.outlineGroup.visible = (S.interactionMode==='node');
+  });
+  const inNode = S.interactionMode==='node';
+  document.getElementById('section-road').style.display = (inNode && S.currentTool==='road') ? 'block' : 'none';
+  document.getElementById('section-zone').style.display = (inNode && S.currentTool==='zone') ? 'block' : 'none';
+  document.getElementById('section-train').style.display = (inNode && S.currentTool==='train') ? 'block' : 'none';
+  document.getElementById('entity-toolbar').style.display = inNode ? 'flex' : 'none';
+  document.getElementById('details-panel').style.display = inNode ? 'block' : 'none';
+  document.getElementById('section-move').style.display = S.interactionMode==='move' ? 'block' : 'none';
+  document.getElementById('section-maps').style.display = S.interactionMode==='maps' ? 'block' : 'none';
+  document.querySelectorAll('#mode-toolbar .tool-btn').forEach(b => b.classList.toggle('active', b.dataset.mode===S.interactionMode));
+  document.querySelectorAll('#entity-toolbar .tool-btn').forEach(b => b.classList.toggle('active', b.dataset.entity===S.currentTool));
+  updateHint();
+}
+function setMode(mode) {
+  S.lastGroundClick = null;
+  cancelActiveDrawing();
+  setHover(null);
+  if (S.hoveredRoadLineId!=null) { S.hoveredRoadLineId=null; refreshHighlights(); }
+  if (S.hoveredZoneId!=null) { const z=S.zones.find(z=>z.id===S.hoveredZoneId); S.hoveredZoneId=null; if (z) styleZoneVisual(z); }
+  insertPreviewMarker.visible = false;
+  if (mode==='move' && S.selection.type) {
+    S.selection = { type:null, id:null };
+    refreshHighlights();
+    S.zones.forEach(rebuildZoneVisual);
+  }
+  if (mode!=='maps') { S.hoveredMapId = null; setSelectedMap(null); }
+  S.interactionMode = mode;
+  applyModeVisibility();
+  renderHierarchy();
+}
+function setEntityTab(tab) {
+  S.lastGroundClick = null;
+  cancelActiveDrawing();
+  setHover(null);
+  insertPreviewMarker.visible = false;
+  S.currentTool = tab;
+  rebuildRoadMarkers(); rebuildRoadHandles(); // each tab only shows its own kind of node
+  applyModeVisibility();
+  renderHierarchy();
+}
+document.querySelectorAll('#mode-toolbar .tool-btn').forEach(b => b.addEventListener('click', ()=> setMode(b.dataset.mode)));
+document.querySelectorAll('#entity-toolbar .tool-btn').forEach(b => b.addEventListener('click', ()=> setEntityTab(b.dataset.entity)));
+
+document.getElementById('s-roadwidth').addEventListener('input', (e)=>{
+  const v = parseFloat(e.target.value);
+  document.getElementById('v-roadwidth').textContent = v;
+  if (S.selection.type==='road') {
+    const lines = S.roadLines.filter(l=>l.networkId===S.selection.id);
+    if (lines.length) { lines.forEach(l=>{ l.width = v; }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); }
+  } else {
+    S.DEFAULT_ROAD_WIDTH = v;
+  }
+});
+document.getElementById('s-sidewalkwidth').addEventListener('input', (e)=>{
+  const v = parseFloat(e.target.value);
+  document.getElementById('v-sidewalkwidth').textContent = v;
+  if (S.selection.type==='road') {
+    const lines = S.roadLines.filter(l=>l.networkId===S.selection.id);
+    if (lines.length) { lines.forEach(l=>{ l.sidewalkWidth = v; }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); }
+  } else {
+    S.DEFAULT_SIDEWALK_WIDTH = v;
+  }
+});
+
+document.getElementById('s-tuberadius').addEventListener('input', (e)=>{
+  const v = parseFloat(e.target.value);
+  document.getElementById('v-tuberadius').textContent = v;
+  if (S.selection.type==='train') {
+    const lines = S.roadLines.filter(l=>l.networkId===S.selection.id);
+    if (lines.length) { lines.forEach(l=>{ l.radius = v; }); rebuildTrainMeshes(); refreshHighlights(); }
+  } else {
+    S.TRAIN_DEFAULT_RADIUS = v;
+  }
+});
+document.getElementById('s-trainheight').addEventListener('input', (e)=>{
+  S.TRAIN_DEFAULT_HEIGHT = parseFloat(e.target.value);
+  document.getElementById('v-trainheight').textContent = S.TRAIN_DEFAULT_HEIGHT;
+});
+document.getElementById('s-coilfreq').addEventListener('input', (e)=>{
+  S.TRAIN_COIL_TURNS_PER_10 = parseFloat(e.target.value);
+  document.getElementById('v-coilfreq').textContent = S.TRAIN_COIL_TURNS_PER_10.toFixed(2);
+  rebuildTrainMeshes(); refreshHighlights();
+});
+
+document.getElementById('btn-export').addEventListener('click', () => App.exportOBJ());
+document.getElementById('btn-export-glb').addEventListener('click', () => App.exportGLB());
+document.getElementById('btn-undo').addEventListener('click', () => App.undo());
+document.getElementById('btn-redo').addEventListener('click', () => App.redo());
+document.getElementById('s-sunelev').addEventListener('input', (e) => {
+  S.sunElevation = parseFloat(e.target.value);
+  document.getElementById('dv-sunelev').textContent = S.sunElevation;
+  updateSun();
+});
+document.getElementById('s-sunazim').addEventListener('input', (e) => {
+  S.sunAzimuth = parseFloat(e.target.value);
+  document.getElementById('dv-sunazim').textContent = S.sunAzimuth;
+  updateSun();
+});
+document.getElementById('s-grassnoise').addEventListener('input', (e) => {
+  S.globalGrassNoiseStrength = parseFloat(e.target.value);
+  document.getElementById('dv-grassnoise').textContent = S.globalGrassNoiseStrength.toFixed(2);
+  S.zones.forEach(subdivideZone);
+});
+document.getElementById('s-people').addEventListener('click', () => { S.peopleEnabled = !S.peopleEnabled; App.syncPeopleUI(); });
+document.getElementById('s-peopleamount').addEventListener('input', (e) => { S.peopleAmount = parseFloat(e.target.value); App.syncPeopleUI(); });
+document.getElementById('s-peoplespeed').addEventListener('input', (e) => { S.peopleSpeed = parseFloat(e.target.value); App.syncPeopleUI(); });
+document.getElementById('s-peoplesize').addEventListener('input', (e) => { S.peopleSize = parseFloat(e.target.value); App.syncPeopleUI(); });
+document.getElementById('s-traffic').addEventListener('input', (e) => { S.trafficAmount = parseFloat(e.target.value); App.syncPeopleUI(); });
+document.getElementById('s-daynight').addEventListener('click', () => {
+  S.dayNightEnabled = !S.dayNightEnabled;
+  if (S.dayNightEnabled) App.applyTimeOfDay(false); else App.syncSkyUI();
+});
+document.getElementById('s-timeofday').addEventListener('input', (e) => { S.timeOfDay = parseFloat(e.target.value) % 24; App.applyTimeOfDay(false); });
+document.getElementById('s-daylength').addEventListener('input', (e) => { S.dayLengthMinutes = parseFloat(e.target.value); App.syncSkyUI(); });
+['rain', 'snow', 'clouds'].forEach(kind => document.getElementById('s-' + kind).addEventListener('input', (e) => App.setWeather(kind, parseFloat(e.target.value))));
+document.getElementById('s-groundcolor').addEventListener('input', (e) => {
+  groundMat.color.set(e.target.value);
+});
+document.getElementById('s-gridcolor').addEventListener('input', (e) => {
+  setGridColor(e.target.value);
+});
+document.getElementById('btn-clear').addEventListener('click', ()=>{
+  cancelActiveDrawing();
+  S.roadLines=[]; Object.keys(roadNodes).forEach(k=>delete roadNodes[k]);
+  S.zones.forEach(z=>{ scene.remove(z.outlineGroup); disposeObject(z.outlineGroup); scene.remove(z.buildingsGroup); disposeObject(z.buildingsGroup); });
+  S.zones=[];
+  S.selection={type:null,id:null};
+  mapImages.slice().forEach(m => removeMapImage(m.id));
+  rebuildRoadMeshes();
+  renderHierarchy();
+});
+document.getElementById('btn-import-image').addEventListener('click', () => {
+  document.getElementById('map-file-input').click();
+});
+document.getElementById('map-file-input').addEventListener('change', (e) => {
+  Array.from(e.target.files||[]).forEach(importMapImageFile);
+  e.target.value = ''; // allow re-importing the same filename later
+});
+
+Object.assign(App, { updateHint, applyModeVisibility });
