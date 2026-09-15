@@ -1,6 +1,8 @@
 # Splinetopia
 A little procedural city blockout tool that runs in the browser, built on three.js.
-<img width="1507" height="765" alt="Screenshot 2026-09-15 at 01 52 15" src="https://github.com/user-attachments/assets/f91fe7ea-cd2e-4b18-be13-8e46fc094d6a" />
+
+<img width="1488" height="808" alt="Screenshot 2026-09-15 at 07 03 26" src="https://github.com/user-attachments/assets/6d05f003-07e9-4b07-ad12-6a3e25bc99fb" />
+<img width="1507" height="796" alt="Screenshot 2026-09-15 at 07 04 56" src="https://github.com/user-attachments/assets/4110beb5-9924-46c2-bb2b-1f418b1b16e1" />
 
 **Live:** https://splinetopia.netlify.app/ · **Repo:** https://github.com/DoveCharles/splinetopia
 
