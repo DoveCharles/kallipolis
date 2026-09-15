@@ -46,4 +46,4 @@ then visit http://localhost:8000. (The app is made of JavaScript modules, which 
 - `src/editor/`, `src/ui/` — input, tools and the side panel
 - `src/sky/`, `src/life/` — day/night and weather; people and traffic
 - `src/project/` — save/load, undo/redo, GLB and OBJ export
-- `assets/models/` — the Blender models (train carriage, person)
+- `assets/models/` — the Blender models (train carriage, person, hairstyles)

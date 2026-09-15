@@ -41,17 +41,24 @@ peopleMesh.name = 'People';
 scene.add(peopleMesh);
 
 // The people model (assets/models/Person.glb, made in Blender) replaces the cuboids once it's loaded: a rigged figure with a
-// Walk and an Idle animation, drawn — everyone at once — as one instanced mesh. three.js's own rigged meshes can't be
-// instanced, so the animations are baked: when the model loads, each one is played through a frame at a time and every
-// bone's pose at each frame is written into a texture (a row per frame, three texels per bone), and the vertex shader poses
-// each person by looking up the rows for the moment they're at in each animation — the texture blending between frames,
-// and the shader between walking and standing idle. What makes each person themselves is kept in textures too, a texel
-// per person, as there aren't enough vertex attributes to go round: their body shape keys, their sex (a man's eyelashes
-// and lips aren't drawn) and the colors of their top, pants and shoes. Their skin is always the model's yellow. Only their
-// animation — how far through the walk and the idle they are, how much they're walking, how far their eyes are closed —
-// changes from frame to frame, in one instanceAnim attribute.
+// Walk and an Idle animation, drawn — everyone at once — as one instanced mesh, flat-shaded. three.js's own rigged meshes
+// can't be instanced, so the animations are baked: when the model loads, each one is played through a frame at a time and
+// every bone's pose at each frame is written into a texture (a row per frame, three texels per bone), and the vertex shader
+// poses each person by looking up the rows for the moment they're at in each animation — the texture blending between
+// frames, and the shader between walking and standing idle. What makes each person themselves is kept in textures too, a
+// texel per person, as there aren't enough vertex attributes to go round: their body shape keys, their sex (a man's
+// eyelashes and lips aren't drawn) and the colors of their top, pants, shoes and hair. Their skin is always the model's
+// yellow. Only their animation — how far through the walk and the idle they are, how much they're walking, how far their
+// eyes are closed — changes from frame to frame, in one instanceAnim attribute.
+// Hairstyles (assets/models/Hair.glb, each its own mesh, placed on the model's head) ride on the head bone. Each style is an
+// instanced mesh of its own, holding just the people with that style, who carry a copy of their pose and their index into
+// the traits texture.
 const PERSON_MODEL_URL = 'assets/models/Person.glb';
+const HAIR_MODEL_URL = 'assets/models/Hair.glb';
 const PERSON_BAKE_FPS = 24;
+// how far a person walks for each cycle of the walk animation, in the distances the model's foot travels in one — the higher,
+// the slower the walk plays for the same speed
+const WALK_CYCLE_LENGTH = 4;
 // every shape key the shader applies, in the order of the shape key texture; the body's are set once per person, Blink as
 // they blink
 const PERSON_SHAPE_KEYS = ['Breast', 'Waist', 'Hips', 'Weight', 'Butt', 'Blink'];
@@ -64,42 +71,16 @@ const PERSON_BODY_SHAPES = {
 // the model's materials, by name: which part of the model each vertex belongs to (its personSlot) — the clothes take each
 // person's own colors, the rest keep the model's; and the parts only drawn for women
 const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelashes', 'Lips'];
-const PERSON_CLOTHES = ['Top', 'Pants', 'Shoes'];
 const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
+// the colors each person has their own of, from row 2 of the traits texture on
+const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair'];
+// the hairstyles a man can have (or none); a woman can have any of them
+const MEN_HAIRSTYLES = ['GHair20', 'GHair14', 'GHair12', 'GHair9', 'GHair21'];
 const PANTS_COLORS = [0x26344f, 0x3e5a82, 0x5a7aa6, 0x232326, 0x4d5057, 0x8f8f93, 0xb09a72, 0x6b5038, 0x46503a];
 const SHOE_COLORS = [0x151517, 0x2b2b2f, 0xeeeeea, 0x8f9298, 0x6b4a2f, 0x3b2a1e, 0x22304a, 0xb5a383];
+const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 0xc49a5a, 0xdcc08a, 0xb9b5ad, 0xe3ddd2]; // black to platinum
 const BLINK_DURATION = 0.5; // seconds for the eyes to close and open again
-let personModel = null; // { mesh, anim, height, minY, walk, idle, stride } once loaded
-
-// Smooth vertex normals for an indexed mesh whose vertices are split per face: vertices in the same place are grouped
-// (or grouped as `groups` says, to reuse another pose's grouping), and each group gets the area-weighted average of the
-// normals of every face touching it. Returns { normals, groups }.
-function smoothVertexNormals(count, index, positionAt, groups) {
-  if (!groups) {
-    const ids = new Map();
-    groups = new Int32Array(count);
-    for (let i=0;i<count;i++) {
-      const [x, y, z] = positionAt(i), key = Math.round(x*1e4) + ',' + Math.round(y*1e4) + ',' + Math.round(z*1e4);
-      if (!ids.has(key)) ids.set(key, ids.size);
-      groups[i] = ids.get(key);
-    }
-  }
-  const sums = new Float32Array(count*3);
-  const corners = index ? index.count : count;
-  for (let t=0;t+2<corners;t+=3) {
-    const a = index ? index.getX(t) : t, b = index ? index.getX(t+1) : t+1, c = index ? index.getX(t+2) : t+2;
-    const pa = positionAt(a), pb = positionAt(b), pc = positionAt(c);
-    const ux = pb[0]-pa[0], uy = pb[1]-pa[1], uz = pb[2]-pa[2], vx = pc[0]-pa[0], vy = pc[1]-pa[1], vz = pc[2]-pa[2];
-    const nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx; // length is twice the face's area, so bigger faces count more
-    [a, b, c].forEach(v => { const g = groups[v]*3; sums[g] += nx; sums[g+1] += ny; sums[g+2] += nz; });
-  }
-  const normals = new Float32Array(count*3);
-  for (let i=0;i<count;i++) {
-    const g = groups[i]*3, len = Math.hypot(sums[g], sums[g+1], sums[g+2]) || 1;
-    normals[i*3] = sums[g]/len; normals[i*3+1] = sums[g+1]/len; normals[i*3+2] = sums[g+2]/len;
-  }
-  return { normals, groups };
-}
+let personModel = null; // { mesh, anim, hair, hairOf, hairSlot, height, minY, walk, idle, stride } once loaded
 
 const PERSON_VERTEX_PARS = `
   uniform sampler2D personBones;
@@ -113,6 +94,14 @@ const PERSON_VERTEX_PARS = `
   attribute float personSlot;
   attribute float personMorphMask;
   attribute vec4 instanceAnim;
+  // which person this instance is: the instance itself for the body, and for a hairstyle (holding only some people) the
+  // person it was given
+  #ifdef PERSON_INDEX_ATTRIBUTE
+    attribute float instancePerson;
+    int personIndex() { return int(instancePerson + 0.5); }
+  #else
+    int personIndex() { return gl_InstanceID; }
+  #endif
   // a bone's pose (as a matrix from the rest pose) at a row of the bone texture — part-way between rows is part-way between
   // frames, as the texture blends them
   mat4 personBoneAt(float bone, float row) {
@@ -140,64 +129,93 @@ const PERSON_VERTEX_PARS = `
     return m;
   }
   // this person's row of the traits texture: 0 their first four body shape keys, 1 x their fifth and y whether they're a man,
-  // then the colors of their clothes
-  vec4 personTrait(int row) { return texelFetch(personTraits, ivec2(gl_InstanceID, row), 0); }
-  // a shape key's offset at this vertex — or, with normals, the change it makes to the vertex's normal
-  vec3 personMorph(int key, bool normals) {
-    int width = int(personMorphsWidth), rows = int(personMorphsRows);
-    return texelFetch(personMorphs, ivec2(gl_VertexID % width, gl_VertexID/width + (key*2 + (normals ? 1 : 0))*rows), 0).xyz;
+  // then the colors they have their own of
+  vec4 personTrait(int row) { return texelFetch(personTraits, ivec2(personIndex(), row), 0); }
+  // a shape key's offset at this vertex
+  vec3 personMorph(int key) {
+    int width = int(personMorphsWidth);
+    return texelFetch(personMorphs, ivec2(gl_VertexID % width, gl_VertexID/width + key*int(personMorphsRows)), 0).xyz;
   }
-  // every shape key's offset (or normal change) at this vertex, each as far on as this person has it; personMorphMask says
-  // which keys move the vertex at all — 1 the body's, 2 Blink
-  vec3 personShape(bool normals) {
+  // every shape key's offset at this vertex, each as far on as this person has it; personMorphMask says which keys move the
+  // vertex at all — 1 the body's, 2 Blink
+  vec3 personShape() {
     int mask = int(personMorphMask + 0.5);
     vec3 offset = vec3(0.0);
     if ((mask & 1) != 0) {
       vec4 body = personTrait(0);
-      offset += personMorph(0, normals)*body.x + personMorph(1, normals)*body.y + personMorph(2, normals)*body.z + personMorph(3, normals)*body.w
-        + personMorph(4, normals)*personTrait(1).x;
+      offset += personMorph(0)*body.x + personMorph(1)*body.y + personMorph(2)*body.z + personMorph(3)*body.w + personMorph(4)*personTrait(1).x;
     }
-    if ((mask & 2) != 0) offset += personMorph(5, normals)*instanceAnim.w;
+    if ((mask & 2) != 0) offset += personMorph(5)*instanceAnim.w;
     return offset;
   }
 `;
-// adds the posing, shape keys and (unless it's the shadow's depth material, `withColor` false) the colors to a material's shaders
-function injectPersonShader(shader, uniforms, withColor) {
+// Adds the posing and shape keys to a material's shaders, and how it colors the figure. `look`: `femaleOnly`, the slots only
+// drawn for women; and, unless it's the shadow's depth material, `palette` (each slot's own color) and `traitColors` (the
+// slots taking a color of the person's own instead, as { slot: traits row }).
+function injectPersonShader(shader, uniforms, look) {
   Object.assign(shader.uniforms, uniforms);
-  const femaleOnly = PERSON_FEMALE_ONLY.map(name => `personSlotIndex == ${PERSON_SLOTS.indexOf(name)}`).join(' || ');
-  const firstClothes = PERSON_SLOTS.indexOf(PERSON_CLOTHES[0]), lastClothes = PERSON_SLOTS.indexOf(PERSON_CLOTHES[PERSON_CLOTHES.length - 1]);
+  const colored = !!look.palette;
+  if (colored) shader.uniforms.personPalette = { value: look.palette };
+  const hide = look.femaleOnly.length
+    ? `if ((${look.femaleOnly.map(slot => `personSlotIndex == ${slot}`).join(' || ')}) && personTrait(1).y > 0.5) transformed = vec3(0.0);` : '';
+  const color = colored
+    ? 'vPersonColor = ' + Object.entries(look.traitColors).map(([slot, row]) => `personSlotIndex == ${slot} ? personTrait(${row}).rgb : `).join('') + 'personPalette[personSlotIndex];' : '';
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\n' + PERSON_VERTEX_PARS
-      + (withColor ? `uniform vec3 personPalette[${PERSON_SLOTS.length}];\nvarying vec3 vPersonColor;` : ''))
+      + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : ''))
     .replace('#include <begin_vertex>', `#include <begin_vertex>
-      ${withColor ? '' : 'mat4 personSkin = personSkinMatrix();'}
-      transformed = (personSkin*vec4(transformed + personShape(false), 1.0)).xyz;
+      transformed = (personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz;
       int personSlotIndex = int(personSlot + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
-      if ((${femaleOnly}) && personTrait(1).y > 0.5) transformed = vec3(0.0);
-      ${withColor ? `vPersonColor = personSlotIndex >= ${firstClothes} && personSlotIndex <= ${lastClothes}
-        ? personTrait(2 + personSlotIndex - ${firstClothes}).rgb : personPalette[personSlotIndex];` : ''}`);
-  if (!withColor) return;
-  shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
-    mat4 personSkin = personSkinMatrix();
-    objectNormal = normalize(mat3(personSkin)*normalize(objectNormal + personShape(true)));`);
+      ${hide}
+      ${color}`);
+  if (!colored) return;
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vPersonColor;')
     .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vPersonColor;');
 }
+// An instanced mesh of `geometry` drawn with `look` (see injectPersonShader), with shadows that take the pose too;
+// `byAttribute` for one whose instances say which person they are (instancePerson) rather than being them in order.
+function makePersonMesh(geometry, uniforms, look, capacity, byAttribute) {
+  const material = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.DoubleSide, flatShading: true });
+  const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  if (byAttribute) { material.defines = { PERSON_INDEX_ATTRIBUTE: '' }; depth.defines = { PERSON_INDEX_ATTRIBUTE: '' }; }
+  // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
+  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), look.femaleOnly.join(',')].join('|');
+  material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, look);
+  material.customProgramCacheKey = () => key;
+  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly });
+  depth.customProgramCacheKey = () => key + '|depth';
+  const mesh = new THREE.InstancedMesh(geometry, material, capacity);
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mesh.customDepthMaterial = depth;
+  mesh.count = 0;
+  mesh.frustumCulled = false;
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.visible = false;
+  mesh.name = 'People';
+  scene.add(mesh);
+  return mesh;
+}
 
+async function loadGLB(url) {
+  const buffer = await fetch(url).then(response => { if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.arrayBuffer(); });
+  return new GLTFLoader().parseAsync(buffer, '');
+}
 export async function loadPersonModel() {
+  const [body, hair] = await Promise.allSettled([loadGLB(PERSON_MODEL_URL), loadGLB(HAIR_MODEL_URL)]);
+  if (body.status === 'rejected') { console.warn('Blockout: the people model failed to load; people stay cuboids', body.reason); return; }
+  if (hair.status === 'rejected') console.warn('Blockout: the hair model failed to load; people go without', hair.reason);
   try {
-    const buffer = await fetch(PERSON_MODEL_URL).then(response => { if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.arrayBuffer(); });
-    personModel = buildPersonModel(await new GLTFLoader().parseAsync(buffer, ''));
+    personModel = buildPersonModel(body.value, hair.status === 'fulfilled' ? hair.value : null);
     peopleMesh.visible = false;
   } catch (err) {
     console.warn('Blockout: the people model failed to load; people stay cuboids', err);
   }
 }
 
-// The instanced mesh, and its textures, from the loaded model.
-function buildPersonModel(gltf) {
+// The instanced meshes, and their textures, from the loaded models.
+function buildPersonModel(gltf, hairGltf) {
   const root = gltf.scene;
   const rigged = [], attached = [];
   root.traverse(o => { if (o.isSkinnedMesh) rigged.push(o); else if (o.isMesh) attached.push(o); });
@@ -212,7 +230,7 @@ function buildPersonModel(gltf) {
   skeleton.pose();
   root.updateMatrixWorld(true);
 
-  // ---- the geometry, in the rest pose, as one mesh: every part's vertices with the bones moving them, which part they are,
+  // ---- the body, in the rest pose, as one mesh: every part's vertices with the bones moving them, which part they are,
   // and each shape key's offsets. A mesh riding on a bone rather than rigged (the head) moves with that bone alone. A mesh
   // that's only one side of the body — Blender's Mirror modifier isn't applied when the model's exported, as a mesh with
   // shape keys can't have its modifiers applied — gets its other side here, flipped across X onto the other side's bones.
@@ -271,37 +289,23 @@ function buildPersonModel(gltf) {
   geometry.setAttribute('personJoints', new THREE.Float32BufferAttribute(joints, 4));
   geometry.setAttribute('personWeights', new THREE.Float32BufferAttribute(weights, 4));
   geometry.setAttribute('personSlot', new THREE.Float32BufferAttribute(slots, 1));
+  geometry.computeVertexNormals(); // (flat shading works its normals out per pixel; these are only for the shadows)
   geometry.computeBoundingBox();
 
-  // ---- smooth shading, and the shape key texture: the model's normals are per face, so they're replaced with normals averaged
-  // over every face meeting at each point — worked out for the rest shape and again with each shape key fully on, so it stays
-  // smooth however they're set. Each shape key takes two blocks of rows, a texel per vertex: its offsets, then its normal changes.
-  const shapeWith = keyOffsets => i => keyOffsets
-    ? [positions[i*3] + keyOffsets[i*3], positions[i*3+1] + keyOffsets[i*3+1], positions[i*3+2] + keyOffsets[i*3+2]]
-    : [positions[i*3], positions[i*3+1], positions[i*3+2]];
-  const base = smoothVertexNormals(vertexCount, geometry.index, shapeWith(null), null);
-  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(base.normals, 3));
+  // ---- the shape key texture: a block of rows per shape key, a texel per vertex, holding its offsets
   const morphWidth = Math.min(vertexCount, 1024), morphRows = Math.ceil(vertexCount/morphWidth);
-  const morphData = new Float32Array(morphWidth*morphRows*PERSON_SHAPE_KEYS.length*2*4);
+  const morphData = new Float32Array(morphWidth*morphRows*PERSON_SHAPE_KEYS.length*4);
   const morphMask = new Float32Array(vertexCount);
   PERSON_SHAPE_KEYS.forEach((key, k) => {
-    const keyOffsets = offsets[k];
-    if (!keyOffsets.some(x => x !== 0)) return;
-    const shaped = smoothVertexNormals(vertexCount, geometry.index, shapeWith(keyOffsets), base.groups).normals;
-    const bit = k < PERSON_BODY_KEY_COUNT ? 1 : 2;
+    const keyOffsets = offsets[k], bit = k < PERSON_BODY_KEY_COUNT ? 1 : 2;
     for (let i=0;i<vertexCount;i++) {
-      const offsetTexel = (k*2*morphRows*morphWidth + i)*4, normalTexel = ((k*2 + 1)*morphRows*morphWidth + i)*4;
-      let moves = false;
-      for (let c=0;c<3;c++) {
-        morphData[offsetTexel + c] = keyOffsets[i*3 + c];
-        morphData[normalTexel + c] = shaped[i*3 + c] - base.normals[i*3 + c];
-        moves = moves || Math.abs(keyOffsets[i*3 + c]) > 1e-6 || Math.abs(morphData[normalTexel + c]) > 1e-5;
-      }
-      if (moves) morphMask[i] = morphMask[i] | bit;
+      const texel = (k*morphRows*morphWidth + i)*4;
+      for (let c=0;c<3;c++) morphData[texel + c] = keyOffsets[i*3 + c];
+      if (Math.abs(keyOffsets[i*3]) + Math.abs(keyOffsets[i*3+1]) + Math.abs(keyOffsets[i*3+2]) > 1e-6) morphMask[i] = morphMask[i] | bit;
     }
   });
   geometry.setAttribute('personMorphMask', new THREE.BufferAttribute(morphMask, 1));
-  const morphTexture = new THREE.DataTexture(morphData, morphWidth, morphRows*PERSON_SHAPE_KEYS.length*2, THREE.RGBAFormat, THREE.FloatType);
+  const morphTexture = new THREE.DataTexture(morphData, morphWidth, morphRows*PERSON_SHAPE_KEYS.length, THREE.RGBAFormat, THREE.FloatType);
   morphTexture.needsUpdate = true;
 
   // ---- the bone texture: each animation's frames, then its first frame again, so that blending past its last frame loops
@@ -315,7 +319,7 @@ function buildPersonModel(gltf) {
   let boneRows = 0;
   clips.forEach(c => { c.start = boneRows; boneRows += c.frames + 1; });
   const boneWidth = bones.length*3, boneData = new Float32Array(boneWidth*boneRows*4), pose = new THREE.Matrix4();
-  // how far a foot travels over the walk, for how far a step of it carries a person
+  // how far a foot travels over the walk, for how far a cycle of it carries a person
   const footBone = bones[boneByName.get('FootL') ?? boneByName.get('FootR') ?? 0], footPosition = new THREE.Vector3();
   let footMinZ = Infinity, footMaxZ = -Infinity;
   clips.forEach((c, clipIndex) => {
@@ -341,14 +345,56 @@ function buildPersonModel(gltf) {
   boneTexture.magFilter = boneTexture.minFilter = THREE.LinearFilter;
   boneTexture.needsUpdate = true;
 
-  // ---- each person's traits: their sex, their body's shape keys (as far on as the ranges for their sex allow) and their
-  // clothes' colors
-  const traitRows = 2 + PERSON_CLOTHES.length, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
-  const traitRng = mulberry32(777), colorRng = mulberry32(4242), color = new THREE.Color();
+  // ---- the hairstyles, in the model's space, each riding on the head bone. The biggest part of each is the hair itself,
+  // taking the person's hair color; anything else on it (a hair band) keeps its own color.
+  const hairStyles = [], hairSlots = ['Hair'], hairPalette = [new THREE.Color(0xffffff)];
+  const headBone = boneByName.get('Head');
+  if (hairGltf && headBone != null) {
+    hairGltf.scene.updateMatrixWorld(true);
+    hairGltf.scene.children.forEach(style => {
+      const parts = [];
+      style.traverse(o => { if (o.isMesh) parts.push(o); });
+      if (!parts.length) return;
+      const hair = parts.reduce((a, b) => b.geometry.attributes.position.count > a.geometry.attributes.position.count ? b : a);
+      const stylePositions = [], styleSlots = [], styleIndices = [];
+      parts.forEach(part => {
+        let slot = 0;
+        if (part !== hair) {
+          const name = part.material.name || 'Accessory';
+          slot = hairSlots.indexOf(name);
+          if (slot < 0) { hairSlots.push(name); hairPalette.push(new THREE.Color(part.material.color || 0xffffff).convertLinearToSRGB()); slot = hairSlots.length - 1; }
+        }
+        const pos = part.geometry.attributes.position, index = part.geometry.index, first = stylePositions.length/3;
+        for (let i=0;i<pos.count;i++) { v.fromBufferAttribute(pos, i).applyMatrix4(part.matrixWorld); stylePositions.push(v.x, v.y, v.z); styleSlots.push(slot); }
+        const corners = index ? index.count : pos.count;
+        for (let t=0;t<corners;t++) styleIndices.push(first + (index ? index.getX(t) : t));
+      });
+      const count = stylePositions.length/3;
+      const styleGeometry = new THREE.BufferGeometry();
+      styleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(stylePositions, 3));
+      styleGeometry.setIndex(styleIndices);
+      styleGeometry.setAttribute('personJoints', new THREE.Float32BufferAttribute(new Float32Array(count*4).map((_, k) => k % 4 === 0 ? headBone : 0), 4));
+      styleGeometry.setAttribute('personWeights', new THREE.Float32BufferAttribute(new Float32Array(count*4).map((_, k) => k % 4 === 0 ? 1 : 0), 4));
+      styleGeometry.setAttribute('personSlot', new THREE.Float32BufferAttribute(styleSlots, 1));
+      styleGeometry.setAttribute('personMorphMask', new THREE.BufferAttribute(new Float32Array(count), 1));
+      styleGeometry.computeVertexNormals();
+      hairStyles.push({ name: style.name, geometry: styleGeometry, mesh: null, anim: null, members: [] });
+    });
+    hairGltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+  }
+  const menStyles = hairStyles.map((style, k) => MEN_HAIRSTYLES.includes(style.name) ? k : -1).filter(k => k >= 0);
+
+  // ---- each person's traits: their sex, their body's shape keys (as far on as the ranges for their sex allow), their
+  // hairstyle (any for a woman; for a man one of his, or none) and their colors
+  const traitRows = 2 + PERSON_TRAIT_COLORS.length, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
+  const hairOf = new Int16Array(PEOPLE_MAX).fill(-1), hairSlot = new Int32Array(PEOPLE_MAX);
+  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hairRng = mulberry32(31337), color = new THREE.Color();
   const colorFor = {
     Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
     Pants: () => colorRng() < 0.8 ? color.set(PANTS_COLORS[Math.floor(colorRng()*PANTS_COLORS.length)]) : color.setHSL(colorRng(), 0.25 + colorRng()*0.3, 0.25 + colorRng()*0.25),
     Shoes: () => colorRng() < 0.7 ? color.set(SHOE_COLORS[Math.floor(colorRng()*SHOE_COLORS.length)]) : color.setHSL(colorRng(), 0.4 + colorRng()*0.45, 0.35 + colorRng()*0.25),
+    // three in four have a natural hair color; the rest have dyed it something bright
+    Hair: () => colorRng() < 0.75 ? color.set(HAIR_TONES[Math.floor(colorRng()*HAIR_TONES.length)]).multiplyScalar(0.9 + colorRng()*0.2) : color.setHSL(colorRng(), 0.65 + colorRng()*0.3, 0.45 + colorRng()*0.15),
   };
   for (let i=0;i<PEOPLE_MAX;i++) {
     const texel = row => (row*PEOPLE_MAX + i)*4;
@@ -356,39 +402,48 @@ function buildPersonModel(gltf) {
     const shape = PERSON_SHAPE_KEYS.slice(0, PERSON_BODY_KEY_COUNT).map(key => { const [lo, hi] = ranges[key]; return lo + traitRng()*(hi - lo); });
     traits.set(shape.slice(0, 4), texel(0));
     traits.set([shape[4], man ? 1 : 0], texel(1));
-    PERSON_CLOTHES.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
+    PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
+    if (hairStyles.length) {
+      const pick = Math.floor(hairRng()*(man ? menStyles.length + 1 : hairStyles.length));
+      hairOf[i] = man ? (pick < menStyles.length ? menStyles[pick] : -1) : pick;
+    }
+    if (hairOf[i] >= 0) { const members = hairStyles[hairOf[i]].members; hairSlot[i] = members.length; members.push(i); }
   }
   const traitTexture = new THREE.DataTexture(traits, PEOPLE_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
   traitTexture.needsUpdate = true;
 
+  // ---- the meshes
   const uniforms = {
     personBones: { value: boneTexture }, personBonesSize: { value: new THREE.Vector2(boneWidth, boneRows) },
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
-    personTraits: { value: traitTexture }, personPalette: { value: palette },
+    personTraits: { value: traitTexture },
+  };
+  const traitRow = part => 2 + PERSON_TRAIT_COLORS.indexOf(part);
+  const bodyLook = {
+    palette,
+    traitColors: Object.fromEntries(['Top', 'Pants', 'Shoes'].map(part => [PERSON_SLOTS.indexOf(part), traitRow(part)])),
+    femaleOnly: PERSON_FEMALE_ONLY.map(part => PERSON_SLOTS.indexOf(part)),
   };
   const anim = new THREE.InstancedBufferAttribute(new Float32Array(PEOPLE_MAX*4), 4);
   anim.setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('instanceAnim', anim);
-  const material = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.DoubleSide });
-  material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, true);
-  const mesh = new THREE.InstancedMesh(geometry, material, PEOPLE_MAX);
-  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  // shadows take the pose and shape keys too
-  const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
-  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, false);
-  mesh.customDepthMaterial = depth;
-  mesh.count = 0;
-  mesh.frustumCulled = false;
-  mesh.castShadow = true; mesh.receiveShadow = true;
-  mesh.visible = false;
-  mesh.name = 'People';
-  scene.add(mesh);
+  const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
+  const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair') }, femaleOnly: [] };
+  hairStyles.forEach(style => {
+    if (!style.members.length) { style.geometry.dispose(); return; }
+    style.geometry.setAttribute('instancePerson', new THREE.InstancedBufferAttribute(Float32Array.from(style.members), 1));
+    style.anim = new THREE.InstancedBufferAttribute(new Float32Array(style.members.length*4), 4);
+    style.anim.setUsage(THREE.DynamicDrawUsage);
+    style.geometry.setAttribute('instanceAnim', style.anim);
+    style.mesh = makePersonMesh(style.geometry, uniforms, hairLook, style.members.length, true);
+  });
   root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
 
   const box = geometry.boundingBox;
-  const walkStride = footMaxZ > footMinZ ? 2*(footMaxZ - footMinZ) : (box.max.y - box.min.y)*0.6;
+  const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, anim, height: box.max.y - box.min.y, minY: box.min.y, walk: clips[0], idle: clips[1], stride: walkStride };
+  return { mesh, anim, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles,
+    height: box.max.y - box.min.y, minY: box.min.y, walk: clips[0], idle: clips[1], stride: footTravel*WALK_CYCLE_LENGTH };
 }
 
 export function syncPeopleUI() {
@@ -580,11 +635,17 @@ function walkAlong(p, dist) {
   }
   p.u = Math.max(0, Math.min(nav.total, u));
 }
+// how many of `sorted` (ascending) are below `limit`
+function countBelow(sorted, limit) {
+  let lo = 0, hi = sorted.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < limit) lo = mid + 1; else hi = mid; }
+  return lo;
+}
 export function updatePeople(t) {
   const dt = lastPeopleTime == null ? 0 : Math.min(0.1, Math.max(0, t - lastPeopleTime));
   lastPeopleTime = t;
   peopleMesh.visible = S.peopleEnabled && !personModel;
-  if (personModel) personModel.mesh.visible = S.peopleEnabled;
+  if (personModel) [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; });
   if (!S.peopleEnabled) return;
   if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25)) {
     S.peopleNavDirty = false;
@@ -596,7 +657,10 @@ export function updatePeople(t) {
   while (people.length < wanted) { const p = newPerson(); spawnPerson(p); people.push(p); }
   if (people.length > wanted) people.length = wanted;
   peopleMesh.count = people.length;
-  if (personModel) personModel.mesh.count = people.length;
+  if (personModel) {
+    personModel.mesh.count = people.length;
+    personModel.hair.forEach(style => { style.mesh.count = countBelow(style.members, people.length); });
+  }
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   people.forEach((p, i) => {
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
@@ -681,8 +745,7 @@ export function updatePeople(t) {
       rotation.setFromAxisAngle(up, p.heading);
       matrix.compose(position.set(p.x, p.y - personModel.minY*s, p.z), rotation, scale.set(s, s, s));
       personModel.mesh.setMatrixAt(i, matrix);
-      // a cycle of the walk for every stride of the model's own length, as big as they are — so their feet keep pace with the
-      // ground — easing into the idle when they stop
+      // a cycle of the walk for every stride's worth of ground covered, as big as they are, easing into the idle when they stop
       if (s > 0) p.walkCycle = (p.walkCycle + p.stepped/(personModel.stride*s)) % 1;
       p.idleTime += dt;
       p.walkBlend += ((p.moving ? 1 : 0) - p.walkBlend)*Math.min(1, dt*6);
@@ -695,6 +758,13 @@ export function updatePeople(t) {
       a[o+1] = idle.start + (p.idleTime*PERSON_BAKE_FPS) % idle.frames;
       a[o+2] = p.walkBlend;
       a[o+3] = p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0;
+      // their hairstyle's copy of where they are and how they're posed
+      const style = personModel.hairOf[i] >= 0 ? personModel.hairStyles[personModel.hairOf[i]] : null;
+      if (style && style.mesh) {
+        const slot = personModel.hairSlot[i];
+        matrix.toArray(style.mesh.instanceMatrix.array, slot*16);
+        for (let k=0;k<4;k++) style.anim.array[slot*4 + k] = a[o + k];
+      }
     } else {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
       const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;
@@ -704,8 +774,12 @@ export function updatePeople(t) {
       peopleMesh.setMatrixAt(i, matrix);
     }
   });
-  if (personModel) { personModel.mesh.instanceMatrix.needsUpdate = true; personModel.anim.needsUpdate = true; }
-  else peopleMesh.instanceMatrix.needsUpdate = true;
+  if (personModel) {
+    personModel.mesh.instanceMatrix.needsUpdate = true; personModel.anim.needsUpdate = true;
+    personModel.hair.forEach(style => { style.mesh.instanceMatrix.needsUpdate = true; style.anim.needsUpdate = true; });
+  } else {
+    peopleMesh.instanceMatrix.needsUpdate = true;
+  }
 }
 
 Object.assign(App, { syncPeopleUI });
