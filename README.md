@@ -30,6 +30,9 @@ A little procedural city blockout tool that runs in the browser, built on three.
 - **Undo/redo** — Ctrl+Z and Ctrl+Shift+Z (or Ctrl+Y), or the arrows at the top.
 - **Windows 3.0 look** — the whole UI dresses up as Windows 3.0 (untick it in World for the modern look), and under it a Pixelation slider turns the 3D view to chunky pixels and a 16-colour palette checkbox redraws it in sixteen colours or fewer (Windows 3.0's, PICO-8's, CGA, Commodore 64, ZX Spectrum, Apple II, Mac OS, Sweetie 16, DawnBringer 16, Endesga 16, Game Boy or 1-bit), dithered in a pattern of your choice (ordered, blue noise, halftone and more). (Its pixel font is [“MS Sans Serif Bold” by lou](https://fontstruct.com/fontstructions/show/1384862), CC BY-SA 3.0, loaded from [98.css](https://github.com/jdan/98.css).)
 
+<img width="1506" height="762" alt="Screenshot 2026-09-15 at 16 29 31" src="https://github.com/user-attachments/assets/840b062d-51ed-4a64-ad02-edf0852cc581" />
+
+
 ## Running it
 
 Use the live site, or serve the repo folder locally and open it in a browser — for example:
