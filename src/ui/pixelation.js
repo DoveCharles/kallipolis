@@ -4,7 +4,7 @@ import { mulberry32 } from '../core/math.js';
 
 // ============================================================ pixelation and the 16-colour palette
 // Filters on the 3D view, from World settings. Pixelation draws the view small — one pixel for every so many screen pixels
-// across; the 16-colour palette redraws it in sixteen colours (Windows 3.0's or another set, from the Palette menu),
+// across; the 16-colour palette redraws it in sixteen colours or fewer (Windows 3.0's or another set, from the Palette menu),
 // dithering (in a pattern picked from the Dithering menu) to fake the shades in between. With either on, the view is drawn into a render target of its own,
 // without anti-aliasing (the canvas's can't be turned off once it's made, but a render target's is its own), and copied
 // onto the screen by a shader that applies the palette — each drawn pixel exactly so many screen pixels square, with hard
@@ -14,7 +14,7 @@ const PIXELATION_KEY = 'splinetopia.pixelation', PALETTE_KEY = 'splinetopia.pale
 const DITHER_KEY = 'splinetopia.dither';
 const MAX_PIXEL_SIZE = 12;
 const SHARP_PIXEL_RATIO = Math.min(window.devicePixelRatio, 2); // (as scene.js sets it up)
-// the sets of sixteen colours, in the Palette menu's order
+// the sets of colours, in the Palette menu's order — sixteen, or fewer (repeated round to fill the shader's sixteen)
 const PALETTES = [
   // Windows 3.0's: the dark eight, then the light
   { id: 'win3', name: 'Windows 3.0', colors: [0x000000, 0x800000, 0x008000, 0x808000, 0x000080, 0x800080, 0x008080, 0xc0c0c0,
@@ -22,6 +22,31 @@ const PALETTES = [
   // the PICO-8 fantasy console's
   { id: 'pico8', name: 'PICO-8', colors: [0x000000, 0x1d2b53, 0x7e2553, 0x008751, 0xab5236, 0x5f574f, 0xc2c3c7, 0xfff1e8,
                                          0xff004d, 0xffa300, 0xffec27, 0x00e436, 0x29adff, 0x83769c, 0xff77a8, 0xffccaa] },
+  // IBM's CGA and EGA: the DOS sixteen, with the brown in place of dark yellow
+  { id: 'cga', name: 'CGA / EGA', colors: [0x000000, 0x0000aa, 0x00aa00, 0x00aaaa, 0xaa0000, 0xaa00aa, 0xaa5500, 0xaaaaaa,
+                                          0x555555, 0x5555ff, 0x55ff55, 0x55ffff, 0xff5555, 0xff55ff, 0xffff55, 0xffffff] },
+  // the Commodore 64's (as Pepto measured them)
+  { id: 'c64', name: 'Commodore 64', colors: [0x000000, 0xffffff, 0x68372b, 0x70a4b2, 0x6f3d86, 0x588d43, 0x352879, 0xb8c76f,
+                                             0x6f4f25, 0x433900, 0x9a6759, 0x444444, 0x6c6c6c, 0x9ad284, 0x6c5eb5, 0x959595] },
+  // the ZX Spectrum's: each colour normal and bright (black only the once)
+  { id: 'zx', name: 'ZX Spectrum', colors: [0x000000, 0x0000d7, 0xd70000, 0xd700d7, 0x00d700, 0x00d7d7, 0xd7d700, 0xd7d7d7,
+                                           0x0000ff, 0xff0000, 0xff00ff, 0x00ff00, 0x00ffff, 0xffff00, 0xffffff] },
+  // the Apple II's low-resolution colours (its two greys are the same)
+  { id: 'apple2', name: 'Apple II', colors: [0x000000, 0x901740, 0x402ca5, 0xd043e5, 0x006940, 0x808080, 0x2f95e5, 0xbfabff,
+                                            0x405400, 0xd06a1a, 0xff96bf, 0x2fbc1a, 0xbfd35a, 0x6fe8bf, 0xffffff] },
+  // the Macintosh II's sixteen system colours
+  { id: 'mac', name: 'Mac OS', colors: [0xffffff, 0xfbf305, 0xff6403, 0xdd0907, 0xf20884, 0x4700a5, 0x0000d3, 0x02abea,
+                                       0x1fb714, 0x006412, 0x562c05, 0x90713a, 0xc0c0c0, 0x808080, 0x404040, 0x000000] },
+  // pixel artists' palettes: Sweetie 16 (by GrafxKid, TIC-80's), DawnBringer's 16 and Endesga 16
+  { id: 'sweetie16', name: 'Sweetie 16', colors: [0x1a1c2c, 0x5d275d, 0xb13e53, 0xef7d57, 0xffcd75, 0xa7f070, 0x38b764, 0x257179,
+                                                 0x29366f, 0x3b5dc9, 0x41a6f6, 0x73eff7, 0xf4f4f4, 0x94b0c2, 0x566c86, 0x333c57] },
+  { id: 'db16', name: 'DawnBringer 16', colors: [0x140c1c, 0x442434, 0x30346d, 0x4e4a4e, 0x854c30, 0x346524, 0xd04648, 0x757161,
+                                                0x597dce, 0xd27d2c, 0x8595a1, 0x6daa2c, 0xd2aa99, 0x6dc2ca, 0xdad45e, 0xdeeed6] },
+  { id: 'endesga16', name: 'Endesga 16', colors: [0xe4a672, 0xb86f50, 0x743f39, 0x3f2832, 0x9e2835, 0xe53b44, 0xfb922b, 0xffe762,
+                                                 0x63c64d, 0x327345, 0x193d3f, 0x4f6781, 0xafbfd2, 0xffffff, 0x2ce8f4, 0x0484d1] },
+  // the original Game Boy's four greens, and plain black and white
+  { id: 'gameboy', name: 'Game Boy', colors: [0x0f380f, 0x306230, 0x8bac0f, 0x9bbc0f] },
+  { id: '1bit', name: '1-bit', colors: [0x000000, 0xffffff] },
 ];
 const DEFAULT_PALETTE = 'win3';
 // the dithering patterns, in the menu's order — each one's place in the list is its ditherMode in the shader
@@ -205,10 +230,10 @@ function setPalette(on, save) {
   copyMaterial.uniforms.usePalette.value = on ? 1 : 0;
   if (save) remember(PALETTE_KEY, on ? '1' : '0');
 }
-// which set of sixteen colours the palette draws in
+// which set of colours the palette draws in (a colour repeated is only ever picked once, so a short set just repeats)
 function setPaletteColors(id, save) {
   const palette = PALETTES.find(p => p.id === id) || PALETTES[0];
-  copyMaterial.uniforms.palette.value.forEach((color, i) => color.setHex(palette.colors[i]));
+  copyMaterial.uniforms.palette.value.forEach((color, i) => color.setHex(palette.colors[i % palette.colors.length]));
   paletteMenu.value = palette.id;
   if (save) remember(PALETTE_COLORS_KEY, palette.id);
 }
