@@ -25,21 +25,45 @@
     <button class="tool-btn" data-mode="maps"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/><circle cx="5.2" cy="6" r="1.2" fill="currentColor" stroke="none"/><path d="M2 12.2 L6.3 8 L8.8 10.3 L11.3 7.3 L14 10.5"/></svg>Maps</button>
   </div>
   <div class="toolbar" id="entity-toolbar" style="margin-top:6px;">
-    <button class="tool-btn active" data-entity="road">Road</button>
-    <button class="tool-btn" data-entity="zone">Zone</button>
-    <button class="tool-btn" data-entity="train">Train</button>
+    <button class="tool-btn active" data-entity="paths">Paths</button>
+    <button class="tool-btn" data-entity="zone">Zones</button>
+    <button class="tool-btn" data-entity="objects">Objects</button>
   </div>
 
-  <div class="section" id="section-road">
-    <div class="section-label">Roads <span id="roads-count">0</span></div>
-    <div class="hier-list" id="roads-list"></div>
-    <div class="slider-row" style="margin-top:8px;">
-      <div class="row"><label>Road width <span id="rw-context" style="font-weight:400;"></span></label><span class="val" id="v-roadwidth">8</span></div>
-      <input type="range" id="s-roadwidth" min="3" max="40" step="0.5" value="8">
+  <div class="section" id="section-paths">
+    <div class="section-label">Paths <span id="paths-count">0</span></div>
+    <div class="hier-list" id="paths-list"></div>
+    <div class="row" style="margin-top:8px;"><label>Type <span style="font-weight:400;">· new paths</span></label>
+      <select class="select-input" id="s-pathtype" style="width:130px; margin-bottom:0;">
+        <option value="sidewalk">Sidewalk</option>
+        <option value="path">Path</option>
+        <option value="river">River</option>
+        <option value="train">Train</option>
+      </select>
     </div>
-    <div class="slider-row">
-      <div class="row"><label>Sidewalk size <span id="sw-context" style="font-weight:400;"></span></label><span class="val" id="v-sidewalkwidth">3</span></div>
-      <input type="range" id="s-sidewalkwidth" min="0" max="10" step="0.5" value="3">
+    <div id="path-road-settings">
+      <div class="slider-row" style="margin-top:8px;">
+        <div class="row"><label>Width <span id="rw-context" style="font-weight:400;"></span></label><span class="val" id="v-roadwidth">8</span></div>
+        <input type="range" id="s-roadwidth" min="3" max="40" step="0.5" value="8">
+      </div>
+      <div class="slider-row">
+        <div class="row"><label>Sidewalk size <span id="sw-context" style="font-weight:400;"></span></label><span class="val" id="v-sidewalkwidth">3</span></div>
+        <input type="range" id="s-sidewalkwidth" min="0" max="10" step="0.5" value="3">
+      </div>
+    </div>
+    <div id="path-train-settings" style="display:none;">
+      <div class="slider-row" style="margin-top:8px;">
+        <div class="row"><label>Tube radius <span id="tr-context" style="font-weight:400;"></span></label><span class="val" id="v-tuberadius">2.5</span></div>
+        <input type="range" id="s-tuberadius" min="1" max="6" step="0.25" value="2.5">
+      </div>
+      <div class="slider-row">
+        <div class="row"><label>Height <span style="font-weight:400;">· new lines</span></label><span class="val" id="v-trainheight">14</span></div>
+        <input type="range" id="s-trainheight" min="1" max="80" step="1" value="14">
+      </div>
+      <div class="slider-row">
+        <div class="row"><label>Coil frequency <span style="font-weight:400;">· turns per 10</span></label><span class="val" id="v-coilfreq">1.00</span></div>
+        <input type="range" id="s-coilfreq" min="0.1" max="5" step="0.05" value="1">
+      </div>
     </div>
   </div>
 
@@ -49,21 +73,9 @@
     <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Drag to reorder — a zone cuts into the zones below it.</div>
   </div>
 
-  <div class="section" id="section-train" style="display:none;">
-    <div class="section-label">Train lines <span id="trains-count">0</span></div>
-    <div class="hier-list" id="trains-list"></div>
-    <div class="slider-row" style="margin-top:8px;">
-      <div class="row"><label>Tube radius <span id="tr-context" style="font-weight:400;"></span></label><span class="val" id="v-tuberadius">2.5</span></div>
-      <input type="range" id="s-tuberadius" min="1" max="6" step="0.25" value="2.5">
-    </div>
-    <div class="slider-row">
-      <div class="row"><label>Height <span style="font-weight:400;">· new lines</span></label><span class="val" id="v-trainheight">14</span></div>
-      <input type="range" id="s-trainheight" min="1" max="80" step="1" value="14">
-    </div>
-    <div class="slider-row">
-      <div class="row"><label>Coil frequency <span style="font-weight:400;">· turns per 10</span></label><span class="val" id="v-coilfreq">1.00</span></div>
-      <input type="range" id="s-coilfreq" min="0.1" max="5" step="0.05" value="1">
-    </div>
+  <div class="section" id="section-objects" style="display:none;">
+    <div class="section-label">Objects</div>
+    <div style="padding:18px 0; text-align:center; color:var(--text-dim);">Coming soon</div>
   </div>
 
   <div class="section" id="section-maps" style="display:none;">
@@ -140,7 +152,7 @@
 	h43.77V159.149z M266.227,63.894h-43.77v-43.770h43.77V63.894z"/></svg>
 </div>
 
-<div id="stats">zones <span id="stat-zones">0</span> · roads <span id="stat-roads">0</span><br>buildings <span id="stat-buildings">0</span></div>
+<div id="stats">zones <span id="stat-zones">0</span> · paths <span id="stat-roads">0</span><br>buildings <span id="stat-buildings">0</span></div>
 
 <div id="hint"></div>
 

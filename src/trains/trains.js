@@ -706,9 +706,9 @@ export function asNodeUi(object) { object.renderOrder = 1000; return object; }
 export function rebuildRoadMarkers() {
   scene.remove(S.roadMarkerGroup); disposeObject(S.roadMarkerGroup);
   S.roadMarkerGroup = new THREE.Group();
-  S.roadMarkerGroup.visible = (S.interactionMode==='node');
-  // Road and train nodes share roadNodes, but each entity tab only shows (and so only lets you pick) its own kind —
-  // so a train line can't be joined onto a road, or the other way round.
+  S.roadMarkerGroup.visible = S.interactionMode==='node' && S.currentTool!=='objects';
+  // Road and train nodes share roadNodes, but the road and train tools (the Paths tab's Type) each only show (and so only
+  // let you pick) their own kind — so a train line can't be joined onto a road, or the other way round.
   const trainIds = trainNodeIdSet();
   const showTrains = S.currentTool==='train';
   Object.keys(roadNodes).forEach(id => {
@@ -726,7 +726,7 @@ export function rebuildRoadMarkers() {
 export function rebuildRoadHandles() {
   scene.remove(S.roadHandleGroup); disposeObject(S.roadHandleGroup);
   S.roadHandleGroup = new THREE.Group();
-  S.roadHandleGroup.visible = (S.interactionMode==='node');
+  S.roadHandleGroup.visible = S.interactionMode==='node' && S.currentTool!=='objects';
   const trainIds = trainNodeIdSet();
   const showTrains = S.currentTool==='train';
   Object.keys(roadNodes).forEach(id => {

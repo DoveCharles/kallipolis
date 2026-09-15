@@ -8,10 +8,11 @@ A little procedural city blockout tool that runs in the browser, built on three.
 
 ## What it does
 
-- **Roads** — draw road networks with poly or spline nodes, as one of three types:
-  - **Sidewalk** — junctions merge into one clean outline with curbs and raised sidewalks
+- **Paths** — draw networks with poly or spline nodes, as one of four types:
+  - **Sidewalk** — roads whose junctions merge into one clean outline with curbs and raised sidewalks
   - **Path** — a sandy track with a soft, speckled edge
   - **River** — water, joining any water zone it runs into
+  - **Train** — glass solenoid tubes on smooth 3D paths, with stations and a shuttle running the line
 
   Roads get lane markings, and junctions get zebra crossings and working traffic lights. Roads and paths crossing water become bridges.
 - **Zones** — draw areas and pick a type:
@@ -24,7 +25,7 @@ A little procedural city blockout tool that runs in the browser, built on three.
   - **Plain** — flat ground
 
   Roads cut through zones, and zones higher in the list cut into the ones below (drag to reorder).
-- **Trains** — glass solenoid tubes on smooth 3D paths, with stations and a shuttle running the line.
+- **Objects** — coming soon.
 - **People & traffic** — lil people walking the sidewalks and paths and gathering in plazas and parks, and cars driving the roads (toggle and tune them in World). People stop to wave and chat when they meet (taking turns to talk), sit down on plaza benches, sit around in circles on the grass talking, or lie down in a quiet corner of a park, and now and then have a scratch or a think while they stand about. Click someone in World mode and the camera follows them, with a card (and a live headshot) saying who they are — their names, moods, likes and dislikes come from `assets/people.txt`, so edit away.
 - **World** — sun position or a day/night cycle (with a realistic sun path, moonlight and stars), weather (rain, snow, cloud shadows), ground and grid colors, save/load projects as JSON, and GLB (with materials) or OBJ export.
 - **Undo/redo** — Ctrl+Z and Ctrl+Shift+Z (or Ctrl+Y), or the arrows at the top.

@@ -5,7 +5,9 @@ import { BUILDING_GROUND_COLORS, PARK_TINT_COLORS, TREE_TINT_COLORS, DEFAULT_GRA
 
 // ============================================================ state
 S.interactionMode = 'node'; // 'node' | 'move'
-S.currentTool = 'road';     // entity tab: 'road' | 'zone' | 'train'
+S.currentTool = 'road';     // what Edit mode edits: 'road' or 'train' (both in the Paths tab), 'zone' or 'objects'
+S.lastPathTool = 'road';    // which of the two the Paths tab was last on
+S.newRoadType = 'sidewalk'; // the type a new path gets ('sidewalk' | 'path' | 'river'), unless it's a train line
 S.DEFAULT_ROAD_WIDTH = 8;
 
 export const roadNodes = {};        // id -> {x,z}

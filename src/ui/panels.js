@@ -4,7 +4,7 @@ import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLOR
 import { roadNodes, MAX_TARGET_LOTS } from '../core/state.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
 import { PATH_COLOR, PATH_COLOR_PALETTE, isPathLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
-import { isTrainLine, networkKindOf, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
+import { networkKindOf, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
 import { subdivideZone, subdivideZonesFrom, subdivideZonesFromIndex, moveZone } from '../zones/cutouts.js';
@@ -16,7 +16,12 @@ export function selectItem(type,id,force) {
   S.selection = { type, id };
   S.currentTool = type;
   S.colorPickerState = null;
-  if (type==='road') S.lastSelectedRoadNetworkId = id;
+  if (type==='road') {
+    S.lastSelectedRoadNetworkId = id;
+    // new paths take the type of the one last selected
+    const line = S.roadLines.find(l=>l.networkId===id);
+    if (line) S.newRoadType = line.roadType || 'sidewalk';
+  }
   else if (type==='zone') S.lastSelectedZoneId = id;
   else if (type==='train') S.lastSelectedTrainNetworkId = id;
   refreshHighlights();
@@ -77,35 +82,33 @@ export function deleteZoneVertex(zone, idx) {
 }
 
 export function renderHierarchy() {
-  // road and train networks both live in roadLines, each listed in its own tab
-  [['road', 'roads-list', 'roads-count'], ['train', 'trains-list', 'trains-count']].forEach(([kind, listId, countId]) => {
-    const list = document.getElementById(listId);
-    list.innerHTML='';
-    const networks = [];
-    const seenNetworks = new Set();
-    S.roadLines.forEach(line => {
-      if (networkKindOf(line)!==kind || seenNetworks.has(line.networkId)) return;
-      seenNetworks.add(line.networkId);
-      networks.push(line.networkId);
-    });
-    networks.forEach(netId => {
-      const lines = S.roadLines.filter(l=>l.networkId===netId);
-      const row = document.createElement('div');
-      row.className = 'hier-row' + (S.selection.type===kind&&S.selection.id===netId?' active':'');
-      const span = document.createElement('span');
-      span.textContent = lines.length>1
-        ? `${netId} · ${lines.length} branches`
-        : lines[0].id;
-      row.appendChild(span);
-      const del = document.createElement('button');
-      del.className='hier-del'; del.textContent='×';
-      del.onclick = (e)=>{ e.stopPropagation(); removeRoadNetwork(netId); };
-      row.appendChild(del);
-      row.onclick = ()=> selectItem(kind, netId);
-      list.appendChild(row);
-    });
-    document.getElementById(countId).textContent = networks.length;
+  // road and train networks both live in roadLines, and are listed together in the Paths tab
+  const pathsList = document.getElementById('paths-list');
+  pathsList.innerHTML='';
+  const networks = [];
+  const seenNetworks = new Set();
+  S.roadLines.forEach(line => {
+    if (seenNetworks.has(line.networkId)) return;
+    seenNetworks.add(line.networkId);
+    networks.push({ netId: line.networkId, kind: networkKindOf(line) });
   });
+  networks.forEach(({ netId, kind }) => {
+    const lines = S.roadLines.filter(l=>l.networkId===netId);
+    const row = document.createElement('div');
+    row.className = 'hier-row' + (S.selection.type===kind&&S.selection.id===netId?' active':'');
+    const span = document.createElement('span');
+    span.textContent = lines.length>1
+      ? `${netId} · ${lines.length} branches`
+      : lines[0].id;
+    row.appendChild(span);
+    const del = document.createElement('button');
+    del.className='hier-del'; del.textContent='×';
+    del.onclick = (e)=>{ e.stopPropagation(); removeRoadNetwork(netId); };
+    row.appendChild(del);
+    row.onclick = ()=> selectItem(kind, netId);
+    pathsList.appendChild(row);
+  });
+  document.getElementById('paths-count').textContent = networks.length;
 
   const zonesList = document.getElementById('zones-list');
   zonesList.innerHTML='';
@@ -168,7 +171,7 @@ function syncRoadWidthUI() {
   }
   widthInput.value = S.DEFAULT_ROAD_WIDTH;
   widthVal.textContent = S.DEFAULT_ROAD_WIDTH;
-  ctx.textContent = '· new roads';
+  ctx.textContent = '· new paths';
 }
 function syncSidewalkWidthUI() {
   const widthInput = document.getElementById('s-sidewalkwidth');
@@ -186,7 +189,7 @@ function syncSidewalkWidthUI() {
   }
   widthInput.value = S.DEFAULT_SIDEWALK_WIDTH;
   widthVal.textContent = S.DEFAULT_SIDEWALK_WIDTH;
-  ctx.textContent = '· new roads';
+  ctx.textContent = '· new paths';
 }
 
 function syncTrainRadiusUI() {
@@ -406,7 +409,7 @@ function renderDetails() {
   const panel = document.getElementById('details-panel');
   if (S.selection.type==='zone') {
     const zone = S.zones.find(z=>z.id===S.selection.id);
-    if (!zone) { panel.innerHTML = '<div class="empty">Select a road or zone from the list to see its settings.</div>'; return; }
+    if (!zone) { panel.innerHTML = '<div class="empty">Select a path or zone from the list to see its settings.</div>'; return; }
     const s = zone.settings;
     const zoneType = zone.zoneType || 'buildings';
     const toggleHtml = (id, label, on) => `<div class="row" style="margin-top:11px;"><label>${label}</label><button class="toggle-switch${on?' on':''}" id="${id}"><span class="knob"></span></button></div>`;
@@ -656,7 +659,7 @@ function renderDetails() {
   } else if (S.selection.type==='road') {
     const netId = S.selection.id;
     const lines = S.roadLines.filter(l=>l.networkId===netId);
-    if (!lines.length) { panel.innerHTML = '<div class="empty">Select a road or zone from the list to see its settings.</div>'; return; }
+    if (!lines.length) { panel.innerHTML = '<div class="empty">Select a path or zone from the list to see its settings.</div>'; return; }
     const totalNodes = lines.reduce((sum,l)=>sum+l.nodeIds.length, 0);
     const curColor = lines[0].color!=null ? lines[0].color : ROAD_COLOR;
     const curSidewalkColor = lines[0].sidewalkColor!=null ? lines[0].sidewalkColor : SIDEWALK_COLOR;
@@ -667,7 +670,7 @@ function renderDetails() {
     panel.innerHTML = `
       <div class="title-row"><span class="name">${title}</span><button class="close-x" id="d-close">deselect</button></div>
       <div class="empty" style="margin-bottom:10px;">${subtitle}</div>
-      <div class="slider-row"><div class="row"><label>Road type</label></div>
+      <div class="slider-row"><div class="row"><label>Path type</label></div>
         <select id="ds-roadtype" class="select-input">
           <option value="sidewalk" ${!isPath&&!isRiver?'selected':''}>Sidewalk</option>
           <option value="path" ${isPath?'selected':''}>Path</option>
@@ -675,7 +678,7 @@ function renderDetails() {
         </select>
       </div>
       ${isRiver ? `
-      <div class="empty" style="margin:6px 0 10px;">Water, as wide as the road width. It joins any water zone it runs into, and roads and paths cross it on bridges.</div>
+      <div class="empty" style="margin:6px 0 10px;">Water, as wide as the path's width. It joins any water zone it runs into, and roads and paths cross it on bridges.</div>
       ` : isPath ? `
       <div class="section-label">Path color</div>
       ${colorSwatchRowHtml(PATH_COLOR_PALETTE, curPathColor, 'pathcolor')}
@@ -685,10 +688,12 @@ function renderDetails() {
       <div class="section-label">Sidewalk color</div>
       ${colorSwatchRowHtml(SIDEWALK_COLOR_PALETTE, curSidewalkColor, 'sidewalkcolor')}
       `}
-      <button class="btn danger" id="d-delete">Delete road${lines.length>1?' network':''}</button>
+      <button class="btn danger" id="d-delete">Delete path${lines.length>1?' network':''}</button>
     `;
     document.getElementById('ds-roadtype').addEventListener('change', (e) => {
       lines.forEach(l => { l.roadType = e.target.value; });
+      S.newRoadType = e.target.value;
+      App.applyModeVisibility();
       rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderDetails();
     });
     // paths get their own color swatches; sidewalk roads get road and sidewalk colors
@@ -749,7 +754,7 @@ function renderDetails() {
   } else if (S.selection.type==='train') {
     const netId = S.selection.id;
     const lines = S.roadLines.filter(l=>l.networkId===netId);
-    if (!lines.length) { panel.innerHTML = '<div class="empty">Select a road or zone from the list to see its settings.</div>'; return; }
+    if (!lines.length) { panel.innerHTML = '<div class="empty">Select a path or zone from the list to see its settings.</div>'; return; }
     const nodeIds = new Set(lines.flatMap(l => l.nodeIds));
     const stations = [...nodeIds].filter(id => roadNodes[id] && roadNodes[id].type==='station').length;
     const title = lines.length>1 ? netId : lines[0].id;
@@ -761,7 +766,7 @@ function renderDetails() {
     document.getElementById('d-delete').addEventListener('click', ()=> removeRoadNetwork(netId));
     document.getElementById('d-close').addEventListener('click', deselect);
   } else {
-    panel.innerHTML = '<div class="empty">Select a road or zone from the list to see its settings.</div>';
+    panel.innerHTML = '<div class="empty">Select a path or zone from the list to see its settings.</div>';
   }
 }
 
@@ -769,7 +774,7 @@ export function updateStats() {
   let buildings=0;
   S.zones.forEach(z => { if (z.buildingsGroup) buildings += z.buildingsGroup.children.filter(c=>c.name==='Building').length; });
   document.getElementById('stat-zones').textContent = S.zones.length;
-  document.getElementById('stat-roads').textContent = S.roadLines.filter(l => !isTrainLine(l)).length;
+  document.getElementById('stat-roads').textContent = S.roadLines.length;
   document.getElementById('stat-buildings').textContent = buildings;
 }
 

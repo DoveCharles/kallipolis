@@ -68,30 +68,37 @@ function updateHint() {
   } else {
     const hints = {
       train: "Click to place nodes at the line's height · drag a node to move it in 3D (top view, key 7, moves it level) · alt+drag changes only its height · right-click a node to make it a station · double-click a node to delete it · double-click or Enter finishes · shift+click a line to insert a node · Esc cancels",
-      road:'Click ground to place nodes · click a node to select its road · double-click a node to delete it · drag to move · empty-ground drag orbits · double-click ground or Enter finishes · shift+click a road to insert a node · Esc cancels',
-      zone: 'Click ground for boundary points · click a point to select its zone · double-click a point to delete it · drag to move · empty-ground drag orbits · double-click ground, click first point, or Enter (3+ points) to close · shift+click an edge to insert a point · Esc cancels'
+      road:'Click ground to place nodes · click a node to select its path · double-click a node to delete it · drag to move · empty-ground drag orbits · double-click ground or Enter finishes · shift+click a path to insert a node · Esc cancels',
+      zone: 'Click ground for boundary points · click a point to select its zone · double-click a point to delete it · drag to move · empty-ground drag orbits · double-click ground, click first point, or Enter (3+ points) to close · shift+click an edge to insert a point · Esc cancels',
+      objects: 'Objects are coming soon · drag to orbit · shift+drag to pan · scroll to zoom'
     };
     msg = hints[S.currentTool];
   }
   document.getElementById('hint').textContent = msg;
 }
+// Edit mode's tabs: Paths (roads, paths and rivers — the 'road' tool — and train lines, the 'train' tool, which the Type menu
+// switches between, as each shows only its own kind of node), Zones, and Objects (nothing yet)
 export function applyModeVisibility() {
   App.hideContextMenu();
-  S.roadMarkerGroup.visible = (S.interactionMode==='node');
-  S.roadHandleGroup.visible = (S.interactionMode==='node');
+  const inNode = S.interactionMode==='node', inPaths = S.currentTool==='road' || S.currentTool==='train', inObjects = S.currentTool==='objects';
+  if (inPaths) S.lastPathTool = S.currentTool;
+  S.roadMarkerGroup.visible = inNode && !inObjects;
+  S.roadHandleGroup.visible = inNode && !inObjects;
   S.zones.forEach(z => {
-    if (z.outlineGroup) z.outlineGroup.visible = (S.interactionMode==='node');
+    if (z.outlineGroup) z.outlineGroup.visible = inNode && !inObjects;
   });
-  const inNode = S.interactionMode==='node';
-  document.getElementById('section-road').style.display = (inNode && S.currentTool==='road') ? 'block' : 'none';
+  document.getElementById('section-paths').style.display = (inNode && inPaths) ? 'block' : 'none';
+  document.getElementById('path-road-settings').style.display = S.currentTool==='road' ? 'block' : 'none';
+  document.getElementById('path-train-settings').style.display = S.currentTool==='train' ? 'block' : 'none';
+  document.getElementById('s-pathtype').value = S.currentTool==='train' ? 'train' : S.newRoadType;
   document.getElementById('section-zone').style.display = (inNode && S.currentTool==='zone') ? 'block' : 'none';
-  document.getElementById('section-train').style.display = (inNode && S.currentTool==='train') ? 'block' : 'none';
+  document.getElementById('section-objects').style.display = (inNode && inObjects) ? 'block' : 'none';
   document.getElementById('entity-toolbar').style.display = inNode ? 'flex' : 'none';
-  document.getElementById('details-panel').style.display = inNode ? 'block' : 'none';
+  document.getElementById('details-panel').style.display = inNode && !inObjects ? 'block' : 'none';
   document.getElementById('section-move').style.display = S.interactionMode==='move' ? 'block' : 'none';
   document.getElementById('section-maps').style.display = S.interactionMode==='maps' ? 'block' : 'none';
   document.querySelectorAll('#mode-toolbar .tool-btn').forEach(b => b.classList.toggle('active', b.dataset.mode===S.interactionMode));
-  document.querySelectorAll('#entity-toolbar .tool-btn').forEach(b => b.classList.toggle('active', b.dataset.entity===S.currentTool));
+  document.querySelectorAll('#entity-toolbar .tool-btn').forEach(b => b.classList.toggle('active', b.dataset.entity===(inPaths ? 'paths' : S.currentTool)));
   updateHint();
 }
 function setMode(mode) {
@@ -122,7 +129,14 @@ function setEntityTab(tab) {
   renderHierarchy();
 }
 document.querySelectorAll('#mode-toolbar .tool-btn').forEach(b => b.addEventListener('click', ()=> setMode(b.dataset.mode)));
-document.querySelectorAll('#entity-toolbar .tool-btn').forEach(b => b.addEventListener('click', ()=> setEntityTab(b.dataset.entity)));
+document.querySelectorAll('#entity-toolbar .tool-btn').forEach(b => b.addEventListener('click', ()=> setEntityTab(b.dataset.entity==='paths' ? S.lastPathTool : b.dataset.entity)));
+// the type new paths get: sidewalk, path or river draw with the road tool, a train line with the train tool
+document.getElementById('s-pathtype').addEventListener('change', (e) => {
+  const type = e.target.value;
+  if (type!=='train') S.newRoadType = type;
+  const tool = type==='train' ? 'train' : 'road';
+  if (tool!==S.currentTool) setEntityTab(tool); else applyModeVisibility();
+});
 
 document.getElementById('s-roadwidth').addEventListener('input', (e)=>{
   const v = parseFloat(e.target.value);

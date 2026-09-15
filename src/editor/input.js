@@ -102,7 +102,8 @@ dom.addEventListener('pointerdown', (e) => {
     isCameraDragging = true;
     dragMode = e.shiftKey ? 'pan' : 'orbit';
   } else if (e.button===0) {
-    if (S.interactionMode==='move') {
+    // (the Objects tab has nothing to pick yet, so it only moves the camera)
+    if (S.interactionMode==='move' || S.currentTool==='objects') {
       isCameraDragging = true;
       dragMode = e.shiftKey ? 'pan' : 'orbit';
     } else {
@@ -110,7 +111,7 @@ dom.addEventListener('pointerdown', (e) => {
       if (picked) S.draggedNode = picked;
       else { isCameraDragging = true; dragMode = e.shiftKey ? 'pan' : 'orbit'; }
     }
-  } else if (e.button===2 && S.interactionMode==='node') {
+  } else if (e.button===2 && S.interactionMode==='node' && S.currentTool!=='objects') {
     const picked = pickNodeOrHandle(e.clientX, e.clientY);
     if (picked && (picked.kind==='road' || picked.kind==='zone')) rightClickTarget = picked;
   }
@@ -185,6 +186,12 @@ dom.addEventListener('pointermove', (e) => {
     setHover(null);
     const overPerson = App.pickPerson(e.clientX, e.clientY) >= 0;
     if (overPerson !== hoveringPerson) { hoveringPerson = overPerson; dom.style.cursor = overPerson ? 'pointer' : ''; }
+    return;
+  }
+  if (S.currentTool==='objects') {
+    previewLine.visible = false;
+    insertPreviewMarker.visible = false;
+    setHover(null);
     return;
   }
 
@@ -383,7 +390,7 @@ function handleLeftClick(x,y) {
       const color = templateLine ? templateLine.color : ROAD_COLOR;
       const sidewalkWidth = templateLine && templateLine.sidewalkWidth!=null ? templateLine.sidewalkWidth : S.DEFAULT_SIDEWALK_WIDTH;
       const sidewalkColor = templateLine && templateLine.sidewalkColor!=null ? templateLine.sidewalkColor : SIDEWALK_COLOR;
-      const roadType = templateLine && templateLine.roadType ? templateLine.roadType : 'sidewalk';
+      const roadType = S.newRoadType; // (from the Paths tab's Type menu)
       const pathColor = templateLine && templateLine.pathColor!=null ? templateLine.pathColor : PATH_COLOR;
       const line={ id:'road-'+(S.roadLineSeq++), nodeIds:[id], drawing:true, width, color, sidewalkWidth, sidewalkColor, roadType, pathColor, networkId:'net-'+(S.roadNetworkSeq++) };
       S.roadLines.push(line); S.activeRoadLine=line;
