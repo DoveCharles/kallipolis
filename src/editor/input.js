@@ -79,6 +79,11 @@ dom.addEventListener('pointerdown', (e) => {
     dom.setPointerCapture(e.pointerId);
     return;
   }
+  // shift+click a path's node (when not already drawing): a new branch, drawn out from it
+  if (S.interactionMode==='node' && e.button===0 && e.shiftKey && (S.currentTool==='road' || S.currentTool==='train') && !S.activeRoadLine) {
+    const picked = pickNodeOrHandle(e.clientX, e.clientY);
+    if (picked && picked.kind==='road') { startBranchFrom(picked.nodeId); dom.setPointerCapture(e.pointerId); return; }
+  }
   if (S.interactionMode==='node' && e.button===0 && e.shiftKey && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
     let found = null;
     if (S.currentTool==='train') found = findNearestTrainEdge(e.clientX, e.clientY);
@@ -120,6 +125,7 @@ dom.addEventListener('pointerdown', (e) => {
 
 dom.addEventListener('pointermove', (e) => {
   S.lastMouseX = e.clientX; S.lastMouseY = e.clientY;
+  showAddCursor(e.shiftKey);
   if (hoveringPerson && S.interactionMode!=='move') { hoveringPerson = false; dom.style.cursor = ''; }
   if (S.interactionMode==='maps') {
     if (S.mapTransform) { applyMapTransform(e.clientX, e.clientY, e.shiftKey); return; }
@@ -197,6 +203,11 @@ dom.addEventListener('pointermove', (e) => {
 
   if (e.shiftKey && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
     previewLine.visible = false;
+    // over a path's node (when not drawing), a click would branch from it, so it's the node that lights up
+    if (S.currentTool!=='zone' && !S.activeRoadLine) {
+      const nodeHits = raycastObjects(e.clientX, e.clientY, S.roadMarkerGroup.children);
+      if (nodeHits.length) { setHover(nodeHits[0].object); insertPreviewMarker.visible = false; S.pendingInsert = null; return; }
+    }
     setHover(null);
     let found = null;
     if (S.currentTool==='train') found = findNearestTrainEdge(e.clientX, e.clientY);
@@ -355,6 +366,34 @@ window.addEventListener('keydown', (e) => {
   else if (e.key==='1') controls.snapFront();
   else if (e.key==='3') controls.snapRight();
 });
+
+// Holding shift in the Paths tab — where a click adds a node to a path, or a branch — shows a cursor with a plus.
+function showAddCursor(shift) {
+  dom.classList.toggle('adding', shift && S.interactionMode==='node' && (S.currentTool==='road' || S.currentTool==='train'));
+}
+window.addEventListener('keydown', (e) => { if (e.key==='Shift') showAddCursor(true); });
+window.addEventListener('keyup', (e) => { if (e.key==='Shift') showAddCursor(false); });
+window.addEventListener('blur', () => showAddCursor(false));
+
+// Starts drawing a new line out from an existing node, as a branch of that node's network, just like it: the same type,
+// width and colors (or, for a train line, tube radius). It's finished, joined onto another node, or cancelled as any line
+// being drawn is.
+function startBranchFrom(nodeId) {
+  const source = S.roadLines.find(l => !l.drawing && l.nodeIds.includes(nodeId));
+  if (!source) return;
+  const { networkId } = source;
+  const line = isTrainLine(source)
+    ? { id:'train-'+(S.roadLineSeq++), kind:'train', nodeIds:[nodeId], drawing:true, radius: source.radius, networkId }
+    : { id:'road-'+(S.roadLineSeq++), nodeIds:[nodeId], drawing:true, width: source.width, color: source.color,
+        sidewalkWidth: source.sidewalkWidth, sidewalkColor: source.sidewalkColor, roadType: source.roadType, pathColor: source.pathColor, networkId };
+  S.roadLines.push(line);
+  S.activeRoadLine = line;
+  S.lastGroundClick = null;
+  insertPreviewMarker.visible = false;
+  S.pendingInsert = null;
+  selectItem(networkKindOf(source), networkId, true);
+  rebuildRoadMeshes();
+}
 
 function mergeActiveRoadLineInto(sharedNodeId) {
   const targetLine = S.roadLines.find(l => l.id !== S.activeRoadLine.id && l.nodeIds.includes(sharedNodeId));

@@ -223,6 +223,8 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
   padding:12px 14px; color:var(--text); font-size:12px; user-select:none; box-shadow:0 4px 16px rgba(0,0,0,0.4);
 }
 #person-card[hidden] { display:none; }
+/* holding shift in the Paths tab: a click adds a node, or a branch (src/editor/input.js) */
+canvas.adding { cursor:copy; }
 #person-card-close {
   position:absolute; top:6px; right:8px; padding:2px 4px; background:none; border:none;
   color:var(--text-dim); font-size:16px; line-height:1; cursor:pointer;
@@ -272,6 +274,9 @@ html.win3 body, html.win3 body * {
   cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='19'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3C/svg%3E") 0 0, default;
 }
 html.win3 input[type=number] { cursor:text; }
+html.win3 canvas.adding {
+  cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' shape-rendering='crispEdges'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3Crect x='11.5' y='11.5' width='8' height='8' fill='%23fff' stroke='%23000'/%3E%3Cpath d='M15.5 13.5v5M13.5 15.5h5' stroke='%23000'/%3E%3C/svg%3E") 0 0, copy;
+}
 html.win3 button:focus-visible { outline:1px dotted #000; outline-offset:-4px; }
 
 /* windows: a grey frame between black lines, with a navy title bar — a control-menu box at its left, minimize and maximize at its right */

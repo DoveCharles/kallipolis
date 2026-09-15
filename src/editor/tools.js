@@ -67,8 +67,8 @@ function updateHint() {
     }
   } else {
     const hints = {
-      train: "Click to place nodes at the line's height · drag a node to move it in 3D (top view, key 7, moves it level) · alt+drag changes only its height · right-click a node to make it a station · double-click a node to delete it · double-click or Enter finishes · shift+click a line to insert a node · Esc cancels",
-      road:'Click ground to place nodes · click a node to select its path · double-click a node to delete it · drag to move · empty-ground drag orbits · double-click ground or Enter finishes · shift+click a path to insert a node · Esc cancels',
+      train: "Click to place nodes at the line's height · drag a node to move it in 3D (top view, key 7, moves it level) · alt+drag changes only its height · right-click a node to make it a station · double-click a node to delete it · double-click or Enter finishes · shift+click a line to insert a node · shift+click a node to branch from it · Esc cancels",
+      road:'Click ground to place nodes · click a node to select its path · double-click a node to delete it · drag to move · empty-ground drag orbits · double-click ground or Enter finishes · shift+click a path to insert a node · shift+click a node to branch from it · Esc cancels',
       zone: 'Click ground for boundary points · click a point to select its zone · double-click a point to delete it · drag to move · empty-ground drag orbits · double-click ground, click first point, or Enter (3+ points) to close · shift+click an edge to insert a point · Esc cancels',
       objects: 'Objects are coming soon · drag to orbit · shift+drag to pan · scroll to zoom'
     };
