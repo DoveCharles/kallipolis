@@ -4,18 +4,26 @@ import { mulberry32 } from '../core/math.js';
 
 // ============================================================ pixelation and the 16-colour palette
 // Filters on the 3D view, from World settings. Pixelation draws the view small — one pixel for every so many screen pixels
-// across; the 16-colour palette redraws it in Windows 3.0's sixteen colours, dithering (in a pattern picked from the
-// Dithering menu) to fake the shades in between. With either on, the view is drawn into a render target of its own,
+// across; the 16-colour palette redraws it in sixteen colours (Windows 3.0's or another set, from the Palette menu),
+// dithering (in a pattern picked from the Dithering menu) to fake the shades in between. With either on, the view is drawn into a render target of its own,
 // without anti-aliasing (the canvas's can't be turned off once it's made, but a render target's is its own), and copied
 // onto the screen by a shader that applies the palette — each drawn pixel exactly so many screen pixels square, with hard
 // edges. So pixelating is cheaper to draw, not dearer, and the palette is one pass over the screen. Like the Windows 3.0
 // look, these are the browser's preferences, kept in localStorage, not the project's.
-const PIXELATION_KEY = 'splinetopia.pixelation', PALETTE_KEY = 'splinetopia.palette16', DITHER_KEY = 'splinetopia.dither';
+const PIXELATION_KEY = 'splinetopia.pixelation', PALETTE_KEY = 'splinetopia.palette16', PALETTE_COLORS_KEY = 'splinetopia.paletteColors';
+const DITHER_KEY = 'splinetopia.dither';
 const MAX_PIXEL_SIZE = 12;
 const SHARP_PIXEL_RATIO = Math.min(window.devicePixelRatio, 2); // (as scene.js sets it up)
-// Windows 3.0's sixteen colours: the dark eight, then the light
-const PALETTE_16 = [0x000000, 0x800000, 0x008000, 0x808000, 0x000080, 0x800080, 0x008080, 0xc0c0c0,
-                    0x808080, 0xff0000, 0x00ff00, 0xffff00, 0x0000ff, 0xff00ff, 0x00ffff, 0xffffff];
+// the sets of sixteen colours, in the Palette menu's order
+const PALETTES = [
+  // Windows 3.0's: the dark eight, then the light
+  { id: 'win3', name: 'Windows 3.0', colors: [0x000000, 0x800000, 0x008000, 0x808000, 0x000080, 0x800080, 0x008080, 0xc0c0c0,
+                                             0x808080, 0xff0000, 0x00ff00, 0xffff00, 0x0000ff, 0xff00ff, 0x00ffff, 0xffffff] },
+  // the PICO-8 fantasy console's
+  { id: 'pico8', name: 'PICO-8', colors: [0x000000, 0x1d2b53, 0x7e2553, 0x008751, 0xab5236, 0x5f574f, 0xc2c3c7, 0xfff1e8,
+                                         0xff004d, 0xffa300, 0xffec27, 0x00e436, 0x29adff, 0x83769c, 0xff77a8, 0xffccaa] },
+];
+const DEFAULT_PALETTE = 'win3';
 // the dithering patterns, in the menu's order — each one's place in the list is its ditherMode in the shader
 const DITHER_PATTERNS = [
   { id: 'none', name: 'None' },
@@ -31,6 +39,7 @@ const DEFAULT_DITHER = 'bayer4';
 const BLUE_NOISE_SIZE = 64;
 const slider = document.getElementById('s-pixelation'), label = document.getElementById('dv-pixelation');
 const paletteToggle = document.getElementById('s-palette16');
+const paletteRow = document.getElementById('palette-row'), paletteMenu = document.getElementById('s-palette');
 const ditherRow = document.getElementById('dither-row'), ditherMenu = document.getElementById('s-dither');
 let pixelSize = 1, palette16 = false;
 
@@ -89,7 +98,7 @@ const copyMaterial = new THREE.ShaderMaterial({
     tView: { value: filteredView.texture },
     viewSize: { value: new THREE.Vector2(1, 1) },
     usePalette: { value: 0 },
-    palette: { value: PALETTE_16.map(hex => new THREE.Color(hex)) },
+    palette: { value: PALETTES[0].colors.map(hex => new THREE.Color(hex)) },
     ditherMode: { value: DITHER_PATTERNS.findIndex(p => p.id === DEFAULT_DITHER) },
     blueNoise: { value: placeholderNoise },
   },
@@ -191,9 +200,17 @@ function setPixelation(size, save) {
 function setPalette(on, save) {
   palette16 = on;
   paletteToggle.classList.toggle('on', on);
+  paletteRow.style.display = on ? '' : 'none';
   ditherRow.style.display = on ? '' : 'none';
   copyMaterial.uniforms.usePalette.value = on ? 1 : 0;
   if (save) remember(PALETTE_KEY, on ? '1' : '0');
+}
+// which set of sixteen colours the palette draws in
+function setPaletteColors(id, save) {
+  const palette = PALETTES.find(p => p.id === id) || PALETTES[0];
+  copyMaterial.uniforms.palette.value.forEach((color, i) => color.setHex(palette.colors[i]));
+  paletteMenu.value = palette.id;
+  if (save) remember(PALETTE_COLORS_KEY, palette.id);
 }
 function setDither(id, save) {
   const index = Math.max(0, DITHER_PATTERNS.findIndex(p => p.id === id));
@@ -205,12 +222,15 @@ function setDither(id, save) {
   ditherMenu.value = DITHER_PATTERNS[index].id;
   if (save) remember(DITHER_KEY, DITHER_PATTERNS[index].id);
 }
+PALETTES.forEach(palette => paletteMenu.add(new Option(palette.name, palette.id)));
 DITHER_PATTERNS.forEach(pattern => ditherMenu.add(new Option(pattern.name, pattern.id)));
 setPixelation(Number(recall(PIXELATION_KEY)) || 1, false);
 setPalette(recall(PALETTE_KEY) === '1', false);
+setPaletteColors(recall(PALETTE_COLORS_KEY) || DEFAULT_PALETTE, false);
 setDither(recall(DITHER_KEY) || DEFAULT_DITHER, false);
 slider.addEventListener('input', () => setPixelation(Number(slider.value), true));
 paletteToggle.addEventListener('click', () => setPalette(!palette16, true));
+paletteMenu.addEventListener('change', () => setPaletteColors(paletteMenu.value, true));
 ditherMenu.addEventListener('change', () => setDither(ditherMenu.value, true));
 
 // Draws the view to the screen — straight there, or through the filters.
