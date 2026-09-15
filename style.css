@@ -16,6 +16,7 @@ html { color-scheme: dark; } /* forces native form UI (the color picker popup in
 html, body { margin:0; height:100%; overflow:hidden; background:var(--bg-viewport); font-family:var(--sans); }
 #canvas-wrap { position:fixed; inset:0; }
 canvas { display:block; touch-action:none; }
+canvas.pixelated { image-rendering:pixelated; } /* the Pixelation slider (src/ui/pixelation.js): drawn small, scaled up with hard edges */
 
 #panel {
   position:fixed; top:16px; left:16px; width:266px;
