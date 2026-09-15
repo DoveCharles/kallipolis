@@ -45,7 +45,7 @@ import { createWindowMaterial } from './buildings/windows.js';
 import { renderMapsList } from './maps/map-images.js';
 import { applyPathShader } from './roads/paths.js';
 import { updateTrafficLights } from './roads/markings.js';
-import { loadCarriageModel, updateTrainShuttles } from './trains/trains.js';
+import { loadCarriageModel, updateTrainShuttles, scaleNodeUi } from './trains/trains.js';
 import { applyGrassNoiseShader } from './zones/surface-detail.js';
 import { applyPavingShader } from './zones/plazas.js';
 import { applyCropShader } from './zones/farmland.js';
@@ -123,6 +123,7 @@ function animate() {
       o.material.emissiveIntensity = 0.5 + Math.sin(t*3 + o.userData.blinkPhase)*0.5;
     }
   });
+  if (S.interactionMode === 'node') scaleNodeUi(camera);
   renderView(scene, camera);
 }
 animate();

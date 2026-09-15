@@ -82,10 +82,12 @@ export function applyModeVisibility() {
   App.hideContextMenu();
   const inNode = S.interactionMode==='node', inPaths = S.currentTool==='road' || S.currentTool==='train', inObjects = S.currentTool==='objects';
   if (inPaths) S.lastPathTool = S.currentTool;
-  S.roadMarkerGroup.visible = inNode && !inObjects;
-  S.roadHandleGroup.visible = inNode && !inObjects;
+  // each tab shows (and lets you pick) only its own nodes — though zones' outlines stay on show in the Paths tab
+  S.roadMarkerGroup.visible = inNode && inPaths;
+  S.roadHandleGroup.visible = inNode && inPaths;
   S.zones.forEach(z => {
     if (z.outlineGroup) z.outlineGroup.visible = inNode && !inObjects;
+    if (z.markerGroup) z.markerGroup.visible = inNode && S.currentTool==='zone';
   });
   document.getElementById('section-paths').style.display = (inNode && inPaths) ? 'block' : 'none';
   document.getElementById('path-road-settings').style.display = S.currentTool==='road' ? 'block' : 'none';

@@ -39,15 +39,17 @@ let rightClickTarget = null; // node/vertex hit under a right-click, for the con
 let hoveringPerson = false; // the cursor's over someone a click would follow (World mode), and shows it
 
 const dom = renderer.domElement;
+// (only the nodes on show can be picked: a path's in the Paths tab, a zone's in the Zones tab)
+const shownZoneMarkers = () => S.zones.filter(z => z.markerGroup && z.markerGroup.visible).flatMap(z => z.markerGroup.children);
 function pickNodeOrHandle(x,y) {
-  const roadHandleHits = raycastObjects(x,y, S.roadHandleGroup.children.filter(c=>c.userData && c.userData.handleKind));
+  const roadHandleHits = S.roadHandleGroup.visible ? raycastObjects(x,y, S.roadHandleGroup.children.filter(c=>c.userData && c.userData.handleKind)) : [];
   if (roadHandleHits.length) return { kind:'roadHandle', nodeId: roadHandleHits[0].object.userData.nodeId, which: roadHandleHits[0].object.userData.handleKind };
-  const zoneHandleMarkers = S.zones.flatMap(z => z.markerGroup ? z.markerGroup.children.filter(c=>c.userData && c.userData.handleKind) : []);
+  const zoneHandleMarkers = shownZoneMarkers().filter(c=>c.userData && c.userData.handleKind);
   const zoneHandleHits = raycastObjects(x,y, zoneHandleMarkers);
   if (zoneHandleHits.length) { const ud=zoneHandleHits[0].object.userData; return { kind:'zoneHandle', zoneId: ud.zoneId, index: ud.ownerIndex, which: ud.handleKind }; }
-  const roadNodeHits = raycastObjects(x,y, S.roadMarkerGroup.children);
+  const roadNodeHits = S.roadMarkerGroup.visible ? raycastObjects(x,y, S.roadMarkerGroup.children) : [];
   if (roadNodeHits.length) return { kind:'road', nodeId: roadNodeHits[0].object.userData.nodeId };
-  const zoneVertexMarkers = S.zones.flatMap(z => z.markerGroup ? z.markerGroup.children.filter(c=>c.userData.vertexIndex!==undefined) : []);
+  const zoneVertexMarkers = shownZoneMarkers().filter(c=>c.userData.vertexIndex!==undefined);
   const zoneVertexHits = raycastObjects(x,y, zoneVertexMarkers);
   if (zoneVertexHits.length) { const ud=zoneVertexHits[0].object.userData; return { kind:'zone', zoneId: ud.zoneId, index: ud.vertexIndex }; }
   return null;
@@ -219,9 +221,9 @@ dom.addEventListener('pointermove', (e) => {
   insertPreviewMarker.visible = false;
   S.pendingInsert = null;
 
-  const hoverList = S.roadMarkerGroup.children
-    .concat(S.roadHandleGroup.children.filter(c=>c.userData && c.userData.handleKind))
-    .concat(S.zones.flatMap(z => z.markerGroup ? z.markerGroup.children.filter(c=>c.userData.vertexIndex!==undefined || c.userData.handleKind) : []));
+  const hoverList = (S.roadMarkerGroup.visible ? S.roadMarkerGroup.children : [])
+    .concat(S.roadHandleGroup.visible ? S.roadHandleGroup.children.filter(c=>c.userData && c.userData.handleKind) : [])
+    .concat(shownZoneMarkers().filter(c=>c.userData.vertexIndex!==undefined || c.userData.handleKind));
   const hoverHits = raycastObjects(e.clientX, e.clientY, hoverList);
   setHover(hoverHits.length ? hoverHits[0].object : null);
 

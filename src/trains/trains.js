@@ -701,12 +701,26 @@ export function findNearestTrainEdge(sx, sy) {
 export function nodeUiMaterial(MaterialType, params) {
   return new MaterialType({ ...params, transparent:true, depthTest:false, depthWrite:false });
 }
-export function asNodeUi(object) { object.renderOrder = 1000; return object; }
+// (its markers and handles — its meshes — are also kept the same size on screen, by scaleNodeUi)
+export function asNodeUi(object) { object.renderOrder = 1000; if (object.isMesh) object.userData.screenSized = true; return object; }
+// Node UI stays the same size on screen however near or far the camera is: each marker and handle is scaled by how far it
+// is from the camera, at NODE_UI_DISTANCE away being the size it's made.
+const NODE_UI_DISTANCE = 160;
+export function nodeUiScaleAt(camera, position) { return camera.position.distanceTo(position)/NODE_UI_DISTANCE; }
+export function scaleNodeUi(camera) {
+  const scaleGroup = group => {
+    if (!group || !group.visible) return;
+    group.children.forEach(o => { if (o.userData.screenSized) o.scale.setScalar(nodeUiScaleAt(camera, o.position)); });
+  };
+  scaleGroup(S.roadMarkerGroup);
+  scaleGroup(S.roadHandleGroup);
+  S.zones.forEach(z => { if (z.outlineGroup && z.outlineGroup.visible) scaleGroup(z.markerGroup); });
+}
 
 export function rebuildRoadMarkers() {
   scene.remove(S.roadMarkerGroup); disposeObject(S.roadMarkerGroup);
   S.roadMarkerGroup = new THREE.Group();
-  S.roadMarkerGroup.visible = S.interactionMode==='node' && S.currentTool!=='objects';
+  S.roadMarkerGroup.visible = S.interactionMode==='node' && (S.currentTool==='road' || S.currentTool==='train'); // (the Paths tab's alone)
   // Road and train nodes share roadNodes, but the road and train tools (the Paths tab's Type) each only show (and so only
   // let you pick) their own kind — so a train line can't be joined onto a road, or the other way round.
   const trainIds = trainNodeIdSet();
@@ -726,7 +740,7 @@ export function rebuildRoadMarkers() {
 export function rebuildRoadHandles() {
   scene.remove(S.roadHandleGroup); disposeObject(S.roadHandleGroup);
   S.roadHandleGroup = new THREE.Group();
-  S.roadHandleGroup.visible = S.interactionMode==='node' && S.currentTool!=='objects';
+  S.roadHandleGroup.visible = S.interactionMode==='node' && (S.currentTool==='road' || S.currentTool==='train');
   const trainIds = trainNodeIdSet();
   const showTrains = S.currentTool==='train';
   Object.keys(roadNodes).forEach(id => {

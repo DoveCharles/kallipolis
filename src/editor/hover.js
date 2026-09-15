@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, snapPointToGrid } from '../core/scene.js';
+import { scene, camera, snapPointToGrid } from '../core/scene.js';
 import { nearestPointOnEdgeTessellated } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { setLinePoints } from '../roads/roads.js';
 import { rebuildRoadMeshes } from '../roads/paths.js';
-import { nodeUiMaterial, asNodeUi } from '../trains/trains.js';
+import { nodeUiMaterial, asNodeUi, nodeUiScaleAt } from '../trains/trains.js';
 
 // ---------------------------------------------------------- hover + insert-on-edge
 let hoveredMesh = null;
@@ -22,13 +22,14 @@ const insertPreviewGeo = new THREE.BufferGeometry();
 export const insertPreviewMarker = asNodeUi(new THREE.LineSegments(insertPreviewGeo, nodeUiMaterial(THREE.LineBasicMaterial, { color:0xffffff })));
 insertPreviewMarker.visible = false;
 scene.add(insertPreviewMarker);
+const insertPreviewAt = new THREE.Vector3();
 export function updateInsertPreviewGeometry(point, angle) {
-  const r = 1.8;
+  const y = point.y!=null ? point.y : 1.4; // train insert points sit up on the tube
+  const r = 1.8*nodeUiScaleAt(camera, insertPreviewAt.set(point.x, y, point.z)); // (the same size on screen at any zoom, as the nodes are)
   const rotAngle = angle;
   const cos = Math.cos(rotAngle), sin = Math.sin(rotAngle);
   const rot = (lx,lz) => ({ x: lx*cos - lz*sin, z: lx*sin + lz*cos });
   const c1=rot(-r,-r), c2=rot(r,r), c3=rot(-r,r), c4=rot(r,-r);
-  const y = point.y!=null ? point.y : 1.4; // train insert points sit up on the tube
   setLinePoints(insertPreviewGeo, [
     new THREE.Vector3(point.x+c1.x, y, point.z+c1.z), new THREE.Vector3(point.x+c2.x, y, point.z+c2.z),
     new THREE.Vector3(point.x+c3.x, y, point.z+c3.z), new THREE.Vector3(point.x+c4.x, y, point.z+c4.z)
