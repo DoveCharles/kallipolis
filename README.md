@@ -26,6 +26,7 @@ A little procedural city blockout tool that runs in the browser, built on three.
 - **People & traffic** — lil people walking the sidewalks and paths and gathering in plazas and parks, and cars driving the roads (toggle and tune them in World). Click someone in World mode and the camera follows them, with a card saying who they are — their names, moods, likes and dislikes come from `assets/people.txt`, so edit away.
 - **World** — sun position or a day/night cycle (with a realistic sun path, moonlight and stars), weather (rain, snow, cloud shadows), ground and grid colors, save/load projects as JSON, and GLB (with materials) or OBJ export.
 - **Undo/redo** — Ctrl+Z and Ctrl+Shift+Z (or Ctrl+Y), or the arrows at the top.
+- **Windows 3.0 look** — a checkbox in World turns the whole UI into Windows 3.0. (Its pixel font is [“MS Sans Serif Bold” by lou](https://fontstruct.com/fontstructions/show/1384862), CC BY-SA 3.0, loaded from [98.css](https://github.com/jdan/98.css).)
 
 ## Running it
 

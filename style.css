@@ -234,3 +234,139 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
 .pc-value { line-height:1.4; }
 .pc-name { font-weight:600; color:var(--accent); padding-right:16px; }
 .pc-mood { font-size:18px; line-height:1; }
+
+/* ============================================================ Windows 3.0 look
+   Turned on from World settings (src/ui/win3.js), which puts the win3 class on <html>. Most of it is the palette above swapped
+   for Windows 3.0's (white windows, black lines, navy highlights, the chunky bold system font); the rest is its furniture:
+   title bars, grey bevelled buttons, crossed checkboxes, scroll-bar sliders, list boxes and menus. */
+@font-face {
+  /* "MS Sans Serif Bold" by lou (fontstruct.com/fontstructions/show/1384862), CC BY-SA 3.0, as packaged by 98.css */
+  font-family:'Win3 System';
+  src:url('https://cdn.jsdelivr.net/npm/98.css@0.1.21/dist/ms_sans_serif_bold.woff2') format('woff2'),
+      url('https://cdn.jsdelivr.net/npm/98.css@0.1.21/dist/ms_sans_serif_bold.woff') format('woff');
+}
+.win3-titlebar { display:none; }
+html.win3 {
+  --bg-panel:#ffffff; --bg-input:#ffffff; --border:#000000; --text:#000000; --text-dim:#000000;
+  --accent:#000080; --accent-dim:#000080;
+  --sans:'Win3 System', 'MS Sans Serif', 'Microsoft Sans Serif', Arial, sans-serif;
+  --mono:'Win3 System', 'MS Sans Serif', 'Microsoft Sans Serif', Arial, sans-serif;
+  --w3-face:#c0c0c0; --w3-shadow:#808080; --w3-navy:#000080;
+  --w3-raised:inset 1px 1px 0 #fff, inset 2px 2px 0 #fff, inset -1px -1px 0 #808080, inset -2px -2px 0 #808080;
+  --w3-pressed:inset 1px 1px 0 #808080, inset 2px 2px 0 #808080;
+  --w3-box:inset 0 0 0 1px #000, inset 2px 2px 0 #fff, inset -2px -2px 0 #808080;
+  --w3-dither:repeating-conic-gradient(#c0c0c0 0% 25%, #ffffff 0% 50%) 0 0 / 2px 2px;
+}
+html.win3 :is(#panel, #person-card, #stats, #hint, #node-context-menu),
+html.win3 :is(#panel, #person-card, #stats, #hint, #node-context-menu) * { font-size:11px; letter-spacing:0; -webkit-font-smoothing:none; }
+html.win3 body, html.win3 body * {
+  cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='19'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3C/svg%3E") 0 0, default;
+}
+html.win3 input[type=number] { cursor:text; }
+html.win3 button:focus-visible { outline:1px dotted #000; outline-offset:-4px; }
+
+/* windows: a grey frame between black lines, with a navy title bar — a control-menu box at its left, minimize and maximize at its right */
+html.win3 :is(#panel, #person-card) { border:4px solid var(--w3-face); border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000; }
+html.win3 #panel { top:17px; left:17px; padding:0; display:flex; flex-direction:column; overflow:hidden; }
+html.win3 #panel-body { min-height:0; overflow-y:auto; padding:10px; } /* (only the window's inside scrolls, under its title bar) */
+html.win3 .win3-titlebar { display:flex; flex:0 0 auto; height:21px; background:var(--w3-navy); border-bottom:1px solid #000; }
+html.win3 #person-card .win3-titlebar { margin:0 -10px 8px; }
+html.win3 .win3-titlebar .win3-title { flex:1; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; white-space:nowrap; overflow:hidden; }
+html.win3 .win3-titlebar button { flex:0 0 auto; width:20px; height:20px; padding:0; margin:0; border:none; border-radius:0; background-repeat:no-repeat; }
+html.win3 .win3-titlebar .win3-sysbox {
+  border-right:1px solid #000;
+  background:linear-gradient(#fff, #fff) 4px 8px / 11px 3px no-repeat, linear-gradient(#000, #000) 5px 9px / 11px 3px no-repeat, var(--w3-face);
+}
+html.win3 .win3-titlebar :is(.win3-min, .win3-max) { border-left:1px solid #000; background-color:var(--w3-face); background-position:center; box-shadow:var(--w3-raised); }
+html.win3 .win3-titlebar .win3-min { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5'%3E%3Cpath d='M0 0h9L4.5 5z'/%3E%3C/svg%3E"); }
+html.win3 .win3-titlebar .win3-max { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5'%3E%3Cpath d='M0 5h9L4.5 0z'/%3E%3C/svg%3E"); }
+html.win3 .win3-titlebar :is(.win3-min, .win3-max):active { box-shadow:var(--w3-pressed); background-position:calc(50% + 1px) calc(50% + 1px); }
+html.win3 #panel.win3-minimized { padding-bottom:0; overflow:hidden; }
+html.win3 #panel.win3-minimized .win3-titlebar { margin-bottom:0; }
+html.win3 #panel.win3-minimized > :not(.win3-titlebar) { display:none !important; }
+
+/* push buttons: grey, bevelled, black-edged; pressed ones sink in */
+html.win3 .toolbar { background:transparent; border:none; border-radius:0; padding:0; gap:6px; }
+html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool, #grid-toggle, .carousel-arrow, .add-color-confirm, .type-card) {
+  background:var(--w3-face); color:#000; border:1px solid #000; border-radius:3px; box-shadow:var(--w3-raised);
+}
+html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool:not(:disabled), #grid-toggle, .carousel-arrow, .add-color-confirm, .type-card):active,
+html.win3 :is(.tool-btn.active, #grid-toggle.active, .type-card.active) { background:var(--w3-face); color:#000; box-shadow:var(--w3-pressed); }
+html.win3 :is(.tool-btn:not(.active):hover, .btn:hover, .btn.danger:hover, .icon-btn:hover, .canvas-tool:hover:not(:disabled), #grid-toggle:hover, .carousel-arrow:hover, .add-color-confirm:hover, .type-card:hover) { color:#000; border-color:#000; background:var(--w3-face); }
+html.win3 .tool-btn.active { text-decoration:underline; }
+html.win3 .canvas-tool:disabled { opacity:1; color:var(--w3-shadow); }
+html.win3 .carousel-arrow { flex-basis:18px; font-size:13px; }
+html.win3 .type-card .thumb { border:1px solid #000; border-radius:0; }
+html.win3 .add-color-cancel:hover { color:#000; }
+
+/* checkboxes: a white square, crossed when on */
+html.win3 .toggle-switch { width:13px; height:13px; border:1px solid #000; border-radius:0; background:#fff; }
+html.win3 .toggle-switch .knob { display:none; }
+html.win3 .toggle-switch.on {
+  border-color:#000;
+  background:linear-gradient(to top right, transparent calc(50% - 0.8px), #000 calc(50% - 0.8px) calc(50% + 0.8px), transparent calc(50% + 0.8px)),
+             linear-gradient(to bottom right, transparent calc(50% - 0.8px), #000 calc(50% - 0.8px) calc(50% + 0.8px), transparent calc(50% + 0.8px)), #fff;
+}
+
+/* sliders as scroll bars: a dithered grey track and a square thumb */
+html.win3 input[type=range] { height:16px; border:1px solid #000; border-radius:0; background:var(--w3-dither); }
+html.win3 input[type=range]::-webkit-slider-thumb { width:16px; height:14px; border:none; border-radius:0; background:var(--w3-face); box-shadow:var(--w3-box); }
+html.win3 input[type=range]::-moz-range-track { background:transparent; border:none; }
+html.win3 input[type=range]::-moz-range-thumb { width:16px; height:14px; border:none; border-radius:0; background:var(--w3-face); box-shadow:var(--w3-box); }
+html.win3 .range-slider .range-track { top:0; height:16px; margin-top:0; border:1px solid #000; border-radius:0; background:var(--w3-dither); }
+html.win3 .range-slider .range-fill { top:5px; height:6px; margin-top:0; border-radius:0; background:var(--w3-navy); }
+html.win3 .range-slider input[type=range] { top:1px; height:14px; border:none; background:transparent; }
+
+/* scroll bars: dithered track, bevelled thumb, arrow buttons at the ends */
+html.win3 ::-webkit-scrollbar { width:16px; height:16px; background:var(--w3-dither); }
+html.win3 ::-webkit-scrollbar-track { background:var(--w3-dither); }
+html.win3 ::-webkit-scrollbar-thumb { background:var(--w3-face); box-shadow:var(--w3-box); }
+html.win3 ::-webkit-scrollbar-corner { background:var(--w3-face); }
+html.win3 ::-webkit-scrollbar-button:single-button { display:block; width:16px; height:16px; background-color:var(--w3-face); background-repeat:no-repeat; background-position:center; box-shadow:var(--w3-box); }
+html.win3 ::-webkit-scrollbar-button:single-button:vertical:decrement { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 4h7L3.5 0z'/%3E%3C/svg%3E"); }
+html.win3 ::-webkit-scrollbar-button:single-button:vertical:increment { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 0h7L3.5 4z'/%3E%3C/svg%3E"); }
+html.win3 ::-webkit-scrollbar-button:single-button:horizontal:decrement { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='7'%3E%3Cpath d='M4 0v7L0 3.5z'/%3E%3C/svg%3E"); }
+html.win3 ::-webkit-scrollbar-button:single-button:horizontal:increment { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='7'%3E%3Cpath d='M0 0v7L4 3.5z'/%3E%3C/svg%3E"); }
+html.win3 .carousel-track::-webkit-scrollbar { display:none; }
+@supports not selector(::-webkit-scrollbar) { html.win3 * { scrollbar-color:#c0c0c0 #e6e6e6; } }
+
+/* list boxes, text boxes, combo boxes and color wells: white with black lines; a selected row goes navy */
+html.win3 .hier-list { border:1px solid #000; border-radius:0; background:#fff; }
+html.win3 .hier-row { padding:3px 6px; border-bottom:none; }
+html.win3 .hier-row:hover { background:transparent; }
+html.win3 .hier-row.active { background:var(--w3-navy); color:#fff; }
+html.win3 .hier-row.active :is(.hier-del, .hier-eye) { color:#fff; }
+html.win3 :is(.hier-del, .hier-eye):hover { color:inherit; }
+html.win3 .hier-eye.off { color:var(--w3-shadow); }
+html.win3 .hier-row.drop-before { box-shadow:inset 0 2px 0 #000; }
+html.win3 .hier-row.drop-after { box-shadow:inset 0 -2px 0 #000; }
+html.win3 :is(.hier-list:empty::after, #details-panel .empty, #tool-hint) { color:var(--w3-shadow); }
+html.win3 :is(.select-input, .seed-row input[type=number]) { background-color:#fff; color:#000; border:1px solid #000; border-radius:0; }
+html.win3 .select-input {
+  appearance:none; -webkit-appearance:none; padding-right:24px;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 0h7L3.5 4z'/%3E%3C/svg%3E") calc(100% - 5px) center no-repeat,
+             linear-gradient(#000, #000) calc(100% - 17px) 0 / 1px 100% no-repeat,
+             linear-gradient(var(--w3-face), var(--w3-face)) right / 17px 100% no-repeat, #fff;
+}
+html.win3 :is(.swatch, .swatch:hover) { border:1px solid #000; border-radius:0; }
+html.win3 .swatch.active { outline:2px solid #000; outline-offset:1px; }
+html.win3 .swatch-add { background:#fff; color:#000; }
+html.win3 input[type=color].color-input, html.win3 input[type=color].color-input:hover { border:1px solid #000; border-radius:0; }
+html.win3 input[type=color].color-input::-webkit-color-swatch { border-radius:0; }
+html.win3 #details-panel { border-top:1px solid #000; }
+
+/* menus, and the little boxes about the screen */
+html.win3 #node-context-menu { background:#fff; border:1px solid #000; border-radius:0; padding:2px 0; box-shadow:2px 2px 0 #000; }
+html.win3 #node-context-menu button { position:relative; padding:3px 18px 3px 16px; border-radius:0; color:#000; }
+html.win3 #node-context-menu button:hover { background:var(--w3-navy); color:#fff; }
+html.win3 #node-context-menu button.active { font-weight:700; }
+html.win3 #node-context-menu button.active::before { content:'\2713'; position:absolute; left:4px; }
+html.win3 :is(#hint, #stats) { background:#fff; color:#000; border:1px solid #000; border-radius:0; }
+html.win3 #stats { box-shadow:2px 2px 0 #000; }
+
+/* the person card: a little window of its own, closed from its control-menu box */
+html.win3 #person-card { padding:0 10px 10px; right:21px; bottom:56px; }
+html.win3 #person-card-close { display:none; }
+html.win3 .pc-row.pc-gap { border-top:1px solid #000; }
+html.win3 .pc-name { padding-right:0; }
+html.win3 #person-card .pc-mood { font-size:18px; }

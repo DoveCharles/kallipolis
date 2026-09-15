@@ -33,6 +33,7 @@ import './project/export-glb.js';
 import './life/people.js';
 import './life/traffic.js';
 import './life/person-card.js';
+import './ui/win3.js';
 import './project/export-obj.js';
 import * as THREE from 'three';
 import { S } from './core/shared.js';
