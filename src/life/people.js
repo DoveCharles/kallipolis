@@ -669,7 +669,9 @@ function newPerson() {
     faceTo: null, lookAt: null, seatLift: 0, chatCheckIn: peopleRng(), chatCooldown: peopleRng()*20,
     talk: 0, talkTo: 0, talkIn: 0, emotion: 0, emotionTo: 0, emotionIn: 0,
     // their traits, from what they were picked in people.txt (see refreshTraits)
-    traits: DEFAULT_TRAITS, traitsKey: '' };
+    traits: DEFAULT_TRAITS, traitsKey: '',
+    // how they're taking someone blowing up nearby, if they are (see frightenBystanders)
+    fright: null };
 }
 // A person's traits — from the entries picked for them in people.txt (see profiles.js), by their place in the crowd, `i` —
 // worked out again whenever people.txt loads, and once the model's loaded and says whether they're a man (which decides
@@ -879,7 +881,7 @@ function goChat(p, area) {
   let friend = null, best = 25;
   for (let k=0;k<10;k++) {
     const q = people[Math.floor(peopleRng()*people.length)], d = Math.hypot(q.x - p.x, q.z - p.z);
-    if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.oneShot && !q.moving && q.traits.chatty > 0 && d < best) { friend = q; best = d; }
+    if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.fright && !q.oneShot && !q.moving && q.traits.chatty > 0 && d < best) { friend = q; best = d; }
   }
   if (!friend) return false;
   startChat(friend, p, true);
@@ -904,11 +906,11 @@ function meetOnWalkways(dt) {
   if (!hasClip('Wave') || talking > people.length*0.15) return;
   const reach = 1.6*S.peopleSize;
   people.forEach(p => {
-    if (p.mode !== 'line' || p.act || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
+    if (p.mode !== 'line' || p.act || p.fright || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
     p.chatCheckIn = 0.4 + peopleRng()*0.8;
     const path = peopleNav.lines[p.li].path, cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
     for (let ox=-1;ox<=1;ox++) for (let oz=-1;oz<=1;oz++) for (const q of cells.get((cx+ox) + ',' + (cz+oz)) || []) {
-      if (q === p || q.act || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || (!path && Math.sign(q.lat) !== Math.sign(p.lat))) continue;
+      if (q === p || q.act || q.fright || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || (!path && Math.sign(q.lat) !== Math.sign(p.lat))) continue;
       // still coming towards each other, and close
       if ((q.u - p.u)*p.dir < 0 || Math.hypot(q.x - p.x, q.z - p.z) > reach) continue;
       if (peopleRng() < 0.35*p.traits.chatty*q.traits.chatty) startChat(p, q, false); else p.chatCooldown = q.chatCooldown = 10;
@@ -1147,6 +1149,52 @@ function headshotOf(i) {
   headshot.distance = 4.6*modelScale(people[i]);
   return headshot;
 }
+// Someone blowing up nearby: everyone around notices (the nearer, the sooner), drops whatever they were doing, stares in
+// shock — mouth open, face aghast — then runs off away from it for a while, more than twice as fast.
+const FRIGHT_RADIUS = 14, FLEE_SPEED = 2.3;
+function frightenBystanders(victim) {
+  const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
+  people.forEach(p => {
+    if (p === victim || p.mode === 'none' || p.mode === 'dead') return;
+    const d = Math.hypot(p.x - from.x, p.z - from.z);
+    if (d <= reach) p.fright = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
+  });
+}
+function updateFright(p, dt) {
+  const fright = p.fright;
+  fright.timer -= dt;
+  if (fright.timer > 0) return;
+  if (fright.stage === 'notice') {
+    endActivity(p);
+    p.oneShot = null; p.wait = 0;
+    p.faceTo = headingTo(p, fright.from);
+    p.lookAt = fright.from;
+    fright.stage = 'look';
+    fright.timer = 0.5 + peopleRng()*0.7;
+  } else if (fright.stage === 'look') {
+    fright.stage = 'flee';
+    fright.timer = 5 + peopleRng()*4;
+    p.faceTo = null; p.lookAt = null;
+    if (p.mode === 'line') {
+      // back the way they came, if they were heading towards it
+      const nav = peopleNav.lines[p.li], k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), a = nav.pts[k], b = nav.pts[k + 1];
+      if (((b.x - a.x)*(fright.from.x - p.x) + (b.z - a.z)*(fright.from.z - p.z))*p.dir > 0) p.dir = -p.dir;
+    } else if (p.mode === 'wander') {
+      fleeWithin(p, peopleNav.areas[p.area]);
+    }
+  } else {
+    p.fright = null;
+  }
+}
+// somewhere in a plaza or park as far as can be found from whatever frightened them
+function fleeWithin(p, area) {
+  let best = null;
+  for (let k=0;k<12;k++) {
+    const spot = randomSpotIn(area), d = Math.hypot(spot.x - p.fright.from.x, spot.z - p.fright.from.z);
+    if (!best || d > best.d) best = { x: spot.x, z: spot.z, d };
+  }
+  p.tx = best.x; p.tz = best.z; p.wait = 0;
+}
 // The person card's Kill button: whoever it is explodes into giblets in their own colors, and stays dead (gone from the
 // crowd, though their place in it is kept) — whoever they were talking to carrying on without them.
 function killPerson(i) {
@@ -1168,6 +1216,7 @@ function killPerson(i) {
     colors.pants.copy(colors.top);
   }
   explode({ x: p.x, y: p.y, z: p.z }, 1.7*p.height*S.peopleSize, colors);
+  frightenBystanders(p);
   p.mode = 'dead';
   p.moving = false;
 }
@@ -1210,10 +1259,12 @@ export function updatePeople(t) {
   people.forEach((p, i) => {
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
-    const speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed;
+    if (p.fright) updateFright(p, dt);
+    const frozen = !!p.fright && p.fright.stage === 'look', fleeing = !!p.fright && p.fright.stage === 'flee';
+    const speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
     let goal = null;
-    // (stopped to talk, someone on a walkway stays put)
-    if (p.mode === 'line' && p.act !== 'chat') {
+    // (stopped to talk, or frozen in shock, someone on a walkway stays put)
+    if (p.mode === 'line' && p.act !== 'chat' && !frozen) {
       walkAlong(p, speed*dt);
       if (p.mode === 'line') goal = walkwayPoint(p);
     }
@@ -1221,6 +1272,9 @@ export function updatePeople(t) {
       const area = peopleNav.areas[p.area];
       if (p.act) {
         goal = updateActivity(p, area, dt);
+      } else if (p.fright) {
+        // frightened: running off, on somewhere further away each time they get where they were running to
+        if (fleeing && Math.hypot(p.tx - p.x, p.tz - p.z) < 0.5) fleeWithin(p, area);
       } else if (p.wait > 0 || p.oneShot) {
         p.wait -= dt;
       } else if (Math.hypot(p.tx - p.x, p.tz - p.z) < 0.3) {
@@ -1256,11 +1310,11 @@ export function updatePeople(t) {
           const s = randomSpotIn(area); p.tx = s.x; p.tz = s.z;
         }
       }
-      if (p.mode === 'wander' && !p.act) goal = { x: p.tx, y: area.y, z: p.tz };
+      if (p.mode === 'wander' && !p.act && !frozen) goal = { x: p.tx, y: area.y, z: p.tz };
     }
     if (p.mode === 'leaving') {
       // already placed on their walkway by joinWalkway; once they've reached it they carry on along it
-      goal = p.exit;
+      goal = frozen ? null : p.exit;
       if (Math.hypot(p.exit.x - p.x, p.exit.z - p.z) < 0.5) p.mode = 'line';
     }
     // in a plaza, walk around its fountain rather than through the pool: while the straight line to where they're going
@@ -1307,7 +1361,7 @@ export function updatePeople(t) {
       // standing about with nothing to do for a while, now and then a scratch or a think
       if (p.moving) {
         p.stillFor = 0;
-      } else if (!p.act && !p.oneShot && p.pose === 'Idle') {
+      } else if (!p.act && !p.oneShot && !p.fright && p.pose === 'Idle') {
         p.stillFor += dt;
         if (p.traits.fidgety > 0 && p.stillFor > p.fidgetAfter/p.traits.fidgety) { playOnce(p, pickFrom(FIDGETS)); p.stillFor = 0; p.fidgetAfter = 3 + peopleRng()*8; }
       }
@@ -1353,12 +1407,15 @@ export function updatePeople(t) {
         p.talkTo = peopleRng() < 0.25 ? 0 : 0.3 + peopleRng()*0.7;
         p.talkIn = 0.08 + peopleRng()*0.14;
       }
+      // (shocked, a gasp — agape while they stare)
+      if (frozen || fleeing) p.talkTo = frozen ? 1 : 0.55;
       p.talk += (p.talkTo - p.talk)*Math.min(1, dt*20);
       if (listening) {
         if ((p.emotionIn -= dt) <= 0) { p.emotionTo = Math.max(-1, Math.min(1, peopleRng()*2 - 1 + p.traits.mood)); p.emotionIn = 1.5 + peopleRng()*3; }
       } else if (!group) {
         p.emotionTo = p.traits.mood; // (their resting face)
       }
+      if (frozen || fleeing) p.emotionTo = -1;
       p.emotion += (p.emotionTo - p.emotion)*Math.min(1, dt*5);
       const o = i*4, a = personModel.anim.array, lookArray = personModel.look.array;
       a[o] = clipRow(p, p.clipA);

@@ -29,6 +29,7 @@ import './ui/zone-carousel.js';
 import './sky/day-night.js';
 import './sky/weather.js';
 import './project/history.js';
+import './project/autosave.js';
 import './project/export-glb.js';
 import './life/people.js';
 import './life/traffic.js';

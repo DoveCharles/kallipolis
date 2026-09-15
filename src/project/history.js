@@ -37,6 +37,15 @@ export function commitHistory() {
   historyCurrent = snapshot;
   syncHistoryButtons();
 }
+// starts history over from the project as it is now (after the autosave's put back, say), with nothing to undo or redo
+export function resetHistory() {
+  clearTimeout(historyTimer);
+  historyTimer = null;
+  undoStack.length = 0;
+  redoStack.length = 0;
+  historyCurrent = historySnapshot();
+  syncHistoryButtons();
+}
 function scheduleHistory(delay) {
   clearTimeout(historyTimer);
   historyTimer = setTimeout(commitHistory, delay);
@@ -74,4 +83,4 @@ function redo() {
   restoreHistory(redoStack.pop());
 }
 
-Object.assign(App, { scheduleHistory, undo, redo });
+Object.assign(App, { scheduleHistory, resetHistory, undo, redo });
