@@ -240,8 +240,10 @@ canvas.adding { cursor:copy; }
 /* name, age and mood, with the headshot beside them (clear of the close button above it) */
 .pc-top { display:flex; gap:10px; align-items:flex-start; }
 .pc-rows { flex:1; min-width:0; }
+.pc-shot { flex:0 0 auto; display:flex; flex-direction:column; gap:6px; margin-top:18px; }
+#pc-kill { width:62px; margin:0; padding:3px 0; font-size:11px; }
 #pc-headshot {
-  flex:0 0 auto; width:60px; height:60px; margin-top:18px;
+  width:60px; height:60px;
   background:linear-gradient(#8fb8d6, #dde8ef); border:1px solid var(--border); border-radius:6px;
 }
 #pc-headshot[hidden] { display:none; }
@@ -384,7 +386,8 @@ html.win3 #person-card-close { display:none; }
 html.win3 .pc-row.pc-gap { border-top:1px solid #000; }
 html.win3 .pc-name { padding-right:0; }
 html.win3 #person-card .pc-mood { font-size:18px; }
+html.win3 .pc-shot { margin-top:0; }
 html.win3 #pc-headshot {
-  margin-top:0; border-radius:0; background:#008080;
+  border-radius:0; background:#008080;
   border:1px solid; border-color:#808080 #fff #fff #808080; box-shadow:inset 1px 1px 0 #000;
 }

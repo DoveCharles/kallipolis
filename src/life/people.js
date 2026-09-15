@@ -14,6 +14,8 @@ import { Y_PLAZA } from '../zones/plazas.js';
 import { getWaterRegion } from '../water/water.js';
 import { toClipperPath, pathsArea, offsetPaths, createRegionTester, zoneCutoutsNear } from '../zones/cutouts.js';
 import { FOOTBRIDGE_TOP } from '../water/bridges.js';
+import { DEFAULT_TRAITS, profileOf, profilesVersion } from './profiles.js';
+import { explode } from './giblets.js';
 
 // ============================================================ people
 // Lil people: tiny cuboids in random colors, all drawn as one instanced mesh. Most walk the walkways — the sidewalks either
@@ -111,7 +113,7 @@ const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
 // the camera layer the people (and the lights) are also on, for the person card's headshot to draw them alone
 export const HEADSHOT_LAYER = 3;
 // the middle of a person's face, from where their head meets their neck, in the model's units
-const HEAD_CENTER = new THREE.Vector3(0, 0.45, 0.2);
+const HEAD_CENTER = new THREE.Vector3(0, 0.3, 0.2);
 let personModel = null; // { mesh, anim, look, hair, hairOf, hairSlot, isMan, height, minY, clips, stride } once loaded
 
 const PERSON_VERTEX_PARS = `
@@ -554,7 +556,7 @@ function buildPersonModel(gltf, hairGltf) {
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, anim, look, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles, isMan, boneData, boneWidth,
+  return { mesh, anim, look, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles, isMan, boneData, boneWidth, traitData: traits, palette,
     headBone: headBone ?? 0, headPivot,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
@@ -646,7 +648,8 @@ function buildPeopleNav() {
 }
 
 function newPerson() {
-  return { x:0, y:0, z:0, heading: peopleRng()*Math.PI*2, stride: 0.8 + peopleRng()*0.4, height: 0.85 + peopleRng()*0.27, phase: peopleRng()*10,
+  const baseHeight = 0.85 + peopleRng()*0.27; // (their height, before their size trait)
+  return { x:0, y:0, z:0, heading: peopleRng()*Math.PI*2, stride: 0.8 + peopleRng()*0.4, baseHeight, height: baseHeight, phase: peopleRng()*10,
     mode: 'none', li: 0, u: 0, dir: 1, seg: 0, lat: 0, area: -1, tx: 0, tz: 0, wait: 0, exit: null, moving: false, stepped: 0,
     // the model's animation: how far through the walk (in whole cycles) and the looping ones (in seconds) they are; the
     // animation they're in (clipA) and the one they're blending out of (clipB, held at row rowB), how far they've blended and
@@ -664,7 +667,19 @@ function newPerson() {
     // their expression (emotionTo, until emotionIn)
     act: null, stage: '', timer: 0, spot: null, seat: null, sitClip: null, lieClip: null, circleAngle: 0, group: null,
     faceTo: null, lookAt: null, seatLift: 0, chatCheckIn: peopleRng(), chatCooldown: peopleRng()*20,
-    talk: 0, talkTo: 0, talkIn: 0, emotion: 0, emotionTo: 0, emotionIn: 0 };
+    talk: 0, talkTo: 0, talkIn: 0, emotion: 0, emotionTo: 0, emotionIn: 0,
+    // their traits, from what they were picked in people.txt (see refreshTraits)
+    traits: DEFAULT_TRAITS, traitsKey: '' };
+}
+// A person's traits — from the entries picked for them in people.txt (see profiles.js), by their place in the crowd, `i` —
+// worked out again whenever people.txt loads, and once the model's loaded and says whether they're a man (which decides
+// their name, and so the rest of their picks).
+function refreshTraits(p, i) {
+  const isMan = personModel ? personModel.isMan[i] === 1 : null, key = profilesVersion() + ':' + isMan;
+  if (p.traitsKey === key) return;
+  p.traitsKey = key;
+  p.traits = profileOf(i, isMan).traits;
+  p.height = p.baseHeight*p.traits.size;
 }
 export function pickWeighted(items, weightOf) {
   const total = items.reduce((sum, item) => sum + weightOf(item), 0);
@@ -711,6 +726,7 @@ function spawnPerson(p) {
 }
 // after the walkways are rebuilt: back into the hangout they're standing in, else onto the nearest walkway, else anywhere
 function reseatPerson(p) {
+  if (p.mode === 'dead') return; // (who stays that way)
   const { areas, lines, grid, CELL } = peopleNav;
   if (p.mode === 'wander' || p.mode === 'leaving') {
     const ai = areas.findIndex(a => p.x >= a.minX && p.x <= a.maxX && p.z >= a.minZ && p.z <= a.maxZ && a.inside(p.x, p.z));
@@ -749,7 +765,8 @@ function walkAlong(p, dist) {
     const vertex = nav.vertices[ahead], isEnd = ahead === 0 || ahead === nav.pts.length-1;
     // someone on a sidewalk only turns in on their own side of the road; on a path, either side will do
     const entrance = vertex.entrances.length ? vertex.entrances.find(e => e.side === Math.sign(p.lat)) || (nav.path ? vertex.entrances[0] : null) : null;
-    if (entrance && peopleRng() < 0.12) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
+    const drawn = entrance ? (peopleNav.areas[entrance.area].kind === 'park' ? p.traits.parks : p.traits.plazas) : 0;
+    if (entrance && peopleRng() < 0.12*drawn) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
     if (vertex.links.length && peopleRng() < (isEnd ? 0.85 : 0.3)) {
       const link = vertex.links[Math.floor(peopleRng()*vertex.links.length)];
       const other = peopleNav.lines[link.li], remaining = Math.abs(u - at);
@@ -862,7 +879,7 @@ function goChat(p, area) {
   let friend = null, best = 25;
   for (let k=0;k<10;k++) {
     const q = people[Math.floor(peopleRng()*people.length)], d = Math.hypot(q.x - p.x, q.z - p.z);
-    if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.oneShot && !q.moving && d < best) { friend = q; best = d; }
+    if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.oneShot && !q.moving && q.traits.chatty > 0 && d < best) { friend = q; best = d; }
   }
   if (!friend) return false;
   startChat(friend, p, true);
@@ -894,7 +911,7 @@ function meetOnWalkways(dt) {
       if (q === p || q.act || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || (!path && Math.sign(q.lat) !== Math.sign(p.lat))) continue;
       // still coming towards each other, and close
       if ((q.u - p.u)*p.dir < 0 || Math.hypot(q.x - p.x, q.z - p.z) > reach) continue;
-      if (peopleRng() < 0.35) startChat(p, q, false); else p.chatCooldown = q.chatCooldown = 10;
+      if (peopleRng() < 0.35*p.traits.chatty*q.traits.chatty) startChat(p, q, false); else p.chatCooldown = q.chatCooldown = 10;
       return;
     }
   });
@@ -902,8 +919,10 @@ function meetOnWalkways(dt) {
 function takeTurns(g, talkers, dt) {
   g.turnIn -= dt;
   if (!talkers.includes(g.speaker) || g.turnIn <= 0) {
-    g.speaker = pickFrom(talkers.filter(m => m !== g.speaker));
-    g.turnIn = 1.5 + peopleRng()*4;
+    // the more talkative someone is, the more of the turns they take, and the longer they go on
+    const others = talkers.filter(m => m !== g.speaker);
+    g.speaker = others[pickWeighted(others, m => m.traits.talkative)];
+    g.turnIn = (1.5 + peopleRng()*4)*Math.sqrt(g.speaker.traits.talkative);
     g.speaker.lookAt = pickFrom(talkers.filter(m => m !== g.speaker));
   }
   talkers.forEach(m => { if (m !== g.speaker) m.lookAt = g.speaker; });
@@ -925,7 +944,7 @@ function updateGroups(dt) {
       if (Math.hypot(b.tx - b.x, b.tz - b.z) < 0.3) wave(g, 'greet');
       else if (g.timer <= 0) { endChat(g); continue; }
     } else if (g.stage === 'greet') {
-      if (g.timer <= 0) { g.stage = 'talk'; g.timer = 8 + peopleRng()*22; }
+      if (g.timer <= 0) { g.stage = 'talk'; g.timer = (8 + peopleRng()*22)*(a.traits.patience + b.traits.patience)/2; }
     } else if (g.stage === 'talk') {
       takeTurns(g, g.members, dt);
       if (g.timer <= 0) { g.speaker = null; wave(g, 'bye'); }
@@ -948,7 +967,7 @@ function goSit(p, area) {
   if (!personModel) return false;
   if (area.kind === 'plaza') {
     // (only people about the size the benches are made for)
-    if (!hasClip('Sit1') || !area.seats.length || Math.abs(S.peopleSize - 1) > 0.3) return false;
+    if (!hasClip('Sit1') || !area.seats.length || Math.abs(S.peopleSize*p.traits.size - 1) > 0.3) return false;
     let seat = null, best = 40;
     for (let k=0;k<10;k++) {
       const s = area.seats[Math.floor(peopleRng()*area.seats.length)], d = Math.hypot(s.x - p.x, s.z - p.z);
@@ -1040,7 +1059,7 @@ function updateActivity(p, area, dt) {
       if (p.oneShot) break;
       p.stage = 'sit';
       p.pose = poseName;
-      p.timer = (p.act === 'circle' ? 25 : 15) + peopleRng()*45;
+      p.timer = ((p.act === 'circle' ? 25 : 15) + peopleRng()*45)*p.traits.patience;
       if (p.act === 'bench') p.seatLift = p.seat.y - area.y - clipNamed('Sit1').seatY*modelScale(p);
       // falls through
     case 'sit':
@@ -1077,7 +1096,7 @@ function pickPerson(clientX, clientY) {
   const width = window.innerWidth, height = window.innerHeight, foot = new THREE.Vector3(), head = new THREE.Vector3();
   let best = -1, bestDepth = Infinity;
   people.forEach((p, i) => {
-    if (p.mode === 'none') return;
+    if (p.mode === 'none' || p.mode === 'dead') return;
     foot.set(p.x, p.y, p.z).project(camera);
     head.set(p.x, p.y + personHeight(p), p.z).project(camera);
     if (Math.abs(foot.z) > 1 || Math.abs(head.z) > 1) return; // behind the camera, or beyond what it draws
@@ -1125,8 +1144,32 @@ function headshotOf(i) {
   headshot.head.copy(personModel.headPivot).applyMatrix4(headMatrix).add(headOffset).applyMatrix4(headshotInstance);
   headshot.forward.set(0, 0, 1).applyMatrix4(lookTurn).applyMatrix3(headTurn).transformDirection(headshotInstance);
   headshot.up.set(0, 1, 0).applyMatrix4(lookTurn).applyMatrix3(headTurn).transformDirection(headshotInstance);
-  headshot.distance = 3.2*modelScale(people[i]);
+  headshot.distance = 4.6*modelScale(people[i]);
   return headshot;
+}
+// The person card's Kill button: whoever it is explodes into giblets in their own colors, and stays dead (gone from the
+// crowd, though their place in it is kept) — whoever they were talking to carrying on without them.
+function killPerson(i) {
+  const p = people[i];
+  if (!p || p.mode === 'none' || p.mode === 'dead') return;
+  if (followed === i) stopFollowingPerson();
+  endActivity(p);
+  const colors = { skin: new THREE.Color(0xf2d33c), top: new THREE.Color(), pants: new THREE.Color(), shoes: new THREE.Color(0x222226), hair: null };
+  if (personModel) {
+    const colorFrom = (part, color) => {
+      const o = ((2 + PERSON_TRAIT_COLORS.indexOf(part))*PEOPLE_MAX + i)*4, data = personModel.traitData;
+      return color.setRGB(data[o], data[o+1], data[o+2]);
+    };
+    colors.skin.copy(personModel.palette[0]);
+    colorFrom('Top', colors.top); colorFrom('Pants', colors.pants); colorFrom('Shoes', colors.shoes);
+    if (personModel.hairOf[i] >= 0) colors.hair = colorFrom('Hair', new THREE.Color());
+  } else {
+    peopleMesh.getColorAt(i, colors.top);
+    colors.pants.copy(colors.top);
+  }
+  explode({ x: p.x, y: p.y, z: p.z }, 1.7*p.height*S.peopleSize, colors);
+  p.mode = 'dead';
+  p.moving = false;
 }
 function stopFollowingPerson() {
   if (followed < 0) return;
@@ -1166,7 +1209,8 @@ export function updatePeople(t) {
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   people.forEach((p, i) => {
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
-    const speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride;
+    refreshTraits(p, i);
+    const speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed;
     let goal = null;
     // (stopped to talk, someone on a walkway stays put)
     if (p.mode === 'line' && p.act !== 'chat') {
@@ -1180,9 +1224,12 @@ export function updatePeople(t) {
       } else if (p.wait > 0 || p.oneShot) {
         p.wait -= dt;
       } else if (Math.hypot(p.tx - p.x, p.tz - p.z) < 0.3) {
-        p.wait = 1 + peopleRng()*9;
-        const roll = peopleRng();
-        if (area.exits.length && roll < 0.2) {
+        p.wait = (1 + peopleRng()*9)*p.traits.patience;
+        // what next, by how likely each is for them: leaving, sitting down, lying down, going over to talk to someone, going
+        // over to someone else, or just somewhere else here — which is what they do if what they'd do next can't be done
+        const { lounging, chatty } = p.traits;
+        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam'][pickWeighted([area.exits.length ? 0.2 : 0, 0.16*lounging, 0.08*lounging, 0.18*chatty, 0.13, 0.25], w => w)];
+        if (next === 'leave' && area.exits.length) {
           // head for the nearest of a few of the hangout's entrances
           let exit = null;
           for (let k=0;k<6;k++) {
@@ -1193,13 +1240,13 @@ export function updatePeople(t) {
           joinWalkway(p, exit.li, peopleNav.lines[exit.li].cum[exit.vi], peopleRng() < 0.5 ? -1 : 1);
           p.exit = walkwayPoint(p);
           p.mode = 'leaving'; p.wait = 0;
-        } else if (roll < 0.36 && goSit(p, area)) {
+        } else if (next === 'sit' && goSit(p, area)) {
           // off to a bench, or to sit on the grass
-        } else if (roll < 0.44 && goLieDown(p, area)) {
+        } else if (next === 'lie' && goLieDown(p, area)) {
           // off to lie down on the grass
-        } else if (roll < 0.62 && goChat(p, area)) {
+        } else if (next === 'chat' && goChat(p, area)) {
           // over to talk to someone
-        } else if (roll < 0.75) {
+        } else if (next === 'friend') {
           // over to someone else hanging out here
           let friend = null;
           for (let k=0;k<8 && !friend;k++) { const q = people[Math.floor(peopleRng()*people.length)]; if (q !== p && q.mode === 'wander' && q.area === p.area) friend = q; }
@@ -1242,7 +1289,7 @@ export function updatePeople(t) {
         // which way they face, and whether they're walking, go by how far they actually moved this frame — someone
         // keeping pace with their walkway is always right on top of the point they're heading for
         if (Math.hypot(mx, mz) > speed*dt*0.25) {
-          const facing = Math.atan2(mx, mz);
+          const facing = Math.atan2(mx, mz) + (p.traits.backwards ? Math.PI : 0); // (or away from it, walking backwards)
           p.heading += Math.atan2(Math.sin(facing - p.heading), Math.cos(facing - p.heading))*Math.min(1, dt*8);
           p.moving = true;
           p.stepped = Math.hypot(mx, mz);
@@ -1253,16 +1300,16 @@ export function updatePeople(t) {
     // standing still for something (talking, sitting down), they turn to face the way it wants
     if (!p.moving && p.faceTo != null) p.heading += wrapAngle(p.faceTo - p.heading)*Math.min(1, dt*5);
     if (personModel) {
-      const clips = personModel.clips, s = p.mode === 'none' ? 0 : modelScale(p);
-      // a cycle of the walk for every stride's worth of ground covered, as big as they are
-      if (s > 0) p.walkCycle = (p.walkCycle + p.stepped/(personModel.stride*s)) % 1;
+      const clips = personModel.clips, s = p.mode === 'none' || p.mode === 'dead' ? 0 : modelScale(p);
+      // a cycle of the walk for every stride's worth of ground covered, as big as they are (played in reverse, backwards)
+      if (s > 0) p.walkCycle = (p.walkCycle + (p.traits.backwards ? -1 : 1)*p.stepped/(personModel.stride*s) + 1) % 1;
       p.idleTime += dt;
       // standing about with nothing to do for a while, now and then a scratch or a think
       if (p.moving) {
         p.stillFor = 0;
       } else if (!p.act && !p.oneShot && p.pose === 'Idle') {
         p.stillFor += dt;
-        if (p.stillFor > p.fidgetAfter) { playOnce(p, pickFrom(FIDGETS)); p.stillFor = 0; p.fidgetAfter = 3 + peopleRng()*8; }
+        if (p.traits.fidgety > 0 && p.stillFor > p.fidgetAfter/p.traits.fidgety) { playOnce(p, pickFrom(FIDGETS)); p.stillFor = 0; p.fidgetAfter = 3 + peopleRng()*8; }
       }
       // the animation: one playing through once, else walking, else the pose they're in — blending into it from the last
       if (p.oneShot) { p.shotTime += dt; if (p.shotTime >= (p.oneShot.frames - 1)/PERSON_BAKE_FPS) p.oneShot = null; }
@@ -1281,7 +1328,7 @@ export function updatePeople(t) {
       // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION
       p.blinkIn -= dt;
       p.blinkAge += dt;
-      if (p.blinkIn <= 0) { p.blinkAge = 0; p.blinkIn = BLINK_DURATION + 1.5 + peopleRng()*5; }
+      if (p.blinkIn <= 0 && p.traits.blinks > 0) { p.blinkAge = 0; p.blinkIn = BLINK_DURATION + (1.5 + peopleRng()*5)/p.traits.blinks; }
       p.lookIn -= dt;
       if (p.lookAt) {
         // talking: at whoever they're talking to, or whoever's talking
@@ -1289,8 +1336,10 @@ export function updatePeople(t) {
         p.lookTiltTo = 0;
       } else if (p.lookIn <= 0) {
         // every so often a glance somewhere else — not so far while walking — or back ahead, the head easing round to it
-        p.lookIn = 1.5 + peopleRng()*4;
-        const ahead = peopleRng() < 0.35, reach = p.moving ? 0.6 : 1;
+        // (the nosier they are, the more often, the less often back ahead, and the further round)
+        const { nosy } = p.traits;
+        p.lookIn = (1.5 + peopleRng()*4)/nosy;
+        const ahead = peopleRng() < 0.35/nosy, reach = (p.moving ? 0.6 : 1)*Math.min(1.5, Math.sqrt(nosy));
         p.lookTurnTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TURN*reach;
         p.lookTiltTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TILT;
       }
@@ -1306,9 +1355,9 @@ export function updatePeople(t) {
       }
       p.talk += (p.talkTo - p.talk)*Math.min(1, dt*20);
       if (listening) {
-        if ((p.emotionIn -= dt) <= 0) { p.emotionTo = peopleRng()*2 - 1; p.emotionIn = 1.5 + peopleRng()*3; }
+        if ((p.emotionIn -= dt) <= 0) { p.emotionTo = Math.max(-1, Math.min(1, peopleRng()*2 - 1 + p.traits.mood)); p.emotionIn = 1.5 + peopleRng()*3; }
       } else if (!group) {
-        p.emotionTo = 0;
+        p.emotionTo = p.traits.mood; // (their resting face)
       }
       p.emotion += (p.emotionTo - p.emotion)*Math.min(1, dt*5);
       const o = i*4, a = personModel.anim.array, lookArray = personModel.look.array;
@@ -1328,7 +1377,7 @@ export function updatePeople(t) {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
       const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;
       rotation.setFromAxisAngle(up, p.heading);
-      if (p.mode === 'none') scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
+      if (p.mode === 'none' || p.mode === 'dead') scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
       matrix.compose(position.set(p.x, p.y + bob, p.z), rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);
     }
@@ -1345,4 +1394,4 @@ export function updatePeople(t) {
 }
 
 // (people and groups too, for poking at from the browser console)
-Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, people, peopleGroups: groups });
+Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, killPerson, people, peopleGroups: groups });

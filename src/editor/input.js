@@ -335,7 +335,13 @@ dom.addEventListener('pointerup', (e) => {
     }
   }
 });
-dom.addEventListener('contextmenu', (e)=> e.preventDefault());
+// No browser right-click menu anywhere but text fields: on Windows it opens when the button comes up — after a right-click on
+// a node has already opened the node menu under the cursor, so it lands on that rather than the view (on a Mac it opens as
+// the button goes down, while the view's still under the cursor)
+document.addEventListener('contextmenu', (e) => {
+  const field = e.target.closest && e.target.closest('input, textarea');
+  if (!field || ['range', 'checkbox', 'color', 'button', 'file'].includes(field.type)) e.preventDefault();
+});
 dom.addEventListener('wheel', (e)=>{ e.preventDefault(); controls.zoom(e.deltaY); }, { passive:false });
 window.addEventListener('keydown', (e) => {
   // undo / redo — everywhere except while typing into a text field (a slider or color input still being focused is fine)

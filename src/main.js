@@ -57,6 +57,7 @@ import { placeSunLight, updateWeather } from './sky/weather.js';
 import { commitHistory } from './project/history.js';
 import { loadPersonModel, syncPeopleUI, updatePeople } from './life/people.js';
 import { updateTraffic } from './life/traffic.js';
+import { updateGiblets } from './life/giblets.js';
 import { renderView } from './ui/pixelation.js';
 
 // ============================================================ init
@@ -112,6 +113,7 @@ function animate() {
   updateTrainShuttles(t);
   if (S.waterDirty) rebuildWater();
   updatePeople(t);
+  updateGiblets(t);
   updateTraffic(t);
   updateTrafficLights(t);
   updateDayNight(t);
