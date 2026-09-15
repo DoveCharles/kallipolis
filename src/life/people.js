@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
-import { scene, Y_PARK, Y_PATH, Y_ROAD, Y_SIDEWALK } from '../core/scene.js';
+import { scene, camera, Y_PARK, Y_PATH, Y_ROAD, Y_SIDEWALK } from '../core/scene.js';
+import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { mulberry32 } from '../core/math.js';
 import { closestPointOnSegment } from '../buildings/footprints.js';
 import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
@@ -83,7 +84,7 @@ const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 
 const BLINK_DURATION = 0.5; // seconds for the eyes to close and open again
 // how far a person turns their head when they glance around: side to side, and up and down
 const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
-let personModel = null; // { mesh, anim, look, hair, hairOf, hairSlot, height, minY, walk, idle, stride } once loaded
+let personModel = null; // { mesh, anim, look, hair, hairOf, hairSlot, isMan, height, minY, walk, idle, stride } once loaded
 
 const PERSON_VERTEX_PARS = `
   uniform sampler2D personBones;
@@ -423,7 +424,7 @@ function buildPersonModel(gltf, hairGltf) {
   // ---- each person's traits: their sex, their body's shape keys (as far on as the ranges for their sex allow), their
   // hairstyle (any for a woman; for a man one of his, or none) and their colors
   const traitRows = 2 + PERSON_TRAIT_COLORS.length, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
-  const hairOf = new Int16Array(PEOPLE_MAX).fill(-1), hairSlot = new Int32Array(PEOPLE_MAX);
+  const isMan = new Uint8Array(PEOPLE_MAX), hairOf = new Int16Array(PEOPLE_MAX).fill(-1), hairSlot = new Int32Array(PEOPLE_MAX);
   const traitRng = mulberry32(777), colorRng = mulberry32(4242), hairRng = mulberry32(31337), color = new THREE.Color();
   const colorFor = {
     Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
@@ -435,6 +436,7 @@ function buildPersonModel(gltf, hairGltf) {
   for (let i=0;i<PEOPLE_MAX;i++) {
     const texel = row => (row*PEOPLE_MAX + i)*4;
     const man = traitRng() < 0.5, ranges = man ? PERSON_BODY_SHAPES.male : PERSON_BODY_SHAPES.female;
+    isMan[i] = man ? 1 : 0;
     const shape = PERSON_SHAPE_KEYS.slice(0, PERSON_BODY_KEY_COUNT).map(key => { const [lo, hi] = ranges[key]; return lo + traitRng()*(hi - lo); });
     traits.set(shape.slice(0, 4), texel(0));
     traits.set([shape[4], man ? 1 : 0], texel(1));
@@ -480,7 +482,7 @@ function buildPersonModel(gltf, hairGltf) {
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, anim, look, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles,
+  return { mesh, anim, look, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles, isMan,
     height: box.max.y - box.min.y, minY: box.min.y, walk: clips[0], idle: clips[1], stride: footTravel*WALK_CYCLE_LENGTH };
 }
 
@@ -681,9 +683,53 @@ function countBelow(sorted, limit) {
   while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < limit) lo = mid + 1; else hi = mid; }
   return lo;
 }
+
+// ---- following someone with the camera: in World mode, clicking a person keeps the view centered on them as they go —
+// orbiting and zooming as usual, and able to come in closer than the camera usually can — with a card saying who they are
+// (person-card.js), until a click anywhere else, a pan, leaving World mode, or them leaving the crowd lets them go
+let followed = -1; // their index in people
+const personHeight = p => 1.7*p.height*S.peopleSize;
+// the person under a point on the screen (the one nearest the camera, if several are), or -1: a point within about their
+// width of the line up the middle of them, as they look on screen — or within a few pixels, for someone far off
+function pickPerson(clientX, clientY) {
+  if (!S.peopleEnabled) return -1;
+  const width = window.innerWidth, height = window.innerHeight, foot = new THREE.Vector3(), head = new THREE.Vector3();
+  let best = -1, bestDepth = Infinity;
+  people.forEach((p, i) => {
+    if (p.mode === 'none') return;
+    foot.set(p.x, p.y, p.z).project(camera);
+    head.set(p.x, p.y + personHeight(p), p.z).project(camera);
+    if (Math.abs(foot.z) > 1 || Math.abs(head.z) > 1) return; // behind the camera, or beyond what it draws
+    const ax = (foot.x + 1)/2*width, ay = (1 - foot.y)/2*height, bx = (head.x + 1)/2*width, by = (1 - head.y)/2*height;
+    const lengthSq = (bx - ax)**2 + (by - ay)**2;
+    const k = lengthSq > 0 ? Math.max(0, Math.min(1, ((clientX - ax)*(bx - ax) + (clientY - ay)*(by - ay))/lengthSq)) : 0;
+    const off = Math.hypot(clientX - (ax + (bx - ax)*k), clientY - (ay + (by - ay)*k));
+    if (off <= Math.max(8, Math.sqrt(lengthSq)*0.22) && foot.z < bestDepth) { best = i; bestDepth = foot.z; }
+  });
+  return best;
+}
+// follows whoever's under a point on the screen, or stops following if nobody is
+function followPersonAt(clientX, clientY) {
+  const i = pickPerson(clientX, clientY);
+  if (i < 0) { stopFollowingPerson(); return; }
+  followed = i;
+  const h = personHeight(people[i]);
+  controls.minRadius = Math.max(1.2, h*0.8);
+  controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9)); // swooping in, if the camera's far off
+  App.showPersonCard(i, personModel ? personModel.isMan[i] === 1 : null);
+}
+function stopFollowingPerson() {
+  if (followed < 0) return;
+  followed = -1;
+  controls.minRadius = CAMERA_MIN_RADIUS;
+  controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
+  App.hidePersonCard();
+}
+
 export function updatePeople(t) {
   const dt = lastPeopleTime == null ? 0 : Math.min(0.1, Math.max(0, t - lastPeopleTime));
   lastPeopleTime = t;
+  if (followed >= 0 && (!S.peopleEnabled || S.interactionMode !== 'move')) stopFollowingPerson();
   peopleMesh.visible = S.peopleEnabled && !personModel;
   if (personModel) [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; });
   if (!S.peopleEnabled) return;
@@ -696,6 +742,7 @@ export function updatePeople(t) {
   const wanted = Math.min(PEOPLE_MAX, Math.round(S.peopleAmount));
   while (people.length < wanted) { const p = newPerson(); spawnPerson(p); people.push(p); }
   if (people.length > wanted) people.length = wanted;
+  if (followed >= people.length) stopFollowingPerson();
   peopleMesh.count = people.length;
   if (personModel) {
     personModel.mesh.count = people.length;
@@ -831,6 +878,8 @@ export function updatePeople(t) {
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;
   }
+  // the camera onto whoever it's following, at about their shoulders
+  if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
 }
 
-Object.assign(App, { syncPeopleUI });
+Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson });

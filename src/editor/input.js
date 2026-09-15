@@ -36,6 +36,7 @@ S.pendingInsert = null; // edge insertion candidate while shift is held
 S.lastGroundClick = null; // {x,y,time} for double-click-to-finish detection
 S.lastNodeClick = null; // {kind,nodeId|zoneId+index,time} for double-click-to-delete detection
 let rightClickTarget = null; // node/vertex hit under a right-click, for the context menu
+let hoveringPerson = false; // the cursor's over someone a click would follow (World mode), and shows it
 
 const dom = renderer.domElement;
 function pickNodeOrHandle(x,y) {
@@ -118,6 +119,7 @@ dom.addEventListener('pointerdown', (e) => {
 
 dom.addEventListener('pointermove', (e) => {
   S.lastMouseX = e.clientX; S.lastMouseY = e.clientY;
+  if (hoveringPerson && S.interactionMode!=='move') { hoveringPerson = false; dom.style.cursor = ''; }
   if (S.interactionMode==='maps') {
     if (S.mapTransform) { applyMapTransform(e.clientX, e.clientY, e.shiftKey); return; }
     if (isCameraDragging) {
@@ -130,7 +132,8 @@ dom.addEventListener('pointermove', (e) => {
     return;
   }
   if (isCameraDragging) {
-    if (dragMode==='pan') controls.pan(e.movementX, e.movementY); else controls.orbit(e.movementX, e.movementY);
+    // panning takes the camera off whoever it's following; orbiting keeps it on them
+    if (dragMode==='pan') { App.stopFollowingPerson(); controls.pan(e.movementX, e.movementY); } else controls.orbit(e.movementX, e.movementY);
     return;
   }
   if (S.draggedNode) {
@@ -180,6 +183,8 @@ dom.addEventListener('pointermove', (e) => {
     previewLine.visible = false;
     insertPreviewMarker.visible = false;
     setHover(null);
+    const overPerson = App.pickPerson(e.clientX, e.clientY) >= 0;
+    if (overPerson !== hoveringPerson) { hoveringPerson = overPerson; dom.style.cursor = overPerson ? 'pointer' : ''; }
     return;
   }
 
@@ -239,6 +244,8 @@ dom.addEventListener('pointerup', (e) => {
     if (was.button===0 && dist<6 && dt<600 && S.interactionMode==='node') {
       handleLeftClick(e.clientX, e.clientY);
       S.lastGroundClick = { x:e.clientX, y:e.clientY, time:performance.now() };
+    } else if (was.button===0 && dist<6 && dt<600 && S.interactionMode==='move') {
+      App.followPersonAt(e.clientX, e.clientY); // a click on someone has the camera follow them; anywhere else lets go
     }
     return;
   }

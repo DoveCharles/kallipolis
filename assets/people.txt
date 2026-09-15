@@ -1,0 +1,259 @@
+# Who the people of Splinetopia are. Click someone in World mode to see their card.
+# Edit freely: each [section] is a list, one entry per line. Blank lines and lines starting with # are skipped.
+# Men get a boy name and women a girl name. Everyone gets one mood, one thing they enjoy and one thing they hate.
+
+[Boy names]
+Oliver
+Jack
+Harry
+George
+Noah
+Leo
+Arthur
+Oscar
+Theo
+Freddie
+Alfie
+Charlie
+Henry
+Archie
+Finn
+Hugo
+Ezra
+Milo
+Rufus
+Barnaby
+Dexter
+Otis
+Stanley
+Reggie
+Wilbur
+Jasper
+Felix
+Ronan
+Idris
+Mateo
+Kofi
+Hiroshi
+Rahul
+Dmitri
+Luca
+Santiago
+Omar
+Tobias
+Casper
+Gus
+Nigel
+Trevor
+Derek
+Clive
+Brian
+Kevin
+Gary
+Terry
+Keith
+Dave
+
+[Girl names]
+Olivia
+Amelia
+Isla
+Ava
+Mia
+Ivy
+Lily
+Freya
+Florence
+Willow
+Rosie
+Sienna
+Poppy
+Matilda
+Evie
+Ruby
+Hazel
+Maeve
+Nora
+Iris
+Clementine
+Beatrix
+Winifred
+Dolores
+Marge
+Brenda
+Sandra
+Pam
+Linda
+Gloria
+Priya
+Aiko
+Fatima
+Zara
+Ingrid
+Sofia
+Lucia
+Amara
+Chloe
+Esme
+Harriet
+Mabel
+Agnes
+Edith
+Juniper
+Pearl
+Opal
+Tallulah
+Imogen
+Georgina
+
+[Moods]
+😀
+😄
+😁
+😆
+😅
+😂
+🙂
+🙃
+😉
+😊
+😇
+🥰
+😍
+🤩
+😋
+😜
+🤪
+😎
+🤓
+🧐
+😏
+😐
+😑
+😶
+🙄
+😬
+😴
+🤤
+😌
+😔
+🙁
+😮
+😳
+🥺
+😢
+😭
+😤
+😠
+🤯
+😱
+🥳
+🤠
+🥴
+🤔
+🫠
+🤗
+
+[Enjoys]
+Collecting interesting pebbles
+Narrating their own life in a whisper
+Competitive napping
+Alphabetising other people's spice racks
+Reading the terms and conditions, in full
+Telling pigeons about their day
+Clapping when the plane lands
+Watching paint dry (gloss only)
+Popping bubble wrap, responsibly
+Correcting "less" to "fewer"
+Pretending to be a tour guide
+Smelling new books
+Finding the perfect stick
+Yelling "bingo" at random
+Recreating famous paintings in toast
+Ranking the city's benches
+Karaoke, exclusively power ballads
+Talking to plants in a French accent
+Ducks
+Staring meaningfully out of windows
+Building flat-pack furniture without the instructions
+Guessing strangers' star signs
+Cereal for dinner
+Spotting shapes in clouds
+Stepping on crunchy leaves
+Writing strongly worded letters, never sending them
+Waving at trains
+Novelty fridge magnets
+Practising their Oscar acceptance speech
+Counting every step they take
+Free samples
+Dramatic sighing
+Doing the crossword in pen
+Parallel parking first time
+Being the first to spot a dog
+Whistling the same four notes
+Standing by the fountain looking thoughtful
+Mild peril
+Sorting their sock drawer by mood
+Knowing a guy for everything
+Birdwatching (the birds don't know)
+Soup, in any weather
+Explaining the offside rule to anyone nearby
+Four-minute voice notes
+Buying plants and hoping for the best
+Riding the glass train for no reason
+Pressing the crossing button over and over
+Fixing everything with tape
+Inventing new sandwiches
+Pretending they're in a music video when it rains
+
+[Hates]
+Wet socks
+People who stop at the top of escalators
+The word "moist"
+Traffic lights that go red just for them
+Slow walkers on the sidewalk
+Fast walkers on the sidewalk
+Stepping on a Lego
+Reply-all emails
+Loud chewing
+Pigeons who don't listen
+Someone taking the last slice
+Seagulls with confidence
+Tangled headphones
+Being told to smile
+Unskippable ads
+Sand in unexpected places
+Their phone on 1%
+People who clap when the plane lands
+Mondays, specifically
+The fountain splashing them
+Cold toast
+Buses that leave ten seconds early
+Puddles that looked shallow
+Hold music
+"Expresso"
+Popcorn stuck in their teeth
+Wobbly café tables
+Automatic doors that ignore them
+Small talk about the weather
+Paper straws
+Printers, all of them
+Forgetting why they walked into a room
+Film spoilers
+Too many throw pillows
+Hiccups at important moments
+Soggy chips
+Speakerphone calls in public
+Shampoo in the eye
+Being the last to get the joke
+The sound of polystyrene
+Cars that don't stop at the zebra crossing
+Pineapple on pizza (and its defenders)
+Leaves that aren't crunchy
+Stairs with one uneven step
+Clowns
+Proving they're not a robot
+Receipts longer than their arm
+Geese, deeply
+Queue jumpers
+Drivers who don't indicate

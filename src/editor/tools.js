@@ -56,7 +56,7 @@ export function finishActiveDrawing() {
 function updateHint() {
   let msg;
   if (S.interactionMode==='move') {
-    msg = 'Left-drag to orbit · shift+left-drag to pan · scroll to zoom · 1/3/7 for view snaps';
+    msg = 'Left-drag to orbit · shift+left-drag to pan · scroll to zoom · 1/3/7 for view snaps · click a person to follow them';
   } else if (S.interactionMode==='maps') {
     if (S.mapTransform) {
       const label = S.mapTransform.mode==='translate' ? 'Move' : S.mapTransform.mode==='rotate' ? 'Rotate' : 'Scale';

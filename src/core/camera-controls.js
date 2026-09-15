@@ -2,9 +2,12 @@ import * as THREE from 'three';
 import { camera } from './scene.js';
 
 // ============================================================ camera controls (math only)
+// the closest the camera zooms in, except while it's following someone (see people.js)
+export const CAMERA_MIN_RADIUS = 8;
 export const controls = {
   target: new THREE.Vector3(0, 8, 0),
   radius: 220, theta: Math.PI*0.28, phi: Math.PI*0.32,
+  minRadius: CAMERA_MIN_RADIUS,
   goalRadius: 220, goalTheta: Math.PI*0.28, goalPhi: Math.PI*0.32,
   goalTarget: new THREE.Vector3(0, 8, 0),
   orbit(dx, dy) {
@@ -23,7 +26,7 @@ export const controls = {
   },
   zoom(deltaY) {
     this.goalRadius *= (1 + deltaY * 0.001);
-    this.goalRadius = Math.max(8, Math.min(1800, this.goalRadius));
+    this.goalRadius = Math.max(this.minRadius, Math.min(1800, this.goalRadius));
   },
   snapTop() { this.goalPhi = 0.05; },
   snapFront() { this.goalPhi = Math.PI/2; this.goalTheta = 0; },
