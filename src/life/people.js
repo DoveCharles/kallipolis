@@ -41,17 +41,18 @@ peopleMesh.visible = false;
 peopleMesh.name = 'People';
 scene.add(peopleMesh);
 
-// The people model (assets/models/Person.glb, made in Blender) replaces the cuboids once it's loaded: a rigged figure with a
-// Walk and an Idle animation, drawn — everyone at once — as one instanced mesh, flat-shaded. three.js's own rigged meshes
-// can't be instanced, so the animations are baked: when the model loads, each one is played through a frame at a time and
-// every bone's pose at each frame is written into a texture (a row per frame, three texels per bone), and the vertex shader
-// poses each person by looking up the rows for the moment they're at in each animation — the texture blending between
-// frames, and the shader between walking and standing idle. What makes each person themselves is kept in textures too, a
-// texel per person, as there aren't enough vertex attributes to go round: their body shape keys, their sex (a man's
-// eyelashes and lips aren't drawn) and the colors of their top, pants, shoes and hair. Their skin is always the model's
-// yellow. Only what they're doing changes from frame to frame: their animation — how far through the walk and the idle
-// they are, how much they're walking, how far their eyes are closed — in the instanceAnim attribute, and which way they've
-// turned their head, in instanceLook.
+// The people model (assets/models/Person.glb, made in Blender) replaces the cuboids once it's loaded: a rigged figure with
+// animations — walking, standing idle (now and then scratching or having a think), waving, sitting on a bench, and sitting or
+// lying on the grass — drawn, everyone at once, as one instanced mesh, flat-shaded. three.js's own rigged meshes can't be
+// instanced, so the animations are baked: when the model loads, each one is played through a frame at a time and every
+// bone's pose at each frame is written into a texture (a row per frame, three texels per bone), and the vertex shader poses
+// each person by looking up the rows for the moment they're at — the texture blending between frames, and the shader
+// between the animation they're going into and the one they're leaving. What makes each person themselves is kept in
+// textures too, a texel per person, as there aren't enough vertex attributes to go round: their body shape keys, their sex
+// (a man's eyelashes and lips aren't drawn), the colors of their top, pants, shoes and hair, and how much skin their clothes
+// show. Their skin is always the model's yellow. Only what they're doing changes from frame to frame: their animation — the
+// rows they're at in the two animations, how far they've blended from one to the other, how far their eyes are closed — in
+// the instanceAnim attribute, and which way they've turned their head and what their mouth is doing, in instanceLook.
 // Hairstyles (assets/models/Hair.glb, each its own mesh, placed on the model's head) ride on the head bone. Each style is an
 // instanced mesh of its own, holding just the people with that style, who carry a copy of their pose and their index into
 // the traits texture.
@@ -61,21 +62,44 @@ const PERSON_BAKE_FPS = 24;
 // how far a person walks for each cycle of the walk animation, in the distances the model's foot travels in one — the higher,
 // the slower the walk plays for the same speed
 const WALK_CYCLE_LENGTH = 4;
+// the model's animations: `loop` for those playing round and round (walking, standing idle, sitting on a bench), the rest
+// playing through once (Idle2, Idle3, Wave) or being a single pose, held; `pose` for sitting and lying down
+const PERSON_CLIPS = [
+  { name: 'Walk', loop: true }, { name: 'Idle', loop: true }, { name: 'Idle2' }, { name: 'Idle3' }, { name: 'Wave' },
+  { name: 'Sit1', loop: true, pose: true }, { name: 'SitDown1', pose: true }, { name: 'SitDown2', pose: true }, { name: 'SitDown3', pose: true },
+  { name: 'LieDown1', pose: true }, { name: 'LieDown2', pose: true }, { name: 'LieDown3', pose: true },
+];
+const FIDGETS = ['Idle2', 'Idle3'], GRASS_SITS = ['SitDown1', 'SitDown2', 'SitDown3'], LIE_DOWNS = ['LieDown1', 'LieDown2', 'LieDown3'];
+// seconds to blend from one animation into the next: between walking, standing and waving, and into or out of sitting or lying
+const FADE_QUICK = 0.2, FADE_POSE = 0.6;
+const CHAT_GAP = 1.1;        // how far apart two people stand to talk, at people size 1
+const CIRCLE_RADIUS = 1.35;  // how far from the middle of a circle sat on the grass each of them sits, at people size 1
+const CIRCLE_MAX = 4;
 // every shape key the shader applies, in the order of the shape key texture; the body's are set once per person, Blink as
-// they blink
-const PERSON_SHAPE_KEYS = ['Breast', 'Waist', 'Hips', 'Weight', 'Butt', 'Blink'];
+// they blink, and the mouth's Talk and Emotion as they talk and listen
+const PERSON_SHAPE_KEYS = ['Breast', 'Waist', 'Hips', 'Weight', 'Butt', 'Blink', 'Talk', 'Emotion'];
 const PERSON_BODY_KEY_COUNT = 5;
 // each person's shape keys by sex, as [lowest, highest]
 const PERSON_BODY_SHAPES = {
   male:   { Breast: [0.6, 1],  Waist: [0.5, 1],    Hips: [-1, -0.5],   Weight: [0, 1],   Butt: [1, 1] },
   female: { Breast: [-1, 0.1], Waist: [-0.5, 0.1], Hips: [-0.4, 0.2], Weight: [0, 0.3], Butt: [0, 0.6] },
 };
+// How much skin clothes show: a sleeve, the tummy and a leg are each split into numbered bands (materials named Sleeve1,
+// Sleeve2…, lowest nearest the body), and each person's clothes stop at one of them — it and every higher-numbered band of
+// that part showing skin, the rest the clothes' color. A man's tummy is always covered.
+const PERSON_CLOTHING = [
+  { band: 'Sleeve', part: 'Top', count: 3 },
+  { band: 'Tummy', part: 'Top', count: 2, coveredOnMen: true },
+  { band: 'Leg', part: 'Pants', count: 2 },
+];
 // the model's materials, by name: which part of the model each vertex belongs to (its personSlot) — the clothes take each
 // person's own colors, the rest keep the model's; and the parts only drawn for women
-const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelashes', 'Lips'];
+const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelashes', 'Lips',
+  ...PERSON_CLOTHING.flatMap(c => Array.from({ length: c.count }, (_, k) => c.band + (k + 1)))];
 const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
-// the colors each person has their own of, from row 2 of the traits texture on
+// the colors each person has their own of, from row 2 of the traits texture on; then a row of where their clothes stop
 const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair'];
+const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length;
 // the hairstyles a man can have (or none); a woman can have any of them
 const MEN_HAIRSTYLES = ['GHair20', 'GHair14', 'GHair12', 'GHair9', 'GHair8', 'GHair21'];
 const PANTS_COLORS = [0x26344f, 0x3e5a82, 0x5a7aa6, 0x232326, 0x4d5057, 0x8f8f93, 0xb09a72, 0x6b5038, 0x46503a];
@@ -84,7 +108,7 @@ const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 
 const BLINK_DURATION = 0.5; // seconds for the eyes to close and open again
 // how far a person turns their head when they glance around: side to side, and up and down
 const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
-let personModel = null; // { mesh, anim, look, hair, hairOf, hairSlot, isMan, height, minY, walk, idle, stride } once loaded
+let personModel = null; // { mesh, anim, look, hair, hairOf, hairSlot, isMan, height, minY, clips, stride } once loaded
 
 const PERSON_VERTEX_PARS = `
   uniform sampler2D personBones;
@@ -101,7 +125,7 @@ const PERSON_VERTEX_PARS = `
   attribute float personMorphMask;
   attribute float personHeadWeight;
   attribute vec4 instanceAnim;
-  attribute vec2 instanceLook;
+  attribute vec4 instanceLook;
   // which person this instance is: the instance itself for the body, and for a hairstyle (holding only some people) the
   // person it was given
   #ifdef PERSON_INDEX_ATTRIBUTE
@@ -120,8 +144,8 @@ const PERSON_VERTEX_PARS = `
     vec4 r2 = textureLod(personBones, vec2(x + 2.0*texel.x, y), 0.0);
     return mat4(r0.x, r1.x, r2.x, 0.0, r0.y, r1.y, r2.y, 0.0, r0.z, r1.z, r2.z, 0.0, r0.w, r1.w, r2.w, 1.0);
   }
-  // instanceAnim: x the row they're at in the walk, y the row they're at in the idle, z how much they're walking (0 standing
-  // idle, 1 walking), w how far their eyes are closed
+  // instanceAnim: x the row they're at in the animation they're going into, y the row of the one they're leaving, z how far
+  // they've gone into the first (1 all the way), w how far their eyes are closed
   mat4 personBone(float bone) {
     mat4 pose;
     if (instanceAnim.z > 0.999) pose = personBoneAt(bone, instanceAnim.x);
@@ -137,15 +161,18 @@ const PERSON_VERTEX_PARS = `
     return m;
   }
   // a posed position with the head turned — everything moving with the head bone or the bones under it (personHeadWeight),
-  // about where the head meets the neck — by instanceLook: x side to side, y up and down
+  // about where the head meets the neck — by instanceLook: x side to side, y up and down, as the head sees it (so someone
+  // lying down rolls their head to the side rather than twisting it round)
   vec3 personLook(vec3 posed) {
     vec3 looked = posed;
     if (personHeadWeight > 0.0 && (instanceLook.x != 0.0 || instanceLook.y != 0.0)) {
-      vec3 pivot = (personBone(personHeadBone)*vec4(personHeadPivot, 1.0)).xyz, p = posed - pivot;
+      mat4 head = personBone(personHeadBone);
+      mat3 headTurn = mat3(head);
+      vec3 pivot = (head*vec4(personHeadPivot, 1.0)).xyz, p = inverse(headTurn)*(posed - pivot);
       float ct = cos(instanceLook.x), st = sin(instanceLook.x), cn = cos(instanceLook.y), sn = sin(instanceLook.y);
       p = vec3(p.x, p.y*cn - p.z*sn, p.y*sn + p.z*cn);
       p = vec3(p.x*ct + p.z*st, p.y, p.z*ct - p.x*st);
-      looked = mix(posed, pivot + p, personHeadWeight);
+      looked = mix(posed, pivot + headTurn*p, personHeadWeight);
     }
     return looked;
   }
@@ -158,7 +185,7 @@ const PERSON_VERTEX_PARS = `
     return texelFetch(personMorphs, ivec2(gl_VertexID % width, gl_VertexID/width + key*int(personMorphsRows)), 0).xyz;
   }
   // every shape key's offset at this vertex, each as far on as this person has it; personMorphMask says which keys move the
-  // vertex at all — 1 the body's, 2 Blink
+  // vertex at all — 1 the body's, 2 Blink, 4 Talk, 8 Emotion
   vec3 personShape() {
     int mask = int(personMorphMask + 0.5);
     vec3 offset = vec3(0.0);
@@ -167,20 +194,25 @@ const PERSON_VERTEX_PARS = `
       offset += personMorph(0)*body.x + personMorph(1)*body.y + personMorph(2)*body.z + personMorph(3)*body.w + personMorph(4)*personTrait(1).x;
     }
     if ((mask & 2) != 0) offset += personMorph(5)*instanceAnim.w;
+    if ((mask & 4) != 0) offset += personMorph(6)*instanceLook.z;
+    if ((mask & 8) != 0) offset += personMorph(7)*instanceLook.w;
     return offset;
   }
 `;
 // Adds the posing and shape keys to a material's shaders, and how it colors the figure. `look`: `femaleOnly`, the slots only
-// drawn for women; and, unless it's the shadow's depth material, `palette` (each slot's own color) and `traitColors` (the
-// slots taking a color of the person's own instead, as { slot: traits row }).
+// drawn for women; and, unless it's the shadow's depth material, `palette` (each slot's own color), `traitColors` (the
+// slots taking a color of the person's own instead, as { slot: traits row }) and `bands` (bands of clothes, which show skin —
+// slot 0's color — if the person's clothes stop at or before them: { slot, number, cut (which of the clothing row's values
+// says where their clothes stop), colorRow (the traits row of the clothes' color) }).
 function injectPersonShader(shader, uniforms, look) {
   Object.assign(shader.uniforms, uniforms);
   const colored = !!look.palette;
   if (colored) shader.uniforms.personPalette = { value: look.palette };
   const hide = look.femaleOnly.length
     ? `if ((${look.femaleOnly.map(slot => `personSlotIndex == ${slot}`).join(' || ')}) && personTrait(1).y > 0.5) transformed = vec3(0.0);` : '';
+  const bands = (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? personPalette[0] : personTrait(${b.colorRow}).rgb) : `).join('');
   const color = colored
-    ? 'vPersonColor = ' + Object.entries(look.traitColors).map(([slot, row]) => `personSlotIndex == ${slot} ? personTrait(${row}).rgb : `).join('') + 'personPalette[personSlotIndex];' : '';
+    ? 'vPersonColor = ' + bands + Object.entries(look.traitColors).map(([slot, row]) => `personSlotIndex == ${slot} ? personTrait(${row}).rgb : `).join('') + 'personPalette[personSlotIndex];' : '';
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\n' + PERSON_VERTEX_PARS
       + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : ''))
@@ -202,7 +234,7 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute) {
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   if (byAttribute) { material.defines = { PERSON_INDEX_ATTRIBUTE: '' }; depth.defines = { PERSON_INDEX_ATTRIBUTE: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
-  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), look.femaleOnly.join(',')].join('|');
+  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), JSON.stringify(look.bands || []), look.femaleOnly.join(',')].join('|');
   material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, look);
   material.customProgramCacheKey = () => key;
   depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly });
@@ -334,7 +366,7 @@ function buildPersonModel(gltf, hairGltf) {
   const morphData = new Float32Array(morphWidth*morphRows*PERSON_SHAPE_KEYS.length*4);
   const morphMask = new Float32Array(vertexCount);
   PERSON_SHAPE_KEYS.forEach((key, k) => {
-    const keyOffsets = offsets[k], bit = k < PERSON_BODY_KEY_COUNT ? 1 : 2;
+    const keyOffsets = offsets[k], bit = k < PERSON_BODY_KEY_COUNT ? 1 : 1 << (k - PERSON_BODY_KEY_COUNT + 1);
     for (let i=0;i<vertexCount;i++) {
       const texel = (k*morphRows*morphWidth + i)*4;
       for (let c=0;c<3;c++) morphData[texel + c] = keyOffsets[i*3 + c];
@@ -346,12 +378,17 @@ function buildPersonModel(gltf, hairGltf) {
   morphTexture.needsUpdate = true;
 
   // ---- the bone texture: each animation's frames, then its first frame again, so that blending past its last frame loops
-  // back smoothly. A missing animation is the rest pose, as a single frame.
+  // back smoothly. A missing animation is the rest pose, as a single frame (and nobody does what it's for). For each one,
+  // too, from its first frame: where it puts the pelvis — someone sitting or lying down keeps their pelvis where it was, not
+  // their feet — how tall it leaves them, and (for sitting on a bench) how high their bottom is.
   const mixer = new THREE.AnimationMixer(root);
-  const clips = ['Walk', 'Idle'].map(name => {
-    const clip = gltf.animations.find(c => c.name.toLowerCase() === name.toLowerCase());
-    if (!clip) console.warn(`Blockout: the people model has no ${name} animation`);
-    return { clip, frames: clip ? Math.max(1, Math.round(clip.duration*PERSON_BAKE_FPS)) : 1 };
+  const pelvisBone = bones[boneByName.get('Pelvis') ?? 0], restPelvis = pelvisBone.getWorldPosition(new THREE.Vector3());
+  const clips = PERSON_CLIPS.map(def => {
+    const clip = gltf.animations.find(c => c.name.toLowerCase() === def.name.toLowerCase());
+    if (!clip) console.warn(`Blockout: the people model has no ${def.name} animation`);
+    const frames = clip ? Math.max(1, Math.round(clip.duration*PERSON_BAKE_FPS)) : 1;
+    return { name: def.name, clip, missing: !clip, loop: !!def.loop && frames > 1, pose: !!def.pose, frames, duration: frames/PERSON_BAKE_FPS,
+      start: 0, pelvis: new THREE.Vector3(), pelvisX: 0, pelvisZ: 0, top: 0, heightScale: 1, seatY: 0 };
   });
   let boneRows = 0;
   clips.forEach(c => { c.start = boneRows; boneRows += c.frames + 1; });
@@ -359,7 +396,7 @@ function buildPersonModel(gltf, hairGltf) {
   // how far a foot travels over the walk, for how far a cycle of it carries a person
   const footBone = bones[boneByName.get('FootL') ?? boneByName.get('FootR') ?? 0], footPosition = new THREE.Vector3();
   let footMinZ = Infinity, footMaxZ = -Infinity;
-  clips.forEach((c, clipIndex) => {
+  clips.forEach(c => {
     mixer.stopAllAction();
     const action = c.clip ? mixer.clipAction(c.clip).play() : null;
     for (let f=0;f<=c.frames;f++) {
@@ -372,11 +409,37 @@ function buildPersonModel(gltf, hairGltf) {
           boneData[o] = e[r]; boneData[o+1] = e[4+r]; boneData[o+2] = e[8+r]; boneData[o+3] = e[12+r];
         }
       });
-      if (clipIndex === 0 && action) { footBone.getWorldPosition(footPosition); footMinZ = Math.min(footMinZ, footPosition.z); footMaxZ = Math.max(footMaxZ, footPosition.z); }
+      if (c.name === 'Walk' && action) { footBone.getWorldPosition(footPosition); footMinZ = Math.min(footMinZ, footPosition.z); footMaxZ = Math.max(footMaxZ, footPosition.z); }
+      if (f === 0) pelvisBone.getWorldPosition(c.pelvis);
     }
   });
   mixer.stopAllAction();
   mixer.uncacheRoot(root);
+  // the body at each animation's first frame, posed as the shader poses it (less the shape keys)
+  clips.forEach(c => {
+    let top = -Infinity, seat = Infinity;
+    for (let i=0;i<vertexCount;i++) {
+      const px = positions[i*3], py = positions[i*3+1], pz = positions[i*3+2];
+      let x = 0, y = 0, z = 0;
+      for (let k=0;k<4;k++) {
+        const w = weights[i*4 + k];
+        if (!w) continue;
+        const o = (c.start*boneWidth + joints[i*4 + k]*3)*4;
+        x += w*(boneData[o]*px + boneData[o+1]*py + boneData[o+2]*pz + boneData[o+3]);
+        y += w*(boneData[o+4]*px + boneData[o+5]*py + boneData[o+6]*pz + boneData[o+7]);
+        z += w*(boneData[o+8]*px + boneData[o+9]*py + boneData[o+10]*pz + boneData[o+11]);
+      }
+      top = Math.max(top, y);
+      // their bottom: the lowest of them right around the pelvis
+      if (Math.abs(x - c.pelvis.x) < 1.2 && Math.abs(z - c.pelvis.z) < 0.6) seat = Math.min(seat, y);
+    }
+    c.top = top;
+    c.seatY = seat < Infinity ? seat : 0;
+    // only sitting or lying down moves the pelvis far enough to follow; standing about, it only sways
+    if (c.pose) { c.pelvisX = c.pelvis.x - restPelvis.x; c.pelvisZ = c.pelvis.z - restPelvis.z; }
+  });
+  const standingTop = clips.find(c => c.name === 'Idle').top;
+  clips.forEach(c => { c.heightScale = standingTop > 0 ? c.top/standingTop : 1; });
   // half floats, which (unlike full floats, everywhere) the texture can blend between rows
   const boneTexture = new THREE.DataTexture(Uint16Array.from(boneData, x => THREE.DataUtils.toHalfFloat(x)), boneWidth, boneRows, THREE.RGBAFormat, THREE.HalfFloatType);
   boneTexture.magFilter = boneTexture.minFilter = THREE.LinearFilter;
@@ -422,10 +485,10 @@ function buildPersonModel(gltf, hairGltf) {
   const menStyles = hairStyles.map((style, k) => MEN_HAIRSTYLES.includes(style.name) ? k : -1).filter(k => k >= 0);
 
   // ---- each person's traits: their sex, their body's shape keys (as far on as the ranges for their sex allow), their
-  // hairstyle (any for a woman; for a man one of his, or none) and their colors
-  const traitRows = 2 + PERSON_TRAIT_COLORS.length, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
+  // hairstyle (any for a woman; for a man one of his, or none), their colors, and where their clothes stop
+  const traitRows = PERSON_CLOTHING_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
   const isMan = new Uint8Array(PEOPLE_MAX), hairOf = new Int16Array(PEOPLE_MAX).fill(-1), hairSlot = new Int32Array(PEOPLE_MAX);
-  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hairRng = mulberry32(31337), color = new THREE.Color();
+  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hairRng = mulberry32(31337), clothingRng = mulberry32(1990), color = new THREE.Color();
   const colorFor = {
     Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
     Pants: () => colorRng() < 0.8 ? color.set(PANTS_COLORS[Math.floor(colorRng()*PANTS_COLORS.length)]) : color.setHSL(colorRng(), 0.25 + colorRng()*0.3, 0.25 + colorRng()*0.25),
@@ -441,6 +504,8 @@ function buildPersonModel(gltf, hairGltf) {
     traits.set(shape.slice(0, 4), texel(0));
     traits.set([shape[4], man ? 1 : 0], texel(1));
     PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
+    // the band each part of their clothes stops at (one past the last band for none)
+    traits.set(PERSON_CLOTHING.map(c => c.coveredOnMen && man ? c.count + 1 : 1 + Math.floor(clothingRng()*(c.count + 1))), texel(PERSON_CLOTHING_ROW));
     if (hairStyles.length) {
       const pick = Math.floor(hairRng()*(man ? menStyles.length + 1 : hairStyles.length));
       hairOf[i] = man ? (pick < menStyles.length ? menStyles[pick] : -1) : pick;
@@ -462,8 +527,10 @@ function buildPersonModel(gltf, hairGltf) {
     palette,
     traitColors: Object.fromEntries(['Top', 'Pants', 'Shoes'].map(part => [PERSON_SLOTS.indexOf(part), traitRow(part)])),
     femaleOnly: PERSON_FEMALE_ONLY.map(part => PERSON_SLOTS.indexOf(part)),
+    bands: PERSON_CLOTHING.flatMap((c, cut) => Array.from({ length: c.count }, (_, k) =>
+      ({ slot: PERSON_SLOTS.indexOf(c.band + (k + 1)), number: k + 1, cut, colorRow: traitRow(c.part) }))),
   };
-  const anim = dynamicInstanceAttribute(PEOPLE_MAX, 4), look = dynamicInstanceAttribute(PEOPLE_MAX, 2);
+  const anim = dynamicInstanceAttribute(PEOPLE_MAX, 4), look = dynamicInstanceAttribute(PEOPLE_MAX, 4);
   geometry.setAttribute('instanceAnim', anim);
   geometry.setAttribute('instanceLook', look);
   const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
@@ -472,7 +539,7 @@ function buildPersonModel(gltf, hairGltf) {
     if (!style.members.length) { style.geometry.dispose(); return; }
     style.geometry.setAttribute('instancePerson', new THREE.InstancedBufferAttribute(Float32Array.from(style.members), 1));
     style.anim = dynamicInstanceAttribute(style.members.length, 4);
-    style.look = dynamicInstanceAttribute(style.members.length, 2);
+    style.look = dynamicInstanceAttribute(style.members.length, 4);
     style.geometry.setAttribute('instanceAnim', style.anim);
     style.geometry.setAttribute('instanceLook', style.look);
     style.mesh = makePersonMesh(style.geometry, uniforms, hairLook, style.members.length, true);
@@ -483,7 +550,7 @@ function buildPersonModel(gltf, hairGltf) {
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
   return { mesh, anim, look, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles, isMan,
-    height: box.max.y - box.min.y, minY: box.min.y, walk: clips[0], idle: clips[1], stride: footTravel*WALK_CYCLE_LENGTH };
+    height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
 
 export function syncPeopleUI() {
@@ -500,7 +567,8 @@ export function syncPeopleUI() {
 }
 
 // The walkways ({ pts, cum, lateral, jitter, y… } per road or path line, with each point's junction links and park or
-// plaza entrance) and the hangouts ({ inside, bounds, y, exits } per plaza and park).
+// plaza entrance) and the hangouts ({ kind, inside, bounds, y, exits, seats, trees } per plaza and park — a plaza's bench
+// seats, a park's trees).
 function buildPeopleNav() {
   const areas = [], lines = [];
   S.zones.forEach(zone => {
@@ -513,8 +581,10 @@ function buildPeopleNav() {
     paths.forEach(path => path.forEach(p => { minX=Math.min(minX,p.X); maxX=Math.max(maxX,p.X); minZ=Math.min(minZ,p.Y); maxZ=Math.max(maxZ,p.Y); }));
     const inArea = createRegionTester(paths), fountain = zone.zoneType==='plaza' ? zone.fountainSpot : null;
     const inside = fountain ? (x, z) => inArea(x, z) && Math.hypot(x - fountain.x, z - fountain.z) > fountain.r + 0.8 : inArea;
-    areas.push({ inside, fountain, minX: minX/CLIPPER_SCALE, maxX: maxX/CLIPPER_SCALE, minZ: minZ/CLIPPER_SCALE, maxZ: maxZ/CLIPPER_SCALE,
-      size, y: zone.zoneType==='plaza' ? Y_PLAZA : Y_PARK, exits: [] });
+    areas.push({ kind: zone.zoneType, inside, fountain, minX: minX/CLIPPER_SCALE, maxX: maxX/CLIPPER_SCALE, minZ: minZ/CLIPPER_SCALE, maxZ: maxZ/CLIPPER_SCALE,
+      size, y: zone.zoneType==='plaza' ? Y_PLAZA : Y_PARK, exits: [],
+      seats: zone.zoneType==='plaza' ? (zone.benchSeats || []).map(seat => ({ ...seat, by: null })) : [],
+      trees: zone.zoneType==='park' ? zone.treeSpots || [] : [] });
   });
   const inWater = createRegionTester(getWaterRegion());
   S.roadLines.forEach(line => {
@@ -572,11 +642,23 @@ function buildPeopleNav() {
 function newPerson() {
   return { x:0, y:0, z:0, heading: peopleRng()*Math.PI*2, stride: 0.8 + peopleRng()*0.4, height: 0.85 + peopleRng()*0.27, phase: peopleRng()*10,
     mode: 'none', li: 0, u: 0, dir: 1, seg: 0, lat: 0, area: -1, tx: 0, tz: 0, wait: 0, exit: null, moving: false, stepped: 0,
-    // the model's animation: how far through the walk (in whole cycles) and the idle (in seconds) they are, how much they're
-    // walking rather than standing, the time to their next blink and since their last, and which way they're looking (their
-    // head turned and tilted, the way it's turning to, and the time until they glance somewhere else)
-    walkCycle: peopleRng(), idleTime: peopleRng()*10, walkBlend: 0, blinkIn: peopleRng()*6, blinkAge: BLINK_DURATION,
-    lookTurn: 0, lookTilt: 0, lookTurnTo: 0, lookTiltTo: 0, lookIn: peopleRng()*4 };
+    // the model's animation: how far through the walk (in whole cycles) and the looping ones (in seconds) they are; the
+    // animation they're in (clipA) and the one they're blending out of (clipB, held at row rowB), how far they've blended and
+    // how long it takes; the pose they're in when they're not walking, and one playing through once (and for how long it has);
+    // how tall their pose leaves them; the time to their next blink and since their last; which way they're looking (their
+    // head turned and tilted, the way it's turning to, and the time until they glance somewhere else); and how long they've
+    // stood about, and how long until they fidget
+    walkCycle: peopleRng(), idleTime: peopleRng()*10, clipA: null, clipB: null, rowB: 0, fade: 1, fadeTime: FADE_QUICK,
+    pose: 'Idle', oneShot: null, shotTime: 0, heightScale: 1, blinkIn: peopleRng()*6, blinkAge: BLINK_DURATION,
+    lookTurn: 0, lookTilt: 0, lookTurnTo: 0, lookTiltTo: 0, lookIn: peopleRng()*4, stillFor: 0, fidgetAfter: 2 + peopleRng()*5,
+    // what they're doing besides walking about (see "what people get up to"): act 'chat', 'bench', 'circle' or 'lie', how
+    // far along it they are (stage) and for how long (timer); where they're sitting or lying (spot, seat, the pose — sitClip
+    // or lieClip — and circleAngle round a circle); the group they're talking in; the way they should face and who they're
+    // looking at; how far up onto a bench seat they sit; and their mouth — how open it's going to (talkTo, until talkIn) and
+    // their expression (emotionTo, until emotionIn)
+    act: null, stage: '', timer: 0, spot: null, seat: null, sitClip: null, lieClip: null, circleAngle: 0, group: null,
+    faceTo: null, lookAt: null, seatLift: 0, chatCheckIn: peopleRng(), chatCooldown: peopleRng()*20,
+    talk: 0, talkTo: 0, talkIn: 0, emotion: 0, emotionTo: 0, emotionIn: 0 };
 }
 export function pickWeighted(items, weightOf) {
   const total = items.reduce((sum, item) => sum + weightOf(item), 0);
@@ -684,11 +766,304 @@ function countBelow(sorted, limit) {
   return lo;
 }
 
+// ---- what people get up to besides walking about: someone standing around for a while scratches or has a think now and
+// then; two people meeting — head on along a walkway, or one going over to another in a plaza or park — wave, talk a while
+// and wave goodbye; someone in a plaza sits down on a bench; and someone in a park sits down on the grass, where others might
+// join them in a circle to talk, or, with nobody else about, lies down for a while. People talking are a group, taking
+// turns to talk, and looking at whoever's talking.
+const groups = []; // { kind: 'chat' (two, standing) or 'circle' (sat on the grass), members, speaker, turnIn, … }
+const clipNamed = name => personModel ? personModel.clips[name] : null;
+const hasClip = name => { const clip = clipNamed(name); return !!clip && !clip.missing; };
+const pickFrom = list => list[Math.floor(peopleRng()*list.length)];
+const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
+const headingTo = (p, q) => Math.atan2(q.x - p.x, q.z - p.z);
+const modelScale = p => 1.7*p.height*S.peopleSize/personModel.height; // how much the model's scaled to be a person's height
+// how much of a person's pose is `clip`, part-way through blending from one animation into the next
+const weightOf = (p, clip) => (p.clipA === clip ? p.fade : 0) + (p.clipB === clip ? 1 - p.fade : 0);
+
+// the row of the bone texture a person's at in an animation: along the walk by how far they've walked, round a looping one
+// by the time, and through one playing once by how long it's played
+function clipRow(p, clip) {
+  if (clip.name === 'Walk') return clip.start + p.walkCycle*clip.frames;
+  if (clip.loop) return clip.start + (p.idleTime*PERSON_BAKE_FPS) % clip.frames;
+  return clip.start + Math.min(clip.frames - 1, p.shotTime*PERSON_BAKE_FPS);
+}
+// starts a person blending into an animation from the one they're in — or back, if they're still blending out of it
+function setClip(p, clip) {
+  if (p.clipA === clip) return;
+  p.rowB = clipRow(p, p.clipA);
+  p.fade = p.clipB === clip ? 1 - p.fade : 0;
+  p.fadeTime = clip.pose || p.clipA.pose ? FADE_POSE : FADE_QUICK;
+  p.clipB = p.clipA;
+  p.clipA = clip;
+}
+function playOnce(p, name) {
+  if (!hasClip(name)) return;
+  p.oneShot = clipNamed(name);
+  p.shotTime = 0;
+}
+
+function removeGroup(g) {
+  const k = groups.indexOf(g);
+  if (k >= 0) groups.splice(k, 1);
+}
+// a conversation between two is over, and they both carry on
+function endChat(g) {
+  removeGroup(g);
+  g.members.splice(0).forEach(m => { m.group = null; finishActivity(m); });
+}
+function leaveGroup(p) {
+  const g = p.group;
+  if (!g) return;
+  p.group = null;
+  g.members.splice(g.members.indexOf(p), 1);
+  if (g.speaker === p) g.speaker = null;
+  g.members.forEach(m => { if (m.lookAt === p) m.lookAt = null; });
+  // a conversation between two ends when either goes; a circle carries on while anyone's left in it
+  if (g.kind === 'chat') endChat(g); else if (!g.members.length) removeGroup(g);
+}
+// stops whatever a person's doing, back to standing
+function endActivity(p) {
+  leaveGroup(p);
+  if (p.seat) { p.seat.by = null; p.seat = null; }
+  p.act = null; p.stage = ''; p.spot = null; p.faceTo = null; p.lookAt = null; p.pose = 'Idle'; p.seatLift = 0;
+}
+// …and carries on: off somewhere nearby, or on along their walkway — and not stopping to talk again for a while
+function finishActivity(p) {
+  endActivity(p);
+  if (p.mode === 'wander') { const s = randomSpotIn(peopleNav.areas[p.area], p); p.tx = s.x; p.tz = s.z; p.wait = 0.3 + peopleRng()*1.5; }
+  p.chatCooldown = 30 + peopleRng()*60;
+}
+
+// two people start talking — `approach` if the second is to walk over to the first first, who waits for them
+function startChat(a, b, approach) {
+  const g = { kind: 'chat', members: [a, b], stage: 'gather', timer: 25, speaker: null, turnIn: 0 };
+  groups.push(g);
+  [a, b].forEach(m => { endActivity(m); m.act = 'chat'; m.group = g; m.wait = 0; });
+  a.lookAt = b; b.lookAt = a;
+  if (!approach) wave(g, 'greet');
+  return g;
+}
+// both wave, hello or goodbye, standing still for it
+function wave(g, stage) {
+  g.stage = stage;
+  g.timer = hasClip('Wave') ? clipNamed('Wave').duration : 1;
+  g.members.forEach(m => playOnce(m, 'Wave'));
+}
+// someone hanging out in a plaza or park goes over to someone else standing about there, to talk
+function goChat(p, area) {
+  if (!personModel) return false;
+  let friend = null, best = 25;
+  for (let k=0;k<10;k++) {
+    const q = people[Math.floor(peopleRng()*people.length)], d = Math.hypot(q.x - p.x, q.z - p.z);
+    if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.oneShot && !q.moving && d < best) { friend = q; best = d; }
+  }
+  if (!friend) return false;
+  startChat(friend, p, true);
+  const gap = CHAT_GAP*S.peopleSize, d = Math.max(best, 1e-3);
+  p.tx = friend.x + (p.x - friend.x)/d*gap; p.tz = friend.z + (p.z - friend.z)/d*gap;
+  if (!area.inside(p.tx, p.tz)) { p.tx = p.x; p.tz = p.z; }
+  return true;
+}
+// two people meeting head on along a walkway (on the same side of it) now and then stop to talk — though never too many
+// at once
+function meetOnWalkways(dt) {
+  const cells = new Map(), CELL = 2;
+  let talking = 0;
+  people.forEach(p => {
+    p.chatCooldown -= dt;
+    if (p.mode !== 'line') return;
+    if (p.act) { talking++; return; }
+    const key = Math.floor(p.x/CELL) + ',' + Math.floor(p.z/CELL);
+    if (!cells.has(key)) cells.set(key, []);
+    cells.get(key).push(p);
+  });
+  if (!hasClip('Wave') || talking > people.length*0.15) return;
+  const reach = 1.6*S.peopleSize;
+  people.forEach(p => {
+    if (p.mode !== 'line' || p.act || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
+    p.chatCheckIn = 0.4 + peopleRng()*0.8;
+    const path = peopleNav.lines[p.li].path, cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
+    for (let ox=-1;ox<=1;ox++) for (let oz=-1;oz<=1;oz++) for (const q of cells.get((cx+ox) + ',' + (cz+oz)) || []) {
+      if (q === p || q.act || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || (!path && Math.sign(q.lat) !== Math.sign(p.lat))) continue;
+      // still coming towards each other, and close
+      if ((q.u - p.u)*p.dir < 0 || Math.hypot(q.x - p.x, q.z - p.z) > reach) continue;
+      if (peopleRng() < 0.35) startChat(p, q, false); else p.chatCooldown = q.chatCooldown = 10;
+      return;
+    }
+  });
+}
+function takeTurns(g, talkers, dt) {
+  g.turnIn -= dt;
+  if (!talkers.includes(g.speaker) || g.turnIn <= 0) {
+    g.speaker = pickFrom(talkers.filter(m => m !== g.speaker));
+    g.turnIn = 1.5 + peopleRng()*4;
+    g.speaker.lookAt = pickFrom(talkers.filter(m => m !== g.speaker));
+  }
+  talkers.forEach(m => { if (m !== g.speaker) m.lookAt = g.speaker; });
+}
+// conversations: two standing come together, wave hello, take turns talking a while, wave goodbye and go; a circle on the
+// grass talks among whoever's sat down in it
+function updateGroups(dt) {
+  for (let gi = groups.length - 1; gi >= 0; gi--) {
+    const g = groups[gi];
+    if (g.kind === 'circle') {
+      const seated = g.members.filter(m => m.stage === 'sit');
+      if (seated.length >= 2) takeTurns(g, seated, dt); else g.speaker = null;
+      continue;
+    }
+    const [a, b] = g.members;
+    g.timer -= dt;
+    if (g.stage === 'gather') {
+      a.faceTo = headingTo(a, b);
+      if (Math.hypot(b.tx - b.x, b.tz - b.z) < 0.3) wave(g, 'greet');
+      else if (g.timer <= 0) { endChat(g); continue; }
+    } else if (g.stage === 'greet') {
+      if (g.timer <= 0) { g.stage = 'talk'; g.timer = 8 + peopleRng()*22; }
+    } else if (g.stage === 'talk') {
+      takeTurns(g, g.members, dt);
+      if (g.timer <= 0) { g.speaker = null; wave(g, 'bye'); }
+    } else if (g.timer <= 0) {
+      endChat(g);
+      continue;
+    }
+    if (g.stage !== 'gather') { a.faceTo = headingTo(a, b); b.faceTo = headingTo(b, a); }
+  }
+}
+
+// whether there's room on the grass: in the park all round a spot, and clear of the tree trunks
+function clearGround(area, x, z, r) {
+  if (!area.inside(x, z) || !area.inside(x + r, z) || !area.inside(x - r, z) || !area.inside(x, z + r) || !area.inside(x, z - r)) return false;
+  return area.trees.every(tree => Math.hypot(tree.x - x, tree.z - z) > tree.r + r);
+}
+// someone in a plaza heads for a free bench seat nearby; someone in a park for the grass, to join a circle there with room
+// in it or to start one
+function goSit(p, area) {
+  if (!personModel) return false;
+  if (area.kind === 'plaza') {
+    // (only people about the size the benches are made for)
+    if (!hasClip('Sit1') || !area.seats.length || Math.abs(S.peopleSize - 1) > 0.3) return false;
+    let seat = null, best = 40;
+    for (let k=0;k<10;k++) {
+      const s = area.seats[Math.floor(peopleRng()*area.seats.length)], d = Math.hypot(s.x - p.x, s.z - p.z);
+      if (!s.by && d < best) { seat = s; best = d; }
+    }
+    if (!seat) return false;
+    seat.by = p;
+    Object.assign(p, { seat, act: 'bench', stage: 'go', timer: 30, wait: 0 });
+    return true;
+  }
+  const sits = GRASS_SITS.filter(hasClip);
+  if (area.kind !== 'park' || !sits.length) return false;
+  const radius = CIRCLE_RADIUS*S.peopleSize;
+  const circle = groups.find(g => g.kind === 'circle' && g.area === area && g.members.length < CIRCLE_MAX && Math.hypot(g.cx - p.x, g.cz - p.z) < 30);
+  let spot = null;
+  if (circle && peopleRng() < 0.85) {
+    // the place round the circle furthest from anyone already there
+    for (let k=0;k<12;k++) {
+      const angle = (k + peopleRng()*0.5)/12*Math.PI*2, x = circle.cx + Math.sin(angle)*radius, z = circle.cz + Math.cos(angle)*radius;
+      const gap = Math.min(...circle.members.map(m => Math.abs(wrapAngle(angle - m.circleAngle))));
+      if (gap > 0.9 && (!spot || gap > spot.gap) && clearGround(area, x, z, 0.35*S.peopleSize)) spot = { x, z, angle, gap };
+    }
+    if (!spot) return false;
+    circle.members.push(p);
+    p.group = circle;
+  } else {
+    // an open patch of grass, away from other circles and anyone lying down
+    for (let k=0;k<10 && !spot;k++) {
+      const s = randomSpotIn(area, p), angle = peopleRng()*Math.PI*2;
+      const cx = s.x - Math.sin(angle)*radius, cz = s.z - Math.cos(angle)*radius;
+      if (clearGround(area, cx, cz, radius + 0.5*S.peopleSize) && !groups.some(g => g.kind === 'circle' && Math.hypot(g.cx - cx, g.cz - cz) < 5)
+        && !people.some(q => q.act === 'lie' && Math.hypot(q.x - cx, q.z - cz) < 4)) spot = { x: s.x, z: s.z, angle, cx, cz };
+    }
+    if (!spot) return false;
+    p.group = { kind: 'circle', area, members: [p], speaker: null, turnIn: 0, cx: spot.cx, cz: spot.cz };
+    groups.push(p.group);
+  }
+  Object.assign(p, { act: 'circle', stage: 'go', spot: { x: spot.x, z: spot.z }, circleAngle: spot.angle, sitClip: pickFrom(sits), timer: 40, wait: 0 });
+  return true;
+}
+// someone in a park with nobody else about finds a patch of grass to lie down on
+function goLieDown(p, area) {
+  const poses = LIE_DOWNS.filter(hasClip);
+  if (!personModel || area.kind !== 'park' || !poses.length) return false;
+  const size = S.peopleSize, near = 8*size;
+  if (people.some(q => q !== p && q.mode === 'wander' && q.area === p.area && Math.abs(q.x - p.x) < near && Math.abs(q.z - p.z) < near)) return false;
+  for (let k=0;k<10;k++) {
+    const s = randomSpotIn(area, p), heading = peopleRng()*Math.PI*2, fx = Math.sin(heading), fz = Math.cos(heading);
+    // room from their head (behind where their pelvis goes) to their feet
+    if (![-0.5, 0, 0.5, 0.9].every(d => clearGround(area, s.x + fx*d*size, s.z + fz*d*size, 0.45*size))) continue;
+    Object.assign(p, { act: 'lie', stage: 'go', spot: { x: s.x, z: s.z, heading }, lieClip: pickFrom(poses), timer: 30, wait: 0 });
+    return true;
+  }
+  return false;
+}
+// Someone sitting or lying down, or talking in a plaza or park: where they should walk to, if anywhere. Sitting or lying
+// down goes: walking there ('go'), turning the right way ('turn'), waving hello to a circle ('greet'), sitting or lying
+// ('sit') for a while, getting up ('rise'), and waving goodbye to a circle ('bye').
+function updateActivity(p, area, dt) {
+  if (p.act === 'chat') return p.group.stage === 'gather' && p === p.group.members[1] ? { x: p.tx, y: area.y, z: p.tz } : null;
+  // where they sit or lie, and facing which way: in front of a bench seat, facing out into the plaza (sitting shifts them
+  // back onto it); a place in a circle, facing its middle; or a patch of grass
+  let spot = p.spot, facing, poseName;
+  if (p.act === 'bench') {
+    const seat = p.seat, reach = -clipNamed('Sit1').pelvisZ*modelScale(p);
+    spot = { x: seat.x + seat.nx*reach, z: seat.z + seat.nz*reach };
+    facing = Math.atan2(seat.nx, seat.nz);
+    poseName = 'Sit1';
+  } else if (p.act === 'circle') {
+    facing = headingTo(spot, { x: p.group.cx, z: p.group.cz });
+    poseName = p.sitClip;
+  } else {
+    facing = spot.heading;
+    poseName = p.lieClip;
+  }
+  switch (p.stage) {
+    case 'go':
+      p.timer -= dt;
+      if (p.timer <= 0) { finishActivity(p); return null; } // can't get there
+      if (Math.hypot(spot.x - p.x, spot.z - p.z) > 0.25) return { x: spot.x, y: area.y, z: spot.z };
+      p.stage = 'turn';
+      // falls through
+    case 'turn':
+      p.faceTo = facing;
+      if (Math.abs(wrapAngle(facing - p.heading)) > 0.15) break;
+      if (p.act === 'circle' && hasClip('Wave') && p.group.members.some(m => m.stage === 'sit')) { playOnce(p, 'Wave'); p.stage = 'greet'; break; }
+      // falls through
+    case 'greet':
+      if (p.oneShot) break;
+      p.stage = 'sit';
+      p.pose = poseName;
+      p.timer = (p.act === 'circle' ? 25 : 15) + peopleRng()*45;
+      if (p.act === 'bench') p.seatLift = p.seat.y - area.y - clipNamed('Sit1').seatY*modelScale(p);
+      // falls through
+    case 'sit':
+      p.timer -= dt;
+      if (p.timer <= 0) { p.stage = 'rise'; p.pose = 'Idle'; p.lookAt = null; }
+      break;
+    case 'rise':
+      if (weightOf(p, clipNamed('Idle')) < 1) break;
+      if (p.act === 'circle' && hasClip('Wave') && p.group.members.some(m => m !== p && m.stage === 'sit')) { playOnce(p, 'Wave'); p.stage = 'bye'; break; }
+      finishActivity(p);
+      return null;
+    case 'bye':
+      if (!p.oneShot) { finishActivity(p); return null; }
+      break;
+  }
+  // on a bench, sitting down shifts them back onto the seat, and getting up forward off it — as far as sitting puts their
+  // pelvis behind their feet, so that their feet stay put
+  if (p.act === 'bench') {
+    const w = weightOf(p, clipNamed('Sit1'));
+    p.x = spot.x + (p.seat.x - spot.x)*w; p.z = spot.z + (p.seat.z - spot.z)*w;
+  }
+  return null;
+}
+
 // ---- following someone with the camera: in World mode, clicking a person keeps the view centered on them as they go —
 // orbiting and zooming as usual, and able to come in closer than the camera usually can — with a card saying who they are
 // (person-card.js), until a click anywhere else, a pan, leaving World mode, or them leaving the crowd lets them go
 let followed = -1; // their index in people
-const personHeight = p => 1.7*p.height*S.peopleSize;
+const personHeight = p => 1.7*p.height*S.peopleSize*p.heightScale;
 // the person under a point on the screen (the one nearest the camera, if several are), or -1: a point within about their
 // width of the line up the middle of them, as they look on screen — or within a few pixels, for someone far off
 function pickPerson(clientX, clientY) {
@@ -736,35 +1111,43 @@ export function updatePeople(t) {
   if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25)) {
     S.peopleNavDirty = false;
     peopleNavBuiltAt = t;
+    // whatever anyone was doing stops, as the benches and grass they were using may have gone
+    groups.length = 0;
+    people.forEach(p => { p.group = null; endActivity(p); });
     peopleNav = buildPeopleNav();
     people.forEach(reseatPerson);
   }
   const wanted = Math.min(PEOPLE_MAX, Math.round(S.peopleAmount));
   while (people.length < wanted) { const p = newPerson(); spawnPerson(p); people.push(p); }
-  if (people.length > wanted) people.length = wanted;
+  while (people.length > wanted) endActivity(people.pop());
   if (followed >= people.length) stopFollowingPerson();
   peopleMesh.count = people.length;
   if (personModel) {
     personModel.mesh.count = people.length;
     personModel.hair.forEach(style => { style.mesh.count = countBelow(style.members, people.length); });
+    updateGroups(dt);
+    meetOnWalkways(dt);
   }
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   people.forEach((p, i) => {
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     const speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride;
     let goal = null;
-    if (p.mode === 'line') {
+    // (stopped to talk, someone on a walkway stays put)
+    if (p.mode === 'line' && p.act !== 'chat') {
       walkAlong(p, speed*dt);
       if (p.mode === 'line') goal = walkwayPoint(p);
     }
     if (p.mode === 'wander') {
       const area = peopleNav.areas[p.area];
-      if (p.wait > 0) {
+      if (p.act) {
+        goal = updateActivity(p, area, dt);
+      } else if (p.wait > 0 || p.oneShot) {
         p.wait -= dt;
       } else if (Math.hypot(p.tx - p.x, p.tz - p.z) < 0.3) {
-        p.wait = 1 + peopleRng()*7;
+        p.wait = 1 + peopleRng()*9;
         const roll = peopleRng();
-        if (area.exits.length && roll < 0.22) {
+        if (area.exits.length && roll < 0.2) {
           // head for the nearest of a few of the hangout's entrances
           let exit = null;
           for (let k=0;k<6;k++) {
@@ -775,7 +1158,13 @@ export function updatePeople(t) {
           joinWalkway(p, exit.li, peopleNav.lines[exit.li].cum[exit.vi], peopleRng() < 0.5 ? -1 : 1);
           p.exit = walkwayPoint(p);
           p.mode = 'leaving'; p.wait = 0;
-        } else if (roll < 0.6) {
+        } else if (roll < 0.36 && goSit(p, area)) {
+          // off to a bench, or to sit on the grass
+        } else if (roll < 0.44 && goLieDown(p, area)) {
+          // off to lie down on the grass
+        } else if (roll < 0.62 && goChat(p, area)) {
+          // over to talk to someone
+        } else if (roll < 0.75) {
           // over to someone else hanging out here
           let friend = null;
           for (let k=0;k<8 && !friend;k++) { const q = people[Math.floor(peopleRng()*people.length)]; if (q !== p && q.mode === 'wander' && q.area === p.area) friend = q; }
@@ -785,7 +1174,7 @@ export function updatePeople(t) {
           const s = randomSpotIn(area); p.tx = s.x; p.tz = s.z;
         }
       }
-      if (p.mode === 'wander') goal = { x: p.tx, y: area.y, z: p.tz };
+      if (p.mode === 'wander' && !p.act) goal = { x: p.tx, y: area.y, z: p.tz };
     }
     if (p.mode === 'leaving') {
       // already placed on their walkway by joinWalkway; once they've reached it they carry on along it
@@ -826,23 +1215,45 @@ export function updatePeople(t) {
       }
       p.y += (goal.y - p.y)*Math.min(1, dt*6);
     }
+    // standing still for something (talking, sitting down), they turn to face the way it wants
+    if (!p.moving && p.faceTo != null) p.heading += wrapAngle(p.faceTo - p.heading)*Math.min(1, dt*5);
     if (personModel) {
-      // the model, scaled to the same height as a cuboid person
-      const s = p.mode === 'none' ? 0 : 1.7*p.height*S.peopleSize/personModel.height;
-      rotation.setFromAxisAngle(up, p.heading);
-      matrix.compose(position.set(p.x, p.y - personModel.minY*s, p.z), rotation, scale.set(s, s, s));
-      personModel.mesh.setMatrixAt(i, matrix);
-      // a cycle of the walk for every stride's worth of ground covered, as big as they are, easing into the idle when they stop
+      const clips = personModel.clips, s = p.mode === 'none' ? 0 : modelScale(p);
+      // a cycle of the walk for every stride's worth of ground covered, as big as they are
       if (s > 0) p.walkCycle = (p.walkCycle + p.stepped/(personModel.stride*s)) % 1;
       p.idleTime += dt;
-      p.walkBlend += ((p.moving ? 1 : 0) - p.walkBlend)*Math.min(1, dt*6);
+      // standing about with nothing to do for a while, now and then a scratch or a think
+      if (p.moving) {
+        p.stillFor = 0;
+      } else if (!p.act && !p.oneShot && p.pose === 'Idle') {
+        p.stillFor += dt;
+        if (p.stillFor > p.fidgetAfter) { playOnce(p, pickFrom(FIDGETS)); p.stillFor = 0; p.fidgetAfter = 3 + peopleRng()*8; }
+      }
+      // the animation: one playing through once, else walking, else the pose they're in — blending into it from the last
+      if (p.oneShot) { p.shotTime += dt; if (p.shotTime >= (p.oneShot.frames - 1)/PERSON_BAKE_FPS) p.oneShot = null; }
+      if (!p.clipA) { p.clipA = p.clipB = clips.Idle; p.fade = 1; }
+      setClip(p, p.oneShot || (p.moving ? clips.Walk : clips[p.pose] || clips.Idle));
+      p.fade = Math.min(1, p.fade + dt/p.fadeTime);
+      // the model, scaled to the same height as a cuboid person — set back by however far their pose puts their pelvis from
+      // their feet, and sat on a bench, up on its seat
+      const blend = key => p.clipA[key]*p.fade + p.clipB[key]*(1 - p.fade);
+      const offX = blend('pelvisX')*s, offZ = blend('pelvisZ')*s, sin = Math.sin(p.heading), cos = Math.cos(p.heading);
+      p.heightScale = blend('heightScale');
+      rotation.setFromAxisAngle(up, p.heading);
+      position.set(p.x - offX*cos - offZ*sin, p.y + p.seatLift*weightOf(p, clips.Sit1) - personModel.minY*s, p.z + offX*sin - offZ*cos);
+      matrix.compose(position, rotation, scale.set(s, s, s));
+      personModel.mesh.setMatrixAt(i, matrix);
       // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION
       p.blinkIn -= dt;
       p.blinkAge += dt;
       if (p.blinkIn <= 0) { p.blinkAge = 0; p.blinkIn = BLINK_DURATION + 1.5 + peopleRng()*5; }
-      // every so often a glance somewhere else — not so far while walking — or back ahead, the head easing round to it
       p.lookIn -= dt;
-      if (p.lookIn <= 0) {
+      if (p.lookAt) {
+        // talking: at whoever they're talking to, or whoever's talking
+        p.lookTurnTo = Math.max(-LOOK_MAX_TURN, Math.min(LOOK_MAX_TURN, wrapAngle(headingTo(p, p.lookAt) - p.heading)));
+        p.lookTiltTo = 0;
+      } else if (p.lookIn <= 0) {
+        // every so often a glance somewhere else — not so far while walking — or back ahead, the head easing round to it
         p.lookIn = 1.5 + peopleRng()*4;
         const ahead = peopleRng() < 0.35, reach = p.moving ? 0.6 : 1;
         p.lookTurnTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TURN*reach;
@@ -850,19 +1261,33 @@ export function updatePeople(t) {
       }
       p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, dt*4);
       p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, dt*4);
-      const { walk, idle } = personModel, o = i*4, a = personModel.anim.array, lookArray = personModel.look.array;
-      a[o] = walk.start + p.walkCycle*walk.frames;
-      a[o+1] = idle.start + (p.idleTime*PERSON_BAKE_FPS) % idle.frames;
-      a[o+2] = p.walkBlend;
+      // talking, their mouth moves; listening, their expression changes every now and then
+      const group = p.group, talking = !!group && group.speaker === p, listening = !!group && !!group.speaker && !talking && p.lookAt === group.speaker;
+      if (!talking) {
+        p.talkTo = 0;
+      } else if ((p.talkIn -= dt) <= 0) {
+        p.talkTo = peopleRng() < 0.25 ? 0 : 0.3 + peopleRng()*0.7;
+        p.talkIn = 0.08 + peopleRng()*0.14;
+      }
+      p.talk += (p.talkTo - p.talk)*Math.min(1, dt*20);
+      if (listening) {
+        if ((p.emotionIn -= dt) <= 0) { p.emotionTo = peopleRng()*2 - 1; p.emotionIn = 1.5 + peopleRng()*3; }
+      } else if (!group) {
+        p.emotionTo = 0;
+      }
+      p.emotion += (p.emotionTo - p.emotion)*Math.min(1, dt*5);
+      const o = i*4, a = personModel.anim.array, lookArray = personModel.look.array;
+      a[o] = clipRow(p, p.clipA);
+      a[o+1] = p.clipB === p.clipA ? a[o] : p.rowB;
+      a[o+2] = p.fade;
       a[o+3] = p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0;
-      lookArray[i*2] = p.lookTurn; lookArray[i*2+1] = p.lookTilt;
+      lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
       // their hairstyle's copy of where they are, how they're posed and which way they're looking
       const style = personModel.hairOf[i] >= 0 ? personModel.hairStyles[personModel.hairOf[i]] : null;
       if (style && style.mesh) {
         const slot = personModel.hairSlot[i];
         matrix.toArray(style.mesh.instanceMatrix.array, slot*16);
-        for (let k=0;k<4;k++) style.anim.array[slot*4 + k] = a[o + k];
-        style.look.array[slot*2] = p.lookTurn; style.look.array[slot*2+1] = p.lookTilt;
+        for (let k=0;k<4;k++) { style.anim.array[slot*4 + k] = a[o + k]; style.look.array[slot*4 + k] = lookArray[o + k]; }
       }
     } else {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
@@ -882,4 +1307,5 @@ export function updatePeople(t) {
   if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
 }
 
-Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson });
+// (people and groups too, for poking at from the browser console)
+Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, people, peopleGroups: groups });

@@ -141,8 +141,11 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
   }
   zone.fountainSpot = fountain; // so people hanging out here keep out of the pool (see "people")
   const clearOfFountain = (x, z, gap) => !fountain || Math.hypot(x-fountain.x, z-fountain.z) > fountain.r + gap;
-  // lamp posts every PLAZA_LAMP_SPACING around the edge, with a bench facing inward halfway between each pair
+  // lamp posts every PLAZA_LAMP_SPACING around the edge, with a bench facing inward halfway between each pair — room for two
+  // on each, who people can sit down in (see "people")
   const furniture = createMeshBuilder(), lampHeads = createMeshBuilder();
+  const seatTop = Y_PLAZA + 0.42;
+  zone.benchSeats = [];
   const benchSide = App.createRegionTester(App.offsetPaths(area, -3.3, jtMiter));
   App.offsetPaths(area, -2.2, jtMiter).forEach(path => {
     const pts = App.fromClipperPath(path);
@@ -164,9 +167,10 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
           const side = benchSide(x - dz*1.1, z + dx*1.1) ? 1 : -1;
           const bx = x - dz*1.1*side, bz = z + dx*1.1*side, nx = -dz*side, nz = dx*side;
           if (blocked(bx, bz)) continue;
-          furniture.addBox(bx, bz, dx, dz, 0.95, 0.26, Y_PLAZA + 0.4, Y_PLAZA + 0.5);             // seat
-          furniture.addBox(bx - nx*0.22, bz - nz*0.22, dx, dz, 0.95, 0.05, Y_PLAZA + 0.5, Y_PLAZA + 0.95); // backrest, away from the plaza
-          [-0.8, 0.8].forEach(o => furniture.addBox(bx + dx*o, bz + dz*o, dx, dz, 0.05, 0.22, Y_PLAZA, Y_PLAZA + 0.4));
+          furniture.addBox(bx, bz, dx, dz, 0.95, 0.26, seatTop - 0.1, seatTop);                   // seat
+          furniture.addBox(bx - nx*0.22, bz - nz*0.22, dx, dz, 0.95, 0.05, seatTop, seatTop + 0.45); // backrest, away from the plaza
+          [-0.8, 0.8].forEach(o => furniture.addBox(bx + dx*o, bz + dz*o, dx, dz, 0.05, 0.22, Y_PLAZA, seatTop - 0.1));
+          [-0.45, 0.45].forEach(o => zone.benchSeats.push({ x: bx + dx*o, z: bz + dz*o, y: seatTop, nx, nz }));
         }
       }
       untilNext = d - len;

@@ -826,6 +826,7 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
     if (tooClose) continue;
     placed.push(pt);
   }
+  zone.treeSpots = []; // so people sitting or lying on the grass keep clear of the trunks (see "people")
   placed.forEach(pt => {
     const variant = Math.floor(rng()*3);
     const scale = lerp(s.treeSizeMin, s.treeSizeMax, rng());
@@ -833,6 +834,7 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
     tree.position.set(pt.x, Y_PARK, pt.z);
     tree.rotation.y = rng()*Math.PI*2;
     zone.buildingsGroup.add(tree);
+    zone.treeSpots.push({ x: pt.x, z: pt.z, r: 0.35*scale });
   });
   // a fence around the park's edge, open wherever a road, river or path runs into it, and not along the water
   if (s.fence !== false) {
