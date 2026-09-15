@@ -218,7 +218,7 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
 .carousel-arrow:hover { color:var(--text); }
 
 #person-card {
-  position:fixed; right:16px; bottom:52px; width:270px; z-index:20; /* (clear of the hint along the bottom) */
+  position:fixed; right:16px; bottom:52px; width:300px; z-index:20; /* (clear of the hint along the bottom) */
   background:var(--bg-panel); border:1px solid var(--border); border-radius:8px;
   padding:12px 14px; color:var(--text); font-size:12px; user-select:none; box-shadow:0 4px 16px rgba(0,0,0,0.4);
 }
@@ -235,6 +235,14 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
 .pc-value { line-height:1.4; }
 .pc-name { font-weight:600; color:var(--accent); padding-right:16px; }
 .pc-mood { font-size:18px; line-height:1; }
+/* name, age and mood, with the headshot beside them (clear of the close button above it) */
+.pc-top { display:flex; gap:10px; align-items:flex-start; }
+.pc-rows { flex:1; min-width:0; }
+#pc-headshot {
+  flex:0 0 auto; width:60px; height:60px; margin-top:18px;
+  background:linear-gradient(#8fb8d6, #dde8ef); border:1px solid var(--border); border-radius:6px;
+}
+#pc-headshot[hidden] { display:none; }
 
 /* ============================================================ Windows 3.0 look
    Turned on from World settings (src/ui/win3.js), which puts the win3 class on <html>. Most of it is the palette above swapped
@@ -371,3 +379,7 @@ html.win3 #person-card-close { display:none; }
 html.win3 .pc-row.pc-gap { border-top:1px solid #000; }
 html.win3 .pc-name { padding-right:0; }
 html.win3 #person-card .pc-mood { font-size:18px; }
+html.win3 #pc-headshot {
+  margin-top:0; border-radius:0; background:#008080;
+  border:1px solid; border-color:#808080 #fff #fff #808080; box-shadow:inset 1px 1px 0 #000;
+}

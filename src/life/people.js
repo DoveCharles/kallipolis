@@ -108,6 +108,10 @@ const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 
 const BLINK_DURATION = 0.5; // seconds for the eyes to close and open again
 // how far a person turns their head when they glance around: side to side, and up and down
 const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
+// the camera layer the people (and the lights) are also on, for the person card's headshot to draw them alone
+export const HEADSHOT_LAYER = 3;
+// the middle of a person's face, from where their head meets their neck, in the model's units
+const HEAD_CENTER = new THREE.Vector3(0, 0.45, 0.2);
 let personModel = null; // { mesh, anim, look, hair, hairOf, hairSlot, isMan, height, minY, clips, stride } once loaded
 
 const PERSON_VERTEX_PARS = `
@@ -245,6 +249,7 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute) {
   mesh.count = 0;
   mesh.frustumCulled = false;
   mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.layers.enable(HEADSHOT_LAYER);
   mesh.visible = false;
   mesh.name = 'People';
   scene.add(mesh);
@@ -549,7 +554,8 @@ function buildPersonModel(gltf, hairGltf) {
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, anim, look, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles, isMan,
+  return { mesh, anim, look, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles, isMan, boneData, boneWidth,
+    headBone: headBone ?? 0, headPivot,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
 
@@ -1093,6 +1099,35 @@ function followPersonAt(clientX, clientY) {
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9)); // swooping in, if the camera's far off
   App.showPersonCard(i, personModel ? personModel.isMan[i] === 1 : null);
 }
+// Where someone's head is and which way their face points, in the world, for the person card's headshot: from their pose
+// this frame, worked out as the shader works it out — the head bone's pose (part-way between frames, and between the two
+// animations they're blending), their head turned and tilted, and where they are.
+const headshot = { head: new THREE.Vector3(), forward: new THREE.Vector3(), up: new THREE.Vector3(), distance: 0 };
+const headPoseA = new Float32Array(12), headPoseB = new Float32Array(12);
+const headMatrix = new THREE.Matrix4(), headTurn = new THREE.Matrix3(), lookTurn = new THREE.Matrix4(), lookTilt = new THREE.Matrix4();
+const headshotInstance = new THREE.Matrix4(), headOffset = new THREE.Vector3();
+// the head bone's pose (its matrix's top three rows) at a row of the bone texture
+function headPoseAt(out, row) {
+  const { boneData, boneWidth, headBone } = personModel, r = Math.floor(row), t = row - r;
+  const a = (r*boneWidth + headBone*3)*4, b = ((r + 1)*boneWidth + headBone*3)*4;
+  for (let k=0;k<12;k++) out[k] = boneData[a + k] + (boneData[b + k] - boneData[a + k])*t;
+}
+function headshotOf(i) {
+  const anim = personModel.anim.array, look = personModel.look.array, o = i*4, fade = anim[o+2];
+  headPoseAt(headPoseA, anim[o]);
+  headPoseAt(headPoseB, anim[o+1]);
+  const e = headPoseA.map((value, k) => value*fade + headPoseB[k]*(1 - fade));
+  headMatrix.set(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9], e[10], e[11], 0, 0, 0, 1);
+  headTurn.setFromMatrix4(headMatrix);
+  lookTurn.makeRotationY(look[o]).multiply(lookTilt.makeRotationX(look[o+1]));
+  personModel.mesh.getMatrixAt(i, headshotInstance);
+  headOffset.copy(HEAD_CENTER).applyMatrix4(lookTurn).applyMatrix3(headTurn);
+  headshot.head.copy(personModel.headPivot).applyMatrix4(headMatrix).add(headOffset).applyMatrix4(headshotInstance);
+  headshot.forward.set(0, 0, 1).applyMatrix4(lookTurn).applyMatrix3(headTurn).transformDirection(headshotInstance);
+  headshot.up.set(0, 1, 0).applyMatrix4(lookTurn).applyMatrix3(headTurn).transformDirection(headshotInstance);
+  headshot.distance = 3.2*modelScale(people[i]);
+  return headshot;
+}
 function stopFollowingPerson() {
   if (followed < 0) return;
   followed = -1;
@@ -1305,6 +1340,8 @@ export function updatePeople(t) {
   }
   // the camera onto whoever it's following, at about their shoulders
   if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
+  // and the card's headshot of them
+  if (followed >= 0 && personModel && people[followed].mode !== 'none') App.drawPersonHeadshot(headshotOf(followed));
 }
 
 // (people and groups too, for poking at from the browser console)

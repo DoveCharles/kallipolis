@@ -147,9 +147,14 @@
 <div id="person-card" hidden>
   <div class="win3-titlebar"><button class="win3-sysbox" title="Close"></button><div class="win3-title">Person</div></div>
   <button id="person-card-close" title="Stop following">×</button>
-  <div class="pc-row"><span class="pc-label">Name</span><span class="pc-value pc-name" id="pc-name"></span></div>
-  <div class="pc-row"><span class="pc-label">Age</span><span class="pc-value" id="pc-age"></span></div>
-  <div class="pc-row"><span class="pc-label">Current mood</span><span class="pc-value pc-mood" id="pc-mood"></span></div>
+  <div class="pc-top">
+    <div class="pc-rows">
+      <div class="pc-row"><span class="pc-label">Name</span><span class="pc-value pc-name" id="pc-name"></span></div>
+      <div class="pc-row"><span class="pc-label">Age</span><span class="pc-value" id="pc-age"></span></div>
+      <div class="pc-row"><span class="pc-label">Current mood</span><span class="pc-value pc-mood" id="pc-mood"></span></div>
+    </div>
+    <canvas id="pc-headshot" width="120" height="120"></canvas>
+  </div>
   <div class="pc-row pc-gap"><span class="pc-label">Enjoys</span><span class="pc-value" id="pc-enjoys"></span></div>
   <div class="pc-row"><span class="pc-label">Hates</span><span class="pc-value" id="pc-hates"></span></div>
 </div>
