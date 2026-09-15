@@ -21,6 +21,10 @@ export const TRAITS = {
   parks:     { base: 1, min: 0, max: 8 },
   plazas:    { base: 1, min: 0, max: 8 },
   mood:      { base: 0, min: -1, max: 1, combine: 'add' },
+  happy:     { base: 0, min: 0, max: 1, combine: 'add' },
+  sad:       { base: 0, min: 0, max: 1, combine: 'add' },
+  angry:     { base: 0, min: 0, max: 1, combine: 'add' },
+  shock:     { base: 0, min: 0, max: 1, combine: 'add' },
   backwards: { base: 0, min: 0, max: 1, combine: 'on' },
 };
 export const DEFAULT_TRAITS = Object.fromEntries(Object.entries(TRAITS).map(([key, trait]) => [key, trait.base]));

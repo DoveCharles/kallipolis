@@ -77,15 +77,20 @@ const FADE_QUICK = 0.2, FADE_POSE = 0.6;
 const CHAT_GAP = 1.1;        // how far apart two people stand to talk, at people size 1
 const CIRCLE_RADIUS = 1.35;  // how far from the middle of a circle sat on the grass each of them sits, at people size 1
 const CIRCLE_MAX = 4;
-// every shape key the shader applies, in the order of the shape key texture; the body's are set once per person, Blink as
-// they blink, and the mouth's Talk and Emotion as they talk and listen
-const PERSON_SHAPE_KEYS = ['Breast', 'Waist', 'Hips', 'Weight', 'Butt', 'Blink', 'Talk', 'Emotion'];
+// every shape key the shader applies, in the order of the shape key texture, and the bit of personMorphMask saying a vertex
+// moves with it: the body's (1) and the head's and eyes' shapes (8, 16), set once per person; Blink (2), as they blink;
+// the mouth's Talk and Emotion (4), as they talk and listen; and the eyes' Shock, Happy, Angry and Sad (32), as they feel
+const PERSON_SHAPE_KEYS = ['Breast', 'Waist', 'Hips', 'Weight', 'Butt', 'Blink', 'Talk', 'Emotion', 'Key 1', 'Key 2', 'Shape1', 'Shape2', 'Shape3',
+  'Shock', 'Happy', 'Angry', 'Sad'];
+const PERSON_SHAPE_KEY_BITS = [1, 1, 1, 1, 1, 2, 4, 4, 8, 8, 16, 16, 16, 32, 32, 32, 32];
 const PERSON_BODY_KEY_COUNT = 5;
 // each person's shape keys by sex, as [lowest, highest]
 const PERSON_BODY_SHAPES = {
   male:   { Breast: [0.6, 1],  Waist: [0.5, 1],    Hips: [-1, -0.5],   Weight: [0, 1],   Butt: [1, 1] },
   female: { Breast: [-1, 0.1], Waist: [-0.5, 0.1], Hips: [-0.4, 0.2], Weight: [0, 0.3], Butt: [0, 0.6] },
 };
+// each person's head and eye shape keys, as [lowest, highest] — or, where men's and women's differ, one of those for each
+const PERSON_FACE_SHAPES = { 'Key 1': { male: [0, 1], female: [-0.3, 0] }, 'Key 2': [-0.5, 0.3], Shape1: [-0.2, 1], Shape2: [0, 1], Shape3: [0, 1] };
 // How much skin clothes show: a sleeve, the tummy and a leg are each split into numbered bands (materials named Sleeve1,
 // Sleeve2…, lowest nearest the body), and each person's clothes stop at one of them — it and every higher-numbered band of
 // that part showing skin, the rest the clothes' color. A man's tummy is always covered.
@@ -99,9 +104,10 @@ const PERSON_CLOTHING = [
 const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelashes', 'Lips',
   ...PERSON_CLOTHING.flatMap(c => Array.from({ length: c.count }, (_, k) => c.band + (k + 1)))];
 const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
-// the colors each person has their own of, from row 2 of the traits texture on; then a row of where their clothes stop
+// the colors each person has their own of, from row 2 of the traits texture on; then a row of where their clothes stop,
+// and one of their head's and eyes' shape keys (Key 1, Key 2, Shape1, Shape2 — Shape3 being in row 1)
 const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair'];
-const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length;
+const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
 // the hairstyles a man can have (or none); a woman can have any of them
 const MEN_HAIRSTYLES = ['GHair20', 'GHair14', 'GHair12', 'GHair9', 'GHair8', 'GHair21'];
 const PANTS_COLORS = [0x26344f, 0x3e5a82, 0x5a7aa6, 0x232326, 0x4d5057, 0x8f8f93, 0xb09a72, 0x6b5038, 0x46503a];
@@ -132,6 +138,7 @@ const PERSON_VERTEX_PARS = `
   attribute float personHeadWeight;
   attribute vec4 instanceAnim;
   attribute vec4 instanceLook;
+  attribute vec4 instanceEyes;
   // which person this instance is: the instance itself for the body, and for a hairstyle (holding only some people) the
   // person it was given
   #ifdef PERSON_INDEX_ATTRIBUTE
@@ -182,8 +189,8 @@ const PERSON_VERTEX_PARS = `
     }
     return looked;
   }
-  // this person's row of the traits texture: 0 their first four body shape keys, 1 x their fifth and y whether they're a man,
-  // then the colors they have their own of
+  // this person's row of the traits texture: 0 their first four body shape keys, 1 x their fifth, y whether they're a man
+  // and z their Shape3, then the colors they have their own of, where their clothes stop, and their face's shape keys
   vec4 personTrait(int row) { return texelFetch(personTraits, ivec2(personIndex(), row), 0); }
   // a shape key's offset at this vertex
   vec3 personMorph(int key) {
@@ -191,7 +198,7 @@ const PERSON_VERTEX_PARS = `
     return texelFetch(personMorphs, ivec2(gl_VertexID % width, gl_VertexID/width + key*int(personMorphsRows)), 0).xyz;
   }
   // every shape key's offset at this vertex, each as far on as this person has it; personMorphMask says which keys move the
-  // vertex at all — 1 the body's, 2 Blink, 4 Talk, 8 Emotion
+  // vertex at all (see PERSON_SHAPE_KEY_BITS)
   vec3 personShape() {
     int mask = int(personMorphMask + 0.5);
     vec3 offset = vec3(0.0);
@@ -200,8 +207,14 @@ const PERSON_VERTEX_PARS = `
       offset += personMorph(0)*body.x + personMorph(1)*body.y + personMorph(2)*body.z + personMorph(3)*body.w + personMorph(4)*personTrait(1).x;
     }
     if ((mask & 2) != 0) offset += personMorph(5)*instanceAnim.w;
-    if ((mask & 4) != 0) offset += personMorph(6)*instanceLook.z;
-    if ((mask & 8) != 0) offset += personMorph(7)*instanceLook.w;
+    if ((mask & 4) != 0) offset += personMorph(6)*instanceLook.z + personMorph(7)*instanceLook.w;
+    if ((mask & 24) != 0) {
+      vec4 face = personTrait(${PERSON_FACE_ROW});
+      if ((mask & 8) != 0) offset += personMorph(8)*face.x + personMorph(9)*face.y;
+      if ((mask & 16) != 0) offset += personMorph(10)*face.z + personMorph(11)*face.w + personMorph(12)*personTrait(1).z;
+    }
+    // instanceEyes: how shocked, happy, angry and sad their eyes look
+    if ((mask & 32) != 0) offset += personMorph(13)*instanceEyes.x + personMorph(14)*instanceEyes.y + personMorph(15)*instanceEyes.z + personMorph(16)*instanceEyes.w;
     return offset;
   }
 `;
@@ -373,7 +386,7 @@ function buildPersonModel(gltf, hairGltf) {
   const morphData = new Float32Array(morphWidth*morphRows*PERSON_SHAPE_KEYS.length*4);
   const morphMask = new Float32Array(vertexCount);
   PERSON_SHAPE_KEYS.forEach((key, k) => {
-    const keyOffsets = offsets[k], bit = k < PERSON_BODY_KEY_COUNT ? 1 : 1 << (k - PERSON_BODY_KEY_COUNT + 1);
+    const keyOffsets = offsets[k], bit = PERSON_SHAPE_KEY_BITS[k];
     for (let i=0;i<vertexCount;i++) {
       const texel = (k*morphRows*morphWidth + i)*4;
       for (let c=0;c<3;c++) morphData[texel + c] = keyOffsets[i*3 + c];
@@ -493,9 +506,9 @@ function buildPersonModel(gltf, hairGltf) {
 
   // ---- each person's traits: their sex, their body's shape keys (as far on as the ranges for their sex allow), their
   // hairstyle (any for a woman; for a man one of his, or none), their colors, and where their clothes stop
-  const traitRows = PERSON_CLOTHING_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
+  const traitRows = PERSON_FACE_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
   const isMan = new Uint8Array(PEOPLE_MAX), hairOf = new Int16Array(PEOPLE_MAX).fill(-1), hairSlot = new Int32Array(PEOPLE_MAX);
-  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hairRng = mulberry32(31337), clothingRng = mulberry32(1990), color = new THREE.Color();
+  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hairRng = mulberry32(31337), clothingRng = mulberry32(1990), faceRng = mulberry32(2718), color = new THREE.Color();
   const colorFor = {
     Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
     Pants: () => colorRng() < 0.8 ? color.set(PANTS_COLORS[Math.floor(colorRng()*PANTS_COLORS.length)]) : color.setHSL(colorRng(), 0.25 + colorRng()*0.3, 0.25 + colorRng()*0.25),
@@ -509,7 +522,13 @@ function buildPersonModel(gltf, hairGltf) {
     isMan[i] = man ? 1 : 0;
     const shape = PERSON_SHAPE_KEYS.slice(0, PERSON_BODY_KEY_COUNT).map(key => { const [lo, hi] = ranges[key]; return lo + traitRng()*(hi - lo); });
     traits.set(shape.slice(0, 4), texel(0));
-    traits.set([shape[4], man ? 1 : 0], texel(1));
+    // their head's and eyes' shapes
+    const face = Object.values(PERSON_FACE_SHAPES).map(range => {
+      const [lo, hi] = Array.isArray(range) ? range : range[man ? 'male' : 'female'];
+      return lo + faceRng()*(hi - lo);
+    });
+    traits.set([shape[4], man ? 1 : 0, face[4]], texel(1));
+    traits.set(face.slice(0, 4), texel(PERSON_FACE_ROW));
     PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
     // the band each part of their clothes stops at (one past the last band for none)
     traits.set(PERSON_CLOTHING.map(c => c.coveredOnMen && man ? c.count + 1 : 1 + Math.floor(clothingRng()*(c.count + 1))), texel(PERSON_CLOTHING_ROW));
@@ -537,9 +556,10 @@ function buildPersonModel(gltf, hairGltf) {
     bands: PERSON_CLOTHING.flatMap((c, cut) => Array.from({ length: c.count }, (_, k) =>
       ({ slot: PERSON_SLOTS.indexOf(c.band + (k + 1)), number: k + 1, cut, colorRow: traitRow(c.part) }))),
   };
-  const anim = dynamicInstanceAttribute(PEOPLE_MAX, 4), look = dynamicInstanceAttribute(PEOPLE_MAX, 4);
+  const anim = dynamicInstanceAttribute(PEOPLE_MAX, 4), look = dynamicInstanceAttribute(PEOPLE_MAX, 4), eyes = dynamicInstanceAttribute(PEOPLE_MAX, 4);
   geometry.setAttribute('instanceAnim', anim);
   geometry.setAttribute('instanceLook', look);
+  geometry.setAttribute('instanceEyes', eyes);
   const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
   const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair') }, femaleOnly: [] };
   hairStyles.forEach(style => {
@@ -547,8 +567,10 @@ function buildPersonModel(gltf, hairGltf) {
     style.geometry.setAttribute('instancePerson', new THREE.InstancedBufferAttribute(Float32Array.from(style.members), 1));
     style.anim = dynamicInstanceAttribute(style.members.length, 4);
     style.look = dynamicInstanceAttribute(style.members.length, 4);
+    style.eyes = dynamicInstanceAttribute(style.members.length, 4);
     style.geometry.setAttribute('instanceAnim', style.anim);
     style.geometry.setAttribute('instanceLook', style.look);
+    style.geometry.setAttribute('instanceEyes', style.eyes);
     style.mesh = makePersonMesh(style.geometry, uniforms, hairLook, style.members.length, true);
   });
   root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
@@ -556,7 +578,7 @@ function buildPersonModel(gltf, hairGltf) {
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, anim, look, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles, isMan, boneData, boneWidth, traitData: traits, palette,
+  return { mesh, anim, look, eyes, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles, isMan, boneData, boneWidth, traitData: traits, palette,
     headBone: headBone ?? 0, headPivot,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
@@ -668,6 +690,8 @@ function newPerson() {
     act: null, stage: '', timer: 0, spot: null, seat: null, sitClip: null, lieClip: null, circleAngle: 0, group: null,
     faceTo: null, lookAt: null, seatLift: 0, chatCheckIn: peopleRng(), chatCooldown: peopleRng()*20,
     talk: 0, talkTo: 0, talkIn: 0, emotion: 0, emotionTo: 0, emotionIn: 0,
+    // and their eyes: how shocked, happy, angry and sad they look
+    eyes: [0, 0, 0, 0],
     // their traits, from what they were picked in people.txt (see refreshTraits)
     traits: DEFAULT_TRAITS, traitsKey: '',
     // how they're taking someone blowing up nearby, if they are (see frightenBystanders)
@@ -1417,18 +1441,25 @@ export function updatePeople(t) {
       }
       if (frozen || fleeing) p.emotionTo = -1;
       p.emotion += (p.emotionTo - p.emotion)*Math.min(1, dt*5);
+      // their eyes: the look their traits give them (from their mood, say), brighter or sadder as their expression swings
+      // above or below where it rests, and wide with shock when frightened
+      const { happy, sad, angry, shock } = p.traits, swing = p.emotion - p.traits.mood, shocked = frozen || fleeing;
+      const eyesTo = [shocked ? 1 : shock, shocked ? 0 : happy + Math.max(0, swing)*0.8, angry, sad + Math.max(0, -swing)*0.8];
+      for (let k=0;k<4;k++) p.eyes[k] += (Math.min(1, eyesTo[k]) - p.eyes[k])*Math.min(1, dt*6);
       const o = i*4, a = personModel.anim.array, lookArray = personModel.look.array;
       a[o] = clipRow(p, p.clipA);
       a[o+1] = p.clipB === p.clipA ? a[o] : p.rowB;
       a[o+2] = p.fade;
       a[o+3] = p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0;
       lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
+      const eyesArray = personModel.eyes.array;
+      for (let k=0;k<4;k++) eyesArray[o + k] = p.eyes[k];
       // their hairstyle's copy of where they are, how they're posed and which way they're looking
       const style = personModel.hairOf[i] >= 0 ? personModel.hairStyles[personModel.hairOf[i]] : null;
       if (style && style.mesh) {
         const slot = personModel.hairSlot[i];
         matrix.toArray(style.mesh.instanceMatrix.array, slot*16);
-        for (let k=0;k<4;k++) { style.anim.array[slot*4 + k] = a[o + k]; style.look.array[slot*4 + k] = lookArray[o + k]; }
+        for (let k=0;k<4;k++) { style.anim.array[slot*4 + k] = a[o + k]; style.look.array[slot*4 + k] = lookArray[o + k]; style.eyes.array[slot*4 + k] = eyesArray[o + k]; }
       }
     } else {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
@@ -1440,7 +1471,7 @@ export function updatePeople(t) {
     }
   });
   if (personModel) {
-    [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; });
+    [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; });
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;
   }

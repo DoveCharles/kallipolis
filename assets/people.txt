@@ -12,7 +12,8 @@
 #
 # Separate several with commas (or give each its own brackets). A trait with no value, like [backwards], is switched on.
 # Moods, enjoys, hates (even names) can all have traits, and someone's traits stack up: they multiply together — two
-# entries with walkspeed = 2 make someone four times as fast — except mood, which adds up. Everyone starts at the value in
+# entries with walkspeed = 2 make someone four times as fast — except mood and the eye looks (happy, sad, angry, shock),
+which add up. Everyone starts at the value in
 # brackets below, and a value outside a trait's range is kept to it. A misspelt trait is ignored (and says so in the
 # browser's console).
 #
@@ -29,6 +30,10 @@
 #   parks       1       how likely they are to wander into a park they walk past — 0 never              0 to 8
 #   plazas      1       how likely they are to wander into a plaza they walk past — 0 never             0 to 8
 #   mood        0       their resting face — -1 a frown, 1 a smile (and it tints their reactions)       -1 to 1
+#   happy       0       how happy their eyes look                                                      0 to 1
+#   sad         0       how sad their eyes look                                                        0 to 1
+#   angry       0       how angry their eyes look                                                      0 to 1
+#   shock       0       how shocked their eyes look                                                    0 to 1
 #   backwards   off     they walk backwards                                                           on or off
 # ------------------------------------------------------------------------------------------------------------------------
 
@@ -137,52 +142,52 @@ Imogen
 Georgina
 
 [Moods]
-😀 [mood = 0.6]
-😄 [mood = 0.8]
-😁 [mood = 0.8]
-😆 [mood = 0.7, fidgety = 2]
-😅 [mood = 0.3, fidgety = 2]
-😂 [mood = 1]
-🙂 [mood = 0.3]
-🙃
-😉 [mood = 0.4, chatty = 1.5]
-😊 [mood = 0.6]
-😇 [mood = 0.5, patience = 2]
-🥰 [mood = 0.8, chatty = 2]
-😍 [mood = 0.8, nosy = 2]
-🤩 [mood = 1, nosy = 3]
-😋 [mood = 0.5]
-😜 [mood = 0.5, fidgety = 3]
-🤪 [fidgety = 4, nosy = 3]
+😀 [mood = 0.6, happy = 0.6]
+😄 [mood = 0.8, happy = 0.8]
+😁 [mood = 0.8, happy = 1]
+😆 [mood = 0.7, happy = 1, fidgety = 2]
+😅 [mood = 0.3, happy = 0.5, shock = 0.3, fidgety = 2]
+😂 [mood = 1, happy = 1]
+🙂 [mood = 0.3, happy = 0.3]
+🙃 [happy = 0.3]
+😉 [mood = 0.4, happy = 0.5, chatty = 1.5]
+😊 [mood = 0.6, happy = 0.8]
+😇 [mood = 0.5, happy = 0.6, patience = 2]
+🥰 [mood = 0.8, happy = 0.9, chatty = 2]
+😍 [mood = 0.8, happy = 0.7, shock = 0.3, nosy = 2]
+🤩 [mood = 1, happy = 0.8, shock = 0.5, nosy = 3]
+😋 [mood = 0.5, happy = 0.6]
+😜 [mood = 0.5, happy = 0.6, fidgety = 3]
+🤪 [happy = 0.5, shock = 0.4, fidgety = 4, nosy = 3]
 😎 [walkspeed = 0.85, blinks = 0.3]
 🤓 [talkative = 3]
-🧐 [nosy = 3, blinks = 0.5]
-😏 [mood = 0.2]
+🧐 [angry = 0.2, nosy = 3, blinks = 0.5]
+😏 [mood = 0.2, happy = 0.2, angry = 0.2]
 😐
-😑 [blinks = 0.3]
+😑 [sad = 0.3, blinks = 0.3]
 😶 [talkative = 0.1]
-🙄 [mood = -0.3, nosy = 2]
-😬 [mood = -0.2, fidgety = 2]
-😴 [lounging = 3, blinks = 4, walkspeed = 0.8]
-🤤 [lounging = 2]
-😌 [mood = 0.3, patience = 2]
-😔 [mood = -0.5, walkspeed = 0.8]
-🙁 [mood = -0.5]
-😮 [nosy = 2]
-😳 [blinks = 3]
-🥺 [mood = -0.3]
-😢 [mood = -0.8, walkspeed = 0.8]
-😭 [mood = -1, walkspeed = 0.7]
-😤 [mood = -0.6, walkspeed = 1.4]
-😠 [mood = -0.8, chatty = 0.3]
-🤯 [fidgety = 4]
-😱 [walkspeed = 1.8, blinks = 0]
-🥳 [mood = 0.8, chatty = 3]
-🤠 [mood = 0.5, walkspeed = 0.9]
-🥴 [walkspeed = 0.6]
-🤔 [fidgety = 3, patience = 1.5]
-🫠 [lounging = 3, walkspeed = 0.7]
-🤗 [mood = 0.6, chatty = 3]
+🙄 [mood = -0.3, angry = 0.3, nosy = 2]
+😬 [mood = -0.2, shock = 0.4, fidgety = 2]
+😴 [sad = 0.6, lounging = 3, blinks = 4, walkspeed = 0.8]
+🤤 [sad = 0.4, lounging = 2]
+😌 [mood = 0.3, happy = 0.5, patience = 2]
+😔 [mood = -0.5, sad = 0.8, walkspeed = 0.8]
+🙁 [mood = -0.5, sad = 0.6]
+😮 [shock = 0.7, nosy = 2]
+😳 [shock = 0.8, blinks = 3]
+🥺 [mood = -0.3, sad = 0.7]
+😢 [mood = -0.8, sad = 0.9, walkspeed = 0.8]
+😭 [mood = -1, sad = 1, walkspeed = 0.7]
+😤 [mood = -0.6, angry = 0.9, walkspeed = 1.4]
+😠 [mood = -0.8, angry = 1, chatty = 0.3]
+🤯 [shock = 1, fidgety = 4]
+😱 [shock = 1, walkspeed = 1.8, blinks = 0]
+🥳 [mood = 0.8, happy = 1, chatty = 3]
+🤠 [mood = 0.5, happy = 0.5, walkspeed = 0.9]
+🥴 [sad = 0.4, walkspeed = 0.6]
+🤔 [angry = 0.2, fidgety = 3, patience = 1.5]
+🫠 [happy = 0.3, sad = 0.5, lounging = 3, walkspeed = 0.7]
+🤗 [mood = 0.6, happy = 0.9, chatty = 3]
 
 [Enjoys]
 Energy drinks [walkspeed = 2.5, fidgety = 4, blinks = 0.2, patience = 0.3]
