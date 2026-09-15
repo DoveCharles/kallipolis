@@ -57,6 +57,7 @@ import { placeSunLight, updateWeather } from './sky/weather.js';
 import { commitHistory } from './project/history.js';
 import { loadPersonModel, syncPeopleUI, updatePeople } from './life/people.js';
 import { updateTraffic } from './life/traffic.js';
+import { renderView } from './ui/pixelation.js';
 
 // ============================================================ init
 applyModeVisibility();
@@ -122,7 +123,7 @@ function animate() {
       o.material.emissiveIntensity = 0.5 + Math.sin(t*3 + o.userData.blinkPhase)*0.5;
     }
   });
-  renderer.render(scene, camera);
+  renderView(scene, camera);
 }
 animate();
 
