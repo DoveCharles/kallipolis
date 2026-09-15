@@ -3,17 +3,31 @@ import { S, App } from './shared.js';
 
 // ============================================================ renderer / scene
 const wrap = document.getElementById('canvas-wrap');
+// Every color in the app was tuned by eye as a raw value, the way three.js used to treat them, so color management stays
+// off (and the renderer's output linear, below) — otherwise hex colors would be converted from sRGB and everything would
+// render lighter. This has to happen before any color is made.
+THREE.ColorManagement.enabled = false;
+// Likewise the light intensities were tuned for three.js's old "legacy" lighting, which newer versions dropped: the same
+// look now takes intensities π times higher.
+const LIGHT_INTENSITY_SCALE = Math.PI;
+// And the sky reflection map (SKY_ENV_MAP, below) used to add only reflections, not light: three.js now also lights
+// every surface that has an envMap with the whole sky, which on top of the hemisphere light washed buildings and water
+// out to white. Take that diffuse part back out of the shader so envMaps are reflections again.
+THREE.ShaderChunk.lights_fragment_maps = THREE.ShaderChunk.lights_fragment_maps.replace('iblIrradiance += getIBLIrradiance( geometryNormal );', '');
+
 export const scene = new THREE.Scene();
 const bgColor = 0x12141a;
 scene.background = null;
 scene.fog = new THREE.Fog(bgColor, 600, 2800);
 
 export const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.5, 3000);
-export const renderer = new THREE.WebGLRenderer({ antialias:true });
+// the stencil buffer is off by default now, and the water mask needs it (see SKIP_OVER_WATER)
+export const renderer = new THREE.WebGLRenderer({ antialias:true, stencil:true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap; // (soft-edged now — PCFSoftShadowMap was folded into it)
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 wrap.appendChild(renderer.domElement);
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth/window.innerHeight;
@@ -121,7 +135,7 @@ function updateWindowGlowForSun() {
     }
   });
 }
-// Cheapest plausible "glass reflects the sky" trick: a tiny (8px/face) CubeTexture painted
+// Cheapest plausible "glass reflects the sky" trick: a tiny (16px/face) CubeTexture painted
 // from the same top/horizon colors already driving the sky dome, reused as every specular
 // window material's envMap. No CubeCamera, no scene capture, no per-frame cost — just six small
 // canvases repainted (and the one shared texture flagged needsUpdate) whenever the sun moves.
@@ -129,7 +143,8 @@ function updateWindowGlowForSun() {
 // free with no per-material traversal. And because it's built from the SAME colors that already
 // go dark at night, the reflection naturally fades out right alongside the sky — no separate
 // logic needed to make the glass "fade into emission" after dark.
-const SKY_ENV_FACE_SIZE = 8;
+// three.js blurs an envMap into a PMREM for rough reflections, and that needs faces of at least 16px — smaller ones come out black
+const SKY_ENV_FACE_SIZE = 16;
 function makeSkyEnvFace() { const c = document.createElement('canvas'); c.width=SKY_ENV_FACE_SIZE; c.height=SKY_ENV_FACE_SIZE; return c; }
 const skyEnvFaces = { px:makeSkyEnvFace(), nx:makeSkyEnvFace(), py:makeSkyEnvFace(), ny:makeSkyEnvFace(), pz:makeSkyEnvFace(), nz:makeSkyEnvFace() };
 export const SKY_ENV_MAP = new THREE.CubeTexture([skyEnvFaces.px, skyEnvFaces.nx, skyEnvFaces.py, skyEnvFaces.ny, skyEnvFaces.pz, skyEnvFaces.nz]);
@@ -146,6 +161,9 @@ function updateSkyEnvMap(sky) {
   });
   const pyCtx = skyEnvFaces.py.getContext('2d'); pyCtx.fillStyle = topHex; pyCtx.fillRect(0,0,SKY_ENV_FACE_SIZE,SKY_ENV_FACE_SIZE);
   const nyCtx = skyEnvFaces.ny.getContext('2d'); nyCtx.fillStyle = horizonHex; nyCtx.fillRect(0,0,SKY_ENV_FACE_SIZE,SKY_ENV_FACE_SIZE);
+  // the PMREM made from the texture is cached until the texture is disposed, so dispose it to have the repaint picked up
+  // (it's uploaded and blurred again the next time it's drawn)
+  SKY_ENV_MAP.dispose();
   SKY_ENV_MAP.needsUpdate = true;
 }
 // Weather, 0..1 each (see "weather") — here because it dims the light and greys the sky.
@@ -170,11 +188,11 @@ export function updateSun(quick) {
   if (S.sunElevation > -4) {
     sunOffset.set(dir.x*dist, Math.max(dir.y, 0.06)*dist, dir.z*dist);
     const elevClamped = Math.max(dir.y, 0), warmth = 1 - elevClamped;
-    sun.intensity = ease(-4, 4, S.sunElevation)*(0.35 + elevClamped*0.95);
+    sun.intensity = LIGHT_INTENSITY_SCALE*ease(-4, 4, S.sunElevation)*(0.35 + elevClamped*0.95);
     sun.color.setRGB(1, 1-warmth*0.22, 1-warmth*0.5);
   } else {
     sunOffset.set(-dir.x*dist, Math.max(-dir.y, 0.2)*dist, -dir.z*dist);
-    sun.intensity = (1 - ease(-12, -4, S.sunElevation))*0.18;
+    sun.intensity = LIGHT_INTENSITY_SCALE*(1 - ease(-12, -4, S.sunElevation))*0.18;
     sun.color.copy(MOON_COLOR);
   }
   sun.intensity *= 1 - overcast*0.6;
@@ -195,7 +213,7 @@ export function updateSun(quick) {
   scene.fog.near = THREE.MathUtils.lerp(600, 90, overcast);
   scene.fog.far = THREE.MathUtils.lerp(2800, 900, overcast);
   hemi.color.copy(sky.top).lerp(new THREE.Color(0xffffff), 0.35);
-  hemi.intensity = 0.9*THREE.MathUtils.lerp(0.3, 1, ease(-14, 6, S.sunElevation))*(1 - overcast*0.25);
+  hemi.intensity = LIGHT_INTENSITY_SCALE*0.9*THREE.MathUtils.lerp(0.3, 1, ease(-14, 6, S.sunElevation))*(1 - overcast*0.25);
   if (!quick) {
     updateSkyEnvMap(sky);
     updateWindowGlowForSun();

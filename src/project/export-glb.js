@@ -113,6 +113,9 @@ function exportGLB() {
   new GLTFExporter().parse(exportScene, (result) => {
     downloadFile('splinetopia_city.glb', new Blob([result], { type: 'model/gltf-binary' }));
     cleanUp();
+  }, (err) => {
+    cleanUp();
+    alert('The GLB export failed: ' + (err && err.message ? err.message : err));
   }, { binary: true });
 }
 
