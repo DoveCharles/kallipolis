@@ -11,6 +11,7 @@ import { isPathLine, isRiverLine } from '../roads/paths.js';
 import { placeKey, signalState } from '../roads/markings.js';
 import { isTrainLine } from '../trains/trains.js';
 import { PEOPLE_NAV_SPACING, pickWeighted } from './people.js';
+import { explodeCar } from './giblets.js';
 
 // ============================================================ traffic
 // Cars, switched on and off with the people (World → People, with speed and size shared too). They drive the sidewalk
@@ -474,6 +475,17 @@ function stopFollowingCar() {
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
   App.hideCarCard();
 }
+// The car card's Kill button: it blows up on the spot, in its own paint, with a scorch mark and a fireball rather than the
+// giblets and blood a person leaves (see explodeCar) — and is simply gone, a replacement spawning in elsewhere as usual.
+function killCar(i) {
+  const car = cars[i];
+  if (!car || car.li < 0) return;
+  if (followedCar === i) stopFollowingCar();
+  const paint = new THREE.Color(car.paint[0], car.paint[1], car.paint[2]);
+  explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint });
+  cars.splice(i, 1);
+  if (followedCar > i) followedCar--; // (a car ahead of it in the array, still being followed, keeps its place)
+}
 // The card's thumbnail: a followed car's design, painted its own color, and the camera that frames it — or null before the
 // models have loaded (or for a car that hasn't been given a design yet).
 export function carThumbnailScene(i) {
@@ -484,4 +496,4 @@ export function carThumbnailScene(i) {
   return { mesh: cm.thumbMesh, camera: cm.thumbCamera };
 }
 
-Object.assign(App, { pickCar, followCarAt, stopFollowingCar });
+Object.assign(App, { pickCar, followCarAt, stopFollowingCar, killCar });
