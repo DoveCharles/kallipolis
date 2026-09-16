@@ -446,9 +446,10 @@ function carFootprint(car) {
     ? { length: cm.length*BOX_CAR_LENGTH*S.peopleSize, width: cm.width*S.peopleSize }
     : { length: car.length*BOX_CAR_LENGTH*S.peopleSize, width: car.width*BOX_CAR_WIDTH*S.peopleSize };
 }
-// People wander into the road more readily than they dodge traffic (see people.js) — and the cars don't slow for them,
-// so anyone caught under one when it's moving gets run over: killed exactly as the person card's Kill button does (see
-// killPerson in people.js), blood and all, rather than anything of the car's own.
+// People wander into the road more readily than they dodge traffic (see people.js) — and the cars don't slow for them, so
+// anyone caught under one when it's moving is at risk of getting run over: killed exactly as the person card's Kill button
+// does (see killPerson in people.js), blood and all, rather than anything of the car's own. Their roadsafety trait (see
+// profiles.js) is their chance of dodging out of the way in time instead — 0 (the default) never does, 1 always does.
 function runOverPeople(car) {
   const { length, width } = carFootprint(car), reach = length*0.5 + 0.4, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   App.people.forEach((p, i) => {
@@ -456,7 +457,7 @@ function runOverPeople(car) {
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
-    if (Math.abs(right) < width*0.5 + 0.25 && Math.abs(forward) < length*0.5 + 0.25) App.killPerson(i);
+    if (Math.abs(right) < width*0.5 + 0.25 && Math.abs(forward) < length*0.5 + 0.25 && Math.random() >= p.traits.roadsafety) App.killPerson(i);
   });
 }
 // the car under a point on the screen (the nearest, if several are), or -1 — exactly like pickPerson in people.js, but
