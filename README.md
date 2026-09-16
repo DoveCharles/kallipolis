@@ -6,9 +6,9 @@ A little procedural city blockout tool that runs in the browser, built on three.
 
 **Live:** https://splinetopia.netlify.app/ · **Repo:** https://github.com/DoveCharles/splinetopia
 
-## What it does
+## Features
 
-- **Paths** — draw networks with poly or spline nodes, as one of four types:
+- **Paths** - draw networks with poly or spline nodes, as one of four types:
   - **Sidewalk** — roads whose junctions merge into one clean outline with curbs and raised sidewalks
   - **Path** — a sandy track with a soft, speckled edge
   - **River** — water, joining any water zone it runs into
@@ -27,8 +27,9 @@ A little procedural city blockout tool that runs in the browser, built on three.
   Roads cut through zones, and zones higher in the list cut into the ones below (drag to reorder).
 - **Objects** — coming soon.
 - **People & traffic** — lil people walking the sidewalks and paths and gathering in plazas and parks, and cars driving the roads (toggle and tune them in World). People stop to wave and chat when they meet (taking turns to talk), sit down on plaza benches, sit around in circles on the grass talking, or lie down in a quiet corner of a park, and now and then have a scratch or a think while they stand about. Click someone in World mode and the camera follows them, with a card (and a live headshot, and a Kill button that blows them up — bystanders don't take it well) saying who they are — their names, moods, likes and dislikes come from `assets/people.txt`, so edit away. Entries there can carry traits that change how whoever gets them behaves, like `Energy drinks [walkspeed = 2.5]` or `Moonwalking [backwards]` (the full list is at the top of the file).
-- **World** — sun position or a day/night cycle (with a realistic sun path, moonlight and stars), weather (rain, snow, cloud shadows), ground and grid colors, save/load projects as JSON, and GLB (with materials) or OBJ export. Your project (and where the camera is) autosaves in the browser, so refreshing the page picks up where you left off — Clear starts afresh.
+- **World** — sun position or a day/night cycle (with a realistic sun path, moonlight and stars), weather (rain, snow, cloud shadows), ground and grid colours, save/load projects as JSON, and GLB (with materials) or OBJ export. Your project (and where the camera is) autosaves in the browser, so refreshing the page picks up where you left off — Clear starts afresh.
 - **Undo/redo** — Ctrl+Z and Ctrl+Shift+Z (or Ctrl+Y), or the arrows at the top.
+- **glTF/OBJ export** - Export your city as a glTF or OBJ from the World menu (I recommend glTF as it preserves materials).
 - **Windows 3.0 look** — the whole UI dresses up as Windows 3.0 (untick it in World for the modern look), and under it a Pixelation slider turns the 3D view to chunky pixels and a 16-colour palette checkbox redraws it in sixteen colours or fewer (Windows 3.0's, PICO-8's, CGA, Commodore 64, ZX Spectrum, Apple II, Mac OS, Sweetie 16, DawnBringer 16, Endesga 16, Game Boy or 1-bit), dithered in a pattern of your choice (ordered, blue noise, halftone and more). (Its pixel font is [“MS Sans Serif Bold” by lou](https://fontstruct.com/fontstructions/show/1384862), CC BY-SA 3.0, loaded from [98.css](https://github.com/jdan/98.css).)
 
 <img width="1506" height="762" alt="Screenshot 2026-09-15 at 16 29 31" src="https://github.com/user-attachments/assets/840b062d-51ed-4a64-ad02-edf0852cc581" />
