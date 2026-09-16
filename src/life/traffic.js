@@ -14,7 +14,7 @@ import { PEOPLE_NAV_SPACING, pickWeighted } from './people.js';
 import { explodeCar } from './giblets.js';
 
 // ============================================================ traffic
-// Cars, switched on and off with the people (World → People, with speed and size shared too). They drive the sidewalk
+// Cars, switched on and off with the people (World → Peds, with speed and size shared too). They drive the sidewalk
 // roads — one lane each way, either side of the centerline — turning off at junctions now and then, U-turning at dead
 // ends, slowing as they near a junction and keeping their distance from the car in front. The roads only take so many
 // (one car per TRAFFIC_LANE_PER_CAR of lane), however many the slider asks for, so they don't gridlock. Each car is one

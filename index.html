@@ -89,6 +89,7 @@
   <div id="details-panel"><div class="empty">Select a road or zone from the list to see its settings.</div></div>
 
   <div class="section" id="section-move" style="display:none;">
+    <div class="section-label">Time</div>
     <div class="slider-row"><div class="row"><label>Sun elevation</label><span class="val" id="dv-sunelev">45</span></div>
       <input type="range" id="s-sunelev" min="-20" max="90" step="1" value="45"></div>
     <div class="slider-row"><div class="row"><label>Sun azimuth</label><span class="val" id="dv-sunazim">45</span></div>
@@ -100,12 +101,9 @@
       <div class="slider-row"><div class="row"><label>Day length (minutes)</label><span class="val" id="dv-daylength">4</span></div>
         <input type="range" id="s-daylength" min="1" max="30" step="1" value="4"></div>
     </div>
-    <div class="row"><label>Ground color</label><input type="color" class="color-input" id="s-groundcolor" value="#1b1e24"></div>
-    <div class="row"><label>Grid color</label><input type="color" class="color-input" id="s-gridcolor" value="#33373f"></div>
-    <div id="world-tint-panel"></div>
-    <div class="slider-row"><div class="row"><label>Grass noise strength</label><span class="val" id="dv-grassnoise">0.20</span></div>
-      <input type="range" id="s-grassnoise" min="0" max="2.5" step="0.05" value="0.2"></div>
-    <div class="row" style="margin-top:11px;"><label>People</label><button class="toggle-switch" id="s-people"><span class="knob"></span></button></div>
+
+    <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Peds</div>
+    <div class="row"><label>Peds</label><button class="toggle-switch" id="s-people"><span class="knob"></span></button></div>
     <div id="people-settings" style="display:none;">
       <div class="slider-row" style="margin-top:11px;"><div class="row"><label>Amount</label><span class="val" id="dv-peopleamount">300</span></div>
         <input type="range" id="s-peopleamount" min="10" max="2000" step="10" value="300"></div>
@@ -116,20 +114,32 @@
       <div class="slider-row"><div class="row"><label>Size</label><span class="val" id="dv-peoplesize">1.0</span></div>
         <input type="range" id="s-peoplesize" min="0.3" max="4" step="0.1" value="1"></div>
     </div>
-    <div class="section-label" style="margin-top:14px;">Weather</div>
+
+    <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Weather</div>
     <div class="slider-row"><div class="row"><label>Rain</label><span class="val" id="dv-rain">0.00</span></div>
       <input type="range" id="s-rain" min="0" max="1" step="0.05" value="0"></div>
     <div class="slider-row"><div class="row"><label>Snow</label><span class="val" id="dv-snow">0.00</span></div>
       <input type="range" id="s-snow" min="0" max="1" step="0.05" value="0"></div>
     <div class="slider-row"><div class="row"><label>Cloud shadows</label><span class="val" id="dv-clouds">0.00</span></div>
       <input type="range" id="s-clouds" min="0" max="1" step="0.05" value="0"></div>
-    <div class="row" style="margin-top:11px;"><label>Windows 3.0 look</label><button class="toggle-switch" id="s-win3"><span class="knob"></span></button></div>
+
+    <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Colours</div>
+    <div class="row"><label>Ground color</label><input type="color" class="color-input" id="s-groundcolor" value="#1b1e24"></div>
+    <div class="row"><label>Grid color</label><input type="color" class="color-input" id="s-gridcolor" value="#33373f"></div>
+    <div id="world-tint-panel"></div>
+    <div class="slider-row"><div class="row"><label>Grass noise strength</label><span class="val" id="dv-grassnoise">0.20</span></div>
+      <input type="range" id="s-grassnoise" min="0" max="2.5" step="0.05" value="0.2"></div>
+
+    <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">FX</div>
+    <div class="row"><label>Windows 3.0 look</label><button class="toggle-switch" id="s-win3"><span class="knob"></span></button></div>
     <div class="slider-row"><div class="row"><label>Pixelation</label><span class="val" id="dv-pixelation">off</span></div>
       <input type="range" id="s-pixelation" min="1" max="12" step="1" value="1"></div>
     <div class="row"><label>16-colour palette</label><button class="toggle-switch" id="s-palette16"><span class="knob"></span></button></div>
     <div class="row" id="palette-row" style="display:none;"><label>Palette</label><select class="select-input" id="s-palette" style="width:130px; margin-bottom:0;"></select></div>
     <div class="row" id="dither-row" style="display:none;"><label>Dithering</label><select class="select-input" id="s-dither" style="width:130px; margin-bottom:0;"></select></div>
-    <button class="btn" id="btn-save-project" style="margin-top:11px;">Save project</button>
+
+    <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);"></div>
+    <button class="btn" id="btn-save-project">Save project</button>
     <button class="btn" id="btn-load-project">Load project</button>
     <input type="file" id="project-file-input" accept=".json,application/json" style="display:none;">
     <button class="btn" id="btn-export-glb">Export GLB (with materials)</button>
@@ -158,7 +168,7 @@
 <div id="hint"></div>
 
 <div id="person-card" hidden>
-  <div class="win3-titlebar"><button class="win3-sysbox" title="Close"></button><div class="win3-title">Person</div></div>
+  <div class="win3-titlebar"><button class="win3-sysbox" title="Close"></button><div class="win3-title">Ped</div></div>
   <button id="person-card-close" title="Stop following">×</button>
   <div class="pc-top">
     <div class="pc-rows">
