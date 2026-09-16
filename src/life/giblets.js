@@ -8,7 +8,7 @@ import { scene } from '../core/scene.js';
 // bouncing and tumbling to a stop, lying there a while, then sinking away. A car's explosion also gets a fireball and a
 // few puffs of smoke (explodeFx below), and a flash of light. The chunks are all one instanced mesh, the splats another,
 // and the fire and smoke a third.
-const GIBLETS_MAX = 1500, SPLATS_MAX = 48, FX_MAX = 240;
+const GIBLETS_MAX = 1500, SPLATS_MAX = 48, FX_MAX = 320;
 const GIBLET_LIFE = 40, SPLAT_LIFE = 60, SINK_TIME = 3; // seconds before they sink away, and how long that takes
 const GRAVITY = 9.8;
 const BLOOD_COLORS = [0x7a0a0a, 0x9c1010, 0x5c0606];
@@ -40,20 +40,21 @@ fxMesh.setColorAt(0, new THREE.Color());
 // a brief flash of light where the fireball went off, reused explosion to explosion
 const flash = new THREE.PointLight(0xffb347, 0, 22, 2);
 scene.add(flash);
-let flashUntil = -Infinity, flashBorn = 0;
+let flashUntil = -Infinity, flashBorn = 0, flashDuration = 0.5;
 
 // the chunks thrown out from `at` (where feet or wheels were), `height` tall, one call per material of them: [color, how
-// many, how big (as a fraction of height)]
-function spawnParts(at, height, parts) {
+// many, how big (as a fraction of height)] — `power` throws them further and faster and spreads them wider (a car's
+// explosion, much more violent than a person's, uses a bigger one; see explodeCar)
+function spawnParts(at, height, parts, power = 1) {
   const now = performance.now()/1000;
   parts.forEach(([color, count, size]) => {
     for (let k=0;k<count;k++) {
       if (giblets.length >= GIBLETS_MAX) giblets.shift(); // (the oldest make way)
-      const angle = Math.random()*Math.PI*2, outward = 1 + Math.random()*4.5;
+      const angle = Math.random()*Math.PI*2, outward = (1 + Math.random()*4.5)*power;
       const spinAxis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
       giblets.push({
-        x: at.x + (Math.random() - 0.5)*0.25*height, y: at.y + height*(0.15 + Math.random()*0.75), z: at.z + (Math.random() - 0.5)*0.25*height,
-        vx: Math.cos(angle)*outward, vy: 2 + Math.random()*5.5, vz: Math.sin(angle)*outward,
+        x: at.x + (Math.random() - 0.5)*0.25*height*power, y: at.y + height*(0.15 + Math.random()*0.75), z: at.z + (Math.random() - 0.5)*0.25*height*power,
+        vx: Math.cos(angle)*outward, vy: (2 + Math.random()*5.5)*power, vz: Math.sin(angle)*outward,
         ground: at.y, size: size*height*(0.6 + Math.random()*0.8),
         shape: new THREE.Vector3(0.6 + Math.random()*0.7, 0.5 + Math.random()*0.6, 0.6 + Math.random()*0.7),
         quaternion: new THREE.Quaternion().setFromAxisAngle(spinAxis, Math.random()*Math.PI*2),
@@ -62,35 +63,38 @@ function spawnParts(at, height, parts) {
     }
   });
 }
-// the splat left on the ground at `at`, `height` tall, in `color` (blood, or a car's scorch mark)
-function spawnSplat(at, height, color) {
+// the splat left on the ground at `at`, `height` tall, in `color` (blood, or a car's scorch mark) — `sizeMul` for a bigger
+// mark than the default (a car's, again — see explodeCar)
+function spawnSplat(at, height, color, sizeMul = 1) {
   if (splats.length >= SPLATS_MAX) splats.shift();
-  splats.push({ x: at.x, y: at.y + 0.015, z: at.z, size: height*(0.45 + Math.random()*0.3), angle: Math.random()*Math.PI*2, born: performance.now()/1000, color });
+  splats.push({ x: at.x, y: at.y + 0.015, z: at.z, size: height*(0.45 + Math.random()*0.3)*sizeMul, angle: Math.random()*Math.PI*2, born: performance.now()/1000, color });
 }
 // a car's fireball — bright chunks bursting up and out, quickly shrinking — and the smoke puffs that follow it, drifting up
 // and slowly spreading as they thin out; and the light flash, retriggered (so overlapping explosions just relight it)
 const FIRE_COLORS = [0xffdd66, 0xff9a3c, 0xff5a1f, 0xd8280f];
 function explodeFx(at, height) {
   const now = performance.now()/1000;
-  for (let k=0;k<16;k++) {
+  for (let k=0;k<30;k++) {
     if (fx.length >= FX_MAX) fx.shift();
-    const angle = Math.random()*Math.PI*2, outward = 1.5 + Math.random()*5;
+    const angle = Math.random()*Math.PI*2, outward = 3 + Math.random()*9;
     fx.push({ kind: 'fire', x: at.x, y: at.y + height*0.2, z: at.z,
-      vx: Math.cos(angle)*outward, vy: 3 + Math.random()*6, vz: Math.sin(angle)*outward,
-      size: height*(0.22 + Math.random()*0.22), life: 0.3 + Math.random()*0.25,
+      vx: Math.cos(angle)*outward, vy: 5 + Math.random()*9, vz: Math.sin(angle)*outward,
+      size: height*(0.36 + Math.random()*0.36), life: 0.45 + Math.random()*0.4,
       color: new THREE.Color(FIRE_COLORS[Math.floor(Math.random()*FIRE_COLORS.length)]), born: now });
   }
-  for (let k=0;k<10;k++) {
+  for (let k=0;k<20;k++) {
     if (fx.length >= FX_MAX) fx.shift();
-    const angle = Math.random()*Math.PI*2, outward = 0.3 + Math.random()*1.4;
+    const angle = Math.random()*Math.PI*2, outward = 0.7 + Math.random()*2.8;
     const grey = 0.12 + Math.random()*0.14;
     fx.push({ kind: 'smoke', x: at.x, y: at.y + height*0.3, z: at.z,
-      vx: Math.cos(angle)*outward, vy: 1.2 + Math.random()*1.6, vz: Math.sin(angle)*outward,
-      size: height*(0.32 + Math.random()*0.3), life: 2.2 + Math.random()*1.6,
-      color: new THREE.Color(grey, grey, grey), born: now + Math.random()*0.15 });
+      vx: Math.cos(angle)*outward, vy: 1.7 + Math.random()*2.4, vz: Math.sin(angle)*outward,
+      size: height*(0.55 + Math.random()*0.55), life: 3.2 + Math.random()*2.4,
+      color: new THREE.Color(grey, grey, grey), born: now + Math.random()*0.2 });
   }
   flash.position.set(at.x, at.y + height*0.35, at.z);
-  flashBorn = now; flashUntil = now + 0.35;
+  flash.distance = 26 + height*5;
+  flashDuration = 0.5;
+  flashBorn = now; flashUntil = now + flashDuration;
 }
 
 // Blows someone up: `at` where their feet were, `height` how tall they were, `colors` what they were made of — { skin, top,
@@ -102,14 +106,14 @@ export function explode(at, height, colors) {
   spawnParts(at, height, parts);
   spawnSplat(at, height, BLOOD_SPLAT_COLOR);
 }
-// Blows a car up: `at` where its wheels were, `height` how tall it was, `colors.paint` its own color — chunks of it in its
-// paint and (standing in for glass, trim and tires) CAR_TRIM_COLORS, sooty flecks, a scorch mark rather than blood, and a
-// fireball with smoke (see explodeFx).
+// Blows a car up: `at` where its wheels were, `height` how tall it was, `colors.paint` its own color — chunks of it, bigger
+// and thrown much further than a person's (see spawnParts' `power`), in its paint and (standing in for glass, trim and
+// tires) CAR_TRIM_COLORS, sooty flecks, a big scorch mark rather than blood, and a fireball with smoke (see explodeFx).
 export function explodeCar(at, height, colors) {
-  const parts = [[colors.paint, 18, 0.095], [new THREE.Color(CAR_TRIM_COLORS[0]), 8, 0.075], [new THREE.Color(CAR_TRIM_COLORS[1]), 5, 0.06]];
-  SCORCH_COLORS.forEach(hex => parts.push([new THREE.Color(hex), 8, 0.03]));
-  spawnParts(at, height, parts);
-  spawnSplat(at, height, SCORCH_SPLAT_COLOR);
+  const parts = [[colors.paint, 32, 0.17], [new THREE.Color(CAR_TRIM_COLORS[0]), 16, 0.13], [new THREE.Color(CAR_TRIM_COLORS[1]), 10, 0.11]];
+  SCORCH_COLORS.forEach(hex => parts.push([new THREE.Color(hex), 14, 0.055]));
+  spawnParts(at, height, parts, 2.2);
+  spawnSplat(at, height, SCORCH_SPLAT_COLOR, 1.8);
   explodeFx(at, height);
 }
 
@@ -192,5 +196,5 @@ export function updateGiblets(t) {
   fxMesh.count = fx.length;
   fxMesh.instanceMatrix.needsUpdate = true;
   if (fxMesh.instanceColor) fxMesh.instanceColor.needsUpdate = true;
-  flash.intensity = t < flashUntil ? Math.max(0, 1 - (t - flashBorn)/0.35)**2*6 : 0;
+  flash.intensity = t < flashUntil ? Math.max(0, 1 - (t - flashBorn)/flashDuration)**2*10 : 0;
 }
