@@ -378,11 +378,11 @@ The milking machine
 Skiing (lie)
 Laptop in bed [lounging = 3]
 Crushing a beer can on their head
-Incremental change [speed = 0.6, patience = 3]
+Incremental change [walkspeed = 0.6, patience = 3]
 Synchronicity
 Mummy's cooking
-Ayahuasca [speed = 0.3, blinks = 0.2, parks = 6, fidgety = 0.6]
-Dropping a tab right before work [speed = 0.6, blinks = 0.3, fidgety = 12]
+Ayahuasca [walkspeed = 0.3, blinks = 0.2, parks = 6, fidgety = 0.6]
+Dropping a tab right before work [walkspeed = 0.6, blinks = 0.3, fidgety = 12]
 Pretending to read in public [parks = 3, plazas = 3, lounging = 3]
 Dubai
 Whatever's on TV
@@ -400,8 +400,8 @@ Finding Luigi [patience = 2]
 Pathologising themselves
 Attempting to achieve immortality
 Medieval weaponry
-Abusing nasal decongestants [walkspeed = 3, chatty, = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0]
-Ingesting mystery powder [walkspeed = 3, chatty, = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0]
+Abusing nasal decongestants [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0]
+Ingesting mystery powder [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0]
 Their awesome antidepressants and never wanting sex [mood = 0.3, fidgety = 3]
 Fun facts on mustelidae and other creatures [parks = 2]
 Barfing after drinking but before going to the club
@@ -483,7 +483,7 @@ Acting gregarious [mood = 0.5]
 Searching for missing persons [nosy = 10, fidgety = 2]
 Dwelling in obscurity [chatty = 0.1, talkative = 0.1]
 Hypnagogic visions [lounging = 3]
-Preaching [chatty = 5 , taking = 10]
+Preaching [chatty = 5, talkative = 10]
 Foreign cigarettes
 Suicide, as a concept [mood = 0.4]
 Trying to kiss the dentist
