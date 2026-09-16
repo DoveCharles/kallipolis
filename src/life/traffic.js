@@ -446,10 +446,10 @@ function carFootprint(car) {
     ? { length: cm.length*BOX_CAR_LENGTH*S.peopleSize, width: cm.width*S.peopleSize }
     : { length: car.length*BOX_CAR_LENGTH*S.peopleSize, width: car.width*BOX_CAR_WIDTH*S.peopleSize };
 }
-// People wander into the road more readily than they dodge traffic (see people.js) — and the cars don't slow for them, so
-// anyone caught under one when it's moving is at risk of getting run over: killed exactly as the person card's Kill button
-// does (see killPerson in people.js), blood and all, rather than anything of the car's own. Their roadsafety trait (see
-// profiles.js) is their chance of dodging out of the way in time instead — 0 (the default) never does, 1 always does.
+// The cars don't slow for pedestrians, so anyone caught in front of one when it's moving is at risk of getting run over:
+// killed exactly as the person card's Kill button does (see killPerson in people.js), blood and all, rather than anything
+// of the car's own. Their roadsafety trait (see profiles.js) is their chance of dodging out of the way in time instead —
+// 1 (the default) always does; only someone whose picks in people.txt bring it down risks actually getting hit.
 function runOverPeople(car) {
   const { length, width } = carFootprint(car), reach = length*0.5 + 0.4, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   App.people.forEach((p, i) => {

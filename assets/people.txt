@@ -34,7 +34,7 @@
 #   angry       0       how angry their eyes look                                                      0 to 1
 #   shock       0       how shocked their eyes look                                                    0 to 1
 #   backwards   off     they walk backwards                                                           on or off
-#   roadsafety  0       their chance of dodging a car that's about to run them over — 1 always does      0 to 1
+#   roadsafety  1       their chance of dodging a car that's about to run them over — 0 never does        0 to 1
 # ------------------------------------------------------------------------------------------------------------------------
 
 [Boy names]
