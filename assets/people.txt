@@ -13,7 +13,7 @@
 # Separate several with commas (or give each its own brackets). A trait with no value, like [backwards], is switched on.
 # Moods, enjoys, hates (even names) can all have traits, and someone's traits stack up: they multiply together — two
 # entries with walkspeed = 2 make someone four times as fast — except mood and the eye looks (happy, sad, angry, shock),
-# which add up. Everyone starts at the value in
+which add up. Everyone starts at the value in
 # brackets below, and a value outside a trait's range is kept to it. A misspelt trait is ignored (and says so in the
 # browser's console).
 #
@@ -88,7 +88,6 @@ Gary
 Terry
 Keith
 Dave
-(unknown)
 Hieronymous
 Jeeves
 Johnny
@@ -139,6 +138,21 @@ Cameron
 Jeremy
 Gargamel
 Dasher
+Seigwald
+Shaggy
+Isaac
+Steve
+Roald
+(UNKNOWN)
+Horace
+Bruiser
+Max
+Brick
+Cletus
+Herbert
+Cornelius
+Archibald
+Elmer
 
 [Girl names]
 Olivia
@@ -191,7 +205,6 @@ Opal
 Tallulah
 Imogen
 Georgina
-[unknown]
 Peta-gay
 Requiem
 Faith
@@ -237,6 +250,17 @@ Minnie
 Sam
 Cameron
 Léa
+Sandy
+Rue
+(UNKNOWN)
+Britney
+Reighleigh
+Gertrude
+Doris
+Edna
+Agatha
+Mildred
+Myrtle
 
 [Moods]
 😀 [mood = 0.6, happy = 0.6]
@@ -299,7 +323,7 @@ Léa
 🧟 [walkspeed = 0.3, talkative = 0.05]
 🤡 [chatty = 3, talkative = 3]
 🥶 [walkspeed = 0.5, mood = -0.3]
-🏃🏻‍➡️ [walkspeed = 2, chatty = 0.3]
+🏃🏻‍➡️ [walkspeed = 2, chatty = 0.2, lounging = 0]
 
 [Enjoys]
 Energy drinks [walkspeed = 2.5, fidgety = 4, blinks = 0.2, patience = 0.3]
@@ -307,6 +331,7 @@ Jogging [walkspeed = 1.8, lounging = 0.2]
 Taking it all in [walkspeed = 0.5, nosy = 4, patience = 2]
 Moonwalking [backwards]
 Naps [lounging = 5, walkspeed = 0.8]
+Maps
 Gossip [chatty = 4, talkative = 3]
 Sunbathing [lounging = 4, parks = 3]
 Being tall [size = 1.3]
@@ -345,6 +370,7 @@ Sneezing [fidgety = 4]
 Crosswords [patience = 3, lounging = 2]
 Parallel parking
 Dogs [parks = 3]
+Letting their dog sleep on their bed
 Whistling [mood = 0.6]
 Huge bodies of water
 Mild peril
@@ -388,16 +414,16 @@ Dubai
 Whatever's on TV
 Being a deeply inconsistent person with no real sense of self
 Eating food too fast to even taste it
-Working Out [size = 1.2]
-Steroids [size = 1.5]
-Injecting Human Growth Hormone straight up the butt [size=2.5]
+Trying to work out [size = 1.1]
+Steroids [size = 1.24]
+Injecting Human Growth Hormone straight up the butt [size=2.2]
 Movies
 Jaywalking [patience = 0.5]
 The Law
 Phrenology [mood = -0.3]
 Heart-reacting every message [mood = 0.4, patience = 0.7]
 Finding Luigi [patience = 2]
-Pathologising themselves
+Pathologising themself
 Attempting to achieve immortality
 Medieval weaponry
 Abusing nasal decongestants [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0]
@@ -408,7 +434,7 @@ Barfing after drinking but before going to the club
 Staring at the eclipse [blinks = 5]
 Taking medicine without checking the label [patience = 0.4, mood = -0.2]
 Befriending house spiders
-Guns. like, way too much
+Guns... like, way too much
 Staring at their feet [chatty = 0.4, talkative =0.4]
 Rubbing their belly [fidgety = 2]
 Forgetting
@@ -474,6 +500,7 @@ Light erotica
 Eating 3 packs of oreos and shitting black
 Playing with bugs [parks = 5]
 Correcting themself
+Correcting others
 Taking credit
 Ritual magick
 Speculating around WW3 [chatty =2 ,talkative =2]
@@ -488,13 +515,16 @@ Foreign cigarettes
 Suicide, as a concept [mood = 0.4]
 Trying to kiss the dentist
 Getting older [mood = 0.4]
-Summary executions
+Summary execution
 Curried favours
 Saying, "this is true" [chatty = 2]
 Labubu!!!
 The subscription model
 Looking at their guitar but never playing it, ever
-Not eating their vegetables [size = 0.5]
+Not eating their vegetables [size = 0.67]
+Lucky pot of gold [size =0.34]
+Stinky mould tofu
+Capitalising Every Word In A Sentence
 Rocket boots [walkspeed = 4]
 Fitting it all in [walkspeed = 1.2, chatty = 0.8, talkative = 0.8, fidgety = 0]
 Figuring out sight-lines [plazas = 8, fidgety = 3, chatty = 0.3]
@@ -544,7 +574,7 @@ Having a little class [walkspeed = 0.9]
 Making potions
 Audibly peeing for much longer than anyone else in the bathroom
 Potatoes
-"Bits" [chatty = 3, talkative = 3, mood = 0.3]
+Doing "Bits" [chatty = 3, talkative = 3, mood = 0.3]
 Love Island
 Whipped cream
 The right to protest
@@ -564,7 +594,7 @@ Bulking season [size = 1.5]
 Prayer
 Stockpiling
 Apple cider vinegar [parks = 2]
-Sunning [parks = 4]
+Sunning their holes [parks = 4]
 Coffee enemas [parks = 4, walkspeed = 1.4]
 Yearning [lounging = 2]
 Turning it off in just a minute [patience = 2]
@@ -585,7 +615,7 @@ Ankles
 Modular Synthesis [patience = 2, talkative = 5, mood = -0.1]
 Acting up [mood = -0.1]
 Cloth Mother
-Blanky
+Cuddling Blanky
 Personifying inanimate objects
 Baba ganoush
 The homies (not sexual)
@@ -604,6 +634,48 @@ Dressing as a civilian
 Light spanking
 A cool ass cape
 Wearing sunglasses indoors
+The Oxford comma
+Making lists
+Self-soothing behaviour [fidgety = 4]
+Hoping it'll all be okay [mood = 0.5]
+Popping things on their skin that look vaguely like pimples
+They don't know yet...
+Floral arrangements
+Checking the fridge [fidgety = 2]
+Chinese proverbs
+Burgers
+Debating at university campuses [talkative = 3, chatty = 6]
+Being a subject
+Suggesting increasingly bizarre "would you rather"s [chatty = 4, patience = 0.9]
+Juice
+Retail therapy
+Ripping their shirt off like a wearwolf
+Trying to blow people up with their mind [chatty = 0.5]
+Needlessly apologising [chatty = 2, mood = -0.3]
+Crystals
+Escaping [mood = -0.5, walkspeed = 1.5]
+Inflicting torture [mood = 0.2, blinks = 0.1]
+Taking their socks off
+Facebook marketplace [chatty = 2, talkative = 2, plazas = 2]
+Sowing
+Finger tattoos
+Cryptic crosswords [patience = 3, lounging = 2, mood = -0.1]
+The new IRA [mood = -0.3]
+82 year old korean man online. <3 [mood = 0.3]
+AAVE
+Learning nothing [patience = 0.4]
+Notifications [patience = 0.4, lounging = 2]
+Alien pussy
+Gargoyles
+Avoiding cracks in the pavement [walkspeed = 0.4]
+Cancelling [chatty = 0.6, talkative = 0.6, nosy = 2]
+Ancient knowledge
+Being normal
+Sacrifice [mood = -0.3]
+Harry Potter (and yeah, they known about it)
+Acting ominous [blinks = 0.2]
+Parasocial relationships
+Calling the guards
 
 [Hates]
 Wet stuff
@@ -619,7 +691,7 @@ Pigeons [plazas = 0.3]
 Public speaking [talkative = 0.1]
 Gulls
 Music
-Being told 'no' [mood = -0.3]
+Being told "no" [mood = -0.3]
 Shitting
 Sand [parks = 0.5]
 Themself [mood = -0.6]
@@ -652,7 +724,7 @@ The mortality reminder that comes with Autumn [mood = -0.5, walkspeed = 0.8]
 Any form of exercise [walkspeed = 0.6, lounging = 3]
 Clowns
 Being a robot
-Worrying whether or not the packaging for the copious amount of sex toys they order online will be 'discreet' [fidgety = 3]
+Worrying whether or not the packaging for the copious amount of sex toys they order online will be "discreet" [fidgety = 3]
 Geese [parks = 0.2]
 Queues [patience = 0.3]
 Smells
@@ -663,15 +735,17 @@ Mum
 Dad
 Cousins, as a concept
 Eyes [blinks = 5]
-'Juicers'
+"Juicers"
 People who use LinkedIn
-The phrase 'just what the doctor ordered'
+The phrase, "just what the doctor ordered"
+The phrase, "he's behind me, isn't he?"
 People with nut allergies
 Fat people
 Skinny people
 Rock climbers
 New Yorkers
-Absolutely everything, wants to die [mood = -1, walkspeed = 0.7]
+People outside of New York, and from Bushwick
+Absolutely everything else, wants to die [mood = -1, walkspeed = 0.7]
 Nothing, enjoys everything life has to offer (lie) [mood = 1]
 Telling the truth [talkative = 2]
 Flower people [parks = 0.4]
@@ -711,7 +785,7 @@ The state of the world [mood = -0.4]
 Breaking the fourth wall
 Cognitio-hazards
 The haunting visage of a lost-love, formed unwittingly as a sordid projection of the self [mood = -0.6]
-Toe size variance
+Variations in toe size
 JavaScript
 Larry David
 Their nemesis
@@ -736,7 +810,7 @@ Clean energy [parks = 0.2]
 Parasites
 Blowjobs
 4am Windows update [patience = 0.8]
-Astrology (...a Leo, perhaps?)
+Astrology ( ...a Leo, perhaps?)
 Pestilence
 When they laugh and then hear the sound play back in their head [mood = -0.2, chatty = 0.7]
 Peppa Pig
@@ -819,9 +893,25 @@ The grind
 It really depends
 Praxis
 When dogs seem depressed
-Torture
+Enduring torture
 Starving to death
 The diseased
 Glamping
 A tickle
 Gunshot wounds
+Double denim
+Caring [mood : -0.2]
+Whatever they think of next
+Acts of God
+Sudden arrhytmic death syndrome
+Flies
+Reaping
+Mixing and mastering
+Sensing the spectre [walkspeed = 1.2]
+Sizzling fajitas
+Rap
+Intestines
+The coming moon
+Lead poisoning
+Hemlock water-dropwort
+Scopolamine poisoning
