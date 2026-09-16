@@ -131,6 +131,6 @@ export function profileOf(index, isMan) {
     if (!oneEnsured || rng() >0.5) hates = {...hates, text: '(UNKNOWN)'}
   }
   const traits = traitsOf([name, mood, enjoys, hates]);
-  age *= Math.max(18, traits.age) //no minors!
+  age = Math.max(18, age*traits.age) //no minors!
   return { name: name.text, age, mood: mood.text, enjoys: enjoys.text, hates: hates.text, traits: traits};
 }
