@@ -826,8 +826,22 @@ function walkAlong(p, dist) {
       const link = vertex.links[Math.floor(peopleRng()*vertex.links.length)];
       const other = peopleNav.lines[link.li], remaining = Math.abs(u - at);
       const dir = link.vi === 0 ? 1 : link.vi === other.pts.length-1 ? -1 : (peopleRng() < 0.5 ? 1 : -1);
+      // two lines meeting at a junction vertex only share that point on their centerlines — the two sides of `other`
+      // sit on opposite sides of it, and only one of them is actually a continuation of the sidewalk this person is
+      // walking on. picking randomly (as joinWalkway does for a fresh spawn) can put them on the far side, which
+      // means silently crossing whatever road separates the two without going through updateCrossing — that's what
+      // made peds look like they were cutting across roads at junctions. so here we work out which side by their
+      // direction of approach (their exact position at this instant is right on top of the vertex either way, so it
+      // can't tell the two sides apart) — the near side is whichever one their current heading would carry them onto.
+      const oldA = nav.pts[p.seg], oldB = nav.pts[p.seg+1], oldLen = (nav.cum[p.seg+1] - nav.cum[p.seg]) || 1;
+      const velX = p.dir*(oldB.x-oldA.x)/oldLen, velZ = p.dir*(oldB.z-oldA.z)/oldLen;
       joinWalkway(p, link.li, other.cum[link.vi], dir);
       p.seg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
+      if (!other.path) {
+        const a = other.pts[p.seg], b = other.pts[p.seg+1], segLen = (other.cum[p.seg+1] - other.cum[p.seg]) || 1;
+        const dx = (b.x-a.x)/segLen, dz = (b.z-a.z)/segLen, side = velX*dz - velZ*dx;
+        p.lat = Math.sign(side || p.lat) * Math.abs(p.lat);
+      }
       p.linkCooldown = 6 + peopleRng()*4;
       nav = other;
       u = p.u + dir*remaining;
