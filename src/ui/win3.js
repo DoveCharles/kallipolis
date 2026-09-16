@@ -21,3 +21,4 @@ panel.querySelector('.win3-min').addEventListener('click', () => panel.classList
 panel.querySelector('.win3-max').addEventListener('click', () => panel.classList.remove('win3-minimized'));
 panel.querySelector('.win3-sysbox').addEventListener('click', () => panel.classList.toggle('win3-minimized'));
 document.querySelector('#person-card .win3-sysbox').addEventListener('click', () => App.stopFollowingPerson());
+document.querySelector('#car-card .win3-sysbox').addEventListener('click', () => App.stopFollowingCar());

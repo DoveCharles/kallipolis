@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { S } from '../core/shared.js';
-import { scene, computeWindowGlowFactor, SKY_ENV_MAP, Y_ROAD } from '../core/scene.js';
+import { S, App } from '../core/shared.js';
+import { scene, camera, computeWindowGlowFactor, SKY_ENV_MAP, Y_ROAD } from '../core/scene.js';
+import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { mulberry32 } from '../core/math.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
@@ -93,7 +94,14 @@ const CAR_GLOW_MATERIALS = {
   TaxiLight: { diffuse: 0x3a2410, emissive: 0xffb347, intensity: 1.5 },
 };
 const CAR_SLOT_NAMES = [CAR_PAINT_MATERIAL, 'Lights', 'Backlights', 'TaxiLight']; // vertex slot 0 is everything else
-let carMeshes = []; // [{ mesh, paint, glowUniform, length }], one per design, once loaded
+// what a vehicle's proud of being, for its card (see "the car card" below) — a design not listed here gets DEFAULT_CAR_EMOJI
+const DESIGN_EMOJI = {
+  Ambulance: '🚑', Bus: '🚌', Canyonero: '🚙', Taxi: '🚕', PoliceCar: '🚓',
+  PickupTruck: '🛻', SportsCar: '🏎️', Truck: '🚚', Van: '🚐',
+};
+const DEFAULT_CAR_EMOJI = '🚗';
+let carMeshes = []; // [{ mesh, paint, glowUniform, length, height, name, mood, thumbMesh, thumbCamera, thumbPaint }], one per design, once loaded
+let designNumbers = []; // how many of each design have been given out so far (see "the car card")
 
 async function loadGLB(url) {
   const buffer = await fetch(url).then(response => { if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.arrayBuffer(); });
@@ -109,7 +117,7 @@ export async function loadCarModels() {
   }
   try {
     const designs = buildCarDesigns(gltf);
-    if (designs.length) carMeshes = designs.map(makeCarMesh);
+    if (designs.length) { carMeshes = designs.map(makeCarMesh); designNumbers = designs.map(() => 0); }
   } catch (err) {
     console.warn('Blockout: the car models failed to build; traffic uses the built-in box car', err);
   }
@@ -155,7 +163,8 @@ function buildCarDesigns(gltf) {
     geometry.setAttribute('carSlot', new THREE.Float32BufferAttribute(slots, 1));
     geometry.setAttribute('carColor', new THREE.Float32BufferAttribute(colors, 3));
     geometry.computeVertexNormals();
-    designs.push({ name: node.name, geometry, length: size.z/BOX_CAR_LENGTH });
+    geometry.computeBoundingSphere();
+    designs.push({ name: node.name, geometry, length: size.z/BOX_CAR_LENGTH, height: size.y, radius: geometry.boundingSphere.radius });
   });
   gltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (o.material) o.material.dispose(); } });
   return designs;
@@ -163,12 +172,16 @@ function buildCarDesigns(gltf) {
 // Adds a car design's coloring to its material's shader: vCarColor, per vertex, its instance's paint (instanceCarPaint) if
 // it's slot 1 (CarCol) or its own baked color otherwise; vCarEmissive, added to what it emits, for the glowing slots — lit
 // after dark, like the box car's lights (see carGlowFactor, kept in sync with computeWindowGlowFactor in updateTraffic).
-function injectCarShader(shader, glowUniform) {
+// `paintUniform`, for the card's thumbnail (see makeCarThumbnail): one car at a time, drawn plainly (not instanced), so its
+// paint is a uniform set before each draw rather than an attribute varying per instance.
+function injectCarShader(shader, glowUniform, paintUniform) {
   shader.uniforms.carGlowFactor = glowUniform;
+  if (paintUniform) shader.uniforms.instanceCarPaint = paintUniform;
+  const paintDecl = paintUniform ? 'uniform vec3 instanceCarPaint;' : 'attribute vec3 instanceCarPaint;';
   const glowTerm = (name, slot) => { const g = CAR_GLOW_MATERIALS[name], c = new THREE.Color(g.emissive).multiplyScalar(g.intensity);
     return `carSlot > ${slot - 0.5} && carSlot < ${slot + 0.5} ? vec3(${c.r.toFixed(5)}, ${c.g.toFixed(5)}, ${c.b.toFixed(5)}) : `; };
   shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nattribute float carSlot;\nattribute vec3 carColor;\nattribute vec3 instanceCarPaint;\nvarying vec3 vCarColor;\nvarying vec3 vCarEmissive;')
+    .replace('#include <common>', '#include <common>\nattribute float carSlot;\nattribute vec3 carColor;\n' + paintDecl + '\nvarying vec3 vCarColor;\nvarying vec3 vCarEmissive;')
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       vCarColor = carSlot > 0.5 && carSlot < 1.5 ? instanceCarPaint : carColor;
       vCarEmissive = ${CAR_SLOT_NAMES.slice(1).map((name, k) => glowTerm(name, k + 2)).join('\n        ')}vec3(0.0);`);
@@ -177,10 +190,25 @@ function injectCarShader(shader, glowUniform) {
     .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vCarColor;')
     .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vCarEmissive*carGlowFactor;');
 }
+// The card's thumbnail: the design's own mesh, plainly drawn (not instanced — see injectCarShader), from an isometric
+// camera sized and aimed to fit it (see carThumbnailScene, which sets thumbPaint to whichever car's being shown).
+function makeCarThumbnail(design) {
+  const material = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true });
+  const glowUniform = { value: 1 }, paintUniform = { value: new THREE.Color(0xffffff) };
+  material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, paintUniform);
+  material.customProgramCacheKey = () => 'car-thumb';
+  const mesh = new THREE.Mesh(design.geometry, material);
+  const r = design.radius, elevation = Math.atan(1/Math.SQRT2), azimuth = Math.PI/4, distance = r*4;
+  const thumbCamera = new THREE.OrthographicCamera(-r*1.15, r*1.15, r*1.15, -r*1.15, 0.1, distance*2);
+  thumbCamera.position.set(distance*Math.cos(elevation)*Math.sin(azimuth), distance*Math.sin(elevation), distance*Math.cos(elevation)*Math.cos(azimuth));
+  thumbCamera.up.set(0, 1, 0);
+  thumbCamera.lookAt(0, design.height*0.5, 0);
+  return { mesh, camera: thumbCamera, paint: paintUniform };
+}
 function makeCarMesh(design) {
   const material = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true });
   const glowUniform = { value: 1 };
-  material.onBeforeCompile = shader => injectCarShader(shader, glowUniform);
+  material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, null);
   material.customProgramCacheKey = () => 'car';
   const mesh = new THREE.InstancedMesh(design.geometry, material, TRAFFIC_MAX);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -193,7 +221,10 @@ function makeCarMesh(design) {
   mesh.visible = false;
   mesh.name = 'Traffic';
   scene.add(mesh);
-  return { mesh, paint, glowUniform, length: design.length };
+  const thumb = makeCarThumbnail(design);
+  return { mesh, paint, glowUniform, length: design.length, height: design.height,
+    name: design.name, mood: DESIGN_EMOJI[design.name] || DEFAULT_CAR_EMOJI,
+    thumbMesh: thumb.mesh, thumbCamera: thumb.camera, thumbPaint: thumb.paint };
 }
 
 // The lanes: one per sidewalk road line ({ pts, cum, total, lane (offset from the centerline), vertices with junction
@@ -301,6 +332,7 @@ function junctionAhead(car, lookahead) {
   return null;
 }
 export function updateTraffic(t) {
+  if (followedCar >= 0 && (!S.peopleEnabled || S.interactionMode !== 'move')) stopFollowingCar();
   const dt = S.lastTrafficTime == null ? 0 : Math.min(0.1, Math.max(0, t - S.lastTrafficTime));
   S.lastTrafficTime = t;
   carParts.all.forEach(mesh => { mesh.visible = S.peopleEnabled; });
@@ -315,6 +347,7 @@ export function updateTraffic(t) {
   const wanted = Math.min(TRAFFIC_MAX, Math.round(S.trafficAmount), S.trafficNav.capacity);
   while (cars.length < wanted) { const car = newCar(); spawnCar(car); cars.push(car); }
   if (cars.length > wanted) cars.length = wanted;
+  if (followedCar >= cars.length) stopFollowingCar();
   carParts.all.forEach(mesh => { mesh.count = cars.length; });
   // who's in front of whom: cars in the same lane going the same way, in order along it
   const lanes = new Map();
@@ -334,7 +367,11 @@ export function updateTraffic(t) {
   const designCounts = carMeshes.map(() => 0);
   cars.forEach((car, i) => {
     if (car.li < 0) { matrix.makeScale(0, 0, 0); carParts.body.setMatrixAt(i, matrix); return; }
-    if (car.design == null && carMeshes.length) { car.design = Math.floor(trafficRng()*carMeshes.length); car.length = carMeshes[car.design].length; }
+    if (car.design == null && carMeshes.length) {
+      car.design = Math.floor(trafficRng()*carMeshes.length);
+      car.length = carMeshes[car.design].length;
+      car.number = ++designNumbers[car.design];
+    }
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*car.cruise*S.peopleSpeed;
     let target = cruise;
@@ -391,4 +428,60 @@ export function updateTraffic(t) {
     cm.paint.needsUpdate = true;
     cm.glowUniform.value = glowFactor;
   });
+  // the camera onto whoever it's following, at about their roof
+  if (followedCar >= 0) { const car = cars[followedCar]; controls.goalTarget.set(car.x, Y_ROAD + carHeight(car)*0.6, car.z); }
 }
+
+// ---- following a car with the camera: exactly as for a person (see "following someone" in people.js) — a click on one in
+// World mode keeps the view on it, with a card (car-card.js) naming it, its mood (what kind of vehicle it is) and what it
+// enjoys and hates — the same for every car — until a click elsewhere, a pan, leaving World mode, or it despawning lets it go
+let followedCar = -1;
+function carHeight(car) { return (car.design != null && carMeshes[car.design] ? carMeshes[car.design].height : car.height)*S.peopleSize; }
+// the car under a point on the screen (the nearest, if several are), or -1 — exactly like pickPerson in people.js, but
+// along the line up the middle of the car's height rather than a walking person's
+function pickCar(clientX, clientY) {
+  if (!S.peopleEnabled) return -1;
+  const width = window.innerWidth, height = window.innerHeight, foot = new THREE.Vector3(), roof = new THREE.Vector3();
+  let best = -1, bestDepth = Infinity;
+  cars.forEach((car, i) => {
+    if (car.li < 0) return;
+    foot.set(car.x, Y_ROAD, car.z).project(camera);
+    roof.set(car.x, Y_ROAD + carHeight(car), car.z).project(camera);
+    if (Math.abs(foot.z) > 1 || Math.abs(roof.z) > 1) return;
+    const ax = (foot.x + 1)/2*width, ay = (1 - foot.y)/2*height, bx = (roof.x + 1)/2*width, by = (1 - roof.y)/2*height;
+    const lengthSq = (bx - ax)**2 + (by - ay)**2;
+    const k = lengthSq > 0 ? Math.max(0, Math.min(1, ((clientX - ax)*(bx - ax) + (clientY - ay)*(by - ay))/lengthSq)) : 0;
+    const off = Math.hypot(clientX - (ax + (bx - ax)*k), clientY - (ay + (by - ay)*k));
+    if (off <= Math.max(10, Math.sqrt(lengthSq)*0.35) && foot.z < bestDepth) { best = i; bestDepth = foot.z; }
+  });
+  return best;
+}
+// follows whichever car's under a point on the screen, or stops following if none is
+function followCarAt(clientX, clientY) {
+  const i = pickCar(clientX, clientY);
+  if (i < 0) { stopFollowingCar(); return; }
+  followedCar = i;
+  const h = carHeight(cars[i]);
+  controls.minRadius = Math.max(1.2, h*0.8);
+  controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9));
+  const car = cars[i], cm = car.design != null ? carMeshes[car.design] : null;
+  App.showCarCard(i, cm ? { name: `${cm.name} #${car.number}`, mood: cm.mood } : { name: 'Car', mood: DEFAULT_CAR_EMOJI });
+}
+function stopFollowingCar() {
+  if (followedCar < 0) return;
+  followedCar = -1;
+  controls.minRadius = CAMERA_MIN_RADIUS;
+  controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
+  App.hideCarCard();
+}
+// The card's thumbnail: a followed car's design, painted its own color, and the camera that frames it — or null before the
+// models have loaded (or for a car that hasn't been given a design yet).
+export function carThumbnailScene(i) {
+  const car = cars[i];
+  if (!car || car.design == null || !carMeshes[car.design]) return null;
+  const cm = carMeshes[car.design];
+  cm.thumbPaint.value.setRGB(car.paint[0], car.paint[1], car.paint[2]);
+  return { mesh: cm.thumbMesh, camera: cm.thumbCamera };
+}
+
+Object.assign(App, { pickCar, followCarAt, stopFollowingCar });
