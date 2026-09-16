@@ -107,5 +107,5 @@ export function profileOf(index, isMan) {
   const man = isMan == null ? rng() < 0.5 : isMan;
   const name = pick(lists[man ? 'boy names' : 'girl names']), age = 18 + Math.floor(rng()*65);
   const mood = pick(lists.moods), enjoys = pick(lists.enjoys), hates = pick(lists.hates);
-  return { name: name.text, age, mood: mood.text, enjoys: enjoys.text, hates: hates.text, traits: traitsOf([name, mood, enjoys, hates]) };
+  return { name: name.text, age, mood: mood.text, enjoys: enjoys.text, hates: hates.text, traits: traitsOf([name, mood, enjoys, hates])};
 }
