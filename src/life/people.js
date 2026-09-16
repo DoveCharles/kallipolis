@@ -54,6 +54,15 @@ roadsafetyDebugMesh.frustumCulled = false;
 roadsafetyDebugMesh.visible = false;
 roadsafetyDebugMesh.name = 'RoadsafetyDebug';
 scene.add(roadsafetyDebugMesh);
+// (and, for someone waiting in the middle of the road, just the quarter of it they check then — in front and to the
+// right, which is local -X for a person facing +Z: see crossingClear)
+const roadsafetyQuarterDebugMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 12, 0, Math.PI/2), roadsafetyDebugMesh.material, PEOPLE_MAX);
+roadsafetyQuarterDebugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+roadsafetyQuarterDebugMesh.count = 0;
+roadsafetyQuarterDebugMesh.frustumCulled = false;
+roadsafetyQuarterDebugMesh.visible = false;
+roadsafetyQuarterDebugMesh.name = 'RoadsafetyQuarterDebug';
+scene.add(roadsafetyQuarterDebugMesh);
 const pedHitboxDebugMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ color: 0xffd23d, wireframe: true }), PEOPLE_MAX);
 pedHitboxDebugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 pedHitboxDebugMesh.count = 0;
@@ -1059,7 +1068,7 @@ function walkAlong(p, dist) {
 // - anywhere else: 'jwalk' (to the curb), 'curb' (checking for traffic, giving up after a while), 'half1' (to the
 //   middle), 'mid' (checking again) and 'half2' (the rest of the way)
 // (see checkYield in traffic.js for the cars' side of it)
-const ROADSAFETY_RADIUS = 14, CROSS_CURB_TIMEOUT = 10, CROSS_DECIDE_CHANCE = 0.15, CROSS_SPEED_MULT = 1.6;
+const ROADSAFETY_RADIUS = 14, ROADSAFETY_QUARTER_SLACK = 3, CROSS_CURB_TIMEOUT = 10, CROSS_DECIDE_CHANCE = 0.15, CROSS_SPEED_MULT = 1.6;
 function startZebraCrossing(p, nav, vi, link) {
   p.jc = { route: [nav.pts[vi], peopleNav.lines[link.li].pts[link.vi]], legs: ['jwalk', 'jcross'], holds: ['jwait', null], i: 0,
     holding: false, to: { li: link.li, vi: link.vi }, back: null, junction: link.cross.junction, arm: link.cross.arm, checkIn: 0, wait: Infinity };
@@ -1096,8 +1105,18 @@ function maybeCrossRoad(p, nav, dt) {
 }
 // whether it's safe to set off on the crossing's next leg
 function crossingClear(p, jc, speed) {
-  const from = jc.route[jc.i-1], to = jc.route[jc.i];
-  if (!jc.junction) return !App.carsNearby((from.x + to.x)/2, (from.z + to.z)/2, ROADSAFETY_RADIUS*p.traits.roadsafety);
+  const from = jc.route[jc.i-1], to = jc.route[jc.i], radius = ROADSAFETY_RADIUS*p.traits.roadsafety;
+  if (!jc.junction && p.crossStage === 'mid') {
+    // halfway, only the far lane's still to cross — and its traffic comes from their right (cars keep right), so they
+    // only check the quarter in front of them and to that side (with a little behind that side's edge, for a car still
+    // going by in front)
+    const len = Math.hypot(to.x - from.x, to.z - from.z) || 1, cx = (to.x - from.x)/len, cz = (to.z - from.z)/len;
+    return !App.carsWhere((x, z) => {
+      const dx = x - from.x, dz = z - from.z;
+      return Math.hypot(dx, dz) < radius && dx*cx + dz*cz >= 0 && -dx*cz + dz*cx >= -ROADSAFETY_QUARTER_SLACK;
+    });
+  }
+  if (!jc.junction) return !App.carsNearby((from.x + to.x)/2, (from.z + to.z)/2, radius);
   const j = jc.junction, arm = jc.arm, sx = arm.z, sz = -arm.x;
   const need = Math.hypot(to.x - from.x, to.z - from.z)/Math.max(0.1, speed*CROSS_SPEED_MULT) + 1;
   return signalRedLeft(j, arm.phase, lastPeopleTime) >= Math.min(need, 9) && !App.carsWhere((x, z) => {
@@ -1653,8 +1672,8 @@ export function updatePeople(t) {
   while (people.length > wanted) endActivity(people.pop());
   if (followed >= people.length) stopFollowingPerson();
   peopleMesh.count = people.length;
-  roadsafetyDebugMesh.visible = pedHitboxDebugMesh.visible = S.showRoadsafetyDebug;
-  if (S.showRoadsafetyDebug) roadsafetyDebugMesh.count = pedHitboxDebugMesh.count = people.length;
+  roadsafetyDebugMesh.visible = roadsafetyQuarterDebugMesh.visible = pedHitboxDebugMesh.visible = S.showRoadsafetyDebug;
+  if (S.showRoadsafetyDebug) roadsafetyDebugMesh.count = roadsafetyQuarterDebugMesh.count = pedHitboxDebugMesh.count = people.length;
   if (personModel) {
     personModel.mesh.count = people.length;
     personModel.hair.forEach(style => { style.mesh.count = countBelow(style.members, people.length); });
@@ -1866,11 +1885,17 @@ export function updatePeople(t) {
       peopleMesh.setMatrixAt(i, matrix);
     }
     if (S.showRoadsafetyDebug) {
-      const dead = p.mode === 'none' || p.mode === 'dead';
+      const dead = p.mode === 'none' || p.mode === 'dead', radius = dead ? 0 : ROADSAFETY_RADIUS*p.traits.roadsafety;
+      const quarter = p.crossStage === 'mid' && p.jc && !p.jc.junction;
       rotation.identity();
-      scale.setScalar(dead ? 0 : ROADSAFETY_RADIUS*p.traits.roadsafety);
+      scale.setScalar(quarter ? 0 : radius);
       matrix.compose(position.set(p.x, p.y + 0.9, p.z), rotation, scale);
       roadsafetyDebugMesh.setMatrixAt(i, matrix);
+      const across = quarter && p.jc.route[p.jc.i];
+      rotation.setFromAxisAngle(up, across ? Math.atan2(across.x - p.x, across.z - p.z) : 0);
+      scale.setScalar(quarter ? radius : 0);
+      matrix.compose(position, rotation, scale);
+      roadsafetyQuarterDebugMesh.setMatrixAt(i, matrix);
       rotation.setFromAxisAngle(up, p.heading);
       scale.set(dead ? 0 : 0.5*S.peopleSize, dead ? 0 : 1.7*p.height*S.peopleSize, dead ? 0 : 0.34*S.peopleSize);
       matrix.compose(position.set(p.x, p.y, p.z), rotation, scale);
@@ -1885,6 +1910,7 @@ export function updatePeople(t) {
   }
   if (S.showRoadsafetyDebug) {
     roadsafetyDebugMesh.instanceMatrix.needsUpdate = true;
+    roadsafetyQuarterDebugMesh.instanceMatrix.needsUpdate = true;
     pedHitboxDebugMesh.instanceMatrix.needsUpdate = true;
   }
   // the camera onto whoever it's following, at about their shoulders
