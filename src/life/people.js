@@ -806,6 +806,20 @@ function walkwayPoint(p) {
   const y = nav.path && nav.overWater[i] && nav.overWater[i+1] ? FOOTBRIDGE_TOP : nav.y;
   return { x: a.x + (b.x-a.x)*t - dz*p.lat, y, z: a.z + (b.z-a.z)*t + dx*p.lat };
 }
+// the forward (index-increasing) direction of segment (seg, seg+1) — drawing two branches off the same spot on a
+// road leaves a zero-length duplicate-node segment right at the shared junction point, so if that segment has no
+// length this looks outward on both ends for the nearest points that actually do, rather than collapsing to a
+// meaningless (0,0) direction
+function robustForwardTangent(nav, seg) {
+  let lo = seg, hi = seg+1;
+  for (;;) {
+    const a = nav.pts[lo], b = nav.pts[hi], dx = b.x-a.x, dz = b.z-a.z, len = Math.hypot(dx, dz);
+    if (len > 1e-6) return { x: dx/len, z: dz/len };
+    if (lo === 0 && hi === nav.pts.length-1) return { x: 0, z: 0 };
+    if (lo > 0) lo--;
+    if (hi < nav.pts.length-1) hi++;
+  }
+}
 // moves a person `dist` along their walkway, dealing with each point they pass: maybe wandering into a hangout, maybe
 // turning off at a junction, and turning back at a dead end
 function walkAlong(p, dist) {
@@ -830,33 +844,34 @@ function walkAlong(p, dist) {
       // across roads at junctions. so first we only keep links that actually branch off on this person's own side (by
       // where the branch's own tangent points, relative to the road they're currently on) — paths aren't roads, so
       // either side of one of those is fine, same as `entrance` above.
-      const oldA = nav.pts[p.seg], oldB = nav.pts[p.seg+1], oldLen = (nav.cum[p.seg+1] - nav.cum[p.seg]) || 1;
-      const velX = p.dir*(oldB.x-oldA.x)/oldLen, velZ = p.dir*(oldB.z-oldA.z)/oldLen;
-      const oldNX = -(oldB.z-oldA.z)/oldLen, oldNZ = (oldB.x-oldA.x)/oldLen;
-      let taken = null, takenDir = 0;
+      // the normal (which side is which) has to stay a fixed property of the road's geometry, the same for both
+      // directions of travel (matching walkwayPoint's always-forward convention) — only the velocity actually
+      // depends on which way this person is walking
+      const fwdTan = robustForwardTangent(nav, p.seg);
+      const velX = p.dir*fwdTan.x, velZ = p.dir*fwdTan.z, oldNX = -fwdTan.z, oldNZ = fwdTan.x;
+      let taken = null, takenDir = 0, takenSeg = 0;
       const tries = Math.min(vertex.links.length, 3);
       for (let t=0; t<tries && !taken; t++) {
         const link = vertex.links[Math.floor(peopleRng()*vertex.links.length)];
         const other = peopleNav.lines[link.li];
         const dir = link.vi === 0 ? 1 : link.vi === other.pts.length-1 ? -1 : (peopleRng() < 0.5 ? 1 : -1);
+        const otherSeg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
         if (!nav.path) {
-          const a = other.pts[dir > 0 ? link.vi : Math.max(0, link.vi-1)], b = other.pts[dir > 0 ? Math.min(other.pts.length-1, link.vi+1) : link.vi];
-          const outLen = Math.hypot(b.x-a.x, b.z-a.z) || 1;
-          const outSide = (dir*(b.x-a.x)/outLen)*oldNX + (dir*(b.z-a.z)/outLen)*oldNZ;
+          const outTan = robustForwardTangent(other, otherSeg);
+          const outSide = dir*outTan.x*oldNX + dir*outTan.z*oldNZ;
           if (Math.abs(outSide) > 1e-6 && Math.sign(outSide) !== Math.sign(p.lat || 1)) continue;
         }
-        taken = link; takenDir = dir;
+        taken = link; takenDir = dir; takenSeg = otherSeg;
       }
       if (taken) {
         const link = taken, dir = takenDir;
         const other = peopleNav.lines[link.li], remaining = Math.abs(u - at);
         joinWalkway(p, link.li, other.cum[link.vi], dir);
-        p.seg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
+        p.seg = takenSeg;
         // two lines meeting at a junction vertex sit on both sides of it — pick the side of `other` this person's
         // current heading actually carries them onto (their position at this instant can't tell the sides apart).
         if (!other.path) {
-          const a = other.pts[p.seg], b = other.pts[p.seg+1], segLen = (other.cum[p.seg+1] - other.cum[p.seg]) || 1;
-          const dx = (b.x-a.x)/segLen, dz = (b.z-a.z)/segLen, side = velX*dz - velZ*dx;
+          const landTan = robustForwardTangent(other, takenSeg), side = velX*landTan.z - velZ*landTan.x;
           p.lat = Math.sign(side || p.lat) * Math.abs(p.lat);
         }
         p.linkCooldown = 6 + peopleRng()*4;
