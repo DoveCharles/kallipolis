@@ -5,7 +5,7 @@ import { mulberry32 } from '../core/math.js';
 // ============================================================ pixelation and the 16-colour palette
 // Filters on the 3D view, from World settings. Pixelation draws the view small — one pixel for every so many screen pixels
 // across; the 16-colour palette redraws it in sixteen colours or fewer (Windows 3.0's or another set, from the Palette menu),
-// dithering (in a pattern picked from the Dithering menu) to fake the shades in between. With either on, the view is drawn into a render target of its own,
+// dithering (in a pattern picked from the Dithering menu, or by Floyd–Steinberg error diffusion) to fake the shades in between. With either on, the view is drawn into a render target of its own,
 // without anti-aliasing (the canvas's can't be turned off once it's made, but a render target's is its own), and copied
 // onto the screen by a shader that applies the palette — each drawn pixel exactly so many screen pixels square, with hard
 // edges. So pixelating is cheaper to draw, not dearer, and the palette is one pass over the screen. Like the Windows 3.0
@@ -59,6 +59,7 @@ const DITHER_PATTERNS = [
   { id: 'random', name: 'Random' },
   { id: 'halftone', name: 'Halftone dots' },
   { id: 'lines', name: 'Lines' },
+  { id: 'floyd', name: 'Floyd-Steinberg (SLOW)' },
 ];
 const DEFAULT_DITHER = 'bayer4';
 const BLUE_NOISE_SIZE = 64;
@@ -126,6 +127,7 @@ const copyMaterial = new THREE.ShaderMaterial({
     palette: { value: PALETTES[0].colors.map(hex => new THREE.Color(hex)) },
     ditherMode: { value: DITHER_PATTERNS.findIndex(p => p.id === DEFAULT_DITHER) },
     blueNoise: { value: placeholderNoise },
+    floydIndices: { value: placeholderNoise },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -141,6 +143,7 @@ const copyMaterial = new THREE.ShaderMaterial({
     uniform vec3 palette[16];
     uniform int ditherMode;
     uniform sampler2D blueNoise;
+    uniform sampler2D floydIndices;
     varying vec2 vUv;
     // the Bayer matrix of 2^bits cells across, built up a bit at a time: each level's 2×2 [0 2; 3 1] set inside the next
     float bayer(ivec2 p, int bits) {
@@ -176,7 +179,10 @@ const copyMaterial = new THREE.ShaderMaterial({
     }
     void main() {
       vec3 color = texture2D(tView, vUv).rgb;
-      if (usePalette > 0.5) {
+      if (usePalette > 0.5 && ditherMode == 8) {
+        // (Floyd–Steinberg: already worked out, pixel by pixel — see floydSteinberg below)
+        color = palette[int(texelFetch(floydIndices, ivec2(floor(vUv*viewSize)), 0).r*255.0 + 0.5)];
+      } else if (usePalette > 0.5) {
         // the nearest of the sixteen, then whichever other one the color lies furthest towards (how far along the line
         // between the two it lies), and the dither pattern deciding, pixel by pixel, which of the two to show
         vec3 nearest = palette[0];
@@ -203,6 +209,61 @@ const copyMaterial = new THREE.ShaderMaterial({
   depthTest: false,
   depthWrite: false,
 });
+// Floyd–Steinberg dithering: each pixel's color depends on the error carried over from the ones before it, so the shader
+// can't pick them one at a time like the patterns above — instead the view is read back each frame and dithered here, a
+// row at a time (every other row right to left, which keeps the error from streaking one way), and the shader just shows
+// the palette color picked for each pixel. The error is worked out against the same colors, in the same space, as the
+// shader's palette, so a pixel comes out the color it would with no dithering at all where it's already a palette color.
+// It costs a read back of the whole view every frame, so it's slow unpixelated on a big screen.
+const FLOYD_STEINBERG = DITHER_PATTERNS.findIndex(p => p.id === 'floyd');
+const floydPalette = new Float32Array(48);
+let floydPixels = null, floydIndices = null, floydTexture = null, floydError = null, floydNextError = null;
+function floydSteinberg(width, height) {
+  if (!floydTexture || floydTexture.image.width !== width || floydTexture.image.height !== height) {
+    if (floydTexture) floydTexture.dispose();
+    floydPixels = new Uint8Array(width*height*4);
+    floydIndices = new Uint8Array(width*height);
+    floydTexture = new THREE.DataTexture(floydIndices, width, height, THREE.RedFormat, THREE.UnsignedByteType);
+    floydTexture.magFilter = floydTexture.minFilter = THREE.NearestFilter;
+    // (the error carried to each pixel of this row and the next, with a spare pixel's worth either end)
+    floydError = new Float32Array((width + 2)*3);
+    floydNextError = new Float32Array((width + 2)*3);
+    copyMaterial.uniforms.floydIndices.value = floydTexture;
+  }
+  renderer.readRenderTargetPixels(filteredView, 0, 0, width, height, floydPixels);
+  copyMaterial.uniforms.palette.value.forEach((color, i) => { floydPalette[i*3] = color.r; floydPalette[i*3+1] = color.g; floydPalette[i*3+2] = color.b; });
+  const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  floydError.fill(0);
+  for (let y = 0; y < height; y++) {
+    floydNextError.fill(0);
+    const step = y & 1 ? -1 : 1;
+    for (let n = 0; n < width; n++) {
+      const x = step > 0 ? n : width - 1 - n, i = y*width + x, e = (x + 1)*3;
+      const r = clamp01(floydPixels[i*4]/255 + floydError[e]);
+      const g = clamp01(floydPixels[i*4+1]/255 + floydError[e+1]);
+      const b = clamp01(floydPixels[i*4+2]/255 + floydError[e+2]);
+      let best = 0, bestDistance = Infinity;
+      for (let k = 0; k < 48; k += 3) {
+        const dr = r - floydPalette[k], dg = g - floydPalette[k+1], db = b - floydPalette[k+2], d = dr*dr + dg*dg + db*db;
+        if (d < bestDistance) { bestDistance = d; best = k; }
+      }
+      floydIndices[i] = best/3;
+      // the error spread on: 7/16 to the next pixel along the row, and 3/16, 5/16 and 1/16 to the ones below it — behind,
+      // straight below and ahead
+      const ahead = e + step*3, behind = e - step*3;
+      for (let c = 0; c < 3; c++) {
+        const error = (c === 0 ? r : c === 1 ? g : b) - floydPalette[best + c];
+        floydError[ahead + c] += error*7/16;
+        floydNextError[behind + c] += error*3/16;
+        floydNextError[e + c] += error*5/16;
+        floydNextError[ahead + c] += error/16;
+      }
+    }
+    [floydError, floydNextError] = [floydNextError, floydError];
+  }
+  floydTexture.needsUpdate = true;
+}
+
 const copyCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const copyQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), copyMaterial);
 copyQuad.frustumCulled = false;
@@ -281,5 +342,6 @@ export function renderView(scene, camera) {
   renderer.setRenderTarget(filteredView);
   renderer.render(scene, camera);
   renderer.setRenderTarget(null);
+  if (palette16 && copyMaterial.uniforms.ditherMode.value === FLOYD_STEINBERG) floydSteinberg(width, height);
   renderer.render(copyScene, copyCamera);
 }
