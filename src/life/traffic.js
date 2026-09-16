@@ -30,7 +30,7 @@ const cars = [];
 const trafficRng = mulberry32(31337);
 // the box car, built around its own origin on the ground, facing +Z: about 4.4 long, 1.8 wide and 1.5 tall — what a car
 // looks like until the models have loaded (or if they never do)
-const BOX_CAR_LENGTH = 4.4;
+const BOX_CAR_LENGTH = 4.4, BOX_CAR_WIDTH = 1.8;
 const carParts = (() => {
   const body = createMeshBuilder(), glass = createMeshBuilder(), wheels = createMeshBuilder(), heads = createMeshBuilder(), tails = createMeshBuilder();
   body.addBox(0, 0, 0, 1, 2.2, 0.9, 0.3, 0.95);           // lower body
@@ -165,7 +165,7 @@ function buildCarDesigns(gltf) {
     geometry.setAttribute('carColor', new THREE.Float32BufferAttribute(colors, 3));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-    designs.push({ name: node.name, geometry, length: size.z/BOX_CAR_LENGTH, height: size.y, radius: geometry.boundingSphere.radius });
+    designs.push({ name: node.name, geometry, length: size.z/BOX_CAR_LENGTH, width: size.x, height: size.y, radius: geometry.boundingSphere.radius });
   });
   gltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (o.material) o.material.dispose(); } });
   return designs;
@@ -223,7 +223,7 @@ function makeCarMesh(design) {
   mesh.name = 'Traffic';
   scene.add(mesh);
   const thumb = makeCarThumbnail(design);
-  return { mesh, paint, glowUniform, length: design.length, height: design.height,
+  return { mesh, paint, glowUniform, length: design.length, width: design.width, height: design.height,
     name: design.name, mood: DESIGN_EMOJI[design.name] || DEFAULT_CAR_EMOJI,
     thumbMesh: thumb.mesh, thumbCamera: thumb.camera, thumbPaint: thumb.paint };
 }
@@ -405,6 +405,7 @@ export function updateTraffic(t) {
         car.heading += Math.atan2(Math.sin(facing - car.heading), Math.cos(facing - car.heading))*Math.min(1, dt*6);
       }
     }
+    if (car.speed > 0.3) runOverPeople(car);
     rotation.setFromAxisAngle(up, car.heading);
     position.set(car.x, Y_ROAD, car.z);
     if (car.design != null && carMeshes[car.design]) {
@@ -438,6 +439,26 @@ export function updateTraffic(t) {
 // enjoys and hates — the same for every car — until a click elsewhere, a pan, leaving World mode, or it despawning lets it go
 let followedCar = -1;
 function carHeight(car) { return (car.design != null && carMeshes[car.design] ? carMeshes[car.design].height : car.height)*S.peopleSize; }
+// a car's own length and width, in world units — its design's, or (until that's loaded) the box car's own
+function carFootprint(car) {
+  const cm = car.design != null ? carMeshes[car.design] : null;
+  return cm
+    ? { length: cm.length*BOX_CAR_LENGTH*S.peopleSize, width: cm.width*S.peopleSize }
+    : { length: car.length*BOX_CAR_LENGTH*S.peopleSize, width: car.width*BOX_CAR_WIDTH*S.peopleSize };
+}
+// People wander into the road more readily than they dodge traffic (see people.js) — and the cars don't slow for them,
+// so anyone caught under one when it's moving gets run over: killed exactly as the person card's Kill button does (see
+// killPerson in people.js), blood and all, rather than anything of the car's own.
+function runOverPeople(car) {
+  const { length, width } = carFootprint(car), reach = length*0.5 + 0.4, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+  App.people.forEach((p, i) => {
+    if (p.mode === 'none' || p.mode === 'dead') return;
+    const dx = p.x - car.x, dz = p.z - car.z;
+    if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
+    const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
+    if (Math.abs(right) < width*0.5 + 0.25 && Math.abs(forward) < length*0.5 + 0.25) App.killPerson(i);
+  });
+}
 // the car under a point on the screen (the nearest, if several are), or -1 — exactly like pickPerson in people.js, but
 // along the line up the middle of the car's height rather than a walking person's
 function pickCar(clientX, clientY) {
