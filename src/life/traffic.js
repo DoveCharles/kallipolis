@@ -29,6 +29,15 @@ const CAR_PAINTS = [[0xe9e9e6, 5], [0x1c1d20, 5], [0xa8adb3, 4], [0x5f646b, 3], 
 S.trafficAmount = 150, S.trafficNav = null, S.trafficNavBuiltAt = -Infinity, S.lastTrafficTime = null;
 const cars = [];
 const trafficRng = mulberry32(31337);
+// Debug wireframe (World → Peds → Roadsafety radius (debug)): a box around each car showing the hitbox runOverPeople
+// checks against — off by default, and only kept up to date while the toggle's on.
+const carHitboxDebugMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffd23d, wireframe: true }), TRAFFIC_MAX);
+carHitboxDebugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+carHitboxDebugMesh.count = 0;
+carHitboxDebugMesh.frustumCulled = false;
+carHitboxDebugMesh.visible = false;
+carHitboxDebugMesh.name = 'CarHitboxDebug';
+scene.add(carHitboxDebugMesh);
 // the box car, built around its own origin on the ground, facing +Z: about 4.4 long, 1.8 wide and 1.5 tall — what a car
 // looks like until the models have loaded (or if they never do)
 const BOX_CAR_LENGTH = 4.4, BOX_CAR_WIDTH = 1.8;
@@ -401,7 +410,7 @@ export function updateTraffic(t) {
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   const designCounts = carMeshes.map(() => 0);
   cars.forEach((car, i) => {
-    if (car.li < 0) { matrix.makeScale(0, 0, 0); carParts.body.setMatrixAt(i, matrix); return; }
+    if (car.li < 0) { matrix.makeScale(0, 0, 0); carParts.body.setMatrixAt(i, matrix); if (S.showRoadsafetyDebug) carHitboxDebugMesh.setMatrixAt(i, matrix); return; }
     if (car.design == null && carMeshes.length) {
       car.design = Math.floor(trafficRng()*carMeshes.length);
       car.length = carMeshes[car.design].length;
@@ -456,7 +465,15 @@ export function updateTraffic(t) {
       matrix.compose(position, rotation, scale);
       carParts.body.setMatrixAt(i, matrix);
     }
+    if (S.showRoadsafetyDebug) {
+      const { length: fl, width: fw } = carFootprint(car), h = carHeight(car);
+      scale.set(fw + 0.5, h, fl + 0.5);
+      matrix.compose(position.setY(Y_ROAD + h*0.5), rotation, scale);
+      carHitboxDebugMesh.setMatrixAt(i, matrix);
+    }
   });
+  carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
+  if (S.showRoadsafetyDebug) { carHitboxDebugMesh.count = cars.length; carHitboxDebugMesh.instanceMatrix.needsUpdate = true; }
   carParts.matrix.needsUpdate = true;
   const glowFactor = computeWindowGlowFactor(S.sunElevation);
   carMeshes.forEach((cm, d) => {

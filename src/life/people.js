@@ -26,7 +26,7 @@ import { explode } from './giblets.js';
 const PEOPLE_MAX = 2000;
 const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
 export const PEOPLE_NAV_SPACING = 4;    // walkways are resampled to a point at least this often, for entrances and re-seating
-S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1;
+S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false;
 let peopleNav = null, peopleNavBuiltAt = -Infinity, lastPeopleTime = null;
 const people = [];
 const peopleRng = mulberry32(90210);
@@ -42,6 +42,24 @@ peopleMesh.castShadow = true; peopleMesh.receiveShadow = true;
 peopleMesh.visible = false;
 peopleMesh.name = 'People';
 scene.add(peopleMesh);
+
+// Debug wireframes (World → Peds → Roadsafety radius (debug)): a sphere around each person showing how far they check for
+// traffic before crossing (see ROADSAFETY_RADIUS below), and a box around them showing the hitbox a car's run-over check
+// uses (see runOverPeople in traffic.js) — off by default, and only kept up to date while the toggle's on.
+const roadsafetyDebugMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0x3ddc97, wireframe: true, transparent: true, opacity: 0.35 }), PEOPLE_MAX);
+roadsafetyDebugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+roadsafetyDebugMesh.count = 0;
+roadsafetyDebugMesh.frustumCulled = false;
+roadsafetyDebugMesh.visible = false;
+roadsafetyDebugMesh.name = 'RoadsafetyDebug';
+scene.add(roadsafetyDebugMesh);
+const pedHitboxDebugMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ color: 0xffd23d, wireframe: true }), PEOPLE_MAX);
+pedHitboxDebugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+pedHitboxDebugMesh.count = 0;
+pedHitboxDebugMesh.frustumCulled = false;
+pedHitboxDebugMesh.visible = false;
+pedHitboxDebugMesh.name = 'PedHitboxDebug';
+scene.add(pedHitboxDebugMesh);
 
 // The people model (assets/models/Person.glb, made in Blender) replaces the cuboids once it's loaded: a rigged figure with
 // animations — walking, standing idle (now and then scratching or having a think), waving, sitting on a bench, and sitting or
@@ -587,6 +605,7 @@ function buildPersonModel(gltf, hairGltf) {
 export function syncPeopleUI() {
   document.getElementById('s-people').classList.toggle('on', S.peopleEnabled);
   document.getElementById('people-settings').style.display = S.peopleEnabled ? 'block' : 'none';
+  document.getElementById('s-roadsafety-debug').classList.toggle('on', S.showRoadsafetyDebug);
   document.getElementById('s-peopleamount').value = S.peopleAmount;
   document.getElementById('dv-peopleamount').textContent = String(Math.round(S.peopleAmount));
   document.getElementById('s-peoplespeed').value = S.peopleSpeed;
@@ -1361,6 +1380,8 @@ export function updatePeople(t) {
   while (people.length > wanted) endActivity(people.pop());
   if (followed >= people.length) stopFollowingPerson();
   peopleMesh.count = people.length;
+  roadsafetyDebugMesh.visible = pedHitboxDebugMesh.visible = S.showRoadsafetyDebug;
+  if (S.showRoadsafetyDebug) roadsafetyDebugMesh.count = pedHitboxDebugMesh.count = people.length;
   if (personModel) {
     personModel.mesh.count = people.length;
     personModel.hair.forEach(style => { style.mesh.count = countBelow(style.members, people.length); });
@@ -1571,12 +1592,27 @@ export function updatePeople(t) {
       matrix.compose(position.set(p.x, p.y + bob, p.z), rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);
     }
+    if (S.showRoadsafetyDebug) {
+      const dead = p.mode === 'none' || p.mode === 'dead';
+      rotation.identity();
+      scale.setScalar(dead ? 0 : ROADSAFETY_RADIUS*p.traits.roadsafety);
+      matrix.compose(position.set(p.x, p.y + 0.9, p.z), rotation, scale);
+      roadsafetyDebugMesh.setMatrixAt(i, matrix);
+      rotation.setFromAxisAngle(up, p.heading);
+      scale.set(dead ? 0 : 0.5*S.peopleSize, dead ? 0 : 1.7*p.height*S.peopleSize, dead ? 0 : 0.34*S.peopleSize);
+      matrix.compose(position.set(p.x, p.y, p.z), rotation, scale);
+      pedHitboxDebugMesh.setMatrixAt(i, matrix);
+    }
   });
 
   if (personModel) {
     [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; });
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;
+  }
+  if (S.showRoadsafetyDebug) {
+    roadsafetyDebugMesh.instanceMatrix.needsUpdate = true;
+    pedHitboxDebugMesh.instanceMatrix.needsUpdate = true;
   }
   // the camera onto whoever it's following, at about their shoulders
   if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
