@@ -7,13 +7,14 @@ import { mulberry32 } from '../core/math.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { roadLineWidths, createMeshBuilder } from '../roads/roads.js';
-import { isPathLine, isRiverLine } from '../roads/paths.js';
+import { isPathLine, isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { placeKey, signalState } from '../roads/markings.js';
 import { isTrainLine } from '../trains/trains.js';
 import { PEOPLE_NAV_SPACING, pickWeighted } from './people.js';
+import { explodeCar } from './giblets.js';
 
 // ============================================================ traffic
-// Cars, switched on and off with the people (World → People, with speed and size shared too). They drive the sidewalk
+// Cars, switched on and off with the people (World → Peds, with speed and size shared too). They drive the sidewalk
 // roads — one lane each way, either side of the centerline — turning off at junctions now and then, U-turning at dead
 // ends, slowing as they near a junction and keeping their distance from the car in front. The roads only take so many
 // (one car per TRAFFIC_LANE_PER_CAR of lane), however many the slider asks for, so they don't gridlock. Each car is one
@@ -22,14 +23,25 @@ import { PEOPLE_NAV_SPACING, pickWeighted } from './people.js';
 const TRAFFIC_MAX = 1000;
 const CAR_SPEED = 9;               // world units per second at speed 1
 const TRAFFIC_LANE_PER_CAR = 16;   // the most cars a road takes: one per this length of lane
+const PED_YIELD_RADIUS = 10, PED_YIELD_CHANCE = 0.25; // how far ahead a car notices someone waiting in the road, and how often it stops for them
+const TURN_SAFE_ANGLE = 0.35; // ~20°: while a car's heading is catching up to the lane by more than this (swinging round a corner or a dead-end U-turn — see driveAlong's junction/end handling), it can't run anyone over, though it's still a normal hazard for a ped's roadsafety check
 const CAR_PAINTS = [[0xe9e9e6, 5], [0x1c1d20, 5], [0xa8adb3, 4], [0x5f646b, 3], [0x233a66, 2], [0x8f1f22, 2], [0x2f5d3a, 1],
   [0xd8b12c, 1], [0xd26a1f, 1], [0x2a8a9a, 1], [0x6b3d7a, 0.5], [0xb8c9d8, 1]]; // [color, how common]
 S.trafficAmount = 150, S.trafficNav = null, S.trafficNavBuiltAt = -Infinity, S.lastTrafficTime = null;
 const cars = [];
 const trafficRng = mulberry32(31337);
+// Debug wireframe (World → Peds → Roadsafety radius (debug)): a box around each car showing the hitbox runOverPeople
+// checks against — off by default, and only kept up to date while the toggle's on.
+const carHitboxDebugMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffd23d, wireframe: true }), TRAFFIC_MAX);
+carHitboxDebugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+carHitboxDebugMesh.count = 0;
+carHitboxDebugMesh.frustumCulled = false;
+carHitboxDebugMesh.visible = false;
+carHitboxDebugMesh.name = 'CarHitboxDebug';
+scene.add(carHitboxDebugMesh);
 // the box car, built around its own origin on the ground, facing +Z: about 4.4 long, 1.8 wide and 1.5 tall — what a car
 // looks like until the models have loaded (or if they never do)
-const BOX_CAR_LENGTH = 4.4;
+const BOX_CAR_LENGTH = 4.4, BOX_CAR_WIDTH = 1.8;
 const carParts = (() => {
   const body = createMeshBuilder(), glass = createMeshBuilder(), wheels = createMeshBuilder(), heads = createMeshBuilder(), tails = createMeshBuilder();
   body.addBox(0, 0, 0, 1, 2.2, 0.9, 0.3, 0.95);           // lower body
@@ -164,7 +176,7 @@ function buildCarDesigns(gltf) {
     geometry.setAttribute('carColor', new THREE.Float32BufferAttribute(colors, 3));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-    designs.push({ name: node.name, geometry, length: size.z/BOX_CAR_LENGTH, height: size.y, radius: geometry.boundingSphere.radius });
+    designs.push({ name: node.name, geometry, length: size.z/BOX_CAR_LENGTH, width: size.x, height: size.y, radius: geometry.boundingSphere.radius });
   });
   gltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (o.material) o.material.dispose(); } });
   return designs;
@@ -222,7 +234,7 @@ function makeCarMesh(design) {
   mesh.name = 'Traffic';
   scene.add(mesh);
   const thumb = makeCarThumbnail(design);
-  return { mesh, paint, glowUniform, length: design.length, height: design.height,
+  return { mesh, paint, glowUniform, length: design.length, width: design.width, height: design.height,
     name: design.name, mood: DESIGN_EMOJI[design.name] || DEFAULT_CAR_EMOJI,
     thumbMesh: thumb.mesh, thumbCamera: thumb.camera, thumbPaint: thumb.paint };
 }
@@ -232,7 +244,7 @@ function makeCarMesh(design) {
 function buildTrafficNav() {
   const lines = [];
   S.roadLines.forEach(line => {
-    if (isTrainLine(line) || isPathLine(line) || isRiverLine(line)) return;
+    if (isTrainLine(line) || isPathLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
     const nodes = tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean));
     if (nodes.length < 2) return;
     const pts = [nodes[0]];
@@ -260,7 +272,10 @@ function buildTrafficNav() {
 function newCar() {
   return { x: 0, z: 0, heading: 0, li: -1, u: 0, dir: 1, seg: 0, speed: 0, ahead: null,
     cruise: 0.8 + trafficRng()*0.4, length: 0.9 + trafficRng()*0.3, width: 0.95 + trafficRng()*0.12, height: 0.9 + trafficRng()*0.35,
-    design: null, paint: pickCarPaint() };
+    design: null, paint: pickCarPaint(),
+    // someone crossing it's stopped for (see checkYield) — and the last one it rolled its one-in-four chance against, so
+    // it doesn't keep re-rolling for the same person every frame while it's still approaching them
+    yieldFor: null, yieldChecked: -1 };
 }
 // puts a car in lane `li` at distance u along it, heading `dir`
 function carJoinLane(car, li, u, dir) {
@@ -331,6 +346,36 @@ function junctionAhead(car, lookahead) {
   }
   return null;
 }
+// whether any moving car is within `radius` of (x, z) — the "roadsafety radius" a pedestrian checks before crossing, and
+// again at the middle of the road, before committing to each half (see updateCrossing in people.js); a car that's
+// stopped (e.g. one yielding to this very pedestrian) poses no threat, so it doesn't count — otherwise a car stopped to
+// let someone cross would keep looking dangerous to them, and neither would ever move again
+function carsNearby(x, z, radius) {
+  return cars.some(car => car.li >= 0 && car.speed > 0.5 && Math.hypot(car.x - x, car.z - z) < radius);
+}
+// notices someone waiting in the middle of the road ahead, ready to cross the rest of the way, and — one time in four —
+// decides to stop and let them; once it's committed to stopping for someone it keeps stopping until they're done
+// waiting (or gone), rather than re-rolling every frame
+function checkYield(car) {
+  if (car.yieldFor != null) {
+    const p = App.people[car.yieldFor];
+    if (!p || p.crossStage !== 'mid') car.yieldFor = null;
+    return car.yieldFor != null;
+  }
+  const cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+  for (let i = 0; i < App.people.length; i++) {
+    const p = App.people[i];
+    if (p.crossStage !== 'mid' || i === car.yieldChecked) continue;
+    const dx = p.x - car.x, dz = p.z - car.z;
+    if (Math.hypot(dx, dz) > PED_YIELD_RADIUS) continue;
+    const forward = dx*sin + dz*cos;
+    if (forward < 0.5 || forward > PED_YIELD_RADIUS) continue; // (only ahead of it, not behind)
+    car.yieldChecked = i;
+    if (trafficRng() < PED_YIELD_CHANCE) car.yieldFor = i;
+    return car.yieldFor === i;
+  }
+  return false;
+}
 export function updateTraffic(t) {
   if (followedCar >= 0 && (!S.peopleEnabled || S.interactionMode !== 'move')) stopFollowingCar();
   const dt = S.lastTrafficTime == null ? 0 : Math.min(0.1, Math.max(0, t - S.lastTrafficTime));
@@ -366,7 +411,7 @@ export function updateTraffic(t) {
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   const designCounts = carMeshes.map(() => 0);
   cars.forEach((car, i) => {
-    if (car.li < 0) { matrix.makeScale(0, 0, 0); carParts.body.setMatrixAt(i, matrix); return; }
+    if (car.li < 0) { matrix.makeScale(0, 0, 0); carParts.body.setMatrixAt(i, matrix); if (S.showRoadsafetyDebug) carHitboxDebugMesh.setMatrixAt(i, matrix); return; }
     if (car.design == null && carMeshes.length) {
       car.design = Math.floor(trafficRng()*carMeshes.length);
       car.length = carMeshes[car.design].length;
@@ -391,19 +436,23 @@ export function updateTraffic(t) {
         target = Math.min(target, Math.max(0, (ahead.dist - stopAt)*1.5*S.peopleSpeed));
       }
     }
+    if (checkYield(car)) target = 0;
     car.speed += Math.max(-18*S.peopleSpeed*dt, Math.min(5*S.peopleSpeed*dt, target - car.speed));
     driveAlong(car, car.speed*dt);
     // steer towards the lane — quicker when off it, as when swinging round a corner or into the other lane
     const at = lanePoint(car);
     const dx = at.x - car.x, dz = at.z - car.z, d = Math.hypot(dx, dz);
+    let angleDiff = 0;
     if (d > 1e-4) {
       const step = Math.max(car.speed, 3*S.peopleSpeed)*dt*(1 + Math.min(3, d*0.3)), k = Math.min(1, step/d), mx = dx*k, mz = dz*k;
       car.x += mx; car.z += mz;
       if (Math.hypot(mx, mz) > 1e-3) {
         const facing = Math.atan2(mx, mz);
-        car.heading += Math.atan2(Math.sin(facing - car.heading), Math.cos(facing - car.heading))*Math.min(1, dt*6);
+        angleDiff = Math.atan2(Math.sin(facing - car.heading), Math.cos(facing - car.heading));
+        car.heading += angleDiff*Math.min(1, dt*6);
       }
     }
+    if (car.speed > 0.3 && Math.abs(angleDiff) < TURN_SAFE_ANGLE) runOverPeople(car);
     rotation.setFromAxisAngle(up, car.heading);
     position.set(car.x, Y_ROAD, car.z);
     if (car.design != null && carMeshes[car.design]) {
@@ -419,7 +468,15 @@ export function updateTraffic(t) {
       matrix.compose(position, rotation, scale);
       carParts.body.setMatrixAt(i, matrix);
     }
+    if (S.showRoadsafetyDebug) {
+      const { length: fl, width: fw } = carFootprint(car), h = carHeight(car);
+      scale.set(fw + 0.5, h, fl + 0.5);
+      matrix.compose(position.setY(Y_ROAD + h*0.5), rotation, scale);
+      carHitboxDebugMesh.setMatrixAt(i, matrix);
+    }
   });
+  carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
+  if (S.showRoadsafetyDebug) { carHitboxDebugMesh.count = cars.length; carHitboxDebugMesh.instanceMatrix.needsUpdate = true; }
   carParts.matrix.needsUpdate = true;
   const glowFactor = computeWindowGlowFactor(S.sunElevation);
   carMeshes.forEach((cm, d) => {
@@ -437,6 +494,26 @@ export function updateTraffic(t) {
 // enjoys and hates — the same for every car — until a click elsewhere, a pan, leaving World mode, or it despawning lets it go
 let followedCar = -1;
 function carHeight(car) { return (car.design != null && carMeshes[car.design] ? carMeshes[car.design].height : car.height)*S.peopleSize; }
+// a car's own length and width, in world units — its design's, or (until that's loaded) the box car's own
+function carFootprint(car) {
+  const cm = car.design != null ? carMeshes[car.design] : null;
+  return cm
+    ? { length: cm.length*BOX_CAR_LENGTH*S.peopleSize, width: cm.width*S.peopleSize }
+    : { length: car.length*BOX_CAR_LENGTH*S.peopleSize, width: car.width*BOX_CAR_WIDTH*S.peopleSize };
+}
+// People wander into the road more readily than they dodge traffic (see people.js) — and the cars don't slow for them,
+// so anyone caught under one when it's moving gets run over: killed exactly as the person card's Kill button does (see
+// killPerson in people.js), blood and all, rather than anything of the car's own.
+function runOverPeople(car) {
+  const { length, width } = carFootprint(car), reach = length*0.5 + 0.4, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+  App.people.forEach((p, i) => {
+    if (p.mode === 'none' || p.mode === 'dead') return;
+    const dx = p.x - car.x, dz = p.z - car.z;
+    if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
+    const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
+    if (Math.abs(right) < width*0.5 + 0.25 && Math.abs(forward) < length*0.5 + 0.25) App.killPerson(i);
+  });
+}
 // the car under a point on the screen (the nearest, if several are), or -1 — exactly like pickPerson in people.js, but
 // along the line up the middle of the car's height rather than a walking person's
 function pickCar(clientX, clientY) {
@@ -474,6 +551,17 @@ function stopFollowingCar() {
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
   App.hideCarCard();
 }
+// The car card's Kill button: it blows up on the spot, in its own paint, with a scorch mark and a fireball rather than the
+// giblets and blood a person leaves (see explodeCar) — and is simply gone, a replacement spawning in elsewhere as usual.
+function killCar(i) {
+  const car = cars[i];
+  if (!car || car.li < 0) return;
+  if (followedCar === i) stopFollowingCar();
+  const paint = new THREE.Color(car.paint[0], car.paint[1], car.paint[2]);
+  explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint });
+  cars.splice(i, 1);
+  if (followedCar > i) followedCar--; // (a car ahead of it in the array, still being followed, keeps its place)
+}
 // The card's thumbnail: a followed car's design, painted its own color, and the camera that frames it — or null before the
 // models have loaded (or for a car that hasn't been given a design yet).
 export function carThumbnailScene(i) {
@@ -484,4 +572,4 @@ export function carThumbnailScene(i) {
   return { mesh: cm.thumbMesh, camera: cm.thumbCamera };
 }
 
-Object.assign(App, { pickCar, followCarAt, stopFollowingCar });
+Object.assign(App, { pickCar, followCarAt, stopFollowingCar, killCar, carsNearby });

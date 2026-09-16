@@ -13,8 +13,13 @@ import { CURB_COLOR, SIDEWALK_COLOR, CLIPPER_SCALE, roadLineWidths, unionRoadStr
 // lots, buildings and trees still keep off them (see pathFootprint).
 export const PATH_COLOR = 0xb09973; // kept near the grass's brightness, so a path reads as sand on the ground rather than a glowing stripe
 export const PATH_COLOR_PALETTE = [PATH_COLOR]; // user-extendable palette; grows via the '+' swatch
+// A walkway is a path in every way that matters for the sim (pedestrians walk it, it keeps lots/trees off it, it
+// bridges water like a path) but looks nothing like one: just a plain flat color, no dirt texture or soft fade edge.
+export const WALKWAY_COLOR = 0xb0ac9f;
+export const WALKWAY_COLOR_PALETTE = [WALKWAY_COLOR];
 const PATH_MAX_SEGMENTS = 128; // fixed GLSL array size; a network's centerlines are simplified to fit
 export function isPathLine(line) { return line.roadType === 'path'; }
+export function isWalkwayLine(line) { return line.roadType === 'walkway'; }
 export function isRiverLine(line) { return line.roadType === 'river'; }
 // how far past its nominal edge a path's sand fades out
 function pathFadeWidth(halfWidth) { return Math.min(2.5, halfWidth*0.9); }
@@ -115,12 +120,32 @@ function buildPathMesh(lines, networkId) {
   return mesh;
 }
 
+// One walkway network's mesh: like a path, but just a plain flat color — no dirt shader or soft fade edge
+function buildWalkwayMesh(lines, networkId) {
+  const halfWidth = (lines[0].width || S.DEFAULT_ROAD_WIDTH)/2;
+  const color = lines[0].walkwayColor!=null ? lines[0].walkwayColor : WALKWAY_COLOR; // colors are set per network in the details panel
+  const outline = unionRoadStrokes(lines.map(line => ({
+    path: App.toClipperPath(tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean))),
+    radius: halfWidth,
+  })));
+  const builder = createMeshBuilder();
+  builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, outline, [], true), Y_PATH);
+  const geo = builder.build();
+  if (!geo) return null;
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, ...SKIP_OVER_WATER });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = true;
+  mesh.name = 'Walkway';
+  mesh.userData = { networkId, baseColor: color };
+  return mesh;
+}
+
 export function rebuildRoadMeshes() {
   scene.remove(S.roadMeshGroup); disposeObject(S.roadMeshGroup);
   S.roadMeshGroup = new THREE.Group(); S.roadMeshGroup.name='Roads';
   const networks = new Map(); // networkId -> [{ path, line, hw, cw, sw }]
   S.roadLines.forEach(line => {
-    if (App.isTrainLine(line) || isPathLine(line) || isRiverLine(line)) return; // built separately — see rebuildTrainMeshes, buildPathMesh and rebuildWater
+    if (App.isTrainLine(line) || isPathLine(line) || isWalkwayLine(line) || isRiverLine(line)) return; // built separately — see rebuildTrainMeshes, buildPathMesh/buildWalkwayMesh and rebuildWater
     const pts = line.nodeIds.map(id=>roadNodes[id]).filter(Boolean);
     if (pts.length<2) return;
     const path = tessellateOpenPath(pts).map(p => ({ X:Math.round(p.x*CLIPPER_SCALE), Y:Math.round(p.z*CLIPPER_SCALE) }));
@@ -178,6 +203,23 @@ export function rebuildRoadMeshes() {
   S.pathBridgeSources = [];
   pathNetworks.forEach((lines, netId) => {
     const mesh = buildPathMesh(lines, netId);
+    if (mesh) S.roadMeshGroup.add(mesh);
+    const strokes = lines.map(line => ({
+      path: App.toClipperPath(tessellateOpenPath(line.nodeIds.map(id=>roadNodes[id]).filter(Boolean))),
+      radius: (line.width || S.DEFAULT_ROAD_WIDTH)/2,
+    }));
+    pathStrokes.push(...strokes);
+    S.pathBridgeSources.push({ networkId: netId, strokes });
+  });
+  // walkway networks: same flat plaza-like footprint plumbing as paths, just a different-looking mesh
+  const walkwayNetworks = new Map();
+  S.roadLines.forEach(line => {
+    if (!isWalkwayLine(line) || line.nodeIds.map(id=>roadNodes[id]).filter(Boolean).length < 2) return;
+    if (!walkwayNetworks.has(line.networkId)) walkwayNetworks.set(line.networkId, []);
+    walkwayNetworks.get(line.networkId).push(line);
+  });
+  walkwayNetworks.forEach((lines, netId) => {
+    const mesh = buildWalkwayMesh(lines, netId);
     if (mesh) S.roadMeshGroup.add(mesh);
     const strokes = lines.map(line => ({
       path: App.toClipperPath(tessellateOpenPath(line.nodeIds.map(id=>roadNodes[id]).filter(Boolean))),

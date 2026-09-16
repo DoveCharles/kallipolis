@@ -7,9 +7,13 @@ import { carThumbnailScene } from './traffic.js';
 // Who's behind the wheel, in a card at the bottom right while the camera follows a vehicle (see "following a car" in
 // traffic.js): its name (its model and a number of its own, among others like it — see designNumbers in traffic.js), its
 // mood (what kind of vehicle it is, as an emoji), and what it enjoys and hates — the same for every one of them.
+let shown = -1; // whoever the card is showing, for its Kill button
 const card = document.getElementById('car-card');
 document.getElementById('car-card-close').addEventListener('click', () => App.stopFollowingCar());
+// the Kill button, under the thumbnail: it blows up on the spot (see killCar in traffic.js), and the card goes
+document.getElementById('cc-kill').addEventListener('click', () => { if (shown >= 0) App.killCar(shown); });
 function showCarCard(i, info) {
+  shown = i;
   document.getElementById('cc-name').textContent = info.name;
   document.getElementById('cc-mood').textContent = info.mood;
   document.getElementById('cc-enjoys').textContent = 'Beep beep';
@@ -18,6 +22,7 @@ function showCarCard(i, info) {
   drawCarThumbnail(i);
 }
 function hideCarCard() {
+  shown = -1;
   card.hidden = true;
 }
 

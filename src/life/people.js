@@ -8,7 +8,7 @@ import { closestPointOnSegment } from '../buildings/footprints.js';
 import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { CLIPPER_SCALE, roadLineWidths, clipPolygons } from '../roads/roads.js';
-import { isPathLine, isRiverLine } from '../roads/paths.js';
+import { isPathLine, isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { isTrainLine } from '../trains/trains.js';
 import { Y_PLAZA } from '../zones/plazas.js';
 import { getWaterRegion } from '../water/water.js';
@@ -26,7 +26,7 @@ import { explode } from './giblets.js';
 const PEOPLE_MAX = 2000;
 const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
 export const PEOPLE_NAV_SPACING = 4;    // walkways are resampled to a point at least this often, for entrances and re-seating
-S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1;
+S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false;
 let peopleNav = null, peopleNavBuiltAt = -Infinity, lastPeopleTime = null;
 const people = [];
 const peopleRng = mulberry32(90210);
@@ -42,6 +42,24 @@ peopleMesh.castShadow = true; peopleMesh.receiveShadow = true;
 peopleMesh.visible = false;
 peopleMesh.name = 'People';
 scene.add(peopleMesh);
+
+// Debug wireframes (World → Peds → Roadsafety radius (debug)): a sphere around each person showing how far they check for
+// traffic before crossing (see ROADSAFETY_RADIUS below), and a box around them showing the hitbox a car's run-over check
+// uses (see runOverPeople in traffic.js) — off by default, and only kept up to date while the toggle's on.
+const roadsafetyDebugMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0x3ddc97, wireframe: true, transparent: true, opacity: 0.35 }), PEOPLE_MAX);
+roadsafetyDebugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+roadsafetyDebugMesh.count = 0;
+roadsafetyDebugMesh.frustumCulled = false;
+roadsafetyDebugMesh.visible = false;
+roadsafetyDebugMesh.name = 'RoadsafetyDebug';
+scene.add(roadsafetyDebugMesh);
+const pedHitboxDebugMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ color: 0xffd23d, wireframe: true }), PEOPLE_MAX);
+pedHitboxDebugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+pedHitboxDebugMesh.count = 0;
+pedHitboxDebugMesh.frustumCulled = false;
+pedHitboxDebugMesh.visible = false;
+pedHitboxDebugMesh.name = 'PedHitboxDebug';
+scene.add(pedHitboxDebugMesh);
 
 // The people model (assets/models/Person.glb, made in Blender) replaces the cuboids once it's loaded: a rigged figure with
 // animations — walking, standing idle (now and then scratching or having a think), waving, sitting on a bench, and sitting or
@@ -587,6 +605,7 @@ function buildPersonModel(gltf, hairGltf) {
 export function syncPeopleUI() {
   document.getElementById('s-people').classList.toggle('on', S.peopleEnabled);
   document.getElementById('people-settings').style.display = S.peopleEnabled ? 'block' : 'none';
+  document.getElementById('s-roadsafety-debug').classList.toggle('on', S.showRoadsafetyDebug);
   document.getElementById('s-peopleamount').value = S.peopleAmount;
   document.getElementById('dv-peopleamount').textContent = String(Math.round(S.peopleAmount));
   document.getElementById('s-peoplespeed').value = S.peopleSpeed;
@@ -630,7 +649,7 @@ function buildPeopleNav() {
     const cum = [0];
     for (let i=1;i<pts.length;i++) cum.push(cum[i-1] + Math.hypot(pts[i].x-pts[i-1].x, pts[i].z-pts[i-1].z));
     if (cum[cum.length-1] < 1) return;
-    const path = isPathLine(line), { hw, cw, sw } = roadLineWidths(line);
+    const path = isPathLine(line) || isWalkwayLine(line), { hw, cw, sw } = roadLineWidths(line);
     lines.push({ pts, cum, total: cum[cum.length-1], path,
       y: path ? Y_PATH : (cw + sw > 0 ? Y_SIDEWALK : Y_ROAD),
       lateral: path ? hw*0.55 : hw + cw + sw*0.5, jitter: path ? 0 : Math.min(sw*0.3, 0.8),
@@ -698,7 +717,12 @@ function newPerson() {
     // how they're taking someone blowing up nearby, if they are (see frightenBystanders)
     fright: null,
     stun: null,
-    please: null };
+    please: null,
+    // crossing a road (see updateCrossing): null until they decide to, then 'curb' (standing, checking for traffic before
+    // committing), 'half1' (walking to the middle), 'mid' (standing there, checking again) or 'half2' (walking the rest of
+    // the way) — crossWait counts down the curb wait, crossCheckIn how long until the next check, crossToLat the far side;
+    // and linkCooldown, separately, keeps them from turning off at another junction right after just having at one
+    crossStage: null, crossWait: 0, crossCheckIn: peopleRng()*5, crossToLat: 0, linkCooldown: 0 };
 }
 // A person's traits — from the entries picked for them in people.txt (see profiles.js), by their place in the crowd, `i` —
 // worked out again whenever people.txt loads, and once the model's loaded and says whether they're a man (which decides
@@ -782,6 +806,20 @@ function walkwayPoint(p) {
   const y = nav.path && nav.overWater[i] && nav.overWater[i+1] ? FOOTBRIDGE_TOP : nav.y;
   return { x: a.x + (b.x-a.x)*t - dz*p.lat, y, z: a.z + (b.z-a.z)*t + dx*p.lat };
 }
+// the forward (index-increasing) direction of segment (seg, seg+1) — drawing two branches off the same spot on a
+// road leaves a zero-length duplicate-node segment right at the shared junction point, so if that segment has no
+// length this looks outward on both ends for the nearest points that actually do, rather than collapsing to a
+// meaningless (0,0) direction
+function robustForwardTangent(nav, seg) {
+  let lo = seg, hi = seg+1;
+  for (;;) {
+    const a = nav.pts[lo], b = nav.pts[hi], dx = b.x-a.x, dz = b.z-a.z, len = Math.hypot(dx, dz);
+    if (len > 1e-6) return { x: dx/len, z: dz/len };
+    if (lo === 0 && hi === nav.pts.length-1) return { x: 0, z: 0 };
+    if (lo > 0) lo--;
+    if (hi < nav.pts.length-1) hi++;
+  }
+}
 // moves a person `dist` along their walkway, dealing with each point they pass: maybe wandering into a hangout, maybe
 // turning off at a junction, and turning back at a dead end
 function walkAlong(p, dist) {
@@ -796,20 +834,92 @@ function walkAlong(p, dist) {
     const entrance = vertex.entrances.length ? vertex.entrances.find(e => e.side === Math.sign(p.lat)) || (nav.path ? vertex.entrances[0] : null) : null;
     const drawn = entrance ? (peopleNav.areas[entrance.area].kind === 'park' ? p.traits.parks : p.traits.plazas) : 0;
     if (entrance && peopleRng() < 0.12*drawn) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
-    if (vertex.links.length && peopleRng() < (isEnd ? 0.85 : 0.3)) {
-      const link = vertex.links[Math.floor(peopleRng()*vertex.links.length)];
-      const other = peopleNav.lines[link.li], remaining = Math.abs(u - at);
-      const dir = link.vi === 0 ? 1 : link.vi === other.pts.length-1 ? -1 : (peopleRng() < 0.5 ? 1 : -1);
-      joinWalkway(p, link.li, other.cum[link.vi], dir);
-      p.seg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
-      nav = other;
-      u = p.u + dir*remaining;
-      continue;
+    // (linkCooldown keeps them from turning off again right away — otherwise a junction with several close-together
+    // vertices could have them zigzagging between roads, first one way then straight back)
+    if (vertex.links.length && p.linkCooldown <= 0 && peopleRng() < (isEnd ? 0.85 : 0.3)) {
+      // a road's two sidewalks are just +/-lat either side of one shared centerline (see walkwayPoint), so the vertex
+      // this junction link lives on belongs to BOTH sides — without a check, someone on the far sidewalk from a stub
+      // road could take the very same link as someone on the near sidewalk, silently teleporting across whatever road
+      // separates them without ever going through updateCrossing. that's what made peds look like they were cutting
+      // across roads at junctions. so first we only keep links that actually branch off on this person's own side (by
+      // where the branch's own tangent points, relative to the road they're currently on) — paths aren't roads, so
+      // either side of one of those is fine, same as `entrance` above.
+      // the normal (which side is which) has to stay a fixed property of the road's geometry, the same for both
+      // directions of travel (matching walkwayPoint's always-forward convention) — only the velocity actually
+      // depends on which way this person is walking
+      const fwdTan = robustForwardTangent(nav, p.seg);
+      const velX = p.dir*fwdTan.x, velZ = p.dir*fwdTan.z, oldNX = -fwdTan.z, oldNZ = fwdTan.x;
+      let taken = null, takenDir = 0, takenSeg = 0;
+      const tries = Math.min(vertex.links.length, 3);
+      for (let t=0; t<tries && !taken; t++) {
+        const link = vertex.links[Math.floor(peopleRng()*vertex.links.length)];
+        const other = peopleNav.lines[link.li];
+        const dir = link.vi === 0 ? 1 : link.vi === other.pts.length-1 ? -1 : (peopleRng() < 0.5 ? 1 : -1);
+        const otherSeg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
+        if (!nav.path) {
+          const outTan = robustForwardTangent(other, otherSeg);
+          const outSide = dir*outTan.x*oldNX + dir*outTan.z*oldNZ;
+          if (Math.abs(outSide) > 1e-6 && Math.sign(outSide) !== Math.sign(p.lat || 1)) continue;
+        }
+        taken = link; takenDir = dir; takenSeg = otherSeg;
+      }
+      if (taken) {
+        const link = taken, dir = takenDir;
+        const other = peopleNav.lines[link.li], remaining = Math.abs(u - at);
+        joinWalkway(p, link.li, other.cum[link.vi], dir);
+        p.seg = takenSeg;
+        // two lines meeting at a junction vertex sit on both sides of it — pick the side of `other` this person's
+        // current heading actually carries them onto (their position at this instant can't tell the sides apart).
+        if (!other.path) {
+          const landTan = robustForwardTangent(other, takenSeg), side = velX*landTan.z - velZ*landTan.x;
+          p.lat = Math.sign(side || p.lat) * Math.abs(p.lat);
+        }
+        p.linkCooldown = 6 + peopleRng()*4;
+        nav = other;
+        u = p.u + dir*remaining;
+        continue;
+      }
     }
     if (isEnd) { p.dir = -p.dir; u = 2*at - u; continue; }
     p.seg += p.dir;
   }
   p.u = Math.max(0, Math.min(nav.total, u));
+}
+// deciding to cross a road, and seeing it through (see newPerson for the stages) — walking each half is left to the
+// goal-seeking movement in updatePeople, which this only points at the middle of the road, then the far curb, by
+// setting p.lat directly and letting that code carry p.x/z to it; this only tracks the stages and the roadsafety
+// radius checks (via App.carsNearby, from traffic.js) that gate moving between them
+const ROADSAFETY_RADIUS = 14, CROSS_CURB_TIMEOUT = 10, CROSS_DECIDE_CHANCE = 0.15, CROSS_SPEED_MULT = 1.6;
+function updateCrossing(p, nav, dt) {
+  if (p.crossStage === null) {
+    if (nav.path || (p.crossCheckIn -= dt) > 0) return;
+    p.crossCheckIn = 4 + peopleRng()*6;
+    if (peopleRng() >= CROSS_DECIDE_CHANCE) return;
+    p.crossStage = 'curb';
+    p.crossWait = CROSS_CURB_TIMEOUT;
+    p.crossCheckIn = 0; // check straight away
+    p.crossToLat = -Math.sign(p.lat || 1)*(nav.lateral + (peopleRng()-0.5)*2*nav.jitter);
+    return;
+  }
+  if (p.crossStage === 'curb' || p.crossStage === 'mid') {
+    if (p.crossStage === 'curb') p.crossWait -= dt;
+    if ((p.crossCheckIn -= dt) <= 0) {
+      p.crossCheckIn = 0.6 + peopleRng()*0.6;
+      const at = walkwayPoint(p);
+      if (!App.carsNearby(at.x, at.z, ROADSAFETY_RADIUS*p.traits.roadsafety)) {
+        if (p.crossStage === 'curb') { p.crossStage = 'half1'; p.lat = 0; } else { p.crossStage = 'half2'; p.lat = p.crossToLat; }
+        return;
+      }
+    }
+    if (p.crossStage === 'curb' && p.crossWait <= 0) p.crossStage = null; // no gap in time — just carry on along the curb
+    return;
+  }
+  // half1/half2: getting there is the goal-seeking movement's job — this just notices arriving
+  const at = walkwayPoint(p);
+  if (Math.hypot(at.x - p.x, at.z - p.z) >= 0.15) return;
+  if (p.crossStage === 'half1') { p.crossStage = 'mid'; p.crossCheckIn = 0; return; } // check straight away — no needless pause if it's clear
+  p.crossStage = null;
+  p.crossCheckIn = 4 + peopleRng()*6; // just crossed — no need to think about it again right away
 }
 // how many of `sorted` (ascending) are below `limit`
 function countBelow(sorted, limit) {
@@ -933,11 +1043,11 @@ function meetOnWalkways(dt) {
   if (!hasClip('Wave') || talking > people.length*0.15) return;
   const reach = 1.6*S.peopleSize;
   people.forEach(p => {
-    if (p.mode !== 'line' || p.act || p.fright || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
+    if (p.mode !== 'line' || p.act || p.fright || p.crossStage || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
     p.chatCheckIn = 0.4 + peopleRng()*0.8;
     const path = peopleNav.lines[p.li].path, cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
     for (let ox=-1;ox<=1;ox++) for (let oz=-1;oz<=1;oz++) for (const q of cells.get((cx+ox) + ',' + (cz+oz)) || []) {
-      if (q === p || q.act || q.fright || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || (!path && Math.sign(q.lat) !== Math.sign(p.lat))) continue;
+      if (q === p || q.act || q.fright || q.crossStage || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || (!path && Math.sign(q.lat) !== Math.sign(p.lat))) continue;
       // still coming towards each other, and close
       if ((q.u - p.u)*p.dir < 0 || Math.hypot(q.x - p.x, q.z - p.z) > reach) continue;
       if (peopleRng() < 0.35*p.traits.chatty*q.traits.chatty) startChat(p, q, false); else p.chatCooldown = q.chatCooldown = 10;
@@ -1265,6 +1375,7 @@ function killPerson(i) {
   if (!p || p.mode === 'none' || p.mode === 'dead') return;
   if (followed === i) stopFollowingPerson();
   endActivity(p);
+  p.crossStage = null; // don't leave a car yielding forever for someone who can no longer finish crossing
   const colors = { skin: new THREE.Color(0xf2d33c), top: new THREE.Color(), pants: new THREE.Color(), shoes: new THREE.Color(0x222226), hair: null };
   if (personModel) {
     const colorFrom = (part, color) => {
@@ -1307,7 +1418,7 @@ export function updatePeople(t) {
     peopleNavBuiltAt = t;
     // whatever anyone was doing stops, as the benches and grass they were using may have gone
     groups.length = 0;
-    people.forEach(p => { p.group = null; endActivity(p); });
+    people.forEach(p => { p.group = null; p.crossStage = null; endActivity(p); });
     peopleNav = buildPeopleNav();
     people.forEach(reseatPerson);
   }
@@ -1316,6 +1427,8 @@ export function updatePeople(t) {
   while (people.length > wanted) endActivity(people.pop());
   if (followed >= people.length) stopFollowingPerson();
   peopleMesh.count = people.length;
+  roadsafetyDebugMesh.visible = pedHitboxDebugMesh.visible = S.showRoadsafetyDebug;
+  if (S.showRoadsafetyDebug) roadsafetyDebugMesh.count = pedHitboxDebugMesh.count = people.length;
   if (personModel) {
     personModel.mesh.count = people.length;
     personModel.hair.forEach(style => { style.mesh.count = countBelow(style.members, people.length); });
@@ -1335,12 +1448,18 @@ export function updatePeople(t) {
                 || (!!p.stun && p.stun.stage === 'held')
                 || (!!p.please && p.please.stage === 'held');
     const fleeing = !!p.fright && p.fright.stage === 'flee';
-    const speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
+    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
     let goal = null;
     // (stopped to talk, or frozen in shock, someone on a walkway stays put)
     if (p.mode === 'line' && p.act !== 'chat' && !frozen) {
-      walkAlong(p, speed*dt);
-      if (p.mode === 'line') goal = walkwayPoint(p);
+      updateCrossing(p, peopleNav.lines[p.li], dt);
+      if (p.crossStage === 'half1' || p.crossStage === 'half2') {
+        speed *= CROSS_SPEED_MULT; // an increased pace, crossing
+        goal = walkwayPoint(p);
+      } else if (p.crossStage === null) {
+        walkAlong(p, speed*dt);
+        if (p.mode === 'line') goal = walkwayPoint(p);
+      } // else 'curb' or 'mid': standing still, waiting for a gap in traffic
     }
     if (p.mode === 'wander') {
       const area = peopleNav.areas[p.area];
@@ -1520,12 +1639,27 @@ export function updatePeople(t) {
       matrix.compose(position.set(p.x, p.y + bob, p.z), rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);
     }
+    if (S.showRoadsafetyDebug) {
+      const dead = p.mode === 'none' || p.mode === 'dead';
+      rotation.identity();
+      scale.setScalar(dead ? 0 : ROADSAFETY_RADIUS*p.traits.roadsafety);
+      matrix.compose(position.set(p.x, p.y + 0.9, p.z), rotation, scale);
+      roadsafetyDebugMesh.setMatrixAt(i, matrix);
+      rotation.setFromAxisAngle(up, p.heading);
+      scale.set(dead ? 0 : 0.5*S.peopleSize, dead ? 0 : 1.7*p.height*S.peopleSize, dead ? 0 : 0.34*S.peopleSize);
+      matrix.compose(position.set(p.x, p.y, p.z), rotation, scale);
+      pedHitboxDebugMesh.setMatrixAt(i, matrix);
+    }
   });
 
   if (personModel) {
     [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; });
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;
+  }
+  if (S.showRoadsafetyDebug) {
+    roadsafetyDebugMesh.instanceMatrix.needsUpdate = true;
+    pedHitboxDebugMesh.instanceMatrix.needsUpdate = true;
   }
   // the camera onto whoever it's following, at about their shoulders
   if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }

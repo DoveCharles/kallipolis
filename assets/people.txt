@@ -29,6 +29,7 @@ which add up. Everyone starts at the value in
 #   blinks      1       how often they blink — 0 never does (unsettling)                               0 to 20
 #   parks       1       how likely they are to wander into a park they walk past — 0 never              0 to 8
 #   plazas      1       how likely they are to wander into a plaza they walk past — 0 never             0 to 8
+#   roadsafety  1       how big a gap in traffic they wait for before crossing a road — 0.2 barely looks 0.2 to 3
 #   mood        0       their resting face — -1 a frown, 1 a smile (and it tints their reactions)       -1 to 1
 #   happy       0       how happy their eyes look                                                      0 to 1
 #   sad         0       how sad their eyes look                                                        0 to 1

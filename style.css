@@ -241,7 +241,7 @@ canvas.adding { cursor:copy; }
 .pc-top { display:flex; gap:10px; align-items:flex-start; }
 .pc-rows { flex:1; min-width:0; }
 .pc-shot { flex:0 0 auto; display:flex; flex-direction:column; gap:6px; margin-top:18px; }
-#pc-kill { width:62px; margin:0; padding:3px 0; font-size:11px; }
+#pc-kill, #cc-kill { width:62px; margin:0; padding:3px 0; font-size:11px; }
 #pc-headshot, #cc-thumb {
   width:60px; height:60px;
   background:linear-gradient(#8fb8d6, #dde8ef); border:1px solid var(--border); border-radius:6px;

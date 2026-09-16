@@ -204,6 +204,7 @@ document.getElementById('s-people').addEventListener('click', () => { S.peopleEn
 document.getElementById('s-peopleamount').addEventListener('input', (e) => { S.peopleAmount = parseFloat(e.target.value); App.syncPeopleUI(); });
 document.getElementById('s-peoplespeed').addEventListener('input', (e) => { S.peopleSpeed = parseFloat(e.target.value); App.syncPeopleUI(); });
 document.getElementById('s-peoplesize').addEventListener('input', (e) => { S.peopleSize = parseFloat(e.target.value); App.syncPeopleUI(); });
+document.getElementById('s-roadsafety-debug').addEventListener('click', () => { S.showRoadsafetyDebug = !S.showRoadsafetyDebug; App.syncPeopleUI(); });
 document.getElementById('s-traffic').addEventListener('input', (e) => { S.trafficAmount = parseFloat(e.target.value); App.syncPeopleUI(); });
 document.getElementById('s-daynight').addEventListener('click', () => {
   S.dayNightEnabled = !S.dayNightEnabled;

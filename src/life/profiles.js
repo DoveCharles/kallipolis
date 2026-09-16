@@ -20,6 +20,7 @@ export const TRAITS = {
   blinks:    { base: 1, min: 0, max: 20 },
   parks:     { base: 1, min: 0, max: 8 },
   plazas:    { base: 1, min: 0, max: 8 },
+  roadsafety:{ base: 1, min: 0.2, max: 3 },
   mood:      { base: 0, min: -1, max: 1, combine: 'add' },
   happy:     { base: 0, min: 0, max: 1, combine: 'add' },
   sad:       { base: 0, min: 0, max: 1, combine: 'add' },
