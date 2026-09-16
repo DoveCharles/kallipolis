@@ -23,6 +23,7 @@ import { explodeCar } from './giblets.js';
 const TRAFFIC_MAX = 1000;
 const CAR_SPEED = 9;               // world units per second at speed 1
 const TRAFFIC_LANE_PER_CAR = 16;   // the most cars a road takes: one per this length of lane
+const PED_YIELD_RADIUS = 10, PED_YIELD_CHANCE = 0.25; // how far ahead a car notices someone waiting in the road, and how often it stops for them
 const CAR_PAINTS = [[0xe9e9e6, 5], [0x1c1d20, 5], [0xa8adb3, 4], [0x5f646b, 3], [0x233a66, 2], [0x8f1f22, 2], [0x2f5d3a, 1],
   [0xd8b12c, 1], [0xd26a1f, 1], [0x2a8a9a, 1], [0x6b3d7a, 0.5], [0xb8c9d8, 1]]; // [color, how common]
 S.trafficAmount = 150, S.trafficNav = null, S.trafficNavBuiltAt = -Infinity, S.lastTrafficTime = null;
@@ -261,7 +262,10 @@ function buildTrafficNav() {
 function newCar() {
   return { x: 0, z: 0, heading: 0, li: -1, u: 0, dir: 1, seg: 0, speed: 0, ahead: null,
     cruise: 0.8 + trafficRng()*0.4, length: 0.9 + trafficRng()*0.3, width: 0.95 + trafficRng()*0.12, height: 0.9 + trafficRng()*0.35,
-    design: null, paint: pickCarPaint() };
+    design: null, paint: pickCarPaint(),
+    // someone crossing it's stopped for (see checkYield) — and the last one it rolled its one-in-four chance against, so
+    // it doesn't keep re-rolling for the same person every frame while it's still approaching them
+    yieldFor: null, yieldChecked: -1 };
 }
 // puts a car in lane `li` at distance u along it, heading `dir`
 function carJoinLane(car, li, u, dir) {
@@ -332,6 +336,36 @@ function junctionAhead(car, lookahead) {
   }
   return null;
 }
+// whether any moving car is within `radius` of (x, z) — the "roadsafety radius" a pedestrian checks before crossing, and
+// again at the middle of the road, before committing to each half (see updateCrossing in people.js); a car that's
+// stopped (e.g. one yielding to this very pedestrian) poses no threat, so it doesn't count — otherwise a car stopped to
+// let someone cross would keep looking dangerous to them, and neither would ever move again
+function carsNearby(x, z, radius) {
+  return cars.some(car => car.li >= 0 && car.speed > 0.5 && Math.hypot(car.x - x, car.z - z) < radius);
+}
+// notices someone waiting in the middle of the road ahead, ready to cross the rest of the way, and — one time in four —
+// decides to stop and let them; once it's committed to stopping for someone it keeps stopping until they're done
+// waiting (or gone), rather than re-rolling every frame
+function checkYield(car) {
+  if (car.yieldFor != null) {
+    const p = App.people[car.yieldFor];
+    if (!p || p.crossStage !== 'mid') car.yieldFor = null;
+    return car.yieldFor != null;
+  }
+  const cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+  for (let i = 0; i < App.people.length; i++) {
+    const p = App.people[i];
+    if (p.crossStage !== 'mid' || i === car.yieldChecked) continue;
+    const dx = p.x - car.x, dz = p.z - car.z;
+    if (Math.hypot(dx, dz) > PED_YIELD_RADIUS) continue;
+    const forward = dx*sin + dz*cos;
+    if (forward < 0.5 || forward > PED_YIELD_RADIUS) continue; // (only ahead of it, not behind)
+    car.yieldChecked = i;
+    if (trafficRng() < PED_YIELD_CHANCE) car.yieldFor = i;
+    return car.yieldFor === i;
+  }
+  return false;
+}
 export function updateTraffic(t) {
   if (followedCar >= 0 && (!S.peopleEnabled || S.interactionMode !== 'move')) stopFollowingCar();
   const dt = S.lastTrafficTime == null ? 0 : Math.min(0.1, Math.max(0, t - S.lastTrafficTime));
@@ -392,6 +426,7 @@ export function updateTraffic(t) {
         target = Math.min(target, Math.max(0, (ahead.dist - stopAt)*1.5*S.peopleSpeed));
       }
     }
+    if (checkYield(car)) target = 0;
     car.speed += Math.max(-18*S.peopleSpeed*dt, Math.min(5*S.peopleSpeed*dt, target - car.speed));
     driveAlong(car, car.speed*dt);
     // steer towards the lane — quicker when off it, as when swinging round a corner or into the other lane
@@ -517,4 +552,4 @@ export function carThumbnailScene(i) {
   return { mesh: cm.thumbMesh, camera: cm.thumbCamera };
 }
 
-Object.assign(App, { pickCar, followCarAt, stopFollowingCar, killCar });
+Object.assign(App, { pickCar, followCarAt, stopFollowingCar, killCar, carsNearby });

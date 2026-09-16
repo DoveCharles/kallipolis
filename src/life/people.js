@@ -698,7 +698,12 @@ function newPerson() {
     // how they're taking someone blowing up nearby, if they are (see frightenBystanders)
     fright: null,
     stun: null,
-    please: null };
+    please: null,
+    // crossing a road (see updateCrossing): null until they decide to, then 'curb' (standing, checking for traffic before
+    // committing), 'half1' (walking to the middle), 'mid' (standing there, checking again) or 'half2' (walking the rest of
+    // the way) — crossWait counts down the curb wait, crossCheckIn how long until the next check, crossToLat the far side;
+    // and linkCooldown, separately, keeps them from turning off at another junction right after just having at one
+    crossStage: null, crossWait: 0, crossCheckIn: peopleRng()*5, crossToLat: 0, linkCooldown: 0 };
 }
 // A person's traits — from the entries picked for them in people.txt (see profiles.js), by their place in the crowd, `i` —
 // worked out again whenever people.txt loads, and once the model's loaded and says whether they're a man (which decides
@@ -796,12 +801,15 @@ function walkAlong(p, dist) {
     const entrance = vertex.entrances.length ? vertex.entrances.find(e => e.side === Math.sign(p.lat)) || (nav.path ? vertex.entrances[0] : null) : null;
     const drawn = entrance ? (peopleNav.areas[entrance.area].kind === 'park' ? p.traits.parks : p.traits.plazas) : 0;
     if (entrance && peopleRng() < 0.12*drawn) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
-    if (vertex.links.length && peopleRng() < (isEnd ? 0.85 : 0.3)) {
+    // (linkCooldown keeps them from turning off again right away — otherwise a junction with several close-together
+    // vertices could have them zigzagging between roads, first one way then straight back)
+    if (vertex.links.length && p.linkCooldown <= 0 && peopleRng() < (isEnd ? 0.85 : 0.3)) {
       const link = vertex.links[Math.floor(peopleRng()*vertex.links.length)];
       const other = peopleNav.lines[link.li], remaining = Math.abs(u - at);
       const dir = link.vi === 0 ? 1 : link.vi === other.pts.length-1 ? -1 : (peopleRng() < 0.5 ? 1 : -1);
       joinWalkway(p, link.li, other.cum[link.vi], dir);
       p.seg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
+      p.linkCooldown = 6 + peopleRng()*4;
       nav = other;
       u = p.u + dir*remaining;
       continue;
@@ -810,6 +818,42 @@ function walkAlong(p, dist) {
     p.seg += p.dir;
   }
   p.u = Math.max(0, Math.min(nav.total, u));
+}
+// deciding to cross a road, and seeing it through (see newPerson for the stages) — walking each half is left to the
+// goal-seeking movement in updatePeople, which this only points at the middle of the road, then the far curb, by
+// setting p.lat directly and letting that code carry p.x/z to it; this only tracks the stages and the roadsafety
+// radius checks (via App.carsNearby, from traffic.js) that gate moving between them
+const ROADSAFETY_RADIUS = 14, CROSS_CURB_TIMEOUT = 10, CROSS_DECIDE_CHANCE = 0.15, CROSS_SPEED_MULT = 1.6;
+function updateCrossing(p, nav, dt) {
+  if (p.crossStage === null) {
+    if (nav.path || (p.crossCheckIn -= dt) > 0) return;
+    p.crossCheckIn = 4 + peopleRng()*6;
+    if (peopleRng() >= CROSS_DECIDE_CHANCE) return;
+    p.crossStage = 'curb';
+    p.crossWait = CROSS_CURB_TIMEOUT;
+    p.crossCheckIn = 0; // check straight away
+    p.crossToLat = -Math.sign(p.lat || 1)*(nav.lateral + (peopleRng()-0.5)*2*nav.jitter);
+    return;
+  }
+  if (p.crossStage === 'curb' || p.crossStage === 'mid') {
+    if (p.crossStage === 'curb') p.crossWait -= dt;
+    if ((p.crossCheckIn -= dt) <= 0) {
+      p.crossCheckIn = 0.6 + peopleRng()*0.6;
+      const at = walkwayPoint(p);
+      if (!App.carsNearby(at.x, at.z, ROADSAFETY_RADIUS*p.traits.roadsafety)) {
+        if (p.crossStage === 'curb') { p.crossStage = 'half1'; p.lat = 0; } else { p.crossStage = 'half2'; p.lat = p.crossToLat; }
+        return;
+      }
+    }
+    if (p.crossStage === 'curb' && p.crossWait <= 0) p.crossStage = null; // no gap in time — just carry on along the curb
+    return;
+  }
+  // half1/half2: getting there is the goal-seeking movement's job — this just notices arriving
+  const at = walkwayPoint(p);
+  if (Math.hypot(at.x - p.x, at.z - p.z) >= 0.15) return;
+  if (p.crossStage === 'half1') { p.crossStage = 'mid'; return; }
+  p.crossStage = null;
+  p.crossCheckIn = 4 + peopleRng()*6; // just crossed — no need to think about it again right away
 }
 // how many of `sorted` (ascending) are below `limit`
 function countBelow(sorted, limit) {
@@ -933,11 +977,11 @@ function meetOnWalkways(dt) {
   if (!hasClip('Wave') || talking > people.length*0.15) return;
   const reach = 1.6*S.peopleSize;
   people.forEach(p => {
-    if (p.mode !== 'line' || p.act || p.fright || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
+    if (p.mode !== 'line' || p.act || p.fright || p.crossStage || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
     p.chatCheckIn = 0.4 + peopleRng()*0.8;
     const path = peopleNav.lines[p.li].path, cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
     for (let ox=-1;ox<=1;ox++) for (let oz=-1;oz<=1;oz++) for (const q of cells.get((cx+ox) + ',' + (cz+oz)) || []) {
-      if (q === p || q.act || q.fright || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || (!path && Math.sign(q.lat) !== Math.sign(p.lat))) continue;
+      if (q === p || q.act || q.fright || q.crossStage || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || (!path && Math.sign(q.lat) !== Math.sign(p.lat))) continue;
       // still coming towards each other, and close
       if ((q.u - p.u)*p.dir < 0 || Math.hypot(q.x - p.x, q.z - p.z) > reach) continue;
       if (peopleRng() < 0.35*p.traits.chatty*q.traits.chatty) startChat(p, q, false); else p.chatCooldown = q.chatCooldown = 10;
@@ -1265,6 +1309,7 @@ function killPerson(i) {
   if (!p || p.mode === 'none' || p.mode === 'dead') return;
   if (followed === i) stopFollowingPerson();
   endActivity(p);
+  p.crossStage = null; // don't leave a car yielding forever for someone who can no longer finish crossing
   const colors = { skin: new THREE.Color(0xf2d33c), top: new THREE.Color(), pants: new THREE.Color(), shoes: new THREE.Color(0x222226), hair: null };
   if (personModel) {
     const colorFrom = (part, color) => {
@@ -1307,7 +1352,7 @@ export function updatePeople(t) {
     peopleNavBuiltAt = t;
     // whatever anyone was doing stops, as the benches and grass they were using may have gone
     groups.length = 0;
-    people.forEach(p => { p.group = null; endActivity(p); });
+    people.forEach(p => { p.group = null; p.crossStage = null; endActivity(p); });
     peopleNav = buildPeopleNav();
     people.forEach(reseatPerson);
   }
@@ -1335,12 +1380,18 @@ export function updatePeople(t) {
                 || (!!p.stun && p.stun.stage === 'held')
                 || (!!p.please && p.please.stage === 'held');
     const fleeing = !!p.fright && p.fright.stage === 'flee';
-    const speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
+    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
     let goal = null;
     // (stopped to talk, or frozen in shock, someone on a walkway stays put)
     if (p.mode === 'line' && p.act !== 'chat' && !frozen) {
-      walkAlong(p, speed*dt);
-      if (p.mode === 'line') goal = walkwayPoint(p);
+      updateCrossing(p, peopleNav.lines[p.li], dt);
+      if (p.crossStage === 'half1' || p.crossStage === 'half2') {
+        speed *= CROSS_SPEED_MULT; // an increased pace, crossing
+        goal = walkwayPoint(p);
+      } else if (p.crossStage === null) {
+        walkAlong(p, speed*dt);
+        if (p.mode === 'line') goal = walkwayPoint(p);
+      } // else 'curb' or 'mid': standing still, waiting for a gap in traffic
     }
     if (p.mode === 'wander') {
       const area = peopleNav.areas[p.area];
