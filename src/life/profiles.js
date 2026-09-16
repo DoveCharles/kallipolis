@@ -28,8 +28,9 @@ export const TRAITS = {
   shock:     { base: 0, min: 0, max: 1, combine: 'add' },
   backwards: { base: 0, min: 0, max: 1, combine: 'on' },
   evil:      {base: 0, min: -1, max: 1, combine: 'add'},
-  choiceweight: {base: 0, min: 1, max: Infinity} //Increase how many times a line is added to lists, 
+  choiceweight: {base: 0, min: 1, max: Infinity}, //Increase how many times a line is added to lists, 
   //                                               set 0 to prevent auto assignment and allow manual setting only
+  age: {base: 1, min: 0.1, max: Infinity}, //Inf limit to allow vampiric / immortal type shit
 };
 export const DEFAULT_TRAITS = Object.fromEntries(Object.entries(TRAITS).map(([key, trait]) => [key, trait.base]));
 
@@ -116,7 +117,8 @@ export function profileOf(index, isMan) {
   const rng = mulberry32(48271 + index*7919);
   const pick = list => list[Math.floor(rng()*list.length)];
   const man = isMan == null ? rng() < 0.5 : isMan;
-  const name = pick(lists[man ? 'boy names' : 'girl names']), age = 18 + Math.floor(rng()*65);
+  const name = pick(lists[man ? 'boy names' : 'girl names']);
+  let age = 18 + Math.floor(rng()*65);
   const mood = pick(lists.moods);
   let enjoys = pick(lists.enjoys), hates = pick(lists.hates)
   //unknown entities have hidden traits
@@ -128,5 +130,7 @@ export function profileOf(index, isMan) {
     }
     if (!oneEnsured || rng() >0.5) hates = {...hates, text: '(UNKNOWN)'}
   }
-  return { name: name.text, age, mood: mood.text, enjoys: enjoys.text, hates: hates.text, traits: traitsOf([name, mood, enjoys, hates])};
+  const traits = traitsOf([name, mood, enjoys, hates]);
+  age = Math.round(Math.max(18, age*traits.age)) //no minors!
+  return { name: name.text, age, mood: mood.text, enjoys: enjoys.text, hates: hates.text, traits: traits};
 }
