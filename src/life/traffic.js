@@ -10,7 +10,7 @@ import { roadLineWidths, createMeshBuilder } from '../roads/roads.js';
 import { isPathLine, isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { placeKey, signalState } from '../roads/markings.js';
 import { isTrainLine } from '../trains/trains.js';
-import { PEOPLE_NAV_SPACING, pickWeighted } from './people.js';
+import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people.js';
 import { explodeCar } from './giblets.js';
 
 // ============================================================ traffic
@@ -359,13 +359,13 @@ function carsNearby(x, z, radius) {
 function checkYield(car) {
   if (car.yieldFor != null) {
     const p = App.people[car.yieldFor];
-    if (!p || p.crossStage !== 'mid') car.yieldFor = null;
+    if (!p || (p.crossStage !== 'mid' && !isPedInDanger(p))) car.yieldFor = null;
     return car.yieldFor != null;
   }
   const cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   for (let i = 0; i < App.people.length; i++) {
     const p = App.people[i];
-    if (p.crossStage !== 'mid' || i === car.yieldChecked) continue;
+    if ((p.crossStage !== 'mid' && !isPedInDanger(p)) || i === car.yieldChecked) continue;
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.hypot(dx, dz) > PED_YIELD_RADIUS) continue;
     const forward = dx*sin + dz*cos;

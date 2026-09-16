@@ -653,6 +653,7 @@ function buildPeopleNav() {
     lines.push({ pts, cum, total: cum[cum.length-1], path,
       y: path ? Y_PATH : (cw + sw > 0 ? Y_SIDEWALK : Y_ROAD),
       lateral: path ? hw*0.55 : hw + cw + sw*0.5, jitter: path ? 0 : Math.min(sw*0.3, 0.8),
+      footprint: path ? hw : hw+cw+sw,
       overWater: path ? pts.map(p => inWater(p.x, p.z)) : null,
       vertices: pts.map(() => ({ links: [], entrances: [] })) });
   });
@@ -664,6 +665,19 @@ function buildPeopleNav() {
     byPlace.get(key).push({ li, vi });
   }));
   byPlace.forEach(list => { if (list.length > 1) list.forEach(a => { lines[a.li].vertices[a.vi].links = list.filter(b => b.li !== a.li); }); });
+  // a sidewalk that just hugs its own road's centerline, straight through a junction where another road joins
+  // partway along it, runs right over that other road's own live traffic lanes for a stretch near the shared
+  // point — its curb-to-curb pavement reaches that far along ours regardless of which side of our own road
+  // we're walking on. Mark that stretch on every connected line so movement through it gets the same
+  // car-safety gate as an explicit crossing (see the ROADSAFETY_RADIUS check in updateCrossing/updatePeople).
+  lines.forEach(nav => { nav.danger = nav.pts.map(() => false); });
+  lines.forEach((nav, li) => nav.pts.forEach((p, vi) => {
+    const links = nav.vertices[vi].links;
+    if (!links.length) return;
+    const reach = links.reduce((m, link) => Math.max(m, lines[link.li].footprint), 0);
+    const here = nav.cum[vi];
+    nav.pts.forEach((q, i) => { if (Math.abs(nav.cum[i] - here) < reach) nav.danger[i] = true; });
+  }));
   // entrances: points beside (or, for a path, in) a plaza or park; and a grid of every point, for finding the nearest
   const grid = new Map(), CELL = 16;
   lines.forEach((nav, li) => nav.pts.forEach((p, vi) => {
@@ -1406,6 +1420,13 @@ function stopFollowingPerson() {
   App.hidePersonCard();
 }
 
+// whether p is mid-stride through a danger stretch (see buildPeopleNav) — treated the same as an explicit
+// crossStage 'mid' by checkYield in traffic.js, since to a passing car the two look identical: someone out on the
+// live lanes, not on a sidewalk
+export function isPedInDanger(p) {
+  const nav = p.mode === 'line' && !p.crossStage ? peopleNav.lines[p.li] : null;
+  return !!nav && !!nav.danger[Math.max(0, Math.min(nav.danger.length-1, p.seg))];
+}
 export function updatePeople(t) {
   const dt = lastPeopleTime == null ? 0 : Math.min(0.1, Math.max(0, t - lastPeopleTime));
   lastPeopleTime = t;
@@ -1457,7 +1478,17 @@ export function updatePeople(t) {
         speed *= CROSS_SPEED_MULT; // an increased pace, crossing
         goal = walkwayPoint(p);
       } else if (p.crossStage === null) {
-        walkAlong(p, speed*dt);
+        const nav0 = peopleNav.lines[p.li], seg0 = Math.max(0, Math.min(nav0.danger.length-1, p.seg));
+        const inZone = nav0.danger[seg0];
+        // walking straight along a danger stretch (see buildPeopleNav) still crosses another road's live lanes,
+        // even though li/lat never change. only check for a gap right at the curb, before the step that would
+        // carry them off safe ground and into it — once they're actually in there, stopping dead in a live lane
+        // is far more dangerous than just hurrying the rest of the way across (same as an explicit crossing)
+        const ahead = Math.max(0, Math.min(nav0.danger.length-1, seg0 + (p.dir > 0 ? 1 : -1)));
+        const entering = !inZone && nav0.danger[ahead];
+        if (!entering || !App.carsNearby(p.x, p.z, ROADSAFETY_RADIUS*p.traits.roadsafety)) {
+          walkAlong(p, speed*(inZone ? CROSS_SPEED_MULT : 1)*dt);
+        }
         if (p.mode === 'line') goal = walkwayPoint(p);
       } // else 'curb' or 'mid': standing still, waiting for a gap in traffic
     }
