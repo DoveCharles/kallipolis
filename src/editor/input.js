@@ -36,7 +36,7 @@ S.pendingInsert = null; // edge insertion candidate while shift is held
 S.lastGroundClick = null; // {x,y,time} for double-click-to-finish detection
 S.lastNodeClick = null; // {kind,nodeId|zoneId+index,time} for double-click-to-delete detection
 let rightClickTarget = null; // node/vertex hit under a right-click, for the context menu
-let hoveringPerson = false; // the cursor's over someone a click would follow (World mode), and shows it
+let hoveringClickable = false; // the cursor's over someone or something a click would follow (World mode), and shows it
 
 const dom = renderer.domElement;
 // (only the nodes on show can be picked: a path's in the Paths tab, a zone's in the Zones tab)
@@ -128,7 +128,7 @@ dom.addEventListener('pointerdown', (e) => {
 dom.addEventListener('pointermove', (e) => {
   S.lastMouseX = e.clientX; S.lastMouseY = e.clientY;
   showAddCursor(e.shiftKey);
-  if (hoveringPerson && S.interactionMode!=='move') { hoveringPerson = false; dom.style.cursor = ''; }
+  if (hoveringClickable && S.interactionMode!=='move') { hoveringClickable = false; dom.style.cursor = ''; }
   if (S.interactionMode==='maps') {
     if (S.mapTransform) { applyMapTransform(e.clientX, e.clientY, e.shiftKey); return; }
     if (isCameraDragging) {
@@ -192,8 +192,8 @@ dom.addEventListener('pointermove', (e) => {
     previewLine.visible = false;
     insertPreviewMarker.visible = false;
     setHover(null);
-    const overPerson = App.pickPerson(e.clientX, e.clientY) >= 0;
-    if (overPerson !== hoveringPerson) { hoveringPerson = overPerson; dom.style.cursor = overPerson ? 'pointer' : ''; }
+    const overClickable = App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0;
+    if (overClickable !== hoveringClickable) { hoveringClickable = overClickable; dom.style.cursor = overClickable ? 'pointer' : ''; }
     return;
   }
   if (S.currentTool==='objects') {
@@ -265,7 +265,9 @@ dom.addEventListener('pointerup', (e) => {
       handleLeftClick(e.clientX, e.clientY);
       S.lastGroundClick = { x:e.clientX, y:e.clientY, time:performance.now() };
     } else if (was.button===0 && dist<6 && dt<600 && S.interactionMode==='move') {
-      App.followPersonAt(e.clientX, e.clientY); // a click on someone has the camera follow them; anywhere else lets go
+      // a click on someone or something has the camera follow them; anywhere else lets go of both
+      if (App.pickPerson(e.clientX, e.clientY) >= 0) { App.stopFollowingCar(); App.followPersonAt(e.clientX, e.clientY); }
+      else { App.stopFollowingPerson(); App.followCarAt(e.clientX, e.clientY); }
     }
     return;
   }

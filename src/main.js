@@ -34,6 +34,7 @@ import './project/export-glb.js';
 import './life/people.js';
 import './life/traffic.js';
 import './life/person-card.js';
+import './life/car-card.js';
 import './ui/win3.js';
 import './ui/pixelation.js';
 import './project/export-obj.js';
@@ -57,7 +58,7 @@ import { updateDayNight, syncSkyUI } from './sky/day-night.js';
 import { placeSunLight, updateWeather } from './sky/weather.js';
 import { commitHistory } from './project/history.js';
 import { loadPersonModel, syncPeopleUI, updatePeople } from './life/people.js';
-import { updateTraffic } from './life/traffic.js';
+import { updateTraffic, loadCarModels } from './life/traffic.js';
 import { updateGiblets } from './life/giblets.js';
 import { renderView } from './ui/pixelation.js';
 
@@ -68,6 +69,7 @@ renderMapsList();
 renderWorldTintPanel();
 loadCarriageModel();
 loadPersonModel();
+loadCarModels();
 // Roads, zones and water are thrown away and rebuilt wholesale on every edit, and three.js deletes a shader program as soon
 // as the last material using it is disposed — so a rebuild that replaces every material of one kind (every water tile,
 // every road surface…) would compile that shader again from scratch: a hitch of up to a third of a second. One
