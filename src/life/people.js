@@ -823,29 +823,47 @@ function walkAlong(p, dist) {
     // (linkCooldown keeps them from turning off again right away — otherwise a junction with several close-together
     // vertices could have them zigzagging between roads, first one way then straight back)
     if (vertex.links.length && p.linkCooldown <= 0 && peopleRng() < (isEnd ? 0.85 : 0.3)) {
-      const link = vertex.links[Math.floor(peopleRng()*vertex.links.length)];
-      const other = peopleNav.lines[link.li], remaining = Math.abs(u - at);
-      const dir = link.vi === 0 ? 1 : link.vi === other.pts.length-1 ? -1 : (peopleRng() < 0.5 ? 1 : -1);
-      // two lines meeting at a junction vertex only share that point on their centerlines — the two sides of `other`
-      // sit on opposite sides of it, and only one of them is actually a continuation of the sidewalk this person is
-      // walking on. picking randomly (as joinWalkway does for a fresh spawn) can put them on the far side, which
-      // means silently crossing whatever road separates the two without going through updateCrossing — that's what
-      // made peds look like they were cutting across roads at junctions. so here we work out which side by their
-      // direction of approach (their exact position at this instant is right on top of the vertex either way, so it
-      // can't tell the two sides apart) — the near side is whichever one their current heading would carry them onto.
+      // a road's two sidewalks are just +/-lat either side of one shared centerline (see walkwayPoint), so the vertex
+      // this junction link lives on belongs to BOTH sides — without a check, someone on the far sidewalk from a stub
+      // road could take the very same link as someone on the near sidewalk, silently teleporting across whatever road
+      // separates them without ever going through updateCrossing. that's what made peds look like they were cutting
+      // across roads at junctions. so first we only keep links that actually branch off on this person's own side (by
+      // where the branch's own tangent points, relative to the road they're currently on) — paths aren't roads, so
+      // either side of one of those is fine, same as `entrance` above.
       const oldA = nav.pts[p.seg], oldB = nav.pts[p.seg+1], oldLen = (nav.cum[p.seg+1] - nav.cum[p.seg]) || 1;
       const velX = p.dir*(oldB.x-oldA.x)/oldLen, velZ = p.dir*(oldB.z-oldA.z)/oldLen;
-      joinWalkway(p, link.li, other.cum[link.vi], dir);
-      p.seg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
-      if (!other.path) {
-        const a = other.pts[p.seg], b = other.pts[p.seg+1], segLen = (other.cum[p.seg+1] - other.cum[p.seg]) || 1;
-        const dx = (b.x-a.x)/segLen, dz = (b.z-a.z)/segLen, side = velX*dz - velZ*dx;
-        p.lat = Math.sign(side || p.lat) * Math.abs(p.lat);
+      const oldNX = -(oldB.z-oldA.z)/oldLen, oldNZ = (oldB.x-oldA.x)/oldLen;
+      let taken = null, takenDir = 0;
+      const tries = Math.min(vertex.links.length, 3);
+      for (let t=0; t<tries && !taken; t++) {
+        const link = vertex.links[Math.floor(peopleRng()*vertex.links.length)];
+        const other = peopleNav.lines[link.li];
+        const dir = link.vi === 0 ? 1 : link.vi === other.pts.length-1 ? -1 : (peopleRng() < 0.5 ? 1 : -1);
+        if (!nav.path) {
+          const a = other.pts[dir > 0 ? link.vi : Math.max(0, link.vi-1)], b = other.pts[dir > 0 ? Math.min(other.pts.length-1, link.vi+1) : link.vi];
+          const outLen = Math.hypot(b.x-a.x, b.z-a.z) || 1;
+          const outSide = (dir*(b.x-a.x)/outLen)*oldNX + (dir*(b.z-a.z)/outLen)*oldNZ;
+          if (Math.abs(outSide) > 1e-6 && Math.sign(outSide) !== Math.sign(p.lat || 1)) continue;
+        }
+        taken = link; takenDir = dir;
       }
-      p.linkCooldown = 6 + peopleRng()*4;
-      nav = other;
-      u = p.u + dir*remaining;
-      continue;
+      if (taken) {
+        const link = taken, dir = takenDir;
+        const other = peopleNav.lines[link.li], remaining = Math.abs(u - at);
+        joinWalkway(p, link.li, other.cum[link.vi], dir);
+        p.seg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
+        // two lines meeting at a junction vertex sit on both sides of it — pick the side of `other` this person's
+        // current heading actually carries them onto (their position at this instant can't tell the sides apart).
+        if (!other.path) {
+          const a = other.pts[p.seg], b = other.pts[p.seg+1], segLen = (other.cum[p.seg+1] - other.cum[p.seg]) || 1;
+          const dx = (b.x-a.x)/segLen, dz = (b.z-a.z)/segLen, side = velX*dz - velZ*dx;
+          p.lat = Math.sign(side || p.lat) * Math.abs(p.lat);
+        }
+        p.linkCooldown = 6 + peopleRng()*4;
+        nav = other;
+        u = p.u + dir*remaining;
+        continue;
+      }
     }
     if (isEnd) { p.dir = -p.dir; u = 2*at - u; continue; }
     p.seg += p.dir;
