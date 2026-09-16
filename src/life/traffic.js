@@ -24,6 +24,7 @@ const TRAFFIC_MAX = 1000;
 const CAR_SPEED = 9;               // world units per second at speed 1
 const TRAFFIC_LANE_PER_CAR = 16;   // the most cars a road takes: one per this length of lane
 const PED_YIELD_RADIUS = 10, PED_YIELD_CHANCE = 0.25; // how far ahead a car notices someone waiting in the road, and how often it stops for them
+const TURN_SAFE_ANGLE = 0.35; // ~20°: while a car's heading is catching up to the lane by more than this (swinging round a corner or a dead-end U-turn — see driveAlong's junction/end handling), it can't run anyone over, though it's still a normal hazard for a ped's roadsafety check
 const CAR_PAINTS = [[0xe9e9e6, 5], [0x1c1d20, 5], [0xa8adb3, 4], [0x5f646b, 3], [0x233a66, 2], [0x8f1f22, 2], [0x2f5d3a, 1],
   [0xd8b12c, 1], [0xd26a1f, 1], [0x2a8a9a, 1], [0x6b3d7a, 0.5], [0xb8c9d8, 1]]; // [color, how common]
 S.trafficAmount = 150, S.trafficNav = null, S.trafficNavBuiltAt = -Infinity, S.lastTrafficTime = null;
@@ -441,15 +442,17 @@ export function updateTraffic(t) {
     // steer towards the lane — quicker when off it, as when swinging round a corner or into the other lane
     const at = lanePoint(car);
     const dx = at.x - car.x, dz = at.z - car.z, d = Math.hypot(dx, dz);
+    let angleDiff = 0;
     if (d > 1e-4) {
       const step = Math.max(car.speed, 3*S.peopleSpeed)*dt*(1 + Math.min(3, d*0.3)), k = Math.min(1, step/d), mx = dx*k, mz = dz*k;
       car.x += mx; car.z += mz;
       if (Math.hypot(mx, mz) > 1e-3) {
         const facing = Math.atan2(mx, mz);
-        car.heading += Math.atan2(Math.sin(facing - car.heading), Math.cos(facing - car.heading))*Math.min(1, dt*6);
+        angleDiff = Math.atan2(Math.sin(facing - car.heading), Math.cos(facing - car.heading));
+        car.heading += angleDiff*Math.min(1, dt*6);
       }
     }
-    if (car.speed > 0.3) runOverPeople(car);
+    if (car.speed > 0.3 && Math.abs(angleDiff) < TURN_SAFE_ANGLE) runOverPeople(car);
     rotation.setFromAxisAngle(up, car.heading);
     position.set(car.x, Y_ROAD, car.z);
     if (car.design != null && carMeshes[car.design]) {
