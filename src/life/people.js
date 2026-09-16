@@ -8,7 +8,7 @@ import { closestPointOnSegment } from '../buildings/footprints.js';
 import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { CLIPPER_SCALE, roadLineWidths, clipPolygons } from '../roads/roads.js';
-import { isPathLine, isRiverLine } from '../roads/paths.js';
+import { isPathLine, isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { isTrainLine } from '../trains/trains.js';
 import { Y_PLAZA } from '../zones/plazas.js';
 import { getWaterRegion } from '../water/water.js';
@@ -630,7 +630,7 @@ function buildPeopleNav() {
     const cum = [0];
     for (let i=1;i<pts.length;i++) cum.push(cum[i-1] + Math.hypot(pts[i].x-pts[i-1].x, pts[i].z-pts[i-1].z));
     if (cum[cum.length-1] < 1) return;
-    const path = isPathLine(line), { hw, cw, sw } = roadLineWidths(line);
+    const path = isPathLine(line) || isWalkwayLine(line), { hw, cw, sw } = roadLineWidths(line);
     lines.push({ pts, cum, total: cum[cum.length-1], path,
       y: path ? Y_PATH : (cw + sw > 0 ? Y_SIDEWALK : Y_ROAD),
       lateral: path ? hw*0.55 : hw + cw + sw*0.5, jitter: path ? 0 : Math.min(sw*0.3, 0.8),

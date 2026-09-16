@@ -3,7 +3,7 @@ import { scene } from '../core/scene.js';
 import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
 import { roadNodes, MAX_TARGET_LOTS } from '../core/state.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
-import { PATH_COLOR, PATH_COLOR_PALETTE, isPathLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
+import { PATH_COLOR, PATH_COLOR_PALETTE, WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, isPathLine, isWalkwayLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
 import { networkKindOf, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
@@ -665,15 +665,17 @@ function renderDetails() {
     const curSidewalkColor = lines[0].sidewalkColor!=null ? lines[0].sidewalkColor : SIDEWALK_COLOR;
     const title = lines.length>1 ? netId : lines[0].id;
     const subtitle = lines.length>1 ? `${lines.length} branches · ${totalNodes} nodes` : `${totalNodes} nodes`;
-    const isPath = isPathLine(lines[0]), isRiver = isRiverLine(lines[0]);
+    const isPath = isPathLine(lines[0]), isWalkway = isWalkwayLine(lines[0]), isRiver = isRiverLine(lines[0]);
     const curPathColor = lines[0].pathColor!=null ? lines[0].pathColor : PATH_COLOR;
+    const curWalkwayColor = lines[0].walkwayColor!=null ? lines[0].walkwayColor : WALKWAY_COLOR;
     panel.innerHTML = `
       <div class="title-row"><span class="name">${title}</span><button class="close-x" id="d-close">deselect</button></div>
       <div class="empty" style="margin-bottom:10px;">${subtitle}</div>
       <div class="slider-row"><div class="row"><label>Path type</label></div>
         <select id="ds-roadtype" class="select-input">
-          <option value="sidewalk" ${!isPath&&!isRiver?'selected':''}>Sidewalk</option>
-          <option value="path" ${isPath?'selected':''}>Path</option>
+          <option value="sidewalk" ${!isPath&&!isWalkway&&!isRiver?'selected':''}>Sidewalk</option>
+          <option value="path" ${isPath?'selected':''}>Dirt</option>
+          <option value="walkway" ${isWalkway?'selected':''}>Walkway</option>
           <option value="river" ${isRiver?'selected':''}>River</option>
         </select>
       </div>
@@ -682,6 +684,9 @@ function renderDetails() {
       ` : isPath ? `
       <div class="section-label">Path color</div>
       ${colorSwatchRowHtml(PATH_COLOR_PALETTE, curPathColor, 'pathcolor')}
+      ` : isWalkway ? `
+      <div class="section-label">Walkway color</div>
+      ${colorSwatchRowHtml(WALKWAY_COLOR_PALETTE, curWalkwayColor, 'walkwaycolor')}
       ` : `
       <div class="section-label">Color</div>
       ${colorSwatchRowHtml(ROAD_COLOR_PALETTE, curColor, 'roadcolor')}
@@ -715,7 +720,25 @@ function renderDetails() {
         onPreview: (hex) => { lines.forEach(l => { l.pathColor = hex; }); rebuildRoadMeshes(); }
       }, 'pathcolor', renderDetails, curPathColor);
     }
-    if (!isPath && !isRiver) {
+    if (isWalkway) {
+      wireColorSwatchEvents(panel, WALKWAY_COLOR_PALETTE, {
+        onPick: (hex) => { lines.forEach(l => { l.walkwayColor = hex; }); rebuildRoadMeshes(); renderDetails(); },
+        onCommit: (hex, mode, oldHex) => {
+          if (mode==='edit') {
+            S.roadLines.forEach(l => { if (isWalkwayLine(l) && (l.walkwayColor!=null?l.walkwayColor:WALKWAY_COLOR)===oldHex) l.walkwayColor = hex; });
+          } else {
+            lines.forEach(l => { l.walkwayColor = hex; });
+          }
+          rebuildRoadMeshes();
+        },
+        onRemove: (oldHex, fallback) => {
+          S.roadLines.forEach(l => { if (isWalkwayLine(l) && (l.walkwayColor!=null?l.walkwayColor:WALKWAY_COLOR)===oldHex) l.walkwayColor = fallback; });
+          rebuildRoadMeshes();
+        },
+        onPreview: (hex) => { lines.forEach(l => { l.walkwayColor = hex; }); rebuildRoadMeshes(); }
+      }, 'walkwaycolor', renderDetails, curWalkwayColor);
+    }
+    if (!isPath && !isWalkway && !isRiver) {
     wireColorSwatchEvents(panel, ROAD_COLOR_PALETTE, {
       onPick: (hex) => { lines.forEach(l => { l.color = hex; }); rebuildRoadMeshes(); renderDetails(); },
       onCommit: (hex, mode, oldHex) => {
