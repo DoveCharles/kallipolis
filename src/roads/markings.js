@@ -34,6 +34,12 @@ export function signalState(junction, phase, t) {
   const s = (((t + junction.offset - phase*SIGNAL_CYCLE/2) % SIGNAL_CYCLE) + SIGNAL_CYCLE) % SIGNAL_CYCLE;
   return s < SIGNAL_GREEN ? 2 : s < SIGNAL_GREEN + SIGNAL_AMBER ? 1 : 0;
 }
+// how many more seconds a phase of a junction's lights stays red at time t (0 if it isn't red) — for a pedestrian
+// deciding whether there's time to get across before its traffic goes again
+export function signalRedLeft(junction, phase, t) {
+  const s = (((t + junction.offset - phase*SIGNAL_CYCLE/2) % SIGNAL_CYCLE) + SIGNAL_CYCLE) % SIGNAL_CYCLE;
+  return s < SIGNAL_GREEN + SIGNAL_AMBER ? 0 : SIGNAL_CYCLE - s;
+}
 // Every node where three or more sidewalk-road arms meet: { x, z, r (how far the junction reaches out from its center),
 // offset (so neighboring junctions don't all change together), arms: [{ x, z (unit direction away from the center), hw,
 // cw, sw, phase }] }.
@@ -59,7 +65,14 @@ function findRoadJunctions() {
   armsAt.forEach((arms, id) => {
     if (arms.length < 3) return;
     const n = roadNodes[id];
-    arms.forEach(arm => { arm.phase = Math.abs(arm.x*arms[0].x + arm.z*arms[0].z) > 0.5 ? 0 : 1; });
+    // phase 0 for the two arms most nearly in line with each other (the road straight through), or just the first if
+    // none are; phase 1 for the rest — comparing every arm against one, a diagonal arm would put them all in one phase
+    let through = [arms[0]], straightest = -0.5;
+    arms.forEach((a, i) => arms.slice(i+1).forEach(b => {
+      const dot = a.x*b.x + a.z*b.z;
+      if (dot < straightest) { straightest = dot; through = [a, b]; }
+    }));
+    arms.forEach(arm => { arm.phase = through.includes(arm) ? 0 : 1; });
     junctions.push({ x: n.x, z: n.z, arms, r: Math.max(...arms.map(a => a.hw + a.cw + a.sw)) + 0.6,
       offset: (Math.abs(Math.round(n.x*7 + n.z*13)) % 97)/97*SIGNAL_CYCLE });
   });

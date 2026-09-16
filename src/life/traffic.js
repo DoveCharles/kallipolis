@@ -353,6 +353,10 @@ function junctionAhead(car, lookahead) {
 function carsNearby(x, z, radius) {
   return cars.some(car => car.li >= 0 && car.speed > 0.5 && Math.hypot(car.x - x, car.z - z) < radius);
 }
+// whether any moving car is somewhere `test(x, z)` says — like carsNearby, for a shape other than a circle
+function carsWhere(test) {
+  return cars.some(car => car.li >= 0 && car.speed > 0.5 && test(car.x, car.z));
+}
 // notices someone waiting in the middle of the road ahead, ready to cross the rest of the way, and — one time in four —
 // decides to stop and let them; once it's committed to stopping for someone it keeps stopping until they're done
 // waiting (or gone), rather than re-rolling every frame
@@ -371,7 +375,8 @@ function checkYield(car) {
     const forward = dx*sin + dz*cos;
     if (forward < 0.5 || forward > PED_YIELD_RADIUS) continue; // (only ahead of it, not behind)
     car.yieldChecked = i;
-    if (trafficRng() < PED_YIELD_CHANCE) car.yieldFor = i;
+    // (someone on a junction's zebra crossing always gets let across)
+    if (p.crossStage === 'jcross' || trafficRng() < PED_YIELD_CHANCE) car.yieldFor = i;
     return car.yieldFor === i;
   }
   return false;
@@ -447,7 +452,9 @@ export function updateTraffic(t) {
       const step = Math.max(car.speed, 3*S.peopleSpeed)*dt*(1 + Math.min(3, d*0.3)), k = Math.min(1, step/d), mx = dx*k, mz = dz*k;
       car.x += mx; car.z += mz;
       if (Math.hypot(mx, mz) > 1e-3) {
-        const facing = Math.atan2(mx, mz);
+        // (once it's overshot the start of a tight turn's new lane, the lane point is behind it and off to the wrong
+        // side — turning to face that would swing it the long way round, so it lines up with the lane instead)
+        const toward = Math.atan2(mx, mz), facing = Math.cos(toward - at.heading) < 0 ? at.heading : toward;
         angleDiff = Math.atan2(Math.sin(facing - car.heading), Math.cos(facing - car.heading));
         car.heading += angleDiff*Math.min(1, dt*6);
       }
@@ -572,4 +579,4 @@ export function carThumbnailScene(i) {
   return { mesh: cm.thumbMesh, camera: cm.thumbCamera };
 }
 
-Object.assign(App, { pickCar, followCarAt, stopFollowingCar, killCar, carsNearby });
+Object.assign(App, { pickCar, followCarAt, stopFollowingCar, killCar, carsNearby, carsWhere });
