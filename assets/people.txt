@@ -12,9 +12,10 @@
 #
 # Separate several with commas (or give each its own brackets). A trait with no value, like [backwards], is switched on.
 # Moods, enjoys, hates (even names) can all have traits, and someone's traits stack up: they multiply together — two
-# entries with walkspeed = 2 make someone four times as fast — except mood, the eye looks (happy, sad, angry, shock) and
-# roadsafety, which add up. Everyone starts at the value in brackets below, and a value outside a trait's range is kept to
-# it. A misspelt trait is ignored (and says so in the browser's console).
+# entries with walkspeed = 2 make someone four times as fast — except mood and the eye looks (happy, sad, angry, shock),
+which add up. Everyone starts at the value in
+# brackets below, and a value outside a trait's range is kept to it. A misspelt trait is ignored (and says so in the
+# browser's console).
 #
 #   trait       start   what it does                                                                    range
 #   walkspeed   1       how fast they walk — 2 is twice as fast, 0.5 half                               0.1 to 6
@@ -34,7 +35,6 @@
 #   angry       0       how angry their eyes look                                                      0 to 1
 #   shock       0       how shocked their eyes look                                                    0 to 1
 #   backwards   off     they walk backwards                                                           on or off
-#   roadsafety  1       their chance of dodging a car that's about to run them over — 0 never does        0 to 1
 # ------------------------------------------------------------------------------------------------------------------------
 
 [Boy names]
