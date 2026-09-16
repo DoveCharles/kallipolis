@@ -13,7 +13,7 @@
 # Separate several with commas (or give each its own brackets). A trait with no value, like [backwards], is switched on.
 # Moods, enjoys, hates (even names) can all have traits, and someone's traits stack up: they multiply together — two
 # entries with walkspeed = 2 make someone four times as fast — except mood and the eye looks (happy, sad, angry, shock),
-which add up. Everyone starts at the value in
+# which add up. Everyone starts at the value in
 # brackets below, and a value outside a trait's range is kept to it. A misspelt trait is ignored (and says so in the
 # browser's console).
 #

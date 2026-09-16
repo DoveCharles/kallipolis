@@ -77,7 +77,7 @@ const FADE_QUICK = 0.2, FADE_POSE = 0.6;
 const CHAT_GAP = 1.1;        // how far apart two people stand to talk, at people size 1
 const CIRCLE_RADIUS = 1.35;  // how far from the middle of a circle sat on the grass each of them sits, at people size 1
 const CIRCLE_MAX = 4;
-// every shape key the shader applies, in the order of the shape key texture, and the bit of personMorphMask saying a vertex
+// every shape key the shader applies, in the order of the shape key texture, and the bit of personVertex.z saying a vertex
 // moves with it: the body's (1) and the head's and eyes' shapes (8, 16), set once per person; Blink (2), as they blink;
 // the mouth's Talk and Emotion (4), as they talk and listen; and the eyes' Shock, Happy, Angry and Sad (32), as they feel
 const PERSON_SHAPE_KEYS = ['Breast', 'Waist', 'Hips', 'Weight', 'Butt', 'Blink', 'Talk', 'Emotion', 'Key 1', 'Key 2', 'Shape1', 'Shape2', 'Shape3',
@@ -99,7 +99,7 @@ const PERSON_CLOTHING = [
   { band: 'Tummy', part: 'Top', count: 2, coveredOnMen: true },
   { band: 'Leg', part: 'Pants', count: 2 },
 ];
-// the model's materials, by name: which part of the model each vertex belongs to (its personSlot) — the clothes take each
+// the model's materials, by name: which part of the model each vertex belongs to (its slot, in personVertex.y) — the clothes take each
 // person's own colors, the rest keep the model's; and the parts only drawn for women
 const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelashes', 'Lips',
   ...PERSON_CLOTHING.flatMap(c => Array.from({ length: c.count }, (_, k) => c.band + (k + 1)))];
@@ -133,9 +133,11 @@ const PERSON_VERTEX_PARS = `
   uniform vec3 personHeadPivot;
   attribute vec4 personJoints;
   attribute vec4 personWeights;
-  attribute float personSlot;
-  attribute float personMorphMask;
-  attribute float personHeadWeight;
+  // What the shader needs to know about the vertex itself, all in one attribute: a machine is only guaranteed 16 of them,
+  // and instanceMatrix takes four of those while gl_InstanceID takes another. x how much the vertex moves with the head,
+  // y which slot (which part of the figure) it belongs to, z which shape keys move it (see PERSON_SHAPE_KEY_BITS), and w
+  // where it is in the shape key texture — which is gl_VertexID, but reading it costs an attribute of its own.
+  attribute vec4 personVertex;
   attribute vec4 instanceAnim;
   attribute vec4 instanceLook;
   attribute vec4 instanceEyes;
@@ -173,19 +175,19 @@ const PERSON_VERTEX_PARS = `
     if (personWeights.w > 0.0) m += personBone(personJoints.w)*personWeights.w;
     return m;
   }
-  // a posed position with the head turned — everything moving with the head bone or the bones under it (personHeadWeight),
+  // a posed position with the head turned — everything moving with the head bone or the bones under it (personVertex.x),
   // about where the head meets the neck — by instanceLook: x side to side, y up and down, as the head sees it (so someone
   // lying down rolls their head to the side rather than twisting it round)
   vec3 personLook(vec3 posed) {
     vec3 looked = posed;
-    if (personHeadWeight > 0.0 && (instanceLook.x != 0.0 || instanceLook.y != 0.0)) {
+    if (personVertex.x > 0.0 && (instanceLook.x != 0.0 || instanceLook.y != 0.0)) {
       mat4 head = personBone(personHeadBone);
       mat3 headTurn = mat3(head);
       vec3 pivot = (head*vec4(personHeadPivot, 1.0)).xyz, p = inverse(headTurn)*(posed - pivot);
       float ct = cos(instanceLook.x), st = sin(instanceLook.x), cn = cos(instanceLook.y), sn = sin(instanceLook.y);
       p = vec3(p.x, p.y*cn - p.z*sn, p.y*sn + p.z*cn);
       p = vec3(p.x*ct + p.z*st, p.y, p.z*ct - p.x*st);
-      looked = mix(posed, pivot + headTurn*p, personHeadWeight);
+      looked = mix(posed, pivot + headTurn*p, personVertex.x);
     }
     return looked;
   }
@@ -194,13 +196,12 @@ const PERSON_VERTEX_PARS = `
   vec4 personTrait(int row) { return texelFetch(personTraits, ivec2(personIndex(), row), 0); }
   // a shape key's offset at this vertex
   vec3 personMorph(int key) {
-    int width = int(personMorphsWidth);
-    return texelFetch(personMorphs, ivec2(gl_VertexID % width, gl_VertexID/width + key*int(personMorphsRows)), 0).xyz;
+    int width = int(personMorphsWidth), vertex = int(personVertex.w + 0.5);
+    return texelFetch(personMorphs, ivec2(vertex % width, vertex/width + key*int(personMorphsRows)), 0).xyz;
   }
-  // every shape key's offset at this vertex, each as far on as this person has it; personMorphMask says which keys move the
-  // vertex at all (see PERSON_SHAPE_KEY_BITS)
+  // every shape key's offset at this vertex, each as far on as this person has it
   vec3 personShape() {
-    int mask = int(personMorphMask + 0.5);
+    int mask = int(personVertex.z + 0.5);
     vec3 offset = vec3(0.0);
     if ((mask & 1) != 0) {
       vec4 body = personTrait(0);
@@ -237,7 +238,7 @@ function injectPersonShader(shader, uniforms, look) {
       + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : ''))
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       transformed = personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz);
-      int personSlotIndex = int(personSlot + 0.5);
+      int personSlotIndex = int(personVertex.y + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
       ${color}`);
@@ -376,8 +377,6 @@ function buildPersonModel(gltf, hairGltf) {
   geometry.setIndex(indices);
   geometry.setAttribute('personJoints', new THREE.Float32BufferAttribute(joints, 4));
   geometry.setAttribute('personWeights', new THREE.Float32BufferAttribute(weights, 4));
-  geometry.setAttribute('personHeadWeight', new THREE.Float32BufferAttribute(headWeights, 1));
-  geometry.setAttribute('personSlot', new THREE.Float32BufferAttribute(slots, 1));
   geometry.computeVertexNormals(); // (flat shading works its normals out per pixel; these are only for the shadows)
   geometry.computeBoundingBox();
 
@@ -393,7 +392,9 @@ function buildPersonModel(gltf, hairGltf) {
       if (Math.abs(keyOffsets[i*3]) + Math.abs(keyOffsets[i*3+1]) + Math.abs(keyOffsets[i*3+2]) > 1e-6) morphMask[i] = morphMask[i] | bit;
     }
   });
-  geometry.setAttribute('personMorphMask', new THREE.BufferAttribute(morphMask, 1));
+  const vertexData = new Float32Array(vertexCount*4);
+  for (let i=0;i<vertexCount;i++) vertexData.set([headWeights[i], slots[i], morphMask[i], i], i*4);
+  geometry.setAttribute('personVertex', new THREE.BufferAttribute(vertexData, 4));
   const morphTexture = new THREE.DataTexture(morphData, morphWidth, morphRows*PERSON_SHAPE_KEYS.length, THREE.RGBAFormat, THREE.FloatType);
   morphTexture.needsUpdate = true;
 
@@ -494,9 +495,9 @@ function buildPersonModel(gltf, hairGltf) {
       styleGeometry.setIndex(styleIndices);
       styleGeometry.setAttribute('personJoints', new THREE.Float32BufferAttribute(new Float32Array(count*4).map((_, k) => k % 4 === 0 ? headBone : 0), 4));
       styleGeometry.setAttribute('personWeights', new THREE.Float32BufferAttribute(new Float32Array(count*4).map((_, k) => k % 4 === 0 ? 1 : 0), 4));
-      styleGeometry.setAttribute('personHeadWeight', new THREE.Float32BufferAttribute(new Float32Array(count).fill(1), 1));
-      styleGeometry.setAttribute('personSlot', new THREE.Float32BufferAttribute(styleSlots, 1));
-      styleGeometry.setAttribute('personMorphMask', new THREE.BufferAttribute(new Float32Array(count), 1));
+      const styleVertices = new Float32Array(count*4);
+      for (let i=0;i<count;i++) styleVertices.set([1, styleSlots[i], 0, i], i*4);
+      styleGeometry.setAttribute('personVertex', new THREE.BufferAttribute(styleVertices, 4));
       styleGeometry.computeVertexNormals();
       hairStyles.push({ name: style.name, geometry: styleGeometry, mesh: null, anim: null, look: null, members: [] });
     });
