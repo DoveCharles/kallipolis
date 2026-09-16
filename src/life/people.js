@@ -851,7 +851,7 @@ function updateCrossing(p, nav, dt) {
   // half1/half2: getting there is the goal-seeking movement's job — this just notices arriving
   const at = walkwayPoint(p);
   if (Math.hypot(at.x - p.x, at.z - p.z) >= 0.15) return;
-  if (p.crossStage === 'half1') { p.crossStage = 'mid'; return; }
+  if (p.crossStage === 'half1') { p.crossStage = 'mid'; p.crossCheckIn = 0; return; } // check straight away — no needless pause if it's clear
   p.crossStage = null;
   p.crossCheckIn = 4 + peopleRng()*6; // just crossed — no need to think about it again right away
 }
