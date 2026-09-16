@@ -7,7 +7,7 @@ import { mulberry32 } from '../core/math.js';
 import { closestPointOnSegment } from '../buildings/footprints.js';
 import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
-import { CLIPPER_SCALE, roadLineWidths, clipPolygons } from '../roads/roads.js';
+import { CLIPPER_SCALE, roadLineWidths, clipPolygons, unionRoadStrokes } from '../roads/roads.js';
 import { isPathLine, isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { isTrainLine } from '../trains/trains.js';
 import { Y_PLAZA } from '../zones/plazas.js';
@@ -26,8 +26,8 @@ import { explode } from './giblets.js';
 const PEOPLE_MAX = 2000;
 const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
 export const PEOPLE_NAV_SPACING = 4;    // walkways are resampled to a point at least this often, for entrances and re-seating
-S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false;
-let peopleNav = null, peopleNavBuiltAt = -Infinity, lastPeopleTime = null;
+S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false, S.showPeopleNavDebug = false;
+let peopleNav = null, peopleNavBuiltAt = -Infinity, peopleNavDebugBuiltAt = -Infinity, lastPeopleTime = null;
 const people = [];
 const peopleRng = mulberry32(90210);
 const peopleMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ roughness: 0.8 }), PEOPLE_MAX);
@@ -60,6 +60,87 @@ pedHitboxDebugMesh.frustumCulled = false;
 pedHitboxDebugMesh.visible = false;
 pedHitboxDebugMesh.name = 'PedHitboxDebug';
 scene.add(pedHitboxDebugMesh);
+// the walkway lines themselves (see buildPeopleNav below): one segment pair per sidewalk edge, red where marked
+// as a danger stretch (a connecting road's own pavement reaching across it near a junction) and cyan elsewhere —
+// rebuilt whenever the nav does, shown only while the toggle's on
+const peopleNavDebugMesh = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthTest: false }));
+peopleNavDebugMesh.frustumCulled = false;
+peopleNavDebugMesh.visible = false;
+peopleNavDebugMesh.renderOrder = 999;
+peopleNavDebugMesh.name = 'PeopleNavDebug';
+scene.add(peopleNavDebugMesh);
+// which way (and how far, per unit of lateral offset) a line's walkway sits off its point vi: square to the average of
+// the nearest non-zero-length segments either side (skipping the zero-length ones a duplicate node leaves), stretched
+// so a bend keeps the full width from both segments — the same mitred join the sidewalk mesh is stroked with (see
+// unionRoadStrokes). Consecutive segments at a bend then share one offset point instead of each having its own.
+const NAV_MITER_LIMIT = 2;
+function navVertexMitre(pts, vi) {
+  const dirFrom = (j, step) => {
+    for (; j >= 0 && j+1 < pts.length; j += step) {
+      const a = pts[j], b = pts[j+1], len = Math.hypot(b.x-a.x, b.z-a.z);
+      if (len > 1e-6) return { x: (b.x-a.x)/len, z: (b.z-a.z)/len };
+    }
+    return null;
+  };
+  const d1 = dirFrom(vi-1, -1) || dirFrom(vi, 1), d2 = dirFrom(vi, 1) || d1;
+  if (!d1) return { x: 0, z: 0 };
+  let tx = d1.x + d2.x, tz = d1.z + d2.z;
+  const len = Math.hypot(tx, tz);
+  if (len < 1e-6) { tx = d1.x; tz = d1.z; } else { tx /= len; tz /= len; } // (a full U-turn)
+  const stretch = 1/Math.max(tx*d1.x + tz*d1.z, 1/NAV_MITER_LIMIT);
+  return { x: -tz*stretch, z: tx*stretch };
+}
+// the walkway's offset from point vi at a lateral offset of side*nav.lateral (see buildPeopleNav) — for a sidewalk road,
+// snapped onto the middle of the sidewalk as it's actually drawn
+const navSideOffsets = (nav, side) => side < 0 ? nav.offNeg : nav.offPos;
+function navOffsetPoint(nav, vi, side) {
+  const p = nav.pts[vi], o = side ? navSideOffsets(nav, side)[vi] : { x: 0, z: 0 };
+  return { x: p.x + o.x, y: nav.y + 0.15, z: p.z + o.z };
+}
+function rebuildPeopleNavDebug() {
+  const positions = [], colors = [], safe = [0.22, 0.77, 1], danger = [1, 0.18, 0.33];
+  if (peopleNav) peopleNav.lines.forEach(nav => {
+    (nav.path ? [0] : [1, -1]).forEach(side => {
+      for (let vi = 0; vi < nav.pts.length - 1; vi++) {
+        const a = navOffsetPoint(nav, vi, side), b = navOffsetPoint(nav, vi+1, side);
+        positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+        const c = nav.danger[vi] || nav.danger[vi+1] ? danger : safe;
+        colors.push(...c, ...c);
+      }
+    });
+  });
+  // junctions: different lines' points land on the same spot (see byPlace in buildPeopleNav), but each line offsets
+  // that shared point outward along its own tangent, so the lines drawn above fan out from the corner without
+  // touching. connect each side's offset point to whichever linked line/side lands nearest it, closing that gap —
+  // a nearest-match hub rather than a topologically exact join, which is enough for a debug overlay
+  const joined = new Set();
+  if (peopleNav) peopleNav.lines.forEach((nav, li) => nav.vertices.forEach((vertex, vi) => {
+    if (!vertex.links.length) return;
+    (nav.path ? [0] : [1, -1]).forEach(side => {
+      const key = `${li}:${vi}:${side}`, p = navOffsetPoint(nav, vi, side);
+      let best = null, bestKey = null, bestD = Infinity;
+      vertex.links.forEach(link => {
+        const other = peopleNav.lines[link.li];
+        (other.path ? [0] : [1, -1]).forEach(oside => {
+          const okey = `${link.li}:${link.vi}:${oside}`, q = navOffsetPoint(other, link.vi, oside);
+          const d = Math.hypot(p.x-q.x, p.z-q.z);
+          if (d < bestD) { bestD = d; best = q; bestKey = okey; }
+        });
+      });
+      if (!best) return;
+      const pairKey = key < bestKey ? key+'|'+bestKey : bestKey+'|'+key;
+      if (joined.has(pairKey)) return;
+      joined.add(pairKey);
+      const c = (nav.danger[vi] ? danger : safe);
+      positions.push(p.x, p.y, p.z, best.x, best.y, best.z);
+      colors.push(...c, ...c);
+    });
+  }));
+  const geom = peopleNavDebugMesh.geometry;
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geom.computeBoundingSphere();
+}
 
 // The people model (assets/models/Person.glb, made in Blender) replaces the cuboids once it's loaded: a rigged figure with
 // animations — walking, standing idle (now and then scratching or having a think), waving, sitting on a bench, and sitting or
@@ -606,6 +687,7 @@ export function syncPeopleUI() {
   document.getElementById('s-people').classList.toggle('on', S.peopleEnabled);
   document.getElementById('people-settings').style.display = S.peopleEnabled ? 'block' : 'none';
   document.getElementById('s-roadsafety-debug').classList.toggle('on', S.showRoadsafetyDebug);
+  document.getElementById('s-peoplenav-debug').classList.toggle('on', S.showPeopleNavDebug);
   document.getElementById('s-peopleamount').value = S.peopleAmount;
   document.getElementById('dv-peopleamount').textContent = String(Math.round(S.peopleAmount));
   document.getElementById('s-peoplespeed').value = S.peopleSpeed;
@@ -657,6 +739,57 @@ function buildPeopleNav() {
       overWater: path ? pts.map(p => inWater(p.x, p.z)) : null,
       vertices: pts.map(() => ({ links: [], entrances: [] })) });
   });
+  // each point's offset to either side (see navVertexMitre), then, for sidewalk roads, snapped onto the middle of the
+  // sidewalk as it's really drawn — the whole network stroked at mid-sidewalk width, joined and capped the same way the
+  // mesh is. That line runs round a junction's corners, round a road's rounded end, and doesn't fold over itself on the
+  // inside of a tight curve, where just offsetting the centerline would do all three wrong.
+  lines.forEach(nav => {
+    const mitres = nav.pts.map((p, vi) => navVertexMitre(nav.pts, vi));
+    nav.offPos = mitres.map(m => ({ x: m.x*nav.lateral, z: m.z*nav.lateral }));
+    nav.offNeg = mitres.map(m => ({ x: -m.x*nav.lateral, z: -m.z*nav.lateral }));
+  });
+  const roadStrokes = [];
+  S.roadLines.forEach(line => {
+    if (isTrainLine(line) || isPathLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
+    const nodePts = line.nodeIds.map(id => roadNodes[id]).filter(Boolean);
+    if (nodePts.length < 2) return;
+    const { hw, cw, sw } = roadLineWidths(line);
+    roadStrokes.push({ radius: hw + cw + sw*0.5,
+      path: tessellateOpenPath(nodePts).map(p => ({ X: Math.round(p.x*CLIPPER_SCALE), Y: Math.round(p.z*CLIPPER_SCALE) })) });
+  });
+  if (roadStrokes.length) {
+    const EDGE_CELL = 8, edgeGrid = new Map();
+    unionRoadStrokes(roadStrokes).forEach(path => path.forEach((P, k) => {
+      const Q = path[(k+1) % path.length];
+      const edge = { a: { x: P.X/CLIPPER_SCALE, z: P.Y/CLIPPER_SCALE }, b: { x: Q.X/CLIPPER_SCALE, z: Q.Y/CLIPPER_SCALE } };
+      const len = Math.hypot(edge.b.x-edge.a.x, edge.b.z-edge.a.z), steps = Math.ceil(len/(EDGE_CELL*0.5)), cells = new Set();
+      for (let s=0; s<=steps; s++) {
+        const t = steps ? s/steps : 0;
+        cells.add(Math.floor((edge.a.x + (edge.b.x-edge.a.x)*t)/EDGE_CELL) + ',' + Math.floor((edge.a.z + (edge.b.z-edge.a.z)*t)/EDGE_CELL));
+      }
+      cells.forEach(key => { if (!edgeGrid.has(key)) edgeGrid.set(key, []); edgeGrid.get(key).push(edge); });
+    }));
+    const nearestOnOutline = (p, maxD) => {
+      const r = Math.ceil(maxD/EDGE_CELL) + 1, cx = Math.floor(p.x/EDGE_CELL), cz = Math.floor(p.z/EDGE_CELL), seen = new Set();
+      let best = null, bestD = maxD;
+      for (let dx=-r; dx<=r; dx++) for (let dz=-r; dz<=r; dz++) (edgeGrid.get((cx+dx) + ',' + (cz+dz)) || []).forEach(edge => {
+        if (seen.has(edge)) return;
+        seen.add(edge);
+        const q = closestPointOnSegment(p, edge.a, edge.b), d = Math.hypot(q.x-p.x, q.z-p.z);
+        if (d < bestD) { bestD = d; best = q; }
+      });
+      return best;
+    };
+    // (how far a point may move: out of the widest road that could be crossing ours at a junction)
+    const widest = lines.reduce((m, nav) => nav.path ? m : Math.max(m, nav.footprint), 0);
+    lines.forEach(nav => {
+      if (nav.path) return;
+      [nav.offPos, nav.offNeg].forEach(offs => offs.forEach((o, vi) => {
+        const p = nav.pts[vi], q = nearestOnOutline({ x: p.x + o.x, z: p.z + o.z }, nav.footprint + widest);
+        if (q) offs[vi] = { x: q.x - p.x, z: q.z - p.z };
+      }));
+    });
+  }
   // junctions: points of different lines in the same place
   const byPlace = new Map();
   lines.forEach((nav, li) => nav.pts.forEach((p, vi) => {
@@ -770,6 +903,10 @@ function joinWalkway(p, li, u, dir) {
   p.seg = 0;
   while (p.seg < nav.pts.length-2 && nav.cum[p.seg+1] <= p.u) p.seg++;
   p.lat = nav.path ? (peopleRng()-0.5)*2*nav.lateral : (peopleRng() < 0.5 ? -1 : 1)*(nav.lateral + (peopleRng()-0.5)*2*nav.jitter);
+  // a junction hand-off inside walkAlong can land someone straight onto a different line's danger stretch (see the
+  // crossStage === null branch below) without ever having been one segment away from it to trigger a check — so any
+  // fresh landing on a walkway re-arms the check rather than trusting whatever the previous line's lookahead saw
+  p.dangerChecked = false;
 }
 function wanderInto(p, areaIndex, near) {
   const spot = randomSpotIn(peopleNav.areas[areaIndex], near);
@@ -816,9 +953,11 @@ function walkwayPoint(p) {
   const i = Math.max(0, Math.min(nav.pts.length-2, p.seg));
   const a = nav.pts[i], b = nav.pts[i+1], segLen = (nav.cum[i+1] - nav.cum[i]) || 1;
   const t = Math.max(0, Math.min(1, (p.u - nav.cum[i])/segLen));
-  const dx = (b.x-a.x)/segLen, dz = (b.z-a.z)/segLen;
+  // blend between the two points' own offsets (scaled by how far out this person walks), so the walkway bends round
+  // corners smoothly instead of jumping at each one
+  const offs = navSideOffsets(nav, p.lat), k = Math.abs(p.lat)/(nav.lateral || 1), oa = offs[i], ob = offs[i+1];
   const y = nav.path && nav.overWater[i] && nav.overWater[i+1] ? FOOTBRIDGE_TOP : nav.y;
-  return { x: a.x + (b.x-a.x)*t - dz*p.lat, y, z: a.z + (b.z-a.z)*t + dx*p.lat };
+  return { x: a.x + (b.x-a.x)*t + (oa.x + (ob.x-oa.x)*t)*k, y, z: a.z + (b.z-a.z)*t + (oa.z + (ob.z-oa.z)*t)*k };
 }
 // the forward (index-increasing) direction of segment (seg, seg+1) — drawing two branches off the same spot on a
 // road leaves a zero-length duplicate-node segment right at the shared junction point, so if that segment has no
@@ -1433,6 +1572,7 @@ export function updatePeople(t) {
   if (followed >= 0 && (!S.peopleEnabled || S.interactionMode !== 'move')) stopFollowingPerson();
   peopleMesh.visible = S.peopleEnabled && !personModel;
   if (personModel) [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; });
+  peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
   if (!S.peopleEnabled) return;
   if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25)) {
     S.peopleNavDirty = false;
@@ -1443,6 +1583,7 @@ export function updatePeople(t) {
     peopleNav = buildPeopleNav();
     people.forEach(reseatPerson);
   }
+  if (S.showPeopleNavDebug && peopleNavDebugBuiltAt !== peopleNavBuiltAt) { peopleNavDebugBuiltAt = peopleNavBuiltAt; rebuildPeopleNavDebug(); }
   const wanted = Math.min(PEOPLE_MAX, Math.round(S.peopleAmount));
   while (people.length < wanted) { const p = newPerson(); spawnPerson(p); people.push(p); }
   while (people.length > wanted) endActivity(people.pop());
@@ -1481,12 +1622,17 @@ export function updatePeople(t) {
         const nav0 = peopleNav.lines[p.li], seg0 = Math.max(0, Math.min(nav0.danger.length-1, p.seg));
         const inZone = nav0.danger[seg0];
         // walking straight along a danger stretch (see buildPeopleNav) still crosses another road's live lanes,
-        // even though li/lat never change. only check for a gap right at the curb, before the step that would
-        // carry them off safe ground and into it — once they're actually in there, stopping dead in a live lane
-        // is far more dangerous than just hurrying the rest of the way across (same as an explicit crossing)
-        const ahead = Math.max(0, Math.min(nav0.danger.length-1, seg0 + (p.dir > 0 ? 1 : -1)));
-        const entering = !inZone && nav0.danger[ahead];
-        if (!entering || !App.carsNearby(p.x, p.z, ROADSAFETY_RADIUS*p.traits.roadsafety)) {
+        // even though li/lat never change. only check once, right as they arrive there — once they're actually in
+        // there, stopping dead in a live lane is far more dangerous than just hurrying the rest of the way across
+        // (same as an explicit crossing). this used to look one segment ahead on the *current* line to catch that
+        // arrival, but walkAlong can also hand someone off onto a different line at a junction — exactly where
+        // danger stretches cluster — landing them already inside one without that lookahead ever having seen it
+        // coming. checking the actual current segment against a flag that only clears once they're back on safe
+        // ground catches both ways of arriving, not just walking straight down one line into it.
+        if (!inZone) p.dangerChecked = false;
+        const needsCheck = inZone && !p.dangerChecked;
+        if (!needsCheck || !App.carsNearby(p.x, p.z, ROADSAFETY_RADIUS*p.traits.roadsafety)) {
+          if (needsCheck) p.dangerChecked = true;
           walkAlong(p, speed*(inZone ? CROSS_SPEED_MULT : 1)*dt);
         }
         if (p.mode === 'line') goal = walkwayPoint(p);
