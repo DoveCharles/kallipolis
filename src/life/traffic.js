@@ -446,18 +446,47 @@ function carFootprint(car) {
     ? { length: cm.length*BOX_CAR_LENGTH*S.peopleSize, width: cm.width*S.peopleSize }
     : { length: car.length*BOX_CAR_LENGTH*S.peopleSize, width: car.width*BOX_CAR_WIDTH*S.peopleSize };
 }
-// The cars don't slow for pedestrians, so anyone caught in front of one when it's moving is at risk of getting run over:
-// killed exactly as the person card's Kill button does (see killPerson in people.js), blood and all, rather than anything
-// of the car's own. Their roadsafety trait (see profiles.js) is their chance of dodging out of the way in time instead —
-// 1 (the default) always does; only someone whose picks in people.txt bring it down risks actually getting hit.
+// The cars don't slow for pedestrians, so the ones in front of one that don't get out of the way are at risk of getting run
+// over: killed exactly as the person card's Kill button does (see killPerson in people.js), blood and all, rather than
+// anything of the car's own. Their roadsafety trait (see profiles.js) is their chance of actually dodging — noticing the
+// car early enough to stop and wait at the roadside for it to pass (see p.trafficHold, and where it holds them in
+// updatePeople), rather than a last-second escape once it's already on them: 1 (the default) always notices in time; only
+// someone whose picks in people.txt bring it down risks not, and lower still, of not even managing a last-second dodge.
+// Whether someone's hit is judged tightly, against the car's own lane; whether they stop and wait is judged much more
+// widely, across the whole road (nav.lane, doubled, either side of its centerline) — a person nearing the curb needs
+// noticing well before they're anywhere near the car's own path. And someone already standing on a road (any road, not
+// just this one — see onRoad, at a junction several can run close together) when they're noticed is past waiting for
+// it: better to hurry across than stop in traffic.
+const TRAFFIC_HOLD = 0.9; // how long someone waits, once they've decided to, for a car to clear
+function onRoad(x, z) {
+  return S.trafficNav.lines.some(nav => {
+    const half = nav.lane*2, pts = nav.pts;
+    for (let i=0;i<pts.length-1;i++) {
+      const a = pts[i], b = pts[i+1], abx = b.x-a.x, abz = b.z-a.z, len2 = abx*abx + abz*abz || 1;
+      const t = Math.max(0, Math.min(1, ((x-a.x)*abx + (z-a.z)*abz)/len2));
+      if (Math.hypot(x - (a.x + abx*t), z - (a.z + abz*t)) < half) return true;
+    }
+    return false;
+  });
+}
 function runOverPeople(car) {
-  const { length, width } = carFootprint(car), reach = length*0.5 + 0.4, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+  const { length, width } = carFootprint(car);
+  const lookahead = car.speed*0.4 + 1.6; // how far up the road a cautious person notices trouble and stops for it
+  const nav = S.trafficNav.lines[car.li], roadHalf = nav ? nav.lane*2 : width*0.5;
+  const holdWidth = roadHalf + 1.5; // reaches across the whole road, not just the car's own lane, so someone approaching from the curb is caught in time
+  const reach = length*0.5 + lookahead + holdWidth + 0.4, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   App.people.forEach((p, i) => {
     if (p.mode === 'none' || p.mode === 'dead') return;
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
-    if (Math.abs(right) < width*0.5 + 0.25 && Math.abs(forward) < length*0.5 + 0.25 && Math.random() >= p.traits.roadsafety) App.killPerson(i);
+    if (Math.abs(right) < width*0.5 + 0.25 && Math.abs(forward) < length*0.5 + 0.25) {
+      if (Math.random() >= p.traits.roadsafety) App.killPerson(i);
+      return;
+    }
+    if (p.trafficHold > 0 || Math.abs(right) > holdWidth || Math.abs(forward) >= length*0.5 + 0.25 + lookahead || Math.random() >= p.traits.roadsafety) return;
+    if (onRoad(p.x, p.z)) return; // already out on the road — hurrying across beats freezing here
+    p.trafficHold = TRAFFIC_HOLD;
   });
 }
 // the car under a point on the screen (the nearest, if several are), or -1 — exactly like pickPerson in people.js, but

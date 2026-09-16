@@ -698,7 +698,10 @@ function newPerson() {
     // how they're taking someone blowing up nearby, if they are (see frightenBystanders)
     fright: null,
     stun: null,
-    please: null };
+    please: null,
+    // seconds left waiting at the roadside for a car to clear, if their roadsafety trait has them doing that (see
+    // runOverPeople in traffic.js)
+    trafficHold: 0 };
 }
 // A person's traits — from the entries picked for them in people.txt (see profiles.js), by their place in the crowd, `i` —
 // worked out again whenever people.txt loads, and once the model's loaded and says whether they're a man (which decides
@@ -933,11 +936,12 @@ function meetOnWalkways(dt) {
   if (!hasClip('Wave') || talking > people.length*0.15) return;
   const reach = 1.6*S.peopleSize;
   people.forEach(p => {
-    if (p.mode !== 'line' || p.act || p.fright || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
+    if (p.mode !== 'line' || p.act || p.fright || p.trafficHold > 0 || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
     p.chatCheckIn = 0.4 + peopleRng()*0.8;
     const path = peopleNav.lines[p.li].path, cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
     for (let ox=-1;ox<=1;ox++) for (let oz=-1;oz<=1;oz++) for (const q of cells.get((cx+ox) + ',' + (cz+oz)) || []) {
-      if (q === p || q.act || q.fright || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || (!path && Math.sign(q.lat) !== Math.sign(p.lat))) continue;
+      // (someone waiting at the roadside for a car to clear — see runOverPeople in traffic.js — isn't free to stop and chat)
+      if (q === p || q.act || q.fright || q.trafficHold > 0 || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || (!path && Math.sign(q.lat) !== Math.sign(p.lat))) continue;
       // still coming towards each other, and close
       if ((q.u - p.u)*p.dir < 0 || Math.hypot(q.x - p.x, q.z - p.z) > reach) continue;
       if (peopleRng() < 0.35*p.traits.chatty*q.traits.chatty) startChat(p, q, false); else p.chatCooldown = q.chatCooldown = 10;
@@ -1330,10 +1334,13 @@ export function updatePeople(t) {
     //attempting to give additional reactions to npc death depending on how evil they are
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
     if (p.please) updatePlease(p, dt); //Should do same as stun but make them emote happily - Doesn't make happy :(
-    // frozen in place: fright's 'look' stage, or stun/please's 'held' stage. only fright ever flees.
+    if (p.trafficHold > 0) p.trafficHold = Math.max(0, p.trafficHold - dt);
+    // frozen in place: fright's 'look' stage, stun/please's 'held' stage, or waiting at the roadside for a car to clear.
+    // only fright ever flees.
     const frozen = (!!p.fright && p.fright.stage === 'look')
                 || (!!p.stun && p.stun.stage === 'held')
-                || (!!p.please && p.please.stage === 'held');
+                || (!!p.please && p.please.stage === 'held')
+                || p.trafficHold > 0;
     const fleeing = !!p.fright && p.fright.stage === 'flee';
     const speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
     let goal = null;
