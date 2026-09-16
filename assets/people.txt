@@ -88,6 +88,57 @@ Gary
 Terry
 Keith
 Dave
+[unknown]
+Hieronymous
+Jeeves
+Johnny
+Markus
+Matthew
+Peter
+Danny
+Lyle
+Paulie
+Chase
+Ryder
+Friedrich
+Michel
+Jean
+Bartholomew
+Jacques
+Cecil
+Adonis
+Homer
+Ralph
+Germaine
+Albert
+Bruce
+Pee-wee
+Vladimir
+Nathan
+Lorenzo
+Timmy
+Mort
+Anthony
+Yves
+Stephen
+Harrier
+Sock
+Grint
+Herm
+Teddy
+Saul
+Leonard
+Woody
+Roy
+Wyatt
+Lewis
+Don
+Sancho
+Sam
+Cameron
+Jeremy
+Gargamel
+Dasher
 
 [Girl names]
 Olivia
@@ -140,6 +191,52 @@ Opal
 Tallulah
 Imogen
 Georgina
+[unknown]
+Peta-gay
+Requiem
+Faith
+Joy
+Vivian
+Angela
+Roberta
+Simone
+Penelope
+Circe
+Adriana
+Jan
+Rachel
+Rita
+Priti
+April
+Rapunzel
+Erykah
+Yana
+Suzanne
+Chiyomi
+Sylvia
+Haze
+Kate
+Sock
+Alice
+Charlie
+Ripley
+Laura
+Sarah
+Donna
+Shelly
+Dusty
+Hope
+Elizabeth
+Vanessa
+Ana
+May
+Kelly
+Isis
+Steffanie
+Minnie
+Sam
+Cameron
+Léa
 
 [Moods]
 😀 [mood = 0.6, happy = 0.6]
@@ -188,6 +285,21 @@ Georgina
 🤔 [angry = 0.2, fidgety = 3, patience = 1.5]
 🫠 [happy = 0.3, sad = 0.5, lounging = 3, walkspeed = 0.7]
 🤗 [mood = 0.6, happy = 0.9, chatty = 3]
+🤢 [mood = -0.6, patience = 0.2, walkspeed = 0.4, chatty = 0.3, nosy = 0.4]
+🧌 [parks = 8, chatty = 0.3]
+🥳 [mood = 1, chatty = 4, nosy = 2]
+😷 [mood = -0.3, chatty = 0.1]
+🤐 [chatty = 0, talkative = 0]
+🥷 [walkspeed = 0.3, chatty = 0]
+👩‍🎨 [plazas = 4, parks = 3, lounging = 3, patience = 4]
+🎵 [mood = 0.3, fidgety = 3, chatty = 0.3]
+🕵️ [nosy = 10 , chatty = 10, talkative = 0.3]
+🧘 [patience = 4, lounging = 4, parks = 4]
+🧑🏻‍💼 [plazas = 4, patience = 0.5, chatty = 2]
+🧟 [walkspeed = 0.3, talkative = 0.05]
+🤡 [chatty = 3, talkative = 3]
+🥶 [walkspeed = 0.5, mood = -0.3]
+🏃🏻‍➡️ [walkspeed = 2, chatty = 0.3]
 
 [Enjoys]
 Energy drinks [walkspeed = 2.5, fidgety = 4, blinks = 0.2, patience = 0.3]
@@ -264,6 +376,234 @@ Lying [talkative = 2]
 Shitty fucking overpriced merchandise
 The milking machine
 Skiing (lie)
+Laptop in bed [lounging = 3]
+Crushing a beer can on their head
+Incremental change [speed = 0.6, patience = 3]
+Synchronicity
+Mummy's cooking
+Ayahuasca [speed = 0.3, blinks = 0.2, parks = 6, fidgety = 0.6]
+Dropping a tab right before work [speed = 0.6, blinks = 0.3, fidgety = 12]
+Pretending to read in public [parks = 3, plazas = 3, lounging = 3]
+Dubai
+Whatever's on TV
+Being a deeply inconsistent person with no real sense of self
+Eating food too fast to even taste it
+Working Out [size = 1.2]
+Steroids [size = 1.5]
+Injecting Human Growth Hormone straight up the butt [size=2.5]
+Movies
+Jaywalking [patience = 0.5]
+The Law
+Phrenology [mood = -0.3]
+Heart-reacting every message [mood = 0.4, patience = 0.7]
+Finding Luigi [patience = 2]
+Pathologising themselves
+Attempting to achieve immortality
+Medieval weaponry
+Abusing nasal decongestants [walkspeed = 3, chatty, = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0]
+Ingesting mystery powder [walkspeed = 3, chatty, = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0]
+Their awesome antidepressants and never wanting sex [mood = 0.3, fidgety = 3]
+Fun facts on mustelidae and other creatures [parks = 2]
+Barfing after drinking but before going to the club
+Staring at the eclipse [blinks = 5]
+Taking medicine without checking the label [patience = 0.4, mood = -0.2]
+Befriending house spiders
+Guns. like, way too much
+Staring at their feet [chatty = 0.4, talkative =0.4]
+Rubbing their belly [fidgety = 2]
+Forgetting
+The promise of early retirement
+Feelin' it out
+Local politics [patience = 2]
+The safety provided by the surveillance state
+Their polycule
+Car crashes (sexual)
+Not understanding anything
+Forgoing their destiny
+Open toe sandals
+Floordrobe
+Amassing a world-renouned collection of tiny jars full of the same four spices
+Swallowing
+Self-critique [mood = -0.2, fidgety = 2]
+Keeping a dream journal [lounging = 2]
+Sending texts in their sleep [lounging = 2, fidgety = 2]
+Passive-mindedly playing with objects at their desk (pins, scaples, etc.) [fidgety = 8]
+Being a pseud [chatty = 3, talkative = 6]
+Swag
+Breeding up new cognitio-hazards [chatty = 2]
+Blowing their chunks off [mood = -0.4]
+Researching adult autism
+Taylor Swift
+Meeping it
+Unlocking their phone using biometrics
+The way iPhone automatically fills in the phone number sometimes
+Cooking everything on high
+Running reconnaissance [chatty = 3, talkative = 0.3]
+Grapefruit
+Fonts & typefaces
+Being scared [walkspeed = 1.2]
+Getting so high they get scared [walkspeed = 0.5, blinks = 0.6, walkspeed = 1.2]
+Having a psychosexual fixation on their nemesis
+Horse racing
+Calling people "libtard"
+Calling people "lumpen"
+Nietzschean freedom [patience = 0.4]
+Reverting to Irish Catholic
+A billion dollars
+The cursed mirror
+Getting another piercing
+Lasers
+Going outside and immediately taking a big, deep breath [parks = 3, walkspeed = 0.8]
+Counting
+Autism in women
+Trying to get more straight
+Stonewalling [talkative = 0.1]
+Memorials
+Gore videos and Hello Kitty
+Multiple streams of income
+Listening to albums out of order [patience = 0.6]
+Rare fruits
+The vibe at the airport
+Setting their profile pic to a black square when they want attention
+Changing their nature
+Saying "cybernetics"
+Cooking up homogenous, technically edible, goop
+Surgery
+Opiates [walkspeed = 0.3, chatty = 0.3, patience = 10, lounging = 10, blinks = 0.2]
+Light erotica
+Eating 3 packs of oreos and shitting black
+Playing with bugs [parks = 5]
+Correcting themself
+Taking credit
+Ritual magick
+Speculating around WW3 [chatty =2 ,talkative =2]
+Voting
+Messaging back the porn bots in their message requests
+Acting gregarious [mood = 0.5]
+Searching for missing persons [nosy = 10, fidgety = 2]
+Dwelling in obscurity [chatty = 0.1, talkative = 0.1]
+Hypnagogic visions [lounging = 3]
+Preaching [chatty = 5 , taking = 10]
+Foreign cigarettes
+Suicide, as a concept [mood = 0.4]
+Trying to kiss the dentist
+Getting older [mood = 0.4]
+Summary executions
+Curried favours
+Saying, "this is true" [chatty = 2]
+Labubu!!!
+The subscription model
+Looking at their guitar but never playing it, ever
+Not eating their vegetables [size = 0.5]
+Rocket boots [walkspeed = 4]
+Fitting it all in [walkspeed = 1.2, chatty = 0.8, talkative = 0.8, fidgety = 0]
+Figuring out sight-lines [plazas = 8, fidgety = 3, chatty = 0.3]
+Taking long strides [walkspeed = 1.5]
+Pretending they're riding a horse [walkspeed = 1.5, mood = 0.1]
+Pretending they're riding a pony [walkspeed = 0.8, mood = 0.15]
+Butch lesbians
+Beads
+The Singing Fish
+Doing it anyway
+Having a secure attachment style
+Rotating an apple in their mind
+Biding it [patience = 4, walkspeed = 0.8]
+French non-binary people
+Setting their profile pic to Gregory House
+>8 hours phone time [lounging = 4]
+Having "animal swag"
+Having "prescient swag"
+Searching for scrap metal [plazas = 0.1, parks = 0.1, chatty = 0.1, walkspeed = 1.2]
+Happy hardcore [walkspeed = 1.5, mood = 0.4]
+Running their fingers through their hair [fidgety = 5]
+Biting their nails [fidgety = 5]
+Eating the skin on the inside of their lip [fidgety = 5]
+Thinking about everything, all of it [fidgety = 3, walkspeed = 0.8, lounging = 3]
+Swearing in their head
+Feeling like a bad bitch
+E-mail
+Salad
+Being a hater
+Playing games on YouTube Playables [lounging = 2]
+Dad rock
+Curling up small [lounging = 2]
+Moving dialectically
+Calling girls "bro"
+Burning shit
+Monkeys, lesser apes, greater apes too
+Encouraging Obama to run for a third term
+Wonders of the flesh
+Power tools
+Personality tests that don't really mean anything
+Oil [parks = 0.2]
+Karaoke
+Yelling "hoochie mama" during sex
+Winning
+Losing, but gracefully
+Having a little class [walkspeed = 0.9]
+Making potions
+Audibly peeing for much longer than anyone else in the bathroom
+Potatoes
+"Bits" [chatty = 3, talkative = 3, mood = 0.3]
+Love Island
+Whipped cream
+The right to protest
+Bleach
+Ugly phone covers
+Estate sales
+Corporate Memphis
+Jerking it to imagination only
+Coconut yoghurt
+Saṃsāra
+Multivitamins [ walkspeed = 1.1, size = 1.1, mood = 0.1]
+Points
+Big trucks
+Breasts
+Nostalgia [backwards]
+Bulking season [size = 1.5]
+Prayer
+Stockpiling
+Apple cider vinegar [parks = 2]
+Sunning [parks = 4]
+Coffee enemas [parks = 4, walkspeed = 1.4]
+Yearning [lounging = 2]
+Turning it off in just a minute [patience = 2]
+Feeling an effect
+Greek mythology
+Eco-fascism
+Ted Kaczynski [plazas = 0.1, parks = 5, chatty = 0.1]
+Slicing garlic razor thin [patience = 3]
+Doing 10 press-ups and calling it a day
+Throwing a thumbs up [mood = 0.3]
+Home-movies
+April Fool's Day
+Space
+Peanuts
+Writhing about [walkspeed = 0.6, mood = -0.5]
+Banana bread
+Ankles
+Modular Synthesis [patience = 2, talkative = 5, mood = -0.1]
+Acting up [mood = -0.1]
+Cloth Mother
+Blanky
+Personifying inanimate objects
+Baba ganoush
+The homies (not sexual)
+The homies (sexual)
+Tariffs
+Contact lenses
+Graveyards
+Fridays
+Grinding and grinding and grinding on it
+Caffeine for lunch [walkspeed = 1.4, size = 0.9]
+Theory
+Carrying around a suitcase on the weekend
+Yelling on the bus [chatty = 4,  talkative = 4]
+Seeming human
+Dressing as a civilian
+Light spanking
+A cool ass cape
+Wearing sunglasses indoors
 
 [Hates]
 Wet stuff
@@ -342,3 +682,146 @@ Anything with wires
 Drunks
 Junkies
 Anime
+Noxious Gas
+People with the same name as them
+Trends
+Cheap fast fashion (expensive fast fashion ok)
+The current zoning laws
+Their new situationship
+Being employed [plazas = 0.4]
+Love [mood = -0.4]
+Justice... (success mindset)
+capitalisation
+tje tibny litkle bnuttons on digutal keyboarad
+Health and safety
+Cinema
+Other socialists [chatty = 0.6, talkative = 5, mood = -0.5]
+Their voice on video [talkative = 0.9, mood = -0.1]
+Remembering
+False hope
+Debtors
+Knocking shit over
+Constructive criticism
+The family group chat [chatty = 0.6]
+Men
+Women
+The nuclear family
+Radiation
+The state of the world [mood = -0.4]
+Breaking the fourth wall
+Cognitio-hazards
+The haunting visage of a lost-love, formed unwittingly as a sordid projection of the self [mood = -0.6]
+Toe size variance
+JavaScript
+Larry David
+Their nemesis
+Practicing restraint [patience = 0.4]
+Spending money
+High Treason
+Reflections
+When something is, "titular"
+When something is, "seminal"
+When you put a telephone up to your ear and it explodes and your beak spins clean around your face
+Hamas
+The inevitable
+The cursed mirror
+"The app economy"
+Not even nightmares but, like, when the dream is... kind of nice, actually? [mood = -0.2]
+The mentally ill
+The poor
+Discovering their zipper is down again [fidgety = 4]
+Their current style [mood = -0.1]
+Their whole shit [mood = -0.3]
+Clean energy [parks = 0.2]
+Parasites
+Blowjobs
+4am Windows update [patience = 0.8]
+Astrology (...a Leo, perhaps?)
+Pestilence
+When they laugh and then hear the sound play back in their head [mood = -0.2, chatty = 0.7]
+Peppa Pig
+Being forced to Fornicate Under Charles the King
+Seeing roadkill
+All other forms of life [mood = -0.5, chatty = 0.6]
+Going with the flow [backwards]
+Nostalgia
+Missing out [walkspeed = 1.2, chatty = 1.5]
+Spiritual qualities
+Acting their age
+The avante garde
+Their inferior sense of smell
+Weird little boys
+Being weak [size = 0.8, walkspeed = 0.8, mood = -0.1]
+Suffering
+Moths (butterflies ok)
+Moths AND butterflies
+AI restaurant menu art
+Having a good time [mood = -0.4, chatty = 0.7]
+Swearing out loud
+Having an accident
+Hyperpop
+Not being niche enough
+Realising
+Stroking out
+"These hoes"
+Washing their bedsheets
+Anomalies
+Poisonberry
+Phone death
+Frostbite
+Saṃsāra
+Clowns
+Being obliterated by unsucessful journey through Da'at [mood = -1, blinks = 0.2, walkspeed = 0.7]
+The Curse [mood = -1, blinks = 0.2, walkspeed = 0.7]
+Generational trauma [mood = -0.5]
+Déjà vu
+Gangstalking
+Outside forces
+Birdsong in the morning
+Sexual dimorphism
+Getting blown up
+Ambition
+Using a douche
+Psychosomatic symptoms
+Leaving work [plazas = 5]
+Yearning
+Feeling an effect
+Hemorrhaging everywhere
+Anything viscous
+That hand sanitiser that's really really sticky
+Their rotten, putrid genes [mood = -0.2]
+Vaccines
+The sight of blood
+Hyperhydrosis
+When the sleeves are too short
+Dropping things in the toilet
+Cancel culture
+Being too woke for everyone
+Lumpy mattress
+Being ahead of the curve
+Fungal infections
+Moral injury [mood = -0.4]
+Trauma [mood = -0.8, chatty = 0.5]
+Inflating a balloon until it pops
+Ovens
+Excuses
+Hammers
+Natalism
+Being burped like a baby
+Killing the vibe [mood = 0.3, chatty = 2]
+Liquorice
+Brand deals
+Childhood [mood = -0.4]
+Psychoanalysis
+Considerable burden
+When the microwave goes off
+The grind
+It really depends
+Praxis
+When dogs seem depressed
+Torture
+Starving to death
+The diseased
+Glamping
+A tickle
+Gunshot wounds
