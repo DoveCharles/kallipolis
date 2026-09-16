@@ -34,7 +34,9 @@ which add up. Everyone starts at the value in
 #   sad         0       how sad their eyes look                                                        0 to 1
 #   angry       0       how angry their eyes look                                                      0 to 1
 #   shock       0       how shocked their eyes look                                                    0 to 1
+#   evil        0       how evil they are, the reactions of others when they die                       -1 to 1
 #   backwards   off     they walk backwards                                                           on or off
+#   choiceweight 0       whole numbers, how likely to appear, set 0 to disable autoassign               0 to Inf
 # ------------------------------------------------------------------------------------------------------------------------
 
 [Boy names]
@@ -143,7 +145,7 @@ Shaggy
 Isaac
 Steve
 Roald
-(UNKNOWN)
+(UNKNOWN) [choiceweight = 3, evil = 0.05]
 Horace
 Bruiser
 Max
@@ -252,7 +254,7 @@ Cameron
 Léa
 Sandy
 Rue
-(UNKNOWN)
+(UNKNOWN) [choiceweight = 3, evil = 0.05]
 Britney
 Reighleigh
 Gertrude
@@ -324,6 +326,14 @@ Myrtle
 🤡 [chatty = 3, talkative = 3]
 🥶 [walkspeed = 0.5, mood = -0.3]
 🏃🏻‍➡️ [walkspeed = 2, chatty = 0.2, lounging = 0]
+📃 [choiceweight = 0, walkspeed = 0.6, blinks = 0.3, fidgety = 12, evil = 0.1, shocked = 0.7, happy = 0.5]
+🌵 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shocked = 1, happy = 0.3]
+🍄 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shocked = 0.7, happy = 0.2]
+🐸 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shocked = 1, sad = 0.2]
+💊 [choiceweight = 0, walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, happy = 0.9]
+🌿 [choiceweight = 0, walkspeed = 0.5, blinks = 0.6, chatty = 4, shocked = 0.5]
+💨 [choiceweight = 0, walkspeed = 0.3, chatty = 0.3, patience = 10, lounging = 10, blinks = 0.2, happy = 1]
+🍺 [choiceweight = 0, walkspeed = 0.8, chatty = 3, fidgety = 3, happy = 0.5, sad = 0.5]
 
 [Enjoys]
 Energy drinks [walkspeed = 2.5, fidgety = 4, blinks = 0.2, patience = 0.3]
@@ -415,7 +425,7 @@ Whatever's on TV
 Being a deeply inconsistent person with no real sense of self
 Eating food too fast to even taste it
 Trying to work out [size = 1.1, evil = -0.01]
-Steroids [size = 1.24, evil = 0.05]
+Steroids [size = 1.24, evil = 0.01]
 Injecting Human Growth Hormone straight up the butt [size=1.9, evil = 0.05]
 Movies
 Jaywalking [patience = 0.5, evil = 0.05]
@@ -468,7 +478,7 @@ Running reconnaissance [chatty = 3, talkative = 0.3]
 Grapefruit
 Fonts & typefaces
 Being scared [walkspeed = 1.2]
-Getting so high they get scared [walkspeed = 0.5, blinks = 0.6, walkspeed = 1.2]
+Getting so high they get scared [blinks = 0.6, walkspeed = 1.2]
 Having a psychosexual fixation on their nemesis
 Horse racing [ evil = 0.05]
 Calling people "libtard" [ evil = 0.1]
@@ -501,7 +511,7 @@ Eating 3 packs of oreos and shitting black
 Playing with bugs [parks = 5]
 Correcting themself [evil = -0.05]
 Correcting others [evil = 0.05]
-Taking credit [evil = 0.05]
+Taking credit for shit they didn't do [evil = 0.05]
 Ritual magick
 Speculating around WW3 [chatty =2 ,talkative =2]
 Voting [evil = -0.05]
@@ -640,7 +650,7 @@ Self-soothing behaviour [fidgety = 4]
 Hoping it'll all be okay [mood = 0.5]
 Popping things on their skin that look vaguely like pimples
 They don't know yet...
-Floral arrangements [evil = -0.05]
+Floral arrangements [evil = -0.05, patience = 3]
 Checking the fridge [fidgety = 2]
 Chinese proverbs [evil = -0.05]
 Burgers
@@ -657,7 +667,7 @@ Escaping [mood = -0.5, walkspeed = 1.5]
 Inflicting torture [mood = 0.2, blinks = 0.1, evil = 0.5]
 Taking their socks off
 Facebook marketplace [chatty = 2, talkative = 2, plazas = 2]
-Sowing
+Sowing [patience = 3]
 Finger tattoos
 Cryptic crosswords [patience = 3, lounging = 2, mood = -0.1]
 The new IRA [mood = -0.3, evil = 0.1]
@@ -671,7 +681,7 @@ Avoiding cracks in the pavement [walkspeed = 0.4, evil = -0.05]
 Cancelling [chatty = 0.6, talkative = 0.6, nosy = 2, evil = 0.05]
 Ancient knowledge
 Being normal
-Sacrifice [mood = -0.3]
+Personal sacrifice [mood = -0.3]
 Harry Potter (and yeah, they know about it) [ evil = 0.05]
 Acting ominous [blinks = 0.2]
 Parasocial relationships
@@ -683,6 +693,28 @@ Big butts
 Shape, not size
 Chess
 Doing it all over again
+Turning evil [mood = 0.1, evil = 0.3]
+Leaving their boxers unbuttoned
+Remaining loyle to their capo
+Whatever remains
+Saying, "truth nuke"
+Being an alcoholic
+Dichotomies
+Spellcheck
+The Godfather Part III
+Walking around the house in just a bathrobe
+Adding more Lycantropes
+Getting sick on purpose
+Impossibly archiac slurs [evil = 0.5]
+Doing the impossible
+Riding it out
+Hacking screen displays at the station
+Their secret life with their second family
+Anthropomorphism
+Practicing their jump
+Consulting their shoulder spirits
+Kissing toads
+Licking toads
 
 [Hates]
 Wet stuff
@@ -899,7 +931,7 @@ The grind
 It really depends
 Praxis [ evil = 0.05]
 When dogs seem depressed [ evil = -0.05]
-Enduring torture [ evil = -0.05]
+Enduring torture
 Starving to death
 The diseased [ evil = 0.1]
 Glamping
@@ -921,3 +953,9 @@ The coming moon
 Lead poisoning
 Hemlock water-dropwort
 Scopolamine poisoning
+Being an alcoholic
+Lederhosen
+Malappropriate-isms
+Centipedes [parks = 0.5]
+Wasps [parks = 0.5]
+Bees [parks = 0.5, evil = 0.05]

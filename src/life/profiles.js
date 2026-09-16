@@ -26,7 +26,9 @@ export const TRAITS = {
   angry:     { base: 0, min: 0, max: 1, combine: 'add' },
   shock:     { base: 0, min: 0, max: 1, combine: 'add' },
   backwards: { base: 0, min: 0, max: 1, combine: 'on' },
-  evil:      {base: 0, min: -1, max: 1, combine: 'add'}
+  evil:      {base: 0, min: -1, max: 1, combine: 'add'},
+  choiceweight: {base: 0, min: 1, max: Infinity} //Increase how many times a line is added to lists, 
+  //                                               set 0 to prevent auto assignment and allow manual setting only
 };
 export const DEFAULT_TRAITS = Object.fromEntries(Object.entries(TRAITS).map(([key, trait]) => [key, trait.base]));
 
@@ -38,7 +40,7 @@ const warned = new Set();
 // brackets separated by commas, or each in its own; a trait without a value is 1 (on).
 function entryOf(line) {
   const traits = [];
-  let text = line, group;
+  let text = line, group, weight = 1;
   while ((group = text.match(/\[([^[\]]*)\]\s*$/))) {
     text = text.slice(0, group.index).trimEnd();
     const found = [];
@@ -46,6 +48,14 @@ function entryOf(line) {
       if (!part.trim()) return;
       const [rawKey, rawValue] = part.split('=');
       const key = rawKey.trim().toLowerCase(), value = rawValue == null ? 1 : parseFloat(rawValue);
+      if (key === 'choiceweight') {
+        if (Number.isInteger(value) && value >= 0) {weight = value; return;}
+        if (!warned.has(part.trim())) {
+          warned.add(part.trim());
+          console.warn(`Blockout: in people.txt, "${part.trim()}" (after "${text}") needs a whole number of 0 or more`);
+        }
+        return;
+      }
       if (TRAITS[key] && Number.isFinite(value)) { found.push([key, value]); return; }
       if (!warned.has(part.trim())) {
         warned.add(part.trim());
@@ -54,10 +64,10 @@ function entryOf(line) {
     });
     traits.unshift(...found);
   }
-  return { text, traits };
+  return { text, traits, weight };
 }
 // the lists, by their headings in people.txt — these stand in until it's loaded, or if it can't be
-const lists = { 'boy names': ['Dave'], 'girl names': ['Linda'], 'moods': ['🙂'], 'enjoys': ['A nice walk'], 'hates': ['Puddles'] };
+const lists = { 'boy names': ['Dave'], 'girl names': ['Linda'], 'moods': ['😐'], 'enjoys': ['A nice walk'], 'hates': ['Puddles'] };
 Object.keys(lists).forEach(key => { lists[key] = lists[key].map(entryOf); });
 
 // people.txt: a [heading] starts each list, one entry per line after it; blank lines and lines starting with # are skipped
@@ -71,7 +81,7 @@ function parsePeopleText(text) {
     if (heading) { current = heading[1].trim().toLowerCase(); parsed[current] = []; return; }
     if (!current) return;
     const entry = entryOf(line);
-    if (entry.text) parsed[current].push(entry);
+    if (entry.text) for (let i = 0; i< entry.weight; i++) parsed[current].push(entry);
   });
   return parsed;
 }
@@ -106,6 +116,16 @@ export function profileOf(index, isMan) {
   const pick = list => list[Math.floor(rng()*list.length)];
   const man = isMan == null ? rng() < 0.5 : isMan;
   const name = pick(lists[man ? 'boy names' : 'girl names']), age = 18 + Math.floor(rng()*65);
-  const mood = pick(lists.moods), enjoys = pick(lists.enjoys), hates = pick(lists.hates);
+  const mood = pick(lists.moods);
+  let enjoys = pick(lists.enjoys), hates = pick(lists.hates)
+  //unknown entities have hidden traits
+  if (name.text === '(UNKNOWN)') {
+    let oneEnsured = false;
+    if (rng() > 0.5) {
+      enjoys = { ...enjoys, text: '(UNKNOWN)'};
+      oneEnsured = true;
+    }
+    if (!oneEnsured || rng() >0.5) hates = {...hates, text: '(UNKNOWN)'}
+  }
   return { name: name.text, age, mood: mood.text, enjoys: enjoys.text, hates: hates.text, traits: traitsOf([name, mood, enjoys, hates])};
 }
