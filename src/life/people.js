@@ -1109,17 +1109,22 @@ function crossingClear(p, jc, speed) {
   if (!jc.junction && p.crossStage === 'mid') {
     // halfway, only the far lane's still to cross, so they only check the half in front of them
     const len = Math.hypot(to.x - from.x, to.z - from.z) || 1, cx = (to.x - from.x)/len, cz = (to.z - from.z)/len;
-    return !App.carsWhere((x, z) => {
+    return !App.carsWhere((x, z, car) => {
       const dx = x - from.x, dz = z - from.z;
-      return Math.hypot(dx, dz) < radius && dx*cx + dz*cz >= 0;
+      return Math.hypot(dx, dz) < radius && dx*cx + dz*cz >= 0 && App.people[car.yieldFor] !== p;
     });
   }
   if (!jc.junction) return !App.carsNearby((from.x + to.x)/2, (from.z + to.z)/2, radius);
   const j = jc.junction, arm = jc.arm, sx = arm.z, sz = -arm.x;
   const need = Math.hypot(to.x - from.x, to.z - from.z)/Math.max(0.1, speed*CROSS_SPEED_MULT) + 1;
-  return signalRedLeft(j, arm.phase, lastPeopleTime) >= Math.min(need, 9) && !App.carsWhere((x, z) => {
+  // and nothing that could come over it: no car on the crossing (stopped or not — though one stopped at the stop line,
+  // just past it, is fine), none still moving in over the stop line, and none in the middle of the junction heading
+  // out this way (turning in off the road with the green)
+  return signalRedLeft(j, arm.phase, lastPeopleTime) >= Math.min(need, 9) && !App.carsWhere((x, z, car) => {
     const a = (x - j.x)*arm.x + (z - j.z)*arm.z, s = (x - j.x)*sx + (z - j.z)*sz;
-    return a > j.r*0.5 && a < j.r + 6 && Math.abs(s) < arm.hw + 1.5;
+    if (Math.hypot(x - j.x, z - j.z) < j.r + 1) return Math.sin(car.heading)*arm.x + Math.cos(car.heading)*arm.z > 0.3;
+    if (a <= j.r*0.5 || Math.abs(s) >= arm.hw + 1.5) return false;
+    return a < j.r + 2.9 || (car.speed > 0.5 && a < j.r + 6);
   });
 }
 // off the crossing, onto the walkway at dest ({ li, and vi or u, and maybe dir })

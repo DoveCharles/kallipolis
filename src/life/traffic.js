@@ -346,16 +346,15 @@ function junctionAhead(car, lookahead) {
   }
   return null;
 }
-// whether any moving car is within `radius` of (x, z) — the "roadsafety radius" a pedestrian checks before crossing, and
-// again at the middle of the road, before committing to each half (see updateCrossing in people.js); a car that's
-// stopped (e.g. one yielding to this very pedestrian) poses no threat, so it doesn't count — otherwise a car stopped to
-// let someone cross would keep looking dangerous to them, and neither would ever move again
+// whether any car — moving or not, since a stopped one can pull away at any moment — is within `radius` of (x, z): the
+// "roadsafety radius" a pedestrian checks before crossing (see crossingClear in people.js)
 function carsNearby(x, z, radius) {
-  return cars.some(car => car.li >= 0 && car.speed > 0.5 && Math.hypot(car.x - x, car.z - z) < radius);
+  return cars.some(car => car.li >= 0 && Math.hypot(car.x - x, car.z - z) < radius);
 }
-// whether any moving car is somewhere `test(x, z)` says — like carsNearby, for a shape other than a circle
+// whether any car is somewhere `test(x, z, car)` says — like carsNearby, for a shape other than a circle (and with the
+// car itself, e.g. to leave out one stopped for the pedestrian asking — or neither would ever move again)
 function carsWhere(test) {
-  return cars.some(car => car.li >= 0 && car.speed > 0.5 && test(car.x, car.z));
+  return cars.some(car => car.li >= 0 && test(car.x, car.z, car));
 }
 // notices someone waiting in the middle of the road ahead, ready to cross the rest of the way, and — one time in four —
 // decides to stop and let them; once it's committed to stopping for someone it keeps stopping until they're done
