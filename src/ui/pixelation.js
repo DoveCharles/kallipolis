@@ -214,7 +214,7 @@ const copyMaterial = new THREE.ShaderMaterial({
 // row at a time (every other row right to left, which keeps the error from streaking one way), and the shader just shows
 // the palette color picked for each pixel. The error is worked out against the same colors, in the same space, as the
 // shader's palette, so a pixel comes out the color it would with no dithering at all where it's already a palette color.
-// It costs a read back of the whole view every frame, so it's slow unpixelated on a big screen.
+// It costs a read back of the whole view every frame, so it's slow unpixelated on a big screen (see renderView).
 const FLOYD_STEINBERG = DITHER_PATTERNS.findIndex(p => p.id === 'floyd');
 const floydPalette = new Float32Array(48);
 let floydPixels = null, floydIndices = null, floydTexture = null, floydError = null, floydNextError = null;
@@ -323,7 +323,10 @@ ditherMenu.addEventListener('change', () => setDither(ditherMenu.value, true));
 export function renderView(scene, camera) {
   if (pixelSize <= 1 && !palette16) { renderer.render(scene, camera); return; }
   let width, height, coverX = 1, coverY = 1;
-  if (pixelSize > 1) {
+  const floyd = palette16 && copyMaterial.uniforms.ditherMode.value === FLOYD_STEINBERG;
+  // (Floyd–Steinberg unpixelated is drawn a pixel per CSS pixel, not per device pixel — on a high-density screen that's a
+  // quarter of the pixels to dither, or less, and too fine to tell apart anyway)
+  if (pixelSize > 1 || floyd) {
     // enough pixels to cover the screen, the last row and column running a little off it, pinned to its top left
     renderer.getSize(screenSize);
     width = Math.ceil(screenSize.x/pixelSize);
@@ -342,6 +345,6 @@ export function renderView(scene, camera) {
   renderer.setRenderTarget(filteredView);
   renderer.render(scene, camera);
   renderer.setRenderTarget(null);
-  if (palette16 && copyMaterial.uniforms.ditherMode.value === FLOYD_STEINBERG) floydSteinberg(width, height);
+  if (floyd) floydSteinberg(width, height);
   renderer.render(copyScene, copyCamera);
 }
