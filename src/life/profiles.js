@@ -26,6 +26,7 @@ export const TRAITS = {
   angry:     { base: 0, min: 0, max: 1, combine: 'add' },
   shock:     { base: 0, min: 0, max: 1, combine: 'add' },
   backwards: { base: 0, min: 0, max: 1, combine: 'on' },
+  evil:      {base: 0, min: -1, max: 1, combine: 'add'}
 };
 export const DEFAULT_TRAITS = Object.fromEntries(Object.entries(TRAITS).map(([key, trait]) => [key, trait.base]));
 

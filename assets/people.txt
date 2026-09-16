@@ -332,58 +332,88 @@ Taking it all in [walkspeed = 0.5, nosy = 4, patience = 2]
 Moonwalking [backwards]
 Naps [lounging = 5, walkspeed = 0.8]
 Maps
-Gossip [chatty = 4, talkative = 3]
+Gossip [chatty = 4, talkative = 3, evil = 0.05, nosy = 3]
 Sunbathing [lounging = 4, parks = 3]
 Being tall [size = 1.3]
 Collecting stupid shit
 Awful old webseries
 Snoozing [lounging = 4, blinks = 3, walkspeed = 0.7]
 Spicy food [fidgety = 3]
-Reading wikipedia
+Reading Wikipedia
 Footsies
-Drama [chatty = 2, talkative = 3]
+Drama [chatty = 2, talkative = 3, evil = 0.05]
 Theatre [talkative = 2]
-Poppers [walkspeed = 1.5, mood = 0.5]
+Poppers [walkspeed = 1.5, mood = 0.5, evil = 0.05]
 Good grammar
-Child-like whimsy [mood = 0.5, nosy = 2]
+Child-like whimsy [mood = 0.5, nosy = 2, evil = -0.1]
 The smell of things [nosy = 3]
 Being a wolf [walkspeed = 1.4, nosy = 3, parks = 3]
 Bingo
 Bathing
 Walking around the city aimlessly [walkspeed = 0.7, parks = 0.3, plazas = 0.3, nosy = 2]
 Karaoke [talkative = 3]
-Talking to plants [parks = 4, chatty = 0.3]
+Talking to plants [parks = 4, chatty = 0.3, evil = -0.1]
 Ducks [parks = 3]
 Staring meaningfully out of windows [blinks = 0.1, nosy = 0.2]
 Building flat-pack furniture without the instructions [patience = 0.4]
-Guessing strangers' dick size [nosy = 5]
+Guessing strangers' dick size [nosy = 5, evil = 0.05]
 Sweeties for dinnar [fidgety = 3, walkspeed = 1.3]
 Spotting shapes in clouds [lounging = 4, parks = 2]
 Stepping on the beat
 Writing strongly worded letters to their estranged father [mood = -0.4]
 Shitting [patience = 0.3]
 Darts
-Killing [blinks = 0, mood = 0.6]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
+Killing [blinks = 0, mood = 0.6, evil = 0.5]
 Just magnets
 Pub [walkspeed = 0.8, chatty = 3, talkative = 2]
 Sneezing [fidgety = 4]
 Crosswords [patience = 3, lounging = 2]
 Parallel parking
 Dogs [parks = 3]
-Letting their dog sleep on their bed
+Letting the dog sleep on the bed [ evil = -0.05]
 Whistling [mood = 0.6]
 Huge bodies of water
 Mild peril
 Little green ghouls
 Knowing everything [talkative = 6]
-Milking weak boys
+Milking weak boys [evil = 0.1]
 Soup
 Explaining football rules [talkative = 8]
 Making voice notes [talkative = 3, chatty = 0.5]
-Birdwatching [nosy = 5, parks = 3, walkspeed = 0.6]
+Birdwatching [nosy = 5, parks = 3, walkspeed = 0.6, evil = -0.05]
 Riding the glass train
 Pushing little buttons [fidgety = 3]
-Fixing stuff
+Fixing stuff [evil = -0.1]
 Cooking
 Pretending they're in a Tool visual [walkspeed = 0.5]
 Squash [walkspeed = 1.5]
@@ -392,13 +422,13 @@ Sucking clits
 Truckin' [walkspeed = 1.3]
 Pissing about [fidgety = 3, patience = 0.4]
 Waxing
-The weirdest shit you've ever heard of. I'm not even gonna say it
+The weirdest shit you've ever heard of. I'm not even gonna say it [evil = 0.1]
 Debunking Christians [talkative = 4]
-Reddit (loser) [chatty = 0.2, blinks = 0.3]
-Pimping [walkspeed = 0.7, plazas = 3]
+Reddit (loser) [chatty = 0.2, blinks = 0.3, evil = 0.05]
+Pimping [walkspeed = 0.7, plazas = 3, evil = 0.3]
 Driving
 Helping animals (will sometimes put  animals in dangerous situations in order to help them) [parks = 3]
-Lying [talkative = 2]
+Lying [talkative = 2, evil = 0.05]
 Shitty fucking overpriced merchandise
 The milking machine
 Skiing (lie)
@@ -407,34 +437,34 @@ Crushing a beer can on their head
 Incremental change [walkspeed = 0.6, patience = 3]
 Synchronicity
 Mummy's cooking
-Ayahuasca [walkspeed = 0.3, blinks = 0.2, parks = 6, fidgety = 0.6]
-Dropping a tab right before work [walkspeed = 0.6, blinks = 0.3, fidgety = 12]
-Pretending to read in public [parks = 3, plazas = 3, lounging = 3]
-Dubai
+Ayahuasca [walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6]
+Dropping a tab right before work [walkspeed = 0.6, blinks = 0.3, fidgety = 12, evil = 0.1]
+Pretending to read in public [parks = 3, plazas = 3, lounging = 3, evil = 0.05]
+Dubai [evil = 0.05]
 Whatever's on TV
 Being a deeply inconsistent person with no real sense of self
 Eating food too fast to even taste it
-Trying to work out [size = 1.1]
-Steroids [size = 1.24]
-Injecting Human Growth Hormone straight up the butt [size=2.2]
+Trying to work out [size = 1.1, evil = -0.01]
+Steroids [size = 1.24, evil = 0.05]
+Injecting Human Growth Hormone straight up the butt [size=1.9, evil = 0.05]
 Movies
-Jaywalking [patience = 0.5]
+Jaywalking [patience = 0.5, evil = 0.05]
 The Law
-Phrenology [mood = -0.3]
+Phrenology [mood = -0.3, evil = 0.3]
 Heart-reacting every message [mood = 0.4, patience = 0.7]
 Finding Luigi [patience = 2]
 Pathologising themself
-Attempting to achieve immortality
+Attempting to achieve immortality [ evil = 0.05]
 Medieval weaponry
-Abusing nasal decongestants [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0]
-Ingesting mystery powder [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0]
+Abusing nasal decongestants [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05]
+Ingesting mystery powder [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05]
 Their awesome antidepressants and never wanting sex [mood = 0.3, fidgety = 3]
 Fun facts on mustelidae and other creatures [parks = 2]
-Barfing after drinking but before going to the club
+Barfing after drinking but before getting to the club
 Staring at the eclipse [blinks = 5]
-Taking medicine without checking the label [patience = 0.4, mood = -0.2]
-Befriending house spiders
-Guns... like, way too much
+Taking medicine without checking the label [patience = 0.4, mood = -0.2, evil = 0.05]
+Befriending house spiders [ evil = -0.05]
+Guns... like, way too much [evil = 0.2]
 Staring at their feet [chatty = 0.4, talkative =0.4]
 Rubbing their belly [fidgety = 2]
 Forgetting
@@ -442,24 +472,24 @@ The promise of early retirement
 Feelin' it out
 Local politics [patience = 2]
 The safety provided by the surveillance state
-Their polycule
-Car crashes (sexual)
+Their polycule 
+Car crashes (sexual) [ evil = 0.1]
 Not understanding anything
-Forgoing their destiny
+Betraying their destiny [evil = 0.05]
 Open toe sandals
 Floordrobe
 Amassing a world-renouned collection of tiny jars full of the same four spices
 Swallowing
-Self-critique [mood = -0.2, fidgety = 2]
+Self-critique [mood = -0.2, fidgety = 2, evil = -0.05]
 Keeping a dream journal [lounging = 2]
 Sending texts in their sleep [lounging = 2, fidgety = 2]
 Passive-mindedly playing with objects at their desk (pins, scaples, etc.) [fidgety = 8]
-Being a pseud [chatty = 3, talkative = 6]
+Being a pseud [chatty = 3, talkative = 6, evil = 0.05]
 Swag
-Breeding up new cognitio-hazards [chatty = 2]
+Breeding up new cognitio-hazards [chatty = 2, evil = 0.1]
 Blowing their chunks off [mood = -0.4]
 Researching adult autism
-Taylor Swift
+Taylor Swift [evil = 0.05]
 Meeping it
 Unlocking their phone using biometrics
 The way iPhone automatically fills in the phone number sometimes
@@ -470,9 +500,9 @@ Fonts & typefaces
 Being scared [walkspeed = 1.2]
 Getting so high they get scared [walkspeed = 0.5, blinks = 0.6, walkspeed = 1.2]
 Having a psychosexual fixation on their nemesis
-Horse racing
-Calling people "libtard"
-Calling people "lumpen"
+Horse racing [ evil = 0.05]
+Calling people "libtard" [ evil = 0.1]
+Calling people "lumpen" [ evil = 0.05]
 Nietzschean freedom [patience = 0.4]
 Reverting to Irish Catholic
 A billion dollars
@@ -481,16 +511,16 @@ Getting another piercing
 Lasers
 Going outside and immediately taking a big, deep breath [parks = 3, walkspeed = 0.8]
 Counting
-Autism in women
+Autism in women [ evil = 0.05]
 Trying to get more straight
-Stonewalling [talkative = 0.1]
+Stonewalling [talkative = 0.1, evil = 0.05]
 Memorials
-Gore videos and Hello Kitty
+Gore videos & Hello Kitty [ evil = 0.15]
 Multiple streams of income
-Listening to albums out of order [patience = 0.6]
+Listening to albums out of order [patience = 0.6, evil = 0.01]
 Rare fruits
 The vibe at the airport
-Setting their profile pic to a black square when they want attention
+Setting their profile pic to a black square when they want attention [evil = 0.01]
 Changing their nature
 Saying "cybernetics"
 Cooking up homogenous, technically edible, goop
@@ -499,47 +529,47 @@ Opiates [walkspeed = 0.3, chatty = 0.3, patience = 10, lounging = 10, blinks = 0
 Light erotica
 Eating 3 packs of oreos and shitting black
 Playing with bugs [parks = 5]
-Correcting themself
-Correcting others
-Taking credit
+Correcting themself [evil = -0.05]
+Correcting others [evil = 0.05]
+Taking credit [evil = 0.05]
 Ritual magick
 Speculating around WW3 [chatty =2 ,talkative =2]
-Voting
+Voting [evil = -0.05]
 Messaging back the porn bots in their message requests
-Acting gregarious [mood = 0.5]
-Searching for missing persons [nosy = 10, fidgety = 2]
+Acting gregarious [mood = 0.5, evil = -0.05]
+Searching for missing persons [nosy = 10, fidgety = 2, evil = -0.2]
 Dwelling in obscurity [chatty = 0.1, talkative = 0.1]
 Hypnagogic visions [lounging = 3]
-Preaching [chatty = 5, talkative = 10]
+Preaching [chatty = 5, talkative = 10, evil = 0.05]
 Foreign cigarettes
 Suicide, as a concept [mood = 0.4]
-Trying to kiss the dentist
-Getting older [mood = 0.4]
-Summary execution
+Trying to kiss the dentist [evil = 0.05]
+Getting older [mood = 0.4, evil = -0.05]
+Summary execution [evil = 0.2]
 Curried favours
 Saying, "this is true" [chatty = 2]
 Labubu!!!
-The subscription model
+The subscription model [evil = 0.05]
 Looking at their guitar but never playing it, ever
-Not eating their vegetables [size = 0.67]
-Lucky pot of gold [size =0.34]
+Not eating their vegetables [size = 0.67, evil = 0.05]
+Pots of gold [size =0.34, evil = 0.05]
 Stinky mould tofu
 Capitalising Every Word In A Sentence
 Rocket boots [walkspeed = 4]
 Fitting it all in [walkspeed = 1.2, chatty = 0.8, talkative = 0.8, fidgety = 0]
-Figuring out sight-lines [plazas = 8, fidgety = 3, chatty = 0.3]
+Figuring out sight-lines [plazas = 8, fidgety = 3, chatty = 0.3, evil= 0.15]
 Taking long strides [walkspeed = 1.5]
 Pretending they're riding a horse [walkspeed = 1.5, mood = 0.1]
-Pretending they're riding a pony [walkspeed = 0.8, mood = 0.15]
+Pretending they're riding a pony [walkspeed = 1.1, mood = 0.15, evil = -0.05]
 Butch lesbians
 Beads
 The Singing Fish
 Doing it anyway
-Having a secure attachment style
+Having a secure attachment style [ evil = -0.05]
 Rotating an apple in their mind
 Biding it [patience = 4, walkspeed = 0.8]
 French non-binary people
-Setting their profile pic to Gregory House
+Setting their profile pic to Gregory House [evil = 0.05]
 >8 hours phone time [lounging = 4]
 Having "animal swag"
 Having "prescient swag"
@@ -549,40 +579,40 @@ Running their fingers through their hair [fidgety = 5]
 Biting their nails [fidgety = 5]
 Eating the skin on the inside of their lip [fidgety = 5]
 Thinking about everything, all of it [fidgety = 3, walkspeed = 0.8, lounging = 3]
-Swearing in their head
+Swearing in their head [evil = 0.01]
 Feeling like a bad bitch
 E-mail
 Salad
-Being a hater
+Being a hater [evil = 0.1]
 Playing games on YouTube Playables [lounging = 2]
 Dad rock
 Curling up small [lounging = 2]
 Moving dialectically
 Calling girls "bro"
-Burning shit
+Burning shit [ evil = 0.1]
 Monkeys, lesser apes, greater apes too
 Encouraging Obama to run for a third term
 Wonders of the flesh
 Power tools
 Personality tests that don't really mean anything
-Oil [parks = 0.2]
+Oil [parks = 0.2, evil = 0.05]
 Karaoke
 Yelling "hoochie mama" during sex
 Winning
-Losing, but gracefully
+Losing, but gracefully [evil = -0.1]
 Having a little class [walkspeed = 0.9]
 Making potions
 Audibly peeing for much longer than anyone else in the bathroom
 Potatoes
-Doing "Bits" [chatty = 3, talkative = 3, mood = 0.3]
+Doing "Bits" [chatty = 3, talkative = 3, mood = 0.3, evil = 0.01]
 Love Island
 Whipped cream
-The right to protest
+The right to protest [evil = -0.05]
 Bleach
 Ugly phone covers
 Estate sales
 Corporate Memphis
-Jerking it to imagination only
+Jerking it imagination only [evil = -0.05]
 Coconut yoghurt
 Saṃsāra
 Multivitamins [ walkspeed = 1.1, size = 1.1, mood = 0.1]
@@ -590,8 +620,8 @@ Points
 Big trucks
 Breasts
 Nostalgia [backwards]
-Bulking season [size = 1.5]
-Prayer
+Bulking season [size = 1.3]
+Prayer [evil = -0.05]
 Stockpiling
 Apple cider vinegar [parks = 2]
 Sunning their holes [parks = 4]
@@ -600,36 +630,36 @@ Yearning [lounging = 2]
 Turning it off in just a minute [patience = 2]
 Feeling an effect
 Greek mythology
-Eco-fascism
-Ted Kaczynski [plazas = 0.1, parks = 5, chatty = 0.1]
+Eco-fascism [evil = 0.3]
+Ted Kaczynski [plazas = 0.1, parks = 5, chatty = 0.1, evil = 0.15]
 Slicing garlic razor thin [patience = 3]
 Doing 10 press-ups and calling it a day
-Throwing a thumbs up [mood = 0.3]
+Throwing a thumbs up [mood = 0.3, evil = -0.05 ]
 Home-movies
 April Fool's Day
-Space
+Outer space
 Peanuts
 Writhing about [walkspeed = 0.6, mood = -0.5]
 Banana bread
-Ankles
+Exposed ankle
 Modular Synthesis [patience = 2, talkative = 5, mood = -0.1]
-Acting up [mood = -0.1]
+Acting up [mood = -0.1, evil = 0.05]
 Cloth Mother
-Cuddling Blanky
-Personifying inanimate objects
+Cuddling Blanky [evil = -0.05]
+Personifying inanimate objects [evil = -0.05]
 Baba ganoush
-The homies (not sexual)
+The homies (not sexual) [evil = -0.05]
 The homies (sexual)
-Tariffs
+Tariffs [evil = 0.05]
 Contact lenses
-Graveyards
+Graveyards [mood = -0.2]
 Fridays
 Grinding and grinding and grinding on it
 Caffeine for lunch [walkspeed = 1.4, size = 0.9]
 Theory
-Carrying around a suitcase on the weekend
-Yelling on the bus [chatty = 4,  talkative = 4]
-Seeming human
+Carrying around a suitcase on the weekends
+Yelling on the bus [chatty = 4,  talkative = 4, evil = 0.15]
+Seeming human 
 Dressing as a civilian
 Light spanking
 A cool ass cape
@@ -640,56 +670,63 @@ Self-soothing behaviour [fidgety = 4]
 Hoping it'll all be okay [mood = 0.5]
 Popping things on their skin that look vaguely like pimples
 They don't know yet...
-Floral arrangements
+Floral arrangements [evil = -0.05]
 Checking the fridge [fidgety = 2]
-Chinese proverbs
+Chinese proverbs [evil = -0.05]
 Burgers
-Debating at university campuses [talkative = 3, chatty = 6]
+Debating at university campuses [talkative = 3, chatty = 6, evil = 0.1]
 Being a subject
-Suggesting increasingly bizarre "would you rather"s [chatty = 4, patience = 0.9]
+Suggesting increasingly bizarre "would you rather"s [chatty = 4, patience = 0.9, evil = 0.05]
 Juice
 Retail therapy
-Ripping their shirt off like a wearwolf
-Trying to blow people up with their mind [chatty = 0.5]
-Needlessly apologising [chatty = 2, mood = -0.3]
+Ripping their shirt off like a werewolf
+Trying to blow people up with their mind [chatty = 0.5, evil = 0.05]
+Apologising needlessly [chatty = 2, mood = -0.3, evil = -0.05]
 Crystals
 Escaping [mood = -0.5, walkspeed = 1.5]
-Inflicting torture [mood = 0.2, blinks = 0.1]
+Inflicting torture [mood = 0.2, blinks = 0.1, evil = 0.5]
 Taking their socks off
 Facebook marketplace [chatty = 2, talkative = 2, plazas = 2]
 Sowing
 Finger tattoos
 Cryptic crosswords [patience = 3, lounging = 2, mood = -0.1]
-The new IRA [mood = -0.3]
+The new IRA [mood = -0.3, evil = 0.1]
 82 year old korean man online. <3 [mood = 0.3]
-AAVE
+AAVE 
 Learning nothing [patience = 0.4]
 Notifications [patience = 0.4, lounging = 2]
 Alien pussy
 Gargoyles
-Avoiding cracks in the pavement [walkspeed = 0.4]
-Cancelling [chatty = 0.6, talkative = 0.6, nosy = 2]
+Avoiding cracks in the pavement [walkspeed = 0.4, evil = -0.05]
+Cancelling [chatty = 0.6, talkative = 0.6, nosy = 2, evil = 0.05]
 Ancient knowledge
 Being normal
 Sacrifice [mood = -0.3]
-Harry Potter (and yeah, they known about it)
+Harry Potter (and yeah, they know about it) [ evil = 0.05]
 Acting ominous [blinks = 0.2]
 Parasocial relationships
 Calling the guards
+Fortnite
+Auto-correcting things in their mind
+Cutting up the mail
+Big butts
+Shape, not size
+Chess
+Doing it all over again
 
 [Hates]
 Wet stuff
-Foreigners [mood = -0.4]
-People [chatty = 0, mood = -0.4]
+Foreigners [mood = -0.4, evil = 0.25]
+People [chatty = 0, mood = -0.4, evil = 0.1]
 Punctuality, as a concept [walkspeed = 0.6, patience = 2]
 Slow walkers [walkspeed = 1.7]
 Fast walkers [walkspeed = 0.5]
-Accidentally stepping on snails [walkspeed = 0.7, nosy = 2]
+Accidentally stepping on snails [walkspeed = 0.7, nosy = 2, evil = -0.1]
 Jokes [mood = -0.5]
 Loud chewing
-Pigeons [plazas = 0.3]
+Pigeons [plazas = 0.3, evil = 0.05]
 Public speaking [talkative = 0.1]
-Gulls
+Gulls [evil = 0.01]
 Music
 Being told "no" [mood = -0.3]
 Shitting
@@ -709,8 +746,8 @@ Automatic doors (wants to bring back bell boys)
 Podcasts [talkative = 0.5]
 Wolf people
 Machines that don't do the fucking thing they're designed to do [mood = -0.4]
-Injustice... (loser)
-Foreplay [patience = 0.3]
+Injustice... (loser) [ evil = -0.1]
+Foreplay [patience = 0.3] [ evil = 0.05]
 Bad hygiene
 Eating
 Swamps
@@ -739,57 +776,57 @@ Eyes [blinks = 5]
 People who use LinkedIn
 The phrase, "just what the doctor ordered"
 The phrase, "he's behind me, isn't he?"
-People with nut allergies
-Fat people
-Skinny people
+People with nut allergies [ evil = 0.1]
+Fat people [ evil = 0.1]
+Skinny people [ evil = 0.05]
 Rock climbers
-New Yorkers
-People outside of New York, and from Bushwick
+New Yorkers [ evil = 0.01]
+People outside of New York, and from Bushwick [ evil = 0.05]
 Absolutely everything else, wants to die [mood = -1, walkspeed = 0.7]
 Nothing, enjoys everything life has to offer (lie) [mood = 1]
-Telling the truth [talkative = 2]
-Flower people [parks = 0.4]
+Telling the truth [talkative = 2, evil = 0.05]
+Flower people [parks = 0.4, evil = 0.05]
 Dog people [parks = 0.5]
-Cat people
+Lycantropes [parks = 0.5]
+Cat people [evil = 0.01]
 Wireless mice
 Anything with wires
 Drunks
-Junkies
+Junkies [ evil = 0.05]
 Anime
-Noxious Gas
+Deadly Nuerotoxin
 People with the same name as them
 Trends
 Cheap fast fashion (expensive fast fashion ok)
 The current zoning laws
-Their new situationship
+New situationship
 Being employed [plazas = 0.4]
-Love [mood = -0.4]
-Justice... (success mindset)
+Love [mood = -0.4, evil = 0.1]
+Justice... (success mindset) [ evil = 0.1]
 capitalisation
 tje tibny litkle bnuttons on digutal keyboarad
-Health and safety
-Cinema
+Health and safety [ evil = 0.05]
+Cinema [ evil = 0.05]
 Other socialists [chatty = 0.6, talkative = 5, mood = -0.5]
 Their voice on video [talkative = 0.9, mood = -0.1]
 Remembering
 False hope
 Debtors
-Knocking shit over
-Constructive criticism
+Knocking shit over [ evil = -0.05]
+Constructive criticism [ evil = 0.05]
 The family group chat [chatty = 0.6]
 Men
-Women
-The nuclear family
+Women [ evil = 0.1]
 Radiation
 The state of the world [mood = -0.4]
 Breaking the fourth wall
-Cognitio-hazards
+Cognitio-hazards [ evil = -0.05]
 The haunting visage of a lost-love, formed unwittingly as a sordid projection of the self [mood = -0.6]
 Variations in toe size
 JavaScript
 Larry David
 Their nemesis
-Practicing restraint [patience = 0.4]
+Practicing restraint [patience = 0.4, evil = 0.05]
 Spending money
 High Treason
 Reflections
@@ -801,12 +838,12 @@ The inevitable
 The cursed mirror
 "The app economy"
 Not even nightmares but, like, when the dream is... kind of nice, actually? [mood = -0.2]
-The mentally ill
-The poor
+The mentally ill [ evil = 0.1]
+The poor [ evil = 0.1]
 Discovering their zipper is down again [fidgety = 4]
 Their current style [mood = -0.1]
 Their whole shit [mood = -0.3]
-Clean energy [parks = 0.2]
+Clean energy [parks = 0.2, evil = 0.05]
 Parasites
 Blowjobs
 4am Windows update [patience = 0.8]
@@ -815,33 +852,32 @@ Pestilence
 When they laugh and then hear the sound play back in their head [mood = -0.2, chatty = 0.7]
 Peppa Pig
 Being forced to Fornicate Under Charles the King
-Seeing roadkill
-All other forms of life [mood = -0.5, chatty = 0.6]
+Seeing roadkill [ evil = -0.05]
+All other forms of life [mood = -0.5, chatty = 0.6, evil = 0.3]
 Going with the flow [backwards]
-Nostalgia
 Missing out [walkspeed = 1.2, chatty = 1.5]
-Spiritual qualities
+Spiritual qualities [ evil = 0.05]
 Acting their age
 The avante garde
 Their inferior sense of smell
 Weird little boys
 Being weak [size = 0.8, walkspeed = 0.8, mood = -0.1]
-Suffering
+Suffering...
 Moths (butterflies ok)
 Moths AND butterflies
 AI restaurant menu art
 Having a good time [mood = -0.4, chatty = 0.7]
-Swearing out loud
+Swearing out loud [ evil = -0.05]
 Having an accident
 Hyperpop
-Not being niche enough
+Not being niche enough [ evil = 0.01]
 Realising
 Stroking out
-"These hoes"
+"These hoes" [ evil = 0.05]
 Washing their bedsheets
 Anomalies
 Poisonberry
-Phone death
+Phone dead
 Frostbite
 Saṃsāra
 Clowns
@@ -851,10 +887,10 @@ Generational trauma [mood = -0.5]
 Déjà vu
 Gangstalking
 Outside forces
-Birdsong in the morning
+Birdsong in the morning [ evil = 0.05]
 Sexual dimorphism
 Getting blown up
-Ambition
+Ambition [ evil = 0.05]
 Using a douche
 Psychosomatic symptoms
 Leaving work [plazas = 5]
@@ -864,13 +900,13 @@ Hemorrhaging everywhere
 Anything viscous
 That hand sanitiser that's really really sticky
 Their rotten, putrid genes [mood = -0.2]
-Vaccines
+Vaccines [ evil = 0.1]
 The sight of blood
 Hyperhydrosis
 When the sleeves are too short
 Dropping things in the toilet
-Cancel culture
-Being too woke for everyone
+Cancel culture [ evil = 0.1]
+Being too woke for anyone in real life
 Lumpy mattress
 Being ahead of the curve
 Fungal infections
@@ -884,32 +920,32 @@ Natalism
 Being burped like a baby
 Killing the vibe [mood = 0.3, chatty = 2]
 Liquorice
-Brand deals
+Brand deals [ evil = -0.05]
 Childhood [mood = -0.4]
 Psychoanalysis
 Considerable burden
 When the microwave goes off
 The grind
 It really depends
-Praxis
-When dogs seem depressed
-Enduring torture
+Praxis [ evil = 0.05]
+When dogs seem depressed [ evil = -0.05]
+Enduring torture [ evil = -0.05]
 Starving to death
-The diseased
+The diseased [ evil = 0.1]
 Glamping
 A tickle
 Gunshot wounds
 Double denim
-Caring [mood : -0.2]
-Whatever they think of next
+Caring [mood : -0.2, evil = 0.05]
+Whatever they think of next [mood : -0.2]
 Acts of God
-Sudden arrhytmic death syndrome
+Sudden arrhythmic death syndrome
 Flies
-Reaping
+Reaping [ evil = 0.01]
 Mixing and mastering
 Sensing the spectre [walkspeed = 1.2]
 Sizzling fajitas
-Rap
+Rap [ evil = 0.05]
 Intestines
 The coming moon
 Lead poisoning

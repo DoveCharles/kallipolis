@@ -588,13 +588,13 @@ export function syncPeopleUI() {
   document.getElementById('s-people').classList.toggle('on', S.peopleEnabled);
   document.getElementById('people-settings').style.display = S.peopleEnabled ? 'block' : 'none';
   document.getElementById('s-peopleamount').value = S.peopleAmount;
-  document.getElementById('dv-peopleamount').textContent = Math.round(S.peopleAmount);
+  document.getElementById('dv-peopleamount').textContent = String(Math.round(S.peopleAmount));
   document.getElementById('s-peoplespeed').value = S.peopleSpeed;
   document.getElementById('dv-peoplespeed').textContent = S.peopleSpeed.toFixed(1);
   document.getElementById('s-peoplesize').value = S.peopleSize;
   document.getElementById('dv-peoplesize').textContent = S.peopleSize.toFixed(1);
   document.getElementById('s-traffic').value = S.trafficAmount;
-  document.getElementById('dv-traffic').textContent = Math.round(S.trafficAmount);
+  document.getElementById('dv-traffic').textContent = String(Math.round(S.trafficAmount));
 }
 
 // The walkways ({ pts, cum, lateral, jitter, y… } per road or path line, with each point's junction links and park or
@@ -696,7 +696,9 @@ function newPerson() {
     // their traits, from what they were picked in people.txt (see refreshTraits)
     traits: DEFAULT_TRAITS, traitsKey: '',
     // how they're taking someone blowing up nearby, if they are (see frightenBystanders)
-    fright: null };
+    fright: null,
+    stun: null,
+    please: null };
 }
 // A person's traits — from the entries picked for them in people.txt (see profiles.js), by their place in the crowd, `i` —
 // worked out again whenever people.txt loads, and once the model's loaded and says whether they're a man (which decides
@@ -1185,31 +1187,67 @@ function frightenBystanders(victim) {
     if (d <= reach) p.fright = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
   });
 }
-function updateFright(p, dt) {
-  const fright = p.fright;
-  fright.timer -= dt;
-  if (fright.timer > 0) return;
-  if (fright.stage === 'notice') {
+function stunBystanders(victim) {
+  const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
+  people.forEach(p => {
+    if (p === victim || p.mode === 'none' || p.mode === 'dead') return;
+    const d = Math.hypot(p.x - from.x, p.z - from.z);
+    if (d <= reach) p.stun = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
+  });
+}
+function pleaseBystanders(victim) {
+  const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
+  people.forEach(p => {
+    if (p === victim || p.mode === 'none' || p.mode === 'dead') return;
+    const d = Math.hypot(p.x - from.x, p.z - from.z);
+    if (d <= reach) p.please = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
+  });
+}
+function updateEffect(p, dt, key, onResolve) {
+  const state = p[key];
+  state.timer -= dt;
+  if (state.timer > 0) return;
+  if (state.stage === 'notice') {
     endActivity(p);
     p.oneShot = null; p.wait = 0;
-    p.faceTo = headingTo(p, fright.from);
-    p.lookAt = fright.from;
-    fright.stage = 'look';
-    fright.timer = 0.5 + peopleRng()*0.7;
-  } else if (fright.stage === 'look') {
+    p.faceTo = headingTo(p, state.from);
+    p.lookAt = state.from;
+    state.stage = 'look';
+    state.timer = 0.5 + peopleRng()*0.7;
+  } else if (state.stage === 'look') {
+    onResolve(p, state);
+  } else {
+    p[key] = null;
+  }
+}
+
+function updateFright(p, dt) {
+  updateEffect(p, dt, 'fright', (p, fright) => {
     fright.stage = 'flee';
     fright.timer = 5 + peopleRng()*4;
     p.faceTo = null; p.lookAt = null;
     if (p.mode === 'line') {
-      // back the way they came, if they were heading towards it
       const nav = peopleNav.lines[p.li], k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), a = nav.pts[k], b = nav.pts[k + 1];
       if (((b.x - a.x)*(fright.from.x - p.x) + (b.z - a.z)*(fright.from.z - p.z))*p.dir > 0) p.dir = -p.dir;
     } else if (p.mode === 'wander') {
       fleeWithin(p, peopleNav.areas[p.area]);
     }
-  } else {
-    p.fright = null;
-  }
+  });
+}
+
+function updateStun(p, dt) {
+  updateEffect(p, dt, 'stun', (p, stun) => {
+    stun.stage = 'dazed';       // they hold still, don't flee
+    stun.timer = 3 + peopleRng()*2;
+  });
+}
+
+function updatePlease(p, dt) {
+  updateEffect(p, dt, 'please', (p, please) => {
+    please.stage = 'delighted'; // they hold still and beam, don't flee either
+    please.timer = 2 + peopleRng()*2;
+    p.faceTo = null; p.lookAt = null;
+  });
 }
 // somewhere in a plaza or park as far as can be found from whatever frightened them
 function fleeWithin(p, area) {
@@ -1241,7 +1279,11 @@ function killPerson(i) {
     colors.pants.copy(colors.top);
   }
   explode({ x: p.x, y: p.y, z: p.z }, 1.7*p.height*S.peopleSize, colors);
-  frightenBystanders(p);
+  const evil = profileOf(i, true).traits.evil;
+  if (people[i])
+  evil <= 0.05 ? frightenBystanders(p) :
+  evil <= 0.35 ? stunBystanders(p) :
+  pleaseBystanders(p);
   p.mode = 'dead';
   p.moving = false;
 }
@@ -1285,7 +1327,14 @@ export function updatePeople(t) {
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
     if (p.fright) updateFright(p, dt);
-    const frozen = !!p.fright && p.fright.stage === 'look', fleeing = !!p.fright && p.fright.stage === 'flee';
+    //attempting to give additional reactions to npc death depending on how evil they are
+    if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
+    if (p.please) updatePlease(p, dt); //Should do same as stun but make them emote happily - Doesn't make happy :(
+    // frozen in place: fright's 'look' stage, or stun/please's 'held' stage. only fright ever flees.
+    const frozen = (!!p.fright && p.fright.stage === 'look')
+                || (!!p.stun && p.stun.stage === 'held')
+                || (!!p.please && p.please.stage === 'held');
+    const fleeing = !!p.fright && p.fright.stage === 'flee';
     const speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
     let goal = null;
     // (stopped to talk, or frozen in shock, someone on a walkway stays put)
@@ -1297,8 +1346,9 @@ export function updatePeople(t) {
       const area = peopleNav.areas[p.area];
       if (p.act) {
         goal = updateActivity(p, area, dt);
-      } else if (p.fright) {
-        // frightened: running off, on somewhere further away each time they get where they were running to
+      } else if (p.fright || p.stun || p.please) {
+        // frightened, stunned or pleased: fright runs off further each time they reach where they were running to;
+        // stun/please just hold position via the `frozen` guard below, with no movement of their own
         if (fleeing && Math.hypot(p.tx - p.x, p.tz - p.z) < 0.5) fleeWithin(p, area);
       } else if (p.wait > 0 || p.oneShot) {
         p.wait -= dt;
@@ -1471,6 +1521,7 @@ export function updatePeople(t) {
       peopleMesh.setMatrixAt(i, matrix);
     }
   });
+
   if (personModel) {
     [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; });
   } else {
