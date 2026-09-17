@@ -429,7 +429,7 @@ Trying to work out [size = 1.1, evil = -0.01]
 Steroids [size = 1.24, evil = 0.01 , age = 0.8]
 Injecting Human Growth Hormone straight up the butt [size=1.9, evil = 0.05 , age = 0.8]
 Movies
-Jaywalking [patience = 0.5, evil = 0.05]
+Jaywalking [patience = 0.5, evil = 0.05, roadsafety = 0.3]
 The Law
 Phrenology [mood = -0.3, evil = 0.3]
 Heart-reacting every message [mood = 0.4, patience = 0.7]
