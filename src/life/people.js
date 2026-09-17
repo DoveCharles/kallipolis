@@ -1864,6 +1864,13 @@ function fleeWithin(p, area) {
   }
   p.tx = best.x; p.tz = best.z; p.wait = 0;
 }
+// Hair greys with age. Their trait colors go to the GPU once and are never sampled back, so this is worked out
+// wherever the color is actually wanted rather than written back over the trait: written back, it re-greyed an
+// already-greyed color every frame — everyone went white within seconds — and the giblets inherited the drift.
+const HAIR_GREY = new THREE.Color(0xffffff);
+const GREYS_FROM = 30, GREYS_OVER = 100; // white-haired by GREYS_FROM + GREYS_OVER, unless they're ageless
+const greyWithAge = (color, p) =>
+  color.lerp(HAIR_GREY, p.traits.ageless ? 0 : Math.max(0, Math.min(1, (p.age - GREYS_FROM)/GREYS_OVER)));
 // The person card's Kill button: whoever it is explodes into giblets in their own colors, and stays dead (gone from the
 // crowd, though their place in it is kept) — whoever they were talking to carrying on without them.
 // `by` is who did it, for the morality meter: 'player' (the Kill button) or 'car'.
@@ -1883,7 +1890,7 @@ function killPerson(i, by = 'player') {
     };
     colors.skin.copy(personModel.palette[0]);
     colorFrom('Top', colors.top); colorFrom('Pants', colors.pants); colorFrom('Shoes', colors.shoes);
-    if (personModel.headLayers.some(layer => layer.of[i] >= 0)) colors.hair = colorFrom('Hair', new THREE.Color());
+    if (personModel.headLayers.some(layer => layer.of[i] >= 0)) colors.hair = greyWithAge(colorFrom('Hair', new THREE.Color()), p);
   } else {
     peopleMesh.getColorAt(i, colors.top);
     colors.pants.copy(colors.top);
@@ -2261,14 +2268,6 @@ export function updatePeople(t) {
     const fleeing = !!p.fright && p.fright.stage === 'flee';
     let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
     let goal = null;
-    //Updating hair colour depending on age
-    if (personModel) {
-      const o = ((2 + PERSON_TRAIT_COLORS.indexOf('Hair'))*PEOPLE_MAX + i)*4, data = personModel.traitData;
-      const hairColor = new THREE.Color().setRGB(data[o], data[o+1], data[o+2]);
-      const greyAmount = p.traits.ageless ? 0 : Math.max(0, Math.min(1, (p.age - 30) / (100))); // tweak range to taste
-      hairColor.lerp(new THREE.Color(0xffffff), greyAmount);
-      data[o] = hairColor.r; data[o+1] = hairColor.g; data[o+2] = hairColor.b;
-    }
     // (stopped to talk, or frozen in shock, someone on a walkway stays put)
     if (p.mode === 'line' && p.act !== 'chat' && !frozen && !p.attack) {
       if (!p.jc) maybeCrossRoad(p, peopleNav.lines[p.li], dt);

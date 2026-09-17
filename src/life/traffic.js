@@ -769,12 +769,12 @@ export function updateTraffic(t) {
     const uTurnWait = ahead && ahead.deadEnd && ahead.dist < 12*S.peopleSize && uTurnBlocked(car);
     car.uTurnWaited = uTurnWait ? car.uTurnWaited + (car.speed < 0.3 ? dt : 0) : 0;
     if (uTurnWait && car.uTurnWaited < GIVE_UP_AFTER*2) {
-      target = Math.min(target, Math.max(0, (ahead.dist - carFootprint(car).length*0.5)*1.5*S.peopleSpeed));
+      target = Math.min(target, Math.max(0, (ahead.dist - carLength(car)*0.5)*1.5*S.peopleSpeed));
     }
     if (ahead && ahead.dist < 10) target = Math.min(target, cruise*(0.45 + 0.055*ahead.dist));
     // stop for a red light — or an amber one there's still room to stop for — with the front bumper at the stop line
     const junction = ahead && S.roadJunctionByPlace.get(placeKey(ahead.x, ahead.z));
-    const stopAt = junction ? junction.r + 3.2 + 2.2*car.length*S.peopleSize : carFootprint(car).length*0.5 + S.peopleSize;
+    const stopAt = junction ? junction.r + 3.2 + 2.2*car.length*S.peopleSize : carLength(car)*0.5 + S.peopleSize;
     if (junction) {
       const lane = lanePoint(car), tx = Math.sin(lane.heading), tz = Math.cos(lane.heading);
       const arm = junction.arms.reduce((best, a) => -(a.x*tx + a.z*tz) > -(best.x*tx + best.z*tz) ? a : best, junction.arms[0]); // the arm it's coming in on
@@ -791,7 +791,7 @@ export function updateTraffic(t) {
     car.speed += Math.max(-CAR_BRAKE*S.peopleSpeed*dt, Math.min(5*S.peopleSpeed*dt, target - car.speed));
     // (its lane point moves along the middle of the road, but its route is longer round the outside of a bend, a U or a
     // turn across a junction, and shorter round the inside — so it goes as much further along as keeps it at its speed)
-    const back = CAR_REAR_AXLE*carFootprint(car).length;
+    const back = CAR_REAR_AXLE*carLength(car);
     let travel = car.speed*dt;
     if (travel > 0) {
       const here = routePoint(car, back), on = routePoint(car, back + ROUTE_SAMPLE);
@@ -880,18 +880,18 @@ function placeCar(car, i, designCounts) {
 // assets/cars.txt, by its type — see car-types.js) — until a click elsewhere, a pan, leaving World mode, or it despawning lets it go
 let followedCar = -1;
 function carHeight(car) { return (car.design != null && carMeshes[car.design] ? carMeshes[car.design].height : car.height)*S.peopleSize; }
-// a car's own length and width, in world units — its design's, or (until that's loaded) the box car's own
-function carFootprint(car) {
-  const cm = car.design != null ? carMeshes[car.design] : null;
-  return cm
-    ? { length: cm.length*BOX_CAR_LENGTH*S.peopleSize, width: cm.width*S.peopleSize }
-    : { length: car.length*BOX_CAR_LENGTH*S.peopleSize, width: car.width*BOX_CAR_WIDTH*S.peopleSize };
-}
+// A car's own length and width, in world units — its design's, or (until that's loaded) the box car's own. Each is asked
+// for on its own rather than the pair handed back together in a new object: the gap and overlap tests below want them
+// several times over, for every car against every car near it, every frame, and the objects were garbage again by the
+// end of the same loop.
+function carModelOf(car) { return car.design != null ? carMeshes[car.design] : null; }
+function carLength(car) { const cm = carModelOf(car); return (cm ? cm.length : car.length)*BOX_CAR_LENGTH*S.peopleSize; }
+function carWidth(car) { const cm = carModelOf(car); return (cm ? cm.width : car.width*BOX_CAR_WIDTH)*S.peopleSize; }
 // Turns a car by `by` radians about its rear axle, as a real one turns, rather than its middle (where car.x/z is) — so
 // its back end follows it round instead of sliding out sideways. The axle's taken as this far back along its length.
 const CAR_REAR_AXLE = 0.3;
 function turnCar(car, by) {
-  const back = CAR_REAR_AXLE*carFootprint(car).length, heading = car.heading + by;
+  const back = CAR_REAR_AXLE*carLength(car), heading = car.heading + by;
   car.x += back*(Math.sin(heading) - Math.sin(car.heading));
   car.z += back*(Math.cos(heading) - Math.cos(car.heading));
   car.heading = heading;
@@ -904,7 +904,7 @@ function turnCar(car, by) {
 // its length and width
 const CAR_HITBOX_SCALE = 0.6;
 function carHitbox(car) {
-  const { length, width } = carFootprint(car);
+  const length = carLength(car), width = carWidth(car);
   return { halfLength: (length*0.5 + 0.25)*CAR_HITBOX_SCALE, halfWidth: (width*0.5 + 0.25)*CAR_HITBOX_SCALE };
 }
 // (the car you're driving hits anyone, wherever they are — sidewalks and parks included — at about the car's height)
@@ -1047,7 +1047,7 @@ function forCarsNear(x, z, radius, fn) {
   for (let ox=-reach;ox<=reach;ox++) for (let oz=-reach;oz<=reach;oz++) (carGrid.get(cellKey(cx+ox, cz+oz)) || []).forEach(fn);
 }
 // how far ahead a car looks: its stopping distance, and some
-const senseRange = car => carFootprint(car).length*0.5 + 6*S.peopleSize + Math.max(0, car.speed)*1.2;
+const senseRange = car => carLength(car)*0.5 + 6*S.peopleSize + Math.max(0, car.speed)*1.2;
 // how far `car` can go before its front bumper reaches `other` — Infinity if other's not in its way
 function gapTo(car, other, range) {
   const sin = Math.sin(car.heading), cos = Math.cos(car.heading), dx = other.x - car.x, dz = other.z - car.z;
@@ -1055,11 +1055,12 @@ function gapTo(car, other, range) {
   if (forward <= 0 || forward > range) return Infinity;
   const turn = other.heading - car.heading, left = dx*cos - dz*sin; // (how far off to its left other is)
   if (other !== drivenCar && car !== drivenCar && inOncomingLane(car, other, turn)) return Infinity;
-  const a = carFootprint(car), b = carFootprint(other), c = Math.abs(Math.cos(turn)), s = Math.abs(Math.sin(turn));
+  const aLen = carLength(car), aWid = carWidth(car), bLen = carLength(other), bWid = carWidth(other);
+  const c = Math.abs(Math.cos(turn)), s = Math.abs(Math.sin(turn));
   // (other's footprint, as seen along and across car's heading)
-  const across = c*b.width*0.5 + s*b.length*0.5, along = c*b.length*0.5 + s*b.width*0.5;
-  if (Math.abs(left) > (a.width*0.5 + across)*LANE_OVERLAP) return Infinity;
-  return forward - a.length*0.5 - along;
+  const across = c*bWid*0.5 + s*bLen*0.5, along = c*bLen*0.5 + s*bWid*0.5;
+  if (Math.abs(left) > (aWid*0.5 + across)*LANE_OVERLAP) return Infinity;
+  return forward - aLen*0.5 - along;
 }
 // whether `other` is coming the other way in the other lane: on the same road, going the other way, with neither of
 // them crossing over (see keepingToLane) — or, on another road, going by where their lanes have them, rather than where
@@ -1075,7 +1076,7 @@ function inOncomingLane(car, other, turn) {
 // whether a car's just keeping to its lane — not about to turn off at the junction ahead (across the other lane,
 // maybe), or turning round at a dead end
 function keepingToLane(car) {
-  const nav = S.trafficNav.lines[car.li], near = TURN_CURVE*nav.lane + carFootprint(car).length, plan = car.plan;
+  const nav = S.trafficNav.lines[car.li], near = TURN_CURVE*nav.lane + carLength(car), plan = car.plan;
   if (plan && plan.link && plan.li === car.li && plan.from === car.dir && Math.abs(nav.cum[plan.vi] - car.u) < near) return false;
   const deadEnd = vi => !nav.loop && !nav.vertices[vi].links.length;
   return !(deadEnd(0) && car.u < near) && !(deadEnd(nav.pts.length-1) && nav.total - car.u < near);
@@ -1121,25 +1122,26 @@ function goesFirst(car, other) {
 }
 // whether a car coming up to a dead end has somewhere to turn round into: no car at that end of its lane going the other way
 function uTurnBlocked(car) {
-  const nav = S.trafficNav.lines[car.li], end = car.dir > 0 ? nav.total : 0, length = carFootprint(car).length;
+  const nav = S.trafficNav.lines[car.li], end = car.dir > 0 ? nav.total : 0, length = carLength(car);
   return cars.some(other => other !== car && other !== drivenCar && other.li === car.li && other.dir === -car.dir
-    && Math.abs(other.u - end) < (length + carFootprint(other).length)*0.5 + CAR_STOP_GAP*S.peopleSize);
+    && Math.abs(other.u - end) < (length + carLength(other))*0.5 + CAR_STOP_GAP*S.peopleSize);
 }
 // whether a car put at (x, z) would be on top of another
 function spotTaken(car, x, z) {
-  const length = carFootprint(car).length;
+  const length = carLength(car);
   return cars.some(other => other !== car && other.li >= 0
-    && Math.hypot(other.x - x, other.z - z) < (length + carFootprint(other).length)*0.5 + CAR_STOP_GAP*S.peopleSize);
+    && Math.hypot(other.x - x, other.z - z) < (length + carLength(other))*0.5 + CAR_STOP_GAP*S.peopleSize);
 }
 // whether two cars' footprints overlap (turned rectangles: overlapping as seen along each one's length and width)
 function carsOverlap(a, b) {
-  const fa = carFootprint(a), fb = carFootprint(b), dx = b.x - a.x, dz = b.z - a.z;
+  const aLen = carLength(a), aWid = carWidth(a), bLen = carLength(b), bWid = carWidth(b), dx = b.x - a.x, dz = b.z - a.z;
   const axes = [a.heading, b.heading].flatMap(h => [[Math.sin(h), Math.cos(h)], [Math.cos(h), -Math.sin(h)]]);
-  const extent = (f, h, [ax, az]) => {
+  const extent = (len, wid, h, [ax, az]) => {
     const along = Math.abs(Math.sin(h)*ax + Math.cos(h)*az), across = Math.abs(Math.cos(h)*ax - Math.sin(h)*az);
-    return along*f.length*0.5 + across*f.width*0.5;
+    return along*len*0.5 + across*wid*0.5;
   };
-  return axes.every(axis => Math.abs(dx*axis[0] + dz*axis[1]) < extent(fa, a.heading, axis) + extent(fb, b.heading, axis));
+  return axes.every(axis => Math.abs(dx*axis[0] + dz*axis[1])
+    < extent(aLen, aWid, a.heading, axis) + extent(bLen, bWid, b.heading, axis));
 }
 
 // ---- driving a car (see possession.js): the one the camera's following, by hand — out of its lane and anywhere at all,
@@ -1156,7 +1158,7 @@ function driveCar(i) {
   if (i !== followedCar || !car || car.li < 0 || drivenCar === car || !startDriving()) return;
   drivenCar = car;
   car.yieldFor = null;
-  controls.goalRadius = Math.max(controls.minRadius, carFootprint(car).length*2.2);
+  controls.goalRadius = Math.max(controls.minRadius, carLength(car)*2.2);
 }
 function stopDriving() {
   if (!drivenCar) return;
@@ -1202,7 +1204,7 @@ const BUMP_BOUNCE = 0.3, BUMP_SHOVE = 0.15;
 const WRECK_SPEED = 14, WRECK_SLOWDOWN = 0.75; // (how fast it has to be going; how much of its speed it keeps per car)
 const wreckedCars = [];
 function bumpIntoCars(car, was) {
-  const reach = carFootprint(car).length*1.5 + 4*S.peopleSize, before = { ...car, ...was };
+  const reach = carLength(car)*1.5 + 4*S.peopleSize, before = { ...car, ...was };
   const wrecking = Math.abs(car.speed) >= WRECK_SPEED;
   let hit = false;
   forCarsNear(car.x, car.z, reach, other => {
