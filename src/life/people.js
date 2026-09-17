@@ -122,8 +122,8 @@ function rebuildPeopleNavDebug() {
 }
 
 // The people model (assets/models/Person.glb, made in Blender) replaces the cuboids once it's loaded: a rigged figure with
-// animations — walking, standing idle (now and then scratching or having a think), waving, sitting on a bench, and sitting or
-// lying on the grass — drawn, everyone at once, as one instanced mesh, flat-shaded. three.js's own rigged meshes can't be
+// animations — walking, standing idle (now and then scratching or having a think), waving, sitting on a bench, sitting or
+// lying on the grass, and punching someone or being knocked flat — drawn, everyone at once, as one instanced mesh, flat-shaded. three.js's own rigged meshes can't be
 // instanced, so the animations are baked: when the model loads, each one is played through a frame at a time and every
 // bone's pose at each frame is written into a texture (a row per frame, three texels per bone), and the vertex shader poses
 // each person by looking up the rows for the moment they're at — the texture blending between frames, and the shader
@@ -143,11 +143,13 @@ const PERSON_BAKE_FPS = 24;
 // the slower the walk plays for the same speed
 const WALK_CYCLE_LENGTH = 4;
 // the model's animations: `loop` for those playing round and round (walking, standing idle, sitting on a bench), the rest
-// playing through once (Idle2, Idle3, Wave) or being a single pose, held; `pose` for sitting and lying down
+// playing through once (Idle2, Idle3, Wave, Punch, Fall) or being a single pose, held; `pose` for sitting and lying down;
+// `from` for a pose that's the last frame of another animation (Fallen: lying where Fall leaves them)
 const PERSON_CLIPS = [
   { name: 'Walk', loop: true }, { name: 'Idle', loop: true }, { name: 'Idle2' }, { name: 'Idle3' }, { name: 'Wave' },
   { name: 'Sit1', loop: true, pose: true }, { name: 'SitDown1', pose: true }, { name: 'SitDown2', pose: true }, { name: 'SitDown3', pose: true },
   { name: 'LieDown1', pose: true }, { name: 'LieDown2', pose: true }, { name: 'LieDown3', pose: true },
+  { name: 'Punch' }, { name: 'Fall' }, { name: 'Fallen', from: 'Fall', pose: true },
 ];
 const FIDGETS = ['Idle2', 'Idle3'], GRASS_SITS = ['SitDown1', 'SitDown2', 'SitDown3'], LIE_DOWNS = ['LieDown1', 'LieDown2', 'LieDown3'];
 // seconds to blend from one animation into the next: between walking, standing and waving, and into or out of sitting or lying
@@ -483,10 +485,12 @@ function buildPersonModel(gltf, hairGltf) {
   const mixer = new THREE.AnimationMixer(root);
   const pelvisBone = bones[boneByName.get('Pelvis') ?? 0], restPelvis = pelvisBone.getWorldPosition(new THREE.Vector3());
   const clips = PERSON_CLIPS.map(def => {
-    const clip = gltf.animations.find(c => c.name.toLowerCase() === def.name.toLowerCase());
-    if (!clip) console.warn(`Blockout: the people model has no ${def.name} animation`);
-    const frames = clip ? Math.max(1, Math.round(clip.duration*PERSON_BAKE_FPS)) : 1;
+    const source = def.from || def.name;
+    const clip = gltf.animations.find(c => c.name.toLowerCase() === source.toLowerCase());
+    if (!clip && !def.from) console.warn(`Blockout: the people model has no ${def.name} animation`);
+    const sourceFrames = clip ? Math.max(1, Math.round(clip.duration*PERSON_BAKE_FPS)) : 1, frames = def.from ? 1 : sourceFrames;
     return { name: def.name, clip, missing: !clip, loop: !!def.loop && frames > 1, pose: !!def.pose, frames, duration: frames/PERSON_BAKE_FPS,
+      holdAt: def.from ? (sourceFrames - 1)/PERSON_BAKE_FPS : null,
       start: 0, pelvis: new THREE.Vector3(), pelvisX: 0, pelvisZ: 0, top: 0, heightScale: 1, seatY: 0 };
   });
   let boneRows = 0;
@@ -499,7 +503,7 @@ function buildPersonModel(gltf, hairGltf) {
     mixer.stopAllAction();
     const action = c.clip ? mixer.clipAction(c.clip).play() : null;
     for (let f=0;f<=c.frames;f++) {
-      if (action) mixer.setTime((f % c.frames)/PERSON_BAKE_FPS); else skeleton.pose();
+      if (action) mixer.setTime(c.holdAt ?? (f % c.frames)/PERSON_BAKE_FPS); else skeleton.pose();
       root.updateMatrixWorld(true);
       bones.forEach((bone, b) => {
         const e = pose.multiplyMatrices(bone.matrixWorld, skeleton.boneInverses[b]).elements;
@@ -934,7 +938,10 @@ function newPerson() {
     crossStage: null, jc: null, crossCheckIn: peopleRng()*5, linkCooldown: 0,
     // riding the trains (see "riding the trains"): where they are in it (null if they aren't), and how long until they'd
     // think about riding again
-    train: null, trainCooldown: 20 + peopleRng()*40 };
+    train: null, trainCooldown: 20 + peopleRng()*40,
+    // punching (see "punching"): who they're going for and how far along it they are, how long until they'd think about it
+    // again, and being punched themselves
+    attack: null, punchCooldown: 10 + peopleRng()*30, punched: null };
 }
 // A person's traits — from the entries picked for them in people.txt (see profiles.js), by their place in the crowd, `i` —
 // worked out again whenever people.txt loads, and once the model's loaded and says whether they're a man (which decides
@@ -1254,6 +1261,8 @@ function leaveGroup(p) {
 // stops whatever a person's doing, back to standing
 function endActivity(p) {
   leaveGroup(p);
+  endAttack(p);
+  releasePunched(p);
   if (p.seat) { p.seat.by = null; p.seat = null; }
   p.act = null; p.stage = ''; p.spot = null; p.faceTo = null; p.lookAt = null; p.pose = 'Idle'; p.seatLift = 0;
 }
@@ -1285,7 +1294,7 @@ function goChat(p, area) {
   let friend = null, best = 25;
   for (let k=0;k<10;k++) {
     const q = people[Math.floor(peopleRng()*people.length)], d = Math.hypot(q.x - p.x, q.z - p.z);
-    if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.fright && !q.oneShot && !q.moving && q.traits.chatty > 0 && d < best) { friend = q; best = d; }
+    if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.fright && !q.oneShot && !q.moving && !q.attack && !q.punched && q.traits.chatty > 0 && d < best) { friend = q; best = d; }
   }
   if (!friend) return false;
   startChat(friend, p, true);
@@ -1310,11 +1319,11 @@ function meetOnWalkways(dt) {
   if (!hasClip('Wave') || talking > people.length*0.15) return;
   const reach = 1.6*S.peopleSize;
   people.forEach(p => {
-    if (p.mode !== 'line' || p.act || p.fright || p.crossStage || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
+    if (p.mode !== 'line' || p.act || p.fright || p.crossStage || p.attack || p.punched || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
     p.chatCheckIn = 0.4 + peopleRng()*0.8;
     const cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
     for (let ox=-1;ox<=1;ox++) for (let oz=-1;oz<=1;oz++) for (const q of cells.get((cx+ox) + ',' + (cz+oz)) || []) {
-      if (q === p || q.act || q.fright || q.crossStage || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir) continue;
+      if (q === p || q.act || q.fright || q.crossStage || q.attack || q.punched || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir) continue;
       // still coming towards each other, and close
       if ((q.u - p.u)*p.dir < 0 || Math.hypot(q.x - p.x, q.z - p.z) > reach) continue;
       if (peopleRng() < 0.35*p.traits.chatty*q.traits.chatty) startChat(p, q, false); else p.chatCooldown = q.chatCooldown = 10;
@@ -1490,6 +1499,127 @@ function updateActivity(p, area, dt) {
     p.x = spot.x + (p.seat.x - spot.x)*w; p.z = spot.z + (p.seat.z - spot.z)*w;
   }
   return null;
+}
+
+// ---- punching: now and then someone evil (the more evil, the more often) picks on someone near them — along the same
+// walkway, or in the same plaza or park — goes up to them, as close as they'd stand to talk, punches them, and walks off.
+// Whoever they pick on only notices them at the last moment, turning to face them, and is knocked flat on their back; they
+// lie there a while, then get up where they fell and carry on.
+const PUNCH_RATE = 1/40;        // the chance a second of picking on someone, per unit of evil
+const PUNCH_REACH = 8;          // how far off (at people size 1) the one they pick on can be
+const PUNCH_NOTICE = 2.5;       // how near they come before they're noticed
+const PUNCH_CHASE_SPEED = 1.5;  // how much faster than they walk they go after them
+const PUNCH_CHASE_MAX = 12;     // seconds before they give up on catching them
+const PUNCH_HIT_TIME = 0.33;    // how far into the Punch animation the fist lands, in seconds
+// someone going about their business, who might punch or be punched
+const isFairGame = q => (q.mode === 'line' || q.mode === 'wander') && !q.act && !q.fright && !q.stun && !q.please && !q.jc && !q.crossStage
+  && !q.attack && !q.punched && !q.oneShot;
+function pickFights(dt) {
+  if (!hasClip('Punch') || !hasClip('Fall')) return;
+  const reach = PUNCH_REACH*S.peopleSize;
+  people.forEach(p => {
+    const { evil } = p.traits;
+    if (evil <= 0 || (p.punchCooldown -= dt) > 0 || peopleRng() > dt*PUNCH_RATE*evil || !isFairGame(p)) return;
+    // anyone near enough: along the same walkway (not across the block it runs round), or in the same hangout
+    const nav = p.mode === 'line' ? peopleNav.lines[p.li] : null;
+    const along = q => { const d = Math.abs(q.u - p.u); return nav.loop ? Math.min(d, nav.total - d) : d; };
+    const near = people.filter(q => q !== p && q.mode === p.mode && Math.abs(q.x - p.x) < reach && Math.abs(q.z - p.z) < reach
+      && Math.hypot(q.x - p.x, q.z - p.z) < reach && (nav ? q.li === p.li && along(q) < reach : q.area === p.area) && isFairGame(q));
+    if (!near.length) { p.punchCooldown = 2 + peopleRng()*3; return; }
+    const victim = pickFrom(near);
+    p.attack = { target: victim, stage: 'chase', timer: PUNCH_CHASE_MAX };
+    p.lookAt = victim;
+    victim.punched = { by: p, stage: 'marked', timer: 0 };
+    p.punchCooldown = 30 + peopleRng()*30;
+  });
+}
+// someone punching, each frame: where they should walk to (or null to stand still)
+function updateAttack(p, dt) {
+  const a = p.attack, t = a.target;
+  a.timer -= dt;
+  if (a.stage === 'chase') {
+    // given up on: gone somewhere they can't be followed (or taken up with something else), or not caught in time
+    if (t.punched?.by !== p || a.timer <= 0 || !(t.mode === 'line' || t.mode === 'wander' || t.mode === 'leaving') || t.jc) { endAttack(p); return null; }
+    const d = Math.hypot(t.x - p.x, t.z - p.z), gap = CHAT_GAP*S.peopleSize;
+    if (t.punched.stage === 'marked' && d < PUNCH_NOTICE*S.peopleSize) {
+      // they've been seen coming: whoever it is stops what they're doing and turns to face them
+      t.punched = null;
+      endActivity(t);
+      t.oneShot = null; t.wait = 0;
+      t.punched = { by: p, stage: 'brace', timer: 0 };
+      t.faceTo = headingTo(t, p); t.lookAt = p;
+    }
+    if (d > gap + 0.1) return { x: t.x + (p.x - t.x)/d*gap, y: t.y, z: t.z + (p.z - t.z)/d*gap };
+    a.stage = 'punch';
+    a.timer = PUNCH_HIT_TIME;
+    playOnce(p, 'Punch');
+  }
+  if (a.stage === 'punch') {
+    p.faceTo = headingTo(p, t);
+    if (a.timer > 0) return null;
+    if (t.punched?.by === p) knockDown(t, p);
+    a.stage = 'follow';
+  }
+  // the punch played out, they walk off
+  if (!p.oneShot) {
+    endAttack(p);
+    if (p.mode === 'line') {
+      const nav = peopleNav.lines[p.li], k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), from = nav.pts[k], to = nav.pts[k + 1];
+      if (((to.x - from.x)*(t.x - p.x) + (to.z - from.z)*(t.z - p.z))*p.dir > 0) p.dir = -p.dir;
+    } else if (p.mode === 'wander') {
+      const area = peopleNav.areas[p.area];
+      let best = null;
+      for (let k=0;k<8;k++) {
+        const spot = randomSpotIn(area, p), d = Math.hypot(spot.x - t.x, spot.z - t.z);
+        if (!best || d > best.d) best = { ...spot, d };
+      }
+      p.tx = best.x; p.tz = best.z; p.wait = 0;
+    }
+  }
+  return null;
+}
+// stops someone going after whoever they were going to punch — who, if they hadn't been hit yet, carries on as they were
+function endAttack(p) {
+  const a = p.attack;
+  if (!a) return;
+  p.attack = null;
+  p.lookAt = null; p.faceTo = null;
+  const t = a.target;
+  if (t.punched?.by === p && (t.punched.stage === 'marked' || t.punched.stage === 'brace')) { t.punched = null; t.faceTo = null; t.lookAt = null; }
+}
+// someone being punched is let off it (to do something else): whoever was coming for them gives up, and if they were
+// falling they stand straight back up
+function releasePunched(p) {
+  const k = p.punched;
+  if (!k) return;
+  p.punched = null;
+  if (k.by.attack?.target === p) endAttack(k.by);
+  if (k.stage === 'fall') p.oneShot = null;
+}
+// the punch lands: they're knocked flat on their back, facing whoever hit them
+function knockDown(t, p) {
+  t.punched.stage = 'fall';
+  t.heading = headingTo(t, p);
+  t.faceTo = null; t.lookAt = null;
+  playOnce(t, 'Fall');
+  t.pose = 'Fallen';
+}
+// the fall played out: they lie where it's left them — moved to where their pelvis landed, as for anyone lying down, the
+// pose drawn set back from there by as much (so nothing moves)
+function landFall(p) {
+  const fallen = clipNamed('Fallen'), s = modelScale(p), sin = Math.sin(p.heading), cos = Math.cos(p.heading);
+  const offX = fallen.pelvisX*s, offZ = fallen.pelvisZ*s;
+  p.x += offX*cos + offZ*sin; p.z += offZ*cos - offX*sin;
+  p.clipA = p.clipB = fallen; p.fade = 1;
+  p.punched.stage = 'down';
+  p.punched.timer = (3 + peopleRng()*4)*p.traits.patience;
+  if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; }
+}
+// someone who's been punched, each frame: lying there a while, then getting up
+function updatePunched(p, dt) {
+  const k = p.punched;
+  if (k.stage === 'down' && (k.timer -= dt) <= 0) { k.stage = 'rise'; p.pose = 'Idle'; }
+  else if (k.stage === 'rise' && weightOf(p, clipNamed('Idle')) >= 1) { p.punched = null; p.wait = 0.5 + peopleRng(); }
 }
 
 // ---- following someone with the camera: in World mode, clicking a person keeps the view centered on them as they go —
@@ -1939,6 +2069,7 @@ export function updatePeople(t) {
     personModel.hair.forEach(style => { style.mesh.count = countBelow(style.members, people.length); });
     updateGroups(dt);
     meetOnWalkways(dt);
+    pickFights(dt);
   }
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   people.forEach((p, i) => {
@@ -1951,15 +2082,17 @@ export function updatePeople(t) {
     //attempting to give additional reactions to npc death depending on how evil they are
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
     if (p.please) updatePlease(p, dt); //Should do same as stun but make them emote happily - Doesn't make happy :(
+    if (p.punched) updatePunched(p, dt);
     // frozen in place: fright's 'look' stage, or stun/please's 'held' stage. only fright ever flees.
     const frozen = (!!p.fright && p.fright.stage === 'look')
                 || (!!p.stun && p.stun.stage === 'held')
-                || (!!p.please && p.please.stage === 'held');
+                || (!!p.please && p.please.stage === 'held')
+                || (!!p.punched && p.punched.stage !== 'marked'); // (braced for a punch, knocked down, or getting up)
     const fleeing = !!p.fright && p.fright.stage === 'flee';
     let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
     let goal = null;
     // (stopped to talk, or frozen in shock, someone on a walkway stays put)
-    if (p.mode === 'line' && p.act !== 'chat' && !frozen) {
+    if (p.mode === 'line' && p.act !== 'chat' && !frozen && !p.attack) {
       if (!p.jc) maybeCrossRoad(p, peopleNav.lines[p.li], dt);
       if (p.jc) {
         goal = updateCrossing(p, dt, speed); // (null while waiting for a gap in traffic)
@@ -1973,7 +2106,7 @@ export function updatePeople(t) {
       const area = peopleNav.areas[p.area];
       if (p.act) {
         goal = updateActivity(p, area, dt);
-      } else if (p.fright || p.stun || p.please) {
+      } else if (p.fright || p.stun || p.please || p.attack || frozen) {
         // frightened, stunned or pleased: fright runs off further each time they reach where they were running to;
         // stun/please just hold position via the `frozen` guard below, with no movement of their own
         if (fleeing && Math.hypot(p.tx - p.x, p.tz - p.z) < 0.5) fleeWithin(p, area);
@@ -2017,11 +2150,15 @@ export function updatePeople(t) {
           const s = randomSpotIn(area); p.tx = s.x; p.tz = s.z;
         }
       }
-      if (p.mode === 'wander' && !p.act && !frozen) goal = { x: p.tx, y: area.y, z: p.tz };
+      if (p.mode === 'wander' && !p.act && !frozen && !p.attack) goal = { x: p.tx, y: area.y, z: p.tz };
     }
     if (p.mode === 'train') {
       goal = updateTrainRider(p, i, dt);
       if (frozen) goal = null;
+    }
+    if (p.attack) {
+      goal = updateAttack(p, dt);
+      if (p.attack?.stage === 'chase') speed *= PUNCH_CHASE_SPEED;
     }
     if (possessed) goal = walkPossessed(p, dt);
     if (p.mode === 'leaving') {
@@ -2048,7 +2185,7 @@ export function updatePeople(t) {
     p.stepped = 0;
     if (goal) {
       const dx = goal.x - p.x, dz = goal.z - p.z, d = Math.hypot(dx, dz);
-      const step = possessed ? d : speed*dt*(p.mode === 'line' && !p.crossStage ? 1 + Math.min(2, d*0.5) : 1);
+      const step = possessed ? d : speed*dt*(p.mode === 'line' && !p.crossStage && !p.attack ? 1 + Math.min(2, d*0.5) : 1);
       if (d > 1e-4) {
         const k = Math.min(1, step/d), mx = dx*k, mz = dz*k;
         p.x += mx; p.z += mz;
@@ -2083,7 +2220,13 @@ export function updatePeople(t) {
         if (p.traits.fidgety > 0 && p.stillFor > p.fidgetAfter/p.traits.fidgety) { playOnce(p, pickFrom(FIDGETS)); p.stillFor = 0; p.fidgetAfter = 3 + peopleRng()*8; }
       }
       // the animation: one playing through once, else walking, else the pose they're in — blending into it from the last
-      if (p.oneShot) { p.shotTime += dt; if (p.shotTime >= (p.oneShot.frames - 1)/PERSON_BAKE_FPS) p.oneShot = null; }
+      if (p.oneShot) {
+        p.shotTime += dt;
+        if (p.shotTime >= (p.oneShot.frames - 1)/PERSON_BAKE_FPS) {
+          if (p.oneShot.name === 'Fall' && p.punched?.stage === 'fall') landFall(p);
+          p.oneShot = null;
+        }
+      }
       if (!p.clipA) { p.clipA = p.clipB = clips.Idle; p.fade = 1; }
       setClip(p, p.oneShot || (p.moving ? clips.Walk : clips[p.pose] || clips.Idle));
       p.fade = Math.min(1, p.fade + dt/p.fadeTime);
@@ -2138,7 +2281,7 @@ export function updatePeople(t) {
       // their eyes: the look their traits give them (from their mood, say), brighter or sadder as their expression swings
       // above or below where it rests, and wide with shock when frightened
       const { happy, sad, angry, shock } = p.traits, swing = p.emotion - p.traits.mood, shocked = frozen || fleeing;
-      const eyesTo = [shocked ? 1 : shock, shocked ? 0 : happy + Math.max(0, swing)*0.8, angry, sad + Math.max(0, -swing)*0.8];
+      const eyesTo = [shocked ? 1 : shock, shocked ? 0 : happy + Math.max(0, swing)*0.8, p.attack ? 1 : angry, sad + Math.max(0, -swing)*0.8];
       for (let k=0;k<4;k++) p.eyes[k] += (Math.min(1, eyesTo[k]) - p.eyes[k])*Math.min(1, dt*6);
       const o = i*4, a = personModel.anim.array, lookArray = personModel.look.array;
       a[o] = clipRow(p, p.clipA);

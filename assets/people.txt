@@ -35,7 +35,7 @@ which add up. Everyone starts at the value in
 #   sad         0       how sad their eyes look                                                        0 to 1
 #   angry       0       how angry their eyes look                                                      0 to 1
 #   shock       0       how shocked their eyes look                                                    0 to 1
-#   evil        0       how evil they are, the reactions of others when they die                       -1 to 1
+#   evil        0       how evil they are: how often they punch people, and how others take their death -1 to 1
 #   backwards   off     they walk backwards                                                           on or off
 #   choiceweight 0       whole numbers, how likely to appear, set 0 to disable autoassign               0 to Inf
 # ------------------------------------------------------------------------------------------------------------------------
