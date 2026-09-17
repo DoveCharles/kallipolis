@@ -30,7 +30,8 @@ export const TRAITS = {
   evil:      {base: 0, min: -1, max: 1, combine: 'add'},
   choiceweight: {base: 0, min: 1, max: Infinity}, //Increase how many times a line is added to lists, 
   //                                               set 0 to prevent auto assignment and allow manual setting only
-  age: {base: 1, min: 0.1, max: Infinity}, //Inf limit to allow vampiric / immortal type shit
+  agemult: {base: 1, min: 0.1, max: Infinity}, //Inf limit to allow vampiric / immortal type shit
+  ageless: { base: 0, min: 0, max: 1, combine: 'on' },
 };
 // the value everyone starts with, by trait: TRAITS' base until people.txt loads, then whatever its trait table's start
 // column says (see parsePeopleText) — updated in place, so people holding it see the file's values
@@ -142,6 +143,6 @@ export function profileOf(index, isMan) {
     if (!oneEnsured || rng() >0.5) hates = {...hates, text: '(UNKNOWN)'}
   }
   const traits = traitsOf([name, mood, enjoys, hates]);
-  age = Math.round(Math.max(18, age*traits.age)) //no minors!
+  age = Math.round(Math.max(18, age*traits.agemult)) //no minors!
   return { name: name.text, age, mood: mood.text, enjoys: enjoys.text, hates: hates.text, traits: traits};
 }

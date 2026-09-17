@@ -199,7 +199,8 @@ const hairstyleWearers = name => {
 const isHatMaterial = name => /^Hat(\.\d+)?$/i.test(name || '');
 const PANTS_COLORS = [0x26344f, 0x3e5a82, 0x5a7aa6, 0x232326, 0x4d5057, 0x8f8f93, 0xb09a72, 0x6b5038, 0x46503a];
 const SHOE_COLORS = [0x151517, 0x2b2b2f, 0xeeeeea, 0x8f9298, 0x6b4a2f, 0x3b2a1e, 0x22304a, 0xb5a383];
-const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 0xc49a5a, 0xdcc08a, 0xb9b5ad, 0xe3ddd2]; // black to platinum
+const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 0xc49a5a, 0xdcc08a]; // black to platinum
+//Removed light tones: 0xb9b5a 0xe3ddd2
 const BLINK_DURATION = 0.5; // seconds for the eyes to close and open again
 // how far a person turns their head when they glance around: side to side, and up and down
 const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
@@ -612,12 +613,14 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const traitRows = PERSON_FACE_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
   const isMan = new Uint8Array(PEOPLE_MAX);
   const traitRng = mulberry32(777), colorRng = mulberry32(4242), hatRng = mulberry32(8086), clothingRng = mulberry32(1990), faceRng = mulberry32(2718), color = new THREE.Color();
+  const NATURAL_COLOUR_CHANCE = 0.85;
   const colorFor = {
     Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
     Pants: () => colorRng() < 0.8 ? color.set(PANTS_COLORS[Math.floor(colorRng()*PANTS_COLORS.length)]) : color.setHSL(colorRng(), 0.25 + colorRng()*0.3, 0.25 + colorRng()*0.25),
     Shoes: () => colorRng() < 0.7 ? color.set(SHOE_COLORS[Math.floor(colorRng()*SHOE_COLORS.length)]) : color.setHSL(colorRng(), 0.4 + colorRng()*0.45, 0.35 + colorRng()*0.25),
     // three in four have a natural hair color; the rest have dyed it something bright
-    Hair: () => colorRng() < 0.75 ? color.set(HAIR_TONES[Math.floor(colorRng()*HAIR_TONES.length)]).multiplyScalar(0.9 + colorRng()*0.2) : color.setHSL(colorRng(), 0.65 + colorRng()*0.3, 0.45 + colorRng()*0.15),
+    Hair: () => colorRng() < NATURAL_COLOUR_CHANCE ? color.set(HAIR_TONES[Math.floor(colorRng()*HAIR_TONES.length)]).multiplyScalar(0.9 + colorRng()*0.2) : color.setHSL(colorRng(), 0.65 + colorRng()*0.3, 0.45 + colorRng()*0.15),
+    // Hair: () => color.set(HAIR_TONES[Math.floor(colorRng()*HAIR_TONES.length)]).multiplyScalar(0.9 + colorRng()*0.2),
     // its own generator, so adding it didn't change anyone's other colors
     Hat: () => hatRng() < 0.25 ? color.setHSL(0, 0, [0.08, 0.3, 0.6, 0.9][Math.floor(hatRng()*4)]) : color.setHSL(hatRng(), 0.4 + hatRng()*0.5, 0.3 + hatRng()*0.35),
   };
@@ -977,8 +980,10 @@ function refreshTraits(p, i) {
   const isMan = personModel ? personModel.isMan[i] === 1 : null, key = profilesVersion() + ':' + isMan;
   if (p.traitsKey === key) return;
   p.traitsKey = key;
-  p.traits = profileOf(i, isMan).traits;
+  const profile = profileOf(i, isMan);
+  p.traits = profile.traits;
   p.height = p.baseHeight*p.traits.size;
+  p.age = profile.age;
 }
 export function pickWeighted(items, weightOf) {
   const total = items.reduce((sum, item) => sum + weightOf(item), 0);
@@ -2118,6 +2123,14 @@ export function updatePeople(t) {
     const fleeing = !!p.fright && p.fright.stage === 'flee';
     let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
     let goal = null;
+    //Updating hair colour depending on age
+    if (personModel) {
+      const o = ((2 + PERSON_TRAIT_COLORS.indexOf('Hair'))*PEOPLE_MAX + i)*4, data = personModel.traitData;
+      const hairColor = new THREE.Color().setRGB(data[o], data[o+1], data[o+2]);
+      const greyAmount = p.traits.ageless ? 0 : Math.max(0, Math.min(1, (p.age - 30) / (100))); // tweak range to taste
+      hairColor.lerp(new THREE.Color(0xffffff), greyAmount);
+      data[o] = hairColor.r; data[o+1] = hairColor.g; data[o+2] = hairColor.b;
+    }
     // (stopped to talk, or frozen in shock, someone on a walkway stays put)
     if (p.mode === 'line' && p.act !== 'chat' && !frozen && !p.attack) {
       if (!p.jc) maybeCrossRoad(p, peopleNav.lines[p.li], dt);

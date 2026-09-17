@@ -29,14 +29,16 @@ which add up. Everyone starts at the value in
 #   blinks      1       how often they blink — 0 never does (unsettling)                               0 to 20
 #   parks       1       how likely they are to wander into a park they walk past — 0 never              0 to 8
 #   plazas      1       how likely they are to wander into a plaza they walk past — 0 never             0 to 8
-#   roadsafety  2       how big a gap in traffic they wait for before crossing a road — 0.2 barely looks 0.2 to 3
+#   roadsafety  1       how big a gap in traffic they wait for before crossing a road — 0.2 barely looks 0.2 to 3
+#   agemult     1       multiplies age, suiting traits to younger or older people                      0.1 to Inf
 #   mood        0       their resting face — -1 a frown, 1 a smile (and it tints their reactions)       -1 to 1
 #   happy       0       how happy their eyes look                                                      0 to 1
 #   sad         0       how sad their eyes look                                                        0 to 1
 #   angry       0       how angry their eyes look                                                      0 to 1
 #   shock       0       how shocked their eyes look                                                    0 to 1
-#   evil        0       how evil they are: how often they punch people, and how others take their death -1 to 1
+#   evil        0       how evil they are, the reactions of others when they die                       -1 to 1
 #   backwards   off     they walk backwards                                                           on or off
+#   ageless     off     they don't visibly age, hair does not grey                                    on or off
 #   choiceweight 0       whole numbers, how likely to appear, set 0 to disable autoassign               0 to Inf
 # ------------------------------------------------------------------------------------------------------------------------
 
@@ -51,11 +53,11 @@ Arthur
 Oscar
 Theo
 Freddie
-Alfie [age = 0.8]
+Alfie [agemult = 0.8]
 Charlie
 Henry
 Archie
-Finn [age = 0.8]
+Finn [agemult = 0.8]
 Hugo
 Ezra
 Milo 
@@ -91,8 +93,8 @@ Gary
 Terry
 Keith
 Dave
-Hieronymous [age = 1.3]
-Jeeves [age = 1.05]
+Hieronymous [agemult = 1.3]
+Jeeves [agemult = 1.05]
 Johnny
 Markus
 Matthew
@@ -102,20 +104,20 @@ Lyle
 Paulie
 Chase
 Ryder
-Friedrich [age = 1.05]
+Friedrich [agemult = 1.05]
 Michel
 Jean
-Bartholomew [age = 1.05]
+Bartholomew [agemult = 1.05]
 Jacques
 Cecil
 Adonis
-Homer [age = 1.05]
+Homer [agemult = 1.05]
 Ralph
 Germaine
 Albert
 Bruce
-Pee-wee [age = 1.05]
-Vladimir [age = 1.05]
+Pee-wee [agemult = 1.05]
+Vladimir [agemult = 1.05]
 Nathan
 Lorenzo
 Timmy
@@ -124,7 +126,7 @@ Anthony
 Yves
 Stephen
 Harrier
-Sock [age = 0.5]
+Sock [agemult = 0.5]
 Grint
 Herm
 Teddy
@@ -134,31 +136,31 @@ Woody
 Roy
 Wyatt
 Lewis
-Don [age = 1.05]
-Sancho [age = 1.05]
+Don [agemult = 1.05]
+Sancho [agemult = 1.05]
 Sam
 Cameron
 Jeremy
-Gargamel [age = 1.05]
+Gargamel [agemult = 1.05]
 Dasher
-Seigwald [age = 1.05]
+Seigwald [agemult = 1.05]
 Shaggy
 Isaac
 Steve
 Roald
-(UNKNOWN) [choiceweight = 3, evil = 0.05]
-Horace [age = 1.05]
+(UNKNOWN) [choiceweight = 2]
+Horace [agemult = 1.05]
 Bruiser
 Max
 Brick
-Cletus [age = 1.05]
-Herbert [age = 1.05]
-Cornelius [age = 1.05]
-Archibald [age = 1.05]
-Elmer [age = 1.05]
+Cletus [agemult = 1.05]
+Herbert [agemult = 1.05]
+Cornelius [agemult = 1.05]
+Archibald [agemult = 1.05]
+Elmer [agemult = 1.05]
 
 [Girl names]
-Olivia [age = 0.9]
+Olivia [agemult = 0.9]
 Amelia
 Isla
 Ava
@@ -167,7 +169,7 @@ Ivy
 Lily
 Freya
 Florence
-Willow [age = 0.9]
+Willow [agemult = 0.9]
 Rosie
 Sienna
 Poppy
@@ -179,13 +181,13 @@ Maeve
 Nora
 Iris
 Clementine
-Beatrix [age = 1.15]
-Winifred [age = 1.15]
-Dolores [age = 1.15]
-Marge [age = 1.05]
+Beatrix [agemult = 1.15]
+Winifred [agemult = 1.15]
+Dolores [agemult = 1.15]
+Marge [agemult = 1.05]
 Brenda
 Sandra
-Pam [age = 1.15]
+Pam [agemult = 1.15]
 Linda
 Gloria
 Priya
@@ -200,8 +202,8 @@ Chloe
 Esme
 Harriet
 Mabel
-Agnes [age = 1.15]
-Edith [age = 1.15]
+Agnes [agemult = 1.15]
+Edith [agemult = 1.15]
 Juniper
 Pearl
 Opal
@@ -217,7 +219,7 @@ Angela
 Roberta
 Simone
 Penelope
-Circe [age = 1.2]
+Circe [agemult = 1.2]
 Adriana
 Jan
 Rachel
@@ -255,15 +257,15 @@ Cameron
 Léa
 Sandy
 Rue
-(UNKNOWN) [choiceweight = 3, evil = 0.05]
+(UNKNOWN) [choiceweight = 2]
 Britney
-Reighleigh [age = 0.8]
-Gertrude [age = 1.15]
-Doris [age = 1.15]
-Edna [age = 1.15]
-Agatha [age = 1.15]
-Mildred [age = 1.15]
-Myrtle [age = 1.15]
+Reighleigh [agemult = 0.8]
+Gertrude [agemult = 1.15]
+Doris [agemult = 1.15]
+Edna [agemult = 1.15]
+Agatha [agemult = 1.15]
+Mildred [agemult = 1.15]
+Myrtle [agemult = 1.15]
 
 [Moods]
 😀 [mood = 0.6, happy = 0.6]
@@ -399,13 +401,13 @@ Cooking
 Pretending they're in a Tool visual [walkspeed = 0.5]
 Squash [walkspeed = 1.5]
 Painting [patience = 2]
-Sucking clits [age = 0.8]
+Sucking clits [agemult = 0.8]
 Truckin' [walkspeed = 1.3]
 Pissing about [fidgety = 3, patience = 0.4]
 Waxing
 The weirdest shit you've ever heard of. I'm not even gonna say it [evil = 0.1]
 Debunking Christians [talkative = 4]
-Reddit (loser) [chatty = 0.2, blinks = 0.3, evil = 0.05, age = 0.8]
+Reddit (loser) [chatty = 0.2, blinks = 0.3, evil = 0.05, agemult = 0.8]
 Pimping [walkspeed = 0.7, plazas = 3, evil = 0.3]
 Driving
 Helping animals (will sometimes put  animals in dangerous situations in order to help them) [parks = 3]
@@ -413,35 +415,35 @@ Lying [talkative = 2, evil = 0.05]
 Shitty fucking overpriced merchandise
 The milking machine
 Skiing (lie)
-Laptop in bed [lounging = 3, age = 0.8]
+Laptop in bed [lounging = 3, agemult = 0.8]
 Crushing a beer can on their head
-Incremental change [walkspeed = 0.6, patience = 3, age = 1.1]
+Incremental change [walkspeed = 0.6, patience = 3, agemult = 1.1]
 Synchronicity
-Mummy's cooking [age = 0.7]
+Mummy's cooking [agemult = 0.7]
 Ayahuasca [walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6]
-Dropping a tab right before work [walkspeed = 0.6, blinks = 0.3, fidgety = 12, evil = 0.1, age = 0.8]
-Pretending to read in public [parks = 3, plazas = 3, lounging = 3, evil = 0.05, age = 0.7]
+Dropping a tab right before work [walkspeed = 0.6, blinks = 0.3, fidgety = 12, evil = 0.1, agemult = 0.8]
+Pretending to read in public [parks = 3, plazas = 3, lounging = 3, evil = 0.05, agemult = 0.7]
 Dubai [evil = 0.05]
-Whatever's on TV [age = 1.1]
+Whatever's on TV [agemult = 1.1]
 Being a deeply inconsistent person with no real sense of self
 Eating food too fast to even taste it
 Trying to work out [size = 1.05, evil = -0.01]
-Steroids [size = 1.24, evil = 0.01 , age = 0.8]
-Injecting Human Growth Hormone straight up the butt [size=1.9, evil = 0.05 , age = 0.8]
+Steroids [size = 1.24, evil = 0.01 , agemult = 0.8]
+Injecting Human Growth Hormone straight up the butt [size=1.9, evil = 0.05 , agemult = 0.8]
 Movies
 Jaywalking [patience = 0.5, evil = 0.05, roadsafety = 0.3]
 The Law
 Phrenology [mood = -0.3, evil = 0.3]
-Heart-reacting every message [mood = 0.4, patience = 0.7]
-Finding Luigi [patience = 2, age = 0.8]
+Heart-reacting every messagemult [mood = 0.4, patience = 0.7]
+Finding Luigi [patience = 2, agemult = 0.8]
 Pathologising themself
-Attempting to achieve immortality [ evil = 0.05, age = 1.5]
+Attempting to achieve immortality [ evil = 0.05, agemult = 1.5, ageless]
 Medieval weaponry
 Abusing nasal decongestants [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05]
-Ingesting mystery powder [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, age = 0.8]
+Ingesting mystery powder [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, agemult = 0.8]
 Their awesome antidepressants and never wanting sex [mood = 0.3, fidgety = 3]
 Mustelidae [parks = 2]
-Barfing after drinking but before getting to the club [age = 0.8]
+Barfing after drinking but before getting to the club [agemult = 0.8]
 Staring at the eclipse [blinks = 5]
 Taking medicine without checking the label [patience = 0.4, mood = -0.2, evil = 0.05]
 Befriending house spiders [ evil = -0.05]
@@ -449,10 +451,10 @@ Guns... like, way too much [evil = 0.2]
 Staring at their feet [chatty = 0.4, talkative =0.4]
 Rubbing their belly [fidgety = 2]
 Forgetting
-The promise of early retirement [ age = 0.8]
+The promise of early retirement [ agemult = 0.8]
 Feelin' it out
 Local politics [patience = 2]
-The safety provided by the surveillance state [ age = 1.1]
+The safety provided by the surveillance state [ agemult = 1.1]
 Their polycule 
 Car crashes (sexual) [ evil = 0.1]
 Not understanding anything
@@ -467,14 +469,14 @@ Sending texts in their sleep [lounging = 2, fidgety = 2]
 Passive-mindedly playing with objects at their desk (pins, scaples, etc.) [fidgety = 8]
 Being a pseud [chatty = 3, talkative = 6, evil = 0.05]
 Swag
-Breeding up new cognitio-hazards [chatty = 2, evil = 0.1, age = 0.8]
+Breeding up new cognitio-hazards [chatty = 2, evil = 0.1, agemult = 0.8]
 Blowing their chunks off [mood = -0.4]
-Researching adult autism [age = 1.05]
+Researching adult autism [agemult = 1.05]
 Taylor Swift [evil = 0.05]
-Meeping [ age = 0.8]
+Meeping [ agemult = 0.8]
 Unlocking their phone using biometrics
-The way iPhone automatically fills in the phone number sometimes [ age = 0.8]
-Cooking everything on high [ age = 0.5]
+The way iPhone automatically fills in the phone number sometimes [ agemult = 0.8]
+Cooking everything on high [ agemult = 0.5]
 Running reconnaissance [chatty = 3, talkative = 0.3]
 Grapefruit
 Fonts & typefaces
@@ -482,8 +484,8 @@ Being scared [walkspeed = 1.2]
 Getting so high they get scared [blinks = 0.6, walkspeed = 1.2]
 Having a psychosexual fixation on their nemesis
 Horse racing [ evil = 0.05]
-Calling people "libtard" [ evil = 0.1, age = 0.95]
-Calling people "lumpen" [ evil = 0.05, age = 1.05]
+Calling people "libtard" [ evil = 0.1, agemult = 0.95]
+Calling people "lumpen" [ evil = 0.05, agemult = 1.05]
 Nietzschean freedom [patience = 0.4]
 Reverting to Irish Catholic
 A billion dollars
@@ -495,13 +497,13 @@ Counting
 Autism in women [ evil = 0.05]
 Trying to get more straight
 Stonewalling [talkative = 0.1, evil = 0.05]
-Memorials [ age = 1.1]
-Gore videos & Hello Kitty [ evil = 0.15, age = 0.8]
+Memorials [ agemult = 1.1]
+Gore videos & Hello Kitty [ evil = 0.15, agemult = 0.8]
 Multiple streams of income
-Listening to albums out of order [patience = 0.6, evil = 0.01, age = 0.9]
+Listening to albums out of order [patience = 0.6, evil = 0.01, agemult = 0.9]
 Rare fruits
 The vibe at the airport
-Setting their profile pic to a black square when they want attention [evil = 0.01, age = 0.8]
+Setting their profile pic to a black square when they want attention [evil = 0.01, agemult = 0.8]
 Changing their nature
 Saying "cybernetics"
 Cooking up homogenous, technically edible, goop
@@ -513,7 +515,7 @@ Playing with bugs [parks = 5]
 Correcting themself [evil = -0.05]
 Correcting others [evil = 0.05]
 Taking credit for shit they didn't do [evil = 0.05]
-Ritual magick [age = 1.1]
+Ritual magick [agemult = 1.1, ageless, evil = 0.05]
 Speculating around WW3 [chatty =2 ,talkative =2]
 Voting [evil = -0.05]
 Messaging back the porn bots in their message requests
@@ -525,7 +527,7 @@ Preaching [chatty = 5, talkative = 10, evil = 0.05]
 Foreign cigarettes
 Suicide, as a concept [mood = 0.4]
 Trying to kiss the dentist [evil = 0.05]
-Getting older [mood = 0.4, evil = -0.05, age = 1.1]
+Getting older [mood = 0.4, evil = -0.05, agemult = 1.1]
 Summary execution [evil = 0.2]
 Curried favours
 Saying, "this is true" [chatty = 2]
@@ -549,8 +551,8 @@ Doing it anyway
 Having a secure attachment style [ evil = -0.05]
 Rotating an apple in their mind
 Biding it [patience = 4, walkspeed = 0.8]
-French non-binary people [ age = 0.8]
-Setting their profile pic to Gregory House [evil = 0.05, age = 0.5]
+French non-binary people [ agemult = 0.8]
+Setting their profile pic to Gregory House [evil = 0.05, agemult = 0.5]
 >8 hours phone time [lounging = 4]
 Having "animal swag"
 Having "prescient swag"
@@ -561,37 +563,37 @@ Biting their nails [fidgety = 5]
 Eating the skin on the inside of their lip [fidgety = 5]
 Thinking about everything, all of it [fidgety = 3, walkspeed = 0.8, lounging = 3]
 Swearing in their head [evil = 0.01]
-Feeling like a bad bitch [ age = 0.8]
+Feeling like a bad bitch [ agemult = 0.8]
 E-mail
 Salad
 Being a hater [evil = 0.1]
-Playing games on YouTube Playables [lounging = 2, age = 0.8]
+Playing games on YouTube Playables [lounging = 2, agemult = 0.8]
 Dad rock 
 Curling up small [lounging = 2]
-Moving dialectically [age = 0.9]
-Calling girls "bro" [age = 0.7]
+Moving dialectically [agemult = 0.9]
+Calling girls "bro" [agemult = 0.7]
 Burning shit [ evil = 0.1]
 Monkeys, lesser apes, greater apes too
 Obama
 Wonders of the flesh
 Power tools
-Personality tests that don't really mean anything [ age = 0.9]
+Personality tests that don't really mean anything [ agemult = 0.9]
 Oil [parks = 0.2, evil = 0.05]
 Karaoke
 Yelling "hoochie mama" during sex
 Winning
 Losing, but gracefully [evil = -0.1]
-Having a little class [walkspeed = 0.9, age = 1.1]
+Having a little class [walkspeed = 0.9, agemult = 1.1]
 Making potions
 Audibly peeing for much longer than anyone else in the bathroom
 Potatoes
-Doing "Bits" [chatty = 3, talkative = 3, mood = 0.3, evil = 0.01, age = 0.9]
-Love Island [ age = 0.9]
+Doing "Bits" [chatty = 3, talkative = 3, mood = 0.3, evil = 0.01, agemult = 0.9]
+Love Island [ agemult = 0.9]
 Whipped cream
 The right to protest [evil = -0.05]
 Bleach
 Ugly phone covers
-Estate sales [ age = 1.1]
+Estate sales [ agemult = 1.1]
 Corporate Memphis
 Jerking it imagination only [evil = -0.05]
 Coconut yoghurt
@@ -608,7 +610,7 @@ Apple cider vinegar [parks = 2]
 Sunning their holes [parks = 4]
 Coffee enemas [parks = 4, walkspeed = 1.4]
 Yearning [lounging = 2]
-Turning it off in just a minute [patience = 2, age = 0.5]
+Turning it off in just a minute [patience = 2, agemult = 0.5]
 Feeling an effect
 Greek mythology
 Eco-fascism [evil = 0.3]
@@ -623,7 +625,7 @@ Peanuts
 Writhing about [walkspeed = 0.6, mood = -0.5]
 Banana bread
 Exposed ankle
-Modular Synthesis [patience = 2, talkative = 5, mood = -0.1]
+Modular Synthesis [patience = 2, talkative = 5, mood = -0.1, agemult = 1.2]
 Acting up [mood = -0.1, evil = 0.05]
 Cloth Mother
 Cuddling Blanky [evil = -0.05]
@@ -640,10 +642,10 @@ Caffeine for lunch [walkspeed = 1.4, size = 0.9]
 Theory
 Carrying around a suitcase on the weekends
 Yelling on the bus [chatty = 4,  talkative = 4, evil = 0.15]
-Seeming human [ age = 1.3]
+Seeming human [ agemult = 1.3, ageless]
 Dressing as a civilian
 Light spanking
-A cool ass cape [ age = 1.1]
+A cool ass cape [ agemult = 1.1]
 Wearing sunglasses indoors
 The Oxford comma
 Making lists
@@ -670,22 +672,22 @@ Taking their socks off
 Facebook marketplace [chatty = 2, talkative = 2, plazas = 2]
 Sowing [patience = 3]
 Finger tattoos
-Cryptic crosswords [patience = 3, lounging = 2, mood = -0.1, age = 1.1]
-The new IRA [mood = -0.3, evil = 0.1, age = 0.6]
-82 year old korean man online. <3 [mood = 0.3, age = 0.8]
+Cryptic crosswords [patience = 3, lounging = 2, mood = -0.1, agemult = 1.1]
+The new IRA [mood = -0.3, evil = 0.1, agemult = 0.6]
+82 year old korean man online. <3 [mood = 0.3, agemult = 0.8]
 AAVE 
 Learning nothing [patience = 0.4]
-Notifications [patience = 0.4, lounging = 2, age = 0.8]
+Notifications [patience = 0.4, lounging = 2, agemult = 0.8]
 Alien pussy
 Gargoyles
 Avoiding cracks in the pavement [walkspeed = 0.4, evil = -0.05]
 Cancelling [chatty = 0.6, talkative = 0.6, nosy = 2, evil = 0.05]
-Ancient knowledge [age = 1.3]
+Ancient knowledge [agemult = 1.3, ageless, evil = 0.05]
 Being normal
 Personal sacrifice [mood = -0.3]
-Harry Potter [ evil = 0.05, age = 0.8]
+Harry Potter [ evil = 0.05, agemult = 0.8]
 Acting ominous [blinks = 0.2]
-Parasocial relationships [ age = 0.8]
+Parasocial relationships [ agemult = 0.8]
 Calling the guards
 Fortnite
 Auto-correcting things in their mind
@@ -698,7 +700,7 @@ Turning evil [mood = 0.1, evil = 0.3]
 Leaving their boxers unbuttoned
 Remaining loyle to their capo
 Whatever remains
-Saying, "truth nuke" [ age = 0.6]
+Saying, "truth nuke" [ agemult = 0.6]
 Being an alcoholic
 Dichotomies
 Spellcheck
@@ -717,23 +719,25 @@ Consulting their shoulder spirits
 Kissing toads
 Licking toads
 Giving context [evil = -0.05]
-SPF-100 [age = 2]
+SPF-100 [agemult = 2, ageless]
 Only going out at night
-Only going out at night [age = 10, evil = 0.5 ]
-The taste of blood [age = 10, evil = 0.5]
+Only going out at night [agemult = 10 ,evil = 0.5, ageless]
+The taste of blood [agemult = 10, evil = 0.5, ageless]
 The taste of blood
 Jumpin' all over the world
 Two in the trunk
 Being invited over
-Being invited over [age = 10, evil = 0.5 ]
+Being invited over [agemult = 10, evil = 0.5, ageless ]
+Peepholes [evil = 0.1]
+Talking a big talk
 
 [Hates]
 Wet stuff
 Foreigners [mood = -0.4, evil = 0.25]
 People [chatty = 0, mood = -0.4, evil = 0.1]
 Punctuality, as a concept [walkspeed = 0.6, patience = 2]
-Slow walkers [walkspeed = 1.7, age = 0.9]
-Fast walkers [walkspeed = 0.5, age = 1.1]
+Slow walkers [walkspeed = 1.7, agemult = 0.9]
+Fast walkers [walkspeed = 0.5, agemult = 1.1]
 Accidentally stepping on snails [walkspeed = 0.7, nosy = 2, evil = -0.1]
 Jokes [mood = -0.5]
 Loud chewing
@@ -752,11 +756,11 @@ Being cold [walkspeed = 1.3]
 Public transport
 Rain
 Hold music [patience = 0.4]
-"Expresso" [ age = 0.9]
+"Expresso" [ agemult = 0.9]
 Hot weather [lounging = 2]
 Toes
 Automatic doors (wants to bring back bell boys)
-Podcasts [talkative = 0.5, age = 0.8]
+Podcasts [talkative = 0.5, agemult = 0.8]
 Wolf people
 Machines that don't do the fucking thing they're designed to do [mood = -0.4]
 Injustice... (loser) [ evil = -0.1]
@@ -770,10 +774,10 @@ Radiohead
 Polystyrene
 Cars
 Farters
-The mortality reminder that comes with Autumn [mood = -0.5, walkspeed = 0.8, age =1.1]
+The mortality reminder that comes with Autumn [mood = -0.5, walkspeed = 0.8, agemult =1.1]
 Any form of exercise [walkspeed = 0.6, lounging = 3]
 Clowns
-Being a robot [ age = 0.8 ]
+Being a robot [ agemult = 0.8 ]
 Worrying whether or not the packaging for the copious amount of sex toys they order online will be "discreet" [fidgety = 3]
 Geese [parks = 0.2]
 Queues [patience = 0.3]
@@ -786,9 +790,9 @@ Dad
 Cousins, as a concept
 Eyes [blinks = 5]
 "Juicers"
-People who use LinkedIn [ age = 0.8]
+People who use LinkedIn [ agemult = 0.8]
 The phrase, "just what the doctor ordered"
-The phrase, "he's behind me, isn't he?" [ age = 0.8]
+The phrase, "he's behind me, isn't he?" [ agemult = 0.8]
 People with nut allergies [ evil = 0.1]
 Fat people [ evil = 0.1]
 Skinny people [ evil = 0.05]
@@ -810,14 +814,14 @@ Anime
 Deadly Nuerotoxin
 People with the same name as them
 Trends
-Cheap fast fashion (expensive fast fashion ok) [ age = 0.8]
+Cheap fast fashion (expensive fast fashion ok) [ agemult = 0.8]
 The current zoning laws
-New situationship [ age = 0.6]
+New situationship [ agemult = 0.6]
 Being employed [plazas = 0.4]
 Love [mood = -0.4, evil = 0.01]
 Justice... (success mindset) [ evil = 0.1]
 capitalisation
-tje tibny litkle bnuttons on digutal keyboarad [ age = 1.2]
+tje tibny litkle bnuttons on digutal keyboarad [ agemult = 1.2]
 Health and safety [ evil = 0.05]
 Cinema [ evil = 0.05]
 Other socialists [chatty = 0.6, talkative = 5, mood = -0.5]
@@ -827,22 +831,22 @@ False hope
 Debtors
 Knocking shit over [ evil = -0.05]
 Constructive criticism [ evil = 0.05]
-The family group chat [chatty = 0.6, age = 0.6]
+The family group chat [chatty = 0.6, agemult = 0.6]
 Men
 Women [ evil = 0.1]
 Radiation 
 The state of the world [mood = -0.4]
 Breaking the fourth wall
-Cognitio-hazards [ evil = -0.05, age = 0.8]
-The haunting visage of a lost-love, formed unwittingly as a sordid projection of the self [mood = -0.6, age = 1.05]
+Cognitio-hazards [ evil = -0.05, agemult = 0.8]
+The haunting visage of a lost-love, formed unwittingly as a sordid projection of the self [mood = -0.6, agemult = 1.1]
 Variations in toe size
 JavaScript
 Larry David
 Their nemesis
 Practicing restraint [patience = 0.4, evil = 0.05]
 Spending money
-High Treason [ age = 1.2]
-Looking at their reflection [ age = 10, evil = 0.5]
+High Treason [ agemult = 1.2]
+Looking at their reflection [ agemult = 10, evil = 0.5, ageless]
 Looking at their reflection
 When something is, "titular"
 When something is, "seminal"
@@ -857,10 +861,10 @@ The poor [ evil = 0.1]
 Discovering their zipper is down again [fidgety = 4]
 Their current style [mood = -0.1]
 Their whole shit [mood = -0.3]
-Clean energy [parks = 0.2, evil = 0.05, age =1.1]
+Clean energy [parks = 0.2, evil = 0.05, agemult =1.1]
 Parasites
 Blowjobs
-4am Windows update [patience = 0.8, age = 0.8]
+4am Windows update [patience = 0.8, agemult = 0.8]
 Astrology ( ...a Leo, perhaps?)
 Pestilence
 When they laugh and then hear the sound play back in their head [mood = -0.2, chatty = 0.7]
@@ -879,15 +883,15 @@ Being weak [size = 0.8, walkspeed = 0.8, mood = -0.1]
 Suffering...
 Moths (butterflies ok)
 Moths AND butterflies
-AI restaurant menu art [age = 0.8]
+AI restaurant menu art [agemult = 0.8]
 Having a good time [mood = -0.4, chatty = 0.7]
-Swearing out loud [ evil = -0.05, age =1.1]
-Having an accident [ age = 1.2]
+Swearing out loud [ evil = -0.05, agemult =1.1]
+Having an accident [ agemult = 1.2]
 Hyperpop
 Not being niche enough [ evil = 0.01]
 Realising
-Stroking out [ age = 1.2]
-"These hoes" [ evil = 0.05, age = 0.6]
+Stroking out [ agemult = 1.2]
+"These hoes" [ evil = 0.05, agemult = 0.6]
 Washing their bedsheets
 Anomalies
 Poisonberry
@@ -896,7 +900,7 @@ Frostbite
 Saṃsāra
 Clowns
 Being obliterated by unsucessful journey through Da'at [mood = -1, blinks = 0.2, walkspeed = 0.7]
-The Curse [mood = -1, blinks = 0.2, walkspeed = 0.7, age = 1.3]
+The Curse [mood = -1, blinks = 0.2, walkspeed = 0.7, agemult = 1.3]
 Generational trauma [mood = -0.5]
 Déjà vu
 Gangstalking
@@ -920,7 +924,7 @@ Hyperhydrosis
 When the sleeves are too short
 Dropping things in the toilet
 Cancel culture [ evil = 0.1]
-Being too woke for anyone in real life [ age = 0.8]
+Being too woke for anyone in real life [ agemult = 0.8]
 Lumpy mattress
 Being ahead of the curve
 Fungal infections
@@ -946,7 +950,7 @@ When dogs seem depressed [ evil = -0.05]
 Enduring torture
 Starving to death
 The diseased [ evil = 0.1]
-Time [ age = 1.2]
+Time [ agemult = 1.2]
 Glamping
 A tickle
 Gunshot wounds
@@ -960,10 +964,10 @@ Reaping [ evil = 0.01]
 Mixing and mastering
 Sensing the spectre [walkspeed = 1.2]
 Sizzling fajitas
-Rap [ evil = 0.05, age = 1.1]
+Rap [ evil = 0.05, agemult = 1.1]
 Intestines
 The coming moon
-Lead poisoning [ age = 1.2]
+Lead poisoning [ agemult = 1.2]
 Hemlock water-dropwort
 Scopolamine poisoning
 Being an alcoholic
@@ -973,8 +977,8 @@ Centipedes [parks = 0.5]
 Wasps [parks = 0.5]
 Bees [parks = 0.5, evil = 0.05]
 Garlic bread
-Garlic bread [ age = 10, evil = 0.5 ]
+Garlic bread [ agemult = 10, evil = 0.5, ageless ]
 Running water
-Running water [ age = 10, evil = 0.5 ]
+Running water [ agemult = 10, evil = 0.5, ageless ]
 Going bald
-Their bastard son... bastard little boy... [age = 1.2, evil = 0.1]
+Their bastard son... bastard little boy... [agemult = 1.2, evil = 0.1]
