@@ -5,6 +5,7 @@
 // warehouse, say), and then to [default], so a section need only say what it does differently.
 const BUILDINGS_TEXT_URL = 'assets/buildings.txt';
 const ATTRIBUTES = ['name', 'mood', 'loves', 'hates'];
+const SETTINGS = ['enterable']; // not card text: whether people go into one (see "going indoors" in people.js)
 // what every kind of building falls back to: the zone type that puts it up (see buildingKindOf below)
 const ZONE_OF_KIND = {
   landmark: 'buildings',
@@ -25,8 +26,8 @@ function parseBuildingsText(text) {
     if (heading) { current = heading[1].trim().toLowerCase(); parsed[current] = parsed[current] || {}; return; }
     const pair = line.match(/^([^=]+?)\s*=\s*(.+)$/);
     const key = pair && pair[1].toLowerCase();
-    if (!current || !ATTRIBUTES.includes(key)) {
-      console.warn(`Blockout: in buildings.txt, "${line}" isn't an "attribute = value" line (${ATTRIBUTES.join(', ')}) under a [building kind]`);
+    if (!current || !(ATTRIBUTES.includes(key) || SETTINGS.includes(key))) {
+      console.warn(`Blockout: in buildings.txt, "${line}" isn't an "attribute = value" line (${ATTRIBUTES.concat(SETTINGS).join(', ')}) under a [building kind]`);
       return;
     }
     (parsed[current][key] = parsed[current][key] || []).push(pair[2]);
@@ -42,11 +43,22 @@ fetch(BUILDINGS_TEXT_URL)
 export function buildingKindOf(group, zone) {
   return (group && group.userData.buildingKind) || (zone && zone.zoneType) || 'buildings';
 }
+// what a kind falls back to, nearest first: itself, then its zone type, then [default]
+function chainFor(kind) {
+  const key = (kind || '').toLowerCase();
+  return [types[key], types[ZONE_OF_KIND[key]], types.default].filter(Boolean);
+}
+// Whether people go into buildings of this kind (see "going indoors" in people.js): `enterable = yes` in buildings.txt.
+// Anything that doesn't say so stays shut, so a kind is only enterable if it's been thought about — which is the way
+// round we want it: somewhere ambiguous (a container yard, say) shouldn't swallow people just because nobody said not to.
+export function buildingEnterable(kind) {
+  const said = chainFor(kind).map(t => t.enterable).find(v => v && v.length);
+  return !!said && /^(yes|true|on|1)$/i.test(said[said.length - 1].trim());
+}
 // A building's card details: `kind` is what it is (see buildingKindOf) and `number` its own number (see buildingNumber
 // in footprints.js), which decides which it gets of an attribute with several values.
 export function buildingTypeOf(kind, number = 1) {
-  const key = (kind || '').toLowerCase();
-  const chain = [types[key], types[ZONE_OF_KIND[key]], types.default].filter(Boolean);
+  const chain = chainFor(kind);
   const pick = attribute => {
     const values = chain.map(t => t[attribute]).find(v => v && v.length) || [''];
     return values[(number - 1) % values.length];

@@ -5,7 +5,7 @@ import { scene, camera, Y_PARK, Y_PATH, Y_ROAD, Y_SIDEWALK, Y_ZONE_GROUND } from
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { mulberry32, centroid } from '../core/math.js';
 import { closestPointOnSegment, buildingKey, buildingNumber } from '../buildings/footprints.js';
-import { buildingKindOf, buildingTypeOf } from '../buildings/building-types.js';
+import { buildingKindOf, buildingTypeOf, buildingEnterable } from '../buildings/building-types.js';
 import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { CLIPPER_SCALE, roadLineWidths, clipPolygons, unionRoadStrokes, navRebuildOnHold } from '../roads/roads.js';
@@ -932,9 +932,9 @@ function buildPeopleNav() {
   const buildings = buildingDoors(lines, grid, CELL, onPavement, widestSidewalk);
   return { areas, lines, grid, CELL, onPavement, nearRing, buildings };
 }
-// The buildings people can go into (see "going indoors"): each city building (one with its footprint kept on it — see
-// subdivideZone in cutouts.js) close enough to a walkway point, with no road in between, gets a door on the wall nearest
-// the nearest such point — which is where people on that walkway go in.
+// The buildings people can go into (see "going indoors"): each building of a kind people go into (`enterable` in
+// assets/buildings.txt) that keeps its footprint on it, close enough to a walkway point, with no road in between, gets a
+// door on the wall nearest the nearest such point — which is where people on that walkway go in.
 // How close is "close enough" follows the street itself rather than being a flat number, since how far a building stands
 // off the pavement is the player's to set: walkways run down the middle of the sidewalk, so it takes half of that to
 // reach the kerb, then the zone's setbacks to reach the lot's edge, and then DOOR_SLACK for a footprint that doesn't
@@ -950,6 +950,8 @@ function buildingDoors(lines, grid, CELL, onPavement, sidewalkWidth) {
     (zone.buildingsGroup?.children || []).forEach((group, k) => {
       const fp = group.userData.footprint;
       if (!fp || fp.length < 3) return;
+      const kind = buildingKindOf(group, zone);
+      if (!buildingEnterable(kind)) return; // (nobody wanders into a tank farm: see enterable in buildings.txt)
       const c = centroid(fp), size = Math.max(...fp.map(q => Math.hypot(q.x - c.x, q.z - c.z)));
       const span = Math.ceil((size + reach)/CELL), cx = Math.floor(c.x/CELL), cz = Math.floor(c.z/CELL);
       let best = null;
@@ -970,7 +972,7 @@ function buildingDoors(lines, grid, CELL, onPavement, sidewalkWidth) {
       // just short of the wall, so they don't walk into it
       const back = Math.min(0.4, best.d)/best.d;
       const key = buildingKey(zone, k);
-      const building = { key, number: buildingNumber(key), kind: buildingKindOf(group, zone),
+      const building = { key, number: buildingNumber(key), kind,
         x: c.x, z: c.z, y: Y_ZONE_GROUND, height: group.userData.height || 10, size,
         door: { x: best.q.x + (best.from.x - best.q.x)*back, z: best.q.z + (best.from.z - best.q.z)*back } };
       vertex.building = building;

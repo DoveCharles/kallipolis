@@ -6,6 +6,9 @@
 #   loves   what it loves
 #   hates   what it hates
 #
+#   enterable   `yes` if people go inside this kind and are gone a while (see "going indoors" in src/life/people.js).
+#               Left out, it's no: somewhere you'd only ambiguously go into (a container yard) shouldn't swallow people.
+#
 # Give an attribute several lines to have each building of that kind pick one of them (always the same one for the same
 # building). A kind falls back to the zone type that puts it up, and then to [default], so a section need only say what
 # it does differently. Blank lines and lines starting with # are skipped.
@@ -25,6 +28,7 @@ hates = Strong winds
 # ============================================================ city blocks
 
 [buildings]
+enterable = yes
 name = Building
 mood = 🏢
 loves = Having people inside them
@@ -55,6 +59,7 @@ loves = Logistics
 hates = Inspections
 
 [warehouse]
+enterable = yes
 name = Warehouse
 mood = 📦
 loves = Boxes
@@ -64,6 +69,7 @@ hates = Stocktaking
 hates = Forklift certification
 
 [factory]
+enterable = yes
 name = Factory
 mood = 🏭
 loves = MAKING THINGS
@@ -96,6 +102,7 @@ loves = A good harvest
 hates = Bad weather
 
 [farmstead]
+enterable = yes
 name = Farmstead
 mood = 🚜
 loves = The smell of hay
