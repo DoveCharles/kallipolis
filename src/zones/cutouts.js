@@ -5,7 +5,7 @@ import { mulberry32, lerp, polygonArea, recursiveSubdivide, insetPolygon } from 
 import { applyFootprintArchetype } from '../buildings/footprints.js';
 import { tessellateClosedPath, BUILDING_GROUND_COLORS, resolveParkTint, resolveGrassNoiseStrength } from '../core/splines.js';
 import { CLIPPER_SCALE, ROAD_ARC_TOLERANCE, clipPolygons, disposeObject } from '../roads/roads.js';
-import { makeBuildingMesh, makeParkMesh, makeFlatZoneMesh, generateParkContent } from './surface-detail.js';
+import { makeBuildingMesh, makeParkMesh, makeFlatZoneMesh, generateParkContent, generateBeachContent } from './surface-detail.js';
 import { generatePlazaContent } from './plazas.js';
 import { generateFarmlandContent } from './farmland.js';
 
@@ -151,6 +151,8 @@ export function subdivideZone(zone) {
     const blockers = pathsHere.length ? clipPolygons(ClipperLib.ClipType.ctUnion, cutouts, pathsHere) : cutouts;
     if (zone.zoneType==='park') {
       generateParkContent(zone, poly, cutouts, blockers);
+    } else if (zone.zoneType==='beach') {
+      generateBeachContent(zone, poly, cutouts);
     } else if (zone.zoneType==='water') {
       // nothing of its own: all water is built together, by rebuildWater
     } else if (zone.zoneType==='plaza') {
@@ -220,13 +222,13 @@ export function subdivideZone(zone) {
   App.updateStats();
 }
 // Re-subdivides `zone` and every zone below it in the list — needed whenever a zone's outline or type changes, or it's
-// added, since each zone is cut by the outlines of all the zones above it. Water and park zones above it are redone as
-// well: their shorelines and beaches depend on every zone around them, not just the ones above.
+// added, since each zone is cut by the outlines of all the zones above it. Water, park and beach zones above it are redone
+// as well: their shorelines and beaches depend on every zone around them, not just the ones above.
 export function subdivideZonesFrom(zone) {
   subdivideZonesFromIndex(Math.max(0, S.zones.indexOf(zone)));
 }
 export function subdivideZonesFromIndex(index) {
-  S.zones.forEach((z, i) => { if (i >= index || z.zoneType==='water' || z.zoneType==='park' || z.zoneType==='farmland') subdivideZone(z); });
+  S.zones.forEach((z, i) => { if (i >= index || z.zoneType==='water' || z.zoneType==='park' || z.zoneType==='beach' || z.zoneType==='farmland') subdivideZone(z); });
 }
 // Moves a zone to just before (or after) another in the zone list. The order is priority — a zone cuts itself out of
 // every zone below it — so every zone is re-subdivided.

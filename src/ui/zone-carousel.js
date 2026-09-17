@@ -17,7 +17,8 @@ import { updateStats } from './panels.js';
 // all happens between two frames, so the view never flickers, and the images are kept for the rest of the session.
 const ZONE_TYPES = [
   { id: 'buildings', label: 'Buildings', color: '#6d717c' }, { id: 'plain', label: 'Plain', color: '#5d6068' },
-  { id: 'park', label: 'Park', color: '#8fb85a' }, { id: 'water', label: 'Water', color: '#1d6f7d' },
+  { id: 'park', label: 'Park', color: '#8fb85a' }, { id: 'beach', label: 'Beach', color: '#d9c48f' },
+  { id: 'water', label: 'Water', color: '#1d6f7d' },
   { id: 'plaza', label: 'Plaza', color: '#b7b0a4' }, { id: 'farmland', label: 'Farmland', color: '#c9b75c' },
   { id: 'industrial', label: 'Industrial', color: '#7d8187' },
 ];

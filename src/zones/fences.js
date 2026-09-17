@@ -36,7 +36,7 @@ export function buildRailingMesh(lines, baseY, style, name) {
 }
 // The lines a fence around `poly` (a zone's outline) should follow: the edge of its area — the outline minus the zones
 // above it — pulled in by `inset`, with a gap wherever a road, river or path crosses it, and left off wherever it runs along
-// water (that edge is a beach or an embankment instead).
+// water or a beach zone (that edge is a beach or an embankment instead).
 function zoneFenceLines(zone, poly, inset) {
   const { ctDifference, ctUnion, ctIntersection } = ClipperLib.ClipType;
   const edge = App.offsetPaths(clipPolygons(ctDifference, [App.toClipperPath(poly)], App.zoneOutlinesAbove(zone)), -inset, ClipperLib.JoinType.jtMiter);
@@ -44,7 +44,7 @@ function zoneFenceLines(zone, poly, inset) {
   const loops = edge.map(path => path.concat([path[0]]));
   const reach = App.offsetPaths([App.toClipperPath(poly)], App.ZONE_CUTOUT_REACH + inset, ClipperLib.JoinType.jtRound);
   const crossings = clipPolygons(ctIntersection, clipPolygons(ctUnion, S.landCutFootprint, S.pathFootprint), reach);
-  const water = clipPolygons(ctIntersection, App.getWaterRegion(), reach);
+  const water = clipPolygons(ctIntersection, clipPolygons(ctUnion, App.getWaterRegion(), App.getBeachZoneArea()), reach);
   const gaps = clipPolygons(ctUnion, crossings.length ? App.offsetPaths(crossings, 0.6, ClipperLib.JoinType.jtRound) : [],
     water.length ? App.offsetPaths(water, inset + 0.6, ClipperLib.JoinType.jtRound) : []);
   if (!gaps.length) return loops.map(App.fromClipperPath);

@@ -24,7 +24,7 @@ export const WATER_BANK_BOTTOM = -1.6;     // and reach down past the surface (w
 const BEACH_SLOPE_WIDTH = 3;        // how far out a beach slopes before it reaches the bottom of the bank
 // how far out along a beach its slope goes under the water — where the waterline and its foam are
 const BEACH_WATERLINE = BEACH_SLOPE_WIDTH*(WATER_BANK_TOP - WATER_LEVEL)/(WATER_BANK_TOP - WATER_BANK_BOTTOM);
-export const WATER_BANK_COLOR = 0x6f6c66, WATER_BEACH_COLOR = 0xc9b387;
+export const WATER_BANK_COLOR = 0x6f6c66;
 const WATER_MAX_SHORE_SEGMENTS = 128;
 const WATER_MAX_BEACH_SEGMENTS = 64;
 const WATER_TILE_SIZE = 96;         // world units per surface tile
@@ -184,24 +184,27 @@ export function applyWaterShader(mat, shoreSegments, beachSegments, beachWaterli
       .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n' + WATER_NORMAL_FRAGMENT);
   };
 }
-// The water region — every water zone minus the zones above it, plus every river, unioned — and the park area beside it
-// (every park minus the zones above it, for beaches). Cached, and only worked out again when a zone or river changes.
-const waterCache = { key: null, region: [], parkArea: [] };
+// The water region — every water zone minus the zones above it, plus every river, unioned — and the land beside it that
+// gets a sloping beach rather than a wall (every park and beach zone minus the zones above it), plus the beach zones on
+// their own (for parks to fade into sand beside them). Cached, and only worked out again when a zone or river changes.
+const waterCache = { key: null, region: [], parkArea: [], beachZoneArea: [] };
 function refreshWaterCache() {
   const key = S.riverSeq + '|' + JSON.stringify(S.zones.map(z => (z.drawing || z.points.length < 3) ? null : [z.zoneType, z.points]));
   if (key === waterCache.key) return;
   waterCache.key = key;
   const { ctUnion, ctDifference } = ClipperLib.ClipType;
-  const water = S.riverFootprint.slice(), parks = [];
+  const water = S.riverFootprint.slice(), parks = [], beaches = [];
   S.zones.forEach(zone => {
-    if (zone.drawing || zone.points.length < 3 || (zone.zoneType !== 'water' && zone.zoneType !== 'park')) return;
+    if (zone.drawing || zone.points.length < 3 || (zone.zoneType !== 'water' && zone.zoneType !== 'park' && zone.zoneType !== 'beach')) return;
     const area = clipPolygons(ctDifference, [App.toClipperPath(tessellateClosedPath(zone.points))], App.zoneOutlinesAbove(zone));
-    (zone.zoneType === 'water' ? water : parks).push(...area);
+    (zone.zoneType === 'water' ? water : zone.zoneType === 'beach' ? beaches : parks).push(...area);
   });
   waterCache.region = water.length ? clipPolygons(ctUnion, water, []) : [];
-  waterCache.parkArea = parks.length ? clipPolygons(ctUnion, parks, []) : [];
+  waterCache.parkArea = parks.length || beaches.length ? clipPolygons(ctUnion, parks.concat(beaches), []) : [];
+  waterCache.beachZoneArea = beaches.length ? clipPolygons(ctUnion, beaches, []) : [];
 }
 export function getWaterRegion() { refreshWaterCache(); return waterCache.region; }
+export function getBeachZoneArea() { refreshWaterCache(); return waterCache.beachZoneArea; }
 
 S.waterGroup = new THREE.Group(); S.waterGroup.name = 'Water'; scene.add(S.waterGroup);
 let builtWaterKey = null, builtBridgeKey = null;
@@ -303,16 +306,19 @@ function buildWaterBody(region, parkArea) {
       node.Childs().forEach(visit);
     };
     tree.Childs().forEach(visit);
-    const addBankMesh = (builder, color, name) => {
+    const addBankMesh = (builder, color, name, shader) => {
       const geo = builder.build();
       if (!geo) return;
-      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.95 }));
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.95 });
+      if (shader) shader(mat);
+      const mesh = new THREE.Mesh(geo, mat);
       mesh.receiveShadow = true;
       mesh.name = name;
       S.waterGroup.add(mesh);
     };
     addBankMesh(banks, WATER_BANK_COLOR, 'WaterBank');
-    addBankMesh(beaches, WATER_BEACH_COLOR, 'Beach');
+    // the same wet sand the beach meets the water with, so the slope carries straight on from it
+    addBankMesh(beaches, 0xffffff, 'Beach', mat => App.applySandShader(mat, [], true));
 
     // the surface, tile by tile: each tile is the region clipped to its square (rows first, so each square only clips a
     // row's worth of outline), shaded with just the shore within WATER_TILE_MARGIN of it — nearest first if that's still
@@ -363,4 +369,4 @@ function buildWaterBody(region, parkArea) {
   scene.add(S.waterGroup);
 }
 
-Object.assign(App, { WATER_COLOR, PARK_BEACH_WIDTH, segmentUniformArray, edgeSegmentsOf, sharedEdgeSegmentsWith, applyWaterShader, getWaterRegion });
+Object.assign(App, { WATER_COLOR, PARK_BEACH_WIDTH, segmentUniformArray, edgeSegmentsOf, sharedEdgeSegmentsWith, applyWaterShader, getWaterRegion, getBeachZoneArea });

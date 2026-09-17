@@ -579,10 +579,84 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
   group.rotation.x = -Math.PI/2;
   return group;
 }
-export function makeParkMesh(poly, tintColor, noiseStrength, cutouts, beachSegments) {
+export function makeParkMesh(poly, tintColor, noiseStrength, cutouts, beachSegments, wetCount) {
   // falls back to PARK_TINT_COLORS[0] (a natural yellow-green by default, white = fully
   // untinted) when no tint is passed; multiplies over the shader's own grayscale grass pattern
-  return makeFlatZoneMesh(poly, tintColor!=null ? tintColor : PARK_TINT_COLORS[0], Y_PARK, 'Park', (mat) => applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments), cutouts);
+  return makeFlatZoneMesh(poly, tintColor!=null ? tintColor : PARK_TINT_COLORS[0], Y_PARK, 'Park', (mat) => applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, wetCount), cutouts);
+}
+// The sand shared by park beaches and beach zones, so the two meet without a seam: `p` is the world position, `wetDistance`
+// how far it is from the water's edge (darker, still wet, within 1.5 units of it). Needs grassNoise.
+const SAND_GLSL = `
+  vec3 sandColor(vec2 p, float wetDistance) {
+    vec3 sand = vec3(0.86, 0.77, 0.56)*(0.92 + 0.16*grassNoise(p*3.1));
+    return sand*mix(0.72, 1.0, smoothstep(0.0, 1.5, wetDistance));
+  }
+`;
+const GRASS_NOISE_GLSL = `
+  float grassHash(vec2 p) {
+    p = fract(p*vec2(123.34, 456.21));
+    p += dot(p, p+45.32);
+    return fract(p.x*p.y);
+  }
+  float grassNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    float a = grassHash(i), b = grassHash(i+vec2(1.0,0.0));
+    float c = grassHash(i+vec2(0.0,1.0)), d = grassHash(i+vec2(1.0,1.0));
+    vec2 u = f*f*(3.0-2.0*f);
+    return mix(a,b,u.x) + (c-a)*u.y*(1.0-u.x) + (d-b)*u.x*u.y;
+  }
+  // shortest distance from p to the segment a-b
+  float grassDistToSegment(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p-a, ba = b-a;
+    float h = clamp(dot(pa,ba)/max(dot(ba,ba), 1e-6), 0.0, 1.0);
+    return length(pa - ba*h);
+  }
+`;
+// A beach zone's surface: all sand, wet along `wetSegments` (its edges that meet water), with faint wind-blown ripples.
+// `allWet` makes it wet all over — for the beach slopes running down into the water.
+export function applySandShader(mat, wetSegments, allWet) {
+  const wet = App.segmentUniformArray(wetSegments, GRASS_MAX_BEACH_SEGMENTS);
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uWetSegments = { value: wet };
+    shader.uniforms.uWetCount = { value: allWet ? 0 : Math.min(wetSegments.length, GRASS_MAX_BEACH_SEGMENTS) };
+    shader.uniforms.uAllWet = { value: allWet ? 1 : 0 };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSandWorldPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSandWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `
+        #include <common>
+        #define SAND_MAX_WET ${GRASS_MAX_BEACH_SEGMENTS}
+        varying vec3 vSandWorldPos;
+        uniform vec4 uWetSegments[SAND_MAX_WET];
+        uniform int uWetCount;
+        uniform int uAllWet;
+        ${GRASS_NOISE_GLSL}
+        ${SAND_GLSL}
+      `)
+      .replace('#include <color_fragment>', `
+        #include <color_fragment>
+        {
+          vec2 p = vSandWorldPos.xz;
+          float wetDistance = uAllWet == 1 ? 0.0 : 1e9;
+          for (int i=0; i<SAND_MAX_WET; i++) {
+            if (i >= uWetCount) break;
+            wetDistance = min(wetDistance, grassDistToSegment(p, uWetSegments[i].xy, uWetSegments[i].zw));
+          }
+          vec3 sand = sandColor(p, wetDistance);
+          // soft ripples, bent by broad noise so they don't read as stripes — fading out toward the (flat, wet) waterline
+          float ripple = sin(p.x*0.9 + p.y*0.35 + grassNoise(p*0.15)*6.0);
+          sand *= 1.0 + 0.035*ripple*smoothstep(1.0, 4.0, wetDistance);
+          diffuseColor.rgb = sand;
+        }
+      `);
+  };
+}
+export function generateBeachContent(zone, poly, cutouts) {
+  const ownArea = clipPolygons(ClipperLib.ClipType.ctDifference, [App.toClipperPath(poly)], cutouts);
+  const wet = App.sharedEdgeSegmentsWith(ownArea, App.getWaterRegion(), GRASS_MAX_BEACH_SEGMENTS);
+  const floor = makeFlatZoneMesh(poly, 0xffffff, Y_PARK, 'BeachFloor', mat => applySandShader(mat, wet), cutouts);
+  if (floor) zone.buildingsGroup.add(floor);
 }
 // Fractal (fBM) value-noise grass shading, evaluated per-fragment from each vertex's real
 // WORLD position (not local UV) — see the comment above the old texture code for why. Four
@@ -590,8 +664,9 @@ export function makeParkMesh(poly, tintColor, noiseStrength, cutouts, beachSegme
 // look the old canvas texture had, but as one continuous function with no tile period at all.
 const GRASS_MAX_EDGE_POINTS = 48; // fixed GLSL array size; zone outlines beyond this are truncated
 const GRASS_MAX_BEACH_SEGMENTS = 64; // fixed GLSL array size for the stretches of a park's edge that meet water
-// `beachSegments` (optional): stretches of the park's edge that meet water, where its grass turns to sand
-export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments) {
+// `beachSegments` (optional): stretches of the park's edge where its grass turns to sand — the first `wetCount` meet water
+// (the sand there is wet), the rest meet beach zones
+export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, wetCount) {
   const beach = App.segmentUniformArray(beachSegments || [], GRASS_MAX_BEACH_SEGMENTS);
   const beachCount = Math.min((beachSegments || []).length, GRASS_MAX_BEACH_SEGMENTS);
   // Pad/truncate the zone's own world-space outline to a fixed-length array so it can be
@@ -612,6 +687,7 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments) {
     shader.uniforms.uGrassNoiseStrength = { value: noiseStrength!=null ? noiseStrength : 1.0 };
     shader.uniforms.uBeachSegments = { value: beach };
     shader.uniforms.uBeachCount = { value: beachCount };
+    shader.uniforms.uBeachWetCount = { value: wetCount!=null ? wetCount : beachCount };
     shader.uniforms.uBeachWidth = { value: App.PARK_BEACH_WIDTH };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `
@@ -635,29 +711,14 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments) {
         uniform float uGrassNoiseStrength;
         uniform vec4 uBeachSegments[GRASS_MAX_BEACH];
         uniform int uBeachCount;
+        uniform int uBeachWetCount;
         uniform float uBeachWidth;
-        float grassHash(vec2 p) {
-          p = fract(p*vec2(123.34, 456.21));
-          p += dot(p, p+45.32);
-          return fract(p.x*p.y);
-        }
-        float grassNoise(vec2 p) {
-          vec2 i = floor(p), f = fract(p);
-          float a = grassHash(i), b = grassHash(i+vec2(1.0,0.0));
-          float c = grassHash(i+vec2(0.0,1.0)), d = grassHash(i+vec2(1.0,1.0));
-          vec2 u = f*f*(3.0-2.0*f);
-          return mix(a,b,u.x) + (c-a)*u.y*(1.0-u.x) + (d-b)*u.x*u.y;
-        }
+        ${GRASS_NOISE_GLSL}
+        ${SAND_GLSL}
         float grassFbm(vec2 p) {
           float v = 0.0, amp = 0.5;
           for (int i=0;i<4;i++) { v += amp*grassNoise(p); p *= 2.03; amp *= 0.5; }
           return v;
-        }
-        // shortest distance from p to the segment a-b
-        float grassDistToSegment(vec2 p, vec2 a, vec2 b) {
-          vec2 pa = p-a, ba = b-a;
-          float h = clamp(dot(pa,ba)/max(dot(ba,ba), 1e-6), 0.0, 1.0);
-          return length(pa - ba*h);
         }
         // shortest distance from world position p to the zone's own boundary polygon —
         // walks every edge since a zone can be concave, where "nearest edge" isn't obvious
@@ -695,19 +756,20 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments) {
           float edgeT = smoothstep(0.0, uZoneEdgeFalloff, edgeDist);
           grassColor *= mix(uZoneEdgeDarken, 1.0, edgeT);
           diffuseColor.rgb *= grassColor;
-          // sand where the park meets water: strongest (and darker, still wet) at the water's edge, fading back into
-          // grass over about uBeachWidth units, with a ragged inland edge rather than a ruler-straight one
+          // sand where the park meets water or a beach zone: strongest at that edge (and darker, still wet, at the
+          // water's), fading back into grass over about uBeachWidth units, with a ragged inland edge rather than a
+          // ruler-straight one
           if (uBeachCount > 0) {
-            float beachDistance = 1e9;
+            float beachDistance = 1e9, wetDistance = 1e9;
             for (int i=0; i<GRASS_MAX_BEACH; i++) {
               if (i >= uBeachCount) break;
-              beachDistance = min(beachDistance, grassDistToSegment(vGrassWorldPos.xz, uBeachSegments[i].xy, uBeachSegments[i].zw));
+              float d = grassDistToSegment(vGrassWorldPos.xz, uBeachSegments[i].xy, uBeachSegments[i].zw);
+              beachDistance = min(beachDistance, d);
+              if (i < uBeachWetCount) wetDistance = min(wetDistance, d);
             }
             float reach = uBeachWidth*(0.75 + 0.5*grassNoise(vGrassWorldPos.xz*0.12));
             float sandT = 1.0 - smoothstep(reach*0.45, reach, beachDistance);
-            vec3 sand = vec3(0.86, 0.77, 0.56)*(0.92 + 0.16*grassNoise(vGrassWorldPos.xz*3.1));
-            sand *= mix(0.72, 1.0, smoothstep(0.0, 1.5, beachDistance));
-            diffuseColor.rgb = mix(diffuseColor.rgb, sand, sandT);
+            diffuseColor.rgb = mix(diffuseColor.rgb, sandColor(vGrassWorldPos.xz, wetDistance), sandT);
           }
         }
       `);
@@ -793,10 +855,11 @@ export function makeTreeMesh(variant, scale, rng, tintColor) {
 // `cutouts` are cut out of the park's grass; `blockers` (cut-outs plus paths) are where trees can't go
 export function generateParkContent(zone, poly, cutouts, blockers) {
   const rng = mulberry32(zone.settings.seed>>>0);
-  // where the park meets water, its grass turns to sand along that edge (see applyGrassNoiseShader)
+  // where the park meets water or a beach zone, its grass turns to sand along that edge (see applyGrassNoiseShader)
   const ownArea = clipPolygons(ClipperLib.ClipType.ctDifference, [App.toClipperPath(poly)], cutouts);
-  const beach = App.sharedEdgeSegmentsWith(ownArea, App.getWaterRegion(), GRASS_MAX_BEACH_SEGMENTS);
-  const floor = makeParkMesh(poly, resolveParkTint(zone), resolveGrassNoiseStrength(zone), cutouts, beach);
+  const wet = App.sharedEdgeSegmentsWith(ownArea, App.getWaterRegion(), GRASS_MAX_BEACH_SEGMENTS);
+  const beach = wet.concat(App.sharedEdgeSegmentsWith(ownArea, App.getBeachZoneArea(), GRASS_MAX_BEACH_SEGMENTS - wet.length));
+  const floor = makeParkMesh(poly, resolveParkTint(zone), resolveGrassNoiseStrength(zone), cutouts, beach, wet.length);
   if (floor) { floor.name = 'ParkFloor'; zone.buildingsGroup.add(floor); }
 
   const s = zone.settings;
@@ -842,3 +905,5 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
     if (fence) zone.buildingsGroup.add(fence);
   }
 }
+
+Object.assign(App, { applySandShader });
