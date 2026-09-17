@@ -19,44 +19,116 @@ hates = Honkkkk
 [Ambulance]
 name = Ambulance
 mood = 🚑
+loves = WOOOOOOOOOooooo....oooooOOOOOWWWW
+hates = When... they don't make it...
+hates = Budget cuts
 
 [Bus]
 name = Bus
 mood = 🚌
+loves = Picking up my lovely peoples
+hates = Traffic
+hates = Mean peoplesss
 
 [Canyonero]
-name = Canyonero
+name = SUV
 mood = 🚙
+loves = Flipping over
+loves = GET OUT OF MY WAY
+loves = Being so so big and huge
+loves = MUH-MUH-MUH MYYY SHARONA
+loves = Imagine Dragons
+loves = FUCK YOU BUDDY! YEAH FUCK YOU! FUCKING CUT ME OFF, SHIT
+hates = SMALLER CARS!!!
+hates = Slowies
 
 [Taxi]
 name = Taxi
 mood = 🚕
+loves = Rolling up the meter
+loves = Cutting people off
+loves = Not indicating
+hates = People shagging in the back
+hates = Driving
+hates = Knowing the whole layout of the city by heart. It's too much
 
 [PoliceCar]
 name = Police car
 mood = 🚓
+loves = WEEWOOWEEWOO
+loves = PULL OVER, NOW
+hates = 'N******'
+hates = Diets
 
 [Sedan]
 name = Sedan
+mood = 💼
+loves = Going to work
+loves = Their job
+loves = Forgetting about their wife and children
+loves = Leaving home
+loves = Having two biiig cup holders
+loves = Heated seats
+loves = Project management frameworks
+hates = Being late for work!!!
+hates = Traffic, guh! I'm gonna be so late for work!!!
+hates = Hippies
 
 [PickupTruck]
 name = Pickup truck
 mood = 🛻
+loves = Taking up the whooole road omg
+loves = Running over wildlife
+loves = Running over literally anything
+loves = Vaping
+loves = Fucking their fat wife
+hates = Children and small animals
+hates = Nature
+hates = Fucking their fat wife
 
 [SportsCar]
 name = Sports car
 mood = 🏎️
+loves = VROOOOOOOOM
+loves = EEEEEEEEEE *gear change* WREEEEEEEEEE
+loves = RRRRUM RUM RUM RUM RUM RUM
+loves = Being a moderator on r/smalldickproblems
+hates = Their wife
+hates = Getting it in the ear from their missus
 
 [FamilyCar]
 name = Family car
+mood = 👪
+loves = Their family omg
+loves = Road trip!!!
+loves = Sliding doors
+loves = Rolling up their windows
+hates = The 'streets'
+hates = Hearing sirens nearby, omg are they after me? Did I do something?
+hates = Rap music
 
 [Truck]
 name = Truck
 mood = 🚚
+loves = HOONK HOOOOOOOOONK
+loves = Blocking the motorway
+loves = Going sooo so slow
+hates = Literally anyone passing them on the motorway
+hates = Non-truckers
 
 [Twingo]
 name = Twingo
+mood = 🚗
+loves = Being oh so cutey
+loves = France
+hates = Bigger cars (small willy's)
+hates = beeeep beeeeeeep
 
 [Van]
 name = Van
 mood = 🚐
+loves = Uhh. Just on my way to work, mate.
+loves = Parking on the curb in a busy street. It's alright, got me hazards on mate.
+hates = All other cars
+hates = Women
+hates = Bellends
