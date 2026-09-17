@@ -43,4 +43,4 @@ farmhouses = 0.2
 [events]
 peds killed by player = -5
 peds killed by cars = -0.1
-cars destroyed by player = -2
+cars destroyed by player = -10

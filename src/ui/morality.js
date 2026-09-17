@@ -6,7 +6,8 @@ import { S, App } from '../core/shared.js';
 // assets/morality.txt says (to be edited freely) — along with things that happen, like people getting killed. The
 // show/hide button lists what it's made of, and each change pops up next to the bar for a few seconds.
 const MORALITY_TEXT_URL = 'assets/morality.txt';
-const MORALITY_MAX = 100;
+const MORALITY_MAX = 2500, MORALITY_KNEE = 500;   // max value & value that should land at the halfway point of that half-bar;
+const MORALITY_EXP = Math.log(0.5) / Math.log(MORALITY_KNEE / MORALITY_MAX); 
 const NOTICE_LIFE = 3500, NOTICES_MAX = 6;
 const QUIET_TICKS_TO_SETTLE = 1; // a change is only announced once the world's held still this many ticks (so a drag is one notice)
 const TICK_MS = 400;
@@ -100,21 +101,32 @@ const detailsEl = document.getElementById('mor-details');
 const noticesEl = document.getElementById('mor-notices');
 
 const NEUTRAL = [146, 150, 160], EVIL = [229, 72, 77], GOOD = [61, 220, 151];
+
 function meterColor(v) {
-  const t = Math.min(1, Math.abs(v)/MORALITY_MAX), to = v < 0 ? EVIL : GOOD;
-  return `rgb(${NEUTRAL.map((c, i) => Math.round(c + (to[i] - c)*t)).join(',')})`;
+  const t = meterFrac(v); // same non-linear curve as the bar fill
+  const to = v < 0 ? EVIL : GOOD;
+  return `rgb(${NEUTRAL.map((c, i) => Math.round(c + (to[i] - c) * t)).join(',')})`;
 }
 const round1 = n => Math.round(n*10)/10 || 0; // (|| 0: no "-0")
 const signed = n => { const r = round1(n); return (r > 0 ? '+' : '') + r; };
 const scoreClass = n => round1(n) > 0 ? 'good' : round1(n) < 0 ? 'evil' : '';
+
+function meterFrac(v) {
+  const clamped = Math.min(Math.abs(v), MORALITY_MAX);
+  return Math.pow(clamped / MORALITY_MAX, MORALITY_EXP); // 0..1, non-linear
+}
+
 
 function renderMeter(t) {
   const v = t.overall, color = meterColor(v);
   valueEl.textContent = signed(v);
   valueEl.style.color = color;
   fillEl.style.background = color;
-  fillEl.style.width = (Math.abs(v)/MORALITY_MAX*50) + '%';
-  fillEl.style.left = v < 0 ? (50 - Math.abs(v)/MORALITY_MAX*50) + '%' : '50%';
+
+  const frac = meterFrac(v); // 0..1
+  fillEl.style.width = (frac * 50) + '%';
+  fillEl.style.left = v < 0 ? (50 - frac * 50) + '%' : '50%';
+
   if (detailsEl.hidden) return;
   const row = (label, count, score, sub) =>
     `<div class="mor-row${sub ? ' sub' : ''}"><span class="mor-label">${sub ? '• ' : ''}${label}</span><span class="mor-count">${count}</span><span class="mor-score ${scoreClass(score)}">${signed(score)}</span></div>`;
