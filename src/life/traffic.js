@@ -335,6 +335,8 @@ function newCar() {
     // how far round its wheels have rolled, and how far its steering ones are turned, both in radians (see turnWheels) —
     // and which way it was facing last frame, for how fast it's turning
     wheelSpin: 0, wheelSteer: 0, lastHeading: null,
+    // how far the steering's held over, -1 (left) to 1 (right), while it's being driven (see driveByHand)
+    steerHeld: 0,
     // someone crossing it's stopped for (see checkYield) — and the last one it rolled its one-in-four chance against, so
     // it doesn't keep re-rolling for the same person every frame while it's still approaching them
     yieldFor: null, yieldChecked: -1, yielded: 0,
@@ -705,7 +707,7 @@ function turnWheels(car, dt) {
   if (!cm || !cm.wheelRadius || dt <= 0) return;
   car.wheelSpin = (car.wheelSpin + car.speed*dt/(cm.wheelRadius*S.peopleSize)) % (Math.PI*2);
   let steer = 0;
-  if (car === drivenCar) steer = -controlInput().right*WHEEL_STEER_MAX;
+  if (car === drivenCar) steer = -car.steerHeld*WHEEL_STEER_MAX;
   else if (Math.abs(car.speed) > 0.5 && cm.wheelbase) steer = Math.atan(turned/dt*cm.wheelbase*S.peopleSize/car.speed);
   steer = Math.max(-WHEEL_STEER_MAX, Math.min(WHEEL_STEER_MAX, steer));
   car.wheelSteer += (steer - car.wheelSteer)*Math.min(1, dt*10);
@@ -1009,6 +1011,9 @@ function carsOverlap(a, b) {
 // anyone it hits. Let go, it rejoins the nearest lane, facing whichever way along it it's nearest to.
 const DRIVE_TOP_SPEED = 20, DRIVE_BOOST = 1.6, DRIVE_REVERSE_SPEED = 7;
 const DRIVE_ACCEL = 10, DRIVE_BRAKE = 28, DRIVE_COAST = 4, DRIVE_TURN = 2.2; // per second (the turn in radians)
+// how quickly the steering goes over to full lock and back, per second — and the speed at which the car turns half as
+// sharply as it would at a crawl (a third as sharply at twice that, and so on), so it doesn't spin round at top speed
+const DRIVE_STEER_RATE = 5, DRIVE_TURN_FADE = 12;
 let drivenCar = null;
 function driveCar(i) {
   const car = cars[i];
@@ -1042,9 +1047,12 @@ function driveByHand(car, dt) {
   else if (forward > 0) car.speed = toward(car.speed, top, car.speed < 0 ? DRIVE_BRAKE : DRIVE_ACCEL*(run ? DRIVE_BOOST : 1));
   else if (forward < 0) car.speed = toward(car.speed, -DRIVE_REVERSE_SPEED, car.speed > 0 ? DRIVE_BRAKE : DRIVE_ACCEL*0.6);
   else car.speed = toward(car.speed, 0, DRIVE_COAST);
-  // steering turns it more the faster it's going, up to a walking pace — and the other way round, reversing
+  // steering turns it more the faster it's going, up to a walking pace, and less again from there — and the other way
+  // round, reversing — eased on and off rather than all at once
   const was = { x: car.x, z: car.z, heading: car.heading };
-  turnCar(car, -right*DRIVE_TURN*dt*Math.max(-1, Math.min(1, car.speed/4)));
+  car.steerHeld = toward(car.steerHeld, right, DRIVE_STEER_RATE);
+  const pace = Math.max(-1, Math.min(1, car.speed/4))/(1 + Math.abs(car.speed)/DRIVE_TURN_FADE);
+  turnCar(car, -car.steerHeld*DRIVE_TURN*dt*pace);
   car.x += Math.sin(car.heading)*car.speed*dt;
   car.z += Math.cos(car.heading)*car.speed*dt;
   bumpIntoCars(car, was);
