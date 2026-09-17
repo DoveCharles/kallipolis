@@ -42,5 +42,5 @@ farmhouses = 0.2
 # THINGS THAT HAPPEN: per time it happens (these start at 0 each time the page loads)
 [events]
 peds killed by player = -5
-peds killed by cars = -1
+peds killed by cars = -0.1
 cars destroyed by player = -2

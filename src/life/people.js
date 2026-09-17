@@ -1656,6 +1656,7 @@ function killPerson(i, by = 'player') {
     peopleMesh.getColorAt(i, colors.top);
     colors.pants.copy(colors.top);
   }
+  Object.values(colors).forEach(color => color.lerp(new THREE.Color(0x550000), 0.4)); //make gibs darker, less saturated
   explode({ x: p.x, y: p.y, z: p.z }, 1.7*p.height*S.peopleSize, colors);
   const evil = profileOf(i, true).traits.evil;
   if (people[i])
