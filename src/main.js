@@ -45,9 +45,9 @@ import { controls } from './core/camera-controls.js';
 import { mulberry32 } from './core/math.js';
 import { createWindowMaterial } from './buildings/windows.js';
 import { renderMapsList } from './maps/map-images.js';
-import { applyPathShader } from './roads/paths.js';
+import { applyPathShader, applyWalkwayShader } from './roads/paths.js';
 import { updateTrafficLights } from './roads/markings.js';
-import { loadCarriageModel, updateTrainShuttles, scaleNodeUi } from './trains/trains.js';
+import { loadCarriageModel, updateTrainShuttles, scaleNodeUi, nodeUiMaterial } from './trains/trains.js';
 import { applyGrassNoiseShader } from './zones/surface-detail.js';
 import { applyPavingShader } from './zones/plazas.js';
 import { applyCropShader } from './zones/farmland.js';
@@ -87,6 +87,7 @@ const standardWith = (applyShader, params) => () => {
   standardWith(mat => applyCropShader(mat, 1, 0, 1, 0.2)),
   standardWith(mat => applyPavingShader(mat, 0)),
   standardWith(mat => applyPathShader(mat, [], 1, 1), { transparent: true, depthWrite: false, ...SKIP_OVER_WATER_AND_ROADS }),
+  standardWith(mat => applyWalkwayShader(mat, 'plain', 1, 0), SKIP_OVER_WATER_AND_ROADS), // walkway paving
   standardWith(null, { side: THREE.DoubleSide }),                                         // road surfaces, fountain stone
   standardWith(null, { vertexColors: true, flatShading: true, side: THREE.DoubleSide }),  // building bodies
   standardWith(null, { flatShading: true }),                                              // building details (greebles, ribs, canopies…)
@@ -95,6 +96,7 @@ const standardWith = (applyShader, params) => () => {
   () => createWindowMaterial(0x888888, mulberry32(1), true, 1, 1, true),                  // building windows, with and
   () => createWindowMaterial(0x888888, mulberry32(1), true, 1, 1, false),                 // without reflections
   () => new THREE.MeshBasicMaterial({ color: 0xffffff }),
+  () => nodeUiMaterial(THREE.MeshBasicMaterial, { color: 0xffffff }),                     // node markers and handles
 ].forEach(makeMaterial => {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute([0,-10,0, 0,-10,0, 0,-10,0], 3));
