@@ -681,6 +681,7 @@ export function updateTraffic(t) {
     turnWheels(car, dt);
     placeCar(car, i, designCounts);
   });
+  wreckedCars.splice(0).forEach(other => { const i = cars.indexOf(other); if (i >= 0) killCar(i); });
   carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
   if (S.showRoadsafetyDebug) { carHitboxDebugMesh.count = cars.length; carHitboxDebugMesh.instanceMatrix.needsUpdate = true; }
   carParts.matrix.needsUpdate = true;
@@ -1059,15 +1060,21 @@ function driveByHand(car, dt) {
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
 }
 // Running into another car stops it dead — bouncing back a little, and shoving the other one aside (which steers back
-// into its lane after). Already on top of one (one that's pulled into it, say), it can still move off it.
+// into its lane after). Already on top of one (one that's pulled into it, say), it can still move off it. At speed,
+// though, it ploughs on through, a little slower for each, and blows up whatever it hits — once updateTraffic's done
+// going through the cars (see wreckedCars), since that takes them out of the list.
 const BUMP_BOUNCE = 0.3, BUMP_SHOVE = 0.15;
+const WRECK_SPEED = 14, WRECK_SLOWDOWN = 0.75; // (how fast it has to be going; how much of its speed it keeps per car)
+const wreckedCars = [];
 function bumpIntoCars(car, was) {
   const reach = carFootprint(car).length*1.5 + 4*S.peopleSize, before = { ...car, ...was };
+  const wrecking = Math.abs(car.speed) >= WRECK_SPEED;
   let hit = false;
   forCarsNear(car.x, car.z, reach, other => {
-    if (other === car || !carsOverlap(car, other)) return;
+    if (other === car || wreckedCars.includes(other) || !carsOverlap(car, other)) return;
     const d = Math.hypot(other.x - car.x, other.z - car.z), dWas = Math.hypot(other.x - was.x, other.z - was.z);
     if (carsOverlap(before, other) && d >= dWas) return; // (moving off it)
+    if (wrecking) { wreckedCars.push(other); car.speed *= WRECK_SLOWDOWN; return; }
     const push = Math.min(1, Math.abs(car.speed)*BUMP_SHOVE)/(d || 1);
     other.x += (other.x - car.x)*push; other.z += (other.z - car.z)*push;
     other.speed = 0;
