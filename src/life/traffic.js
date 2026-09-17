@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
-import { scene, camera, computeWindowGlowFactor, SKY_ENV_MAP, Y_ROAD } from '../core/scene.js';
+import { scene, camera, renderer, computeWindowGlowFactor, SKY_ENV_MAP, Y_ROAD } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
-import { hashLicensePlate, hashNameToString, mulberry32 } from '../core/math.js';
+import { hashLicensePlate, mulberry32 } from '../core/math.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { roadLineWidths, createMeshBuilder, navRebuildOnHold } from '../roads/roads.js';
@@ -108,8 +108,9 @@ const CAR_GLOW_MATERIALS = {
   Backlights: { diffuse: 0x7a1010, emissive: 0xff2a1a, intensity: 1.2 },
   TaxiLight: { diffuse: 0x3a2410, emissive: 0xffb347, intensity: 1.5 },
 };
-const CAR_SLOT_NAMES = [CAR_PAINT_MATERIAL, 'Lights', 'Backlights', 'TaxiLight']; // vertex slot 0 is everything else
-let carMeshes = []; // [{ mesh, paint, wheels, glowUniform, wheelRadius, wheelbase, length, height, name, thumbMesh, thumbCamera, thumbPaint }], one per design, once loaded
+const CAR_PLATE_MATERIAL = 'Plate';
+const CAR_SLOT_NAMES = [CAR_PAINT_MATERIAL, 'Lights', 'Backlights', 'TaxiLight', CAR_PLATE_MATERIAL]; // vertex slot 0 is everything else
+let carMeshes = []; // [{ mesh, paint, wheels, plates, glowUniform, wheelRadius, wheelbase, length, height, name, thumbMesh, thumbCamera, thumbPaint, thumbPlate }], one per design, once loaded
 let designNumbers = []; // how many of each design have been given out so far (see "the car card")
 
 async function loadGLB(url) {
@@ -180,6 +181,7 @@ function buildCarDesigns(gltf) {
     geometry.translate(-center.x, -box.min.y, -center.z); // centered, and sat on the ground
     geometry.setAttribute('carSlot', new THREE.Float32BufferAttribute(slots, 1));
     geometry.setAttribute('carColor', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('carPlate', plateCoordinates(geometry.attributes.position, slots));
     // each wheel's middle and size, from where its vertices ended up (turned and centered, as above)
     const position = geometry.attributes.position, hubs = wheels.map(() => new THREE.Box3());
     wheelIds.forEach((w, k) => { if (w >= 0) hubs[w].expandByPoint(v.fromBufferAttribute(position, k)); });
@@ -207,6 +209,72 @@ function buildCarDesigns(gltf) {
   gltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (o.material) o.material.dispose(); } });
   return designs;
 }
+// carPlate, per vertex of a Plate part (see "number plates"): where it is across its plate, (u, v, side) — u from 0 at the
+// left to 1 at the right as it reads from outside the car, v from 0 at the top to 1 at the bottom, side 1 for the front
+// plate (+Z) and 2 for the back — or all zeros for anything else. Worked out from where the vertices are, not from the
+// model's own UVs, so a plate reads the right way round however it was unwrapped in Blender.
+function plateCoordinates(position, slots) {
+  const plateSlot = CAR_SLOT_NAMES.indexOf(CAR_PLATE_MATERIAL) + 1, data = new Float32Array(position.count*3);
+  const bounds = [1, 2].map(() => ({ minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }));
+  const sideOf = k => position.getZ(k) > 0 ? 1 : 2;
+  for (let k=0;k<position.count;k++) {
+    if (slots[k] !== plateSlot) continue;
+    const b = bounds[sideOf(k) - 1], x = position.getX(k), y = position.getY(k);
+    b.minX = Math.min(b.minX, x); b.maxX = Math.max(b.maxX, x); b.minY = Math.min(b.minY, y); b.maxY = Math.max(b.maxY, y);
+  }
+  for (let k=0;k<position.count;k++) {
+    if (slots[k] !== plateSlot) continue;
+    const side = sideOf(k), b = bounds[side - 1], x = position.getX(k), y = position.getY(k);
+    const across = (x - b.minX)/Math.max(1e-6, b.maxX - b.minX);
+    data.set([side === 1 ? across : 1 - across, (b.maxY - y)/Math.max(1e-6, b.maxY - b.minY), side], k*3);
+  }
+  return new THREE.BufferAttribute(data, 3);
+}
+
+// ---- number plates: each car's registration (see carPlate), on its model's Plate parts. Drawn by the car shader itself
+// (see injectCarShader), so they cost no more draw calls: one shared atlas of the characters a plate can have, and per
+// car its characters packed into instanceCarPlate — six bits each, three to a float (exact, well within a float's 24
+// bits) — with, in the fourth, its length*4 + its format (0 UK, 1 EU, 2 US, as hashLicensePlate makes them).
+const PLATE_GLYPHS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-'; // (index 0, the space, is left blank)
+const PLATE_MAX_CHARS = 9, PLATE_ATLAS_COLUMNS = 8, PLATE_ATLAS_ROWS = 5, PLATE_CELL_W = 48, PLATE_CELL_H = 96;
+const plateAtlas = (() => {
+  const canvas = document.createElement('canvas');
+  canvas.width = PLATE_ATLAS_COLUMNS*PLATE_CELL_W;
+  canvas.height = PLATE_ATLAS_ROWS*PLATE_CELL_H;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#fff';
+  ctx.font = `bold ${PLATE_CELL_H*0.8}px "Arial Narrow", Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // squeezed to fit the widest character inside its cell, with a margin so neighbours don't bleed in when it's mipmapped
+  const squeeze = Math.min(1, PLATE_CELL_W*0.8/ctx.measureText('W').width);
+  [...PLATE_GLYPHS].forEach((ch, g) => {
+    ctx.save();
+    ctx.translate((g % PLATE_ATLAS_COLUMNS + 0.5)*PLATE_CELL_W, (Math.floor(g/PLATE_ATLAS_COLUMNS) + 0.5)*PLATE_CELL_H);
+    ctx.scale(squeeze, 1);
+    ctx.fillText(ch, 0, PLATE_CELL_H*0.04);
+    ctx.restore();
+  });
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+})();
+function packPlate(text) {
+  const format = text.includes('-') ? 1 : text[3] === ' ' ? 2 : 0; // (AB-123-CD is EU, ABC 1234 US, AB12 CDE UK)
+  const length = Math.min(PLATE_MAX_CHARS, text.length), packed = [0, 0, 0, length*4 + format];
+  for (let k=0;k<length;k++) packed[Math.floor(k/3)] += Math.max(0, PLATE_GLYPHS.indexOf(text[k]))*64**(k % 3);
+  return packed;
+}
+// A car's registration, from its type's name and its number among those like it (so it's the same every time), in the
+// UK's format for the bus, ambulance, police car and taxi, or any for the rest — and packed for its plates.
+const UK_ONLY_TYPES = ['bus', 'ambulance', 'police car', 'taxi'];
+function carPlate(car) {
+  const type = carTypeOf(carMeshes[car.design].name, car.number), name = (type.name || '').trim().toLowerCase();
+  const text = hashLicensePlate(`${type.name} #${car.number}`, UK_ONLY_TYPES.includes(name) ? 0 : undefined);
+  return { text, packed: packPlate(text) };
+}
 // Adds a car design's coloring to its material's shader: vCarColor, per vertex, its instance's paint (instanceCarPaint) if
 // it's slot 1 (CarCol) or its own baked color otherwise; vCarEmissive, added to what it emits, for the glowing slots — lit
 // after dark, like the box car's lights (see carGlowFactor, kept in sync with computeWindowGlowFactor in updateTraffic).
@@ -214,11 +282,42 @@ function buildCarDesigns(gltf) {
 // steering ones steered by instanceCarWheel.y (see turnWheels) — normals too, though only the shadows use them.
 // `paintUniform`, for the card's thumbnail (see makeCarThumbnail): one car at a time, drawn plainly (not instanced), so its
 // paint is a uniform set before each draw rather than an attribute varying per instance (and its wheels sit still).
-function injectCarShader(shader, glowUniform, paintUniform) {
+// And its number plates (see "number plates"): for a Plate part's pixels, which of the plate's character cells it's in
+// (the text centered on the plate), that character from instanceCarPlate, and its shape from the atlas — sampled with
+// the gradients of the plate as a whole, since the jump from one cell to the next would otherwise pick a far too blurry
+// mip along it, and faded to a plain plate once the characters are too small on screen to read.
+function injectCarShader(shader, glowUniform, paintUniform, plateUniform) {
   shader.uniforms.carGlowFactor = glowUniform;
+  shader.uniforms.carPlateAtlas = { value: plateAtlas };
   if (paintUniform) shader.uniforms.instanceCarPaint = paintUniform;
   if (paintUniform) shader.uniforms.instanceCarWheel = { value: new THREE.Vector2() };
-  const paintDecl = paintUniform ? 'uniform vec3 instanceCarPaint;\nuniform vec2 instanceCarWheel;' : 'attribute vec3 instanceCarPaint;\nattribute vec2 instanceCarWheel;';
+  if (plateUniform) shader.uniforms.instanceCarPlate = plateUniform;
+  const paintDecl = paintUniform
+    ? 'uniform vec3 instanceCarPaint;\nuniform vec2 instanceCarWheel;\nuniform vec4 instanceCarPlate;'
+    : 'attribute vec3 instanceCarPaint;\nattribute vec2 instanceCarWheel;\nattribute vec4 instanceCarPlate;';
+  const plateDecl = 'varying vec3 vCarPlateUv;\nflat varying vec4 vCarPlate;';
+  const plateColor = `
+    uniform sampler2D carPlateAtlas;
+    vec3 carPlateColor() {
+      int format = int(vCarPlate.w + 0.5) % 4, count = int(vCarPlate.w + 0.5) / 4;
+      bool back = vCarPlateUv.z > 1.5;
+      vec3 background = format == 0 && back ? vec3(0.98, 0.72, 0.02) : vec3(0.92);
+      // the text: ${PLATE_MAX_CHARS} cells across the plate, inside a margin, the characters centered among them
+      const vec2 grid = vec2(${PLATE_ATLAS_COLUMNS}.0, ${PLATE_ATLAS_ROWS}.0), toAtlas = vec2(1.0, -1.0)/grid;
+      vec2 inner = (vCarPlateUv.xy - vec2(0.08, 0.14))/vec2(0.84, 0.72);
+      vec2 p = vec2(inner.x*${PLATE_MAX_CHARS}.0 - float(${PLATE_MAX_CHARS} - count)*0.5, inner.y);
+      vec2 dx = dFdx(p)*toAtlas, dy = dFdy(p)*toAtlas; // (before any branching, where derivatives aren't to be trusted)
+      float tiny = smoothstep(0.35, 0.8, max(fwidth(p.x), fwidth(p.y))); // (characters only a pixel or two across)
+      if (format == 1 && vCarPlateUv.x < 0.07) return vec3(0.0, 0.12, 0.6); // (the EU's blue band)
+      float cell = floor(p.x);
+      if (p.y < 0.0 || p.y > 1.0 || cell < 0.0 || cell >= float(count)) return background;
+      int k = int(cell), glyph = (int(vCarPlate[k/3] + 0.5) >> (6*(k % 3))) & 63;
+      if (glyph == 0) return background;
+      vec2 corner = vec2(float(glyph % ${PLATE_ATLAS_COLUMNS}), float(glyph / ${PLATE_ATLAS_COLUMNS}));
+      vec2 atlasUv = vec2((corner.x + p.x - cell)/grid.x, 1.0 - (corner.y + p.y)/grid.y);
+      float ink = mix(textureGrad(carPlateAtlas, atlasUv, dx, dy).r, 0.3, tiny);
+      return mix(background, vec3(0.03), ink);
+    }`;
   const wheelTurn = `
     attribute vec4 carWheel;
     vec3 carWheelTurn(vec3 v) {
@@ -231,23 +330,25 @@ function injectCarShader(shader, glowUniform, paintUniform) {
   const glowTerm = (name, slot) => { const g = CAR_GLOW_MATERIALS[name], c = new THREE.Color(g.emissive).multiplyScalar(g.intensity);
     return `carSlot > ${slot - 0.5} && carSlot < ${slot + 0.5} ? vec3(${c.r.toFixed(5)}, ${c.g.toFixed(5)}, ${c.b.toFixed(5)}) : `; };
   shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nattribute float carSlot;\nattribute vec3 carColor;\n' + paintDecl + wheelTurn + '\nvarying vec3 vCarColor;\nvarying vec3 vCarEmissive;')
+    .replace('#include <common>', '#include <common>\nattribute float carSlot;\nattribute vec3 carColor;\nattribute vec3 carPlate;\n' + paintDecl + wheelTurn + '\nvarying vec3 vCarColor;\nvarying vec3 vCarEmissive;\n' + plateDecl)
     .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = carWheelTurn(objectNormal);')
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       transformed = carWheelTurn(transformed - carWheel.xyz) + carWheel.xyz;
       vCarColor = carSlot > 0.5 && carSlot < 1.5 ? instanceCarPaint : carColor;
-      vCarEmissive = ${CAR_SLOT_NAMES.slice(1).map((name, k) => glowTerm(name, k + 2)).join('\n        ')}vec3(0.0);`);
+      vCarPlateUv = carPlate;
+      vCarPlate = instanceCarPlate;
+      vCarEmissive = ${CAR_SLOT_NAMES.map((name, k) => CAR_GLOW_MATERIALS[name] ? glowTerm(name, k + 1) : '').join('')}vec3(0.0);`);
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vCarColor;\nvarying vec3 vCarEmissive;\nuniform float carGlowFactor;')
-    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vCarColor;')
+    .replace('#include <common>', '#include <common>\nvarying vec3 vCarColor;\nvarying vec3 vCarEmissive;\nuniform float carGlowFactor;\n' + plateDecl + plateColor)
+    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vCarPlateUv.z > 0.5 ? carPlateColor() : vCarColor;')
     .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vCarEmissive*carGlowFactor;');
 }
 // The card's thumbnail: the design's own mesh, plainly drawn (not instanced — see injectCarShader), from an isometric
 // camera sized and aimed to fit it (see carThumbnailScene, which sets thumbPaint to whichever car's being shown).
 function makeCarThumbnail(design) {
   const material = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true });
-  const glowUniform = { value: 1 }, paintUniform = { value: new THREE.Color(0xffffff) };
-  material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, paintUniform);
+  const glowUniform = { value: 1 }, paintUniform = { value: new THREE.Color(0xffffff) }, plateUniform = { value: new THREE.Vector4() };
+  material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, paintUniform, plateUniform);
   material.customProgramCacheKey = () => 'car-thumb';
   const mesh = new THREE.Mesh(design.geometry, material);
   const r = design.radius, elevation = Math.atan(1/Math.SQRT2), azimuth = Math.PI/4, distance = r*4;
@@ -255,12 +356,12 @@ function makeCarThumbnail(design) {
   thumbCamera.position.set(distance*Math.cos(elevation)*Math.sin(azimuth), distance*Math.sin(elevation), distance*Math.cos(elevation)*Math.cos(azimuth));
   thumbCamera.up.set(0, 1, 0);
   thumbCamera.lookAt(0, design.height*0.5, 0);
-  return { mesh, camera: thumbCamera, paint: paintUniform };
+  return { mesh, camera: thumbCamera, paint: paintUniform, plate: plateUniform };
 }
 function makeCarMesh(design) {
   const material = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true });
   const glowUniform = { value: 1 };
-  material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, null);
+  material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, null, null);
   material.customProgramCacheKey = () => 'car';
   const mesh = new THREE.InstancedMesh(design.geometry, material, TRAFFIC_MAX);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -270,6 +371,9 @@ function makeCarMesh(design) {
   const wheels = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*2), 2);
   wheels.setUsage(THREE.DynamicDrawUsage);
   design.geometry.setAttribute('instanceCarWheel', wheels);
+  const plates = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*4), 4);
+  plates.setUsage(THREE.DynamicDrawUsage);
+  design.geometry.setAttribute('instanceCarPlate', plates);
   mesh.count = 0;
   mesh.frustumCulled = false;
   mesh.castShadow = true; mesh.receiveShadow = true;
@@ -277,10 +381,10 @@ function makeCarMesh(design) {
   mesh.name = 'Traffic';
   scene.add(mesh);
   const thumb = makeCarThumbnail(design);
-  return { mesh, paint, wheels, glowUniform, length: design.length, width: design.width, height: design.height,
+  return { mesh, paint, wheels, plates, glowUniform, length: design.length, width: design.width, height: design.height,
     wheelRadius: design.wheelRadius, wheelbase: design.wheelbase,
     name: design.name,
-    thumbMesh: thumb.mesh, thumbCamera: thumb.camera, thumbPaint: thumb.paint };
+    thumbMesh: thumb.mesh, thumbCamera: thumb.camera, thumbPaint: thumb.paint, thumbPlate: thumb.plate };
 }
 
 // The lanes: one per sidewalk road line ({ pts, cum, total, lane (offset from the centerline), loop (whether it ends
@@ -616,6 +720,7 @@ export function updateTraffic(t) {
       car.design = Math.floor(trafficRng()*carMeshes.length);
       car.length = carMeshes[car.design].length;
       car.number = ++designNumbers[car.design];
+      car.plate = carPlate(car);
     }
     if (car === drivenCar) { driveByHand(car, dt); turnWheels(car, dt); placeCar(car, i, designCounts); return; }
     // cruise, but ease off for the car in front and slow down into junctions
@@ -691,6 +796,7 @@ export function updateTraffic(t) {
     cm.mesh.instanceMatrix.needsUpdate = true;
     cm.paint.needsUpdate = true;
     cm.wheels.needsUpdate = true;
+    cm.plates.needsUpdate = true;
     cm.glowUniform.value = glowFactor;
   });
   // the camera onto whoever it's following, at about their roof — and driving it, round behind it
@@ -726,6 +832,7 @@ function placeCar(car, i, designCounts) {
     cm.mesh.setMatrixAt(idx, matrix);
     cm.paint.setXYZ(idx, car.paint[0], car.paint[1], car.paint[2]);
     cm.wheels.setXY(idx, car.wheelSpin, car.wheelSteer);
+    cm.plates.setXYZW(idx, ...car.plate.packed);
     matrix.makeScale(0, 0, 0);
     carParts.body.setMatrixAt(i, matrix);
   } else {
@@ -814,22 +921,8 @@ function followCarAt(clientX, clientY) {
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9));
   const car = cars[i], cm = car.design != null ? carMeshes[car.design] : null;
   const type = cm ? carTypeOf(cm.name, car.number) : carTypeOf(null);
-  const carMakeNumber = cm ? `${type.name} #${car.number}` : type.name;
-  let forceRegion;
-  switch (type.name?.trim().toLowerCase()) {
-    case 'bus':
-    case 'ambulance':
-    case 'police car':
-    case 'taxi':
-      forceRegion = 0;
-      break;
-    default:
-      forceRegion = undefined;
-  }
-  const name = cm ? 
-    `${hashLicensePlate(carMakeNumber, forceRegion)} (${carMakeNumber})`
-    : carMakeNumber;
-  App.showCarCard(i, { ...type, name: name });
+  const name = cm ? `${car.plate.text} (${type.name} #${car.number})` : type.name;
+  App.showCarCard(i, { ...type, name });
 }
 function stopFollowingCar() {
   if (followedCar < 0) return;
@@ -1128,6 +1221,7 @@ export function carThumbnailScene(i) {
   if (!car || car.design == null || !carMeshes[car.design]) return null;
   const cm = carMeshes[car.design];
   cm.thumbPaint.value.setRGB(car.paint[0], car.paint[1], car.paint[2]);
+  cm.thumbPlate.value.fromArray(car.plate.packed);
   return { mesh: cm.thumbMesh, camera: cm.thumbCamera };
 }
 
