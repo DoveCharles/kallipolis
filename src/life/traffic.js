@@ -297,19 +297,91 @@ function newCar() {
 // puts a car in lane `li` at distance u along it, heading `dir`
 function carJoinLane(car, li, u, dir) {
   const nav = S.trafficNav.lines[li];
-  car.li = li; car.dir = dir; car.u = Math.max(0, Math.min(nav.total, u));
+  car.li = li; car.dir = dir; car.u = Math.max(0, Math.min(nav.total, u)); car.turned = null;
   car.seg = 0;
   while (car.seg < nav.pts.length-2 && nav.cum[car.seg+1] <= car.u) car.seg++;
 }
 // where a car should be: its lane's point at its distance along it, on the side for its direction, and which way that
-// lane runs there
+// lane runs there — offset square to the road along each segment, and mitred round the bends between them so it doesn't
+// jump at each one
 function lanePoint(car) {
-  const nav = S.trafficNav.lines[car.li];
-  const i = Math.max(0, Math.min(nav.pts.length-2, car.seg));
+  const nav = S.trafficNav.lines[car.li], i = Math.max(0, Math.min(nav.pts.length-2, car.seg));
   const a = nav.pts[i], b = nav.pts[i+1], segLen = (nav.cum[i+1] - nav.cum[i]) || 1;
   const t = Math.max(0, Math.min(1, (car.u - nav.cum[i])/segLen));
-  const dx = (b.x-a.x)/segLen, dz = (b.z-a.z)/segLen, side = car.dir*nav.lane;
-  return { x: a.x + (b.x-a.x)*t - dz*side, z: a.z + (b.z-a.z)*t + dx*side, heading: Math.atan2(dx*car.dir, dz*car.dir) };
+  const dx = (b.x-a.x)/segLen, dz = (b.z-a.z)/segLen, side = car.dir*nav.lane, m = laneMitres(nav);
+  const ox = m[i].x + (m[i+1].x - m[i].x)*t, oz = m[i].z + (m[i+1].z - m[i].z)*t;
+  return { x: a.x + (b.x-a.x)*t + ox*side, z: a.z + (b.z-a.z)*t + oz*side, heading: Math.atan2(dx*car.dir, dz*car.dir) };
+}
+// the lane's point at distance u along it, going `dir`
+function lanePointAt(li, u, dir) {
+  const spot = {};
+  carJoinLane(spot, li, u, dir);
+  return lanePoint(spot);
+}
+// each of a lane's points' offset to its left (for a unit lane), square to the road either side, averaged and mitred at
+// a bend — round the join too, on a loop
+function laneMitres(nav) {
+  if (nav.mitres) return nav.mitres;
+  const { pts, cum } = nav, n = pts.length;
+  const left = i => { const len = (cum[i+1] - cum[i]) || 1; return { x: -(pts[i+1].z - pts[i].z)/len, z: (pts[i+1].x - pts[i].x)/len }; };
+  nav.mitres = pts.map((p, v) => {
+    const before = v > 0 ? left(v-1) : nav.loop ? left(n-2) : null, after = v < n-1 ? left(v) : nav.loop ? left(0) : null;
+    if (!before || !after) return before || after;
+    const x = before.x + after.x, z = before.z + after.z, len = Math.hypot(x, z);
+    if (len < 1e-6) return after;
+    const cos = Math.max(0.5, (x*after.x + z*after.z)/len);
+    return { x: x/len/cos, z: z/len/cos };
+  });
+  return nav.mitres;
+}
+
+// ---- a car's route: the path its front axle follows — along its lane, round in a curve where it turns off onto another
+// (planned — see planTurn — or just taken) and in a U at a dead end, rather than jumping across as its lane point does
+const TURN_CURVE = 2.5; // how far either side of a junction a turn's curve takes, in lane offsets
+// the point on a car's route `ahead` further on from its lane point (following its plan through the junction ahead)
+function routePoint(car, ahead) {
+  const probe = { li: car.li, u: car.u, seg: car.seg, dir: car.dir, plan: car.plan, turned: car.turned, probe: true };
+  if (ahead > 0) driveAlong(probe, ahead);
+  const nav = S.trafficNav.lines[probe.li];
+  // turning round at a dead end: a U, as wide as the lane's offset either side of the middle of the road, and some way
+  // back from the end, taken as it comes up to the end and goes back again
+  const depth = Math.min(1.5*nav.lane, nav.total*0.5);
+  if (!nav.loop && depth >= nav.lane) {
+    for (const end of [1, -1]) {
+      const vi = end > 0 ? nav.pts.length-1 : 0, left = end > 0 ? nav.total - probe.u : probe.u;
+      if (nav.vertices[vi].links.length || left >= depth) continue;
+      const angle = Math.PI*0.5*(probe.dir === end ? 1 - left/depth : 1 + left/depth);
+      const mid = lanePointAt(probe.li, nav.cum[vi] - end*depth, end); // (in the lane going in, so off the middle)
+      const fx = Math.sin(mid.heading), fz = Math.cos(mid.heading), lx = -fz, lz = fx;
+      const cx = mid.x - lx*nav.lane, cz = mid.z - lz*nav.lane, across = nav.lane*Math.cos(angle), along = depth*Math.sin(angle);
+      const tx = -nav.lane*Math.sin(angle)*lx + depth*Math.cos(angle)*fx, tz = -nav.lane*Math.sin(angle)*lz + depth*Math.cos(angle)*fz;
+      return { x: cx + lx*across + fx*along, z: cz + lz*across + fz*along, heading: Math.atan2(tx, tz) };
+    }
+  }
+  // turning off at a junction: coming up to it (with it planned) or just past it
+  const curve = TURN_CURVE*nav.lane;
+  let turn = null, at = 0;
+  const plan = probe.plan;
+  if (plan && plan.link && plan.li === probe.li && plan.from === probe.dir) {
+    const d = (nav.cum[plan.vi] - probe.u)*probe.dir;
+    if (d >= 0 && d < curve) { turn = { from: { li: plan.li, vi: plan.vi, dir: plan.from }, to: { li: plan.link.li, vi: plan.link.vi, dir: plan.dir } }; at = -d; }
+  }
+  const turned = probe.turned;
+  if (!turn && turned && turned.nav === S.trafficNav && turned.to.li === probe.li && turned.to.dir === probe.dir) {
+    const d = (probe.u - nav.cum[turned.to.vi])*probe.dir;
+    if (d >= 0 && d < curve) { turn = turned; at = d; }
+  }
+  if (!turn) return lanePoint(probe);
+  const from = S.trafficNav.lines[turn.from.li], to = S.trafficNav.lines[turn.to.li];
+  const p0 = lanePointAt(turn.from.li, from.cum[turn.from.vi] - turn.from.dir*curve, turn.from.dir);
+  const p3 = lanePointAt(turn.to.li, to.cum[turn.to.vi] + turn.to.dir*curve, turn.to.dir);
+  const reach = 0.4*Math.hypot(p3.x - p0.x, p3.z - p0.z);
+  const p1 = { x: p0.x + Math.sin(p0.heading)*reach, z: p0.z + Math.cos(p0.heading)*reach };
+  const p2 = { x: p3.x - Math.sin(p3.heading)*reach, z: p3.z - Math.cos(p3.heading)*reach };
+  const t = (at + curve)/(2*curve), s = 1 - t;
+  const bez = k => s*s*s*p0[k] + 3*s*s*t*p1[k] + 3*s*t*t*p2[k] + t*t*t*p3[k];
+  const slope = k => 3*s*s*(p1[k] - p0[k]) + 6*s*t*(p2[k] - p1[k]) + 3*t*t*(p3[k] - p2[k]);
+  return { x: bez('x'), z: bez('z'), heading: Math.atan2(slope('x'), slope('z')) };
 }
 // somewhere at random with no other car on it — or, failing a few goes at that, nowhere for now (li -1: out of sight, and
 // tried again next frame)
@@ -348,18 +420,20 @@ function driveAlong(car, dist) {
     const ahead = car.dir > 0 ? car.seg + 1 : car.seg, at = nav.cum[ahead];
     if (car.dir > 0 ? u < at : u > at) break;
     const vertex = nav.vertices[ahead], isEnd = ahead === 0 || ahead === nav.pts.length-1;
-    const plan = planFor(car, ahead) ? car.plan : vertex.links.length ? pickTurn(car.li, ahead, car.dir) : null;
+    const plan = planFor(car, ahead) ? car.plan : vertex.links.length && !car.probe ? pickTurn(car.li, ahead, car.dir) : null;
     car.plan = null;
     if (plan && plan.link) {
       const link = plan.link, other = S.trafficNav.lines[link.li], remaining = Math.abs(u - at), dir = plan.dir;
+      const from = { li: car.li, vi: ahead, dir: car.dir };
       carJoinLane(car, link.li, other.cum[link.vi], dir);
+      car.turned = { nav: S.trafficNav, from, to: { li: link.li, vi: link.vi, dir } }; // (see routePoint)
       car.seg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
       nav = other;
       u = car.u + dir*remaining;
       continue;
     }
     if (isEnd && nav.loop) { u -= car.dir*nav.total; car.seg = car.dir > 0 ? 0 : nav.pts.length-2; continue; } // (round again)
-    if (isEnd) { car.dir = -car.dir; u = 2*at - u; continue; }
+    if (isEnd) { car.dir = -car.dir; u = 2*at - u; car.turned = null; continue; }
     car.seg += car.dir;
   }
   car.u = Math.max(0, Math.min(nav.total, u));
@@ -498,23 +572,17 @@ export function updateTraffic(t) {
     if (checkYield(car, dt)) target = 0;
     car.speed += Math.max(-CAR_BRAKE*S.peopleSpeed*dt, Math.min(5*S.peopleSpeed*dt, target - car.speed));
     driveAlong(car, car.speed*dt);
-    // steer towards the lane — quicker when off it, as when swinging round a corner or into the other lane (but not at a
-    // standstill, when it'd slide sideways into whatever it's stopped for)
-    const at = lanePoint(car);
-    const dx = at.x - car.x, dz = at.z - car.z, d = Math.hypot(dx, dz);
-    let angleDiff = 0;
-    if (d > 1e-4) {
-      const step = Math.max(car.speed, Math.min(3*S.peopleSpeed, car.speed*4))*dt*(1 + Math.min(3, d*0.3)), k = Math.min(1, step/d), mx = dx*k, mz = dz*k;
-      car.x += mx; car.z += mz;
-      if (Math.hypot(mx, mz) > 1e-3) {
-        // (once it's overshot the start of a tight turn's new lane, the lane point is behind it and off to the wrong
-        // side — turning to face that would swing it the long way round, so it lines up with the lane instead)
-        const toward = Math.atan2(mx, mz), facing = Math.cos(toward - at.heading) < 0 ? at.heading : toward;
-        angleDiff = Math.atan2(Math.sin(facing - car.heading), Math.cos(facing - car.heading));
-        car.heading += angleDiff*Math.min(1, dt*6);
-      }
+    // its front axle keeps to its route (see routePoint), and its back axle — pulled along behind it, as a real car's is —
+    // cuts in round the bends
+    const back = CAR_REAR_AXLE*carFootprint(car).length, front = routePoint(car, back);
+    const pullX = front.x - (car.x - back*Math.sin(car.heading)), pullZ = front.z - (car.z - back*Math.cos(car.heading));
+    if (Math.hypot(pullX, pullZ) > 1e-6) {
+      car.heading = Math.atan2(pullX, pullZ);
+      car.x = front.x - back*Math.sin(car.heading);
+      car.z = front.z - back*Math.cos(car.heading);
     }
-    if (car.speed > 0.3 && Math.abs(angleDiff) < TURN_SAFE_ANGLE) runOverPeople(car);
+    const lane = lanePoint(car), offLane = Math.abs(Math.atan2(Math.sin(lane.heading - car.heading), Math.cos(lane.heading - car.heading)));
+    if (car.speed > 0.3 && offLane < TURN_SAFE_ANGLE) runOverPeople(car);
     placeCar(car, i, designCounts);
   });
   carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
@@ -569,6 +637,15 @@ function carFootprint(car) {
   return cm
     ? { length: cm.length*BOX_CAR_LENGTH*S.peopleSize, width: cm.width*S.peopleSize }
     : { length: car.length*BOX_CAR_LENGTH*S.peopleSize, width: car.width*BOX_CAR_WIDTH*S.peopleSize };
+}
+// Turns a car by `by` radians about its rear axle, as a real one turns, rather than its middle (where car.x/z is) — so
+// its back end follows it round instead of sliding out sideways. The axle's taken as this far back along its length.
+const CAR_REAR_AXLE = 0.3;
+function turnCar(car, by) {
+  const back = CAR_REAR_AXLE*carFootprint(car).length, heading = car.heading + by;
+  car.x += back*(Math.sin(heading) - Math.sin(car.heading));
+  car.z += back*(Math.cos(heading) - Math.cos(car.heading));
+  car.heading = heading;
 }
 // People wander into the road more readily than they dodge traffic (see people.js) — and the cars don't slow for them,
 // so anyone out crossing the road who's caught under one when it's moving gets run over: killed exactly as the person
@@ -843,7 +920,7 @@ function driveByHand(car, dt) {
   else car.speed = toward(car.speed, 0, DRIVE_COAST);
   // steering turns it more the faster it's going, up to a walking pace — and the other way round, reversing
   const was = { x: car.x, z: car.z, heading: car.heading };
-  car.heading -= right*DRIVE_TURN*dt*Math.max(-1, Math.min(1, car.speed/4));
+  turnCar(car, -right*DRIVE_TURN*dt*Math.max(-1, Math.min(1, car.speed/4)));
   car.x += Math.sin(car.heading)*car.speed*dt;
   car.z += Math.cos(car.heading)*car.speed*dt;
   bumpIntoCars(car, was);
