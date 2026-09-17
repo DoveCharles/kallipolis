@@ -32,6 +32,8 @@ export const TRAITS = {
   //                                               set 0 to prevent auto assignment and allow manual setting only
   age: {base: 1, min: 0.1, max: Infinity}, //Inf limit to allow vampiric / immortal type shit
 };
+// the value everyone starts with, by trait: TRAITS' base until people.txt loads, then whatever its trait table's start
+// column says (see parsePeopleText) — updated in place, so people holding it see the file's values
 export const DEFAULT_TRAITS = Object.fromEntries(Object.entries(TRAITS).map(([key, trait]) => [key, trait.base]));
 
 let version = 0; // counts up each time people.txt loads, so what was worked out from it can be worked out again
@@ -72,12 +74,20 @@ function entryOf(line) {
 const lists = { 'boy names': ['Dave'], 'girl names': ['Linda'], 'moods': ['😐'], 'enjoys': ['A nice walk'], 'hates': ['Puddles'] };
 Object.keys(lists).forEach(key => { lists[key] = lists[key].map(entryOf); });
 
-// people.txt: a [heading] starts each list, one entry per line after it; blank lines and lines starting with # are skipped
+// people.txt: a [heading] starts each list, one entry per line after it; blank lines and lines starting with # are skipped,
+// except the rows of the trait table at the top ("#   walkspeed   1   ..."), whose start column sets everyone's starting
+// value (on/off for the switches). choiceweight isn't a trait anyone has, so its row is only there to explain it.
+const TRAIT_ROW = /^#\s+([a-z]+)\s+(-?\d*\.?\d+|on|off)\s/i;
 function parsePeopleText(text) {
-  const parsed = {};
+  const parsed = {}, starts = {};
   let current = null;
   text.split(/\r?\n/).forEach(raw => {
     const line = raw.trim();
+    const row = line.match(TRAIT_ROW), key = row && row[1].toLowerCase();
+    if (row && TRAITS[key] && key !== 'choiceweight') {
+      const value = row[2].toLowerCase(), trait = TRAITS[key];
+      starts[key] = Math.max(trait.min, Math.min(trait.max, value === 'on' ? 1 : value === 'off' ? 0 : parseFloat(value)));
+    }
     if (!line || line.startsWith('#')) return;
     const heading = line.match(/^\[([^[\]]+)\]$/);
     if (heading) { current = heading[1].trim().toLowerCase(); parsed[current] = []; return; }
@@ -85,12 +95,13 @@ function parsePeopleText(text) {
     const entry = entryOf(line);
     if (entry.text) for (let i = 0; i< entry.weight; i++) parsed[current].push(entry);
   });
-  return parsed;
+  return { lists: parsed, starts };
 }
 fetch(PEOPLE_TEXT_URL)
   .then(response => { if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.text(); })
   .then(text => {
-    const parsed = parsePeopleText(text);
+    const { lists: parsed, starts } = parsePeopleText(text);
+    Object.assign(DEFAULT_TRAITS, starts);
     Object.keys(lists).forEach(key => { if (parsed[key] && parsed[key].length) lists[key] = parsed[key]; });
     version++;
     listeners.forEach(listener => listener());
