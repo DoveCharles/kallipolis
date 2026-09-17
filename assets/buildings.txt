@@ -32,23 +32,25 @@ enterable = yes
 name = Building
 mood = 🏢
 loves = Having people inside them
-loves = Being tall. Ish
 loves = Standing here
-loves = The little guys who come in and out of me
+loves = The little guys who come in n out
 hates = Strong winds
-hates = Pigeons
-hates = Being empty at night
-hates = That new one going up across the road
+hates = Ivy
+hates = Being empty at night, apart from uuuuh forget his name
+hates = The dude across the street blocking my sunlight
 
 [landmark]
 name = Tower
 mood = 🏙️
-loves = Being the tallest one here
+loves = Being the tallest one around
 loves = Blocking your view
-loves = Casting a REALLY long shadow
+loves = Casting SUCH a long shadow
+loves = Reflecting sunlight at a point
+loves = Burning shit (not my fault)
+loves = Suddenly combusting
 hates = The other tall one
-hates = Planes
-hates = Being called an eyesore
+hates = Planes LMAO
+hates = Having to be sooo iconic ALL of the time
 
 # ============================================================ industrial
 
@@ -56,15 +58,19 @@ hates = Being called an eyesore
 name = Depot
 mood = 🏭
 loves = Logistics
+loves = Being a depot I guess
 hates = Inspections
+hates = Existing
 
 [warehouse]
 enterable = yes
 name = Warehouse
 mood = 📦
-loves = Boxes
-loves = More boxes
-loves = A really smooth concrete floor
+loves = Holding shit
+loves = Being full
+loves = Stuff
+loves = People just dropping shit off
+hates = Being emptied
 hates = Stocktaking
 hates = Forklift certification
 
@@ -72,42 +78,60 @@ hates = Forklift certification
 enterable = yes
 name = Factory
 mood = 🏭
-loves = MAKING THINGS
-loves = The sound at 6am
-hates = Downtime
-hates = Health and safety
+loves = MAKIN SHIT
+loves = The sound of that god damn WHISTLE
+loves = Pollution
+loves = Destroying lungs
+loves = Whirrrrrrrr EEEEE clank
+loves = Bald dudes
+hates = Not getting to 'freestyle'
+hates = Foreign trade agreements
+hates = Health and safety inspectas
 
 [tankfarm]
 name = Tank farm
 mood = 🛢️
-loves = Being full
-loves = Sloshing
+loves = Being so full
+loves = Sloshing about
+loves = Pushing stuff down
+loves = Gravity
+loves = Being touched, meaningfully
 hates = Naked flames
-hates = Leaks. Please. No leaks
+hates = Leaks. Pleaaaase no leaks
+hates = Being tooo hot
 
 [containeryard]
 name = Container yard
 mood = 🚢
+loves = Being swung around by magnets
 loves = Stacking
-loves = Not knowing what's in any of them
-hates = Customs
+loves = Harboring smuggled slaves
+loves = Being gentrified into a bao bun / 'sushi burrito' stall 
+hates = Being cracked open
 hates = Wind (see: stacking)
+hates = Waiting way toooo long to be moved
 
 # ============================================================ farmland
 
 [farmland]
 name = Farm
 mood = 🚜
-loves = A good harvest
-hates = Bad weather
+loves = Buggies that work on us
+hates = Being touched
 
 [farmstead]
 enterable = yes
 name = Farmstead
 mood = 🚜
-loves = The smell of hay
-loves = Getting up before everyone else
-loves = The dog
-hates = Foxes
-hates = Rain at the wrong time
-hates = The price of everything
+loves = SIC 'EM, BOY
+loves = Big circles
+loves = Doggies
+loves = Knockin' boots in the moonlight
+loves = Pregnant women
+loves = Grains and such
+loves = Lead poisoning
+loves = Paying people for shit they already fucking own
+hates = Inheritance tax (nepo baby)
+hates = Vegans (is growing exclusively wheat)
+hates = Those pesky bugs (bugs don't exist anymore)
+hates = Self-sustaining fertilizers
