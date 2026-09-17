@@ -12,6 +12,8 @@ let shown = null; // { index, isMan } of whoever the card is showing
 const card = document.getElementById('person-card');
 document.getElementById('person-card-close').addEventListener('click', () => App.stopFollowingPerson());
 
+// the headshot itself: into their head (see possession.js)
+document.getElementById('pc-headshot').addEventListener('click', () => { if (shown) App.possessPerson(shown.index); });
 // the Kill button, under their headshot: they explode (see killPerson in people.js), and the card goes
 document.getElementById('pc-kill').addEventListener('click', () => { if (shown) App.killPerson(shown.index); });
 // (once people.txt has loaded, the card shows what it says)

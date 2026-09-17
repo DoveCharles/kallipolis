@@ -9,6 +9,8 @@ import { makeThumbnailDrawer } from './thumbnail.js';
 let shown = -1; // whoever the card is showing, for its Kill button
 const card = document.getElementById('car-card');
 document.getElementById('car-card-close').addEventListener('click', () => App.stopFollowingCar());
+// the thumbnail itself: behind the wheel (see "driving a car" in traffic.js)
+document.getElementById('cc-thumb').addEventListener('click', () => { if (shown >= 0) App.driveCar(shown); });
 // the Kill button, under the thumbnail: it blows up on the spot (see killCar in traffic.js), and the card goes
 document.getElementById('cc-kill').addEventListener('click', () => { if (shown >= 0) App.killCar(shown); });
 function showCarCard(i, info) {

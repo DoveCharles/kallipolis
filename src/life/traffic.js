@@ -13,6 +13,7 @@ import { isTrainLine } from '../trains/trains.js';
 import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people.js';
 import { explodeCar } from './giblets.js';
 import { carTypeOf } from './car-types.js';
+import { controlInput, startDriving, endDriving } from './possession.js';
 
 // ============================================================ traffic
 // Cars, switched on and off with the people (World → Peds, with speed and size shared too). They drive the sidewalk
@@ -386,7 +387,7 @@ export function updateTraffic(t) {
     S.trafficNavDirty = false;
     S.trafficNavBuiltAt = t;
     S.trafficNav = buildTrafficNav();
-    cars.forEach(reseatCar);
+    cars.forEach(car => { if (car !== drivenCar) reseatCar(car); });
   }
   const wanted = Math.min(TRAFFIC_MAX, Math.round(S.trafficAmount), S.trafficNav.capacity);
   while (cars.length < wanted) { const car = newCar(); spawnCar(car); cars.push(car); }
@@ -398,7 +399,7 @@ export function updateTraffic(t) {
   cars.forEach(car => {
     if (car.li < 0 && S.trafficNav.lines.length) spawnCar(car);
     car.ahead = null;
-    if (car.li < 0) return;
+    if (car.li < 0 || car === drivenCar) return; // (the one being driven isn't in any lane — see "driving a car")
     const key = car.li*2 + (car.dir > 0 ? 1 : 0);
     if (!lanes.has(key)) lanes.set(key, []);
     lanes.get(key).push(car);
@@ -407,7 +408,7 @@ export function updateTraffic(t) {
     list.sort((a, b) => (a.u - b.u)*a.dir);
     for (let k=0;k<list.length-1;k++) list[k].ahead = list[k+1];
   });
-  const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  const { matrix } = placing;
   const designCounts = carMeshes.map(() => 0);
   cars.forEach((car, i) => {
     if (car.li < 0) { matrix.makeScale(0, 0, 0); carParts.body.setMatrixAt(i, matrix); if (S.showRoadsafetyDebug) carHitboxDebugMesh.setMatrixAt(i, matrix); return; }
@@ -416,6 +417,7 @@ export function updateTraffic(t) {
       car.length = carMeshes[car.design].length;
       car.number = ++designNumbers[car.design];
     }
+    if (car === drivenCar) { driveByHand(car, dt); placeCar(car, i, designCounts); return; }
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*car.cruise*S.peopleSpeed;
     let target = cruise;
@@ -424,6 +426,15 @@ export function updateTraffic(t) {
       target = Math.min(target, Math.max(0, (gap - 2*S.peopleSize)*1.2*S.peopleSpeed));
     }
     const ahead = junctionAhead(car, 8);
+    // (and for the one being driven, if it's in the way — wherever it's got to)
+    if (drivenCar) {
+      const dx = drivenCar.x - car.x, dz = drivenCar.z - car.z, sin = Math.sin(car.heading), cos = Math.cos(car.heading);
+      const forward = dx*sin + dz*cos, right = dx*cos - dz*sin;
+      if (forward > 0 && forward < 14*S.peopleSize && Math.abs(right) < 2*S.peopleSize) {
+        const gap = forward - 2.2*S.peopleSize*(car.length + drivenCar.length);
+        target = Math.min(target, Math.max(0, (gap - 2*S.peopleSize)*1.2*S.peopleSpeed));
+      }
+    }
     if (ahead && ahead.dist < 10) target = Math.min(target, cruise*(0.45 + 0.055*ahead.dist));
     // stop for a red light — or an amber one there's still room to stop for — with the front bumper at the stop line
     const junction = ahead && S.roadJunctionByPlace.get(placeKey(ahead.x, ahead.z));
@@ -454,27 +465,7 @@ export function updateTraffic(t) {
       }
     }
     if (car.speed > 0.3 && Math.abs(angleDiff) < TURN_SAFE_ANGLE) runOverPeople(car);
-    rotation.setFromAxisAngle(up, car.heading);
-    position.set(car.x, Y_ROAD, car.z);
-    if (car.design != null && carMeshes[car.design]) {
-      const cm = carMeshes[car.design], idx = designCounts[car.design]++;
-      scale.setScalar(S.peopleSize);
-      matrix.compose(position, rotation, scale);
-      cm.mesh.setMatrixAt(idx, matrix);
-      cm.paint.setXYZ(idx, car.paint[0], car.paint[1], car.paint[2]);
-      matrix.makeScale(0, 0, 0);
-      carParts.body.setMatrixAt(i, matrix);
-    } else {
-      scale.set(car.width*S.peopleSize, car.height*S.peopleSize, car.length*S.peopleSize);
-      matrix.compose(position, rotation, scale);
-      carParts.body.setMatrixAt(i, matrix);
-    }
-    if (S.showRoadsafetyDebug) {
-      const { halfLength, halfWidth } = carHitbox(car), h = carHeight(car);
-      scale.set(halfWidth*2, h, halfLength*2);
-      matrix.compose(position.setY(Y_ROAD + h*0.5), rotation, scale);
-      carHitboxDebugMesh.setMatrixAt(i, matrix);
-    }
+    placeCar(car, i, designCounts);
   });
   carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
   if (S.showRoadsafetyDebug) { carHitboxDebugMesh.count = cars.length; carHitboxDebugMesh.instanceMatrix.needsUpdate = true; }
@@ -486,8 +477,35 @@ export function updateTraffic(t) {
     cm.paint.needsUpdate = true;
     cm.glowUniform.value = glowFactor;
   });
-  // the camera onto whoever it's following, at about their roof
-  if (followedCar >= 0) { const car = cars[followedCar]; controls.goalTarget.set(car.x, Y_ROAD + carHeight(car)*0.6, car.z); }
+  // the camera onto whoever it's following, at about their roof — and driving it, round behind it
+  if (followedCar >= 0) { const car = cars[followedCar]; controls.goalTarget.set(car.x, Y_ROAD + carHeight(car)*(drivenCar ? 1.1 : 0.6), car.z); }
+  if (drivenCar) chaseCamera(drivenCar);
+}
+// puts car i's model (or box) where it is — counted among its design's in designCounts — and its debug hitbox
+const placing = { matrix: new THREE.Matrix4(), rotation: new THREE.Quaternion(), scale: new THREE.Vector3(), position: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0) };
+function placeCar(car, i, designCounts) {
+  const { matrix, rotation, scale, position, up } = placing;
+  rotation.setFromAxisAngle(up, car.heading);
+  position.set(car.x, Y_ROAD, car.z);
+  if (car.design != null && carMeshes[car.design]) {
+    const cm = carMeshes[car.design], idx = designCounts[car.design]++;
+    scale.setScalar(S.peopleSize);
+    matrix.compose(position, rotation, scale);
+    cm.mesh.setMatrixAt(idx, matrix);
+    cm.paint.setXYZ(idx, car.paint[0], car.paint[1], car.paint[2]);
+    matrix.makeScale(0, 0, 0);
+    carParts.body.setMatrixAt(i, matrix);
+  } else {
+    scale.set(car.width*S.peopleSize, car.height*S.peopleSize, car.length*S.peopleSize);
+    matrix.compose(position, rotation, scale);
+    carParts.body.setMatrixAt(i, matrix);
+  }
+  if (S.showRoadsafetyDebug) {
+    const { halfLength, halfWidth } = carHitbox(car), h = carHeight(car);
+    scale.set(halfWidth*2, h, halfLength*2);
+    matrix.compose(position.setY(Y_ROAD + h*0.5), rotation, scale);
+    carHitboxDebugMesh.setMatrixAt(i, matrix);
+  }
 }
 
 // ---- following a car with the camera: exactly as for a person (see "following someone" in people.js) — a click on one in
@@ -513,14 +531,16 @@ function carHitbox(car) {
   const { length, width } = carFootprint(car);
   return { halfLength: (length*0.5 + 0.25)*CAR_HITBOX_SCALE, halfWidth: (width*0.5 + 0.25)*CAR_HITBOX_SCALE };
 }
+// (the car you're driving hits anyone, wherever they are — sidewalks and parks included — at about the car's height)
 function runOverPeople(car) {
   const { halfLength, halfWidth } = carHitbox(car), reach = Math.hypot(halfLength, halfWidth), cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+  const driven = car === drivenCar;
   App.people.forEach((p, i) => {
-    if (!isPedInDanger(p) && p.crossStage !== 'mid') return; // only while out on the road, over it or halfway
+    if (driven ? Math.abs(p.y - Y_ROAD) > carHeight(car) : !isPedInDanger(p) && p.crossStage !== 'mid') return; // only while out on the road, over it or halfway
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
-    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength) App.killPerson(i, 'car');
+    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength) App.killPerson(i, driven ? 'player' : 'car');
   });
 }
 // the car under a point on the screen (the nearest, if several are), or -1 — exactly like pickPerson in people.js, but
@@ -556,11 +576,64 @@ function followCarAt(clientX, clientY) {
 }
 function stopFollowingCar() {
   if (followedCar < 0) return;
+  stopDriving();
   followedCar = -1;
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
   App.hideCarCard();
 }
+
+// ---- driving a car (see possession.js): the one the camera's following, by hand — out of its lane and anywhere at all,
+// with the camera swung round behind it. The other cars hold back for it when it's in front of them, and it runs over
+// anyone it hits. Let go, it rejoins the nearest lane, facing whichever way along it it's nearest to.
+const DRIVE_TOP_SPEED = 20, DRIVE_BOOST = 1.6, DRIVE_REVERSE_SPEED = 7;
+const DRIVE_ACCEL = 10, DRIVE_BRAKE = 28, DRIVE_COAST = 4, DRIVE_TURN = 2.2; // per second (the turn in radians)
+let drivenCar = null;
+function driveCar(i) {
+  const car = cars[i];
+  if (i !== followedCar || !car || car.li < 0 || drivenCar === car || !startDriving()) return;
+  drivenCar = car;
+  car.yieldFor = null;
+  controls.goalRadius = Math.max(controls.minRadius, carFootprint(car).length*2.2);
+}
+function stopDriving() {
+  if (!drivenCar) return;
+  const car = drivenCar;
+  drivenCar = null;
+  endDriving();
+  car.speed = Math.max(0, car.speed);
+  // onto the nearest lane
+  let best = null;
+  S.trafficNav.lines.forEach((nav, li) => nav.pts.forEach((q, vi) => {
+    const d = Math.hypot(q.x - car.x, q.z - car.z);
+    if (!best || d < best.d) best = { li, vi, d };
+  }));
+  if (!best) { spawnCar(car); return; }
+  const nav = S.trafficNav.lines[best.li], a = nav.pts[Math.max(0, best.vi - 1)], b = nav.pts[Math.min(nav.pts.length - 1, best.vi + 1)];
+  carJoinLane(car, best.li, nav.cum[best.vi], (b.x - a.x)*Math.sin(car.heading) + (b.z - a.z)*Math.cos(car.heading) >= 0 ? 1 : -1);
+}
+// this frame's worth of driving, from the keys held (see controlInput)
+function driveByHand(car, dt) {
+  const { forward, right, run, brake } = controlInput();
+  const top = DRIVE_TOP_SPEED*(run ? DRIVE_BOOST : 1);
+  const toward = (v, goal, rate) => v + Math.max(-rate*dt, Math.min(rate*dt, goal - v));
+  if (brake) car.speed = toward(car.speed, 0, DRIVE_BRAKE);
+  else if (forward > 0) car.speed = toward(car.speed, top, car.speed < 0 ? DRIVE_BRAKE : DRIVE_ACCEL*(run ? DRIVE_BOOST : 1));
+  else if (forward < 0) car.speed = toward(car.speed, -DRIVE_REVERSE_SPEED, car.speed > 0 ? DRIVE_BRAKE : DRIVE_ACCEL*0.6);
+  else car.speed = toward(car.speed, 0, DRIVE_COAST);
+  // steering turns it more the faster it's going, up to a walking pace — and the other way round, reversing
+  car.heading -= right*DRIVE_TURN*dt*Math.max(-1, Math.min(1, car.speed/4));
+  car.x += Math.sin(car.heading)*car.speed*dt;
+  car.z += Math.cos(car.heading)*car.speed*dt;
+  if (Math.abs(car.speed) > 0.3) runOverPeople(car);
+}
+// the camera eased round behind it, a little above
+function chaseCamera(car) {
+  const behind = car.speed < -0.5 ? car.heading : car.heading + Math.PI; // (reversing, it looks back over the boot)
+  controls.goalTheta = controls.theta + Math.atan2(Math.sin(behind - controls.theta), Math.cos(behind - controls.theta));
+  controls.goalPhi = 1.25;
+}
+
 // The car card's Kill button: it blows up on the spot, in its own paint, with a scorch mark and a fireball rather than the
 // giblets and blood a person leaves (see explodeCar) — and is simply gone, a replacement spawning in elsewhere as usual.
 function killCar(i) {
@@ -583,4 +656,4 @@ export function carThumbnailScene(i) {
   return { mesh: cm.thumbMesh, camera: cm.thumbCamera };
 }
 
-Object.assign(App, { pickCar, followCarAt, stopFollowingCar, killCar, carsNearby, carsWhere });
+Object.assign(App, { pickCar, followCarAt, stopFollowingCar, driveCar, stopDriving, killCar, carsNearby, carsWhere });

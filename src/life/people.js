@@ -17,6 +17,7 @@ import { toClipperPath, pathsArea, offsetPaths, createRegionTester, zoneCutoutsN
 import { FOOTBRIDGE_TOP } from '../water/bridges.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from './profiles.js';
 import { explode } from './giblets.js';
+import { possession, controlInput, startPossession, endPossession } from './possession.js';
 
 // ============================================================ people
 // Lil people: tiny cuboids in random colors, all drawn as one instanced mesh. Most walk the walkways — the sidewalks either
@@ -990,6 +991,7 @@ function spawnPerson(p) {
 function reseatPerson(p) {
   if (p.mode === 'dead') return; // (who stays that way)
   if (p.mode === 'train') return; // (up in a station or on a train, and dropped back onto whatever's there when they're done)
+  if (p.mode === 'possessed') return; // (walked wherever they're walked, and set back on a walkway when let go)
   const { areas, lines, grid, CELL } = peopleNav;
   if (p.mode === 'wander' || p.mode === 'leaving') {
     const ai = areas.findIndex(a => p.x >= a.minX && p.x <= a.maxX && p.z >= a.minZ && p.z <= a.maxZ && a.inside(p.x, p.z));
@@ -1669,10 +1671,71 @@ function killPerson(i, by = 'player') {
 }
 function stopFollowingPerson() {
   if (followed < 0) return;
+  if (possession.index === followed) unpossessPerson();
   followed = -1;
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
   App.hidePersonCard();
+}
+
+// ---- possessing someone (see possession.js): whoever the camera's following, walked about from their own eyes. They drop
+// whatever they were doing and walk wherever they're walked — out onto the roads too, where the cars can hit them — and
+// when let go, carry on from the nearest walkway, with the camera back behind them.
+const EYE_NEAR = 0.2; // how close the view draws, from their eyes (it's usually further off than that)
+let cameraNear = camera.near;
+function possessPerson(i) {
+  const p = people[i];
+  if (i !== followed || !p || isGone(p) || possession.index === i) return;
+  endActivity(p);
+  if (p.train) { p.train = null; p.trainCooldown = 40 + peopleRng()*50; }
+  p.crossStage = null; p.jc = null; p.fright = p.stun = p.please = null; p.oneShot = null;
+  p.mode = 'possessed';
+  p.onRoad = false;
+  if (!startPossession(i, p.heading + (p.traits.backwards ? Math.PI : 0))) { p.mode = 'wander'; reseatPerson(p); return; }
+  cameraNear = camera.near;
+  camera.near = EYE_NEAR;
+  camera.updateProjectionMatrix();
+}
+function unpossessPerson() {
+  if (possession.index < 0) return;
+  const i = possession.index, p = people[i];
+  endPossession();
+  camera.near = cameraNear;
+  camera.updateProjectionMatrix();
+  if (!p || p.mode !== 'possessed') return;
+  // back into a hangout they're standing in, else onto the nearest walkway
+  p.mode = 'wander';
+  p.onRoad = false;
+  reseatPerson(p);
+  if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; p.wait = 1; }
+  // the camera behind them, looking the way they were
+  const behind = possession.yaw + Math.PI;
+  controls.goalTheta = controls.theta + wrapAngle(behind - controls.theta);
+  controls.goalPhi = Math.max(controls.goalPhi, Math.PI*0.3);
+}
+// walks them where they're asked to go, this frame, over whatever's there — returning where they end up
+function walkPossessed(p, dt) {
+  const { forward, right, run } = controlInput(), yaw = possession.yaw;
+  const len = Math.hypot(forward, right);
+  let x = p.x, z = p.z;
+  if (len > 0) {
+    const speed = PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.walkspeed)*(run ? FLEE_SPEED : 1);
+    const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = -Math.cos(yaw), rz = Math.sin(yaw);
+    x += (fx*forward + rx*right)/len*speed*dt;
+    z += (fz*forward + rz*right)/len*speed*dt;
+  }
+  // how high the ground is there: a hangout's, the road's, or the pavement's
+  const area = peopleNav.areas.find(a => x >= a.minX && x <= a.maxX && z >= a.minZ && z <= a.maxZ && a.inside(x, z));
+  p.onRoad = !area && peopleNav.onPavement(x, z);
+  p.area = area ? peopleNav.areas.indexOf(area) : -1;
+  return { x, y: area ? area.y : p.onRoad ? Y_ROAD : Y_SIDEWALK, z };
+}
+// the view from their eyes (or where they'd be, as a cuboid)
+function placePossessedCamera(i) {
+  const p = people[i];
+  if (personModel) camera.position.copy(headshotOf(i).head);
+  else camera.position.set(p.x, p.y + personHeight(p)*0.92, p.z);
+  camera.rotation.set(possession.pitch, possession.yaw + Math.PI, 0, 'YXZ');
 }
 
 // ---- riding the trains: someone walking past a train station — one standing in the plaza or park they're in, or near
@@ -1836,7 +1899,7 @@ function showPassengers() {
 // whether p is walking over a road (see updateCrossing) — treated like someone standing in the middle of it ('mid') by
 // checkYield in traffic.js: out on the live lanes, not on a sidewalk
 export function isPedInDanger(p) {
-  return p.crossStage === 'jcross' || p.crossStage === 'half1' || p.crossStage === 'half2';
+  return p.crossStage === 'jcross' || p.crossStage === 'half1' || p.crossStage === 'half2' || (p.mode === 'possessed' && p.onRoad);
 }
 export function updatePeople(t) {
   const dt = lastPeopleTime == null ? 0 : Math.min(0.1, Math.max(0, t - lastPeopleTime));
@@ -1875,6 +1938,8 @@ export function updatePeople(t) {
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
     p.trainCooldown -= dt;
+    const possessed = p.mode === 'possessed';
+    if (possessed) p.fright = p.stun = p.please = null;
     if (p.fright) updateFright(p, dt);
     //attempting to give additional reactions to npc death depending on how evil they are
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
@@ -1951,6 +2016,7 @@ export function updatePeople(t) {
       goal = updateTrainRider(p, i, dt);
       if (frozen) goal = null;
     }
+    if (possessed) goal = walkPossessed(p, dt);
     if (p.mode === 'leaving') {
       // already placed on their walkway by joinWalkway; once they've reached it they carry on along it
       goal = frozen ? null : p.exit;
@@ -1975,13 +2041,13 @@ export function updatePeople(t) {
     p.stepped = 0;
     if (goal) {
       const dx = goal.x - p.x, dz = goal.z - p.z, d = Math.hypot(dx, dz);
-      const step = speed*dt*(p.mode === 'line' && !p.crossStage ? 1 + Math.min(2, d*0.5) : 1);
+      const step = possessed ? d : speed*dt*(p.mode === 'line' && !p.crossStage ? 1 + Math.min(2, d*0.5) : 1);
       if (d > 1e-4) {
         const k = Math.min(1, step/d), mx = dx*k, mz = dz*k;
         p.x += mx; p.z += mz;
         // which way they face, and whether they're walking, go by how far they actually moved this frame — someone
         // keeping pace with their walkway is always right on top of the point they're heading for
-        if (Math.hypot(mx, mz) > speed*dt*0.25) {
+        if (Math.hypot(mx, mz) > (possessed ? 1e-3 : speed*dt*0.25)) {
           const facing = Math.atan2(mx, mz) + (p.traits.backwards ? Math.PI : 0); // (or away from it, walking backwards)
           p.heading += Math.atan2(Math.sin(facing - p.heading), Math.cos(facing - p.heading))*Math.min(1, dt*8);
           p.moving = true;
@@ -1989,6 +2055,11 @@ export function updatePeople(t) {
         }
       }
       p.y += (goal.y - p.y)*Math.min(1, dt*6);
+    }
+    // possessed, they face the way they're looking — the walk played backwards, stepping backwards
+    if (possessed) {
+      p.heading = possession.yaw;
+      if (p.moving && controlInput().forward < 0 !== !!p.traits.backwards) p.stepped = -p.stepped;
     }
     // standing still for something (talking, sitting down), they turn to face the way it wants
     if (!p.moving && p.faceTo != null) p.heading += wrapAngle(p.faceTo - p.heading)*Math.min(1, dt*5);
@@ -2036,6 +2107,7 @@ export function updatePeople(t) {
         p.lookTurnTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TURN*reach;
         p.lookTiltTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TILT;
       }
+      if (possessed) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
       p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, dt*4);
       p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, dt*4);
       // talking, their mouth moves; listening, their expression changes every now and then
@@ -2118,7 +2190,9 @@ export function updatePeople(t) {
   if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
   // and the card's headshot of them
   if (followed >= 0 && personModel && people[followed].mode !== 'none') App.drawPersonHeadshot(headshotOf(followed));
+  // or, possessing them, the view from their eyes
+  if (possession.index >= 0 && possession.index === followed && people[followed].mode === 'possessed') placePossessedCamera(followed);
 }
 
 // (people and groups too, for poking at from the browser console)
-Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, killPerson, people, peopleGroups: groups });
+Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, killPerson, people, peopleGroups: groups });

@@ -32,6 +32,7 @@ import './sky/weather.js';
 import './project/history.js';
 import './project/autosave.js';
 import './project/export-glb.js';
+import './life/possession.js';
 import './life/people.js';
 import './life/traffic.js';
 import './life/person-card.js';

@@ -242,6 +242,21 @@ canvas.adding { cursor:copy; }
 .pc-top { display:flex; gap:10px; align-items:flex-start; }
 .pc-rows { flex:1; min-width:0; }
 .pc-shot { flex:0 0 auto; display:flex; flex-direction:column; gap:6px; margin-top:18px; }
+#pc-headshot, #cc-thumb { cursor:pointer; border-radius:5px; }
+#pc-headshot:hover, #cc-thumb:hover { box-shadow:0 0 0 1px var(--accent); }
+/* possessing someone, or driving a car (src/life/possession.js) */
+#possess-hint {
+  position:fixed; top:16px; left:50%; transform:translateX(-50%); z-index:30; pointer-events:none;
+  display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 16px;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+  color:var(--text); font-size:13px; white-space:nowrap;
+}
+#possess-hint[hidden] { display:none; }
+#possess-hint kbd {
+  font-family:var(--mono); font-size:12px; padding:1px 5px; border:1px solid var(--border); border-bottom-width:2px;
+  border-radius:4px; background:var(--bg-input); color:var(--accent);
+}
+.ph-sub { font-family:var(--mono); font-size:11px; color:var(--text-dim); }
 #pc-kill, #cc-kill { width:62px; margin:0; padding:3px 0; font-size:11px; }
 #pc-headshot, #cc-thumb, #tc-thumb {
   width:60px; height:60px;
