@@ -6,32 +6,30 @@ import { tessellateOpenPath, ROAD_COLOR } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { CURB_COLOR, SIDEWALK_COLOR, CLIPPER_SCALE, roadLineWidths, unionRoadStrokes, clipPolygons, createMeshBuilder, forEachPolyTreeEdge, createEdgeIndex, addRoadLayerMesh, disposeObject } from './roads.js';
 
-// ---------------------------------------------------------- paths
-// A road network can be a path instead of a sidewalk road: no curb or raised sidewalk, just a sandy, speckled track laid
-// over whatever's underneath, whose edge wanders in and out a little and fades away softly instead of stopping at a hard
-// line. Paths don't cut holes in zone ground or park grass — the fade needs something beneath it to fade into — but
-// lots, buildings and trees still keep off them (see pathFootprint).
-export const PATH_COLOR = 0xb09973; // kept near the grass's brightness, so a path reads as sand on the ground rather than a glowing stripe
-export const PATH_COLOR_PALETTE = [PATH_COLOR]; // user-extendable palette; grows via the '+' swatch
-// A walkway is a path in every way that matters for the sim (pedestrians walk it, it keeps lots/trees off it, it
-// bridges water like a path) but looks nothing like one: just a plain flat color, no dirt texture or soft fade edge.
+// ---------------------------------------------------------- walkways
+// A road network can be a walkway instead of a sidewalk road: no curb or raised sidewalk, just a flat surface laid over
+// whatever's underneath, which pedestrians walk and which keeps lots, buildings and trees off it (see pathFootprint).
+// Walkways don't cut holes in zone ground or park grass. Its texture is paving of some kind, a plain color, or dirt: a
+// sandy, speckled track whose edge wanders in and out a little and fades away softly instead of stopping at a hard line.
 export const WALKWAY_COLOR = 0xb0ac9f;
-export const WALKWAY_COLOR_PALETTE = [WALKWAY_COLOR];
-// the surfaces a walkway can be paved with (set per network in the details panel); the index is the shader's uWalkPattern
+export const DIRT_COLOR = 0xb09973; // kept near the grass's brightness, so dirt reads as sand on the ground rather than a glowing stripe
+export const WALKWAY_COLOR_PALETTE = [WALKWAY_COLOR, DIRT_COLOR]; // user-extendable palette; grows via the '+' swatch
+// the textures a walkway can have (set per network in the details panel); for the paving ones, the index is the paving
+// shader's uWalkPattern — dirt has a shader of its own
 export const WALKWAY_TEXTURES = [
   { id: 'plain', label: 'Plain' },
   { id: 'planks', label: 'Wood planks' },
   { id: 'cobblestone', label: 'Cobblestone' },
   { id: 'tiles', label: 'Tiles' },
   { id: 'brick', label: 'Brick' },
+  { id: 'dirt', label: 'Dirt' },
 ];
 export const WALKWAY_TEXTURE = 'plain';
 const PATH_MAX_SEGMENTS = 128; // fixed GLSL array size; a network's centerlines are simplified to fit
-export function isPathLine(line) { return line.roadType === 'path'; }
 export function isWalkwayLine(line) { return line.roadType === 'walkway'; }
 export function isRiverLine(line) { return line.roadType === 'river'; }
-// how far past its nominal edge a path's sand fades out
-function pathFadeWidth(halfWidth) { return Math.min(2.5, halfWidth*0.9); }
+// how far past its nominal edge dirt's sand fades out
+export function pathFadeWidth(halfWidth) { return Math.min(2.5, halfWidth*0.9); }
 // Ramer–Douglas–Peucker: the fewest of `points` that keep the line within `tolerance` of its original course
 function simplifyPolyline(points, tolerance) {
   if (points.length <= 2) return points;
@@ -41,8 +39,8 @@ function simplifyPolyline(points, tolerance) {
   if (worst <= tolerance) return [a, b];
   return simplifyPolyline(points.slice(0, index+1), tolerance).slice(0, -1).concat(simplifyPolyline(points.slice(index), tolerance));
 }
-// a path network's centerlines as world-space segments [ax, az, bx, bz], simplified until they fit the shader's list
-function pathSegmentsOf(lines) {
+// a network's centerlines as world-space segments [ax, az, bx, bz], simplified until they fit the shader's list
+export function pathSegmentsOf(lines) {
   const polylines = lines.map(line => tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean)));
   const countSegments = pls => pls.reduce((sum, pl) => sum + Math.max(0, pl.length-1), 0);
   let simplified = polylines;
@@ -60,6 +58,7 @@ const PATH_FRAGMENT_PARS = `
   uniform int uPathSegmentCount;
   uniform float uPathHalfWidth;
   uniform float uPathFade;
+  uniform float uPathScale;
   float pathHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
   float pathNoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -79,26 +78,28 @@ const PATH_COLOR_FRAGMENT = `
       float h = clamp(dot(pa, ba)/max(dot(ba, ba), 1e-6), 0.0, 1.0);
       d = min(d, length(pa - ba*h));
     }
-    float coarse = pathNoise(wp*0.3), grain = pathNoise(wp*3.1);
+    vec2 np = wp/uPathScale; // the noise, not the width, follows the texture scale
+    float coarse = pathNoise(np*0.3), grain = pathNoise(np*3.1);
     // The edge wanders in and out a little. Across the fade beyond it, the sand breaks up grain by grain rather than
     // blurring: fine noise is compared against how far into the fade each point is, so the grains thin out and
     // scatter into the ground. (fadeT runs a little past 0..1 so the core stays solid and the far side fully clear.)
     float edge = uPathHalfWidth*(0.85 + 0.3*coarse);
     float fadeT = smoothstep(edge - uPathFade*0.5, edge + uPathFade*0.5, d)*1.3 - 0.15;
-    float speckle = 0.7*pathNoise(wp*4.3) + 0.3*pathNoise(wp*11.0);
+    float speckle = 0.7*pathNoise(np*4.3) + 0.3*pathNoise(np*11.0);
     float cover = 1.0 - smoothstep(speckle - 0.12, speckle + 0.12, fadeT);
     vec3 sand = diffuseColor.rgb*(0.88 + 0.18*coarse)*(0.92 + 0.16*grain);
     sand *= mix(1.05, 0.95, smoothstep(0.0, edge, d)); // trodden a little lighter down the middle
     diffuseColor = vec4(sand, diffuseColor.a*cover);
   }
 `;
-export function applyPathShader(mat, segments, halfWidth, fade) {
+export function applyPathShader(mat, segments, halfWidth, fade, scale) {
   const segmentUniforms = App.segmentUniformArray(segments, PATH_MAX_SEGMENTS);
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uPathSegments = { value: segmentUniforms };
     shader.uniforms.uPathSegmentCount = { value: segments.length };
     shader.uniforms.uPathHalfWidth = { value: halfWidth };
     shader.uniforms.uPathFade = { value: fade };
+    shader.uniforms.uPathScale = { value: scale || 1 };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vPathWorldPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPathWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -107,28 +108,6 @@ export function applyPathShader(mat, segments, halfWidth, fade) {
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + PATH_COLOR_FRAGMENT);
   };
 }
-// One path network's mesh: the union of its lines stroked out to their full fade, shaded by distance to its centerlines.
-function buildPathMesh(lines, networkId) {
-  const halfWidth = (lines[0].width || S.DEFAULT_ROAD_WIDTH)/2;
-  const fade = pathFadeWidth(halfWidth);
-  const color = lines[0].pathColor!=null ? lines[0].pathColor : PATH_COLOR; // colors are set per network in the details panel
-  const outline = unionRoadStrokes(lines.map(line => ({
-    path: App.toClipperPath(tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean))),
-    radius: halfWidth + fade,
-  })));
-  const builder = createMeshBuilder();
-  builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, outline, [], true), Y_PATH);
-  const geo = builder.build();
-  if (!geo) return null;
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 1, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, ...SKIP_OVER_WATER });
-  applyPathShader(mat, pathSegmentsOf(lines), halfWidth, fade);
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.receiveShadow = true;
-  mesh.name = 'Path';
-  mesh.userData = { networkId, baseColor: color };
-  return mesh;
-}
-
 // Walkway paving, drawn in world space like a plaza's so the pattern runs on unbroken along the whole network. Each
 // pattern works out, for the point being shaded, which piece (plank, stone, tile, brick) it's on and how far it is from
 // that piece's edge: pieces get a slight tint of their own and the gaps between them are darkened. Everything is
@@ -210,21 +189,34 @@ export function applyWalkwayShader(mat, texture, scale, rotationDegrees) {
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + WALKWAY_COLOR_FRAGMENT);
   };
 }
-// One walkway network's mesh: like a path, but with a hard edge and paved (or plain) instead of the dirt shader
+// A walkway's material: paving (or plain) with a hard edge, or dirt fading out across `fade` beyond `halfWidth` from `segments`
+export function makeWalkwayMaterial({ texture, color, scale, rotation, segments, halfWidth, fade }) {
+  if (texture === 'dirt') {
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 1, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, ...SKIP_OVER_WATER });
+    applyPathShader(mat, segments, halfWidth, fade, scale);
+    return mat;
+  }
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, ...SKIP_OVER_WATER });
+  applyWalkwayShader(mat, texture, scale, rotation);
+  return mat;
+}
+// One walkway network's mesh: the union of its lines stroked out to their width (plus the fade, for dirt)
 function buildWalkwayMesh(lines, networkId) {
-  const halfWidth = (lines[0].width || S.DEFAULT_ROAD_WIDTH)/2;
-  const color = lines[0].walkwayColor!=null ? lines[0].walkwayColor : WALKWAY_COLOR; // colors are set per network in the details panel
-  const outline = unionRoadStrokes(lines.map(line => ({
-    path: App.toClipperPath(tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean))),
-    radius: halfWidth,
+  const line = lines[0]; // colors and textures are set per network in the details panel
+  const halfWidth = (line.width || S.DEFAULT_ROAD_WIDTH)/2;
+  const texture = line.walkwayTexture || WALKWAY_TEXTURE;
+  const fade = texture === 'dirt' ? pathFadeWidth(halfWidth) : 0;
+  const color = line.walkwayColor!=null ? line.walkwayColor : WALKWAY_COLOR;
+  const outline = unionRoadStrokes(lines.map(l => ({
+    path: App.toClipperPath(tessellateOpenPath(l.nodeIds.map(id => roadNodes[id]).filter(Boolean))),
+    radius: halfWidth + fade,
   })));
   const builder = createMeshBuilder();
   builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, outline, [], true), Y_PATH);
   const geo = builder.build();
   if (!geo) return null;
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, ...SKIP_OVER_WATER });
-  const line = lines[0]; // the texture is set per network too
-  applyWalkwayShader(mat, line.walkwayTexture || WALKWAY_TEXTURE, line.walkwayTextureScale, line.walkwayTextureRotation);
+  const mat = makeWalkwayMaterial({ texture, color, scale: line.walkwayTextureScale, rotation: line.walkwayTextureRotation,
+    segments: texture === 'dirt' ? pathSegmentsOf(lines) : [], halfWidth, fade });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'Walkway';
@@ -237,7 +229,7 @@ export function rebuildRoadMeshes() {
   S.roadMeshGroup = new THREE.Group(); S.roadMeshGroup.name='Roads';
   const networks = new Map(); // networkId -> [{ path, line, hw, cw, sw }]
   S.roadLines.forEach(line => {
-    if (App.isTrainLine(line) || isPathLine(line) || isWalkwayLine(line) || isRiverLine(line)) return; // built separately — see rebuildTrainMeshes, buildPathMesh/buildWalkwayMesh and rebuildWater
+    if (App.isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line)) return; // built separately — see rebuildTrainMeshes, buildWalkwayMesh and rebuildWater
     const pts = line.nodeIds.map(id=>roadNodes[id]).filter(Boolean);
     if (pts.length<2) return;
     const path = tessellateOpenPath(pts).map(p => ({ X:Math.round(p.x*CLIPPER_SCALE), Y:Math.round(p.z*CLIPPER_SCALE) }));
@@ -284,26 +276,9 @@ export function rebuildRoadMeshes() {
     addRoadLayerMesh(curb.build(), CURB_COLOR, 0.85, 'Curb', netId);
     addRoadLayerMesh(sidewalk.build(), line.sidewalkColor!=null ? line.sidewalkColor : SIDEWALK_COLOR, 0.9, 'Sidewalk', netId);
   });
-  // path networks: one soft-edged sandy mesh each, plus their combined footprint for zones to keep lots and trees off
-  const pathNetworks = new Map();
-  S.roadLines.forEach(line => {
-    if (!isPathLine(line) || line.nodeIds.map(id=>roadNodes[id]).filter(Boolean).length < 2) return;
-    if (!pathNetworks.has(line.networkId)) pathNetworks.set(line.networkId, []);
-    pathNetworks.get(line.networkId).push(line);
-  });
   const pathStrokes = [];
   S.pathBridgeSources = [];
-  pathNetworks.forEach((lines, netId) => {
-    const mesh = buildPathMesh(lines, netId);
-    if (mesh) S.roadMeshGroup.add(mesh);
-    const strokes = lines.map(line => ({
-      path: App.toClipperPath(tessellateOpenPath(line.nodeIds.map(id=>roadNodes[id]).filter(Boolean))),
-      radius: (line.width || S.DEFAULT_ROAD_WIDTH)/2,
-    }));
-    pathStrokes.push(...strokes);
-    S.pathBridgeSources.push({ networkId: netId, strokes });
-  });
-  // walkway networks: same flat plaza-like footprint plumbing as paths, just a different-looking mesh
+  // walkway networks: one mesh each, plus their combined footprint for zones to keep lots and trees off
   const walkwayNetworks = new Map();
   S.roadLines.forEach(line => {
     if (!isWalkwayLine(line) || line.nodeIds.map(id=>roadNodes[id]).filter(Boolean).length < 2) return;

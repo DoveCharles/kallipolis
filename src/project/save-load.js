@@ -4,7 +4,7 @@ import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLOR
 import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { importMapImageFile, renderMapsList, removeMapImage } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
-import { PATH_COLOR, PATH_COLOR_PALETTE, WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isPathLine, isWalkwayLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
+import { DIRT_COLOR, WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
 import { isTrainLine } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone } from '../zones/cutouts.js';
@@ -50,7 +50,6 @@ export function serializeProject() {
       groundColorPalette: BUILDING_GROUND_COLORS.map(c => colorToHex(c)),
       roadColorPalette: ROAD_COLOR_PALETTE.map(c => colorToHex(c)),
       sidewalkColorPalette: SIDEWALK_COLOR_PALETTE.map(c => colorToHex(c)),
-      pathColorPalette: PATH_COLOR_PALETTE.map(c => colorToHex(c)),
       walkwayColorPalette: WALKWAY_COLOR_PALETTE.map(c => colorToHex(c)),
       parkTintPalette: PARK_TINT_COLORS.map(c => colorToHex(c)),
       treeTintPalette: TREE_TINT_COLORS.map(c => colorToHex(c)),
@@ -67,7 +66,7 @@ export function serializeProject() {
       lines: finishedLines.map(l => ({ id:l.id, nodeIds:l.nodeIds.slice(), width:l.width,
         color: colorToHex(l.color, ROAD_COLOR), sidewalkWidth:l.sidewalkWidth,
         sidewalkColor: colorToHex(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId,
-        ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}), ...(isPathLine(l) ? { roadType:'path', pathColor: colorToHex(l.pathColor, PATH_COLOR) } : {}), ...(isWalkwayLine(l) ? { roadType:'walkway', walkwayColor: colorToHex(l.walkwayColor, WALKWAY_COLOR), walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: l.walkwayTextureScale ?? 1, walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}), ...(isRiverLine(l) ? { roadType:'river' } : {}) }))
+        ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}), ...(isWalkwayLine(l) ? { roadType:'walkway', walkwayColor: colorToHex(l.walkwayColor, WALKWAY_COLOR), walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: l.walkwayTextureScale ?? 1, walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}), ...(isRiverLine(l) ? { roadType:'river' } : {}) }))
     },
     zoneSeq: S.zoneSeq,
     zones: S.zones.filter(z => !z.drawing && z.points.length>=3).map(z => ({
@@ -167,14 +166,15 @@ export async function loadProjectFromData(data, options) {
     SIDEWALK_COLOR_PALETTE.length = 0;
     sc.sidewalkColorPalette.forEach(hex => SIDEWALK_COLOR_PALETTE.push(hexToColor(hex, SIDEWALK_COLOR)));
   }
-  if (Array.isArray(sc.pathColorPalette) && sc.pathColorPalette.length) {
-    PATH_COLOR_PALETTE.length = 0;
-    sc.pathColorPalette.forEach(hex => PATH_COLOR_PALETTE.push(hexToColor(hex, PATH_COLOR)));
-  }
   if (Array.isArray(sc.walkwayColorPalette) && sc.walkwayColorPalette.length) {
     WALKWAY_COLOR_PALETTE.length = 0;
     sc.walkwayColorPalette.forEach(hex => WALKWAY_COLOR_PALETTE.push(hexToColor(hex, WALKWAY_COLOR)));
   }
+  // older saves had dirt paths as a path type of their own, with their own palette: it joins the walkway one
+  if (Array.isArray(sc.pathColorPalette)) sc.pathColorPalette.forEach(hex => {
+    const color = hexToColor(hex, DIRT_COLOR);
+    if (!WALKWAY_COLOR_PALETTE.includes(color)) WALKWAY_COLOR_PALETTE.push(color);
+  });
   if (Array.isArray(sc.parkTintPalette) && sc.parkTintPalette.length) {
     PARK_TINT_COLORS.length = 0;
     sc.parkTintPalette.forEach(hex => PARK_TINT_COLORS.push(hexToColor(hex, 0xffffff)));
@@ -221,7 +221,7 @@ export async function loadProjectFromData(data, options) {
     color: hexToColor(l.color, ROAD_COLOR), sidewalkWidth: l.sidewalkWidth!=null ? l.sidewalkWidth : S.DEFAULT_SIDEWALK_WIDTH,
     sidewalkColor: hexToColor(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId, drawing:false,
     ...(l.kind==='train' ? { kind:'train', radius: l.radius!=null ? l.radius : S.TRAIN_DEFAULT_RADIUS } : {}),
-    ...(l.roadType==='path' ? { roadType:'path', pathColor: hexToColor(l.pathColor, PATH_COLOR) } : {}),
+    ...(l.roadType==='path' ? { roadType:'walkway', walkwayColor: hexToColor(l.pathColor, DIRT_COLOR), walkwayTexture:'dirt', walkwayTextureScale:1, walkwayTextureRotation:0 } : {}), // (older saves' dirt paths)
     ...(l.roadType==='walkway' ? { roadType:'walkway', walkwayColor: hexToColor(l.walkwayColor, WALKWAY_COLOR),
       walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: l.walkwayTextureScale ?? 1, walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}),
     ...(l.roadType==='river' ? { roadType:'river' } : {}) }));

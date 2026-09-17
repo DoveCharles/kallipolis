@@ -3,7 +3,7 @@ import { scene } from '../core/scene.js';
 import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
 import { roadNodes, MAX_TARGET_LOTS } from '../core/state.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
-import { PATH_COLOR, PATH_COLOR_PALETTE, WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURES, WALKWAY_TEXTURE, isPathLine, isWalkwayLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
+import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
 import { networkKindOf, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
@@ -667,8 +667,7 @@ function renderDetails() {
     const curSidewalkColor = lines[0].sidewalkColor!=null ? lines[0].sidewalkColor : SIDEWALK_COLOR;
     const title = lines.length>1 ? netId : lines[0].id;
     const subtitle = lines.length>1 ? `${lines.length} branches · ${totalNodes} nodes` : `${totalNodes} nodes`;
-    const isPath = isPathLine(lines[0]), isWalkway = isWalkwayLine(lines[0]), isRiver = isRiverLine(lines[0]);
-    const curPathColor = lines[0].pathColor!=null ? lines[0].pathColor : PATH_COLOR;
+    const isWalkway = isWalkwayLine(lines[0]), isRiver = isRiverLine(lines[0]);
     const curWalkwayColor = lines[0].walkwayColor!=null ? lines[0].walkwayColor : WALKWAY_COLOR;
     const curWalkwayTexture = lines[0].walkwayTexture || WALKWAY_TEXTURE;
     const curTextureScale = lines[0].walkwayTextureScale ?? 1, curTextureRotation = lines[0].walkwayTextureRotation ?? 0;
@@ -677,25 +676,20 @@ function renderDetails() {
       <div class="empty" style="margin-bottom:10px;">${subtitle}</div>
       <div class="slider-row"><div class="row"><label>Path type</label></div>
         <select id="ds-roadtype" class="select-input">
-          <option value="sidewalk" ${!isPath&&!isWalkway&&!isRiver?'selected':''}>Sidewalk</option>
-          <option value="path" ${isPath?'selected':''}>Dirt</option>
+          <option value="sidewalk" ${!isWalkway&&!isRiver?'selected':''}>Sidewalk</option>
           <option value="walkway" ${isWalkway?'selected':''}>Walkway</option>
           <option value="river" ${isRiver?'selected':''}>River</option>
         </select>
       </div>
       ${isRiver ? `
       <div class="empty" style="margin:6px 0 10px;">Water, as wide as the path's width. It joins any water zone it runs into, and roads and paths cross it on bridges.</div>
-      ` : isPath ? `
-      <div class="section-label">Path color</div>
-      ${colorSwatchRowHtml(PATH_COLOR_PALETTE, curPathColor, 'pathcolor')}
       ` : isWalkway ? `
-      <div class="slider-row"><div class="row"><label>Texture</label></div>
-        <select id="ds-walkwaytexture" class="select-input">
-          ${WALKWAY_TEXTURES.map(t => `<option value="${t.id}" ${t.id===curWalkwayTexture?'selected':''}>${t.label}</option>`).join('')}
-        </select></div>
+      ${App.walkwayTextureCarouselHtml(curWalkwayTexture, curWalkwayColor)}
       ${curWalkwayTexture!=='plain' ? `
       <div class="slider-row"><div class="row"><label>Texture scale</label><span class="val" id="dv-walkwayscale">${curTextureScale.toFixed(2)}</span></div>
         <input type="range" id="ds-walkwayscale" min="0.25" max="4" step="0.05" value="${curTextureScale}"></div>
+      ` : ''}
+      ${curWalkwayTexture!=='plain' && curWalkwayTexture!=='dirt' ? `
       <div class="slider-row"><div class="row"><label>Texture rotation</label><span class="val" id="dv-walkwayrotation">${curTextureRotation}°</span></div>
         <input type="range" id="ds-walkwayrotation" min="0" max="180" step="1" value="${curTextureRotation}"></div>
       ` : ''}
@@ -715,28 +709,11 @@ function renderDetails() {
       App.applyModeVisibility();
       rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderDetails();
     });
-    // paths get their own color swatches; sidewalk roads get road and sidewalk colors
-    if (isPath) {
-      wireColorSwatchEvents(panel, PATH_COLOR_PALETTE, {
-        onPick: (hex) => { lines.forEach(l => { l.pathColor = hex; }); rebuildRoadMeshes(); renderDetails(); },
-        onCommit: (hex, mode, oldHex) => {
-          if (mode==='edit') {
-            S.roadLines.forEach(l => { if (isPathLine(l) && (l.pathColor!=null?l.pathColor:PATH_COLOR)===oldHex) l.pathColor = hex; });
-          } else {
-            lines.forEach(l => { l.pathColor = hex; });
-          }
-          rebuildRoadMeshes();
-        },
-        onRemove: (oldHex, fallback) => {
-          S.roadLines.forEach(l => { if (isPathLine(l) && (l.pathColor!=null?l.pathColor:PATH_COLOR)===oldHex) l.pathColor = fallback; });
-          rebuildRoadMeshes();
-        },
-        onPreview: (hex) => { lines.forEach(l => { l.pathColor = hex; }); rebuildRoadMeshes(); }
-      }, 'pathcolor', renderDetails, curPathColor);
-    }
+    // walkways get their texture and color; sidewalk roads get road and sidewalk colors
     if (isWalkway) {
-      document.getElementById('ds-walkwaytexture').addEventListener('change', (e) => {
-        lines.forEach(l => { l.walkwayTexture = e.target.value; });
+      App.wireWalkwayTextureCarousel(panel, curWalkwayColor, (texture) => {
+        if (texture === curWalkwayTexture) return;
+        lines.forEach(l => { l.walkwayTexture = texture; });
         rebuildRoadMeshes(); renderDetails();
       });
       const wireTextureSlider = (id, key, format) => document.getElementById('ds-'+id).addEventListener('input', (e) => {
@@ -745,10 +722,8 @@ function renderDetails() {
         document.getElementById('dv-'+id).textContent = format(v);
         rebuildRoadMeshes();
       });
-      if (curWalkwayTexture!=='plain') {
-        wireTextureSlider('walkwayscale', 'walkwayTextureScale', v => v.toFixed(2));
-        wireTextureSlider('walkwayrotation', 'walkwayTextureRotation', v => v+'°');
-      }
+      if (curWalkwayTexture!=='plain') wireTextureSlider('walkwayscale', 'walkwayTextureScale', v => v.toFixed(2));
+      if (curWalkwayTexture!=='plain' && curWalkwayTexture!=='dirt') wireTextureSlider('walkwayrotation', 'walkwayTextureRotation', v => v+'°');
       wireColorSwatchEvents(panel, WALKWAY_COLOR_PALETTE, {
         onPick: (hex) => { lines.forEach(l => { l.walkwayColor = hex; }); rebuildRoadMeshes(); renderDetails(); },
         onCommit: (hex, mode, oldHex) => {
@@ -766,7 +741,7 @@ function renderDetails() {
         onPreview: (hex) => { lines.forEach(l => { l.walkwayColor = hex; }); rebuildRoadMeshes(); }
       }, 'walkwaycolor', renderDetails, curWalkwayColor);
     }
-    if (!isPath && !isWalkway && !isRiver) {
+    if (!isWalkway && !isRiver) {
     wireColorSwatchEvents(panel, ROAD_COLOR_PALETTE, {
       onPick: (hex) => { lines.forEach(l => { l.color = hex; }); rebuildRoadMeshes(); renderDetails(); },
       onCommit: (hex, mode, oldHex) => {

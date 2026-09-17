@@ -6,7 +6,7 @@ import { ROAD_COLOR } from '../core/splines.js';
 import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { setSelectedMap, setMapHover, startMapTransform, applyMapTransform, confirmMapTransform, cancelMapTransform, previewLine } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, setLinePoints } from '../roads/roads.js';
-import { PATH_COLOR, WALKWAY_COLOR, rebuildRoadMeshes } from '../roads/paths.js';
+import { WALKWAY_COLOR, rebuildRoadMeshes } from '../roads/paths.js';
 import { isTrainLine, isTrainNode, networkKindOf, trainNodeY, trainPlanePoint, dragTrainPoint, findNearestTrainEdge } from '../trains/trains.js';
 import { setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge } from './hover.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
@@ -395,7 +395,7 @@ function startBranchFrom(nodeId) {
   const line = isTrainLine(source)
     ? { id:'train-'+(S.roadLineSeq++), kind:'train', nodeIds:[nodeId], drawing:true, radius: source.radius, networkId }
     : { id:'road-'+(S.roadLineSeq++), nodeIds:[nodeId], drawing:true, width: source.width, color: source.color,
-        sidewalkWidth: source.sidewalkWidth, sidewalkColor: source.sidewalkColor, roadType: source.roadType, pathColor: source.pathColor, walkwayColor: source.walkwayColor,
+        sidewalkWidth: source.sidewalkWidth, sidewalkColor: source.sidewalkColor, roadType: source.roadType, walkwayColor: source.walkwayColor,
         walkwayTexture: source.walkwayTexture, walkwayTextureScale: source.walkwayTextureScale, walkwayTextureRotation: source.walkwayTextureRotation, networkId };
   S.roadLines.push(line);
   S.activeRoadLine = line;
@@ -441,10 +441,9 @@ function handleLeftClick(x,y) {
       const sidewalkWidth = templateLine && templateLine.sidewalkWidth!=null ? templateLine.sidewalkWidth : S.DEFAULT_SIDEWALK_WIDTH;
       const sidewalkColor = templateLine && templateLine.sidewalkColor!=null ? templateLine.sidewalkColor : SIDEWALK_COLOR;
       const roadType = S.newRoadType; // (from the Paths tab's Type menu)
-      const pathColor = templateLine && templateLine.pathColor!=null ? templateLine.pathColor : PATH_COLOR;
       const walkwayColor = templateLine && templateLine.walkwayColor!=null ? templateLine.walkwayColor : WALKWAY_COLOR;
       const { walkwayTexture, walkwayTextureScale, walkwayTextureRotation } = templateLine || {};
-      const line={ id:'road-'+(S.roadLineSeq++), nodeIds:[id], drawing:true, width, color, sidewalkWidth, sidewalkColor, roadType, pathColor, walkwayColor,
+      const line={ id:'road-'+(S.roadLineSeq++), nodeIds:[id], drawing:true, width, color, sidewalkWidth, sidewalkColor, roadType, walkwayColor,
         walkwayTexture, walkwayTextureScale, walkwayTextureRotation, networkId:'net-'+(S.roadNetworkSeq++) };
       S.roadLines.push(line); S.activeRoadLine=line;
     }

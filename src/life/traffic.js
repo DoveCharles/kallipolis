@@ -7,7 +7,7 @@ import { mulberry32 } from '../core/math.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { roadLineWidths, createMeshBuilder } from '../roads/roads.js';
-import { isPathLine, isWalkwayLine, isRiverLine } from '../roads/paths.js';
+import { isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { placeKey, signalState } from '../roads/markings.js';
 import { isTrainLine } from '../trains/trains.js';
 import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people.js';
@@ -244,7 +244,7 @@ function makeCarMesh(design) {
 function buildTrafficNav() {
   const lines = [];
   S.roadLines.forEach(line => {
-    if (isTrainLine(line) || isPathLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
+    if (isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
     const nodes = tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean));
     if (nodes.length < 2) return;
     const pts = [nodes[0]];

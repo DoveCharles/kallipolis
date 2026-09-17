@@ -8,7 +8,7 @@ import { closestPointOnSegment } from '../buildings/footprints.js';
 import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { CLIPPER_SCALE, roadLineWidths, clipPolygons, unionRoadStrokes } from '../roads/roads.js';
-import { isPathLine, isWalkwayLine, isRiverLine } from '../roads/paths.js';
+import { isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { isTrainLine } from '../trains/trains.js';
 import { Y_PLAZA } from '../zones/plazas.js';
 import { getWaterRegion } from '../water/water.js';
@@ -751,7 +751,7 @@ function buildPeopleNav() {
   const midStrokes = [], curbStrokes = [];
   let anySidewalk = false;
   S.roadLines.forEach(line => {
-    if (isTrainLine(line) || isPathLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
+    if (isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
     const nodePts = line.nodeIds.map(id => roadNodes[id]).filter(Boolean);
     if (nodePts.length < 2) return;
     const { hw, cw, sw } = roadLineWidths(line);
@@ -787,7 +787,7 @@ function buildPeopleNav() {
   // paths
   const pending = [];
   S.roadLines.forEach(line => {
-    if (!isPathLine(line) && !isWalkwayLine(line)) return;
+    if (!isWalkwayLine(line)) return;
     const nodes = tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean));
     if (nodes.length < 2) return;
     const { pts } = resampleLine(nodes), cum = cumulative(pts);
