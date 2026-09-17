@@ -38,6 +38,7 @@ import './life/traffic.js';
 import './life/person-card.js';
 import './life/car-card.js';
 import './trains/train-card.js';
+import './buildings/building-card.js';
 import './ui/win3.js';
 import './ui/pixelation.js';
 import './project/export-obj.js';
@@ -63,6 +64,7 @@ import { commitHistory } from './project/history.js';
 import { loadPersonModel, syncPeopleUI, updatePeople } from './life/people.js';
 import { updateTraffic, loadCarModels } from './life/traffic.js';
 import { updateGiblets } from './life/giblets.js';
+import { updateBuildingFollow } from './buildings/building-card.js';
 import { renderView } from './ui/pixelation.js';
 
 // ============================================================ init
@@ -123,6 +125,7 @@ function animate() {
   updatePeople(t);
   updateGiblets(t);
   updateTraffic(t);
+  updateBuildingFollow();
   updateTrafficLights(t);
   updateDayNight(t);
   updateWeather(t);

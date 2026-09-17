@@ -27,7 +27,16 @@ function showPersonCard(index, isMan) {
   headshotCanvas.hidden = isMan == null;
   headshotDrawnAt = -Infinity;
   lightsOnLayer = false;
+  setPersonCardIndoors(null);
   card.hidden = false;
+}
+// whether they're inside a building (see "going indoors" in people.js): what it's called ("Tower #4821"), or null for
+// out and about
+function setPersonCardIndoors(label) {
+  const inside = label != null;
+  document.getElementById('pc-indoors-row').hidden = !inside;
+  document.getElementById('pc-indoors').textContent = inside ? 'Inside ' + label : '';
+  headshotCanvas.classList.toggle('pc-away', inside);
 }
 
 // ---- the headshot: a live close-up of their face, beside their name — drawn a few times a second (people.js hands over
@@ -75,4 +84,4 @@ function hidePersonCard() {
   card.hidden = true;
 }
 
-Object.assign(App, { showPersonCard, hidePersonCard, drawPersonHeadshot });
+Object.assign(App, { showPersonCard, hidePersonCard, drawPersonHeadshot, setPersonCardIndoors });

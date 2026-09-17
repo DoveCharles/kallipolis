@@ -84,3 +84,13 @@ export function distToPolygonBoundary(p, poly) {
   }
   return minD;
 }
+
+// ---------------------------------------------------------- building identity
+// Which building a zone's child `index` is, as a key (see people.js and building-card.js), and its number on its card —
+// the same every time, for the same building in the same zone.
+export const buildingKey = (zone, index) => zone.id + ':' + index;
+export function buildingNumber(key) {
+  let h = 2166136261;
+  for (let i=0;i<key.length;i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
+  return 1 + ((h >>> 0) % 9999);
+}

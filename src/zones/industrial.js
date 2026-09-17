@@ -59,10 +59,11 @@ function generateIndustrialContent(zone, poly, cutouts, blockers) {
     const group = new THREE.Group();
     group.name = 'Building';
     const roll = rng();
-    if (roll < 0.4) buildWarehouse(group, inner, rng, lerp(hMin, (hMin+hMax)/2, rng()));
-    else if (roll < 0.6) buildFactory(group, inner, rng, lerp(hMin, hMax, rng()));
-    else if (roll < 0.8) buildTankFarm(group, inner, rng, lerp(hMin*0.8, hMax*0.8, rng()));
-    else buildContainerYard(group, inner, rng);
+    // (which of the four it is kept on it, for what its card says about it: see building-types.js)
+    if (roll < 0.4) { group.userData.buildingKind = 'warehouse'; buildWarehouse(group, inner, rng, lerp(hMin, (hMin+hMax)/2, rng())); }
+    else if (roll < 0.6) { group.userData.buildingKind = 'factory'; buildFactory(group, inner, rng, lerp(hMin, hMax, rng())); }
+    else if (roll < 0.8) { group.userData.buildingKind = 'tankfarm'; buildTankFarm(group, inner, rng, lerp(hMin*0.8, hMax*0.8, rng())); }
+    else { group.userData.buildingKind = 'containeryard'; buildContainerYard(group, inner, rng); }
     if (group.children.length) zone.buildingsGroup.add(group);
   }));
   const yardMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(groundColor).lerp(new THREE.Color(0x8c8c88), 0.55), roughness: 0.95 });
@@ -89,10 +90,22 @@ function addMainBlock(walls, accent, site, h, withBand) {
   if (withBand) accent.addBox(rect.center.x, rect.center.z, dx, dz, L + 0.06, W + 0.06, Y_YARD + h - 1.0, Y_YARD + h - 0.5);
   return { cx: rect.center.x, cz: rect.center.z, dx, dz, L, W };
 }
+// Where a building stands and how tall, kept on it so people can find the wall nearest a walkway and go in through it
+// (see buildingDoors in people.js): the main block's four corners, or the site itself where the block follows an
+// irregular one. Only the kinds people go into need this (see `enterable` in assets/buildings.txt).
+function keepFootprint(group, box, site, h) {
+  const corners = box
+    ? [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([along, across]) => ({
+        x: box.cx + box.dx*box.L*along + -box.dz*box.W*across,
+        z: box.cz + box.dz*box.L*along + box.dx*box.W*across }))
+    : site.map(p => ({ x: p.x, z: p.z }));
+  Object.assign(group.userData, { footprint: corners, height: h });
+}
 function buildWarehouse(group, site, rng, h) {
   const walls = createMeshBuilder(), roof = createMeshBuilder(), accent = createMeshBuilder(), glass = createMeshBuilder(), doors = createMeshBuilder();
   const wallColor = INDUSTRIAL_WALL_COLORS[Math.floor(rng()*INDUSTRIAL_WALL_COLORS.length)];
   const box = addMainBlock(walls, accent, site, h, true);
+  keepFootprint(group, box, site, h);
   if (box) {
     const { cx, cz, dx, dz, L, W } = box, nx = -dz, nz = dx, top = Y_YARD + h;
     const at = (s, w, y) => ({ x: cx + dx*s + nx*w, y, z: cz + dz*s + nz*w });
@@ -132,6 +145,7 @@ function buildFactory(group, site, rng, h) {
   const walls = createMeshBuilder(), accent = createMeshBuilder(), roofGear = createMeshBuilder();
   const brick = rng() < 0.5;
   const box = addMainBlock(walls, accent, site, h, !brick);
+  keepFootprint(group, box, site, h);
   const c = box ? { x: box.cx, z: box.cz } : centroid(site);
   const dx = box ? box.dx : 1, dz = box ? box.dz : 0, L = box ? box.L : 4, W = box ? box.W : 4;
   // a few boxes of plant on the roof

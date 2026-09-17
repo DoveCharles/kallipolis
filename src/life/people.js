@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
-import { scene, camera, Y_PARK, Y_PATH, Y_ROAD, Y_SIDEWALK } from '../core/scene.js';
+import { scene, camera, Y_PARK, Y_PATH, Y_ROAD, Y_SIDEWALK, Y_ZONE_GROUND } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
-import { mulberry32 } from '../core/math.js';
-import { closestPointOnSegment } from '../buildings/footprints.js';
+import { mulberry32, centroid } from '../core/math.js';
+import { closestPointOnSegment, buildingKey, buildingNumber } from '../buildings/footprints.js';
+import { buildingKindOf, buildingTypeOf, buildingEnterable } from '../buildings/building-types.js';
 import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { CLIPPER_SCALE, roadLineWidths, clipPolygons, unionRoadStrokes, navRebuildOnHold } from '../roads/roads.js';
@@ -786,13 +787,14 @@ function buildPeopleNav() {
   // the road network, stroked three times: out to mid-sidewalk (the rings, and what paths are blocked by), to the curb, and
   // just past the sidewalk's outer edge (what a path's end has to reach to join it)
   const midStrokes = [], curbStrokes = [], edgeStrokes = [];
-  let anySidewalk = false;
+  let anySidewalk = false, widestSidewalk = 0; // (the widest, for how far a building can be off a walkway: see buildingDoors)
   S.roadLines.forEach(line => {
     if (isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
     const nodePts = line.nodeIds.map(id => roadNodes[id]).filter(Boolean);
     if (nodePts.length < 2) return;
     const { hw, cw, sw } = roadLineWidths(line);
     if (sw > 0) anySidewalk = true;
+    widestSidewalk = Math.max(widestSidewalk, sw);
     const path = tessellateOpenPath(nodePts).map(p => ({ X: Math.round(p.x*CLIPPER_SCALE), Y: Math.round(p.z*CLIPPER_SCALE) }));
     midStrokes.push({ radius: hw + cw + sw*0.5, path });
     curbStrokes.push({ radius: hw + cw, path });
@@ -930,7 +932,57 @@ function buildPeopleNav() {
   }));
   // for crossing mid-block: the nearest point on any ring
   const nearRing = segmentGrid(lines.flatMap((nav, li) => nav.ring ? nav.pts.slice(0, -1).map((a, seg) => ({ a, b: nav.pts[seg+1], li, seg })) : []));
-  return { areas, lines, grid, CELL, onPavement, nearRing };
+  const buildings = buildingDoors(lines, grid, CELL, onPavement, widestSidewalk);
+  return { areas, lines, grid, CELL, onPavement, nearRing, buildings };
+}
+// The buildings people can go into (see "going indoors"): each building of a kind people go into (`enterable` in
+// assets/buildings.txt) that keeps its footprint on it, close enough to a walkway point, with no road in between, gets a
+// door on the wall nearest the nearest such point — which is where people on that walkway go in.
+// How close is "close enough" follows the street itself rather than being a flat number, since how far a building stands
+// off the pavement is the player's to set: walkways run down the middle of the sidewalk, so it takes half of that to
+// reach the kerb, then the zone's setbacks to reach the lot's edge, and then DOOR_SLACK for a footprint that doesn't
+// fill its lot (a rounded or stepped-back one). Capped, so nobody hikes across a field to a door.
+// A building is { key, number, kind, x, z, y, height, size, door: { x, z } }, and the walkway point's vertex gets `building`.
+const DOOR_SLACK = 4, DOOR_REACH_MAX = 20;
+const doorReach = (zone, sidewalkWidth) =>
+  Math.min(DOOR_REACH_MAX, sidewalkWidth*0.5 + (zone.settings.setback || 0) + (zone.settings.borderSetback || 0) + DOOR_SLACK);
+function buildingDoors(lines, grid, CELL, onPavement, sidewalkWidth) {
+  const buildings = [];
+  S.zones.forEach(zone => {
+    const reach = doorReach(zone, sidewalkWidth);
+    (zone.buildingsGroup?.children || []).forEach((group, k) => {
+      const fp = group.userData.footprint;
+      if (!fp || fp.length < 3) return;
+      const kind = buildingKindOf(group, zone);
+      if (!buildingEnterable(kind)) return; // (nobody wanders into a tank farm: see enterable in buildings.txt)
+      const c = centroid(fp), size = Math.max(...fp.map(q => Math.hypot(q.x - c.x, q.z - c.z)));
+      const span = Math.ceil((size + reach)/CELL), cx = Math.floor(c.x/CELL), cz = Math.floor(c.z/CELL);
+      let best = null;
+      for (let ox=-span;ox<=span;ox++) for (let oz=-span;oz<=span;oz++) (grid.get((cx+ox) + ',' + (cz+oz)) || []).forEach(({ li, vi }) => {
+        const p = lines[li].pts[vi];
+        let wall = null;
+        fp.forEach((a, n) => {
+          const q = closestPointOnSegment(p, a, fp[(n+1) % fp.length]), d = Math.hypot(q.x - p.x, q.z - p.z);
+          if (!wall || d < wall.d) wall = { q, d };
+        });
+        if (wall.d > reach || wall.d < 0.5 || (best && wall.d >= best.d)) return;
+        for (let t=0.2;t<1;t+=0.2) if (onPavement(p.x + (wall.q.x - p.x)*t, p.z + (wall.q.z - p.z)*t)) return; // (across a road)
+        best = { li, vi, ...wall, from: p };
+      });
+      if (!best) return;
+      const vertex = lines[best.li].vertices[best.vi];
+      if (vertex.building) return; // (a door onto that point already)
+      // just short of the wall, so they don't walk into it
+      const back = Math.min(0.4, best.d)/best.d;
+      const key = buildingKey(zone, k);
+      const building = { key, number: buildingNumber(key), kind,
+        x: c.x, z: c.z, y: Y_ZONE_GROUND, height: group.userData.height || 10, size,
+        door: { x: best.q.x + (best.from.x - best.q.x)*back, z: best.q.z + (best.from.z - best.q.z)*back } };
+      vertex.building = building;
+      buildings.push(building);
+    });
+  });
+  return buildings;
 }
 
 function newPerson() {
@@ -969,6 +1021,9 @@ function newPerson() {
     // riding the trains (see "riding the trains"): where they are in it (null if they aren't), and how long until they'd
     // think about riding again
     train: null, trainCooldown: 20 + peopleRng()*40,
+    // going into a building (see "going indoors"): where they are in it (null if they aren't), and how long until they'd
+    // think about going into one again
+    indoors: null, indoorsCooldown: 10 + peopleRng()*30,
     // punching (see "punching"): who they're going for and how far along it they are, how long until they'd think about it
     // again, and being punched themselves
     attack: null, punchCooldown: 10 + peopleRng()*30, punched: null };
@@ -1036,6 +1091,10 @@ function reseatPerson(p) {
   if (p.mode === 'dead') return; // (who stays that way)
   if (p.mode === 'train') return; // (up in a station or on a train, and dropped back onto whatever's there when they're done)
   if (p.mode === 'possessed') return; // (walked wherever they're walked, and set back on a walkway when let go)
+  if (p.mode === 'indoors') {
+    if (p.indoors.stage === 'inside') return; // (back out where they went in, when they're done)
+    p.indoors = null; p.mode = 'line'; // (on their way in or out: back onto the walkway)
+  }
   const { areas, lines, grid, CELL } = peopleNav;
   if (p.mode === 'wander' || p.mode === 'leaving') {
     const ai = areas.findIndex(a => p.x >= a.minX && p.x <= a.maxX && p.z >= a.minZ && p.z <= a.maxZ && a.inside(p.x, p.z));
@@ -1095,6 +1154,7 @@ function walkAlong(p, dist) {
     const vertex = nav.vertices[ahead];
     const station = p.trainCooldown <= 0 ? stationLinks().byVertex.get(p.li + ':' + ahead) : null;
     if (station != null && peopleRng() < RIDE_CHANCE) { p.u = at; goRideTrain(p, station, walkwayPoint(p)); return; }
+    if (vertex.building && mayGoIndoors(p) && peopleRng() < ENTER_CHANCE) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
     const isEnd = (!nav.loop && (ahead === 0 || ahead === last)) || !!nav.blocked?.[nextVertex(nav, ahead, p.dir)];
     const entrance = vertex.entrances.length ? vertex.entrances[Math.floor(peopleRng()*vertex.entrances.length)] : null;
     const drawn = entrance ? (isOpenGround(peopleNav.areas[entrance.area]) ? p.traits.parks : p.traits.plazas) : 0;
@@ -1691,6 +1751,7 @@ function followPerson(i) {
   controls.minRadius = Math.max(1.2, h*0.8);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9)); // swooping in, if the camera's far off
   App.showPersonCard(i, personModel ? personModel.isMan[i] === 1 : null);
+  App.setPersonCardIndoors(isGone(people[i]) && people[i].indoors ? buildingLabel(people[i].indoors.building) : null);
 }
 // Where someone's head is and which way their face points, in the world, for the person card's headshot: from their pose
 // this frame, worked out as the shader works it out — the head bone's pose (part-way between frames, and between the two
@@ -1836,6 +1897,7 @@ function killPerson(i, by = 'player') {
   pleaseBystanders(p);
   p.mode = 'dead';
   p.train = null;
+  p.indoors = null;
   p.moving = false;
 }
 function stopFollowingPerson() {
@@ -1857,6 +1919,7 @@ function possessPerson(i) {
   if (i !== followed || !p || isGone(p) || possession.index === i) return;
   endActivity(p);
   if (p.train) { p.train = null; p.trainCooldown = 40 + peopleRng()*50; }
+  if (p.indoors) { p.indoors = null; p.indoorsCooldown = INDOORS_COOLDOWN; }
   p.crossStage = null; p.jc = null; p.fright = p.stun = p.please = null; p.oneShot = null;
   p.mode = 'possessed';
   p.onRoad = false;
@@ -1922,7 +1985,8 @@ const RIDE_CHANCE = 0.05;      // at each walkway point near a station
 const STATION_REACH = 4;       // how far beyond a station's sides a walkway can pass and still lead up to it
 const TRAIN_WAIT_MAX = 120, TRAIN_RIDE_MAX = 240;
 let riderFollowed = -1;        // someone the camera was following when they got on, to follow again when they get off
-const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode === 'train' && p.train.stage === 'ride');
+const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode === 'train' && p.train.stage === 'ride')
+  || (p.mode === 'indoors' && p.indoors.stage === 'inside');
 // What each station's foot leads to, worked out again when the walkways or the trains change: for each station node,
 // { area (the hangout it stands in, or -1), vertex ({ li, vi }, the nearest walkway point, or null) } — and the other way,
 // the station near each walkway point ('li:vi') and those in each hangout (by index).
@@ -2065,6 +2129,78 @@ function showPassengers() {
   App.setTrainCardPassengers(riders.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name), riders.indexOf(riderFollowed));
 }
 
+// ---- going indoors: someone walking past a building's door (see buildingDoors) now and then goes in — walking up to it
+// and vanishing inside for anything up to INDOORS_MAX_HOURS of the day's clock (at the World panel's day length, whether
+// or not the clock's running), then coming back out the same door and on along the walkway they came off. Someone the
+// camera's following takes it with them: it looks at the building while they're in, and their card says which one.
+// Only so many of the crowd are ever indoors at once, so the streets don't empty out on long days.
+// p.indoors: { building, stage ('approach' → 'inside' → 'exit'), back (the walkway point they came from), hoursLeft }
+const ENTER_CHANCE = 0.1;          // at each walkway point with a door onto it
+const INDOORS_MIN_HOURS = 0.25, INDOORS_MAX_HOURS = 7;
+const INDOORS_MAX_SHARE = 0.3;     // of the crowd, indoors (or on their way in) at once
+const INDOORS_COOLDOWN = 30;       // seconds after coming out before they'd go in anywhere again
+let indoorsCount = 0;
+const mayGoIndoors = p => p.indoorsCooldown <= 0 && !p.act && !p.attack && !p.punched && !p.fright && indoorsCount < people.length*INDOORS_MAX_SHARE;
+// what a building's called on the card of whoever's in it: its kind's name and its own number (see building-types.js)
+const buildingLabel = b => buildingTypeOf(b.kind, b.number).name + ' #' + b.number;
+function goIndoors(p, building, from) {
+  endActivity(p);
+  p.crossStage = null; p.jc = null; p.wait = 0;
+  p.mode = 'indoors';
+  // mostly a quick visit, now and then most of the day
+  const hours = INDOORS_MIN_HOURS + (INDOORS_MAX_HOURS - INDOORS_MIN_HOURS)*peopleRng()**2;
+  p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, hoursLeft: hours };
+  indoorsCount++;
+}
+// someone going into (or in, or coming out of) a building, each frame: where they should walk to (or null to stand still)
+function updateIndoors(p, i, dt) {
+  const visit = p.indoors, { door } = visit.building;
+  if (visit.stage === 'approach') {
+    if (Math.hypot(door.x - p.x, door.z - p.z) >= 0.35) return { x: door.x, y: visit.building.y, z: door.z };
+    visit.stage = 'inside';
+    p.faceTo = null; p.lookAt = null; p.oneShot = null;
+    if (followed === i) { App.setPersonCardIndoors(buildingLabel(visit.building)); lookAtBuilding(visit.building); }
+    return null;
+  }
+  if (visit.stage === 'inside') {
+    visit.hoursLeft -= dt*24/(Math.max(0.1, S.dayLengthMinutes)*60);
+    if (visit.hoursLeft > 0) return null;
+    // back out, at the door, facing the walkway
+    visit.stage = 'exit';
+    p.x = door.x; p.z = door.z; p.y = visit.building.y;
+    p.heading = headingTo(p, visit.back) + (p.traits.backwards ? Math.PI : 0);
+    if (followed === i) { App.setPersonCardIndoors(null); lookAtPerson(p); }
+    return visit.back;
+  }
+  // 'exit': back to the walkway, then on along it, whichever way
+  if (Math.hypot(visit.back.x - p.x, visit.back.z - p.z) >= 0.35) return visit.back;
+  p.indoors = null;
+  p.indoorsCooldown = INDOORS_COOLDOWN*(0.5 + peopleRng());
+  p.mode = 'line';
+  p.dir = peopleRng() < 0.5 ? -1 : 1;
+  reseatPerson(p);
+  return null;
+}
+// the followed building's card (see building-card.js): who's inside, by name
+let inhabitantsKey = null;
+function showInhabitants() {
+  const key = App.followedBuildingKey?.();
+  const inside = [];
+  if (key && S.peopleEnabled) people.forEach((p, i) => { if (p.mode === 'indoors' && p.indoors.stage === 'inside' && p.indoors.building.key === key) inside.push(i); });
+  const shownKey = key + '|' + inside.join(',') + '|' + profilesVersion() + '|' + !!personModel;
+  if (shownKey === inhabitantsKey || !App.setBuildingCardInhabitants) return;
+  inhabitantsKey = shownKey;
+  if (key) App.setBuildingCardInhabitants(inside.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name));
+}
+// the camera, following someone who's gone indoors: back far enough to take in the building they're in
+function lookAtBuilding(b) {
+  controls.goalRadius = Math.max(controls.goalRadius, Math.min(400, (b.size + b.height)*1.6));
+}
+// and once they're out: swooping back in on them
+function lookAtPerson(p) {
+  controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, personHeight(p)*9));
+}
+
 // whether p is walking over a road (see updateCrossing) — treated like someone standing in the middle of it ('mid') by
 // checkYield in traffic.js: out on the live lanes, not on a sidewalk
 export function isPedInDanger(p) {
@@ -2077,7 +2213,7 @@ export function updatePeople(t) {
   peopleMesh.visible = S.peopleEnabled && !personModel;
   if (personModel) [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; });
   peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
-  if (!S.peopleEnabled) { showPassengers(); return; }
+  if (!S.peopleEnabled) { showPassengers(); showInhabitants(); return; }
   if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.peopleNavDirty = false;
     peopleNavBuiltAt = t;
@@ -2096,6 +2232,7 @@ export function updatePeople(t) {
   peopleMesh.count = people.length;
   roadsafetyDebugMesh.visible = roadsafetyHalfDebugMesh.visible = pedHitboxDebugMesh.visible = S.showRoadsafetyDebug;
   if (S.showRoadsafetyDebug) roadsafetyDebugMesh.count = roadsafetyHalfDebugMesh.count = pedHitboxDebugMesh.count = people.length;
+  indoorsCount = people.reduce((n, p) => n + (p.mode === 'indoors' ? 1 : 0), 0);
   if (personModel) {
     personModel.mesh.count = people.length;
     personModel.hair.forEach(style => { style.mesh.count = countBelow(style.members, people.length); });
@@ -2108,6 +2245,7 @@ export function updatePeople(t) {
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
     p.trainCooldown -= dt;
+    p.indoorsCooldown -= dt;
     const possessed = p.mode === 'possessed';
     if (possessed) p.fright = p.stun = p.please = null;
     if (p.fright) updateFright(p, dt);
@@ -2194,6 +2332,10 @@ export function updatePeople(t) {
     }
     if (p.mode === 'train') {
       goal = updateTrainRider(p, i, dt);
+      if (frozen) goal = null;
+    }
+    if (p.mode === 'indoors') {
+      goal = updateIndoors(p, i, dt);
       if (frozen) goal = null;
     }
     if (p.attack) {
@@ -2377,10 +2519,13 @@ export function updatePeople(t) {
     pedHitboxDebugMesh.instanceMatrix.needsUpdate = true;
   }
   showPassengers();
-  // the camera onto whoever it's following, at about their shoulders
-  if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
-  // and the card's headshot of them
-  if (followed >= 0 && personModel && people[followed].mode !== 'none') App.drawPersonHeadshot(headshotOf(followed));
+  showInhabitants();
+  // the camera onto whoever it's following, at about their shoulders — or, while they're indoors, onto the building
+  const inside = followed >= 0 && isGone(people[followed]) && people[followed].indoors?.building;
+  if (inside) controls.goalTarget.set(inside.x, inside.y + inside.height*0.5, inside.z);
+  else if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
+  // and the card's headshot of them (kept as it was while they can't be seen)
+  if (followed >= 0 && personModel && !isGone(people[followed])) App.drawPersonHeadshot(headshotOf(followed));
   // or, possessing them, the view from their eyes
   if (possession.index >= 0 && possession.index === followed && people[followed].mode === 'possessed') placePossessedCamera(followed);
 }

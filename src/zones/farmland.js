@@ -141,10 +141,16 @@ export function generateFarmlandContent(zone, poly, cutouts, blockers) {
       const { dx, dz } = longAxisOf(field), nx = -dz, nz = dx;
       const group = new THREE.Group();
       group.name = 'Building';
+      group.userData.buildingKind = 'farmstead'; // what its card says about it: see building-types.js
       const yard = createMeshBuilder(), barn = createMeshBuilder(), roof = createMeshBuilder(), silo = createMeshBuilder();
       yard.addBox(c.x, c.z, dx, dz, 10, 7.5, Y_PARK, Y_PARK + 0.04);
       barn.addBox(c.x, c.z, dx, dz, 6, 3.6, Y_PARK, Y_PARK + 4.2);
       addGableRoof(roof, barn, c.x, c.z, dx, dz, 6.3, 3.9, Y_PARK + 4.2, 2.6);
+      // the barn's own corners and its height to the ridge, kept on it so people can find a door on its wall and go in
+      // (see buildingDoors in people.js)
+      group.userData.footprint = [[1, 1], [1, -1], [-1, -1], [-1, 1]]
+        .map(([along, across]) => ({ x: c.x + dx*6*along + nx*3.6*across, z: c.z + dz*6*along + nz*3.6*across }));
+      group.userData.height = 6.8;
       const shed = { x: c.x - nx*6.5 + dx*2, z: c.z - nz*6.5 + dz*2 };
       barn.addBox(shed.x, shed.z, dx, dz, 2.4, 1.8, Y_PARK, Y_PARK + 2.4);
       addGableRoof(roof, barn, shed.x, shed.z, dx, dz, 2.6, 2.0, Y_PARK + 2.4, 1.1);

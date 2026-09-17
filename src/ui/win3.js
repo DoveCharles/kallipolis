@@ -23,3 +23,4 @@ panel.querySelector('.win3-sysbox').addEventListener('click', () => panel.classL
 document.querySelector('#person-card .win3-sysbox').addEventListener('click', () => App.stopFollowingPerson());
 document.querySelector('#car-card .win3-sysbox').addEventListener('click', () => App.stopFollowingCar());
 document.querySelector('#train-card .win3-sysbox').addEventListener('click', () => App.stopFollowingTrain());
+document.querySelector('#building-card .win3-sysbox').addEventListener('click', () => App.stopFollowingBuilding());

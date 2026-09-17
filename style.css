@@ -217,19 +217,19 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
 .carousel-arrow { flex:0 0 20px; height:60px; padding:0; background:none; border:none; color:var(--text-dim); font-size:20px; line-height:1; cursor:pointer; }
 .carousel-arrow:hover { color:var(--text); }
 
-#person-card, #car-card, #train-card {
+#person-card, #car-card, #train-card, #building-card {
   position:fixed; right:16px; bottom:52px; width:300px; z-index:20; /* (clear of the hint along the bottom) */
   background:var(--bg-panel); border:1px solid var(--border); border-radius:8px;
   padding:12px 14px; color:var(--text); font-size:12px; user-select:none; box-shadow:0 4px 16px rgba(0,0,0,0.4);
 }
-#person-card[hidden], #car-card[hidden], #train-card[hidden] { display:none; }
+#person-card[hidden], #car-card[hidden], #train-card[hidden], #building-card[hidden] { display:none; }
 /* holding shift in the Paths tab: a click adds a node, or a branch (src/editor/input.js) */
 canvas.adding { cursor:copy; }
-#person-card-close, #car-card-close, #train-card-close {
+#person-card-close, #car-card-close, #train-card-close, #building-card-close {
   position:absolute; top:6px; right:8px; padding:2px 4px; background:none; border:none;
   color:var(--text-dim); font-size:16px; line-height:1; cursor:pointer;
 }
-#person-card-close:hover, #car-card-close:hover, #train-card-close:hover { color:var(--text); }
+#person-card-close:hover, #car-card-close:hover, #train-card-close:hover, #building-card-close:hover { color:var(--text); }
 .pc-row { display:grid; grid-template-columns:90px 1fr; gap:8px; align-items:baseline; margin-bottom:6px; }
 .pc-row:last-child { margin-bottom:0; }
 .pc-row.pc-gap { margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
@@ -258,11 +258,15 @@ canvas.adding { cursor:copy; }
 }
 .ph-sub { font-family:var(--mono); font-size:11px; color:var(--text-dim); }
 #pc-kill, #cc-kill { width:62px; margin:0; padding:3px 0; font-size:11px; }
-#pc-headshot, #cc-thumb, #tc-thumb {
+#pc-headshot, #cc-thumb, #tc-thumb, #bc-thumb {
   width:60px; height:60px;
   background:linear-gradient(#8fb8d6, #dde8ef); border:1px solid var(--border); border-radius:6px;
 }
 #pc-headshot[hidden] { display:none; }
+.pc-row[hidden] { display:none; }
+.pc-indoors { color:var(--accent); }
+/* (their headshot, faded while they're out of sight indoors) */
+#pc-headshot.pc-away { opacity:0.35; }
 
 /* ============================================================ Windows 3.0 look
    Turned on from World settings (src/ui/win3.js), which puts the win3 class on <html>. Most of it is the palette above swapped
@@ -286,8 +290,8 @@ html.win3 {
   --w3-box:inset 0 0 0 1px #000, inset 2px 2px 0 #fff, inset -2px -2px 0 #808080;
   --w3-dither:repeating-conic-gradient(#c0c0c0 0% 25%, #ffffff 0% 50%) 0 0 / 2px 2px;
 }
-html.win3 :is(#panel, #person-card, #car-card, #train-card, #stats, #hint, #node-context-menu),
-html.win3 :is(#panel, #person-card, #car-card, #train-card, #stats, #hint, #node-context-menu) * { font-size:11px; letter-spacing:0; -webkit-font-smoothing:none; }
+html.win3 :is(#panel, #person-card, #car-card, #train-card, #building-card, #stats, #hint, #node-context-menu),
+html.win3 :is(#panel, #person-card, #car-card, #train-card, #building-card, #stats, #hint, #node-context-menu) * { font-size:11px; letter-spacing:0; -webkit-font-smoothing:none; }
 html.win3 body, html.win3 body * {
   cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='19'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3C/svg%3E") 0 0, default;
 }
@@ -298,11 +302,11 @@ html.win3 canvas.adding {
 html.win3 button:focus-visible { outline:1px dotted #000; outline-offset:-4px; }
 
 /* windows: a grey frame between black lines, with a navy title bar — a control-menu box at its left, minimize and maximize at its right */
-html.win3 :is(#panel, #person-card, #car-card, #train-card) { border:4px solid var(--w3-face); border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000; }
+html.win3 :is(#panel, #person-card, #car-card, #train-card, #building-card) { border:4px solid var(--w3-face); border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000; }
 html.win3 #panel { top:17px; left:17px; padding:0; display:flex; flex-direction:column; overflow:hidden; }
 html.win3 #panel-body { min-height:0; overflow-y:auto; padding:10px; } /* (only the window's inside scrolls, under its title bar) */
 html.win3 .win3-titlebar { display:flex; flex:0 0 auto; height:21px; background:var(--w3-navy); border-bottom:1px solid #000; }
-html.win3 :is(#person-card, #car-card, #train-card) .win3-titlebar { margin:0 -10px 8px; }
+html.win3 :is(#person-card, #car-card, #train-card, #building-card) .win3-titlebar { margin:0 -10px 8px; }
 html.win3 .win3-titlebar .win3-title { flex:1; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; white-space:nowrap; overflow:hidden; }
 html.win3 .win3-titlebar button { flex:0 0 auto; width:20px; height:20px; padding:0; margin:0; border:none; border-radius:0; background-repeat:no-repeat; }
 html.win3 .win3-titlebar .win3-sysbox {
@@ -397,14 +401,14 @@ html.win3 #node-context-menu button.active::before { content:'\2713'; position:a
 html.win3 #hint { background:#fff; color:#000; border:1px solid #000; border-radius:0; }
 
 /* the person card, and the car card just like it: a little window of its own, closed from its control-menu box */
-html.win3 :is(#person-card, #car-card, #train-card) { padding:0 10px 10px; right:21px; bottom:56px; }
-html.win3 :is(#person-card-close, #car-card-close, #train-card-close) { display:none; }
+html.win3 :is(#person-card, #car-card, #train-card, #building-card) { padding:0 10px 10px; right:21px; bottom:56px; }
+html.win3 :is(#person-card-close, #car-card-close, #train-card-close, #building-card-close) { display:none; }
 html.win3 .pc-row.pc-gap { border-top:1px solid #000; }
 html.win3 .pc-name { padding-right:0; }
 html.win3 .tc-tracked { background:#000080; color:#fff; }
-html.win3 :is(#person-card, #car-card, #train-card) .pc-mood { font-size:18px; }
+html.win3 :is(#person-card, #car-card, #train-card, #building-card) .pc-mood { font-size:18px; }
 html.win3 .pc-shot { margin-top:0; }
-html.win3 :is(#pc-headshot, #cc-thumb, #tc-thumb) {
+html.win3 :is(#pc-headshot, #cc-thumb, #tc-thumb, #bc-thumb) {
   border-radius:0; background:#008080;
   border:1px solid; border-color:#808080 #fff #fff #808080; box-shadow:inset 1px 1px 0 #000;
 }
