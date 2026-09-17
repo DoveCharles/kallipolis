@@ -503,8 +503,9 @@ function carFootprint(car) {
     : { length: car.length*BOX_CAR_LENGTH*S.peopleSize, width: car.width*BOX_CAR_WIDTH*S.peopleSize };
 }
 // People wander into the road more readily than they dodge traffic (see people.js) — and the cars don't slow for them,
-// so anyone caught under one when it's moving gets run over: killed exactly as the person card's Kill button does (see
-// killPerson in people.js), blood and all, rather than anything of the car's own.
+// so anyone out crossing the road who's caught under one when it's moving gets run over: killed exactly as the person
+// card's Kill button does (see killPerson in people.js), blood and all, rather than anything of the car's own. Anyone
+// else — on a sidewalk, or still at the curb — is never hit, even if a car's hitbox reaches them.
 // the hitbox a car runs people over with: its footprint and a little margin, shrunk to CAR_HITBOX_SCALE of that — as half
 // its length and width
 const CAR_HITBOX_SCALE = 0.6;
@@ -515,7 +516,7 @@ function carHitbox(car) {
 function runOverPeople(car) {
   const { halfLength, halfWidth } = carHitbox(car), reach = Math.hypot(halfLength, halfWidth), cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   App.people.forEach((p, i) => {
-    if (p.mode === 'none' || p.mode === 'dead' || p.mode === 'train') return; // (up in a station, or on a train, out of reach)
+    if (!isPedInDanger(p) && p.crossStage !== 'mid') return; // only while out on the road, over it or halfway
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
