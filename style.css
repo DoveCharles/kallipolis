@@ -119,7 +119,14 @@ input[type=range]::-moz-range-thumb {
   position:fixed; bottom:14px; left:50%; transform:translateX(-50%);
   font-family:var(--mono); font-size:11px; color:var(--text-dim);
   background:rgba(26,28,34,0.7); padding:6px 12px; border-radius:5px;
-  border:1px solid var(--border); pointer-events:none; white-space:nowrap; max-width:90vw; text-align:center;
+  border:1px solid var(--border); pointer-events:none; text-align:center;
+  /* The tool hints run to 340 characters. Held to one nowrap line they were cut off mid-word with no ellipsis on
+     anything narrower than about 1100px — and what went missing was the tail, where the shift+click and Esc parts
+     live: the interactions least likely to be guessed. They wrap now, held to a readable measure rather than
+     stretching the full width of a wide screen. */
+  /* width:max-content because `left:50%` alone leaves a fixed element only the far half of the viewport to size
+     itself in — the box came out exactly 50vw wide and the max-width never applied. */
+  white-space:normal; width:max-content; max-width:min(90vw, 760px); line-height:1.6;
 }
 
 #stats {
