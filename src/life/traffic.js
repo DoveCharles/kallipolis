@@ -627,11 +627,11 @@ function driveByHand(car, dt) {
   car.z += Math.cos(car.heading)*car.speed*dt;
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
 }
-// the camera eased round behind it, a little above — left wherever it's been dragged to for a moment after, and for as
-// long as the car's standing still
+// the camera eased round behind it, a little above — left wherever the mouse has swung it to for a moment after, and for
+// as long as the car's standing still
 const CHASE_HOLD = 1500, CHASE_EASE = 0.3, CHASE_PHI = 1.25; // (ms; the share of the way back it's asked for each frame)
 function chaseCamera(car) {
-  if (driving.dragging || performance.now() - driving.lookedAt < CHASE_HOLD || (Math.abs(car.speed) < 1 && driving.lookedAt > -Infinity)) return;
+  if (performance.now() - driving.lookedAt < CHASE_HOLD || (Math.abs(car.speed) < 1 && driving.lookedAt > -Infinity)) return;
   const behind = car.speed < -0.5 ? car.heading : car.heading + Math.PI; // (reversing, it looks back over the boot)
   controls.goalTheta = controls.theta + CHASE_EASE*Math.atan2(Math.sin(behind - controls.theta), Math.cos(behind - controls.theta));
   controls.goalPhi = controls.phi + CHASE_EASE*(CHASE_PHI - controls.phi);

@@ -141,8 +141,8 @@ dom.addEventListener('pointermove', (e) => {
     return;
   }
   if (isCameraDragging) {
-    // panning takes the camera off whoever it's following; orbiting keeps it on them (and driving, it only orbits)
-    if (dragMode==='pan' && !App.isDriving?.()) { App.stopFollowingPerson(); controls.pan(e.movementX, e.movementY); } else controls.orbit(e.movementX, e.movementY);
+    // panning takes the camera off whoever it's following; orbiting keeps it on them
+    if (dragMode==='pan') { App.stopFollowingPerson(); controls.pan(e.movementX, e.movementY); } else controls.orbit(e.movementX, e.movementY);
     return;
   }
   if (S.draggedNode) {
@@ -264,7 +264,7 @@ dom.addEventListener('pointerup', (e) => {
     if (was.button===0 && dist<6 && dt<600 && S.interactionMode==='node') {
       handleLeftClick(e.clientX, e.clientY);
       S.lastGroundClick = { x:e.clientX, y:e.clientY, time:performance.now() };
-    } else if (was.button===0 && dist<6 && dt<600 && S.interactionMode==='move' && !App.isDriving?.()) {
+    } else if (was.button===0 && dist<6 && dt<600 && S.interactionMode==='move') {
       // a click on someone or something has the camera follow them; anywhere else lets go of both
       if (App.pickPerson(e.clientX, e.clientY) >= 0) { App.stopFollowingCar(); App.stopFollowingTrain(); App.followPersonAt(e.clientX, e.clientY); }
       else if (App.pickCar(e.clientX, e.clientY) >= 0) { App.stopFollowingPerson(); App.stopFollowingTrain(); App.followCarAt(e.clientX, e.clientY); }

@@ -1,21 +1,22 @@
 import { S, App } from '../core/shared.js';
 import { renderer } from '../core/scene.js';
+import { controls } from '../core/camera-controls.js';
 
 // ============================================================ taking control
 // Taking over whoever or whatever the camera's following, from its card — the keys held, the mouse, and the note across
 // the top of the view saying how to stop; people.js and traffic.js do the walking, the driving and the camera from what's
 // here. Esc lets go, leaving the camera following as before; anything that stops the camera following lets go too.
-// - someone (clicking the person card's headshot): the view from their eyes, WASD to walk them about (shift to run), the
-//   mouse to look around — the pointer locked to the view while it does, or dragged, where the browser won't lock it
-//   (Esc also frees a locked pointer, which is taken as Esc)
+// Either way the mouse looks around — the pointer locked to the view while it does, or dragged, where the browser won't
+// lock it (Esc also frees a locked pointer, which is taken as Esc).
+// - someone (clicking the person card's headshot): the view from their eyes, WASD to walk them about (shift to run)
 // - a car (clicking the car card's picture): the view from behind it, WASD to drive (shift for a boost, space to brake),
-//   dragging to look around it (the camera swinging back behind once you've let go a moment), the wheel to zoom
+//   the mouse swinging the camera round it (and back behind, a moment after it's left alone), the wheel to zoom
 const dom = renderer.domElement;
 const hint = document.getElementById('possess-hint'), hintTitle = document.getElementById('ph-title'), hintSub = document.getElementById('ph-sub');
 export const possession = { index: -1, yaw: 0, pitch: 0 };
-export const driving = { active: false, dragging: false, lookedAt: -Infinity }; // (lookedAt: when the camera was last let go of)
+export const driving = { active: false, lookedAt: -Infinity }; // (lookedAt: when the mouse last swung the camera round)
 const held = new Set();
-const PITCH_MAX = 1.35, LOOK_SPEED = 0.0025;
+const PITCH_MAX = 1.35, LOOK_SPEED = 0.0025, ORBIT_PHI_MIN = 0.3, ORBIT_PHI_MAX = 1.5; // (driving: the camera not quite overhead, nor lower than about level with the car)
 const KEY_NAMES = { arrowup: 'w', arrowleft: 'a', arrowdown: 's', arrowright: 'd', ' ': 'space' };
 const CONTROL_KEYS = ['w', 'a', 's', 'd', 'shift', 'space'];
 
@@ -32,22 +33,25 @@ export function startPossession(i, heading) {
   possession.pitch = -0.1;
   held.clear();
   showHint('Press <kbd>Esc</kbd> to exit first person', 'WASD to walk · Shift to run · mouse to look');
-  dom.requestPointerLock?.()?.catch?.(() => {}); // (a click is what lets it lock, and this runs from one)
+  lockPointer(); // (a click is what lets it lock, and this runs from one)
   return true;
 }
+function lockPointer() { if (document.pointerLockElement !== dom) dom.requestPointerLock?.()?.catch?.(() => {}); }
+function unlockPointer() { if (document.pointerLockElement === dom) document.exitPointerLock(); }
 export function endPossession() {
   if (possession.index < 0) return;
   possession.index = -1;
   held.clear();
   hint.hidden = true;
-  if (document.pointerLockElement === dom) document.exitPointerLock();
+  unlockPointer();
 }
 export function startDriving() {
   if (!S.peopleEnabled || S.interactionMode !== 'move') return false;
   driving.active = true;
-  driving.dragging = false, driving.lookedAt = -Infinity;
+  driving.lookedAt = -Infinity;
   held.clear();
-  showHint('Press <kbd>Esc</kbd> to stop driving', 'W/S to drive · A/D to steer · Shift to boost · Space to brake · drag to look around · scroll to zoom');
+  showHint('Press <kbd>Esc</kbd> to stop driving', 'W/S to drive · A/D to steer · Shift to boost · Space to brake · mouse to look around · scroll to zoom');
+  lockPointer();
   return true;
 }
 export function endDriving() {
@@ -55,6 +59,7 @@ export function endDriving() {
   driving.active = false;
   held.clear();
   hint.hidden = true;
+  unlockPointer();
 }
 const isPossessing = () => possession.index >= 0;
 const inControl = () => isPossessing() || driving.active;
@@ -78,19 +83,24 @@ window.addEventListener('keydown', (e) => {
 }, true);
 window.addEventListener('keyup', (e) => held.delete(keyName(e)));
 window.addEventListener('blur', () => held.clear());
-document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement !== dom && isPossessing()) App.unpossessPerson(); });
-// clicking the view while possessing someone picks no one, but locks the pointer to it (again) — driving, it's left to
-// orbit the camera as usual (input.js picking no one either, while driving)
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement === dom) return;
+  if (isPossessing()) App.unpossessPerson(); else if (driving.active) App.stopDriving();
+});
+// clicking the view while in control picks no one, but locks the pointer to it (again)
 dom.addEventListener('pointerdown', (e) => {
-  if (!isPossessing()) return;
+  if (!inControl()) return;
   e.stopImmediatePropagation();
-  if (isPossessing() && document.pointerLockElement !== dom) dom.requestPointerLock?.()?.catch?.(() => {});
+  lockPointer();
 }, true);
-dom.addEventListener('pointerdown', () => { if (driving.active) driving.dragging = true; });
-window.addEventListener('pointerup', () => { if (driving.dragging) { driving.dragging = false; driving.lookedAt = performance.now(); } });
 window.addEventListener('mousemove', (e) => {
-  if (!isPossessing()) return;
-  if (document.pointerLockElement !== dom && !(e.buttons & 1 && e.target === dom)) return;
+  if (!inControl() || (document.pointerLockElement !== dom && !(e.buttons & 1 && e.target === dom))) return;
+  if (driving.active) {
+    controls.orbit(e.movementX, e.movementY);
+    controls.goalPhi = Math.max(ORBIT_PHI_MIN, Math.min(ORBIT_PHI_MAX, controls.goalPhi));
+    driving.lookedAt = performance.now();
+    return;
+  }
   possession.yaw -= e.movementX*LOOK_SPEED;
   possession.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, possession.pitch - e.movementY*LOOK_SPEED));
 });
