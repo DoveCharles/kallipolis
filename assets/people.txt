@@ -327,12 +327,12 @@ Myrtle [age = 1.15]
 🤡 [chatty = 3, talkative = 3]
 🥶 [walkspeed = 0.5, mood = -0.3]
 🏃🏻‍➡️ [walkspeed = 2, chatty = 0.2, lounging = 0]
-📃 [choiceweight = 0, walkspeed = 0.6, blinks = 0.3, fidgety = 12, evil = 0.1, shocked = 0.7, happy = 0.5]
-🌵 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shocked = 1, happy = 0.3]
-🍄 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shocked = 0.7, happy = 0.2]
-🐸 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shocked = 1, sad = 0.2]
+📃 [choiceweight = 0, walkspeed = 0.6, blinks = 0.3, fidgety = 12, evil = 0.1, shock = 0.7, happy = 0.5]
+🌵 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shock = 1, happy = 0.3]
+🍄 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shock = 0.7, happy = 0.2]
+🐸 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shock = 1, sad = 0.2]
 💊 [choiceweight = 0, walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, happy = 0.9]
-🌿 [choiceweight = 0, walkspeed = 0.5, blinks = 0.6, chatty = 4, shocked = 0.5]
+🌿 [choiceweight = 0, walkspeed = 0.5, blinks = 0.6, chatty = 4, shock = 0.5]
 💨 [choiceweight = 0, walkspeed = 0.3, chatty = 0.3, patience = 10, lounging = 10, blinks = 0.2, happy = 1]
 🍺 [choiceweight = 0, walkspeed = 0.8, chatty = 3, fidgety = 3, happy = 0.5, sad = 0.5]
 
@@ -945,8 +945,8 @@ Glamping
 A tickle
 Gunshot wounds
 Double denim
-Caring [mood : -0.2, evil = 0.05]
-Whatever they think of next [mood : -0.2]
+Caring [mood = -0.2, evil = 0.05]
+Whatever they think of next [mood = -0.2]
 Acts of God
 Sudden arrhythmic death syndrome
 Flies

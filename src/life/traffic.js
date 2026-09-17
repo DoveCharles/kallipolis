@@ -836,7 +836,7 @@ const stretchOf = (li, seg) => S.trafficNav.lines[li].stretchOf[Math.max(0, Math
 // how many cars a stretch takes: its two lanes' worth, less the junctions at its ends and one space to turn round in
 function stretchRoom(si) {
   const st = S.trafficNav.stretches[si];
-  if (!st.deadEnd) return Infinity;
+  if (st === undefined || st.deadEnd) return Infinity;
   const nav = S.trafficNav.lines[st.li];
   const junctionAt = v => S.roadJunctionByPlace.get(placeKey(nav.pts[v].x, nav.pts[v].z))?.r || 0;
   const usable = st.length - junctionAt(st.from) - junctionAt(st.to);
