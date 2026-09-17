@@ -17,6 +17,15 @@ export const PATH_COLOR_PALETTE = [PATH_COLOR]; // user-extendable palette; grow
 // bridges water like a path) but looks nothing like one: just a plain flat color, no dirt texture or soft fade edge.
 export const WALKWAY_COLOR = 0xb0ac9f;
 export const WALKWAY_COLOR_PALETTE = [WALKWAY_COLOR];
+// the surfaces a walkway can be paved with (set per network in the details panel); the index is the shader's uWalkPattern
+export const WALKWAY_TEXTURES = [
+  { id: 'plain', label: 'Plain' },
+  { id: 'planks', label: 'Wood planks' },
+  { id: 'cobblestone', label: 'Cobblestone' },
+  { id: 'tiles', label: 'Tiles' },
+  { id: 'brick', label: 'Brick' },
+];
+export const WALKWAY_TEXTURE = 'plain';
 const PATH_MAX_SEGMENTS = 128; // fixed GLSL array size; a network's centerlines are simplified to fit
 export function isPathLine(line) { return line.roadType === 'path'; }
 export function isWalkwayLine(line) { return line.roadType === 'walkway'; }
@@ -120,7 +129,88 @@ function buildPathMesh(lines, networkId) {
   return mesh;
 }
 
-// One walkway network's mesh: like a path, but just a plain flat color — no dirt shader or soft fade edge
+// Walkway paving, drawn in world space like a plaza's so the pattern runs on unbroken along the whole network. Each
+// pattern works out, for the point being shaded, which piece (plank, stone, tile, brick) it's on and how far it is from
+// that piece's edge: pieces get a slight tint of their own and the gaps between them are darkened. Everything is
+// measured in pattern space — world space turned by the rotation and shrunk by the scale — so the gaps scale too.
+const WALKWAY_FRAGMENT_PARS = `
+  varying vec3 vWalkWorldPos;
+  uniform int uWalkPattern;
+  uniform float uWalkScale;
+  uniform vec2 uWalkRotation; // (cos, sin)
+  float walkHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
+  float walkNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    float a = walkHash(i), b = walkHash(i+vec2(1.0,0.0)), c = walkHash(i+vec2(0.0,1.0)), d = walkHash(i+vec2(1.0,1.0));
+    vec2 u = f*f*(3.0-2.0*f);
+    return mix(a,b,u.x) + (c-a)*u.y*(1.0-u.x) + (d-b)*u.x*u.y;
+  }
+`;
+const WALKWAY_COLOR_FRAGMENT = `
+  if (uWalkPattern != 0) {
+    vec2 w = vWalkWorldPos.xz;
+    vec2 p = vec2(uWalkRotation.x*w.x + uWalkRotation.y*w.y, uWalkRotation.x*w.y - uWalkRotation.y*w.x)/uWalkScale;
+    float edgeDist = 1.0, tint = 1.0, gapLo = 0.03, gapHi = 0.08, gapShade = 0.62;
+    if (uWalkPattern == 1) {
+      // wood planks: long boards along x, each row's joints staggered at random, with grain streaking along them
+      float boardW = 0.3, boardL = 3.0;
+      float row = floor(p.y/boardW);
+      float u = p.x/boardL + walkHash(vec2(row, 3.7));
+      vec2 id = vec2(floor(u), row), f = vec2(fract(u), fract(p.y/boardW));
+      edgeDist = min(min(f.x, 1.0-f.x)*boardL, min(f.y, 1.0-f.y)*boardW);
+      float grain = walkNoise(vec2(u*6.0, p.y*40.0) + id*13.0);
+      tint = (0.8 + 0.3*walkHash(id + 5.0))*(0.86 + 0.2*grain);
+      gapLo = 0.008; gapHi = 0.022; gapShade = 0.4;
+    } else if (uWalkPattern == 2) {
+      // cobblestones: a jittered grid of stones (Voronoi cells), rounded off darker toward their edges
+      float size = 0.5;
+      vec2 q = p/size, iq = floor(q), fq = fract(q);
+      float f1 = 8.0, f2 = 8.0;
+      vec2 id = vec2(0.0);
+      for (int j=-1; j<=1; j++) for (int i=-1; i<=1; i++) {
+        vec2 g = vec2(float(i), float(j)), cell = iq + g;
+        vec2 r = g + 0.15 + 0.7*vec2(walkHash(cell), walkHash(cell + 19.7)) - fq;
+        float d = dot(r, r);
+        if (d < f1) { f2 = f1; f1 = d; id = cell; } else if (d < f2) { f2 = d; }
+      }
+      edgeDist = (sqrt(f2) - sqrt(f1))*0.5*size;
+      tint = (0.78 + 0.36*walkHash(id + 7.0))*mix(0.8, 1.0, smoothstep(0.02, 0.14, edgeDist));
+      gapLo = 0.015; gapHi = 0.04; gapShade = 0.45;
+    } else if (uWalkPattern == 3) {
+      // square tiles, as on a plaza
+      float size = 2.4;
+      vec2 f = fract(p/size);
+      edgeDist = min(min(f.x, 1.0-f.x), min(f.y, 1.0-f.y))*size;
+      tint = 0.9 + 0.2*walkHash(floor(p/size) + 17.0);
+    } else {
+      // brick: 2:1 bricks in running bond, each course shifted half a brick from the last
+      float brickL = 0.44, brickW = 0.22;
+      float row = floor(p.y/brickW);
+      float u = p.x/brickL + 0.5*mod(row, 2.0);
+      vec2 id = vec2(floor(u), row), f = vec2(fract(u), fract(p.y/brickW));
+      edgeDist = min(min(f.x, 1.0-f.x)*brickL, min(f.y, 1.0-f.y)*brickW);
+      tint = 0.82 + 0.3*walkHash(id + 11.0);
+      gapLo = 0.01; gapHi = 0.025; gapShade = 0.55;
+    }
+    diffuseColor.rgb *= mix(gapShade, tint, smoothstep(gapLo, gapHi, edgeDist));
+  }
+`;
+export function applyWalkwayShader(mat, texture, scale, rotationDegrees) {
+  const pattern = Math.max(0, WALKWAY_TEXTURES.findIndex(t => t.id === texture));
+  const angle = (rotationDegrees || 0)*Math.PI/180;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uWalkPattern = { value: pattern };
+    shader.uniforms.uWalkScale = { value: scale || 1 };
+    shader.uniforms.uWalkRotation = { value: new THREE.Vector2(Math.cos(angle), Math.sin(angle)) };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWalkWorldPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWalkWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\n' + WALKWAY_FRAGMENT_PARS)
+      .replace('#include <color_fragment>', '#include <color_fragment>\n' + WALKWAY_COLOR_FRAGMENT);
+  };
+}
+// One walkway network's mesh: like a path, but with a hard edge and paved (or plain) instead of the dirt shader
 function buildWalkwayMesh(lines, networkId) {
   const halfWidth = (lines[0].width || S.DEFAULT_ROAD_WIDTH)/2;
   const color = lines[0].walkwayColor!=null ? lines[0].walkwayColor : WALKWAY_COLOR; // colors are set per network in the details panel
@@ -133,6 +223,8 @@ function buildWalkwayMesh(lines, networkId) {
   const geo = builder.build();
   if (!geo) return null;
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, ...SKIP_OVER_WATER });
+  const line = lines[0]; // the texture is set per network too
+  applyWalkwayShader(mat, line.walkwayTexture || WALKWAY_TEXTURE, line.walkwayTextureScale, line.walkwayTextureRotation);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'Walkway';

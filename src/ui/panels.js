@@ -3,7 +3,7 @@ import { scene } from '../core/scene.js';
 import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
 import { roadNodes, MAX_TARGET_LOTS } from '../core/state.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
-import { PATH_COLOR, PATH_COLOR_PALETTE, WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, isPathLine, isWalkwayLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
+import { PATH_COLOR, PATH_COLOR_PALETTE, WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURES, WALKWAY_TEXTURE, isPathLine, isWalkwayLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
 import { networkKindOf, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
@@ -415,7 +415,9 @@ function renderDetails() {
     const toggleHtml = (id, label, on) => `<div class="row" style="margin-top:11px;"><label>${label}</label><button class="toggle-switch${on?' on':''}" id="${id}"><span class="knob"></span></button></div>`;
     const seedHtml = `<div class="seed-row"><input type="number" id="ds-seed" value="${s.seed}"><button class="icon-btn" id="d-dice">&#127922;</button></div>`;
     const settingsHtml = zoneType==='water' ? `
-      <div class="empty" style="margin:6px 0 10px;">Animated water, sunk below the ground. It joins any river running into it, roads cross it on bridges, and where it meets a park there's a sandy beach.</div>
+      <div class="empty" style="margin:6px 0 10px;">Animated water, sunk below the ground. It joins any river running into it, roads cross it on bridges, and where it meets a park or beach there's a sandy slope down into it.</div>
+    ` : zoneType==='beach' ? `
+      <div class="empty" style="margin:6px 0 10px;">Sand, darker and wetter toward the water. It slopes gently down into any water beside it, and parks next to it fade from grass into sand.</div>
     ` : zoneType==='plaza' ? `
       <div class="slider-row"><div class="row"><label>Paving</label></div>
         <select id="ds-paving" class="select-input">
@@ -517,8 +519,8 @@ function renderDetails() {
       onRemove: (oldHex, replacement) => { S.zones.forEach(z => { if (z.settings && z.settings[key]===oldHex) { z.settings[key]=replacement; subdivideZone(z); } }); },
       onPreview: (hex) => { s[key] = hex; subdivideZone(zone); }
     }, swatchKey, renderDetails, s[key]!=null ? s[key] : fallback);
-    if (zoneType==='water') {
-      // water has no settings of its own
+    if (zoneType==='water' || zoneType==='beach') {
+      // water and beaches have no settings of their own
     } else if (zoneType==='plaza') {
       document.getElementById('ds-paving').addEventListener('change', (e) => { s.pavingPattern = e.target.value; subdivideZone(zone); });
       wireSwatches(PLAZA_COLORS, 'pavingColor', 'pavingcolor', PLAZA_COLORS[0]);
@@ -668,6 +670,8 @@ function renderDetails() {
     const isPath = isPathLine(lines[0]), isWalkway = isWalkwayLine(lines[0]), isRiver = isRiverLine(lines[0]);
     const curPathColor = lines[0].pathColor!=null ? lines[0].pathColor : PATH_COLOR;
     const curWalkwayColor = lines[0].walkwayColor!=null ? lines[0].walkwayColor : WALKWAY_COLOR;
+    const curWalkwayTexture = lines[0].walkwayTexture || WALKWAY_TEXTURE;
+    const curTextureScale = lines[0].walkwayTextureScale ?? 1, curTextureRotation = lines[0].walkwayTextureRotation ?? 0;
     panel.innerHTML = `
       <div class="title-row"><span class="name">${title}</span><button class="close-x" id="d-close">deselect</button></div>
       <div class="empty" style="margin-bottom:10px;">${subtitle}</div>
@@ -685,6 +689,16 @@ function renderDetails() {
       <div class="section-label">Path color</div>
       ${colorSwatchRowHtml(PATH_COLOR_PALETTE, curPathColor, 'pathcolor')}
       ` : isWalkway ? `
+      <div class="slider-row"><div class="row"><label>Texture</label></div>
+        <select id="ds-walkwaytexture" class="select-input">
+          ${WALKWAY_TEXTURES.map(t => `<option value="${t.id}" ${t.id===curWalkwayTexture?'selected':''}>${t.label}</option>`).join('')}
+        </select></div>
+      ${curWalkwayTexture!=='plain' ? `
+      <div class="slider-row"><div class="row"><label>Texture scale</label><span class="val" id="dv-walkwayscale">${curTextureScale.toFixed(2)}</span></div>
+        <input type="range" id="ds-walkwayscale" min="0.25" max="4" step="0.05" value="${curTextureScale}"></div>
+      <div class="slider-row"><div class="row"><label>Texture rotation</label><span class="val" id="dv-walkwayrotation">${curTextureRotation}°</span></div>
+        <input type="range" id="ds-walkwayrotation" min="0" max="180" step="1" value="${curTextureRotation}"></div>
+      ` : ''}
       <div class="section-label">Walkway color</div>
       ${colorSwatchRowHtml(WALKWAY_COLOR_PALETTE, curWalkwayColor, 'walkwaycolor')}
       ` : `
@@ -721,6 +735,20 @@ function renderDetails() {
       }, 'pathcolor', renderDetails, curPathColor);
     }
     if (isWalkway) {
+      document.getElementById('ds-walkwaytexture').addEventListener('change', (e) => {
+        lines.forEach(l => { l.walkwayTexture = e.target.value; });
+        rebuildRoadMeshes(); renderDetails();
+      });
+      const wireTextureSlider = (id, key, format) => document.getElementById('ds-'+id).addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        lines.forEach(l => { l[key] = v; });
+        document.getElementById('dv-'+id).textContent = format(v);
+        rebuildRoadMeshes();
+      });
+      if (curWalkwayTexture!=='plain') {
+        wireTextureSlider('walkwayscale', 'walkwayTextureScale', v => v.toFixed(2));
+        wireTextureSlider('walkwayrotation', 'walkwayTextureRotation', v => v+'°');
+      }
       wireColorSwatchEvents(panel, WALKWAY_COLOR_PALETTE, {
         onPick: (hex) => { lines.forEach(l => { l.walkwayColor = hex; }); rebuildRoadMeshes(); renderDetails(); },
         onCommit: (hex, mode, oldHex) => {

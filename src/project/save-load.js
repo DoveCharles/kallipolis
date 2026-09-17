@@ -4,7 +4,7 @@ import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLOR
 import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { importMapImageFile, renderMapsList, removeMapImage } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
-import { PATH_COLOR, PATH_COLOR_PALETTE, WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, isPathLine, isWalkwayLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
+import { PATH_COLOR, PATH_COLOR_PALETTE, WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isPathLine, isWalkwayLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
 import { isTrainLine } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone } from '../zones/cutouts.js';
@@ -67,7 +67,7 @@ export function serializeProject() {
       lines: finishedLines.map(l => ({ id:l.id, nodeIds:l.nodeIds.slice(), width:l.width,
         color: colorToHex(l.color, ROAD_COLOR), sidewalkWidth:l.sidewalkWidth,
         sidewalkColor: colorToHex(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId,
-        ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}), ...(isPathLine(l) ? { roadType:'path', pathColor: colorToHex(l.pathColor, PATH_COLOR) } : {}), ...(isWalkwayLine(l) ? { roadType:'walkway', walkwayColor: colorToHex(l.walkwayColor, WALKWAY_COLOR) } : {}), ...(isRiverLine(l) ? { roadType:'river' } : {}) }))
+        ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}), ...(isPathLine(l) ? { roadType:'path', pathColor: colorToHex(l.pathColor, PATH_COLOR) } : {}), ...(isWalkwayLine(l) ? { roadType:'walkway', walkwayColor: colorToHex(l.walkwayColor, WALKWAY_COLOR), walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: l.walkwayTextureScale ?? 1, walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}), ...(isRiverLine(l) ? { roadType:'river' } : {}) }))
     },
     zoneSeq: S.zoneSeq,
     zones: S.zones.filter(z => !z.drawing && z.points.length>=3).map(z => ({
@@ -222,7 +222,8 @@ export async function loadProjectFromData(data, options) {
     sidewalkColor: hexToColor(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId, drawing:false,
     ...(l.kind==='train' ? { kind:'train', radius: l.radius!=null ? l.radius : S.TRAIN_DEFAULT_RADIUS } : {}),
     ...(l.roadType==='path' ? { roadType:'path', pathColor: hexToColor(l.pathColor, PATH_COLOR) } : {}),
-    ...(l.roadType==='walkway' ? { roadType:'walkway', walkwayColor: hexToColor(l.walkwayColor, WALKWAY_COLOR) } : {}),
+    ...(l.roadType==='walkway' ? { roadType:'walkway', walkwayColor: hexToColor(l.walkwayColor, WALKWAY_COLOR),
+      walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: l.walkwayTextureScale ?? 1, walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}),
     ...(l.roadType==='river' ? { roadType:'river' } : {}) }));
   S.roadNodeSeq = rd.nodeSeq || 1; S.roadLineSeq = rd.lineSeq || 1; S.roadNetworkSeq = rd.networkSeq || 1;
   rebuildRoadMeshes();
