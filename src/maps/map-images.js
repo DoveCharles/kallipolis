@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, SKIP_OVER_WATER, Y_MAP } from '../core/scene.js';
+import { scene, SKIP_OVER_WATER_AND_ROADS, Y_MAP } from '../core/scene.js';
 import { mapImages, mapGroup } from '../core/state.js';
 
 // ---------------------------------------------------------- map images (reference tracing)
@@ -25,7 +25,7 @@ function createMapPlaneMesh(texture, aspect) {
   const h = aspect>=1 ? targetSize/aspect : targetSize;
   const geo = new THREE.PlaneGeometry(w, h);
   const mat = new THREE.MeshBasicMaterial({ map:texture, transparent:true, side:THREE.DoubleSide,
-    polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2, ...SKIP_OVER_WATER });
+    polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2, ...SKIP_OVER_WATER_AND_ROADS });
   const plane = new THREE.Mesh(geo, mat);
   plane.rotation.x = -Math.PI/2; // lay flat within the pivot's frame — fixed, never touched again
   plane.name = 'MapImage';

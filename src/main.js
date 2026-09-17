@@ -40,7 +40,7 @@ import './ui/pixelation.js';
 import './project/export-obj.js';
 import * as THREE from 'three';
 import { S } from './core/shared.js';
-import { scene, camera, renderer, skyDome, SKIP_OVER_WATER } from './core/scene.js';
+import { scene, camera, renderer, skyDome, SKIP_OVER_WATER_AND_ROADS } from './core/scene.js';
 import { controls } from './core/camera-controls.js';
 import { mulberry32 } from './core/math.js';
 import { createWindowMaterial } from './buildings/windows.js';
@@ -86,7 +86,7 @@ const standardWith = (applyShader, params) => () => {
   standardWith(mat => applyGrassNoiseShader(mat, [{ x:0, z:0 }, { x:1, z:0 }, { x:0, z:1 }], 1, [])),
   standardWith(mat => applyCropShader(mat, 1, 0, 1, 0.2)),
   standardWith(mat => applyPavingShader(mat, 0)),
-  standardWith(mat => applyPathShader(mat, [], 1, 1), { transparent: true, depthWrite: false, ...SKIP_OVER_WATER }),
+  standardWith(mat => applyPathShader(mat, [], 1, 1), { transparent: true, depthWrite: false, ...SKIP_OVER_WATER_AND_ROADS }),
   standardWith(null, { side: THREE.DoubleSide }),                                         // road surfaces, fountain stone
   standardWith(null, { vertexColors: true, flatShading: true, side: THREE.DoubleSide }),  // building bodies
   standardWith(null, { flatShading: true }),                                              // building details (greebles, ribs, canopies…)

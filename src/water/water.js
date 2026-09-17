@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, SKY_ENV_MAP, GROUND_HALF_SIZE, ground, Y_MAP } from '../core/scene.js';
+import { scene, SKY_ENV_MAP, GROUND_HALF_SIZE, ground, makeStencilMask, STENCIL_WATER, Y_MAP } from '../core/scene.js';
 import { distPointSegment } from '../buildings/footprints.js';
 import { tessellateClosedPath } from '../core/splines.js';
 import { CLIPPER_SCALE, clipPolygons, createMeshBuilder, disposeObject } from '../roads/roads.js';
@@ -207,7 +207,7 @@ export function getWaterRegion() { refreshWaterCache(); return waterCache.region
 export function getBeachZoneArea() { refreshWaterCache(); return waterCache.beachZoneArea; }
 
 S.waterGroup = new THREE.Group(); S.waterGroup.name = 'Water'; scene.add(S.waterGroup);
-let builtWaterKey = null, builtBridgeKey = null;
+let builtWaterKey = null, builtBridgeKey = null, builtGroundKey = null;
 // Brings the water, and the bridges over it, up to date — each only if what it depends on has changed. Called from
 // animate() whenever waterDirty is set, so any number of zone and road rebuilds in one go cost one water rebuild.
 export function rebuildWater() {
@@ -218,23 +218,26 @@ export function rebuildWater() {
     buildWaterBody(waterCache.region, waterCache.parkArea);
   }
   const bridgeKey = waterCache.key + '#' + S.roadBuildSeq;
+  if (builtGroundKey !== bridgeKey) {
+    builtGroundKey = bridgeKey;
+    rebuildGround(waterCache.region, S.roadSurfaceOutline);
+  }
   if (builtBridgeKey !== bridgeKey) {
     builtBridgeKey = bridgeKey;
     App.buildBridges(waterCache.region);
   }
 }
-// The ground: one big flat mesh at height 0, with a hole wherever there's water.
-function rebuildGround(region) {
+// The ground: one big flat mesh at height 0, with a hole wherever there's water or a (sunk) road surface.
+function rebuildGround(region, roadSurface) {
   const S = GROUND_HALF_SIZE*CLIPPER_SCALE;
   const builder = createMeshBuilder();
-  builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, [[{X:-S,Y:-S}, {X:S,Y:-S}, {X:S,Y:S}, {X:-S,Y:S}]], region, true), 0);
+  builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, [[{X:-S,Y:-S}, {X:S,Y:-S}, {X:S,Y:S}, {X:-S,Y:S}]], region.concat(roadSurface), true), 0);
   ground.geometry.dispose();
   ground.geometry = builder.build() || new THREE.BufferGeometry();
 }
 function buildWaterBody(region, parkArea) {
   scene.remove(S.waterGroup); disposeObject(S.waterGroup);
   S.waterGroup = new THREE.Group(); S.waterGroup.name = 'Water';
-  rebuildGround(region);
   if (region.length) {
     const tree = clipPolygons(ClipperLib.ClipType.ctUnion, region, [], true);
     const inPark = App.createRegionTester(parkArea);
@@ -356,15 +359,10 @@ function buildWaterBody(region, parkArea) {
       }
     }
 
-    // the stencil mask that keeps the grid, map images and path sand from being drawn over the water (see SKIP_OVER_WATER)
+    // the stencil mask that keeps the grid, map images and walkways from being drawn over the water (see SKIP_OVER_WATER_AND_ROADS)
     const maskBuilder = createMeshBuilder();
     maskBuilder.addTops(tree, Y_MAP);
-    const mask = new THREE.Mesh(maskBuilder.build(), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false,
-      stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc, stencilRef: 1, stencilZPass: THREE.ReplaceStencilOp }));
-    mask.renderOrder = -10; // before anything that tests it
-    mask.name = 'WaterMask';
-    mask.userData.noExport = true;
-    S.waterGroup.add(mask);
+    S.waterGroup.add(makeStencilMask(maskBuilder.build(), STENCIL_WATER, 'WaterMask'));
   }
   scene.add(S.waterGroup);
 }

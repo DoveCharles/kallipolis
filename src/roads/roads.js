@@ -9,8 +9,8 @@ import { S, App } from '../core/shared.js';
 // merges into one continuous outline; the curb is the ring between the curb outline and the road outline,
 // and the sidewalk the ring between the sidewalk outline and the curb outline. Polygon offsetting and
 // boolean ops are done by Clipper (clipper-lib); the resulting polygons — holes included, e.g. the block
-// enclosed by a ring road — are triangulated with THREE.ShapeUtils. The road surface stays flat at Y_ROAD;
-// curb and sidewalk together are one solid raised to Y_SIDEWALK, with a vertical face stepping down to the
+// enclosed by a ring road — are triangulated with THREE.ShapeUtils. The road surface stays flat at Y_ROAD, sunk below
+// the ground; curb and sidewalk together are one solid raised to Y_SIDEWALK, with a vertical face stepping down to the
 // road along the road outline and one dropping to the ground along the outer outline.
 const CURB_WIDTH = 0.5;
 export const CURB_COLOR = 0x9c988d; // light concrete, deliberately not tied to the road's own color palette —
@@ -26,6 +26,7 @@ export const ROAD_ARC_TOLERANCE = 0.05; // max distance (world units) a rounded 
 // The whole road network's footprint (road + curb + sidewalk) as Clipper paths, cached by rebuildRoadMeshes for
 // zones to cut themselves with — see "zone cut-outs".
 S.roadFootprint = [];
+S.roadSurfaceOutline = [];
 // Paths' footprint (the track itself, not its fade), cached alongside by rebuildRoadMeshes — zones keep lots, buildings
 // and trees off it without cutting their ground (see "paths").
 S.pathFootprint = [];

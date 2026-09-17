@@ -21,7 +21,7 @@ scene.background = null;
 scene.fog = new THREE.Fog(bgColor, 600, 2800);
 
 export const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.5, 3000);
-// the stencil buffer is off by default now, and the water mask needs it (see SKIP_OVER_WATER)
+// the stencil buffer is off by default now, and the water and road masks need it (see SKIP_OVER_WATER_AND_ROADS)
 export const renderer = new THREE.WebGLRenderer({ antialias:true, stencil:true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -221,11 +221,22 @@ export function updateSun(quick) {
 }
 updateSun();
 
-// Water sits below the ground (see "water"). The ground mesh itself is rebuilt with holes where the water is, but a few
-// things are drawn flat just above ground level across the whole map — the grid, map images, path sand — and those skip
-// the water with the stencil buffer instead: rebuildWater draws the water's outline into the stencil first (an invisible
-// mask at map-image height), and materials carrying these settings don't draw wherever it's marked.
-export const SKIP_OVER_WATER = { stencilWrite:true, stencilFunc:THREE.NotEqualStencilFunc, stencilRef:1 };
+// Water and road surfaces sit below the ground (see "water" and rebuildRoadMeshes). The ground mesh itself is rebuilt
+// with holes where they are, but a few things are drawn flat just above ground level across the whole map — the grid,
+// map images, walkways — and those skip them with the stencil buffer instead: rebuildWater and rebuildRoadMeshes each
+// draw their outline into its own stencil bit first (an invisible mask, see makeStencilMask), and materials carrying
+// these settings don't draw wherever those bits are marked. Zone fills only skip the roads, and still tint water zones.
+export const STENCIL_WATER = 1, STENCIL_ROAD = 2;
+export const SKIP_OVER_WATER_AND_ROADS = { stencilWrite:true, stencilFunc:THREE.EqualStencilFunc, stencilRef:0, stencilFuncMask:STENCIL_WATER|STENCIL_ROAD };
+export const SKIP_OVER_ROADS = { stencilWrite:true, stencilFunc:THREE.EqualStencilFunc, stencilRef:0, stencilFuncMask:STENCIL_ROAD };
+export function makeStencilMask(geometry, bit, name) {
+  const mask = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ colorWrite:false, depthWrite:false,
+    stencilWrite:true, stencilFunc:THREE.AlwaysStencilFunc, stencilRef:bit, stencilWriteMask:bit, stencilZPass:THREE.ReplaceStencilOp }));
+  mask.renderOrder = -10; // before anything that tests it
+  mask.name = name;
+  mask.userData.noExport = true;
+  return mask;
+}
 export const GROUND_HALF_SIZE = 1500;
 export const groundMat = new THREE.MeshStandardMaterial({ color:0x1b1e24, roughness:1 });
 export const ground = new THREE.Mesh(new THREE.PlaneGeometry(GROUND_HALF_SIZE*2, GROUND_HALF_SIZE*2).rotateX(-Math.PI/2), groundMat);
@@ -234,7 +245,7 @@ scene.add(ground);
 
 let gridHelper = new THREE.GridHelper(2000, 200, 0x33373f, 0x20232a);
 gridHelper.position.y = 0.02;
-Object.assign(gridHelper.material, SKIP_OVER_WATER);
+Object.assign(gridHelper.material, SKIP_OVER_WATER_AND_ROADS);
 scene.add(gridHelper);
 export function setGridColor(hexStr) {
   // GridHelper bakes colors into its geometry (not a live material uniform), so recreate it.
@@ -245,7 +256,7 @@ export function setGridColor(hexStr) {
   scene.remove(gridHelper); App.disposeObject(gridHelper);
   gridHelper = new THREE.GridHelper(2000, 200, mainColor.getHex(), dimColor.getHex());
   gridHelper.position.y = 0.02;
-  Object.assign(gridHelper.material, SKIP_OVER_WATER);
+  Object.assign(gridHelper.material, SKIP_OVER_WATER_AND_ROADS);
   scene.add(gridHelper);
 }
 
@@ -264,5 +275,6 @@ document.getElementById('grid-toggle').addEventListener('click', (e)=>{
   e.currentTarget.classList.toggle('active', gridSnapEnabled);
 });
 
-// Y-height layering (avoids coplanar z-fighting):
-export const Y_GRID=0.02, Y_MAP=0.03, Y_ZONE_GROUND=0.04, Y_PARK=0.06, Y_PATH=0.1, Y_ZONE_FILL=0.2, Y_ROAD=0.35, Y_SIDEWALK=0.5, Y_ZONE_LINE=0.55, Y_PREVIEW=0.65;
+// Y-height layering (avoids coplanar z-fighting). The road is sunk below the ground so its sidewalk sits level with
+// the zone floors beside it, a curb's height above the road:
+export const Y_ROAD=-0.07, Y_GRID=0.02, Y_MAP=0.03, Y_ZONE_GROUND=0.04, Y_PARK=0.06, Y_SIDEWALK=0.08, Y_PATH=0.1, Y_ZONE_FILL=0.2, Y_ZONE_LINE=0.55, Y_PREVIEW=0.65;

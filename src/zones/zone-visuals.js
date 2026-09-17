@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, Y_ZONE_FILL, Y_ZONE_LINE } from '../core/scene.js';
+import { scene, SKIP_OVER_ROADS, Y_ZONE_FILL, Y_ZONE_LINE } from '../core/scene.js';
 import { centroid } from '../core/math.js';
 import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
 import { mergeGeometries, extractCapGeometry, buildWallGeometry } from '../buildings/windows.js';
@@ -19,7 +19,7 @@ export function rebuildZoneVisual(zone) {
     shape.closePath();
     const fillGeo = new THREE.ShapeGeometry(shape);
     const isSel = S.selection.type==='zone' && S.selection.id===zone.id;
-    const fillMat = new THREE.MeshBasicMaterial({ color: isSel?0xffffff:0x3ddc97, transparent:true, opacity: isSel?0.13:0.07, side:THREE.DoubleSide, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-8, polygonOffsetUnits:-8 });
+    const fillMat = new THREE.MeshBasicMaterial({ color: isSel?0xffffff:0x3ddc97, transparent:true, opacity: isSel?0.13:0.07, side:THREE.DoubleSide, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-8, polygonOffsetUnits:-8, ...SKIP_OVER_ROADS });
     const fill = new THREE.Mesh(fillGeo,fillMat);
     fill.rotation.x=-Math.PI/2; fill.position.y=Y_ZONE_FILL;
     fill.userData = { zoneId: zone.id, isZoneFill:true };
