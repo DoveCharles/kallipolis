@@ -9,6 +9,55 @@ export function mulberry32(seed) {
 }
 export const lerp = (a,b,t) => a + (b-a)*t;
 
+export function hashNameToString(name, length = 8) {
+  // Simple 32-bit hash (djb2-ish)
+  let hash = 5381;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) + hash + name.charCodeAt(i)) >>> 0; // hash * 33 + char
+  }
+
+  // Use the hash to seed a PRNG (e.g. mulberry32) and generate chars
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let rng = mulberry32(hash);
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars[Math.floor(rng() * chars.length)];
+  }
+  return result;
+}
+
+export function hashLicensePlate(name, forceType) {
+  let hash = 5381;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) + hash + name.charCodeAt(i)) >>> 0;
+  }
+  const rng = mulberry32(hash);
+
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const digits = '0123456789';
+
+  const pickChar = (chars) => chars[(rng() * chars.length) | 0];
+  const pick = (chars, n) => {
+    let s = '';
+    for (let i = 0; i < n; i++) s += pickChar(chars);
+    return s;
+  };
+
+  const roll = rng();
+  const format = forceType !== undefined ?
+    forceType :
+    roll < 0.85 ? 0 : roll < 0.95 ? 1 : 2; // 0=uk 1=eu 2=us
+
+  switch (format) {
+    case 0: // UK format: AB12 CDE
+      return `${pick(letters, 2)}${pick(digits, 2)} ${pick(letters, 3)}`;
+    case 1: // EU format: AB-123-CD
+      return `${pick(letters, 2)}-${pick(digits, 3)}-${pick(letters, 2)}`;
+    default: // US format: ABC 1234
+      return `${pick(letters, 3)} ${pick(digits, 4)}`;
+  }
+}
+
 export function polygonArea(poly) {
   let s = 0;
   for (let i=0;i<poly.length;i++) { const a=poly[i], b=poly[(i+1)%poly.length]; s += a.x*b.z - b.x*a.z; }

@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { scene, camera, computeWindowGlowFactor, SKY_ENV_MAP, Y_ROAD } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
-import { mulberry32 } from '../core/math.js';
+import { hashLicensePlate, hashNameToString, mulberry32 } from '../core/math.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { roadLineWidths, createMeshBuilder, navRebuildOnHold } from '../roads/roads.js';
@@ -814,7 +814,22 @@ function followCarAt(clientX, clientY) {
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9));
   const car = cars[i], cm = car.design != null ? carMeshes[car.design] : null;
   const type = cm ? carTypeOf(cm.name, car.number) : carTypeOf(null);
-  App.showCarCard(i, { ...type, name: cm ? `${type.name} #${car.number}` : type.name });
+  const carMakeNumber = cm ? `${type.name} #${car.number}` : type.name;
+  let forceRegion;
+  switch (type.name?.trim().toLowerCase()) {
+    case 'bus':
+    case 'ambulance':
+    case 'police car':
+    case 'taxi':
+      forceRegion = 0;
+      break;
+    default:
+      forceRegion = undefined;
+  }
+  const name = cm ? 
+    `${hashLicensePlate(carMakeNumber, forceRegion)} (${carMakeNumber})`
+    : carMakeNumber;
+  App.showCarCard(i, { ...type, name: name });
 }
 function stopFollowingCar() {
   if (followedCar < 0) return;
