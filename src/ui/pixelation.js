@@ -215,7 +215,10 @@ const copyMaterial = new THREE.ShaderMaterial({
 // the palette color picked for each pixel. The error is worked out against the same colors, in the same space, as the
 // shader's palette, so a pixel comes out the color it would with no dithering at all where it's already a palette color.
 // It costs a read back of the whole view every frame, so it's slow unpixelated on a big screen (see renderView).
+// The error only spreads within tiles FLOYD_TILE pixels square: error diffusion is chaotic — one pixel changing reshuffles
+// the dots after it — so a car moving would otherwise set the whole view flickering, where this keeps it to its own tiles.
 const FLOYD_STEINBERG = DITHER_PATTERNS.findIndex(p => p.id === 'floyd');
+const FLOYD_TILE = 16;
 const floydPalette = new Float32Array(48);
 let floydPixels = null, floydIndices = null, floydTexture = null, floydError = null, floydNextError = null;
 function floydSteinberg(width, height) {
@@ -237,6 +240,7 @@ function floydSteinberg(width, height) {
   for (let y = 0; y < height; y++) {
     floydNextError.fill(0);
     const step = y & 1 ? -1 : 1;
+    const belowInTile = (y + 1) % FLOYD_TILE !== 0;
     for (let n = 0; n < width; n++) {
       const x = step > 0 ? n : width - 1 - n, i = y*width + x, e = (x + 1)*3;
       const r = clamp01(floydPixels[i*4]/255 + floydError[e]);
@@ -249,14 +253,19 @@ function floydSteinberg(width, height) {
       }
       floydIndices[i] = best/3;
       // the error spread on: 7/16 to the next pixel along the row, and 3/16, 5/16 and 1/16 to the ones below it — behind,
-      // straight below and ahead
+      // straight below and ahead — but only to those in the same tile, their shares scaled up to make the whole of it
+      const tile = Math.floor(x/FLOYD_TILE);
+      const aheadIn = Math.floor((x + step)/FLOYD_TILE) === tile, behindIn = Math.floor((x - step)/FLOYD_TILE) === tile;
+      const wAhead = aheadIn ? 7 : 0, wBehind = belowInTile && behindIn ? 3 : 0, wBelow = belowInTile ? 5 : 0;
+      const wAheadBelow = belowInTile && aheadIn ? 1 : 0, total = wAhead + wBehind + wBelow + wAheadBelow;
+      if (!total) continue;
       const ahead = e + step*3, behind = e - step*3;
       for (let c = 0; c < 3; c++) {
-        const error = (c === 0 ? r : c === 1 ? g : b) - floydPalette[best + c];
-        floydError[ahead + c] += error*7/16;
-        floydNextError[behind + c] += error*3/16;
-        floydNextError[e + c] += error*5/16;
-        floydNextError[ahead + c] += error/16;
+        const error = ((c === 0 ? r : c === 1 ? g : b) - floydPalette[best + c])/total;
+        floydError[ahead + c] += error*wAhead;
+        floydNextError[behind + c] += error*wBehind;
+        floydNextError[e + c] += error*wBelow;
+        floydNextError[ahead + c] += error*wAheadBelow;
       }
     }
     [floydError, floydNextError] = [floydNextError, floydError];
