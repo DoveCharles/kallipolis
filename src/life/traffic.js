@@ -12,6 +12,7 @@ import { placeKey, signalState } from '../roads/markings.js';
 import { isTrainLine } from '../trains/trains.js';
 import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people.js';
 import { explodeCar } from './giblets.js';
+import { carTypeOf } from './car-types.js';
 
 // ============================================================ traffic
 // Cars, switched on and off with the people (World → Peds, with speed and size shared too). They drive the sidewalk
@@ -106,13 +107,7 @@ const CAR_GLOW_MATERIALS = {
   TaxiLight: { diffuse: 0x3a2410, emissive: 0xffb347, intensity: 1.5 },
 };
 const CAR_SLOT_NAMES = [CAR_PAINT_MATERIAL, 'Lights', 'Backlights', 'TaxiLight']; // vertex slot 0 is everything else
-// what a vehicle's proud of being, for its card (see "the car card" below) — a design not listed here gets DEFAULT_CAR_EMOJI
-const DESIGN_EMOJI = {
-  Ambulance: '🚑', Bus: '🚌', Canyonero: '🚙', Taxi: '🚕', PoliceCar: '🚓',
-  PickupTruck: '🛻', SportsCar: '🏎️', Truck: '🚚', Van: '🚐',
-};
-const DEFAULT_CAR_EMOJI = '🚗';
-let carMeshes = []; // [{ mesh, paint, glowUniform, length, height, name, mood, thumbMesh, thumbCamera, thumbPaint }], one per design, once loaded
+let carMeshes = []; // [{ mesh, paint, glowUniform, length, height, name, thumbMesh, thumbCamera, thumbPaint }], one per design, once loaded
 let designNumbers = []; // how many of each design have been given out so far (see "the car card")
 
 async function loadGLB(url) {
@@ -235,7 +230,7 @@ function makeCarMesh(design) {
   scene.add(mesh);
   const thumb = makeCarThumbnail(design);
   return { mesh, paint, glowUniform, length: design.length, width: design.width, height: design.height,
-    name: design.name, mood: DESIGN_EMOJI[design.name] || DEFAULT_CAR_EMOJI,
+    name: design.name,
     thumbMesh: thumb.mesh, thumbCamera: thumb.camera, thumbPaint: thumb.paint };
 }
 
@@ -496,8 +491,8 @@ export function updateTraffic(t) {
 }
 
 // ---- following a car with the camera: exactly as for a person (see "following someone" in people.js) — a click on one in
-// World mode keeps the view on it, with a card (car-card.js) naming it, its mood (what kind of vehicle it is) and what it
-// enjoys and hates — the same for every car — until a click elsewhere, a pan, leaving World mode, or it despawning lets it go
+// World mode keeps the view on it, with a card (car-card.js) naming it, its mood, and what it loves and hates (all from
+// assets/cars.txt, by its type — see car-types.js) — until a click elsewhere, a pan, leaving World mode, or it despawning lets it go
 let followedCar = -1;
 function carHeight(car) { return (car.design != null && carMeshes[car.design] ? carMeshes[car.design].height : car.height)*S.peopleSize; }
 // a car's own length and width, in world units — its design's, or (until that's loaded) the box car's own
@@ -548,7 +543,8 @@ function followCarAt(clientX, clientY) {
   controls.minRadius = Math.max(1.2, h*0.8);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9));
   const car = cars[i], cm = car.design != null ? carMeshes[car.design] : null;
-  App.showCarCard(i, cm ? { name: `${cm.name} #${car.number}`, mood: cm.mood } : { name: 'Car', mood: DEFAULT_CAR_EMOJI });
+  const type = cm ? carTypeOf(cm.name, car.number) : carTypeOf(null);
+  App.showCarCard(i, { ...type, name: cm ? `${type.name} #${car.number}` : type.name });
 }
 function stopFollowingCar() {
   if (followedCar < 0) return;

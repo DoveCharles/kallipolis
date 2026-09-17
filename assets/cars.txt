@@ -1,0 +1,62 @@
+# What each kind of vehicle is like: what its card says when you click one in World mode. Edit freely, then reload the page.
+# Each [section] is a vehicle type, named as in assets/models/Cars.glb. Under it, `attribute = value` lines:
+#
+#   name    what it's called on its card (followed by its own number, like "Police car #3")
+#   mood    its current mood, usually an emoji
+#   loves   what it loves
+#   hates   what it hates
+#
+# Give an attribute several lines to have each vehicle of that type pick one of them (always the same one for the same
+# vehicle). Anything a type leaves out comes from [default], which is also used for any type that isn't listed.
+# Blank lines and lines starting with # are skipped.
+
+[default]
+name = Car
+mood = 🚗
+loves = Beep beep
+hates = Honkkkk
+
+[Ambulance]
+name = Ambulance
+mood = 🚑
+
+[Bus]
+name = Bus
+mood = 🚌
+
+[Canyonero]
+name = Canyonero
+mood = 🚙
+
+[Taxi]
+name = Taxi
+mood = 🚕
+
+[PoliceCar]
+name = Police car
+mood = 🚓
+
+[Sedan]
+name = Sedan
+
+[PickupTruck]
+name = Pickup truck
+mood = 🛻
+
+[SportsCar]
+name = Sports car
+mood = 🏎️
+
+[FamilyCar]
+name = Family car
+
+[Truck]
+name = Truck
+mood = 🚚
+
+[Twingo]
+name = Twingo
+
+[Van]
+name = Van
+mood = 🚐

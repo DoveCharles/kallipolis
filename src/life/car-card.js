@@ -4,8 +4,8 @@ import { makeThumbnailDrawer } from './thumbnail.js';
 
 // ============================================================ car card
 // Who's behind the wheel, in a card at the bottom right while the camera follows a vehicle (see "following a car" in
-// traffic.js): its name (its model and a number of its own, among others like it — see designNumbers in traffic.js), its
-// mood (what kind of vehicle it is, as an emoji), and what it enjoys and hates — the same for every one of them.
+// traffic.js): its name (its type's and a number of its own, among others like it — see designNumbers in traffic.js), its
+// mood, and what it loves and hates — all from assets/cars.txt, by its type (see car-types.js).
 let shown = -1; // whoever the card is showing, for its Kill button
 const card = document.getElementById('car-card');
 document.getElementById('car-card-close').addEventListener('click', () => App.stopFollowingCar());
@@ -15,8 +15,8 @@ function showCarCard(i, info) {
   shown = i;
   document.getElementById('cc-name').textContent = info.name;
   document.getElementById('cc-mood').textContent = info.mood;
-  document.getElementById('cc-enjoys').textContent = 'Beep beep';
-  document.getElementById('cc-hates').textContent = 'Honkkkk';
+  document.getElementById('cc-loves').textContent = info.loves;
+  document.getElementById('cc-hates').textContent = info.hates;
   card.hidden = false;
   drawCarThumbnail(i);
 }
