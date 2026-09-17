@@ -470,8 +470,8 @@ export function updateTraffic(t) {
       carParts.body.setMatrixAt(i, matrix);
     }
     if (S.showRoadsafetyDebug) {
-      const { length: fl, width: fw } = carFootprint(car), h = carHeight(car);
-      scale.set(fw + 0.5, h, fl + 0.5);
+      const { halfLength, halfWidth } = carHitbox(car), h = carHeight(car);
+      scale.set(halfWidth*2, h, halfLength*2);
       matrix.compose(position.setY(Y_ROAD + h*0.5), rotation, scale);
       carHitboxDebugMesh.setMatrixAt(i, matrix);
     }
@@ -505,14 +505,21 @@ function carFootprint(car) {
 // People wander into the road more readily than they dodge traffic (see people.js) — and the cars don't slow for them,
 // so anyone caught under one when it's moving gets run over: killed exactly as the person card's Kill button does (see
 // killPerson in people.js), blood and all, rather than anything of the car's own.
+// the hitbox a car runs people over with: its footprint and a little margin, shrunk to CAR_HITBOX_SCALE of that — as half
+// its length and width
+const CAR_HITBOX_SCALE = 0.6;
+function carHitbox(car) {
+  const { length, width } = carFootprint(car);
+  return { halfLength: (length*0.5 + 0.25)*CAR_HITBOX_SCALE, halfWidth: (width*0.5 + 0.25)*CAR_HITBOX_SCALE };
+}
 function runOverPeople(car) {
-  const { length, width } = carFootprint(car), reach = length*0.5 + 0.4, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+  const { halfLength, halfWidth } = carHitbox(car), reach = Math.hypot(halfLength, halfWidth), cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   App.people.forEach((p, i) => {
     if (p.mode === 'none' || p.mode === 'dead' || p.mode === 'train') return; // (up in a station, or on a train, out of reach)
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
-    if (Math.abs(right) < width*0.5 + 0.25 && Math.abs(forward) < length*0.5 + 0.25) App.killPerson(i, 'car');
+    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength) App.killPerson(i, 'car');
   });
 }
 // the car under a point on the screen (the nearest, if several are), or -1 — exactly like pickPerson in people.js, but
