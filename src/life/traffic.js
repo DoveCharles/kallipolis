@@ -27,8 +27,9 @@ const CAR_SPEED = 9;               // world units per second at speed 1
 const TRAFFIC_LANE_PER_CAR = 16;   // the most cars a road takes: one per this length of lane
 const PED_YIELD_RADIUS = 10, PED_YIELD_CHANCE = 0.25; // how far ahead a car notices someone waiting in the road, and how often it stops for them
 const TURN_SAFE_ANGLE = 0.35; // ~20°: while a car's heading is catching up to the lane by more than this (swinging round a corner or a dead-end U-turn — see driveAlong's junction/end handling), it can't run anyone over, though it's still a normal hazard for a ped's roadsafety check
-const CAR_PAINTS = [[0xe9e9e6, 5], [0x1c1d20, 5], [0xa8adb3, 4], [0x5f646b, 3], [0x233a66, 2], [0x8f1f22, 2], [0x2f5d3a, 1],
-  [0xd8b12c, 1], [0xd26a1f, 1], [0x2a8a9a, 1], [0x6b3d7a, 0.5], [0xb8c9d8, 1]]; // [color, how common]
+const CAR_PAINTS = [ // [color, how common]: the PICO-8 palette
+  [0x000000, 1], [0x1d2b53, 1], [0x7e2553, 1], [0x008751, 1], [0xab5236, 1], [0x5f574f, 1], [0xc2c3c7, 1], [0xfff1e8, 1],
+  [0xff004d, 1], [0xffa300, 1], [0xffec27, 1], [0x00e436, 1], [0x29adff, 1], [0x83769c, 1], [0xff77a8, 1], [0xffccaa, 1]];
 S.trafficAmount = 150, S.trafficNav = null, S.trafficNavBuiltAt = -Infinity, S.lastTrafficTime = null;
 const cars = [];
 let carIds = 0;
@@ -109,6 +110,7 @@ const CAR_GLOW_MATERIALS = {
   TaxiLight: { diffuse: 0x3a2410, emissive: 0xffb347, intensity: 1.5 },
 };
 const CAR_PLATE_MATERIAL = 'Plate';
+const CAR_GLASS_MATERIAL = 'Window'; // see-through, drawn with its own material (see makeCarMaterials)
 const CAR_SLOT_NAMES = [CAR_PAINT_MATERIAL, 'Lights', 'Backlights', 'TaxiLight', CAR_PLATE_MATERIAL]; // vertex slot 0 is everything else
 let carMeshes = []; // [{ mesh, paint, wheels, plates, glowUniform, wheelRadius, wheelbase, length, height, name, thumbMesh, thumbCamera, thumbPaint, thumbPlate }], one per design, once loaded
 let designNumbers = []; // how many of each design have been given out so far (see "the car card")
@@ -146,7 +148,8 @@ function buildCarDesigns(gltf) {
     const parts = [];
     node.traverse(o => { if (o.isMesh) parts.push(o); });
     if (!parts.length) return;
-    const positions = [], slots = [], colors = [], indices = [], wheelIds = [], wheels = [];
+    const positions = [], slots = [], colors = [], indices = [], glassIndices = [], wheelIds = [], wheels = [];
+    let glass = null;
     parts.forEach(part => {
       let wheel = part;
       while (wheel && wheel !== node && !wheel.name.startsWith('Wheel')) wheel = wheel.parent;
@@ -158,6 +161,8 @@ function buildCarDesigns(gltf) {
       if (glow) baseColor.set(glow.diffuse);
       else if (part.material && part.material.color) baseColor.copy(part.material.color).convertLinearToSRGB();
       else baseColor.set(0xffffff);
+      const isGlass = matName === CAR_GLASS_MATERIAL;
+      if (isGlass && !glass) glass = { opacity: part.material.opacity, roughness: part.material.roughness, metalness: part.material.metalness };
       const first = positions.length/3;
       for (let i=0;i<pos.count;i++) {
         v.fromBufferAttribute(pos, i).applyMatrix4(part.matrixWorld);
@@ -167,11 +172,13 @@ function buildCarDesigns(gltf) {
         wheelIds.push(wheelId);
       }
       const index = geo.index, corners = index ? index.count : pos.count;
-      for (let t=0;t<corners;t++) indices.push(first + (index ? index.getX(t) : t));
+      for (let t=0;t<corners;t++) (isGlass ? glassIndices : indices).push(first + (index ? index.getX(t) : t));
     });
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setIndex(indices);
+    geometry.setIndex(indices.concat(glassIndices)); // the glass last, as a group of its own
+    geometry.addGroup(0, indices.length, 0);
+    geometry.addGroup(indices.length, glassIndices.length, 1);
     geometry.computeBoundingBox();
     box.copy(geometry.boundingBox);
     box.getSize(size);
@@ -204,7 +211,8 @@ function buildCarDesigns(gltf) {
     const wheelRadius = hubInfo.length ? hubInfo.reduce((sum, h) => sum + h.r, 0)/hubInfo.length : 0;
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-    designs.push({ name: node.name, geometry, length: size.z/BOX_CAR_LENGTH, width: size.x, height: size.y, radius: geometry.boundingSphere.radius, wheelRadius, wheelbase });
+    designs.push({ name: node.name, geometry, length: size.z/BOX_CAR_LENGTH, width: size.x, height: size.y, radius: geometry.boundingSphere.radius, wheelRadius, wheelbase,
+      glass: glass || { opacity: 1, roughness: 0.35, metalness: 0.25 } });
   });
   gltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (o.material) o.material.dispose(); } });
   return designs;
@@ -355,11 +363,22 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform) {
 }
 // The card's thumbnail: the design's own mesh, plainly drawn (not instanced — see injectCarShader), from an isometric
 // camera sized and aimed to fit it (see carThumbnailScene, which sets thumbPaint to whichever car's being shown).
+// A design's two materials: the body, and its glass (the Window parts), see-through as the model has it — its color comes
+// from carColor like any other part's, its opacity, roughness and metalness from the model's Window material.
+function makeCarMaterials(design, key, glowUniform, paintUniform, plateUniform) {
+  const { opacity, roughness, metalness } = design.glass;
+  const body = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true });
+  const glass = new THREE.MeshStandardMaterial({ roughness, metalness, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true,
+    transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
+  [body, glass].forEach((material, k) => {
+    material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, paintUniform, plateUniform);
+    material.customProgramCacheKey = () => key + (k ? '-glass' : '');
+  });
+  return [body, glass];
+}
 function makeCarThumbnail(design) {
-  const material = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true });
   const glowUniform = { value: 1 }, paintUniform = { value: new THREE.Color(0xffffff) }, plateUniform = { value: new THREE.Vector4() };
-  material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, paintUniform, plateUniform);
-  material.customProgramCacheKey = () => 'car-thumb';
+  const material = makeCarMaterials(design, 'car-thumb', glowUniform, paintUniform, plateUniform);
   const mesh = new THREE.Mesh(design.geometry, material);
   const r = design.radius, elevation = Math.atan(1/Math.SQRT2), azimuth = Math.PI/4, distance = r*4;
   const thumbCamera = new THREE.OrthographicCamera(-r*1.15, r*1.15, r*1.15, -r*1.15, 0.1, distance*2);
@@ -369,10 +388,8 @@ function makeCarThumbnail(design) {
   return { mesh, camera: thumbCamera, paint: paintUniform, plate: plateUniform };
 }
 function makeCarMesh(design) {
-  const material = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true });
   const glowUniform = { value: 1 };
-  material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, null, null);
-  material.customProgramCacheKey = () => 'car';
+  const material = makeCarMaterials(design, 'car', glowUniform, null, null);
   const mesh = new THREE.InstancedMesh(design.geometry, material, TRAFFIC_MAX);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const paint = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*3), 3);
