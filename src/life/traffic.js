@@ -6,7 +6,7 @@ import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { mulberry32 } from '../core/math.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
-import { roadLineWidths, createMeshBuilder } from '../roads/roads.js';
+import { roadLineWidths, createMeshBuilder, navRebuildOnHold } from '../roads/roads.js';
 import { isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { placeKey, signalState } from '../roads/markings.js';
 import { isTrainLine } from '../trains/trains.js';
@@ -387,7 +387,7 @@ export function updateTraffic(t) {
   carParts.all.forEach(mesh => { mesh.visible = S.peopleEnabled; });
   carMeshes.forEach(cm => { cm.mesh.visible = S.peopleEnabled; });
   if (!S.peopleEnabled) return;
-  if (!S.trafficNav || (S.trafficNavDirty && t - S.trafficNavBuiltAt > 0.25)) {
+  if (!S.trafficNav || (S.trafficNavDirty && t - S.trafficNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.trafficNavDirty = false;
     S.trafficNavBuiltAt = t;
     S.trafficNav = buildTrafficNav();

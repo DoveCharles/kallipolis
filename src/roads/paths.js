@@ -94,12 +94,13 @@ const PATH_COLOR_FRAGMENT = `
 `;
 export function applyPathShader(mat, segments, halfWidth, fade, scale) {
   const segmentUniforms = App.segmentUniformArray(segments, PATH_MAX_SEGMENTS);
+  const uniforms = mat.userData.pathUniforms = { uPathScale: { value: scale || 1 } }; // kept so setWalkwayLook can change it live
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uPathSegments = { value: segmentUniforms };
     shader.uniforms.uPathSegmentCount = { value: segments.length };
     shader.uniforms.uPathHalfWidth = { value: halfWidth };
     shader.uniforms.uPathFade = { value: fade };
-    shader.uniforms.uPathScale = { value: scale || 1 };
+    shader.uniforms.uPathScale = uniforms.uPathScale;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vPathWorldPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPathWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -175,12 +176,11 @@ const WALKWAY_COLOR_FRAGMENT = `
   }
 `;
 export function applyWalkwayShader(mat, texture, scale, rotationDegrees) {
-  const pattern = Math.max(0, WALKWAY_TEXTURES.findIndex(t => t.id === texture));
-  const angle = (rotationDegrees || 0)*Math.PI/180;
+  // kept on the material so setWalkwayLook can change them live, without a rebuild
+  const uniforms = mat.userData.walkUniforms = { uWalkPattern: { value: 0 }, uWalkScale: { value: 1 }, uWalkRotation: { value: new THREE.Vector2(1, 0) } };
+  setWalkwayLook(mat, texture, scale, rotationDegrees);
   mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uWalkPattern = { value: pattern };
-    shader.uniforms.uWalkScale = { value: scale || 1 };
-    shader.uniforms.uWalkRotation = { value: new THREE.Vector2(Math.cos(angle), Math.sin(angle)) };
+    Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWalkWorldPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWalkWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -189,6 +189,19 @@ export function applyWalkwayShader(mat, texture, scale, rotationDegrees) {
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + WALKWAY_COLOR_FRAGMENT);
   };
 }
+// Changes a walkway material's texture (paving to paving only — dirt is a different material), scale and rotation in place
+function setWalkwayLook(mat, texture, scale, rotationDegrees) {
+  const walk = mat.userData.walkUniforms, path = mat.userData.pathUniforms;
+  if (walk) {
+    const angle = (rotationDegrees || 0)*Math.PI/180;
+    walk.uWalkPattern.value = Math.max(0, WALKWAY_TEXTURES.findIndex(t => t.id === texture));
+    walk.uWalkScale.value = scale || 1;
+    walk.uWalkRotation.value.set(Math.cos(angle), Math.sin(angle));
+  }
+  if (path) path.uPathScale.value = scale || 1;
+}
+// Whether switching a walkway from one texture to another needs its mesh rebuilt (dirt has a fade and a material of its own)
+export function walkwayTextureChangeNeedsRebuild(from, to) { return (from === 'dirt') !== (to === 'dirt'); }
 // A walkway's material: paving (or plain) with a hard edge, or dirt fading out across `fade` beyond `halfWidth` from `segments`
 export function makeWalkwayMaterial({ texture, color, scale, rotation, segments, halfWidth, fade }) {
   if (texture === 'dirt') {
@@ -224,6 +237,31 @@ function buildWalkwayMesh(lines, networkId) {
   return mesh;
 }
 
+// Updates the colors and walkway textures of already-built road and walkway meshes from their lines — for the purely
+// cosmetic settings, which don't need rebuildRoadMeshes (and so don't make people, traffic or water rebuild either).
+// Only `networkId`'s meshes, or every network's when it's left out.
+export function refreshRoadAppearance(networkId) {
+  S.roadMeshGroup.children.forEach(mesh => {
+    const netId = mesh.userData && mesh.userData.networkId;
+    if (netId == null || (networkId != null && netId !== networkId)) return;
+    const line = S.roadLines.find(l => l.networkId === netId);
+    if (!line) return;
+    if (mesh.name === 'Road') mesh.userData.baseColor = line.color!=null ? line.color : ROAD_COLOR;
+    else if (mesh.name === 'Sidewalk') mesh.userData.baseColor = line.sidewalkColor!=null ? line.sidewalkColor : SIDEWALK_COLOR;
+    else if (mesh.name === 'Walkway') {
+      mesh.userData.baseColor = line.walkwayColor!=null ? line.walkwayColor : WALKWAY_COLOR;
+      setWalkwayLook(mesh.material, line.walkwayTexture || WALKWAY_TEXTURE, line.walkwayTextureScale, line.walkwayTextureRotation);
+    }
+  });
+  App.refreshHighlights();
+}
+// Everything about the roads that people, traffic and water depend on — not colors or textures — so a rebuild that only
+// changed those doesn't make them rebuild too
+let lastLayoutKey = null;
+function roadLayoutKey() {
+  return JSON.stringify([S.DEFAULT_ROAD_WIDTH, S.DEFAULT_SIDEWALK_WIDTH, S.roadLines.map(l => [l.id, l.networkId, l.kind, l.roadType,
+    l.width, l.sidewalkWidth, l.radius, !!l.drawing, l.nodeIds.map(id => roadNodes[id])])]);
+}
 // the stencil mask over the whole road footprint (see SKIP_OVER_WATER_AND_ROADS) — kept out of roadMeshGroup, which
 // is exported and recolored for highlights
 let roadMask = null;
@@ -338,10 +376,14 @@ export function rebuildRoadMeshes() {
     S.riverSeq++;
   }
   S.landCutFootprint = S.riverFootprint.length ? clipPolygons(ctUnion, S.roadFootprint, S.riverFootprint) : S.roadFootprint;
-  S.roadBuildSeq++;
-  S.waterDirty = true;
-  S.peopleNavDirty = true;
-  S.trafficNavDirty = true;
+  const layoutKey = roadLayoutKey();
+  if (layoutKey !== lastLayoutKey) {
+    lastLayoutKey = layoutKey;
+    S.roadBuildSeq++;
+    S.waterDirty = true;
+    S.peopleNavDirty = true;
+    S.trafficNavDirty = true;
+  }
   scene.add(S.roadMeshGroup);
   App.rebuildTrainMeshes();
   App.rebuildRoadMarkers();

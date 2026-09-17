@@ -145,7 +145,7 @@ document.getElementById('s-roadwidth').addEventListener('input', (e)=>{
   document.getElementById('v-roadwidth').textContent = v;
   if (S.selection.type==='road') {
     const lines = S.roadLines.filter(l=>l.networkId===S.selection.id);
-    if (lines.length) { lines.forEach(l=>{ l.width = v; }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); }
+    if (lines.length) { lines.forEach(l=>{ l.width = v; }); rebuildRoadMeshes(); }
   } else {
     S.DEFAULT_ROAD_WIDTH = v;
   }
@@ -155,11 +155,16 @@ document.getElementById('s-sidewalkwidth').addEventListener('input', (e)=>{
   document.getElementById('v-sidewalkwidth').textContent = v;
   if (S.selection.type==='road') {
     const lines = S.roadLines.filter(l=>l.networkId===S.selection.id);
-    if (lines.length) { lines.forEach(l=>{ l.sidewalkWidth = v; }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); }
+    if (lines.length) { lines.forEach(l=>{ l.sidewalkWidth = v; }); rebuildRoadMeshes(); }
   } else {
     S.DEFAULT_SIDEWALK_WIDTH = v;
   }
 });
+
+// the zones' lots and buildings only follow once the slider's let go of — regenerating them on every tick is slow
+['s-roadwidth', 's-sidewalkwidth'].forEach(id => document.getElementById(id).addEventListener('change', () => {
+  if (S.selection.type==='road' && S.roadLines.some(l=>l.networkId===S.selection.id)) S.zones.forEach(subdivideZone);
+}));
 
 document.getElementById('s-tuberadius').addEventListener('input', (e)=>{
   const v = parseFloat(e.target.value);

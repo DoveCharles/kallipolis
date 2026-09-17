@@ -7,7 +7,7 @@ import { mulberry32 } from '../core/math.js';
 import { closestPointOnSegment } from '../buildings/footprints.js';
 import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
-import { CLIPPER_SCALE, roadLineWidths, clipPolygons, unionRoadStrokes } from '../roads/roads.js';
+import { CLIPPER_SCALE, roadLineWidths, clipPolygons, unionRoadStrokes, navRebuildOnHold } from '../roads/roads.js';
 import { isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { isTrainLine } from '../trains/trains.js';
 import { Y_PLAZA } from '../zones/plazas.js';
@@ -1674,7 +1674,7 @@ export function updatePeople(t) {
   if (personModel) [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; });
   peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
   if (!S.peopleEnabled) return;
-  if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25)) {
+  if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.peopleNavDirty = false;
     peopleNavBuiltAt = t;
     // whatever anyone was doing stops, as the benches and grass they were using may have gone

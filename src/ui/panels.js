@@ -3,7 +3,7 @@ import { scene } from '../core/scene.js';
 import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
 import { roadNodes, MAX_TARGET_LOTS } from '../core/state.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
-import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes } from '../roads/paths.js';
+import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes, refreshRoadAppearance, walkwayTextureChangeNeedsRebuild } from '../roads/paths.js';
 import { networkKindOf, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
@@ -714,65 +714,66 @@ function renderDetails() {
       App.wireWalkwayTextureCarousel(panel, curWalkwayColor, (texture) => {
         if (texture === curWalkwayTexture) return;
         lines.forEach(l => { l.walkwayTexture = texture; });
-        rebuildRoadMeshes(); renderDetails();
+        if (walkwayTextureChangeNeedsRebuild(curWalkwayTexture, texture)) rebuildRoadMeshes(); else refreshRoadAppearance(netId);
+        renderDetails();
       });
       const wireTextureSlider = (id, key, format) => document.getElementById('ds-'+id).addEventListener('input', (e) => {
         const v = parseFloat(e.target.value);
         lines.forEach(l => { l[key] = v; });
         document.getElementById('dv-'+id).textContent = format(v);
-        rebuildRoadMeshes();
+        refreshRoadAppearance(netId);
       });
       if (curWalkwayTexture!=='plain') wireTextureSlider('walkwayscale', 'walkwayTextureScale', v => v.toFixed(2));
       if (curWalkwayTexture!=='plain' && curWalkwayTexture!=='dirt') wireTextureSlider('walkwayrotation', 'walkwayTextureRotation', v => v+'°');
       wireColorSwatchEvents(panel, WALKWAY_COLOR_PALETTE, {
-        onPick: (hex) => { lines.forEach(l => { l.walkwayColor = hex; }); rebuildRoadMeshes(); renderDetails(); },
+        onPick: (hex) => { lines.forEach(l => { l.walkwayColor = hex; }); refreshRoadAppearance(netId); renderDetails(); },
         onCommit: (hex, mode, oldHex) => {
           if (mode==='edit') {
             S.roadLines.forEach(l => { if (isWalkwayLine(l) && (l.walkwayColor!=null?l.walkwayColor:WALKWAY_COLOR)===oldHex) l.walkwayColor = hex; });
           } else {
             lines.forEach(l => { l.walkwayColor = hex; });
           }
-          rebuildRoadMeshes();
+          refreshRoadAppearance();
         },
         onRemove: (oldHex, fallback) => {
           S.roadLines.forEach(l => { if (isWalkwayLine(l) && (l.walkwayColor!=null?l.walkwayColor:WALKWAY_COLOR)===oldHex) l.walkwayColor = fallback; });
-          rebuildRoadMeshes();
+          refreshRoadAppearance();
         },
-        onPreview: (hex) => { lines.forEach(l => { l.walkwayColor = hex; }); rebuildRoadMeshes(); }
+        onPreview: (hex) => { lines.forEach(l => { l.walkwayColor = hex; }); refreshRoadAppearance(netId); }
       }, 'walkwaycolor', renderDetails, curWalkwayColor);
     }
     if (!isWalkway && !isRiver) {
     wireColorSwatchEvents(panel, ROAD_COLOR_PALETTE, {
-      onPick: (hex) => { lines.forEach(l => { l.color = hex; }); rebuildRoadMeshes(); renderDetails(); },
+      onPick: (hex) => { lines.forEach(l => { l.color = hex; }); refreshRoadAppearance(netId); renderDetails(); },
       onCommit: (hex, mode, oldHex) => {
         if (mode==='edit') {
           S.roadLines.forEach(l => { if ((l.color!=null?l.color:ROAD_COLOR)===oldHex) l.color = hex; });
         } else {
           lines.forEach(l => { l.color = hex; });
         }
-        rebuildRoadMeshes();
+        refreshRoadAppearance();
       },
       onRemove: (oldHex, fallback) => {
         S.roadLines.forEach(l => { if ((l.color!=null?l.color:ROAD_COLOR)===oldHex) l.color = fallback; });
-        rebuildRoadMeshes();
+        refreshRoadAppearance();
       },
-      onPreview: (hex) => { lines.forEach(l => { l.color = hex; }); rebuildRoadMeshes(); }
+      onPreview: (hex) => { lines.forEach(l => { l.color = hex; }); refreshRoadAppearance(netId); }
     }, 'roadcolor', renderDetails, curColor);
     wireColorSwatchEvents(panel, SIDEWALK_COLOR_PALETTE, {
-      onPick: (hex) => { lines.forEach(l => { l.sidewalkColor = hex; }); rebuildRoadMeshes(); renderDetails(); },
+      onPick: (hex) => { lines.forEach(l => { l.sidewalkColor = hex; }); refreshRoadAppearance(netId); renderDetails(); },
       onCommit: (hex, mode, oldHex) => {
         if (mode==='edit') {
           S.roadLines.forEach(l => { if ((l.sidewalkColor!=null?l.sidewalkColor:SIDEWALK_COLOR)===oldHex) l.sidewalkColor = hex; });
         } else {
           lines.forEach(l => { l.sidewalkColor = hex; });
         }
-        rebuildRoadMeshes();
+        refreshRoadAppearance();
       },
       onRemove: (oldHex, fallback) => {
         S.roadLines.forEach(l => { if ((l.sidewalkColor!=null?l.sidewalkColor:SIDEWALK_COLOR)===oldHex) l.sidewalkColor = fallback; });
-        rebuildRoadMeshes();
+        refreshRoadAppearance();
       },
-      onPreview: (hex) => { lines.forEach(l => { l.sidewalkColor = hex; }); rebuildRoadMeshes(); }
+      onPreview: (hex) => { lines.forEach(l => { l.sidewalkColor = hex; }); refreshRoadAppearance(netId); }
     }, 'sidewalkcolor', renderDetails, curSidewalkColor);
     }
     document.getElementById('d-delete').addEventListener('click', ()=> removeRoadNetwork(netId));
