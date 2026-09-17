@@ -133,11 +133,13 @@ function rebuildPeopleNavDebug() {
 // show. Their skin is always the model's yellow. Only what they're doing changes from frame to frame: their animation — the
 // rows they're at in the two animations, how far they've blended from one to the other, how far their eyes are closed — in
 // the instanceAnim attribute, and which way they've turned their head and what their mouth is doing, in instanceLook.
-// Hairstyles (assets/models/Hair.glb, each its own mesh, placed on the model's head) ride on the head bone. Each style is an
-// instanced mesh of its own, holding just the people with that style, who carry a copy of their pose and their index into
-// the traits texture.
+// Hairstyles (assets/models/Hair.glb, each its own mesh, placed on the model's head) ride on the head bone. A style's name
+// says who can wear it: ending in _G, girls; _B, boys; _GB, either (as does no suffix). Facial hair
+// (assets/models/FacialHair.glb) works the same way, but only boys wear it. Each style is an instanced mesh of its own,
+// holding just the people with that style, who carry a copy of their pose and their index into the traits texture.
 const PERSON_MODEL_URL = 'assets/models/Person.glb';
 const HAIR_MODEL_URL = 'assets/models/Hair.glb';
+const FACIAL_HAIR_MODEL_URL = 'assets/models/FacialHair.glb';
 const PERSON_BAKE_FPS = 24;
 // how far a person walks for each cycle of the walk animation, in the distances the model's foot travels in one — the higher,
 // the slower the walk plays for the same speed
@@ -186,10 +188,15 @@ const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelas
 const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
 // the colors each person has their own of, from row 2 of the traits texture on; then a row of where their clothes stop,
 // and one of their head's and eyes' shape keys (Key 1, Key 2, Shape1, Shape2 — Shape3 being in row 1)
-const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair'];
+const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat'];
 const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
-// the hairstyles a man can have (or none); a woman can have any of them
-const MEN_HAIRSTYLES = ['GHair20', 'GHair14', 'GHair12', 'GHair9', 'GHair8', 'GHair21'];
+// who can wear a hairstyle, from the end of its name: 'Hair3_GB' girls and boys, 'Hair6_G' only girls
+const hairstyleWearers = name => {
+  const suffix = /_([GB]+)$/i.exec(name)?.[1].toUpperCase();
+  return suffix ? { girls: suffix.includes('G'), boys: suffix.includes('B') } : { girls: true, boys: true };
+};
+// a hairstyle's parts with this material take a color of their own, rather than the hair's
+const isHatMaterial = name => /^Hat(\.\d+)?$/i.test(name || '');
 const PANTS_COLORS = [0x26344f, 0x3e5a82, 0x5a7aa6, 0x232326, 0x4d5057, 0x8f8f93, 0xb09a72, 0x6b5038, 0x46503a];
 const SHOE_COLORS = [0x151517, 0x2b2b2f, 0xeeeeea, 0x8f9298, 0x6b4a2f, 0x3b2a1e, 0x22304a, 0xb5a383];
 const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 0xc49a5a, 0xdcc08a, 0xb9b5ad, 0xe3ddd2]; // black to platinum
@@ -200,7 +207,7 @@ const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
 export const HEADSHOT_LAYER = 3;
 // the middle of a person's face, from where their head meets their neck, in the model's units
 const HEAD_CENTER = new THREE.Vector3(0, 0.3, 0.2);
-let personModel = null; // { mesh, anim, look, hair, hairOf, hairSlot, isMan, height, minY, clips, stride } once loaded
+let personModel = null; // { mesh, anim, look, hair, headLayers, isMan, height, minY, clips, stride } once loaded
 
 const PERSON_VERTEX_PARS = `
   uniform sampler2D personBones;
@@ -363,11 +370,12 @@ async function loadGLB(url) {
   return new GLTFLoader().parseAsync(buffer, '');
 }
 export async function loadPersonModel() {
-  const [body, hair] = await Promise.allSettled([loadGLB(PERSON_MODEL_URL), loadGLB(HAIR_MODEL_URL)]);
+  const [body, hair, facialHair] = await Promise.allSettled([loadGLB(PERSON_MODEL_URL), loadGLB(HAIR_MODEL_URL), loadGLB(FACIAL_HAIR_MODEL_URL)]);
   if (body.status === 'rejected') { console.warn('Blockout: the people model failed to load; people stay cuboids', body.reason); return; }
   if (hair.status === 'rejected') console.warn('Blockout: the hair model failed to load; people go without', hair.reason);
+  if (facialHair.status === 'rejected') console.warn('Blockout: the facial hair model failed to load; people go without', facialHair.reason);
   try {
-    personModel = buildPersonModel(body.value, hair.status === 'fulfilled' ? hair.value : null);
+    personModel = buildPersonModel(body.value, hair.status === 'fulfilled' ? hair.value : null, facialHair.status === 'fulfilled' ? facialHair.value : null);
     peopleMesh.visible = false;
   } catch (err) {
     console.warn('Blockout: the people model failed to load; people stay cuboids', err);
@@ -375,7 +383,7 @@ export async function loadPersonModel() {
 }
 
 // The instanced meshes, and their textures, from the loaded models.
-function buildPersonModel(gltf, hairGltf) {
+function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const root = gltf.scene;
   const rigged = [], attached = [];
   root.traverse(o => { if (o.isSkinnedMesh) rigged.push(o); else if (o.isMesh) attached.push(o); });
@@ -548,20 +556,25 @@ function buildPersonModel(gltf, hairGltf) {
   boneTexture.magFilter = boneTexture.minFilter = THREE.LinearFilter;
   boneTexture.needsUpdate = true;
 
-  // ---- the hairstyles, in the model's space, each riding on the head bone. The biggest part of each is the hair itself,
-  // taking the person's hair color; anything else on it (a hair band) keeps its own color.
-  const hairStyles = [], hairSlots = ['Hair'], hairPalette = [new THREE.Color(0xffffff)];
-  if (hairGltf && headBone != null) {
-    hairGltf.scene.updateMatrixWorld(true);
-    hairGltf.scene.children.forEach(style => {
+  // ---- the hairstyles and facial hair, in the model's space, each riding on the head bone. The biggest part of each (a
+  // hat aside) is the hair itself, taking the person's hair color; a hat takes their hat color; anything else (a hair
+  // band) keeps its own.
+  const hairSlots = ['Hair', 'Hat'], hairPalette = [new THREE.Color(0xffffff), new THREE.Color(0xffffff)];
+  const headStylesFrom = (styleGltf, wearers) => {
+    const styles = [];
+    if (!styleGltf || headBone == null) return styles;
+    styleGltf.scene.updateMatrixWorld(true);
+    styleGltf.scene.children.forEach(style => {
       const parts = [];
       style.traverse(o => { if (o.isMesh) parts.push(o); });
       if (!parts.length) return;
-      const hair = parts.reduce((a, b) => b.geometry.attributes.position.count > a.geometry.attributes.position.count ? b : a);
+      const hairParts = parts.filter(part => !isHatMaterial(part.material.name));
+      const hair = hairParts.length ? hairParts.reduce((a, b) => b.geometry.attributes.position.count > a.geometry.attributes.position.count ? b : a) : null;
       const stylePositions = [], styleSlots = [], styleIndices = [];
       parts.forEach(part => {
         let slot = 0;
-        if (part !== hair) {
+        if (isHatMaterial(part.material.name)) slot = 1;
+        else if (part !== hair) {
           const name = part.material.name || 'Accessory';
           slot = hairSlots.indexOf(name);
           if (slot < 0) { hairSlots.push(name); hairPalette.push(new THREE.Color(part.material.color || 0xffffff).convertLinearToSRGB()); slot = hairSlots.length - 1; }
@@ -581,23 +594,32 @@ function buildPersonModel(gltf, hairGltf) {
       for (let i=0;i<count;i++) styleVertices.set([1, styleSlots[i], 0, i], i*4);
       styleGeometry.setAttribute('personVertex', new THREE.BufferAttribute(styleVertices, 4));
       styleGeometry.computeVertexNormals();
-      hairStyles.push({ name: style.name, geometry: styleGeometry, mesh: null, anim: null, look: null, members: [] });
+      styles.push({ name: style.name, ...wearers(style.name), geometry: styleGeometry, mesh: null, anim: null, look: null, members: [] });
     });
-    hairGltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
-  }
-  const menStyles = hairStyles.map((style, k) => MEN_HAIRSTYLES.includes(style.name) ? k : -1).filter(k => k >= 0);
+    styleGltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+    return styles;
+  };
+  // each layer of what's worn on the head: its styles, and for each person which style they wear (-1 for none) and where
+  // they are among its wearers. Women always wear a hairstyle if one suits them; men might go without either.
+  const headLayer = (styles, rng) => ({ styles, rng, of: new Int16Array(PEOPLE_MAX).fill(-1), slot: new Int32Array(PEOPLE_MAX),
+    girls: styles.map((style, k) => style.girls ? k : -1).filter(k => k >= 0), boys: styles.map((style, k) => style.boys ? k : -1).filter(k => k >= 0) });
+  const hairLayer = headLayer(headStylesFrom(hairGltf, hairstyleWearers), mulberry32(31337));
+  const facialHairLayer = headLayer(headStylesFrom(facialHairGltf, () => ({ girls: false, boys: true })), mulberry32(4711));
+  const headLayers = [hairLayer, facialHairLayer];
 
   // ---- each person's traits: their sex, their body's shape keys (as far on as the ranges for their sex allow), their
-  // hairstyle (any for a woman; for a man one of his, or none), their colors, and where their clothes stop
+  // hairstyle and facial hair (what their sex can wear), their colors, and where their clothes stop
   const traitRows = PERSON_FACE_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
-  const isMan = new Uint8Array(PEOPLE_MAX), hairOf = new Int16Array(PEOPLE_MAX).fill(-1), hairSlot = new Int32Array(PEOPLE_MAX);
-  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hairRng = mulberry32(31337), clothingRng = mulberry32(1990), faceRng = mulberry32(2718), color = new THREE.Color();
+  const isMan = new Uint8Array(PEOPLE_MAX);
+  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hatRng = mulberry32(8086), clothingRng = mulberry32(1990), faceRng = mulberry32(2718), color = new THREE.Color();
   const colorFor = {
     Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
     Pants: () => colorRng() < 0.8 ? color.set(PANTS_COLORS[Math.floor(colorRng()*PANTS_COLORS.length)]) : color.setHSL(colorRng(), 0.25 + colorRng()*0.3, 0.25 + colorRng()*0.25),
     Shoes: () => colorRng() < 0.7 ? color.set(SHOE_COLORS[Math.floor(colorRng()*SHOE_COLORS.length)]) : color.setHSL(colorRng(), 0.4 + colorRng()*0.45, 0.35 + colorRng()*0.25),
     // three in four have a natural hair color; the rest have dyed it something bright
     Hair: () => colorRng() < 0.75 ? color.set(HAIR_TONES[Math.floor(colorRng()*HAIR_TONES.length)]).multiplyScalar(0.9 + colorRng()*0.2) : color.setHSL(colorRng(), 0.65 + colorRng()*0.3, 0.45 + colorRng()*0.15),
+    // its own generator, so adding it didn't change anyone's other colors
+    Hat: () => hatRng() < 0.25 ? color.setHSL(0, 0, [0.08, 0.3, 0.6, 0.9][Math.floor(hatRng()*4)]) : color.setHSL(hatRng(), 0.4 + hatRng()*0.5, 0.3 + hatRng()*0.35),
   };
   for (let i=0;i<PEOPLE_MAX;i++) {
     const texel = row => (row*PEOPLE_MAX + i)*4;
@@ -615,11 +637,16 @@ function buildPersonModel(gltf, hairGltf) {
     PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
     // the band each part of their clothes stops at (one past the last band for none)
     traits.set(PERSON_CLOTHING.map(c => c.coveredOnMen && man ? c.count + 1 : 1 + Math.floor(clothingRng()*(c.count + 1))), texel(PERSON_CLOTHING_ROW));
-    if (hairStyles.length) {
-      const pick = Math.floor(hairRng()*(man ? menStyles.length + 1 : hairStyles.length));
-      hairOf[i] = man ? (pick < menStyles.length ? menStyles[pick] : -1) : pick;
-    }
-    if (hairOf[i] >= 0) { const members = hairStyles[hairOf[i]].members; hairSlot[i] = members.length; members.push(i); }
+    headLayers.forEach(layer => {
+      const styles = man ? layer.boys : layer.girls;
+      if (!styles.length) return;
+      const pick = Math.floor(layer.rng()*(man ? styles.length + 1 : styles.length));
+      if (pick >= styles.length) return;
+      const members = layer.styles[styles[pick]].members;
+      layer.of[i] = styles[pick];
+      layer.slot[i] = members.length;
+      members.push(i);
+    });
   }
   const traitTexture = new THREE.DataTexture(traits, PEOPLE_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
   traitTexture.needsUpdate = true;
@@ -644,8 +671,8 @@ function buildPersonModel(gltf, hairGltf) {
   geometry.setAttribute('instanceLook', look);
   geometry.setAttribute('instanceEyes', eyes);
   const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
-  const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair') }, femaleOnly: [] };
-  hairStyles.forEach(style => {
+  const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair'), 1: traitRow('Hat') }, femaleOnly: [] };
+  headLayers.flatMap(layer => layer.styles).forEach(style => {
     if (!style.members.length) { style.geometry.dispose(); return; }
     style.geometry.setAttribute('instancePerson', new THREE.InstancedBufferAttribute(Float32Array.from(style.members), 1));
     style.anim = dynamicInstanceAttribute(style.members.length, 4);
@@ -661,7 +688,7 @@ function buildPersonModel(gltf, hairGltf) {
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, anim, look, eyes, hair: hairStyles.filter(style => style.mesh), hairOf, hairSlot, hairStyles, isMan, boneData, boneWidth, traitData: traits, palette,
+  return { mesh, anim, look, eyes, hair: headLayers.flatMap(layer => layer.styles).filter(style => style.mesh), headLayers, isMan, boneData, boneWidth, traitData: traits, palette,
     headBone: headBone ?? 0, headPivot,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
@@ -1790,7 +1817,7 @@ function killPerson(i, by = 'player') {
     };
     colors.skin.copy(personModel.palette[0]);
     colorFrom('Top', colors.top); colorFrom('Pants', colors.pants); colorFrom('Shoes', colors.shoes);
-    if (personModel.hairOf[i] >= 0) colors.hair = colorFrom('Hair', new THREE.Color());
+    if (personModel.headLayers.some(layer => layer.of[i] >= 0)) colors.hair = colorFrom('Hair', new THREE.Color());
   } else {
     peopleMesh.getColorAt(i, colors.top);
     colors.pants.copy(colors.top);
@@ -2291,13 +2318,14 @@ export function updatePeople(t) {
       lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
       const eyesArray = personModel.eyes.array;
       for (let k=0;k<4;k++) eyesArray[o + k] = p.eyes[k];
-      // their hairstyle's copy of where they are, how they're posed and which way they're looking
-      const style = personModel.hairOf[i] >= 0 ? personModel.hairStyles[personModel.hairOf[i]] : null;
-      if (style && style.mesh) {
-        const slot = personModel.hairSlot[i];
+      // their hairstyle's and facial hair's copies of where they are, how they're posed and which way they're looking
+      personModel.headLayers.forEach(layer => {
+        const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null;
+        if (!style || !style.mesh) return;
+        const slot = layer.slot[i];
         matrix.toArray(style.mesh.instanceMatrix.array, slot*16);
         for (let k=0;k<4;k++) { style.anim.array[slot*4 + k] = a[o + k]; style.look.array[slot*4 + k] = lookArray[o + k]; style.eyes.array[slot*4 + k] = eyesArray[o + k]; }
-      }
+      });
     } else {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
       const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;
