@@ -719,7 +719,8 @@ function cumulative(pts) {
   for (let i=1;i<pts.length;i++) cum.push(cum[i-1] + Math.hypot(pts[i].x-pts[i-1].x, pts[i].z-pts[i-1].z));
   return cum;
 }
-// The walkways, and the hangouts. A walkway is { pts, cum, total, loop, path, y, lateral (how far either side of its
+// The walkways, and the hangouts. A walkway is { pts, cum, total, loop (its last point is its first: walked round and
+// round), ring, path, y, lateral (how far either side of its
 // line people walk), mitres (see navVertexMitre), blocked, overWater, vertices: [{ links, entrances }] }, and one of:
 // - a sidewalk ring, running down the middle of the sidewalks: every sidewalk road stroked out to mid-sidewalk width
 //   and unioned — joined and capped just as the sidewalk mesh is — leaves an outline that is exactly that, one closed
@@ -798,19 +799,23 @@ function buildPeopleNav() {
     if (cum[cum.length-1] < 1) return;
     const blocked = pts.map(p => inMid(p.x, p.z));
     if (blocked.every(Boolean)) return;
+    const loop = line.nodeIds.length > 3 && line.nodeIds[0] === line.nodeIds[line.nodeIds.length-1]; // (drawn back onto its first node)
     const { hw } = roadLineWidths(line), li = lines.length;
     // (a path's drawn end reaches its half-width past its last point)
     const endReaches = (vi, from) => {
       const d = Math.hypot(pts[vi].x - pts[from].x, pts[vi].z - pts[from].z) || 1;
       return bySidewalk(pts[vi].x + (pts[vi].x - pts[from].x)/d*hw, pts[vi].z + (pts[vi].z - pts[from].z)/d*hw);
     };
-    lines.push({ pts, cum, total: cum[cum.length-1], loop: false, path: true, y: Y_PATH, lateral: hw*0.55,
-      blocked, overWater: pts.map(p => inWater(p.x, p.z)), vertices: pts.map(() => ({ links: [], entrances: [] })) });
+    const nav = { pts, cum, total: cum[cum.length-1], loop, ring: false, path: true, y: Y_PATH, lateral: hw*0.55,
+      blocked, overWater: pts.map(p => inWater(p.x, p.z)), vertices: pts.map(() => ({ links: [], entrances: [] })) };
+    if (loop) nav.vertices[pts.length-1] = nav.vertices[0];
+    lines.push(nav);
     // where it comes off a road, or ends at a sidewalk (just touching it, short of where people walk along it): onto the
     // sidewalk there
     pts.forEach((p, vi) => {
-      const endsBySidewalk = (vi === 0 && endReaches(0, 1)) || (vi === pts.length-1 && endReaches(vi, vi-1));
-      if (blocked[vi] || !(blocked[vi-1] || blocked[vi+1] || endsBySidewalk)) return;
+      if (loop && vi === pts.length-1) return; // (the same point as its first)
+      const endsBySidewalk = !loop && ((vi === 0 && endReaches(0, 1)) || (vi === pts.length-1 && endReaches(vi, vi-1)));
+      if (blocked[vi] || !(blocked[nextVertex(nav, vi, -1)] || blocked[nextVertex(nav, vi, 1)] || endsBySidewalk)) return;
       const handle = ringPoint(p, PEOPLE_NAV_SPACING + 12);
       if (handle) pending.push({ li, vi, handle });
     });
@@ -834,7 +839,7 @@ function buildPeopleNav() {
     const vertices = pts.map(() => ({ links: [], entrances: [] }));
     vertices[pts.length-1] = vertices[0]; // (the ring's last point is its first)
     ring.inserts.forEach(h => { h.li = li; h.vi = at[h.anchor] === pts.length-1 ? 0 : at[h.anchor]; });
-    lines.push({ pts, cum, total: cum[cum.length-1], loop: true, path: false, y: anySidewalk ? Y_SIDEWALK : Y_ROAD, lateral: 0.7,
+    lines.push({ pts, cum, total: cum[cum.length-1], loop: true, ring: true, path: false, y: anySidewalk ? Y_SIDEWALK : Y_ROAD, lateral: 0.7,
       blocked: null, overWater: null, vertices });
   });
   const link = (a, b, cross) => {
@@ -846,7 +851,7 @@ function buildPeopleNav() {
   // paths meeting at a node
   const byPlace = new Map();
   lines.forEach((nav, li) => nav.path && nav.pts.forEach((p, vi) => {
-    if (nav.blocked[vi]) return;
+    if (nav.blocked[vi] || (nav.loop && vi === nav.pts.length-1)) return;
     const key = Math.round(p.x*2) + ',' + Math.round(p.z*2);
     if (!byPlace.has(key)) byPlace.set(key, []);
     byPlace.get(key).push({ li, vi });
@@ -856,7 +861,7 @@ function buildPeopleNav() {
   })));
   lines.forEach(nav => {
     nav.mitres = nav.pts.map((p, vi) => navVertexMitre(nav.pts, vi, nav.loop));
-    if (!nav.loop) return;
+    if (!nav.ring) return;
     // which side of the ring the road's on (relative to the mitres)
     let votes = 0;
     nav.pts.forEach((p, vi) => {
@@ -874,12 +879,12 @@ function buildPeopleNav() {
     if (!grid.has(key)) grid.set(key, []);
     grid.get(key).push({ li, vi });
     if (!areas.length) return;
-    const m = nav.mitres[vi], len = Math.hypot(m.x, m.z) || 1, nx = m.x/len, nz = m.z/len, edge = nav.lateral + (nav.loop ? 1.5 : 0);
+    const m = nav.mitres[vi], len = Math.hypot(m.x, m.z) || 1, nx = m.x/len, nz = m.z/len, edge = nav.lateral + (nav.ring ? 1.5 : 0);
     // look straight out from the walkway, a few steps further each time — a zone's edge can sit well back from the
     // sidewalk — and, for a path, at the path itself (running through a park)
     const areaAt = (x, z) => areas.findIndex(ar => x >= ar.minX && x <= ar.maxX && z >= ar.minZ && z <= ar.maxZ && ar.inside(x, z));
     const entrances = nav.vertices[vi].entrances;
-    (nav.loop ? [-nav.roadSide] : [1, -1]).forEach(side => {
+    (nav.ring ? [-nav.roadSide] : [1, -1]).forEach(side => {
       const offsets = (nav.path ? [0] : []).concat([2, 5, 9, 14].map(extra => side*(edge + extra)));
       for (const off of offsets) {
         const x = p.x + nx*off, z = p.z + nz*off;
@@ -890,7 +895,7 @@ function buildPeopleNav() {
     });
   }));
   // for crossing mid-block: the nearest point on any ring
-  const nearRing = segmentGrid(lines.flatMap((nav, li) => nav.loop ? nav.pts.slice(0, -1).map((a, seg) => ({ a, b: nav.pts[seg+1], li, seg })) : []));
+  const nearRing = segmentGrid(lines.flatMap((nav, li) => nav.ring ? nav.pts.slice(0, -1).map((a, seg) => ({ a, b: nav.pts[seg+1], li, seg })) : []));
   return { areas, lines, grid, CELL, onPavement, nearRing };
 }
 
@@ -1020,15 +1025,15 @@ function walkwayPoint(p) {
   return { x: a.x + (b.x-a.x)*t + (ma.x + (mb.x-ma.x)*t)*k, y, z: a.z + (b.z-a.z)*t + (ma.z + (mb.z-ma.z)*t)*k };
 }
 // the segment someone standing at point vi, heading dir, is on (see walkAlong: the point ahead is seg+1 going forward,
-// seg going back) — round the end, for a ring's first point going back
+// seg going back) — round the end, for a loop's first point going back
+// the point after vi, heading dir — round the end, on a loop (or past it: vi -1 or pts.length)
+const nextVertex = (nav, vi, dir) => !nav.loop ? vi + dir : dir > 0 && vi === nav.pts.length-1 ? 1 : dir < 0 && vi === 0 ? nav.pts.length-2 : vi + dir;
 const segFrom = (nav, vi, dir) => dir > 0 ? Math.min(vi, nav.pts.length-2) : nav.loop && vi === 0 ? nav.pts.length-2 : Math.max(vi-1, 0);
 // puts p on walkway li at its point vi, heading dir (or away from the end, or the road a path runs onto, there)
 function placeAtVertex(p, li, vi, dir) {
   const nav = peopleNav.lines[li];
-  if (!nav.loop) {
-    if (vi === 0) dir = 1; else if (vi === nav.pts.length-1) dir = -1;
-    if (nav.blocked[vi + dir]) dir = -dir;
-  }
+  if (!nav.loop) { if (vi === 0) dir = 1; else if (vi === nav.pts.length-1) dir = -1; }
+  if (nav.blocked?.[nextVertex(nav, vi, dir)]) dir = -dir;
   joinWalkway(p, li, nav.cum[vi], dir);
   if (nav.loop && vi === 0 && dir < 0) p.u = nav.total;
   p.seg = segFrom(nav, vi, dir);
@@ -1041,7 +1046,7 @@ function takeLink(p, link) {
 }
 // moves a person `dist` along their walkway, dealing with each point they pass: maybe wandering into a hangout, maybe
 // turning off onto another walkway or heading over a zebra crossing, and turning back at a dead end (or where a path
-// runs onto a road); a ring just goes round and round
+// runs onto a road); a loop just goes round and round
 function walkAlong(p, dist) {
   let nav = peopleNav.lines[p.li];
   let u = p.u + p.dir*dist;
@@ -1051,7 +1056,7 @@ function walkAlong(p, dist) {
     const vertex = nav.vertices[ahead];
     const station = p.trainCooldown <= 0 ? stationLinks().byVertex.get(p.li + ':' + ahead) : null;
     if (station != null && peopleRng() < RIDE_CHANCE) { p.u = at; goRideTrain(p, station, walkwayPoint(p)); return; }
-    const isEnd = !nav.loop && (ahead === 0 || ahead === last || !!nav.blocked[ahead + p.dir]);
+    const isEnd = (!nav.loop && (ahead === 0 || ahead === last)) || !!nav.blocked?.[nextVertex(nav, ahead, p.dir)];
     const entrance = vertex.entrances.length ? vertex.entrances[Math.floor(peopleRng()*vertex.entrances.length)] : null;
     const drawn = entrance ? (isOpenGround(peopleNav.areas[entrance.area]) ? p.traits.parks : p.traits.plazas) : 0;
     if (entrance && peopleRng() < 0.12*drawn) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
@@ -1071,11 +1076,11 @@ function walkAlong(p, dist) {
         continue;
       }
     }
+    if (isEnd) { p.dir = -p.dir; u = 2*at - u; continue; }
     if (nav.loop && ahead === (p.dir > 0 ? last : 0)) {
       if (p.dir > 0) { u -= nav.total; p.seg = 0; } else { u += nav.total; p.seg = last - 1; }
       continue;
     }
-    if (isEnd) { p.dir = -p.dir; u = 2*at - u; continue; }
     p.seg += p.dir;
   }
   p.u = Math.max(0, Math.min(nav.total, u));
@@ -1098,7 +1103,7 @@ function startZebraCrossing(p, nav, vi, link) {
 // now and then, someone on a sidewalk heads straight over the road beside them — if it is just the one road, out of the
 // way of any junction, with sidewalk on the far side
 function maybeCrossRoad(p, nav, dt) {
-  if (!nav.loop || (p.crossCheckIn -= dt) > 0) return;
+  if (!nav.ring || (p.crossCheckIn -= dt) > 0) return;
   p.crossCheckIn = 4 + peopleRng()*6;
   if (peopleRng() >= CROSS_DECIDE_CHANCE) return;
   const { onPavement, nearRing } = peopleNav, here = walkwayPoint(p);

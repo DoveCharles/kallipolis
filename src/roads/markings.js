@@ -50,9 +50,11 @@ function findRoadJunctions() {
     const nodes = line.nodeIds.map(id => roadNodes[id]);
     if (nodes.length < 2 || nodes.some(n => !n)) return;
     const pts = tessellateOpenPath(nodes), widths = roadLineWidths(line);
+    let from = 0; // (a loop has its first node again at the end: that's its last point, not its first again)
     line.nodeIds.forEach(id => {
-      const n = roadNodes[id], at = pts.findIndex(p => Math.abs(p.x - n.x) < 1e-6 && Math.abs(p.z - n.z) < 1e-6);
+      const n = roadNodes[id], at = pts.findIndex((p, i) => i >= from && Math.abs(p.x - n.x) < 1e-6 && Math.abs(p.z - n.z) < 1e-6);
       if (at < 0) return;
+      from = at + 1;
       if (!armsAt.has(id)) armsAt.set(id, []);
       [pts[at-1], pts[at+1]].forEach(q => {
         if (!q) return;

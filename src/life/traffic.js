@@ -236,8 +236,9 @@ function makeCarMesh(design) {
     thumbMesh: thumb.mesh, thumbCamera: thumb.camera, thumbPaint: thumb.paint };
 }
 
-// The lanes: one per sidewalk road line ({ pts, cum, total, lane (offset from the centerline), vertices with junction
-// links }), plus a grid of their points for re-seating cars, and how many cars the roads take.
+// The lanes: one per sidewalk road line ({ pts, cum, total, lane (offset from the centerline), loop (whether it ends
+// where it started, so cars carry on round rather than turning back), vertices with junction links }), plus a grid of
+// their points for re-seating cars, and how many cars the roads take.
 function buildTrafficNav() {
   const lines = [];
   S.roadLines.forEach(line => {
@@ -252,7 +253,8 @@ function buildTrafficNav() {
     const cum = [0];
     for (let i=1;i<pts.length;i++) cum.push(cum[i-1] + Math.hypot(pts[i].x-pts[i-1].x, pts[i].z-pts[i-1].z));
     if (cum[cum.length-1] < 4) return;
-    lines.push({ pts, cum, total: cum[cum.length-1], lane: Math.max(0.8, roadLineWidths(line).hw*0.5), vertices: pts.map(() => ({ links: [] })) });
+    const loop = line.nodeIds.length > 3 && line.nodeIds[0] === line.nodeIds[line.nodeIds.length-1];
+    lines.push({ pts, cum, total: cum[cum.length-1], lane: Math.max(0.8, roadLineWidths(line).hw*0.5), loop, vertices: pts.map(() => ({ links: [] })) });
   });
   const byPlace = new Map(), grid = new Map(), CELL = 16;
   lines.forEach((nav, li) => nav.pts.forEach((p, vi) => {
@@ -270,7 +272,7 @@ function buildTrafficNav() {
     let from = 0;
     for (let v=1; v<nav.pts.length; v++) {
       if (!nav.vertices[v].links.length && v < nav.pts.length-1) continue;
-      const deadEnd = (from === 0 && !nav.vertices[0].links.length) || (v === nav.pts.length-1 && !nav.vertices[v].links.length);
+      const deadEnd = !nav.loop && ((from === 0 && !nav.vertices[0].links.length) || (v === nav.pts.length-1 && !nav.vertices[v].links.length));
       for (let seg=from; seg<v; seg++) nav.stretchOf[seg] = stretches.length;
       stretches.push({ li, from, to: v, length: nav.cum[v] - nav.cum[from], deadEnd });
       from = v;
@@ -356,6 +358,7 @@ function driveAlong(car, dist) {
       u = car.u + dir*remaining;
       continue;
     }
+    if (isEnd && nav.loop) { u -= car.dir*nav.total; car.seg = car.dir > 0 ? 0 : nav.pts.length-2; continue; } // (round again)
     if (isEnd) { car.dir = -car.dir; u = 2*at - u; continue; }
     car.seg += car.dir;
   }
@@ -364,11 +367,13 @@ function driveAlong(car, dist) {
 // the next junction or dead end ahead of a car, within `lookahead` points: { dist (along its lane), x, z, deadEnd (where
 // it'll turn round) } — or null
 function junctionAhead(car, lookahead) {
-  const nav = S.trafficNav.lines[car.li];
-  let v = car.dir > 0 ? car.seg + 1 : car.seg;
-  for (let k=0; k<lookahead && v >= 0 && v < nav.pts.length; k++, v += car.dir) {
+  const nav = S.trafficNav.lines[car.li], last = nav.pts.length-1, seam = car.dir > 0 ? last : 0;
+  let v = car.dir > 0 ? car.seg + 1 : car.seg, round = null; // (past a loop's start: how far away that was)
+  for (let k=0; k<lookahead && v >= 0 && v <= last; k++, v += car.dir) {
     const links = nav.vertices[v].links.length;
-    if (links || v === 0 || v === nav.pts.length-1) return { dist: Math.abs(nav.cum[v] - car.u), x: nav.pts[v].x, z: nav.pts[v].z, vi: v, deadEnd: !links };
+    const dist = round == null ? Math.abs(nav.cum[v] - car.u) : round + Math.abs(nav.cum[v] - nav.cum[last - seam]);
+    if (links || (!nav.loop && (v === 0 || v === last))) return { dist, x: nav.pts[v].x, z: nav.pts[v].z, vi: v, deadEnd: !links };
+    if (nav.loop && v === seam && round == null) { round = dist; v = last - seam; } // (on round from the other end)
   }
   return null;
 }
@@ -441,6 +446,7 @@ export function updateTraffic(t) {
   lanes.forEach(list => {
     list.sort((a, b) => (a.u - b.u)*a.dir);
     for (let k=0;k<list.length-1;k++) list[k].ahead = list[k+1];
+    if (list.length > 1 && S.trafficNav.lines[list[0].li].loop) list[list.length-1].ahead = list[0]; // (round the loop)
   });
   buildCarGrid();
   const { matrix } = placing;
@@ -457,7 +463,8 @@ export function updateTraffic(t) {
     const cruise = CAR_SPEED*car.cruise*S.peopleSpeed;
     let target = cruise;
     if (car.ahead) {
-      const gap = Math.abs(car.ahead.u - car.u) - 2.2*S.peopleSize*(car.length + car.ahead.length);
+      const nav = S.trafficNav.lines[car.li], along = (car.ahead.u - car.u)*car.dir;
+      const gap = (along < 0 ? along + nav.total : along) - 2.2*S.peopleSize*(car.length + car.ahead.length); // (round a loop)
       target = Math.min(target, Math.max(0, (gap - 2*S.peopleSize)*1.2*S.peopleSpeed));
     }
     // (and for any other car in its way, whatever lane it's in — see "keeping clear of other cars")
@@ -652,9 +659,11 @@ function turnOptions(li, vi, dir) {
     (link.vi === 0 ? [1] : link.vi === last ? [-1] : [1, -1]).forEach(d =>
       options.push({ link, dir: d, stretch: stretchOf(link.li, d > 0 ? link.vi : link.vi-1) }));
   });
-  const straight = { link: null, dir, stretch: stretchOf(li, dir > 0 ? vi : vi-1) };
-  const isEnd = vi === 0 || vi === nav.pts.length-1;
-  return { options, straight: isEnd ? null : straight };
+  const last = nav.pts.length-1, isEnd = vi === 0 || vi === last;
+  if (isEnd && !nav.loop) return { options, straight: null };
+  // (round a loop, straight on from its end is on from its start, and the other way)
+  const seg = dir > 0 ? (vi === last ? 0 : vi) : (vi === 0 ? last-1 : vi-1);
+  return { options, straight: { link: null, dir, stretch: stretchOf(li, seg) } };
 }
 // which way to go, at random: at the end of a road onto another one, otherwise now and then off onto another one
 function pickTurn(li, vi, dir) {

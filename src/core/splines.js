@@ -55,7 +55,9 @@ export function computeAutoHandlesRoad(nodeId) {
   for (const line of S.roadLines) {
     const idx = line.nodeIds.indexOf(nodeId);
     if (idx===-1) continue;
+    const loop = line.nodeIds.length > 3 && line.nodeIds[line.nodeIds.length-1] === line.nodeIds[0]; // (the first node again at the end)
     if (idx>0) prevPos = App.roadNodes[line.nodeIds[idx-1]];
+    else if (loop) prevPos = App.roadNodes[line.nodeIds[line.nodeIds.length-2]];
     if (idx<line.nodeIds.length-1) nextPos = App.roadNodes[line.nodeIds[idx+1]];
     if (prevPos || nextPos) break;
   }

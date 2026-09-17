@@ -51,14 +51,18 @@ export function roadLineWidths(line) {
   const sw = Math.max(line.sidewalkWidth!=null ? line.sidewalkWidth : S.DEFAULT_SIDEWALK_WIDTH, 0);
   return { hw: w/2, cw, sw };
 }
+// whether a Clipper path comes back round to where it started (a line drawn back onto its own first node)
+const isClosedPath = path => path.length >= 4 && path[0].X === path[path.length-1].X && path[0].Y === path[path.length-1].Y;
 // Union of every stroke in `strokes` ({ path: Clipper IntPoint[], radius }) — each one its centerline
-// offset outward by `radius` to both sides, with round ends and mitered bends.
+// offset outward by `radius` to both sides, with round ends and mitered bends — or, for a loop (ending where it started),
+// no ends at all, just one more bend where it closes.
 export function unionRoadStrokes(strokes) {
   const clipper = new ClipperLib.Clipper();
   strokes.forEach(({ path, radius }) => {
     if (!(radius > 0)) return;
     const offset = new ClipperLib.ClipperOffset(ROAD_MITER_LIMIT, ROAD_ARC_TOLERANCE*CLIPPER_SCALE);
-    offset.AddPath(path, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etOpenRound);
+    if (isClosedPath(path)) offset.AddPath(path.slice(0, -1), ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedLine);
+    else offset.AddPath(path, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etOpenRound);
     const stroked = [];
     offset.Execute(stroked, radius*CLIPPER_SCALE);
     clipper.AddPaths(stroked, ClipperLib.PolyType.ptSubject, true);
