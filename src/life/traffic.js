@@ -301,16 +301,64 @@ function carJoinLane(car, li, u, dir) {
   car.seg = 0;
   while (car.seg < nav.pts.length-2 && nav.cum[car.seg+1] <= car.u) car.seg++;
 }
-// where a car should be: its lane's point at its distance along it, on the side for its direction, and which way that
-// lane runs there — offset square to the road along each segment, and mitred round the bends between them so it doesn't
-// jump at each one
+// where a car should be: its lane's point at its distance along it, on the side for its direction (smoothed round the
+// bends — see laneSmoothed), and which way that lane runs there
 function lanePoint(car) {
-  const nav = S.trafficNav.lines[car.li], i = Math.max(0, Math.min(nav.pts.length-2, car.seg));
-  const a = nav.pts[i], b = nav.pts[i+1], segLen = (nav.cum[i+1] - nav.cum[i]) || 1;
-  const t = Math.max(0, Math.min(1, (car.u - nav.cum[i])/segLen));
-  const dx = (b.x-a.x)/segLen, dz = (b.z-a.z)/segLen, side = car.dir*nav.lane, m = laneMitres(nav);
-  const ox = m[i].x + (m[i+1].x - m[i].x)*t, oz = m[i].z + (m[i+1].z - m[i].z)*t;
-  return { x: a.x + (b.x-a.x)*t + ox*side, z: a.z + (b.z-a.z)*t + oz*side, heading: Math.atan2(dx*car.dir, dz*car.dir) };
+  const nav = S.trafficNav.lines[car.li], sm = laneSmoothed(nav), side = car.dir*nav.lane;
+  const at = Math.max(0, Math.min(sm.length-1.001, car.u/sm.spacing)), k = Math.floor(at), t = at - k;
+  const ax = sm[k].x + sm[k].mx*side, az = sm[k].z + sm[k].mz*side, bx = sm[k+1].x + sm[k+1].mx*side, bz = sm[k+1].z + sm[k+1].mz*side;
+  let hx = bx-ax, hz = bz-az;
+  if (Math.hypot(hx, hz) < 1e-6) {
+    const i = Math.max(0, Math.min(nav.pts.length-2, car.seg));
+    hx = nav.pts[i+1].x - nav.pts[i].x; hz = nav.pts[i+1].z - nav.pts[i].z;
+  }
+  return { x: ax + (bx-ax)*t, z: az + (bz-az)*t, heading: Math.atan2(hx*car.dir, hz*car.dir) };
+}
+// the middle of a lane's road about every LANE_SAMPLE along it (its `spacing`), averaged over LANE_SMOOTH lane offsets
+// either way along the road, and which way is left there (for a unit lane, square to that): which rounds off the bends,
+// so a car turns in a little before one — and, round a sharp one, keeps the inside lane from making a kink (going on
+// past the corner, back, then round it), as it would offset from the corners of the road itself
+const LANE_SMOOTH = 3.5, LANE_SAMPLE = 0.5;
+function laneSmoothed(nav) {
+  if (nav.smoothed) return nav.smoothed;
+  const { pts, cum, total } = nav, n = pts.length, reach = LANE_SMOOTH*nav.lane, STEPS = 32;
+  // the road's middle at distance u — round a loop, or carried on straight past either end
+  const raw = u => {
+    if (nav.loop) u = ((u % total) + total) % total;
+    let lo = 0, hi = n-2;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (cum[mid] <= u) lo = mid; else hi = mid - 1; }
+    const a = pts[lo], b = pts[lo+1], t = (u - cum[lo])/((cum[lo+1] - cum[lo]) || 1), at = nav.loop ? Math.max(0, Math.min(1, t)) : t;
+    return { x: a.x + (b.x-a.x)*at, z: a.z + (b.z-a.z)*at };
+  };
+  const count = Math.ceil(total/LANE_SAMPLE) + 1, spacing = total/(count-1);
+  const middle = Array.from({ length: count }, (_, j) => {
+    let x = 0, z = 0;
+    for (let k=0; k<=STEPS; k++) { const p = raw(j*spacing + (k/STEPS*2 - 1)*reach); x += p.x; z += p.z; }
+    return { x: x/(STEPS+1), z: z/(STEPS+1) };
+  });
+  nav.smoothed = middle.map((p, j) => {
+    const before = middle[j > 0 ? j-1 : nav.loop ? count-2 : 0], after = middle[j < count-1 ? j+1 : nav.loop ? 1 : count-1];
+    const dx = after.x - before.x, dz = after.z - before.z, len = Math.hypot(dx, dz) || 1;
+    return { x: p.x, z: p.z, mx: -dz/len, mz: dx/len };
+  });
+  nav.smoothed.spacing = spacing;
+  // (and how far along each lane each point is — see laneLength)
+  for (const side of [1, -1]) {
+    let length = 0;
+    nav.smoothed.forEach((p, j) => {
+      const q = nav.smoothed[j-1];
+      if (q) length += Math.hypot(p.x + p.mx*side*nav.lane - q.x - q.mx*side*nav.lane, p.z + p.mz*side*nav.lane - q.z - q.mz*side*nav.lane);
+      p[side > 0 ? 'along' : 'alongBack'] = length;
+    });
+  }
+  return nav.smoothed;
+}
+// how far along its lane (the one going `dir`) the point at distance u along the road is — further than u round the
+// outside of a bend, and not as far round the inside
+function laneLength(nav, dir, u) {
+  const sm = laneSmoothed(nav), key = dir > 0 ? 'along' : 'alongBack';
+  const at = Math.max(0, Math.min(sm.length-1.001, u/sm.spacing)), k = Math.floor(at);
+  return sm[k][key] + (sm[k+1][key] - sm[k][key])*(at - k);
 }
 // the lane's point at distance u along it, going `dir`
 function lanePointAt(li, u, dir) {
@@ -318,26 +366,11 @@ function lanePointAt(li, u, dir) {
   carJoinLane(spot, li, u, dir);
   return lanePoint(spot);
 }
-// each of a lane's points' offset to its left (for a unit lane), square to the road either side, averaged and mitred at
-// a bend — round the join too, on a loop
-function laneMitres(nav) {
-  if (nav.mitres) return nav.mitres;
-  const { pts, cum } = nav, n = pts.length;
-  const left = i => { const len = (cum[i+1] - cum[i]) || 1; return { x: -(pts[i+1].z - pts[i].z)/len, z: (pts[i+1].x - pts[i].x)/len }; };
-  nav.mitres = pts.map((p, v) => {
-    const before = v > 0 ? left(v-1) : nav.loop ? left(n-2) : null, after = v < n-1 ? left(v) : nav.loop ? left(0) : null;
-    if (!before || !after) return before || after;
-    const x = before.x + after.x, z = before.z + after.z, len = Math.hypot(x, z);
-    if (len < 1e-6) return after;
-    const cos = Math.max(0.5, (x*after.x + z*after.z)/len);
-    return { x: x/len/cos, z: z/len/cos };
-  });
-  return nav.mitres;
-}
 
 // ---- a car's route: the path its front axle follows — along its lane, round in a curve where it turns off onto another
 // (planned — see planTurn — or just taken) and in a U at a dead end, rather than jumping across as its lane point does
-const TURN_CURVE = 2.5; // how far either side of a junction a turn's curve takes, in lane offsets
+const TURN_CURVE = 2.5;
+const ROUTE_SAMPLE = 0.25; // how far along the road to look for how much further its route goes (see updateTraffic) // how far either side of a junction a turn's curve takes, in lane offsets
 // the point on a car's route `ahead` further on from its lane point (following its plan through the junction ahead)
 function routePoint(car, ahead) {
   const probe = { li: car.li, u: car.u, seg: car.seg, dir: car.dir, plan: car.plan, turned: car.turned, probe: true };
@@ -537,8 +570,9 @@ export function updateTraffic(t) {
     const cruise = CAR_SPEED*car.cruise*S.peopleSpeed;
     let target = cruise;
     if (car.ahead) {
-      const nav = S.trafficNav.lines[car.li], along = (car.ahead.u - car.u)*car.dir;
-      const gap = (along < 0 ? along + nav.total : along) - 2.2*S.peopleSize*(car.length + car.ahead.length); // (round a loop)
+      // (along its lane, not the road, which a car goes round quicker on the inside of a bend — see updateTraffic)
+      const nav = S.trafficNav.lines[car.li], along = (laneLength(nav, car.dir, car.ahead.u) - laneLength(nav, car.dir, car.u))*car.dir;
+      const gap = (along < 0 ? along + laneLength(nav, car.dir, nav.total) : along) - 2.2*S.peopleSize*(car.length + car.ahead.length); // (round a loop)
       target = Math.min(target, Math.max(0, (gap - 2*S.peopleSize)*1.2*S.peopleSpeed));
     }
     // (and for any other car in its way, whatever lane it's in — see "keeping clear of other cars")
@@ -571,10 +605,19 @@ export function updateTraffic(t) {
     }
     if (checkYield(car, dt)) target = 0;
     car.speed += Math.max(-CAR_BRAKE*S.peopleSpeed*dt, Math.min(5*S.peopleSpeed*dt, target - car.speed));
-    driveAlong(car, car.speed*dt);
+    // (its lane point moves along the middle of the road, but its route is longer round the outside of a bend, a U or a
+    // turn across a junction, and shorter round the inside — so it goes as much further along as keeps it at its speed)
+    const back = CAR_REAR_AXLE*carFootprint(car).length;
+    let travel = car.speed*dt;
+    if (travel > 0) {
+      const here = routePoint(car, back), on = routePoint(car, back + ROUTE_SAMPLE);
+      const moved = Math.hypot(on.x - here.x, on.z - here.z);
+      if (moved > 1e-6) travel *= Math.max(0.25, Math.min(4, ROUTE_SAMPLE/moved));
+    }
+    driveAlong(car, travel);
     // its front axle keeps to its route (see routePoint), and its back axle — pulled along behind it, as a real car's is —
     // cuts in round the bends
-    const back = CAR_REAR_AXLE*carFootprint(car).length, front = routePoint(car, back);
+    const front = routePoint(car, back);
     const pullX = front.x - (car.x - back*Math.sin(car.heading)), pullZ = front.z - (car.z - back*Math.cos(car.heading));
     if (Math.hypot(pullX, pullZ) > 1e-6) {
       car.heading = Math.atan2(pullX, pullZ);
@@ -804,19 +847,31 @@ function gapTo(car, other, range) {
   const forward = dx*sin + dz*cos;
   if (forward <= 0 || forward > range) return Infinity;
   const turn = other.heading - car.heading, left = dx*cos - dz*sin; // (how far off to its left other is)
-  if (other !== drivenCar && car !== drivenCar && Math.cos(turn) < -0.3 && inOncomingLane(car, other)) return Infinity;
+  if (other !== drivenCar && car !== drivenCar && inOncomingLane(car, other, turn)) return Infinity;
   const a = carFootprint(car), b = carFootprint(other), c = Math.abs(Math.cos(turn)), s = Math.abs(Math.sin(turn));
   // (other's footprint, as seen along and across car's heading)
   const across = c*b.width*0.5 + s*b.length*0.5, along = c*b.length*0.5 + s*b.width*0.5;
   if (Math.abs(left) > (a.width*0.5 + across)*LANE_OVERLAP) return Infinity;
   return forward - a.length*0.5 - along;
 }
-// whether `other` is coming the other way in the other lane — going by where their lanes have them, rather than where
-// they are, since halfway round a corner a car's pointing across both lanes of the road it's turning into
-function inOncomingLane(car, other) {
+// whether `other` is coming the other way in the other lane: on the same road, going the other way, with neither of
+// them crossing over (see keepingToLane) — or, on another road, going by where their lanes have them, rather than where
+// they are (turned by `turn` from car), since halfway round a corner a car's pointing across both lanes of the road it's
+// turning into
+function inOncomingLane(car, other, turn) {
+  if (other.li === car.li) return other.dir !== car.dir && keepingToLane(car) && keepingToLane(other);
+  if (Math.cos(turn) >= -0.3) return false;
   const a = lanePoint(car), b = lanePoint(other), sin = Math.sin(a.heading), cos = Math.cos(a.heading);
   const lane = S.trafficNav.lines[car.li].lane;
   return Math.cos(b.heading - a.heading) < -0.7 && (b.x - a.x)*cos - (b.z - a.z)*sin > lane;
+}
+// whether a car's just keeping to its lane — not about to turn off at the junction ahead (across the other lane,
+// maybe), or turning round at a dead end
+function keepingToLane(car) {
+  const nav = S.trafficNav.lines[car.li], near = TURN_CURVE*nav.lane + carFootprint(car).length, plan = car.plan;
+  if (plan && plan.link && plan.li === car.li && plan.from === car.dir && Math.abs(nav.cum[plan.vi] - car.u) < near) return false;
+  const deadEnd = vi => !nav.loop && !nav.vertices[vi].links.length;
+  return !(deadEnd(0) && car.u < near) && !(deadEnd(nav.pts.length-1) && nav.total - car.u < near);
 }
 // the nearest car in its way and the gap to it: { gap (Infinity if none), by }
 function gapAhead(car) {
