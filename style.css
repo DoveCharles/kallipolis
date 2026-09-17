@@ -403,9 +403,11 @@ html.win3 :is(#pc-headshot, #cc-thumb) {
 }
 #mor-toggle:hover { color:var(--text); }
 .mor-meter { display:flex; align-items:center; gap:8px; margin:6px 0 2px; }
-.mor-bar { flex:1; position:relative; height:16px; background:var(--bg-input); border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+.mor-track { flex:1; position:relative; }
+.mor-bar { position:relative; height:16px; background:var(--bg-input); border:1px solid var(--border); border-radius:4px; overflow:hidden; }
 #mor-fill { position:absolute; top:0; bottom:0; left:50%; width:0; transition:left .3s, width .3s, background-color .3s; }
-.mor-center { position:absolute; top:-1px; bottom:-1px; left:50%; width:1px; margin-left:-0.5px; background:var(--text-dim); }
+/* the middle, neutral: a line through the bar that sticks out past it, so it reads as a needle's zero */
+.mor-center { position:absolute; top:-4px; bottom:-4px; left:50%; width:2px; margin-left:-1px; background:var(--text); border-radius:1px; pointer-events:none; }
 #mor-details { margin-top:8px; border-top:1px solid var(--border); padding-top:6px; max-height:calc(100vh - 110px); overflow-y:auto; }
 .mor-row { display:grid; grid-template-columns:1fr 36px 52px; gap:4px; }
 .mor-row.sub { color:var(--text-dim); opacity:.85; padding-left:8px; }
@@ -436,7 +438,7 @@ html.win3 #stats .mor-head { display:none; }
 html.win3 #stats .mor-meter { margin:0; }
 html.win3 :is(.mor-bar, #mor-details) { border-color:#000; border-radius:0; }
 html.win3 .mor-bar { background:#fff; }
-html.win3 .mor-center { background:#000; }
+html.win3 .mor-center { background:#000; border-radius:0; }
 html.win3 :is(#stats .mor-title, .mor-row:not(.sub)) { color:#000; }
 html.win3 .mor-row.sub { color:#404040; }
 html.win3 #stats .mor-score.good, html.win3 #stats .mor-notice.good .mor-notice-score { color:#008000; }
