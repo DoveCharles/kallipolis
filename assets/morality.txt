@@ -1,0 +1,46 @@
+# How good or evil Splinetopia is: the morality meter at the top right. Edit freely, then reload the page.
+# Each line is `thing = score`: how much morality ONE of that thing is worth. Negative is evil, positive is good,
+# and decimals are fine (-0.25). Blank lines and lines starting with # are skipped. Anything missing counts as 0.
+#
+# The overall morality is everything added up, times the multiplier below, kept between -100 and 100.
+# -100 is as evil as it gets (the bar is all the way left, and red), 100 as good (all the way right, and green).
+
+[overall]
+multiplier = 1
+
+# ------------------------------------------------------------------------------------------------------------------------
+# ZONES: per zone of each type
+[zones]
+buildings = -1
+plain = 0
+park = 3
+beach = 1
+water = 1
+plaza = 1
+farmland = 2
+industrial = -4
+
+# ------------------------------------------------------------------------------------------------------------------------
+# PATHS: per path of each type (roads are the ones with sidewalks)
+[paths]
+roads = -0.5
+walkways = 0.5
+rivers = 1
+train lines = 1
+
+# ------------------------------------------------------------------------------------------------------------------------
+# BUILDINGS: per building, by the zone it's in
+# commercial: in a Buildings zone (skyscrapers and the like)
+# industrial: in an Industrial zone
+# farmhouses: in a Farmland zone
+[buildings]
+commercial = -0.1
+industrial = -0.5
+farmhouses = 0.2
+
+# ------------------------------------------------------------------------------------------------------------------------
+# THINGS THAT HAPPEN: per time it happens (these start at 0 each time the page loads)
+[events]
+peds killed by player = -5
+peds killed by cars = -1
+cars destroyed by player = -2

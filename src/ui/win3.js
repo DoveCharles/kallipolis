@@ -14,7 +14,7 @@ function setWin3(on) {
 toggle.classList.toggle('on', document.documentElement.classList.contains('win3'));
 toggle.addEventListener('click', () => setWin3(!document.documentElement.classList.contains('win3')));
 
-// the title bars' buttons: on the panel, minimize folds it up to its title bar, and maximize — or the control-menu box — opens
+// the title bars' buttons: on the panel, minimize (▲ here, though Windows 3.0 drew it ▼) folds it up to its title bar, and maximize (▼) — or the control-menu box — opens
 // it out again; on the person card, the control-menu box closes it, as double-clicking one closed a window
 const panel = document.getElementById('panel');
 panel.querySelector('.win3-min').addEventListener('click', () => panel.classList.add('win3-minimized'));

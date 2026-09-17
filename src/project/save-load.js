@@ -126,6 +126,7 @@ async function restoreMapImages(list) {
 // `options.keepMaps`: leave the map images as they are (used by undo and redo, whose snapshots don't include them)
 export async function loadProjectFromData(data, options) {
   const keepMaps = !!(options && options.keepMaps);
+  if (!keepMaps) App.hushMorality?.(); // (a project coming in isn't something to announce on the morality meter; undo is)
   // wipe current scene (roads, zones, map images, selection) before restoring
   cancelActiveDrawing();
   S.roadLines = []; Object.keys(roadNodes).forEach(k => delete roadNodes[k]);
@@ -252,6 +253,7 @@ export async function loadProjectFromData(data, options) {
   applyModeVisibility();
   renderHierarchy();
   renderMapsList();
+  if (!keepMaps) App.hushMorality?.();
 }
 function loadProject(file) {
   const reader = new FileReader();

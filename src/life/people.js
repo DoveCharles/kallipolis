@@ -1624,9 +1624,11 @@ function fleeWithin(p, area) {
 }
 // The person card's Kill button: whoever it is explodes into giblets in their own colors, and stays dead (gone from the
 // crowd, though their place in it is kept) — whoever they were talking to carrying on without them.
-function killPerson(i) {
+// `by` is who did it, for the morality meter: 'player' (the Kill button) or 'car'.
+function killPerson(i, by = 'player') {
   const p = people[i];
   if (!p || p.mode === 'none' || p.mode === 'dead') return;
+  App.recordMoralityEvent?.(by === 'car' ? 'peds killed by cars' : 'peds killed by player');
   if (followed === i) stopFollowingPerson();
   endActivity(p);
   p.crossStage = null; // don't leave a car yielding forever for someone who can no longer finish crossing

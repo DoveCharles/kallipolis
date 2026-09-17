@@ -294,8 +294,9 @@ html.win3 .win3-titlebar .win3-sysbox {
   background:linear-gradient(#fff, #fff) 4px 8px / 11px 3px no-repeat, linear-gradient(#000, #000) 5px 9px / 11px 3px no-repeat, var(--w3-face);
 }
 html.win3 .win3-titlebar :is(.win3-min, .win3-max) { border-left:1px solid #000; background-color:var(--w3-face); background-position:center; box-shadow:var(--w3-raised); }
-html.win3 .win3-titlebar .win3-min { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5'%3E%3Cpath d='M0 0h9L4.5 5z'/%3E%3C/svg%3E"); }
-html.win3 .win3-titlebar .win3-max { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5'%3E%3Cpath d='M0 5h9L4.5 0z'/%3E%3C/svg%3E"); }
+/* (swapped from Windows 3.0, where minimize was ▼ and maximize ▲: here ▲ folds a window up and ▼ opens it out) */
+html.win3 .win3-titlebar .win3-min { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5'%3E%3Cpath d='M0 5h9L4.5 0z'/%3E%3C/svg%3E"); }
+html.win3 .win3-titlebar .win3-max { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5'%3E%3Cpath d='M0 0h9L4.5 5z'/%3E%3C/svg%3E"); }
 html.win3 .win3-titlebar :is(.win3-min, .win3-max):active { box-shadow:var(--w3-pressed); background-position:calc(50% + 1px) calc(50% + 1px); }
 html.win3 #panel.win3-minimized { padding-bottom:0; overflow:hidden; }
 html.win3 #panel.win3-minimized .win3-titlebar { margin-bottom:0; }
@@ -377,8 +378,7 @@ html.win3 #node-context-menu button { position:relative; padding:3px 18px 3px 16
 html.win3 #node-context-menu button:hover { background:var(--w3-navy); color:#fff; }
 html.win3 #node-context-menu button.active { font-weight:700; }
 html.win3 #node-context-menu button.active::before { content:'\2713'; position:absolute; left:4px; }
-html.win3 :is(#hint, #stats) { background:#fff; color:#000; border:1px solid #000; border-radius:0; }
-html.win3 #stats { box-shadow:2px 2px 0 #000; }
+html.win3 #hint { background:#fff; color:#000; border:1px solid #000; border-radius:0; }
 
 /* the person card, and the car card just like it: a little window of its own, closed from its control-menu box */
 html.win3 :is(#person-card, #car-card) { padding:0 10px 10px; right:21px; bottom:56px; }
@@ -391,3 +391,57 @@ html.win3 :is(#pc-headshot, #cc-thumb) {
   border-radius:0; background:#008080;
   border:1px solid; border-color:#808080 #fff #fff #808080; box-shadow:inset 1px 1px 0 #000;
 }
+
+/* the morality meter (src/ui/morality.js), top right: a bar growing left (evil, red) or right (good, green) from the middle */
+#stats { width:290px; text-align:left; line-height:1.4; }
+.mor-head { display:flex; align-items:center; gap:8px; }
+#stats .mor-title { color:var(--text); }
+#stats #mor-value { min-width:40px; text-align:right; font-weight:700; color:var(--text-dim); }
+#mor-toggle {
+  font-family:var(--mono); font-size:10px; color:var(--text-dim); background:var(--bg-input);
+  border:1px solid var(--border); border-radius:4px; padding:1px 6px; cursor:pointer;
+}
+#mor-toggle:hover { color:var(--text); }
+.mor-meter { display:flex; align-items:center; gap:8px; margin:6px 0 2px; }
+.mor-bar { flex:1; position:relative; height:16px; background:var(--bg-input); border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+#mor-fill { position:absolute; top:0; bottom:0; left:50%; width:0; transition:left .3s, width .3s, background-color .3s; }
+.mor-center { position:absolute; top:-1px; bottom:-1px; left:50%; width:1px; margin-left:-0.5px; background:var(--text-dim); }
+#mor-details { margin-top:8px; border-top:1px solid var(--border); padding-top:6px; max-height:calc(100vh - 110px); overflow-y:auto; }
+.mor-row { display:grid; grid-template-columns:1fr 36px 52px; gap:4px; }
+.mor-row.sub { color:var(--text-dim); opacity:.85; padding-left:8px; }
+.mor-row:not(.sub) { color:var(--text); margin-top:3px; }
+.mor-count, .mor-score { text-align:right; }
+.mor-gap { height:4px; }
+#stats :is(.mor-label, .mor-count, .mor-score) { color:inherit; white-space:nowrap; }
+#stats .mor-score.good { color:#3ddc97; }
+#stats .mor-score.evil { color:#e5484d; }
+#mor-notices { position:absolute; top:0; right:calc(100% + 8px); display:flex; flex-direction:column; align-items:flex-end; gap:4px; pointer-events:none; }
+.mor-notice {
+  white-space:nowrap; font-family:var(--mono); font-size:11px; color:var(--text);
+  background:var(--bg-panel); border:1px solid var(--border); border-left:3px solid var(--text-dim);
+  border-radius:5px; padding:3px 8px; animation:mor-in .25s ease-out; transition:opacity .4s, transform .4s;
+}
+.mor-notice.good { border-left-color:#3ddc97; }
+.mor-notice.evil { border-left-color:#e5484d; }
+#stats .mor-notice.good .mor-notice-score { color:#3ddc97; font-weight:700; }
+#stats .mor-notice.evil .mor-notice-score { color:#e5484d; font-weight:700; }
+#stats .mor-notice-count { color:var(--text-dim); }
+.mor-notice.leaving { opacity:0; transform:translateX(12px); }
+@keyframes mor-in { from { opacity:0; transform:translateX(12px); } }
+/* in the Windows 3.0 look it's a window like the Splinetopia one, "Morality" in its title bar, which opens and closes the details */
+html.win3 #stats { background:#fff; color:#000; border:4px solid var(--w3-face); border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000; top:17px; right:17px; padding:0 10px 10px; }
+html.win3 #stats .win3-titlebar { margin:0 -10px 8px; }
+html.win3 #stats :is(.mor-title, #mor-toggle) { display:none; }
+html.win3 #stats .mor-head { display:none; }
+html.win3 #stats .mor-meter { margin:0; }
+html.win3 :is(.mor-bar, #mor-details) { border-color:#000; border-radius:0; }
+html.win3 .mor-bar { background:#fff; }
+html.win3 .mor-center { background:#000; }
+html.win3 :is(#stats .mor-title, .mor-row:not(.sub)) { color:#000; }
+html.win3 .mor-row.sub { color:#404040; }
+html.win3 #stats .mor-score.good, html.win3 #stats .mor-notice.good .mor-notice-score { color:#008000; }
+html.win3 #stats .mor-score.evil, html.win3 #stats .mor-notice.evil .mor-notice-score { color:#c00000; }
+html.win3 .mor-notice { background:#fff; color:#000; border:1px solid #000; border-radius:0; box-shadow:2px 2px 0 #000; font-size:11px; }
+html.win3 #stats .mor-notice-count { color:#808080; }
+html.win3 .mor-notice.good { border-left:4px solid #008000; }
+html.win3 .mor-notice.evil { border-left:4px solid #c00000; }

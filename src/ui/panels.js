@@ -798,11 +798,7 @@ function renderDetails() {
 }
 
 export function updateStats() {
-  let buildings=0;
-  S.zones.forEach(z => { if (z.buildingsGroup) buildings += z.buildingsGroup.children.filter(c=>c.name==='Building').length; });
-  document.getElementById('stat-zones').textContent = S.zones.length;
-  document.getElementById('stat-roads').textContent = S.roadLines.length;
-  document.getElementById('stat-buildings').textContent = buildings;
+  App.refreshMorality?.(); // (the meter at the top right, see morality.js)
 }
 
 Object.assign(App, { renderHierarchy, updateStats });

@@ -517,7 +517,7 @@ function runOverPeople(car) {
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
-    if (Math.abs(right) < width*0.5 + 0.25 && Math.abs(forward) < length*0.5 + 0.25) App.killPerson(i);
+    if (Math.abs(right) < width*0.5 + 0.25 && Math.abs(forward) < length*0.5 + 0.25) App.killPerson(i, 'car');
   });
 }
 // the car under a point on the screen (the nearest, if several are), or -1 — exactly like pickPerson in people.js, but
@@ -562,6 +562,7 @@ function stopFollowingCar() {
 function killCar(i) {
   const car = cars[i];
   if (!car || car.li < 0) return;
+  App.recordMoralityEvent?.('cars destroyed by player');
   if (followedCar === i) stopFollowingCar();
   const paint = new THREE.Color(car.paint[0], car.paint[1], car.paint[2]);
   explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint });

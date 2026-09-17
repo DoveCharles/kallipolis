@@ -21,6 +21,7 @@ import './zones/cutouts.js';
 import './zones/industrial.js';
 import './water/bridges.js';
 import './ui/panels.js';
+import './ui/morality.js';
 import './editor/tools.js';
 import './editor/input.js';
 import './editor/context-menu.js';
