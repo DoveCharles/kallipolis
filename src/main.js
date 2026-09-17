@@ -36,6 +36,7 @@ import './life/people.js';
 import './life/traffic.js';
 import './life/person-card.js';
 import './life/car-card.js';
+import './trains/train-card.js';
 import './ui/win3.js';
 import './ui/pixelation.js';
 import './project/export-obj.js';

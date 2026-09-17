@@ -5,6 +5,7 @@ import { scene, camera, computeWindowGlowFactor, SKY_ENV_MAP, snapPointToGrid } 
 import { mergeGeometryList } from '../buildings/windows.js';
 import { roadNodes } from '../core/state.js';
 import { disposeObject } from '../roads/roads.js';
+import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 
 // ---------------------------------------------------------- trains
 // Train lines live in roadNodes/roadLines alongside roads (line.kind === 'train'), so drawing, dragging, joining,
@@ -470,10 +471,15 @@ export function rebuildTrainMeshes() {
     const shuttle = buildShuttle(radius, mats);
     const { steps, cycle } = buildShuttleTimeline(sampler.total, stations.map(s => s.dist), shuttle.userData.length);
     S.trainMeshGroup.add(shuttle);
-    trainShuttles.push({ object: shuttle, sampler, steps, cycle, offset: (trainHash(line.id) % 997)/997*cycle });
+    trainShuttles.push({ lineId: line.id, object: shuttle, sampler, steps, cycle, offset: (trainHash(line.id) % 997)/997*cycle });
     if (beams.length) addMesh(mergeGeometryList(beams), mats.steel, 'TrainSupports', line, true);
   });
   scene.add(S.trainMeshGroup);
+  // a followed carriage whose line has gone lets go; one whose line was only rebuilt keeps being followed (and renumbered)
+  if (followedTrain) {
+    if (!trainShuttles.some(s => s.lineId === followedTrain)) stopFollowingTrain();
+    else showFollowedTrainCard();
+  }
 }
 function trainHash(s) { let h = 7; for (let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0; return h; }
 // A shuttle carriage's body: a capsule — a cylinder with hemispherical ends — lathed around the Y axis.
@@ -611,7 +617,59 @@ export function updateTrainShuttles(t) {
     orientAlongTrack(s.object, tangent);
     s.object.visible = true;
   });
+  if (followedTrain && S.interactionMode !== 'move') stopFollowingTrain();
+  // the camera onto the carriage it's following
+  const followed = followedTrain && trainShuttles.find(s => s.lineId === followedTrain);
+  if (followed) controls.goalTarget.copy(followed.object.position);
 }
+
+// ---- following a carriage with the camera: just like a car (see "following a car" in traffic.js) — a click on one in
+// World mode keeps the view on it, with a card (train-card.js) naming it — Train #n, by its line's place among them —
+// until a click elsewhere, leaving World mode, or its line being deleted lets it go. Unlike a car, it can't be killed.
+let followedTrain = null; // the followed carriage's line id, which survives the train meshes being rebuilt
+// the carriage under a point on the screen, as its index in trainShuttles, or -1
+function pickTrain(clientX, clientY) {
+  const shown = trainShuttles.filter(s => s.object.visible);
+  if (!shown.length) return -1;
+  App.raycaster.setFromCamera(App.ndcOf(clientX, clientY), camera);
+  const hit = App.raycaster.intersectObjects(shown.map(s => s.object), true)[0];
+  if (!hit) return -1;
+  return trainShuttles.findIndex(s => s.object === hit.object.parent);
+}
+function showFollowedTrainCard() {
+  const i = trainShuttles.findIndex(s => s.lineId === followedTrain);
+  App.showTrainCard({ name: `Train #${i + 1}`, mood: '🚆', view: trainThumbnailOf(trainShuttles[i].object) });
+}
+// The card's thumbnail: a copy of the carriage (sharing its geometry and materials), sitting level at the origin, and an
+// isometric camera framing it — as for a car (see makeCarThumbnail in traffic.js).
+function trainThumbnailOf(shuttle) {
+  const mesh = shuttle.clone();
+  mesh.position.set(0, 0, 0); mesh.quaternion.identity(); mesh.visible = true;
+  const r = new THREE.Box3().setFromObject(mesh).getBoundingSphere(new THREE.Sphere()).radius;
+  const elevation = Math.atan(1/Math.SQRT2), azimuth = Math.PI/4, distance = r*4;
+  const camera = new THREE.OrthographicCamera(-r, r, r, -r, 0.1, distance*2);
+  camera.position.set(distance*Math.cos(elevation)*Math.sin(azimuth), distance*Math.sin(elevation), distance*Math.cos(elevation)*Math.cos(azimuth));
+  camera.lookAt(0, 0, 0);
+  return { mesh, camera };
+}
+// follows whichever carriage is under a point on the screen, or stops following if none is
+function followTrainAt(clientX, clientY) {
+  const i = pickTrain(clientX, clientY);
+  if (i < 0) { stopFollowingTrain(); return; }
+  followedTrain = trainShuttles[i].lineId;
+  const radius = Math.max(1.2, trainShuttles[i].object.userData.length*0.3);
+  controls.minRadius = radius;
+  controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, radius*6));
+  showFollowedTrainCard();
+}
+function stopFollowingTrain() {
+  if (!followedTrain) return;
+  followedTrain = null;
+  controls.minRadius = CAMERA_MIN_RADIUS;
+  controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
+  App.hideTrainCard();
+}
+Object.assign(App, { pickTrain, followTrainAt, stopFollowingTrain });
 // where the cursor's ray crosses the level plane at height `y` (null if it doesn't)
 export function trainPlanePoint(sx, sy, y) {
   App.raycaster.setFromCamera(App.ndcOf(sx, sy), camera);

@@ -192,7 +192,7 @@ dom.addEventListener('pointermove', (e) => {
     previewLine.visible = false;
     insertPreviewMarker.visible = false;
     setHover(null);
-    const overClickable = App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0;
+    const overClickable = App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0;
     if (overClickable !== hoveringClickable) { hoveringClickable = overClickable; dom.style.cursor = overClickable ? 'pointer' : ''; }
     return;
   }
@@ -266,8 +266,9 @@ dom.addEventListener('pointerup', (e) => {
       S.lastGroundClick = { x:e.clientX, y:e.clientY, time:performance.now() };
     } else if (was.button===0 && dist<6 && dt<600 && S.interactionMode==='move') {
       // a click on someone or something has the camera follow them; anywhere else lets go of both
-      if (App.pickPerson(e.clientX, e.clientY) >= 0) { App.stopFollowingCar(); App.followPersonAt(e.clientX, e.clientY); }
-      else { App.stopFollowingPerson(); App.followCarAt(e.clientX, e.clientY); }
+      if (App.pickPerson(e.clientX, e.clientY) >= 0) { App.stopFollowingCar(); App.stopFollowingTrain(); App.followPersonAt(e.clientX, e.clientY); }
+      else if (App.pickCar(e.clientX, e.clientY) >= 0) { App.stopFollowingPerson(); App.stopFollowingTrain(); App.followCarAt(e.clientX, e.clientY); }
+      else { App.stopFollowingPerson(); App.stopFollowingCar(); App.followTrainAt(e.clientX, e.clientY); }
     }
     return;
   }
