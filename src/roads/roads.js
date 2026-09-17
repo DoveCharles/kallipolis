@@ -158,14 +158,18 @@ export function forEachPolyTreeEdge(tree, fn) {
 // ground, and where it merely meets another network's share of the platform. One platform edge can do all
 // three along its length, so this works in ranges along the segment rather than testing a single point.
 export function createEdgeIndex(paths) {
-  const CELL = 2*CLIPPER_SCALE, TOL = 2, cells = new Map();
-  // every cell a segment passes through (or comes within TOL of): sample it at quarter-cell steps and take
-  // each sample's 3x3 cell neighborhood, rather than walking its whole bounding box
+  // Roads are long and the index is rebuilt on every drag step, so the cells are coarse and keyed by number: it's
+  // the number of cells a segment touches that costs, not the few extra edges a coarse cell holds.
+  const CELL = 8*CLIPPER_SCALE, TOL = 2, cells = new Map();
+  const cellKey = (cx, cy) => (cx + 0x8000)*0x10000 + (cy + 0x8000);
+  // every cell a segment passes through (or comes within TOL of): sample it at most a cell apart and take each
+  // sample's 3x3 cell neighborhood — every point of the segment is within half a cell of a sample, so (with TOL
+  // far smaller than a cell) that neighborhood covers it — rather than walking its whole bounding box
   const cellKeys = (a, b) => {
-    const keys = new Set(), steps = Math.max(1, Math.ceil(Math.hypot(b.X-a.X, b.Y-a.Y)/(CELL/4)));
+    const keys = new Set(), steps = Math.max(1, Math.ceil(Math.hypot(b.X-a.X, b.Y-a.Y)/CELL));
     for (let s=0;s<=steps;s++) {
       const cx = Math.floor((a.X+(b.X-a.X)*s/steps)/CELL), cy = Math.floor((a.Y+(b.Y-a.Y)*s/steps)/CELL);
-      for (let ox=-1;ox<=1;ox++) for (let oy=-1;oy<=1;oy++) keys.add((cx+ox)+','+(cy+oy));
+      for (let ox=-1;ox<=1;ox++) for (let oy=-1;oy<=1;oy++) keys.add(cellKey(cx+ox, cy+oy));
     }
     return keys;
   };
