@@ -109,7 +109,7 @@ const CAR_GLOW_MATERIALS = {
   TaxiLight: { diffuse: 0x3a2410, emissive: 0xffb347, intensity: 1.5 },
 };
 const CAR_SLOT_NAMES = [CAR_PAINT_MATERIAL, 'Lights', 'Backlights', 'TaxiLight']; // vertex slot 0 is everything else
-let carMeshes = []; // [{ mesh, paint, glowUniform, length, height, name, thumbMesh, thumbCamera, thumbPaint }], one per design, once loaded
+let carMeshes = []; // [{ mesh, paint, wheels, glowUniform, wheelRadius, wheelbase, length, height, name, thumbMesh, thumbCamera, thumbPaint }], one per design, once loaded
 let designNumbers = []; // how many of each design have been given out so far (see "the car card")
 
 async function loadGLB(url) {
@@ -133,7 +133,10 @@ export async function loadCarModels() {
 }
 // One merged, indexed geometry per top-level mesh in the model: carSlot says what a vertex is (see CAR_SLOT_NAMES, 0 for
 // anything else) and carColor its color when it isn't being repainted or lit up — the part's own material color, as
-// Blender shows it, or (for a glowing part) its unlit color.
+// Blender shows it, or (for a glowing part) its unlit color. carWheel is, for a wheel's vertices (anything under a child
+// object named Wheel…), the middle of that wheel, and 1 for one that only rolls or 2 for one that steers too — the
+// front ones (at +Z), unless the design names its steering wheels WheelSteer… — and all zeros for anything else (see
+// injectCarShader, which turns them, and turnWheels).
 function buildCarDesigns(gltf) {
   gltf.scene.updateMatrixWorld(true);
   const box = new THREE.Box3(), size = new THREE.Vector3(), center = new THREE.Vector3(), v = new THREE.Vector3(), baseColor = new THREE.Color();
@@ -142,8 +145,13 @@ function buildCarDesigns(gltf) {
     const parts = [];
     node.traverse(o => { if (o.isMesh) parts.push(o); });
     if (!parts.length) return;
-    const positions = [], slots = [], colors = [], indices = [];
+    const positions = [], slots = [], colors = [], indices = [], wheelIds = [], wheels = [];
     parts.forEach(part => {
+      let wheel = part;
+      while (wheel && wheel !== node && !wheel.name.startsWith('Wheel')) wheel = wheel.parent;
+      if (wheel === node || !wheel) wheel = null;
+      if (wheel && !wheels.includes(wheel)) wheels.push(wheel);
+      const wheelId = wheel ? wheels.indexOf(wheel) : -1;
       const geo = part.geometry, pos = geo.attributes.position, matName = (part.material && part.material.name) || '';
       const glow = CAR_GLOW_MATERIALS[matName], slot = CAR_SLOT_NAMES.indexOf(matName) + 1; // 0 for anything else
       if (glow) baseColor.set(glow.diffuse);
@@ -155,6 +163,7 @@ function buildCarDesigns(gltf) {
         positions.push(v.x, v.y, v.z);
         slots.push(slot);
         colors.push(baseColor.r, baseColor.g, baseColor.b);
+        wheelIds.push(wheelId);
       }
       const index = geo.index, corners = index ? index.count : pos.count;
       for (let t=0;t<corners;t++) indices.push(first + (index ? index.getX(t) : t));
@@ -171,9 +180,29 @@ function buildCarDesigns(gltf) {
     geometry.translate(-center.x, -box.min.y, -center.z); // centered, and sat on the ground
     geometry.setAttribute('carSlot', new THREE.Float32BufferAttribute(slots, 1));
     geometry.setAttribute('carColor', new THREE.Float32BufferAttribute(colors, 3));
+    // each wheel's middle and size, from where its vertices ended up (turned and centered, as above)
+    const position = geometry.attributes.position, hubs = wheels.map(() => new THREE.Box3());
+    wheelIds.forEach((w, k) => { if (w >= 0) hubs[w].expandByPoint(v.fromBufferAttribute(position, k)); });
+    const namedSteer = wheels.some(w => w.name.startsWith('WheelSteer'));
+    const hubInfo = hubs.map((hub, w) => {
+      const c = hub.getCenter(new THREE.Vector3());
+      return { c, r: (hub.max.y - hub.min.y)*0.5, steers: namedSteer ? wheels[w].name.startsWith('WheelSteer') : c.z > 0 };
+    });
+    const wheelData = new Float32Array(wheelIds.length*4);
+    wheelIds.forEach((w, k) => {
+      if (w < 0) return;
+      const { c, steers } = hubInfo[w];
+      wheelData.set([c.x, c.y, c.z, steers ? 2 : 1], k*4);
+    });
+    geometry.setAttribute('carWheel', new THREE.BufferAttribute(wheelData, 4));
+    // (how far the steering wheels are ahead of the others, for how sharply they're turned — see turnWheels)
+    const meanZ = list => list.reduce((sum, h) => sum + h.c.z, 0)/list.length;
+    const steering = hubInfo.filter(h => h.steers), rolling = hubInfo.filter(h => !h.steers);
+    const wheelbase = steering.length && rolling.length ? meanZ(steering) - meanZ(rolling) : 0;
+    const wheelRadius = hubInfo.length ? hubInfo.reduce((sum, h) => sum + h.r, 0)/hubInfo.length : 0;
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-    designs.push({ name: node.name, geometry, length: size.z/BOX_CAR_LENGTH, width: size.x, height: size.y, radius: geometry.boundingSphere.radius });
+    designs.push({ name: node.name, geometry, length: size.z/BOX_CAR_LENGTH, width: size.x, height: size.y, radius: geometry.boundingSphere.radius, wheelRadius, wheelbase });
   });
   gltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (o.material) o.material.dispose(); } });
   return designs;
@@ -181,17 +210,31 @@ function buildCarDesigns(gltf) {
 // Adds a car design's coloring to its material's shader: vCarColor, per vertex, its instance's paint (instanceCarPaint) if
 // it's slot 1 (CarCol) or its own baked color otherwise; vCarEmissive, added to what it emits, for the glowing slots — lit
 // after dark, like the box car's lights (see carGlowFactor, kept in sync with computeWindowGlowFactor in updateTraffic).
+// And its wheels (see carWheel in buildCarDesigns) turned about their middles: rolled by instanceCarWheel.x, and the
+// steering ones steered by instanceCarWheel.y (see turnWheels) — normals too, though only the shadows use them.
 // `paintUniform`, for the card's thumbnail (see makeCarThumbnail): one car at a time, drawn plainly (not instanced), so its
-// paint is a uniform set before each draw rather than an attribute varying per instance.
+// paint is a uniform set before each draw rather than an attribute varying per instance (and its wheels sit still).
 function injectCarShader(shader, glowUniform, paintUniform) {
   shader.uniforms.carGlowFactor = glowUniform;
   if (paintUniform) shader.uniforms.instanceCarPaint = paintUniform;
-  const paintDecl = paintUniform ? 'uniform vec3 instanceCarPaint;' : 'attribute vec3 instanceCarPaint;';
+  if (paintUniform) shader.uniforms.instanceCarWheel = { value: new THREE.Vector2() };
+  const paintDecl = paintUniform ? 'uniform vec3 instanceCarPaint;\nuniform vec2 instanceCarWheel;' : 'attribute vec3 instanceCarPaint;\nattribute vec2 instanceCarWheel;';
+  const wheelTurn = `
+    attribute vec4 carWheel;
+    vec3 carWheelTurn(vec3 v) {
+      if (carWheel.w < 0.5) return v;
+      float s = sin(instanceCarWheel.x), c = cos(instanceCarWheel.x);
+      v = vec3(v.x, c*v.y - s*v.z, s*v.y + c*v.z);
+      if (carWheel.w > 1.5) { float ss = sin(instanceCarWheel.y), cs = cos(instanceCarWheel.y); v = vec3(cs*v.x + ss*v.z, v.y, cs*v.z - ss*v.x); }
+      return v;
+    }`;
   const glowTerm = (name, slot) => { const g = CAR_GLOW_MATERIALS[name], c = new THREE.Color(g.emissive).multiplyScalar(g.intensity);
     return `carSlot > ${slot - 0.5} && carSlot < ${slot + 0.5} ? vec3(${c.r.toFixed(5)}, ${c.g.toFixed(5)}, ${c.b.toFixed(5)}) : `; };
   shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nattribute float carSlot;\nattribute vec3 carColor;\n' + paintDecl + '\nvarying vec3 vCarColor;\nvarying vec3 vCarEmissive;')
+    .replace('#include <common>', '#include <common>\nattribute float carSlot;\nattribute vec3 carColor;\n' + paintDecl + wheelTurn + '\nvarying vec3 vCarColor;\nvarying vec3 vCarEmissive;')
+    .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = carWheelTurn(objectNormal);')
     .replace('#include <begin_vertex>', `#include <begin_vertex>
+      transformed = carWheelTurn(transformed - carWheel.xyz) + carWheel.xyz;
       vCarColor = carSlot > 0.5 && carSlot < 1.5 ? instanceCarPaint : carColor;
       vCarEmissive = ${CAR_SLOT_NAMES.slice(1).map((name, k) => glowTerm(name, k + 2)).join('\n        ')}vec3(0.0);`);
   shader.fragmentShader = shader.fragmentShader
@@ -224,6 +267,9 @@ function makeCarMesh(design) {
   const paint = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*3), 3);
   paint.setUsage(THREE.DynamicDrawUsage);
   design.geometry.setAttribute('instanceCarPaint', paint);
+  const wheels = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*2), 2);
+  wheels.setUsage(THREE.DynamicDrawUsage);
+  design.geometry.setAttribute('instanceCarWheel', wheels);
   mesh.count = 0;
   mesh.frustumCulled = false;
   mesh.castShadow = true; mesh.receiveShadow = true;
@@ -231,7 +277,8 @@ function makeCarMesh(design) {
   mesh.name = 'Traffic';
   scene.add(mesh);
   const thumb = makeCarThumbnail(design);
-  return { mesh, paint, glowUniform, length: design.length, width: design.width, height: design.height,
+  return { mesh, paint, wheels, glowUniform, length: design.length, width: design.width, height: design.height,
+    wheelRadius: design.wheelRadius, wheelbase: design.wheelbase,
     name: design.name,
     thumbMesh: thumb.mesh, thumbCamera: thumb.camera, thumbPaint: thumb.paint };
 }
@@ -285,6 +332,9 @@ function newCar() {
   return { id: ++carIds, x: 0, z: 0, heading: 0, li: -1, u: 0, dir: 1, seg: 0, speed: 0, ahead: null,
     cruise: 0.8 + trafficRng()*0.4, length: 0.9 + trafficRng()*0.3, width: 0.95 + trafficRng()*0.12, height: 0.9 + trafficRng()*0.35,
     design: null, paint: pickCarPaint(),
+    // how far round its wheels have rolled, and how far its steering ones are turned, both in radians (see turnWheels) —
+    // and which way it was facing last frame, for how fast it's turning
+    wheelSpin: 0, wheelSteer: 0, lastHeading: null,
     // someone crossing it's stopped for (see checkYield) — and the last one it rolled its one-in-four chance against, so
     // it doesn't keep re-rolling for the same person every frame while it's still approaching them
     yieldFor: null, yieldChecked: -1, yielded: 0,
@@ -565,7 +615,7 @@ export function updateTraffic(t) {
       car.length = carMeshes[car.design].length;
       car.number = ++designNumbers[car.design];
     }
-    if (car === drivenCar) { driveByHand(car, dt); placeCar(car, i, designCounts); return; }
+    if (car === drivenCar) { driveByHand(car, dt); turnWheels(car, dt); placeCar(car, i, designCounts); return; }
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*car.cruise*S.peopleSpeed;
     let target = cruise;
@@ -626,6 +676,7 @@ export function updateTraffic(t) {
     }
     const lane = lanePoint(car), offLane = Math.abs(Math.atan2(Math.sin(lane.heading - car.heading), Math.cos(lane.heading - car.heading)));
     if (car.speed > 0.3 && offLane < TURN_SAFE_ANGLE) runOverPeople(car);
+    turnWheels(car, dt);
     placeCar(car, i, designCounts);
   });
   carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
@@ -636,11 +687,28 @@ export function updateTraffic(t) {
     cm.mesh.count = designCounts[d];
     cm.mesh.instanceMatrix.needsUpdate = true;
     cm.paint.needsUpdate = true;
+    cm.wheels.needsUpdate = true;
     cm.glowUniform.value = glowFactor;
   });
   // the camera onto whoever it's following, at about their roof — and driving it, round behind it
   if (followedCar >= 0) { const car = cars[followedCar]; controls.goalTarget.set(car.x, Y_ROAD + carHeight(car)*(drivenCar ? 1.1 : 0.6), car.z); }
   if (drivenCar) chaseCamera(drivenCar);
+}
+// Rolls a car's wheels as far as it's gone, and steers its steering ones as sharply as it's turning: for the one being
+// driven, the way the steering's held (so they turn standing still, too); for the rest, as sharply as a car with its
+// wheelbase would have to steer to turn as fast as it is. Eased toward, so a jolt (being re-seated, say) doesn't flick them.
+const WHEEL_STEER_MAX = 0.6; // (radians)
+function turnWheels(car, dt) {
+  const cm = car.design != null ? carMeshes[car.design] : null;
+  const turned = car.lastHeading == null ? 0 : Math.atan2(Math.sin(car.heading - car.lastHeading), Math.cos(car.heading - car.lastHeading));
+  car.lastHeading = car.heading;
+  if (!cm || !cm.wheelRadius || dt <= 0) return;
+  car.wheelSpin = (car.wheelSpin + car.speed*dt/(cm.wheelRadius*S.peopleSize)) % (Math.PI*2);
+  let steer = 0;
+  if (car === drivenCar) steer = -controlInput().right*WHEEL_STEER_MAX;
+  else if (Math.abs(car.speed) > 0.5 && cm.wheelbase) steer = Math.atan(turned/dt*cm.wheelbase*S.peopleSize/car.speed);
+  steer = Math.max(-WHEEL_STEER_MAX, Math.min(WHEEL_STEER_MAX, steer));
+  car.wheelSteer += (steer - car.wheelSteer)*Math.min(1, dt*10);
 }
 // puts car i's model (or box) where it is — counted among its design's in designCounts — and its debug hitbox
 const placing = { matrix: new THREE.Matrix4(), rotation: new THREE.Quaternion(), scale: new THREE.Vector3(), position: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0) };
@@ -654,6 +722,7 @@ function placeCar(car, i, designCounts) {
     matrix.compose(position, rotation, scale);
     cm.mesh.setMatrixAt(idx, matrix);
     cm.paint.setXYZ(idx, car.paint[0], car.paint[1], car.paint[2]);
+    cm.wheels.setXY(idx, car.wheelSpin, car.wheelSteer);
     matrix.makeScale(0, 0, 0);
     carParts.body.setMatrixAt(i, matrix);
   } else {
