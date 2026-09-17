@@ -244,17 +244,26 @@ const plateAtlas = (() => {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#fff';
-  ctx.font = `bold ${PLATE_CELL_H*0.8}px "Arial Narrow", Arial, sans-serif`;
+  ctx.fillStyle = ctx.strokeStyle = '#fff';
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  // squeezed to fit the widest character inside its cell, with a margin so neighbours don't bleed in when it's mipmapped
-  const squeeze = Math.min(1, PLATE_CELL_W*0.8/ctx.measureText('W').width);
+  ctx.textBaseline = 'alphabetic';
+  ctx.lineJoin = 'round';
+  // the capitals as tall as most of the cell, heavy and thickened further by a stroke round them, then squeezed to fill its
+  // width — as far as a typical character needs, and any wider one (M, W) further — with only a sliver left either side,
+  // so neighbours don't bleed in when it's mipmapped
+  const font = size => `900 ${size}px "Arial Black", "Arial Narrow", Arial, sans-serif`;
+  ctx.font = font(100);
+  const capHeight = ctx.measureText('W').actualBoundingBoxAscent/100, stroke = PLATE_CELL_H*0.06;
+  ctx.font = font((PLATE_CELL_H*0.86 - stroke)/capHeight);
+  ctx.lineWidth = stroke;
+  const fit = ch => (PLATE_CELL_W*0.96 - stroke)/ctx.measureText(ch).width, typical = fit('0');
+  const baseline = PLATE_CELL_H*0.5 + ctx.measureText('W').actualBoundingBoxAscent*0.5;
   [...PLATE_GLYPHS].forEach((ch, g) => {
     ctx.save();
-    ctx.translate((g % PLATE_ATLAS_COLUMNS + 0.5)*PLATE_CELL_W, (Math.floor(g/PLATE_ATLAS_COLUMNS) + 0.5)*PLATE_CELL_H);
-    ctx.scale(squeeze, 1);
-    ctx.fillText(ch, 0, PLATE_CELL_H*0.04);
+    ctx.translate((g % PLATE_ATLAS_COLUMNS + 0.5)*PLATE_CELL_W, Math.floor(g/PLATE_ATLAS_COLUMNS)*PLATE_CELL_H + baseline);
+    ctx.scale(Math.min(typical, fit(ch)), 1);
+    ctx.fillText(ch, 0, 0);
+    ctx.strokeText(ch, 0, 0);
     ctx.restore();
   });
   const texture = new THREE.CanvasTexture(canvas);
@@ -304,7 +313,8 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform) {
       vec3 background = format == 0 && back ? vec3(0.98, 0.72, 0.02) : vec3(0.92);
       // the text: ${PLATE_MAX_CHARS} cells across the plate, inside a margin, the characters centered among them
       const vec2 grid = vec2(${PLATE_ATLAS_COLUMNS}.0, ${PLATE_ATLAS_ROWS}.0), toAtlas = vec2(1.0, -1.0)/grid;
-      vec2 inner = (vCarPlateUv.xy - vec2(0.08, 0.14))/vec2(0.84, 0.72);
+      float left = format == 1 ? 0.09 : 0.05; // (clear of the EU's blue band)
+      vec2 inner = (vCarPlateUv.xy - vec2(left, 0.06))/vec2(0.95 - left, 0.88);
       vec2 p = vec2(inner.x*${PLATE_MAX_CHARS}.0 - float(${PLATE_MAX_CHARS} - count)*0.5, inner.y);
       vec2 dx = dFdx(p)*toAtlas, dy = dFdy(p)*toAtlas; // (before any branching, where derivatives aren't to be trusted)
       float tiny = smoothstep(0.35, 0.8, max(fwidth(p.x), fwidth(p.y))); // (characters only a pixel or two across)
