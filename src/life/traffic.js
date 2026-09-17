@@ -318,7 +318,7 @@ function lanePoint(car) {
 // either way along the road, and which way is left there (for a unit lane, square to that): which rounds off the bends,
 // so a car turns in a little before one — and, round a sharp one, keeps the inside lane from making a kink (going on
 // past the corner, back, then round it), as it would offset from the corners of the road itself
-const LANE_SMOOTH = 3.5, LANE_SAMPLE = 0.5;
+const LANE_SMOOTH = 2.5, LANE_SAMPLE = 0.5;
 function laneSmoothed(nav) {
   if (nav.smoothed) return nav.smoothed;
   const { pts, cum, total } = nav, n = pts.length, reach = LANE_SMOOTH*nav.lane, STEPS = 32;
