@@ -747,8 +747,9 @@ function buildPeopleNav() {
       trees: zone.zoneType==='park' ? zone.treeSpots || [] : [] });
   });
   const inWater = createRegionTester(getWaterRegion());
-  // the road network, stroked twice: out to mid-sidewalk (the rings, and what paths are blocked by), and to the curb
-  const midStrokes = [], curbStrokes = [];
+  // the road network, stroked three times: out to mid-sidewalk (the rings, and what paths are blocked by), to the curb, and
+  // just past the sidewalk's outer edge (what a path's end has to reach to join it)
+  const midStrokes = [], curbStrokes = [], edgeStrokes = [];
   let anySidewalk = false;
   S.roadLines.forEach(line => {
     if (isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
@@ -759,9 +760,11 @@ function buildPeopleNav() {
     const path = tessellateOpenPath(nodePts).map(p => ({ X: Math.round(p.x*CLIPPER_SCALE), Y: Math.round(p.z*CLIPPER_SCALE) }));
     midStrokes.push({ radius: hw + cw + sw*0.5, path });
     curbStrokes.push({ radius: hw + cw, path });
+    edgeStrokes.push({ radius: hw + cw + sw + 0.5, path });
   });
   const midOutline = midStrokes.length ? unionRoadStrokes(midStrokes) : [];
-  const inMid = createRegionTester(midOutline), onPavement = createRegionTester(curbStrokes.length ? unionRoadStrokes(curbStrokes) : []);
+  const inMid = createRegionTester(midOutline), bySidewalk = createRegionTester(edgeStrokes.length ? unionRoadStrokes(edgeStrokes) : []);
+  const onPavement = createRegionTester(curbStrokes.length ? unionRoadStrokes(curbStrokes) : []);
   const rings = [];
   midOutline.forEach(path => {
     const pts = [];
@@ -795,11 +798,18 @@ function buildPeopleNav() {
     const blocked = pts.map(p => inMid(p.x, p.z));
     if (blocked.every(Boolean)) return;
     const { hw } = roadLineWidths(line), li = lines.length;
+    // (a path's drawn end reaches its half-width past its last point)
+    const endReaches = (vi, from) => {
+      const d = Math.hypot(pts[vi].x - pts[from].x, pts[vi].z - pts[from].z) || 1;
+      return bySidewalk(pts[vi].x + (pts[vi].x - pts[from].x)/d*hw, pts[vi].z + (pts[vi].z - pts[from].z)/d*hw);
+    };
     lines.push({ pts, cum, total: cum[cum.length-1], loop: false, path: true, y: Y_PATH, lateral: hw*0.55,
       blocked, overWater: pts.map(p => inWater(p.x, p.z)), vertices: pts.map(() => ({ links: [], entrances: [] })) });
-    // where it comes off a road: onto the sidewalk there
+    // where it comes off a road, or ends at a sidewalk (just touching it, short of where people walk along it): onto the
+    // sidewalk there
     pts.forEach((p, vi) => {
-      if (blocked[vi] || !(blocked[vi-1] || blocked[vi+1])) return;
+      const endsBySidewalk = (vi === 0 && endReaches(0, 1)) || (vi === pts.length-1 && endReaches(vi, vi-1));
+      if (blocked[vi] || !(blocked[vi-1] || blocked[vi+1] || endsBySidewalk)) return;
       const handle = ringPoint(p, PEOPLE_NAV_SPACING + 12);
       if (handle) pending.push({ li, vi, handle });
     });
