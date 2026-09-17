@@ -201,7 +201,13 @@ export function subdivideZone(zone) {
             const cvMin = zone.settings.colorVariationMin!=null ? zone.settings.colorVariationMin : 0.25;
             const cvMax = zone.settings.colorVariationMax!=null ? zone.settings.colorVariationMax : 0.25;
             const cv = lerp(cvMin, cvMax, rng());
-            const buildOn = (fp, round, arch, crn) => makeBuildingMesh(fp,h,isLandmark,rng,zone.settings.windowsEnabled,cv,zone.settings.windowScale,round,arch,crn,zone.settings.litWindowChance,zone.settings.specularWindows);
+            // (its footprint and height kept on it, for people going in: see "going indoors" in people.js; its kind for
+            // what its card says about it: see building-types.js)
+            const buildOn = (fp, round, arch, crn) => {
+              const mesh = makeBuildingMesh(fp,h,isLandmark,rng,zone.settings.windowsEnabled,cv,zone.settings.windowScale,round,arch,crn,zone.settings.litWindowChance,zone.settings.specularWindows);
+              if (mesh) Object.assign(mesh.userData, { footprint: fp, height: h, buildingKind: isLandmark ? 'landmark' : 'buildings' });
+              return mesh;
+            };
             let building = buildOn(footprint, isRound, archetype, corners);
             if (blockers.length && buildingReachesCutout(building, footprint, blockers, inCutout)) {
               // it reached into a road or a zone above (a round footprint, canopy, balcony or podium): rebuild it as a

@@ -184,6 +184,7 @@
       <div class="pc-row"><span class="pc-label">Name</span><span class="pc-value pc-name" id="pc-name"></span></div>
       <div class="pc-row"><span class="pc-label">Age</span><span class="pc-value" id="pc-age"></span></div>
       <div class="pc-row"><span class="pc-label">Current mood</span><span class="pc-value pc-mood" id="pc-mood"></span></div>
+      <div class="pc-row" id="pc-indoors-row" hidden><span class="pc-label">Status</span><span class="pc-value pc-indoors" id="pc-indoors"></span></div>
     </div>
     <div class="pc-shot">
       <canvas id="pc-headshot" width="120" height="120" title="Possess them"></canvas>
@@ -226,6 +227,23 @@
   <div class="pc-row pc-gap"><span class="pc-label">Loves</span><span class="pc-value">Shoooom</span></div>
   <div class="pc-row"><span class="pc-label">Hates</span><span class="pc-value">Delays</span></div>
   <div class="pc-row pc-gap"><span class="pc-label">Passengers</span><span class="pc-value" id="tc-passengers">None</span></div>
+</div>
+
+<div id="building-card" hidden>
+  <div class="win3-titlebar"><button class="win3-sysbox" title="Close"></button><div class="win3-title">Building</div></div>
+  <button id="building-card-close" title="Stop following">×</button>
+  <div class="pc-top">
+    <div class="pc-rows">
+      <div class="pc-row"><span class="pc-label">Name</span><span class="pc-value pc-name" id="bc-name"></span></div>
+      <div class="pc-row"><span class="pc-label">Current mood</span><span class="pc-value pc-mood" id="bc-mood"></span></div>
+    </div>
+    <div class="pc-shot">
+      <canvas id="bc-thumb" width="120" height="120"></canvas>
+    </div>
+  </div>
+  <div class="pc-row pc-gap"><span class="pc-label">Loves</span><span class="pc-value" id="bc-loves"></span></div>
+  <div class="pc-row"><span class="pc-label">Hates</span><span class="pc-value" id="bc-hates"></span></div>
+  <div class="pc-row pc-gap"><span class="pc-label">Inhabitants</span><span class="pc-value" id="bc-inhabitants">None</span></div>
 </div>
 
 <div id="node-context-menu"></div>

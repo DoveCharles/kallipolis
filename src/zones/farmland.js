@@ -141,6 +141,7 @@ export function generateFarmlandContent(zone, poly, cutouts, blockers) {
       const { dx, dz } = longAxisOf(field), nx = -dz, nz = dx;
       const group = new THREE.Group();
       group.name = 'Building';
+      group.userData.buildingKind = 'farmstead'; // what its card says about it: see building-types.js
       const yard = createMeshBuilder(), barn = createMeshBuilder(), roof = createMeshBuilder(), silo = createMeshBuilder();
       yard.addBox(c.x, c.z, dx, dz, 10, 7.5, Y_PARK, Y_PARK + 0.04);
       barn.addBox(c.x, c.z, dx, dz, 6, 3.6, Y_PARK, Y_PARK + 4.2);

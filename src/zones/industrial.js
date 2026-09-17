@@ -59,10 +59,11 @@ function generateIndustrialContent(zone, poly, cutouts, blockers) {
     const group = new THREE.Group();
     group.name = 'Building';
     const roll = rng();
-    if (roll < 0.4) buildWarehouse(group, inner, rng, lerp(hMin, (hMin+hMax)/2, rng()));
-    else if (roll < 0.6) buildFactory(group, inner, rng, lerp(hMin, hMax, rng()));
-    else if (roll < 0.8) buildTankFarm(group, inner, rng, lerp(hMin*0.8, hMax*0.8, rng()));
-    else buildContainerYard(group, inner, rng);
+    // (which of the four it is kept on it, for what its card says about it: see building-types.js)
+    if (roll < 0.4) { group.userData.buildingKind = 'warehouse'; buildWarehouse(group, inner, rng, lerp(hMin, (hMin+hMax)/2, rng())); }
+    else if (roll < 0.6) { group.userData.buildingKind = 'factory'; buildFactory(group, inner, rng, lerp(hMin, hMax, rng())); }
+    else if (roll < 0.8) { group.userData.buildingKind = 'tankfarm'; buildTankFarm(group, inner, rng, lerp(hMin*0.8, hMax*0.8, rng())); }
+    else { group.userData.buildingKind = 'containeryard'; buildContainerYard(group, inner, rng); }
     if (group.children.length) zone.buildingsGroup.add(group);
   }));
   const yardMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(groundColor).lerp(new THREE.Color(0x8c8c88), 0.55), roughness: 0.95 });

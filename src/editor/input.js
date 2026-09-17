@@ -142,7 +142,7 @@ dom.addEventListener('pointermove', (e) => {
   }
   if (isCameraDragging) {
     // panning takes the camera off whoever it's following; orbiting keeps it on them
-    if (dragMode==='pan') { App.stopFollowingPerson(); controls.pan(e.movementX, e.movementY); } else controls.orbit(e.movementX, e.movementY);
+    if (dragMode==='pan') { App.stopFollowingPerson(); App.stopFollowingBuilding(); controls.pan(e.movementX, e.movementY); } else controls.orbit(e.movementX, e.movementY);
     return;
   }
   if (S.draggedNode) {
@@ -192,7 +192,8 @@ dom.addEventListener('pointermove', (e) => {
     previewLine.visible = false;
     insertPreviewMarker.visible = false;
     setHover(null);
-    const overClickable = App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0;
+    const overClickable = App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
+      || !!App.pickBuilding(e.clientX, e.clientY);
     if (overClickable !== hoveringClickable) { hoveringClickable = overClickable; dom.style.cursor = overClickable ? 'pointer' : ''; }
     return;
   }
@@ -266,9 +267,10 @@ dom.addEventListener('pointerup', (e) => {
       S.lastGroundClick = { x:e.clientX, y:e.clientY, time:performance.now() };
     } else if (was.button===0 && dist<6 && dt<600 && S.interactionMode==='move') {
       // a click on someone or something has the camera follow them; anywhere else lets go of both
-      if (App.pickPerson(e.clientX, e.clientY) >= 0) { App.stopFollowingCar(); App.stopFollowingTrain(); App.followPersonAt(e.clientX, e.clientY); }
-      else if (App.pickCar(e.clientX, e.clientY) >= 0) { App.stopFollowingPerson(); App.stopFollowingTrain(); App.followCarAt(e.clientX, e.clientY); }
-      else { App.stopFollowingPerson(); App.stopFollowingCar(); App.followTrainAt(e.clientX, e.clientY); }
+      if (App.pickPerson(e.clientX, e.clientY) >= 0) { App.stopFollowingCar(); App.stopFollowingTrain(); App.stopFollowingBuilding(); App.followPersonAt(e.clientX, e.clientY); }
+      else if (App.pickCar(e.clientX, e.clientY) >= 0) { App.stopFollowingPerson(); App.stopFollowingTrain(); App.stopFollowingBuilding(); App.followCarAt(e.clientX, e.clientY); }
+      else if (App.pickTrain(e.clientX, e.clientY) >= 0) { App.stopFollowingPerson(); App.stopFollowingCar(); App.stopFollowingBuilding(); App.followTrainAt(e.clientX, e.clientY); }
+      else { App.stopFollowingPerson(); App.stopFollowingCar(); App.stopFollowingTrain(); App.followBuildingAt(e.clientX, e.clientY); }
     }
     return;
   }

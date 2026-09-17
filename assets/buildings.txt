@@ -1,0 +1,106 @@
+# What each kind of building is like: what its card says when you click one in World mode. Edit freely, then reload the page.
+# Each [section] is a kind of building. Under it, `attribute = value` lines:
+#
+#   name    what it's called on its card (followed by its own number, like "Warehouse #4821")
+#   mood    its current mood, usually an emoji
+#   loves   what it loves
+#   hates   what it hates
+#
+# Give an attribute several lines to have each building of that kind pick one of them (always the same one for the same
+# building). A kind falls back to the zone type that puts it up, and then to [default], so a section need only say what
+# it does differently. Blank lines and lines starting with # are skipped.
+#
+# The kinds, by the zone type they belong to:
+#
+#   buildings    landmark
+#   industrial   warehouse, factory, tankfarm, containeryard
+#   farmland     farmstead
+
+[default]
+name = Building
+mood = 🏢
+loves = Having people inside them
+hates = Strong winds
+
+# ============================================================ city blocks
+
+[buildings]
+name = Building
+mood = 🏢
+loves = Having people inside them
+loves = Being tall. Ish
+loves = Standing here
+loves = The little guys who come in and out of me
+hates = Strong winds
+hates = Pigeons
+hates = Being empty at night
+hates = That new one going up across the road
+
+[landmark]
+name = Tower
+mood = 🏙️
+loves = Being the tallest one here
+loves = Blocking your view
+loves = Casting a REALLY long shadow
+hates = The other tall one
+hates = Planes
+hates = Being called an eyesore
+
+# ============================================================ industrial
+
+[industrial]
+name = Depot
+mood = 🏭
+loves = Logistics
+hates = Inspections
+
+[warehouse]
+name = Warehouse
+mood = 📦
+loves = Boxes
+loves = More boxes
+loves = A really smooth concrete floor
+hates = Stocktaking
+hates = Forklift certification
+
+[factory]
+name = Factory
+mood = 🏭
+loves = MAKING THINGS
+loves = The sound at 6am
+hates = Downtime
+hates = Health and safety
+
+[tankfarm]
+name = Tank farm
+mood = 🛢️
+loves = Being full
+loves = Sloshing
+hates = Naked flames
+hates = Leaks. Please. No leaks
+
+[containeryard]
+name = Container yard
+mood = 🚢
+loves = Stacking
+loves = Not knowing what's in any of them
+hates = Customs
+hates = Wind (see: stacking)
+
+# ============================================================ farmland
+
+[farmland]
+name = Farm
+mood = 🚜
+loves = A good harvest
+hates = Bad weather
+
+[farmstead]
+name = Farmstead
+mood = 🚜
+loves = The smell of hay
+loves = Getting up before everyone else
+loves = The dog
+hates = Foxes
+hates = Rain at the wrong time
+hates = The price of everything
