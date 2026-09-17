@@ -21,9 +21,10 @@ import { explode } from './giblets.js';
 // ============================================================ people
 // Lil people: tiny cuboids in random colors, all drawn as one instanced mesh. Most walk the walkways — the sidewalks either
 // side of sidewalk roads, and paths — carrying on through junctions or turning off, and turning back at dead ends. They
-// gather in plazas and parks: someone walking past one sometimes wanders in, drifts from spot to spot (often over to
-// someone already there), stands around for a while, and eventually heads back out to the nearest walkway. The walkways
-// are worked out again whenever the roads or zones change, and anyone whose walkway moved is set back on the nearest one.
+// gather in plazas, parks and on beaches: someone walking past one sometimes wanders in, drifts from spot to spot (often
+// over to someone already there), stands around for a while, and eventually heads back out to the nearest walkway. The
+// walkways are worked out again whenever the roads or zones change, and anyone whose walkway moved is set back on the
+// nearest one.
 const PEOPLE_MAX = 2000;
 const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
 export const PEOPLE_NAV_SPACING = 4;    // walkways are resampled to a point at least this often, for entrances and re-seating
@@ -726,11 +727,12 @@ function cumulative(pts) {
 //   crossings (links with `cross`); anywhere else, people cross mid-block as they please (see maybeCrossRoad).
 // - a path (a footpath or walkway line), walked anywhere across its width. Where one runs over a road it's `blocked`,
 //   and the points either side are linked to the nearest sidewalk ring; paths meeting at a node are linked to each other.
-// A hangout is { kind, inside, bounds, y, exits, seats, trees } per plaza and park — a plaza's bench seats, a park's trees.
+// A hangout is { kind, inside, bounds, y, exits, seats, trees } per plaza, park and beach — a plaza's bench seats, a park's
+// trees. Beaches are open ground, like parks: people sit in circles and lie down on them (see isOpenGround).
 function buildPeopleNav() {
   const areas = [], lines = [];
   S.zones.forEach(zone => {
-    if (zone.drawing || zone.points.length < 3 || (zone.zoneType !== 'plaza' && zone.zoneType !== 'park')) return;
+    if (zone.drawing || zone.points.length < 3 || (zone.zoneType !== 'plaza' && zone.zoneType !== 'park' && zone.zoneType !== 'beach')) return;
     const poly = tessellateClosedPath(zone.points);
     const paths = offsetPaths(clipPolygons(ClipperLib.ClipType.ctDifference, [toClipperPath(poly)], zoneCutoutsNear(zone, poly)), -1.2, ClipperLib.JoinType.jtMiter);
     const size = pathsArea(paths);
@@ -1033,7 +1035,7 @@ function walkAlong(p, dist) {
     const vertex = nav.vertices[ahead];
     const isEnd = !nav.loop && (ahead === 0 || ahead === last || !!nav.blocked[ahead + p.dir]);
     const entrance = vertex.entrances.length ? vertex.entrances[Math.floor(peopleRng()*vertex.entrances.length)] : null;
-    const drawn = entrance ? (peopleNav.areas[entrance.area].kind === 'park' ? p.traits.parks : p.traits.plazas) : 0;
+    const drawn = entrance ? (isOpenGround(peopleNav.areas[entrance.area]) ? p.traits.parks : p.traits.plazas) : 0;
     if (entrance && peopleRng() < 0.12*drawn) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
     // (linkCooldown keeps them from turning off again right away — otherwise a junction with several close-together
     // links could have them zigzagging, first one way then straight back)
@@ -1340,8 +1342,10 @@ function clearGround(area, x, z, r) {
   if (!area.inside(x, z) || !area.inside(x + r, z) || !area.inside(x - r, z) || !area.inside(x, z + r) || !area.inside(x, z - r)) return false;
   return area.trees.every(tree => Math.hypot(tree.x - x, tree.z - z) > tree.r + r);
 }
-// someone in a plaza heads for a free bench seat nearby; someone in a park for the grass, to join a circle there with room
-// in it or to start one
+// the hangouts people sit and lie down on the ground in, rather than on benches
+const isOpenGround = area => area.kind === 'park' || area.kind === 'beach';
+// someone in a plaza heads for a free bench seat nearby; someone in a park or on a beach for the ground, to join a circle
+// there with room in it or to start one
 function goSit(p, area) {
   if (!personModel) return false;
   if (area.kind === 'plaza') {
@@ -1358,7 +1362,7 @@ function goSit(p, area) {
     return true;
   }
   const sits = GRASS_SITS.filter(hasClip);
-  if (area.kind !== 'park' || !sits.length) return false;
+  if (!isOpenGround(area) || !sits.length) return false;
   const radius = CIRCLE_RADIUS*S.peopleSize;
   const circle = groups.find(g => g.kind === 'circle' && g.area === area && g.members.length < CIRCLE_MAX && Math.hypot(g.cx - p.x, g.cz - p.z) < 30);
   let spot = null;
@@ -1387,10 +1391,10 @@ function goSit(p, area) {
   Object.assign(p, { act: 'circle', stage: 'go', spot: { x: spot.x, z: spot.z }, circleAngle: spot.angle, sitClip: pickFrom(sits), timer: 40, wait: 0 });
   return true;
 }
-// someone in a park with nobody else about finds a patch of grass to lie down on
+// someone in a park or on a beach with nobody else about finds a patch of ground to lie down on
 function goLieDown(p, area) {
   const poses = LIE_DOWNS.filter(hasClip);
-  if (!personModel || area.kind !== 'park' || !poses.length) return false;
+  if (!personModel || !isOpenGround(area) || !poses.length) return false;
   const size = S.peopleSize, near = 8*size;
   if (people.some(q => q !== p && q.mode === 'wander' && q.area === p.area && Math.abs(q.x - p.x) < near && Math.abs(q.z - p.z) < near)) return false;
   for (let k=0;k<10;k++) {
