@@ -40,6 +40,7 @@ import './life/car-card.js';
 import './trains/train-card.js';
 import './buildings/building-card.js';
 import './ui/win3.js';
+import './ui/mobile.js';
 import './ui/pixelation.js';
 import './project/export-obj.js';
 import * as THREE from 'three';

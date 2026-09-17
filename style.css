@@ -14,6 +14,8 @@
 * { box-sizing: border-box; }
 html { color-scheme: dark; } /* forces native form UI (the color picker popup included) to render dark regardless of the OS theme */
 html, body { margin:0; height:100%; overflow:hidden; background:var(--bg-viewport); font-family:var(--sans); }
+/* on a phone: no rubber-banding past the edges, and no grey flash where a finger lands */
+html, body { overscroll-behavior:none; -webkit-tap-highlight-color:transparent; }
 #canvas-wrap { position:fixed; inset:0; }
 canvas { display:block; touch-action:none; }
 canvas.pixelated { image-rendering:pixelated; } /* the Pixelation slider (src/ui/pixelation.js): drawn small, scaled up with hard edges */
@@ -196,15 +198,21 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
 #node-context-menu button:hover { background:rgba(255,255,255,0.06); }
 #node-context-menu button.active { color:var(--accent); font-weight:600; }
 
+/* the row of buttons over the view, to the right of the panel — on a narrow screen it moves to the top-left corner (below) */
+#canvas-tools { position:fixed; top:16px; left:292px; display:flex; align-items:flex-start; gap:8px; }
 #grid-toggle {
-  position:fixed; top:16px; left:292px; width:34px; height:34px;
+  width:34px; height:34px;
   display:flex; align-items:center; justify-content:center;
   background:var(--bg-panel); border:1px solid var(--border); border-radius:8px;
   color:var(--text-dim); cursor:pointer; user-select:none;
 }
 #grid-toggle:hover { color:var(--text); border-color:var(--accent-dim); }
 #grid-toggle.active { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
-#history-tools { position:fixed; top:16px; left:334px; display:flex; gap:6px; }
+#history-tools { display:flex; gap:6px; }
+/* the two the touch layout adds (src/ui/mobile.js): ☰ only where the panel is a sheet, ✛ only under a finger */
+#btn-panel-toggle, #btn-touch-add { display:none; }
+html.touch #btn-touch-add { display:flex; }
+.canvas-tool.on { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
 .canvas-tool {
   width:34px; height:34px; padding:0; display:flex; align-items:center; justify-content:center;
   background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; color:var(--text-dim); cursor:pointer;
@@ -475,3 +483,125 @@ html.win3 .mor-notice { background:#fff; color:#000; border:1px solid #000; bord
 html.win3 #stats .mor-notice-count { color:#808080; }
 html.win3 .mor-notice.good { border-left:4px solid #008000; }
 html.win3 .mor-notice.evil { border-left:4px solid #c00000; }
+
+/* ============================================================ touch, and small screens
+   Two different things, kept apart. `pointer: coarse` is about the size of a fingertip: the controls this theme draws at
+   mouse size grow, and the ones that only ever appear under a cursor (a swatch's delete badge) appear anyway. The
+   `max-width: 760px` block below is about the width of a phone: the panel leaves the left-hand side and becomes a sheet
+   along the bottom that ☰ slides up and down. A tablet gets the first of those and not the second.
+   Where a rule has to beat the Windows 3.0 look, html.win3 is named alongside it — otherwise that sheet, being more
+   specific, would go on putting the window back in the corner. */
+
+@media (pointer: coarse) {
+  /* no waiting to see whether a tap was the first of a double, and no double-tap zoom over the controls */
+  button, .swatch, .toggle-switch, .hier-row, #grid-toggle, .type-card { touch-action:manipulation; }
+  .tool-btn { padding:11px 0; font-size:13px; }
+  .btn { padding:12px; font-size:13px; }
+  .icon-btn { min-height:34px; }
+  .select-input { padding:10px 8px; font-size:13px; }
+  .hier-row { padding:12px 10px; font-size:13px; }
+  .hier-del { font-size:18px; padding:4px 8px; }
+  .carousel-arrow { flex-basis:30px; }
+  #node-context-menu button { padding:11px 20px 11px 14px; font-size:13px; }
+  .toggle-switch { width:46px; height:26px; border-radius:13px; }
+  .toggle-switch .knob { top:3px; left:3px; width:18px; height:18px; }
+  .toggle-switch.on .knob { left:23px; }
+  input[type=range] { height:5px; }
+  input[type=range]::-webkit-slider-thumb { width:22px; height:22px; }
+  input[type=range]::-moz-range-thumb { width:22px; height:22px; }
+  .range-slider { height:22px; }
+  .range-slider input[type=range] { height:22px; }
+  /* a swatch's delete badge waits for a hover that never comes, so on touch it's simply always there */
+  .swatch-wrap .swatch-delete { display:flex; width:18px; height:18px; font-size:11px; }
+  /* moving a zone up and down its list, in place of dragging it (src/ui/panels.js) */
+  .hier-move {
+    background:none; border:none; color:var(--text-dim); font-size:11px; line-height:1;
+    padding:6px 5px; cursor:pointer; font-family:var(--sans);
+  }
+  .hier-move:hover { color:var(--accent); }
+  /* nothing is hovered under a finger, so the highlight a hover leaves behind is more confusing than useful */
+  .hier-row:hover { background:none; }
+}
+
+/* Move / Rotate / Scale under the Images list, in place of G / R / S */
+#map-touch-tools { display:flex; gap:6px; margin-top:8px; }
+#map-touch-tools[hidden] { display:none; }
+#map-touch-tools .btn { margin-top:0; }
+#map-touch-tools .btn.on { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
+
+/* ============================================================ the phone layout */
+@media (max-width: 760px) {
+  html.win3 #btn-panel-toggle, #btn-panel-toggle { display:flex; }
+  html.win3 #canvas-tools, #canvas-tools {
+    top:calc(8px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left)); gap:6px;
+  }
+
+  /* the panel as a sheet along the bottom: ☰ slides it down out of the way, and it comes back where it was */
+  html.win3 #panel, #panel {
+    top:auto; left:0; right:0; bottom:0; width:auto; z-index:15;
+    max-height:min(52vh, 520px); max-height:min(52dvh, 520px);
+    border-radius:12px 12px 0 0; border-bottom:none;
+    padding-bottom:calc(16px + env(safe-area-inset-bottom));
+    transition:transform 0.22s ease;
+  }
+  html.win3 #panel { border-radius:0; padding:0; } /* the win3 window keeps its square corners, and its body does the scrolling */
+  html.win3 #panel-body { padding-bottom:calc(10px + env(safe-area-inset-bottom)); }
+  html.win3 body:not(.panel-open) #panel, body:not(.panel-open) #panel { transform:translateY(102%); }
+
+  /* the morality meter goes under the buttons rather than beside them, where it would crowd them off a 375px screen */
+  html.win3 #stats, #stats {
+    top:calc(56px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left));
+    right:calc(8px + env(safe-area-inset-right)); width:auto; max-width:none;
+  }
+  #mor-details { max-height:32vh; overflow-y:auto; }
+
+  /* the hint runs to a couple of hundred characters — across the bottom, and under the sheet when that's up */
+  #hint {
+    left:8px; right:8px; transform:none; width:auto; max-width:none; z-index:1;
+    bottom:calc(8px + env(safe-area-inset-bottom)); max-height:4.8em; overflow:hidden;
+  }
+
+  /* whoever's being followed: the card spans the screen, and opening one folds the sheet away (src/ui/mobile.js) */
+  html.win3 :is(#person-card, #car-card, #train-card, #building-card),
+  :is(#person-card, #car-card, #train-card, #building-card) {
+    left:calc(8px + env(safe-area-inset-left)); right:calc(8px + env(safe-area-inset-right)); width:auto;
+    bottom:calc(8px + env(safe-area-inset-bottom)); max-height:56vh; max-height:56dvh; overflow-y:auto;
+  }
+
+  #possess-hint {
+    left:8px; right:8px; transform:none; white-space:normal; text-align:center;
+    top:calc(8px + env(safe-area-inset-top));
+  }
+}
+
+/* ============================================================ walking someone about, or driving
+   The thumbstick and buttons hold WASD, shift and space down in place of a keyboard (src/ui/mobile.js). */
+#ph-exit {
+  pointer-events:auto; margin-top:4px; padding:7px 22px; border-radius:6px; cursor:pointer;
+  background:var(--bg-input); border:1px solid var(--border); color:var(--text);
+  font-family:var(--sans); font-size:13px; font-weight:600;
+}
+#ph-exit[hidden] { display:none; }
+#touch-drive {
+  position:fixed; inset:auto 0 0 0; z-index:40; pointer-events:none;
+  display:flex; align-items:flex-end; justify-content:space-between;
+  padding:0 calc(20px + env(safe-area-inset-left)) calc(28px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-right));
+}
+#touch-drive[hidden] { display:none; }
+#touch-stick {
+  pointer-events:auto; width:124px; height:124px; border-radius:50%; touch-action:none;
+  background:rgba(26,28,34,0.45); border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+}
+#touch-stick-knob {
+  width:52px; height:52px; border-radius:50%; background:rgba(61,220,151,0.35);
+  border:1px solid var(--accent); pointer-events:none;
+}
+#touch-drive-buttons { display:flex; flex-direction:column; gap:10px; }
+.touch-drive-btn {
+  pointer-events:auto; width:78px; height:78px; border-radius:50%; touch-action:none;
+  background:rgba(26,28,34,0.45); border:1px solid var(--border); color:var(--text);
+  font-family:var(--sans); font-size:13px; font-weight:600; cursor:pointer;
+}
+.touch-drive-btn.on { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
+.touch-drive-btn[hidden] { display:none; }

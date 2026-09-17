@@ -6,6 +6,7 @@ import { mergeGeometryList } from '../buildings/windows.js';
 import { roadNodes } from '../core/state.js';
 import { disposeObject } from '../roads/roads.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
+import { IS_TOUCH } from '../core/device.js';
 
 // ---------------------------------------------------------- trains
 // Train lines live in roadNodes/roadLines alongside roads (line.kind === 'train'), so drawing, dragging, joining,
@@ -812,8 +813,9 @@ export function nodeUiMaterial(MaterialType, params) {
 // (its markers and handles — its meshes — are also kept the same size on screen, by scaleNodeUi)
 export function asNodeUi(object) { object.renderOrder = 1000; if (object.isMesh) object.userData.screenSized = true; return object; }
 // Node UI stays the same size on screen however near or far the camera is: each marker and handle is scaled by how far it
-// is from the camera, at NODE_UI_DISTANCE away being the size it's made.
-const NODE_UI_DISTANCE = 160;
+// is from the camera, at NODE_UI_DISTANCE away being the size it's made. A nearer distance means bigger markers, which
+// is what touch gets: a fingertip covers a good deal more of the screen than a cursor's point does.
+const NODE_UI_DISTANCE = IS_TOUCH ? 110 : 160;
 export function nodeUiScaleAt(camera, position) { return camera.position.distanceTo(position)/NODE_UI_DISTANCE; }
 export function scaleNodeUi(camera) {
   const scaleGroup = group => {

@@ -24,9 +24,10 @@ export const controls = {
     this.goalTarget.addScaledVector(right, dx * panSpeed);
     this.goalTarget.addScaledVector(up, dy * panSpeed);
   },
-  zoom(deltaY) {
-    this.goalRadius *= (1 + deltaY * 0.001);
-    this.goalRadius = Math.max(this.minRadius, Math.min(1800, this.goalRadius));
+  zoom(deltaY) { this.zoomBy(1 + deltaY * 0.001); },
+  // straight multiplier, for a pinch: the radius scales with how far the two fingers have closed or spread
+  zoomBy(factor) {
+    this.goalRadius = Math.max(this.minRadius, Math.min(1800, this.goalRadius * factor));
   },
   snapTop() { this.goalPhi = 0.05; },
   snapFront() { this.goalPhi = Math.PI/2; this.goalTheta = 0; },

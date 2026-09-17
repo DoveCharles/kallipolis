@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { S, App } from './shared.js';
+import { IS_TOUCH } from './device.js';
 
 // ============================================================ renderer / scene
 const wrap = document.getElementById('canvas-wrap');
@@ -23,7 +24,9 @@ scene.fog = new THREE.Fog(bgColor, 600, 2800);
 export const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.5, 3000);
 // the stencil buffer is off by default now, and the water and road masks need it (see SKIP_OVER_WATER_AND_ROADS)
 export const renderer = new THREE.WebGLRenderer({ antialias:true, stencil:true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// phones and tablets draw the same scene on a much smaller GPU, so they render at a lower ratio (and with a smaller
+// shadow map below) — at that size the difference is hard to see, and it's the difference between smooth and not
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, IS_TOUCH ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap; // (soft-edged now — PCFSoftShadowMap was folded into it)
@@ -40,7 +43,7 @@ scene.add(hemi);
 export const sun = new THREE.DirectionalLight(0xfff2df, 1.1);
 sun.position.set(150, 220, 100);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(IS_TOUCH ? 1024 : 2048, IS_TOUCH ? 1024 : 2048);
 sun.shadow.camera.left = -300; sun.shadow.camera.right = 300;
 sun.shadow.camera.top = 300; sun.shadow.camera.bottom = -300;
 sun.shadow.camera.far = 800;

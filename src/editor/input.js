@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
 import { camera, renderer, snapPointToGrid, Y_PREVIEW } from '../core/scene.js';
 import { controls } from '../core/camera-controls.js';
+import { IS_TOUCH } from '../core/device.js';
 import { ROAD_COLOR } from '../core/splines.js';
 import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { setSelectedMap, setMapHover, startMapTransform, applyMapTransform, confirmMapTransform, cancelMapTransform, previewLine } from '../maps/map-images.js';
@@ -39,6 +40,80 @@ let rightClickTarget = null; // node/vertex hit under a right-click, for the con
 let hoveringClickable = false; // the cursor's over someone or something a click would follow (World mode), and shows it
 
 const dom = renderer.domElement;
+
+// ============================================================ touch gestures
+// Touch has no buttons and no modifier keys, so the same jobs are done by how many fingers are down and for how long:
+// one finger is the left button (drag empty ground to orbit, drag a node to move it, tap to place or pick), two fingers
+// pan and pinch to zoom, and a finger held still is the right button (a node's menu, or cancelling what's being drawn).
+// Shift — inserting a node into a path, or branching off one — is the ✛ button along the top (src/ui/mobile.js), which
+// sets S.touchAdd.
+// Drag distances are measured from where the pointer was last rather than read off movementX/movementY, which Safari
+// leaves at zero for touch.
+const activePointers = new Map(); // pointerId -> {x,y}, every finger currently on the view
+let dragPointerId = null;         // the one a one-finger drag is following (a second finger's moves are the gesture's)
+let lastPointer = { x:0, y:0 };
+let gesture = null;               // two fingers: { dist, cx, cy } as they were last frame
+let ignoreUntilRelease = false;   // a gesture has had its fingers; whatever's left does nothing until they're all up
+let longPress = null;             // { x, y, timer, fired }
+const CLICK_SLOP = IS_TOUCH ? 12 : 6;    // how far a press may wander and still count as a click
+const DOUBLE_SLOP = IS_TOUCH ? 26 : 10;  // ...and how far apart two of them may be and still count as a double
+const LONG_PRESS_MS = 450;
+// the ✛ button stands in for holding shift
+const shiftHeld = (e) => e.shiftKey || S.touchAdd === true;
+const inControl = () => App.isPossessing?.() || App.isDriving?.();
+
+function pointerDelta(e) {
+  const dx = e.clientX - lastPointer.x, dy = e.clientY - lastPointer.y;
+  lastPointer = { x:e.clientX, y:e.clientY };
+  return { dx, dy };
+}
+function twoFingers() { const [a,b] = [...activePointers.values()]; return { dist: Math.hypot(a.x-b.x, a.y-b.y), cx: (a.x+b.x)/2, cy: (a.y+b.y)/2 }; }
+function beginGesture() {
+  cancelLongPress();
+  if (S.draggedNode) commitNodeDrag(S.draggedNode); // a second finger down mid-drag leaves the node where it got to
+  pointerDown = null; S.draggedNode = null; isCameraDragging = false; rightClickTarget = null;
+  S.lastGroundClick = null; S.lastNodeClick = null;
+  gesture = { ...twoFingers(), travelled: 0 };
+  ignoreUntilRelease = true;
+}
+function updateGesture() {
+  const now = twoFingers();
+  const dx = now.cx - gesture.cx, dy = now.cy - gesture.cy;
+  // Panning takes the camera off whoever it's following, as a mouse pan does — but a pinch to get a closer look at them
+  // shouldn't, and two fingers closing always drag the middle about a little. So it's the distance the middle has
+  // travelled over the whole gesture that decides, rather than any one frame's.
+  gesture.travelled += Math.hypot(dx, dy);
+  if (gesture.travelled > 24) { App.stopFollowingPerson(); App.stopFollowingBuilding(); }
+  controls.pan(dx, dy);
+  if (gesture.dist > 8 && now.dist > 8) controls.zoomBy(gesture.dist / now.dist);
+  gesture = { ...now, travelled: gesture.travelled };
+}
+// a finger held still where a right-click would have gone
+function startLongPress(e) {
+  if (e.pointerType === 'mouse' || S.interactionMode !== 'node' || S.currentTool === 'objects') return;
+  const x = e.clientX, y = e.clientY;
+  longPress = { x, y, fired: false, timer: setTimeout(() => {
+    longPress.fired = true;
+    pointerDown = null; S.draggedNode = null; isCameraDragging = false;
+    const picked = pickNodeOrHandle(x, y);
+    if (picked && (picked.kind === 'road' || picked.kind === 'zone')) App.showNodeContextMenu(x, y, picked);
+    else cancelActiveDrawing();
+    navigator.vibrate?.(12);
+  }, LONG_PRESS_MS) };
+}
+function cancelLongPress() { if (longPress) { clearTimeout(longPress.timer); longPress = null; } }
+// a node let go of after being moved: rebuild what it's part of, and reselect it
+function commitNodeDrag(dn) {
+  if (dn.kind === 'road' || dn.kind === 'roadHandle') {
+    const line = S.roadLines.find(l => l.nodeIds.includes(dn.nodeId));
+    rebuildRoadMeshes();
+    if (!line || !isTrainLine(line)) S.zones.forEach(subdivideZone); // trains don't affect zones
+    if (line) selectItem(networkKindOf(line), line.networkId, true); else renderHierarchy();
+  } else if (dn.kind === 'zone' || dn.kind === 'zoneHandle') {
+    const zone = S.zones.find(z => z.id === dn.zoneId);
+    if (zone) { subdivideZonesFrom(zone); selectItem('zone', zone.id, true); } else renderHierarchy();
+  }
+}
 // (only the nodes on show can be picked: a path's in the Paths tab, a zone's in the Zones tab)
 const shownZoneMarkers = () => S.zones.filter(z => z.markerGroup && z.markerGroup.visible).flatMap(z => z.markerGroup.children);
 function pickNodeOrHandle(x,y) {
@@ -55,10 +130,21 @@ function pickNodeOrHandle(x,y) {
   return null;
 }
 dom.addEventListener('pointerdown', (e) => {
+  if (inControl()) return; // walking someone about or driving: the view's own gestures are possession.js's while that lasts
+  activePointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+  if (activePointers.size === 2) { beginGesture(); dom.setPointerCapture(e.pointerId); return; }
+  if (activePointers.size > 2 || ignoreUntilRelease) return;
+  dragPointerId = e.pointerId;
+  lastPointer = { x:e.clientX, y:e.clientY };
   if (S.interactionMode==='maps') {
     if (S.mapTransform) {
       if (e.button===2) cancelMapTransform();
       else if (e.button===0) confirmMapTransform();
+      dom.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (e.button===0 && S.touchMapMode && S.selectedMapId) {
+      startMapTransform(S.touchMapMode, e.clientX, e.clientY);
       dom.setPointerCapture(e.pointerId);
       return;
     }
@@ -82,19 +168,19 @@ dom.addEventListener('pointerdown', (e) => {
     return;
   }
   // shift+click a path's node (when not already drawing): a new branch, drawn out from it
-  if (S.interactionMode==='node' && e.button===0 && e.shiftKey && (S.currentTool==='road' || S.currentTool==='train') && !S.activeRoadLine) {
+  if (S.interactionMode==='node' && e.button===0 && shiftHeld(e) && (S.currentTool==='road' || S.currentTool==='train') && !S.activeRoadLine) {
     const picked = pickNodeOrHandle(e.clientX, e.clientY);
     if (picked && picked.kind==='road') { startBranchFrom(picked.nodeId); dom.setPointerCapture(e.pointerId); return; }
   }
-  if (S.interactionMode==='node' && e.button===0 && e.shiftKey && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
+  if (S.interactionMode==='node' && e.button===0 && shiftHeld(e) && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
     let found = null;
     if (S.currentTool==='train') found = findNearestTrainEdge(e.clientX, e.clientY);
     else { const gp = raycastGround(e.clientX, e.clientY); if (gp) found = findNearestEdge(gp, 6); }
     if (found) { insertNodeOnEdge(found); dom.setPointerCapture(e.pointerId); return; }
   }
-  if (S.interactionMode==='node' && e.button===0 && !e.shiftKey && S.lastGroundClick
+  if (S.interactionMode==='node' && e.button===0 && !shiftHeld(e) && S.lastGroundClick
       && (performance.now()-S.lastGroundClick.time)<350
-      && Math.hypot(e.clientX-S.lastGroundClick.x, e.clientY-S.lastGroundClick.y)<10
+      && Math.hypot(e.clientX-S.lastGroundClick.x, e.clientY-S.lastGroundClick.y)<DOUBLE_SLOP
       && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
     S.lastGroundClick = null;
     finishActiveDrawing();
@@ -105,6 +191,7 @@ dom.addEventListener('pointerdown', (e) => {
   S.draggedNode = null;
   rightClickTarget = null;
   isCameraDragging = false;
+  if (e.button===0) startLongPress(e);
   if (e.button===1) {
     isCameraDragging = true;
     dragMode = e.shiftKey ? 'pan' : 'orbit';
@@ -126,13 +213,20 @@ dom.addEventListener('pointerdown', (e) => {
 });
 
 dom.addEventListener('pointermove', (e) => {
+  if (inControl()) return;
+  if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+  if (gesture) { updateGesture(); return; }
+  if (ignoreUntilRelease) return;
+  if (e.pointerType!=='mouse' && dragPointerId!==null && e.pointerId!==dragPointerId) return;
+  if (longPress && Math.hypot(e.clientX-longPress.x, e.clientY-longPress.y) > CLICK_SLOP) cancelLongPress();
   S.lastMouseX = e.clientX; S.lastMouseY = e.clientY;
   showAddCursor(e.shiftKey);
   if (hoveringClickable && S.interactionMode!=='move') { hoveringClickable = false; dom.style.cursor = ''; }
   if (S.interactionMode==='maps') {
-    if (S.mapTransform) { applyMapTransform(e.clientX, e.clientY, e.shiftKey); return; }
+    if (S.mapTransform) { applyMapTransform(e.clientX, e.clientY, shiftHeld(e)); return; }
     if (isCameraDragging) {
-      if (dragMode==='pan') controls.pan(e.movementX, e.movementY); else controls.orbit(e.movementX, e.movementY);
+      const { dx, dy } = pointerDelta(e);
+      if (dragMode==='pan') controls.pan(dx, dy); else controls.orbit(dx, dy);
       return;
     }
     const hit = raycastObjects(e.clientX, e.clientY, mapImages.filter(m=>m.mesh.visible).map(m=>m.mesh.userData.plane));
@@ -141,8 +235,9 @@ dom.addEventListener('pointermove', (e) => {
     return;
   }
   if (isCameraDragging) {
+    const { dx, dy } = pointerDelta(e);
     // panning takes the camera off whoever it's following; orbiting keeps it on them
-    if (dragMode==='pan') { App.stopFollowingPerson(); App.stopFollowingBuilding(); controls.pan(e.movementX, e.movementY); } else controls.orbit(e.movementX, e.movementY);
+    if (dragMode==='pan') { App.stopFollowingPerson(); App.stopFollowingBuilding(); controls.pan(dx, dy); } else controls.orbit(dx, dy);
     return;
   }
   if (S.draggedNode) {
@@ -204,7 +299,7 @@ dom.addEventListener('pointermove', (e) => {
     return;
   }
 
-  if (e.shiftKey && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
+  if (shiftHeld(e) && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
     previewLine.visible = false;
     // over a path's node (when not drawing), a click would branch from it, so it's the node that lights up
     if (S.currentTool!=='zone' && !S.activeRoadLine) {
@@ -252,20 +347,37 @@ dom.addEventListener('pointermove', (e) => {
   }
 });
 
+// the last of the fingers lifting ends whatever gesture they were making
+function releasePointer(e) {
+  activePointers.delete(e.pointerId);
+  if (gesture && activePointers.size < 2) gesture = null;
+  if (activePointers.size === 0) { ignoreUntilRelease = false; dragPointerId = null; }
+}
+dom.addEventListener('pointercancel', (e) => {
+  releasePointer(e); cancelLongPress();
+  pointerDown = null; isCameraDragging = false; S.draggedNode = null;
+});
 dom.addEventListener('pointerup', (e) => {
+  const spent = !!gesture || ignoreUntilRelease || (longPress && longPress.fired); // a gesture or a held press: no click in it
+  releasePointer(e);
+  cancelLongPress();
   const was = pointerDown; pointerDown=null;
   const camDrag = isCameraDragging; isCameraDragging=false;
   const dn = S.draggedNode; S.draggedNode=null;
-  if (!was) return;
-  if (S.interactionMode==='maps') return; // selection/transform already handled on pointerdown/pointermove
+  if (spent || !was || inControl()) return;
+  if (S.interactionMode==='maps') {
+    // on touch a map transform is dragged out rather than confirmed with a second click (see pointerdown)
+    if (S.mapTransform && S.touchMapMode) confirmMapTransform();
+    return; // otherwise selection/transform is already handled on pointerdown/pointermove
+  }
   const dist = Math.hypot(e.clientX-was.x, e.clientY-was.y);
   const dt = performance.now()-was.time;
 
   if (camDrag) {
-    if (was.button===0 && dist<6 && dt<600 && S.interactionMode==='node') {
+    if (was.button===0 && dist<CLICK_SLOP && dt<600 && S.interactionMode==='node') {
       handleLeftClick(e.clientX, e.clientY);
       S.lastGroundClick = { x:e.clientX, y:e.clientY, time:performance.now() };
-    } else if (was.button===0 && dist<6 && dt<600 && S.interactionMode==='move') {
+    } else if (was.button===0 && dist<CLICK_SLOP && dt<600 && S.interactionMode==='move') {
       // a click on someone or something has the camera follow them; anywhere else lets go of both
       if (App.pickPerson(e.clientX, e.clientY) >= 0) { App.stopFollowingCar(); App.stopFollowingTrain(); App.stopFollowingBuilding(); App.followPersonAt(e.clientX, e.clientY); }
       else if (App.pickCar(e.clientX, e.clientY) >= 0) { App.stopFollowingPerson(); App.stopFollowingTrain(); App.stopFollowingBuilding(); App.followCarAt(e.clientX, e.clientY); }
@@ -276,7 +388,7 @@ dom.addEventListener('pointerup', (e) => {
   }
 
   if (dn) {
-    if (dist<6 && dt<600) {
+    if (dist<CLICK_SLOP && dt<600) {
       if (dn.kind==='road') {
         if (S.activeRoadLine) {
           const ids = S.activeRoadLine.nodeIds;
@@ -315,20 +427,12 @@ dom.addEventListener('pointerup', (e) => {
       }
       // roadHandle / zoneHandle: a bare click on a handle does nothing
     } else {
-      if (dn.kind==='road' || dn.kind==='roadHandle') {
-        const line = S.roadLines.find(l => l.nodeIds.includes(dn.nodeId));
-        rebuildRoadMeshes();
-        if (!line || !isTrainLine(line)) S.zones.forEach(subdivideZone); // trains don't affect zones
-        if (line) selectItem(networkKindOf(line), line.networkId, true); else renderHierarchy();
-      } else if (dn.kind==='zone' || dn.kind==='zoneHandle') {
-        const zone=S.zones.find(z=>z.id===dn.zoneId);
-        if (zone) { subdivideZonesFrom(zone); selectItem('zone', zone.id, true); } else renderHierarchy();
-      }
+      commitNodeDrag(dn);
     }
     return;
   }
 
-  if (dist<6 && dt<600) {
+  if (dist<CLICK_SLOP && dt<600) {
     if (was.button===0) {
       handleLeftClick(e.clientX, e.clientY);
       S.lastGroundClick = { x:e.clientX, y:e.clientY, time:performance.now() };
@@ -481,6 +585,7 @@ function handleLeftClick(x,y) {
     }
     renderHierarchy();
   }
+  if (IS_TOUCH) previewLine.visible = false; // nothing hovers on touch, so there's no cursor for it to stretch to
 }
 
 Object.assign(App, { raycaster, ndcOf, raycastGround });
