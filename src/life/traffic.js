@@ -13,7 +13,7 @@ import { isTrainLine } from '../trains/trains.js';
 import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people.js';
 import { explodeCar } from './giblets.js';
 import { carTypeOf } from './car-types.js';
-import { controlInput, startDriving, endDriving } from './possession.js';
+import { driving, controlInput, startDriving, endDriving } from './possession.js';
 
 // ============================================================ traffic
 // Cars, switched on and off with the people (World → Peds, with speed and size shared too). They drive the sidewalk
@@ -627,11 +627,14 @@ function driveByHand(car, dt) {
   car.z += Math.cos(car.heading)*car.speed*dt;
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
 }
-// the camera eased round behind it, a little above
+// the camera eased round behind it, a little above — left wherever it's been dragged to for a moment after, and for as
+// long as the car's standing still
+const CHASE_HOLD = 1500, CHASE_EASE = 0.3, CHASE_PHI = 1.25; // (ms; the share of the way back it's asked for each frame)
 function chaseCamera(car) {
+  if (driving.dragging || performance.now() - driving.lookedAt < CHASE_HOLD || (Math.abs(car.speed) < 1 && driving.lookedAt > -Infinity)) return;
   const behind = car.speed < -0.5 ? car.heading : car.heading + Math.PI; // (reversing, it looks back over the boot)
-  controls.goalTheta = controls.theta + Math.atan2(Math.sin(behind - controls.theta), Math.cos(behind - controls.theta));
-  controls.goalPhi = 1.25;
+  controls.goalTheta = controls.theta + CHASE_EASE*Math.atan2(Math.sin(behind - controls.theta), Math.cos(behind - controls.theta));
+  controls.goalPhi = controls.phi + CHASE_EASE*(CHASE_PHI - controls.phi);
 }
 
 // The car card's Kill button: it blows up on the spot, in its own paint, with a scorch mark and a fireball rather than the

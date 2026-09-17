@@ -9,11 +9,11 @@ import { renderer } from '../core/scene.js';
 //   mouse to look around — the pointer locked to the view while it does, or dragged, where the browser won't lock it
 //   (Esc also frees a locked pointer, which is taken as Esc)
 // - a car (clicking the car card's picture): the view from behind it, WASD to drive (shift for a boost, space to brake),
-//   the wheel to zoom
+//   dragging to look around it (the camera swinging back behind once you've let go a moment), the wheel to zoom
 const dom = renderer.domElement;
 const hint = document.getElementById('possess-hint'), hintTitle = document.getElementById('ph-title'), hintSub = document.getElementById('ph-sub');
 export const possession = { index: -1, yaw: 0, pitch: 0 };
-export const driving = { active: false };
+export const driving = { active: false, dragging: false, lookedAt: -Infinity }; // (lookedAt: when the camera was last let go of)
 const held = new Set();
 const PITCH_MAX = 1.35, LOOK_SPEED = 0.0025;
 const KEY_NAMES = { arrowup: 'w', arrowleft: 'a', arrowdown: 's', arrowright: 'd', ' ': 'space' };
@@ -45,8 +45,9 @@ export function endPossession() {
 export function startDriving() {
   if (!S.peopleEnabled || S.interactionMode !== 'move') return false;
   driving.active = true;
+  driving.dragging = false, driving.lookedAt = -Infinity;
   held.clear();
-  showHint('Press <kbd>Esc</kbd> to stop driving', 'W/S to drive · A/D to steer · Shift to boost · Space to brake · scroll to zoom');
+  showHint('Press <kbd>Esc</kbd> to stop driving', 'W/S to drive · A/D to steer · Shift to boost · Space to brake · drag to look around · scroll to zoom');
   return true;
 }
 export function endDriving() {
@@ -78,12 +79,15 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => held.delete(keyName(e)));
 window.addEventListener('blur', () => held.clear());
 document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement !== dom && isPossessing()) App.unpossessPerson(); });
-// clicking the view while in control picks no one — possessing someone, it locks the pointer to it (again)
+// clicking the view while possessing someone picks no one, but locks the pointer to it (again) — driving, it's left to
+// orbit the camera as usual (input.js picking no one either, while driving)
 dom.addEventListener('pointerdown', (e) => {
-  if (!inControl()) return;
+  if (!isPossessing()) return;
   e.stopImmediatePropagation();
   if (isPossessing() && document.pointerLockElement !== dom) dom.requestPointerLock?.()?.catch?.(() => {});
 }, true);
+dom.addEventListener('pointerdown', () => { if (driving.active) driving.dragging = true; });
+window.addEventListener('pointerup', () => { if (driving.dragging) { driving.dragging = false; driving.lookedAt = performance.now(); } });
 window.addEventListener('mousemove', (e) => {
   if (!isPossessing()) return;
   if (document.pointerLockElement !== dom && !(e.buttons & 1 && e.target === dom)) return;
