@@ -263,8 +263,21 @@ function buildTrafficNav() {
     grid.get(cell).push({ li, vi });
   }));
   byPlace.forEach(list => { if (list.length > 1) list.forEach(a => { lines[a.li].vertices[a.vi].links = list.filter(b => b.li !== a.li); }); });
+  // each line's stretches between junctions and ends, and which one each of its segments is in
+  const stretches = [];
+  lines.forEach((nav, li) => {
+    nav.stretchOf = [];
+    let from = 0;
+    for (let v=1; v<nav.pts.length; v++) {
+      if (!nav.vertices[v].links.length && v < nav.pts.length-1) continue;
+      const deadEnd = (from === 0 && !nav.vertices[0].links.length) || (v === nav.pts.length-1 && !nav.vertices[v].links.length);
+      for (let seg=from; seg<v; seg++) nav.stretchOf[seg] = stretches.length;
+      stretches.push({ li, from, to: v, length: nav.cum[v] - nav.cum[from], deadEnd });
+      from = v;
+    }
+  });
   const capacity = Math.floor(lines.reduce((sum, nav) => sum + nav.total*2, 0)/TRAFFIC_LANE_PER_CAR);
-  return { lines, grid, CELL, capacity };
+  return { lines, grid, CELL, capacity, stretches };
 }
 function newCar() {
   return { id: ++carIds, x: 0, z: 0, heading: 0, li: -1, u: 0, dir: 1, seg: 0, speed: 0, ahead: null,
@@ -272,10 +285,12 @@ function newCar() {
     design: null, paint: pickCarPaint(),
     // someone crossing it's stopped for (see checkYield) — and the last one it rolled its one-in-four chance against, so
     // it doesn't keep re-rolling for the same person every frame while it's still approaching them
-    yieldFor: null, yieldChecked: -1,
+    yieldFor: null, yieldChecked: -1, yielded: 0,
     // how long it's stood waiting for another car to get out of its way, how much longer it's given up waiting for any
     // (see waitOrGiveUp), and how long it's waited to turn round at a dead end
-    waited: 0, pushing: 0, uTurnWaited: 0 };
+    waited: 0, pushing: 0, uTurnWaited: 0,
+    // which way it'll go at the next junction, decided on the way up to it (see planTurn), and how long it's waited there
+    plan: null, held: 0 };
 }
 // puts a car in lane `li` at distance u along it, heading `dir`
 function carJoinLane(car, li, u, dir) {
@@ -331,9 +346,10 @@ function driveAlong(car, dist) {
     const ahead = car.dir > 0 ? car.seg + 1 : car.seg, at = nav.cum[ahead];
     if (car.dir > 0 ? u < at : u > at) break;
     const vertex = nav.vertices[ahead], isEnd = ahead === 0 || ahead === nav.pts.length-1;
-    if (vertex.links.length && trafficRng() < (isEnd ? 1 : 0.35)) {
-      const link = vertex.links[Math.floor(trafficRng()*vertex.links.length)], other = S.trafficNav.lines[link.li], remaining = Math.abs(u - at);
-      const dir = link.vi === 0 ? 1 : link.vi === other.pts.length-1 ? -1 : (trafficRng() < 0.5 ? 1 : -1);
+    const plan = planFor(car, ahead) ? car.plan : vertex.links.length ? pickTurn(car.li, ahead, car.dir) : null;
+    car.plan = null;
+    if (plan && plan.link) {
+      const link = plan.link, other = S.trafficNav.lines[link.li], remaining = Math.abs(u - at), dir = plan.dir;
       carJoinLane(car, link.li, other.cum[link.vi], dir);
       car.seg = dir > 0 ? Math.min(link.vi, other.pts.length-2) : Math.max(link.vi-1, 0);
       nav = other;
@@ -352,7 +368,7 @@ function junctionAhead(car, lookahead) {
   let v = car.dir > 0 ? car.seg + 1 : car.seg;
   for (let k=0; k<lookahead && v >= 0 && v < nav.pts.length; k++, v += car.dir) {
     const links = nav.vertices[v].links.length;
-    if (links || v === 0 || v === nav.pts.length-1) return { dist: Math.abs(nav.cum[v] - car.u), x: nav.pts[v].x, z: nav.pts[v].z, deadEnd: !links };
+    if (links || v === 0 || v === nav.pts.length-1) return { dist: Math.abs(nav.cum[v] - car.u), x: nav.pts[v].x, z: nav.pts[v].z, vi: v, deadEnd: !links };
   }
   return null;
 }
@@ -368,11 +384,15 @@ function carsWhere(test) {
 }
 // notices someone waiting in the middle of the road ahead, ready to cross the rest of the way, and — one time in four —
 // decides to stop and let them; once it's committed to stopping for someone it keeps stopping until they're done
-// waiting (or gone), rather than re-rolling every frame
-function checkYield(car) {
+// waiting (or gone), rather than re-rolling every frame — or until it's waited long enough, when it drives on, and
+// (like anyone a car's stopped for: see updateCrossing in people.js) they can't be hit till they're off the road
+const YIELD_GIVE_UP = 8; // (seconds)
+function checkYield(car, dt) {
   if (car.yieldFor != null) {
     const p = App.people[car.yieldFor];
-    if (!p || (p.crossStage !== 'mid' && !isPedInDanger(p))) car.yieldFor = null;
+    car.yielded += dt;
+    if (p?.jc && car.yielded > YIELD_GIVE_UP) p.jc.waved = true;
+    if (!p || (p.crossStage !== 'mid' && !isPedInDanger(p)) || car.yielded > YIELD_GIVE_UP) { car.yieldFor = null; car.yielded = 0; }
     return car.yieldFor != null;
   }
   const cos = Math.cos(car.heading), sin = Math.sin(car.heading);
@@ -455,15 +475,20 @@ export function updateTraffic(t) {
     if (ahead && ahead.dist < 10) target = Math.min(target, cruise*(0.45 + 0.055*ahead.dist));
     // stop for a red light — or an amber one there's still room to stop for — with the front bumper at the stop line
     const junction = ahead && S.roadJunctionByPlace.get(placeKey(ahead.x, ahead.z));
+    const stopAt = junction ? junction.r + 3.2 + 2.2*car.length*S.peopleSize : carFootprint(car).length*0.5 + S.peopleSize;
     if (junction) {
       const lane = lanePoint(car), tx = Math.sin(lane.heading), tz = Math.cos(lane.heading);
       const arm = junction.arms.reduce((best, a) => -(a.x*tx + a.z*tz) > -(best.x*tx + best.z*tz) ? a : best, junction.arms[0]); // the arm it's coming in on
-      const state = signalState(junction, arm.phase, t), stopAt = junction.r + 3.2 + 2.2*car.length*S.peopleSize;
+      const state = signalState(junction, arm.phase, t);
       if (state !== 2 && ahead.dist > stopAt - 0.5 && (state === 0 || ahead.dist > stopAt + 3)) {
         target = Math.min(target, Math.max(0, (ahead.dist - stopAt)*1.5*S.peopleSpeed));
       }
     }
-    if (checkYield(car)) target = 0;
+    // (and at the stop line while the road it's turning onto is full — see "not filling up dead ends")
+    if (ahead && !ahead.deadEnd && ahead.dist < 30*S.peopleSize && waitToTurn(car, ahead, dt) && ahead.dist > stopAt - 0.5) {
+      target = Math.min(target, Math.max(0, (ahead.dist - stopAt)*1.5*S.peopleSpeed));
+    }
+    if (checkYield(car, dt)) target = 0;
     car.speed += Math.max(-CAR_BRAKE*S.peopleSpeed*dt, Math.min(5*S.peopleSpeed*dt, target - car.speed));
     driveAlong(car, car.speed*dt);
     // steer towards the lane — quicker when off it, as when swinging round a corner or into the other lane (but not at a
@@ -554,7 +579,7 @@ function runOverPeople(car) {
   const { halfLength, halfWidth } = carHitbox(car), reach = Math.hypot(halfLength, halfWidth), cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   const driven = car === drivenCar;
   App.people.forEach((p, i) => {
-    if (driven ? Math.abs(p.y - Y_ROAD) > carHeight(car) : !isPedInDanger(p) && p.crossStage !== 'mid') return; // only while out on the road, over it or halfway
+    if (driven ? Math.abs(p.y - Y_ROAD) > carHeight(car) : (!isPedInDanger(p) && p.crossStage !== 'mid') || p.jc?.waved) return; // only while out on the road, over it or halfway (and not waved over)
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
@@ -601,6 +626,60 @@ function stopFollowingCar() {
   App.hideCarCard();
 }
 
+// ---- not filling up dead ends: a road with a dead end only takes so many cars — or, with its lane back full of cars
+// waiting to get out, the ones turning round at the end would have nowhere to go, and the ones behind them would back up
+// into the junction, where the ones waiting to get out are headed. So each car decides which way it'll go at a junction
+// on the way up to it (going some other way if the road it picked is full), and waits at the stop line while the road
+// it's going onto is still full — not in the middle of the junction.
+const CAR_SLOT = 7; // how much lane a car stopped in a queue takes up (at size 1)
+const stretchCounts = [];
+const stretchOf = (li, seg) => S.trafficNav.lines[li].stretchOf[Math.max(0, Math.min(S.trafficNav.lines[li].pts.length-2, seg))];
+// how many cars a stretch takes: its two lanes' worth, less the junctions at its ends and one space to turn round in
+function stretchRoom(si) {
+  const st = S.trafficNav.stretches[si];
+  if (!st.deadEnd) return Infinity;
+  const nav = S.trafficNav.lines[st.li];
+  const junctionAt = v => S.roadJunctionByPlace.get(placeKey(nav.pts[v].x, nav.pts[v].z))?.r || 0;
+  const usable = st.length - junctionAt(st.from) - junctionAt(st.to);
+  return Math.max(1, Math.floor(usable*2/(CAR_SLOT*S.peopleSize)) - 1);
+}
+const stretchFull = si => stretchCounts[si] >= stretchRoom(si);
+// the ways a car on line li heading dir can go at vertex vi: { link (null: straight on), dir, stretch }
+function turnOptions(li, vi, dir) {
+  const nav = S.trafficNav.lines[li], options = [];
+  nav.vertices[vi].links.forEach(link => {
+    const other = S.trafficNav.lines[link.li], last = other.pts.length-1;
+    (link.vi === 0 ? [1] : link.vi === last ? [-1] : [1, -1]).forEach(d =>
+      options.push({ link, dir: d, stretch: stretchOf(link.li, d > 0 ? link.vi : link.vi-1) }));
+  });
+  const straight = { link: null, dir, stretch: stretchOf(li, dir > 0 ? vi : vi-1) };
+  const isEnd = vi === 0 || vi === nav.pts.length-1;
+  return { options, straight: isEnd ? null : straight };
+}
+// which way to go, at random: at the end of a road onto another one, otherwise now and then off onto another one
+function pickTurn(li, vi, dir) {
+  const { options, straight } = turnOptions(li, vi, dir);
+  const turn = options.length && (!straight || trafficRng() < 0.35);
+  return { li, vi, from: dir, ...(turn ? options[Math.floor(trafficRng()*options.length)] : straight) };
+}
+// picks which way a car goes at the junction ahead, if it hasn't yet — and whether it has to wait for room there
+function waitToTurn(car, ahead, dt) {
+  if (!planFor(car, ahead.vi)) { car.plan = planTurn(car, ahead.vi); car.held = 0; }
+  if (!stretchFull(car.plan.stretch) || stretchOf(car.li, car.seg) === car.plan.stretch) { car.held = 0; return false; }
+  car.held += dt;
+  if (car.held > GIVE_UP_AFTER) { car.plan = planTurn(car, ahead.vi); car.held = 0; } // (maybe there's room some other way now)
+  return true;
+}
+// whether the car's plan is for the vertex vi it's coming up to
+const planFor = (car, vi) => car.plan && car.plan.li === car.li && car.plan.vi === vi && car.plan.from === car.dir;
+function planTurn(car, vi) {
+  const { options, straight } = turnOptions(car.li, vi, car.dir);
+  const picked = pickTurn(car.li, vi, car.dir);
+  if (!stretchFull(picked.stretch)) return picked;
+  const free = [...options, ...(straight ? [straight] : [])].filter(o => !stretchFull(o.stretch));
+  return free.length ? { li: car.li, vi, from: car.dir, ...free[Math.floor(trafficRng()*free.length)] } : picked;
+}
+
 // ---- keeping clear of other cars: each one watches a strip of road ahead of it, as wide as it is and as long as it needs
 // to stop in, and eases off for the nearest car with any of its footprint in there — in its lane or not (turning in
 // across it at a junction, coming round from a dead end, or the one being driven) — besides the one in front in its own
@@ -617,8 +696,11 @@ const carGrid = new Map();
 const cellKey = (cx, cz) => cx + ',' + cz;
 function buildCarGrid() {
   carGrid.clear();
+  stretchCounts.length = S.trafficNav.stretches.length;
+  stretchCounts.fill(0);
   cars.forEach(car => {
     if (car.li < 0) return;
+    stretchCounts[stretchOf(car.li, car.seg)]++;
     const key = cellKey(Math.floor(car.x/CAR_GRID_CELL), Math.floor(car.z/CAR_GRID_CELL));
     if (!carGrid.has(key)) carGrid.set(key, []);
     carGrid.get(key).push(car);

@@ -1086,8 +1086,9 @@ function walkAlong(p, dist) {
 // - at a junction's zebra crossing: 'jwalk' (to the curb), 'jwait' (there, until that road's lights have gone red with
 //   time enough left to get over, and nothing's still moving across it) and 'jcross' (over)
 // - anywhere else: 'jwalk' (to the curb), 'curb' (checking for traffic, giving up after a while), 'half1' (to the
-//   middle), 'mid' (checking again) and 'half2' (the rest of the way)
-// (see checkYield in traffic.js for the cars' side of it)
+//   middle), 'mid' (checking again) and 'half2' (the rest of the way) — straight away, once a car's stopped to let them
+//   over, and with no car able to hit them till they're off the road (jc.waved: see checkYield in traffic.js), so neither
+//   of them waits on the other for ever
 const ROADSAFETY_RADIUS = 14, CROSS_CURB_TIMEOUT = 10, CROSS_DECIDE_CHANCE = 0.15, CROSS_SPEED_MULT = 1.6;
 function startZebraCrossing(p, nav, vi, link) {
   p.jc = { route: [nav.pts[vi], peopleNav.lines[link.li].pts[link.vi]], legs: ['jwalk', 'jcross'], holds: ['jwait', null], i: 0,
@@ -1165,7 +1166,8 @@ function updateCrossing(p, dt, speed) {
     if (p.crossStage === 'curb' && (jc.wait -= dt) <= 0) { endCrossing(p, jc.back); return walkwayPoint(p); } // no gap in time
     if ((jc.checkIn -= dt) > 0) return null;
     jc.checkIn = 0.3 + peopleRng()*0.3;
-    if (!crossingClear(p, jc, speed)) return null;
+    if (p.crossStage === 'mid' && App.carsWhere((x, z, car) => App.people[car.yieldFor] === p)) jc.waved = true;
+    if (!jc.waved && !crossingClear(p, jc, speed)) return null;
     jc.holding = false;
     p.faceTo = null;
     p.crossStage = jc.legs[jc.i];
@@ -1658,7 +1660,7 @@ function killPerson(i, by = 'player') {
     peopleMesh.getColorAt(i, colors.top);
     colors.pants.copy(colors.top);
   }
-  Object.values(colors).forEach(color => color.lerp(new THREE.Color(0x550000), 0.4)); //make gibs darker, less saturated
+  Object.values(colors).forEach(color => color?.lerp(new THREE.Color(0x550000), 0.4)); //make gibs darker, less saturated
   explode({ x: p.x, y: p.y, z: p.z }, 1.7*p.height*S.peopleSize, colors);
   const evil = profileOf(i, true).traits.evil;
   if (people[i])
