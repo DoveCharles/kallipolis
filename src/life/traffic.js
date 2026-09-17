@@ -513,7 +513,7 @@ function carFootprint(car) {
 function runOverPeople(car) {
   const { length, width } = carFootprint(car), reach = length*0.5 + 0.4, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   App.people.forEach((p, i) => {
-    if (p.mode === 'none' || p.mode === 'dead') return;
+    if (p.mode === 'none' || p.mode === 'dead' || p.mode === 'train') return; // (up in a station, or on a train, out of reach)
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;

@@ -9,7 +9,7 @@ import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { CLIPPER_SCALE, roadLineWidths, clipPolygons, unionRoadStrokes, navRebuildOnHold } from '../roads/roads.js';
 import { isWalkwayLine, isRiverLine } from '../roads/paths.js';
-import { isTrainLine } from '../trains/trains.js';
+import { isTrainLine, getTrainStations, trainStationsVersion, getTrainShuttles } from '../trains/trains.js';
 import { Y_PLAZA } from '../zones/plazas.js';
 import { getWaterRegion } from '../water/water.js';
 import { signalRedLeft } from '../roads/markings.js';
@@ -925,7 +925,10 @@ function newPerson() {
     // crossing a road (see updateCrossing): where they are on it (null if they aren't), the way over, and how long until
     // they next think about crossing mid-block; and linkCooldown, separately, keeps them from turning off at another
     // junction right after just having at one
-    crossStage: null, jc: null, crossCheckIn: peopleRng()*5, linkCooldown: 0 };
+    crossStage: null, jc: null, crossCheckIn: peopleRng()*5, linkCooldown: 0,
+    // riding the trains (see "riding the trains"): where they are in it (null if they aren't), and how long until they'd
+    // think about riding again
+    train: null, trainCooldown: 20 + peopleRng()*40 };
 }
 // A person's traits — from the entries picked for them in people.txt (see profiles.js), by their place in the crowd, `i` —
 // worked out again whenever people.txt loads, and once the model's loaded and says whether they're a man (which decides
@@ -986,6 +989,7 @@ function spawnPerson(p) {
 // after the walkways are rebuilt: back into the hangout they're standing in, else onto the nearest walkway, else anywhere
 function reseatPerson(p) {
   if (p.mode === 'dead') return; // (who stays that way)
+  if (p.mode === 'train') return; // (up in a station or on a train, and dropped back onto whatever's there when they're done)
   const { areas, lines, grid, CELL } = peopleNav;
   if (p.mode === 'wander' || p.mode === 'leaving') {
     const ai = areas.findIndex(a => p.x >= a.minX && p.x <= a.maxX && p.z >= a.minZ && p.z <= a.maxZ && a.inside(p.x, p.z));
@@ -1043,6 +1047,8 @@ function walkAlong(p, dist) {
     const last = nav.pts.length-1, ahead = p.dir > 0 ? p.seg + 1 : p.seg, at = nav.cum[ahead];
     if (p.dir > 0 ? u < at : u > at) break;
     const vertex = nav.vertices[ahead];
+    const station = p.trainCooldown <= 0 ? stationLinks().byVertex.get(p.li + ':' + ahead) : null;
+    if (station != null && peopleRng() < RIDE_CHANCE) { p.u = at; goRideTrain(p, station, walkwayPoint(p)); return; }
     const isEnd = !nav.loop && (ahead === 0 || ahead === last || !!nav.blocked[ahead + p.dir]);
     const entrance = vertex.entrances.length ? vertex.entrances[Math.floor(peopleRng()*vertex.entrances.length)] : null;
     const drawn = entrance ? (isOpenGround(peopleNav.areas[entrance.area]) ? p.traits.parks : p.traits.plazas) : 0;
@@ -1489,7 +1495,7 @@ function pickPerson(clientX, clientY) {
   const width = window.innerWidth, height = window.innerHeight, foot = new THREE.Vector3(), head = new THREE.Vector3();
   let best = -1, bestDepth = Infinity;
   people.forEach((p, i) => {
-    if (p.mode === 'none' || p.mode === 'dead') return;
+    if (isGone(p)) return;
     foot.set(p.x, p.y, p.z).project(camera);
     head.set(p.x, p.y + personHeight(p), p.z).project(camera);
     if (Math.abs(foot.z) > 1 || Math.abs(head.z) > 1) return; // behind the camera, or beyond what it draws
@@ -1505,7 +1511,11 @@ function pickPerson(clientX, clientY) {
 function followPersonAt(clientX, clientY) {
   const i = pickPerson(clientX, clientY);
   if (i < 0) { stopFollowingPerson(); return; }
+  followPerson(i);
+}
+function followPerson(i) {
   followed = i;
+  riderFollowed = -1;
   const h = personHeight(people[i]);
   controls.minRadius = Math.max(1.2, h*0.8);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9)); // swooping in, if the camera's far off
@@ -1546,7 +1556,7 @@ const FRIGHT_RADIUS = 14, FLEE_SPEED = 2.3;
 function frightenBystanders(victim) {
   const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
   people.forEach(p => {
-    if (p === victim || p.mode === 'none' || p.mode === 'dead') return;
+    if (p === victim || isGone(p)) return;
     const d = Math.hypot(p.x - from.x, p.z - from.z);
     if (d <= reach) p.fright = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
   });
@@ -1554,7 +1564,7 @@ function frightenBystanders(victim) {
 function stunBystanders(victim) {
   const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
   people.forEach(p => {
-    if (p === victim || p.mode === 'none' || p.mode === 'dead') return;
+    if (p === victim || isGone(p)) return;
     const d = Math.hypot(p.x - from.x, p.z - from.z);
     if (d <= reach) p.stun = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
   });
@@ -1562,7 +1572,7 @@ function stunBystanders(victim) {
 function pleaseBystanders(victim) {
   const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
   people.forEach(p => {
-    if (p === victim || p.mode === 'none' || p.mode === 'dead') return;
+    if (p === victim || isGone(p)) return;
     const d = Math.hypot(p.x - from.x, p.z - from.z);
     if (d <= reach) p.please = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
   });
@@ -1627,7 +1637,7 @@ function fleeWithin(p, area) {
 // `by` is who did it, for the morality meter: 'player' (the Kill button) or 'car'.
 function killPerson(i, by = 'player') {
   const p = people[i];
-  if (!p || p.mode === 'none' || p.mode === 'dead') return;
+  if (!p || isGone(p)) return;
   App.recordMoralityEvent?.(by === 'car' ? 'peds killed by cars' : 'peds killed by player');
   if (followed === i) stopFollowingPerson();
   endActivity(p);
@@ -1653,6 +1663,7 @@ function killPerson(i, by = 'player') {
   evil <= 0.35 ? stunBystanders(p) :
   pleaseBystanders(p);
   p.mode = 'dead';
+  p.train = null;
   p.moving = false;
 }
 function stopFollowingPerson() {
@@ -1661,6 +1672,164 @@ function stopFollowingPerson() {
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
   App.hidePersonCard();
+}
+
+// ---- riding the trains: someone walking past a train station — one standing in the plaza or park they're in, or near
+// enough a walkway they're on — now and then decides to ride it. Stations can be at any height, so there's no walking up
+// to one: they go to the foot of it, pop up onto the landing outside one of its doors, walk in to wait on the platform,
+// and vanish into the first carriage to stop there. At each station it then stops at, they get off — always, on a network
+// of just two stations, else with a chance of one in however many stations the network has — reappearing on the
+// platform, walking out, and popping back down onto the walkway or hangout at the station's foot. Stations with neither
+// nearby can't be got on or off at. Someone being followed by the camera takes it with them: onto their train, and back
+// off it with them (see "following a carriage" in trains.js), whose card lists who's aboard.
+// p.train: { node (the station they're at or last got on at), stage ('approach' → 'enter' → 'wait' → 'ride' → 'exit'),
+// target (where they're walking to), side (of the station they came in by), along (where along its platform they wait),
+// lineId (while riding), timer }
+const RIDE_CHANCE = 0.05;      // at each walkway point near a station
+const STATION_REACH = 4;       // how far beyond a station's sides a walkway can pass and still lead up to it
+const TRAIN_WAIT_MAX = 120, TRAIN_RIDE_MAX = 240;
+let riderFollowed = -1;        // someone the camera was following when they got on, to follow again when they get off
+const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode === 'train' && p.train.stage === 'ride');
+// What each station's foot leads to, worked out again when the walkways or the trains change: for each station node,
+// { area (the hangout it stands in, or -1), vertex ({ li, vi }, the nearest walkway point, or null) } — and the other way,
+// the station near each walkway point ('li:vi') and those in each hangout (by index).
+let stationLinksCache = null, stationLinksKey = '';
+function stationLinks() {
+  const key = peopleNavBuiltAt + ':' + trainStationsVersion();
+  if (stationLinksCache && key === stationLinksKey) return stationLinksCache;
+  stationLinksKey = key;
+  const { areas, lines, grid, CELL } = peopleNav, links = { ground: new Map(), byVertex: new Map(), byArea: new Map() };
+  const nearest = new Map(); // 'li:vi' -> its distance to the station it's been given
+  getTrainStations().forEach(st => {
+    const area = areas.findIndex(a => st.x >= a.minX && st.x <= a.maxX && st.z >= a.minZ && st.z <= a.maxZ && a.inside(st.x, st.z));
+    const reach = st.halfW + STATION_REACH, span = Math.ceil(reach/CELL);
+    const cx = Math.floor(st.x/CELL), cz = Math.floor(st.z/CELL);
+    let vertex = null;
+    for (let ox=-span;ox<=span;ox++) for (let oz=-span;oz<=span;oz++) (grid.get((cx+ox) + ',' + (cz+oz)) || []).forEach(({ li, vi }) => {
+      if (lines[li].blocked && lines[li].blocked[vi]) return; // (not out on a road)
+      const q = lines[li].pts[vi], d = Math.hypot(q.x - st.x, q.z - st.z), k = li + ':' + vi;
+      if (d > reach) return;
+      if (!vertex || d < vertex.d) vertex = { li, vi, d };
+      if (!nearest.has(k) || d < nearest.get(k)) { nearest.set(k, d); links.byVertex.set(k, st.nodeId); }
+    });
+    if (area < 0 && !vertex) return;
+    links.ground.set(st.nodeId, { area, vertex });
+    if (area >= 0) { if (!links.byArea.has(area)) links.byArea.set(area, []); links.byArea.get(area).push(st.nodeId); }
+  });
+  return (stationLinksCache = links);
+}
+// off to the foot of a station, `from` (where they are), to ride its trains
+function goRideTrain(p, node, from) {
+  endActivity(p);
+  p.crossStage = null; p.jc = null; p.wait = 0;
+  p.mode = 'train';
+  p.train = { node, stage: 'approach', target: { x: from.x, y: from.y, z: from.z }, side: 1, along: 0, lineId: null, timer: 0 };
+}
+// someone riding the trains, each frame: where they should walk to (or null to stand still)
+function updateTrainRider(p, i, dt) {
+  const ride = p.train, st = getTrainStations().get(ride.node), reached = () => Math.hypot(ride.target.x - p.x, ride.target.z - p.z) < 0.35;
+  ride.timer += dt;
+  if (ride.stage === 'ride') {
+    const shuttle = getTrainShuttles().find(s => s.lineId === ride.lineId);
+    if (!shuttle) { gotOff(p, i); dropToGround(p); return null; } // (their line's gone)
+    p.x = shuttle.object.position.x; p.y = shuttle.object.position.y; p.z = shuttle.object.position.z;
+    const at = shuttle.arrived && getTrainStations().get(shuttle.stopNode);
+    if (at && stationLinks().ground.has(at.nodeId) && (at.networkStations <= 2 || peopleRng() < 1/at.networkStations || ride.timer > TRAIN_RIDE_MAX)) {
+      // off here: back onto the platform, beside the track, to walk out the way they'd have come in
+      ride.node = at.nodeId; ride.stage = 'exit'; ride.side = peopleRng() < 0.5 ? -1 : 1; ride.timer = 0;
+      const out = at.spot(ride.side*(at.radius + 0.8), (peopleRng()*2 - 1)*Math.min(2, at.alongMax));
+      p.x = out.x; p.y = out.y; p.z = out.z;
+      p.heading = headingTo(p, at.spot(ride.side*at.landing, 0));
+      ride.target = at.spot(ride.side*at.landing, 0);
+      gotOff(p, i);
+    }
+    return null;
+  }
+  if (!st) { dropToGround(p); return null; } // (the station's gone from under them)
+  if (ride.stage === 'approach') {
+    if (!reached()) return ride.target;
+    // up onto the landing outside whichever of its doors is nearer
+    const plus = st.spot(st.landing, 0), minus = st.spot(-st.landing, 0);
+    ride.side = Math.hypot(plus.x - p.x, plus.z - p.z) <= Math.hypot(minus.x - p.x, minus.z - p.z) ? 1 : -1;
+    const landing = ride.side > 0 ? plus : minus;
+    p.x = landing.x; p.y = landing.y; p.z = landing.z;
+    ride.stage = 'enter';
+    ride.along = (peopleRng()*2 - 1)*st.alongMax;
+    ride.target = st.spot(ride.side*(st.radius + 0.8 + peopleRng()*1.2), ride.along);
+    return ride.target;
+  }
+  if (ride.stage === 'enter') {
+    if (!reached()) return ride.target;
+    ride.stage = 'wait'; ride.timer = 0;
+    p.faceTo = headingTo(p, st.spot(0, ride.along)); // (towards the track)
+    return null;
+  }
+  if (ride.stage === 'wait') {
+    const shuttle = getTrainShuttles().find(s => s.stopNode === ride.node && st.lineIds.includes(s.lineId));
+    if (shuttle) {
+      // aboard
+      p.faceTo = null; p.oneShot = null;
+      ride.stage = 'ride'; ride.lineId = shuttle.lineId; ride.timer = 0;
+      if (followed === i) { stopFollowingPerson(); App.followTrainLine?.(shuttle.lineId); riderFollowed = i; }
+    } else if (ride.timer > TRAIN_WAIT_MAX) {
+      // fed up of waiting: back out
+      p.faceTo = null;
+      ride.stage = 'exit'; ride.target = st.spot(ride.side*st.landing, 0);
+    }
+    return null;
+  }
+  // 'exit': out to the landing, then down to the station's foot
+  if (!reached()) return ride.target;
+  landAtStation(p, ride.node);
+  return null;
+}
+// just got off (or been thrown off) a train: the camera back onto them, if it came along for the ride and is still on it
+function gotOff(p, i) {
+  if (riderFollowed !== i) return;
+  riderFollowed = -1;
+  if (App.followedTrainLine?.() !== p.train.lineId) return;
+  App.stopFollowingTrain();
+  followPerson(i);
+}
+// from a station's landing down to its foot: onto the walkway there (heading either way), or into the hangout it's in
+function landAtStation(p, node) {
+  const foot = stationLinks().ground.get(node), st = getTrainStations().get(node);
+  p.train = null;
+  p.faceTo = null;
+  p.trainCooldown = 40 + peopleRng()*50;
+  if (foot && foot.vertex) {
+    placeAtVertex(p, foot.vertex.li, foot.vertex.vi, peopleRng() < 0.5 ? -1 : 1);
+    const at = walkwayPoint(p);
+    p.x = at.x; p.y = at.y; p.z = at.z;
+  } else if (foot) {
+    const area = peopleNav.areas[foot.area];
+    wanderInto(p, foot.area, st);
+    p.x = p.tx; p.z = p.tz; p.y = area.y;
+  } else {
+    p.mode = 'line';
+    dropToGround(p);
+  }
+}
+// the station or line they were on has gone: straight onto the nearest walkway or hangout below
+function dropToGround(p) {
+  p.train = null;
+  p.faceTo = null;
+  p.trainCooldown = 40 + peopleRng()*50;
+  p.mode = 'line';
+  reseatPerson(p);
+  if (p.mode === 'line') { const at = walkwayPoint(p); p.x = at.x; p.y = at.y; p.z = at.z; }
+  else if (p.mode === 'wander') { p.x = p.tx; p.z = p.tz; p.y = peopleNav.areas[p.area].y; }
+}
+// the followed carriage's card: who's aboard, by name — whoever the camera came aboard with picked out
+let passengersKey = null;
+function showPassengers() {
+  const line = App.followedTrainLine?.();
+  const riders = [];
+  if (line && S.peopleEnabled) people.forEach((p, i) => { if (p.mode === 'train' && p.train.stage === 'ride' && p.train.lineId === line) riders.push(i); });
+  const key = line + '|' + riders.join(',') + '|' + riderFollowed + '|' + profilesVersion() + '|' + !!personModel;
+  if (key === passengersKey || !App.setTrainCardPassengers) return;
+  passengersKey = key;
+  App.setTrainCardPassengers(riders.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name), riders.indexOf(riderFollowed));
 }
 
 // whether p is walking over a road (see updateCrossing) — treated like someone standing in the middle of it ('mid') by
@@ -1675,7 +1844,7 @@ export function updatePeople(t) {
   peopleMesh.visible = S.peopleEnabled && !personModel;
   if (personModel) [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; });
   peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
-  if (!S.peopleEnabled) return;
+  if (!S.peopleEnabled) { showPassengers(); return; }
   if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.peopleNavDirty = false;
     peopleNavBuiltAt = t;
@@ -1690,6 +1859,7 @@ export function updatePeople(t) {
   while (people.length < wanted) { const p = newPerson(); spawnPerson(p); people.push(p); }
   while (people.length > wanted) endActivity(people.pop());
   if (followed >= people.length) stopFollowingPerson();
+  if (riderFollowed >= people.length) riderFollowed = -1;
   peopleMesh.count = people.length;
   roadsafetyDebugMesh.visible = roadsafetyHalfDebugMesh.visible = pedHitboxDebugMesh.visible = S.showRoadsafetyDebug;
   if (S.showRoadsafetyDebug) roadsafetyDebugMesh.count = roadsafetyHalfDebugMesh.count = pedHitboxDebugMesh.count = people.length;
@@ -1703,6 +1873,7 @@ export function updatePeople(t) {
   people.forEach((p, i) => {
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
+    p.trainCooldown -= dt;
     if (p.fright) updateFright(p, dt);
     //attempting to give additional reactions to npc death depending on how evil they are
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
@@ -1740,8 +1911,13 @@ export function updatePeople(t) {
         // what next, by how likely each is for them: leaving, sitting down, lying down, going over to talk to someone, going
         // over to someone else, or just somewhere else here — which is what they do if what they'd do next can't be done
         const { lounging, chatty } = p.traits;
-        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam'][pickWeighted([area.exits.length ? 0.2 : 0, 0.16*lounging, 0.08*lounging, 0.18*chatty, 0.13, 0.25], w => w)];
-        if (next === 'leave' && area.exits.length) {
+        const stations = p.trainCooldown <= 0 ? stationLinks().byArea.get(p.area) : null;
+        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train'][pickWeighted([area.exits.length ? 0.2 : 0, 0.16*lounging, 0.08*lounging, 0.18*chatty, 0.13, 0.25, stations ? 0.12 : 0], w => w)];
+        if (next === 'train' && stations) {
+          // over to a train station standing in here
+          const node = stations[Math.floor(peopleRng()*stations.length)], st = getTrainStations().get(node);
+          goRideTrain(p, node, { x: st.x, y: area.y, z: st.z });
+        } else if (next === 'leave' && area.exits.length) {
           // head for the nearest of a few of the hangout's entrances
           let exit = null;
           for (let k=0;k<6;k++) {
@@ -1769,6 +1945,10 @@ export function updatePeople(t) {
         }
       }
       if (p.mode === 'wander' && !p.act && !frozen) goal = { x: p.tx, y: area.y, z: p.tz };
+    }
+    if (p.mode === 'train') {
+      goal = updateTrainRider(p, i, dt);
+      if (frozen) goal = null;
     }
     if (p.mode === 'leaving') {
       // already placed on their walkway by joinWalkway; once they've reached it they carry on along it
@@ -1812,7 +1992,7 @@ export function updatePeople(t) {
     // standing still for something (talking, sitting down), they turn to face the way it wants
     if (!p.moving && p.faceTo != null) p.heading += wrapAngle(p.faceTo - p.heading)*Math.min(1, dt*5);
     if (personModel) {
-      const clips = personModel.clips, s = p.mode === 'none' || p.mode === 'dead' ? 0 : modelScale(p);
+      const clips = personModel.clips, s = isGone(p) ? 0 : modelScale(p);
       // a cycle of the walk for every stride's worth of ground covered, as big as they are (played in reverse, backwards)
       if (s > 0) p.walkCycle = (p.walkCycle + (p.traits.backwards ? -1 : 1)*p.stepped/(personModel.stride*s) + 1) % 1;
       p.idleTime += dt;
@@ -1899,12 +2079,12 @@ export function updatePeople(t) {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
       const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;
       rotation.setFromAxisAngle(up, p.heading);
-      if (p.mode === 'none' || p.mode === 'dead') scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
+      if (isGone(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
       matrix.compose(position.set(p.x, p.y + bob, p.z), rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);
     }
     if (S.showRoadsafetyDebug) {
-      const dead = p.mode === 'none' || p.mode === 'dead', radius = dead ? 0 : ROADSAFETY_RADIUS*p.traits.roadsafety;
+      const dead = isGone(p), radius = dead ? 0 : ROADSAFETY_RADIUS*p.traits.roadsafety;
       const half = p.crossStage === 'mid' && p.jc && !p.jc.junction;
       rotation.identity();
       scale.setScalar(half ? 0 : radius);
@@ -1932,6 +2112,7 @@ export function updatePeople(t) {
     roadsafetyHalfDebugMesh.instanceMatrix.needsUpdate = true;
     pedHitboxDebugMesh.instanceMatrix.needsUpdate = true;
   }
+  showPassengers();
   // the camera onto whoever it's following, at about their shoulders
   if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
   // and the card's headshot of them

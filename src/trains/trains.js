@@ -27,6 +27,16 @@ const TRAIN_SHUTTLE_SPEED = 45;      // world units per second, averaged over ea
 const TRAIN_STATION_DWELL = 3.5;     // seconds a shuttle stops at each station
 const TRAIN_END_DWELL = 1.5;         // seconds it pauses at an end of the line (one without a station) before heading back
 let trainShuttles = [];              // rebuilt with the train meshes; moved every frame by updateTrainShuttles
+const lastStopOf = new Map();        // line id -> the station node its shuttle was last stopped at, kept across rebuilds
+// Every station, for people riding the trains (see "riding the trains" in people.js), rebuilt with the train meshes: node id ->
+// { nodeId, x, y, z, radius, halfW, landing, alongMax, lineIds, networkId, networkStations, spot(across, along) }, where
+// spot gives a point on its deck, `across` the track (+ to its right) and `along` it from the middle.
+let trainStations = new Map(), stationsVersion = 0;
+export const getTrainStations = () => trainStations;
+export const trainStationsVersion = () => stationsVersion;
+// each line's shuttle: { lineId, object (its position is the carriage's), stopNode (the station it's stopped at, or null),
+// arrived (whether it pulled in there this frame) }
+export const getTrainShuttles = () => trainShuttles;
 
 export function isTrainLine(line) { return line.kind==='train'; }
 function trainNodeIdSet() {
@@ -39,6 +49,8 @@ export function isTrainNode(nodeId) { return S.roadLines.some(line => isTrainLin
 export function networkKindOf(line) { return isTrainLine(line) ? 'train' : 'road'; }
 export function trainNodeY(n) { return n.y!=null ? n.y : S.TRAIN_DEFAULT_HEIGHT; }
 function trainStationSize(radius) { return { width: radius*2 + 5, height: radius*2 + 2.5 }; }
+// how far below the tube's centerline a station's platform deck is
+const stationDeckTop = radius => -radius - 0.3;
 
 // A train line's centerline as 3D points — always the smoothest curve through its nodes, never a corner: a cubic
 // Hermite spline whose direction at each node follows the line from the node before to the node after, scaled by
@@ -247,7 +259,7 @@ function buildStationParts(position, tangent, radius, mats) {
   const capLength = Math.min(halfW, halfL);      // the rounded ends are half-discs in plan
   const straightHalf = halfL - capLength;
   // local coordinates: x across the track, y up (0 = the tube's centerline), z along the track
-  const deckTop = -radius - 0.3, deckDepth = 0.7;
+  const deckTop = stationDeckTop(radius), deckDepth = 0.7;
   const rise = height/2 - deckTop;               // how high the vault stands above the deck
   const forward = new THREE.Vector3(tangent.x, 0, tangent.z);
   if (forward.lengthSq() < 1e-6) forward.set(1,0,0); else forward.normalize();
@@ -394,6 +406,8 @@ export function rebuildTrainMeshes() {
   scene.remove(S.trainMeshGroup); disposeObject(S.trainMeshGroup);
   S.trainMeshGroup = new THREE.Group(); S.trainMeshGroup.name = 'Trains';
   trainShuttles = [];
+  trainStations = new Map();
+  stationsVersion++;
   // each network gets its own materials, so selecting one only highlights that network
   const materials = new Map();
   const materialsFor = netId => {
@@ -442,11 +456,12 @@ export function rebuildTrainMeshes() {
     const beamW = Math.max(0.3, radius*0.16);
     const sampler = createPathSampler(path);
     const mats = materialsFor(line.networkId);
-    const stations = line.nodeIds.map(id => roadNodes[id]).filter(n => n && n.type==='station').map(n => {
+    const stations = line.nodeIds.filter(id => roadNodes[id] && roadNodes[id].type==='station').map(id => {
+      const n = roadNodes[id];
       const position = new THREE.Vector3(n.x, trainNodeY(n), n.z);
       const dist = sampler.distanceOf(position);
       const tangent = sampler.at(dist - 0.5).tangent.add(sampler.at(dist + 0.5).tangent).normalize();
-      return { position, dist, tangent };
+      return { node: id, position, dist, tangent };
     });
     const inStation = (d, margin) => stations.some(s => Math.abs(s.dist - d) < TRAIN_STATION_LENGTH/2 + margin);
 
@@ -466,20 +481,41 @@ export function rebuildTrainMeshes() {
     }
     stations.forEach(s => {
       buildStationParts(s.position, s.tangent, radius, mats).forEach(part => addMesh(part.geo, part.material, part.name, line, part.opaque));
+      registerStation(s, line, radius);
     });
     // one shuttle per line, running back and forth along all of it and stopping at each station on the way
     const shuttle = buildShuttle(radius, mats);
-    const { steps, cycle } = buildShuttleTimeline(sampler.total, stations.map(s => s.dist), shuttle.userData.length);
+    const { steps, cycle } = buildShuttleTimeline(sampler.total, stations, shuttle.userData.length);
     S.trainMeshGroup.add(shuttle);
-    trainShuttles.push({ lineId: line.id, object: shuttle, sampler, steps, cycle, offset: (trainHash(line.id) % 997)/997*cycle });
+    trainShuttles.push({ lineId: line.id, object: shuttle, sampler, steps, cycle, offset: (trainHash(line.id) % 997)/997*cycle,
+      stopNode: lastStopOf.get(line.id) ?? null, arrived: false });
     if (beams.length) addMesh(mergeGeometryList(beams), mats.steel, 'TrainSupports', line, true);
   });
+  const perNetwork = new Map();
+  trainStations.forEach(st => perNetwork.set(st.networkId, (perNetwork.get(st.networkId) || 0) + 1));
+  trainStations.forEach(st => { st.networkStations = perNetwork.get(st.networkId); });
   scene.add(S.trainMeshGroup);
   // a followed carriage whose line has gone lets go; one whose line was only rebuilt keeps being followed (and renumbered)
   if (followedTrain) {
     if (!trainShuttles.some(s => s.lineId === followedTrain)) stopFollowingTrain();
     else showFollowedTrainCard();
   }
+}
+// adds a line's station to trainStations (a station shared by several lines is listed once, with each of them), laid out as
+// buildStationParts lays it out
+function registerStation(s, line, radius) {
+  const known = trainStations.get(s.node);
+  if (known) { known.lineIds.push(line.id); return; }
+  const halfW = trainStationSize(radius).width/2, halfL = TRAIN_STATION_LENGTH/2;
+  const forward = new THREE.Vector3(s.tangent.x, 0, s.tangent.z);
+  if (forward.lengthSq() < 1e-6) forward.set(1,0,0); else forward.normalize();
+  const right = { x: forward.z, z: -forward.x }, deckY = s.position.y + stationDeckTop(radius);
+  const { x, z } = s.position;
+  trainStations.set(s.node, { nodeId: s.node, x, y: s.position.y, z, radius, halfW,
+    landing: halfW + 0.9,                                   // across to the middle of an entrance's landing
+    alongMax: Math.max(0.5, halfL - Math.min(halfW, halfL) - 1), // along the straight middle, clear of the rounded ends
+    lineIds: [line.id], networkId: line.networkId, networkStations: 1,
+    spot: (across, along) => ({ x: x + right.x*across + forward.x*along, y: deckY, z: z + right.z*across + forward.z*along }) });
 }
 function trainHash(s) { let h = 7; for (let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0; return h; }
 // A shuttle carriage's body: a capsule — a cylinder with hemispherical ends — lathed around the Y axis.
@@ -566,28 +602,28 @@ function buildShuttle(radius, mats) {
 }
 // The out-and-back schedule for a line's shuttle, as distances along the line: a stop at each end (kept far enough in
 // that the whole carriage stays inside the tube) and at every station between, with a run easing out of one stop and
-// into the next. Forward to the far end, then back again, and repeat. Returns the steps in order — { at, dwell } for
-// a stop, { from, to, duration } for a run — and the whole cycle's length in seconds.
-function buildShuttleTimeline(total, stationDists, shuttleLength) {
+// into the next. Forward to the far end, then back again, and repeat. Returns the steps in order — { at, dwell, node
+// (the station's node id, or null for an end of the line) } for a stop, { from, to, duration } for a run — and the whole cycle's length in seconds.
+function buildShuttleTimeline(total, stations, shuttleLength) {
   const margin = Math.min(total/2, shuttleLength/2 + 0.5);
   const clamp = d => Math.max(margin, Math.min(total - margin, d));
-  const stops = [{ at: margin, station: false }];
-  stationDists.map(clamp).sort((p, q) => p-q).forEach(d => {
+  const stops = [{ at: margin, node: null }];
+  stations.map(s => ({ at: clamp(s.dist), node: s.node })).sort((p, q) => p.at-q.at).forEach(s => {
     const last = stops[stops.length-1];
-    if (d - last.at < 1) last.station = true; // a station right at the end of the line is that end's stop
-    else stops.push({ at: d, station: true });
+    if (s.at - last.at < 1) last.node = last.node || s.node; // a station right at the end of the line is that end's stop
+    else stops.push(s);
   });
-  if (total - margin - stops[stops.length-1].at >= 1) stops.push({ at: total - margin, station: false });
-  const dwellAt = stop => stop.station ? TRAIN_STATION_DWELL : TRAIN_END_DWELL;
+  if (total - margin - stops[stops.length-1].at >= 1) stops.push({ at: total - margin, node: null });
+  const dwellAt = stop => stop.node ? TRAIN_STATION_DWELL : TRAIN_END_DWELL;
   const run = (a, b) => ({ from: a.at, to: b.at, duration: Math.max(1, Math.abs(b.at - a.at)/TRAIN_SHUTTLE_SPEED) });
   const steps = [];
   for (let i=0;i<stops.length;i++) {
-    steps.push({ at: stops[i].at, dwell: dwellAt(stops[i]) });
+    steps.push({ at: stops[i].at, dwell: dwellAt(stops[i]), node: stops[i].node });
     if (i < stops.length-1) steps.push(run(stops[i], stops[i+1]));
   }
   for (let i=stops.length-1;i>0;i--) {
     steps.push(run(stops[i], stops[i-1]));
-    if (i-1 > 0) steps.push({ at: stops[i-1].at, dwell: dwellAt(stops[i-1]) });
+    if (i-1 > 0) steps.push({ at: stops[i-1].at, dwell: dwellAt(stops[i-1]), node: stops[i-1].node });
   }
   return { steps, cycle: steps.reduce((sum, step) => sum + (step.dwell!=null ? step.dwell : step.duration), 0) };
 }
@@ -606,12 +642,19 @@ function orientAlongTrack(object, tangent) {
 export function updateTrainShuttles(t) {
   const ease = x => x*x*(3 - 2*x);
   trainShuttles.forEach(s => {
-    let phase = (t + s.offset) % s.cycle, along = s.steps[0].at;
+    let phase = (t + s.offset) % s.cycle, along = s.steps[0].at, stopNode = null;
     for (const step of s.steps) {
       const span = step.dwell!=null ? step.dwell : step.duration;
-      if (phase <= span) { along = step.dwell!=null ? step.at : step.from + (step.to - step.from)*ease(phase/span); break; }
+      if (phase <= span) {
+        along = step.dwell!=null ? step.at : step.from + (step.to - step.from)*ease(phase/span);
+        if (step.dwell!=null) stopNode = step.node;
+        break;
+      }
       phase -= span;
     }
+    s.arrived = stopNode != null && stopNode !== s.stopNode;
+    s.stopNode = stopNode;
+    lastStopOf.set(s.lineId, stopNode);
     const { point, tangent } = s.sampler.at(along);
     s.object.position.copy(point);
     orientAlongTrack(s.object, tangent);
@@ -656,7 +699,13 @@ function trainThumbnailOf(shuttle) {
 function followTrainAt(clientX, clientY) {
   const i = pickTrain(clientX, clientY);
   if (i < 0) { stopFollowingTrain(); return; }
-  followedTrain = trainShuttles[i].lineId;
+  followTrainLine(trainShuttles[i].lineId);
+}
+// follows a line's carriage (as when someone being followed boards it — see people.js)
+function followTrainLine(lineId) {
+  const i = trainShuttles.findIndex(s => s.lineId === lineId);
+  if (i < 0) return;
+  followedTrain = lineId;
   const radius = Math.max(1.2, trainShuttles[i].object.userData.length*0.3);
   controls.minRadius = radius;
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, radius*6));
@@ -669,7 +718,8 @@ function stopFollowingTrain() {
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
   App.hideTrainCard();
 }
-Object.assign(App, { pickTrain, followTrainAt, stopFollowingTrain });
+const followedTrainLine = () => followedTrain;
+Object.assign(App, { pickTrain, followTrainAt, followTrainLine, followedTrainLine, stopFollowingTrain });
 // where the cursor's ray crosses the level plane at height `y` (null if it doesn't)
 export function trainPlanePoint(sx, sy, y) {
   App.raycaster.setFromCamera(App.ndcOf(sx, sy), camera);
