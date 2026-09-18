@@ -14,11 +14,13 @@ import { makeFlatZoneMesh, makeTreeMesh } from './surface-detail.js';
 // room for one.
 export const PLAZA_COLORS = [0xb7b0a4, 0xc4a88a, 0x9c9fa4, 0xd6cfc0];
 export const Y_PLAZA = 0.07;
+export const DEFAULT_MORTAR = 0.08; // how wide the joints between paving stones are, in metres
 const PLAZA_LAMP_SPACING = 13;
 const PAVING_FRAGMENT_PARS = `
   varying vec3 vPaveWorldPos;
   uniform int uPavePattern;
   uniform float uPaveScale;
+  uniform float uPaveMortar;
   float paveHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
 `;
 const PAVING_COLOR_FRAGMENT = `
@@ -47,15 +49,16 @@ const PAVING_COLOR_FRAGMENT = `
       id = floor(p);
       edgeDist = min(min(f.x, 1.0-f.x), min(f.y, 1.0-f.y))*size;
     }
-    float grout = smoothstep(0.03, 0.08, edgeDist);
+    float grout = smoothstep(uPaveMortar*0.4, uPaveMortar, edgeDist); // a joint of the same width whatever size the paving is
     float tint = 0.9 + 0.2*paveHash(id + 17.0);
     diffuseColor.rgb *= mix(0.62, tint, grout);
   }
 `;
-export function applyPavingShader(mat, pattern, scale) {
+export function applyPavingShader(mat, pattern, scale, mortar) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uPavePattern = { value: pattern };
     shader.uniforms.uPaveScale = { value: scale || 1 };
+    shader.uniforms.uPaveMortar = { value: mortar || DEFAULT_MORTAR };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vPaveWorldPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPaveWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -101,8 +104,8 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
   const { jtMiter, jtRound } = ClipperLib.JoinType;
   const color = s.pavingColor!=null ? s.pavingColor : PLAZA_COLORS[0];
   const pattern = s.pavingPattern==='herringbone' ? 1 : 0;
-  const paveScale = s.pavingScale!=null ? s.pavingScale : 1;
-  const floor = makeFlatZoneMesh(poly, color, Y_PLAZA, 'Plaza', mat => applyPavingShader(mat, pattern, paveScale), cutouts);
+  const paveScale = s.pavingScale!=null ? s.pavingScale : 1, mortar = s.mortarWidth!=null ? s.mortarWidth : DEFAULT_MORTAR;
+  const floor = makeFlatZoneMesh(poly, color, Y_PLAZA, 'Plaza', mat => applyPavingShader(mat, pattern, paveScale, mortar), cutouts);
   if (!floor) return;
   zone.buildingsGroup.add(floor);
   const area = clipPolygons(ctDifference, [App.toClipperPath(poly)], cutouts);
@@ -112,7 +115,7 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
   const bandGeo = bandBuilder.build();
   if (bandGeo) {
     const bandMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.72), roughness: 1, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-    applyPavingShader(bandMat, 0, 0.3*paveScale);
+    applyPavingShader(bandMat, 0, 0.3*paveScale, mortar);
     const band = new THREE.Mesh(bandGeo, bandMat);
     band.receiveShadow = true;
     band.name = 'PlazaBorder';
