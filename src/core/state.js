@@ -33,7 +33,7 @@ S.colorPickerState = null;
 export const DEFAULT_ZONE_SETTINGS = { density:0.8, heightMin:4, heightMax:40, landmarkChance:0.08, lotCount:24, setback:1.5, windowsEnabled:true,
   groundColor:BUILDING_GROUND_COLORS[0], borderSetback:0, treeDensity:0.5, treeSizeMin:1, treeSizeMax:2.2, treeSetback:3, colorVariationMin:0.25, colorVariationMax:0.25, windowScale:1, litWindowChance:0.8, specularWindows:true, parkTint:PARK_TINT_COLORS[0], treeTint:TREE_TINT_COLORS[0], customTint:false, grassNoiseStrength:DEFAULT_GRASS_NOISE_STRENGTH,
   fence:true,                                                                       // park
-  pavingColor:0xb7b0a4, pavingPattern:'tiles', fountain:true, plazaTrees:0.35,      // plaza
+  pavingColor:0xb7b0a4, pavingPattern:'tiles', pavingScale:1, fountain:true, plazaTrees:0.35, // plaza
   fieldCount:14, hedgerows:true, farmsteads:true,                                   // farmland
   industrialLots:10, industrialDensity:0.85, industrialHeightMin:5, industrialHeightMax:14, lotFences:true }; // industrial
 export const MAX_TARGET_LOTS = 150; // slider max = this many lots; slider min (1) = "whole zone"

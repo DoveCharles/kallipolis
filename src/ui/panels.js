@@ -439,6 +439,8 @@ function renderDetails() {
           <option value="tiles" ${s.pavingPattern!=='herringbone'?'selected':''}>Tiles</option>
           <option value="herringbone" ${s.pavingPattern==='herringbone'?'selected':''}>Herringbone</option>
         </select></div>
+      <div class="slider-row" style="margin-top:11px;"><div class="row"><label>Paving scale</label><span class="val" id="dv-pavingscale">${(s.pavingScale!=null?s.pavingScale:1).toFixed(2)}</span></div>
+        <input type="range" id="ds-pavingscale" min="0.3" max="3" step="0.05" value="${s.pavingScale!=null?s.pavingScale:1}"></div>
       <div class="section-label">Paving color</div>
       ${colorSwatchRowHtml(PLAZA_COLORS, s.pavingColor!=null?s.pavingColor:PLAZA_COLORS[0], 'pavingcolor')}
       ${toggleHtml('ds-fountain', 'Fountain', s.fountain!==false)}
@@ -538,6 +540,7 @@ function renderDetails() {
       // water and beaches have no settings of their own
     } else if (zoneType==='plaza') {
       document.getElementById('ds-paving').addEventListener('change', (e) => { s.pavingPattern = e.target.value; subdivideZone(zone); });
+      wireNumber('ds-pavingscale', 'dv-pavingscale', 'pavingScale', 2);
       wireSwatches(PLAZA_COLORS, 'pavingColor', 'pavingcolor', PLAZA_COLORS[0]);
       wireToggle('ds-fountain', 'fountain');
       wireNumber('ds-plazatrees', 'dv-plazatrees', 'plazaTrees', 2);
