@@ -165,6 +165,12 @@ Dick
 Angel
 Jock
 Mister
+Hidden
+Elmo
+DJ
+Ryan
+Regina
+Eisenberg
 
 [Girl names]
 Olivia [agemult = 0.9]
@@ -279,6 +285,10 @@ Kitty
 Little
 Lady
 San
+Barb
+I'm
+Bridget
+Nina
 
 [Surnames]
 Smith [choiceweight = 5]
@@ -318,7 +328,7 @@ Salamanca
 Marx
 Tools
 XCX
-Twins
+Twin
 Duvall
 Treatment
 Benson
@@ -341,6 +351,39 @@ Fraser
 Gem
 Cook
 Craft
+Jam
+McGill
+Morgan
+Lewis
+Scott
+Palmer
+Beers
+Bass
+McDonald
+McMurphy
+Express
+Whatever
+Berries
+Dragon
+Glass
+Naples
+Garcia
+Drake
+Sanders
+Davis
+Slater
+Kisses
+Roberts
+Error
+Aoba
+Star
+Love
+Clarke
+Walnuts
+Spade
+Woolworths
+Blaster
+Nonsense
 
 [Nicknames]
 Freakazoid
@@ -354,7 +397,7 @@ Gorebag
 Grubs
 Sandwich
 Eyes
-Yum Yum
+Yummy Yum
 Steamwand
 Hotdog
 Jingles
@@ -365,7 +408,7 @@ Tiny
 Mincemeat
 Chief
 Epic Gore
-Ped
+Big Ped
 The Boss
 Twinkie
 The Kid
@@ -377,7 +420,6 @@ Poolstick
 Stomach
 Chaps
 Rubber
-2 for 1
 Flushes
 Gristle
 Caramel
@@ -385,6 +427,25 @@ Piglet
 Suicide
 Cupholder
 Butterballs
+Quicksie
+Cupcake
+Timestamp
+Most Wanted
+Cheesewheel
+The Chimney
+Atom Bomb
+Lightbulbs
+Pinball
+Septic
+Could Do
+Might Be
+Beans
+Friendly
+Oathbreaker
+Hopeless
+Hoe-Shit
+Syntax
+War-Crimes
 
 [Moods]
 😀 [mood = 0.6, happy = 0.6, aggression = 0.5]
@@ -625,7 +686,7 @@ The vibe at the airport
 Setting their profile pic to a black square when they want attention [evil = 0.01, agemult = 0.8]
 Changing their nature
 Saying "cybernetics"
-Cooking up homogenous, technically edible, goop
+Cooking up homogenous — technically edible — goop
 Surgery
 Opiates [walkspeed = 0.3, chatty = 0.3, patience = 10, lounging = 10, blinks = 0.2, aggression = 0]
 Light erotica
@@ -646,7 +707,7 @@ Preaching [chatty = 5, talkative = 10, evil = 0.05]
 Foreign cigarettes
 Suicide, as a concept [mood = 0.4]
 Trying to kiss the dentist [evil = 0.05]
-Getting older [mood = 0.4, evil = -0.05, agemult = 1.1]
+Getting older [mood = 0.4, evil = -0.05, agemult = 1.3, bleach]
 Summary execution [evil = 0.2, aggression = 2]
 Curried favours
 Saying, "this is true" [chatty = 2]
@@ -655,7 +716,7 @@ The subscription model [evil = 0.05]
 Looking at their guitar but never playing it, ever
 Not eating their vegetables [size = 0.84, evil = 0.05]
 Pots of gold [size =0.45, evil = 0.05, aggression = 10]
-Stinky mouldy tofu
+Stinky tofu
 Capitalising Every Word In A Sentence
 Rocket boots [walkspeed = 4]
 Fitting it all in [walkspeed = 1.2, chatty = 0.8, talkative = 0.8, fidgety = 0]
@@ -710,7 +771,7 @@ Doing "Bits" [chatty = 3, talkative = 3, mood = 0.3, evil = 0.01, agemult = 0.9]
 Love Island [ agemult = 0.9]
 Whipped cream
 The right to protest [evil = -0.05]
-Bleach
+Bleach [bleach]
 Ugly phone covers
 Estate sales [ agemult = 1.1]
 Corporate Memphis
@@ -838,15 +899,15 @@ Consulting their shoulder spirits
 Kissing toads
 Licking toads
 Giving context [evil = -0.05]
-SPF-100 [agemult = 2, ageless]
+SPF-100 [ageless]
 Only going out at night
-Only going out at night [agemult = 10 ,evil = 0.5, ageless, aggression = 50]
-The taste of blood [agemult = 10, evil = 0.5, ageless, aggression = 50]
+Only going out at night [agemult = 4.5 ,evil = 0.5, ageless, aggression = 50]
+The taste of blood [agemult = 4.5, evil = 0.5, ageless, aggression = 50]
 The taste of blood
 Jumpin' all over the world
 Two in the trunk
 Being invited over
-Being invited over [agemult = 10, evil = 0.5, ageless, aggression = 50 ]
+Being invited over [agemult = 4.5, evil = 0.5, ageless, aggression = 50 ]
 Peepholes [evil = 0.1]
 Talking a big talk [angry = 0.5, aggression = 0.5]
 Spelunking
@@ -958,7 +1019,7 @@ Constructive criticism [ evil = 0.05, aggression = 5]
 The family group chat [chatty = 0.6, agemult = 0.6]
 Men [ aggression = 2]
 Women [ evil = 0.1, aggression = 2]
-Radiation 
+Radiation [bleach]
 The state of the world [mood = -0.4]
 Breaking the fourth wall
 Cognitio-hazards [ evil = -0.05, agemult = 0.8]
@@ -970,7 +1031,7 @@ Their nemesis [ aggression = 2]
 Practicing restraint [patience = 0.4, evil = 0.05, aggression = 2]
 Spending money
 High Treason [ agemult = 1.2]
-Looking at their reflection [ agemult = 10, evil = 0.5, ageless, aggression = 50]
+Looking at their reflection [ agemult = 4.5, evil = 0.5, ageless, aggression = 50]
 Looking at their reflection
 When something is, "titular"
 When something is, "seminal"
@@ -1101,9 +1162,9 @@ Centipedes [parks = 0.5]
 Wasps [parks = 0.5]
 Bees [parks = 0.5, evil = 0.05]
 Garlic bread
-Garlic bread [ agemult = 10, evil = 0.5, ageless, aggression = 50 ]
+Garlic bread [ agemult = 4.5, evil = 0.5, ageless, aggression = 50 ]
 Running water
-Running water [ agemult = 10, evil = 0.5, ageless , aggression = 50]
+Running water [ agemult = 4.5, evil = 0.5, ageless , aggression = 50]
 Going bald
 Their bastard son... bastard little boy... [agemult = 1.2, evil = 0.1]
 The Killer

@@ -34,6 +34,7 @@ export const TRAITS = {
   agemult: {base: 1, min: 0.1, max: Infinity}, //Inf limit to allow vampiric / immortal type shit
   ageless: { base: 0, min: 0, max: 1, combine: 'on' },
   nickname: { base: 0, min: 0, max: 1, combine: 'on'},
+  bleach: {base: 0, min: 0, max: 1, combine: 'on'}
 };
 // the value everyone starts with, by trait: TRAITS' base until people.txt loads, then whatever its trait table's start
 // column says (see parsePeopleText) — updated in place, so people holding it see the file's values

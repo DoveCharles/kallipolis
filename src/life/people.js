@@ -2301,7 +2301,9 @@ export function updatePeople(t) {
       p.defaultHair = hairColor;
       //TO DO: If birthdays added, break this block into two; below repeated after check for newBirthday boolean
       //Saving default hair future proofs against hair collapsing to white, but as is this should only run once anyways.
-      const greyAmount = p.traits.ageless ? 0 : Math.max(0, Math.min(1, (p.age - 30) / (100))); // tweak range to taste
+      const greyAmount = p.traits.bleach ? 1 :
+        p.traits.ageless ? 0 : 
+          Math.max(0, Math.min(1, (p.age - 30) / (100))); // tweak range to taste
       const newHair =  p.defaultHair.clone().lerp(new THREE.Color(0xffffff), greyAmount);
       data[o] = newHair.r; data[o+1] = newHair.g; data[o+2] = newHair.b;
     }
