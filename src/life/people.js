@@ -766,6 +766,9 @@ function cumulative(pts) {
 //   and the points either side are linked to the nearest sidewalk ring; paths meeting at a node are linked to each other.
 // A hangout is { kind, inside, bounds, y, exits, seats, trees } per plaza, park and beach — a plaza's bench seats, a park's
 // trees. Beaches are open ground, like parks: people sit in circles and lie down on them (see isOpenGround).
+// `inside` is the zone with everything that cuts into it taken out, so water in a hangout — a pond drawn in a park, a
+// river running across a beach — is no part of it; walking round it rather than over it is randomSpotIn's job.
+// The nav also carries `onPath`: the walkways' footprint, which people keep off when they sit down.
 function buildPeopleNav() {
   const areas = [], lines = [];
   S.zones.forEach(zone => {
@@ -784,6 +787,9 @@ function buildPeopleNav() {
       trees: zone.zoneType==='park' ? zone.treeSpots || [] : [] });
   });
   const inWater = createRegionTester(getWaterRegion());
+  // the walkways' own footprint, a little proud of their edges: a path cutting through a park is part of the hangout —
+  // people walk and stand on it — but nobody sits or lies down on one (see clearGround)
+  const onPath = createRegionTester(S.pathFootprint.length ? offsetPaths(S.pathFootprint, 0.35, ClipperLib.JoinType.jtRound) : []);
   // the road network, stroked three times: out to mid-sidewalk (the rings, and what paths are blocked by), to the curb, and
   // just past the sidewalk's outer edge (what a path's end has to reach to join it)
   const midStrokes = [], curbStrokes = [], edgeStrokes = [];
@@ -926,14 +932,14 @@ function buildPeopleNav() {
         const x = p.x + nx*off, z = p.z + nz*off;
         if (onPavement(x, z)) break;
         const area = areaAt(x, z);
-        if (area >= 0) { entrances.push({ area, side, x, z }); if (!areas[area].exits.some(e => e.li === li && e.vi === vi)) areas[area].exits.push({ li, vi }); break; }
+        if (area >= 0) { entrances.push({ area, side, x, z }); if (!areas[area].exits.some(e => e.li === li && e.vi === vi)) areas[area].exits.push({ li, vi, x, z }); break; }
       }
     });
   }));
   // for crossing mid-block: the nearest point on any ring
   const nearRing = segmentGrid(lines.flatMap((nav, li) => nav.ring ? nav.pts.slice(0, -1).map((a, seg) => ({ a, b: nav.pts[seg+1], li, seg })) : []));
   const buildings = buildingDoors(lines, grid, CELL, onPavement, widestSidewalk);
-  return { areas, lines, grid, CELL, onPavement, nearRing, buildings };
+  return { areas, lines, grid, CELL, onPath, onPavement, nearRing, buildings };
 }
 // The buildings people can go into (see "going indoors"): each building of a kind people go into (`enterable` in
 // assets/buildings.txt) that keeps its footprint on it, close enough to a walkway point, with no road in between, gets a
@@ -1046,14 +1052,42 @@ export function pickWeighted(items, weightOf) {
   for (let i=0;i<items.length;i++) { r -= weightOf(items[i]); if (r <= 0) return i; }
   return items.length - 1;
 }
-// a random spot inside a hangout — near `near` if one can be found there
-function randomSpotIn(area, near) {
+// How far along the straight walk from `from` to (x, z) someone gets while staying in the hangout, and whether that's
+// all the way. Water is no part of a hangout (see buildPeopleNav), and people walk straight at where they're going, so
+// this is what keeps them out of a pond: they stop at the bank and set off again from there.
+function walkableUpTo(area, from, x, z) {
+  const dx = x - from.x, dz = z - from.z, len = Math.hypot(dx, dz), steps = Math.max(1, Math.ceil(len/1.5));
+  let last = 0;
+  for (let k=1;k<=steps;k++) {
+    const f = k/steps;
+    if (!area.inside(from.x + dx*f, from.z + dz*f)) return { x: from.x + dx*last, z: from.z + dz*last, d: len*last, clear: false };
+    last = f;
+  }
+  return { x, z, d: len, clear: true };
+}
+// Where someone should actually head for a spot they've picked out in their hangout: the spot itself when the walk there
+// is clear, else as far along the way as they get before the water, or null when that's nowhere at all.
+function reachableSpot(area, from, x, z) {
+  const reach = walkableUpTo(area, from, x, z);
+  return reach.clear || reach.d > 0.5 ? { x: reach.x, z: reach.z } : null;
+}
+// A random spot inside a hangout — near `near` if one can be found there, and one they can walk to from `from` (where
+// they're setting off, `near` by default) without crossing water. Where nothing in reach is clear, the furthest they can
+// get along the way to one — up to the bank — so someone by a pond still works their way round it.
+function randomSpotIn(area, near, from) {
+  const start = from || near;
+  let best = null;
   for (let k=0;k<24;k++) {
     const x = near && k < 12 ? near.x + (peopleRng()-0.5)*24 : area.minX + peopleRng()*(area.maxX-area.minX);
     const z = near && k < 12 ? near.z + (peopleRng()-0.5)*24 : area.minZ + peopleRng()*(area.maxZ-area.minZ);
-    if (area.inside(x, z)) return { x, z };
+    if (!area.inside(x, z)) continue;
+    if (!start) return { x, z };
+    const reach = walkableUpTo(area, start, x, z);
+    if (reach.clear) return { x, z };
+    if (reach.d > 0.5 && (!best || reach.d > best.d)) best = reach;
   }
-  return near ? { x: near.x, z: near.z } : { x: (area.minX+area.maxX)/2, z: (area.minZ+area.maxZ)/2 };
+  if (best) return { x: best.x, z: best.z };
+  return start ? { x: start.x, z: start.z } : { x: (area.minX+area.maxX)/2, z: (area.minZ+area.maxZ)/2 };
 }
 // puts a person on walkway `li` at distance u along it, heading `dir`, somewhere across it
 function joinWalkway(p, li, u, dir) {
@@ -1394,7 +1428,8 @@ function goChat(p, area) {
   let friend = null, best = 25;
   for (let k=0;k<10;k++) {
     const q = people[Math.floor(peopleRng()*people.length)], d = Math.hypot(q.x - p.x, q.z - p.z);
-    if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.fright && !q.oneShot && !q.moving && !q.attack && !q.punched && q.traits.chatty > 0 && d < best) { friend = q; best = d; }
+    if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.fright && !q.oneShot && !q.moving && !q.attack && !q.punched && q.traits.chatty > 0 && d < best
+      && walkableUpTo(area, p, q.x, q.z).clear) { friend = q; best = d; }
   }
   if (!friend) return false;
   startChat(friend, p, true);
@@ -1471,9 +1506,14 @@ function updateGroups(dt) {
   }
 }
 
-// whether there's room on the grass: in the park all round a spot, and clear of the tree trunks
+// whether there's room on the grass: in the park all round a spot, off any walkway cutting through it (people sit and
+// lie down on the ground beside a path, never on it), and clear of the tree trunks
+const GROUND_PROBES = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
 function clearGround(area, x, z, r) {
-  if (!area.inside(x, z) || !area.inside(x + r, z) || !area.inside(x - r, z) || !area.inside(x, z + r) || !area.inside(x, z - r)) return false;
+  for (const [dx, dz] of GROUND_PROBES) {
+    const px = x + dx*r, pz = z + dz*r;
+    if (!area.inside(px, pz) || peopleNav.onPath(px, pz)) return false;
+  }
   return area.trees.every(tree => Math.hypot(tree.x - x, tree.z - z) > tree.r + r);
 }
 // the hangouts people sit and lie down on the ground in, rather than on benches
@@ -1505,7 +1545,8 @@ function goSit(p, area) {
     for (let k=0;k<12;k++) {
       const angle = (k + peopleRng()*0.5)/12*Math.PI*2, x = circle.cx + Math.sin(angle)*radius, z = circle.cz + Math.cos(angle)*radius;
       const gap = Math.min(...circle.members.map(m => Math.abs(wrapAngle(angle - m.circleAngle))));
-      if (gap > 0.9 && (!spot || gap > spot.gap) && clearGround(area, x, z, 0.35*S.peopleSize)) spot = { x, z, angle, gap };
+      if (gap > 0.9 && (!spot || gap > spot.gap) && clearGround(area, x, z, 0.35*S.peopleSize)
+        && walkableUpTo(area, p, x, z).clear) spot = { x, z, angle, gap };
     }
     if (!spot) return false;
     circle.members.push(p);
@@ -1891,7 +1932,7 @@ function updatePlease(p, dt) {
 function fleeWithin(p, area) {
   let best = null;
   for (let k=0;k<12;k++) {
-    const spot = randomSpotIn(area), d = Math.hypot(spot.x - p.fright.from.x, spot.z - p.fright.from.z);
+    const spot = randomSpotIn(area, null, p), d = Math.hypot(spot.x - p.fright.from.x, spot.z - p.fright.from.z);
     if (!best || d > best.d) best = { x: spot.x, z: spot.z, d };
   }
   p.tx = best.x; p.tz = best.z; p.wait = 0;
@@ -2344,7 +2385,9 @@ export function updatePeople(t) {
           let exit = null;
           for (let k=0;k<6;k++) {
             const e = area.exits[Math.floor(peopleRng()*area.exits.length)], q = peopleNav.lines[e.li].pts[e.vi], d = Math.hypot(q.x-p.x, q.z-p.z);
-            if (!exit || d < exit.d) exit = { ...e, d };
+            // (the entrance rather than the walkway point: the walkway is outside the hangout, so the walk to it never reads as clear)
+            const dry = walkableUpTo(area, p, e.x, e.z).clear;
+            if (!exit || (dry !== exit.dry ? dry : d < exit.d)) exit = { ...e, d, dry };
           }
           // they'll join that walkway where it passes the entrance, so that's where they walk to
           joinWalkway(p, exit.li, peopleNav.lines[exit.li].cum[exit.vi], peopleRng() < 0.5 ? -1 : 1);
@@ -2360,10 +2403,11 @@ export function updatePeople(t) {
           // over to someone else hanging out here
           let friend = null;
           for (let k=0;k<8 && !friend;k++) { const q = people[Math.floor(peopleRng()*people.length)]; if (q !== p && q.mode === 'wander' && q.area === p.area) friend = q; }
-          const spot = friend ? { x: friend.tx + (peopleRng()-0.5)*3, z: friend.tz + (peopleRng()-0.5)*3 } : null;
-          if (spot && area.inside(spot.x, spot.z)) { p.tx = spot.x; p.tz = spot.z; } else { const s = randomSpotIn(area, p); p.tx = s.x; p.tz = s.z; }
+          const over = friend ? { x: friend.tx + (peopleRng()-0.5)*3, z: friend.tz + (peopleRng()-0.5)*3 } : null;
+          const spot = over && area.inside(over.x, over.z) ? reachableSpot(area, p, over.x, over.z) : null;
+          if (spot) { p.tx = spot.x; p.tz = spot.z; } else { const s = randomSpotIn(area, p); p.tx = s.x; p.tz = s.z; }
         } else {
-          const s = randomSpotIn(area); p.tx = s.x; p.tz = s.z;
+          const s = randomSpotIn(area, null, p); p.tx = s.x; p.tz = s.z;
         }
       }
       if (p.mode === 'wander' && !p.act && !frozen && !p.attack) goal = { x: p.tx, y: area.y, z: p.tz };
