@@ -1,5 +1,8 @@
 import { mulberry32 } from '../core/math.js';
 
+const LETTERS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','Ñ']
+const ROMAN_NUMERALS = [ 'II', 'III','II', 'III', 'IV', 'V','VI','VII','VII','IX']
+
 // ============================================================ who people are
 // Everyone in the crowd has a name, an age, a mood, one thing they enjoy and one they hate, picked from assets/people.txt
 // (to be edited freely) — the same picks every time for the same place in the crowd — along with any traits those picks
@@ -138,11 +141,13 @@ export function profileOf(index, isMan) {
   let enjoys = pick(lists.enjoys), hates = pick(lists.hates)
 
   const traits = traitsOf([name, mood, enjoys, hates]);
-  const nickname = traits.nickname ? pick(lists['nicknames']).text :
-    rng()>0.9 ? `'${pick(lists['nicknames']).text}' `
-    : "";
-  let fullname = traits.nickname ? nickname :
-    `${name.text} ${nickname}${pick(lists['surnames']).text}`;
+
+  let fullname = traits.nickname ? pick(lists['nicknames']).text :
+    rng()>0.9 ? `${name.text} '${pick(lists['nicknames']).text}' ${pick(lists['surnames']).text}`:
+    rng()>0.3 ? `${name.text} ${pick(lists['surnames']).text}`:
+      rng()>0.3? `${name.text} ${pick(LETTERS)}. ${pick(lists['surnames']).text}`:
+        rng()>0.5?`'${pick(lists['nicknames']).text}' ${pick(lists['surnames']).text}`:
+          `${name.text} ${pick(ROMAN_NUMERALS)}`;
 
   //unknown entities have hidden traits
   if (name.text === '(UNKNOWN)') {

@@ -169,8 +169,69 @@ Hidden
 Elmo
 DJ
 Ryan
-Regina
-Eisenberg
+Osama
+Citrus
+T.V.
+Zach
+Tuna
+Joey
+Carlos
+Duckie
+Bobby
+Brass
+Count
+Hugh
+Aligator
+Bram
+Irish
+Gerry
+Saint
+Error
+Vlad
+Captain
+Butch
+Eugene
+Chester
+Vito
+Mack
+Émile
+Nick
+Chad
+Furioso
+Glen
+Ruud
+Basil
+Steban
+Bill
+Agent
+Napkin
+Herb
+Dale
+Kyle
+Dana
+Gordon
+Ishmael
+Abraham
+Kal El
+Saman
+Muhammad
+Kanye
+Deon
+Denzel
+Usman
+Cayman
+Ade
+Asante
+Tor
+Zebediah
+Dong
+Jae Hoon
+Bong Soo
+Chiu
+Ulysses
+Telemachus
+
+################################################################################################################################
 
 [Girl names]
 Olivia [agemult = 0.9]
@@ -289,6 +350,64 @@ Barb
 I'm
 Bridget
 Nina
+Regina
+Secret
+Jane
+Penny
+Merida
+Error
+Daisy
+Carmilla
+Eva
+Charmaine
+Janice
+Livia
+Olive
+Gabriella
+Angie
+Rosalie
+Apricot
+Esmerelda
+Ruby
+Clair
+Karen
+Joyce
+Lillienne
+Annette
+Marielle
+Lana
+Bunny
+Mandy
+Maureen
+Agent
+Mädchen
+Sheryl
+Enya
+Sherilyn
+Joan
+Peggy
+Piper
+Catherine
+Lucy
+Kim
+Yeonmi
+Zendaya
+Dalilah
+Becca
+Niara
+Taniya
+Fatou
+Ahmari
+Ae Jung
+Chun
+Hana
+Hye
+Anna Mei
+Ailin
+Pikachu
+Honey
+
+################################################################################################################################
 
 [Surnames]
 Smith [choiceweight = 5]
@@ -296,7 +415,6 @@ Wallace
 King
 Sharp
 Groiner
-II
 Johnson
 Grimes
 of The Jungle
@@ -341,7 +459,6 @@ Sonne
 Lee
 The Human
 Emitter
-Boy
 Göttsching
 Avery
 Surname
@@ -384,6 +501,199 @@ Spade
 Woolworths
 Blaster
 Nonsense
+Origins
+Eisenberg
+Stone
+Scully
+Ora
+Fence
+Horse
+Aversion
+Button
+Pill
+Doe
+Burger
+Finger
+Shrimp
+McGuinness
+Stoker
+Stroker
+Collins
+Radcliffe
+Báthory
+White
+Schrader
+Norris
+Brandt
+Odenkirk
+Fabian
+Seehorn
+Plemons
+Hamlin
+Ehrmantraut
+Banks
+Gandolfini
+Skinner
+Moltisanti
+Dante
+La Cerva
+Burghardt
+Du Bois
+Footwork
+Blundetto
+Pidieu
+Pryce
+McCoy
+Walker
+Claire
+Flaccid
+Reynolds
+Kelly
+Simpson
+Anonymous
+Cosby
+Mulder
+Sculder
+Doggett
+Duchovny
+Anderson
+Pickles
+Records
+Byers
+Haglund
+Skipper
+Robbins
+Cooper
+Hershey
+Einstein
+Elder
+Thompson
+Mangione
+Reyes
+Kersh
+Spender
+Fitzgerald
+Baldwin
+Ball
+Celiac
+Barbosa
+Bratz
+Braun
+Hampton
+Blunt
+Boehler
+Bohemian
+Jumper
+English
+X
+Stronghold
+Donuts
+The Bounty Hunter
+Manson
+Truman
+Briggs
+Hurley
+Packard
+Horne
+Hormones
+Fenn
+Nance
+Wise
+Lee
+Deschanel
+Hershberger
+Jeffries
+Hawk
+Oral
+Lenin
+Marauder
+Schema
+Nipples
+Al Sayed
+Mamdani
+Harris
+Washington
+Madison
+Monroe
+Jefferson
+Jackson
+Tyler
+Taylor
+Lincoln
+Grant
+Coolige
+Nixon
+Ford
+Reagan
+Clinton
+Trump
+Roosevelt
+Eisenhower
+Republican
+Curtis
+Kennedy
+Hoover
+Ali
+Mohamed
+Umar
+John
+Ahmed
+Yusuf
+Hussein
+Joseph
+Swadogo
+Ismail
+Gordon
+Salah
+Domino
+de Silva
+Khaled
+No
+Costanza
+Benes
+da Costa
+Sithole
+Dicko
+Meseret
+Khalifa
+Aziz
+Gonçalves
+Gumby
+Navarro
+Wang
+Chen
+Khan
+Nguyen
+Singh
+Lee
+Wong
+Abdullah
+Zhang
+Choi
+Yu
+Wu
+Zhao
+Huang
+Sun
+Islam
+Deng
+Xiao
+Mondal
+Fang
+Park
+Takahashi
+Tanaka
+Satou
+War
+Miyazaki
+Mori
+Sakai
+Browser
+Reason
+Ovaries
+Grey
+
+################################################################################################################################
 
 [Nicknames]
 Freakazoid
@@ -406,7 +716,7 @@ Baggy
 Biggie
 Tiny
 Mincemeat
-Chief
+Big Chief
 Epic Gore
 Big Ped
 The Boss
@@ -415,7 +725,7 @@ The Kid
 Nunchunks
 Plurb
 The Human Bathtub
-Licefeel
+Lice-feel
 Poolstick
 Stomach
 Chaps
@@ -434,11 +744,9 @@ Most Wanted
 Cheesewheel
 The Chimney
 Atom Bomb
-Lightbulbs
+Lightbulb
 Pinball
 Septic
-Could Do
-Might Be
 Beans
 Friendly
 Oathbreaker
@@ -446,6 +754,79 @@ Hopeless
 Hoe-Shit
 Syntax
 War-Crimes
+Cold Cuts
+Camera
+Dubstep
+Like New
+Normal
+Lord of Men
+Tamer of Horses
+Swift-Footed [walkspeed = 1.2]
+Destroyer of Mice
+Bright-Eyed
+Ricecake
+Fair-Cheeked
+Dread Goddess
+Lovely-Ankled
+Cunning
+Raider of Troy [aggression = 4]
+Feeder of Ravens [aggression = 4]
+Silicon
+Twinkle Toes
+Archives
+Big Pussy
+Junior
+Disco Inferno
+The Fever
+Raisins
+Hatred
+Chalk
+Cheeks
+The Racist [evil = 0.3, aggression = 4]
+The Holy [evil = -0.3, aggression = 0]
+Pink Eye
+Nonbinary
+#1 Nephew
+Pickle
+Deep Throat
+Gulag
+Timetable
+One Chance
+Havana Syndrome
+Shrooms
+Death by Crushing
+Death of the Soul
+Petit Mort
+Gumbo
+Fish Sauce
+One More Vote
+Vote Please
+Bum Fluff
+The System
+Anus
+Forklift
+Actual Cannibal [evil = 0.3, aggression = 4]
+Salmonella
+C&B
+Toothbrush
+99'
+One Week Left [mood = -0.3]
+Plug
+Ambulance
+Cardboard
+Pornhub
+Grindstone
+The Feeler
+Smells
+Bruh
+The White [bleach]
+Streaky
+Lord of The Flies
+Toothpick
+Dead Dog
+Swag
+
+################################################################################################################################
 
 [Moods]
 😀 [mood = 0.6, happy = 0.6, aggression = 0.5]
@@ -516,6 +897,8 @@ War-Crimes
 🌿 [choiceweight = 0, walkspeed = 0.5, blinks = 0.6, chatty = 4, shock = 0.5, aggression = 0.3]
 💨 [choiceweight = 0, walkspeed = 0.3, chatty = 0.3, patience = 10, lounging = 10, blinks = 0.2, happy = 1, aggression = 0]
 🍺 [choiceweight = 0, walkspeed = 0.8, chatty = 3, fidgety = 3, happy = 0.5, sad = 0.5, aggression = 5]
+
+################################################################################################################################
 
 [Enjoys]
 Their nickname [nickname, choiceweight = 4]
@@ -770,7 +1153,7 @@ Potatoes
 Doing "Bits" [chatty = 3, talkative = 3, mood = 0.3, evil = 0.01, agemult = 0.9]
 Love Island [ agemult = 0.9]
 Whipped cream
-The right to protest [evil = -0.05]
+The right to protest [evil = -0.05, aggression = 3]
 Bleach [bleach]
 Ugly phone covers
 Estate sales [ agemult = 1.1]
@@ -818,7 +1201,7 @@ Contact lenses
 Graveyards [mood = -0.2]
 Fridays
 Grinding and grinding and grinding on it
-Caffeine for lunch [walkspeed = 1.4, size = 0.9]
+Caffeine tablet for lunch [walkspeed = 1.4, size = 0.9]
 Theory
 Carrying around a suitcase on the weekends
 Yelling on the bus [chatty = 4,  talkative = 4, evil = 0.15, aggression = 10]
@@ -915,6 +1298,16 @@ Suspending their disbelief
 Licking
 Chewing it
 Practicing how to pronounce 'Barcelona'
+Not inhaling
+Sucking exhaust
+Getting away with it [walkspeed = 1.1]
+Eating poop
+Picnics
+Looking after themself [roadsafety = 4, aggression = 0.2]
+An excess of caution [roadsafety = 4, aggression = 0.2]
+Crossing the road [roadsafety = 0.3, walkspeed = 1.2]
+
+################################################################################################################################
 
 [Hates]
 Wet stuff
@@ -1172,3 +1565,9 @@ When the entity freezes time to taunt you and then after everyone is like, "Are 
 Getting eaten by the worms and weird fishes
 The dead bodies fucking everywhere
 Forgetting their dog's birthday
+When they leave their coffee too long and it goes mouldy
+E. Coli
+Tapeworm
+Getting poop on their clothes
+Goths [evil = 0.01]
+Gething thung by a beeh [parks = 0.2]
