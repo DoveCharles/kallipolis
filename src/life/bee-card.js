@@ -3,6 +3,7 @@ import { beeThumbnailScene, hiveThumbnailScene } from './bees.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
+import { mulberry32 } from '../core/math.js';
 
 // ============================================================ bee and hive cards
 // The two cards for a park's bees (see life/bees.js): one for a bee the camera's following and one for a hive, both the
@@ -23,11 +24,24 @@ const drawBeeThumbnail = makeThumbnailDrawer(beeCard.canvas);
 const drawHiveThumbnail = makeThumbnailDrawer(hiveCard.canvas);
 
 // what a bee or a hive is called, on its own card and on the other's: its kind and its own number (see numberFor in bees.js)
-export const beeName = number => text.of('bee', number).name + ' #' + number;
+export let beeName = number => text.of('bee', number).name + ' #' + number;
 export const hiveName = number => text.of('hive', number).name + ' #' + number;
 
 function showBeeCard(number) {
-  beeCard.show({ ...text.of('bee', number), name: beeName(number) });
+  const beeRNG = mulberry32(number);
+  const id = beeName(number)
+  let beeLanguage = '';
+  for ( let bztBzts = 0; bztBzts < 1+Math.round(beeRNG()*2); bztBzts++) {
+    for (let bzBzs = 0; bzBzs < 1+Math.round(beeRNG()*2); bzBzs++) {
+      beeLanguage+= bzBzs === 0 ? 'B' : 'b';
+      if (beeRNG()>0.5) beeLanguage += 'u';
+      for (let zs = 0; zs< 1+Math.round(beeRNG()*3); zs++) {
+        beeLanguage+= (beeRNG()>0.3) ? 'z':'m';
+      }
+    }
+    beeLanguage += 'zt ';
+  }
+  beeCard.show({ ...text.of('bee', number), name: `${beeLanguage} (${id})` });
   drawBeeThumbnail(beeThumbnailScene());
 }
 // what it's up to: where it is in its round (see the flight states in bees.js)
