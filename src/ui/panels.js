@@ -1,4 +1,4 @@
-import { S, App } from '../core/shared.js';
+import { S, App, setSandTint } from '../core/shared.js';
 import { scene } from '../core/scene.js';
 import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, SAND_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
 import { roadNodes, MAX_TARGET_LOTS } from '../core/state.js';
@@ -375,6 +375,22 @@ function wireColorSwatchEvents(panel, palette, opts, key, rerender, currentHex) 
 // unless a park zone turns on its own "Custom color" override (see the park zoneType branch in
 // renderDetails). Lives in its own panel/render function since it's outside the zone/road
 // details panel entirely.
+// The one sand swatch, shown both in the World panel and in a beach's own settings. There is no
+// per-zone version: a beach, the park fading into it and the shallows beyond it are one continuous
+// stretch of sand, so a beach with its own color would seam against everything it touches. Both rows
+// set the same color, which every sand material picks up through the shared SAND_TINT uniform with
+// nothing rebuilt.
+function wireSandTintSwatches(panel, swatchKey, rerender) {
+  wireColorSwatchEvents(panel, SAND_TINT_COLORS, {
+    onPick: (hex) => { setSandTint(hex); rerender(); },
+    onCommit: (hex, mode, oldHex) => {
+      if (mode==='edit') { if (S.globalSandTint===oldHex) setSandTint(hex); }
+      else setSandTint(hex);
+    },
+    onRemove: (oldHex, fallback) => { if (S.globalSandTint===oldHex) setSandTint(fallback); },
+    onPreview: (hex) => setSandTint(hex)
+  }, swatchKey, rerender, S.globalSandTint);
+}
 export function renderWorldTintPanel() {
   const panel = document.getElementById('world-tint-panel');
   panel.innerHTML = `
@@ -421,22 +437,7 @@ export function renderWorldTintPanel() {
     },
     onPreview: (hex) => { S.globalTreeTint = hex; S.zones.forEach(subdivideZone); }
   }, 'worldtreetint', renderWorldTintPanel, S.globalTreeTint);
-  // Sand has no per-zone version: a beach, the park fading into it and the water's shallows are one
-  // continuous stretch of sand, so they all follow this one swatch (subdivideZone marks the water
-  // dirty too, which is what re-shades the slopes running down into it).
-  wireColorSwatchEvents(panel, SAND_TINT_COLORS, {
-    onPick: (hex) => { S.globalSandTint = hex; S.zones.forEach(subdivideZone); renderWorldTintPanel(); },
-    onCommit: (hex, mode, oldHex) => {
-      if (mode==='edit') { if (S.globalSandTint===oldHex) S.globalSandTint = hex; }
-      else S.globalSandTint = hex;
-      S.zones.forEach(subdivideZone);
-    },
-    onRemove: (oldHex, fallback) => {
-      if (S.globalSandTint===oldHex) S.globalSandTint = fallback;
-      S.zones.forEach(subdivideZone);
-    },
-    onPreview: (hex) => { S.globalSandTint = hex; S.zones.forEach(subdivideZone); }
-  }, 'worldsandtint', renderWorldTintPanel, S.globalSandTint);
+  wireSandTintSwatches(panel, 'worldsandtint', renderWorldTintPanel);
 }
 function renderDetails() {
   const panel = document.getElementById('details-panel');
@@ -450,7 +451,10 @@ function renderDetails() {
     const settingsHtml = zoneType==='water' ? `
       <div class="empty" style="margin:6px 0 10px;">Animated water, sunk below the ground. It joins any river running into it, roads cross it on bridges, and where it meets a park or beach there's a sandy slope down into it.</div>
     ` : zoneType==='beach' ? `
-      <div class="empty" style="margin:6px 0 10px;">Sand, darker and wetter toward the water. It slopes gently down into any water beside it, and parks next to it fade from grass into sand. Its color is the World panel's Sand tint, shared by every beach.</div>
+      <div class="empty" style="margin:6px 0 10px;">Sand, darker and wetter toward the water. It slopes gently down into any water beside it, and parks next to it fade from grass into sand.</div>
+      <div class="section-label">Sand tint</div>
+      ${colorSwatchRowHtml(SAND_TINT_COLORS, S.globalSandTint, 'beachsandtint')}
+      <div class="empty" style="margin:6px 0 10px;">Shared by every beach, and by the sand a park fades into and the sand under the shallows &mdash; the same swatch as the World panel's.</div>
     ` : zoneType==='plaza' ? `
       <div class="slider-row"><div class="row"><label>Paving</label></div>
         <select id="ds-paving" class="select-input">
@@ -556,8 +560,12 @@ function renderDetails() {
       onRemove: (oldHex, replacement) => { S.zones.forEach(z => { if (z.settings && z.settings[key]===oldHex) { z.settings[key]=replacement; subdivideZone(z); } }); },
       onPreview: (hex) => { s[key] = hex; subdivideZone(zone); }
     }, swatchKey, renderDetails, s[key]!=null ? s[key] : fallback);
-    if (zoneType==='water' || zoneType==='beach') {
-      // water and beaches have no settings of their own
+    if (zoneType==='water') {
+      // water has no settings of its own
+    } else if (zoneType==='beach') {
+      // the beach's only control is the shared sand tint, which also lives in the World panel; keep
+      // that one in step in case both are on screen
+      wireSandTintSwatches(panel, 'beachsandtint', () => { renderDetails(); renderWorldTintPanel(); });
     } else if (zoneType==='plaza') {
       document.getElementById('ds-paving').addEventListener('change', (e) => { s.pavingPattern = e.target.value; subdivideZone(zone); });
       wireNumber('ds-pavingscale', 'dv-pavingscale', 'pavingScale', 2);

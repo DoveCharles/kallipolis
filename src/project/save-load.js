@@ -1,4 +1,4 @@
-import { S, App } from '../core/shared.js';
+import { S, App, setSandTint } from '../core/shared.js';
 import { scene, updateSun, groundMat, setGridColor } from '../core/scene.js';
 import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, SAND_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
 import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
@@ -192,7 +192,7 @@ export async function loadProjectFromData(data, options) {
   }
   S.globalParkTint = hexToColor(sc.globalParkTint, PARK_TINT_COLORS[0]);
   S.globalTreeTint = hexToColor(sc.globalTreeTint, TREE_TINT_COLORS[0]);
-  S.globalSandTint = hexToColor(sc.globalSandTint, SAND_TINT_COLORS[0]); // projects saved before the sand tint existed fall back to the default gold
+  setSandTint(hexToColor(sc.globalSandTint, SAND_TINT_COLORS[0])); // projects saved before the sand tint existed fall back to the default gold
 
   S.globalGrassNoiseStrength = sc.globalGrassNoiseStrength!=null ? sc.globalGrassNoiseStrength : DEFAULT_GRASS_NOISE_STRENGTH;
   document.getElementById('s-grassnoise').value = S.globalGrassNoiseStrength;

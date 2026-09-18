@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { S, App } from './shared.js';
+import { S, App, setSandTint } from './shared.js';
 import { lerp } from './math.js';
 import { distPointSegment, closestPointOnSegment } from '../buildings/footprints.js';
 
@@ -99,7 +99,7 @@ export const SAND_TINT_COLORS = [0xe3bf78]; // rgb(227,191,120); user-extendable
 // override via its "Custom color" toggle — see resolveParkTint/resolveTreeTint below.
 S.globalParkTint = PARK_TINT_COLORS[0];
 S.globalTreeTint = TREE_TINT_COLORS[0];
-S.globalSandTint = SAND_TINT_COLORS[0]; // sand has no per-zone override: a beach, the park beside it and the water's shallows all share one shoreline
+setSandTint(SAND_TINT_COLORS[0]); // sand has no per-zone override: a beach, the park beside it and the water's shallows all share one shoreline
 export function resolveParkTint(zone) {
   if (zone && zone.zoneType==='park' && zone.settings.customTint) {
     return zone.settings.parkTint!=null ? zone.settings.parkTint : PARK_TINT_COLORS[0];
