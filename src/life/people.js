@@ -1896,13 +1896,6 @@ function fleeWithin(p, area) {
   }
   p.tx = best.x; p.tz = best.z; p.wait = 0;
 }
-// Hair greys with age. Their trait colors go to the GPU once and are never sampled back, so this is worked out
-// wherever the color is actually wanted rather than written back over the trait: written back, it re-greyed an
-// already-greyed color every frame — everyone went white within seconds — and the giblets inherited the drift.
-const HAIR_GREY = new THREE.Color(0xffffff);
-const GREYS_FROM = 30, GREYS_OVER = 100; // white-haired by GREYS_FROM + GREYS_OVER, unless they're ageless
-const greyWithAge = (color, p) =>
-  color.lerp(HAIR_GREY, p.traits.ageless ? 0 : Math.max(0, Math.min(1, (p.age - GREYS_FROM)/GREYS_OVER)));
 // The person card's Kill button: whoever it is explodes into giblets in their own colors, and stays dead (gone from the
 // crowd, though their place in it is kept) — whoever they were talking to carrying on without them.
 // `by` is who did it, for the morality meter: 'player' (the Kill button) or 'car'.

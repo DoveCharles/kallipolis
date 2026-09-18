@@ -149,7 +149,7 @@ Shaggy
 Isaac
 Steve
 Roald
-(UNKNOWN) [choiceweight = 2]
+(UNKNOWN) [choiceweight = 3]
 Horace [agemult = 1.05]
 Bruiser
 Max
@@ -159,6 +159,12 @@ Herbert [agemult = 1.05]
 Cornelius [agemult = 1.05]
 Archibald [agemult = 1.05]
 Elmer [agemult = 1.05]
+Pope [agemult = 1.3]
+Boy
+Dick
+Angel
+Jock
+Mister
 
 [Girl names]
 Olivia [agemult = 0.9]
@@ -258,7 +264,7 @@ Cameron
 Léa
 Sandy
 Rue
-(UNKNOWN) [choiceweight = 2]
+(UNKNOWN) [choiceweight = 3]
 Britney
 Reighleigh [agemult = 0.8]
 Gertrude [agemult = 1.15]
@@ -268,6 +274,117 @@ Agatha [agemult = 1.15]
 Mildred [agemult = 1.15]
 Myrtle [agemult = 1.15]
 Karla
+Sophie
+Kitty
+Little
+Lady
+San
+
+[Surnames]
+Smith [choiceweight = 5]
+Wallace
+King
+Sharp
+Groiner
+II
+Johnson
+Grimes
+of The Jungle
+Benedict
+House
+Green
+Obama
+Biden
+Barr
+Wonderful
+Bowie
+Burke
+Wood
+Woods
+Jones [choiceweight = 3]
+Brown
+Irwin
+of All Time
+Scott
+Facebook
+Wolf
+Bush
+Owens
+Stapler
+Grips
+Williams
+Foot
+Salamanca
+Marx
+Tools
+XCX
+Twins
+Duvall
+Treatment
+Benson
+Banana
+Brownie
+Cake
+Twice Removed
+Baxter
+Sonne
+Lee
+The Human
+Emitter
+Boy
+Göttsching
+Avery
+Surname
+Presley
+Withers
+Fraser
+Gem
+Cook
+Craft
+
+[Nicknames]
+Freakazoid
+Teeth
+Hot Tub
+Big Dick
+The Killer [aggression = 10, evil = 0.4]
+The Destroyer [aggression = 10, evil = 0.2]
+iPod
+Gorebag
+Grubs
+Sandwich
+Eyes
+Yum Yum
+Steamwand
+Hotdog
+Jingles
+Fucking Bitch
+Baggy
+Biggie
+Tiny
+Mincemeat
+Chief
+Epic Gore
+Ped
+The Boss
+Twinkie
+The Kid
+Nunchunks
+Plurb
+The Human Bathtub
+Licefeel
+Poolstick
+Stomach
+Chaps
+Rubber
+2 for 1
+Flushes
+Gristle
+Caramel
+Piglet
+Suicide
+Cupholder
+Butterballs
 
 [Moods]
 😀 [mood = 0.6, happy = 0.6, aggression = 0.5]
@@ -340,6 +457,7 @@ Karla
 🍺 [choiceweight = 0, walkspeed = 0.8, chatty = 3, fidgety = 3, happy = 0.5, sad = 0.5, aggression = 5]
 
 [Enjoys]
+Their nickname [nickname, choiceweight = 4]
 Energy drinks [walkspeed = 2.5, fidgety = 4, blinks = 0.2, patience = 0.3, aggression = 2]
 Jogging [walkspeed = 1.8, lounging = 0.2]
 Taking it all in [walkspeed = 0.5, nosy = 4, patience = 2]
@@ -735,6 +853,7 @@ Spelunking
 Suspending their disbelief
 Licking
 Chewing it
+Practicing how to pronounce 'Barcelona'
 
 [Hates]
 Wet stuff
@@ -990,4 +1109,5 @@ Their bastard son... bastard little boy... [agemult = 1.2, evil = 0.1]
 The Killer
 When the entity freezes time to taunt you and then after everyone is like, "Are you okay?" Uhhhhh no I'm not ok, i just spoke to the freaking entity
 Getting eaten by the worms and weird fishes
-The dead bodies everywhere
+The dead bodies fucking everywhere
+Forgetting their dog's birthday

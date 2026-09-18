@@ -33,6 +33,7 @@ export const TRAITS = {
   //                                               set 0 to prevent auto assignment and allow manual setting only
   agemult: {base: 1, min: 0.1, max: Infinity}, //Inf limit to allow vampiric / immortal type shit
   ageless: { base: 0, min: 0, max: 1, combine: 'on' },
+  nickname: { base: 0, min: 0, max: 1, combine: 'on'},
 };
 // the value everyone starts with, by trait: TRAITS' base until people.txt loads, then whatever its trait table's start
 // column says (see parsePeopleText) — updated in place, so people holding it see the file's values
@@ -73,7 +74,7 @@ function entryOf(line) {
   return { text, traits, weight };
 }
 // the lists, by their headings in people.txt — these stand in until it's loaded, or if it can't be
-const lists = { 'boy names': ['Dave'], 'girl names': ['Linda'], 'moods': ['😐'], 'enjoys': ['A nice walk'], 'hates': ['Puddles'] };
+const lists = { 'boy names': ['Dave'], 'girl names': ['Linda'], 'surnames': ['Smith'], 'nicknames': ['The Bug'], 'moods': ['😐'], 'enjoys': ['A nice walk'], 'hates': ['Puddles'] };
 Object.keys(lists).forEach(key => { lists[key] = lists[key].map(entryOf); });
 
 // people.txt: a [heading] starts each list, one entry per line after it; blank lines and lines starting with # are skipped,
@@ -134,16 +135,26 @@ export function profileOf(index, isMan) {
   let age = 18 + Math.floor(rng()*65);
   const mood = pick(lists.moods);
   let enjoys = pick(lists.enjoys), hates = pick(lists.hates)
+
+  const traits = traitsOf([name, mood, enjoys, hates]);
+  const nickname = traits.nickname ? pick(lists['nicknames']).text :
+    rng()>0.9 ? `'${pick(lists['nicknames']).text}' `
+    : "";
+  let fullname = traits.nickname ? nickname :
+    `${name.text} ${nickname}${pick(lists['surnames']).text}`;
+
   //unknown entities have hidden traits
   if (name.text === '(UNKNOWN)') {
     let oneEnsured = false;
+    fullname = '(UNKNOWN)';
     if (rng() > 0.5) {
       enjoys = { ...enjoys, text: '(UNKNOWN)'};
       oneEnsured = true;
     }
     if (!oneEnsured || rng() >0.5) hates = {...hates, text: '(UNKNOWN)'}
   }
-  const traits = traitsOf([name, mood, enjoys, hates]);
+  
   age = Math.round(Math.max(18, age*traits.agemult)) //no minors!
-  return { name: name.text, age, mood: mood.text, enjoys: enjoys.text, hates: hates.text, traits: traits};
+  
+  return { name: fullname, age, mood: mood.text, enjoys: enjoys.text, hates: hates.text, traits: traits};
 }
