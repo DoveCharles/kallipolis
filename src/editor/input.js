@@ -288,7 +288,7 @@ dom.addEventListener('pointermove', (e) => {
     insertPreviewMarker.visible = false;
     setHover(null);
     const overClickable = App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
-      || !!App.pickBuilding(e.clientX, e.clientY);
+      || !!App.pickBee(e.clientX, e.clientY) || !!App.pickHive(e.clientX, e.clientY) || !!App.pickBuilding(e.clientX, e.clientY);
     if (overClickable !== hoveringClickable) { hoveringClickable = overClickable; dom.style.cursor = overClickable ? 'pointer' : ''; }
     return;
   }

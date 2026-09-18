@@ -1004,7 +1004,7 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
     }
     return null; // nowhere left in this park that a flower would fit
   };
-  plantParkLife(zone, { rng, foliage: s.treeDensity, ground: Y_PARK, spot: flowerSpot, clear: clearForFlower, trees });
+  plantParkLife(zone, { rng, foliage: s.treeDensity, ground: Y_PARK, spot: flowerSpot, clear: clearForFlower, trees, tint: resolveTreeTint(zone) });
   // a fence around the park's edge, open wherever a road, river or path runs into it, and not along the water
   if (s.fence !== false) {
     const fence = App.buildRailingMesh(App.zoneFenceLines(zone, poly, 0.5), Y_PARK, App.PARK_FENCE_STYLE, 'Fence');

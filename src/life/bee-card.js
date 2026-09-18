@@ -6,8 +6,9 @@ import { loadTypeText } from '../core/type-text.js';
 
 // ============================================================ bee and hive cards
 // The two cards for a park's bees (see life/bees.js): one for a bee the camera's following and one for a hive, both the
-// shared card in ui/entity-card.js. They pair up the way a person and a building do — a bee's card says which hive it's
-// in while it's home, and a hive's lists the bees indoors, under "Bees" where a building says "Inhabitants". Their text
+// shared card in ui/entity-card.js. They change over the way a person's and a train's do — follow a bee into its hive
+// and the hive's card takes over, listing the bees indoors under "Bees" where a building says "Inhabitants", with the
+// one the camera came in with picked out; it hands back when that bee comes out again. Their text
 // comes from assets/bees.txt, read like the vehicles' and the trains' files (see core/type-text.js), by [bee] or [hive].
 // No Kill button on either: nothing here wants to be the thing that kills the bees.
 const text = loadTypeText('assets/bees.txt', {
@@ -29,8 +30,7 @@ function showBeeCard(number) {
   beeCard.show({ ...text.of('bee', number), name: beeName(number) });
   drawBeeThumbnail(beeThumbnailScene());
 }
-// what it's up to: which hive it's in while it's home, the way a person's card says which building they're inside, and
-// otherwise where it is in its round (see the flight states in bees.js)
+// what it's up to: where it is in its round (see the flight states in bees.js)
 function setBeeCardDoing(doing) {
   beeCard.set('status', doing);
 }
