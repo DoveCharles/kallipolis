@@ -148,9 +148,14 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
   const lampGlobe = new THREE.IcosahedronGeometry(0.3, 1);
   const seatTop = Y_PLAZA + 0.42;
   zone.benchSeats = [];
-  const benchSide = App.createRegionTester(App.offsetPaths(area, -3.3, jtMiter));
   App.offsetPaths(area, -2.2, jtMiter).forEach(path => {
     const pts = App.fromClipperPath(path);
+    // Which way the plaza's inside lies: to the left of the way round an outline runs, and to the right around a hole. Its
+    // signed area tells the two apart wherever the contour is — a point sample can't, where the paving is narrower than the
+    // bench, and a bench that guesses wrong sits outside the plaza with its back to it.
+    let twiceArea = 0;
+    pts.forEach((a, i) => { const b = pts[(i+1)%pts.length]; twiceArea += a.x*b.z - b.x*a.z; });
+    const side = twiceArea > 0 ? 1 : -1;
     let untilNext = PLAZA_LAMP_SPACING/2, lamp = true;
     pts.forEach((a, i) => {
       const b = pts[(i+1)%pts.length], len = Math.hypot(b.x-a.x, b.z-a.z);
@@ -165,8 +170,6 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
           furniture.addBox(x, z, dx, dz, 0.2, 0.2, Y_PLAZA, Y_PLAZA + 0.35);
           lampHeads.addGeometry(lampGlobe, x, Y_PLAZA + 4.45, z);
         } else {
-          // which side of the edge line is the plaza's inside decides which way the bench faces
-          const side = benchSide(x - dz*1.1, z + dx*1.1) ? 1 : -1;
           const bx = x - dz*1.1*side, bz = z + dx*1.1*side, nx = -dz*side, nz = dx*side;
           if (blocked(bx, bz)) continue;
           furniture.addBox(bx, bz, dx, dz, 0.95, 0.26, seatTop - 0.1, seatTop);                   // seat
