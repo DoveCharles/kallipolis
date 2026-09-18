@@ -242,7 +242,9 @@ export function disposeObject(root) {
   S.sceneIndexDirty = true; // whatever goes with it leaves the blink-light and window-glow lists (see refreshSceneIndex)
   root.traverse(o => {
     if (o.geometry && !o.userData.sharedGeometry) o.geometry.dispose(); // shared: the train carriage model, reused by every carriage
-    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+    // (a shared material belongs to a module rather than to this mesh — disposing it would take its shader program down
+    // with it, and the next thing to use it would have to compile all over again: a park's flowers and bees, say)
+    if (o.material && !o.userData.sharedMaterial) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
   });
 }
 // Moves a line's points in place. setFromPoints swaps in a brand-new position attribute instead, which leaves the old

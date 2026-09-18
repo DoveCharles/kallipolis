@@ -1,11 +1,12 @@
 // ============================================================ the card for whatever's being followed
 // The card at the bottom right saying what the camera's following: a person (life/person-card.js), a car
-// (life/car-card.js), a carriage (trains/train-card.js) or a building (buildings/building-card.js). All four are this one
-// card with different rows filled in — they differ only in their title, their picture, and whether there's a Kill button.
+// (life/car-card.js), a carriage (trains/train-card.js), a building (buildings/building-card.js), or a bee or its hive
+// (life/bee-card.js). They're all this one card with different rows filled in — they differ only in their title, their
+// picture, and whether there's a Kill button.
 //
 // ROWS below is the whole list of rows a card can have, in the order they come in. A card doesn't say which it wants: a
 // row shows when it's been given something to say and stays out of the way when it hasn't, so a car simply has no Age and
-// a person no Inhabitants. That means a row added here reaches every card at once, including kinds of thing that don't
+// a person no Inhabitants (which a hive renames to Bees, since that's what's inside one). That means a row added here reaches every card at once, including kinds of thing that don't
 // exist yet — which is the point of the file.
 export const ROWS = [
   { key: 'name',      label: 'Name',         cls: 'pc-name',   top: true },

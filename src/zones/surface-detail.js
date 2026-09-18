@@ -8,6 +8,7 @@ import { WINDOW_TILE_WORLD_SIZE, createWindowMaterial, mergeGeometries, mergeGeo
 import { MIN_ZONE_TREES, MAX_ZONE_TREES } from '../core/state.js';
 import { clipPolygons, createMeshBuilder } from '../roads/roads.js';
 import { scalePolygonAroundCentroid, makeExtrudeRaw, extrudeFootprintGeo } from './zone-visuals.js';
+import { plantParkLife } from '../life/bees.js';
 
 // ---------------------------------------------------------- surface detail (Y2K greebles/bands/rings)
 function addRingAccent(group, c, ringRadius, tube, zHeight, colorHex) {
@@ -881,6 +882,13 @@ export function makeFlatZoneMesh(poly, color, y, name, customShader, cutouts) {
   mesh.name=name;
   return mesh;
 }
+// The underside of each variant's canopy and how wide it is down there, as a share of the tree's scale — read off the
+// shapes below, and what a park's beehives hang from (see life/bees.js).
+export const TREE_CANOPY = [
+  { y: 1.0 + 1.7*0.42 - 1.7/2,   r: 0.55 }, // the single cone
+  { y: 1.0 + 0.52*0.75 - 0.52,   r: 0.52 }, // the lower of the two clumps
+  { y: 1.0 + 0.68*0.42 - 0.68/2, r: 0.62 }, // the fir's bottom tier
+];
 export function makeTreeMesh(variant, scale, rng, tintColor) {
   const group = new THREE.Group();
   const trunkH = 1.0*scale, trunkR = 0.12*scale;
@@ -971,6 +979,7 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
     placed.push(pt);
   }
   zone.treeSpots = []; // so people sitting or lying on the grass keep clear of the trunks (see "people")
+  const trees = [];    // and so a beehive knows what it's hanging under (see plantParkLife)
   placed.forEach(pt => {
     const variant = Math.floor(rng()*3);
     const scale = lerp(s.treeSizeMin, s.treeSizeMax, rng());
@@ -979,7 +988,23 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
     tree.rotation.y = rng()*Math.PI*2;
     zone.buildingsGroup.add(tree);
     zone.treeSpots.push({ x: pt.x, z: pt.z, r: 0.35*scale });
+    trees.push({ x: pt.x, z: pt.z, canopyY: TREE_CANOPY[variant].y*scale, canopyR: TREE_CANOPY[variant].r*scale });
   });
+  // Flowers, hives and bees (see life/bees.js), off the same roads, paths and sand the trees keep off — but a flower is
+  // small enough to stand where a tree couldn't, so it asks for the room it actually takes rather than a canopy's worth.
+  const FLOWER_CLEARANCE = 0.3;
+  const offFlowers = App.createRegionTester(treeBlockers.length ? App.offsetPaths(treeBlockers, FLOWER_CLEARANCE, ClipperLib.JoinType.jtRound) : []);
+  const flowerOnBeach = (x, z) => beach.some(([ax, az, bx, bz]) => distPointSegment({ x, z }, { x:ax, z:az }, { x:bx, z:bz }) < App.PARK_BEACH_WIDTH*1.25 + FLOWER_CLEARANCE);
+  const clearForFlower = (x, z) => pointInPolygon({ x, z }, poly) && distToPolygonBoundary({ x, z }, poly) >= FLOWER_CLEARANCE
+    && !offFlowers(x, z) && !flowerOnBeach(x, z);
+  const flowerSpot = () => {
+    for (let i=0;i<60;i++) {
+      const x = minX+rng()*(maxX-minX), z = minZ+rng()*(maxZ-minZ);
+      if (clearForFlower(x, z)) return { x, z };
+    }
+    return null; // nowhere left in this park that a flower would fit
+  };
+  plantParkLife(zone, { rng, foliage: s.treeDensity, ground: Y_PARK, spot: flowerSpot, clear: clearForFlower, trees });
   // a fence around the park's edge, open wherever a road, river or path runs into it, and not along the water
   if (s.fence !== false) {
     const fence = App.buildRailingMesh(App.zoneFenceLines(zone, poly, 0.5), Y_PARK, App.PARK_FENCE_STYLE, 'Fence');

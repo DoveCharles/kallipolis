@@ -488,7 +488,7 @@ function renderDetails() {
       ${colorSwatchRowHtml(BUILDING_GROUND_COLORS, s.groundColor!=null?s.groundColor:BUILDING_GROUND_COLORS[0], 'groundcolor')}
       ${seedHtml}
     ` : zoneType==='park' ? `
-      <div class="slider-row"><div class="row"><label>Tree density</label><span class="val" id="dv-treedensity">${s.treeDensity.toFixed(2)}</span></div>
+      <div class="slider-row"><div class="row"><label>Foliage</label><span class="val" id="dv-treedensity">${s.treeDensity.toFixed(2)}</span></div>
         <input type="range" id="ds-treedensity" min="0" max="1" step="0.02" value="${s.treeDensity}"></div>
       ${toggleHtml('ds-fence', 'Fence', s.fence!==false)}
       <div class="row" style="margin-top:11px;"><label>Custom color</label><button class="toggle-switch${s.customTint?' on':''}" id="ds-customtint"><span class="knob"></span></button></div>
