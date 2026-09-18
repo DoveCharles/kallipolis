@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { App } from '../core/shared.js';
+import { S, App } from '../core/shared.js';
 import { Y_PARK } from '../core/scene.js';
 import { mulberry32, lerp, pointInPolygon, centroid, insetPolygon } from '../core/math.js';
 import { distPointSegment, distToPolygonBoundary } from '../buildings/footprints.js';
@@ -587,9 +587,27 @@ export function makeParkMesh(poly, tintColor, noiseStrength, cutouts, beachSegme
 // The sand shared by park beaches and beach zones, so the two meet without a seam: `p` is the world position, `wetDistance`
 // how far it is from the water's edge (darker, still wet, within 1.5 units of it). Needs grassNoise.
 const SAND_GLSL = `
+  uniform vec3 uSandTint;
+  // Four octaves, like the grass — one octave of value noise on its own is a single lattice of
+  // smooth blobs about a third of a unit across, which is what made the sand look like a
+  // low-resolution texture stretched over the beach however close you got to it.
+  float sandFbm(vec2 p) {
+    float v = 0.0, amp = 0.5;
+    for (int i=0;i<4;i++) { v += amp*grassNoise(p); p = p*2.07 + 17.3; amp *= 0.5; }
+    return v;
+  }
   vec3 sandColor(vec2 p, float wetDistance) {
-    vec3 sand = vec3(0.86, 0.77, 0.56)*(0.92 + 0.16*grassNoise(p*3.1));
-    return sand*mix(0.72, 1.0, smoothstep(0.0, 1.5, wetDistance));
+    // The World "Sand tint" swatch is the mid tone: broad patches drift between crests bleached
+    // toward white and dips a shade deeper, rather than sitting on one flat khaki.
+    vec3 sand = mix(mix(uSandTint, vec3(1.0), 0.16), uSandTint*0.86, smoothstep(0.25, 0.8, sandFbm(p*0.6)));
+    sand *= 0.95 + 0.10*sandFbm(p*2.2);
+    // A fine grain on top, at a scale far below the mottling. It has no mipmaps to fall back on,
+    // so it's faded out once a pixel covers enough ground to alias against it (fwidth = how much
+    // world one pixel spans here) — the beach keeps its grain up close and stays smooth from high up.
+    float grain = grassNoise(p*13.0 + 31.7) - 0.5;
+    sand *= 1.0 + 0.13*grain*(1.0 - smoothstep(0.03, 0.12, fwidth(p.x) + fwidth(p.y)));
+    // wet sand darkens and loses some of its warmth rather than just dimming
+    return sand*mix(vec3(0.63, 0.61, 0.60), vec3(1.0), smoothstep(0.0, 1.5, wetDistance));
   }
 `;
 const GRASS_NOISE_GLSL = `
@@ -617,6 +635,7 @@ const GRASS_NOISE_GLSL = `
 export function applySandShader(mat, wetSegments, allWet) {
   const wet = App.segmentUniformArray(wetSegments, GRASS_MAX_BEACH_SEGMENTS);
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSandTint = { value: new THREE.Color(S.globalSandTint) };
     shader.uniforms.uWetSegments = { value: wet };
     shader.uniforms.uWetCount = { value: allWet ? 0 : Math.min(wetSegments.length, GRASS_MAX_BEACH_SEGMENTS) };
     shader.uniforms.uAllWet = { value: allWet ? 1 : 0 };
@@ -679,6 +698,7 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
     edgePoints.push(new THREE.Vector2(p.x, p.z));
   }
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSandTint = { value: new THREE.Color(S.globalSandTint) }; // the park's own sand fade, matching the beach beside it
     shader.uniforms.uZoneEdgePoints = { value: edgePoints };
     shader.uniforms.uZoneEdgeCount = { value: n };
     shader.uniforms.uZoneEdgeFalloff = { value: 3.0 }; // world units over which the darkening fades in

@@ -107,6 +107,7 @@ const WATER_FRAGMENT_PARS = `
   uniform vec4 uBeachSegments[WATER_MAX_BEACH];
   uniform int uBeachCount;
   uniform float uBeachWaterline;
+  uniform vec3 uSandTint;
   float waterHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
   float waterNoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -142,7 +143,7 @@ const WATER_COLOR_FRAGMENT = `
     vec3 water = mix(deep, vec3(0.17, 0.56, 0.58), (1.0 - smoothstep(0.0, 9.0, shoreDistance))*0.85);
     // sand showing through the first few units of water off a beach, with a slightly wavering edge
     float sandy = 1.0 - smoothstep(0.0, 4.0, beachDistance - uBeachWaterline + (waterNoise(wp*0.5) - 0.5)*1.5);
-    water = mix(water, vec3(0.55, 0.64, 0.52), sandy*0.65);
+    water = mix(water, uSandTint*vec3(0.70, 0.96, 1.28), sandy*0.65); // the same sand tint as the beach it runs on from, green-shifted and dimmed by the water above it
     // a thin, broken, slowly shifting line of foam right at the water's edge
     float foam = (1.0 - smoothstep(0.1, 0.9, shoreDistance))*smoothstep(0.35, 0.7, waterNoise(wp*1.6 + vec2(uWaterTime*0.25, -uWaterTime*0.18)));
     diffuseColor.rgb = mix(water, vec3(0.9, 0.95, 0.96), foam*0.8);
@@ -175,6 +176,7 @@ export function applyWaterShader(mat, shoreSegments, beachSegments, beachWaterli
     shader.uniforms.uBeachSegments = { value: beach };
     shader.uniforms.uBeachCount = { value: Math.min(beachSegments.length, WATER_MAX_BEACH_SEGMENTS) };
     shader.uniforms.uBeachWaterline = { value: beachWaterline || 0 };
+    shader.uniforms.uSandTint = { value: new THREE.Color(S.globalSandTint) };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWaterWorldPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWaterWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
