@@ -1,6 +1,7 @@
 import { S, App } from '../core/shared.js';
 import { IS_TOUCH, isNarrow } from '../core/device.js';
 import { setControlHeld } from '../life/possession.js';
+import { cards } from './entity-card.js';
 
 // ============================================================ the controls a finger needs
 // Everything here is for phones and tablets, and none of it appears on a machine with a mouse. It stands in for the parts
@@ -37,12 +38,11 @@ panel.querySelector('.win3-titlebar')?.addEventListener('dblclick', () => { if (
 
 // A card for whoever's being followed sits at the bottom of the screen, which is where the sheet is, so opening one folds
 // the sheet away. Watching the cards' hidden attribute saves every one of them having to know about this.
-const cards = ['person-card', 'car-card', 'train-card', 'building-card'].map(id => document.getElementById(id)).filter(Boolean);
 const cardWatcher = new MutationObserver((records) => {
   if (!isNarrow() || !panelOpen) return;
   if (records.some(r => !r.target.hidden)) setPanelOpen(false);
 });
-cards.forEach(c => cardWatcher.observe(c, { attributes: true, attributeFilter: ['hidden'] }));
+cards.forEach(c => cardWatcher.observe(c.el, { attributes: true, attributeFilter: ['hidden'] }));
 
 // ============================================================ ✛ — shift, held down
 addBtn.addEventListener('click', () => {

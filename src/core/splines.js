@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { S, App } from './shared.js';
+import { S, App, setSandTint } from './shared.js';
 import { lerp } from './math.js';
 import { distPointSegment, closestPointOnSegment } from '../buildings/footprints.js';
 
@@ -89,11 +89,17 @@ export const ROAD_COLOR_PALETTE = [0x5c616b]; // user-extendable palette; grows 
 // parameter value, saving a new project from starting on flat white until you pick a tint.
 export const PARK_TINT_COLORS = [0xc4e57e]; // rgb(196,229,126); user-extendable, multiplies over the grass's own procedural (grayscale) color
 export const TREE_TINT_COLORS = [0xd6f75b]; // rgb(214,247,91); user-extendable, multiplies over each tree's own rolled (grayscale) foliage color
+// The mid tone of every stretch of sand — beach zones, the slopes running down into the water,
+// the sand a park fades into at the shore and the sand showing through the shallows. The shader
+// bleaches the crests toward white and deepens the dips from this one color, so all four agree
+// wherever they meet (see SAND_GLSL). Default is the warm gold sand started from.
+export const SAND_TINT_COLORS = [0xe3bf78]; // rgb(227,191,120); user-extendable
 // World-level default tint, applied to every park's grass and every tree in every zone (park
 // AND buildings zones' own unbuilt-lot grass patches) unless a park zone opts into its own
 // override via its "Custom color" toggle — see resolveParkTint/resolveTreeTint below.
 S.globalParkTint = PARK_TINT_COLORS[0];
 S.globalTreeTint = TREE_TINT_COLORS[0];
+setSandTint(SAND_TINT_COLORS[0]); // sand has no per-zone override: a beach, the park beside it and the water's shallows all share one shoreline
 export function resolveParkTint(zone) {
   if (zone && zone.zoneType==='park' && zone.settings.customTint) {
     return zone.settings.parkTint!=null ? zone.settings.parkTint : PARK_TINT_COLORS[0];

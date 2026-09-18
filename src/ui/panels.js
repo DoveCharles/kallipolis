@@ -1,6 +1,6 @@
-import { S, App } from '../core/shared.js';
+import { S, App, setSandTint } from '../core/shared.js';
 import { scene } from '../core/scene.js';
-import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
+import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, SAND_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
 import { roadNodes, MAX_TARGET_LOTS } from '../core/state.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
 import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes, refreshRoadAppearance, walkwayTextureChangeNeedsRebuild } from '../roads/paths.js';
@@ -375,6 +375,22 @@ function wireColorSwatchEvents(panel, palette, opts, key, rerender, currentHex) 
 // unless a park zone turns on its own "Custom color" override (see the park zoneType branch in
 // renderDetails). Lives in its own panel/render function since it's outside the zone/road
 // details panel entirely.
+// The one sand swatch, shown both in the World panel and in a beach's own settings. There is no
+// per-zone version: a beach, the park fading into it and the shallows beyond it are one continuous
+// stretch of sand, so a beach with its own color would seam against everything it touches. Both rows
+// set the same color, which every sand material picks up through the shared SAND_TINT uniform with
+// nothing rebuilt.
+function wireSandTintSwatches(panel, swatchKey, rerender) {
+  wireColorSwatchEvents(panel, SAND_TINT_COLORS, {
+    onPick: (hex) => { setSandTint(hex); rerender(); },
+    onCommit: (hex, mode, oldHex) => {
+      if (mode==='edit') { if (S.globalSandTint===oldHex) setSandTint(hex); }
+      else setSandTint(hex);
+    },
+    onRemove: (oldHex, fallback) => { if (S.globalSandTint===oldHex) setSandTint(fallback); },
+    onPreview: (hex) => setSandTint(hex)
+  }, swatchKey, rerender, S.globalSandTint);
+}
 export function renderWorldTintPanel() {
   const panel = document.getElementById('world-tint-panel');
   panel.innerHTML = `
@@ -382,6 +398,8 @@ export function renderWorldTintPanel() {
     ${colorSwatchRowHtml(PARK_TINT_COLORS, S.globalParkTint, 'worldparktint')}
     <div class="section-label">Tree tint</div>
     ${colorSwatchRowHtml(TREE_TINT_COLORS, S.globalTreeTint, 'worldtreetint')}
+    <div class="section-label">Sand tint</div>
+    ${colorSwatchRowHtml(SAND_TINT_COLORS, S.globalSandTint, 'worldsandtint')}
   `;
   wireColorSwatchEvents(panel, PARK_TINT_COLORS, {
     onPick: (hex) => { S.globalParkTint = hex; S.zones.forEach(subdivideZone); renderWorldTintPanel(); },
@@ -419,6 +437,7 @@ export function renderWorldTintPanel() {
     },
     onPreview: (hex) => { S.globalTreeTint = hex; S.zones.forEach(subdivideZone); }
   }, 'worldtreetint', renderWorldTintPanel, S.globalTreeTint);
+  wireSandTintSwatches(panel, 'worldsandtint', renderWorldTintPanel);
 }
 function renderDetails() {
   const panel = document.getElementById('details-panel');
@@ -433,12 +452,19 @@ function renderDetails() {
       <div class="empty" style="margin:6px 0 10px;">Animated water, sunk below the ground. It joins any river running into it, roads cross it on bridges, and where it meets a park or beach there's a sandy slope down into it.</div>
     ` : zoneType==='beach' ? `
       <div class="empty" style="margin:6px 0 10px;">Sand, darker and wetter toward the water. It slopes gently down into any water beside it, and parks next to it fade from grass into sand.</div>
+      <div class="section-label">Sand tint</div>
+      ${colorSwatchRowHtml(SAND_TINT_COLORS, S.globalSandTint, 'beachsandtint')}
+      <div class="empty" style="margin:6px 0 10px;">Shared by every beach, and by the sand a park fades into and the sand under the shallows &mdash; the same swatch as the World panel's.</div>
     ` : zoneType==='plaza' ? `
       <div class="slider-row"><div class="row"><label>Paving</label></div>
         <select id="ds-paving" class="select-input">
           <option value="tiles" ${s.pavingPattern!=='herringbone'?'selected':''}>Tiles</option>
           <option value="herringbone" ${s.pavingPattern==='herringbone'?'selected':''}>Herringbone</option>
         </select></div>
+      <div class="slider-row" style="margin-top:11px;"><div class="row"><label>Paving scale</label><span class="val" id="dv-pavingscale">${(s.pavingScale!=null?s.pavingScale:1).toFixed(2)}</span></div>
+        <input type="range" id="ds-pavingscale" min="0.3" max="3" step="0.05" value="${s.pavingScale!=null?s.pavingScale:1}"></div>
+      <div class="slider-row" style="margin-top:11px;"><div class="row"><label>Mortar</label><span class="val" id="dv-mortarwidth">${(s.mortarWidth!=null?s.mortarWidth:0.08).toFixed(2)}</span></div>
+        <input type="range" id="ds-mortarwidth" min="0.01" max="0.3" step="0.01" value="${s.mortarWidth!=null?s.mortarWidth:0.08}"></div>
       <div class="section-label">Paving color</div>
       ${colorSwatchRowHtml(PLAZA_COLORS, s.pavingColor!=null?s.pavingColor:PLAZA_COLORS[0], 'pavingcolor')}
       ${toggleHtml('ds-fountain', 'Fountain', s.fountain!==false)}
@@ -462,7 +488,7 @@ function renderDetails() {
       ${colorSwatchRowHtml(BUILDING_GROUND_COLORS, s.groundColor!=null?s.groundColor:BUILDING_GROUND_COLORS[0], 'groundcolor')}
       ${seedHtml}
     ` : zoneType==='park' ? `
-      <div class="slider-row"><div class="row"><label>Tree density</label><span class="val" id="dv-treedensity">${s.treeDensity.toFixed(2)}</span></div>
+      <div class="slider-row"><div class="row"><label>Foliage</label><span class="val" id="dv-treedensity">${s.treeDensity.toFixed(2)}</span></div>
         <input type="range" id="ds-treedensity" min="0" max="1" step="0.02" value="${s.treeDensity}"></div>
       ${toggleHtml('ds-fence', 'Fence', s.fence!==false)}
       <div class="row" style="margin-top:11px;"><label>Custom color</label><button class="toggle-switch${s.customTint?' on':''}" id="ds-customtint"><span class="knob"></span></button></div>
@@ -534,10 +560,16 @@ function renderDetails() {
       onRemove: (oldHex, replacement) => { S.zones.forEach(z => { if (z.settings && z.settings[key]===oldHex) { z.settings[key]=replacement; subdivideZone(z); } }); },
       onPreview: (hex) => { s[key] = hex; subdivideZone(zone); }
     }, swatchKey, renderDetails, s[key]!=null ? s[key] : fallback);
-    if (zoneType==='water' || zoneType==='beach') {
-      // water and beaches have no settings of their own
+    if (zoneType==='water') {
+      // water has no settings of its own
+    } else if (zoneType==='beach') {
+      // the beach's only control is the shared sand tint, which also lives in the World panel; keep
+      // that one in step in case both are on screen
+      wireSandTintSwatches(panel, 'beachsandtint', () => { renderDetails(); renderWorldTintPanel(); });
     } else if (zoneType==='plaza') {
       document.getElementById('ds-paving').addEventListener('change', (e) => { s.pavingPattern = e.target.value; subdivideZone(zone); });
+      wireNumber('ds-pavingscale', 'dv-pavingscale', 'pavingScale', 2);
+      wireNumber('ds-mortarwidth', 'dv-mortarwidth', 'mortarWidth', 2);
       wireSwatches(PLAZA_COLORS, 'pavingColor', 'pavingcolor', PLAZA_COLORS[0]);
       wireToggle('ds-fountain', 'fountain');
       wireNumber('ds-plazatrees', 'dv-plazatrees', 'plazaTrees', 2);

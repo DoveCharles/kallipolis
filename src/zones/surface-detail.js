@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { App } from '../core/shared.js';
+import { S, App, SAND_TINT } from '../core/shared.js';
 import { Y_PARK } from '../core/scene.js';
 import { mulberry32, lerp, pointInPolygon, centroid, insetPolygon } from '../core/math.js';
 import { distPointSegment, distToPolygonBoundary } from '../buildings/footprints.js';
@@ -8,6 +8,7 @@ import { WINDOW_TILE_WORLD_SIZE, createWindowMaterial, mergeGeometries, mergeGeo
 import { MIN_ZONE_TREES, MAX_ZONE_TREES } from '../core/state.js';
 import { clipPolygons, createMeshBuilder } from '../roads/roads.js';
 import { scalePolygonAroundCentroid, makeExtrudeRaw, extrudeFootprintGeo } from './zone-visuals.js';
+import { plantParkLife } from '../life/bees.js';
 
 // ---------------------------------------------------------- surface detail (Y2K greebles/bands/rings)
 function addRingAccent(group, c, ringRadius, tube, zHeight, colorHex) {
@@ -587,9 +588,27 @@ export function makeParkMesh(poly, tintColor, noiseStrength, cutouts, beachSegme
 // The sand shared by park beaches and beach zones, so the two meet without a seam: `p` is the world position, `wetDistance`
 // how far it is from the water's edge (darker, still wet, within 1.5 units of it). Needs grassNoise.
 const SAND_GLSL = `
+  uniform vec3 uSandTint;
+  // Four octaves, like the grass — one octave of value noise on its own is a single lattice of
+  // smooth blobs about a third of a unit across, which is what made the sand look like a
+  // low-resolution texture stretched over the beach however close you got to it.
+  float sandFbm(vec2 p) {
+    float v = 0.0, amp = 0.5;
+    for (int i=0;i<4;i++) { v += amp*grassNoise(p); p = p*2.07 + 17.3; amp *= 0.5; }
+    return v;
+  }
   vec3 sandColor(vec2 p, float wetDistance) {
-    vec3 sand = vec3(0.86, 0.77, 0.56)*(0.92 + 0.16*grassNoise(p*3.1));
-    return sand*mix(0.72, 1.0, smoothstep(0.0, 1.5, wetDistance));
+    // The World "Sand tint" swatch is the mid tone: broad patches drift between crests bleached
+    // toward white and dips a shade deeper, rather than sitting on one flat khaki.
+    vec3 sand = mix(mix(uSandTint, vec3(1.0), 0.16), uSandTint*0.86, smoothstep(0.25, 0.8, sandFbm(p*0.6)));
+    sand *= 0.95 + 0.10*sandFbm(p*2.2);
+    // A fine grain on top, at a scale far below the mottling. It has no mipmaps to fall back on,
+    // so it's faded out once a pixel covers enough ground to alias against it (fwidth = how much
+    // world one pixel spans here) — the beach keeps its grain up close and stays smooth from high up.
+    float grain = grassNoise(p*13.0 + 31.7) - 0.5;
+    sand *= 1.0 + 0.13*grain*(1.0 - smoothstep(0.03, 0.12, fwidth(p.x) + fwidth(p.y)));
+    // wet sand darkens and loses some of its warmth rather than just dimming
+    return sand*mix(vec3(0.63, 0.61, 0.60), vec3(1.0), smoothstep(0.0, 1.5, wetDistance));
   }
 `;
 const GRASS_NOISE_GLSL = `
@@ -611,12 +630,21 @@ const GRASS_NOISE_GLSL = `
     float h = clamp(dot(pa,ba)/max(dot(ba,ba), 1e-6), 0.0, 1.0);
     return length(pa - ba*h);
   }
+  // 1 while detail of this frequency is comfortably wider than a pixel, 0 once it isn't. None of
+  // these noise layers has mipmaps to fall back on, so anything finer than the pixel grid can only
+  // sparkle: fading it out instead is what lets the ground carry real detail up close and still go
+  // smooth from high up. \`px\` is how much world one pixel spans (fwidth), in the same units as the
+  // frequency.
+  float grassDetailFade(float px, float freq) {
+    return 1.0 - smoothstep(0.35, 1.1, px*freq);
+  }
 `;
 // A beach zone's surface: all sand, wet along `wetSegments` (its edges that meet water), with faint wind-blown ripples.
 // `allWet` makes it wet all over — for the beach slopes running down into the water.
 export function applySandShader(mat, wetSegments, allWet) {
   const wet = App.segmentUniformArray(wetSegments, GRASS_MAX_BEACH_SEGMENTS);
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSandTint = SAND_TINT;
     shader.uniforms.uWetSegments = { value: wet };
     shader.uniforms.uWetCount = { value: allWet ? 0 : Math.min(wetSegments.length, GRASS_MAX_BEACH_SEGMENTS) };
     shader.uniforms.uAllWet = { value: allWet ? 1 : 0 };
@@ -659,9 +687,12 @@ export function generateBeachContent(zone, poly, cutouts) {
   if (floor) zone.buildingsGroup.add(floor);
 }
 // Fractal (fBM) value-noise grass shading, evaluated per-fragment from each vertex's real
-// WORLD position (not local UV) — see the comment above the old texture code for why. Four
-// octaves at doubling frequency give the same "coarse patches + finer mottling + fine grain"
-// look the old canvas texture had, but as one continuous function with no tile period at all.
+// WORLD position (not local UV) — see the comment above the old texture code for why. Octaves at
+// doubling frequency, from wandering patches a few units across down to tufts a few centimetres
+// wide, give the "coarse patches + finer mottling + fine grain" look the old canvas texture had,
+// but as one continuous function with no tile period at all and no resolution to run out of: each
+// octave is faded out as it approaches the size of a pixel, so the ground carries its detail right
+// up to the camera and still goes smooth from high above.
 const GRASS_MAX_EDGE_POINTS = 48; // fixed GLSL array size; zone outlines beyond this are truncated
 const GRASS_MAX_BEACH_SEGMENTS = 64; // fixed GLSL array size for the stretches of a park's edge that meet water
 // `beachSegments` (optional): stretches of the park's edge where its grass turns to sand — the first `wetCount` meet water
@@ -679,6 +710,7 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
     edgePoints.push(new THREE.Vector2(p.x, p.z));
   }
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSandTint = SAND_TINT; // the park's own sand fade, matching the beach beside it
     shader.uniforms.uZoneEdgePoints = { value: edgePoints };
     shader.uniforms.uZoneEdgeCount = { value: n };
     shader.uniforms.uZoneEdgeFalloff = { value: 3.0 }; // world units over which the darkening fades in
@@ -715,9 +747,43 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
         uniform float uBeachWidth;
         ${GRASS_NOISE_GLSL}
         ${SAND_GLSL}
-        float grassFbm(vec2 p) {
-          float v = 0.0, amp = 0.5;
-          for (int i=0;i<4;i++) { v += amp*grassNoise(p); p *= 2.03; amp *= 0.5; }
+        // Six octaves, not four, and each one turned 37° against the last: value noise sits on a
+        // square lattice, so octaves stacked at the same angle line their cells up into a grid you
+        // can see, and four of them bottom out at features about a third of a unit across — which
+        // is what made the ground look like a low-resolution texture stretched over it up close.
+        // Octaves too fine to draw at this distance are dropped (and the loop stops there, since
+        // every later one is finer still), and what's left is renormalised so the contrast of the
+        // pattern doesn't change as they go.
+        float grassFbm(vec2 p, float px) {
+          mat2 turn = mat2(0.799, 0.602, -0.602, 0.799);
+          float v = 0.0, amp = 0.5, freq = 1.0, norm = 0.0;
+          for (int i=0;i<6;i++) {
+            float fade = grassDetailFade(px, freq);
+            if (fade <= 0.0) break;
+            v += amp*fade*grassNoise(p);
+            norm += amp*fade;
+            p = turn*p*2.03 + 19.1;
+            freq *= 2.03;
+            amp *= 0.5;
+          }
+          return norm > 0.0001 ? v/norm : 0.5;
+        }
+        // The finest layer, at blade scale (a road is 8 units wide, so these are a few centimetres
+        // across): two noises, each stretched about 3:1 and lying at a different angle, so close up
+        // the grass breaks into tufts rather than into either round dots or one direction of combing.
+        float grassTufts(vec2 p, float px) {
+          float v = 0.0;
+          float fineFade = grassDetailFade(px, 11.0);
+          if (fineFade <= 0.0) return v;
+          v += (grassNoise(vec2(p.x*4.4 + p.y*11.0, p.y*4.4 - p.x*11.0)) - 0.5)*0.55*fineFade;
+          float finerFade = grassDetailFade(px, 24.0);
+          if (finerFade <= 0.0) return v;
+          v += (grassNoise(vec2(p.x*24.0 - p.y*8.0, p.y*9.0 + p.x*3.0) + 61.3) - 0.5)*0.33*finerFade;
+          // A third layer, finer again, for a camera down at ground level — from any normal height
+          // it is already smaller than a pixel, so it costs nothing to look at the grass up close.
+          float finestFade = grassDetailFade(px, 52.0);
+          if (finestFade <= 0.0) return v;
+          v += (grassNoise(vec2(p.x*52.0 + p.y*15.0, p.y*19.0 - p.x*6.0) + 8.9) - 0.5)*0.22*finestFade;
           return v;
         }
         // shortest distance from world position p to the zone's own boundary polygon —
@@ -736,8 +802,13 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
       .replace('#include <color_fragment>', `
         #include <color_fragment>
         {
-          vec2 gp = vGrassWorldPos.xz * 0.35;
-          float n = grassFbm(gp);
+          vec2 wp = vGrassWorldPos.xz;
+          float px = fwidth(wp.x) + fwidth(wp.y); // how much world one pixel spans here
+          vec2 gp = wp * 0.35;
+          // The coarse patches are warped by a slower noise before they're read, so they clump and
+          // wander instead of sitting in the evenly spaced round blobs a plain fBM makes.
+          vec2 warp = vec2(grassNoise(gp*0.47 + 3.1), grassNoise(gp*0.47 + 17.9)) - 0.5;
+          float n = grassFbm(gp + warp*0.9, px*0.35);
           float fine = grassNoise(gp*6.3);
           // Grayscale, not green — the grass tint is what actually colors this (diffuseColor
           // already carries it going into this block), so keeping the base neutral means the
@@ -750,6 +821,17 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
           float coarseHalf = 0.19 * uGrassNoiseStrength;
           float fineHalf = 0.08 * uGrassNoiseStrength;
           vec3 grassColor = vec3(grassMid + (n - 0.5) * 2.0 * coarseHalf) * (1.0 + (fine - 0.5) * 2.0 * fineHalf);
+          // The blade-scale tufts follow the same slider — 0 is still perfectly flat — but along a
+          // curve that rises fast and then levels off, so the turf keeps a tooth to it at the low
+          // settings the broad mottling is meant to be barely visible at, and doesn't turn to
+          // static at the high ones.
+          float detail = uGrassNoiseStrength / (uGrassNoiseStrength + 0.45) * 1.45;
+          grassColor *= 1.0 + grassTufts(wp, px) * 0.26 * detail;
+          // A little hue along with the tone: bleached, yellower crests and cooler, deeper hollows.
+          // Turf is never one hue, and a purely tonal noise still reads as one flat color with the
+          // brightness turned up and down.
+          grassColor *= mix(vec3(1.0), mix(vec3(1.045, 1.0, 0.93), vec3(0.955, 1.0, 1.06), smoothstep(0.3, 0.7, n)),
+                            clamp(uGrassNoiseStrength, 0.0, 1.0));
           // subtle darkening as grass nears the zone boundary, fading in smoothly over
           // uZoneEdgeFalloff world units so it reads as a soft vignette, not a hard band
           float edgeDist = grassDistToZoneEdge(vGrassWorldPos.xz);
@@ -800,6 +882,13 @@ export function makeFlatZoneMesh(poly, color, y, name, customShader, cutouts) {
   mesh.name=name;
   return mesh;
 }
+// The underside of each variant's canopy and how wide it is down there, as a share of the tree's scale — read off the
+// shapes below, and what a park's beehives hang from (see life/bees.js).
+export const TREE_CANOPY = [
+  { y: 1.0 + 1.7*0.42 - 1.7/2,   r: 0.55 }, // the single cone
+  { y: 1.0 + 0.52*0.75 - 0.52,   r: 0.52 }, // the lower of the two clumps
+  { y: 1.0 + 0.68*0.42 - 0.68/2, r: 0.62 }, // the fir's bottom tier
+];
 export function makeTreeMesh(variant, scale, rng, tintColor) {
   const group = new THREE.Group();
   const trunkH = 1.0*scale, trunkR = 0.12*scale;
@@ -890,6 +979,7 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
     placed.push(pt);
   }
   zone.treeSpots = []; // so people sitting or lying on the grass keep clear of the trunks (see "people")
+  const trees = [];    // and so a beehive knows what it's hanging under (see plantParkLife)
   placed.forEach(pt => {
     const variant = Math.floor(rng()*3);
     const scale = lerp(s.treeSizeMin, s.treeSizeMax, rng());
@@ -898,7 +988,23 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
     tree.rotation.y = rng()*Math.PI*2;
     zone.buildingsGroup.add(tree);
     zone.treeSpots.push({ x: pt.x, z: pt.z, r: 0.35*scale });
+    trees.push({ x: pt.x, z: pt.z, canopyY: TREE_CANOPY[variant].y*scale, canopyR: TREE_CANOPY[variant].r*scale });
   });
+  // Flowers, hives and bees (see life/bees.js), off the same roads, paths and sand the trees keep off — but a flower is
+  // small enough to stand where a tree couldn't, so it asks for the room it actually takes rather than a canopy's worth.
+  const FLOWER_CLEARANCE = 0.3;
+  const offFlowers = App.createRegionTester(treeBlockers.length ? App.offsetPaths(treeBlockers, FLOWER_CLEARANCE, ClipperLib.JoinType.jtRound) : []);
+  const flowerOnBeach = (x, z) => beach.some(([ax, az, bx, bz]) => distPointSegment({ x, z }, { x:ax, z:az }, { x:bx, z:bz }) < App.PARK_BEACH_WIDTH*1.25 + FLOWER_CLEARANCE);
+  const clearForFlower = (x, z) => pointInPolygon({ x, z }, poly) && distToPolygonBoundary({ x, z }, poly) >= FLOWER_CLEARANCE
+    && !offFlowers(x, z) && !flowerOnBeach(x, z);
+  const flowerSpot = () => {
+    for (let i=0;i<60;i++) {
+      const x = minX+rng()*(maxX-minX), z = minZ+rng()*(maxZ-minZ);
+      if (clearForFlower(x, z)) return { x, z };
+    }
+    return null; // nowhere left in this park that a flower would fit
+  };
+  plantParkLife(zone, { rng, foliage: s.treeDensity, ground: Y_PARK, spot: flowerSpot, clear: clearForFlower, trees, tint: resolveTreeTint(zone) });
   // a fence around the park's edge, open wherever a road, river or path runs into it, and not along the water
   if (s.fence !== false) {
     const fence = App.buildRailingMesh(App.zoneFenceLines(zone, poly, 0.5), Y_PARK, App.PARK_FENCE_STYLE, 'Fence');

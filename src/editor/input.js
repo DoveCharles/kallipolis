@@ -83,7 +83,7 @@ function updateGesture() {
   // shouldn't, and two fingers closing always drag the middle about a little. So it's the distance the middle has
   // travelled over the whole gesture that decides, rather than any one frame's.
   gesture.travelled += Math.hypot(dx, dy);
-  if (gesture.travelled > 24) { App.stopFollowingPerson(); App.stopFollowingBuilding(); }
+  if (gesture.travelled > 24) { App.stopFollowingPerson(); App.stopFollowingBuilding(); App.stopFollowingBee(); App.stopFollowingHive(); }
   controls.pan(dx, dy);
   if (gesture.dist > 8 && now.dist > 8) controls.zoomBy(gesture.dist / now.dist);
   gesture = { ...now, travelled: gesture.travelled };
@@ -237,7 +237,7 @@ dom.addEventListener('pointermove', (e) => {
   if (isCameraDragging) {
     const { dx, dy } = pointerDelta(e);
     // panning takes the camera off whoever it's following; orbiting keeps it on them
-    if (dragMode==='pan') { App.stopFollowingPerson(); App.stopFollowingBuilding(); controls.pan(dx, dy); } else controls.orbit(dx, dy);
+    if (dragMode==='pan') { App.stopFollowingPerson(); App.stopFollowingBuilding(); App.stopFollowingBee(); App.stopFollowingHive(); controls.pan(dx, dy); } else controls.orbit(dx, dy);
     return;
   }
   if (S.draggedNode) {
@@ -288,7 +288,7 @@ dom.addEventListener('pointermove', (e) => {
     insertPreviewMarker.visible = false;
     setHover(null);
     const overClickable = App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
-      || !!App.pickBuilding(e.clientX, e.clientY);
+      || !!App.pickBee(e.clientX, e.clientY) || !!App.pickHive(e.clientX, e.clientY) || !!App.pickBuilding(e.clientX, e.clientY);
     if (overClickable !== hoveringClickable) { hoveringClickable = overClickable; dom.style.cursor = overClickable ? 'pointer' : ''; }
     return;
   }
@@ -353,6 +353,11 @@ function releasePointer(e) {
   if (gesture && activePointers.size < 2) gesture = null;
   if (activePointers.size === 0) { ignoreUntilRelease = false; dragPointerId = null; }
 }
+// Everything the camera can follow in World mode (see ui/entity-card.js), so a click on one of them lets go of all the
+// rest — a new kind of thing need only be named here, and export stopFollowing<its name> on App.
+const FOLLOWABLE = ['Person', 'Car', 'Train', 'Bee', 'Hive', 'Building'];
+const letGoOfAllBut = kept => FOLLOWABLE.forEach(kind => { if (kind !== kept) App['stopFollowing' + kind](); });
+
 dom.addEventListener('pointercancel', (e) => {
   releasePointer(e); cancelLongPress();
   pointerDown = null; isCameraDragging = false; S.draggedNode = null;
@@ -379,10 +384,12 @@ dom.addEventListener('pointerup', (e) => {
       S.lastGroundClick = { x:e.clientX, y:e.clientY, time:performance.now() };
     } else if (was.button===0 && dist<CLICK_SLOP && dt<600 && S.interactionMode==='move') {
       // a click on someone or something has the camera follow them; anywhere else lets go of both
-      if (App.pickPerson(e.clientX, e.clientY) >= 0) { App.stopFollowingCar(); App.stopFollowingTrain(); App.stopFollowingBuilding(); App.followPersonAt(e.clientX, e.clientY); }
-      else if (App.pickCar(e.clientX, e.clientY) >= 0) { App.stopFollowingPerson(); App.stopFollowingTrain(); App.stopFollowingBuilding(); App.followCarAt(e.clientX, e.clientY); }
-      else if (App.pickTrain(e.clientX, e.clientY) >= 0) { App.stopFollowingPerson(); App.stopFollowingCar(); App.stopFollowingBuilding(); App.followTrainAt(e.clientX, e.clientY); }
-      else { App.stopFollowingPerson(); App.stopFollowingCar(); App.stopFollowingTrain(); App.followBuildingAt(e.clientX, e.clientY); }
+      if (App.pickBee(e.clientX, e.clientY)) { letGoOfAllBut('Bee'); App.followBeeAt(e.clientX, e.clientY); }
+      else if (App.pickPerson(e.clientX, e.clientY) >= 0) { letGoOfAllBut('Person'); App.followPersonAt(e.clientX, e.clientY); }
+      else if (App.pickCar(e.clientX, e.clientY) >= 0) { letGoOfAllBut('Car'); App.followCarAt(e.clientX, e.clientY); }
+      else if (App.pickTrain(e.clientX, e.clientY) >= 0) { letGoOfAllBut('Train'); App.followTrainAt(e.clientX, e.clientY); }
+      else if (App.pickHive(e.clientX, e.clientY)) { letGoOfAllBut('Hive'); App.followHiveAt(e.clientX, e.clientY); }
+      else { letGoOfAllBut('Building'); App.followBuildingAt(e.clientX, e.clientY); }
     }
     return;
   }

@@ -1,5 +1,3 @@
-import { App } from '../core/shared.js';
-
 // ============================================================ Windows 3.0 look
 // A checkbox in World settings dresses the UI up as Windows 3.0 — the styles are all in style.css, under html.win3. It's the
 // browser's preference rather than part of the project, so it's remembered in localStorage (and put on the page by a small
@@ -15,12 +13,9 @@ toggle.classList.toggle('on', document.documentElement.classList.contains('win3'
 toggle.addEventListener('click', () => setWin3(!document.documentElement.classList.contains('win3')));
 
 // the title bars' buttons: on the panel, minimize (▲ here, though Windows 3.0 drew it ▼) folds it up to its title bar, and maximize (▼) — or the control-menu box — opens
-// it out again; on the person card, the control-menu box closes it, as double-clicking one closed a window
+// it out again. (The cards for whoever's being followed close from their control-menu box, as double-clicking one closed
+// a window — wired up by makeCard in ui/entity-card.js, along with the rest of a card.)
 const panel = document.getElementById('panel');
 panel.querySelector('.win3-min').addEventListener('click', () => panel.classList.add('win3-minimized'));
 panel.querySelector('.win3-max').addEventListener('click', () => panel.classList.remove('win3-minimized'));
 panel.querySelector('.win3-sysbox').addEventListener('click', () => panel.classList.toggle('win3-minimized'));
-document.querySelector('#person-card .win3-sysbox').addEventListener('click', () => App.stopFollowingPerson());
-document.querySelector('#car-card .win3-sysbox').addEventListener('click', () => App.stopFollowingCar());
-document.querySelector('#train-card .win3-sysbox').addEventListener('click', () => App.stopFollowingTrain());
-document.querySelector('#building-card .win3-sysbox').addEventListener('click', () => App.stopFollowingBuilding());

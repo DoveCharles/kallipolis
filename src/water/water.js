@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { S, App } from '../core/shared.js';
+import { S, App, SAND_TINT } from '../core/shared.js';
 import { scene, SKY_ENV_MAP, GROUND_HALF_SIZE, ground, makeStencilMask, STENCIL_WATER, Y_MAP } from '../core/scene.js';
 import { distPointSegment } from '../buildings/footprints.js';
 import { tessellateClosedPath } from '../core/splines.js';
@@ -22,6 +22,7 @@ export const WATER_LEVEL = -1.2;           // the water's surface, below ground 
 export const WATER_BANK_TOP = 0.05;        // banks start a hair above the ground, so zone floors meet them without a gap
 export const WATER_BANK_BOTTOM = -1.6;     // and reach down past the surface (which is opaque)
 const BEACH_SLOPE_WIDTH = 3;        // how far out a beach slopes before it reaches the bottom of the bank
+const BEACH_SLOPE_SHADING_TILT = 0.25; // how much of the slope's real pitch its shading uses (0 = lit as flat sand, 1 = its true angle)
 // how far out along a beach its slope goes under the water — where the waterline and its foam are
 const BEACH_WATERLINE = BEACH_SLOPE_WIDTH*(WATER_BANK_TOP - WATER_LEVEL)/(WATER_BANK_TOP - WATER_BANK_BOTTOM);
 export const WATER_BANK_COLOR = 0x6f6c66;
@@ -107,6 +108,7 @@ const WATER_FRAGMENT_PARS = `
   uniform vec4 uBeachSegments[WATER_MAX_BEACH];
   uniform int uBeachCount;
   uniform float uBeachWaterline;
+  uniform vec3 uSandTint;
   float waterHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
   float waterNoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -142,7 +144,7 @@ const WATER_COLOR_FRAGMENT = `
     vec3 water = mix(deep, vec3(0.17, 0.56, 0.58), (1.0 - smoothstep(0.0, 9.0, shoreDistance))*0.85);
     // sand showing through the first few units of water off a beach, with a slightly wavering edge
     float sandy = 1.0 - smoothstep(0.0, 4.0, beachDistance - uBeachWaterline + (waterNoise(wp*0.5) - 0.5)*1.5);
-    water = mix(water, vec3(0.55, 0.64, 0.52), sandy*0.65);
+    water = mix(water, uSandTint*vec3(0.70, 0.96, 1.28), sandy*0.65); // the same sand tint as the beach it runs on from, green-shifted and dimmed by the water above it
     // a thin, broken, slowly shifting line of foam right at the water's edge
     float foam = (1.0 - smoothstep(0.1, 0.9, shoreDistance))*smoothstep(0.35, 0.7, waterNoise(wp*1.6 + vec2(uWaterTime*0.25, -uWaterTime*0.18)));
     diffuseColor.rgb = mix(water, vec3(0.9, 0.95, 0.96), foam*0.8);
@@ -175,6 +177,7 @@ export function applyWaterShader(mat, shoreSegments, beachSegments, beachWaterli
     shader.uniforms.uBeachSegments = { value: beach };
     shader.uniforms.uBeachCount = { value: Math.min(beachSegments.length, WATER_MAX_BEACH_SEGMENTS) };
     shader.uniforms.uBeachWaterline = { value: beachWaterline || 0 };
+    shader.uniforms.uSandTint = SAND_TINT;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWaterWorldPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWaterWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -285,7 +288,14 @@ function buildWaterBody(region, parkArea) {
         const rb = next.beach ? reachAt((i+1)%count) : { x:-e.out.x, z:-e.out.z };
         const W = BEACH_SLOPE_WIDTH;
         const normalLen = Math.hypot(drop, W);
-        const slopeNormal = { x: inward.x*drop/normalLen, y: W/normalLen, z: inward.z*drop/normalLen };
+        // Shaded as much flatter than it is. Only the top ~2 units of the slope show above the (opaque)
+        // water, and at its true pitch that face catches noticeably more sky and less sun than the beach
+        // it carries on from, which is what made it read as a grey kerb laid along the shore instead of
+        // sand running into the water. Keeping a little of the real tilt leaves it some shape.
+        const nx = inward.x*drop/normalLen, ny = W/normalLen, nz = inward.z*drop/normalLen;
+        const bx = nx*BEACH_SLOPE_SHADING_TILT, by = ny*BEACH_SLOPE_SHADING_TILT + (1 - BEACH_SLOPE_SHADING_TILT), bz = nz*BEACH_SLOPE_SHADING_TILT;
+        const bl = Math.hypot(bx, by, bz);
+        const slopeNormal = { x: bx/bl, y: by/bl, z: bz/bl };
         const topA = { x:e.a.x, y:WATER_BANK_TOP, z:e.a.z }, topB = { x:e.b.x, y:WATER_BANK_TOP, z:e.b.z };
         const lowA = { x:e.a.x + ra.x*W, y:WATER_BANK_BOTTOM, z:e.a.z + ra.z*W }, lowB = { x:e.b.x + rb.x*W, y:WATER_BANK_BOTTOM, z:e.b.z + rb.z*W };
         beaches.addQuad(topA, topB, lowB, lowA, slopeNormal);
@@ -309,10 +319,10 @@ function buildWaterBody(region, parkArea) {
       node.Childs().forEach(visit);
     };
     tree.Childs().forEach(visit);
-    const addBankMesh = (builder, color, name, shader) => {
+    const addBankMesh = (builder, color, name, shader, roughness) => {
       const geo = builder.build();
       if (!geo) return;
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.95 });
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: roughness!=null ? roughness : 0.95 });
       if (shader) shader(mat);
       const mesh = new THREE.Mesh(geo, mat);
       mesh.receiveShadow = true;
@@ -321,7 +331,7 @@ function buildWaterBody(region, parkArea) {
     };
     addBankMesh(banks, WATER_BANK_COLOR, 'WaterBank');
     // the same wet sand the beach meets the water with, so the slope carries straight on from it
-    addBankMesh(beaches, 0xffffff, 'Beach', mat => App.applySandShader(mat, [], true));
+    addBankMesh(beaches, 0xffffff, 'Beach', mat => App.applySandShader(mat, [], true), 1); // fully rough like the flat sand beside it, so it picks up no sheen the beach doesn't have
 
     // the surface, tile by tile: each tile is the region clipped to its square (rows first, so each square only clips a
     // row's worth of outline), shaded with just the shore within WATER_TILE_MARGIN of it — nearest first if that's still

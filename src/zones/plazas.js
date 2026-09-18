@@ -14,11 +14,13 @@ import { makeFlatZoneMesh, makeTreeMesh } from './surface-detail.js';
 // room for one.
 export const PLAZA_COLORS = [0xb7b0a4, 0xc4a88a, 0x9c9fa4, 0xd6cfc0];
 export const Y_PLAZA = 0.07;
+export const DEFAULT_MORTAR = 0.08; // how wide the joints between paving stones are, in metres
 const PLAZA_LAMP_SPACING = 13;
 const PAVING_FRAGMENT_PARS = `
   varying vec3 vPaveWorldPos;
   uniform int uPavePattern;
   uniform float uPaveScale;
+  uniform float uPaveMortar;
   float paveHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
 `;
 const PAVING_COLOR_FRAGMENT = `
@@ -47,15 +49,16 @@ const PAVING_COLOR_FRAGMENT = `
       id = floor(p);
       edgeDist = min(min(f.x, 1.0-f.x), min(f.y, 1.0-f.y))*size;
     }
-    float grout = smoothstep(0.03, 0.08, edgeDist);
+    float grout = smoothstep(uPaveMortar*0.4, uPaveMortar, edgeDist); // a joint of the same width whatever size the paving is
     float tint = 0.9 + 0.2*paveHash(id + 17.0);
     diffuseColor.rgb *= mix(0.62, tint, grout);
   }
 `;
-export function applyPavingShader(mat, pattern, scale) {
+export function applyPavingShader(mat, pattern, scale, mortar) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uPavePattern = { value: pattern };
     shader.uniforms.uPaveScale = { value: scale || 1 };
+    shader.uniforms.uPaveMortar = { value: mortar || DEFAULT_MORTAR };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vPaveWorldPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPaveWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -101,7 +104,8 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
   const { jtMiter, jtRound } = ClipperLib.JoinType;
   const color = s.pavingColor!=null ? s.pavingColor : PLAZA_COLORS[0];
   const pattern = s.pavingPattern==='herringbone' ? 1 : 0;
-  const floor = makeFlatZoneMesh(poly, color, Y_PLAZA, 'Plaza', mat => applyPavingShader(mat, pattern), cutouts);
+  const paveScale = s.pavingScale!=null ? s.pavingScale : 1, mortar = s.mortarWidth!=null ? s.mortarWidth : DEFAULT_MORTAR;
+  const floor = makeFlatZoneMesh(poly, color, Y_PLAZA, 'Plaza', mat => applyPavingShader(mat, pattern, paveScale, mortar), cutouts);
   if (!floor) return;
   zone.buildingsGroup.add(floor);
   const area = clipPolygons(ctDifference, [App.toClipperPath(poly)], cutouts);
@@ -111,7 +115,7 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
   const bandGeo = bandBuilder.build();
   if (bandGeo) {
     const bandMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.72), roughness: 1, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-    applyPavingShader(bandMat, 0, 0.3);
+    applyPavingShader(bandMat, 0, 0.3*paveScale, mortar);
     const band = new THREE.Mesh(bandGeo, bandMat);
     band.receiveShadow = true;
     band.name = 'PlazaBorder';
@@ -144,11 +148,17 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
   // lamp posts every PLAZA_LAMP_SPACING around the edge, with a bench facing inward halfway between each pair — room for two
   // on each, who people can sit down in (see "people")
   const furniture = createMeshBuilder(), lampHeads = createMeshBuilder();
+  const lampGlobe = new THREE.IcosahedronGeometry(0.3, 1);
   const seatTop = Y_PLAZA + 0.42;
   zone.benchSeats = [];
-  const benchSide = App.createRegionTester(App.offsetPaths(area, -3.3, jtMiter));
   App.offsetPaths(area, -2.2, jtMiter).forEach(path => {
     const pts = App.fromClipperPath(path);
+    // Which way the plaza's inside lies: to the left of the way round an outline runs, and to the right around a hole. Its
+    // signed area tells the two apart wherever the contour is — a point sample can't, where the paving is narrower than the
+    // bench, and a bench that guesses wrong sits outside the plaza with its back to it.
+    let twiceArea = 0;
+    pts.forEach((a, i) => { const b = pts[(i+1)%pts.length]; twiceArea += a.x*b.z - b.x*a.z; });
+    const side = twiceArea > 0 ? 1 : -1;
     let untilNext = PLAZA_LAMP_SPACING/2, lamp = true;
     pts.forEach((a, i) => {
       const b = pts[(i+1)%pts.length], len = Math.hypot(b.x-a.x, b.z-a.z);
@@ -161,10 +171,8 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
         if (lamp) {
           furniture.addBox(x, z, dx, dz, 0.08, 0.08, Y_PLAZA, Y_PLAZA + 4.2);
           furniture.addBox(x, z, dx, dz, 0.2, 0.2, Y_PLAZA, Y_PLAZA + 0.35);
-          lampHeads.addBox(x, z, dx, dz, 0.24, 0.24, Y_PLAZA + 4.2, Y_PLAZA + 4.7);
+          lampHeads.addGeometry(lampGlobe, x, Y_PLAZA + 4.45, z);
         } else {
-          // which side of the edge line is the plaza's inside decides which way the bench faces
-          const side = benchSide(x - dz*1.1, z + dx*1.1) ? 1 : -1;
           const bx = x - dz*1.1*side, bz = z + dx*1.1*side, nx = -dz*side, nz = dx*side;
           if (blocked(bx, bz)) continue;
           furniture.addBox(bx, bz, dx, dz, 0.95, 0.26, seatTop - 0.1, seatTop);                   // seat
@@ -176,19 +184,42 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
       untilNext = d - len;
     });
   });
-  // trees in square planters, spread over the plaza's open middle
+  // Trees in square planters, laid out in rows rather than scattered: a grid squared up with the plaza's longest edge and
+  // centred on it, so the trees line up with the paving and each other. The spacing is whatever makes as many of the grid's
+  // spots land on open ground as the tree setting asks for — spread wider for a few trees, tighter for many.
   const deepInside = App.createRegionTester(App.offsetPaths(area, -4, jtMiter));
-  const planted = [], targetTrees = Math.round((s.plazaTrees!=null ? s.plazaTrees : 0.35)*16);
-  for (let attempt=0; attempt<targetTrees*40 && planted.length<targetTrees; attempt++) {
-    const x = minX + rng()*(maxX-minX), z = minZ + rng()*(maxZ-minZ);
-    if (!deepInside(x, z) || blocked(x, z) || !clearOfFountain(x, z, 3) || planted.some(p => Math.hypot(p.x-x, p.z-z) < 7)) continue;
-    planted.push({ x, z });
-    furniture.addBox(x, z, 1, 0, 0.95, 0.95, Y_PLAZA, Y_PLAZA + 0.55);
+  const targetTrees = Math.round((s.plazaTrees!=null ? s.plazaTrees : 0.35)*16);
+  let ux = 1, uz = 0, longest = 0;
+  poly.forEach((a, i) => {
+    const b = poly[(i+1)%poly.length], len = Math.hypot(b.x-a.x, b.z-a.z);
+    if (len > longest) { longest = len; ux = (b.x-a.x)/len; uz = (b.z-a.z)/len; }
+  });
+  const cx = (minX+maxX)/2, cz = (minZ+maxZ)/2, reach = Math.hypot(maxX-minX, maxZ-minZ)/2;
+  // every spot on a grid of this spacing that a tree can stand on, nearest the middle of the plaza first
+  const gridSpots = (spacing) => {
+    const spots = [], n = Math.ceil(reach/spacing);
+    for (let i=-n; i<=n; i++) for (let j=-n; j<=n; j++) {
+      const x = cx + ux*i*spacing - uz*j*spacing, z = cz + uz*i*spacing + ux*j*spacing;
+      if (!deepInside(x, z) || blocked(x, z) || !clearOfFountain(x, z, 3)) continue;
+      spots.push({ x, z, d: Math.hypot(x-cx, z-cz) });
+    }
+    return spots.sort((a, b) => a.d - b.d);
+  };
+  let planted = targetTrees > 0 ? gridSpots(7) : [];
+  if (planted.length > targetTrees) { // too many at the tightest spacing: open the grid up until only as many fit as we want
+    let lo = 7, hi = Math.max(14, reach*2);
+    for (let i=0; i<12; i++) {
+      const mid = (lo+hi)/2, spots = gridSpots(mid);
+      if (spots.length > targetTrees) lo = mid; else { hi = mid; planted = spots; }
+    }
+  }
+  planted.slice(0, targetTrees).forEach(({ x, z }) => {
+    furniture.addBox(x, z, ux, uz, 0.95, 0.95, Y_PLAZA, Y_PLAZA + 0.55);
     const tree = makeTreeMesh(1, 1.4 + rng()*0.7, rng, resolveTreeTint(zone));
     tree.position.set(x, Y_PLAZA + 0.55, z);
     tree.rotation.y = rng()*Math.PI*2;
     zone.buildingsGroup.add(tree);
-  }
+  });
   const furnitureGeo = furniture.build();
   if (furnitureGeo) {
     const mesh = new THREE.Mesh(furnitureGeo, new THREE.MeshStandardMaterial({ color: 0x4a4d52, roughness: 0.7, metalness: 0.2 }));

@@ -1,6 +1,6 @@
-import { S, App } from '../core/shared.js';
+import { S, App, setSandTint } from '../core/shared.js';
 import { scene, updateSun, groundMat, setGridColor } from '../core/scene.js';
-import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
+import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, SAND_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
 import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { importMapImageFile, renderMapsList, removeMapImage } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
@@ -53,8 +53,10 @@ export function serializeProject() {
       walkwayColorPalette: WALKWAY_COLOR_PALETTE.map(c => colorToHex(c)),
       parkTintPalette: PARK_TINT_COLORS.map(c => colorToHex(c)),
       treeTintPalette: TREE_TINT_COLORS.map(c => colorToHex(c)),
+      sandTintPalette: SAND_TINT_COLORS.map(c => colorToHex(c)),
       globalParkTint: colorToHex(S.globalParkTint, PARK_TINT_COLORS[0]),
       globalTreeTint: colorToHex(S.globalTreeTint, TREE_TINT_COLORS[0]),
+      globalSandTint: colorToHex(S.globalSandTint, SAND_TINT_COLORS[0]),
       globalGrassNoiseStrength: S.globalGrassNoiseStrength,
       people: { enabled: S.peopleEnabled, amount: S.peopleAmount, speed: S.peopleSpeed, size: S.peopleSize, traffic: S.trafficAmount },
       dayNight: { enabled: S.dayNightEnabled, dayLength: S.dayLengthMinutes, time: S.timeOfDay },
@@ -184,8 +186,14 @@ export async function loadProjectFromData(data, options) {
     TREE_TINT_COLORS.length = 0;
     sc.treeTintPalette.forEach(hex => TREE_TINT_COLORS.push(hexToColor(hex, 0xffffff)));
   }
+  if (Array.isArray(sc.sandTintPalette) && sc.sandTintPalette.length) {
+    SAND_TINT_COLORS.length = 0;
+    sc.sandTintPalette.forEach(hex => SAND_TINT_COLORS.push(hexToColor(hex, 0xffffff)));
+  }
   S.globalParkTint = hexToColor(sc.globalParkTint, PARK_TINT_COLORS[0]);
   S.globalTreeTint = hexToColor(sc.globalTreeTint, TREE_TINT_COLORS[0]);
+  setSandTint(hexToColor(sc.globalSandTint, SAND_TINT_COLORS[0])); // projects saved before the sand tint existed fall back to the default gold
+
   S.globalGrassNoiseStrength = sc.globalGrassNoiseStrength!=null ? sc.globalGrassNoiseStrength : DEFAULT_GRASS_NOISE_STRENGTH;
   document.getElementById('s-grassnoise').value = S.globalGrassNoiseStrength;
   document.getElementById('dv-grassnoise').textContent = S.globalGrassNoiseStrength.toFixed(2);

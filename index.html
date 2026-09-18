@@ -190,75 +190,8 @@
 
 <div id="possess-hint" hidden><span id="ph-title"></span><span class="ph-sub" id="ph-sub"></span><button id="ph-exit" hidden>Exit</button></div>
 
-<div id="person-card" hidden>
-  <div class="win3-titlebar"><button class="win3-sysbox" title="Close"></button><div class="win3-title">Ped</div></div>
-  <button id="person-card-close" title="Stop following">×</button>
-  <div class="pc-top">
-    <div class="pc-rows">
-      <div class="pc-row"><span class="pc-label">Name</span><span class="pc-value pc-name" id="pc-name"></span></div>
-      <div class="pc-row"><span class="pc-label">Age</span><span class="pc-value" id="pc-age"></span></div>
-      <div class="pc-row"><span class="pc-label">Current mood</span><span class="pc-value pc-mood" id="pc-mood"></span></div>
-      <div class="pc-row" id="pc-indoors-row" hidden><span class="pc-label">Status</span><span class="pc-value pc-indoors" id="pc-indoors"></span></div>
-    </div>
-    <div class="pc-shot">
-      <canvas id="pc-headshot" width="120" height="120" title="Possess them"></canvas>
-      <button class="btn danger" id="pc-kill" title="Blow them up">Kill</button>
-    </div>
-  </div>
-  <div class="pc-row pc-gap"><span class="pc-label">Loves</span><span class="pc-value" id="pc-enjoys"></span></div>
-  <div class="pc-row"><span class="pc-label">Hates</span><span class="pc-value" id="pc-hates"></span></div>
-</div>
-
-<div id="car-card" hidden>
-  <div class="win3-titlebar"><button class="win3-sysbox" title="Close"></button><div class="win3-title">Vehicle</div></div>
-  <button id="car-card-close" title="Stop following">×</button>
-  <div class="pc-top">
-    <div class="pc-rows">
-      <div class="pc-row"><span class="pc-label">Name</span><span class="pc-value pc-name" id="cc-name"></span></div>
-      <div class="pc-row"><span class="pc-label">Current mood</span><span class="pc-value pc-mood" id="cc-mood"></span></div>
-    </div>
-    <div class="pc-shot">
-      <canvas id="cc-thumb" width="120" height="120" title="Drive it"></canvas>
-      <button class="btn danger" id="cc-kill" title="Blow it up">Kill</button>
-    </div>
-  </div>
-  <div class="pc-row pc-gap"><span class="pc-label">Loves</span><span class="pc-value" id="cc-loves"></span></div>
-  <div class="pc-row"><span class="pc-label">Hates</span><span class="pc-value" id="cc-hates"></span></div>
-</div>
-
-<div id="train-card" hidden>
-  <div class="win3-titlebar"><button class="win3-sysbox" title="Close"></button><div class="win3-title">Train</div></div>
-  <button id="train-card-close" title="Stop following">×</button>
-  <div class="pc-top">
-    <div class="pc-rows">
-      <div class="pc-row"><span class="pc-label">Name</span><span class="pc-value pc-name" id="tc-name"></span></div>
-      <div class="pc-row"><span class="pc-label">Current mood</span><span class="pc-value pc-mood" id="tc-mood"></span></div>
-    </div>
-    <div class="pc-shot">
-      <canvas id="tc-thumb" width="120" height="120"></canvas>
-    </div>
-  </div>
-  <div class="pc-row pc-gap"><span class="pc-label">Loves</span><span class="pc-value">Shoooom</span></div>
-  <div class="pc-row"><span class="pc-label">Hates</span><span class="pc-value">Delays</span></div>
-  <div class="pc-row pc-gap"><span class="pc-label">Passengers</span><span class="pc-value" id="tc-passengers">None</span></div>
-</div>
-
-<div id="building-card" hidden>
-  <div class="win3-titlebar"><button class="win3-sysbox" title="Close"></button><div class="win3-title">Building</div></div>
-  <button id="building-card-close" title="Stop following">×</button>
-  <div class="pc-top">
-    <div class="pc-rows">
-      <div class="pc-row"><span class="pc-label">Name</span><span class="pc-value pc-name" id="bc-name"></span></div>
-      <div class="pc-row"><span class="pc-label">Current mood</span><span class="pc-value pc-mood" id="bc-mood"></span></div>
-    </div>
-    <div class="pc-shot">
-      <canvas id="bc-thumb" width="120" height="120"></canvas>
-    </div>
-  </div>
-  <div class="pc-row pc-gap"><span class="pc-label">Loves</span><span class="pc-value" id="bc-loves"></span></div>
-  <div class="pc-row"><span class="pc-label">Hates</span><span class="pc-value" id="bc-hates"></span></div>
-  <div class="pc-row pc-gap"><span class="pc-label">Inhabitants</span><span class="pc-value" id="bc-inhabitants">None</span></div>
-</div>
+<!-- The card for whoever's being followed — a person, a car, a carriage, a building, a bee, a hive — is built by src/ui/entity-card.js:
+     they're all one card with different rows filled in, so a row added there reaches every one of them at once. -->
 
 <!-- walking someone about, or driving (src/life/possession.js): the keys as a thumbstick and a couple of buttons, on touch -->
 <div id="touch-drive" hidden>

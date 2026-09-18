@@ -1,0 +1,18 @@
+# What each train is like: what its card says when you click a carriage in World mode. Edit freely, then reload the page.
+# The same format as assets/cars.txt and assets/buildings.txt (they're all read by src/core/type-text.js). Under a
+# [section], `attribute = value` lines:
+#
+#   name    what it's called on its card (followed by its own number, like "Train #3")
+#   mood    its current mood, usually an emoji
+#   loves   what it loves
+#   hates   what it hates
+#
+# Give an attribute several lines to have each train pick one of them (always the same one for the same train). There's
+# only one kind of train for now, so everything goes under [default] — but a [section] named after a carriage would work
+# the same way as a vehicle type does. Blank lines and lines starting with # are skipped.
+
+[default]
+name = Train
+mood = 🚆
+loves = Shoooom
+hates = Delays

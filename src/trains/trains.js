@@ -682,7 +682,7 @@ function pickTrain(clientX, clientY) {
 }
 function showFollowedTrainCard() {
   const i = trainShuttles.findIndex(s => s.lineId === followedTrain);
-  App.showTrainCard({ name: `Train #${i + 1}`, mood: '🚆', view: trainThumbnailOf(trainShuttles[i].object) });
+  App.showTrainCard({ number: i + 1, view: trainThumbnailOf(trainShuttles[i].object) });
 }
 // The card's thumbnail: a copy of the carriage (sharing its geometry and materials), sitting level at the origin, and an
 // isometric camera framing it — as for a car (see makeCarThumbnail in traffic.js).

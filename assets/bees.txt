@@ -1,0 +1,41 @@
+# What each bee and hive is like: what its card says when you click one in World mode. Edit freely, then reload the page.
+# The same format as assets/cars.txt, assets/trains.txt and assets/buildings.txt (they're all read by
+# src/core/type-text.js). Under a [section], `attribute = value` lines:
+#
+#   name    what it's called on its card (followed by its own number, like "Bee #431")
+#   mood    its current mood, usually an emoji
+#   loves   what it loves
+#   hates   what it hates
+#
+# Give an attribute several lines to have each bee (or hive) pick one of them — always the same one for the same bee, so
+# a bee you followed yesterday is the same bee today. Blank lines and lines starting with # are skipped.
+
+[bee]
+name = Bee
+mood = 🐝
+mood = 🌼
+mood = 😤
+mood = 🥱
+loves = Clover
+loves = Lavender
+loves = A short commute
+loves = Telling the others about it
+hates = Rain
+hates = Wasps
+hates = Flying home into the wind
+hates = An empty flower
+
+[hive]
+name = Hive
+mood = 🍯
+mood = 🐝
+loves = A full comb
+loves = Warm afternoons
+hates = Bears
+hates = Draughts
+
+[default]
+name = Hive
+mood = 🐝
+loves = Flowers
+hates = Rain

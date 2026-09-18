@@ -129,6 +129,13 @@ export function createMeshBuilder() {
       sides.forEach(([s0, t0, s1, t1, n]) => this.addQuad(corner(s0,t0,y0), corner(s1,t1,y0), corner(s1,t1,y1), corner(s0,t0,y1), n));
       this.addQuad(corner(-1,-1,y1), corner(1,-1,y1), corner(1,1,y1), corner(-1,1,y1), { x:0, y:1, z:0 });
     },
+    // another geometry's triangles, with its own normals, moved to (x, y, z)
+    addGeometry(geo, x, y, z) {
+      const pos = geo.attributes.position, nrm = geo.attributes.normal, idx = geo.index, base = positions.length/3;
+      for (let i=0; i<pos.count; i++) vertex(pos.getX(i)+x, pos.getY(i)+y, pos.getZ(i)+z, { x:nrm.getX(i), y:nrm.getY(i), z:nrm.getZ(i) });
+      if (idx) for (let i=0; i<idx.count; i+=3) triangle(base+idx.getX(i), base+idx.getX(i+1), base+idx.getX(i+2));
+      else for (let i=0; i<pos.count; i+=3) triangle(base+i, base+i+1, base+i+2);
+    },
     build() {
       if (!indices.length) return null;
       const geo = new THREE.BufferGeometry();
@@ -235,7 +242,9 @@ export function disposeObject(root) {
   S.sceneIndexDirty = true; // whatever goes with it leaves the blink-light and window-glow lists (see refreshSceneIndex)
   root.traverse(o => {
     if (o.geometry && !o.userData.sharedGeometry) o.geometry.dispose(); // shared: the train carriage model, reused by every carriage
-    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+    // (a shared material belongs to a module rather than to this mesh — disposing it would take its shader program down
+    // with it, and the next thing to use it would have to compile all over again: a park's flowers and bees, say)
+    if (o.material && !o.userData.sharedMaterial) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
   });
 }
 // Moves a line's points in place. setFromPoints swaps in a brand-new position attribute instead, which leaves the old

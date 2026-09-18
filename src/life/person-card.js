@@ -3,40 +3,42 @@ import { App } from '../core/shared.js';
 import { scene, renderer } from '../core/scene.js';
 import { HEADSHOT_LAYER } from './people.js';
 import { profileOf, onProfilesLoaded } from './profiles.js';
+import { makeCard } from '../ui/entity-card.js';
 
 // ============================================================ person card
 // Who someone is, in a card at the bottom right while the camera follows them (see "following someone" in people.js): their
 // name, age and mood, and one thing they enjoy and one they hate — picked from assets/people.txt (see profiles.js), and the
-// same person every time.
+// same person every time. The card itself is the shared one in ui/entity-card.js; people are the one kind of thing whose
+// text doesn't come from a [section] file, since people.txt does rather more (weighted lines, traits) than the rest.
 let shown = null; // { index, isMan } of whoever the card is showing
-const card = document.getElementById('person-card');
-document.getElementById('person-card-close').addEventListener('click', () => App.stopFollowingPerson());
-
-// the headshot itself: into their head (see possession.js)
-document.getElementById('pc-headshot').addEventListener('click', () => { if (shown) App.possessPerson(shown.index); });
-// the Kill button, under their headshot: they explode (see killPerson in people.js), and the card goes
-document.getElementById('pc-kill').addEventListener('click', () => { if (shown) App.killPerson(shown.index); });
+const card = makeCard({
+  id: 'person-card',
+  title: 'Ped',
+  onClose: () => App.stopFollowingPerson(),
+  // the headshot itself: into their head (see possession.js)
+  thumb: { title: 'Possess them', onClick: () => { if (shown) App.possessPerson(shown.index); } },
+  // the Kill button, under their headshot: they explode (see killPerson in people.js), and the card goes
+  kill: { title: 'Blow them up', onClick: () => { if (shown) App.killPerson(shown.index); } },
+});
 // (once people.txt has loaded, the card shows what it says)
 onProfilesLoaded(() => { if (shown) showPersonCard(shown.index, shown.isMan); });
 function showPersonCard(index, isMan) {
   shown = { index, isMan };
   const profile = profileOf(index, isMan);
-  ['name', 'age', 'mood', 'enjoys', 'hates'].forEach(key => { document.getElementById('pc-' + key).textContent = profile[key]; });
+  // (what people.txt calls "enjoys" is the card's Loves row, the same one a car or a building has)
+  card.show({ name: profile.name, age: profile.age, mood: profile.mood, loves: profile.enjoys, hates: profile.hates });
   // (no headshot of a cuboid person, before the people model has loaded)
   headshotContext.clearRect(0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE);
   headshotCanvas.hidden = isMan == null;
   headshotDrawnAt = -Infinity;
   lightsOnLayer = false;
   setPersonCardIndoors(null);
-  card.hidden = false;
 }
 // whether they're inside a building (see "going indoors" in people.js): what it's called ("Tower #4821"), or null for
 // out and about
 function setPersonCardIndoors(label) {
-  const inside = label != null;
-  document.getElementById('pc-indoors-row').hidden = !inside;
-  document.getElementById('pc-indoors').textContent = inside ? 'Inside ' + label : '';
-  headshotCanvas.classList.toggle('pc-away', inside);
+  card.set('status', label == null ? null : 'Inside ' + label);
+  headshotCanvas.classList.toggle('pc-away', label != null);
 }
 
 // ---- the headshot: a live close-up of their face, beside their name — drawn a few times a second (people.js hands over
@@ -47,7 +49,7 @@ const HEADSHOT_INTERVAL = 1/15;
 const headshotTarget = new THREE.WebGLRenderTarget(HEADSHOT_SIZE, HEADSHOT_SIZE);
 const headshotCamera = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
 headshotCamera.layers.set(HEADSHOT_LAYER);
-const headshotCanvas = document.getElementById('pc-headshot');
+const headshotCanvas = card.canvas;
 const headshotContext = headshotCanvas.getContext('2d'), headshotImage = headshotContext.createImageData(HEADSHOT_SIZE, HEADSHOT_SIZE);
 const headshotPixels = new Uint8Array(HEADSHOT_SIZE*HEADSHOT_SIZE*4), clearColor = new THREE.Color();
 let headshotDrawnAt = -Infinity, lightsOnLayer = false;
@@ -81,7 +83,7 @@ function drawPersonHeadshot(view) {
 }
 function hidePersonCard() {
   shown = null;
-  card.hidden = true;
+  card.hide();
 }
 
 Object.assign(App, { showPersonCard, hidePersonCard, drawPersonHeadshot, setPersonCardIndoors });
