@@ -31,7 +31,6 @@ loves = Breaking down
 loves = Unexplained 30 minute stop
 hates = Traffic
 hates = Mean peoplesss
-hates = 
 
 [Canyonero]
 name = SUV
@@ -113,7 +112,7 @@ loves = Road trip!!!
 loves = Sliding doors
 loves = Rolling up their windows
 loves = The sat-nav
-hate = Turning this thing around if I have to
+hates = Turning this thing around if I have to
 hates = The 'streets'
 hates = Hearing sirens nearby, omg are they after me? Did I do something?
 hates = Rap music

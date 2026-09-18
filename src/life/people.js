@@ -1922,7 +1922,7 @@ function killPerson(i, by = 'player') {
     };
     colors.skin.copy(personModel.palette[0]);
     colorFrom('Top', colors.top); colorFrom('Pants', colors.pants); colorFrom('Shoes', colors.shoes);
-    if (personModel.headLayers.some(layer => layer.of[i] >= 0)) colors.hair = greyWithAge(colorFrom('Hair', new THREE.Color()), p);
+    if (personModel.headLayers.some(layer => layer.of[i] >= 0)) colors.hair = colorFrom('Hair', new THREE.Color());
   } else {
     peopleMesh.getColorAt(i, colors.top);
     colors.pants.copy(colors.top);
@@ -2300,6 +2300,18 @@ export function updatePeople(t) {
     const fleeing = !!p.fright && p.fright.stage === 'flee';
     let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
     let goal = null;
+    //Updating hair colour depending on age
+    //set default hair colour once
+    if ((p.defaultHair === undefined) && personModel) {
+      const o = ((2 + PERSON_TRAIT_COLORS.indexOf('Hair'))*PEOPLE_MAX + i)*4, data = personModel.traitData;
+      const hairColor = new THREE.Color().setRGB(data[o], data[o+1], data[o+2]);
+      p.defaultHair = hairColor;
+      //TO DO: If birthdays added, break this block into two; below repeated after check for newBirthday boolean
+      //Saving default hair future proofs against hair collapsing to white, but as is this should only run once anyways.
+      const greyAmount = p.traits.ageless ? 0 : Math.max(0, Math.min(1, (p.age - 30) / (100))); // tweak range to taste
+      const newHair =  p.defaultHair.clone().lerp(new THREE.Color(0xffffff), greyAmount);
+      data[o] = newHair.r; data[o+1] = newHair.g; data[o+2] = newHair.b;
+    }
     // (stopped to talk, or frozen in shock, someone on a walkway stays put)
     if (p.mode === 'line' && p.act !== 'chat' && !frozen && !p.attack) {
       if (!p.jc) maybeCrossRoad(p, peopleNav.lines[p.li], dt);

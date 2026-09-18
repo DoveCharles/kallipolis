@@ -267,6 +267,7 @@ Edna [agemult = 1.15]
 Agatha [agemult = 1.15]
 Mildred [agemult = 1.15]
 Myrtle [agemult = 1.15]
+Karla
 
 [Moods]
 😀 [mood = 0.6, happy = 0.6, aggression = 0.5]
@@ -989,3 +990,4 @@ Their bastard son... bastard little boy... [agemult = 1.2, evil = 0.1]
 The Killer
 When the entity freezes time to taunt you and then after everyone is like, "Are you okay?" Uhhhhh no I'm not ok, i just spoke to the freaking entity
 Getting eaten by the worms and weird fishes
+The dead bodies everywhere
