@@ -1338,7 +1338,15 @@ function removeGroup(g) {
 // a conversation between two is over, and they both carry on
 function endChat(g) {
   removeGroup(g);
-  g.members.splice(0).forEach(m => { m.group = null; finishActivity(m); });
+  const chatGroup = g.members.splice(0);
+  chatGroup.forEach((m, index) => { 
+    m.group = null; finishActivity(m); 
+    if (chatGroup.length <= 1) return;
+    let victim;
+    if (index === 0) victim = chatGroup[1]
+    else victim = chatGroup[0]
+    throwPunch(undefined, m, true, victim)
+  });
 }
 function leaveGroup(p) {
   const g = p.group;
@@ -1593,48 +1601,66 @@ function updateActivity(p, area, dt) {
   return null;
 }
 
-// ---- punching: now and then someone evil (the more evil, the more often) picks on someone near them — along the same
+// ---- punching: now and then someone (the more aggression, the more often) picks on someone near them — along the same
 // walkway, or in the same plaza or park — goes up to them, as close as they'd stand to talk, punches them, and walks off.
 // Whoever they pick on only notices them at the last moment, turning to face them, and is knocked flat on their back; they
 // lie there a while, then get up where they fell and carry on.
-const PUNCH_RATE = 1/40;        // the chance a second of picking on someone, per unit of evil
+const PUNCH_RATE = 1/8;        // the chance a second of picking on someone, per unit of aggression
 const PUNCH_REACH = 8;          // how far off (at people size 1) the one they pick on can be
 const PUNCH_NOTICE = 2.5;       // how near they come before they're noticed
 const PUNCH_CHASE_SPEED = 1.5;  // how much faster than they walk they go after them
 const PUNCH_CHASE_MAX = 12;     // seconds before they give up on catching them
-const PUNCH_HIT_TIME = 0.33;    // how far into the Punch animation the fist lands, in seconds
+const PUNCH_HIT_TIME = 0.5;    // how far into the Punch animation the fist lands, in seconds
+let reach = PUNCH_REACH*S.peopleSize;
 // someone going about their business, who might punch or be punched
 const isFairGame = q => (q.mode === 'line' || q.mode === 'wander') && !q.act && !q.fright && !q.stun && !q.please && !q.jc && !q.crossStage
   && !q.attack && !q.punched && !q.oneShot;
 function pickFights(dt) {
   if (!hasClip('Punch') || !hasClip('Fall')) return;
-  const reach = PUNCH_REACH*S.peopleSize;
+  reach = PUNCH_REACH*S.peopleSize;
   people.forEach(p => {
-    const { evil } = p.traits;
-    if (evil <= 0 || (p.punchCooldown -= dt) > 0 || peopleRng() > dt*PUNCH_RATE*evil || !isFairGame(p)) return;
+    throwPunch(dt, p)
+  });
+}
+
+function throwPunch(dt, p, isForced, forcedVictim) {
+  const { aggression } = p.traits;
+  dt = isForced? p.punchCooldown : dt; //force punch roll if forced
+  if ( !isForced && (aggression-1 <= 0 || (p.punchCooldown -= dt*aggression/3) > 0 || !isFairGame(p))) return;
+  if (isForced) dt = 1;
+  if (peopleRng() > dt*PUNCH_RATE*aggression/4){
+    p.punchCooldown = 20 + peopleRng()*20;
+    return;
+  } 
+  
+  let victim;
+  if (forcedVictim) {
+    victim = forcedVictim;
+  } else {
     // anyone near enough: along the same walkway (not across the block it runs round), or in the same hangout
     const nav = p.mode === 'line' ? peopleNav.lines[p.li] : null;
     const along = q => { const d = Math.abs(q.u - p.u); return nav.loop ? Math.min(d, nav.total - d) : d; };
     const near = people.filter(q => q !== p && q.mode === p.mode && Math.abs(q.x - p.x) < reach && Math.abs(q.z - p.z) < reach
       && Math.hypot(q.x - p.x, q.z - p.z) < reach && (nav ? q.li === p.li && along(q) < reach : q.area === p.area) && isFairGame(q));
     if (!near.length) { p.punchCooldown = 2 + peopleRng()*3; return; }
-    const victim = pickFrom(near);
-    p.attack = { target: victim, stage: 'chase', timer: PUNCH_CHASE_MAX };
-    p.lookAt = victim;
-    victim.punched = { by: p, stage: 'marked', timer: 0 };
-    p.punchCooldown = 30 + peopleRng()*30;
-  });
+    victim = pickFrom(near);
+  }
+  p.attack = { target: victim, stage: 'chase', timer: PUNCH_CHASE_MAX };
+  p.lookAt = victim;
+  victim.punched = { by: p, stage: 'marked', timer: 0 };
+  p.punchCooldown = 20 + peopleRng()*20;
 }
+
+const PUNCH_STARE_TIME = 1.5;
+
 // someone punching, each frame: where they should walk to (or null to stand still)
 function updateAttack(p, dt) {
   const a = p.attack, t = a.target;
   a.timer -= dt;
   if (a.stage === 'chase') {
-    // given up on: gone somewhere they can't be followed (or taken up with something else), or not caught in time
     if (t.punched?.by !== p || a.timer <= 0 || !(t.mode === 'line' || t.mode === 'wander' || t.mode === 'leaving') || t.jc) { endAttack(p); return null; }
     const d = Math.hypot(t.x - p.x, t.z - p.z), gap = CHAT_GAP*S.peopleSize;
     if (t.punched.stage === 'marked' && d < PUNCH_NOTICE*S.peopleSize) {
-      // they've been seen coming: whoever it is stops what they're doing and turns to face them
       t.punched = null;
       endActivity(t);
       t.oneShot = null; t.wait = 0;
@@ -1650,9 +1676,15 @@ function updateAttack(p, dt) {
     p.faceTo = headingTo(p, t);
     if (a.timer > 0) return null;
     if (t.punched?.by === p) knockDown(t, p);
+    a.stage = 'stare';
+    a.timer = PUNCH_STARE_TIME;
+  }
+  if (a.stage === 'stare') {
+    p.faceTo = headingTo(p, t); // keep looking down at them while it plays out
+    if (a.timer > 0) return null;
     a.stage = 'follow';
   }
-  // the punch played out, they walk off
+  // the stare's over, they walk off
   if (!p.oneShot) {
     endAttack(p);
     if (p.mode === 'line') {

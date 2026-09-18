@@ -28,6 +28,7 @@ export const TRAITS = {
   shock:     { base: 0, min: 0, max: 1, combine: 'add' },
   backwards: { base: 0, min: 0, max: 1, combine: 'on' },
   evil:      {base: 0, min: -1, max: 1, combine: 'add'},
+  aggression:{base: 1, min: 0, max: 100},
   choiceweight: {base: 0, min: 1, max: Infinity}, //Increase how many times a line is added to lists, 
   //                                               set 0 to prevent auto assignment and allow manual setting only
   agemult: {base: 1, min: 0.1, max: Infinity}, //Inf limit to allow vampiric / immortal type shit

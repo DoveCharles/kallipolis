@@ -27,8 +27,11 @@ hates = Budget cuts
 name = Bus
 mood = 🚌
 loves = Picking up my lovely peoples
+loves = Breaking down
+loves = Unexplained 30 minute stop
 hates = Traffic
 hates = Mean peoplesss
+hates = 
 
 [Canyonero]
 name = SUV
@@ -57,8 +60,11 @@ name = Police car
 mood = 🚓
 loves = WEEWOOWEEWOO
 loves = PULL OVER, NOW
+loves = Being one day away from retirement
+loves = Escalating
 hates = 'N******'
 hates = Diets
+hates = Paperwork
 
 [Sedan]
 name = Sedan
@@ -82,6 +88,8 @@ loves = Running over wildlife
 loves = Running over literally anything
 loves = Vaping
 loves = Fucking their fat wife
+loves = Six-pack of beer in the passenger seat
+loves = Using the cargo bay for absolutely nothing
 hates = Children and small animals
 hates = Nature
 hates = Fucking their fat wife
@@ -95,6 +103,7 @@ loves = RRRRUM RUM RUM RUM RUM RUM
 loves = Being a moderator on r/smalldickproblems
 hates = Their wife
 hates = Getting it in the ear from their missus
+hates = You know, my dad passed away at this age, you know?
 
 [FamilyCar]
 name = Family car
@@ -103,6 +112,8 @@ loves = Their family omg
 loves = Road trip!!!
 loves = Sliding doors
 loves = Rolling up their windows
+loves = The sat-nav
+hate = Turning this thing around if I have to
 hates = The 'streets'
 hates = Hearing sirens nearby, omg are they after me? Did I do something?
 hates = Rap music
@@ -129,6 +140,8 @@ name = Van
 mood = 🚐
 loves = Uhh. Just on my way to work, mate.
 loves = Parking on the curb in a busy street. It's alright, got me hazards on mate.
+loves = Calling in sick
+loves = ALL the CANDY in the back! and it's FREE!!!
 hates = All other cars
 hates = Women
 hates = Bellends
