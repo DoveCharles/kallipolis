@@ -10,6 +10,7 @@ import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone, subdivideZonesFrom } from '../zones/cutouts.js';
 import { refreshHighlights, styleZoneVisual } from '../water/bridges.js';
 import { selectItem, renderHierarchy } from '../ui/panels.js';
+import { IS_TOUCH } from '../core/device.js';
 
 // ============================================================ tool switching / drawing lifecycle
 export function cancelActiveDrawing() {
@@ -53,18 +54,33 @@ export function finishActiveDrawing() {
     closeActiveZone();
   }
 }
+// There's no mouse button, no modifier and no Esc under a finger, so touch is told about the gestures that do those jobs
+// instead: two fingers to pan and pinch, a long press for the right button, and ✛ along the top for shift (src/ui/mobile.js).
 function updateHint() {
   let msg;
   if (S.interactionMode==='move') {
-    msg = 'Left-drag to orbit · shift+left-drag to pan · scroll to zoom · 1/3/7 for view snaps · click a person to follow them';
+    msg = IS_TOUCH
+      ? 'Drag to orbit · two fingers to pan · pinch to zoom · tap a person to follow them'
+      : 'Left-drag to orbit · shift+left-drag to pan · scroll to zoom · 1/3/7 for view snaps · click a person to follow them';
   } else if (S.interactionMode==='maps') {
     if (S.mapTransform) {
       const label = S.mapTransform.mode==='translate' ? 'Move' : S.mapTransform.mode==='rotate' ? 'Rotate' : 'Scale';
       const snapHint = S.mapTransform.mode==='rotate' ? ' · hold shift to snap to 90°' : '';
-      msg = label+' — click or Enter to confirm · Esc or right-click to cancel'+snapHint;
+      msg = IS_TOUCH ? label+' — drag the image, and let go when it looks right'
+                     : label+' — click or Enter to confirm · Esc or right-click to cancel'+snapHint;
     } else {
-      msg = 'Click an image to select it · G move · R rotate · S scale · empty-ground drag orbits';
+      msg = IS_TOUCH
+        ? 'Tap an image to select it · Move, Rotate and Scale are under the Images list · drag empty ground to orbit'
+        : 'Click an image to select it · G move · R rotate · S scale · empty-ground drag orbits';
     }
+  } else if (IS_TOUCH) {
+    const hints = {
+      train: "Tap to place nodes at the line's height · drag a node to move it in 3D (top view moves it level) · double-tap a node to delete it · double-tap to finish · press and hold a node to make it a station · ✛ then tap a line to insert a node, or a node to branch from it · press and hold empty ground to cancel",
+      road: 'Tap ground to place nodes · tap a node to select its path · double-tap a node to delete it · drag to move · drag empty ground to orbit · double-tap ground to finish · ✛ then tap a path to insert a node, or a node to branch from it · press and hold to cancel',
+      zone: 'Tap ground for boundary points · tap a point to select its zone · double-tap a point to delete it · drag to move · drag empty ground to orbit · double-tap ground, or tap the first point, to close · ✛ then tap an edge to insert a point · press and hold to cancel',
+      objects: 'Objects are coming soon · drag to orbit · two fingers to pan · pinch to zoom'
+    };
+    msg = hints[S.currentTool];
   } else {
     const hints = {
       train: "Click to place nodes at the line's height · drag a node to move it in 3D (top view, key 7, moves it level) · alt+drag changes only its height · right-click a node to make it a station · double-click a node to delete it · double-click or Enter finishes · shift+click a line to insert a node · shift+click a node to branch from it · Esc cancels",

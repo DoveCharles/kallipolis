@@ -9,6 +9,7 @@ import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
 import { subdivideZone, subdivideZonesFrom, subdivideZonesFromIndex, moveZone } from '../zones/cutouts.js';
 import { refreshHighlights } from '../water/bridges.js';
+import { IS_TOUCH } from '../core/device.js';
 
 // ============================================================ selection / hierarchy
 export function selectItem(type,id,force) {
@@ -145,6 +146,20 @@ export function renderHierarchy() {
       e.preventDefault();
       moveZone(S.draggedZoneId, zone.id, row.classList.contains('drop-before'));
     });
+    // dragging and dropping never happens under a finger, so touch moves a zone up and down the list a step at a time
+    if (IS_TOUCH) {
+      const step = (dir) => (e) => {
+        e.stopPropagation();
+        const i = S.zones.indexOf(zone), j = i + dir;
+        if (j < 0 || j >= S.zones.length) return;
+        moveZone(zone.id, S.zones[j].id, dir < 0);
+      };
+      const up = document.createElement('button');
+      up.className = 'hier-move'; up.textContent = '\u25b2'; up.title = 'Move up (cuts into more)'; up.onclick = step(-1);
+      const down = document.createElement('button');
+      down.className = 'hier-move'; down.textContent = '\u25bc'; down.title = 'Move down'; down.onclick = step(1);
+      row.insertBefore(up, del); row.insertBefore(down, del);
+    }
     zonesList.appendChild(row);
   });
   document.getElementById('zones-count').textContent = S.zones.length;

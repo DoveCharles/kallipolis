@@ -40,11 +40,12 @@ import './life/car-card.js';
 import './trains/train-card.js';
 import './buildings/building-card.js';
 import './ui/win3.js';
+import './ui/mobile.js';
 import './ui/pixelation.js';
 import './project/export-obj.js';
 import * as THREE from 'three';
 import { S } from './core/shared.js';
-import { scene, camera, renderer, skyDome, SKIP_OVER_WATER_AND_ROADS } from './core/scene.js';
+import { scene, camera, renderer, skyDome, SKIP_OVER_WATER_AND_ROADS, blinkLights, refreshSceneIndex } from './core/scene.js';
 import { controls } from './core/camera-controls.js';
 import { mulberry32 } from './core/math.js';
 import { createWindowMaterial } from './buildings/windows.js';
@@ -131,11 +132,8 @@ function animate() {
   updateWeather(t);
   placeSunLight();
   WATER_TIME.value = t;
-  scene.traverse(o => {
-    if (o.userData && o.userData.isBlinkLight) {
-      o.material.emissiveIntensity = 0.5 + Math.sin(t*3 + o.userData.blinkPhase)*0.5;
-    }
-  });
+  refreshSceneIndex();
+  blinkLights.forEach(o => { o.material.emissiveIntensity = 0.5 + Math.sin(t*3 + o.userData.blinkPhase)*0.5; });
   if (S.interactionMode === 'node') scaleNodeUi(camera);
   renderView(scene, camera);
 }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { S, App } from './shared.js';
+import { IS_TOUCH } from './device.js';
 
 // ============================================================ renderer / scene
 const wrap = document.getElementById('canvas-wrap');
@@ -23,7 +24,9 @@ scene.fog = new THREE.Fog(bgColor, 600, 2800);
 export const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.5, 3000);
 // the stencil buffer is off by default now, and the water and road masks need it (see SKIP_OVER_WATER_AND_ROADS)
 export const renderer = new THREE.WebGLRenderer({ antialias:true, stencil:true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// phones and tablets draw the same scene on a much smaller GPU, so they render at a lower ratio (and with a smaller
+// shadow map below) — at that size the difference is hard to see, and it's the difference between smooth and not
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, IS_TOUCH ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap; // (soft-edged now — PCFSoftShadowMap was folded into it)
@@ -40,7 +43,7 @@ scene.add(hemi);
 export const sun = new THREE.DirectionalLight(0xfff2df, 1.1);
 sun.position.set(150, 220, 100);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(IS_TOUCH ? 1024 : 2048, IS_TOUCH ? 1024 : 2048);
 sun.shadow.camera.left = -300; sun.shadow.camera.right = 300;
 sun.shadow.camera.top = 300; sun.shadow.camera.bottom = -300;
 sun.shadow.camera.far = 800;
@@ -127,13 +130,37 @@ const WINDOW_GLOW_FULL_ELEV = -20, WINDOW_GLOW_OFF_ELEV = 36;
 export function computeWindowGlowFactor(elevation) {
   return THREE.MathUtils.clamp((WINDOW_GLOW_OFF_ELEV-elevation)/(WINDOW_GLOW_OFF_ELEV-WINDOW_GLOW_FULL_ELEV), 0, 1);
 }
-function updateWindowGlowForSun() {
-  const factor = computeWindowGlowFactor(S.sunElevation);
+// Two things have to be picked out of the scene by hand: the beacons blinking on landmark masts, and every material
+// that lights up after dark. Walking the whole graph to find them costs more on a built-up city than the rest of a
+// frame put together, and neither set changes except on an edit — so the walk happens only once something has been
+// added or taken out, and both lists are read straight from then on.
+export const blinkLights = [];   // meshes with userData.isBlinkLight — landmark antenna beacons (see surface-detail)
+export const glowMaterials = []; // materials with userData.baseEmissiveIntensity — lit windows, lamps, train interiors
+S.sceneIndexDirty = true;
+// What marks the index stale is the graph changing shape, not the materials being made: a building's windows exist
+// well before its group is hung off the scene, and anything indexed in between would be missed. Every add and remove
+// goes through these two, detached ones included — marking stale more often than strictly needed, which costs one
+// walk on the next frame and never a wrong answer. Nothing is added or taken out while the city just sits there, so
+// an idle frame does no walking at all.
+['add', 'remove'].forEach(method => {
+  const inner = THREE.Object3D.prototype[method];
+  THREE.Object3D.prototype[method] = function (...objects) { S.sceneIndexDirty = true; return inner.apply(this, objects); };
+});
+export function refreshSceneIndex() {
+  if (!S.sceneIndexDirty) return;
+  S.sceneIndexDirty = false;
+  blinkLights.length = 0; glowMaterials.length = 0;
+  const seen = new Set(); // one material is shared by many meshes, and rescaling its glow once is enough
   scene.traverse(o => {
-    if (o.isMesh && o.material && o.material.userData && o.material.userData.baseEmissiveIntensity != null) {
-      o.material.emissiveIntensity = o.material.userData.baseEmissiveIntensity * factor;
-    }
+    if (o.userData && o.userData.isBlinkLight && o.material) blinkLights.push(o);
+    const mat = o.isMesh ? o.material : null;
+    if (mat && mat.userData && mat.userData.baseEmissiveIntensity != null && !seen.has(mat)) { seen.add(mat); glowMaterials.push(mat); }
   });
+}
+function updateWindowGlowForSun() {
+  refreshSceneIndex();
+  const factor = computeWindowGlowFactor(S.sunElevation);
+  glowMaterials.forEach(mat => { mat.emissiveIntensity = mat.userData.baseEmissiveIntensity * factor; });
 }
 // Cheapest plausible "glass reflects the sky" trick: a tiny (16px/face) CubeTexture painted
 // from the same top/horizon colors already driving the sky dome, reused as every specular

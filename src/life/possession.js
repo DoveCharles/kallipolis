@@ -1,6 +1,7 @@
 import { S, App } from '../core/shared.js';
 import { renderer } from '../core/scene.js';
 import { controls } from '../core/camera-controls.js';
+import { IS_TOUCH } from '../core/device.js';
 
 // ============================================================ taking control
 // Taking over whoever or whatever the camera's following, from its card — the keys held, the mouse, and the note across
@@ -11,8 +12,11 @@ import { controls } from '../core/camera-controls.js';
 // - someone (clicking the person card's headshot): the view from their eyes, WASD to walk them about (shift to run)
 // - a car (clicking the car card's picture): the view from behind it, WASD to drive (shift for a boost, space to brake),
 //   the mouse swinging the camera round it (and back behind, a moment after it's left alone), the wheel to zoom
+// On touch there's no pointer to lock and no keys to hold: a finger dragged across the view looks around instead, and the
+// thumbstick and buttons src/ui/mobile.js puts on screen are held down in place of WASD.
 const dom = renderer.domElement;
 const hint = document.getElementById('possess-hint'), hintTitle = document.getElementById('ph-title'), hintSub = document.getElementById('ph-sub');
+const hintExit = document.getElementById('ph-exit');
 export const possession = { index: -1, yaw: 0, pitch: 0 };
 export const driving = { active: false, lookedAt: -Infinity }; // (lookedAt: when the mouse last swung the camera round)
 const held = new Set();
@@ -24,6 +28,7 @@ function showHint(title, sub) {
   hintTitle.innerHTML = title;
   hintSub.textContent = sub;
   hint.hidden = false;
+  hintExit.hidden = !IS_TOUCH; // no Esc to press: the way out is a button
 }
 // (whether it could: only in World mode)
 export function startPossession(i, heading) {
@@ -32,7 +37,8 @@ export function startPossession(i, heading) {
   possession.yaw = heading;
   possession.pitch = -0.1;
   held.clear();
-  showHint('Press <kbd>Esc</kbd> to exit first person', 'WASD to walk · Shift to run · mouse to look');
+  showHint(IS_TOUCH ? 'First person' : 'Press <kbd>Esc</kbd> to exit first person',
+    IS_TOUCH ? 'Stick to walk · Run to run · drag to look' : 'WASD to walk · Shift to run · mouse to look');
   lockPointer(); // (a click is what lets it lock, and this runs from one)
   return true;
 }
@@ -42,6 +48,7 @@ export function endPossession() {
   if (possession.index < 0) return;
   possession.index = -1;
   held.clear();
+  lookPointer = null;
   hint.hidden = true;
   unlockPointer();
 }
@@ -50,7 +57,9 @@ export function startDriving() {
   driving.active = true;
   driving.lookedAt = -Infinity;
   held.clear();
-  showHint('Press <kbd>Esc</kbd> to stop driving', 'W/S to drive · A/D to steer · Shift to boost · Space to brake · mouse to look around · scroll to zoom');
+  showHint(IS_TOUCH ? 'Driving' : 'Press <kbd>Esc</kbd> to stop driving',
+    IS_TOUCH ? 'Stick to drive and steer · Run to boost · drag to look around'
+             : 'W/S to drive · A/D to steer · Shift to boost · Space to brake · mouse to look around · scroll to zoom');
   lockPointer();
   return true;
 }
@@ -58,11 +67,19 @@ export function endDriving() {
   if (!driving.active) return;
   driving.active = false;
   held.clear();
+  lookPointer = null;
   hint.hidden = true;
   unlockPointer();
 }
 const isPossessing = () => possession.index >= 0;
 const inControl = () => isPossessing() || driving.active;
+hintExit.addEventListener('click', () => { if (isPossessing()) App.unpossessPerson(); else App.stopDriving(); });
+
+// the on-screen controls holding a key down in place of a finger on a keyboard (src/ui/mobile.js)
+export function setControlHeld(key, down) {
+  if (!CONTROL_KEYS.includes(key)) return;
+  if (down) held.add(key); else held.delete(key);
+}
 
 // what you're asking for, relative to where you're looking (or the way the car points): { forward, right, run, brake }
 export function controlInput() {
@@ -87,23 +104,38 @@ document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement === dom) return;
   if (isPossessing()) App.unpossessPerson(); else if (driving.active) App.stopDriving();
 });
-// clicking the view while in control picks no one, but locks the pointer to it (again)
+// clicking the view while in control picks no one, but locks the pointer to it (again) — or, on touch, starts looking around
+let lookPointer = null; // the finger doing the looking: { id, x, y }
 dom.addEventListener('pointerdown', (e) => {
   if (!inControl()) return;
   e.stopImmediatePropagation();
-  lockPointer();
+  if (e.pointerType === 'mouse') lockPointer();
+  else if (!lookPointer) lookPointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
 }, true);
-window.addEventListener('mousemove', (e) => {
-  if (!inControl() || (document.pointerLockElement !== dom && !(e.buttons & 1 && e.target === dom))) return;
+function look(dx, dy) {
   if (driving.active) {
-    controls.orbit(e.movementX, e.movementY);
+    controls.orbit(dx, dy);
     controls.goalPhi = Math.max(ORBIT_PHI_MIN, Math.min(ORBIT_PHI_MAX, controls.goalPhi));
     driving.lookedAt = performance.now();
     return;
   }
-  possession.yaw -= e.movementX*LOOK_SPEED;
-  possession.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, possession.pitch - e.movementY*LOOK_SPEED));
+  possession.yaw -= dx*LOOK_SPEED;
+  possession.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, possession.pitch - dy*LOOK_SPEED));
+}
+window.addEventListener('mousemove', (e) => {
+  if (!inControl() || (document.pointerLockElement !== dom && !(e.buttons & 1 && e.target === dom))) return;
+  look(e.movementX, e.movementY);
 });
+// A dragged finger looks around. movementX/movementY are no use for that — Safari leaves them at zero for touch — so the
+// distance is measured from where the finger was last.
+window.addEventListener('pointermove', (e) => {
+  if (!lookPointer || e.pointerId !== lookPointer.id) return;
+  look(e.clientX - lookPointer.x, e.clientY - lookPointer.y);
+  lookPointer.x = e.clientX; lookPointer.y = e.clientY;
+});
+const endLook = (e) => { if (lookPointer && e.pointerId === lookPointer.id) lookPointer = null; };
+window.addEventListener('pointerup', endLook);
+window.addEventListener('pointercancel', endLook);
 dom.addEventListener('wheel', (e) => { if (isPossessing()) { e.preventDefault(); e.stopImmediatePropagation(); } }, { capture: true, passive: false });
 
 Object.assign(App, { isPossessing, isDriving: () => driving.active });

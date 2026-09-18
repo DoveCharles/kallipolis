@@ -232,6 +232,7 @@ export function addRoadLayerMesh(geo, color, roughness, name, networkId) {
 // the only ones inside these groups are shared (the sky reflection map); map images dispose their own.
 export function disposeObject(root) {
   if (!root) return;
+  S.sceneIndexDirty = true; // whatever goes with it leaves the blink-light and window-glow lists (see refreshSceneIndex)
   root.traverse(o => {
     if (o.geometry && !o.userData.sharedGeometry) o.geometry.dispose(); // shared: the train carriage model, reused by every carriage
     if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());

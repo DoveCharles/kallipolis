@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- the view is a 3D canvas driven by gesture, so the page itself never zooms or scrolls; viewport-fit lets it fill a notched screen -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Blockout — procedural city generator</title>
 <script>/* the Windows 3.0 look (src/ui/win3.js) is on unless it's been switched off */ try { if (localStorage.getItem('splinetopia.win3') !== '0') document.documentElement.classList.add('win3'); } catch (err) { document.documentElement.classList.add('win3'); }</script>
 <link rel="stylesheet" href="style.css">
@@ -83,6 +86,12 @@
     <div class="hier-list" id="maps-list"></div>
     <button class="btn" id="btn-import-image" style="margin-top:8px;">Import image</button>
     <input type="file" id="map-file-input" accept="image/png,image/jpeg" style="display:none;">
+    <!-- G / R / S have nowhere to be typed on a phone, so on touch (src/ui/mobile.js) they're these, and the image is dragged rather than clicked twice -->
+    <div id="map-touch-tools" hidden>
+      <button class="btn map-touch-btn" data-map-mode="translate">Move</button>
+      <button class="btn map-touch-btn" data-map-mode="rotate">Rotate</button>
+      <button class="btn map-touch-btn" data-map-mode="scale">Scale</button>
+    </div>
   </div>
 
   <div id="details-panel"><div class="empty">Select a road or zone from the list to see its settings.</div></div>
@@ -150,18 +159,23 @@
   </div>
 </div>
 
-<div id="history-tools">
-  <button class="canvas-tool" id="btn-undo" title="Undo (Ctrl+Z)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-  <button class="canvas-tool" id="btn-redo" title="Redo (Ctrl+Shift+Z)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
-</div>
-<div id="grid-toggle" title="Snap to grid">
-  <svg width="15" height="15" viewBox="0 0 297 297" fill="currentColor"><path d="M276.289,0h-63.895c-5.557,0-10.062,4.505-10.062,10.062v149.087c0,14.549-5.714,28.181-16.089,38.384
-	c-10.373,10.2-24.091,15.729-38.668,15.44c-29.173-0.486-52.908-25.104-52.908-54.876V10.062C94.668,4.505,90.162,0,84.605,0
-	H20.711c-5.557,0-10.062,4.505-10.062,10.062v149.087C10.649,235.160,72.489,297,148.5,297s137.851-61.84,137.851-137.851V10.062
-	C286.351,4.505,281.846,0,276.289,0z M30.773,20.124h43.77v43.77h-43.77V20.124z M266.226,159.149
-	c0.001,64.914-52.811,117.727-117.726,117.727S30.773,224.064,30.773,159.149v-75.13h43.77v74.079
-	c0,40.685,32.612,74.329,72.696,74.998c20.002,0.333,38.865-7.2,53.115-21.214c14.253-14.017,22.102-32.744,22.102-52.733v-75.13
-	h43.77V159.149z M266.227,63.894h-43.77v-43.770h43.77V63.894z"/></svg>
+<!-- the row of buttons over the view: the panel toggle and ✛ show themselves only on touch (src/ui/mobile.js) -->
+<div id="canvas-tools">
+  <button class="canvas-tool" id="btn-panel-toggle" title="Show or hide the tools"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <div id="grid-toggle" title="Snap to grid">
+    <svg width="15" height="15" viewBox="0 0 297 297" fill="currentColor"><path d="M276.289,0h-63.895c-5.557,0-10.062,4.505-10.062,10.062v149.087c0,14.549-5.714,28.181-16.089,38.384
+  	c-10.373,10.2-24.091,15.729-38.668,15.44c-29.173-0.486-52.908-25.104-52.908-54.876V10.062C94.668,4.505,90.162,0,84.605,0
+  	H20.711c-5.557,0-10.062,4.505-10.062,10.062v149.087C10.649,235.160,72.489,297,148.5,297s137.851-61.84,137.851-137.851V10.062
+  	C286.351,4.505,281.846,0,276.289,0z M30.773,20.124h43.77v43.77h-43.77V20.124z M266.226,159.149
+  	c0.001,64.914-52.811,117.727-117.726,117.727S30.773,224.064,30.773,159.149v-75.13h43.77v74.079
+  	c0,40.685,32.612,74.329,72.696,74.998c20.002,0.333,38.865-7.2,53.115-21.214c14.253-14.017,22.102-32.744,22.102-52.733v-75.13
+  	h43.77V159.149z M266.227,63.894h-43.77v-43.770h43.77V63.894z"/></svg>
+  </div>
+  <div id="history-tools">
+    <button class="canvas-tool" id="btn-undo" title="Undo (Ctrl+Z)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="canvas-tool" id="btn-redo" title="Redo (Ctrl+Shift+Z)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+  </div>
+  <button class="canvas-tool" id="btn-touch-add" title="Insert a node into a path, or branch off one"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 </div>
 
 <div id="stats">
@@ -174,7 +188,7 @@
 
 <div id="hint"></div>
 
-<div id="possess-hint" hidden><span id="ph-title"></span><span class="ph-sub" id="ph-sub"></span></div>
+<div id="possess-hint" hidden><span id="ph-title"></span><span class="ph-sub" id="ph-sub"></span><button id="ph-exit" hidden>Exit</button></div>
 
 <div id="person-card" hidden>
   <div class="win3-titlebar"><button class="win3-sysbox" title="Close"></button><div class="win3-title">Ped</div></div>
@@ -244,6 +258,15 @@
   <div class="pc-row pc-gap"><span class="pc-label">Loves</span><span class="pc-value" id="bc-loves"></span></div>
   <div class="pc-row"><span class="pc-label">Hates</span><span class="pc-value" id="bc-hates"></span></div>
   <div class="pc-row pc-gap"><span class="pc-label">Inhabitants</span><span class="pc-value" id="bc-inhabitants">None</span></div>
+</div>
+
+<!-- walking someone about, or driving (src/life/possession.js): the keys as a thumbstick and a couple of buttons, on touch -->
+<div id="touch-drive" hidden>
+  <div id="touch-stick"><div id="touch-stick-knob"></div></div>
+  <div id="touch-drive-buttons">
+    <button class="touch-drive-btn" id="touch-brake" hidden>Brake</button>
+    <button class="touch-drive-btn" id="touch-run">Run</button>
+  </div>
 </div>
 
 <div id="node-context-menu"></div>

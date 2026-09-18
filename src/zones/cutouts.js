@@ -167,7 +167,7 @@ export function subdivideZone(zone) {
     } else {
       const ground = makeFlatZoneMesh(poly, zone.settings.groundColor!=null ? zone.settings.groundColor : BUILDING_GROUND_COLORS[0], Y_ZONE_GROUND, 'ZoneGround', null, cutouts);
       if (ground) zone.buildingsGroup.add(ground);
-      const rng = mulberry32(zone.settings.seed>>>0);
+      const layoutRng = mulberry32(zone.settings.seed>>>0);
       const boundary = zone.settings.borderSetback>0 ? insetPolygon(poly, zone.settings.borderSetback) : poly;
       // Target lot count is a flat number (1..MAX_TARGET_LOTS), not an area threshold, so the
       // same slider position yields roughly the same number of lots no matter the zone's size.
@@ -176,14 +176,20 @@ export function subdivideZone(zone) {
       const avgLotArea = boundaryArea / targetLots;
       const opts = { minArea: avgLotArea, maxDepth:9, jitter:0.35, minSplitDim:3 };
       const lots = [];
-      if (boundary.length>=3) recursiveSubdivide(boundary, 0, opts, rng, lots);
+      if (boundary.length>=3) recursiveSubdivide(boundary, 0, opts, layoutRng, lots);
       // shrunk a hair so a building merely touching a cut-out's edge (setback 0) doesn't count as in it
       const inCutout = createRegionTester(blockers.length ? offsetPaths(blockers, -0.01, ClipperLib.JoinType.jtMiter) : []);
-      lots.forEach(lot => {
+      lots.forEach((lot, li) => {
         const { cut, pieces } = cutLotByCutouts(lot, blockers);
-        pieces.forEach(piece => {
+        pieces.forEach((piece, pi) => {
           const larea = Math.abs(polygonArea(piece));
           if (larea < avgLotArea*0.12) return;
+          // Every lot draws from its own stream, keyed to where it sits rather than to how far along the zone we are, so
+          // nothing that happens on one lot can shift what happens on the next. On one shared stream a lot flipping
+          // between built and empty changed how many numbers it took, which re-rolled every lot after it — so nudging
+          // Density (or the landmark, height or colour sliders) looked like it reshuffled the whole zone, when in fact
+          // the lots underneath had never moved. Now each slider only changes the thing it names.
+          const rng = mulberry32(((zone.settings.seed>>>0) ^ Math.imul(li+1, 0x9E3779B1) ^ Math.imul(pi+1, 0x85EBCA6B)) >>> 0);
           const built = rng() < zone.settings.density;
           const setback = built ? zone.settings.setback : zone.settings.setback*0.4;
           // A lot something cut into can be any shape, so it's shrunk with a true offset — keeping the setback from the

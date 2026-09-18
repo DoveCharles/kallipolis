@@ -25,6 +25,10 @@ function showNodeContextMenu(x,y,target) {
   menu.style.left = x+'px';
   menu.style.top = y+'px';
   menu.style.display = 'block';
+  // there's little room to spare on a phone, and a long press near an edge would put half the menu past it
+  const r = menu.getBoundingClientRect();
+  menu.style.left = Math.max(6, Math.min(x, window.innerWidth - r.width - 6))+'px';
+  menu.style.top = Math.max(6, Math.min(y, window.innerHeight - r.height - 6))+'px';
   menu.querySelectorAll('button').forEach(b => {
     b.addEventListener('click', (ev) => {
       ev.stopPropagation();
