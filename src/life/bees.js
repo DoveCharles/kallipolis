@@ -15,12 +15,12 @@ import { beeName } from './bee-card.js';
 // small chance of a hive under it, and a hive keeps a few bees.
 //
 // A bee sits in its hive for a while, then goes out on a round: it makes for a flower, circles down onto it, sits there a
-// moment working, moves on to the next one or two, and flies home. The model carries three shape keys and the flight
-// drives all three: 'flap' beats the wings (0 all the way up, 1 all the way down), fast while it's in the air and held
+// moment working, moves on to the next one or two, and flies home. The model carries four shape keys and the flight
+// drives all four: 'flap' beats the wings (0 all the way up, 1 all the way down), fast while it's in the air and held
 // all the way down while it's sat; 'legs' reaches them out and folds them back about once every three-quarters of a
-// second in the air and holds them out to stand on a flower; and 'look' turns its head down onto the flower it's coming
-// onto or sitting on. They ride along as three morph influences a bee (InstancedMesh.setMorphAt), so every bee in a park
-// is at its own point of the beat.
+// second in the air; 'land' puts them down under it to stand on a flower, and takes over from 'legs' the moment it's
+// down; and 'look' turns its head onto the flower it's coming onto or sitting on. They ride along as four morph
+// influences a bee (InstancedMesh.setMorphAt), so every bee in a park is at its own point of the beat.
 //
 // Bees are fair-weather workers: they stay in from dusk until the sun's up again, and through anything rainier than a
 // shower, and one caught out by either turns for home.
@@ -206,7 +206,7 @@ export async function loadBeeModel() {
     // which shape key is which, by name and whatever order they came out of the file in; a missing one is simply never
     // driven, so an export without the legs in it still flies and still flaps
     const shapes = bee.userData.shapes.map(name => name.toLowerCase());
-    const shape = { flap: shapes.indexOf('flap'), legs: shapes.indexOf('legs'), look: shapes.indexOf('look') };
+    const shape = { flap: shapes.indexOf('flap'), legs: shapes.indexOf('legs'), look: shapes.indexOf('look'), land: shapes.indexOf('land') };
     model = { flowers: flowers.map(geometry => ({ geometry, perch: perchOf(geometry) })), hive, bee, shape, shapeCount: shapes.length };
   } catch (err) {
     console.warn('Blockout: the bee model failed to build; parks go without flowers, hives and bees', err);
@@ -219,7 +219,7 @@ export async function loadBeeModel() {
 // the cards' thumbnails: the model's own bee and hive, framed from an isometric angle like a car's or a building's. A
 // still bee is posed mid-beat with its legs out rather than left at the shape keys' zero, which would have its wings
 // straight up and nothing to stand on.
-const THUMBNAIL_POSE = { flap: 0.45, legs: 1, look: 0 };
+const THUMBNAIL_POSE = { flap: 0.45, legs: 1, look: 0, land: 0 };
 function thumbnailOf(geometry) {
   if (!geometry) return null; // (no thumbnail before the model has loaded)
   const box = geometry.boundingBox, center = box.getCenter(new THREE.Vector3());
@@ -363,7 +363,7 @@ export function plantParkLife(zone, { rng, foliage, ground, spot, clear, trees, 
         flowers: near.length ? near : flowerSpots,
         at: hive.mouth.clone(), v: new THREE.Vector3(), aim: hive.mouth.clone(),
         state: 'hive', until: between(Math.random, 0.5, BEE_REST_MAX), yaw: Math.random()*Math.PI*2,
-        phase: Math.random()*Math.PI*2, plan: [], perch: null, angle: 0, circling: 1, flap: 0, legs: 1, look: 0 });
+        phase: Math.random()*Math.PI*2, plan: [], perch: null, angle: 0, circling: 1, flap: 0, legs: 0, look: 0, land: 1 });
     }
   });
   const beeMesh = instanced(model.bee, bees.length, [solidMaterial, clearMaterial], 'Bees');
@@ -384,7 +384,7 @@ const pick = list => list[Math.floor(Math.random()*list.length)];
 const isHome = bee => bee.state === 'hive';
 // the head, which comes round onto a flower over a moment rather than snapping onto it
 const lookAt = (bee, to, dt) => { bee.look += (to - bee.look)*(1 - Math.exp(-BEE_LOOK_EASE*dt)); };
-// one bee's three shape keys onto its instance of the mesh (see the model's own 'shape' for which is which)
+// one bee's four shape keys onto its instance of the mesh (see the model's own 'shape' for which is which)
 const posed = { morphTargetInfluences: [] };
 function setShape(mesh, k, bee) {
   const shape = model.shape;
@@ -394,6 +394,7 @@ function setShape(mesh, k, bee) {
   if (shape.flap >= 0) posed.morphTargetInfluences[shape.flap] = bee.flap;
   if (shape.legs >= 0) posed.morphTargetInfluences[shape.legs] = bee.legs;
   if (shape.look >= 0) posed.morphTargetInfluences[shape.look] = bee.look;
+  if (shape.land >= 0) posed.morphTargetInfluences[shape.land] = bee.land;
   mesh.setMorphAt(k, posed);
 }
 
@@ -423,7 +424,7 @@ function stepBee(bee, t, dt, sheltering) {
   switch (bee.state) {
     case 'hive':
       bee.at.copy(bee.hive.mouth);
-      bee.flap = 0; bee.legs = 1; bee.look = 0;
+      bee.flap = 0; bee.legs = 0; bee.look = 0; bee.land = 1;
       // in for the night, or for the weather — and, once it lifts, out again a few seconds later rather than every bee
       // in the park at the same instant
       if (sheltering) { bee.until = t + between(Math.random, 0.5, BEE_REST_MIN); return; }
@@ -436,9 +437,9 @@ function stepBee(bee, t, dt, sheltering) {
       }
       return;
     case 'land':
-      // sat on the blossom with its wings folded all the way down and its legs out under it, working it over
+      // sat on the blossom with its wings folded all the way down and its legs down under it, working it over
       bee.at.lerp(bee.perch, 1 - Math.exp(-14*dt));
-      bee.flap = 1; bee.legs = 1;
+      bee.flap = 1; bee.legs = 0; bee.land = 1;
       lookAt(bee, 1, dt);
       if (t >= bee.until) nextLeg(bee);
       return;
@@ -467,6 +468,7 @@ function stepBee(bee, t, dt, sheltering) {
   bee.at.addScaledVector(bee.v, dt);
   bee.flap = 0.5 - 0.5*Math.cos(t*BEE_FLAP_HZ*Math.PI*2 + bee.phase);
   bee.legs = 0.5 - 0.5*Math.cos(t*Math.PI*2/BEE_LEGS_SECONDS + bee.phase);
+  bee.land = 0; // back off the flower, so the legs are the flight's again
   lookAt(bee, bee.state === 'circle' ? 1 : 0, dt); // head down onto the flower it's coming onto, and up again after
   if (bee.v.lengthSq() > 0.04) bee.yaw = Math.atan2(bee.v.x, bee.v.z);
 }
