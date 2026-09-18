@@ -3,6 +3,7 @@ import { S, App } from '../core/shared.js';
 import { camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
+import { makeCard } from '../ui/entity-card.js';
 import { buildingKey, buildingNumber } from './footprints.js';
 import { buildingKindOf, buildingTypeOf } from './building-types.js';
 
@@ -11,12 +12,12 @@ import { buildingKindOf, buildingTypeOf } from './building-types.js';
 // naming it (what its kind is called, and its own number — see buildingNumber), saying what it's like (from
 // assets/buildings.txt, by its kind — see building-types.js) and who's inside
 // (see "going indoors" in people.js), until a click elsewhere, a pan, leaving World mode, or its zone being rebuilt lets it go.
+// The card itself is the shared one in ui/entity-card.js. No Kill button, and nothing to be behind the wheel of.
 // followed: { zone, group, key, center } of the building the camera's on, or null
 let followed = null;
 const raycaster = new THREE.Raycaster();
-const card = document.getElementById('building-card');
-document.getElementById('building-card-close').addEventListener('click', () => stopFollowingBuilding());
-const drawThumbnail = makeThumbnailDrawer(document.getElementById('bc-thumb'));
+const card = makeCard({ id: 'building-card', title: 'Building', onClose: () => stopFollowingBuilding() });
+const drawThumbnail = makeThumbnailDrawer(card.canvas);
 
 // every zone's buildings (a zone's own children named 'Building': city blocks', industrial yards' and farmsteads')
 function buildingsInZones() {
@@ -49,18 +50,14 @@ function followBuildingAt(clientX, clientY) {
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(CAMERA_MIN_RADIUS, Math.min(600, radius*2.8));
   const number = buildingNumber(key), info = buildingTypeOf(buildingKindOf(picked.group, picked.zone), number);
-  document.getElementById('bc-name').textContent = info.name + ' #' + number;
-  document.getElementById('bc-mood').textContent = info.mood;
-  document.getElementById('bc-loves').textContent = info.loves;
-  document.getElementById('bc-hates').textContent = info.hates;
+  card.show({ ...info, name: info.name + ' #' + number });
   setBuildingCardInhabitants([]);
-  card.hidden = false;
   drawThumbnail(thumbnailOf(picked.group, box, center, radius));
 }
 function stopFollowingBuilding() {
   if (!followed) return;
   followed = null;
-  card.hidden = true;
+  card.hide();
 }
 const followedBuildingKey = () => followed ? followed.key : null;
 
@@ -78,13 +75,7 @@ function thumbnailOf(group, box, center, radius) {
 
 // who's inside the followed building (see people.js): their names, one a line
 function setBuildingCardInhabitants(names) {
-  const list = document.getElementById('bc-inhabitants');
-  list.textContent = names.length ? '' : 'None';
-  names.forEach(name => {
-    const row = document.createElement('div');
-    row.textContent = name;
-    list.appendChild(row);
-  });
+  card.setList('occupants', names);
 }
 
 // each frame: the camera on the building, or letting go of it once it's gone (its zone rebuilt or removed) or World mode's left
