@@ -27,21 +27,42 @@ const drawHiveThumbnail = makeThumbnailDrawer(hiveCard.canvas);
 export let beeName = number => text.of('bee', number).name + ' #' + number;
 export const hiveName = number => text.of('hive', number).name + ' #' + number;
 
-function showBeeCard(number) {
-  const beeRNG = mulberry32(number);
-  const id = beeName(number)
+function speakInBee(number) {
+  const beeLangRNG = mulberry32(number);
   let beeLanguage = '';
-  for ( let bztBzts = 0; bztBzts < 1+Math.round(beeRNG()*2); bztBzts++) {
-    for (let bzBzs = 0; bzBzs < 1+Math.round(beeRNG()*2); bzBzs++) {
+  for ( let bztBzts = 0; bztBzts < 1+Math.round(beeLangRNG()*2); bztBzts++) {
+    for (let bzBzs = 0; bzBzs < 1+Math.round(beeLangRNG()*2); bzBzs++) {
       beeLanguage+= bzBzs === 0 ? 'B' : 'b';
-      if (beeRNG()>0.5) beeLanguage += 'u';
-      for (let zs = 0; zs< 1+Math.round(beeRNG()*3); zs++) {
-        beeLanguage+= (beeRNG()>0.3) ? 'z':'m';
+      if (beeLangRNG()>0.5) beeLanguage += 'u';
+      for (let zs = 0; zs< 1+Math.round(beeLangRNG()*3); zs++) {
+        beeLanguage+= (beeLangRNG()>0.3) ? 'z':'m';
       }
     }
-    beeLanguage += 'zt ';
+    return beeLanguage += 'zt ';
   }
-  beeCard.show({ ...text.of('bee', number), name: `${beeLanguage} (${id})` });
+}
+
+function showBeeCard(number) {
+  
+  const beeRNG = mulberry32(number);
+
+  const id = beeName(number)
+  const beeLanguage = speakInBee(number)
+  
+  const beeText = text.of('bee', number);
+  let beeLove = beeText.loves;
+  let beeHate = beeText.hates;
+
+  //30% chance to replace a love or hate with bee language
+  if (beeRNG()>0.7) {
+    beeLove = speakInBee(number+37);
+  }
+  if (beeRNG()>0.7) {
+    beeHate = speakInBee(number+227).toUpperCase();
+  }
+
+  
+  beeCard.show({ ...text.of('bee', number), name: `${beeLanguage} (${id})`, loves: beeLove, hates: beeHate} );
   drawBeeThumbnail(beeThumbnailScene());
 }
 // what it's up to: where it is in its round (see the flight states in bees.js)

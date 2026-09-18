@@ -20,10 +20,22 @@ loves = Clover
 loves = Lavender
 loves = A short commute
 loves = Telling the others about it
+loves = Drunkkkk on the nectar
+loves = The Queen (true patriot)
+loves = Working together
+loves = Being voiced by Jerry Seinfeld
+loves = Stinging
+loves = A spoon with some sugar water in it
+loves = Flying into beer bottles
+loves = Smoking
+loves = Papier-mâché
+loves = Flower nap
 hates = Rain
 hates = Wasps
 hates = Flying home into the wind
-hates = An empty flower
+hates = Plastic flowers
+hates = Rugged individualism
+hates = Stinging
 
 [hive]
 name = Hive
@@ -31,8 +43,14 @@ mood = 🍯
 mood = 🐝
 loves = A full comb
 loves = Warm afternoons
+loves = Me wee grubs
+loves = Wax
+loves = Honey
+loves = Regicide, occasionally
 hates = Bears
 hates = Draughts
+hates = Fire
+hates = Foreigners
 
 [default]
 name = Hive
