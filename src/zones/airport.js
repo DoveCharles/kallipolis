@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { Y_ZONE_GROUND, Y_PARK } from '../core/scene.js';
+import { Y_ZONE_GROUND, Y_PARK, camera } from '../core/scene.js';
+import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
+import { controlInput, startFlying, endFlying, flying } from '../life/possession.js';
 import { mulberry32, lerp, polygonArea, pointInPolygon, centroid } from '../core/math.js';
 import { resolveParkTint, resolveGrassNoiseStrength } from '../core/splines.js';
 import { CLIPPER_SCALE, clipPolygons, createMeshBuilder, forEachPolyTreeEdge } from '../roads/roads.js';
@@ -331,12 +333,14 @@ function buildHelicopter(span, rng) {
   group.userData.rotors = [{ object: mast, axis: 'y', speed: 9 }, { object: tailRotor, axis: 'z', speed: 22 }];
   return group;
 }
-// Points an aircraft along a heading, nose up by `pitch`. Built along +Z, so the yaw is measured from +Z, and a positive
-// rotation about its own X would put the nose down — hence the minus.
-function poseAircraft(object, x, y, z, dx, dz, pitch) {
+// Points an aircraft along a heading, nose up by `pitch` and leaning by `roll`. Built along +Z, so the yaw is measured
+// from +Z, and a positive rotation about its own X would put the nose down — hence the minus. The order matters: YXZ
+// rolls it about its own length first, then pitches and yaws that, which is how a wing drops rather than a whole
+// aeroplane sliding sideways. Nothing on the schedule ever banks — only a hand on the controls does (see flyByHand).
+function poseAircraft(object, x, y, z, dx, dz, pitch, roll) {
   object.position.set(x, y, z);
   object.rotation.order = 'YXZ';
-  object.rotation.set(-(pitch || 0), Math.atan2(dx, dz), 0);
+  object.rotation.set(-(pitch || 0), Math.atan2(dx, dz), roll || 0);
 }
 // how far along `path` (a polyline of {x,z}) a distance lands, and which way it's heading there
 function alongPath(path, distance) {
@@ -401,7 +405,7 @@ function flightSchedule(taxiInLength, taxiOutLength, flights) {
  * @param {{touchdown: number, turnoff: number, holdShort: number, arrive: number, leave: number}} marks Points along the
  *   runway, measured from the threshold it is using; `arrive` and `leave` are which way round that is, ±1.
  * @param {number} offset How far into the round this aircraft starts.
- * @returns {(t: number) => void}
+ * @returns {(t: number) => void} Poses the aircraft for that moment.
  */
 function makeFlight(plane, sched, paths, frame, marks, offset) {
   const { cycle, taxiIn, taxiOut, dwell } = sched;
@@ -744,6 +748,9 @@ export function generateAirportContent(zone, poly, cutouts, blockers) {
 
   // ---- the aircraft, which are the most alive thing on the zone
   zone.airportAnim = null;
+  zone.airportFlights = [];
+  // where the camera falls back to while the aircraft it was watching is away over the horizon (see updateAirports)
+  zone.airportField = { x: frame.center.x, z: frame.center.z, radius: Math.max(60, chord.length*0.6) };
   if (s.airportAircraft !== false) {
     if (tier.pad) {
       const heli = buildHelicopter(tier.width*0.55, rng);
@@ -776,12 +783,13 @@ export function generateAirportContent(zone, poly, cutouts, blockers) {
       // one schedule for the whole field, sized off the longest taxi on it, so the aircraft keep step with each other
       const sched = flightSchedule(Math.max(...routes.map(r => pathLength(r.in))),
         Math.max(...routes.map(r => pathLength(r.out))), routes.length);
-      const flights = routes.map((route, k) => {
+      zone.airportFlights = routes.map((route, k) => {
         const plane = buildAircraft(tier.width*0.8, rng, jet);
         zone.buildingsGroup.add(plane);
         // half a cycle apart: as one lands the other is already sitting on its stand, waiting its turn to go
-        return makeFlight(plane, sched, route, frame, { touchdown, turnoff, holdShort, arrive: route.arrive, leave: route.leave },
+        const fly = makeFlight(plane, sched, route, frame, { touchdown, turnoff, holdShort, arrive: route.arrive, leave: route.leave },
           k*sched.cycle/routes.length);
+        return makeTrackedFlight(zone, plane, fly, tier, k);
       });
       idle.forEach(st => {
         const at = frame.at(st.s, st.w);
@@ -789,9 +797,10 @@ export function generateAirportContent(zone, poly, cutouts, blockers) {
         poseAircraft(parked, at.x, Y_TARMAC, at.z, side*frame.nx, side*frame.nz, 0);
         zone.buildingsGroup.add(parked);
       });
-      zone.airportAnim = (t) => flights.forEach(fly => fly(t));
+      const flights = zone.airportFlights;
+      zone.airportAnim = (t, dt) => flights.forEach(flight => flight.update(t, dt));
     }
-    zone.airportAnim(0); // posed once where they stand, so a zone that's never updated (a carousel thumbnail) still shows them
+    zone.airportAnim(0, 0); // posed once where they stand, so a zone that's never updated (a carousel thumbnail) still shows them
   }
   // a windsock, somewhere beside the strip, and the perimeter fence
   const sockAt = frame.at(-L*0.55, -side*(W + tier.width*CLEARWAY + 5));
@@ -850,14 +859,256 @@ function finishAirport(zone, builders, poly, s, tint) {
     if (fence) zone.buildingsGroup.add(fence);
   }
 }
+// ============================================================ WATCHING AND FLYING ============================================================
+// A scheduled aircraft can be clicked in World mode like a car or a carriage: the camera stays on it, a card names it
+// (zones/plane-card.js), and from that card's picture you can take the controls off it — the one thing a carriage can't
+// do, and the reason an aircraft is wrapped in a record here rather than left as the bare closure the schedule makes.
+//
+// A flight is in one of three states, and `update` is where that is decided:
+// - on schedule, which is all any of them did before this: the closure poses it from the clock
+// - hand-flown, off the schedule entirely, moved by the keys held (flyByHand)
+// - handing back, easing from wherever it was let go of to wherever the schedule says it should be by now (see stopFlying)
+//
+// What never changes is the clock its schedule reads. Taking one off for a while and giving it back doesn't shift its
+// place in the round, so the separation the two of them keep on the runway survives being interfered with — the aircraft
+// you let go of has to fit itself back around the one that carried on.
+
 /**
- * Runs every frame: moves whatever's flying at each airport. Each zone's aircraft reads its place in its cycle straight
- * off the clock, so rebuilding a zone — or the one next to it — doesn't restart anything.
+ * Wraps a scheduled flight in the record the camera, the card and the controls all address it by.
+ * @param {object} zone
+ * @param {THREE.Group} plane
+ * @param {(t: number) => void} fly Poses it on its schedule.
+ * @param {object} tier The airfield's tier, for the size the aircraft flies at.
+ * @param {number} index Its place in the zone's flights, which is what a follow remembers it by.
+ */
+function makeTrackedFlight(zone, plane, fly, tier, index) {
+  const flight = { zone, plane, fly, index, size: tier.width*0.8, hand: null, handback: null };
+  flight.update = (t, dt) => {
+    if (flight.hand) { flyByHand(flight, dt); return; }
+    fly(t);
+    if (flight.handback) handBack(flight, t);
+  };
+  return flight;
+}
+
+// ---- the flying itself
+const FLY_SPEED = 46, FLY_SPEED_MIN = 22, FLY_SPEED_MAX = 105;   // units a second, at the size an international jet is
+const FLY_POWER = 26, FLY_DRAG = 14, FLY_GRAVITY = 40;           // how hard the throttle, the air and the weight pull on that speed
+const FLY_PITCH_RATE = 0.9, FLY_BANK_RATE = 2.2, FLY_TURN = 1.1; // radians a second: the nose, the wings, and how fast a full bank comes round
+const FLY_PITCH_MAX = 0.85, FLY_BANK_MAX = 1.05, FLY_LEVEL = 1.4; // how far it will go, and how briskly it lets go of the stick
+const FLY_CEILING = 900, FLY_STALL = 0.7;                         // and where the air runs out, and the speed below which the nose drops
+/**
+ * One frame of a hand-flown aircraft, from the keys held (controlInput). W and S put the nose down and up, A and D drop a
+ * wing — and it is the dropped wing that turns it, the way a real one turns, so a bank held over comes round a circle
+ * rather than sliding sideways. Shift is power and space is the airbrake; left alone, the stick centres itself, the
+ * aeroplane picks up its cruising speed and flies level, so it can be let go of for a moment without falling out of the
+ * sky. Climbing bleeds speed off and diving puts it back on, and too slow a climb drops the nose by itself.
+ *
+ * It cannot go under the ground: the ground stops it, levels it and lets it run along like a landing, which is friendlier
+ * than a crash and means a bad approach just ends with a bump.
+ * @param {object} flight
+ * @param {number} dt Seconds this frame.
+ * @returns {void}
+ */
+function flyByHand(flight, dt) {
+  const hand = flight.hand, scale = flight.size/32; // (everything below is written for an international jet; a light one flies smaller)
+  const { forward, right, run, brake } = controlInput();
+  const toward = (v, goal, rate) => v + Math.max(-rate*dt, Math.min(rate*dt, goal - v));
+  // the stick: held over it goes to full deflection, let go it comes back to the middle
+  // W climbs and S dives — the way round a stick isn't, but the way round W is for everything else you can take hold of here
+  hand.pitch = forward ? Math.max(-FLY_PITCH_MAX, Math.min(FLY_PITCH_MAX, hand.pitch + forward*FLY_PITCH_RATE*dt))
+    : toward(hand.pitch, 0, FLY_LEVEL);
+  hand.bank = right ? Math.max(-FLY_BANK_MAX, Math.min(FLY_BANK_MAX, hand.bank + right*FLY_BANK_RATE*dt))
+    : toward(hand.bank, 0, FLY_LEVEL);
+  // too slow to hold the nose up, and it drops whatever the stick says
+  const cruise = FLY_SPEED*scale, stall = FLY_SPEED_MIN*scale;
+  if (hand.speed < stall/FLY_STALL && hand.pitch > 0) hand.pitch = toward(hand.pitch, -0.3, FLY_LEVEL);
+  // speed: the throttle against the drag, less whatever the climb is costing (or the dive paying back)
+  const power = (brake ? -FLY_POWER : run ? FLY_POWER : 0)*scale + (cruise - hand.speed)*FLY_DRAG/cruise;
+  hand.speed = Math.max(stall*0.6, Math.min(FLY_SPEED_MAX*scale,
+    hand.speed + (power - Math.sin(hand.pitch)*FLY_GRAVITY*scale)*dt));
+  // the bank is what turns it, and the turn is sharper the slower it is going
+  hand.heading += Math.sin(hand.bank)*FLY_TURN*dt*Math.min(2, cruise/Math.max(1, hand.speed));
+  const ahead = hand.speed*dt;
+  hand.x += Math.sin(hand.heading)*Math.cos(hand.pitch)*ahead;
+  hand.z += Math.cos(hand.heading)*Math.cos(hand.pitch)*ahead;
+  hand.y += Math.sin(hand.pitch)*ahead;
+  // the ground underneath and the thin air above
+  const floor = Y_TARMAC + flight.size*0.1;
+  if (hand.y <= floor) { hand.y = floor; hand.pitch = Math.max(hand.pitch, 0); hand.bank = toward(hand.bank, 0, FLY_LEVEL*3); }
+  if (hand.y > FLY_CEILING) { hand.y = FLY_CEILING; hand.pitch = Math.min(hand.pitch, 0); }
+  flight.plane.visible = true;
+  poseAircraft(flight.plane, hand.x, hand.y, hand.z, Math.sin(hand.heading), Math.cos(hand.heading), hand.pitch, -hand.bank);
+}
+
+const HANDBACK_SPEED = 120, HANDBACK_MIN = 1.2, HANDBACK_MAX = 7; // how quickly it works its way back, and the seconds that takes
+/**
+ * The seconds after letting go, easing the aircraft from where it was left to wherever its schedule has got to. The
+ * schedule has been running the whole time and has posed it already this frame, so this only has to drag it back from
+ * where the hand left it — a pull that shrinks to nothing, at which point the flight is simply on schedule again.
+ * @param {object} flight
  * @param {number} t Seconds.
  * @returns {void}
  */
-export function updateAirports(t) {
-  S.zones.forEach(zone => { if (zone.airportAnim) zone.airportAnim(t); });
+function handBack(flight, t) {
+  const back = flight.handback, u = Math.min(1, (t - back.from)/back.span);
+  if (u >= 1) { flight.handback = null; return; }
+  const pull = Math.pow(1 - u, 3); // (all of the way off it at first, none of it by the end)
+  const plane = flight.plane;
+  plane.visible = true; // (it stays in sight all the way back, even if the schedule has it away over the horizon)
+  plane.position.addScaledVector(back.offset, pull);
+  // the angles come round the short way, so an aeroplane pointing the other way turns rather than spins
+  const turn = a => Math.atan2(Math.sin(a), Math.cos(a));
+  plane.rotation.x += turn(back.rotation.x - plane.rotation.x)*pull;
+  plane.rotation.y += turn(back.rotation.y - plane.rotation.y)*pull;
+  plane.rotation.z += turn(back.rotation.z - plane.rotation.z)*pull;
 }
+
+/**
+ * Runs every frame: moves whatever's flying at each airport, and keeps the camera on the one being watched. Each zone's
+ * aircraft reads its place in its cycle straight off the clock, so rebuilding a zone — or the one next to it — doesn't
+ * restart anything.
+ * @param {number} t Seconds.
+ * @returns {void}
+ */
+let lastFrame = null;
+export function updateAirports(t) {
+  const dt = lastFrame == null ? 0 : Math.max(0, Math.min(0.1, t - lastFrame)); // (capped: a backgrounded tab shouldn't fly half a mile)
+  lastFrame = t;
+  S.zones.forEach(zone => { if (zone.airportAnim) zone.airportAnim(t, dt); });
+  updatePlaneFollow();
+}
+
+// ---- following an aircraft with the camera: a click on one in World mode keeps the view on it, with a card naming it,
+// until a click elsewhere, leaving World mode, or its zone being rebuilt away lets it go. What it is remembered by is its
+// zone and its place in that zone's flights rather than the object itself, so a rebuild — the zone next door being
+// redrawn, say — hands the camera straight back to the same aircraft instead of dropping it.
+let followed = null;          // { zoneId, index }
+let flown = null;             // the flight under the player's hands, if any
+const everyFlight = () => S.zones.flatMap(zone => zone.airportFlights || []);
+const followedFlight = () => {
+  if (!followed) return null;
+  const zone = S.zones.find(z => z.id === followed.zoneId);
+  return zone && zone.airportFlights ? zone.airportFlights[followed.index] || null : null;
+};
+// the aircraft under a point on the screen, or null
+function pickPlane(clientX, clientY) {
+  const shown = everyFlight().filter(f => f.plane.visible);
+  if (!shown.length) return null;
+  App.raycaster.setFromCamera(App.ndcOf(clientX, clientY), camera);
+  const hit = App.raycaster.intersectObjects(shown.map(f => f.plane), true)[0];
+  if (!hit) return null;
+  let object = hit.object;
+  while (object && object.name !== 'Aircraft') object = object.parent;
+  return shown.find(f => f.plane === object) || null;
+}
+function followPlaneAt(clientX, clientY) {
+  const flight = pickPlane(clientX, clientY);
+  if (!flight) { stopFollowingPlane(); return; }
+  followed = { zoneId: flight.zone.id, index: flight.index };
+  controls.minRadius = Math.max(1.2, flight.size*0.35);
+  controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, flight.size*2.6));
+  App.showPlaneCard(planeCardInfo(flight));
+}
+function stopFollowingPlane() {
+  if (!followed) return;
+  stopFlying();
+  followed = null;
+  controls.minRadius = CAMERA_MIN_RADIUS;
+  controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
+  App.hidePlaneCard();
+}
+// what the card says about one: its number across the whole world, so two fields don't both have a Flight #1
+function planeCardInfo(flight) {
+  const number = everyFlight().indexOf(flight) + 1;
+  return { number, view: planeThumbnailOf(flight.plane) };
+}
+// The card's picture: a copy of the aircraft (sharing its geometry and materials), sitting level at the origin, and an
+// isometric camera framing it — as for a carriage (see trainThumbnailOf in trains.js).
+function planeThumbnailOf(plane) {
+  const mesh = plane.clone();
+  mesh.position.set(0, 0, 0); mesh.rotation.set(0, 0, 0); mesh.visible = true;
+  const r = new THREE.Box3().setFromObject(mesh).getBoundingSphere(new THREE.Sphere()).radius;
+  const elevation = Math.atan(1/Math.SQRT2), azimuth = Math.PI/4, distance = r*4;
+  const view = new THREE.OrthographicCamera(-r, r, r, -r, 0.1, distance*2);
+  view.position.set(distance*Math.cos(elevation)*Math.sin(azimuth), distance*Math.sin(elevation), distance*Math.cos(elevation)*Math.cos(azimuth));
+  view.lookAt(0, 0, 0);
+  return { mesh, camera: view };
+}
+
+const FIELD_EASE = 0.04, CHASE_HOLD = 1500, CHASE_EASE = 0.3, CHASE_PHI = 1.15;
+/**
+ * The camera, once the aircraft have all been moved.
+ *
+ * A departure climbs out and then simply stops being drawn, which is the whole of how this world lets one go. So rather
+ * than follow it into nothing, or drop the aircraft the moment it goes, the camera comes back down to the airfield and
+ * waits there — and the same flight is still being followed, so when it turns up on final a cycle later the camera picks
+ * it up again where it left off. Flying one by hand also swings the camera round behind it, the way driving does.
+ * @returns {void}
+ */
+function updatePlaneFollow() {
+  if (followed && S.interactionMode !== 'move') { stopFollowingPlane(); return; }
+  const flight = followedFlight();
+  // a rebuild puts a fresh set of aircraft on the zone, and the one in hand went with the old ones
+  if (flown && flown !== flight) { flown = null; endFlying(); }
+  if (!flight) { if (followed) stopFollowingPlane(); return; }
+  if (flight.plane.visible) {
+    controls.goalTarget.copy(flight.plane.position);
+    if (flight === flown) chaseFrom(flight.plane.position, flight.plane.rotation.y);
+    return;
+  }
+  // away: ease back down onto the field it flew out of, and sit there until it comes round again
+  const field = flight.zone.airportField;
+  if (!field) return;
+  controls.goalTarget.x += (field.x - controls.goalTarget.x)*FIELD_EASE;
+  controls.goalTarget.y += (Y_TARMAC - controls.goalTarget.y)*FIELD_EASE;
+  controls.goalTarget.z += (field.z - controls.goalTarget.z)*FIELD_EASE;
+  controls.goalRadius += (field.radius - controls.goalRadius)*FIELD_EASE;
+}
+// eases the camera round behind a hand-flown aircraft, unless the mouse has swung it somewhere lately (as traffic.js does
+// for a driven car)
+function chaseFrom(position, heading) {
+  if (performance.now() - flying.lookedAt < CHASE_HOLD) return;
+  const behind = heading + Math.PI;
+  controls.goalTheta = controls.theta + CHASE_EASE*Math.atan2(Math.sin(behind - controls.theta), Math.cos(behind - controls.theta));
+  controls.goalPhi = controls.phi + CHASE_EASE*(CHASE_PHI - controls.phi);
+}
+
+/**
+ * The plane card's picture: take the followed aircraft off its schedule and fly it by hand, starting from exactly where
+ * and how fast it already was, so the handover is invisible.
+ * @returns {void}
+ */
+function flyPlane() {
+  const flight = followedFlight();
+  if (!flight || flown === flight || !startFlying()) return;
+  flown = flight;
+  flight.handback = null;
+  const plane = flight.plane;
+  plane.visible = true;
+  flight.hand = { x: plane.position.x, y: Math.max(Y_TARMAC + flight.size*0.1, plane.position.y), z: plane.position.z,
+    heading: plane.rotation.y, pitch: -plane.rotation.x, bank: 0, speed: FLY_SPEED*flight.size/32 };
+  controls.goalRadius = Math.max(controls.minRadius, flight.size*2.2);
+}
+/**
+ * Give it back: the schedule has been running underneath the whole time and has never lost its place, so all that is
+ * needed is to note how far from it the aircraft has wandered and let that distance fall away over the next few seconds
+ * (handBack). A long way out takes longer to come back, up to a point.
+ * @returns {void}
+ */
+function stopFlying() {
+  if (!flown) return;
+  const flight = flown;
+  flown = null;
+  endFlying();
+  const plane = flight.plane;
+  const was = plane.position.clone(), wasRotation = { x: plane.rotation.x, y: plane.rotation.y, z: plane.rotation.z };
+  flight.hand = null;
+  flight.fly(lastFrame || 0); // where the schedule has got to while it was being flown about
+  const offset = was.sub(plane.position);
+  flight.handback = { from: lastFrame || 0, rotation: wasRotation, offset,
+    span: Math.max(HANDBACK_MIN, Math.min(HANDBACK_MAX, offset.length()/HANDBACK_SPEED)) };
+}
+Object.assign(App, { pickPlane, followPlaneAt, stopFollowingPlane, flyPlane, stopFlying });
 
 Object.assign(App, { generateAirportContent, longestChordIn, runwayNumber });

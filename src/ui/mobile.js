@@ -113,14 +113,14 @@ punchBtn.addEventListener('pointerdown', (e) => {
 });
 ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => punchBtn.addEventListener(ev, () => punchBtn.classList.remove('on')));
 
-// The controls are up for exactly as long as someone's being walked or driven about, which is exactly as long as the note
-// across the top of the view is (src/life/possession.js) — so that's what says when to show them.
+// The controls are up for exactly as long as something's being walked, driven or flown about, which is exactly as long as
+// the note across the top of the view is (src/life/possession.js) — so that's what says when to show them.
 const possessHint = document.getElementById('possess-hint');
 function syncDrive() {
   const on = !possessHint.hidden;
   if (!on && !drive.hidden) releaseStick();
   drive.hidden = !on;
-  brakeBtn.hidden = !App.isDriving?.();
+  brakeBtn.hidden = !App.isDriving?.() && !App.isFlying?.(); // (it slows an aircraft down as it brakes a car)
   punchBtn.hidden = !App.isPossessing?.(); // (there's nobody to punch from a car)
 }
 new MutationObserver(syncDrive).observe(possessHint, { attributes: true, attributeFilter: ['hidden'] });

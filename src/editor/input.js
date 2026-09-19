@@ -288,7 +288,8 @@ dom.addEventListener('pointermove', (e) => {
     insertPreviewMarker.visible = false;
     setHover(null);
     const overClickable = App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
-      || !!App.pickBee(e.clientX, e.clientY) || !!App.pickHive(e.clientX, e.clientY) || !!App.pickBuilding(e.clientX, e.clientY);
+      || !!App.pickPlane(e.clientX, e.clientY) || !!App.pickBee(e.clientX, e.clientY) || !!App.pickHive(e.clientX, e.clientY)
+      || !!App.pickBuilding(e.clientX, e.clientY);
     if (overClickable !== hoveringClickable) { hoveringClickable = overClickable; dom.style.cursor = overClickable ? 'pointer' : ''; }
     return;
   }
@@ -355,7 +356,7 @@ function releasePointer(e) {
 }
 // Everything the camera can follow in World mode (see ui/entity-card.js), so a click on one of them lets go of all the
 // rest — a new kind of thing need only be named here, and export stopFollowing<its name> on App.
-const FOLLOWABLE = ['Person', 'Car', 'Train', 'Bee', 'Hive', 'Building'];
+const FOLLOWABLE = ['Person', 'Car', 'Train', 'Plane', 'Bee', 'Hive', 'Building'];
 const letGoOfAllBut = kept => FOLLOWABLE.forEach(kind => { if (kind !== kept) App['stopFollowing' + kind](); });
 
 dom.addEventListener('pointercancel', (e) => {
@@ -388,6 +389,7 @@ dom.addEventListener('pointerup', (e) => {
       else if (App.pickPerson(e.clientX, e.clientY) >= 0) { letGoOfAllBut('Person'); App.followPersonAt(e.clientX, e.clientY); }
       else if (App.pickCar(e.clientX, e.clientY) >= 0) { letGoOfAllBut('Car'); App.followCarAt(e.clientX, e.clientY); }
       else if (App.pickTrain(e.clientX, e.clientY) >= 0) { letGoOfAllBut('Train'); App.followTrainAt(e.clientX, e.clientY); }
+      else if (App.pickPlane(e.clientX, e.clientY)) { letGoOfAllBut('Plane'); App.followPlaneAt(e.clientX, e.clientY); }
       else if (App.pickHive(e.clientX, e.clientY)) { letGoOfAllBut('Hive'); App.followHiveAt(e.clientX, e.clientY); }
       else { letGoOfAllBut('Building'); App.followBuildingAt(e.clientX, e.clientY); }
     }
