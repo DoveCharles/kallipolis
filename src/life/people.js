@@ -20,16 +20,137 @@ import { DEFAULT_TRAITS, profileOf, profilesVersion, onProfilesLoaded } from './
 import { explode } from './giblets.js';
 import { possession, controlInput, startPossession, endPossession } from './possession.js';
 
-// ============================================================ people
-// Lil people: tiny cuboids in random colors, all drawn as one instanced mesh. Most walk the walkways — the sidewalks either
-// side of sidewalk roads, and paths — carrying on through junctions or turning off, and turning back at dead ends. They
-// gather in plazas, parks and on beaches: someone walking past one sometimes wanders in, drifts from spot to spot (often
-// over to someone already there), stands around for a while, and eventually heads back out to the nearest walkway. The
-// walkways are worked out again whenever the roads or zones change, and anyone whose walkway moved is set back on the
-// nearest one.
+/**
+ * One walkway: a sidewalk ring running down the middle of a block's sidewalks, or a path walked across its own width.
+ * @typedef {object} NavLine
+ * @property {Array<{x: number, z: number}>} pts - the walkway's points, resampled to at least PEOPLE_NAV_SPACING
+ * @property {number[]} cum - distance along the line to each point
+ * @property {number} total - the line's whole length
+ * @property {boolean} loop - its last point is its first (a ring, or a path drawn back onto its first node)
+ * @property {boolean} ring - a sidewalk ring (as opposed to a path)
+ * @property {boolean} path - a path
+ * @property {number} y - the height people walk along it at
+ * @property {number} lateral - how far either side of its line people walk
+ * @property {Array<{x: number, z: number}>} mitres - how a point is set off square to the line there (see navVertexMitre)
+ * @property {?boolean[]} blocked - per point, whether it's out over a road (null on a ring)
+ * @property {?boolean[]} overWater - per point, whether it's over water (null on a ring)
+ * @property {NavVertex[]} vertices - one per point
+ * @property {number} [roadSide] - on a ring, which side (relative to the mitres) the road is on
+ */
+
+/**
+ * A walkway point's joinings and opportunities.
+ * @typedef {object} NavVertex
+ * @property {Array<{li: number, vi: number, cross?: object}>} links - other walkway points joined here
+ * @property {Array<{area: number, side: number, x: number, z: number}>} entrances - hangouts reachable from here
+ * @property {object} [building] - the door onto this point (see buildingDoors)
+ */
+
+/**
+ * A hangout: a plaza, park or beach people gather in.
+ * @typedef {object} Hangout
+ * @property {string} kind - 'plaza', 'park' or 'beach'
+ * @property {function(number, number): boolean} inside - the zone with its cutouts (water, a fountain) taken out
+ * @property {?{x: number, z: number, r: number}} fountain
+ * @property {number} minX
+ * @property {number} maxX
+ * @property {number} minZ
+ * @property {number} maxZ
+ * @property {number} size - its area
+ * @property {number} y
+ * @property {Array<{li: number, vi: number, x: number, z: number}>} exits - walkway points it can be left by
+ * @property {Array<{x: number, z: number, nx: number, nz: number, y: number, by: ?Person}>} seats - a plaza's benches
+ * @property {Array<{x: number, z: number, r: number}>} trees - a park's trunks
+ */
+
+/**
+ * A person, cuboid or model-drawn.
+ * @typedef {object} Person
+ * @property {number} x - where they are
+ * @property {number} y
+ * @property {number} z
+ * @property {number} heading - which way they face, in radians
+ * @property {'none'|'line'|'wander'|'leaving'|'train'|'indoors'|'possessed'|'dead'} mode - what they're doing
+ * @property {number} li - the walkway they're on, in peopleNav.lines
+ * @property {number} u - how far along that walkway they are
+ * @property {number} dir - which way along it
+ * @property {number} seg - the segment they're on
+ * @property {number} lat - how far across the walkway they walk
+ * @property {number} area - the hangout they're in, in peopleNav.areas, or -1
+ * @property {number} tx - where in the hangout they're heading
+ * @property {number} tz
+ * @property {number} wait - seconds until they pick somewhere else to go
+ * @property {boolean} moving - whether they moved this frame
+ * @property {number} stepped
+ * @property {number} height
+ * @property {number} baseHeight
+ * @property {number} stride
+ * @property {object} traits - their traits from people.txt (see profiles.js)
+ * @property {?object} pose - the animation name they stand in (see PERSON_CLIPS)
+ * @property {?object} clipA - the animation they're in
+ * @property {?object} clipB - the animation they're blending out of
+ * @property {number} fade
+ * @property {?object} oneShot - an animation playing through once
+ * @property {?string} act - 'chat', 'bench', 'circle' or 'lie'
+ * @property {string} stage
+ * @property {number} timer
+ * @property {?{x: number, z: number, heading?: number}} spot - where they're sitting or lying
+ * @property {?object} seat
+ * @property {?object} sitClip
+ * @property {?object} lieClip
+ * @property {?object} group - the conversation they're in (see groups)
+ * @property {?number} faceTo - which way they should face
+ * @property {?Person} lookAt - who they're looking at
+ * @property {?object} jc - the way over a road they're crossing (see maybeCrossRoad)
+ * @property {?string} crossStage
+ * @property {?object} train - where they are in riding the trains
+ * @property {?object} indoors - where they are in going into a building
+ * @property {?object} attack - who they're punching, and how far along they are
+ * @property {?object} punched - who's punching them, and how far along they are
+ * @property {?object} fright - how they're taking someone blowing up nearby (see updateFright)
+ * @property {?object} stun
+ * @property {?object} please
+ * @property {number[]} eyes - how shocked, happy, angry and sad they look
+ * @property {number} age
+ */
+
+/**
+ * The loaded people model: the meshes and textures the shader poses people with.
+ * @typedef {object} PersonModel
+ * @property {THREE.InstancedMesh} mesh - the body
+ * @property {THREE.InstancedBufferAttribute} anim - per person, their animation (see instanceAnim in the shader)
+ * @property {THREE.InstancedBufferAttribute} look
+ * @property {THREE.InstancedBufferAttribute} eyes
+ * @property {object[]} hair - the hairstyle and facial-hair meshes that have someone wearing them
+ * @property {object[]} headLayers - the hairstyle and facial-hair layers
+ * @property {Uint8Array} isMan - per person, whether they're a man
+ * @property {Float32Array} boneData - the baked bone poses
+ * @property {number} boneWidth
+ * @property {Float32Array} traitData - the traits texture's data
+ * @property {THREE.Color[]} palette - the model's own colors by slot
+ * @property {number} headBone
+ * @property {THREE.Vector3} headPivot
+ * @property {number} height - the model's height, in its own units
+ * @property {number} minY
+ * @property {Object<string, object>} clips - the baked animations by name (see PERSON_CLIPS)
+ * @property {number} stride - how far a person walks for each cycle of the walk animation
+ */
+
+// ============================================== PEOPLE ==============================================
+// People are cuboids in random colors, drawn as one instanced mesh — replaced by the models in "the people model" below
+// once they load.
+//
+// Most walk the walkways (the sidewalks either side of sidewalk roads, and paths), through junctions, turning off at
+// links and back at dead ends. A walker passing a plaza, park or beach sometimes wanders in, drifts between spots (often
+// to someone already there), waits, then leaves by the nearest walkway.
+//
+// The walkways are rebuilt when the roads or zones change (see buildPeopleNav), and anyone on a moved walkway is
+// re-seated on the nearest one.
+
 const PEOPLE_MAX = 2000;
 const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
-export const PEOPLE_NAV_SPACING = 4;    // walkways are resampled to a point at least this often, for entrances and re-seating
+/** How often, at least, the walkways are resampled to a point — for entrances and for re-seating people. */
+export const PEOPLE_NAV_SPACING = 4;
 S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false, S.showPeopleNavDebug = false;
 let peopleNav = null, peopleNavBuiltAt = -Infinity, peopleNavDebugBuiltAt = -Infinity, lastPeopleTime = null;
 const people = [];
@@ -57,8 +178,7 @@ roadsafetyDebugMesh.frustumCulled = false;
 roadsafetyDebugMesh.visible = false;
 roadsafetyDebugMesh.name = 'RoadsafetyDebug';
 scene.add(roadsafetyDebugMesh);
-// (and, for someone waiting in the middle of the road, just the half of it they check then — in front of them, +Z for
-// a person facing +Z: see crossingClear)
+// (the half-sphere for someone waiting in the road)
 const roadsafetyHalfDebugMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 12, 0, Math.PI), roadsafetyDebugMesh.material, PEOPLE_MAX);
 roadsafetyHalfDebugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 roadsafetyHalfDebugMesh.count = 0;
@@ -73,21 +193,30 @@ pedHitboxDebugMesh.frustumCulled = false;
 pedHitboxDebugMesh.visible = false;
 pedHitboxDebugMesh.name = 'PedHitboxDebug';
 scene.add(pedHitboxDebugMesh);
-// the walkway lines themselves (see buildPeopleNav below): cyan along each sidewalk ring and path, red where a path runs
-// over a road (and nobody walks), yellow across each zebra crossing, and white joining a path to the sidewalk it meets —
-// rebuilt whenever the nav does, shown only while the toggle's on
+// The walkway lines, rebuilt whenever the nav is: cyan along each ring and path, red where a path crosses a road (and
+// nobody walks there), yellow across a zebra crossing, white joining a path to the sidewalk it meets.
 const peopleNavDebugMesh = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthTest: false }));
 peopleNavDebugMesh.frustumCulled = false;
 peopleNavDebugMesh.visible = false;
 peopleNavDebugMesh.renderOrder = 999;
 peopleNavDebugMesh.name = 'PeopleNavDebug';
 scene.add(peopleNavDebugMesh);
-// which way (and how far, per unit of lateral offset) a walkway's point vi is set off square to it: the average of the
-// nearest non-zero-length segments either side (skipping the zero-length ones a duplicate node leaves), stretched so a
-// bend keeps the full width from both — wrapping round, for a ring
+// Which way, and how far per unit of lateral offset, a walkway's point `vi` is set off square to it: the average of the
+// nearest non-zero-length segments either side, stretched so a bend keeps its full width, wrapping round for a ring.
+
+/** How far a mitre may stretch, as a limit on 1/cos(half the bend): a full U-turn shares its one direction's mitre. */
 const NAV_MITER_LIMIT = 2;
+
+/**
+ * Work out which way, and how far per unit of lateral offset, a walkway's point `vi` is set off square to the line there.
+ * @param {Array<{x: number, z: number}>} pts - the walkway's points
+ * @param {number} vi - the point to work it out for
+ * @param {boolean} loop - whether the line wraps round
+ * @returns {{x: number, z: number}} the offset per unit of lateral offset (zero, for a line with no length at all)
+ */
 function navVertexMitre(pts, vi, loop) {
   const last = pts.length - 1;
+  // the direction of the nearest segment of at least some length, walking `step` from `j`
   const dirFrom = (j, step) => {
     for (let n = 0; n < last; n++, j += step) {
       if (loop) j = (j + last) % last;
@@ -97,14 +226,21 @@ function navVertexMitre(pts, vi, loop) {
     }
     return null;
   };
+  // the average of the nearest non-zero-length segments either side, skipping the zero-length ones a duplicate node leaves
   const d1 = dirFrom(vi-1, -1) || dirFrom(vi, 1), d2 = dirFrom(vi, 1) || d1;
   if (!d1) return { x: 0, z: 0 };
   let tx = d1.x + d2.x, tz = d1.z + d2.z;
   const len = Math.hypot(tx, tz);
   if (len < 1e-6) { tx = d1.x; tz = d1.z; } else { tx /= len; tz /= len; } // (a full U-turn)
-  const stretch = 1/Math.max(tx*d1.x + tz*d1.z, 1/NAV_MITER_LIMIT);
+  const stretch = 1/Math.max(tx*d1.x + tz*d1.z, 1/NAV_MITER_LIMIT); // stretched, so a bend keeps the full width from both
   return { x: -tz*stretch, z: tx*stretch };
 }
+
+/**
+ * Rebuild the walkway debug wireframe: cyan along each sidewalk ring and path, red where a path runs over a road (and
+ * nobody walks), yellow across each zebra crossing, and white joining a path to the sidewalk it meets.
+ * @returns {void}
+ */
 function rebuildPeopleNavDebug() {
   const positions = [], colors = [], walk = [0.22, 0.77, 1], blocked = [1, 0.18, 0.33], zebra = [1, 0.82, 0.2], join = [1, 1, 1];
   const seg = (a, b, c, y) => { positions.push(a.x, y, a.z, b.x, y, b.z); colors.push(...c, ...c); };
@@ -122,88 +258,108 @@ function rebuildPeopleNavDebug() {
   geom.computeBoundingSphere();
 }
 
-// The people model (assets/models/Person.glb, made in Blender) replaces the cuboids once it's loaded: a rigged figure with
-// animations — walking, standing idle (now and then scratching or having a think), waving, sitting on a bench, sitting or
-// lying on the grass, and punching someone or being knocked flat — drawn, everyone at once, as one instanced mesh, flat-shaded. three.js's own rigged meshes can't be
-// instanced, so the animations are baked: when the model loads, each one is played through a frame at a time and every
-// bone's pose at each frame is written into a texture (a row per frame, three texels per bone), and the vertex shader poses
-// each person by looking up the rows for the moment they're at — the texture blending between frames, and the shader
-// between the animation they're going into and the one they're leaving. What makes each person themselves is kept in
-// textures too, a texel per person, as there aren't enough vertex attributes to go round: their body shape keys, their sex
-// (a man's eyelashes and lips aren't drawn), the colors of their top, pants, shoes and hair, and how much skin their clothes
-// show. Their skin is always the model's yellow. Only what they're doing changes from frame to frame: their animation — the
-// rows they're at in the two animations, how far they've blended from one to the other, how far their eyes are closed — in
-// the instanceAnim attribute, and which way they've turned their head and what their mouth is doing, in instanceLook.
+// =========================================== PEOPLE MODEL ===========================================
+// assets/models/Person.glb replaces the cuboids once it loads — one rigged figure, drawn for everyone
+// at once as one instanced mesh, flat-shaded.
+//
+// The clips (walk, idle fidgets, wave, sit, lie, punch, fall) are baked, as three.js can't instance a rigged mesh: at
+// load each is played a frame at a time and every bone's pose per frame written into a texture (a row per frame, three
+// texels per bone), and the vertex shader poses each person from the rows for the moment they are at, blending between
+// rows and between the clip they are entering and the one they are leaving.
+//
+// Hairstyles (Hair.glb) and facial hair (FacialHair.glb) are one instanced mesh per style, parented to the head bone.
+// Per-person appearance is in the traits texture (a texel per person); per-frame state is in the instance attributes.
+// Their skin is always the model's yellow. 
 // Hairstyles (assets/models/Hair.glb, each its own mesh, placed on the model's head) ride on the head bone. A style's name
-// says who can wear it: ending in _G, girls; _B, boys; _GB, either (as does no suffix). Facial hair
-// (assets/models/FacialHair.glb) works the same way, but only boys wear it. Each style is an instanced mesh of its own,
-// holding just the people with that style, who carry a copy of their pose and their index into the traits texture.
+// says who can wear it: ending in _G, girls; _B, boys; _GB, either (as does no suffix).
+// Facial hair (assets/models/FacialHair.glb) works the same way, but only boys wear it.
 const PERSON_MODEL_URL = 'assets/models/Person.glb';
 const HAIR_MODEL_URL = 'assets/models/Hair.glb';
 const FACIAL_HAIR_MODEL_URL = 'assets/models/FacialHair.glb';
+/** Frames per second the source clips are baked at, into the bone-pose texture. */
 const PERSON_BAKE_FPS = 24;
-// how far a person walks for each cycle of the walk animation, in the distances the model's foot travels in one — the higher,
-// the slower the walk plays for the same speed
+/** Distances the model's foot travels per walk-animation cycle. The walk plays slower for the same speed the higher this is. */
 const WALK_CYCLE_LENGTH = 4;
-// the model's animations: `loop` for those playing round and round (walking, standing idle, sitting on a bench), the rest
-// playing through once (Idle2, Idle3, Wave, Punch, Fall) or being a single pose, held; `pose` for sitting and lying down;
-// `from` for a pose that's the last frame of another animation (Fallen: lying where Fall leaves them)
+/** The model's clips: `loop` plays round and round, otherwise once (or held, if `pose`). `pose` is a single held pose, and
+ * `from` names a clip whose last frame this pose is (Fallen is where Fall leaves them). */
 const PERSON_CLIPS = [
   { name: 'Walk', loop: true }, { name: 'Idle', loop: true }, { name: 'Idle2' }, { name: 'Idle3' }, { name: 'Wave' },
   { name: 'Sit1', loop: true, pose: true }, { name: 'SitDown1', pose: true }, { name: 'SitDown2', pose: true }, { name: 'SitDown3', pose: true },
   { name: 'LieDown1', pose: true }, { name: 'LieDown2', pose: true }, { name: 'LieDown3', pose: true },
   { name: 'Punch' }, { name: 'Fall' }, { name: 'Fallen', from: 'Fall', pose: true },
 ];
+
 const FIDGETS = ['Idle2', 'Idle3'], GRASS_SITS = ['SitDown1', 'SitDown2', 'SitDown3'], LIE_DOWNS = ['LieDown1', 'LieDown2', 'LieDown3'];
-// seconds to blend from one animation into the next: between walking, standing and waving, and into or out of sitting or lying
+/** Seconds to blend from one clip into the next: FADE_QUICK between walk, idle and wave; FADE_POSE into or out of sitting or lying. */
 const FADE_QUICK = 0.2, FADE_POSE = 0.6;
 const CHAT_GAP = 1.1;        // how far apart two people stand to talk, at people size 1
 const CIRCLE_RADIUS = 1.35;  // how far from the middle of a circle sat on the grass each of them sits, at people size 1
 const CIRCLE_MAX = 4;
-// every shape key the shader applies, in the order of the shape key texture, and the bit of personVertex.z saying a vertex
-// moves with it: the body's (1) and the head's and eyes' shapes (8, 16), set once per person; Blink (2), as they blink;
-// the mouth's Talk and Emotion (4), as they talk and listen; and the eyes' Shock, Happy, Angry and Sad (32), as they feel
+/** Every shape key the shader applies, in the order of the shape key texture. PERSON_SHAPE_KEY_BITS holds each one's bit in
+ * personVertex.z: body and head/eye keys are set once per person, the rest while that state holds. */
 const PERSON_SHAPE_KEYS = ['Breast', 'Waist', 'Hips', 'Weight', 'Butt', 'Shoulders', 'Blink', 'Talk', 'Emotion', 'Key 1', 'Key 2',
   'Shape1', 'Shape2', 'Shape3', 'Shock', 'Happy', 'Angry', 'Sad'];
 const PERSON_SHAPE_KEY_BITS = [1, 1, 1, 1, 1, 1, 2, 4, 4, 8, 8, 16, 16, 16, 32, 32, 32, 32];
 const PERSON_BODY_KEY_COUNT = 6;
-// a shape key's place in that order, for the shader to read it by name rather than by a number that moves when a key is added
+
+/**
+ * A shape key's place in PERSON_SHAPE_KEYS, for the shader to read it by name rather than by a number that moves when a
+ * key is added.
+ * @param {string} name - the shape key's name in the model
+ * @returns {number} its index, or -1
+ */
 const shapeKey = name => PERSON_SHAPE_KEYS.indexOf(name);
-// each person's shape keys by sex, as [lowest, highest]
+/** Each person's body shape keys by sex, as [lowest, highest]. */
 const PERSON_BODY_SHAPES = {
   male:   { Breast: [0.6, 1],  Waist: [0.5, 1],    Hips: [-1, -0.5],  Weight: [0, 1],   Butt: [1, 1],     Shoulders: [0, 1] },
   female: { Breast: [-1, 0.1], Waist: [-0.5, 0.1], Hips: [-0.4, 0.2], Weight: [0, 1],   Butt: [0, 0.6],   Shoulders: [0, 0.3] },
 };
-// How far out a person's arms hang from their sides, in the model's units, at Weight 1 and at Shoulders 1 — those two
-// shape keys widen the body (Weight by about this much all the way from the hips to the shoulders, Shoulders only across
-// the shoulders themselves) and leave the arms where they were, so without this a heavy or a broad person's shoulders
-// swallow theirs and their hands swing through their hips.
+
+/** How far out the arms are moved at Weight 1 and at Shoulders 1, in the model's units. Those two keys widen the body but
+ * leave the arms where they are, so without this a heavy or broad person's hands swing through their hips. */
 const PERSON_ARM_SPREAD = { Weight: 0.43, Shoulders: 0.5 };
-// each person's head and eye shape keys, as [lowest, highest] — or, where men's and women's differ, one of those for each
+
+/** Each person's head and eye shape keys, as [lowest, highest] — or one pair per sex where they differ. */
 const PERSON_FACE_SHAPES = { 'Key 1': { male: [0, 1], female: [-0.3, 0] }, 'Key 2': [-0.5, 0.3], Shape1: [-0.2, 1], Shape2: [0, 1], Shape3: [0, 1] };
-// How likely a woman's top is to show any of her midriff, by age: as likely as anything while she's young, and rarer
-// every year after that until, by MIDRIFF_COVERED_BY, it's only the odd one who does.
+
+/** The ages a woman's midriff goes from as bare as anything to all but covered, and the chance at either end (midriffChance). */
 const MIDRIFF_BARE_AGE = 22, MIDRIFF_COVERED_BY = 55, MIDRIFF_CHANCE_YOUNG = 2/3, MIDRIFF_CHANCE_OLD = 0.05;
+
+/**
+ * The chance a woman's clothes leave any of her midriff bare: lerped from MIDRIFF_CHANCE_YOUNG at MIDRIFF_BARE_AGE to
+ * MIDRIFF_CHANCE_OLD at MIDRIFF_COVERED_BY.
+ * @param {number} age - her age
+ * @returns {number} the chance, from 0 to 1
+ */
 const midriffChance = age =>
   lerp(MIDRIFF_CHANCE_YOUNG, MIDRIFF_CHANCE_OLD,
        Math.max(0, Math.min(1, (age - MIDRIFF_BARE_AGE)/(MIDRIFF_COVERED_BY - MIDRIFF_BARE_AGE))));
-// How much skin clothes show: a sleeve, the tummy and a leg are each split into numbered bands (materials named Sleeve1,
-// Sleeve2…, lowest nearest the body), and each person's clothes stop at one of them — it and every higher-numbered band of
-// that part showing skin, the rest the clothes' color. A man's tummy is always covered, and a woman's the older she is
-// (`bareChance`, where a part has one: how often any of it shows at all, the bands that do being even between them).
+       
+// How much skin clothes show: a sleeve, the tummy and a leg are each split into numbered bands (materials Sleeve1,
+// Sleeve2…, lowest nearest the body), and a person's clothes stop at one of them — that band and every higher-numbered
+// band of the part show skin, the rest the clothes' color.
+// `bareChance`, where a part has one, is how often any of it shows at all, the bands that do being evenly spread.
 const PERSON_CLOTHING = [
   { band: 'Sleeve', part: 'Top', count: 3 },
   { band: 'Tummy', part: 'Top', count: 2, coveredOnMen: true, bareChance: midriffChance },
   { band: 'Leg', part: 'Pants', count: 2 },
 ];
-// Where a part of someone's clothes stops, from one random number: the band it stops at, counting from 1, or one past the
-// last band when it covers the part altogether.
-const clothingBand = (c, r, man, age) => {
-  if (c.coveredOnMen && man) return c.count + 1;
-  const bare = c.bareChance ? c.bareChance(age) : c.count/(c.count + 1);
-  if (r >= bare) return c.count + 1;
-  return 1 + Math.min(c.count - 1, Math.floor(r/bare*c.count));
+
+/**
+ * Work out where one part of someone's clothes stops, from one random number.
+ * @param {{band: string, part: string, count: number, coveredOnMen?: boolean, bareChance?: function(number): number}} clothing - the part: its bands, and how likely any of it is to show
+ * @param {number} roll - a random number from 0 to 1
+ * @param {boolean} man - whether they're a man
+ * @param {number} age - how old they are
+ * @returns {number} the band it stops at, counting from 1, or one past the last band when it covers the part altogether
+ */
+const clothingBand = (clothing, roll, man, age) => {
+  if (clothing.coveredOnMen && man) return clothing.count + 1;
+  const bare = clothing.bareChance ? clothing.bareChance(age) : clothing.count/(clothing.count + 1);
+  if (roll >= bare) return clothing.count + 1;
+  return 1 + Math.min(clothing.count - 1, Math.floor(roll/bare*clothing.count));
 };
+
 // the model's materials, by name: which part of the model each vertex belongs to (its slot, in personVertex.y) — the clothes take each
 // person's own colors, the rest keep the model's; and the parts only drawn for women
 const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelashes', 'Lips',
@@ -213,13 +369,24 @@ const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
 // and one of their head's and eyes' shape keys (Key 1, Key 2, Shape1, Shape2 — Shape3 being in row 1)
 const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat'];
 const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
-// who can wear a hairstyle, from the end of its name: 'Hair3_GB' girls and boys, 'Hair6_G' only girls
+
+/**
+ * Work out who can wear a hairstyle, from the end of its name: 'Hair3_GB' girls and boys, 'Hair6_G' only girls.
+ * @param {string} name - the style's name
+ * @returns {{girls: boolean, boys: boolean}} who can wear it (everyone, with no suffix)
+ */
 const hairstyleWearers = name => {
   const suffix = /_([GB]+)$/i.exec(name)?.[1].toUpperCase();
   return suffix ? { girls: suffix.includes('G'), boys: suffix.includes('B') } : { girls: true, boys: true };
 };
-// a hairstyle's parts with this material take a color of their own, rather than the hair's
+
+/**
+ * Whether a hairstyle part with this material takes a color of its own, rather than the hair's.
+ * @param {string} name - the part's material name
+ * @returns {boolean} whether it's a hat
+ */
 const isHatMaterial = name => /^Hat(\.\d+)?$/i.test(name || '');
+
 const PANTS_COLORS = [0x26344f, 0x3e5a82, 0x5a7aa6, 0x232326, 0x4d5057, 0x8f8f93, 0xb09a72, 0x6b5038, 0x46503a];
 const SHOE_COLORS = [0x151517, 0x2b2b2f, 0xeeeeea, 0x8f9298, 0x6b4a2f, 0x3b2a1e, 0x22304a, 0xb5a383];
 const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 0xc49a5a, 0xdcc08a]; // black to platinum
@@ -227,7 +394,7 @@ const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 
 const BLINK_DURATION = 0.5; // seconds for the eyes to close and open again
 // how far a person turns their head when they glance around: side to side, and up and down
 const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
-// the camera layer the people (and the lights) are also on, for the person card's headshot to draw them alone
+/** The camera layer the people (and the lights) are also on, for the person card's headshot to draw them alone. */
 export const HEADSHOT_LAYER = 3;
 // the middle of a person's face, from where their head meets their neck, in the model's units
 const HEAD_CENTER = new THREE.Vector3(0, 0.3, 0.2);
@@ -245,11 +412,11 @@ const PERSON_VERTEX_PARS = `
   uniform float personChestBone;
   attribute vec4 personJoints;
   attribute vec4 personWeights;
-  // What the shader needs to know about the vertex itself, all in one attribute: a machine is only guaranteed 16 of them,
-  // and instanceMatrix takes four of those while gl_InstanceID takes another. x how much the vertex moves with the head,
-  // or, negative, how much it moves out with the arms (nothing is both, so the two share the sign of the one number),
-  // y which slot (which part of the figure) it belongs to, z which shape keys move it (see PERSON_SHAPE_KEY_BITS), and w
-  // where it is in the shape key texture — which is gl_VertexID, but reading it costs an attribute of its own.
+  // What the shader needs to know about the vertex itself, packed into one attribute (a machine guarantees only 16, and
+  // instanceMatrix takes four while gl_InstanceID takes another).
+  //
+  // x: how much the vertex moves with the head, or negative how much it moves out with the arms. y: which slot (which
+  // part of the figure). z: which shape keys move it (PERSON_SHAPE_KEY_BITS). w: where it is in the shape key texture.
   attribute vec4 personVertex;
   attribute vec4 instanceAnim;
   attribute vec4 instanceLook;
@@ -288,9 +455,10 @@ const PERSON_VERTEX_PARS = `
     if (personWeights.w > 0.0) m += personBone(personJoints.w)*personWeights.w;
     return m;
   }
-  // a posed position with the head turned — everything moving with the head bone or the bones under it (personVertex.x),
-  // about where the head meets the neck — by instanceLook: x side to side, y up and down, as the head sees it (so someone
-  // lying down rolls their head to the side rather than twisting it round)
+  // A posed position with the head turned, about where the head meets the neck: instanceLook.x is side to side and .y up
+  // and down as the head sees it, so someone lying down rolls their head rather than twisting it round.
+  //
+  // Only the vertices that move with the head bone or the bones under it (personVertex.x) are affected.
   vec3 personLook(vec3 posed) {
     vec3 looked = posed;
     if (personVertex.x > 0.0 && (instanceLook.x != 0.0 || instanceLook.y != 0.0)) {
@@ -304,9 +472,9 @@ const PERSON_VERTEX_PARS = `
     }
     return looked;
   }
-  // this person's row of the traits texture: 0 their first four body shape keys, 1 x their fifth and w their sixth, with
-  // y whether they're a man and z their Shape3, then the colors they have their own of, where their clothes stop, and
-  // their face's shape keys
+  // This person's row of the traits texture: row 0 is their first four body shape keys, row 1 is x their fifth, w their
+  // sixth, y whether they are a man and z their Shape3; after those come the colors they have their own of, where their
+  // clothes stop, and their face's shape keys.
   vec4 personTrait(int row) { return texelFetch(personTraits, ivec2(personIndex(), row), 0); }
   // a shape key's offset at this vertex
   vec3 personMorph(int key) {
@@ -332,9 +500,10 @@ const PERSON_VERTEX_PARS = `
     if ((mask & 32) != 0) offset += personMorph(${shapeKey('Shock')})*instanceEyes.x + personMorph(${shapeKey('Happy')})*instanceEyes.y + personMorph(${shapeKey('Angry')})*instanceEyes.z + personMorph(${shapeKey('Sad')})*instanceEyes.w;
     return offset;
   }
-  // A heavier or broader person's arms hang out away from their sides, rather than swinging through their hips. Everything
-  // from the shoulder down (personVertex.x, negative) moves out along the way their chest faces, as far as their Weight
-  // and Shoulders shape keys widen their body — after they're posed, as the shape keys and the bones leave the arms
+  // Moves the arms out from the sides of a heavy or broad person, so their hands don't swing through their hips.
+  //
+  // Everything from the shoulder down (personVertex.x, negative) moves out along the way the chest faces, by how far the
+  // Weight and Shoulders shape keys widen the body. Applied after posing, since the shape keys and bones leave the arms
   // where a slight person's are.
   vec3 personArms(vec3 posed, float restX) {
     float spread = max(-personVertex.x, 0.0)*(personTrait(0).w*${PERSON_ARM_SPREAD.Weight.toFixed(3)} + personTrait(1).w*${PERSON_ARM_SPREAD.Shoulders.toFixed(3)});
@@ -343,11 +512,20 @@ const PERSON_VERTEX_PARS = `
     return posed + sideways*(restX < 0.0 ? -spread : spread);
   }
 `;
-// Adds the posing and shape keys to a material's shaders, and how it colors the figure. `look`: `femaleOnly`, the slots only
-// drawn for women; and, unless it's the shadow's depth material, `palette` (each slot's own color), `traitColors` (the
-// slots taking a color of the person's own instead, as { slot: traits row }) and `bands` (bands of clothes, which show skin —
-// slot 0's color — if the person's clothes stop at or before them: { slot, number, cut (which of the clothing row's values
-// says where their clothes stop), colorRow (the traits row of the clothes' color) }).
+
+/**
+ * Add the posing and shape keys to a material's shaders, and how it colors the figure.
+ *
+ * `look.femaleOnly` gives the slots only drawn for women; and, unless it's the shadow's depth material, `look.palette`
+ * (each slot's own color), `look.traitColors` (the slots taking a color of the person's own instead, as
+ * { slot: traits row }) and `look.bands` (bands of clothes, which show skin — slot 0's color — if the person's clothes
+ * stop at or before them: { slot, number, cut (which of the clothing row's values says where their clothes stop),
+ * colorRow (the traits row of the clothes' color) }).
+ * @param {object} shader - three.js's shader object to patch
+ * @param {Object<string, {value: *}>} uniforms - the person uniforms to give it
+ * @param {object} look - what the material draws and how it colors it
+ * @returns {void}
+ */
 function injectPersonShader(shader, uniforms, look) {
   Object.assign(shader.uniforms, uniforms);
   const colored = !!look.palette;
@@ -371,8 +549,16 @@ function injectPersonShader(shader, uniforms, look) {
     .replace('#include <common>', '#include <common>\nvarying vec3 vPersonColor;')
     .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vPersonColor;');
 }
-// An instanced mesh of `geometry` drawn with `look` (see injectPersonShader), with shadows that take the pose too;
-// `byAttribute` for one whose instances say which person they are (instancePerson) rather than being them in order.
+
+/**
+ * Make an instanced mesh of `geometry` drawn with `look` (see injectPersonShader), with shadows that take the pose too.
+ * @param {THREE.BufferGeometry} geometry - the posed-figure geometry
+ * @param {Object<string, {value: *}>} uniforms - the person uniforms (see buildPersonModel)
+ * @param {object} look - what the material draws and how it colors it
+ * @param {number} capacity - how many instances to make room for
+ * @param {boolean} byAttribute - whether the instances say which person they are (instancePerson) rather than being them in order
+ * @returns {THREE.InstancedMesh} the mesh, added to the scene
+ */
 function makePersonMesh(geometry, uniforms, look, capacity, byAttribute) {
   const material = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.DoubleSide, flatShading: true });
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
@@ -395,17 +581,34 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute) {
   scene.add(mesh);
   return mesh;
 }
-// a per-instance attribute that changes every frame
+
+/**
+ * Make a per-instance attribute that changes every frame.
+ * @param {number} count - how many instances
+ * @param {number} size - how many numbers per instance
+ * @returns {THREE.InstancedBufferAttribute} the attribute
+ */
 function dynamicInstanceAttribute(count, size) {
   const attribute = new THREE.InstancedBufferAttribute(new Float32Array(count*size), size);
   attribute.setUsage(THREE.DynamicDrawUsage);
   return attribute;
 }
 
+/**
+ * Load a glTF model from a URL.
+ * @param {string} url - where the model is
+ * @returns {Promise<object>} the parsed glTF
+ */
 async function loadGLB(url) {
   const buffer = await fetch(url).then(response => { if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.arrayBuffer(); });
   return new GLTFLoader().parseAsync(buffer, '');
 }
+
+/**
+ * Load the people, hair and facial-hair models and build the instanced meshes from them. The body failing leaves people
+ * as cuboids; hair or facial hair failing only leaves people without them.
+ * @returns {Promise<void>}
+ */
 export async function loadPersonModel() {
   const [body, hair, facialHair] = await Promise.allSettled([loadGLB(PERSON_MODEL_URL), loadGLB(HAIR_MODEL_URL), loadGLB(FACIAL_HAIR_MODEL_URL)]);
   if (body.status === 'rejected') { console.warn('Blockout: the people model failed to load; people stay cuboids', body.reason); return; }
@@ -419,7 +622,19 @@ export async function loadPersonModel() {
   }
 }
 
-// The instanced meshes, and their textures, from the loaded models.
+/**
+ * Build the instanced meshes, and their textures, from the loaded models.
+ *
+ * three.js's own rigged meshes can't be instanced, so the animations are baked instead: each one is played through a
+ * frame at a time, and every bone's pose at each frame is written into a texture (a row per frame, three texels per
+ * bone), the vertex shader posing each person by looking up the rows for the moment they're at. What makes each person
+ * themselves is a texel per person in the traits texture — their shape keys, sex, colors and how much skin their
+ * clothes show — as there aren't enough vertex attributes to go round.
+ * @param {object} gltf - the loaded people model
+ * @param {?object} hairGltf - the loaded hairstyles, or null
+ * @param {?object} facialHairGltf - the loaded facial hair, or null
+ * @returns {PersonModel} the meshes and everything the shader and the update loop need
+ */
 function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const root = gltf.scene;
   const rigged = [], attached = [];
@@ -439,19 +654,20 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const headBone = boneByName.get('Head');
   const inHead = bones.map(bone => { for (let b = bone; b; b = b.parent) if (headBone != null && b === bones[headBone]) return true; return false; });
   const headPivot = headBone != null ? bones[headBone].getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
-  // the arm bones, by name — the rig doesn't hang them off each other (a hand is posed where its own bone puts it, not
-  // where the arm leaves it), so there's no chain to walk down from the shoulder. The whole arm, shoulder included, moves
-  // out together: the Weight shape key widens the body by about as much at the shoulders as at the hips, and the skin
-  // weights carry the arm into the body at the armpit on their own. The chest, which the shoulders hang from, says which
-  // way sideways is once they're posed.
+  // The arm bones, by name: the rig does not chain them (a hand is posed by its own bone, not by the arm's), so there is
+  // nothing to walk down from the shoulder. The whole arm moves out as one, shoulder included.
+  //
+  // Sideways once posed is the chest's X, which the shoulders hang from.
   const isArmBone = /^(Shoulder|Elbow|Hand|Wrist|Finger|Thumb|Little|Middle)/;
   const inArm = bones.map(bone => isArmBone.test(bone.name));
   const chestBone = boneIndex.get(bones[boneByName.get('ShoulderL') ?? 0].parent) ?? 0;
 
-  // ---- the body, in the rest pose, as one mesh: every part's vertices with the bones moving them, which part they are,
-  // and each shape key's offsets. A mesh riding on a bone rather than rigged (the head) moves with that bone alone. A mesh
-  // that's only one side of the body — Blender's Mirror modifier isn't applied when the model's exported, as a mesh with
-  // shape keys can't have its modifiers applied — gets its other side here, flipped across X onto the other side's bones.
+  // ============== BODY POSE ============== 
+  // Below defines the body in the rest pose, as one mesh: each part's vertices, the bones moving them, which part they are, and
+  // every shape key's offsets.
+  //
+  // A mesh riding on a bone rather than rigged (the head) moves with that bone alone. A mesh that is only one side of
+  // the body (an unapplied Blender Mirror modifier) is mirrored across X onto the other side's bones.
   const positions = [], joints = [], weights = [], headWeights = [], armWeights = [], slots = [], indices = [];
   const offsets = PERSON_SHAPE_KEYS.map(() => []);
   const toModel = new THREE.Matrix4(), toModelLinear = new THREE.Matrix3(), v = new THREE.Vector3();
@@ -533,10 +749,12 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const morphTexture = new THREE.DataTexture(morphData, morphWidth, morphRows*PERSON_SHAPE_KEYS.length, THREE.RGBAFormat, THREE.FloatType);
   morphTexture.needsUpdate = true;
 
-  // ---- the bone texture: each animation's frames, then its first frame again, so that blending past its last frame loops
-  // back smoothly. A missing animation is the rest pose, as a single frame (and nobody does what it's for). For each one,
-  // too, from its first frame: where it puts the pelvis — someone sitting or lying down keeps their pelvis where it was, not
-  // their feet — how tall it leaves them, and (for sitting on a bench) how high their bottom is.
+  // ============== BONE TEXTURE ============== 
+  // Each clip's frames followed by its first frame again, so blending past the last frame loops
+  // smoothly. A missing clip is the rest pose, one frame.
+  //
+  // Per clip, from its first frame: where it puts the pelvis (someone sitting or lying keeps their pelvis where it was,
+  // not their feet), how tall it leaves them, and (for a bench sit) how high their bottom is.
   const mixer = new THREE.AnimationMixer(root);
   const pelvisBone = bones[boneByName.get('Pelvis') ?? 0], restPelvis = pelvisBone.getWorldPosition(new THREE.Vector3());
   const clips = PERSON_CLIPS.map(def => {
@@ -603,9 +821,11 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   boneTexture.magFilter = boneTexture.minFilter = THREE.LinearFilter;
   boneTexture.needsUpdate = true;
 
-  // ---- the hairstyles and facial hair, in the model's space, each riding on the head bone. The biggest part of each (a
-  // hat aside) is the hair itself, taking the person's hair color; a hat takes their hat color; anything else (a hair
-  // band) keeps its own.
+  //============== Hairstyles and facial hair ============== 
+  //
+  // In model space, riding on head bone.
+  // The biggest part of each (a hat aside) is the hair itself, taking the person's hair color; a hat takes their hat
+  // color; anything else (a hair band) keeps its own.
   const hairSlots = ['Hair', 'Hat'], hairPalette = [new THREE.Color(0xffffff), new THREE.Color(0xffffff)];
   const headStylesFrom = (styleGltf, wearers) => {
     const styles = [];
@@ -646,15 +866,16 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     styleGltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
     return styles;
   };
-  // each layer of what's worn on the head: its styles, and for each person which style they wear (-1 for none) and where
-  // they are among its wearers. Women always wear a hairstyle if one suits them; men might go without either.
+  // Each layer of what's worn on the head: its styles, and for each person which style they wear (-1 for none) and where
+  // they are among its wearers. Women always wear a hairstyle, men can be bald.
   const headLayer = (styles, rng) => ({ styles, rng, of: new Int16Array(PEOPLE_MAX).fill(-1), slot: new Int32Array(PEOPLE_MAX),
     girls: styles.map((style, k) => style.girls ? k : -1).filter(k => k >= 0), boys: styles.map((style, k) => style.boys ? k : -1).filter(k => k >= 0) });
   const hairLayer = headLayer(headStylesFrom(hairGltf, hairstyleWearers), mulberry32(31337));
   const facialHairLayer = headLayer(headStylesFrom(facialHairGltf, () => ({ girls: false, boys: true })), mulberry32(4711));
   const headLayers = [hairLayer, facialHairLayer];
 
-  // ---- each person's traits: their sex, their body's shape keys (as far on as the ranges for their sex allow), their
+  // ============== Body Traits ============== 
+  // Their sex, their body's shape keys (as far on as the ranges for their sex allow), their
   // hairstyle and facial hair (what their sex can wear), their colors, and where their clothes stop
   const traitRows = PERSON_FACE_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
   const isMan = new Uint8Array(PEOPLE_MAX);
@@ -695,8 +916,11 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
       members.push(i);
     });
   }
-  // Where everyone's clothes stop. It's worked out on its own, after the rest, because a woman's midriff depends on how
-  // old she is — which comes of people.txt, and so is worked out again whenever that loads.
+
+  /**
+   * Writes where everyone's clothes stop into the traits texture. Run on its own, after the rest: a woman's midriff
+   * depends on her age, which comes from people.txt, so this runs again whenever that loads.
+   */
   const setClothing = () => {
     const clothingRng = mulberry32(1990);
     for (let i=0;i<PEOPLE_MAX;i++) {
@@ -710,7 +934,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   traitTexture.needsUpdate = true;
   onProfilesLoaded(() => { setClothing(); traitTexture.needsUpdate = true; });
 
-  // ---- the meshes
+  // ============== Meshes  ============== 
   const uniforms = {
     personBones: { value: boneTexture }, personBonesSize: { value: new THREE.Vector2(boneWidth, boneRows) },
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
@@ -752,6 +976,10 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
 
+/**
+ * Push the people settings into the World panel's controls and their value readouts.
+ * @returns {void}
+ */
 export function syncPeopleUI() {
   document.getElementById('s-people').classList.toggle('on', S.peopleEnabled);
   document.getElementById('people-settings').style.display = S.peopleEnabled ? 'block' : 'none';
@@ -767,8 +995,29 @@ export function syncPeopleUI() {
   document.getElementById('dv-traffic').textContent = String(Math.round(S.trafficAmount));
 }
 
-// segments ({ a, b, ... }) bucketed for finding the nearest one to a point: near(x, z, maxD) gives { seg, q (the nearest
-// point on it), t (how far along it that is), d }, or null if none is within maxD
+/**
+ * A segment to search against.
+ * @typedef {object} Segment
+ * @property {{x: number, z: number}} a - where it starts
+ * @property {{x: number, z: number}} b - where it ends
+ */
+
+/**
+ * The nearest segment to a point.
+ * @typedef {object} SegmentHit
+ * @property {Segment} seg - the segment found
+ * @property {{x: number, z: number}} q - the nearest point on it
+ * @property {number} t - how far along the segment that is, from 0 to 1
+ * @property {number} d - how far the point is from it
+ */
+
+/**
+ * Bucket segments by grid cell for finding the nearest one to a point.
+ *
+ * @param {Segment[]} segs - the segments to search
+ * @param {number} [cell] - the cell size
+ * @returns {function(number, number, number): ?SegmentHit} near(x, z, maxD): the nearest segment within maxD, or null
+ */
 function segmentGrid(segs, cell = 8) {
   const grid = new Map();
   segs.forEach(seg => {
@@ -779,10 +1028,11 @@ function segmentGrid(segs, cell = 8) {
     }
     cells.forEach(key => { if (!grid.has(key)) grid.set(key, []); grid.get(key).push(seg); });
   });
+  // the search itself: the whole cells within maxD of the point, each segment looked at once
   return (x, z, maxD) => {
-    const r = Math.ceil(maxD/cell), cx = Math.floor(x/cell), cz = Math.floor(z/cell), seen = new Set();
+    const rings = Math.ceil(maxD/cell), cx = Math.floor(x/cell), cz = Math.floor(z/cell), seen = new Set();
     let best = null;
-    for (let dx=-r; dx<=r; dx++) for (let dz=-r; dz<=r; dz++) (grid.get((cx+dx) + ',' + (cz+dz)) || []).forEach(seg => {
+    for (let dx=-rings; dx<=rings; dx++) for (let dz=-rings; dz<=rings; dz++) (grid.get((cx+dx) + ',' + (cz+dz)) || []).forEach(seg => {
       if (seen.has(seg)) return;
       seen.add(seg);
       const q = closestPointOnSegment({ x, z }, seg.a, seg.b), d = Math.hypot(q.x-x, q.z-z);
@@ -794,7 +1044,12 @@ function segmentGrid(segs, cell = 8) {
     return best;
   };
 }
-// a line's points, resampled to at least every PEOPLE_NAV_SPACING — and (at) where each of the originals ended up
+
+/**
+ * Resample a line's points to at least every PEOPLE_NAV_SPACING.
+ * @param {Array<{x: number, z: number}>} pts - the line's points
+ * @returns {{pts: Array<{x: number, z: number}>, at: number[]}} the new points, and where each of the originals ended up
+ */
 function resampleLine(pts) {
   const out = [pts[0]], at = [0];
   for (let i=1;i<pts.length;i++) {
@@ -804,26 +1059,33 @@ function resampleLine(pts) {
   }
   return { pts: out, at };
 }
+
+/**
+ * Work out the distance along a line to each of its points.
+ * @param {Array<{x: number, z: number}>} pts - the line's points
+ * @returns {number[]} the distance to each of them, the first being zero
+ */
 function cumulative(pts) {
   const cum = [0];
   for (let i=1;i<pts.length;i++) cum.push(cum[i-1] + Math.hypot(pts[i].x-pts[i-1].x, pts[i].z-pts[i-1].z));
   return cum;
 }
-// The walkways, and the hangouts. A walkway is { pts, cum, total, loop (its last point is its first: walked round and
-// round), ring, path, y, lateral (how far either side of its
-// line people walk), mitres (see navVertexMitre), blocked, overWater, vertices: [{ links, entrances }] }, and one of:
-// - a sidewalk ring, running down the middle of the sidewalks: every sidewalk road stroked out to mid-sidewalk width
-//   and unioned — joined and capped just as the sidewalk mesh is — leaves an outline that is exactly that, one closed
-//   ring round each block (and one round the outside of the network). It turns each junction's corners and runs round
-//   each dead end by itself, and never crosses a road. Rings are joined across the roads by each junction's zebra
-//   crossings (links with `cross`); anywhere else, people cross mid-block as they please (see maybeCrossRoad).
-// - a path (a footpath or walkway line), walked anywhere across its width. Where one runs over a road it's `blocked`,
-//   and the points either side are linked to the nearest sidewalk ring; paths meeting at a node are linked to each other.
-// A hangout is { kind, inside, bounds, y, exits, seats, trees } per plaza, park and beach — a plaza's bench seats, a park's
-// trees. Beaches are open ground, like parks: people sit in circles and lie down on them (see isOpenGround).
-// `inside` is the zone with everything that cuts into it taken out, so water in a hangout — a pond drawn in a park, a
-// river running across a beach — is no part of it; walking round it rather than over it is randomSpotIn's job.
-// The nav also carries `onPath`: the walkways' footprint, which people keep off when they sit down.
+
+/**
+ * Work out the walkways and the hangouts — everything about the map people need.
+ *
+ * A sidewalk ring runs down the middle of a block's sidewalks: every sidewalk road stroked out to mid-sidewalk width and
+ * unioned, which leaves one closed ring round each block (and one round the outside of the network). It turns each
+ * junction's corners and runs round each dead end by itself, and never crosses a road. Rings are joined across the roads
+ * by each junction's zebra crossings (links with `cross`); anywhere else, people cross mid-block as they please (see
+ * maybeCrossRoad). A path is walked anywhere across its width: where one runs over a road it's `blocked`, and the points
+ * either side are linked to the nearest ring; paths meeting at a node are linked to each other.
+ *
+ * `onPath` is the walkways' footprint, which people keep off when they sit down. A hangout's `inside` is the zone with
+ * everything that cuts into it taken out, so water in one — a pond drawn in a park, a river running across a beach — is
+ * no part of it; walking round it rather than over it is randomSpotIn's job.
+ * @returns {object} the nav: { areas, lines, grid, CELL, onPath, onPavement, nearRing, buildings }
+ */
 function buildPeopleNav() {
   const areas = [], lines = [];
   S.zones.forEach(zone => {
@@ -996,17 +1258,34 @@ function buildPeopleNav() {
   const buildings = buildingDoors(lines, grid, CELL, onPavement, widestSidewalk);
   return { areas, lines, grid, CELL, onPath, onPavement, nearRing, buildings };
 }
-// The buildings people can go into (see "going indoors"): each building of a kind people go into (`enterable` in
-// assets/buildings.txt) that keeps its footprint on it, close enough to a walkway point, with no road in between, gets a
-// door on the wall nearest the nearest such point — which is where people on that walkway go in.
-// How close is "close enough" follows the street itself rather than being a flat number, since how far a building stands
-// off the pavement is the player's to set: walkways run down the middle of the sidewalk, so it takes half of that to
-// reach the kerb, then the zone's setbacks to reach the lot's edge, and then DOOR_SLACK for a footprint that doesn't
-// fill its lot (a rounded or stepped-back one). Capped, so nobody hikes across a field to a door.
-// A building is { key, number, kind, x, z, y, height, size, door: { x, z } }, and the walkway point's vertex gets `building`.
+
+/** How much slack, and the cap, on how far off a walkway a building's door may be (see doorReach). */
 const DOOR_SLACK = 4, DOOR_REACH_MAX = 20;
+
+/**
+ * How far off a walkway point a building may stand and still be walked into.
+ *
+ * Derived from the zone's own settings, not a flat number: half the sidewalk width to reach the kerb, plus the zone's
+ * setbacks to reach the lot's edge, plus DOOR_SLACK for a footprint that doesn't fill its lot (a rounded or stepped-back
+ * one). Capped at DOOR_REACH_MAX, so nobody hikes across a field to a door.
+ * @param {object} zone - the zone the building stands in
+ * @param {number} sidewalkWidth - the widest sidewalk in the city
+ * @returns {number} how far a door may be, in world units
+ */
 const doorReach = (zone, sidewalkWidth) =>
   Math.min(DOOR_REACH_MAX, sidewalkWidth*0.5 + (zone.settings.setback || 0) + (zone.settings.borderSetback || 0) + DOOR_SLACK);
+
+/**
+ * Find the door of every building people can go into: each enterable building that keeps its footprint on the walkway,
+ * close enough to a walkway point, with no road in between, gets a door on the wall nearest the nearest such point —
+ * which is where people on that walkway go in. The point's vertex gets `building`.
+ * @param {NavLine[]} lines - the walkways
+ * @param {Map<string, Array<{li: number, vi: number}>>} grid - walkway points bucketed by cell (see buildPeopleNav)
+ * @param {number} CELL - the grid's cell size
+ * @param {function(number, number): boolean} onPavement - whether a point is on the road network
+ * @param {number} sidewalkWidth - the widest sidewalk in the city
+ * @returns {object[]} one { key, number, kind, x, z, y, height, size, door: { x, z } } per building
+ */
 function buildingDoors(lines, grid, CELL, onPavement, sidewalkWidth) {
   const buildings = [];
   S.zones.forEach(zone => {
@@ -1046,6 +1325,10 @@ function buildingDoors(lines, grid, CELL, onPavement, sidewalkWidth) {
   return buildings;
 }
 
+/**
+ * Make a person with their traits and state at their starting values.
+ * @returns {Person} the person
+ */
 function newPerson() {
   const baseHeight = 0.85 + peopleRng()*0.27; // (their height, before their size trait)
   return { x:0, y:0, z:0, heading: peopleRng()*Math.PI*2, stride: 0.8 + peopleRng()*0.4, baseHeight, height: baseHeight, phase: peopleRng()*10,
@@ -1053,17 +1336,19 @@ function newPerson() {
     // the model's animation: how far through the walk (in whole cycles) and the looping ones (in seconds) they are; the
     // animation they're in (clipA) and the one they're blending out of (clipB, held at row rowB), how far they've blended and
     // how long it takes; the pose they're in when they're not walking, and one playing through once (and for how long it has);
-    // how tall their pose leaves them; the time to their next blink and since their last; which way they're looking (their
-    // head turned and tilted, the way it's turning to, and the time until they glance somewhere else); and how long they've
-    // stood about, and how long until they fidget
+    // how tall their pose leaves them; the time to their next blink and since their last;
+    //
+    // which way they're looking (their head turned and tilted, the way it's turning to, and the time until they glance
+    // somewhere else); and how long they've stood about, and how long until they fidget
     walkCycle: peopleRng(), idleTime: peopleRng()*10, clipA: null, clipB: null, rowB: 0, fade: 1, fadeTime: FADE_QUICK,
     pose: 'Idle', oneShot: null, shotTime: 0, heightScale: 1, blinkIn: peopleRng()*6, blinkAge: BLINK_DURATION,
     lookTurn: 0, lookTilt: 0, lookTurnTo: 0, lookTiltTo: 0, lookIn: peopleRng()*4, stillFor: 0, fidgetAfter: 2 + peopleRng()*5,
     // what they're doing besides walking about (see "what people get up to"): act 'chat', 'bench', 'circle' or 'lie', how
     // far along it they are (stage) and for how long (timer); where they're sitting or lying (spot, seat, the pose — sitClip
     // or lieClip — and circleAngle round a circle); the group they're talking in; the way they should face and who they're
-    // looking at; how far up onto a bench seat they sit; and their mouth — how open it's going to (talkTo, until talkIn) and
-    // their expression (emotionTo, until emotionIn)
+    // looking at; how far up onto a bench seat they sit;
+    //
+    // and their mouth — how open it's going to (talkTo, until talkIn) and their expression (emotionTo, until emotionIn)
     act: null, stage: '', timer: 0, spot: null, seat: null, sitClip: null, lieClip: null, circleAngle: 0, group: null,
     faceTo: null, lookAt: null, seatLift: 0, chatCheckIn: peopleRng(), chatCooldown: peopleRng()*20,
     talk: 0, talkTo: 0, talkIn: 0, emotion: 0, emotionTo: 0, emotionIn: 0,
@@ -1075,23 +1360,28 @@ function newPerson() {
     fright: null,
     stun: null,
     please: null,
-    // crossing a road (see updateCrossing): where they are on it (null if they aren't), the way over, and how long until
-    // they next think about crossing mid-block; and linkCooldown, separately, keeps them from turning off at another
-    // junction right after just having at one
+    // crossing a road (see updateCrossing): where they are on it (null if they aren't), the way over, how long until they
+    // next consider crossing mid-block, and linkCooldown, which stops them turning off at another junction straight after one
     crossStage: null, jc: null, crossCheckIn: peopleRng()*5, linkCooldown: 0,
-    // riding the trains (see "riding the trains"): where they are in it (null if they aren't), and how long until they'd
-    // think about riding again
+    // riding the trains (see "riding the trains"): where they are in it (null if they aren't), and how long until they
+    // consider riding again
     train: null, trainCooldown: 20 + peopleRng()*40,
-    // going into a building (see "going indoors"): where they are in it (null if they aren't), and how long until they'd
-    // think about going into one again
+    // going into a building (see "going indoors"): where they are in it (null if they aren't), and how long until they
+    // consider going into one again
     indoors: null, indoorsCooldown: 10 + peopleRng()*30,
-    // punching (see "punching"): who they're going for and how far along it they are, how long until they'd think about it
-    // again, and being punched themselves
+    // punching (see "punching"): who they're going for, how far along it they are, how long until they consider it again,
+    // and being punched themselves
     attack: null, punchCooldown: 10 + peopleRng()*30, punched: null };
 }
-// A person's traits — from the entries picked for them in people.txt (see profiles.js), by their place in the crowd, `i` —
-// worked out again whenever people.txt loads, and once the model's loaded and says whether they're a man (which decides
-// their name, and so the rest of their picks).
+
+/**
+ * Work out a person's traits, from the entries picked for them in people.txt (see profiles.js) by their place in the
+ * crowd. Worked out again whenever people.txt loads, and once the model's loaded and says whether they're a man (which
+ * decides their name, and so the rest of their picks).
+ * @param {Person} p - the person
+ * @param {number} i - their place in the crowd
+ * @returns {void}
+ */
 function refreshTraits(p, i) {
   const isMan = personModel ? personModel.isMan[i] === 1 : null, key = profilesVersion() + ':' + isMan;
   if (p.traitsKey === key) return;
@@ -1101,34 +1391,64 @@ function refreshTraits(p, i) {
   p.height = p.baseHeight*p.traits.size;
   p.age = profile.age;
 }
+
+/**
+ * Pick one of `items` at random, weighted.
+ * @param {Array<*>} items - what to pick from
+ * @param {function(*): number} weightOf - how much each item weighs
+ * @returns {number} the index of the one picked
+ */
 export function pickWeighted(items, weightOf) {
   const total = items.reduce((sum, item) => sum + weightOf(item), 0);
   let r = peopleRng()*total;
   for (let i=0;i<items.length;i++) { r -= weightOf(items[i]); if (r <= 0) return i; }
   return items.length - 1;
 }
-// How far along the straight walk from `from` to (x, z) someone gets while staying in the hangout, and whether that's
-// all the way. Water is no part of a hangout (see buildPeopleNav), and people walk straight at where they're going, so
-// this is what keeps them out of a pond: they stop at the bank and set off again from there.
+
+/**
+ * Work out how far along the straight walk from `from` to (x, z) someone gets while staying in the hangout, and whether
+ * that's all the way. Water is no part of a hangout (see buildPeopleNav), and people walk straight at where they're
+ * going, so this is what keeps them out of a pond: they stop at the bank and set off again from there.
+ * @param {Hangout} area - the hangout they're walking in
+ * @param {{x: number, z: number}} from - where they're setting off
+ * @param {number} x - where they're heading
+ * @param {number} z
+ * @returns {{x: number, z: number, d: number, clear: boolean}} as far as they get, how far that is, and whether it's the whole way
+ */
 function walkableUpTo(area, from, x, z) {
   const dx = x - from.x, dz = z - from.z, len = Math.hypot(dx, dz), steps = Math.max(1, Math.ceil(len/1.5));
   let last = 0;
   for (let k=1;k<=steps;k++) {
-    const f = k/steps;
-    if (!area.inside(from.x + dx*f, from.z + dz*f)) return { x: from.x + dx*last, z: from.z + dz*last, d: len*last, clear: false };
-    last = f;
+    const frac = k/steps;
+    if (!area.inside(from.x + dx*frac, from.z + dz*frac)) return { x: from.x + dx*last, z: from.z + dz*last, d: len*last, clear: false };
+    last = frac;
   }
   return { x, z, d: len, clear: true };
 }
-// Where someone should actually head for a spot they've picked out in their hangout: the spot itself when the walk there
-// is clear, else as far along the way as they get before the water, or null when that's nowhere at all.
+
+/**
+ * Work out where someone should actually head for a spot they've picked out in their hangout.
+ * @param {Hangout} area - the hangout
+ * @param {{x: number, z: number}} from - where they're setting off
+ * @param {number} x - the spot they picked
+ * @param {number} z
+ * @returns {?{x: number, z: number}} the spot itself when the walk there is clear, else as far along the way as they get
+ * before the water, or null when that's nowhere at all
+ */
 function reachableSpot(area, from, x, z) {
   const reach = walkableUpTo(area, from, x, z);
   return reach.clear || reach.d > 0.5 ? { x: reach.x, z: reach.z } : null;
 }
-// A random spot inside a hangout — near `near` if one can be found there, and one they can walk to from `from` (where
-// they're setting off, `near` by default) without crossing water. Where nothing in reach is clear, the furthest they can
-// get along the way to one — up to the bank — so someone by a pond still works their way round it.
+
+/**
+ * Pick a random spot inside a hangout — near `near` if one can be found there, and one they can walk to from `from`
+ * (where they're setting off, `near` by default) without crossing water. Where nothing in reach is clear, the furthest
+ * they can get along the way to one — up to the bank — so someone by a pond still works their way round it.
+ * @param {Hangout} area - the hangout
+ * @param {?{x: number, z: number}} near - roughly where to look, or null for anywhere in the hangout
+ * @param {{x: number, z: number}} [from] - where they're setting off (near, by default)
+ * @returns {{x: number, z: number}} the spot
+ */
 function randomSpotIn(area, near, from) {
   const start = from || near;
   let best = null;
@@ -1144,7 +1464,15 @@ function randomSpotIn(area, near, from) {
   if (best) return { x: best.x, z: best.z };
   return start ? { x: start.x, z: start.z } : { x: (area.minX+area.maxX)/2, z: (area.minZ+area.maxZ)/2 };
 }
-// puts a person on walkway `li` at distance u along it, heading `dir`, somewhere across it
+
+/**
+ * Put a person on walkway `li` at distance u along it, heading `dir`, somewhere across it.
+ * @param {Person} p - the person
+ * @param {number} li - the walkway
+ * @param {number} u - how far along it they are
+ * @param {number} dir - which way along it they head
+ * @returns {void}
+ */
 function joinWalkway(p, li, u, dir) {
   const nav = peopleNav.lines[li];
   p.mode = 'line'; p.li = li; p.dir = dir; p.u = Math.max(0, Math.min(nav.total, u));
@@ -1152,10 +1480,24 @@ function joinWalkway(p, li, u, dir) {
   while (p.seg < nav.pts.length-2 && nav.cum[p.seg+1] <= p.u) p.seg++;
   p.lat = (peopleRng()-0.5)*2*nav.lateral;
 }
+
+/**
+ * Send a person off into a hangout, to pick their way about in it.
+ * @param {Person} p - the person
+ * @param {number} areaIndex - the hangout, in peopleNav.areas
+ * @param {?{x: number, z: number}} near - roughly where to head first, or null
+ * @returns {void}
+ */
 function wanderInto(p, areaIndex, near) {
   const spot = randomSpotIn(peopleNav.areas[areaIndex], near);
   p.mode = 'wander'; p.area = areaIndex; p.tx = spot.x; p.tz = spot.z; p.wait = 0;
 }
+
+/**
+ * Put a person somewhere on the map to begin with: in a hangout, or on a walkway.
+ * @param {Person} p - the person
+ * @returns {void}
+ */
 function spawnPerson(p) {
   const { areas, lines } = peopleNav;
   if (areas.length && (!lines.length || peopleRng() < 0.45)) {
@@ -1175,7 +1517,13 @@ function spawnPerson(p) {
     p.mode = 'none';
   }
 }
-// after the walkways are rebuilt: back into the hangout they're standing in, else onto the nearest walkway, else anywhere
+
+/**
+ * Set a person back on the map after the walkways are rebuilt: back into the hangout they're standing in, else onto the
+ * nearest walkway, else anywhere.
+ * @param {Person} p - the person
+ * @returns {void}
+ */
 function reseatPerson(p) {
   if (p.mode === 'dead') return; // (who stays that way)
   if (p.mode === 'train') return; // (up in a station or on a train, and dropped back onto whatever's there when they're done)
@@ -1200,23 +1548,51 @@ function reseatPerson(p) {
   }
   spawnPerson(p);
 }
-// where a person on a walkway should be: the walkway's point at their distance along it, set off to one side by p.lat
+
+/**
+ * Work out where a person on a walkway should be: the walkway's point at their distance along it, set off to one side
+ * by p.lat.
+ * @param {Person} p - the person
+ * @returns {{x: number, y: number, z: number}} where they are
+ */
 function walkwayPoint(p) {
   const nav = peopleNav.lines[p.li];
-  const i = Math.max(0, Math.min(nav.pts.length-2, p.seg));
-  const a = nav.pts[i], b = nav.pts[i+1], segLen = (nav.cum[i+1] - nav.cum[i]) || 1;
-  const t = Math.max(0, Math.min(1, (p.u - nav.cum[i])/segLen));
+  const point = Math.max(0, Math.min(nav.pts.length-2, p.seg));
+  const a = nav.pts[point], b = nav.pts[point+1], segLen = (nav.cum[point+1] - nav.cum[point]) || 1;
+  const t = Math.max(0, Math.min(1, (p.u - nav.cum[point])/segLen));
   // blending between the two points' own offsets, so the walkway bends round corners smoothly
-  const ma = nav.mitres[i], mb = nav.mitres[i+1], k = p.lat;
-  const y = nav.overWater && nav.overWater[i] && nav.overWater[i+1] ? FOOTBRIDGE_TOP : nav.y;
+  const ma = nav.mitres[point], mb = nav.mitres[point+1], k = p.lat;
+  const y = nav.overWater && nav.overWater[point] && nav.overWater[point+1] ? FOOTBRIDGE_TOP : nav.y;
   return { x: a.x + (b.x-a.x)*t + (ma.x + (mb.x-ma.x)*t)*k, y, z: a.z + (b.z-a.z)*t + (ma.z + (mb.z-ma.z)*t)*k };
 }
-// the segment someone standing at point vi, heading dir, is on (see walkAlong: the point ahead is seg+1 going forward,
-// seg going back) — round the end, for a loop's first point going back
-// the point after vi, heading dir — round the end, on a loop (or past it: vi -1 or pts.length)
+
+/**
+ * The point after vi, heading dir — round the end, on a loop (or past it: vi -1 or pts.length).
+ * @param {NavLine} nav - the walkway
+ * @param {number} vi - the point they're at
+ * @param {number} dir - which way they're heading
+ * @returns {number} the point's index
+ */
 const nextVertex = (nav, vi, dir) => !nav.loop ? vi + dir : dir > 0 && vi === nav.pts.length-1 ? 1 : dir < 0 && vi === 0 ? nav.pts.length-2 : vi + dir;
+
+/**
+ * The segment someone standing at point vi, heading dir, is on — round the end, for a loop's first point going back.
+ * (See walkAlong: the point ahead is seg+1 going forward, seg going back.)
+ * @param {NavLine} nav - the walkway
+ * @param {number} vi - the point they're at
+ * @param {number} dir - which way they're heading
+ * @returns {number} the segment's index
+ */
 const segFrom = (nav, vi, dir) => dir > 0 ? Math.min(vi, nav.pts.length-2) : nav.loop && vi === 0 ? nav.pts.length-2 : Math.max(vi-1, 0);
-// puts p on walkway li at its point vi, heading dir (or away from the end, or the road a path runs onto, there)
+
+/**
+ * Put a person on walkway li at its point vi, heading dir (or away from the end, or the road a path runs onto, there).
+ * @param {Person} p - the person
+ * @param {number} li - the walkway
+ * @param {number} vi - the walkway point
+ * @param {number} dir - which way they head along it
+ * @returns {void}
+ */
 function placeAtVertex(p, li, vi, dir) {
   const nav = peopleNav.lines[li];
   if (!nav.loop) { if (vi === 0) dir = 1; else if (vi === nav.pts.length-1) dir = -1; }
@@ -1225,15 +1601,27 @@ function placeAtVertex(p, li, vi, dir) {
   if (nav.loop && vi === 0 && dir < 0) p.u = nav.total;
   p.seg = segFrom(nav, vi, dir);
 }
-// onto the walkway a (non-crossing) link leads to, either way along it
+
+/**
+ * Put a person onto the walkway a (non-crossing) link leads to, either way along it.
+ * @param {Person} p - the person
+ * @param {{li: number, vi: number}} link - the link to take
+ * @returns {NavLine} the walkway they're now on
+ */
 function takeLink(p, link) {
   placeAtVertex(p, link.li, link.vi, peopleRng() < 0.5 ? -1 : 1);
   p.linkCooldown = 6 + peopleRng()*4;
   return peopleNav.lines[link.li];
 }
-// moves a person `dist` along their walkway, dealing with each point they pass: maybe wandering into a hangout, maybe
-// turning off onto another walkway or heading over a zebra crossing, and turning back at a dead end (or where a path
-// runs onto a road); a loop just goes round and round
+
+/**
+ * Move a person `dist` along their walkway, dealing with each point they pass: maybe wandering into a hangout, maybe
+ * turning off onto another walkway or heading over a zebra crossing, and turning back at a dead end (or where a path
+ * runs onto a road). A loop just goes round and round.
+ * @param {Person} p - the person
+ * @param {number} dist - how far to move them
+ * @returns {void}
+ */
 function walkAlong(p, dist) {
   let nav = peopleNav.lines[p.li];
   let u = p.u + p.dir*dist;
@@ -1248,8 +1636,8 @@ function walkAlong(p, dist) {
     const entrance = vertex.entrances.length ? vertex.entrances[Math.floor(peopleRng()*vertex.entrances.length)] : null;
     const drawn = entrance ? (isOpenGround(peopleNav.areas[entrance.area]) ? p.traits.parks : p.traits.plazas) : 0;
     if (entrance && peopleRng() < 0.12*drawn) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
-    // (linkCooldown keeps them from turning off again right away — otherwise a junction with several close-together
-    // links could have them zigzagging, first one way then straight back)
+    // linkCooldown stops them turning off again immediately after a turn, which would otherwise let a junction with
+    // several close-together links send them zigzagging back the way they came
     if (vertex.links.length && p.linkCooldown <= 0) {
       const crossings = vertex.links.filter(l => l.cross), turns = vertex.links.filter(l => !l.cross);
       if (crossings.length && peopleRng() < 0.35) {
@@ -1273,23 +1661,42 @@ function walkAlong(p, dist) {
   }
   p.u = Math.max(0, Math.min(nav.total, u));
 }
-// Crossing a road. p.jc holds the way over — route (the points walked through, route[i] the one being walked to), legs
-// (the crossStage while walking to each) and holds (the one, if any, while waiting on arriving at each), where it comes
-// out (to) and where they were (back, for giving up) — and p.crossStage where they are on it:
-// - at a junction's zebra crossing: 'jwalk' (to the curb), 'jwait' (there, until that road's lights have gone red with
-//   time enough left to get over, and nothing's still moving across it) and 'jcross' (over)
-// - anywhere else: 'jwalk' (to the curb), 'curb' (checking for traffic, giving up after a while), 'half1' (to the
-//   middle), 'mid' (checking again) and 'half2' (the rest of the way) — straight away, once a car's stopped to let them
-//   over, and with no car able to hit them till they're off the road (jc.waved: see checkYield in traffic.js), so neither
-//   of them waits on the other for ever
+
+// Crossing a road. p.jc holds the way over: route (the points walked through, route[i] the one being walked to), legs (the
+// crossStage while walking to each), holds (the one, if any, while waiting on arriving at each), to (where it comes out)
+// and back (where they came from, for giving up).
+//
+// p.crossStage is where they are on it:
+// - at a junction's zebra crossing: 'jwalk' to the curb, 'jwait' there until that road's lights have gone red with time
+//   enough left to get over and nothing still moving across it, then 'jcross' over
+// - anywhere else: 'jwalk' to the curb, 'curb' checking for traffic (giving up after a while), 'half1' to the middle,
+//   'mid' checking again, 'half2' the rest of the way — straight out once a car has stopped to let them over, and with no
+//   car able to hit them until they are off the road (jc.waved, checkYield in traffic.js)
+/** How far someone checks for traffic before crossing, how long they'll wait at a curb, and the chance and pace of a crossing. */
 const ROADSAFETY_RADIUS = 14, CROSS_CURB_TIMEOUT = 10, CROSS_DECIDE_CHANCE = 0.15, CROSS_SPEED_MULT = 1.6;
+
+/**
+ * Start a person over the zebra crossing a link is.
+ * @param {Person} p - the person
+ * @param {NavLine} nav - the walkway they're on
+ * @param {number} vi - the walkway point the crossing starts at
+ * @param {{li: number, vi: number, cross: {junction: object, arm: object}}} link - the crossing
+ * @returns {void}
+ */
 function startZebraCrossing(p, nav, vi, link) {
   p.jc = { route: [nav.pts[vi], peopleNav.lines[link.li].pts[link.vi]], legs: ['jwalk', 'jcross'], holds: ['jwait', null], i: 0,
     holding: false, to: { li: link.li, vi: link.vi }, back: null, junction: link.cross.junction, arm: link.cross.arm, checkIn: 0, wait: Infinity };
   p.crossStage = 'jwalk';
 }
-// now and then, someone on a sidewalk heads straight over the road beside them — if it is just the one road, out of the
-// way of any junction, with sidewalk on the far side
+
+/**
+ * Now and then, someone on a sidewalk heads straight over the road beside them — if it is just the one road, out of the
+ * way of any junction, with sidewalk on the far side.
+ * @param {Person} p - the person
+ * @param {NavLine} nav - the walkway they're on
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
 function maybeCrossRoad(p, nav, dt) {
   if (!nav.ring || (p.crossCheckIn -= dt) > 0) return;
   p.crossCheckIn = 4 + peopleRng()*6;
@@ -1317,7 +1724,14 @@ function maybeCrossRoad(p, nav, dt) {
     junction: null, arm: null, checkIn: 0, wait: CROSS_CURB_TIMEOUT };
   p.crossStage = 'jwalk';
 }
-// whether it's safe to set off on the crossing's next leg
+
+/**
+ * Work out whether it's safe to set off on the crossing's next leg.
+ * @param {Person} p - the person crossing
+ * @param {object} jc - the way over they're taking (see maybeCrossRoad)
+ * @param {number} speed - how fast they walk
+ * @returns {boolean} whether they can go
+ */
 function crossingClear(p, jc, speed) {
   const from = jc.route[jc.i-1], to = jc.route[jc.i], radius = ROADSAFETY_RADIUS*p.traits.roadsafety;
   if (!jc.junction && p.crossStage === 'mid') {
@@ -1331,9 +1745,10 @@ function crossingClear(p, jc, speed) {
   if (!jc.junction) return !App.carsNearby((from.x + to.x)/2, (from.z + to.z)/2, radius);
   const j = jc.junction, arm = jc.arm, sx = arm.z, sz = -arm.x;
   const need = Math.hypot(to.x - from.x, to.z - from.z)/Math.max(0.1, speed*CROSS_SPEED_MULT) + 1;
-  // and nothing that could come over it: no car on the crossing (stopped or not — though one stopped at the stop line,
-  // just past it, is fine), none still moving in over the stop line, and none in the middle of the junction heading
-  // out this way (turning in off the road with the green)
+  // Check for cars:
+  // - no car on the crossing (stopped or not — though one stopped at the stop line, just past it, is fine)
+  // - none still moving in over the stop line
+  // - none in the middle of the junction heading out this way (turning in off the road with the green)
   return signalRedLeft(j, arm.phase, lastPeopleTime) >= Math.min(need, 9) && !App.carsWhere((x, z, car) => {
     const a = (x - j.x)*arm.x + (z - j.z)*arm.z, s = (x - j.x)*sx + (z - j.z)*sz;
     if (Math.hypot(x - j.x, z - j.z) < j.r + 1) return Math.sin(car.heading)*arm.x + Math.cos(car.heading)*arm.z > 0.3;
@@ -1341,7 +1756,13 @@ function crossingClear(p, jc, speed) {
     return a < j.r + 2.9 || (car.speed > 0.5 && a < j.r + 6);
   });
 }
-// off the crossing, onto the walkway at dest ({ li, and vi or u, and maybe dir })
+
+/**
+ * Take a person off the crossing, onto the walkway at dest.
+ * @param {Person} p - the person
+ * @param {{li: number, vi?: number, u?: number, dir?: number}} dest - where they come out
+ * @returns {void}
+ */
 function endCrossing(p, dest) {
   p.crossStage = null;
   p.jc = null;
@@ -1351,7 +1772,14 @@ function endCrossing(p, dest) {
   p.linkCooldown = 6 + peopleRng()*4;
   p.crossCheckIn = 4 + peopleRng()*6;
 }
-// the next step of a crossing: where to head for this frame (null to stand still)
+
+/**
+ * Work out the next step of a crossing.
+ * @param {Person} p - the person crossing
+ * @param {number} dt - seconds since the last frame
+ * @param {number} speed - how fast they walk
+ * @returns {?{x: number, y: number, z: number}} where to head for this frame (null to stand still)
+ */
 function updateCrossing(p, dt, speed) {
   const jc = p.jc;
   if (jc.holding) {
@@ -1376,36 +1804,100 @@ function updateCrossing(p, dt, speed) {
   const next = jc.route[jc.i];
   return { x: next.x, y: peopleNav.lines[p.li].y, z: next.z };
 }
-// how many of `sorted` (ascending) are below `limit`
+
+/**
+ * Count how many of an ascending list come below a limit.
+ * @param {number[]} sorted - the values, ascending
+ * @param {number} limit - the value to count below
+ * @returns {number} how many are below it
+ */
 function countBelow(sorted, limit) {
   let lo = 0, hi = sorted.length;
   while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < limit) lo = mid + 1; else hi = mid; }
   return lo;
 }
 
-// ---- what people get up to besides walking about: someone standing around for a while scratches or has a think now and
-// then; two people meeting — head on along a walkway, or one going over to another in a plaza or park — wave, talk a while
-// and wave goodbye; someone in a plaza sits down on a bench; and someone in a park sits down on the grass, where others might
-// join them in a circle to talk, or, with nobody else about, lies down for a while. People talking are a group, taking
-// turns to talk, and looking at whoever's talking.
-const groups = []; // { kind: 'chat' (two, standing) or 'circle' (sat on the grass), members, speaker, turnIn, … }
+// ---- what people get up to besides walking about.
+//
+// p.act names it: 'chat' (two people meeting, head on along a walkway or one crossing to another in a plaza or park: they
+// wave, talk a while, wave goodbye), 'bench' (a plaza bench), 'circle' (park grass, others joining to talk), 'lie' (park
+// grass, only with nobody else about).
+//
+// People talking are a group and take turns, looking at whoever is talking. Someone standing about for a while fidgets
+// now and then (Idle2/Idle3).
+/** The conversations going on: { kind: 'chat' (two, standing) or 'circle' (sat on the grass), members, speaker, turnIn, … }. */
+const groups = [];
+
+/**
+ * Look up the baked animation of this name.
+ * @param {string} name - the animation's name (see PERSON_CLIPS)
+ * @returns {?object} the baked animation, or null before the model's loaded
+ */
 const clipNamed = name => personModel ? personModel.clips[name] : null;
+
+/**
+ * Whether the model has this animation at all.
+ * @param {string} name - the animation's name (see PERSON_CLIPS)
+ * @returns {boolean} whether it's there and not missing
+ */
 const hasClip = name => { const clip = clipNamed(name); return !!clip && !clip.missing; };
+
+/**
+ * Pick one of a list at random.
+ * @param {Array<*>} list - what to pick from
+ * @returns {*} the one picked
+ */
 const pickFrom = list => list[Math.floor(peopleRng()*list.length)];
+
+/**
+ * Wrap an angle into -π…π.
+ * @param {number} a - the angle
+ * @returns {number} the same angle, wrapped
+ */
 const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
+
+/**
+ * Which way one point is from another, in radians.
+ * @param {{x: number, z: number}} p - the point looking
+ * @param {{x: number, z: number}} q - the point looked at
+ * @returns {number} the heading
+ */
 const headingTo = (p, q) => Math.atan2(q.x - p.x, q.z - p.z);
-const modelScale = p => 1.7*p.height*S.peopleSize/personModel.height; // how much the model's scaled to be a person's height
-// how much of a person's pose is `clip`, part-way through blending from one animation into the next
+
+/**
+ * How much the model is scaled to be this person's height.
+ * @param {Person} p - the person
+ * @returns {number} the scale
+ */
+const modelScale = p => 1.7*p.height*S.peopleSize/personModel.height;
+
+/**
+ * How much of a person's pose is `clip`, part-way through blending from one animation into the next.
+ * @param {Person} p - the person
+ * @param {object} clip - the animation to weigh
+ * @returns {number} from 0 to 1
+ */
 const weightOf = (p, clip) => (p.clipA === clip ? p.fade : 0) + (p.clipB === clip ? 1 - p.fade : 0);
 
-// the row of the bone texture a person's at in an animation: along the walk by how far they've walked, round a looping one
-// by the time, and through one playing once by how long it's played
+/**
+ * Work out the row of the bone texture a person's at in an animation: along the walk by how far they've walked, round a
+ * looping one by the time, and through one playing once by how long it's played.
+ * @param {Person} p - the person
+ * @param {object} clip - the animation
+ * @returns {number} the row
+ */
 function clipRow(p, clip) {
   if (clip.name === 'Walk') return clip.start + p.walkCycle*clip.frames;
   if (clip.loop) return clip.start + (p.idleTime*PERSON_BAKE_FPS) % clip.frames;
   return clip.start + Math.min(clip.frames - 1, p.shotTime*PERSON_BAKE_FPS);
 }
-// starts a person blending into an animation from the one they're in — or back, if they're still blending out of it
+
+/**
+ * Start a person blending into an animation from the one they're in — or back, if they're still blending out of it.
+ * @param {Person} p - the person
+ * @param {object} clip - the animation to blend into
+ * @returns {void}
+ */
 function setClip(p, clip) {
   if (p.clipA === clip) return;
   p.rowB = clipRow(p, p.clipA);
@@ -1414,17 +1906,34 @@ function setClip(p, clip) {
   p.clipB = p.clipA;
   p.clipA = clip;
 }
+
+/**
+ * Play an animation through once — or hold its single pose, for the poses (see PERSON_CLIPS).
+ * @param {Person} p - the person
+ * @param {string} name - the animation's name
+ * @returns {void}
+ */
 function playOnce(p, name) {
   if (!hasClip(name)) return;
   p.oneShot = clipNamed(name);
   p.shotTime = 0;
 }
 
+/**
+ * Take a group out of the ones going on.
+ * @param {object} g - the group
+ * @returns {void}
+ */
 function removeGroup(g) {
   const k = groups.indexOf(g);
   if (k >= 0) groups.splice(k, 1);
 }
-// a conversation between two is over, and they both carry on
+
+/**
+ * End a conversation between two, and set them both carrying on.
+ * @param {object} g - the group
+ * @returns {void}
+ */
 function endChat(g) {
   removeGroup(g);
   const chatGroup = g.members.splice(0);
@@ -1437,6 +1946,12 @@ function endChat(g) {
     throwPunch(undefined, m, true, victim)
   });
 }
+
+/**
+ * Take a person out of the group they're in, ending a conversation between two if that's what it was.
+ * @param {Person} p - the person
+ * @returns {void}
+ */
 function leaveGroup(p) {
   const g = p.group;
   if (!g) return;
@@ -1447,7 +1962,12 @@ function leaveGroup(p) {
   // a conversation between two ends when either goes; a circle carries on while anyone's left in it
   if (g.kind === 'chat') endChat(g); else if (!g.members.length) removeGroup(g);
 }
-// stops whatever a person's doing, back to standing
+
+/**
+ * Stop whatever a person's doing, back to standing.
+ * @param {Person} p - the person
+ * @returns {void}
+ */
 function endActivity(p) {
   leaveGroup(p);
   endAttack(p);
@@ -1455,14 +1975,26 @@ function endActivity(p) {
   if (p.seat) { p.seat.by = null; p.seat = null; }
   p.act = null; p.stage = ''; p.spot = null; p.faceTo = null; p.lookAt = null; p.pose = 'Idle'; p.seatLift = 0;
 }
-// …and carries on: off somewhere nearby, or on along their walkway — and not stopping to talk again for a while
+
+/**
+ * Stop whatever a person's doing and set them carrying on: off somewhere nearby, or on along their walkway — and not
+ * stopping to talk again for a while.
+ * @param {Person} p - the person
+ * @returns {void}
+ */
 function finishActivity(p) {
   endActivity(p);
   if (p.mode === 'wander') { const s = randomSpotIn(peopleNav.areas[p.area], p); p.tx = s.x; p.tz = s.z; p.wait = 0.3 + peopleRng()*1.5; }
   p.chatCooldown = 30 + peopleRng()*60;
 }
 
-// two people start talking — `approach` if the second is to walk over to the first first, who waits for them
+/**
+ * Start two people talking.
+ * @param {Person} a - the one waited on, if the other is walking over
+ * @param {Person} b - the other
+ * @param {boolean} approach - whether the second walks over to the first first, who waits for them
+ * @returns {object} the group they're talking in
+ */
 function startChat(a, b, approach) {
   const g = { kind: 'chat', members: [a, b], stage: 'gather', timer: 25, speaker: null, turnIn: 0 };
   groups.push(g);
@@ -1471,13 +2003,25 @@ function startChat(a, b, approach) {
   if (!approach) wave(g, 'greet');
   return g;
 }
-// both wave, hello or goodbye, standing still for it
+
+/**
+ * Have both of a conversation wave, hello or goodbye, standing still for it.
+ * @param {object} g - the group
+ * @param {string} stage - the stage to put them into ('greet' or 'bye')
+ * @returns {void}
+ */
 function wave(g, stage) {
   g.stage = stage;
   g.timer = hasClip('Wave') ? clipNamed('Wave').duration : 1;
   g.members.forEach(m => playOnce(m, 'Wave'));
 }
-// someone hanging out in a plaza or park goes over to someone else standing about there, to talk
+
+/**
+ * Send someone hanging out in a plaza or park over to someone else standing about there, to talk.
+ * @param {Person} p - the person
+ * @param {Hangout} area - the hangout they're in
+ * @returns {boolean} whether anyone was found to go over to
+ */
 function goChat(p, area) {
   if (!personModel) return false;
   let friend = null, best = 25;
@@ -1493,8 +2037,13 @@ function goChat(p, area) {
   if (!area.inside(p.tx, p.tz)) { p.tx = p.x; p.tz = p.z; }
   return true;
 }
-// two people meeting head on along a walkway (on the same side of it) now and then stop to talk — though never too many
-// at once
+
+/**
+ * Have two people meeting head on along a walkway (on the same side of it) now and then stop to talk — though never too
+ * many at once.
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
 function meetOnWalkways(dt) {
   const cells = new Map(), CELL = 2;
   let talking = 0;
@@ -1521,6 +2070,15 @@ function meetOnWalkways(dt) {
     }
   });
 }
+
+/**
+ * Move who's speaking in a conversation on: the more talkative someone is, the more of the turns they take, and the
+ * longer they go on.
+ * @param {object} g - the group
+ * @param {Person[]} talkers - those in it who can talk
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
 function takeTurns(g, talkers, dt) {
   g.turnIn -= dt;
   if (!talkers.includes(g.speaker) || g.turnIn <= 0) {
@@ -1532,38 +2090,19 @@ function takeTurns(g, talkers, dt) {
   }
   talkers.forEach(m => { if (m !== g.speaker) m.lookAt = g.speaker; });
 }
-// conversations: two standing come together, wave hello, take turns talking a while, wave goodbye and go; a circle on the
-// grass talks among whoever's sat down in it
-function updateGroups(dt) {
-  for (let gi = groups.length - 1; gi >= 0; gi--) {
-    const g = groups[gi];
-    if (g.kind === 'circle') {
-      const seated = g.members.filter(m => m.stage === 'sit');
-      if (seated.length >= 2) takeTurns(g, seated, dt); else g.speaker = null;
-      continue;
-    }
-    const [a, b] = g.members;
-    g.timer -= dt;
-    if (g.stage === 'gather') {
-      a.faceTo = headingTo(a, b);
-      if (Math.hypot(b.tx - b.x, b.tz - b.z) < 0.3) wave(g, 'greet');
-      else if (g.timer <= 0) { endChat(g); continue; }
-    } else if (g.stage === 'greet') {
-      if (g.timer <= 0) { g.stage = 'talk'; g.timer = (8 + peopleRng()*22)*(a.traits.patience + b.traits.patience)/2; }
-    } else if (g.stage === 'talk') {
-      takeTurns(g, g.members, dt);
-      if (g.timer <= 0) { g.speaker = null; wave(g, 'bye'); }
-    } else if (g.timer <= 0) {
-      endChat(g);
-      continue;
-    }
-    if (g.stage !== 'gather') { a.faceTo = headingTo(a, b); b.faceTo = headingTo(b, a); }
-  }
-}
 
-// whether there's room on the grass: in the park all round a spot, off any walkway cutting through it (people sit and
-// lie down on the ground beside a path, never on it), and clear of the tree trunks
+/** Where on the ground to check for room, around a spot (see clearGround). */
 const GROUND_PROBES = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
+
+/**
+ * Work out whether there's room on the grass: in the park all round a spot, off any walkway cutting through it (people
+ * sit and lie down on the ground beside a path, never on it), and clear of the tree trunks.
+ * @param {Hangout} area - the hangout
+ * @param {number} x - the middle of the spot
+ * @param {number} z
+ * @param {number} r - how much room they need all round it
+ * @returns {boolean} whether it's clear
+ */
 function clearGround(area, x, z, r) {
   for (const [dx, dz] of GROUND_PROBES) {
     const px = x + dx*r, pz = z + dz*r;
@@ -1571,10 +2110,21 @@ function clearGround(area, x, z, r) {
   }
   return area.trees.every(tree => Math.hypot(tree.x - x, tree.z - z) > tree.r + r);
 }
-// the hangouts people sit and lie down on the ground in, rather than on benches
+
+/**
+ * Whether this is a hangout people sit and lie down on the ground in, rather than on benches.
+ * @param {Hangout} area - the hangout
+ * @returns {boolean} whether it's open ground
+ */
 const isOpenGround = area => area.kind === 'park' || area.kind === 'beach';
-// someone in a plaza heads for a free bench seat nearby; someone in a park or on a beach for the ground, to join a circle
-// there with room in it or to start one
+
+/**
+ * Send someone in a plaza to a free bench seat nearby, or someone in a park or on a beach to the ground, to join a
+ * circle there with room in it or to start one.
+ * @param {Person} p - the person
+ * @param {Hangout} area - the hangout they're in
+ * @returns {boolean} whether somewhere was found
+ */
 function goSit(p, area) {
   if (!personModel) return false;
   if (area.kind === 'plaza') {
@@ -1582,8 +2132,8 @@ function goSit(p, area) {
     if (!hasClip('Sit1') || !area.seats.length || Math.abs(S.peopleSize*p.traits.size - 1) > 0.3) return false;
     let seat = null, best = 40;
     for (let k=0;k<10;k++) {
-      const s = area.seats[Math.floor(peopleRng()*area.seats.length)], d = Math.hypot(s.x - p.x, s.z - p.z);
-      if (!s.by && d < best) { seat = s; best = d; }
+      const free = area.seats[Math.floor(peopleRng()*area.seats.length)], d = Math.hypot(free.x - p.x, free.z - p.z);
+      if (!free.by && d < best) { seat = free; best = d; }
     }
     if (!seat) return false;
     seat.by = p;
@@ -1609,10 +2159,10 @@ function goSit(p, area) {
   } else {
     // an open patch of grass, away from other circles and anyone lying down
     for (let k=0;k<10 && !spot;k++) {
-      const s = randomSpotIn(area, p), angle = peopleRng()*Math.PI*2;
-      const cx = s.x - Math.sin(angle)*radius, cz = s.z - Math.cos(angle)*radius;
+      const patch = randomSpotIn(area, p), angle = peopleRng()*Math.PI*2;
+      const cx = patch.x - Math.sin(angle)*radius, cz = patch.z - Math.cos(angle)*radius;
       if (clearGround(area, cx, cz, radius + 0.5*S.peopleSize) && !groups.some(g => g.kind === 'circle' && Math.hypot(g.cx - cx, g.cz - cz) < 5)
-        && !people.some(q => q.act === 'lie' && Math.hypot(q.x - cx, q.z - cz) < 4)) spot = { x: s.x, z: s.z, angle, cx, cz };
+        && !people.some(q => q.act === 'lie' && Math.hypot(q.x - cx, q.z - cz) < 4)) spot = { x: patch.x, z: patch.z, angle, cx, cz };
     }
     if (!spot) return false;
     p.group = { kind: 'circle', area, members: [p], speaker: null, turnIn: 0, cx: spot.cx, cz: spot.cz };
@@ -1621,24 +2171,38 @@ function goSit(p, area) {
   Object.assign(p, { act: 'circle', stage: 'go', spot: { x: spot.x, z: spot.z }, circleAngle: spot.angle, sitClip: pickFrom(sits), timer: 40, wait: 0 });
   return true;
 }
-// someone in a park or on a beach with nobody else about finds a patch of ground to lie down on
+
+/**
+ * Send someone in a park or on a beach with nobody else about to a patch of ground to lie down on.
+ * @param {Person} p - the person
+ * @param {Hangout} area - the hangout they're in
+ * @returns {boolean} whether somewhere was found
+ */
 function goLieDown(p, area) {
   const poses = LIE_DOWNS.filter(hasClip);
   if (!personModel || !isOpenGround(area) || !poses.length) return false;
   const size = S.peopleSize, near = 8*size;
   if (people.some(q => q !== p && q.mode === 'wander' && q.area === p.area && Math.abs(q.x - p.x) < near && Math.abs(q.z - p.z) < near)) return false;
   for (let k=0;k<10;k++) {
-    const s = randomSpotIn(area, p), heading = peopleRng()*Math.PI*2, fx = Math.sin(heading), fz = Math.cos(heading);
+    const patch = randomSpotIn(area, p), heading = peopleRng()*Math.PI*2, fx = Math.sin(heading), fz = Math.cos(heading);
     // room from their head (behind where their pelvis goes) to their feet
-    if (![-0.5, 0, 0.5, 0.9].every(d => clearGround(area, s.x + fx*d*size, s.z + fz*d*size, 0.45*size))) continue;
-    Object.assign(p, { act: 'lie', stage: 'go', spot: { x: s.x, z: s.z, heading }, lieClip: pickFrom(poses), timer: 30, wait: 0 });
+    if (![-0.5, 0, 0.5, 0.9].every(d => clearGround(area, patch.x + fx*d*size, patch.z + fz*d*size, 0.45*size))) continue;
+    Object.assign(p, { act: 'lie', stage: 'go', spot: { x: patch.x, z: patch.z, heading }, lieClip: pickFrom(poses), timer: 30, wait: 0 });
     return true;
   }
   return false;
 }
-// Someone sitting or lying down, or talking in a plaza or park: where they should walk to, if anywhere. Sitting or lying
-// down goes: walking there ('go'), turning the right way ('turn'), waving hello to a circle ('greet'), sitting or lying
-// ('sit') for a while, getting up ('rise'), and waving goodbye to a circle ('bye').
+
+/**
+ * Work out where someone sitting or lying down, or talking in a plaza or park, should walk to, if anywhere.
+ *
+ * Sitting or lying down goes: walking there ('go'), turning the right way ('turn'), waving hello to a circle ('greet'),
+ * sitting or lying ('sit') for a while, getting up ('rise'), and waving goodbye to a circle ('bye').
+ * @param {Person} p - the person
+ * @param {Hangout} area - the hangout they're in
+ * @param {number} dt - seconds since the last frame
+ * @returns {?{x: number, y: number, z: number}} where to head (null to stay put)
+ */
 function updateActivity(p, area, dt) {
   if (p.act === 'chat') return p.group.stage === 'gather' && p === p.group.members[1] ? { x: p.tx, y: area.y, z: p.tz } : null;
   // where they sit or lie, and facing which way: in front of a bench seat, facing out into the plaza (sitting shifts them
@@ -1697,10 +2261,12 @@ function updateActivity(p, area, dt) {
   return null;
 }
 
-// ---- punching: now and then someone (the more aggression, the more often) picks on someone near them — along the same
-// walkway, or in the same plaza or park — goes up to them, as close as they'd stand to talk, punches them, and walks off.
-// Whoever they pick on only notices them at the last moment, turning to face them, and is knocked flat on their back; they
-// lie there a while, then get up where they fell and carry on.
+//  ============== Punching  ============== 
+// Someone (more often the more aggression they have) picks on someone near them — on the same walkway, or in
+// the same plaza or park — goes up to them, to talk distance, punches them, and walks off.
+//
+// The victim notices them at the last moment, turns to face them, and is knocked flat on their back; they lie there a
+// while, then get up where they fell.
 const PUNCH_RATE = 1/8;        // the chance a second of picking on someone, per unit of aggression
 const PUNCH_REACH = 8;          // how far off (at people size 1) the one they pick on can be
 const PUNCH_NOTICE = 2.5;       // how near they come before they're noticed
@@ -1708,9 +2274,18 @@ const PUNCH_CHASE_SPEED = 1.5;  // how much faster than they walk they go after 
 const PUNCH_CHASE_MAX = 12;     // seconds before they give up on catching them
 const PUNCH_HIT_TIME = 0.5;    // how far into the Punch animation the fist lands, in seconds
 let reach = PUNCH_REACH*S.peopleSize;
-// someone going about their business, who might punch or be punched
+/**
+ * Whether someone going about their business might punch or be punched.
+ * @param {Person} q - the person
+ * @returns {boolean} whether they're fair game
+ */
 const isFairGame = q => (q.mode === 'line' || q.mode === 'wander') && !q.act && !q.fright && !q.stun && !q.please && !q.jc && !q.crossStage
   && !q.attack && !q.punched && !q.oneShot;
+/**
+ * Let everyone who might pick a fight this frame think about it.
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
 function pickFights(dt) {
   if (!hasClip('Punch') || !hasClip('Fall')) return;
   reach = PUNCH_REACH*S.peopleSize;
@@ -1719,6 +2294,14 @@ function pickFights(dt) {
   });
 }
 
+/**
+ * Give someone the chance to pick on someone near them, and set them going after whoever they pick.
+ * @param {number} dt - seconds since the last frame
+ * @param {Person} p - the person
+ * @param {boolean} [isForced] - whether the punch is called for rather than rolled for (the game's doing)
+ * @param {Person} [forcedVictim] - who to go for, when it is
+ * @returns {void}
+ */
 function throwPunch(dt, p, isForced, forcedVictim) {
   const { aggression } = p.traits;
   dt = isForced? p.punchCooldown : dt; //force punch roll if forced
@@ -1747,9 +2330,15 @@ function throwPunch(dt, p, isForced, forcedVictim) {
   p.punchCooldown = 20 + peopleRng()*20;
 }
 
+/** How long someone stands staring down whoever they've just knocked flat, in seconds. */
 const PUNCH_STARE_TIME = 1.5;
 
-// someone punching, each frame: where they should walk to (or null to stand still)
+/**
+ * Move someone punching on, each frame.
+ * @param {Person} p - the person punching
+ * @param {number} dt - seconds since the last frame
+ * @returns {?{x: number, y: number, z: number}} where they should walk to (null to stand still)
+ */
 function updateAttack(p, dt) {
   const a = p.attack, t = a.target;
   a.timer -= dt;
@@ -1798,7 +2387,12 @@ function updateAttack(p, dt) {
   }
   return null;
 }
-// stops someone going after whoever they were going to punch — who, if they hadn't been hit yet, carries on as they were
+
+/**
+ * Stop someone going after whoever they were going to punch — who, if they hadn't been hit yet, carries on as they were.
+ * @param {Person} p - the person punching
+ * @returns {void}
+ */
 function endAttack(p) {
   const a = p.attack;
   if (!a) return;
@@ -1807,8 +2401,13 @@ function endAttack(p) {
   const t = a.target;
   if (t.punched?.by === p && (t.punched.stage === 'marked' || t.punched.stage === 'brace')) { t.punched = null; t.faceTo = null; t.lookAt = null; }
 }
-// someone being punched is let off it (to do something else): whoever was coming for them gives up, and if they were
-// falling they stand straight back up
+
+/**
+ * Let someone being punched off it (to do something else): whoever was coming for them gives up, and if they were
+ * falling they stand straight back up.
+ * @param {Person} p - the person being punched
+ * @returns {void}
+ */
 function releasePunched(p) {
   const k = p.punched;
   if (!k) return;
@@ -1816,7 +2415,13 @@ function releasePunched(p) {
   if (k.by.attack?.target === p) endAttack(k.by);
   if (k.stage === 'fall') p.oneShot = null;
 }
-// the punch lands: they're knocked flat on their back, facing whoever hit them
+
+/**
+ * Land the punch: knock them flat on their back, facing whoever hit them.
+ * @param {Person} t - the one being hit
+ * @param {Person} p - the one hitting them
+ * @returns {void}
+ */
 function knockDown(t, p) {
   t.punched.stage = 'fall';
   t.heading = headingTo(t, p);
@@ -1824,8 +2429,13 @@ function knockDown(t, p) {
   playOnce(t, 'Fall');
   t.pose = 'Fallen';
 }
-// the fall played out: they lie where it's left them — moved to where their pelvis landed, as for anyone lying down, the
-// pose drawn set back from there by as much (so nothing moves)
+
+/**
+ * Move someone who's been knocked flat on their back to where the fall leaves them: to where their pelvis landed, as
+ * for anyone lying down, the pose drawn set back from there by as much (so nothing moves).
+ * @param {Person} p - the person
+ * @returns {void}
+ */
 function landFall(p) {
   const fallen = clipNamed('Fallen'), s = modelScale(p), sin = Math.sin(p.heading), cos = Math.cos(p.heading);
   const offX = fallen.pelvisX*s, offZ = fallen.pelvisZ*s;
@@ -1835,20 +2445,41 @@ function landFall(p) {
   p.punched.timer = (3 + peopleRng()*4)*p.traits.patience;
   if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; }
 }
-// someone who's been punched, each frame: lying there a while, then getting up
+
+/**
+ * Move someone who's been punched on, each frame: lying there a while, then getting up.
+ * @param {Person} p - the person
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
 function updatePunched(p, dt) {
   const k = p.punched;
   if (k.stage === 'down' && (k.timer -= dt) <= 0) { k.stage = 'rise'; p.pose = 'Idle'; }
   else if (k.stage === 'rise' && weightOf(p, clipNamed('Idle')) >= 1) { p.punched = null; p.wait = 0.5 + peopleRng(); }
 }
 
-// ---- following someone with the camera: in World mode, clicking a person keeps the view centered on them as they go —
-// orbiting and zooming as usual, and able to come in closer than the camera usually can — with a card saying who they are
-// (person-card.js), until a click anywhere else, a pan, leaving World mode, or them leaving the crowd lets them go
-let followed = -1; // their index in people
+// ============== following someone with camera  ============== 
+// In World mode, clicking a person keeps the view centered on them as they move —
+// orbiting and zooming as usual, and closer in than the camera otherwise can — with a card saying who they are
+// (person-card.js).
+//
+// Let go by a click elsewhere, a pan, leaving World mode, or them leaving the crowd.
+/** The index in people of whoever the camera's following, or -1. */
+let followed = -1;
+
+/**
+ * How tall a person stands, this frame.
+ * @param {Person} p - the person
+ * @returns {number} their height, in world units
+ */
 const personHeight = p => 1.7*p.height*S.peopleSize*p.heightScale;
-// the person under a point on the screen (the one nearest the camera, if several are), or -1: a point within about their
-// width of the line up the middle of them, as they look on screen — or within a few pixels, for someone far off
+/**
+ * Find the person under a point on the screen (the one nearest the camera, if several are): a point within about their
+ * width of the line up the middle of them, as they look on screen — or within a few pixels, for someone far off.
+ * @param {number} clientX - the point's x, in pixels from the left of the window
+ * @param {number} clientY - its y, in pixels from the top
+ * @returns {number} their index in people, or -1
+ */
 function pickPerson(clientX, clientY) {
   if (!S.peopleEnabled) return -1;
   const width = window.innerWidth, height = window.innerHeight, foot = new THREE.Vector3(), head = new THREE.Vector3();
@@ -1866,12 +2497,24 @@ function pickPerson(clientX, clientY) {
   });
   return best;
 }
-// follows whoever's under a point on the screen, or stops following if nobody is
+
+/**
+ * Follow whoever's under a point on the screen, or stop following if nobody is.
+ * @param {number} clientX - the point's x, in pixels from the left of the window
+ * @param {number} clientY - its y, in pixels from the top
+ * @returns {void}
+ */
 function followPersonAt(clientX, clientY) {
   const i = pickPerson(clientX, clientY);
   if (i < 0) { stopFollowingPerson(); return; }
   followPerson(i);
 }
+
+/**
+ * Follow whoever's at this place in the crowd: show their card, and let the camera in close.
+ * @param {number} i - their index in people
+ * @returns {void}
+ */
 function followPerson(i) {
   followed = i;
   riderFollowed = -1;
@@ -1881,19 +2524,32 @@ function followPerson(i) {
   App.showPersonCard(i, personModel ? personModel.isMan[i] === 1 : null);
   App.setPersonCardIndoors(isGone(people[i]) && people[i].indoors ? buildingLabel(people[i].indoors.building) : null);
 }
+
 // Where someone's head is and which way their face points, in the world, for the person card's headshot: from their pose
-// this frame, worked out as the shader works it out — the head bone's pose (part-way between frames, and between the two
-// animations they're blending), their head turned and tilted, and where they are.
+// this frame, worked out as the shader works it out — the head bone's pose (blended between rows and between the two clips),
+// their head turned and tilted, and where they are.
 const headshot = { head: new THREE.Vector3(), forward: new THREE.Vector3(), up: new THREE.Vector3(), distance: 0 };
 const headPoseA = new Float32Array(12), headPoseB = new Float32Array(12);
 const headMatrix = new THREE.Matrix4(), headTurn = new THREE.Matrix3(), lookTurn = new THREE.Matrix4(), lookTilt = new THREE.Matrix4();
 const headshotInstance = new THREE.Matrix4(), headOffset = new THREE.Vector3();
-// the head bone's pose (its matrix's top three rows) at a row of the bone texture
+/**
+ * Read the head bone's pose (its matrix's top three rows) at a row of the bone texture, blending between rows.
+ * @param {Float32Array} out - the twelve numbers to write the pose into
+ * @param {number} row - the row of the bone texture, part-way between rows being part-way between frames
+ * @returns {void}
+ */
 function headPoseAt(out, row) {
   const { boneData, boneWidth, headBone } = personModel, r = Math.floor(row), t = row - r;
   const a = (r*boneWidth + headBone*3)*4, b = ((r + 1)*boneWidth + headBone*3)*4;
   for (let k=0;k<12;k++) out[k] = boneData[a + k] + (boneData[b + k] - boneData[a + k])*t;
 }
+
+/**
+ * Work out where someone's head is and which way their face points, in the world, for the person card's headshot.
+ * @param {number} i - their index in people
+ * @returns {{head: THREE.Vector3, forward: THREE.Vector3, up: THREE.Vector3, distance: number}} where to put the headshot
+ * camera, which way it looks, which way is up, and how far off it draws
+ */
 function headshotOf(i) {
   const anim = personModel.anim.array, look = personModel.look.array, o = i*4, fade = anim[o+2];
   headPoseAt(headPoseA, anim[o]);
@@ -1910,9 +2566,15 @@ function headshotOf(i) {
   headshot.distance = 4.6*modelScale(people[i]);
   return headshot;
 }
+
 // Someone blowing up nearby: everyone around notices (the nearer, the sooner), drops whatever they were doing, stares in
 // shock — mouth open, face aghast — then runs off away from it for a while, more than twice as fast.
 const FRIGHT_RADIUS = 14, FLEE_SPEED = 2.3;
+/**
+ * Have everyone around someone blowing up notice it: the nearer they are, the sooner, and they run off for a while.
+ * @param {Person} victim - whoever it is
+ * @returns {void}
+ */
 function frightenBystanders(victim) {
   const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
   people.forEach(p => {
@@ -1921,6 +2583,12 @@ function frightenBystanders(victim) {
     if (d <= reach) p.fright = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
   });
 }
+
+/**
+ * Have everyone around someone blowing up notice it and stand dazed, rather than running off.
+ * @param {Person} victim - whoever it is
+ * @returns {void}
+ */
 function stunBystanders(victim) {
   const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
   people.forEach(p => {
@@ -1929,6 +2597,12 @@ function stunBystanders(victim) {
     if (d <= reach) p.stun = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
   });
 }
+
+/**
+ * Have everyone around someone blowing up notice it and beam, rather than running off.
+ * @param {Person} victim - whoever it is
+ * @returns {void}
+ */
 function pleaseBystanders(victim) {
   const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
   people.forEach(p => {
@@ -1937,6 +2611,16 @@ function pleaseBystanders(victim) {
     if (d <= reach) p.please = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
   });
 }
+
+/**
+ * Move one of someone's reactions to a blast on a stage: noticing turns them to look at it, looking hands over to
+ * whatever that reaction does about it, and anything else lets them go.
+ * @param {Person} p - the person
+ * @param {number} dt - seconds since the last frame
+ * @param {'fright'|'stun'|'please'} key - which reaction, on the person
+ * @param {function(Person, object): void} onResolve - what to do once they've looked
+ * @returns {void}
+ */
 function updateEffect(p, dt, key, onResolve) {
   const state = p[key];
   state.timer -= dt;
@@ -1955,11 +2639,18 @@ function updateEffect(p, dt, key, onResolve) {
   }
 }
 
+/**
+ * Run someone's fright, each frame: gazing in shock, then running off more than twice as fast.
+ * @param {Person} p - the person
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
 function updateFright(p, dt) {
   updateEffect(p, dt, 'fright', (p, fright) => {
     fright.stage = 'flee';
     fright.timer = 5 + peopleRng()*4;
     p.faceTo = null; p.lookAt = null;
+    // away from whatever frightened them: turn round, if they're on a walkway
     if (p.mode === 'line') {
       const nav = peopleNav.lines[p.li], k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), a = nav.pts[k], b = nav.pts[k + 1];
       if (((b.x - a.x)*(fright.from.x - p.x) + (b.z - a.z)*(fright.from.z - p.z))*p.dir > 0) p.dir = -p.dir;
@@ -1969,6 +2660,12 @@ function updateFright(p, dt) {
   });
 }
 
+/**
+ * Run someone's stun, each frame: gazing in shock, then standing dazed.
+ * @param {Person} p - the person
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
 function updateStun(p, dt) {
   updateEffect(p, dt, 'stun', (p, stun) => {
     stun.stage = 'dazed';       // they hold still, don't flee
@@ -1976,6 +2673,12 @@ function updateStun(p, dt) {
   });
 }
 
+/**
+ * Run someone's delight, each frame: gazing at whatever pleased them, then holding still and beaming.
+ * @param {Person} p - the person
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
 function updatePlease(p, dt) {
   updateEffect(p, dt, 'please', (p, please) => {
     please.stage = 'delighted'; // they hold still and beam, don't flee either
@@ -1983,7 +2686,12 @@ function updatePlease(p, dt) {
     p.faceTo = null; p.lookAt = null;
   });
 }
-// somewhere in a plaza or park as far as can be found from whatever frightened them
+/**
+ * Pick somewhere in a plaza or park to run to, as far as can be found from whatever frightened them.
+ * @param {Person} p - the person
+ * @param {Hangout} area - the hangout they're in
+ * @returns {void}
+ */
 function fleeWithin(p, area) {
   let best = null;
   for (let k=0;k<12;k++) {
@@ -1992,9 +2700,13 @@ function fleeWithin(p, area) {
   }
   p.tx = best.x; p.tz = best.z; p.wait = 0;
 }
-// The person card's Kill button: whoever it is explodes into giblets in their own colors, and stays dead (gone from the
-// crowd, though their place in it is kept) — whoever they were talking to carrying on without them.
-// `by` is who did it, for the morality meter: 'player' (the Kill button) or 'car'.
+/**
+ * Kill whoever the person card is showing: explode them into giblets in their own colors, and keep them dead - gone from
+ * the crowd, though their place in it is kept - with whoever they were talking to carrying on without them.
+ * @param {number} i - their index in people
+ * @param {'player'|'car'} [by] - who did it, for the morality meter: the Kill button or a car
+ * @returns {void}
+ */
 function killPerson(i, by = 'player') {
   const p = people[i];
   if (!p || isGone(p)) return;
@@ -2029,6 +2741,10 @@ function killPerson(i, by = 'player') {
   p.indoors = null;
   p.moving = false;
 }
+/**
+ * Stop following whoever the camera's on, and hand it back to the player.
+ * @returns {void}
+ */
 function stopFollowingPerson() {
   if (followed < 0) return;
   if (possession.index === followed) unpossessPerson();
@@ -2038,11 +2754,19 @@ function stopFollowingPerson() {
   App.hidePersonCard();
 }
 
-// ---- possessing someone (see possession.js): whoever the camera's following, walked about from their own eyes. They drop
-// whatever they were doing and walk wherever they're walked — out onto the roads too, where the cars can hit them — and
-// when let go, carry on from the nearest walkway, with the camera back behind them.
-const EYE_NEAR = 0.2; // how close the view draws, from their eyes (it's usually further off than that)
+//  ============== possessing someone  ============== 
+// (see possession.js): whoever the camera's following is walked about from their own eyes.
+//
+// They drop whatever they were doing and walk wherever they're walked — onto the roads too, where cars can hit them — and
+// when let go carry on from the nearest walkway, with the camera back behind them.
+const EYE_NEAR = 0.2; // the nearest the view draws, from their eyes
 let cameraNear = camera.near;
+/**
+ * Start walking someone the camera's following about from their own eyes (see possession.js): they drop whatever they
+ * were doing, and the view comes in to where their head is.
+ * @param {number} i - their index in people
+ * @returns {void}
+ */
 function possessPerson(i) {
   const p = people[i];
   if (i !== followed || !p || isGone(p) || possession.index === i) return;
@@ -2058,6 +2782,11 @@ function possessPerson(i) {
   camera.near = EYE_NEAR;
   camera.updateProjectionMatrix();
 }
+/**
+ * Let someone go, back to walking themselves: back into a hangout or onto the nearest walkway, with the camera behind
+ * them looking the way they were.
+ * @returns {void}
+ */
 function unpossessPerson() {
   if (possession.index < 0) return;
   const i = possession.index, p = people[i];
@@ -2076,7 +2805,12 @@ function unpossessPerson() {
   controls.goalTheta = controls.theta + wrapAngle(behind - controls.theta);
   controls.goalPhi = Math.max(controls.goalPhi, Math.PI*0.3);
 }
-// walks them where they're asked to go, this frame, over whatever's there — returning where they end up
+/**
+ * Walk someone being possessed where they're asked to go, this frame, over whatever's there.
+ * @param {Person} p - the person
+ * @param {number} dt - seconds since the last frame
+ * @returns {{x: number, y: number, z: number}} where they end up, at the height of the ground there
+ */
 function walkPossessed(p, dt) {
   const { forward, right, run } = controlInput(), yaw = possession.yaw;
   const len = Math.hypot(forward, right);
@@ -2093,7 +2827,11 @@ function walkPossessed(p, dt) {
   p.area = area ? peopleNav.areas.indexOf(area) : -1;
   return { x, y: area ? area.y : p.onRoad ? Y_ROAD : Y_SIDEWALK, z };
 }
-// the view from their eyes (or where they'd be, as a cuboid)
+/**
+ * Put the camera at the view from someone's eyes (or where they'd be, as a cuboid).
+ * @param {number} i - their index in people
+ * @returns {void}
+ */
 function placePossessedCamera(i) {
   const p = people[i];
   if (personModel) camera.position.copy(headshotOf(i).head);
@@ -2101,20 +2839,34 @@ function placePossessedCamera(i) {
   camera.rotation.set(possession.pitch, possession.yaw + Math.PI, 0, 'YXZ');
 }
 
-// ---- throwing a punch yourself: possessing someone, a click swings their fist at whoever's in front of them (the click
-// itself is possession.js's). Nobody's walked up to and nobody's stared at afterwards, unlike someone picking a fight of
-// their own (see "punching"): the swing plays out wherever they're standing, and lands on whoever's nearest within reach
-// ahead of them when the fist arrives — knocking them flat, as any punch does — or on nobody at all, which is a miss.
-const SWING_REACH = 1.9;                // how far ahead (at people size 1) the fist reaches
-const SWING_ARC = Math.cos(Math.PI/3);  // how near dead ahead of them whoever takes it has to be
-let swing = null; // the punch being thrown: { timer } — how long until the fist lands
+// ---- throwing a punch yourself: possessing someone, a click swings their fist at whoever is in front of them (the click
+// itself is possession.js's).
+//
+// Unlike a fight someone picks of their own ("punching"), nobody is walked up to and nobody is stared at afterwards: the
+// swing plays wherever they are standing and lands on the nearest person within SWING_REACH ahead and SWING_ARC, at the
+// moment the fist arrives — knocking them flat, as any punch does — or on nobody.
+/** Who a swing can reach: how far ahead of them (at people size 1), and how near dead ahead they have to be. */
+const SWING_REACH = 1.9;
+const SWING_ARC = Math.cos(Math.PI/3);
+/** The punch being thrown: { timer } — how long until the fist lands. */
+let swing = null;
+/**
+ * Swing a possessed person's fist at whoever's in front of them — the click itself is possession.js's.
+ * @returns {void}
+ */
 function punchFromPossession() {
   const p = people[possession.index];
   if (!p || p.mode !== 'possessed' || swing || !hasClip('Punch') || !hasClip('Fall')) return;
   swing = { timer: PUNCH_HIT_TIME };
   playOnce(p, 'Punch');
 }
-// the swing, each frame: when the fist lands, whoever's in front of them takes it
+
+/**
+ * Run the swing they've thrown, each frame: when the fist lands, whoever's nearest in front of them takes it.
+ * @param {Person} p - the person who swung
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
 function updateSwing(p, dt) {
   if (!swing || (swing.timer -= dt) > 0) return;
   swing = null;
@@ -2131,27 +2883,37 @@ function updateSwing(p, dt) {
   knockDown(hit, p);
 }
 
-// ---- riding the trains: someone walking past a train station — one standing in the plaza or park they're in, or near
-// enough a walkway they're on — now and then decides to ride it. Stations can be at any height, so there's no walking up
-// to one: they go to the foot of it, pop up onto the landing outside one of its doors, walk in to wait on the platform,
-// and vanish into the first carriage to stop there. At each station it then stops at, they get off — always, on a network
-// of just two stations, else with a chance of one in however many stations the network has — reappearing on the
-// platform, walking out, and popping back down onto the walkway or hangout at the station's foot. Stations with neither
-// nearby can't be got on or off at. Someone being followed by the camera takes it with them: onto their train, and back
-// off it with them (see "following a carriage" in trains.js), whose card lists who's aboard.
-// p.train: { node (the station they're at or last got on at), stage ('approach' → 'enter' → 'wait' → 'ride' → 'exit'),
-// target (where they're walking to), side (of the station they came in by), along (where along its platform they wait),
-// lineId (while riding), timer }
-const RIDE_CHANCE = 0.05;      // at each walkway point near a station
-const STATION_REACH = 4;       // how far beyond a station's sides a walkway can pass and still lead up to it
+//  ============== Riding the trains  ============== 
+// At TRAIN_RATE, someone near station pops to landing. At each stop after, they exit with probability  1/stationCount or guaranteed if two stations.
+// Someone followed by the camera takes it with them (see followCarriage in trains.js).
+// p.train: { node: Station, stage: 'approach'|'enter'|'wait'|'ride'|'exit', target: Vec3, side: number, along: number, lineId: string, timer: number }
+
+/** The chance, at each walkway point near a station, of deciding to ride the trains. */
+const RIDE_CHANCE = 0.05;
+/** How far beyond a station's sides a walkway can pass and still lead up to it. */
+const STATION_REACH = 4;
+/** How long someone waits on a platform, and rides, before giving up on it. */
 const TRAIN_WAIT_MAX = 120, TRAIN_RIDE_MAX = 240;
-let riderFollowed = -1;        // someone the camera was following when they got on, to follow again when they get off
+/** Someone the camera was following when they got on a train, to follow again when they get off, or -1. */
+let riderFollowed = -1;
+
+/**
+ * Whether this person is out of sight — nowhere, dead, shut in a train or in a building.
+ * @param {Person} p - the person
+ * @returns {boolean} whether they're gone
+ */
 const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode === 'train' && p.train.stage === 'ride')
   || (p.mode === 'indoors' && p.indoors.stage === 'inside');
-// What each station's foot leads to, worked out again when the walkways or the trains change: for each station node,
-// { area (the hangout it stands in, or -1), vertex ({ li, vi }, the nearest walkway point, or null) } — and the other way,
-// the station near each walkway point ('li:vi') and those in each hangout (by index).
+
+/** What each station's foot leads to, and which station is nearest each walkway point and hangout (see stationLinks). */
 let stationLinksCache = null, stationLinksKey = '';
+
+/**
+ * Work out what each station's foot leads to, again when the walkways or the trains change: for each station node,
+ * { area (the hangout it stands in, or -1), vertex ({ li, vi }, the nearest walkway point, or null) } — and the other
+ * way, the station near each walkway point ('li:vi') and those in each hangout (by index).
+ * @returns {{ground: Map<*, *>, byVertex: Map<string, *>, byArea: Map<number, *>}} the links
+ */
 function stationLinks() {
   const key = peopleNavBuiltAt + ':' + trainStationsVersion();
   if (stationLinksCache && key === stationLinksKey) return stationLinksCache;
@@ -2176,14 +2938,29 @@ function stationLinks() {
   });
   return (stationLinksCache = links);
 }
-// off to the foot of a station, `from` (where they are), to ride its trains
+
+/**
+ * Send someone off to the foot of a station to ride its trains.
+ * @param {Person} p - the person
+ * @param {*} node - the station's node id
+ * @param {{x: number, y: number, z: number}} from - where they are now
+ * @returns {void}
+ */
 function goRideTrain(p, node, from) {
   endActivity(p);
   p.crossStage = null; p.jc = null; p.wait = 0;
   p.mode = 'train';
   p.train = { node, stage: 'approach', target: { x: from.x, y: from.y, z: from.z }, side: 1, along: 0, lineId: null, timer: 0 };
 }
-// someone riding the trains, each frame: where they should walk to (or null to stand still)
+
+/**
+ * Move someone riding the trains on, each frame: to the foot of the station, up onto its landing, in to wait on the
+ * platform, then aboard the first carriage to stop there, and back out again at the other end.
+ * @param {Person} p - the person
+ * @param {number} i - their index in people
+ * @param {number} dt - seconds since the last frame
+ * @returns {?{x: number, y: number, z: number}} where they should walk to (null to stand still, or aboard)
+ */
 function updateTrainRider(p, i, dt) {
   const ride = p.train, st = getTrainStations().get(ride.node), reached = () => Math.hypot(ride.target.x - p.x, ride.target.z - p.z) < 0.35;
   ride.timer += dt;
@@ -2241,7 +3018,13 @@ function updateTrainRider(p, i, dt) {
   landAtStation(p, ride.node);
   return null;
 }
-// just got off (or been thrown off) a train: the camera back onto them, if it came along for the ride and is still on it
+
+/**
+ * Put the camera back onto someone who's just got off a train, if it came along for the ride and is still on it.
+ * @param {Person} p - the person
+ * @param {number} i - their index in people
+ * @returns {void}
+ */
 function gotOff(p, i) {
   if (riderFollowed !== i) return;
   riderFollowed = -1;
@@ -2249,7 +3032,14 @@ function gotOff(p, i) {
   App.stopFollowingTrain();
   followPerson(i);
 }
-// from a station's landing down to its foot: onto the walkway there (heading either way), or into the hangout it's in
+
+/**
+ * Bring someone down from a station's landing to its foot: onto the walkway there (heading either way), or into the
+ * hangout it's in.
+ * @param {Person} p - the person
+ * @param {*} node - the station's node id
+ * @returns {void}
+ */
 function landAtStation(p, node) {
   const foot = stationLinks().ground.get(node), st = getTrainStations().get(node);
   p.train = null;
@@ -2268,7 +3058,12 @@ function landAtStation(p, node) {
     dropToGround(p);
   }
 }
-// the station or line they were on has gone: straight onto the nearest walkway or hangout below
+
+/**
+ * Put someone straight onto the nearest walkway or hangout below, the station or line they were on having gone.
+ * @param {Person} p - the person
+ * @returns {void}
+ */
 function dropToGround(p) {
   p.train = null;
   p.faceTo = null;
@@ -2278,9 +3073,14 @@ function dropToGround(p) {
   if (p.mode === 'line') { const at = walkwayPoint(p); p.x = at.x; p.y = at.y; p.z = at.z; }
   else if (p.mode === 'wander') { p.x = p.tx; p.z = p.tz; p.y = peopleNav.areas[p.area].y; }
 }
-// The followed carriage's card: who's aboard, by name — whoever the camera came aboard with picked out. Clicking one of
-// the others makes them the one it came aboard with instead, so it gets off with them (see gotOff) wherever they do.
+
+/** What the followed carriage's card was last told, so it's only told again when it changes. */
 let passengersKey = null;
+/**
+ * Tell the followed carriage's card who's aboard, by name, with whoever the camera came aboard with picked out. Clicking
+ * one of the others makes them the one it came aboard with instead, so it gets off with them (see gotOff).
+ * @returns {void}
+ */
 function showPassengers() {
   const line = App.followedTrainLine?.();
   const riders = [];
@@ -2295,20 +3095,42 @@ function showPassengers() {
   );
 }
 
-// ---- going indoors: someone walking past a building's door (see buildingDoors) now and then goes in — walking up to it
-// and vanishing inside for anything up to INDOORS_MAX_HOURS of the day's clock (at the World panel's day length, whether
-// or not the clock's running), then coming back out the same door and on along the walkway they came off. Someone the
-// camera's following takes it with them: it looks at the building while they're in, and their card says which one.
-// Only so many of the crowd are ever indoors at once, so the streets don't empty out on long days.
+// ============== Going Indoors ============== 
+// Someone walking past a building's door (buildingDoors) sometimes goes in — up to the door, inside
+// for up to INDOORS_MAX_HOURS of the day's clock (measured at the World panel's day length, whether or not it is running) —
+// then back out the same door and on along the walkway they left.
+//
 // p.indoors: { building, stage ('approach' → 'inside' → 'exit'), back (the walkway point they came from), hoursLeft }
-const ENTER_CHANCE = 0.1;          // at each walkway point with a door onto it
+/** The chance of going in, at each walkway point with a door onto it. */
+const ENTER_CHANCE = 0.1;
+/** How long a visit lasts, in hours of the day's clock. */
 const INDOORS_MIN_HOURS = 0.25, INDOORS_MAX_HOURS = 7;
-const INDOORS_MAX_SHARE = 0.3;     // of the crowd, indoors (or on their way in) at once
-const INDOORS_COOLDOWN = 30;       // seconds after coming out before they'd go in anywhere again
+/** The most of the crowd that may be indoors (or on their way in) at once: INDOORS_MAX_SHARE of the people alive. */
+const INDOORS_MAX_SHARE = 0.3;
+/** Seconds after coming out before they'd go in anywhere again. */
+const INDOORS_COOLDOWN = 30;
 let indoorsCount = 0;
+/**
+ * Whether this person may go indoors right now.
+ * @param {Person} p - the person
+ * @returns {boolean} whether they may
+ */
+
 const mayGoIndoors = p => p.indoorsCooldown <= 0 && !p.act && !p.attack && !p.punched && !p.fright && indoorsCount < people.length*INDOORS_MAX_SHARE;
-// what a building's called on the card of whoever's in it: its kind's name and its own number (see building-types.js)
+/**
+ * What a building's called on the card of whoever's in it: its kind's name and its own number (see building-types.js).
+ * @param {object} b - the building (see buildingDoors)
+ * @returns {string} the label
+ */
+
 const buildingLabel = b => buildingTypeOf(b.kind, b.number).name + ' #' + b.number;
+/**
+ * Send someone in at a building's door, for anything up to INDOORS_MAX_HOURS of the day's clock.
+ * @param {Person} p - the person
+ * @param {object} building - the building they're going into (see buildingDoors)
+ * @param {{x: number, y: number, z: number}} from - the walkway point they came off
+ * @returns {void}
+ */
 function goIndoors(p, building, from) {
   endActivity(p);
   p.crossStage = null; p.jc = null; p.wait = 0;
@@ -2318,7 +3140,14 @@ function goIndoors(p, building, from) {
   p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, hoursLeft: hours };
   indoorsCount++;
 }
-// someone going into (or in, or coming out of) a building, each frame: where they should walk to (or null to stand still)
+
+/**
+ * Move someone going into, being in, or coming out of a building on, each frame.
+ * @param {Person} p - the person
+ * @param {number} i - their index in people (for the camera's sake)
+ * @param {number} dt - seconds since the last frame
+ * @returns {?{x: number, y: number, z: number}} where they should walk to (null to stand still, or to be inside)
+ */
 function updateIndoors(p, i, dt) {
   const visit = p.indoors, { door } = visit.building;
   if (visit.stage === 'approach') {
@@ -2349,11 +3178,17 @@ function updateIndoors(p, i, dt) {
   reseatPerson(p);
   return null;
 }
-// The followed building's card (see building-card.js): who's inside, by name. Clicking one of them waits on that one —
-// the camera leaves the building with them when they come back out the door (see awaited below), the way it gets off a
-// train with whoever it came aboard with.
+
+/** What the followed building's card was last told, so it's only told again when it changes. */
 let inhabitantsKey = null;
-let awaited = -1; // whoever indoors the camera's waiting on, or -1
+/** Whoever indoors the camera's waiting on, or -1. */
+let awaited = -1;
+/**
+ * Tell the followed building's card who's inside, by name (see building-card.js). Clicking one of them waits on that one
+ * — the camera leaves the building with them when they come back out the door (see awaited), the way it gets off a train
+ * with whoever it came aboard with.
+ * @returns {void}
+ */
 function showInhabitants() {
   const key = App.followedBuildingKey?.();
   const inside = [];
@@ -2368,20 +3203,77 @@ function showInhabitants() {
     at => { awaited = inside[at]; },
   );
 }
-// the camera, following someone who's gone indoors: back far enough to take in the building they're in
+
+/**
+ * Move the camera, following someone who's gone indoors, back far enough to take in the building they're in.
+ * @param {object} b - the building (see buildingDoors)
+ * @returns {void}
+ */
 function lookAtBuilding(b) {
   controls.goalRadius = Math.max(controls.goalRadius, Math.min(400, (b.size + b.height)*1.6));
 }
-// and once they're out: swooping back in on them
+
+/**
+ * Swoop the camera back in on someone who's come out of a building.
+ * @param {Person} p - the person
+ * @returns {void}
+ */
 function lookAtPerson(p) {
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, personHeight(p)*9));
 }
 
-// whether p is walking over a road (see updateCrossing) — treated like someone standing in the middle of it ('mid') by
-// checkYield in traffic.js: out on the live lanes, not on a sidewalk
+/**
+ * Whether this person is walking over a road (see updateCrossing) — treated like someone standing in the middle of it
+ * ('mid') by checkYield in traffic.js: out on the live lanes, not on a sidewalk.
+ * @param {Person} p - the person
+ * @returns {boolean} whether they're in the road
+ */
 export function isPedInDanger(p) {
   return p.crossStage === 'jcross' || p.crossStage === 'half1' || p.crossStage === 'half2' || (p.mode === 'possessed' && p.onRoad);
 }
+
+/**
+ * Run the conversations: two standing come together, wave hello, take turns talking a while, wave goodbye and go; a
+ * circle on the grass talks among whoever's sat down in it.
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
+function updateGroups(dt) {
+  for (let gi = groups.length - 1; gi >= 0; gi--) {
+    const g = groups[gi];
+    if (g.kind === 'circle') {
+      const seated = g.members.filter(m => m.stage === 'sit');
+      if (seated.length >= 2) takeTurns(g, seated, dt); else g.speaker = null;
+      continue;
+    }
+    const [a, b] = g.members;
+    g.timer -= dt;
+    if (g.stage === 'gather') {
+      a.faceTo = headingTo(a, b);
+      if (Math.hypot(b.tx - b.x, b.tz - b.z) < 0.3) wave(g, 'greet');
+      else if (g.timer <= 0) { endChat(g); continue; }
+    } else if (g.stage === 'greet') {
+      if (g.timer <= 0) { g.stage = 'talk'; g.timer = (8 + peopleRng()*22)*(a.traits.patience + b.traits.patience)/2; }
+    } else if (g.stage === 'talk') {
+      takeTurns(g, g.members, dt);
+      if (g.timer <= 0) { g.speaker = null; wave(g, 'bye'); }
+    } else if (g.timer <= 0) {
+      endChat(g);
+      continue;
+    }
+    if (g.stage !== 'gather') { a.faceTo = headingTo(a, b); b.faceTo = headingTo(b, a); }
+  }
+}
+
+/**
+ * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone
+ * — walking, crossing, talking, sitting, punching, riding the trains, going indoors, being possessed — then write it all
+ * out to the instanced meshes and the shader's attributes, and put the camera where it's following.
+ *
+ * The dt is clamped, so a tab left in the background doesn't teleport everyone across the map on the frame it comes back.
+ * @param {number} t - the time now, in seconds
+ * @returns {void}
+ */
 export function updatePeople(t) {
   const dt = lastPeopleTime == null ? 0 : Math.min(0.1, Math.max(0, t - lastPeopleTime));
   lastPeopleTime = t;
@@ -2467,15 +3359,15 @@ export function updatePeople(t) {
       if (p.act) {
         goal = updateActivity(p, area, dt);
       } else if (p.fright || p.stun || p.please || p.attack || frozen) {
-        // frightened, stunned or pleased: fright runs off further each time they reach where they were running to;
-        // stun/please just hold position via the `frozen` guard below, with no movement of their own
+        // Frightened, stunned or pleased. Fright runs off further each time they reach where they were running to;
+        // stun and please hold position through the `frozen` guard below, with no movement of their own.
         if (fleeing && Math.hypot(p.tx - p.x, p.tz - p.z) < 0.5) fleeWithin(p, area);
       } else if (p.wait > 0 || p.oneShot) {
         p.wait -= dt;
       } else if (Math.hypot(p.tx - p.x, p.tz - p.z) < 0.3) {
         p.wait = (1 + peopleRng()*9)*p.traits.patience;
-        // what next, by how likely each is for them: leaving, sitting down, lying down, going over to talk to someone, going
-        // over to someone else, or just somewhere else here — which is what they do if what they'd do next can't be done
+        // What next, weighted by their traits: leaving, sitting down, lying down, going over to talk to someone, going
+        // over to someone else, or somewhere else in the same hangout.
         const { lounging, chatty } = p.traits;
         const stations = p.trainCooldown <= 0 ? stationLinks().byArea.get(p.area) : null;
         const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train'][pickWeighted([area.exits.length ? 0.2 : 0, 0.16*lounging, 0.08*lounging, 0.18*chatty, 0.13, 0.25, stations ? 0.12 : 0], w => w)];
@@ -2488,11 +3380,12 @@ export function updatePeople(t) {
           let exit = null;
           for (let k=0;k<6;k++) {
             const e = area.exits[Math.floor(peopleRng()*area.exits.length)], q = peopleNav.lines[e.li].pts[e.vi], d = Math.hypot(q.x-p.x, q.z-p.z);
-            // (the entrance rather than the walkway point: the walkway is outside the hangout, so the walk to it never reads as clear)
+            // Uses the entrance's own position, not the walkway point: a walkway lies outside the hangout, so a walk to
+            // that point never reads as clear ground.
             const dry = walkableUpTo(area, p, e.x, e.z).clear;
             if (!exit || (dry !== exit.dry ? dry : d < exit.d)) exit = { ...e, d, dry };
           }
-          // they'll join that walkway where it passes the entrance, so that's where they walk to
+          // Joins the walkway at the point where it passes the entrance.
           joinWalkway(p, exit.li, peopleNav.lines[exit.li].cum[exit.vi], peopleRng() < 0.5 ? -1 : 1);
           p.exit = walkwayPoint(p);
           p.mode = 'leaving'; p.wait = 0;
@@ -2575,7 +3468,7 @@ export function updatePeople(t) {
     // standing still for something (talking, sitting down), they turn to face the way it wants
     if (!p.moving && p.faceTo != null) p.heading += wrapAngle(p.faceTo - p.heading)*Math.min(1, dt*5);
     if (personModel) {
-      const clips = personModel.clips, s = isGone(p) ? 0 : modelScale(p);
+      const clipSet = personModel.clips, s = isGone(p) ? 0 : modelScale(p);
       // a cycle of the walk for every stride's worth of ground covered, as big as they are (played in reverse, backwards)
       if (s > 0) p.walkCycle = (p.walkCycle + (p.traits.backwards ? -1 : 1)*p.stepped/(personModel.stride*s) + 1) % 1;
       p.idleTime += dt;
@@ -2594,8 +3487,8 @@ export function updatePeople(t) {
           p.oneShot = null;
         }
       }
-      if (!p.clipA) { p.clipA = p.clipB = clips.Idle; p.fade = 1; }
-      setClip(p, p.oneShot || (p.moving ? clips.Walk : clips[p.pose] || clips.Idle));
+      if (!p.clipA) { p.clipA = p.clipB = clipSet.Idle; p.fade = 1; }
+      setClip(p, p.oneShot || (p.moving ? clipSet.Walk : clipSet[p.pose] || clipSet.Idle));
       p.fade = Math.min(1, p.fade + dt/p.fadeTime);
       // the model, scaled to the same height as a cuboid person — set back by however far their pose puts their pelvis from
       // their feet, and sat on a bench, up on its seat
@@ -2603,7 +3496,7 @@ export function updatePeople(t) {
       const offX = blend('pelvisX')*s, offZ = blend('pelvisZ')*s, sin = Math.sin(p.heading), cos = Math.cos(p.heading);
       p.heightScale = blend('heightScale');
       rotation.setFromAxisAngle(up, p.heading);
-      position.set(p.x - offX*cos - offZ*sin, p.y + p.seatLift*weightOf(p, clips.Sit1) - personModel.minY*s, p.z + offX*sin - offZ*cos);
+      position.set(p.x - offX*cos - offZ*sin, p.y + p.seatLift*weightOf(p, clipSet.Sit1) - personModel.minY*s, p.z + offX*sin - offZ*cos);
       matrix.compose(position, rotation, scale.set(s, s, s));
       personModel.mesh.setMatrixAt(i, matrix);
       // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION
@@ -2650,11 +3543,12 @@ export function updatePeople(t) {
       const { happy, sad, angry, shock } = p.traits, swing = p.emotion - p.traits.mood, shocked = frozen || fleeing;
       const eyesTo = [shocked ? 1 : shock, shocked ? 0 : happy + Math.max(0, swing)*0.8, p.attack ? 1 : angry, sad + Math.max(0, -swing)*0.8];
       for (let k=0;k<4;k++) p.eyes[k] += (Math.min(1, eyesTo[k]) - p.eyes[k])*Math.min(1, dt*6);
-      const o = i*4, a = personModel.anim.array, lookArray = personModel.look.array;
-      a[o] = clipRow(p, p.clipA);
-      a[o+1] = p.clipB === p.clipA ? a[o] : p.rowB;
-      a[o+2] = p.fade;
-      a[o+3] = p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0;
+      // instanceAnim (see the shader): the rows they're at in the two animations, how far they've blended, and their blink
+      const o = i*4, animArray = personModel.anim.array, lookArray = personModel.look.array;
+      animArray[o] = clipRow(p, p.clipA);
+      animArray[o+1] = p.clipB === p.clipA ? animArray[o] : p.rowB;
+      animArray[o+2] = p.fade;
+      animArray[o+3] = p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0;
       lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
       const eyesArray = personModel.eyes.array;
       for (let k=0;k<4;k++) eyesArray[o + k] = p.eyes[k];
@@ -2664,7 +3558,7 @@ export function updatePeople(t) {
         if (!style || !style.mesh) return;
         const slot = layer.slot[i];
         matrix.toArray(style.mesh.instanceMatrix.array, slot*16);
-        for (let k=0;k<4;k++) { style.anim.array[slot*4 + k] = a[o + k]; style.look.array[slot*4 + k] = lookArray[o + k]; style.eyes.array[slot*4 + k] = eyesArray[o + k]; }
+        for (let k=0;k<4;k++) { style.anim.array[slot*4 + k] = animArray[o + k]; style.look.array[slot*4 + k] = lookArray[o + k]; style.eyes.array[slot*4 + k] = eyesArray[o + k]; }
       });
     } else {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
@@ -2715,5 +3609,8 @@ export function updatePeople(t) {
   if (possession.index >= 0 && possession.index === followed && people[followed].mode === 'possessed') placePossessedCamera(followed);
 }
 
-// (people and groups too, for poking at from the browser console)
+/**
+ * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
+ * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
+ */
 Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, people, peopleGroups: groups });

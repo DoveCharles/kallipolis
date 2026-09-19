@@ -11,6 +11,7 @@ import { scalePolygonAroundCentroid, makeExtrudeRaw, extrudeFootprintGeo } from 
 import { plantParkLife } from '../life/bees.js';
 
 // ---------------------------------------------------------- surface detail (Y2K greebles/bands/rings)
+// A slim torus ring around the building at zHeight, proud of the wall between its inner radius and tube.
 function addRingAccent(group, c, ringRadius, tube, zHeight, colorHex) {
   const ringGeo = new THREE.TorusGeometry(Math.max(0.6,ringRadius), Math.max(0.06,tube), 8, 28);
   const ringMat = new THREE.MeshStandardMaterial({ color:colorHex, roughness:0.3, metalness:0.6, emissive:colorHex, emissiveIntensity:0.3 });
@@ -20,19 +21,22 @@ function addRingAccent(group, c, ringRadius, tube, zHeight, colorHex) {
   ring.name = 'Building';
   group.add(ring);
 }
+// A capped slab 0.35-0.85 tall around the footprint, its outline pushed out 0.12-0.22 past `poly` so the ledge stands
+// proud of the wall rather than lying coplanar with it. Positioned with its bottom at bandBottom
 function addAccentBand(group, poly, bandBottom, bandColor, rng) {
   const bandH = 0.35 + rng()*0.5;
-  // Push the band's footprint out past the main wall face (a real belt-course ledge) instead
-  // of tracing the exact same outline flush against it — that coplanar surface is what was
-  // z-fighting with the wall behind it.
   const bandPoly = insetPolygon(poly, -(0.12 + rng()*0.1));
-  const bandGeo = extrudeFootprintGeo(bandPoly, bandH); // capped, so the protruding ledge doesn't show an open top/bottom rim
+  const bandGeo = extrudeFootprintGeo(bandPoly, bandH);
   const bandMat = new THREE.MeshStandardMaterial({ color:bandColor, roughness:0.3, metalness:0.6, emissive:bandColor, emissiveIntensity:0.25 });
   const band = new THREE.Mesh(bandGeo, bandMat);
   band.position.z = bandBottom;
   band.castShadow = true; band.name = 'Building';
   group.add(band);
 }
+// 2-6 rooftop props scattered over the footprint: a point at random in its bounding box, kept if it's inside the poly
+// and 0.8 clear of its edge, up to count*12 tries. `kind` picks one of: under 0.18 an AC unit, under 0.33 a vent pipe,
+// under 0.46 a dish antenna on a mast, under 0.62 a squat water tank with a conical lid, under 0.77 clustered vent
+// pipes, under 0.87 a helipad marking, else a row of tilted solar panels. All sit on top of height
 function addRooftopGreebles(group, poly, height, rng) {
   const count = 2 + Math.floor(rng()*5);
   let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
@@ -136,11 +140,12 @@ function addRooftopGreebles(group, poly, height, rng) {
   }
 }
 
-// Below: post-hoc facade/structure detail. Each of these ADDS geometry around the already-
-// built massing (never modifies it), so they can be wired in as a flat list of independent,
-// gated calls at the end of makeBuildingMesh rather than threaded through every branch of the
-// massing selection above. Repeated small pieces (ribs, balcony ledges) are merged into one
-// mesh per building via mergeGeometryList, so obj/poly count doesn't balloon with detail.
+/**  Facade and structure detail added around the massing makeBuildingMesh has already built, so each is called
+  independently on its own roll. Repeated small pieces (ribs, balcony ledges) are merged into one mesh per building
+  through mergeGeometryList.
+  Vertical fins or curtain-wall seams down each edge of the footprint, `spacing` apart, up to 40 of them and skipped
+  entirely on edges shorter than 1.3*spacing. Each is ribWidth*ribDepth in section, ribSpanH = 0.86-0.96 of zHeight tall
+  and centered in it, standing off the wall by half its depth less 0.03 */
 function addVerticalRibs(group, poly, zBottom, zHeight, rng, ribColor) {
   const chunky = rng() < 0.5; // chunky structural fins vs frequent thin curtain-wall seams
   const ribWidth = chunky ? 0.28+rng()*0.14 : 0.09+rng()*0.06;
@@ -168,8 +173,8 @@ function addVerticalRibs(group, poly, zBottom, zHeight, rng, ribColor) {
       const t = start + k*spacing;
       const px = ax+ux*t + nx*(ribDepth/2-0.03);
       const py = ay+uy*t + ny*(ribDepth/2-0.03);
-      // authored as (alongEdge, alongNormal, height) then rotated flat into place — a plain
-      // rotateZ suffices since the box's local Z axis (height) never needs to move.
+      // box authored as (along the edge, out from it, height), turned to the edge's angle — a rotateZ is enough since
+      // the height axis never moves
       const g = new THREE.BoxGeometry(ribWidth, ribDepth, ribSpanH);
       g.rotateZ(edgeAngle);
       g.translate(px, py, zCenter);
@@ -181,6 +186,9 @@ function addVerticalRibs(group, poly, zBottom, zHeight, rng, ribColor) {
   mesh.castShadow = true; mesh.name = 'Building';
   group.add(mesh);
 }
+/** Balconies on 1-2 edges of the footprint (each at least 3 long), one per floor from floorH = 3-4.5 up to 1 below the
+*   top: a ledge slab spanning the middle 70% of the edge and projecting 0.7-1.2 out, with a rail 0.85-1.0 tall and 0.06
+ thick along its outer edge, in a see-through dark material*/
 function addBalconies(group, poly, zBottom, zHeight, rng, balColor) {
   const n = poly.length;
   if (n < 3 || zHeight < 6) return;
