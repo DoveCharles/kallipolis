@@ -6,7 +6,7 @@
 #   loves   what it loves
 #   hates   what it hates
 #
-#   enterable   `yes` if people go inside this kind and are gone a while (see "going indoors" in src/life/people.js).
+#   enterable   `yes` if people go inside this kind and are gone a while (see "going indoors" in src/life/people/people.js).
 #               Left out, it's no: somewhere you'd only ambiguously go into (a container yard) shouldn't swallow people.
 #
 # Give an attribute several lines to have each building of that kind pick one of them (always the same one for the same

@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { scene, camera, renderer, computeWindowGlowFactor, SKY_ENV_MAP, Y_ROAD } from '../core/scene.js';
@@ -10,7 +10,7 @@ import { roadLineWidths, createMeshBuilder, navRebuildOnHold } from '../roads/ro
 import { isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { placeKey, signalState } from '../roads/markings.js';
 import { isTrainLine } from '../trains/trains.js';
-import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people.js';
+import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people/people.js';
 import { explodeCar } from './giblets.js';
 import { carTypeOf } from './car-types.js';
 import { driving, controlInput, startDriving, endDriving } from './possession.js';
@@ -1644,3 +1644,4 @@ export function carThumbnailScene(i) {
 }
 
 Object.assign(App, { pickCar, followCarAt, stopFollowingCar, driveCar, stopDriving, killCar, carsNearby, carsWhere });
+

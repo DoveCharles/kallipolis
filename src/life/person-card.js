@@ -1,7 +1,7 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import { App } from '../core/shared.js';
 import { scene, renderer } from '../core/scene.js';
-import { HEADSHOT_LAYER } from './people.js';
+import { HEADSHOT_LAYER } from './people/people.js';
 import { profileOf, onProfilesLoaded } from './profiles.js';
 import { makeCard } from '../ui/entity-card.js';
 
@@ -87,3 +87,4 @@ function hidePersonCard() {
 }
 
 Object.assign(App, { showPersonCard, hidePersonCard, drawPersonHeadshot, setPersonCardIndoors });
+

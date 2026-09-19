@@ -56,6 +56,7 @@ window.addEventListener('pagehide', save);
 
 // on opening: the last autosave, if there is one (nothing's saved over it until it's back)
 (async () => {
+  let restoredCleanly = false;
   try {
     const record = await inStore('readonly', store => store.get(RECORD_KEY));
     if (record && record.project && record.project.roads && record.project.zones) {
@@ -70,11 +71,14 @@ window.addEventListener('pagehide', save);
       }
       App.resetHistory(); // (the restored project is where undo starts from, not a step to undo)
     }
+    restoredCleanly = true; // restored, or there was nothing to restore
   } catch (err) {
-    console.warn('Blockout: couldn\'t restore the autosave', err);
+    // A failed restore leaves the scene half-loaded: autosaving now would destroy the very
+    // record that failed to load, so stay off for this session and say so.
+    console.warn('Blockout: couldn\'t restore the autosave — autosave is off for this session so the saved project is not overwritten. Reload to try again.', err);
   } finally {
     restoring = false;
-    ready = true;
+    ready = restoredCleanly;
   }
 })();
 
