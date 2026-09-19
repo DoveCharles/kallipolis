@@ -1,0 +1,59 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "splinetopia",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "serve.py",
+        "8743"
+      ],
+      "port": 8743
+    },
+    {
+      "name": "splinetopia-alt",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "serve.py",
+        "8744"
+      ],
+      "port": 8744
+    },
+    {
+      "name": "splinetopia-3",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "serve.py",
+        "8745"
+      ],
+      "port": 8745
+    },
+    {
+      "name": "splinetopia-4",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "serve.py",
+        "8746"
+      ],
+      "port": 8746
+    },
+    {
+      "name": "splinetopia-5",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "serve.py",
+        "8748"
+      ],
+      "port": 8748
+    },
+    {
+      "name": "splinetopia-6",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "serve.py",
+        "8749"
+      ],
+      "port": 8749
+    }
+  ]
+}
