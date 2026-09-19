@@ -172,6 +172,10 @@ const PERSON_BODY_SHAPES = {
   male:   { Breast: [0.6, 1],  Waist: [0.5, 1],    Hips: [-1, -0.5],   Weight: [0, 1],   Butt: [1, 1] },
   female: { Breast: [-1, 0.1], Waist: [-0.5, 0.1], Hips: [-0.4, 0.2], Weight: [0, 1],   Butt: [0, 0.6] },
 };
+// How far out a person's arms hang from their sides, in the model's units, at Weight 1 — the Weight shape key widens the
+// body by about this much from the hips to the shoulders and leaves the arms where they were, so without it a heavy
+// person's shoulders swallow theirs and their hands swing through their hips.
+const PERSON_ARM_SPREAD = 0.43;
 // each person's head and eye shape keys, as [lowest, highest] — or, where men's and women's differ, one of those for each
 const PERSON_FACE_SHAPES = { 'Key 1': { male: [0, 1], female: [-0.3, 0] }, 'Key 2': [-0.5, 0.3], Shape1: [-0.2, 1], Shape2: [0, 1], Shape3: [0, 1] };
 // How much skin clothes show: a sleeve, the tummy and a leg are each split into numbered bands (materials named Sleeve1,
@@ -220,10 +224,12 @@ const PERSON_VERTEX_PARS = `
   uniform sampler2D personTraits;
   uniform float personHeadBone;
   uniform vec3 personHeadPivot;
+  uniform float personChestBone;
   attribute vec4 personJoints;
   attribute vec4 personWeights;
   // What the shader needs to know about the vertex itself, all in one attribute: a machine is only guaranteed 16 of them,
   // and instanceMatrix takes four of those while gl_InstanceID takes another. x how much the vertex moves with the head,
+  // or, negative, how much it moves out with the arms (nothing is both, so the two share the sign of the one number),
   // y which slot (which part of the figure) it belongs to, z which shape keys move it (see PERSON_SHAPE_KEY_BITS), and w
   // where it is in the shape key texture — which is gl_VertexID, but reading it costs an attribute of its own.
   attribute vec4 personVertex;
@@ -307,6 +313,15 @@ const PERSON_VERTEX_PARS = `
     if ((mask & 32) != 0) offset += personMorph(13)*instanceEyes.x + personMorph(14)*instanceEyes.y + personMorph(15)*instanceEyes.z + personMorph(16)*instanceEyes.w;
     return offset;
   }
+  // A heavier person's arms hang out away from their sides, rather than swinging through their hips. Everything from the
+  // shoulder down (personVertex.x, negative) moves out along the way their chest faces, as far as the Weight shape key
+  // widens their body — after they're posed, as the shape keys and the bones leave the arms where a thin person's are.
+  vec3 personArms(vec3 posed, float restX) {
+    float spread = max(-personVertex.x, 0.0)*personTrait(0).w*${PERSON_ARM_SPREAD.toFixed(3)};
+    if (spread <= 0.0) return posed;
+    vec3 sideways = normalize(mat3(personBone(personChestBone))*vec3(1.0, 0.0, 0.0));
+    return posed + sideways*(restX < 0.0 ? -spread : spread);
+  }
 `;
 // Adds the posing and shape keys to a material's shaders, and how it colors the figure. `look`: `femaleOnly`, the slots only
 // drawn for women; and, unless it's the shadow's depth material, `palette` (each slot's own color), `traitColors` (the
@@ -326,7 +341,7 @@ function injectPersonShader(shader, uniforms, look) {
     .replace('#include <common>', '#include <common>\n' + PERSON_VERTEX_PARS
       + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : ''))
     .replace('#include <begin_vertex>', `#include <begin_vertex>
-      transformed = personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz);
+      transformed = personArms(personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz), transformed.x);
       int personSlotIndex = int(personVertex.y + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
@@ -404,12 +419,20 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const headBone = boneByName.get('Head');
   const inHead = bones.map(bone => { for (let b = bone; b; b = b.parent) if (headBone != null && b === bones[headBone]) return true; return false; });
   const headPivot = headBone != null ? bones[headBone].getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
+  // the arm bones, by name — the rig doesn't hang them off each other (a hand is posed where its own bone puts it, not
+  // where the arm leaves it), so there's no chain to walk down from the shoulder. The whole arm, shoulder included, moves
+  // out together: the Weight shape key widens the body by about as much at the shoulders as at the hips, and the skin
+  // weights carry the arm into the body at the armpit on their own. The chest, which the shoulders hang from, says which
+  // way sideways is once they're posed.
+  const isArmBone = /^(Shoulder|Elbow|Hand|Wrist|Finger|Thumb|Little|Middle)/;
+  const inArm = bones.map(bone => isArmBone.test(bone.name));
+  const chestBone = boneIndex.get(bones[boneByName.get('ShoulderL') ?? 0].parent) ?? 0;
 
   // ---- the body, in the rest pose, as one mesh: every part's vertices with the bones moving them, which part they are,
   // and each shape key's offsets. A mesh riding on a bone rather than rigged (the head) moves with that bone alone. A mesh
   // that's only one side of the body — Blender's Mirror modifier isn't applied when the model's exported, as a mesh with
   // shape keys can't have its modifiers applied — gets its other side here, flipped across X onto the other side's bones.
-  const positions = [], joints = [], weights = [], headWeights = [], slots = [], indices = [];
+  const positions = [], joints = [], weights = [], headWeights = [], armWeights = [], slots = [], indices = [];
   const offsets = PERSON_SHAPE_KEYS.map(() => []);
   const toModel = new THREE.Matrix4(), toModelLinear = new THREE.Matrix3(), v = new THREE.Vector3();
   const palette = PERSON_SLOTS.map(() => new THREE.Color(0xffffff));
@@ -438,15 +461,17 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
       for (let i=0;i<count;i++) {
         v.set(pos.getX(i)*side, pos.getY(i), pos.getZ(i)).applyMatrix4(toModel);
         positions.push(v.x, v.y, v.z);
-        let headWeight = 0;
+        let headWeight = 0, armWeight = 0;
         for (let k=0;k<4;k++) {
           const own = mesh.isSkinnedMesh ? ownBones[skinIndex.getComponent(i, k)] : k === 0 ? boneIndex.get(bone) : 0;
           const joint = side < 0 ? mirrorBone[own] : own, weight = mesh.isSkinnedMesh ? skinWeight.getComponent(i, k) : k === 0 ? 1 : 0;
           joints.push(joint);
           weights.push(weight);
           if (inHead[joint]) headWeight += weight;
+          else if (inArm[joint]) armWeight += weight;
         }
         headWeights.push(Math.min(1, headWeight));
+        armWeights.push(Math.min(1, armWeight));
         slots.push(slot);
         keyTargets.forEach((target, key) => {
           if (target) v.set(target.getX(i)*side, target.getY(i), target.getZ(i)).applyMatrix3(toModelLinear); else v.set(0, 0, 0);
@@ -483,7 +508,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     }
   });
   const vertexData = new Float32Array(vertexCount*4);
-  for (let i=0;i<vertexCount;i++) vertexData.set([headWeights[i], slots[i], morphMask[i], i], i*4);
+  for (let i=0;i<vertexCount;i++) vertexData.set([headWeights[i] || -armWeights[i], slots[i], morphMask[i], i], i*4);
   geometry.setAttribute('personVertex', new THREE.BufferAttribute(vertexData, 4));
   const morphTexture = new THREE.DataTexture(morphData, morphWidth, morphRows*PERSON_SHAPE_KEYS.length, THREE.RGBAFormat, THREE.FloatType);
   morphTexture.needsUpdate = true;
@@ -660,7 +685,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     personBones: { value: boneTexture }, personBonesSize: { value: new THREE.Vector2(boneWidth, boneRows) },
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
     personTraits: { value: traitTexture },
-    personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot },
+    personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personChestBone: { value: chestBone },
   };
   const traitRow = part => 2 + PERSON_TRAIT_COLORS.indexOf(part);
   const bodyLook = {
