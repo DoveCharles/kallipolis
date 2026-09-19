@@ -170,7 +170,7 @@ const PERSON_BODY_KEY_COUNT = 5;
 // each person's shape keys by sex, as [lowest, highest]
 const PERSON_BODY_SHAPES = {
   male:   { Breast: [0.6, 1],  Waist: [0.5, 1],    Hips: [-1, -0.5],   Weight: [0, 1],   Butt: [1, 1] },
-  female: { Breast: [-1, 0.1], Waist: [-0.5, 0.1], Hips: [-0.4, 0.2], Weight: [0, 0.3], Butt: [0, 0.6] },
+  female: { Breast: [-1, 0.1], Waist: [-0.5, 0.1], Hips: [-0.4, 0.2], Weight: [0, 1],   Butt: [0, 0.6] },
 };
 // each person's head and eye shape keys, as [lowest, highest] — or, where men's and women's differ, one of those for each
 const PERSON_FACE_SHAPES = { 'Key 1': { male: [0, 1], female: [-0.3, 0] }, 'Key 2': [-0.5, 0.3], Shape1: [-0.2, 1], Shape2: [0, 1], Shape3: [0, 1] };
