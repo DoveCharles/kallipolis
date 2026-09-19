@@ -138,6 +138,20 @@ function bakeNode(node) {
   return geometry;
 }
 const sizeOf = geometry => geometry.boundingBox.getSize(new THREE.Vector3());
+// The biggest part of a node, in the same space bakeNode leaves it in: for the hive that's the hive itself rather than
+// the cord it hangs from, which runs on as far up as the model likes so that it always reaches into the leaves.
+function biggestPart(node) {
+  node.updateMatrixWorld(true);
+  let biggest = null, most = -1;
+  node.traverse(o => {
+    if (!o.isMesh) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    const box = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);
+    const size = box.getSize(V), room = size.x*size.y*size.z;
+    if (room > most) { most = room; biggest = box; }
+  });
+  return biggest;
+}
 // Where a bee settles on a flower: the middle of whatever is in its top fifth, which is the blossom rather than the stem.
 function perchOf(geometry) {
   const pos = geometry.attributes.position, box = geometry.boundingBox;
@@ -234,13 +248,20 @@ export async function loadBeeModel() {
       geometry.scale(FLOWER_HEIGHT/tallest, FLOWER_HEIGHT/tallest, FLOWER_HEIGHT/tallest);
       geometry.computeBoundingBox();
     });
-    // the hive hangs, so its origin goes at the top of it — that's the point that meets the branch
-    const hive = bakeNode(node('Hive'));
-    const hiveScale = HIVE_HEIGHT/sizeOf(hive).y;
-    const hiveBox = hive.boundingBox, hiveMid = hiveBox.getCenter(new THREE.Vector3());
-    hive.translate(-hiveMid.x, -hiveBox.max.y, -hiveMid.z);
+    // The hive hangs, so its origin goes at the top of it — that's the point that meets the branch, and the cord carries
+    // on above it into the canopy. Both the size and that point are taken from the hive's body alone: the cord is drawn
+    // long on purpose, and measuring it as well would shrink the hive itself to whatever was left over.
+    const hiveNode = node('Hive');
+    const hive = bakeNode(hiveNode);
+    const hiveBody = biggestPart(hiveNode);
+    const hiveScale = HIVE_HEIGHT/hiveBody.getSize(new THREE.Vector3()).y;
+    const hiveMid = hiveBody.getCenter(new THREE.Vector3());
+    hive.translate(-hiveMid.x, -hiveBody.max.y, -hiveMid.z);
     hive.scale(hiveScale, hiveScale, hiveScale);
     hive.computeBoundingBox();
+    // and the card frames the body rather than all that cord
+    hive.userData.frame = hiveBody.clone().translate(new THREE.Vector3(-hiveMid.x, -hiveBody.max.y, -hiveMid.z))
+      .applyMatrix4(new THREE.Matrix4().makeScale(hiveScale, hiveScale, hiveScale));
     // the bee, centered on itself and turned to face +Z like everything else here that moves under its own steam; it's
     // modelled head-along-+X, so that's a quarter turn the other way, and it leaves the wings reaching out along ±X
     const bee = bakeNode(node('Bee'));
@@ -250,8 +271,10 @@ export async function loadBeeModel() {
     bee.translate(-beeMid.x, -beeMid.y, -beeMid.z);
     bee.scale(beeScale, beeScale, beeScale);
     bee.rotateY(-Math.PI/2);
-    bee.computeBoundingBox();
     moveShapes(bee, new THREE.Matrix4().makeRotationY(-Math.PI/2).multiply(new THREE.Matrix4().makeScale(beeScale, beeScale, beeScale)));
+    bee.computeBoundingBox(); // only once the shape keys have been scaled along with it: three.js grows the box to hold
+    // however far they reach, and at the size they arrive in that's a box three times around the bee — which is what the
+    // card's thumbnail frames, and why it sat so far back
     // which shape key is which, by name and whatever order they came out of the file in; a missing one is simply never
     // driven, so an export without the legs in it still flies and still flaps
     const shapes = bee.userData.shapes.map(name => name.toLowerCase());
@@ -269,13 +292,27 @@ export async function loadBeeModel() {
 // still bee is posed mid-beat with its legs out rather than left at the shape keys' zero, which would have its wings
 // straight up and nothing to stand on.
 const THUMBNAIL_POSE = { flap: 0.45, legs: 1, look: 0, land: 0 };
+// what a geometry fills once its shape keys are turned up as far as this pose turns them
+function posedBox(geometry, influences) {
+  const pos = geometry.attributes.position, shapes = geometry.morphAttributes.position || [];
+  const box = new THREE.Box3();
+  for (let i=0;i<pos.count;i++) {
+    V.fromBufferAttribute(pos, i);
+    shapes.forEach((d, m) => { const by = influences ? influences[m] : 0; if (by) V.addScaledVector(N.fromBufferAttribute(d, i), by); });
+    box.expandByPoint(V);
+  }
+  return box;
+}
 function thumbnailOf(geometry) {
   if (!geometry) return null; // (no thumbnail before the model has loaded)
-  const box = geometry.boundingBox, center = box.getCenter(new THREE.Vector3());
-  const radius = box.getBoundingSphere(new THREE.Sphere()).radius;
   const mesh = new THREE.Mesh(geometry, [solidMaterial, clearMaterial]);
   if (mesh.morphTargetInfluences && model) Object.entries(THUMBNAIL_POSE)
     .forEach(([key, value]) => { if (model.shape[key] >= 0) mesh.morphTargetInfluences[model.shape[key]] = value; });
+  // framed on the pose it's drawn in rather than on the geometry's own box, which three.js grows to hold every shape
+  // key at once — all of them at full stretch and at the same time, which is a good deal more room than a bee takes up
+  const box = geometry.userData.frame || posedBox(geometry, mesh.morphTargetInfluences);
+  const center = box.getCenter(new THREE.Vector3());
+  const radius = box.getBoundingSphere(new THREE.Sphere()).radius;
   mesh.position.sub(center);
   const elevation = Math.atan(1/Math.SQRT2), azimuth = Math.PI/4, distance = radius*4;
   const view = new THREE.OrthographicCamera(-radius, radius, radius, -radius, 0.1, distance*2);
