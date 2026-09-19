@@ -55,6 +55,7 @@ const HOUSE_GLASS_COLOR = 0x2f3d49, HOUSE_GLASS_LIT = 0xffd7a0;
 
 const SUBURB_GROUND_COLOR = 0x9b968c;   // the ground between the plots, where the pavement and driveways run
 const PLOT_MIN_DIM = 15;    // narrowest a plot is ever split to: a house is 11 across, and turning it needs room either side
+const PLOT_MIN_ROOM = HOUSE_WIDTH*0.5;  // a plot with nowhere to fit a circle this wide can't hold a house turned any way at all
 const PLOT_MARGIN = 1.2;    // gap left between a plot and whatever it was cut from
 const FRONT_SETBACK = 4;    // the front garden: how much plot a house leaves between itself and the street side of it
 const PLACE_TRIES = 6;      // steps back toward the middle of the plot before giving up on fitting a house in
@@ -283,47 +284,55 @@ export function generateSuburbsContent(zone, poly, cutouts, blockers) {
   if (ground) zone.buildingsGroup.add(ground);
   const boundary = s.borderSetback>0 ? insetPolygon(poly, s.borderSetback) : poly;
   if (boundary.length < 3) return;
+  // The roads and the zones above are taken out first, and each block they leave behind is then split on its own. Laid
+  // the other way round — one grid of plots over the whole zone, sliced by the roads afterwards — every road left a row
+  // of offcuts down its side: strips too narrow ever to hold a house, each still drawing a lawn and a hedge of its own.
   // Plots are lots by another name, only never split below PLOT_MIN_DIM across: a house wants room to turn on the spot
   // without its corners leaving the plot, whichever way the road runs.
+  const blocks = App.cutLotByCutouts(boundary, blockers).pieces
+    .filter(b => b.length >= 3 && App.insetPolygonExact(b, PLOT_MARGIN + PLOT_MIN_ROOM).length > 0);
+  if (!blocks.length) return;
   const targetPlots = Math.max(1, Math.round(s.suburbPlots!=null ? s.suburbPlots : 40));
-  const plotArea = Math.abs(polygonArea(boundary))/targetPlots;
+  // taken over the blocks rather than the whole zone, so the ground the roads cover doesn't count toward the plot count
+  const plotArea = blocks.reduce((a, b) => a + Math.abs(polygonArea(b)), 0)/targetPlots;
   const lots = [];
-  recursiveSubdivide(boundary, 0, { minArea: plotArea, maxDepth: 9, jitter: 0.3, minSplitDim: PLOT_MIN_DIM }, layoutRng, lots);
+  blocks.forEach(block => recursiveSubdivide(block, 0, { minArea: plotArea, maxDepth: 9, jitter: 0.3, minSplitDim: PLOT_MIN_DIM }, layoutRng, lots));
   const streets = streetSegmentsNear(poly);
   // shrunk a hair so a house merely touching a cut-out's edge doesn't count as in it
   const inBlocker = App.createRegionTester(blockers.length ? App.offsetPaths(blockers, -0.01, ClipperLib.JoinType.jtMiter) : []);
   const tint = resolveParkTint(zone), noise = resolveGrassNoiseStrength(zone);
   const drives = createMeshBuilder(), hedges = createMeshBuilder();
   const density = s.suburbDensity!=null ? s.suburbDensity : 0.9;
-  lots.forEach((lot, li) => {
-    App.cutLotByCutouts(lot, blockers).pieces.forEach((piece, pi) => {
-      if (Math.abs(polygonArea(piece)) < plotArea*0.15) return;
-      // Each plot draws from its own stream, keyed to where it sits rather than how far down the list it is, so a plot
-      // going from built to empty can't reshuffle the ones after it — the same reasoning as a Buildings zone's lots.
-      const rng = mulberry32(((s.seed>>>0) ^ Math.imul(li+1, 0x9E3779B1) ^ Math.imul(pi+1, 0x85EBCA6B)) >>> 0);
-      App.insetPolygonExact(piece, PLOT_MARGIN).forEach(plot => {
-        if (plot.length < 3 || Math.abs(polygonArea(plot)) < 16) return;
-        const lawn = makeParkMesh(plot, tint, noise, null, null, 0, LAWN_BIAS);
-        if (lawn) zone.buildingsGroup.add(lawn);
-        const street = streetFor(centroid(plot), streets);
-        const design = designs && rng() < density ? designs[Math.floor(rng()*designs.length)] : null;
-        const spot = design && street ? placeHouse(plot, design.half, street, inBlocker) : null;
-        let drive = null;
-        if (spot) {
-          const group = houseMesh(design, paintFor(rng), rng() < HOUSE_LIT_CHANCE);
-          group.name = 'Building';
-          group.userData.buildingKind = 'house'; // what its card says about it: see building-types.js
-          group.position.set(spot.at.x, Y_PARK, spot.at.z);
-          group.rotation.y = spot.yaw;
-          // its own corners and its height, kept on it so people can find a door on its wall and go in (see
-          // buildingDoors in people.js) and so it stops being drawn when the camera's inside it (see see-through.js)
-          group.userData.footprint = houseOutline(spot.at, spot.yaw, design.half).slice(0, 4);
-          group.userData.height = design.height;
-          zone.buildingsGroup.add(group);
-          drive = frontPath(spot, design.half, piece, inBlocker, drives);
-        }
-        if (s.suburbHedges !== false) hedgeRound(plot, drive, hedges, rng);
-      });
+  lots.forEach(lot => {
+    App.insetPolygonExact(lot, PLOT_MARGIN).forEach(plot => {
+      if (plot.length < 3) return;
+      // What's left over at the awkward corners of a block is left as bare zone ground, which reads as the verge it is.
+      if (!App.insetPolygonExact(plot, PLOT_MIN_ROOM).length) return;
+      // Each plot draws from its own stream, keyed to the ground it stands on rather than to how far down the list it
+      // is, so a plot going from built to empty can't reshuffle the ones after it — the same reasoning as a Buildings
+      // zone's lots — and a plot keeps the house it had across an edit to the road beside it.
+      const key = centroid(plot);
+      const rng = mulberry32(((s.seed>>>0) ^ Math.imul(Math.round(key.x*4), 0x9E3779B1) ^ Math.imul(Math.round(key.z*4), 0x85EBCA6B)) >>> 0);
+      const lawn = makeParkMesh(plot, tint, noise, null, null, 0, LAWN_BIAS);
+      if (lawn) zone.buildingsGroup.add(lawn);
+      const street = streetFor(centroid(plot), streets);
+      const design = designs && rng() < density ? designs[Math.floor(rng()*designs.length)] : null;
+      const spot = design && street ? placeHouse(plot, design.half, street, inBlocker) : null;
+      let drive = null;
+      if (spot) {
+        const group = houseMesh(design, paintFor(rng), rng() < HOUSE_LIT_CHANCE);
+        group.name = 'Building';
+        group.userData.buildingKind = 'house'; // what its card says about it: see building-types.js
+        group.position.set(spot.at.x, Y_PARK, spot.at.z);
+        group.rotation.y = spot.yaw;
+        // its own corners and its height, kept on it so people can find a door on its wall and go in (see
+        // buildingDoors in people.js) and so it stops being drawn when the camera's inside it (see see-through.js)
+        group.userData.footprint = houseOutline(spot.at, spot.yaw, design.half).slice(0, 4);
+        group.userData.height = design.height;
+        zone.buildingsGroup.add(group);
+        drive = frontPath(spot, design.half, lot, inBlocker, drives);
+      }
+      if (s.suburbHedges !== false) hedgeRound(plot, drive, hedges, rng);
     });
   });
   const driveMesh = builderMesh(drives, DRIVE_COLOR, 'Driveway', { polygonOffset: true, polygonOffsetFactor: DRIVE_BIAS, polygonOffsetUnits: DRIVE_BIAS });
