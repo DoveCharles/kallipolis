@@ -38,6 +38,9 @@ const BEE_MODEL_URL = 'assets/models/Bee.glb';
 const FLOWER_HEIGHT = 0.42;   // how tall the tallest of the three flowers stands, in world units; the others keep their proportion to it
 const HIVE_HEIGHT = 0.6;
 const BEE_LENGTH = 0.26;      // nose to tail
+// The bee's body in the people's own yellow rather than the model's, which is a shade off it: the Person model's
+// Skin material, as it's drawn (people.js reads that material and converts it the same way — see its palette).
+const BEE_BODY_MATERIAL = /^bee\s*1$/i, BEE_BODY_COLOR = 0xffeb2b;
 
 const FLOWER_CLUSTERS_MAX = 22;                        // clumps of flowers in a park at Foliage 1 (one clump at Foliage 0)
 const FLOWER_CLUSTER_MIN = 1, FLOWER_CLUSTER_MAX = 10; // flowers in a clump
@@ -154,6 +157,48 @@ function moveShapes(geometry, matrix) {
   (geometry.morphAttributes.normal || []).forEach(a => a.applyMatrix3(R3));
 }
 
+// Smooth shading for the bee. The model comes over flat-shaded — a normal a face, with a face's corners split off into
+// vertices of their own — which on something this small reads as a handful of facets catching the light one at a time.
+// Averaging the normals of everything that meets at a point rounds it off instead, the way Blender's own shade-smooth
+// does. Two vertices only count as the same point if every shape key leaves them in the same place as well, so the
+// wings, which move where the body doesn't, don't drag the body's shading around with them through a beat. A shape
+// key's normal offsets are averaged the same way, on the shape that key describes, and written back as the difference
+// from the smoothed base normal, which is what they were and what the shader adds them to.
+function smoothShade(geometry) {
+  const pos = geometry.attributes.position, nor = geometry.attributes.normal;
+  const shapePositions = geometry.morphAttributes.position || [], shapeNormals = geometry.morphAttributes.normal || [];
+  const round = v => Math.round(v*1e4); // a place to a ten-thousandth, so vertices meant to be together find each other
+  const groups = new Map();
+  for (let i=0;i<pos.count;i++) {
+    let key = `${round(pos.getX(i))},${round(pos.getY(i))},${round(pos.getZ(i))}`;
+    shapePositions.forEach(d => { key += ` ${round(d.getX(i))},${round(d.getY(i))},${round(d.getZ(i))}`; });
+    const group = groups.get(key);
+    if (group) group.push(i); else groups.set(key, [i]);
+  }
+  const sum = new THREE.Vector3(), one = new THREE.Vector3(), base = new THREE.Vector3();
+  // where a group of vertices points between them, either as they stand or as one shape key leaves them
+  const average = (group, offsets) => {
+    sum.set(0, 0, 0);
+    group.forEach(i => {
+      one.fromBufferAttribute(nor, i);
+      if (offsets) one.set(one.x + offsets.getX(i), one.y + offsets.getY(i), one.z + offsets.getZ(i));
+      sum.add(one.normalize());
+    });
+    if (sum.lengthSq() < 1e-10) sum.fromBufferAttribute(nor, group[0]); // a part with a face each way: leave it be
+    return sum.normalize();
+  };
+  groups.forEach(group => {
+    base.copy(average(group, null)); // read before anything is written back: the shapes' averages are built on it
+    shapeNormals.forEach(offsets => {
+      const smoothed = average(group, offsets);
+      group.forEach(i => offsets.setXYZ(i, smoothed.x - base.x, smoothed.y - base.y, smoothed.z - base.z));
+    });
+    group.forEach(i => nor.setXYZ(i, base.x, base.y, base.z));
+  });
+  nor.needsUpdate = true;
+  shapeNormals.forEach(a => { a.needsUpdate = true; });
+}
+
 // Solid and see-through halves of anything out of this model. Both take their color from the vertices, so one pair does
 // for the flowers, the hives, the bees and the cards' thumbnails, and neither is ever disposed — every mesh that uses
 // them is marked shared, so a park rebuilding doesn't take the shader program down with it (see disposeObject). The bees
@@ -171,6 +216,9 @@ export async function loadBeeModel() {
     return;
   }
   try {
+    // the body's color, before any of it is baked into vertex colors
+    gltf.scene.traverse(o => (Array.isArray(o.material) ? o.material : [o.material])
+      .forEach(mat => { if (mat && BEE_BODY_MATERIAL.test(mat.name || '')) mat.color.setHex(BEE_BODY_COLOR); }));
     // (three.js puts underscores in place of the spaces in a glTF node's name, so "Flower 1" arrives as "Flower_1")
     const node = name => {
       const o = gltf.scene.getObjectByName(name) || gltf.scene.getObjectByName(name.replace(/\s+/g, '_'));
@@ -196,6 +244,7 @@ export async function loadBeeModel() {
     // the bee, centered on itself and turned to face +Z like everything else here that moves under its own steam; it's
     // modelled head-along-+X, so that's a quarter turn the other way, and it leaves the wings reaching out along ±X
     const bee = bakeNode(node('Bee'));
+    smoothShade(bee);
     const beeScale = BEE_LENGTH/sizeOf(bee).x;
     const beeMid = bee.boundingBox.getCenter(new THREE.Vector3());
     bee.translate(-beeMid.x, -beeMid.y, -beeMid.z);
