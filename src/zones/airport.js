@@ -918,7 +918,7 @@ function flyByHand(flight, dt) {
   // W climbs and S dives — the way round a stick isn't, but the way round W is for everything else you can take hold of here
   hand.pitch = forward ? Math.max(-FLY_PITCH_MAX, Math.min(FLY_PITCH_MAX, hand.pitch + forward*FLY_PITCH_RATE*dt))
     : toward(hand.pitch, 0, FLY_LEVEL);
-  hand.bank = right ? Math.max(-FLY_BANK_MAX, Math.min(FLY_BANK_MAX, hand.bank + right*FLY_BANK_RATE*dt))
+  hand.bank = right ? Math.max(-FLY_BANK_MAX, Math.min(FLY_BANK_MAX, hand.bank - right*FLY_BANK_RATE*dt))
     : toward(hand.bank, 0, FLY_LEVEL);
   // too slow to hold the nose up, and it drops whatever the stick says
   const cruise = FLY_SPEED*scale, stall = FLY_SPEED_MIN*scale;
