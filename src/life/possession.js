@@ -9,11 +9,13 @@ import { IS_TOUCH } from '../core/device.js';
 // here. Esc lets go, leaving the camera following as before; anything that stops the camera following lets go too.
 // Either way the mouse looks around — the pointer locked to the view while it does, or dragged, where the browser won't
 // lock it (Esc also frees a locked pointer, which is taken as Esc).
-// - someone (clicking the person card's headshot): the view from their eyes, WASD to walk them about (shift to run)
+// - someone (clicking the person card's headshot): the view from their eyes, WASD to walk them about (shift to run), and
+//   a click to swing a fist at whoever's in front of them (people.js lands it)
 // - a car (clicking the car card's picture): the view from behind it, WASD to drive (shift for a boost, space to brake),
 //   the mouse swinging the camera round it (and back behind, a moment after it's left alone), the wheel to zoom
 // On touch there's no pointer to lock and no keys to hold: a finger dragged across the view looks around instead, and the
-// thumbstick and buttons src/ui/mobile.js puts on screen are held down in place of WASD.
+// thumbstick and buttons src/ui/mobile.js puts on screen are held down in place of WASD — one of them the click, since
+// a tap on the view is already the start of a look.
 const dom = renderer.domElement;
 const hint = document.getElementById('possess-hint'), hintTitle = document.getElementById('ph-title'), hintSub = document.getElementById('ph-sub');
 const hintExit = document.getElementById('ph-exit');
@@ -38,7 +40,8 @@ export function startPossession(i, heading) {
   possession.pitch = -0.1;
   held.clear();
   showHint(IS_TOUCH ? 'First person' : 'Press <kbd>Esc</kbd> to exit first person',
-    IS_TOUCH ? 'Stick to walk · Run to run · drag to look' : 'WASD to walk · Shift to run · mouse to look');
+    IS_TOUCH ? 'Stick to walk · Run to run · Punch to swing · drag to look'
+              : 'WASD to walk · Shift to run · click to punch · mouse to look');
   lockPointer(); // (a click is what lets it lock, and this runs from one)
   return true;
 }
@@ -48,7 +51,7 @@ export function endPossession() {
   if (possession.index < 0) return;
   possession.index = -1;
   held.clear();
-  lookPointer = null;
+  lookPointer = null; pressedAt = null;
   hint.hidden = true;
   unlockPointer();
 }
@@ -67,7 +70,7 @@ export function endDriving() {
   if (!driving.active) return;
   driving.active = false;
   held.clear();
-  lookPointer = null;
+  lookPointer = null; pressedAt = null;
   hint.hidden = true;
   unlockPointer();
 }
@@ -104,14 +107,32 @@ document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement === dom) return;
   if (isPossessing()) App.unpossessPerson(); else if (driving.active) App.stopDriving();
 });
-// clicking the view while in control picks no one, but locks the pointer to it (again) — or, on touch, starts looking around
+// Clicking the view while in control picks no one. Possessing someone, the left button throws a punch; driving, and
+// wherever the pointer won't lock, it goes on locking the pointer to the view instead. On touch it starts looking around.
+const CLICK_SLOP = 5; // how far a press can move and still be a click rather than a drag, in pixels
 let lookPointer = null; // the finger doing the looking: { id, x, y }
+let pressedAt = null;   // where a left press landed while the pointer wasn't locked: see the pointerup below
 dom.addEventListener('pointerdown', (e) => {
   if (!inControl()) return;
   e.stopImmediatePropagation();
-  if (e.pointerType === 'mouse') lockPointer();
-  else if (!lookPointer) lookPointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  if (e.pointerType !== 'mouse') {
+    if (!lookPointer) lookPointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    return;
+  }
+  if (e.button !== 0) return; // (the right button is nothing in here)
+  if (document.pointerLockElement === dom) { if (isPossessing()) App.punchFromPossession(); return; }
+  pressedAt = { x: e.clientX, y: e.clientY };
+  lockPointer();
 }, true);
+// Where the pointer wouldn't lock — a browser that won't, or one holding the request off for a moment after the last Esc
+// — the mouse looks around by dragging, so the punch can't be thrown on the press: it's a press that didn't drag, and
+// that didn't win the lock either (the click that locks the pointer back to the view only does that).
+window.addEventListener('pointerup', (e) => {
+  if (!pressedAt) return;
+  const moved = Math.hypot(e.clientX - pressedAt.x, e.clientY - pressedAt.y);
+  pressedAt = null;
+  if (moved < CLICK_SLOP && isPossessing() && document.pointerLockElement !== dom) App.punchFromPossession();
+});
 function look(dx, dy) {
   if (driving.active) {
     controls.orbit(dx, dy);

@@ -2052,6 +2052,7 @@ function possessPerson(i) {
   p.crossStage = null; p.jc = null; p.fright = p.stun = p.please = null; p.oneShot = null;
   p.mode = 'possessed';
   p.onRoad = false;
+  swing = null;
   if (!startPossession(i, p.heading + (p.traits.backwards ? Math.PI : 0))) { p.mode = 'wander'; reseatPerson(p); return; }
   cameraNear = camera.near;
   camera.near = EYE_NEAR;
@@ -2061,6 +2062,7 @@ function unpossessPerson() {
   if (possession.index < 0) return;
   const i = possession.index, p = people[i];
   endPossession();
+  swing = null;
   camera.near = cameraNear;
   camera.updateProjectionMatrix();
   if (!p || p.mode !== 'possessed') return;
@@ -2097,6 +2099,36 @@ function placePossessedCamera(i) {
   if (personModel) camera.position.copy(headshotOf(i).head);
   else camera.position.set(p.x, p.y + personHeight(p)*0.92, p.z);
   camera.rotation.set(possession.pitch, possession.yaw + Math.PI, 0, 'YXZ');
+}
+
+// ---- throwing a punch yourself: possessing someone, a click swings their fist at whoever's in front of them (the click
+// itself is possession.js's). Nobody's walked up to and nobody's stared at afterwards, unlike someone picking a fight of
+// their own (see "punching"): the swing plays out wherever they're standing, and lands on whoever's nearest within reach
+// ahead of them when the fist arrives — knocking them flat, as any punch does — or on nobody at all, which is a miss.
+const SWING_REACH = 1.9;                // how far ahead (at people size 1) the fist reaches
+const SWING_ARC = Math.cos(Math.PI/3);  // how near dead ahead of them whoever takes it has to be
+let swing = null; // the punch being thrown: { timer } — how long until the fist lands
+function punchFromPossession() {
+  const p = people[possession.index];
+  if (!p || p.mode !== 'possessed' || swing || !hasClip('Punch') || !hasClip('Fall')) return;
+  swing = { timer: PUNCH_HIT_TIME };
+  playOnce(p, 'Punch');
+}
+// the swing, each frame: when the fist lands, whoever's in front of them takes it
+function updateSwing(p, dt) {
+  if (!swing || (swing.timer -= dt) > 0) return;
+  swing = null;
+  const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
+  let hit = null, nearest = SWING_REACH*S.peopleSize;
+  people.forEach(q => {
+    if (q === p || isGone(q) || !isFairGame(q)) return;
+    const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
+    if (d > nearest || d < 1e-3 || (dx*fx + dz*fz)/d < SWING_ARC) return;
+    hit = q; nearest = d;
+  });
+  if (!hit) return;
+  hit.punched = { by: p, stage: 'brace', timer: 0 };
+  knockDown(hit, p);
 }
 
 // ---- riding the trains: someone walking past a train station — one standing in the plaza or park they're in, or near
@@ -2495,7 +2527,7 @@ export function updatePeople(t) {
       goal = updateAttack(p, dt);
       if (p.attack?.stage === 'chase') speed *= PUNCH_CHASE_SPEED;
     }
-    if (possessed) goal = walkPossessed(p, dt);
+    if (possessed) { goal = walkPossessed(p, dt); updateSwing(p, dt); }
     if (p.mode === 'leaving') {
       // already placed on their walkway by joinWalkway; once they've reached it they carry on along it
       goal = frozen ? null : p.exit;
@@ -2684,4 +2716,4 @@ export function updatePeople(t) {
 }
 
 // (people and groups too, for poking at from the browser console)
-Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, killPerson, people, peopleGroups: groups });
+Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, people, peopleGroups: groups });
