@@ -859,8 +859,12 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
 }
 // `cutouts` (optional Clipper paths): areas to leave out of the surface — roads, and zones higher up the zone list (see
 // "zone cut-outs"). Returns null if nothing is left.
-export function makeFlatZoneMesh(poly, color, y, name, customShader, cutouts) {
-  const mat = new THREE.MeshStandardMaterial({ color, roughness:1, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 });
+// `depthBias` (default -2) is the polygon offset that decides which of two surfaces at nearly the same height wins: the
+// world Y layers are only hundredths apart, which the depth buffer can't tell apart once the camera pulls back, so a
+// surface meant to lie on top of another flat one needs a bias below the one underneath it (see the Fields in farmland.js).
+export function makeFlatZoneMesh(poly, color, y, name, customShader, cutouts, depthBias) {
+  const bias = depthBias != null ? depthBias : -2;
+  const mat = new THREE.MeshStandardMaterial({ color, roughness:1, polygonOffset:true, polygonOffsetFactor:bias, polygonOffsetUnits:bias });
   if (customShader) customShader(mat);
   let mesh;
   if (cutouts && cutouts.length) {
