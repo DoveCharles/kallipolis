@@ -6,7 +6,7 @@ import { DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { createMeshBuilder, disposeObject } from '../roads/roads.js';
 import { makeFlatZoneMesh } from '../zones/surface-detail.js';
 import { WATER_COLOR, WATER_LEVEL, WATER_BANK_TOP, WATER_BANK_BOTTOM, WATER_BANK_COLOR, applyWaterShader } from '../water/water.js';
-import { WALKWAY_TEXTURES, makeWalkwayMaterial, pathFadeWidth } from '../roads/paths.js';
+import { WALKWAY_TEXTURES, makeWalkwayMaterial, pathFadeWidth, defaultWalkwayTextureScale } from '../roads/paths.js';
 import { toClipperPath, subdivideZone } from '../zones/cutouts.js';
 import { updateStats } from './panels.js';
 
@@ -180,7 +180,7 @@ function renderWalkwayThumbnails(color) {
       };
       const halfWidth = texture.id === 'dirt' ? SAMPLE*0.22 : 0;
       if (texture.id === 'dirt') plane(Y_ZONE_GROUND, new THREE.MeshStandardMaterial({ color: BUILDING_GROUND_COLORS[0], roughness: 1 }));
-      plane(Y_PATH, makeWalkwayMaterial({ texture: texture.id, color, scale: 1, rotation: 0, halfWidth,
+      plane(Y_PATH, makeWalkwayMaterial({ texture: texture.id, color, scale: defaultWalkwayTextureScale(texture.id), rotation: 0, halfWidth, // each sample at the size that texture starts at
         segments: [[cx - SAMPLE, cz, cx + SAMPLE, cz]], fade: pathFadeWidth(halfWidth) }));
       scene.add(group);
       camera.position.set(cx, 50, cz);

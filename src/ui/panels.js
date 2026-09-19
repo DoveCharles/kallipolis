@@ -3,7 +3,7 @@ import { scene } from '../core/scene.js';
 import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, SAND_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
 import { roadNodes, MAX_TARGET_LOTS } from '../core/state.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
-import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes, refreshRoadAppearance, walkwayTextureChangeNeedsRebuild } from '../roads/paths.js';
+import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes, refreshRoadAppearance, walkwayTextureChangeNeedsRebuild, defaultWalkwayTextureScale, walkwayTextureScaleOf } from '../roads/paths.js';
 import { networkKindOf, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
@@ -717,7 +717,7 @@ function renderDetails() {
     const isWalkway = isWalkwayLine(lines[0]), isRiver = isRiverLine(lines[0]);
     const curWalkwayColor = lines[0].walkwayColor!=null ? lines[0].walkwayColor : WALKWAY_COLOR;
     const curWalkwayTexture = lines[0].walkwayTexture || WALKWAY_TEXTURE;
-    const curTextureScale = lines[0].walkwayTextureScale ?? 1, curTextureRotation = lines[0].walkwayTextureRotation ?? 0;
+    const curTextureScale = walkwayTextureScaleOf(lines[0]), curTextureRotation = lines[0].walkwayTextureRotation ?? 0;
     panel.innerHTML = `
       <div class="title-row"><span class="name">${title}</span><button class="close-x" id="d-close">deselect</button></div>
       <div class="empty" style="margin-bottom:10px;">${subtitle}</div>
@@ -760,7 +760,12 @@ function renderDetails() {
     if (isWalkway) {
       App.wireWalkwayTextureCarousel(panel, curWalkwayColor, (texture) => {
         if (texture === curWalkwayTexture) return;
-        lines.forEach(l => { l.walkwayTexture = texture; });
+        // a scale still sitting on the old texture's default follows along to the new one's, so
+        // picking Dirt gives you dirt at the size it's meant to be; a scale someone actually set is theirs
+        lines.forEach(l => {
+          if (l.walkwayTextureScale === defaultWalkwayTextureScale(l.walkwayTexture || WALKWAY_TEXTURE)) l.walkwayTextureScale = undefined;
+          l.walkwayTexture = texture;
+        });
         if (walkwayTextureChangeNeedsRebuild(curWalkwayTexture, texture)) rebuildRoadMeshes(); else refreshRoadAppearance(netId);
         renderDetails();
       });
