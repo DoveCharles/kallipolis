@@ -36,8 +36,9 @@ loves = Standing here
 loves = The little guys who come in n out
 hates = Strong winds
 hates = Ivy
-hates = Being empty at night, apart from uuuuh forget his name
-hates = The dude across the street blocking my sunlight
+hates = Mould
+hates = Being empty at night
+hates = The dude across the street
 
 [landmark]
 name = Tower
@@ -50,8 +51,7 @@ loves = Burning shit (not my fault)
 loves = Suddenly combusting
 hates = The other tall one
 hates = Planes LMAO
-hates = Having to be sooo iconic ALL of the time
-
+hates = Expectations that come with being iconic
 # ============================================================ industrial
 
 [industrial]
@@ -109,7 +109,7 @@ loves = Harboring smuggled slaves
 loves = Being gentrified into a bao bun / 'sushi burrito' stall 
 hates = Being cracked open
 hates = Wind (see: stacking)
-hates = Waiting way toooo long to be moved
+hates = Waiting to be moved
 
 # ============================================================ farmland
 
