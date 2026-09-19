@@ -143,6 +143,10 @@ export function subdivideZone(zone) {
   zone.buildingsGroup = new THREE.Group();
   S.waterDirty = true; // any zone can cut into water, border it, or cross it
   S.peopleNavDirty = true;
+  // what the generators below leave on the zone for people to walk by, cleared first so a zone turned from one type into
+  // another doesn't keep the last one's (see generateSuburbsContent, and walkGaps and doorSetback in buildPeopleNav)
+  zone.walkGaps = null;
+  zone.doorSetback = 0;
 
   if (zone.points.length>=3) {
     const poly = tessellateClosedPath(zone.points);

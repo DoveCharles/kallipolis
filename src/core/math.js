@@ -31,6 +31,8 @@
  * @property {number} maxDepth Hard recursion cap.
  * @property {number} jitter 0..1; how far the split line may wander from the box centre.
  * @property {number} minSplitDim Stop splitting once a piece's long side falls below this.
+ * @property {(a: Vec2, b: Vec2) => void} [onSplit] Called with each cut as it's made, for a caller that wants the lines
+ *   between the pieces as well as the pieces — the lanes between a suburb's plots, say (see generateSuburbsContent).
  */
 
 /**
@@ -324,6 +326,12 @@ export function recursiveSubdivide(poly, depth, opts, rng, out) {
   if (partA.length<3 || partB.length<3 || Math.abs(polygonArea(partA))<1 || Math.abs(polygonArea(partB))<1) {
     out.push(poly); return;
   }
+  // The cut itself, for a caller collecting them: the edges of `partA` lying along the split line. A piece that's concave
+  // across the line comes apart in more than one place at once, so there can be several.
+  if (opts.onSplit) partA.forEach((a, i) => {
+    const b = partA[(i+1)%partA.length], onLine = p => Math.abs((p.x-origin.x)*longDir.x + (p.z-origin.z)*longDir.z) < 1e-4;
+    if (onLine(a) && onLine(b) && Math.hypot(b.x-a.x, b.z-a.z) > 1e-3) opts.onSplit(a, b);
+  });
   recursiveSubdivide(partA, depth+1, opts, rng, out);
   recursiveSubdivide(partB, depth+1, opts, rng, out);
 }

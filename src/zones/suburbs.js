@@ -67,6 +67,7 @@ const DRIVE_COLOR = 0xb0ac9f;  // paving rather than bare ground, so the path of
 // offset below the one under it, the way a farmland field sits over its tracks (see makeFlatZoneMesh).
 const LAWN_BIAS = -3, DRIVE_BIAS = -4;
 const HEDGE_HEIGHT = 0.85, HEDGE_WIDTH = 0.35, HEDGE_COLOR = 0x4a6b33;
+const LANE_JOIN = 0.05;     // how near a lane's end has to come to another lane to be counted as ending on it
 
 // The five designs, baked once when the model loads: null until then, and a suburb generated in the meantime gets its
 // lawns and hedges and no houses, until loadHouseModels re-subdivides it.
@@ -278,8 +279,41 @@ function placeHouse(plot, half, street, inBlocker) {
   return null;
 }
 
+/**
+ * The lanes between the hedges: the lines the subdivision cut along, which are the middles of the gaps it left.
+ *
+ * A plot is its lot inset by PLOT_MARGIN all round, and its hedge stands on its edge — so between two plots cut from the
+ * same piece there's a gap 2*PLOT_MARGIN wide with the cut line down the middle of it, which is a lane people can walk.
+ *
+ * Each cut is broken wherever another one ends part-way along it, and the two keep the one point between them rather than
+ * each rounding its own: the nav grid joins walkways that share a point, so that's what turns a heap of separate lines
+ * into a network people can walk from one end of a block to the other (see buildPeopleNav).
+ * @param {Array<[Vec2, Vec2]>} cuts - the splits, in the order they were made
+ * @returns {Array<[Vec2, Vec2]>} the lanes, meeting at shared points
+ */
+function gapLanes(cuts) {
+  const ends = cuts.flatMap(cut => cut);
+  return cuts.flatMap(([a, b]) => {
+    const dx = b.x-a.x, dz = b.z-a.z, len2 = dx*dx + dz*dz;
+    if (len2 < 1e-6) return [];
+    const at = [{ t: 0, p: a }, { t: 1, p: b }];
+    ends.forEach(p => {
+      const t = ((p.x-a.x)*dx + (p.z-a.z)*dz)/len2;
+      if (t > 1e-4 && t < 1-1e-4 && Math.hypot(p.x - (a.x+dx*t), p.z - (a.z+dz*t)) < LANE_JOIN) at.push({ t, p });
+    });
+    at.sort((m, n) => m.t - n.t);
+    const lanes = [];
+    for (let i=1;i<at.length;i++) if (at[i].t - at[i-1].t > 1e-4) lanes.push([at[i-1].p, at[i].p]);
+    return lanes;
+  });
+}
+
 export function generateSuburbsContent(zone, poly, cutouts, blockers) {
   const s = zone.settings, layoutRng = mulberry32(s.seed>>>0);
+  zone.walkGaps = []; // (filled in below, once the plots are laid out; people walk these — see buildPeopleNav)
+  // How far back from the lane outside it a house stands: its plot's margin, and the front garden behind that. A suburb
+  // has no setback setting to say so with, so it tells the door-finder here instead (see doorReach).
+  zone.doorSetback = PLOT_MARGIN + FRONT_SETBACK;
   const ground = makeFlatZoneMesh(poly, s.groundColor!=null ? s.groundColor : SUBURB_GROUND_COLOR, Y_ZONE_GROUND, 'ZoneGround', null, cutouts);
   if (ground) zone.buildingsGroup.add(ground);
   const boundary = s.borderSetback>0 ? insetPolygon(poly, s.borderSetback) : poly;
@@ -295,8 +329,10 @@ export function generateSuburbsContent(zone, poly, cutouts, blockers) {
   const targetPlots = Math.max(1, Math.round(s.suburbPlots!=null ? s.suburbPlots : 40));
   // taken over the blocks rather than the whole zone, so the ground the roads cover doesn't count toward the plot count
   const plotArea = blocks.reduce((a, b) => a + Math.abs(polygonArea(b)), 0)/targetPlots;
-  const lots = [];
-  blocks.forEach(block => recursiveSubdivide(block, 0, { minArea: plotArea, maxDepth: 9, jitter: 0.3, minSplitDim: PLOT_MIN_DIM }, layoutRng, lots));
+  const lots = [], cuts = [];
+  blocks.forEach(block => recursiveSubdivide(block, 0,
+    { minArea: plotArea, maxDepth: 9, jitter: 0.3, minSplitDim: PLOT_MIN_DIM, onSplit: (a, b) => cuts.push([a, b]) }, layoutRng, lots));
+  zone.walkGaps = gapLanes(cuts);
   const streets = streetSegmentsNear(poly);
   // shrunk a hair so a house merely touching a cut-out's edge doesn't count as in it
   const inBlocker = App.createRegionTester(blockers.length ? App.offsetPaths(blockers, -0.01, ClipperLib.JoinType.jtMiter) : []);

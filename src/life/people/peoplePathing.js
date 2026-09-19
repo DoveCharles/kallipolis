@@ -23,6 +23,11 @@ import { signalRedLeft } from '../../roads/markings.js';
 /** How far a mitre may stretch, as a limit on 1/cos(half the bend): a full U-turn shares its one direction's mitre. */
 const NAV_MITER_LIMIT = 2;
 
+// A suburb's lanes: how far off the middle of one people stray (the hedges either side leave about three quarters of a
+// unit, so this keeps them off the leaves), and how far a lane's mouth may be from a sidewalk to come out onto it — the
+// block stops at the sidewalk's outer edge, so a lane that reaches the pavement is half a sidewalk short of the ring.
+const LANE_LATERAL = 0.45, LANE_TO_SIDEWALK = 8;
+
 /**
  * Work out which way, and how far per unit of lateral offset, a walkway's point `vi` is set off square to the line there.
  * @param {Array<{x: number, z: number}>} pts - the walkway's points
@@ -242,6 +247,27 @@ export function buildPeopleNav() {
       if (handle) pending.push({ li, vi, handle });
     });
   });
+  // the lanes between a suburb's hedges, walked like any other path: laid out with the plots, since they're the gaps
+  // left between them (see gapLanes). They're also what brings a house in the middle of a block within reach of a door —
+  // off the sidewalk, the only house anyone could walk into is one fronting the road (see buildingDoors).
+  S.zones.forEach(zone => {
+    if (zone.drawing || zone.zoneType !== 'suburbs') return;
+    (zone.walkGaps || []).forEach(lane => {
+      const { pts } = resampleLine(lane), cum = cumulative(pts);
+      if (cum[cum.length-1] < 1) return;
+      const blocked = pts.map(p => inMid(p.x, p.z));
+      if (blocked.every(Boolean)) return;
+      const li = lines.length;
+      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, y: Y_ZONE_GROUND, lateral: LANE_LATERAL,
+        blocked, overWater: pts.map(p => inWater(p.x, p.z)), vertices: pts.map(() => ({ links: [], entrances: [] })) });
+      // a lane that comes out at the pavement joins the sidewalk there, the way a drawn path's end does. The others meet
+      // the lanes they run into, which byPlace picks up from the point they share.
+      [0, pts.length-1].forEach(vi => {
+        const handle = !blocked[vi] && ringPoint(pts[vi], LANE_TO_SIDEWALK);
+        if (handle) pending.push({ li, vi, handle });
+      });
+    });
+  });
   // the zebra crossings: the two ends of each, where it meets the middle of the sidewalk either side
   const zebras = [];
   (S.roadJunctions || []).forEach(j => j.arms.forEach(arm => {
@@ -331,12 +357,15 @@ const DOOR_SLACK = 4, DOOR_REACH_MAX = 20;
  * Derived from the zone's own settings, not a flat number: half the sidewalk width to reach the kerb, plus the zone's
  * setbacks to reach the lot's edge, plus DOOR_SLACK for a footprint that doesn't fill its lot (a rounded or stepped-back
  * one). Capped at DOOR_REACH_MAX, so nobody hikes across a field to a door.
+ *
+ * `zone.doorSetback` is for a zone that stands its buildings back by an amount its settings don't name — a suburb keeps
+ * its front gardens in its layout rather than in a setting, so it says so there instead (see generateSuburbsContent).
  * @param {object} zone - the zone the building stands in
  * @param {number} sidewalkWidth - the widest sidewalk in the city
  * @returns {number} how far a door may be, in world units
  */
 const doorReach = (zone, sidewalkWidth) =>
-  Math.min(DOOR_REACH_MAX, sidewalkWidth*0.5 + (zone.settings.setback || 0) + (zone.settings.borderSetback || 0) + DOOR_SLACK);
+  Math.min(DOOR_REACH_MAX, sidewalkWidth*0.5 + (zone.settings.setback || 0) + (zone.settings.borderSetback || 0) + (zone.doorSetback || 0) + DOOR_SLACK);
 
 /**
  * Find the door of every building people can go into: each enterable building that keeps its footprint on the walkway,
