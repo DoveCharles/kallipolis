@@ -156,20 +156,67 @@ meterWindow.querySelector('.win3-sysbox').addEventListener('click', () => setDet
 meterWindow.classList.add('win3-minimized');
 
 // ---------------------------------------------------------- notices
-// a line as a notice names it: "Zones · Parks", "Paths · Roads", "Peds killed by player"…
+// a line as a notice names it: "Zones · Parks", "Paths · Roads", "Villains killed by player"…
 const noticeLabels = {};
 GROUPS.forEach(g => g.items.forEach(item => { noticeLabels[g.id + '/' + item.key] = `${g.label} · ${item.label}`; }));
 EVENTS.forEach(e => { noticeLabels['events/' + e.key] = e.label; });
 
-function notify(id, delta, countDelta) {
-  if (!round1(delta)) return;
-  const el = document.createElement('div');
-  el.className = 'mor-notice ' + scoreClass(delta);
-  el.innerHTML = `<span class="mor-notice-score">${signed(delta)}</span> ${noticeLabels[id]}` +
-    (countDelta ? ` <span class="mor-notice-count">(${countDelta > 0 ? '+' : ''}${countDelta})</span>` : '');
-  noticesEl.prepend(el);
-  while (noticesEl.children.length > NOTICES_MAX) noticesEl.lastElementChild.remove();
-  setTimeout(() => { el.classList.add('leaving'); setTimeout(() => el.remove(), 400); }, NOTICE_LIFE);
+// The notices on show, by what they're about: another of the same kind adds to the one already up — its tally, and
+// the name of whoever it was — rather than stacking a second copy, and gives it its full life again. Each is
+// { el, score, label, count, names, timer }.
+const liveNotices = new Map();
+const NOTICE_NAMES_MAX = 3;
+function dropNotice(id) {
+  const live = liveNotices.get(id);
+  if (!live) return;
+  liveNotices.delete(id);
+  clearTimeout(live.timer);
+  live.el.classList.add('leaving');
+  setTimeout(() => live.el.remove(), 400);
+}
+/**
+ * Show that something happened: worth `delta` morality, `countDelta` of it, and — for an event — the name of
+ * whoever it was. The same thing happening again within the notice's life folds into the notice already up.
+ * @param {string} id - what it's about, as noticeLabels names it
+ * @param {number} delta - what one is worth
+ * @param {number} countDelta - how many happened
+ * @param {string} [name] - whose name it was, for an event
+ * @returns {void}
+ */
+function notify(id, delta, countDelta, name) {
+  // A notice for anything worth something at all — and for events, which are worth announcing even when they're
+  // worth nothing: a guilty person's death costs no morality, but the player should still be told it happened.
+  const isEvent = id.startsWith('events/');
+  if (!round1(delta) && !(isEvent && countDelta)) return;
+  let live = liveNotices.get(id);
+  if (!live) {
+    const el = document.createElement('div');
+    el.className = 'mor-notice ' + scoreClass(delta);
+    live = { el, score: delta, label: noticeLabels[id], count: 0, names: [], timer: null };
+    liveNotices.set(id, live);
+    noticesEl.prepend(el);
+    while (noticesEl.children.length > NOTICES_MAX) {
+      const oldest = [...liveNotices.entries()].find(([, n]) => n.el === noticesEl.lastElementChild);
+      if (!oldest) break;
+      dropNotice(oldest[0]);
+      noticesEl.lastElementChild?.remove(); // (in case it was already mid-fade)
+    }
+  }
+  live.count += countDelta || 0;
+  if (name) {
+    live.names.unshift(name);                      // most recent first
+    if (live.names.length > NOTICE_NAMES_MAX) live.names.length = NOTICE_NAMES_MAX;
+  }
+  // nothing to score: "Guilty killed by player (+3)", not "0 …"
+  const scoreChip = round1(live.score) ? `<span class="mor-notice-score">${signed(live.score)}</span> ` : '';
+  const countChip = live.count ? ` <span class="mor-notice-count">(${live.count > 0 ? '+' : ''}${live.count})</span>` : '';
+  // one line each, most recent first, under a rule across the notice
+  const names = live.names.length
+    ? `<div class="mor-notice-names">${live.names.map(n => `<div>${n}</div>`).join('')}</div>`
+    : '';
+  live.el.innerHTML = `${scoreChip}${live.label}${countChip}${names}`;
+  clearTimeout(live.timer);
+  live.timer = setTimeout(() => dropNotice(id), NOTICE_LIFE); // each one gives it its full life again
 }
 
 // What was last announced, and what the world looked like last tick: a change is announced (as the difference from what was
@@ -193,10 +240,15 @@ function tick() {
 setInterval(tick, TICK_MS);
 
 // something happening that counts, like someone being killed: counted, and announced straight away
-export function recordMoralityEvent(key) {
+/**
+ * @param {string} key - which event, as morality.txt lists it
+ * @param {string} [name] - whose name it was, shown under the notice
+ * @returns {void}
+ */
+export function recordMoralityEvent(key, name) {
   if (!(key in eventCounts)) return;
   eventCounts[key]++;
-  notify('events/' + key, scoreOf('events', key), 1);
+  notify('events/' + key, scoreOf('events', key), 1, name);
   const now = tally();
   if (announced) announced.lines['events/' + key] = now.lines['events/' + key];
   if (previous) previous.lines['events/' + key] = now.lines['events/' + key];

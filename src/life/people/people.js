@@ -385,6 +385,7 @@ export function refreshTraits(p, i) {
   p.traits = profile.traits;
   p.height = p.baseHeight*p.traits.size;
   p.age = profile.age;
+  p.name = profile.name; // (for their card, and for naming them in the morality notices when they die)
 }
 export const FRIGHT_RADIUS = 14, FLEE_SPEED = 2.3;
 /**
@@ -559,7 +560,7 @@ function killPerson(i, by = 'player') {
   const p = people[i];
   if (!p || isGone(p)) return;
   // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
-  App.recordMoralityEvent?.(`${standingOf(p)} peds killed by ${by === 'car' ? 'cars' : 'player'}`);
+  App.recordMoralityEvent?.(`${standingOf(p)} peds killed by ${by === 'car' ? 'cars' : 'player'}`, p.name);
   if (followed === i) stopFollowingPerson();
   if (awaited === i) setAwaited(-1);
   endActivity(p);

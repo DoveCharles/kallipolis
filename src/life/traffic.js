@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { scene, camera, renderer, computeWindowGlowFactor, SKY_ENV_MAP, Y_ROAD } from '../core/scene.js';
@@ -1143,6 +1143,18 @@ function runOverPeople(car) {
 }
 
 /**
+ * What a car's called, for its card and for the morality notices: its registration, and its type and number within it
+ * — "AB12 CDE (Taxi #3)" — or just the type while its model is still loading.
+ * @param {object} car
+ * @returns {string}
+ */
+function carLabel(car) {
+  const cm = car.design != null ? carMeshes[car.design] : null;
+  const type = carTypeOf(cm ? cm.name : null, car.number);
+  return cm ? `${car.plate.text} (${type.name} #${car.number})` : type.name;
+}
+
+/**
  * The car whose screen-space line from its wheels to its roof lies nearest (clientX, clientY) — within 35% of that line's
  * length or 10 pixels, whichever is greater — and of those the one nearest the camera, or -1 if there is none.
  * @param {number} clientX
@@ -1181,10 +1193,9 @@ function followCarAt(clientX, clientY) {
   const h = carHeight(cars[i]);
   controls.minRadius = Math.max(1.2, h*0.8);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9));
-  const car = cars[i], cm = car.design != null ? carMeshes[car.design] : null;
-  const type = cm ? carTypeOf(cm.name, car.number) : carTypeOf(null);
-  const name = cm ? `${car.plate.text} (${type.name} #${car.number})` : type.name;
-  App.showCarCard(i, { ...type, name });
+  const car = cars[i];
+  const type = carTypeOf(car.design != null ? carMeshes[car.design].name : null, car.number);
+  App.showCarCard(i, { ...type, name: carLabel(car) });
 }
 
 /**
@@ -1620,7 +1631,7 @@ function chaseCamera(car) {
 function killCar(i) {
   const car = cars[i];
   if (!car || car.li < 0) return;
-  App.recordMoralityEvent?.('cars destroyed by player');
+  App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
   if (followedCar === i) stopFollowingCar();
   const paint = new THREE.Color(car.paint[0], car.paint[1], car.paint[2]);
   explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint });

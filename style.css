@@ -5,6 +5,14 @@
   --border: #2b2e36;
   --text: #e7e8ea;
   --text-dim: #9296a0;
+  /* the morality notices: their own text, the dimmer tally, the names under them, and the stripes those sit on.
+     The stripes mirror between the themes — near-black stripes in the dark look, the light greys in the Windows 3.0
+     one — and the names are the lower-contrast grey of each: charcoal on the light, a light grey on the dark. */
+  --notice-text: #dcdde0;
+  --notice-dim: #9296a0;
+  --notice-name: #b0b4bc;
+  --notice-stripe-a: #101010;
+  --notice-stripe-b: #202020;
   --accent: #3ddc97;
   --accent-dim: #2a8f65;
   --warn: #ffd23d;
@@ -307,6 +315,8 @@ button.pc-pick:hover { text-decoration:underline; }
 .win3-titlebar { display:none; }
 html.win3 {
   --bg-panel:#ffffff; --bg-input:#ffffff; --border:#000000; --text:#000000; --text-dim:#000000;
+  --notice-text:#000000; --notice-dim:#808080; --notice-name:#2f3c45;
+  --notice-stripe-a:#f0f0f0; --notice-stripe-b:#e0e0e0;
   --accent:#000080; --accent-dim:#000080;
   --sans:'Win3 System', 'MS Sans Serif', 'Microsoft Sans Serif', Arial, sans-serif;
   --mono:'Win3 System', 'MS Sans Serif', 'Microsoft Sans Serif', Arial, sans-serif;
@@ -468,15 +478,24 @@ html.win3 .pc-thumb {
 #stats .mor-score.evil { color:#e5484d; }
 #mor-notices { position:absolute; top:0; right:calc(100% + 8px); display:flex; flex-direction:column; align-items:flex-end; gap:4px; pointer-events:none; }
 .mor-notice {
-  white-space:nowrap; font-family:var(--mono); font-size:11px; color:var(--text);
+  white-space:nowrap; text-align:right; font-family:var(--mono); font-size:11px; color:var(--notice-text);
   background:var(--bg-panel); border:1px solid var(--border); border-left:3px solid var(--text-dim);
-  border-radius:5px; padding:3px 8px; animation:mor-in .25s ease-out; transition:opacity .4s, transform .4s;
+  border-radius:5px; padding:3px 8px; min-width:190px; animation:mor-in .25s ease-out; transition:opacity .4s, transform .4s;
 }
+/* what the event was about: one a line, under a rule across the notice, in charcoal on alternating stripes. The
+   family is set here as well as on the notice so the names fall back the same way the heading does — in the Windows
+   3.0 look the bitmap font is missing some letters, and an inherited family would swap the whole line for Arial. */
+.mor-notice-names { margin-top:3px; border-top:1px solid var(--border); font-family:var(--mono); font-size:10px; color:var(--notice-name); }
+.mor-notice-names > div { line-height:1.35; margin:0 -8px; padding:1px 8px; }
+.mor-notice-names > div:nth-child(odd) { background:var(--notice-stripe-a); }
+.mor-notice-names > div:nth-child(even) { background:var(--notice-stripe-b); }
 .mor-notice.good { border-left-color:#3ddc97; }
 .mor-notice.evil { border-left-color:#e5484d; }
 #stats .mor-notice.good .mor-notice-score { color:#3ddc97; font-weight:700; }
 #stats .mor-notice.evil .mor-notice-score { color:#e5484d; font-weight:700; }
-#stats .mor-notice-count { color:var(--text-dim); }
+/* the score stands a little clear of the heading it belongs to */
+.mor-notice-score { margin-right:5px; }
+#stats .mor-notice-count { color:var(--notice-dim); }
 .mor-notice.leaving { opacity:0; transform:translateX(12px); }
 @keyframes mor-in { from { opacity:0; transform:translateX(12px); } }
 /* in the Windows 3.0 look it's a window like the Splinetopia one, "Morality" in its title bar, which opens and closes the details */
@@ -492,8 +511,7 @@ html.win3 :is(#stats .mor-title, .mor-row:not(.sub)) { color:#000; }
 html.win3 .mor-row.sub { color:#404040; }
 html.win3 #stats .mor-score.good, html.win3 #stats .mor-notice.good .mor-notice-score { color:#008000; }
 html.win3 #stats .mor-score.evil, html.win3 #stats .mor-notice.evil .mor-notice-score { color:#c00000; }
-html.win3 .mor-notice { background:#fff; color:#000; border:1px solid #000; border-radius:0; box-shadow:2px 2px 0 #000; font-size:11px; }
-html.win3 #stats .mor-notice-count { color:#808080; }
+html.win3 .mor-notice { background:#fff; border:1px solid #000; border-radius:0; box-shadow:2px 2px 0 #000; font-size:11px; }
 html.win3 .mor-notice.good { border-left:4px solid #008000; }
 html.win3 .mor-notice.evil { border-left:4px solid #c00000; }
 
