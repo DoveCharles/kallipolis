@@ -22,6 +22,7 @@ const ZONE_TYPES = [
   { id: 'water', label: 'Water', color: '#1d6f7d' },
   { id: 'plaza', label: 'Plaza', color: '#b7b0a4' }, { id: 'farmland', label: 'Farmland', color: '#c9b75c' },
   { id: 'industrial', label: 'Industrial', color: '#7d8187' }, { id: 'suburbs', label: 'Suburbs', color: '#8a9a6d' },
+  { id: 'airport', label: 'Airport', color: '#6f7a80' },
 ];
 const THUMBNAIL_SIZE = 128;
 let zoneThumbnails = null, zoneThumbnailsScheduled = false;

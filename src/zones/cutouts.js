@@ -9,6 +9,7 @@ import { makeBuildingMesh, makeParkMesh, makeFlatZoneMesh, generateParkContent, 
 import { generatePlazaContent } from './plazas.js';
 import { generateFarmlandContent } from './farmland.js';
 import { generateSuburbsContent } from './suburbs.js';
+import { generateAirportContent } from './airport.js';
 
 // ---------------------------------------------------------- zone cut-outs
 // Zones give way to whatever takes priority over them: zone ground, park floors, lots, buildings and trees all leave out
@@ -147,6 +148,8 @@ export function subdivideZone(zone) {
   // another doesn't keep the last one's (see generateSuburbsContent, and walkGaps and doorSetback in buildPeopleNav)
   zone.walkGaps = null;
   zone.doorSetback = 0;
+  zone.airportAnim = null; // and the same for whatever an airport had flying (see updateAirports)
+  zone.airportInfo = null;
 
   if (zone.points.length>=3) {
     const poly = tessellateClosedPath(zone.points);
@@ -168,6 +171,8 @@ export function subdivideZone(zone) {
       generateSuburbsContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='industrial') {
       App.generateIndustrialContent(zone, poly, cutouts, blockers);
+    } else if (zone.zoneType==='airport') {
+      generateAirportContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='plain') {
       const ground = makeFlatZoneMesh(poly, zone.settings.groundColor!=null ? zone.settings.groundColor : BUILDING_GROUND_COLORS[0], Y_ZONE_GROUND, 'ZoneGround', null, cutouts);
       if (ground) zone.buildingsGroup.add(ground);

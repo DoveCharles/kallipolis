@@ -210,7 +210,8 @@ function houseMesh(design, paint, lit) {
 
 // ---- which way a house looks
 // Every road, walkway and zone edge near `poly`, as segments, kept apart so a house prefers a real road to a footpath.
-function streetSegmentsNear(poly) {
+// (An airport's terminal picks the side of its runway to sit on the same way — see airport.js.)
+export function streetSegmentsNear(poly) {
   let minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
   poly.forEach(p => { if (p.x<minX) minX=p.x; if (p.x>maxX) maxX=p.x; if (p.z<minZ) minZ=p.z; if (p.z>maxZ) maxZ=p.z; });
   minX -= STREET_REACH; maxX += STREET_REACH; minZ -= STREET_REACH; maxZ += STREET_REACH;
@@ -240,7 +241,7 @@ function nearestOn(segments, p) {
 // The street a plot looks onto: the nearest road, however far into the zone the plot is. Only a suburb with no road
 // anywhere near it falls back — to the walkways, and failing those to the zone's own edge, so it faces outward rather
 // than every house on it turning to look at some road right across the map.
-function streetFor(p, streets) {
+export function streetFor(p, streets) {
   const near = nearestOn(streets.roads.length ? streets.roads : streets.paths.length ? streets.paths : streets.edges, p);
   return near ? near.at : null;
 }
