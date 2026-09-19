@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { scene, camera, Y_PARK, Y_PATH, Y_ROAD, Y_SIDEWALK, Y_ZONE_GROUND } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
-import { mulberry32, centroid } from '../core/math.js';
+import { mulberry32, centroid, lerp } from '../core/math.js';
 import { closestPointOnSegment, buildingKey, buildingNumber } from '../buildings/footprints.js';
 import { buildingKindOf, buildingTypeOf, buildingEnterable } from '../buildings/building-types.js';
 import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
@@ -16,7 +16,7 @@ import { getWaterRegion } from '../water/water.js';
 import { signalRedLeft } from '../roads/markings.js';
 import { toClipperPath, pathsArea, offsetPaths, createRegionTester, zoneCutoutsNear } from '../zones/cutouts.js';
 import { FOOTBRIDGE_TOP } from '../water/bridges.js';
-import { DEFAULT_TRAITS, profileOf, profilesVersion } from './profiles.js';
+import { DEFAULT_TRAITS, profileOf, profilesVersion, onProfilesLoaded } from './profiles.js';
 import { explode } from './giblets.js';
 import { possession, controlInput, startPossession, endPossession } from './possession.js';
 
@@ -178,14 +178,29 @@ const PERSON_BODY_SHAPES = {
 const PERSON_ARM_SPREAD = 0.43;
 // each person's head and eye shape keys, as [lowest, highest] — or, where men's and women's differ, one of those for each
 const PERSON_FACE_SHAPES = { 'Key 1': { male: [0, 1], female: [-0.3, 0] }, 'Key 2': [-0.5, 0.3], Shape1: [-0.2, 1], Shape2: [0, 1], Shape3: [0, 1] };
+// How likely a woman's top is to show any of her midriff, by age: as likely as anything while she's young, and rarer
+// every year after that until, by MIDRIFF_COVERED_BY, it's only the odd one who does.
+const MIDRIFF_BARE_AGE = 22, MIDRIFF_COVERED_BY = 55, MIDRIFF_CHANCE_YOUNG = 2/3, MIDRIFF_CHANCE_OLD = 0.05;
+const midriffChance = age =>
+  lerp(MIDRIFF_CHANCE_YOUNG, MIDRIFF_CHANCE_OLD,
+       Math.max(0, Math.min(1, (age - MIDRIFF_BARE_AGE)/(MIDRIFF_COVERED_BY - MIDRIFF_BARE_AGE))));
 // How much skin clothes show: a sleeve, the tummy and a leg are each split into numbered bands (materials named Sleeve1,
 // Sleeve2…, lowest nearest the body), and each person's clothes stop at one of them — it and every higher-numbered band of
-// that part showing skin, the rest the clothes' color. A man's tummy is always covered.
+// that part showing skin, the rest the clothes' color. A man's tummy is always covered, and a woman's the older she is
+// (`bareChance`, where a part has one: how often any of it shows at all, the bands that do being even between them).
 const PERSON_CLOTHING = [
   { band: 'Sleeve', part: 'Top', count: 3 },
-  { band: 'Tummy', part: 'Top', count: 2, coveredOnMen: true },
+  { band: 'Tummy', part: 'Top', count: 2, coveredOnMen: true, bareChance: midriffChance },
   { band: 'Leg', part: 'Pants', count: 2 },
 ];
+// Where a part of someone's clothes stops, from one random number: the band it stops at, counting from 1, or one past the
+// last band when it covers the part altogether.
+const clothingBand = (c, r, man, age) => {
+  if (c.coveredOnMen && man) return c.count + 1;
+  const bare = c.bareChance ? c.bareChance(age) : c.count/(c.count + 1);
+  if (r >= bare) return c.count + 1;
+  return 1 + Math.min(c.count - 1, Math.floor(r/bare*c.count));
+};
 // the model's materials, by name: which part of the model each vertex belongs to (its slot, in personVertex.y) — the clothes take each
 // person's own colors, the rest keep the model's; and the parts only drawn for women
 const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelashes', 'Lips',
@@ -638,7 +653,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   // hairstyle and facial hair (what their sex can wear), their colors, and where their clothes stop
   const traitRows = PERSON_FACE_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
   const isMan = new Uint8Array(PEOPLE_MAX);
-  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hatRng = mulberry32(8086), clothingRng = mulberry32(1990), faceRng = mulberry32(2718), color = new THREE.Color();
+  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hatRng = mulberry32(8086), faceRng = mulberry32(2718), color = new THREE.Color();
   const NATURAL_COLOUR_CHANCE = 0.85;
   const colorFor = {
     Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
@@ -664,8 +679,6 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     traits.set([shape[4], man ? 1 : 0, face[4]], texel(1));
     traits.set(face.slice(0, 4), texel(PERSON_FACE_ROW));
     PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
-    // the band each part of their clothes stops at (one past the last band for none)
-    traits.set(PERSON_CLOTHING.map(c => c.coveredOnMen && man ? c.count + 1 : 1 + Math.floor(clothingRng()*(c.count + 1))), texel(PERSON_CLOTHING_ROW));
     headLayers.forEach(layer => {
       const styles = man ? layer.boys : layer.girls;
       if (!styles.length) return;
@@ -677,8 +690,20 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
       members.push(i);
     });
   }
+  // Where everyone's clothes stop. It's worked out on its own, after the rest, because a woman's midriff depends on how
+  // old she is — which comes of people.txt, and so is worked out again whenever that loads.
+  const setClothing = () => {
+    const clothingRng = mulberry32(1990);
+    for (let i=0;i<PEOPLE_MAX;i++) {
+      const man = isMan[i] === 1, { age } = profileOf(i, man);
+      traits.set(PERSON_CLOTHING.map(c => clothingBand(c, clothingRng(), man, age)), (PERSON_CLOTHING_ROW*PEOPLE_MAX + i)*4);
+    }
+  };
+  setClothing();
+
   const traitTexture = new THREE.DataTexture(traits, PEOPLE_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
   traitTexture.needsUpdate = true;
+  onProfilesLoaded(() => { setClothing(); traitTexture.needsUpdate = true; });
 
   // ---- the meshes
   const uniforms = {
