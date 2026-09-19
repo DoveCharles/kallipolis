@@ -477,6 +477,16 @@ function renderDetails() {
       ${toggleHtml('ds-hedgerows', 'Hedgerows', s.hedgerows!==false)}
       ${toggleHtml('ds-farmsteads', 'Farmsteads', s.farmsteads!==false)}
       <div style="margin-top:11px;">${seedHtml}</div>
+    ` : zoneType==='suburbs' ? `
+      <div class="slider-row"><div class="row"><label>Plots</label><span class="val" id="dv-suburbplots">${s.suburbPlots!=null?s.suburbPlots:40}</span></div>
+        <input type="range" id="ds-suburbplots" min="1" max="150" step="1" value="${s.suburbPlots!=null?s.suburbPlots:40}"></div>
+      <div class="slider-row"><div class="row"><label>Density</label><span class="val" id="dv-suburbdensity">${(s.suburbDensity!=null?s.suburbDensity:0.9).toFixed(2)}</span></div>
+        <input type="range" id="ds-suburbdensity" min="0" max="1" step="0.05" value="${s.suburbDensity!=null?s.suburbDensity:0.9}"></div>
+      ${toggleHtml('ds-suburbhedges', 'Hedges', s.suburbHedges!==false)}
+      <div class="section-label">Ground color</div>
+      ${colorSwatchRowHtml(BUILDING_GROUND_COLORS, s.groundColor!=null?s.groundColor:BUILDING_GROUND_COLORS[0], 'groundcolor')}
+      <div class="empty" style="margin:6px 0 10px;">Every house faces the nearest road &mdash; or, with none within reach, the nearest walkway, and failing those the zone's own edge.</div>
+      ${seedHtml}
     ` : zoneType==='industrial' ? `
       <div class="slider-row"><div class="row"><label>Lot count</label><span class="val" id="dv-industriallots">${s.industrialLots!=null?s.industrialLots:10}</span></div>
         <input type="range" id="ds-industriallots" min="1" max="40" step="1" value="${s.industrialLots!=null?s.industrialLots:10}"></div>
@@ -577,6 +587,11 @@ function renderDetails() {
       wireNumber('ds-fieldcount', 'dv-fieldcount', 'fieldCount');
       wireToggle('ds-hedgerows', 'hedgerows');
       wireToggle('ds-farmsteads', 'farmsteads');
+    } else if (zoneType==='suburbs') {
+      wireNumber('ds-suburbplots', 'dv-suburbplots', 'suburbPlots');
+      wireNumber('ds-suburbdensity', 'dv-suburbdensity', 'suburbDensity', 2);
+      wireToggle('ds-suburbhedges', 'suburbHedges');
+      wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);
     } else if (zoneType==='industrial') {
       wireNumber('ds-industriallots', 'dv-industriallots', 'industrialLots');
       wireNumber('ds-industrialdensity', 'dv-industrialdensity', 'industrialDensity', 2);

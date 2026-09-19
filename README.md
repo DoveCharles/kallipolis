@@ -22,6 +22,7 @@ A little procedural city blockout tool that runs in the browser, built on three.
   - **Plaza** — tiled or herringbone paving, a fountain, lamp posts, benches and trees
   - **Farmland** — crop fields, hedgerows and farmsteads
   - **Industrial** — fenced lots with warehouses, factories, storage tanks and container yards
+  - **Suburbs** — plots of houses, each painted a colour of its own and turned to face the nearest road, with lawns, hedges and a path to the door
   - **Plain** — flat ground
 
   Roads cut through zones, and zones higher in the list cut into the ones below (drag to reorder).

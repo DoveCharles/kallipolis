@@ -21,7 +21,7 @@ const ZONE_TYPES = [
   { id: 'park', label: 'Park', color: '#8fb85a' }, { id: 'beach', label: 'Beach', color: '#d9c48f' },
   { id: 'water', label: 'Water', color: '#1d6f7d' },
   { id: 'plaza', label: 'Plaza', color: '#b7b0a4' }, { id: 'farmland', label: 'Farmland', color: '#c9b75c' },
-  { id: 'industrial', label: 'Industrial', color: '#7d8187' },
+  { id: 'industrial', label: 'Industrial', color: '#7d8187' }, { id: 'suburbs', label: 'Suburbs', color: '#8a9a6d' },
 ];
 const THUMBNAIL_SIZE = 128;
 let zoneThumbnails = null, zoneThumbnailsScheduled = false;
@@ -132,7 +132,7 @@ function renderZoneThumbnails() {
         scene.add(group);
       } else {
         const zone = { id: '__thumbnail-' + type.id, name: type.label, zoneType: type.id, closed: true, drawing: false, points: square(half),
-          settings: { ...DEFAULT_ZONE_SETTINGS, seed: 4242 + i, lotCount: 14, fieldCount: 9, industrialLots: 7, treeDensity: 0.5, plazaTrees: 0.6 } };
+          settings: { ...DEFAULT_ZONE_SETTINGS, seed: 4242 + i, lotCount: 14, fieldCount: 9, industrialLots: 7, suburbPlots: 9, treeDensity: 0.5, plazaTrees: 0.6 } };
         subdivideZone(zone);
         group = zone.buildingsGroup;
       }

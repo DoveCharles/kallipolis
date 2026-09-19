@@ -8,6 +8,7 @@ import { CLIPPER_SCALE, ROAD_ARC_TOLERANCE, clipPolygons, disposeObject } from '
 import { makeBuildingMesh, makeParkMesh, makeFlatZoneMesh, generateParkContent, generateBeachContent } from './surface-detail.js';
 import { generatePlazaContent } from './plazas.js';
 import { generateFarmlandContent } from './farmland.js';
+import { generateSuburbsContent } from './suburbs.js';
 
 // ---------------------------------------------------------- zone cut-outs
 // Zones give way to whatever takes priority over them: zone ground, park floors, lots, buildings and trees all leave out
@@ -159,6 +160,8 @@ export function subdivideZone(zone) {
       generatePlazaContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='farmland') {
       generateFarmlandContent(zone, poly, cutouts, blockers);
+    } else if (zone.zoneType==='suburbs') {
+      generateSuburbsContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='industrial') {
       App.generateIndustrialContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='plain') {

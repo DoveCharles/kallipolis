@@ -10,6 +10,7 @@ const ZONE_OF_KIND = {
   landmark: 'buildings',
   warehouse: 'industrial', factory: 'industrial', tankfarm: 'industrial', containeryard: 'industrial',
   farmstead: 'farmland',
+  house: 'suburbs',
 };
 const buildings = loadTypeText('assets/buildings.txt', {
   attributes: TEXT_ROWS,

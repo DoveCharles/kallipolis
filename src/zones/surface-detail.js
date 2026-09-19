@@ -588,10 +588,12 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
   group.rotation.x = -Math.PI/2;
   return group;
 }
-export function makeParkMesh(poly, tintColor, noiseStrength, cutouts, beachSegments, wetCount) {
+export function makeParkMesh(poly, tintColor, noiseStrength, cutouts, beachSegments, wetCount, depthBias) {
   // falls back to PARK_TINT_COLORS[0] (a natural yellow-green by default, white = fully
-  // untinted) when no tint is passed; multiplies over the shader's own grayscale grass pattern
-  return makeFlatZoneMesh(poly, tintColor!=null ? tintColor : PARK_TINT_COLORS[0], Y_PARK, 'Park', (mat) => applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, wetCount), cutouts);
+  // untinted) when no tint is passed; multiplies over the shader's own grayscale grass pattern.
+  // `depthBias` is for a lawn laid over another flat surface rather than over the world's own ground — see
+  // makeFlatZoneMesh, and the plot lawns in suburbs.js.
+  return makeFlatZoneMesh(poly, tintColor!=null ? tintColor : PARK_TINT_COLORS[0], Y_PARK, 'Park', (mat) => applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, wetCount), cutouts, depthBias);
 }
 // The sand shared by park beaches and beach zones, so the two meet without a seam: `p` is the world position, `wetDistance`
 // how far it is from the water's edge (darker, still wet, within 1.5 units of it). Needs grassNoise.

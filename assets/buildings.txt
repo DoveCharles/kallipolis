@@ -18,6 +18,7 @@
 #   buildings    landmark
 #   industrial   warehouse, factory, tankfarm, containeryard
 #   farmland     farmstead
+#   suburbs      house
 
 [default]
 name = Building
@@ -135,3 +136,28 @@ hates = Inheritance tax (nepo baby)
 hates = Vegans (is growing exclusively wheat)
 hates = Those pesky bugs (bugs don't exist anymore)
 hates = Self-sustaining fertilizers
+
+# ============================================================ suburbs
+
+[suburbs]
+name = House
+mood = 🏡
+loves = The street out front
+hates = Through traffic
+
+[house]
+enterable = yes
+name = House
+mood = 🏡
+loves = Facing the road (has no choice)
+loves = The hedge
+loves = Being told the hedge looks nice
+loves = A car on the drive by six
+loves = Whatever the neighbours are having
+loves = Curtains twitching of their own accord
+loves = The bins going out on the right day
+hates = The neighbours' extension
+hates = Wheelie bins left out past Tuesday
+hates = A caravan on the drive
+hates = Being the only one painted like that
+hates = Anyone parking across the dropped kerb
