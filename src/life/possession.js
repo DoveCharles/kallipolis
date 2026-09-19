@@ -13,8 +13,9 @@ import { IS_TOUCH } from '../core/device.js';
 //   a click to swing a fist at whoever's in front of them (people.js lands it)
 // - a car (clicking the car card's picture): the view from behind it, WASD to drive (shift for a boost, space to brake),
 //   the mouse swinging the camera round it (and back behind, a moment after it's left alone), the wheel to zoom
-// - an aircraft (clicking the plane card's picture): the same view from behind, but W/S climb and dive and A/D bank it
-//   round, since a thing in the air turns by leaning rather than by steering (zones/airport.js does the flying)
+// - an aircraft (clicking the plane card's picture): the same view from behind, but the keys work a stick rather than a
+//   wheel — W/S put the nose down and up, and A/D bank it round, since a thing in the air turns by leaning rather than
+//   by steering (zones/airport.js does the flying)
 // On touch there's no pointer to lock and no keys to hold: a finger dragged across the view looks around instead, and the
 // thumbstick and buttons src/ui/mobile.js puts on screen are held down in place of WASD — one of them the click, since
 // a tap on the view is already the start of a look.
@@ -85,8 +86,8 @@ export function startFlying() {
   flying.lookedAt = -Infinity;
   held.clear();
   showHint(IS_TOUCH ? 'Flying' : 'Press <kbd>Esc</kbd> to stop flying',
-    IS_TOUCH ? 'Stick to climb and bank · Run for power · Brake to slow · drag to look around'
-             : 'W/S to climb and dive · A/D to bank · Shift for power · Space to slow · mouse to look around · scroll to zoom');
+    IS_TOUCH ? 'Stick to fly it · Run for power · Brake to slow · drag to look around'
+             : 'W/S to dive and climb · A/D to bank · Shift for power · Space to slow · mouse to look around · scroll to zoom');
   lockPointer();
   return true;
 }
