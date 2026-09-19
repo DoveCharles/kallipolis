@@ -1,0 +1,28 @@
+# What each aircraft is like: what its card says when you click one in World mode. Edit freely, then reload the page.
+# The same format as assets/trains.txt and assets/cars.txt (they're all read by src/core/type-text.js). Under a
+# [section], `attribute = value` lines:
+#
+#   name    what it's called on its card (followed by its own number, like "Flight #3")
+#   mood    its current mood, usually an emoji
+#   loves   what it loves
+#   hates   what it hates
+#
+# Give an attribute several lines to have each aircraft pick one of them (always the same one for the same aircraft).
+# There's only one kind of aircraft for now, so everything goes under [default] — but a [section] named after a type
+# would work the same way a vehicle type does. Blank lines and lines starting with # are skipped.
+
+[default]
+name = Flight
+mood = ✈️
+loves = A tailwind
+loves = Being first in the queue
+loves = Cabin crew, doors to manual
+loves = The little bottles
+loves = Window seats
+loves = Getting in fifteen minutes early and parking for forty
+hates = Holding
+hates = Headwinds
+hates = Whoever reclines
+hates = Gate B57, at the far end, on foot
+hates = Turbulence, allegedly routine
+hates = Hand luggage that is very clearly not hand luggage

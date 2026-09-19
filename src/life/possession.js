@@ -13,6 +13,9 @@ import { IS_TOUCH } from '../core/device.js';
 //   a click to swing a fist at whoever's in front of them (people.js lands it)
 // - a car (clicking the car card's picture): the view from behind it, WASD to drive (shift for a boost, space to brake),
 //   the mouse swinging the camera round it (and back behind, a moment after it's left alone), the wheel to zoom
+// - an aircraft (clicking the plane card's picture): the same view from behind, but the keys work a stick rather than a
+//   wheel — W/S put the nose down and up, and A/D bank it round, since a thing in the air turns by leaning rather than
+//   by steering (zones/airport.js does the flying)
 // On touch there's no pointer to lock and no keys to hold: a finger dragged across the view looks around instead, and the
 // thumbstick and buttons src/ui/mobile.js puts on screen are held down in place of WASD — one of them the click, since
 // a tap on the view is already the start of a look.
@@ -21,6 +24,7 @@ const hint = document.getElementById('possess-hint'), hintTitle = document.getEl
 const hintExit = document.getElementById('ph-exit');
 export const possession = { index: -1, yaw: 0, pitch: 0 };
 export const driving = { active: false, lookedAt: -Infinity }; // (lookedAt: when the mouse last swung the camera round)
+export const flying = { active: false, lookedAt: -Infinity }; // the same, for an aircraft
 const held = new Set();
 const PITCH_MAX = 1.35, LOOK_SPEED = 0.0025, ORBIT_PHI_MIN = 0.3, ORBIT_PHI_MAX = 1.5; // (driving: the camera not quite overhead, nor lower than about level with the car)
 const KEY_NAMES = { arrowup: 'w', arrowleft: 'a', arrowdown: 's', arrowright: 'd', ' ': 'space' };
@@ -74,9 +78,36 @@ export function endDriving() {
   hint.hidden = true;
   unlockPointer();
 }
+export function startFlying() {
+  // (no people check, unlike the two above: an aircraft flies its schedule whether or not the town has anyone in it,
+  // so its card is there to be clicked either way, and "Fly it" shouldn't be a button that does nothing)
+  if (S.interactionMode !== 'move') return false;
+  flying.active = true;
+  flying.lookedAt = -Infinity;
+  held.clear();
+  showHint(IS_TOUCH ? 'Flying' : 'Press <kbd>Esc</kbd> to stop flying',
+    IS_TOUCH ? 'Stick to fly it · Run for power · Brake to slow · drag to look around'
+             : 'W/S to dive and climb · A/D to bank · Shift for power · Space to slow · mouse to look around · scroll to zoom');
+  lockPointer();
+  return true;
+}
+export function endFlying() {
+  if (!flying.active) return;
+  flying.active = false;
+  held.clear();
+  lookPointer = null; pressedAt = null;
+  hint.hidden = true;
+  unlockPointer();
+}
 const isPossessing = () => possession.index >= 0;
-const inControl = () => isPossessing() || driving.active;
-hintExit.addEventListener('click', () => { if (isPossessing()) App.unpossessPerson(); else App.stopDriving(); });
+const inControl = () => isPossessing() || driving.active || flying.active;
+// whichever hold on the world is the live one, let go of — only ever one at a time
+function releaseControl() {
+  if (isPossessing()) App.unpossessPerson();
+  else if (flying.active) App.stopFlying();
+  else App.stopDriving();
+}
+hintExit.addEventListener('click', releaseControl);
 
 // the on-screen controls holding a key down in place of a finger on a keyboard (src/ui/mobile.js)
 export function setControlHeld(key, down) {
@@ -96,7 +127,7 @@ window.addEventListener('keydown', (e) => {
   const key = keyName(e);
   if (key === 'escape') {
     e.stopImmediatePropagation();
-    if (isPossessing()) App.unpossessPerson(); else App.stopDriving();
+    releaseControl();
     return;
   }
   if (CONTROL_KEYS.includes(key)) { held.add(key); e.preventDefault(); } // (no scrolling, or pressing a focused button)
@@ -105,7 +136,7 @@ window.addEventListener('keyup', (e) => held.delete(keyName(e)));
 window.addEventListener('blur', () => held.clear());
 document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement === dom) return;
-  if (isPossessing()) App.unpossessPerson(); else if (driving.active) App.stopDriving();
+  if (inControl()) releaseControl();
 });
 // Clicking the view while in control picks no one. Possessing someone, the left button throws a punch; driving, and
 // wherever the pointer won't lock, it goes on locking the pointer to the view instead. On touch it starts looking around.
@@ -134,10 +165,12 @@ window.addEventListener('pointerup', (e) => {
   if (moved < CLICK_SLOP && isPossessing() && document.pointerLockElement !== dom) App.punchFromPossession();
 });
 function look(dx, dy) {
-  if (driving.active) {
+  // behind the wheel or at the controls, the mouse swings the camera round rather than turning a head
+  const chase = driving.active ? driving : flying.active ? flying : null;
+  if (chase) {
     controls.orbit(dx, dy);
     controls.goalPhi = Math.max(ORBIT_PHI_MIN, Math.min(ORBIT_PHI_MAX, controls.goalPhi));
-    driving.lookedAt = performance.now();
+    chase.lookedAt = performance.now();
     return;
   }
   possession.yaw -= dx*LOOK_SPEED;
@@ -159,4 +192,4 @@ window.addEventListener('pointerup', endLook);
 window.addEventListener('pointercancel', endLook);
 dom.addEventListener('wheel', (e) => { if (isPossessing()) { e.preventDefault(); e.stopImmediatePropagation(); } }, { capture: true, passive: false });
 
-Object.assign(App, { isPossessing, isDriving: () => driving.active });
+Object.assign(App, { isPossessing, isDriving: () => driving.active, isFlying: () => flying.active });

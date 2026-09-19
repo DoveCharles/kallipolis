@@ -150,6 +150,8 @@ export function subdivideZone(zone) {
   zone.doorSetback = 0;
   zone.airportAnim = null; // and the same for whatever an airport had flying (see updateAirports)
   zone.airportInfo = null;
+  zone.airportFlights = []; // (the aircraft themselves have just gone with the group; a camera following one lets go)
+  zone.airportField = null;
 
   if (zone.points.length>=3) {
     const poly = tessellateClosedPath(zone.points);
