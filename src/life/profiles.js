@@ -1,6 +1,6 @@
 import { mulberry32 } from '../core/math.js';
 
-const LETTERS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','Ñ']
+const LETTERS = ['A.','B.','C.','D.','E.','F.','G.','H.','I.','J.','K.','L.','M.','N.','O.','P.','Q.','R.','S.','T.','U.','V.','W.','X.','Y.','Z.','Ñ.','uh,']
 const ROMAN_NUMERALS = [ 'II', 'III','II', 'III', 'IV', 'V','VI','VII','VII','IX']
 
 // ============================================================ who people are
@@ -159,12 +159,15 @@ export function profileOf(index, isMan) {
 
   const traits = traitsOf([name, mood, enjoys, hates]);
 
-  let fullname = traits.nickname ? pick(lists['nicknames']).text :
-    rng()>0.9 ? `${name.text} '${pick(lists['nicknames']).text}' ${pick(lists['surnames']).text}`:
-    rng()>0.3 ? `${name.text} ${pick(lists['surnames']).text}`:
-      rng()>0.3? `${name.text} ${pick(LETTERS)}. ${pick(lists['surnames']).text}`:
-        rng()>0.5?`'${pick(lists['nicknames']).text}' ${pick(lists['surnames']).text}`:
-          `${name.text} ${pick(ROMAN_NUMERALS)}`;
+  const nameRoll = rng();
+
+  let fullname = traits.nickname ? pick(lists['nicknames']).text :                                    //nickname only - requires trait
+    nameRoll>0.9 ? `${name.text} '${pick(lists['nicknames']).text}' ${pick(lists['surnames']).text}`: //full name w/ nickname, 10%
+    nameRoll>0.3 ? `${name.text} ${pick(lists['surnames']).text}`:                                    //full name no nickname, 60%
+      nameRoll>0.2? `${name.text} ${pick(LETTERS)} ${pick(lists['surnames']).text}`:                 //full name, abr middle, 10%
+        nameRoll>0.13?`'${pick(lists['nicknames']).text}' ${pick(lists['surnames']).text}`:           //nickname surname, 7%
+          nameRoll>0.6?`${name.text} '${pick(lists['nicknames']).text}'`:                            //forename nickname, 6%
+            `${name.text} the ${pick(ROMAN_NUMERALS)}`;                                               //forename numeral, 6%
 
   //unknown entities have hidden traits
   if (name.text === '(UNKNOWN)') {

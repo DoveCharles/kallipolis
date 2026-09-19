@@ -15,4 +15,15 @@
 name = Train
 mood = 🚆
 loves = Shoooom
+loves = Mussolini
+loves = The replacement bus service
+loves = Tiiickkets please, tickets please
+loves = Pensioners
+loves = Under 16s
+loves = Coommee and get your tickets here, get your tickets here!
+hates = Jumpers
 hates = Delays
+hates = The homeless
+hates = Good speakers
+hates = When it gets too hot or when it snows or rains too much or anything really
+hates = People pretending to sleep

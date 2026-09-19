@@ -44,13 +44,14 @@ which add up. Everyone starts at the value in
 # ------------------------------------------------------------------------------------------------------------------------
 #
 # LIMITATIONS!!!
-# Limits can be used to prevent nonsensical combinations, and are called just like ordinary traits, with a few exceptions.
-# Limits are numbered, and have a polarity: Rule 1a is incompatible with 1b, 33b incompatible with 33a, and so on
-# A limit is states as: [ limit = 1a ]
+# Limits can be used to prevent nonsensical combinations, and are called just like ordinary traits, with a few exceptions:
+# Limits are numbered, and have a polarity: Rule 1a is incompatible with 1b, 33b incompatible with 33a, and so on.
+# A limit is stated as: [ limit = 1a ]
 # To put multiple limits, use commas: [ limit = 1a, limit = 3b]
-# Used limits below:
+# Existing limits below:
 #
 #   1.      Vampirism:       a = Vampiric, b = Harmful to vampires
+#   2.      Times:           a = Morning person, b = Night person
 #
 # ------------------------------------------------------------------------------------------------------------------------
 #
@@ -243,6 +244,8 @@ Bong Soo
 Chiu
 Ulysses
 Telemachus
+Mr. [choiceweight = 6]
+Dr.
 
 ################################################################################################################################
 
@@ -297,7 +300,6 @@ Opal
 Tallulah
 Imogen
 Georgina
-Peta-gay
 Requiem
 Faith
 Joy
@@ -360,7 +362,6 @@ Little
 Lady
 San
 Barb
-I'm
 Bridget
 Nina
 Regina
@@ -419,6 +420,11 @@ Anna Mei
 Ailin
 Pikachu
 Honey
+Mrs. [choiceweight = 3]
+Ms. [choiceweight = 3]
+Dr.
+Gothic
+Sky
 
 ################################################################################################################################
 
@@ -598,7 +604,6 @@ Boehler
 Bohemian
 Jumper
 English
-X
 Stronghold
 Donuts
 The Bounty Hunter
@@ -622,7 +627,7 @@ Lenin
 Marauder
 Schema
 Nipples
-Al Sayed
+Sayed
 Mamdani
 Harris
 Washington
@@ -659,12 +664,11 @@ Ismail
 Gordon
 Salah
 Domino
-de Silva
+Silva
 Khaled
-No
 Costanza
 Benes
-da Costa
+Costa
 Sithole
 Dicko
 Meseret
@@ -705,6 +709,10 @@ Browser
 Reason
 Ovaries
 Grey
+Style
+Geekbar
+Allegory
+Chunks
 
 ################################################################################################################################
 
@@ -822,7 +830,7 @@ Actual Cannibal [evil = 0.3, aggression = 4]
 Salmonella
 C&B
 Toothbrush
-99'
+99
 One Week Left [mood = -0.3]
 Plug
 Ambulance
@@ -840,6 +848,15 @@ Dead Dog
 Swag
 Packing
 Third Arm
+Always Comes
+Comes Eventually
+Screamer
+Tushie
+Software
+Curbstomp
+Magic
+A.S.A.P.
+Smooth Down There
 
 ################################################################################################################################
 
@@ -924,7 +941,7 @@ Moonwalking [backwards]
 Naps [lounging = 5, walkspeed = 0.8]
 Maps
 Gossip [chatty = 4, talkative = 3, evil = 0.05, nosy = 3]
-Sunbathing [lounging = 4, parks = 3, limit = 1b]
+Sunbathing [lounging = 4, parks = 3, limit = 1b, limit = 2a]
 Being tall [size = 1.15]
 Collecting stupid shit
 Awful old webseries
@@ -1152,7 +1169,7 @@ Moving dialectically [agemult = 0.9]
 Calling girls "bro" [agemult = 0.7]
 Burning shit [ evil = 0.1, aggression = 2]
 Monkeys, lesser apes, greater apes too
-Obama
+Barack Hussein Obama II
 Wonders of the flesh
 Power tools
 Personality tests that don't really mean anything [ agemult = 0.9]
@@ -1298,8 +1315,8 @@ Kissing toads
 Licking toads
 Giving context [evil = -0.05]
 SPF-100 [ageless]
-Only going out at night
-Only going out at night [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
+Only going out at night [limit = 2b]
+Only going out at night [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a, limit = 2b ] 
 The taste of blood [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
 The taste of blood
 Jumpin' all over the world
@@ -1321,11 +1338,16 @@ Picnics
 Looking after themself [roadsafety = 4, aggression = 0.2]
 An excess of caution [roadsafety = 4, aggression = 0.2]
 Crossing the road [roadsafety = 0.3, walkspeed = 1.2]
+Tanning like fuck [limit = 1b, limit = 2a]
+Bed by 7 [limit = 2a]
+All-nighters [limit = 2b]
 
 ################################################################################################################################
 
 [Hates]
 Wet stuff
+When people say good morning but it's like, 12:30..?
+Nightshift... Never again [limit = 2a]
 Foreigners [mood = -0.4, evil = 0.25, aggression = 5]
 People [chatty = 0, mood = -0.4, evil = 0.1, aggression = 2]
 Punctuality, as a concept [walkspeed = 0.6, patience = 2]
@@ -1362,7 +1384,7 @@ Bad hygiene
 Eating
 Swamps
 Shitty speakers
-Shampooing their hair
+Shampooing the hair
 Radiohead
 Polystyrene
 Cars
@@ -1498,7 +1520,7 @@ Generational trauma [mood = -0.5]
 Déjà vu
 Gangstalking [ aggression = 10]
 Outside forces
-Birdsong in the morning [ evil = 0.05]
+Birdsong in the morning [ evil = 0.05, limit = 2b]
 Sexual dimorphism
 Being blown up
 Ambition [ evil = 0.05, walkspeed = 0.8, mood = -0.2]
@@ -1588,3 +1610,6 @@ Goths [evil = 0.01]
 Gething thung by a beeh [parks = 0.2]
 Silver jewellery
 Silver jewellery [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
+Giblets everywhere
+Vampires
+Being run over by an ambulance

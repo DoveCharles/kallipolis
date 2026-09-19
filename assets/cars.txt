@@ -102,7 +102,7 @@ loves = RRRRUM RUM RUM RUM RUM RUM
 loves = Being a moderator on r/smalldickproblems
 hates = Their wife
 hates = Getting it in the ear from their missus
-hates = You know, my dad passed away at this age, you know?
+hates = My dad passed away at this age, you know?
 
 [FamilyCar]
 name = Family car
@@ -141,6 +141,7 @@ loves = Uhh. Just on my way to work, mate.
 loves = Parking on the curb in a busy street. It's alright, got me hazards on mate.
 loves = Calling in sick
 loves = ALL the CANDY in the back! and it's FREE!!!
+loves = Parking near schools
 hates = All other cars
 hates = Women
 hates = Bellends
