@@ -4,7 +4,10 @@ import { S, App } from '../core/shared.js';
 import { camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { buildingNumber as numberFor } from '../buildings/footprints.js';
-import { beeName } from './bee-card.js';
+import { makeThumbnailDrawer } from './thumbnail.js';
+import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
+import { loadTypeText } from '../core/type-text.js';
+import { mulberry32 } from '../core/math.js';
 
 // ============================================================ flowers, hives and bees
 // Three things a park grows, all cut from one model (assets/models/Bee.glb, made in Blender): patches of flowers, a hive
@@ -25,15 +28,89 @@ import { beeName } from './bee-card.js';
 // Bees are fair-weather workers: they stay in from dusk until the sun's up again, and through anything rainier than a
 // shower, and one caught out by either turns for home.
 //
-// Both a bee and a hive can be followed by the camera in World mode, with a card saying which it is (life/bee-card.js) —
-// and the two change over the way a person and a train do (see riderFollowed in people.js): follow a bee home and the
-// hive's card takes over with that bee picked out of whoever else is in, until it comes out and the camera leaves with
-// it. A hive's card lists whichever of its bees are home whether or not the camera arrived with one of them.
+// Both a bee and a hive can be followed by the camera in World mode, with a card saying which it is (the cards are built
+// below, in this file) — and the two change over the way a person and a train do (see riderFollowed in people.js): follow
+// a bee home and the hive's card takes over with that bee picked out of whoever else is in, until it comes out and the
+// camera leaves with it. A hive's card lists whichever of its bees are home whether or not the camera arrived with one of
+// them.
 //
 // Everything static (the flowers, the hives) is an instanced mesh in the park's own group, so it's thrown away and
 // rebuilt with the rest of the zone. The bees are instanced too, one mesh per park, and their flight is stepped by
 // updateBees below; a park whose group has left the scene drops off the list on the next frame.
 const BEE_MODEL_URL = 'assets/models/Bee.glb';
+
+// ---------------------------------------------------------- the bee and hive cards
+// Which bee or hive the camera's following, in the shared card at the bottom right (ui/entity-card.js): a bee's name and
+// mood and what it loves and hates, or a hive's, from assets/bees.txt by [bee] or [hive] — read like the vehicles' and the
+// trains' files (see core/type-text.js). It changes over the way a person's and a train's do: follow a bee home and the
+// hive's card takes over, listing its bees under "Bees" where a building says "Inhabitants", with the one the camera came
+// in with picked out, and handing back when that bee comes out again. No Kill button on either: nothing here wants to be
+// the thing that kills the bees.
+const text = loadTypeText('assets/bees.txt', {
+  attributes: TEXT_ROWS,
+  counted: ['loves', 'hates'], // can have several per bee, like people: see [distribution] in bees.txt
+  // this stands in until bees.txt has loaded, or if it can't be
+  placeholder: { bee: { name: ['Bee'], mood: ['🐝'], loves: ['Flowers'], hates: ['Rain'] }, default: { name: ['Hive'], mood: ['🍯'], loves: ['Flowers'], hates: ['Bears'] } },
+});
+
+const beeCard = makeCard({ id: 'bee-card', title: 'Bee', onClose: () => App.stopFollowingBee() });
+const hiveCard = makeCard({ id: 'hive-card', title: 'Hive', onClose: () => App.stopFollowingHive(), labels: { occupants: 'Bees' } });
+const drawBeeThumbnail = makeThumbnailDrawer(beeCard.canvas);
+const drawHiveThumbnail = makeThumbnailDrawer(hiveCard.canvas);
+
+// what a bee or a hive is called, on its own card and on the other's: its kind and its own number (see numberFor)
+export let beeName = number => text.of('bee', number).name + ' #' + number;
+export const hiveName = number => text.of('hive', number).name + ' #' + number;
+
+function speakInBee(number) {
+  const beeLangRNG = mulberry32(number);
+  let beeLanguage = '';
+  for ( let bztBzts = 0; bztBzts < 1+Math.round(beeLangRNG()*2); bztBzts++) {
+    for (let bzBzs = 0; bzBzs < 1+Math.round(beeLangRNG()*2); bzBzs++) {
+      beeLanguage+= bzBzs === 0 ? 'B' : 'b';
+      if (beeLangRNG()>0.5) beeLanguage += 'u';
+      for (let zs = 0; zs< 1+Math.round(beeLangRNG()*3); zs++) {
+        beeLanguage+= (beeLangRNG()>0.3) ? 'z':'m';
+      }
+    }
+    return beeLanguage += 'zt ';
+  }
+}
+
+function showBeeCard(number) {
+  
+  const beeRNG = mulberry32(number);
+
+  const id = beeName(number)
+  const beeLanguage = speakInBee(number)
+  
+  const beeText = text.of('bee', number);
+  // a bee can have several loves and hates now (see the [distribution] in bees.txt); talking bee replaces them all with
+  // the one thing it says about each
+  let beeLove = beeText.loves.map(love => beeRNG()>0.7 ? speakInBee(number+37) : love);
+  let beeHate = beeText.hates.map(hate => beeRNG()>0.7 ? speakInBee(number+227).toUpperCase() : hate);
+
+  
+  beeCard.show({ ...beeText, name: `${beeLanguage} (${id})`, loves: beeLove, hates: beeHate} );
+  drawBeeThumbnail(beeThumbnailScene());
+}
+// what it's up to: where it is in its round (see the flight states in bees.js)
+function setBeeCardDoing(doing) {
+  beeCard.set('status', doing);
+}
+function hideBeeCard() { beeCard.hide(); }
+
+function showHiveCard(number) {
+  hiveCard.show({ ...text.of('hive', number), name: hiveName(number) });
+  setHiveCardBees([]);
+  drawHiveThumbnail(hiveThumbnailScene());
+}
+// which of its bees are home, by name — the one the camera came in with, if any, picked out as a train's passengers are,
+// and `onPick` told when one of the names is clicked, to leave with that bee instead
+function setHiveCardBees(names, tracked = -1, onPick = null) {
+  hiveCard.setList('occupants', names, tracked, onPick && { title: 'Follow it out of the hive', onClick: onPick });
+}
+function hideHiveCard() { hiveCard.hide(); }
 
 const FLOWER_HEIGHT = 0.42;   // how tall the tallest of the three flowers stands, in world units; the others keep their proportion to it
 const HIVE_HEIGHT = 0.6;
@@ -596,7 +673,7 @@ function followBee(colony, index) {
   beeDoingShown = null;
   controls.minRadius = 0.5;
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, BEE_FOLLOW_RADIUS)); // swooping in, if the camera's far off
-  App.showBeeCard(colony.bees[index].number);
+  showBeeCard(colony.bees[index].number);
 }
 function followBeeAt(clientX, clientY) {
   const picked = pickBee(clientX, clientY);
@@ -608,14 +685,14 @@ function stopFollowingBee() {
   followedBee = null;
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
-  App.hideBeeCard();
+  hideBeeCard();
 }
 function followHive(colony, index) {
   followedHive = { colony, index };
   hiveBeesShown = null;
   controls.minRadius = 0.8;
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, 5));
-  App.showHiveCard(colony.hives[index].number);
+  showHiveCard(colony.hives[index].number);
 }
 function followHiveAt(clientX, clientY) {
   const picked = pickHive(clientX, clientY);
@@ -629,7 +706,7 @@ function stopFollowingHive() {
   homedBee = null;
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
-  App.hideHiveCard();
+  hideHiveCard();
 }
 // what the followed bee's card says it's up to: where it's got to in its round. There's nothing for being home, since a
 // bee that goes in hands the camera over to its hive and the hive's card takes over from here (see followBees).
@@ -659,7 +736,7 @@ function followBees() {
       if (hive >= 0) { followHive(colony, hive); homedBee = { colony, index }; }
     } else {
       const doing = beeDoing(bee);
-      if (doing !== beeDoingShown) { beeDoingShown = doing; App.setBeeCardDoing(doing); }
+      if (doing !== beeDoingShown) { beeDoingShown = doing; setBeeCardDoing(doing); }
       controls.goalTarget.copy(bee.at);
       controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, BEE_FOLLOW_RADIUS));
     }
@@ -676,7 +753,7 @@ function followBees() {
   const key = names.join(',') + '|' + tracked;
   if (key === hiveBeesShown) return;
   hiveBeesShown = key;
-  App.setHiveCardBees(names, tracked, at => { homedBee = { colony, index: home[at] }; });
+  setHiveCardBees(names, tracked, at => { homedBee = { colony, index: home[at] }; });
 }
 
 let lastBeeTime = null;
@@ -711,4 +788,5 @@ export function updateBees(t) {
   followBees();
 }
 
-Object.assign(App, { pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive });
+// (the bee and hive cards are handed over too, for whoever else wants to put something on them or open one)
+Object.assign(App, { pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive, showBeeCard, setBeeCardDoing, hideBeeCard, showHiveCard, setHiveCardBees, hideHiveCard });

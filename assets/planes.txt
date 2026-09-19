@@ -9,7 +9,22 @@
 #
 # Give an attribute several lines to have each aircraft pick one of them (always the same one for the same aircraft).
 # There's only one kind of aircraft for now, so everything goes under [default] — but a [section] named after a type
-# would work the same way a vehicle type does. Blank lines and lines starting with # are skipped.
+# would work the same way a vehicle type does.
+#
+# A [distribution] section says how many of each counted attribute a thing gets. Counted attributes are the ones that can
+# hold several values at once, which for an aircraft is loves and hates. It's read once for the whole file and applies to
+# every aircraft alike, whatever its type. Leave the section out and the shared spread is used (see core/entries.js), which
+# is mostly one love and one hate. Each row is one count per counted attribute (loves, then hates), then `@` and how likely
+# that row is against the others; a row with no weight is weight 1, and rows with no weights at all are equally likely.
+#
+# Blank lines and lines starting with # are skipped.
+
+[distribution]
+1, 1 @ 0.6
+2, 0 @ 0.1
+0, 2 @ 0.1
+2, 1 @ 0.1
+1, 2 @ 0.1
 
 [default]
 name = Flight

@@ -7,6 +7,46 @@ import { roadNodes } from '../core/state.js';
 import { disposeObject } from '../roads/roads.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { IS_TOUCH } from '../core/device.js';
+import { makeThumbnailDrawer } from '../life/thumbnail.js';
+import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
+import { loadTypeText } from '../core/type-text.js';
+
+// ---------------------------------------------------------- the carriage card
+// Which carriage the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the car's: its
+// name and mood, a picture of it, and what it enjoys and hates — from assets/trains.txt, read the same way as the
+// vehicles' and the buildings' files (see core/type-text.js) — and who's riding it. No Kill button: trains can't be
+// killed.
+const trains = loadTypeText('assets/trains.txt', {
+  attributes: TEXT_ROWS,
+  counted: ['loves', 'hates'], // can have several per carriage, like people: see [distribution] in trains.txt
+  // this stands in until trains.txt has loaded, or if it can't be
+  placeholder: { default: { name: ['Train'], mood: ['🚆'], loves: ['Shoooom'], hates: ['Delays'] } },
+});
+const trainCard = makeCard({
+  id: 'train-card',
+  title: 'Train',
+  onClose: () => App.stopFollowingTrain(),
+  labels: { occupants: 'Passengers' },
+});
+const drawTrainThumbnail = makeThumbnailDrawer(trainCard.canvas);
+
+// `info.number` is the carriage's place among the lines and `info.view` its thumbnail (see trainThumbnailOf below)
+function showTrainCard(info) {
+  const type = trains.of(null, info.number);
+  trainCard.show({ ...type, name: type.name + ' #' + info.number });
+  setTrainCardPassengers([]);
+  drawTrainThumbnail(info.view);
+}
+function hideTrainCard() {
+  trainCard.hide();
+}
+
+// who's riding the followed carriage (see "riding the trains" in people.js): their names, one a line — the one at
+// `tracked` (whoever the camera came aboard with, or a name that's since been clicked) highlighted, and `onPick` told
+// when a name is clicked, to get off with that one instead
+function setTrainCardPassengers(names, tracked = -1, onPick = null) {
+  trainCard.setList('occupants', names, tracked, onPick && { title: 'Follow them off the train', onClick: onPick });
+}
 
 // ---------------------------------------------------------- trains
 // Train lines live in roadNodes/roadLines alongside roads (line.kind === 'train'), so drawing, dragging, joining,
@@ -668,7 +708,7 @@ export function updateTrainShuttles(t) {
 }
 
 // ---- following a carriage with the camera: just like a car (see "following a car" in traffic.js) — a click on one in
-// World mode keeps the view on it, with a card (train-card.js) naming it — Train #n, by its line's place among them —
+// World mode keeps the view on it, with a card (built above) naming it — Train #n, by its line's place among them —
 // until a click elsewhere, leaving World mode, or its line being deleted lets it go. Unlike a car, it can't be killed.
 let followedTrain = null; // the followed carriage's line id, which survives the train meshes being rebuilt
 // the carriage under a point on the screen, as its index in trainShuttles, or -1
@@ -682,7 +722,7 @@ function pickTrain(clientX, clientY) {
 }
 function showFollowedTrainCard() {
   const i = trainShuttles.findIndex(s => s.lineId === followedTrain);
-  App.showTrainCard({ number: i + 1, view: trainThumbnailOf(trainShuttles[i].object) });
+  showTrainCard({ number: i + 1, view: trainThumbnailOf(trainShuttles[i].object) });
 }
 // The card's thumbnail: a copy of the carriage (sharing its geometry and materials), sitting level at the origin, and an
 // isometric camera framing it — as for a car (see makeCarThumbnail in traffic.js).
@@ -717,10 +757,11 @@ function stopFollowingTrain() {
   followedTrain = null;
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
-  App.hideTrainCard();
+  hideTrainCard();
 }
 const followedTrainLine = () => followedTrain;
-Object.assign(App, { pickTrain, followTrainAt, followTrainLine, followedTrainLine, stopFollowingTrain });
+// (the carriage card is handed over too, for whoever else wants to put something on it or open one)
+Object.assign(App, { pickTrain, followTrainAt, followTrainLine, followedTrainLine, stopFollowingTrain, showTrainCard, hideTrainCard, setTrainCardPassengers });
 // where the cursor's ray crosses the level plane at height `y` (null if it doesn't)
 export function trainPlanePoint(sx, sy, y) {
   App.raycaster.setFromCamera(App.ndcOf(sx, sy), camera);

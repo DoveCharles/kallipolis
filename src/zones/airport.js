@@ -10,6 +10,40 @@ import { makeParkMesh } from './surface-detail.js';
 import { builderMesh, addGableRoof } from './farmland.js';
 import { buildRailingMesh } from './fences.js';
 import { streetSegmentsNear, streetFor } from './suburbs.js';
+import { makeThumbnailDrawer } from '../life/thumbnail.js';
+import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
+import { loadTypeText } from '../core/type-text.js';
+
+// ---------------------------------------------------------- the aircraft card
+// Which aircraft the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the train's: its
+// name and mood, a picture of it, and what it loves and hates — from assets/planes.txt, read the same way as the trains'
+// and the vehicles' files (see core/type-text.js). Clicking the picture takes the controls off it, the way clicking a
+// car's picture gets you behind the wheel. No Kill button: there's nothing in here to blow up.
+const planes = loadTypeText('assets/planes.txt', {
+  attributes: TEXT_ROWS,
+  counted: ['loves', 'hates'], // can have several per aircraft, like people: see [distribution] in planes.txt
+  // this stands in until planes.txt has loaded, or if it can't be
+  placeholder: { default: { name: ['Flight'], mood: ['✈️'], loves: ['A tailwind'], hates: ['Holding'] } },
+});
+const planeCard = makeCard({
+  id: 'plane-card',
+  title: 'Aircraft',
+  onClose: () => App.stopFollowingPlane(),
+  // the picture itself: at the controls (see "the flying itself" below)
+  thumb: { title: 'Fly it', onClick: () => App.flyPlane() },
+  labels: { occupants: 'Passengers' },
+});
+const drawPlaneThumbnail = makeThumbnailDrawer(planeCard.canvas);
+
+// `info.number` is the aircraft's place among all of them and `info.view` its picture (see planeThumbnailOf below)
+function showPlaneCard(info) {
+  const type = planes.of(null, info.number);
+  planeCard.show({ ...type, name: type.name + ' #' + info.number });
+  drawPlaneThumbnail(info.view);
+}
+function hidePlaneCard() {
+  planeCard.hide();
+}
 
 // ---------------------------------------------------------- airports
 // Every other zone subdivides its outline first and fits content into the pieces. An airport can't: a runway is one long
@@ -861,7 +895,7 @@ function finishAirport(zone, builders, poly, s, tint) {
 }
 // ============================================================ WATCHING AND FLYING ============================================================
 // A scheduled aircraft can be clicked in World mode like a car or a carriage: the camera stays on it, a card names it
-// (zones/plane-card.js), and from that card's picture you can take the controls off it — the one thing a carriage can't
+// (built above), and from that card's picture you can take the controls off it — the one thing a carriage can't
 // do, and the reason an aircraft is wrapped in a record here rather than left as the bare closure the schedule makes.
 //
 // A flight is in one of three states, and `update` is where that is decided:
@@ -1008,7 +1042,7 @@ function followPlaneAt(clientX, clientY) {
   followed = { zoneId: flight.zone.id, index: flight.index };
   controls.minRadius = Math.max(1.2, flight.size*0.35);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, flight.size*2.6));
-  App.showPlaneCard(planeCardInfo(flight));
+  showPlaneCard(planeCardInfo(flight));
 }
 function stopFollowingPlane() {
   if (!followed) return;
@@ -1016,7 +1050,7 @@ function stopFollowingPlane() {
   followed = null;
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
-  App.hidePlaneCard();
+  hidePlaneCard();
 }
 // what the card says about one: its number across the whole world, so two fields don't both have a Flight #1
 function planeCardInfo(flight) {
@@ -1109,6 +1143,7 @@ function stopFlying() {
   flight.handback = { from: lastFrame || 0, rotation: wasRotation, offset,
     span: Math.max(HANDBACK_MIN, Math.min(HANDBACK_MAX, offset.length()/HANDBACK_SPEED)) };
 }
-Object.assign(App, { pickPlane, followPlaneAt, stopFollowingPlane, flyPlane, stopFlying });
+// (the aircraft card is handed over too, for whoever else wants to put something on it or open one)
+Object.assign(App, { pickPlane, followPlaneAt, stopFollowingPlane, flyPlane, stopFlying, showPlaneCard, hidePlaneCard });
 
 Object.assign(App, { generateAirportContent, longestChordIn, runwayNumber });

@@ -39,8 +39,6 @@ import './life/people/people.js';
 import './life/traffic.js';
 import './life/person-card.js';
 import './life/car-card.js';
-import './trains/train-card.js';
-import './zones/plane-card.js';
 import './buildings/building-card.js';
 import './buildings/see-through.js';
 import './ui/win3.js';
