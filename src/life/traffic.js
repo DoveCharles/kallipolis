@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { scene, camera, renderer, computeWindowGlowFactor, SKY_ENV_MAP, Y_ROAD } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
-import { hashLicensePlate, mulberry32 } from '../core/math.js';
+import { hashLicensePlate, hashNameToNumber, mulberry32 } from '../core/math.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { roadLineWidths, createMeshBuilder, navRebuildOnHold } from '../roads/roads.js';
@@ -287,11 +287,20 @@ function packPlate(text) {
 // A car's registration, from its type's name and its number among those like it (so it's the same every time), in the
 // UK's format for the bus, ambulance, police car and taxi, or any for the rest — and packed for its plates.
 const UK_ONLY_TYPES = ['bus', 'ambulance', 'police car', 'taxi'];
+//max 9 chars
+const VANITY_PLATES = ['IM SO BIG','BUCKET','HOT DICK','ANDY','BOOB HONK','IPOD NANO','YAY CRIME','MINECRAFT',
+  'STEVE JOB','KILL YOU','LASTCHANCE','IBUPROFEN','STALKER','SUCK MAMA','MAOZEDONG','JILLSTEIN','HAI COWOC','BREAKTEST',
+  'SLEEPYBOY','SPEEDBUMP','ROADHEAD','ELLIPSIS','CATTLEGUN','SHRAPNEL','BIGRAGER','KILLMENOW','POOMOBILE','RESPNSBLE','RESPAWN','BREASTMLK',
+  'SAWDUST','UCNTRSTME','ROADRUNNR','PRIORITYS','STINKBUG']
 function carPlate(car) {
+  const carRNG = mulberry32(hashNameToNumber(carMeshes[car.design].name+ car.number));
   const type = carTypeOf(carMeshes[car.design].name, car.number), name = (type.name || '').trim().toLowerCase();
-  const text = hashLicensePlate(`${type.name} #${car.number}`, UK_ONLY_TYPES.includes(name) ? 0 : undefined);
+  const text = (!UK_ONLY_TYPES.includes(name) && carRNG() > 0.8) ? VANITY_PLATES[Math.round(carRNG()*(VANITY_PLATES.length-1))] :
+  hashLicensePlate(`${type.name} #${car.number}`, UK_ONLY_TYPES.includes(name) ? 0 : undefined);
   return { text, packed: packPlate(text) };
 }
+
+
 // Adds a car design's coloring to its material's shader: vCarColor, per vertex, its instance's paint (instanceCarPaint) if
 // it's slot 1 (CarCol) or its own baked color otherwise; vCarEmissive, added to what it emits, for the glowing slots — lit
 // after dark, like the box car's lights (see carGlowFactor, kept in sync with computeWindowGlowFactor in updateTraffic).
@@ -747,7 +756,7 @@ export function updateTraffic(t) {
       car.design = Math.floor(trafficRng()*carMeshes.length);
       car.length = carMeshes[car.design].length;
       car.number = ++designNumbers[car.design];
-      car.plate = carPlate(car);
+      car.plate =  carPlate(car);
     }
     if (car === drivenCar) { driveByHand(car, dt); turnWheels(car, dt); placeCar(car, i, designCounts); return; }
     // cruise, but ease off for the car in front and slow down into junctions

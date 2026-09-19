@@ -26,6 +26,23 @@ export function hashNameToString(name, length = 8) {
   return result;
 }
 
+export function hashNameToNumber(name, length = 8) {
+  // Simple 32-bit hash (djb2-ish)
+  let hash = 5381;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) + hash + name.charCodeAt(i)) >>> 0; // hash * 33 + char
+  }
+
+  // Use the hash to seed a PRNG (e.g. mulberry32) and generate chars
+  const chars = '0123456789';
+  let rng = mulberry32(hash);
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars[Math.floor(rng() * chars.length)];
+  }
+  return result;
+}
+
 export function hashLicensePlate(name, forceType) {
   let hash = 5381;
   for (let i = 0; i < name.length; i++) {
