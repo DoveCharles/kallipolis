@@ -9,8 +9,77 @@ const MORALITY_TEXT_URL = 'assets/morality.txt';
 const MORALITY_MAX = 2500, MORALITY_KNEE = 500;   // max value & value that should land at the halfway point of that half-bar;
 const MORALITY_EXP = Math.log(0.5) / Math.log(MORALITY_KNEE / MORALITY_MAX); 
 const NOTICE_LIFE = 3500, NOTICES_MAX = 6;
+const NOTICE_EXIT_MS = 300;         // how long a notice takes to be gone once it's over
+const NOTICE_EXIT_SPREAD = 14;      // how far either side of its own line it can drift on the way out, in pixels
 const QUIET_TICKS_TO_SETTLE = 1; // a change is only announced once the world's held still this many ticks (so a drag is one notice)
 const TICK_MS = 400;
+
+// the "x3" on a notice, and the jolt it lands with
+const COUNT_START = 3;      // the count the lurch starts at: below this it doesn't move at all, it only darkens
+const COUNT_KNEE = 8;       // the count it has found its feet by: it's COUNT_KNEE_WORTH of the way in at x8
+const COUNT_KNEE_WORTH = 0.2;
+const COUNT_EXTREME = 20;   // the count it's going as hard as it would at the top end
+const COUNT_CLIMB = 0.15;   // past that it keeps getting harder, by this much per square root of the count over
+const COUNT_TURN = -100;    // where a full lurch starts, in degrees: counter-clockwise of where it ends
+const COUNT_DIP = 0.25;     // how far it drops at its lowest, as a fraction of the chip's own line height
+const COUNT_GROW = 0.75;    // how much it swells at that same point, as a fraction of its resting size
+// Its colour: a dim grey down to black over the counts that don't move, then dark purple, violet, blue, red and the reddish
+// magenta it lands on, all by x20. Past that it goes round the colour wheel, a whole rainbow every COUNT_CYCLE counts, so a
+// count in the hundreds is a thing to behold.
+const COUNT_SHADES = ['#3a3a3a', '#101010', '#4c2a86', '#8b5cf6', '#4f7bf7', '#e0473f'];
+const COUNT_END = '#e0317e';    // the reddish magenta at the end of the run
+const COUNT_CYCLE = 10;         // counts per turn of the colour wheel past it
+const colorBytes = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+// Two colours blended, `t` of the way from `a` to `b`.
+function mixColors(a, b, t) {
+  const [ar, ag, ab] = colorBytes(a), [br, bg, bb] = colorBytes(b);
+  const byte = value => Math.round(value).toString(16).padStart(2, '0');
+  return `#${byte(ar + (br - ar)*t)}${byte(ag + (bg - ag)*t)}${byte(ab + (bb - ab)*t)}`;
+}
+// How hard a count lurches, as a fraction of the full throw. Nothing at all up to COUNT_START; then it eases in to
+// COUNT_KNEE_WORTH of the way by COUNT_KNEE, so the first few past the start are a nudge; a straight run from there to
+// COUNT_EXTREME, where it's going as hard as a lurch gets; and past that it still creeps up, by less and less each time,
+// so a count in the hundreds is enormous without ever being so big it leaves the notice behind.
+function countJolt(count) {
+  if (count <= COUNT_START) return 0;
+  const knee = (count - COUNT_START)/(COUNT_KNEE - COUNT_START);
+  // up to the knee it comes off the mark gently, into a run: a soft start rather than a straight line
+  if (count < COUNT_KNEE) return COUNT_KNEE_WORTH*(knee*knee/ (1 + knee*knee));
+  const climbed = COUNT_KNEE_WORTH + (1 - COUNT_KNEE_WORTH)*Math.min((count - COUNT_KNEE)/(COUNT_EXTREME - COUNT_KNEE), 1);
+  return count <= COUNT_EXTREME ? climbed : climbed + COUNT_CLIMB*Math.sqrt(count - COUNT_EXTREME);
+}
+// One colour of the wheel, `hue` in degrees, at full saturation and middling lightness.
+function wheelColor(hue) {
+  const h = ((hue % 360) + 360) % 360/60, x = Math.round(255*(1 - Math.abs(h % 2 - 1)));
+  const [r, g, b] = h < 1 ? [255, x, 0] : h < 2 ? [x, 255, 0] : h < 3 ? [0, 255, x] : h < 4 ? [0, x, 255] : h < 5 ? [x, 0, 255] : [255, 0, x];
+  const byte = value => value.toString(16).padStart(2, '0');
+  return `#${byte(r)}${byte(g)}${byte(b)}`;
+}
+// A count's colour. Up to COUNT_START the counts only darken, dim grey at x1 to black at x3; from there the run of
+// colours, reaching the reddish magenta at COUNT_EXTREME. Past that it goes round the wheel, a whole rainbow every
+// COUNT_CYCLE counts, so a big count is never the same colour twice in a row.
+function countColor(count) {
+  if (count <= COUNT_START) return mixColors(COUNT_SHADES[0], COUNT_SHADES[1], (count - 1)/(COUNT_START - 1));
+  if (count > COUNT_EXTREME) return wheelColor((count - COUNT_EXTREME)/COUNT_CYCLE*360 + 330); // a cycle lands back on that reddish magenta
+  const shades = [...COUNT_SHADES, COUNT_END], span = COUNT_EXTREME - COUNT_START;
+  const at = Math.min((count - COUNT_START)/span, 1)*(shades.length - 1);
+  const i = Math.min(shades.length - 2, Math.floor(at));
+  return mixColors(shades[i], shades[i + 1], at - i);
+}
+// The jolt: a count lands by swinging in out of counter-clockwise, dipping and swelling on the way, and rocking back level.
+// `--count-turn` and `--count-dip` carry how hard it does it, and both grow with the count, so the first few land with a
+// shove and the twentieth one is thrown at the notice. Restarting is the point: the animation is taken off, the layout
+// forced, and put back, so an x5 that becomes an x6 lurches again rather than sitting there.
+function joltCount(chip, count) {
+  const weight = countJolt(count);
+  chip.style.setProperty('--count-color', countColor(count));
+  chip.style.setProperty('--count-turn', (COUNT_TURN*weight).toFixed(1) + 'deg');
+  chip.style.setProperty('--count-dip', (COUNT_DIP*weight).toFixed(3) + 'em');
+  chip.style.setProperty('--count-grow', (1 + COUNT_GROW*weight).toFixed(3));
+  chip.classList.remove('mor-count-jolt');
+  void chip.offsetWidth;
+  chip.classList.add('mor-count-jolt');
+}
 
 // what's counted, grouped as the details list shows it: `key` is the line in morality.txt under the group's [heading]
 const GROUPS = [
@@ -168,13 +237,47 @@ EVENTS.forEach(e => { noticeLabels['events/' + e.key] = e.label; });
 // { el, score, label, count, names, timer }.
 const liveNotices = new Map();
 const NOTICE_NAMES_MAX = 3;
+// The notices are stacked in the order they're shown, which is the order they're in here — by how many of it there have
+// been, the most first, so what's been happening most often is the one at the top. Two on the same count keep the order
+// they came up in.
+//
+// Moving an element is what makes a notice flicker, so the ones already in the right place are left alone: the current
+// order is walked against the ranked one, and only an element sitting where another belongs is put in front of it. When
+// they're already ranked nothing is touched at all, which is the usual case — most updates change a count without changing
+// the order.
+function rankNotices() {
+  const ranked = [...liveNotices.entries()].sort((a, b) => b[1].count - a[1].count);
+  const order = [...noticesEl.children];
+  if (ranked.length === order.length && ranked.every(([, live], i) => live.el === order[i])) return;
+  ranked.forEach(([id, live]) => liveNotices.set(id, live)); // the map's order is the stack's, so it's put right too
+  ranked.forEach(([, live], i) => {
+    // the further down the stack, the further forward it sits (see --notice-z in style.css)
+    live.el.style.setProperty('--notice-z', String(i + 1)); // the top one is behind the ones below it
+    if (order[i] === live.el) return;
+    noticesEl.insertBefore(live.el, order[i] || null);
+    order.splice(order.indexOf(live.el), 1);
+    order.splice(i, 0, live.el);
+  });
+}
+// A notice that's over doesn't blink out: it's let go of — taken out of the stack so what's left is what's on show — and
+// sent up from where it was sitting, with a little drift to one side or the other so a few going at once don't leave in a
+// straight line. It's put where it was first, since out of the stack it would otherwise jump to the corner.
 function dropNotice(id) {
   const live = liveNotices.get(id);
   if (!live) return;
   liveNotices.delete(id);
   clearTimeout(live.timer);
-  live.el.classList.add('leaving');
-  setTimeout(() => live.el.remove(), 400);
+  const box = live.el.getBoundingClientRect();
+  live.el.style.left = box.left + 'px';
+  live.el.style.top = box.top + 'px';
+  live.el.style.width = box.width + 'px';
+  live.el.style.setProperty('--notice-exit-x', (Math.random()*NOTICE_EXIT_SPREAD*2 - NOTICE_EXIT_SPREAD).toFixed(1) + 'px');
+  live.el.style.setProperty('--notice-rise', Math.round(box.bottom + 20) + 'px'); // clear of the top of the screen
+  live.el.style.zIndex = 100; // never behind the ones still sitting there (see --notice-z in style.css)
+  live.el.classList.add('mor-notice-leaving');
+  live.el.remove();
+  document.body.append(live.el);
+  setTimeout(() => live.el.remove(), NOTICE_EXIT_MS);
 }
 /**
  * Show that something happened: worth `delta` morality, `countDelta` of it, and — for an event — the name of
@@ -196,12 +299,11 @@ function notify(id, delta, countDelta, name) {
     el.className = 'mor-notice ' + scoreClass(delta);
     live = { el, score: delta, label: noticeLabels[id], count: 0, names: [], timer: null };
     liveNotices.set(id, live);
-    noticesEl.prepend(el);
-    while (noticesEl.children.length > NOTICES_MAX) {
-      const oldest = [...liveNotices.entries()].find(([, n]) => n.el === noticesEl.lastElementChild);
-      if (!oldest) break;
-      dropNotice(oldest[0]);
-      noticesEl.lastElementChild?.remove(); // (in case it was already mid-fade)
+    noticesEl.append(el); // (where it belongs among the others is rankNotices' job, below)
+    // more than fit: the one with the least to it goes, which is the last of them once they're ranked
+    if (liveNotices.size > NOTICES_MAX) {
+      const [fewest] = [...liveNotices.keys()].reverse();
+      if (fewest !== id) dropNotice(fewest);
     }
   }
   live.count += countDelta || 0;
@@ -209,14 +311,20 @@ function notify(id, delta, countDelta, name) {
     live.names.unshift(name);                      // most recent first
     if (live.names.length > NOTICE_NAMES_MAX) live.names.length = NOTICE_NAMES_MAX;
   }
-  // nothing to score: "Guilty killed by player (+3)", not "0 …"
-  const scoreChip = round1(live.score) ? `<span class="mor-notice-score">${signed(live.score)}</span> ` : '';
-  const countChip = live.count ? ` <span class="mor-notice-count">(${live.count > 0 ? '+' : ''}${live.count})</span>` : '';
+  // the score follows its label ("Innocents killed by player +5"), and nothing is shown for a score of 0: "Guilty killed by
+  // player x3", not "0 …"
+  const scoreChip = round1(live.score) ? ` <span class="mor-notice-score">${signed(live.score)}</span>` : '';
+  // how many of them that is, in the same run: "x3", and no chip at all for a single one
+  const countChip = live.count > 1 ? ` <span class="mor-notice-count">x${live.count}</span>` : '';
   // one line each, most recent first, under a rule across the notice
   const names = live.names.length
     ? `<div class="mor-notice-names">${live.names.map(n => `<div>${n}</div>`).join('')}</div>`
     : '';
-  live.el.innerHTML = `${scoreChip}${live.label}${countChip}${names}`;
+  live.el.innerHTML = `${live.label}${scoreChip}${countChip}${names}`;
+  const chip = live.el.querySelector('.mor-notice-count');
+  if (chip) joltCount(chip, live.count);
+  rankNotices();
+
   clearTimeout(live.timer);
   live.timer = setTimeout(() => dropNotice(id), NOTICE_LIFE); // each one gives it its full life again
 }
