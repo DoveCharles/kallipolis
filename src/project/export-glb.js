@@ -3,6 +3,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { S, App } from '../core/shared.js';
 import { scene, ground } from '../core/scene.js';
 import { downloadFile } from './save-load.js';
+import { showHiddenBuildings } from '../buildings/see-through.js';
 
 // ============================================================ GLB export
 // The city as a GLB with real materials, for Blender, Unity, Unreal and the like: the ground, roads, train lines, water,
@@ -78,6 +79,7 @@ function mergeExportGeometries(geos) {
 }
 function exportGLB() {
   if (!GLTFExporter) { alert('The GLB exporter didn\'t load — check your connection and reload the page.'); return; }
+  showHiddenBuildings(); // a building the camera's inside isn't drawn, and the export skips what isn't (see see-through.js)
   scene.updateMatrixWorld(true);
   const sources = [['Ground', ground], ['Roads', S.roadMeshGroup], ['Trains', S.trainMeshGroup], ['Water', S.waterGroup], ['Bridges', S.bridgeGroup],
     ...S.zones.filter(z => z.buildingsGroup).map(z => [z.name + ' (' + (z.zoneType || 'buildings') + ')', z.buildingsGroup])];
