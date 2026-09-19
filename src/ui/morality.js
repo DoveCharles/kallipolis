@@ -28,8 +28,12 @@ const GROUPS = [
   ] },
 ];
 const EVENTS = [
-  { key: 'peds killed by player', label: 'Peds killed by player' },
-  { key: 'peds killed by cars', label: 'Peds killed by cars' },
+  { key: 'innocent peds killed by player', label: 'Innocents killed by player' },
+  { key: 'innocent peds killed by cars', label: 'Innocents killed by cars' },
+  { key: 'guilty peds killed by player', label: 'Guilty killed by player' },
+  { key: 'guilty peds killed by cars', label: 'Guilty killed by cars' },
+  { key: 'villainous peds killed by player', label: 'Villains killed by player' },
+  { key: 'villainous peds killed by cars', label: 'Villains killed by cars' },
   { key: 'cars destroyed by player', label: 'Cars destroyed by player' },
 ];
 const BUILDING_KIND_OF_ZONE = { buildings: 'commercial', industrial: 'industrial', farmland: 'farmhouses' };

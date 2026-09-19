@@ -429,6 +429,34 @@ function pleaseBystanders(victim) {
   });
 }
 
+/** How evil someone has to be to count as guilty rather than innocent, and as villainous rather than guilty. */
+const EVIL_GUILTY_ABOVE = 0.05, EVIL_VILLAINOUS_ABOVE = 0.35;
+/**
+ * What someone counts as, by how evil they are: an innocent, a bad sort, or a villain. The thresholds the crowd's
+ * reaction and the morality meter both go by, so the two always agree.
+ * @param {Person} p - the person
+ * @returns {'innocent'|'guilty'|'villainous'} what they count as
+ */
+function standingOf(p) {
+  // the traits they're actually going about with, which are picked for their own sex (see refreshTraits); an evil
+  // score they somehow never got counts as innocent
+  const evil = p.traits.evil ?? 0;
+  return evil > EVIL_VILLAINOUS_ABOVE ? 'villainous' : evil > EVIL_GUILTY_ABOVE ? 'guilty' : 'innocent';
+}
+/**
+ * How the people around someone take their death: an innocent's leaves them horrified, a bad sort's stops them in
+ * their tracks, and a villain's delights them. Called for every death, whoever caused it — the Kill button, or a car
+ * running them over (see runOverPeople in traffic.js) — so any way an NPC dies is reacted to the same.
+ * @param {Person} victim - whoever was killed
+ * @returns {void}
+ */
+function bystandersReactToDeath(victim) {
+  const standing = standingOf(victim);
+  if (standing === 'villainous') pleaseBystanders(victim);
+  else if (standing === 'guilty') stunBystanders(victim);
+  else frightenBystanders(victim);
+}
+
 /**
  * Move one of someone's reactions to a blast on a stage: noticing turns them to look at it, looking hands over to
  * whatever that reaction does about it, and anything else lets them go.
@@ -485,7 +513,8 @@ export function updateFright(p, dt) {
  */
 export function updateStun(p, dt) {
   updateEffect(p, dt, 'stun', (p, stun) => {
-    stun.stage = 'dazed';       // they hold still, don't flee
+    // 'held' is the stage updatePeople freezes them on: dazed where they stand, looking, and not fleeing
+    stun.stage = 'held';
     stun.timer = 3 + peopleRng()*2;
   });
 }
@@ -498,9 +527,10 @@ export function updateStun(p, dt) {
  */
 export function updatePlease(p, dt) {
   updateEffect(p, dt, 'please', (p, please) => {
-    please.stage = 'delighted'; // they hold still and beam, don't flee either
+    // the same hold as stun, but beaming: see pleased in updatePeople
+    please.stage = 'held';
     please.timer = 2 + peopleRng()*2;
-    p.faceTo = null; p.lookAt = null;
+    if (hasClip('Wave')) playOnce(p, 'Wave'); // a wave at whatever pleased them
   });
 }
 /**
@@ -518,16 +548,18 @@ export function fleeWithin(p, area) {
   p.tx = best.x; p.tz = best.z; p.wait = 0;
 }
 /**
- * Kill whoever the person card is showing: explode them into giblets in their own colors, and keep them dead - gone from
- * the crowd, though their place in it is kept - with whoever they were talking to carrying on without them.
+ * Kill someone: explode them into giblets in their own colors, and keep them dead - gone from the crowd, though their
+ * place in it is kept - with whoever they were talking to carrying on without them. The people around them take it
+ * according to how evil they were (see bystandersReactToDeath), the same however they died.
  * @param {number} i - their index in people
- * @param {'player'|'car'} [by] - who did it, for the morality meter: the Kill button or a car
+ * @param {'player'|'car'} [by] - who did it, for the morality meter: the Kill button, or a car that ran them over
  * @returns {void}
  */
 function killPerson(i, by = 'player') {
   const p = people[i];
   if (!p || isGone(p)) return;
-  App.recordMoralityEvent?.(by === 'car' ? 'peds killed by cars' : 'peds killed by player');
+  // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
+  App.recordMoralityEvent?.(`${standingOf(p)} peds killed by ${by === 'car' ? 'cars' : 'player'}`);
   if (followed === i) stopFollowingPerson();
   if (awaited === i) setAwaited(-1);
   endActivity(p);
@@ -548,11 +580,7 @@ function killPerson(i, by = 'player') {
   }
   Object.values(colors).forEach(color => color?.lerp(new THREE.Color(0x550000), 0.4)); //make gibs darker, less saturated
   explode({ x: p.x, y: p.y, z: p.z }, 1.7*p.height*S.peopleSize, colors);
-  const evil = profileOf(i, true).traits.evil;
-  if (people[i])
-  evil <= 0.05 ? frightenBystanders(p) :
-  evil <= 0.35 ? stunBystanders(p) :
-  pleaseBystanders(p);
+  bystandersReactToDeath(p);
   p.mode = 'dead';
   p.train = null;
   p.indoors = null;
@@ -627,7 +655,7 @@ export function updatePeople(t) {
     if (p.fright) updateFright(p, dt);
     //attempting to give additional reactions to npc death depending on how evil they are
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
-    if (p.please) updatePlease(p, dt); //Should do same as stun but make them emote happily - Doesn't make happy :(
+    if (p.please) updatePlease(p, dt); // (the same hold as stun, read as delight: see pleased below)
     if (p.punched) updatePunched(p, dt);
     // frozen in place: fright's 'look' stage, or stun/please's 'held' stage. only fright ever flees.
     const frozen = (!!p.fright && p.fright.stage === 'look')
@@ -635,6 +663,9 @@ export function updatePeople(t) {
                 || (!!p.please && p.please.stage === 'held')
                 || (!!p.punched && p.punched.stage !== 'marked'); // (braced for a punch, knocked down, or getting up)
     const fleeing = !!p.fright && p.fright.stage === 'flee';
+    // pleased: looking at it and then held still, beaming. The same 'look' and 'held' stages as stun — the ones
+    // updatePeople freezes them on — read as delight rather than shock, below.
+    const pleased = !!p.please && (p.please.stage === 'look' || p.please.stage === 'held');
     let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
     let goal = null;
     //Updating hair colour depending on age
@@ -837,19 +868,21 @@ export function updatePeople(t) {
         p.talkIn = 0.08 + peopleRng()*0.14;
       }
       // (shocked, a gasp — agape while they stare)
-      if (frozen || fleeing) p.talkTo = frozen ? 1 : 0.55;
+      if (pleased) p.talkTo = 0.45;                        // smiling, not agape
+      else if (frozen || fleeing) p.talkTo = frozen ? 1 : 0.55;
       p.talk += (p.talkTo - p.talk)*Math.min(1, dt*20);
       if (listening) {
         if ((p.emotionIn -= dt) <= 0) { p.emotionTo = Math.max(-1, Math.min(1, peopleRng()*2 - 1 + p.traits.mood)); p.emotionIn = 1.5 + peopleRng()*3; }
       } else if (!group) {
         p.emotionTo = p.traits.mood; // (their resting face)
       }
-      if (frozen || fleeing) p.emotionTo = -1;
+      if (pleased) p.emotionTo = 1;                        // beaming, where fright and stun go flat
+      else if (frozen || fleeing) p.emotionTo = -1;
       p.emotion += (p.emotionTo - p.emotion)*Math.min(1, dt*5);
       // their eyes: the look their traits give them (from their mood, say), brighter or sadder as their expression swings
       // above or below where it rests, and wide with shock when frightened
-      const { happy, sad, angry, shock } = p.traits, swing = p.emotion - p.traits.mood, shocked = frozen || fleeing;
-      const eyesTo = [shocked ? 1 : shock, shocked ? 0 : happy + Math.max(0, swing)*0.8, p.attack ? 1 : angry, sad + Math.max(0, -swing)*0.8];
+      const { happy, sad, angry, shock } = p.traits, swing = p.emotion - p.traits.mood, shocked = (frozen || fleeing) && !pleased;
+      const eyesTo = [shocked ? 1 : shock, pleased ? 1 : shocked ? 0 : happy + Math.max(0, swing)*0.8, p.attack ? 1 : angry, sad + Math.max(0, -swing)*0.8];
       for (let k=0;k<4;k++) p.eyes[k] += (Math.min(1, eyesTo[k]) - p.eyes[k])*Math.min(1, dt*6);
       // instanceAnim (see the shader): the rows they're at in the two animations, how far they've blended, and their blink
       const o = i*4, animArray = personModel.anim.array, lookArray = personModel.look.array;

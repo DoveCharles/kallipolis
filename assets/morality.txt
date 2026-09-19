@@ -41,6 +41,13 @@ farmhouses = 0.2
 # ------------------------------------------------------------------------------------------------------------------------
 # THINGS THAT HAPPEN: per time it happens (these start at 0 each time the page loads)
 [events]
-peds killed by player = -5
-peds killed by cars = -0.1
+# Killing someone is judged by what they were: an innocent is a loss, a bad sort is nobody's problem, and a villain
+# is a good deed. Each counts for the two ways an NPC can die: by your own hand (the Kill button, or driving the car
+# that hits them), or by traffic (someone else's car).
+innocent peds killed by player = -5
+guilty peds killed by player = 0
+villainous peds killed by player = 5
+innocent peds killed by cars = -0.1
+guilty peds killed by cars = 0
+villainous peds killed by cars = 0.1
 cars destroyed by player = -10
