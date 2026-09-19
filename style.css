@@ -251,7 +251,17 @@ canvas.adding { cursor:copy; }
 .pc-label { font-family:var(--mono); font-size:11px; color:var(--text-dim); }
 .pc-value { line-height:1.4; }
 .pc-name { font-weight:600; color:var(--accent); padding-right:16px; }
-.pc-tracked { background:#1f5fd6; color:#fff; padding:0 3px; margin:0 -3px; }
+/* a name in a list row (see setList in src/ui/entity-card.js) — a button, when the camera can leave with whoever it is,
+   shorn of everything that makes a button look like one so it reads as the line of text it was before */
+.pc-line { display:block; }
+button.pc-line {
+  padding:0; margin:0; border:none; border-radius:0; background:none; text-align:left;
+  font:inherit; color:inherit; line-height:inherit;
+}
+button.pc-pick { cursor:pointer; }
+button.pc-pick:hover { text-decoration:underline; }
+/* whoever the camera's leaving with */
+.pc-tracked, button.pc-tracked { background:#1f5fd6; color:#fff; padding:0 3px; margin:0 -3px; }
 .pc-mood { font-size:18px; line-height:1; }
 /* name, age and mood, with the headshot beside them (clear of the close button above it) */
 .pc-top { display:flex; gap:10px; align-items:flex-start; }
@@ -422,6 +432,8 @@ html.win3 .card-close { display:none; }
 html.win3 .pc-row.pc-gap { border-top:1px solid #000; }
 html.win3 .pc-name { padding-right:0; }
 html.win3 .pc-tracked { background:#000080; color:#fff; }
+html.win3 button.pc-line { color:#000; }
+html.win3 button.pc-tracked { color:#fff; }
 html.win3 .entity-card .pc-mood { font-size:18px; }
 html.win3 .pc-shot { margin-top:0; }
 html.win3 .pc-thumb {

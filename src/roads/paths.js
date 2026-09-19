@@ -25,6 +25,15 @@ export const WALKWAY_TEXTURES = [
   { id: 'dirt', label: 'Dirt' },
 ];
 export const WALKWAY_TEXTURE = 'plain';
+// The texture scale a walkway starts at, before anyone touches the slider. Dirt's speckle and the
+// wander of its edge are a far bigger pattern than any of the paving ones, so at the same scale as
+// brick or planks a dirt path reads as a wide, blotchy smear: it starts at a quarter of the size.
+export function defaultWalkwayTextureScale(texture) { return texture === 'dirt' ? 0.25 : 1; }
+// A line's texture scale, falling back to its texture's own default when it has never been set —
+// lines saved before this default existed carry an explicit scale, so they keep the look they had.
+export function walkwayTextureScaleOf(line) {
+  return line.walkwayTextureScale ?? defaultWalkwayTextureScale(line.walkwayTexture || WALKWAY_TEXTURE);
+}
 const PATH_MAX_SEGMENTS = 128; // fixed GLSL array size; a network's centerlines are simplified to fit
 export function isWalkwayLine(line) { return line.roadType === 'walkway'; }
 export function isRiverLine(line) { return line.roadType === 'river'; }
@@ -228,7 +237,7 @@ function buildWalkwayMesh(lines, networkId) {
   builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, outline, [], true), Y_PATH);
   const geo = builder.build();
   if (!geo) return null;
-  const mat = makeWalkwayMaterial({ texture, color, scale: line.walkwayTextureScale, rotation: line.walkwayTextureRotation,
+  const mat = makeWalkwayMaterial({ texture, color, scale: walkwayTextureScaleOf(line), rotation: line.walkwayTextureRotation,
     segments: texture === 'dirt' ? pathSegmentsOf(lines) : [], halfWidth, fade });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
@@ -250,7 +259,7 @@ export function refreshRoadAppearance(networkId) {
     else if (mesh.name === 'Sidewalk') mesh.userData.baseColor = line.sidewalkColor!=null ? line.sidewalkColor : SIDEWALK_COLOR;
     else if (mesh.name === 'Walkway') {
       mesh.userData.baseColor = line.walkwayColor!=null ? line.walkwayColor : WALKWAY_COLOR;
-      setWalkwayLook(mesh.material, line.walkwayTexture || WALKWAY_TEXTURE, line.walkwayTextureScale, line.walkwayTextureRotation);
+      setWalkwayLook(mesh.material, line.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScaleOf(line), line.walkwayTextureRotation);
     }
   });
   App.refreshHighlights();

@@ -73,9 +73,11 @@ function thumbnailOf(group, box, center, radius) {
   return { mesh, camera: view };
 }
 
-// who's inside the followed building (see people.js): their names, one a line
-function setBuildingCardInhabitants(names) {
-  card.setList('occupants', names);
+// Who's inside the followed building (see people.js): their names, one a line. `tracked` is whichever of them the camera
+// means to leave with (see "waiting on someone indoors" in people.js), picked out as a train's passengers are, and
+// `onPick` is told when one of the names is clicked, to make that one the one it leaves with.
+function setBuildingCardInhabitants(names, tracked = -1, onPick = null) {
+  card.setList('occupants', names, tracked, onPick && { title: 'Follow them out', onClick: onPick });
 }
 
 // each frame: the camera on the building, or letting go of it once it's gone (its zone rebuilt or removed) or World mode's left

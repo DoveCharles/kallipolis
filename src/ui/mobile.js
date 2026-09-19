@@ -10,7 +10,8 @@ import { cards } from './entity-card.js';
 //   as S.touchAdd; a long press on the view is the right button, and two fingers pan and pinch (also input.js)
 // - Move / Rotate / Scale under the Maps list stand in for G / R / S, setting S.touchMapMode so the image is dragged about
 //   rather than clicked twice
-// - a thumbstick and a couple of buttons stand in for WASD while someone's being walked or driven about
+// - a thumbstick and a few buttons stand in for WASD, and for the click that throws a punch, while someone's being
+//   walked or driven about
 // - on a narrow screen the side panel becomes a sheet along the bottom, which ☰ slides up and down
 const panel = document.getElementById('panel');
 const addBtn = document.getElementById('btn-touch-add');
@@ -19,6 +20,7 @@ const mapTools = document.getElementById('map-touch-tools');
 const drive = document.getElementById('touch-drive');
 const stick = document.getElementById('touch-stick'), knob = document.getElementById('touch-stick-knob');
 const runBtn = document.getElementById('touch-run'), brakeBtn = document.getElementById('touch-brake');
+const punchBtn = document.getElementById('touch-punch');
 
 // ============================================================ the panel as a bottom sheet
 // Only on a narrow screen: a tablet held either way has room for the panel where it always was. It starts open, because a
@@ -102,6 +104,15 @@ function holdButton(btn, key) {
 holdButton(runBtn, 'shift');
 holdButton(brakeBtn, 'space');
 
+// Punch stands in for the click that throws one (src/life/possession.js): a tap on the view is already a finger looking
+// around, so there's none to spare for it. It's a tap rather than a hold — one punch a press.
+punchBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault(); e.stopPropagation(); // (as the stick: not a finger looking around, and not one the view should see)
+  punchBtn.classList.add('on');
+  App.punchFromPossession?.();
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => punchBtn.addEventListener(ev, () => punchBtn.classList.remove('on')));
+
 // The controls are up for exactly as long as someone's being walked or driven about, which is exactly as long as the note
 // across the top of the view is (src/life/possession.js) — so that's what says when to show them.
 const possessHint = document.getElementById('possess-hint');
@@ -110,6 +121,7 @@ function syncDrive() {
   if (!on && !drive.hidden) releaseStick();
   drive.hidden = !on;
   brakeBtn.hidden = !App.isDriving?.();
+  punchBtn.hidden = !App.isPossessing?.(); // (there's nobody to punch from a car)
 }
 new MutationObserver(syncDrive).observe(possessHint, { attributes: true, attributeFilter: ['hidden'] });
 

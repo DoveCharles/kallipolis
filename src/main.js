@@ -39,6 +39,7 @@ import './life/person-card.js';
 import './life/car-card.js';
 import './trains/train-card.js';
 import './buildings/building-card.js';
+import './buildings/see-through.js';
 import './ui/win3.js';
 import './ui/mobile.js';
 import './ui/pixelation.js';
@@ -67,6 +68,7 @@ import { updateTraffic, loadCarModels } from './life/traffic.js';
 import { updateGiblets } from './life/giblets.js';
 import { loadBeeModel, updateBees } from './life/bees.js';
 import { updateBuildingFollow } from './buildings/building-card.js';
+import { hideBuildingsAroundCamera } from './buildings/see-through.js';
 import { renderView } from './ui/pixelation.js';
 
 // ============================================================ init
@@ -136,6 +138,7 @@ function animate() {
   placeSunLight();
   WATER_TIME.value = t;
   refreshSceneIndex();
+  hideBuildingsAroundCamera(); // (a building the camera's ended up inside isn't drawn: see see-through.js)
   blinkLights.forEach(o => { o.material.emissiveIntensity = 0.5 + Math.sin(t*3 + o.userData.blinkPhase)*0.5; });
   if (S.interactionMode === 'node') scaleNodeUi(camera);
   renderView(scene, camera);

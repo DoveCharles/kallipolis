@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { scene, camera, Y_PARK, Y_PATH, Y_ROAD, Y_SIDEWALK, Y_ZONE_GROUND } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
-import { mulberry32, centroid } from '../core/math.js';
+import { mulberry32, centroid, lerp } from '../core/math.js';
 import { closestPointOnSegment, buildingKey, buildingNumber } from '../buildings/footprints.js';
 import { buildingKindOf, buildingTypeOf, buildingEnterable } from '../buildings/building-types.js';
 import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
@@ -16,7 +16,7 @@ import { getWaterRegion } from '../water/water.js';
 import { signalRedLeft } from '../roads/markings.js';
 import { toClipperPath, pathsArea, offsetPaths, createRegionTester, zoneCutoutsNear } from '../zones/cutouts.js';
 import { FOOTBRIDGE_TOP } from '../water/bridges.js';
-import { DEFAULT_TRAITS, profileOf, profilesVersion } from './profiles.js';
+import { DEFAULT_TRAITS, profileOf, profilesVersion, onProfilesLoaded } from './profiles.js';
 import { explode } from './giblets.js';
 import { possession, controlInput, startPossession, endPossession } from './possession.js';
 
@@ -163,25 +163,47 @@ const CIRCLE_MAX = 4;
 // every shape key the shader applies, in the order of the shape key texture, and the bit of personVertex.z saying a vertex
 // moves with it: the body's (1) and the head's and eyes' shapes (8, 16), set once per person; Blink (2), as they blink;
 // the mouth's Talk and Emotion (4), as they talk and listen; and the eyes' Shock, Happy, Angry and Sad (32), as they feel
-const PERSON_SHAPE_KEYS = ['Breast', 'Waist', 'Hips', 'Weight', 'Butt', 'Blink', 'Talk', 'Emotion', 'Key 1', 'Key 2', 'Shape1', 'Shape2', 'Shape3',
-  'Shock', 'Happy', 'Angry', 'Sad'];
-const PERSON_SHAPE_KEY_BITS = [1, 1, 1, 1, 1, 2, 4, 4, 8, 8, 16, 16, 16, 32, 32, 32, 32];
-const PERSON_BODY_KEY_COUNT = 5;
+const PERSON_SHAPE_KEYS = ['Breast', 'Waist', 'Hips', 'Weight', 'Butt', 'Shoulders', 'Blink', 'Talk', 'Emotion', 'Key 1', 'Key 2',
+  'Shape1', 'Shape2', 'Shape3', 'Shock', 'Happy', 'Angry', 'Sad'];
+const PERSON_SHAPE_KEY_BITS = [1, 1, 1, 1, 1, 1, 2, 4, 4, 8, 8, 16, 16, 16, 32, 32, 32, 32];
+const PERSON_BODY_KEY_COUNT = 6;
+// a shape key's place in that order, for the shader to read it by name rather than by a number that moves when a key is added
+const shapeKey = name => PERSON_SHAPE_KEYS.indexOf(name);
 // each person's shape keys by sex, as [lowest, highest]
 const PERSON_BODY_SHAPES = {
-  male:   { Breast: [0.6, 1],  Waist: [0.5, 1],    Hips: [-1, -0.5],   Weight: [0, 1],   Butt: [1, 1] },
-  female: { Breast: [-1, 0.1], Waist: [-0.5, 0.1], Hips: [-0.4, 0.2], Weight: [0, 0.3], Butt: [0, 0.6] },
+  male:   { Breast: [0.6, 1],  Waist: [0.5, 1],    Hips: [-1, -0.5],  Weight: [0, 1],   Butt: [1, 1],     Shoulders: [0, 1] },
+  female: { Breast: [-1, 0.1], Waist: [-0.5, 0.1], Hips: [-0.4, 0.2], Weight: [0, 1],   Butt: [0, 0.6],   Shoulders: [0, 0.3] },
 };
+// How far out a person's arms hang from their sides, in the model's units, at Weight 1 and at Shoulders 1 — those two
+// shape keys widen the body (Weight by about this much all the way from the hips to the shoulders, Shoulders only across
+// the shoulders themselves) and leave the arms where they were, so without this a heavy or a broad person's shoulders
+// swallow theirs and their hands swing through their hips.
+const PERSON_ARM_SPREAD = { Weight: 0.43, Shoulders: 0.5 };
 // each person's head and eye shape keys, as [lowest, highest] — or, where men's and women's differ, one of those for each
 const PERSON_FACE_SHAPES = { 'Key 1': { male: [0, 1], female: [-0.3, 0] }, 'Key 2': [-0.5, 0.3], Shape1: [-0.2, 1], Shape2: [0, 1], Shape3: [0, 1] };
+// How likely a woman's top is to show any of her midriff, by age: as likely as anything while she's young, and rarer
+// every year after that until, by MIDRIFF_COVERED_BY, it's only the odd one who does.
+const MIDRIFF_BARE_AGE = 22, MIDRIFF_COVERED_BY = 55, MIDRIFF_CHANCE_YOUNG = 2/3, MIDRIFF_CHANCE_OLD = 0.05;
+const midriffChance = age =>
+  lerp(MIDRIFF_CHANCE_YOUNG, MIDRIFF_CHANCE_OLD,
+       Math.max(0, Math.min(1, (age - MIDRIFF_BARE_AGE)/(MIDRIFF_COVERED_BY - MIDRIFF_BARE_AGE))));
 // How much skin clothes show: a sleeve, the tummy and a leg are each split into numbered bands (materials named Sleeve1,
 // Sleeve2…, lowest nearest the body), and each person's clothes stop at one of them — it and every higher-numbered band of
-// that part showing skin, the rest the clothes' color. A man's tummy is always covered.
+// that part showing skin, the rest the clothes' color. A man's tummy is always covered, and a woman's the older she is
+// (`bareChance`, where a part has one: how often any of it shows at all, the bands that do being even between them).
 const PERSON_CLOTHING = [
   { band: 'Sleeve', part: 'Top', count: 3 },
-  { band: 'Tummy', part: 'Top', count: 2, coveredOnMen: true },
+  { band: 'Tummy', part: 'Top', count: 2, coveredOnMen: true, bareChance: midriffChance },
   { band: 'Leg', part: 'Pants', count: 2 },
 ];
+// Where a part of someone's clothes stops, from one random number: the band it stops at, counting from 1, or one past the
+// last band when it covers the part altogether.
+const clothingBand = (c, r, man, age) => {
+  if (c.coveredOnMen && man) return c.count + 1;
+  const bare = c.bareChance ? c.bareChance(age) : c.count/(c.count + 1);
+  if (r >= bare) return c.count + 1;
+  return 1 + Math.min(c.count - 1, Math.floor(r/bare*c.count));
+};
 // the model's materials, by name: which part of the model each vertex belongs to (its slot, in personVertex.y) — the clothes take each
 // person's own colors, the rest keep the model's; and the parts only drawn for women
 const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelashes', 'Lips',
@@ -220,10 +242,12 @@ const PERSON_VERTEX_PARS = `
   uniform sampler2D personTraits;
   uniform float personHeadBone;
   uniform vec3 personHeadPivot;
+  uniform float personChestBone;
   attribute vec4 personJoints;
   attribute vec4 personWeights;
   // What the shader needs to know about the vertex itself, all in one attribute: a machine is only guaranteed 16 of them,
   // and instanceMatrix takes four of those while gl_InstanceID takes another. x how much the vertex moves with the head,
+  // or, negative, how much it moves out with the arms (nothing is both, so the two share the sign of the one number),
   // y which slot (which part of the figure) it belongs to, z which shape keys move it (see PERSON_SHAPE_KEY_BITS), and w
   // where it is in the shape key texture — which is gl_VertexID, but reading it costs an attribute of its own.
   attribute vec4 personVertex;
@@ -280,8 +304,9 @@ const PERSON_VERTEX_PARS = `
     }
     return looked;
   }
-  // this person's row of the traits texture: 0 their first four body shape keys, 1 x their fifth, y whether they're a man
-  // and z their Shape3, then the colors they have their own of, where their clothes stop, and their face's shape keys
+  // this person's row of the traits texture: 0 their first four body shape keys, 1 x their fifth and w their sixth, with
+  // y whether they're a man and z their Shape3, then the colors they have their own of, where their clothes stop, and
+  // their face's shape keys
   vec4 personTrait(int row) { return texelFetch(personTraits, ivec2(personIndex(), row), 0); }
   // a shape key's offset at this vertex
   vec3 personMorph(int key) {
@@ -293,19 +318,29 @@ const PERSON_VERTEX_PARS = `
     int mask = int(personVertex.z + 0.5);
     vec3 offset = vec3(0.0);
     if ((mask & 1) != 0) {
-      vec4 body = personTrait(0);
-      offset += personMorph(0)*body.x + personMorph(1)*body.y + personMorph(2)*body.z + personMorph(3)*body.w + personMorph(4)*personTrait(1).x;
+      vec4 body = personTrait(0), rest = personTrait(1);
+      offset += personMorph(0)*body.x + personMorph(1)*body.y + personMorph(2)*body.z + personMorph(3)*body.w + personMorph(4)*rest.x + personMorph(5)*rest.w;
     }
-    if ((mask & 2) != 0) offset += personMorph(5)*instanceAnim.w;
-    if ((mask & 4) != 0) offset += personMorph(6)*instanceLook.z + personMorph(7)*instanceLook.w;
+    if ((mask & 2) != 0) offset += personMorph(${shapeKey('Blink')})*instanceAnim.w;
+    if ((mask & 4) != 0) offset += personMorph(${shapeKey('Talk')})*instanceLook.z + personMorph(${shapeKey('Emotion')})*instanceLook.w;
     if ((mask & 24) != 0) {
       vec4 face = personTrait(${PERSON_FACE_ROW});
-      if ((mask & 8) != 0) offset += personMorph(8)*face.x + personMorph(9)*face.y;
-      if ((mask & 16) != 0) offset += personMorph(10)*face.z + personMorph(11)*face.w + personMorph(12)*personTrait(1).z;
+      if ((mask & 8) != 0) offset += personMorph(${shapeKey('Key 1')})*face.x + personMorph(${shapeKey('Key 2')})*face.y;
+      if ((mask & 16) != 0) offset += personMorph(${shapeKey('Shape1')})*face.z + personMorph(${shapeKey('Shape2')})*face.w + personMorph(${shapeKey('Shape3')})*personTrait(1).z;
     }
     // instanceEyes: how shocked, happy, angry and sad their eyes look
-    if ((mask & 32) != 0) offset += personMorph(13)*instanceEyes.x + personMorph(14)*instanceEyes.y + personMorph(15)*instanceEyes.z + personMorph(16)*instanceEyes.w;
+    if ((mask & 32) != 0) offset += personMorph(${shapeKey('Shock')})*instanceEyes.x + personMorph(${shapeKey('Happy')})*instanceEyes.y + personMorph(${shapeKey('Angry')})*instanceEyes.z + personMorph(${shapeKey('Sad')})*instanceEyes.w;
     return offset;
+  }
+  // A heavier or broader person's arms hang out away from their sides, rather than swinging through their hips. Everything
+  // from the shoulder down (personVertex.x, negative) moves out along the way their chest faces, as far as their Weight
+  // and Shoulders shape keys widen their body — after they're posed, as the shape keys and the bones leave the arms
+  // where a slight person's are.
+  vec3 personArms(vec3 posed, float restX) {
+    float spread = max(-personVertex.x, 0.0)*(personTrait(0).w*${PERSON_ARM_SPREAD.Weight.toFixed(3)} + personTrait(1).w*${PERSON_ARM_SPREAD.Shoulders.toFixed(3)});
+    if (spread <= 0.0) return posed;
+    vec3 sideways = normalize(mat3(personBone(personChestBone))*vec3(1.0, 0.0, 0.0));
+    return posed + sideways*(restX < 0.0 ? -spread : spread);
   }
 `;
 // Adds the posing and shape keys to a material's shaders, and how it colors the figure. `look`: `femaleOnly`, the slots only
@@ -326,7 +361,7 @@ function injectPersonShader(shader, uniforms, look) {
     .replace('#include <common>', '#include <common>\n' + PERSON_VERTEX_PARS
       + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : ''))
     .replace('#include <begin_vertex>', `#include <begin_vertex>
-      transformed = personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz);
+      transformed = personArms(personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz), transformed.x);
       int personSlotIndex = int(personVertex.y + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
@@ -404,12 +439,20 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const headBone = boneByName.get('Head');
   const inHead = bones.map(bone => { for (let b = bone; b; b = b.parent) if (headBone != null && b === bones[headBone]) return true; return false; });
   const headPivot = headBone != null ? bones[headBone].getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
+  // the arm bones, by name — the rig doesn't hang them off each other (a hand is posed where its own bone puts it, not
+  // where the arm leaves it), so there's no chain to walk down from the shoulder. The whole arm, shoulder included, moves
+  // out together: the Weight shape key widens the body by about as much at the shoulders as at the hips, and the skin
+  // weights carry the arm into the body at the armpit on their own. The chest, which the shoulders hang from, says which
+  // way sideways is once they're posed.
+  const isArmBone = /^(Shoulder|Elbow|Hand|Wrist|Finger|Thumb|Little|Middle)/;
+  const inArm = bones.map(bone => isArmBone.test(bone.name));
+  const chestBone = boneIndex.get(bones[boneByName.get('ShoulderL') ?? 0].parent) ?? 0;
 
   // ---- the body, in the rest pose, as one mesh: every part's vertices with the bones moving them, which part they are,
   // and each shape key's offsets. A mesh riding on a bone rather than rigged (the head) moves with that bone alone. A mesh
   // that's only one side of the body — Blender's Mirror modifier isn't applied when the model's exported, as a mesh with
   // shape keys can't have its modifiers applied — gets its other side here, flipped across X onto the other side's bones.
-  const positions = [], joints = [], weights = [], headWeights = [], slots = [], indices = [];
+  const positions = [], joints = [], weights = [], headWeights = [], armWeights = [], slots = [], indices = [];
   const offsets = PERSON_SHAPE_KEYS.map(() => []);
   const toModel = new THREE.Matrix4(), toModelLinear = new THREE.Matrix3(), v = new THREE.Vector3();
   const palette = PERSON_SLOTS.map(() => new THREE.Color(0xffffff));
@@ -438,15 +481,17 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
       for (let i=0;i<count;i++) {
         v.set(pos.getX(i)*side, pos.getY(i), pos.getZ(i)).applyMatrix4(toModel);
         positions.push(v.x, v.y, v.z);
-        let headWeight = 0;
+        let headWeight = 0, armWeight = 0;
         for (let k=0;k<4;k++) {
           const own = mesh.isSkinnedMesh ? ownBones[skinIndex.getComponent(i, k)] : k === 0 ? boneIndex.get(bone) : 0;
           const joint = side < 0 ? mirrorBone[own] : own, weight = mesh.isSkinnedMesh ? skinWeight.getComponent(i, k) : k === 0 ? 1 : 0;
           joints.push(joint);
           weights.push(weight);
           if (inHead[joint]) headWeight += weight;
+          else if (inArm[joint]) armWeight += weight;
         }
         headWeights.push(Math.min(1, headWeight));
+        armWeights.push(Math.min(1, armWeight));
         slots.push(slot);
         keyTargets.forEach((target, key) => {
           if (target) v.set(target.getX(i)*side, target.getY(i), target.getZ(i)).applyMatrix3(toModelLinear); else v.set(0, 0, 0);
@@ -483,7 +528,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     }
   });
   const vertexData = new Float32Array(vertexCount*4);
-  for (let i=0;i<vertexCount;i++) vertexData.set([headWeights[i], slots[i], morphMask[i], i], i*4);
+  for (let i=0;i<vertexCount;i++) vertexData.set([headWeights[i] || -armWeights[i], slots[i], morphMask[i], i], i*4);
   geometry.setAttribute('personVertex', new THREE.BufferAttribute(vertexData, 4));
   const morphTexture = new THREE.DataTexture(morphData, morphWidth, morphRows*PERSON_SHAPE_KEYS.length, THREE.RGBAFormat, THREE.FloatType);
   morphTexture.needsUpdate = true;
@@ -613,7 +658,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   // hairstyle and facial hair (what their sex can wear), their colors, and where their clothes stop
   const traitRows = PERSON_FACE_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
   const isMan = new Uint8Array(PEOPLE_MAX);
-  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hatRng = mulberry32(8086), clothingRng = mulberry32(1990), faceRng = mulberry32(2718), color = new THREE.Color();
+  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hatRng = mulberry32(8086), faceRng = mulberry32(2718), color = new THREE.Color();
   const NATURAL_COLOUR_CHANCE = 0.85;
   const colorFor = {
     Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
@@ -636,11 +681,9 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
       const [lo, hi] = Array.isArray(range) ? range : range[man ? 'male' : 'female'];
       return lo + faceRng()*(hi - lo);
     });
-    traits.set([shape[4], man ? 1 : 0, face[4]], texel(1));
+    traits.set([shape[4], man ? 1 : 0, face[4], shape[5]], texel(1));
     traits.set(face.slice(0, 4), texel(PERSON_FACE_ROW));
     PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
-    // the band each part of their clothes stops at (one past the last band for none)
-    traits.set(PERSON_CLOTHING.map(c => c.coveredOnMen && man ? c.count + 1 : 1 + Math.floor(clothingRng()*(c.count + 1))), texel(PERSON_CLOTHING_ROW));
     headLayers.forEach(layer => {
       const styles = man ? layer.boys : layer.girls;
       if (!styles.length) return;
@@ -652,15 +695,27 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
       members.push(i);
     });
   }
+  // Where everyone's clothes stop. It's worked out on its own, after the rest, because a woman's midriff depends on how
+  // old she is — which comes of people.txt, and so is worked out again whenever that loads.
+  const setClothing = () => {
+    const clothingRng = mulberry32(1990);
+    for (let i=0;i<PEOPLE_MAX;i++) {
+      const man = isMan[i] === 1, { age } = profileOf(i, man);
+      traits.set(PERSON_CLOTHING.map(c => clothingBand(c, clothingRng(), man, age)), (PERSON_CLOTHING_ROW*PEOPLE_MAX + i)*4);
+    }
+  };
+  setClothing();
+
   const traitTexture = new THREE.DataTexture(traits, PEOPLE_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
   traitTexture.needsUpdate = true;
+  onProfilesLoaded(() => { setClothing(); traitTexture.needsUpdate = true; });
 
   // ---- the meshes
   const uniforms = {
     personBones: { value: boneTexture }, personBonesSize: { value: new THREE.Vector2(boneWidth, boneRows) },
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
     personTraits: { value: traitTexture },
-    personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot },
+    personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personChestBone: { value: chestBone },
   };
   const traitRow = part => 2 + PERSON_TRAIT_COLORS.indexOf(part);
   const bodyLook = {
@@ -1945,6 +2000,7 @@ function killPerson(i, by = 'player') {
   if (!p || isGone(p)) return;
   App.recordMoralityEvent?.(by === 'car' ? 'peds killed by cars' : 'peds killed by player');
   if (followed === i) stopFollowingPerson();
+  if (awaited === i) awaited = -1;
   endActivity(p);
   p.crossStage = null; // don't leave a car yielding forever for someone who can no longer finish crossing
   p.jc = null;
@@ -1996,6 +2052,7 @@ function possessPerson(i) {
   p.crossStage = null; p.jc = null; p.fright = p.stun = p.please = null; p.oneShot = null;
   p.mode = 'possessed';
   p.onRoad = false;
+  swing = null;
   if (!startPossession(i, p.heading + (p.traits.backwards ? Math.PI : 0))) { p.mode = 'wander'; reseatPerson(p); return; }
   cameraNear = camera.near;
   camera.near = EYE_NEAR;
@@ -2005,6 +2062,7 @@ function unpossessPerson() {
   if (possession.index < 0) return;
   const i = possession.index, p = people[i];
   endPossession();
+  swing = null;
   camera.near = cameraNear;
   camera.updateProjectionMatrix();
   if (!p || p.mode !== 'possessed') return;
@@ -2041,6 +2099,36 @@ function placePossessedCamera(i) {
   if (personModel) camera.position.copy(headshotOf(i).head);
   else camera.position.set(p.x, p.y + personHeight(p)*0.92, p.z);
   camera.rotation.set(possession.pitch, possession.yaw + Math.PI, 0, 'YXZ');
+}
+
+// ---- throwing a punch yourself: possessing someone, a click swings their fist at whoever's in front of them (the click
+// itself is possession.js's). Nobody's walked up to and nobody's stared at afterwards, unlike someone picking a fight of
+// their own (see "punching"): the swing plays out wherever they're standing, and lands on whoever's nearest within reach
+// ahead of them when the fist arrives — knocking them flat, as any punch does — or on nobody at all, which is a miss.
+const SWING_REACH = 1.9;                // how far ahead (at people size 1) the fist reaches
+const SWING_ARC = Math.cos(Math.PI/3);  // how near dead ahead of them whoever takes it has to be
+let swing = null; // the punch being thrown: { timer } — how long until the fist lands
+function punchFromPossession() {
+  const p = people[possession.index];
+  if (!p || p.mode !== 'possessed' || swing || !hasClip('Punch') || !hasClip('Fall')) return;
+  swing = { timer: PUNCH_HIT_TIME };
+  playOnce(p, 'Punch');
+}
+// the swing, each frame: when the fist lands, whoever's in front of them takes it
+function updateSwing(p, dt) {
+  if (!swing || (swing.timer -= dt) > 0) return;
+  swing = null;
+  const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
+  let hit = null, nearest = SWING_REACH*S.peopleSize;
+  people.forEach(q => {
+    if (q === p || isGone(q) || !isFairGame(q)) return;
+    const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
+    if (d > nearest || d < 1e-3 || (dx*fx + dz*fz)/d < SWING_ARC) return;
+    hit = q; nearest = d;
+  });
+  if (!hit) return;
+  hit.punched = { by: p, stage: 'brace', timer: 0 };
+  knockDown(hit, p);
 }
 
 // ---- riding the trains: someone walking past a train station — one standing in the plaza or park they're in, or near
@@ -2190,7 +2278,8 @@ function dropToGround(p) {
   if (p.mode === 'line') { const at = walkwayPoint(p); p.x = at.x; p.y = at.y; p.z = at.z; }
   else if (p.mode === 'wander') { p.x = p.tx; p.z = p.tz; p.y = peopleNav.areas[p.area].y; }
 }
-// the followed carriage's card: who's aboard, by name — whoever the camera came aboard with picked out
+// The followed carriage's card: who's aboard, by name — whoever the camera came aboard with picked out. Clicking one of
+// the others makes them the one it came aboard with instead, so it gets off with them (see gotOff) wherever they do.
 let passengersKey = null;
 function showPassengers() {
   const line = App.followedTrainLine?.();
@@ -2199,7 +2288,11 @@ function showPassengers() {
   const key = line + '|' + riders.join(',') + '|' + riderFollowed + '|' + profilesVersion() + '|' + !!personModel;
   if (key === passengersKey || !App.setTrainCardPassengers) return;
   passengersKey = key;
-  App.setTrainCardPassengers(riders.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name), riders.indexOf(riderFollowed));
+  App.setTrainCardPassengers(
+    riders.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name),
+    riders.indexOf(riderFollowed),
+    at => { riderFollowed = riders[at]; },
+  );
 }
 
 // ---- going indoors: someone walking past a building's door (see buildingDoors) now and then goes in — walking up to it
@@ -2243,6 +2336,8 @@ function updateIndoors(p, i, dt) {
     p.x = door.x; p.z = door.z; p.y = visit.building.y;
     p.heading = headingTo(p, visit.back) + (p.traits.backwards ? Math.PI : 0);
     if (followed === i) { App.setPersonCardIndoors(null); lookAtPerson(p); }
+    // and out with whoever the building's card was told to wait on: the camera leaves the building for them
+    if (awaited === i) { awaited = -1; App.stopFollowingBuilding?.(); followPerson(i); }
     return visit.back;
   }
   // 'exit': back to the walkway, then on along it, whichever way
@@ -2254,16 +2349,24 @@ function updateIndoors(p, i, dt) {
   reseatPerson(p);
   return null;
 }
-// the followed building's card (see building-card.js): who's inside, by name
+// The followed building's card (see building-card.js): who's inside, by name. Clicking one of them waits on that one —
+// the camera leaves the building with them when they come back out the door (see awaited below), the way it gets off a
+// train with whoever it came aboard with.
 let inhabitantsKey = null;
+let awaited = -1; // whoever indoors the camera's waiting on, or -1
 function showInhabitants() {
   const key = App.followedBuildingKey?.();
   const inside = [];
   if (key && S.peopleEnabled) people.forEach((p, i) => { if (p.mode === 'indoors' && p.indoors.stage === 'inside' && p.indoors.building.key === key) inside.push(i); });
-  const shownKey = key + '|' + inside.join(',') + '|' + profilesVersion() + '|' + !!personModel;
+  if (!inside.includes(awaited)) awaited = -1; // (the building let go of, or whoever it was gone some other way)
+  const shownKey = key + '|' + inside.join(',') + '|' + awaited + '|' + profilesVersion() + '|' + !!personModel;
   if (shownKey === inhabitantsKey || !App.setBuildingCardInhabitants) return;
   inhabitantsKey = shownKey;
-  if (key) App.setBuildingCardInhabitants(inside.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name));
+  if (key) App.setBuildingCardInhabitants(
+    inside.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name),
+    inside.indexOf(awaited),
+    at => { awaited = inside[at]; },
+  );
 }
 // the camera, following someone who's gone indoors: back far enough to take in the building they're in
 function lookAtBuilding(b) {
@@ -2424,7 +2527,7 @@ export function updatePeople(t) {
       goal = updateAttack(p, dt);
       if (p.attack?.stage === 'chase') speed *= PUNCH_CHASE_SPEED;
     }
-    if (possessed) goal = walkPossessed(p, dt);
+    if (possessed) { goal = walkPossessed(p, dt); updateSwing(p, dt); }
     if (p.mode === 'leaving') {
       // already placed on their walkway by joinWalkway; once they've reached it they carry on along it
       goal = frozen ? null : p.exit;
@@ -2613,4 +2716,4 @@ export function updatePeople(t) {
 }
 
 // (people and groups too, for poking at from the browser console)
-Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, killPerson, people, peopleGroups: groups });
+Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, people, peopleGroups: groups });

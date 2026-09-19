@@ -76,9 +76,10 @@ function showHiveCard(number) {
   setHiveCardBees([]);
   drawHiveThumbnail(hiveThumbnailScene());
 }
-// which of its bees are home, by name — the one the camera came in with, if any, picked out as a train's passengers are
-function setHiveCardBees(names, tracked = -1) {
-  hiveCard.setList('occupants', names, tracked);
+// which of its bees are home, by name — the one the camera came in with, if any, picked out as a train's passengers are,
+// and `onPick` told when one of the names is clicked, to leave with that bee instead
+function setHiveCardBees(names, tracked = -1, onPick = null) {
+  hiveCard.setList('occupants', names, tracked, onPick && { title: 'Follow it out of the hive', onClick: onPick });
 }
 function hideHiveCard() { hiveCard.hide(); }
 

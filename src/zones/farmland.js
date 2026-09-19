@@ -11,14 +11,19 @@ import { makeFlatZoneMesh } from './surface-detail.js';
 // lined with hedgerows, as is the farmland's edge (with gaps where roads and paths come through). A farmstead — a barn with
 // a silo and a shed — stands in some of the bigger fields.
 const FARM_TRACK_COLOR = 0x8f7b5e;
+// `soil`, where a crop has one, is the earth that shows between its rows: without it a wide-spaced crop is just a
+// darker band of itself between the rows, which read as one flat slab of colour from any distance (see the shader below).
+const FARM_SOIL_COLOR = 0x7a6047;
 const CROPS = [
   { color:0xd9bc5c, spacing:0.9, contrast:0.16 },  // wheat
   { color:0xcfc47e, spacing:0.8, contrast:0.14 },  // barley
   { color:0x86ad48, spacing:1.4, contrast:0.3 },   // leafy crop
-  { color:0x9cbf5c, spacing:1.7, contrast:0.5 },   // young shoots, with soil showing between the rows
+  { color:0x9cbf5c, spacing:1.7, contrast:0.5, soil:0.75 },  // young shoots, with soil showing between the rows
   { color:0x7d5d3f, spacing:1.1, contrast:0.35 },  // ploughed soil
   { color:0xd6c554, spacing:0.9, contrast:0.1 },   // rapeseed
-  { color:0x9588ad, spacing:1.8, contrast:0.4 },   // lavender
+  // Leant towards red of the violet it should look: the sky light is blue enough that a crop colour with a high blue
+  // channel comes out cornflower — this is the one crop dark enough in red and green for that to show.
+  { color:0x896a7b, spacing:1.8, contrast:0.4, soil:0.8 },   // lavender, in rows well apart on bare earth
   { color:0x93b862, spacing:3.0, contrast:0.06 },  // pasture
 ];
 const CROP_FRAGMENT_PARS = `
@@ -26,6 +31,8 @@ const CROP_FRAGMENT_PARS = `
   uniform vec2 uRowDir;
   uniform float uRowSpacing;
   uniform float uRowContrast;
+  uniform vec3 uSoilColor;
+  uniform float uSoilMix;
   float cropHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
   float cropNoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -40,16 +47,20 @@ const CROP_COLOR_FRAGMENT = `
     float ridge = smoothstep(0.15, 0.85, abs(fract(dot(wp, uRowDir)/uRowSpacing) - 0.5)*2.0);
     float patches = cropNoise(wp*0.06)*0.6 + cropNoise(wp*0.23)*0.4;
     vec3 c = diffuseColor.rgb*mix(1.0 - uRowContrast, 1.0 + uRowContrast*0.35, ridge);
+    // between the rows the ground itself shows through, rather than a dimmer shade of the crop
+    c = mix(c, mix(uSoilColor*(0.85 + 0.3*patches), c, ridge), uSoilMix);
     c *= (0.86 + 0.28*patches)*(0.95 + 0.1*cropNoise(wp*2.7));
     diffuseColor.rgb = c;
   }
 `;
 // rows run across (dx, dz): the stripes are perpendicular to it
-export function applyCropShader(mat, dx, dz, spacing, contrast) {
+export function applyCropShader(mat, dx, dz, spacing, contrast, soilMix) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uRowDir = { value: new THREE.Vector2(dx, dz) };
     shader.uniforms.uRowSpacing = { value: spacing };
     shader.uniforms.uRowContrast = { value: contrast };
+    shader.uniforms.uSoilColor = { value: new THREE.Color(FARM_SOIL_COLOR) };
+    shader.uniforms.uSoilMix = { value: soilMix || 0 };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vCropWorldPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCropWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -114,7 +125,10 @@ export function generateFarmlandContent(zone, poly, cutouts, blockers) {
     const crop = CROPS[Math.floor(rng()*CROPS.length)];
     const axis = longAxisOf(field);
     const across = rng() < 0.25; // most fields are ploughed along their length
-    const mesh = makeFlatZoneMesh(field, crop.color, Y_PARK, 'Field', mat => applyCropShader(mat, across ? axis.dx : -axis.dz, across ? axis.dz : axis.dx, crop.spacing, crop.contrast));
+    // Y_PARK is only 0.02 above the tracks below, so the fields need the lower polygon offset to stay on top of them.
+    const mesh = makeFlatZoneMesh(field, crop.color, Y_PARK, 'Field',
+      mat => applyCropShader(mat, across ? axis.dx : -axis.dz, across ? axis.dz : axis.dx, crop.spacing, crop.contrast, crop.soil),
+      null, -3);
     if (mesh) zone.buildingsGroup.add(mesh);
     if (s.hedgerows !== false && rng() < 0.5) {
       App.offsetPaths([App.toClipperPath(field)], 0.45, ClipperLib.JoinType.jtMiter).forEach(path => {
