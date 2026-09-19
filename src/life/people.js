@@ -163,19 +163,22 @@ const CIRCLE_MAX = 4;
 // every shape key the shader applies, in the order of the shape key texture, and the bit of personVertex.z saying a vertex
 // moves with it: the body's (1) and the head's and eyes' shapes (8, 16), set once per person; Blink (2), as they blink;
 // the mouth's Talk and Emotion (4), as they talk and listen; and the eyes' Shock, Happy, Angry and Sad (32), as they feel
-const PERSON_SHAPE_KEYS = ['Breast', 'Waist', 'Hips', 'Weight', 'Butt', 'Blink', 'Talk', 'Emotion', 'Key 1', 'Key 2', 'Shape1', 'Shape2', 'Shape3',
-  'Shock', 'Happy', 'Angry', 'Sad'];
-const PERSON_SHAPE_KEY_BITS = [1, 1, 1, 1, 1, 2, 4, 4, 8, 8, 16, 16, 16, 32, 32, 32, 32];
-const PERSON_BODY_KEY_COUNT = 5;
+const PERSON_SHAPE_KEYS = ['Breast', 'Waist', 'Hips', 'Weight', 'Butt', 'Shoulders', 'Blink', 'Talk', 'Emotion', 'Key 1', 'Key 2',
+  'Shape1', 'Shape2', 'Shape3', 'Shock', 'Happy', 'Angry', 'Sad'];
+const PERSON_SHAPE_KEY_BITS = [1, 1, 1, 1, 1, 1, 2, 4, 4, 8, 8, 16, 16, 16, 32, 32, 32, 32];
+const PERSON_BODY_KEY_COUNT = 6;
+// a shape key's place in that order, for the shader to read it by name rather than by a number that moves when a key is added
+const shapeKey = name => PERSON_SHAPE_KEYS.indexOf(name);
 // each person's shape keys by sex, as [lowest, highest]
 const PERSON_BODY_SHAPES = {
-  male:   { Breast: [0.6, 1],  Waist: [0.5, 1],    Hips: [-1, -0.5],   Weight: [0, 1],   Butt: [1, 1] },
-  female: { Breast: [-1, 0.1], Waist: [-0.5, 0.1], Hips: [-0.4, 0.2], Weight: [0, 1],   Butt: [0, 0.6] },
+  male:   { Breast: [0.6, 1],  Waist: [0.5, 1],    Hips: [-1, -0.5],  Weight: [0, 1],   Butt: [1, 1],     Shoulders: [0, 1] },
+  female: { Breast: [-1, 0.1], Waist: [-0.5, 0.1], Hips: [-0.4, 0.2], Weight: [0, 1],   Butt: [0, 0.6],   Shoulders: [0, 0.3] },
 };
-// How far out a person's arms hang from their sides, in the model's units, at Weight 1 — the Weight shape key widens the
-// body by about this much from the hips to the shoulders and leaves the arms where they were, so without it a heavy
-// person's shoulders swallow theirs and their hands swing through their hips.
-const PERSON_ARM_SPREAD = 0.43;
+// How far out a person's arms hang from their sides, in the model's units, at Weight 1 and at Shoulders 1 — those two
+// shape keys widen the body (Weight by about this much all the way from the hips to the shoulders, Shoulders only across
+// the shoulders themselves) and leave the arms where they were, so without this a heavy or a broad person's shoulders
+// swallow theirs and their hands swing through their hips.
+const PERSON_ARM_SPREAD = { Weight: 0.43, Shoulders: 0.5 };
 // each person's head and eye shape keys, as [lowest, highest] — or, where men's and women's differ, one of those for each
 const PERSON_FACE_SHAPES = { 'Key 1': { male: [0, 1], female: [-0.3, 0] }, 'Key 2': [-0.5, 0.3], Shape1: [-0.2, 1], Shape2: [0, 1], Shape3: [0, 1] };
 // How likely a woman's top is to show any of her midriff, by age: as likely as anything while she's young, and rarer
@@ -301,8 +304,9 @@ const PERSON_VERTEX_PARS = `
     }
     return looked;
   }
-  // this person's row of the traits texture: 0 their first four body shape keys, 1 x their fifth, y whether they're a man
-  // and z their Shape3, then the colors they have their own of, where their clothes stop, and their face's shape keys
+  // this person's row of the traits texture: 0 their first four body shape keys, 1 x their fifth and w their sixth, with
+  // y whether they're a man and z their Shape3, then the colors they have their own of, where their clothes stop, and
+  // their face's shape keys
   vec4 personTrait(int row) { return texelFetch(personTraits, ivec2(personIndex(), row), 0); }
   // a shape key's offset at this vertex
   vec3 personMorph(int key) {
@@ -314,25 +318,26 @@ const PERSON_VERTEX_PARS = `
     int mask = int(personVertex.z + 0.5);
     vec3 offset = vec3(0.0);
     if ((mask & 1) != 0) {
-      vec4 body = personTrait(0);
-      offset += personMorph(0)*body.x + personMorph(1)*body.y + personMorph(2)*body.z + personMorph(3)*body.w + personMorph(4)*personTrait(1).x;
+      vec4 body = personTrait(0), rest = personTrait(1);
+      offset += personMorph(0)*body.x + personMorph(1)*body.y + personMorph(2)*body.z + personMorph(3)*body.w + personMorph(4)*rest.x + personMorph(5)*rest.w;
     }
-    if ((mask & 2) != 0) offset += personMorph(5)*instanceAnim.w;
-    if ((mask & 4) != 0) offset += personMorph(6)*instanceLook.z + personMorph(7)*instanceLook.w;
+    if ((mask & 2) != 0) offset += personMorph(${shapeKey('Blink')})*instanceAnim.w;
+    if ((mask & 4) != 0) offset += personMorph(${shapeKey('Talk')})*instanceLook.z + personMorph(${shapeKey('Emotion')})*instanceLook.w;
     if ((mask & 24) != 0) {
       vec4 face = personTrait(${PERSON_FACE_ROW});
-      if ((mask & 8) != 0) offset += personMorph(8)*face.x + personMorph(9)*face.y;
-      if ((mask & 16) != 0) offset += personMorph(10)*face.z + personMorph(11)*face.w + personMorph(12)*personTrait(1).z;
+      if ((mask & 8) != 0) offset += personMorph(${shapeKey('Key 1')})*face.x + personMorph(${shapeKey('Key 2')})*face.y;
+      if ((mask & 16) != 0) offset += personMorph(${shapeKey('Shape1')})*face.z + personMorph(${shapeKey('Shape2')})*face.w + personMorph(${shapeKey('Shape3')})*personTrait(1).z;
     }
     // instanceEyes: how shocked, happy, angry and sad their eyes look
-    if ((mask & 32) != 0) offset += personMorph(13)*instanceEyes.x + personMorph(14)*instanceEyes.y + personMorph(15)*instanceEyes.z + personMorph(16)*instanceEyes.w;
+    if ((mask & 32) != 0) offset += personMorph(${shapeKey('Shock')})*instanceEyes.x + personMorph(${shapeKey('Happy')})*instanceEyes.y + personMorph(${shapeKey('Angry')})*instanceEyes.z + personMorph(${shapeKey('Sad')})*instanceEyes.w;
     return offset;
   }
-  // A heavier person's arms hang out away from their sides, rather than swinging through their hips. Everything from the
-  // shoulder down (personVertex.x, negative) moves out along the way their chest faces, as far as the Weight shape key
-  // widens their body — after they're posed, as the shape keys and the bones leave the arms where a thin person's are.
+  // A heavier or broader person's arms hang out away from their sides, rather than swinging through their hips. Everything
+  // from the shoulder down (personVertex.x, negative) moves out along the way their chest faces, as far as their Weight
+  // and Shoulders shape keys widen their body — after they're posed, as the shape keys and the bones leave the arms
+  // where a slight person's are.
   vec3 personArms(vec3 posed, float restX) {
-    float spread = max(-personVertex.x, 0.0)*personTrait(0).w*${PERSON_ARM_SPREAD.toFixed(3)};
+    float spread = max(-personVertex.x, 0.0)*(personTrait(0).w*${PERSON_ARM_SPREAD.Weight.toFixed(3)} + personTrait(1).w*${PERSON_ARM_SPREAD.Shoulders.toFixed(3)});
     if (spread <= 0.0) return posed;
     vec3 sideways = normalize(mat3(personBone(personChestBone))*vec3(1.0, 0.0, 0.0));
     return posed + sideways*(restX < 0.0 ? -spread : spread);
@@ -676,7 +681,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
       const [lo, hi] = Array.isArray(range) ? range : range[man ? 'male' : 'female'];
       return lo + faceRng()*(hi - lo);
     });
-    traits.set([shape[4], man ? 1 : 0, face[4]], texel(1));
+    traits.set([shape[4], man ? 1 : 0, face[4], shape[5]], texel(1));
     traits.set(face.slice(0, 4), texel(PERSON_FACE_ROW));
     PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
     headLayers.forEach(layer => {
