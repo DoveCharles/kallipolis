@@ -13,6 +13,9 @@
   --notice-name: #b0b4bc;
   --notice-stripe-a: #101010;
   --notice-stripe-b: #202020;
+  /* Entity card Loves (green) and Hates (red) stripes: -a for odd lines, -b (darker) for even, -label for the row label. */
+  --trait-loves-a: #002000; --trait-loves-b: #001800; --trait-loves-label: #8fc4a5;
+  --trait-hates-a: #200000; --trait-hates-b: #180000; --trait-hates-label: #d09a9c;
   --accent: #3ddc97;
   --accent-dim: #2a8f65;
   --warn: #ffd23d;
@@ -271,6 +274,21 @@ button.pc-pick:hover { text-decoration:underline; }
 /* whoever the camera's leaving with */
 .pc-tracked, button.pc-tracked { background:#1f5fd6; color:#fff; padding:0 3px; margin:0 -3px; }
 .pc-mood { font-size:18px; line-height:1; }
+/* Loves/Hates bands on every entity card: full-width, touching, alternating shade per line (see .mor-notice-names).
+   --card-pad-x is the card's horizontal padding; --card-edge is the width of an inner border line the bands must not cover
+   (1px in the Windows 3.0 look). */
+.entity-card { --card-pad-x:14px; --card-edge:0px; }
+.entity-card .pc-body { gap:0; }
+.entity-card .pc-body > :is(.pc-row-loves, .pc-row-hates) { --band-x:calc(var(--card-pad-x) - var(--card-edge)); margin-left:calc(-1*var(--band-x)); margin-right:calc(-1*var(--band-x)); padding:5px var(--band-x); }
+.entity-card .pc-body > .pc-row-loves { background:var(--trait-loves-a); }
+.entity-card .pc-body > .pc-row-hates { background:var(--trait-hates-a); }
+/* pc-alt (every other visible line, across both colours) and pc-lead (first visible line, given the top rule when Loves is
+   hidden) are set by restripe in src/ui/entity-card.js. */
+.entity-card .pc-body > .pc-row-loves.pc-alt { background:var(--trait-loves-b); }
+.entity-card .pc-body > .pc-row-hates.pc-alt { background:var(--trait-hates-b); }
+.entity-card .pc-body > .pc-lead:not(.pc-gap) { margin-top:10px; border-top:1px solid var(--border); }
+.entity-card .pc-row-loves .pc-label { color:var(--trait-loves-label); }
+.entity-card .pc-row-hates .pc-label { color:var(--trait-hates-label); }
 /* name, age and mood, with the headshot beside them (clear of the close button above it) */
 .pc-top { display:flex; gap:10px; align-items:flex-start; }
 .pc-rows { flex:1; min-width:0; }
@@ -317,6 +335,8 @@ html.win3 {
   --bg-panel:#ffffff; --bg-input:#ffffff; --border:#000000; --text:#000000; --text-dim:#000000;
   --notice-text:#000000; --notice-dim:#808080; --notice-name:#2f3c45;
   --notice-stripe-a:#f0f0f0; --notice-stripe-b:#e0e0e0;
+  --trait-loves-a:#e6f2e6; --trait-loves-b:#d7e7d7; --trait-loves-label:#1f4a1f;
+  --trait-hates-a:#f6e3e3; --trait-hates-b:#ecd4d4; --trait-hates-label:#5a1a1a;
   --accent:#000080; --accent-dim:#000080;
   --sans:'Win3 System', 'MS Sans Serif', 'Microsoft Sans Serif', Arial, sans-serif;
   --mono:'Win3 System', 'MS Sans Serif', 'Microsoft Sans Serif', Arial, sans-serif;
@@ -437,9 +457,9 @@ html.win3 #node-context-menu button.active::before { content:'\2713'; position:a
 html.win3 #hint { background:#fff; color:#000; border:1px solid #000; border-radius:0; }
 
 /* the cards for whoever's being followed: each a little window of its own, closed from its control-menu box */
-html.win3 .entity-card { padding:0 10px 10px; right:21px; bottom:56px; }
+html.win3 .entity-card { --card-pad-x:10px; --card-edge:1px; padding:0 10px 10px; right:21px; bottom:56px; }
 html.win3 .card-close { display:none; }
-html.win3 .pc-row.pc-gap { border-top:1px solid #000; }
+html.win3 :is(.pc-row.pc-gap, .entity-card .pc-body > .pc-lead) { border-top:1px solid #000; }
 html.win3 .pc-name { padding-right:0; }
 html.win3 .pc-tracked { background:#000080; color:#fff; }
 html.win3 button.pc-line { color:#000; }

@@ -1,13 +1,14 @@
 import { mulberry32 } from '../core/math.js';
 
-const LETTERS = ['A.','B.','C.','D.','E.','F.','G.','H.','I.','J.','K.','L.','M.','N.','O.','P.','Q.','R.','S.','T.','U.','V.','W.','X.','Y.','Z.','Ñ.','uh,']
+const LETTERS = ['A.','B.','C.','D.','E.','F.','G.','H.','I.','J.','K.','L.','M.','N.','O.','P.','Q.','R.','S.','T.','U.','V.','W.','X.','Y.','Z.','Ñ.']
 const ROMAN_NUMERALS = [ 'II', 'III','II', 'III', 'IV', 'V','VI','VII','VII','IX']
 
 // ============================================================ who people are
-// Everyone in the crowd has a name, an age, a mood, one thing they enjoy and one they hate, picked from assets/people.txt
-// (to be edited freely) — the same picks every time for the same place in the crowd — along with any traits those picks
-// carry, which change how they go about (see the list at the top of people.txt, and people.js). The card saying who
-// someone is is person-card.js.
+// Everyone in the crowd has a name, an age, a mood, and loves and hates, picked from assets/people.txt. The picks are the same
+// every time for the same place in the crowd, and any traits they carry change how that person behaves (see the list at the
+// top of people.txt, and people.js). person-card.js displays a profile.
+// Possible [loves, hates] counts per person, with their chances, which must add up to 1.
+const LOVE_HATE_COUNTS = [[1, 1, 0.6], [2, 0, 0.1], [0, 2, 0.1], [2, 1, 0.1], [1, 2, 0.1]];
 const PEOPLE_TEXT_URL = 'assets/people.txt';
 // The traits an entry can carry, as [trait = value] after it: the value everyone starts with, the range a value's kept to,
 // and how several combine — multiplying together, or (mood) adding up, or (backwards) on if anything turns it on.
@@ -38,6 +39,7 @@ export const TRAITS = {
   ageless: { base: 0, min: 0, max: 1, combine: 'on' },
   nickname: { base: 0, min: 0, max: 1, combine: 'on'},
   bleach: {base: 0, min: 0, max: 1, combine: 'on'},
+  solo: {base: 0, min: 0, max: 1, combine: 'on'}, // On a love or hate: the only one of its kind that person has (see addMore).
 };
 const RULES = ['limit']
 // the value everyone starts with, by trait: TRAITS' base until people.txt loads, then whatever its trait table's start
@@ -134,7 +136,7 @@ function traitsOf(entries) {
   Object.entries(TRAITS).forEach(([key, trait]) => { traits[key] = Math.max(trait.min, Math.min(trait.max, traits[key])); });
   return traits;
 }
-// Someone's name, age, mood, what they enjoy and hate, and the traits those give them — a man's name from the boy names and
+// Someone's name, age, mood, loves and hates (lists; people.txt's "enjoys" section supplies the loves), and the traits those give them — a man's name from the boy names and
 // a woman's from the girl names (either, for the cuboid people, who have no sex). `index` is their place in the crowd.
 export function profileOf(index, isMan) {
   const rng = mulberry32(48271 + index*7919);
@@ -143,21 +145,42 @@ export function profileOf(index, isMan) {
   const name = pick(lists[man ? 'boy names' : 'girl names']);
   let age = 18 + Math.floor(rng()*65);
   const mood = pick(lists.moods);
-  let enjoys = pick(lists.enjoys);
+  const enjoys = pick(lists.enjoys);
 
   const parseLimit = value => ({ rule: value.slice(0, -1), polarity: value.slice(-1) });
   const findLimits = rules => (rules ?? []).filter(([key]) => key === 'limit').map(([, value]) => parseLimit(value));
-
-  const enjoysLimits = findLimits(enjoys.rules);
+  // Two entries clash when they hold the same limit on opposite sides (1a and 1b).
+  const clash = (a, b) => { const bLimits = findLimits(b.rules); return findLimits(a.rules).some(x => bLimits.some(y => x.rule === y.rule && x.polarity !== y.polarity)); };
 
   let hates, incompatible = true;
   while (incompatible) {
     hates = pick(lists.hates);
-    const hatesLimits = findLimits(hates.rules);
-    incompatible = enjoysLimits.some(e => hatesLimits.some(h => e.rule === h.rule && e.polarity !== h.polarity));
+    incompatible = clash(enjoys, hates);
   }
 
-  const traits = traitsOf([name, mood, enjoys, hates]);
+  // The counts and any extra picks use their own random stream, so adding to the picks made on `rng` above does not change
+  // the names, ages and moods of existing people. Keep new random draws for a profile on `extra`, not `rng`.
+  const extra = mulberry32(90173 + index*6151);
+  const countRoll = extra();
+  let chance = 0;
+  const [loveCount, hateCount] = LOVE_HATE_COUNTS.find(([, , odds]) => countRoll < (chance += odds)) ?? LOVE_HATE_COUNTS[0];
+  const loves = loveCount >= 1 ? [enjoys] : [], hated = hateCount >= 1 ? [hates] : [];
+  // Adds entries until `mine` has `count`, skipping any with the same text as, or a limit clashing with, an entry already
+  // chosen. A solo entry is never added to a non-empty list, and a list holding one stops at that entry, so the count can
+  // end lower than requested. Gives up after 50 tries, leaving fewer.
+  const isSolo = entry => entry.traits.some(([key, value]) => key === 'solo' && value > 0);
+  const addMore = (mine, list, count) => {
+    const target = mine.some(isSolo) ? 1 : count;
+    for (let tries = 0; mine.length < target && tries < 50; tries++) {
+      const entry = list[Math.floor(extra()*list.length)];
+      if (isSolo(entry) && mine.length) continue;
+      if ([...loves, ...hated].every(other => other.text !== entry.text && !clash(entry, other))) mine.push(entry);
+    }
+  };
+  addMore(loves, lists.enjoys, loveCount);
+  addMore(hated, lists.hates, hateCount);
+
+  const traits = traitsOf([name, mood, ...loves, ...hated]);
 
   const nameRoll = rng();
 
@@ -165,22 +188,25 @@ export function profileOf(index, isMan) {
     nameRoll>0.9 ? `${name.text} '${pick(lists['nicknames']).text}' ${pick(lists['surnames']).text}`: //full name w/ nickname, 10%
     nameRoll>0.3 ? `${name.text} ${pick(lists['surnames']).text}`:                                    //full name no nickname, 60%
       nameRoll>0.2? `${name.text} ${pick(LETTERS)} ${pick(lists['surnames']).text}`:                 //full name, abr middle, 10%
-        nameRoll>0.13?`'${pick(lists['nicknames']).text}' ${pick(lists['surnames']).text}`:           //nickname surname, 7%
-          nameRoll>0.6?`${name.text} '${pick(lists['nicknames']).text}'`:                            //forename nickname, 6%
-            `${name.text} the ${pick(ROMAN_NUMERALS)}`;                                               //forename numeral, 6%
+        nameRoll>0.115?`'${pick(lists['nicknames']).text}' ${pick(lists['surnames']).text}`:           //nickname surname, 8.5%
+          nameRoll>0.2?`${name.text} '${pick(lists['nicknames']).text}'`:                            //forename nickname, 8.5%
+            `${name.text} ${pick(ROMAN_NUMERALS)}`;                                               //forename numeral, 2%
 
   //unknown entities have hidden traits
+  // (UNKNOWN) people hide every love, every hate, or both — never neither. A hidden side that has no entries shows a single
+  // (UNKNOWN).
+  let loveTexts = loves.map(entry => entry.text), hateTexts = hated.map(entry => entry.text);
   if (name.text === '(UNKNOWN)') {
-    let oneEnsured = false;
     fullname = '(UNKNOWN)';
-    if (rng() > 0.5) {
-      enjoys = { ...enjoys, text: '(UNKNOWN)'};
-      oneEnsured = true;
-    }
-    if (!oneEnsured || rng() >0.5) hates = {...hates, text: '(UNKNOWN)'}
+    const hidden = texts => texts.length ? texts.map(() => '(UNKNOWN)') : ['(UNKNOWN)'];
+    const lovesHidden = rng() > 0.5;
+    const hatesHidden = !lovesHidden || rng() > 0.5;
+    if (lovesHidden) loveTexts = hidden(loveTexts);
+    if (hatesHidden) hateTexts = hidden(hateTexts);
   }
-  
+
   age = Math.round(Math.max(18, age*traits.agemult)) //no minors!
-  
-  return { name: fullname, age, mood: mood.text, enjoys: enjoys.text, hates: hates.text, traits: traits};
+
+  // `loves` and `hates` are lists of text; at most one is ever empty.
+  return { name: fullname, age, mood: mood.text, loves: loveTexts, hates: hateTexts, traits: traits};
 }

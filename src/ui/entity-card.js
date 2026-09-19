@@ -19,6 +19,8 @@ export const ROWS = [
 ];
 // `top`: up beside the picture, rather than below it. `gap`: a rule above it. `list`: several names, one a line (see
 // setList) rather than one value.
+// Any row accepts either one string or a list of strings (see `set`); each extra entry gets its own row below, classed
+// with the row's key (pc-row-loves).
 
 // the rows a .txt file fills in (see core/type-text.js) — the rest are worked out as the world runs
 export const TEXT_ROWS = ['name', 'mood', 'loves', 'hates'];
@@ -81,7 +83,8 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
   body.className = 'pc-body';
   ROWS.forEach(row => {
     const rowEl = document.createElement('div');
-    rowEl.className = 'pc-row' + (row.gap ? ' pc-gap' : '');
+    // Classed by key (pc-row-loves) so CSS can target individual rows.
+    rowEl.className = 'pc-row pc-row-' + row.key + (row.gap ? ' pc-gap' : '');
     rowEl.hidden = true;
     const label = document.createElement('span');
     label.className = 'pc-label';
@@ -90,7 +93,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
     value.className = 'pc-value' + (row.cls ? ' ' + row.cls : '');
     rowEl.append(label, value);
     (row.top ? top : body).append(rowEl);
-    rows[row.key] = { el: rowEl, value, row };
+    rows[row.key] = { el: rowEl, value, row, extras: [] };
   });
   const topSection = document.createElement('div');
   topSection.className = 'pc-top';
@@ -98,13 +101,35 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
   el.append(titlebar, close, topSection, body);
   document.body.append(el);
 
-  // one row: what it says, or null/'' to take it away again
+  // Marks the visible rows below the picture: `pc-alt` on every other one, `pc-lead` on the first. Done here rather than with
+  // :nth-child because hidden rows still count as children in CSS. Call after any change to which rows are shown.
+  function restripe() {
+    [...body.children].filter(rowEl => !rowEl.hidden).forEach((rowEl, i) => {
+      rowEl.classList.toggle('pc-alt', i % 2 === 1);
+      rowEl.classList.toggle('pc-lead', i === 0);
+    });
+  }
+  // Sets a row to a string or a list of strings. The first entry goes in the row, the rest in unlabelled rows beneath it.
+  // null, '' and an empty list hide the row; empty entries are skipped.
   function set(key, value) {
     const row = rows[key];
     if (!row) return;
-    const said = value == null || value === '' ? null : String(value);
-    row.value.textContent = said || '';
-    row.el.hidden = said == null;
+    const said = (Array.isArray(value) ? value : [value]).filter(item => item != null && item !== '').map(String);
+    row.value.textContent = said[0] || '';
+    row.el.hidden = !said.length;
+    row.extras.forEach(extra => extra.remove());
+    row.extras = [];
+    said.slice(1).forEach(text => {
+      const extra = document.createElement('div');
+      extra.className = 'pc-row pc-row-' + row.row.key + ' pc-extra';
+      const value = document.createElement('span');
+      value.className = 'pc-value' + (row.row.cls ? ' ' + row.row.cls : '');
+      value.textContent = text;
+      extra.append(document.createElement('span'), value);
+      (row.extras.length ? row.extras[row.extras.length - 1] : row.el).after(extra);
+      row.extras.push(extra);
+    });
+    restripe();
   }
   // A list row (see ROWS): the names, one a line, the one at `tracked` (whoever the camera's leaving with, if anyone)
   // highlighted — 'None' when there's nobody, so the row still says so rather than vanishing.
@@ -115,6 +140,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
     const row = rows[key];
     if (!row) return;
     row.el.hidden = false;
+    restripe();
     row.value.textContent = names.length ? '' : 'None';
     names.forEach((name, i) => {
       const line = document.createElement(pick ? 'button' : 'div');

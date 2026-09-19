@@ -53,6 +53,9 @@ which add up. Everyone starts at the value in
 #   1.      Vampirism:       a = Vampiric, b = Harmful to vampires
 #   2.      Times:           a = Morning person, b = Night person
 #
+# SOLO: [ solo ] on an enjoy or a hate makes it the only one of its kind that person has: a solo enjoy means no other
+# enjoys, a solo hate no other hates. The other side is unaffected, so they can end up with just that one entry.
+#
 # ------------------------------------------------------------------------------------------------------------------------
 #
 # Current vampire mods: [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
@@ -1247,7 +1250,7 @@ Making lists
 Self-soothing behaviour [fidgety = 4]
 Hoping it'll all be okay [mood = 0.5]
 Popping things on their skin that look vaguely like pimples
-They don't know yet...
+They don't know yet... [solo]
 Floral arrangements [evil = -0.05, patience = 3, aggression = 0.5]
 Checking the fridge [fidgety = 2]
 Chinese proverbs [evil = -0.05, aggression = 0.5]
@@ -1414,8 +1417,8 @@ Skinny people [ evil = 0.05]
 Rock climbers
 New Yorkers [ evil = 0.01]
 People outside of New York, and also people from Bushwick [ evil = 0.05]
-Absolutely everything else, wants to die [mood = -1, walkspeed = 0.7]
-Nothing, enjoys everything life has to offer (lie) [mood = 1]
+Absolutely everything else, wants to die [mood = -1, walkspeed = 0.7, solo]
+Nothing, enjoys everything life has to offer (lie) [mood = 1, solo]
 Telling the truth [talkative = 2, evil = 0.05]
 Flower people [parks = 0.4, evil = 0.05]
 Dog people [parks = 0.5]

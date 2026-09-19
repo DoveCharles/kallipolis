@@ -7,8 +7,7 @@ import { makeCard } from '../ui/entity-card.js';
 
 // ============================================================ person card
 // Who someone is, in a card at the bottom right while the camera follows them (see "following someone" in people.js): their
-// name, age and mood, and one thing they enjoy and one they hate — picked from assets/people.txt (see profiles.js), and the
-// same person every time. The card itself is the shared one in ui/entity-card.js; people are the one kind of thing whose
+// name, age, mood, loves and hates, from assets/people.txt (see profiles.js). The same person always gets the same card. The card itself is the shared one in ui/entity-card.js; people are the one kind of thing whose
 // text doesn't come from a [section] file, since people.txt does rather more (weighted lines, traits) than the rest.
 let shown = null; // { index, isMan } of whoever the card is showing
 const card = makeCard({
@@ -25,8 +24,8 @@ onProfilesLoaded(() => { if (shown) showPersonCard(shown.index, shown.isMan); })
 function showPersonCard(index, isMan) {
   shown = { index, isMan };
   const profile = profileOf(index, isMan);
-  // (what people.txt calls "enjoys" is the card's Loves row, the same one a car or a building has)
-  card.show({ name: profile.name, age: profile.age, mood: profile.mood, loves: profile.enjoys, hates: profile.hates });
+  // loves and hates are lists: one line per entry, and an empty list hides its row.
+  card.show({ name: profile.name, age: profile.age, mood: profile.mood, loves: profile.loves, hates: profile.hates });
   // (no headshot of a cuboid person, before the people model has loaded)
   headshotContext.clearRect(0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE);
   headshotCanvas.hidden = isMan == null;
