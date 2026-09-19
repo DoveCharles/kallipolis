@@ -20,6 +20,7 @@ import './water/water.js';
 import './zones/cutouts.js';
 import './zones/industrial.js';
 import './zones/suburbs.js';
+import './zones/airport.js';
 import './water/bridges.js';
 import './ui/panels.js';
 import './ui/morality.js';
@@ -68,6 +69,7 @@ import { loadPersonModel, syncPeopleUI, updatePeople } from './life/people/peopl
 import { updateTraffic, loadCarModels } from './life/traffic.js';
 import { updateGiblets } from './life/giblets.js';
 import { loadBeeModel, updateBees } from './life/bees.js';
+import { updateAirports } from './zones/airport.js';
 import { loadHouseModels } from './zones/suburbs.js';
 import { updateBuildingFollow } from './buildings/building-card.js';
 import { hideBuildingsAroundCamera } from './buildings/see-through.js';
@@ -133,6 +135,7 @@ function animate() {
   updatePeople(t);
   updateGiblets(t);
   updateBees(t);
+  updateAirports(t);
   updateTraffic(t);
   updateBuildingFollow();
   updateTrafficLights(t);

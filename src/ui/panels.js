@@ -487,6 +487,15 @@ function renderDetails() {
       ${colorSwatchRowHtml(BUILDING_GROUND_COLORS, s.groundColor!=null?s.groundColor:BUILDING_GROUND_COLORS[0], 'groundcolor')}
       <div class="empty" style="margin:6px 0 10px;">Every house faces the nearest road &mdash; or, with none within reach, the nearest walkway, and failing those the zone's own edge.</div>
       ${seedHtml}
+    ` : zoneType==='airport' ? `
+      ${zone.airportInfo ? `<div class="row" style="margin-bottom:9px;"><label>Airfield</label><span class="val">${zone.airportInfo.label}</span></div>
+      <div class="row" style="margin-bottom:9px;"><label>Runway</label><span class="val">${zone.airportInfo.numbers ? zone.airportInfo.numbers + ' &middot; ' + zone.airportInfo.length + 'm' : '&mdash;'}</span></div>` : ''}
+      ${toggleHtml('ds-airportterminal', 'Terminal &amp; hangars', s.airportTerminal!==false)}
+      ${toggleHtml('ds-airporttower', 'Control tower', s.airportTower!==false)}
+      ${toggleHtml('ds-airportaircraft', 'Aircraft', s.airportAircraft!==false)}
+      ${toggleHtml('ds-airportfence', 'Perimeter fence', s.airportFence!==false)}
+      <div class="empty" style="margin:6px 0 10px;">The longest runway that fits decides what you get &mdash; a helipad, a grass strip, a regional field or an international one. Roads can't cross a runway, so one drawn through the zone pushes the runway aside or drops it a size. Its number is its real compass heading, and the terminal turns to face the nearest road.</div>
+      ${seedHtml}
     ` : zoneType==='industrial' ? `
       <div class="slider-row"><div class="row"><label>Lot count</label><span class="val" id="dv-industriallots">${s.industrialLots!=null?s.industrialLots:10}</span></div>
         <input type="range" id="ds-industriallots" min="1" max="40" step="1" value="${s.industrialLots!=null?s.industrialLots:10}"></div>
@@ -592,6 +601,11 @@ function renderDetails() {
       wireNumber('ds-suburbdensity', 'dv-suburbdensity', 'suburbDensity', 2);
       wireToggle('ds-suburbhedges', 'suburbHedges');
       wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);
+    } else if (zoneType==='airport') {
+      wireToggle('ds-airportterminal', 'airportTerminal');
+      wireToggle('ds-airporttower', 'airportTower');
+      wireToggle('ds-airportaircraft', 'airportAircraft');
+      wireToggle('ds-airportfence', 'airportFence');
     } else if (zoneType==='industrial') {
       wireNumber('ds-industriallots', 'dv-industriallots', 'industrialLots');
       wireNumber('ds-industrialdensity', 'dv-industrialdensity', 'industrialDensity', 2);

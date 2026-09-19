@@ -20,6 +20,7 @@ plaza = 1
 farmland = 2
 industrial = -4
 suburbs = -1
+airport = -2
 
 # ------------------------------------------------------------------------------------------------------------------------
 # PATHS: per path of each type (roads are the ones with sidewalks)
@@ -40,6 +41,7 @@ commercial = -0.1
 industrial = -0.5
 farmhouses = 0.2
 houses = -0.1
+terminals = 0.1
 
 # ------------------------------------------------------------------------------------------------------------------------
 # THINGS THAT HAPPEN: per time it happens (these start at 0 each time the page loads)

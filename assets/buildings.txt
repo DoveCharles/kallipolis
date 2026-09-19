@@ -19,6 +19,7 @@
 #   industrial   warehouse, factory, tankfarm, containeryard
 #   farmland     farmstead
 #   suburbs      house
+#   airport      terminal, hangar, controltower
 
 [default]
 name = Building
@@ -161,3 +162,48 @@ hates = Wheelie bins left out past Tuesday
 hates = A caravan on the drive
 hates = Being the only one painted like that
 hates = Anyone parking across the dropped kerb
+
+# ============================================================ airport
+
+[airport]
+name = Terminal
+mood = ✈️
+loves = Departures on time
+hates = Fog
+
+[terminal]
+enterable = yes
+name = Terminal
+mood = ✈️
+loves = The board going all green
+loves = The smell of the place at six in the morning
+loves = Anyone running, but making it
+loves = A window seat over the wing
+loves = Tearful arrivals
+loves = Knowing exactly where everyone is going
+hates = Fog
+hates = The word DELAYED, in any size
+hates = A bag going round the belt on its own
+hates = People standing up before the seatbelt sign
+hates = Being told it is a soulless place
+
+[hangar]
+name = Hangar
+mood = 🛩️
+loves = Doors open on a still morning
+loves = A plane with its cowling off
+loves = Oil, and the smell of it
+hates = Crosswinds
+hates = Birds getting in
+hates = Being used for storage
+
+[controltower]
+name = Control Tower
+mood = 🗼
+loves = Seeing the whole field at once
+loves = A clear read all the way to the horizon
+loves = Everyone on frequency
+loves = The light at the end of the day
+hates = Fog
+hates = Anything on the runway that shouldn't be
+hates = Radio silence
