@@ -32,13 +32,14 @@ export const TRAITS = {
   backwards: { base: 0, min: 0, max: 1, combine: 'on' },
   evil:      {base: 0, min: -1, max: 1, combine: 'add'},
   aggression:{base: 1, min: 0, max: 100},
-  choiceweight: {base: 0, min: 1, max: Infinity}, //Increase how many times a line is added to lists, 
+  choiceweight: {base: 0, min: 1, max: 1000}, //Increase how many times a line is added to lists, 
   //                                               set 0 to prevent auto assignment and allow manual setting only
-  agemult: {base: 1, min: 0.1, max: Infinity}, //Inf limit to allow vampiric / immortal type shit
+  agemult: {base: 1, min: 0.1, max: 1000}, //Inf limit to allow vampiric / immortal type shit
   ageless: { base: 0, min: 0, max: 1, combine: 'on' },
   nickname: { base: 0, min: 0, max: 1, combine: 'on'},
-  bleach: {base: 0, min: 0, max: 1, combine: 'on'}
+  bleach: {base: 0, min: 0, max: 1, combine: 'on'},
 };
+const RULES = ['limit']
 // the value everyone starts with, by trait: TRAITS' base until people.txt loads, then whatever its trait table's start
 // column says (see parsePeopleText) — updated in place, so people holding it see the file's values
 export const DEFAULT_TRAITS = Object.fromEntries(Object.entries(TRAITS).map(([key, trait]) => [key, trait.base]));
@@ -51,10 +52,12 @@ const warned = new Set();
 // brackets separated by commas, or each in its own; a trait without a value is 1 (on).
 function entryOf(line) {
   const traits = [];
+  const rules = [];
   let text = line, group, weight = 1;
   while ((group = text.match(/\[([^[\]]*)\]\s*$/))) {
     text = text.slice(0, group.index).trimEnd();
     const found = [];
+    const foundRules = [];
     group[1].split(/[,;]/).forEach(part => {
       if (!part.trim()) return;
       const [rawKey, rawValue] = part.split('=');
@@ -67,6 +70,7 @@ function entryOf(line) {
         }
         return;
       }
+      if (RULES.includes(key)) { foundRules.push([key, rawValue == null ? '' : rawValue.trim()]); return; }
       if (TRAITS[key] && Number.isFinite(value)) { found.push([key, value]); return; }
       if (!warned.has(part.trim())) {
         warned.add(part.trim());
@@ -74,8 +78,9 @@ function entryOf(line) {
       }
     });
     traits.unshift(...found);
+    rules.unshift(...foundRules);
   }
-  return { text, traits, weight };
+  return { text, traits, weight, rules };
 }
 // the lists, by their headings in people.txt — these stand in until it's loaded, or if it can't be
 const lists = { 'boy names': ['Dave'], 'girl names': ['Linda'], 'surnames': ['Smith'], 'nicknames': ['The Bug'], 'moods': ['😐'], 'enjoys': ['A nice walk'], 'hates': ['Puddles'] };
@@ -138,7 +143,19 @@ export function profileOf(index, isMan) {
   const name = pick(lists[man ? 'boy names' : 'girl names']);
   let age = 18 + Math.floor(rng()*65);
   const mood = pick(lists.moods);
-  let enjoys = pick(lists.enjoys), hates = pick(lists.hates)
+  let enjoys = pick(lists.enjoys);
+
+  const parseLimit = value => ({ rule: value.slice(0, -1), polarity: value.slice(-1) });
+  const findLimits = rules => (rules ?? []).filter(([key]) => key === 'limit').map(([, value]) => parseLimit(value));
+
+  const enjoysLimits = findLimits(enjoys.rules);
+
+  let hates, incompatible = true;
+  while (incompatible) {
+    hates = pick(lists.hates);
+    const hatesLimits = findLimits(hates.rules);
+    incompatible = enjoysLimits.some(e => hatesLimits.some(h => e.rule === h.rule && e.polarity !== h.polarity));
+  }
 
   const traits = traitsOf([name, mood, enjoys, hates]);
 

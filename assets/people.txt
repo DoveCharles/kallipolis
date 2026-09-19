@@ -42,6 +42,19 @@ which add up. Everyone starts at the value in
 #   ageless     off     they don't visibly age, hair does not grey                                    on or off
 #   choiceweight 0       whole numbers, how likely to appear, set 0 to disable autoassign               0 to Inf
 # ------------------------------------------------------------------------------------------------------------------------
+#
+# LIMITATIONS!!!
+# Limits can be used to prevent nonsensical combinations, and are called just like ordinary traits, with a few exceptions.
+# Limits are numbered, and have a polarity: Rule 1a is incompatible with 1b, 33b incompatible with 33a, and so on
+# A limit is states as: [ limit = 1a ]
+# To put multiple limits, use commas: [ limit = 1a, limit = 3b]
+# Used limits below:
+#
+#   1.      Vampirism:       a = Vampiric, b = Harmful to vampires
+#
+# ------------------------------------------------------------------------------------------------------------------------
+#
+# Current vampire mods: [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
 
 [Boy names]
 Oliver 
@@ -911,7 +924,7 @@ Moonwalking [backwards]
 Naps [lounging = 5, walkspeed = 0.8]
 Maps
 Gossip [chatty = 4, talkative = 3, evil = 0.05, nosy = 3]
-Sunbathing [lounging = 4, parks = 3]
+Sunbathing [lounging = 4, parks = 3, limit = 1b]
 Being tall [size = 1.15]
 Collecting stupid shit
 Awful old webseries
@@ -925,7 +938,7 @@ Poppers [walkspeed = 1.5, mood = 0.5, evil = 0.05]
 Good grammar
 Child-like whimsy [mood = 0.5, nosy = 2, evil = -0.1]
 The smell of things [nosy = 3]
-Being a wolf [walkspeed = 1.4, nosy = 3, parks = 3, aggression = 5]
+Being a wolf [walkspeed = 1.4, nosy = 3, parks = 3, aggression = 5, limit = 1b]
 Bingo
 Bathing
 Walking around the city aimlessly [walkspeed = 0.7, parks = 0.3, plazas = 0.3, nosy = 2]
@@ -1009,7 +1022,7 @@ Ingesting mystery powder [walkspeed = 3, chatty = 6, talkative = 6, patience = 0
 Their awesome antidepressants and never wanting sex [mood = 0.3, fidgety = 3, aggression = 0.5]
 Mustelidae [parks = 2]
 Barfing after drinking but before getting to the club [agemult = 0.8]
-Staring at the eclipse [blinks = 5]
+Staring at the eclipse [blinks = 5, limit = 1b]
 Taking medicine without checking the label [patience = 0.4, mood = -0.2, evil = 0.05]
 Befriending house spiders [ evil = -0.05, aggression = 0.5]
 Guns... like, way too much [evil = 0.2, aggression = 10]
@@ -1029,7 +1042,7 @@ Floordrobe
 Amassing a world-renouned collection of tiny jars full of the same four spices
 Swallowing
 Self-critique [mood = -0.2, fidgety = 2, evil = -0.05]
-Keeping a dream journal [lounging = 2]
+Keeping a dream journal [lounging = 2, limit = 1b]
 Sending texts in their sleep [lounging = 2, fidgety = 2]
 Passive-mindedly playing with objects at their desk (pins, scaples, etc.) [fidgety = 8]
 Being a pseud [chatty = 3, talkative = 6, evil = 0.05, aggression = 2]
@@ -1052,7 +1065,7 @@ Horse racing [ evil = 0.05]
 Calling people "libtard" [ evil = 0.1, agemult = 0.95, aggression = 5]
 Calling people "lumpen" [ evil = 0.05, agemult = 1.05, aggression = 5]
 Nietzschean freedom [patience = 0.4]
-Reverting to Irish Catholic
+Reverting to Irish Catholic [limit = 1b]
 A billion dollars
 The cursed mirror
 Getting another piercing
@@ -1088,7 +1101,7 @@ Acting gregarious [mood = 0.5, evil = -0.05, aggression = 0.5]
 Searching for missing persons [nosy = 10, fidgety = 2, evil = -0.2, aggression = 0.5]
 Dwelling in obscurity [chatty = 0.1, talkative = 0.1]
 Hypnagogic visions [lounging = 3]
-Preaching [chatty = 5, talkative = 10, evil = 0.05]
+Preaching [chatty = 5, talkative = 10]
 Foreign cigarettes
 Suicide, as a concept [mood = 0.4]
 Trying to kiss the dentist [evil = 0.05]
@@ -1172,7 +1185,7 @@ Bulking season [size = 1.15]
 Prayer [evil = -0.05]
 Stockpiling
 Apple cider vinegar [parks = 2]
-Sunning their holes [parks = 4]
+Sunning their holes [parks = 4, limit = 1b]
 Coffee enemas [parks = 4, walkspeed = 1.4]
 Yearning [lounging = 2]
 Turning it off in just a minute [patience = 2, agemult = 0.5, aggression = 2]
@@ -1180,7 +1193,7 @@ Feeling an effect
 Greek mythology
 Eco-fascism [evil = 0.3]
 Ted Kaczynski [plazas = 0.1, parks = 5, chatty = 0.1, evil = 0.15]
-Slicing garlic razor thin [patience = 3]
+Slicing garlic razor thin [patience = 3, limit = 1b]
 Doing 10 press-ups and calling it a day
 Throwing a thumbs up [mood = 0.3, evil = -0.05 ]
 Home-movies
@@ -1286,13 +1299,13 @@ Licking toads
 Giving context [evil = -0.05]
 SPF-100 [ageless]
 Only going out at night
-Only going out at night [agemult = 4.5 ,evil = 0.5, ageless, aggression = 50]
-The taste of blood [agemult = 4.5, evil = 0.5, ageless, aggression = 50]
+Only going out at night [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
+The taste of blood [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
 The taste of blood
 Jumpin' all over the world
 Two in the trunk
 Being invited over
-Being invited over [agemult = 4.5, evil = 0.5, ageless, aggression = 50 ]
+Being invited over [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
 Peepholes [evil = 0.1]
 Talking a big talk [angry = 0.5, aggression = 0.5]
 Spelunking
@@ -1426,8 +1439,8 @@ Their nemesis [ aggression = 2]
 Practicing restraint [patience = 0.4, evil = 0.05, aggression = 2]
 Spending money
 High Treason [ agemult = 1.2]
-Looking at their reflection [ agemult = 4.5, evil = 0.5, ageless, aggression = 50]
-Looking at their reflection
+Looking in the mirror [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, limit = 1a]
+Looking in the mirror
 When something is, "titular"
 When something is, "seminal"
 When you put a telephone up to your ear and it explodes and your beak spins clean around your face
@@ -1494,7 +1507,7 @@ Psychosomatic symptoms
 Leaving work [plazas = 5]
 Yearning
 Feeling an effect
-Hemorrhaging everywhere
+Hemorrhaging everywhere 
 Anything viscous
 That hand sanitiser that's really really sticky
 Their rotten, putrid genes [mood = -0.2, aggression = 2]
@@ -1557,9 +1570,9 @@ Centipedes [parks = 0.5]
 Wasps [parks = 0.5]
 Bees [parks = 0.5, evil = 0.05]
 Garlic bread
-Garlic bread [ agemult = 4.5, evil = 0.5, ageless, aggression = 50 ]
+Garlic bread [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
 Running water
-Running water [ agemult = 4.5, evil = 0.5, ageless , aggression = 50]
+Running water [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
 Going bald
 Their bastard son... bastard little boy... [agemult = 1.2, evil = 0.1]
 The Killer
@@ -1573,3 +1586,5 @@ Tapeworm
 Getting poop on their clothes
 Goths [evil = 0.01]
 Gething thung by a beeh [parks = 0.2]
+Silver jewellery
+Silver jewellery [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
