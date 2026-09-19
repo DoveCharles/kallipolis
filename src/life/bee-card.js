@@ -14,6 +14,7 @@ import { mulberry32 } from '../core/math.js';
 // No Kill button on either: nothing here wants to be the thing that kills the bees.
 const text = loadTypeText('assets/bees.txt', {
   attributes: TEXT_ROWS,
+  counted: ['loves', 'hates'], // can have several per bee, like people: see [distribution] in bees.txt
   // this stands in until bees.txt has loaded, or if it can't be
   placeholder: { bee: { name: ['Bee'], mood: ['🐝'], loves: ['Flowers'], hates: ['Rain'] }, default: { name: ['Hive'], mood: ['🍯'], loves: ['Flowers'], hates: ['Bears'] } },
 });

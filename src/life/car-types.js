@@ -7,6 +7,7 @@ import { TEXT_ROWS } from '../ui/entity-card.js';
 // core/type-text.js, which the buildings and the trains use too; see there for the format.
 const cars = loadTypeText('assets/cars.txt', {
   attributes: TEXT_ROWS,
+  counted: ['loves', 'hates'], // can have several per vehicle: see `counts` in core/type-text.js
   // this stands in until cars.txt has loaded, or if it can't be
   placeholder: {
     default: { name: ['Car'], mood: ['🚗'], loves: ['Beep beep'], hates: ['Honkkkk'] },

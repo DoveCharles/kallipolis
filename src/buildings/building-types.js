@@ -15,6 +15,7 @@ const ZONE_OF_KIND = {
 };
 const buildings = loadTypeText('assets/buildings.txt', {
   attributes: TEXT_ROWS,
+  counted: ['loves', 'hates'], // can have several per building, like people: see [distribution] in buildings.txt
   settings: ['enterable'], // not card text: whether people go into one (see "going indoors" in people.js)
   fallbacks: ZONE_OF_KIND,
   // this stands in until buildings.txt has loaded, or if it can't be

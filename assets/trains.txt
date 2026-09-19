@@ -9,7 +9,14 @@
 #
 # Give an attribute several lines to have each train pick one of them (always the same one for the same train). There's
 # only one kind of train for now, so everything goes under [default] — but a [section] named after a carriage would work
-# the same way as a vehicle type does. Blank lines and lines starting with # are skipped.
+# the same way as a vehicle type does.
+
+[distribution]
+1, 1 @ 0.6
+2, 0 @ 0.1
+0, 2 @ 0.1
+2, 1 @ 0.1
+1, 2 @ 0.1
 
 [default]
 name = Train

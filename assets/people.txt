@@ -1,6 +1,7 @@
 # Who the people of Splinetopia are. Click someone in World mode to see their card.
 # Edit freely: each [section] is a list, one entry per line. Blank lines and lines starting with # are skipped.
-# Men get a boy name and women a girl name. Everyone gets one mood, one thing they enjoy and one thing they hate.
+# Men get a boy name and women a girl name. Everyone gets one mood, at least one thing they enjoy and at least one they
+# hate — how many of each is the [distribution] below (see CURRENT DISTRIBUTION).
 #
 # ------------------------------------------------------------------------------------------------------------------------
 # TRAITS
@@ -43,6 +44,24 @@ which add up. Everyone starts at the value in
 #   choiceweight 0       whole numbers, how likely to appear, set 0 to disable autoassign               0 to Inf
 # ------------------------------------------------------------------------------------------------------------------------
 #
+# CURRENT DISTRIBUTION
+# A [distribution] section says how many of each counted attribute a thing gets. Counted attributes are the ones that can
+# hold several values at once: here, enjoys (their loves) and hates. It's read once for the whole file and applies to
+# everyone alike, so it belongs at the top with the trait table, not inside a list. Every other kind of thing reads its own
+# file the same way — cars.txt, buildings.txt, trains.txt and bees.txt each have their own [distribution], and any file
+# without one falls back to the same spread written below.
+#
+# Each row is one count per counted attribute (loves, then hates), then `@` and how likely that row is against the others.
+# Leave the weight out and it's 1. Rows with no weight at all are all equally likely.
+#
+#   loves, hates @ weight
+#   1, 1 @ 0.6            60% of people: one love, one hate
+#
+# SOLO: [ solo ] on an enjoy or a hate makes it the only one of its kind that person has: a solo enjoy means no other
+# enjoys, a solo hate no other hates. The other side is unaffected, so they can end up with just that one entry.
+#
+# ------------------------------------------------------------------------------------------------------------------------
+#
 # LIMITATIONS!!!
 # Limits can be used to prevent nonsensical combinations, and are called just like ordinary traits, with a few exceptions:
 # Limits are numbered, and have a polarity: Rule 1a is incompatible with 1b, 33b incompatible with 33a, and so on.
@@ -53,12 +72,18 @@ which add up. Everyone starts at the value in
 #   1.      Vampirism:       a = Vampiric, b = Harmful to vampires
 #   2.      Times:           a = Morning person, b = Night person
 #
-# SOLO: [ solo ] on an enjoy or a hate makes it the only one of its kind that person has: a solo enjoy means no other
-# enjoys, a solo hate no other hates. The other side is unaffected, so they can end up with just that one entry.
+
 #
 # ------------------------------------------------------------------------------------------------------------------------
 #
 # Current vampire mods: [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
+
+[distribution]
+1, 1 @ 0.6
+2, 0 @ 0.1
+0, 2 @ 0.1
+2, 1 @ 0.1
+1, 2 @ 0.1
 
 [Boy names]
 Oliver 

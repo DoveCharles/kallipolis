@@ -10,6 +10,7 @@ import { loadTypeText } from '../core/type-text.js';
 // be killed.
 const trains = loadTypeText('assets/trains.txt', {
   attributes: TEXT_ROWS,
+  counted: ['loves', 'hates'], // can have several per carriage, like people: see [distribution] in trains.txt
   // this stands in until trains.txt has loaded, or if it can't be
   placeholder: { default: { name: ['Train'], mood: ['🚆'], loves: ['Shoooom'], hates: ['Delays'] } },
 });

@@ -154,7 +154,8 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
     });
   }
   // Opens the card on `values`, a row key to what it says for whichever rows are known at the time — the rest are left
-  // out until something sets them (a person going indoors, say, or who's aboard a train).
+  // out until something sets them (a person going indoors, say, or who's aboard a train). A card is handed whatever a
+  // kind's reader returns, traits included; the card has no row for those, so it ignores them.
   function show(values) {
     Object.keys(rows).forEach(key => set(key, values[key]));
     el.hidden = false;

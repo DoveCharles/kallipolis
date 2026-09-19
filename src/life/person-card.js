@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import { App } from '../core/shared.js';
 import { scene, renderer } from '../core/scene.js';
 import { HEADSHOT_LAYER } from './people/people.js';
@@ -24,7 +24,8 @@ onProfilesLoaded(() => { if (shown) showPersonCard(shown.index, shown.isMan); })
 function showPersonCard(index, isMan) {
   shown = { index, isMan };
   const profile = profileOf(index, isMan);
-  // loves and hates are lists: one line per entry, and an empty list hides its row.
+  // loves and hates are lists: one line per entry, and an empty list hides its row. The traits aren't shown: they're what
+  // the person does, not what the card says about them.
   card.show({ name: profile.name, age: profile.age, mood: profile.mood, loves: profile.loves, hates: profile.hates });
   // (no headshot of a cuboid person, before the people model has loaded)
   headshotContext.clearRect(0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE);

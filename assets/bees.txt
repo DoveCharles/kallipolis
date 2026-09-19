@@ -8,7 +8,15 @@
 #   hates   what it hates
 #
 # Give an attribute several lines to have each bee (or hive) pick one of them — always the same one for the same bee, so
-# a bee you followed yesterday is the same bee today. Blank lines and lines starting with # are skipped.
+# a bee you followed yesterday is the same bee today.
+
+
+[distribution]
+1, 1 @ 0.6
+2, 0 @ 0.1
+0, 2 @ 0.1
+2, 1 @ 0.1
+1, 2 @ 0.1
 
 [bee]
 name = Bee

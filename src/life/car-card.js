@@ -21,6 +21,7 @@ const card = makeCard({
 
 function showCarCard(i, info) {
   shown = i;
+  // `info` is what the car's type says (see car-types.js), traits and all: the card itself turns those into its rows
   card.show(info);
   drawCarThumbnail(i);
 }

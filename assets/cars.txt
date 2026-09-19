@@ -10,6 +10,13 @@
 # vehicle). Anything a type leaves out comes from [default], which is also used for any type that isn't listed.
 # Blank lines and lines starting with # are skipped.
 
+[distribution]
+1, 1 @ 0.6
+2, 0 @ 0.1
+0, 2 @ 0.1
+2, 1 @ 0.1
+1, 2 @ 0.1
+
 [default]
 name = Car
 mood = 🚗
