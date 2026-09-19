@@ -1945,6 +1945,7 @@ function killPerson(i, by = 'player') {
   if (!p || isGone(p)) return;
   App.recordMoralityEvent?.(by === 'car' ? 'peds killed by cars' : 'peds killed by player');
   if (followed === i) stopFollowingPerson();
+  if (awaited === i) awaited = -1;
   endActivity(p);
   p.crossStage = null; // don't leave a car yielding forever for someone who can no longer finish crossing
   p.jc = null;
@@ -2190,7 +2191,8 @@ function dropToGround(p) {
   if (p.mode === 'line') { const at = walkwayPoint(p); p.x = at.x; p.y = at.y; p.z = at.z; }
   else if (p.mode === 'wander') { p.x = p.tx; p.z = p.tz; p.y = peopleNav.areas[p.area].y; }
 }
-// the followed carriage's card: who's aboard, by name — whoever the camera came aboard with picked out
+// The followed carriage's card: who's aboard, by name — whoever the camera came aboard with picked out. Clicking one of
+// the others makes them the one it came aboard with instead, so it gets off with them (see gotOff) wherever they do.
 let passengersKey = null;
 function showPassengers() {
   const line = App.followedTrainLine?.();
@@ -2199,7 +2201,11 @@ function showPassengers() {
   const key = line + '|' + riders.join(',') + '|' + riderFollowed + '|' + profilesVersion() + '|' + !!personModel;
   if (key === passengersKey || !App.setTrainCardPassengers) return;
   passengersKey = key;
-  App.setTrainCardPassengers(riders.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name), riders.indexOf(riderFollowed));
+  App.setTrainCardPassengers(
+    riders.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name),
+    riders.indexOf(riderFollowed),
+    at => { riderFollowed = riders[at]; },
+  );
 }
 
 // ---- going indoors: someone walking past a building's door (see buildingDoors) now and then goes in — walking up to it
@@ -2243,6 +2249,8 @@ function updateIndoors(p, i, dt) {
     p.x = door.x; p.z = door.z; p.y = visit.building.y;
     p.heading = headingTo(p, visit.back) + (p.traits.backwards ? Math.PI : 0);
     if (followed === i) { App.setPersonCardIndoors(null); lookAtPerson(p); }
+    // and out with whoever the building's card was told to wait on: the camera leaves the building for them
+    if (awaited === i) { awaited = -1; App.stopFollowingBuilding?.(); followPerson(i); }
     return visit.back;
   }
   // 'exit': back to the walkway, then on along it, whichever way
@@ -2254,16 +2262,24 @@ function updateIndoors(p, i, dt) {
   reseatPerson(p);
   return null;
 }
-// the followed building's card (see building-card.js): who's inside, by name
+// The followed building's card (see building-card.js): who's inside, by name. Clicking one of them waits on that one —
+// the camera leaves the building with them when they come back out the door (see awaited below), the way it gets off a
+// train with whoever it came aboard with.
 let inhabitantsKey = null;
+let awaited = -1; // whoever indoors the camera's waiting on, or -1
 function showInhabitants() {
   const key = App.followedBuildingKey?.();
   const inside = [];
   if (key && S.peopleEnabled) people.forEach((p, i) => { if (p.mode === 'indoors' && p.indoors.stage === 'inside' && p.indoors.building.key === key) inside.push(i); });
-  const shownKey = key + '|' + inside.join(',') + '|' + profilesVersion() + '|' + !!personModel;
+  if (!inside.includes(awaited)) awaited = -1; // (the building let go of, or whoever it was gone some other way)
+  const shownKey = key + '|' + inside.join(',') + '|' + awaited + '|' + profilesVersion() + '|' + !!personModel;
   if (shownKey === inhabitantsKey || !App.setBuildingCardInhabitants) return;
   inhabitantsKey = shownKey;
-  if (key) App.setBuildingCardInhabitants(inside.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name));
+  if (key) App.setBuildingCardInhabitants(
+    inside.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name),
+    inside.indexOf(awaited),
+    at => { awaited = inside[at]; },
+  );
 }
 // the camera, following someone who's gone indoors: back far enough to take in the building they're in
 function lookAtBuilding(b) {

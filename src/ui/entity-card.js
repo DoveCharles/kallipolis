@@ -106,17 +106,24 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
     row.value.textContent = said || '';
     row.el.hidden = said == null;
   }
-  // a list row (see ROWS): the names, one a line, the one at `tracked` (whoever the camera came in with, if any)
-  // highlighted — 'None' when there's nobody, so the row still says so rather than vanishing
-  function setList(key, names, tracked = -1) {
+  // A list row (see ROWS): the names, one a line, the one at `tracked` (whoever the camera's leaving with, if anyone)
+  // highlighted — 'None' when there's nobody, so the row still says so rather than vanishing.
+  // `pick`, if given, is { title, onClick } for the names themselves: a click hands onClick which of them it was, and
+  // whoever put the list there takes it from there — for all three of these lists, by marking that one as the one to
+  // follow out (see setBuildingCardInhabitants, setTrainCardPassengers and setHiveCardBees).
+  function setList(key, names, tracked = -1, pick = null) {
     const row = rows[key];
     if (!row) return;
     row.el.hidden = false;
     row.value.textContent = names.length ? '' : 'None';
     names.forEach((name, i) => {
-      const line = document.createElement('div');
+      const line = document.createElement(pick ? 'button' : 'div');
+      line.className = 'pc-line' + (i === tracked ? ' pc-tracked' : '') + (pick ? ' pc-pick' : '');
       line.textContent = name;
-      if (i === tracked) line.className = 'pc-tracked';
+      if (pick) {
+        if (pick.title) line.title = pick.title;
+        line.addEventListener('click', () => pick.onClick(i));
+      }
       row.value.append(line);
     });
   }

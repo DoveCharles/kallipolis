@@ -33,9 +33,10 @@ function hideTrainCard() {
 }
 
 // who's riding the followed carriage (see "riding the trains" in people.js): their names, one a line — the one at
-// `tracked` (the person the camera came aboard with, if any) highlighted
-function setTrainCardPassengers(names, tracked = -1) {
-  card.setList('occupants', names, tracked);
+// `tracked` (whoever the camera came aboard with, or a name that's since been clicked) highlighted, and `onPick` told
+// when a name is clicked, to get off with that one instead
+function setTrainCardPassengers(names, tracked = -1, onPick = null) {
+  card.setList('occupants', names, tracked, onPick && { title: 'Follow them off the train', onClick: onPick });
 }
 
 Object.assign(App, { showTrainCard, hideTrainCard, setTrainCardPassengers });

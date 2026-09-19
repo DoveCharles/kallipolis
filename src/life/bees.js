@@ -579,16 +579,18 @@ function followBees() {
     }
   }
   if (!followedHive) return;
-  const hive = followedHive.colony.hives[followedHive.index];
+  const { colony } = followedHive, hive = colony.hives[followedHive.index];
   controls.goalTarget.copy(hive.mouth);
-  // who's in, by name, with the bee the camera came in with picked out (as a train's passengers are)
-  const home = followedHive.colony.bees.filter(bee => bee.hive === hive && isHome(bee));
-  const came = homedBee && homedBee.colony === followedHive.colony ? followedHive.colony.bees[homedBee.index] : null;
-  const names = home.map(bee => beeName(bee.number)), tracked = came ? home.indexOf(came) : -1;
+  // who's in, by name, with the bee the camera came in with picked out (as a train's passengers are) — and a click on
+  // one of the others making that one the bee it came in with, to leave with when that one next flies out
+  const home = [];
+  colony.bees.forEach((bee, index) => { if (bee.hive === hive && isHome(bee)) home.push(index); });
+  const came = homedBee && homedBee.colony === colony ? homedBee.index : -1;
+  const names = home.map(index => beeName(colony.bees[index].number)), tracked = home.indexOf(came);
   const key = names.join(',') + '|' + tracked;
   if (key === hiveBeesShown) return;
   hiveBeesShown = key;
-  App.setHiveCardBees(names, tracked);
+  App.setHiveCardBees(names, tracked, at => { homedBee = { colony, index: home[at] }; });
 }
 
 let lastBeeTime = null;
