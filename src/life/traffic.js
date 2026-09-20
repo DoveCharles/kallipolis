@@ -1158,6 +1158,29 @@ function runOverPeople(car) {
 }
 
 /**
+ * Kill every pedestrian and car an aircraft is touching: whatever lies within its footprint (a box turned to `heading`)
+ * and whose height overlaps the aircraft's. Called each frame by whatever is flying one low enough to matter (see
+ * flyByHand in zones/airport.js); anything killed is credited to the player.
+ * @param {{x: number, y: number, z: number, heading: number, halfLength: number, halfWidth: number, below: number, above: number}} aircraft
+ *   Its middle, its heading, half its length and wingspan, and how far its body reaches below and above `y`.
+ * @returns {void}
+ */
+function strikeWithAircraft({ x, y, z, heading, halfLength, halfWidth, below, above }) {
+  const cos = Math.cos(heading), sin = Math.sin(heading), reach = Math.hypot(halfLength, halfWidth);
+  const inFootprint = (px, pz) => {
+    const dx = px - x, dz = pz - z;
+    if (Math.abs(dx) > reach || Math.abs(dz) > reach) return false; // (cheaply rules out most of them before the exact check)
+    return Math.abs(dx*cos - dz*sin) < halfWidth && Math.abs(dx*sin + dz*cos) < halfLength;
+  };
+  const sharesHeight = (base, height) => base < y + above && base + height > y - below;
+  App.people.forEach((p, i) => { if (sharesHeight(p.y, p.height*S.peopleSize) && inFootprint(p.x, p.z)) App.killPerson(i, 'player'); });
+  for (let i = cars.length - 1; i >= 0; i--) {
+    const car = cars[i];
+    if (car.li >= 0 && sharesHeight(Y_ROAD, carHeight(car)) && inFootprint(car.x, car.z)) killCar(i);
+  }
+}
+
+/**
  * What a car's called, for its card and for the morality notices: its registration, and its type and number within it
  * — "AB12 CDE (Taxi #3)" — or just the type while its model is still loading.
  * @param {object} car
@@ -1669,5 +1692,5 @@ export function carThumbnailScene(i) {
   return { mesh: cm.thumbMesh, camera: cm.thumbCamera };
 }
 
-Object.assign(App, { pickCar, followCarAt, stopFollowingCar, driveCar, stopDriving, killCar, carsNearby, carsWhere });
+Object.assign(App, { pickCar, followCarAt, stopFollowingCar, driveCar, stopDriving, killCar, strikeWithAircraft, carsNearby, carsWhere });
 

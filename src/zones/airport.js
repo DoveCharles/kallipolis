@@ -1100,11 +1100,13 @@ const FLY_PITCH_MAX = 0.85, FLY_BANK_MAX = 1.05, FLY_LEVEL = 1.4; // how far it 
 const FLY_CEILING = 900, FLY_STALL = 0.7;                         // and where the air runs out, and the speed below which the nose drops
 const FLY_CONTROL_LAG = 0.25, FLY_MOMENTUM = 0.35;                // seconds: the weight behind the stick, and how long the flight path trails the nose
 const FLY_RIGHTING = 0.75, FLY_TRIM = 0.8, FLY_BITE_MIN = 0.4;    // let go, how keenly it rolls level and trims out; and how heavy the stick goes when slow
+const FLY_ROLLING = 0.6, FLY_GROUND_TURN = 0.9;                   // on the ground: the share of its speed the wheels lose a second, and the fastest it steers round (radians a second)
 /**
  * One frame of a hand-flown aircraft, from the keys held (controlInput). W and S put the nose down and up, A and D drop a
  * wing — and it is the dropped wing that turns it, the way a real one turns, so a bank held over comes round a circle
  * rather than sliding sideways. Shift is power and space is the airbrake. Climbing bleeds speed off and diving puts it
- * back on, and too slow a climb drops the nose by itself.
+ * back on, and too slow a climb drops the nose by itself. On the ground it steers like a car instead: A and D turn it as
+ * fast as its speed allows, and it rolls to a stop when left alone, until it has the speed to lift the nose (S) and go.
  *
  * What the keys ask for is a rate — how fast to roll, how fast to raise the nose — and the aeroplane takes a moment
  * (FLY_CONTROL_LAG) to get there and the same moment to stop again, so a tap eases the wings over instead of snapping
@@ -1128,6 +1130,10 @@ function flyByHand(flight, dt) {
   const toward = (v, goal, rate) => v + Math.max(-rate*dt, Math.min(rate*dt, goal - v));
   const ease = (v, goal, seconds) => v + (goal - v)*(1 - Math.exp(-dt/seconds)); // (frame-rate independent, unlike a flat fraction)
   const cruise = FLY_SPEED*scale, stall = FLY_SPEED_MIN*scale;
+  // on its wheels, and not lifting off: it drives like a car (A and D steer it, and only while it is moving; shift is
+  // power and space the brake, and left alone it rolls to a stop) until the nose comes up and it leaves the ground
+  const floor = Y_TARMAC + flight.size*0.1;
+  const grounded = hand.y <= floor + flight.size*0.02 && (hand.pitch <= 0.05 || hand.speed < stall/FLY_STALL); // (too slow to lift off, however far the nose is up)
   // how much the air is doing for it: full authority at cruise, heavy and vague down at the stall
   const bite = Math.max(FLY_BITE_MIN, Math.min(1, hand.speed/cruise));
   // the stick, as a rate rather than an attitude. W dives and S climbs, the way round a stick is: pushed forward the
@@ -1140,6 +1146,7 @@ function flyByHand(flight, dt) {
   hand.bankRate = ease(hand.bankRate, askedBank, FLY_CONTROL_LAG);
   hand.pitch += hand.pitchRate*dt;
   hand.bank += hand.bankRate*dt;
+  if (grounded) { hand.bank = 0; hand.bankRate = 0; } // (the stick steers the wheels, not the wings)
   // as far over as it goes: the stop holds it there rather than the rate winding on against it
   if (Math.abs(hand.pitch) > FLY_PITCH_MAX) { hand.pitch = Math.sign(hand.pitch)*FLY_PITCH_MAX; hand.pitchRate = 0; }
   if (Math.abs(hand.bank) > FLY_BANK_MAX) { hand.bank = Math.sign(hand.bank)*FLY_BANK_MAX; hand.bankRate = 0; }
@@ -1147,22 +1154,28 @@ function flyByHand(flight, dt) {
   const sinking = Math.max(0, 1 - hand.speed/(stall/FLY_STALL));
   if (sinking > 0 && hand.pitch > -0.35) { hand.pitch = toward(hand.pitch, -0.35, FLY_LEVEL*sinking); hand.pitchRate = Math.min(hand.pitchRate, 0); }
   // speed: the throttle against the drag, less whatever the climb is costing (or the dive paying back)
-  const power = (brake ? -FLY_POWER : run ? FLY_POWER : 0)*scale + (cruise - hand.speed)*FLY_DRAG/cruise;
-  hand.speed = Math.max(stall*0.6, Math.min(FLY_SPEED_MAX*scale,
+  const throttle = (brake ? -FLY_POWER : run ? FLY_POWER : 0)*scale;
+  const power = throttle + (grounded ? -hand.speed*FLY_ROLLING : (cruise - hand.speed)*FLY_DRAG/cruise);
+  hand.speed = Math.max(grounded ? 0 : stall*0.6, Math.min(FLY_SPEED_MAX*scale,
     hand.speed + (power - Math.sin(hand.pitch)*FLY_GRAVITY*scale)*dt));
-  // the bank is what turns it, and the turn is sharper the slower it is going
-  hand.heading += Math.sin(hand.bank)*FLY_TURN*dt*Math.min(2, cruise/Math.max(1, hand.speed));
+  if (grounded) {
+    // steered like a car: the wheels turn it as fast as its speed allows, a wide circle for a big aircraft
+    hand.heading -= right*Math.min(FLY_GROUND_TURN, hand.speed/(flight.size*0.8))*dt;
+  } else {
+    // the bank is what turns it, and the turn is sharper the slower it is going
+    hand.heading += Math.sin(hand.bank)*FLY_TURN*dt*Math.min(2, cruise/Math.max(1, hand.speed));
+  }
   // where it is pointing, and then where it is actually going — which trails the nose rather than being it, so the
   // aeroplane swings through a turn and slides for a moment before a pull takes effect
   const level = Math.cos(hand.pitch)*hand.speed;
-  hand.vx = ease(hand.vx, Math.sin(hand.heading)*level, FLY_MOMENTUM);
-  hand.vz = ease(hand.vz, Math.cos(hand.heading)*level, FLY_MOMENTUM);
+  // (on its wheels it goes where it points, with no sliding)
+  hand.vx = grounded ? Math.sin(hand.heading)*level : ease(hand.vx, Math.sin(hand.heading)*level, FLY_MOMENTUM);
+  hand.vz = grounded ? Math.cos(hand.heading)*level : ease(hand.vz, Math.cos(hand.heading)*level, FLY_MOMENTUM);
   hand.vy = ease(hand.vy, Math.sin(hand.pitch)*hand.speed, FLY_MOMENTUM);
   hand.x += hand.vx*dt;
   hand.y += hand.vy*dt;
   hand.z += hand.vz*dt;
   // the ground underneath and the thin air above
-  const floor = Y_TARMAC + flight.size*0.1;
   if (hand.y <= floor) {
     hand.y = floor;
     hand.vy = Math.max(0, hand.vy);
@@ -1173,6 +1186,9 @@ function flyByHand(flight, dt) {
   if (hand.y > FLY_CEILING) { hand.y = FLY_CEILING; hand.vy = Math.min(0, hand.vy); hand.pitch = Math.min(hand.pitch, 0); }
   flight.plane.visible = true;
   poseAircraft(flight.plane, hand.x, hand.y, hand.z, Math.sin(hand.heading), Math.cos(hand.heading), hand.pitch, -hand.bank);
+  // whoever is on the ground under it (or a car on the road) when it is low enough to touch them
+  App.strikeWithAircraft?.({ x: hand.x, y: hand.y, z: hand.z, heading: hand.heading,
+    halfLength: flight.size*0.5, halfWidth: flight.size*0.5, below: flight.size*0.1, above: flight.size*0.15 });
 }
 
 const HANDBACK_SPEED = 120, HANDBACK_MIN = 1.2, HANDBACK_MAX = 7; // how quickly it works its way back, and the seconds that takes
