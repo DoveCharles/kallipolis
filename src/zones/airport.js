@@ -1073,14 +1073,25 @@ function makeTrackedFlight(zone, plane, fly, tier, index) {
 const FLY_SPEED = 46, FLY_SPEED_MIN = 22, FLY_SPEED_MAX = 105;   // units a second, at the size an international jet is
 const FLY_POWER = 26, FLY_DRAG = 14, FLY_GRAVITY = 40;           // how hard the throttle, the air and the weight pull on that speed
 const FLY_PITCH_RATE = 0.9, FLY_BANK_RATE = 2.2, FLY_TURN = 1.1; // radians a second: the nose, the wings, and how fast a full bank comes round
-const FLY_PITCH_MAX = 0.85, FLY_BANK_MAX = 1.05, FLY_LEVEL = 1.4; // how far it will go, and how briskly it lets go of the stick
+const FLY_PITCH_MAX = 0.85, FLY_BANK_MAX = 1.05, FLY_LEVEL = 1.4; // how far it will go, and how briskly a stall or the ground straightens it
 const FLY_CEILING = 900, FLY_STALL = 0.7;                         // and where the air runs out, and the speed below which the nose drops
+const FLY_CONTROL_LAG = 0.25, FLY_MOMENTUM = 0.35;                // seconds: the weight behind the stick, and how long the flight path trails the nose
+const FLY_RIGHTING = 0.75, FLY_TRIM = 0.8, FLY_BITE_MIN = 0.4;    // let go, how keenly it rolls level and trims out; and how heavy the stick goes when slow
 /**
  * One frame of a hand-flown aircraft, from the keys held (controlInput). W and S put the nose down and up, A and D drop a
  * wing — and it is the dropped wing that turns it, the way a real one turns, so a bank held over comes round a circle
- * rather than sliding sideways. Shift is power and space is the airbrake; left alone, the stick centres itself, the
- * aeroplane picks up its cruising speed and flies level, so it can be let go of for a moment without falling out of the
- * sky. Climbing bleeds speed off and diving puts it back on, and too slow a climb drops the nose by itself.
+ * rather than sliding sideways. Shift is power and space is the airbrake. Climbing bleeds speed off and diving puts it
+ * back on, and too slow a climb drops the nose by itself.
+ *
+ * What the keys ask for is a rate — how fast to roll, how fast to raise the nose — and the aeroplane takes a moment
+ * (FLY_CONTROL_LAG) to get there and the same moment to stop again, so a tap eases the wings over instead of snapping
+ * them and there is some weight behind the stick. The slower it flies the less the air does for it, so the controls go
+ * heavy towards the stall. Let go and it rights itself the way a stable aeroplane does — the bank falling away and the
+ * nose trimming out over a few seconds — rather than being hauled level, so it can be left alone for a moment without
+ * falling out of the sky, but a bank held and released still settles gently instead of springing back.
+ *
+ * It carries its own momentum too: the flight path trails the nose by FLY_MOMENTUM rather than following it exactly, so
+ * a turn swings through and a sharp pull slides a little before it bites, which is most of what makes it feel heavy.
  *
  * It cannot go under the ground: the ground stops it, levels it and lets it run along like a landing, which is friendlier
  * than a crash and means a bad approach just ends with a bump.
@@ -1092,29 +1103,51 @@ function flyByHand(flight, dt) {
   const hand = flight.hand, scale = flight.size/32; // (everything below is written for an international jet; a light one flies smaller)
   const { forward, right, run, brake } = controlInput();
   const toward = (v, goal, rate) => v + Math.max(-rate*dt, Math.min(rate*dt, goal - v));
-  // the stick: held over it goes to full deflection, let go it comes back to the middle
-  // W dives and S climbs, the way round a stick is: pushed forward the nose drops
-  hand.pitch = forward ? Math.max(-FLY_PITCH_MAX, Math.min(FLY_PITCH_MAX, hand.pitch - forward*FLY_PITCH_RATE*dt))
-    : toward(hand.pitch, 0, FLY_LEVEL);
-  hand.bank = right ? Math.max(-FLY_BANK_MAX, Math.min(FLY_BANK_MAX, hand.bank - right*FLY_BANK_RATE*dt))
-    : toward(hand.bank, 0, FLY_LEVEL);
-  // too slow to hold the nose up, and it drops whatever the stick says
+  const ease = (v, goal, seconds) => v + (goal - v)*(1 - Math.exp(-dt/seconds)); // (frame-rate independent, unlike a flat fraction)
   const cruise = FLY_SPEED*scale, stall = FLY_SPEED_MIN*scale;
-  if (hand.speed < stall/FLY_STALL && hand.pitch > 0) hand.pitch = toward(hand.pitch, -0.3, FLY_LEVEL);
+  // how much the air is doing for it: full authority at cruise, heavy and vague down at the stall
+  const bite = Math.max(FLY_BITE_MIN, Math.min(1, hand.speed/cruise));
+  // the stick, as a rate rather than an attitude. W dives and S climbs, the way round a stick is: pushed forward the
+  // nose drops. Let go, what it asks for instead is its own way back — a roll out of the bank and a nose back to trim,
+  // both of them gentler the nearer it already is, so it rolls level rather than being snapped there.
+  const askedPitch = (forward ? -forward*FLY_PITCH_RATE : -hand.pitch*FLY_TRIM)*bite;
+  const askedBank = (right ? -right*FLY_BANK_RATE : -hand.bank*FLY_RIGHTING)*bite;
+  // ...and the aeroplane takes a moment to reach the rate asked of it, and the same moment to stop again
+  hand.pitchRate = ease(hand.pitchRate, askedPitch, FLY_CONTROL_LAG);
+  hand.bankRate = ease(hand.bankRate, askedBank, FLY_CONTROL_LAG);
+  hand.pitch += hand.pitchRate*dt;
+  hand.bank += hand.bankRate*dt;
+  // as far over as it goes: the stop holds it there rather than the rate winding on against it
+  if (Math.abs(hand.pitch) > FLY_PITCH_MAX) { hand.pitch = Math.sign(hand.pitch)*FLY_PITCH_MAX; hand.pitchRate = 0; }
+  if (Math.abs(hand.bank) > FLY_BANK_MAX) { hand.bank = Math.sign(hand.bank)*FLY_BANK_MAX; hand.bankRate = 0; }
+  // too slow to hold the nose up, and it drops whatever the stick says — further in, the faster it falls
+  const sinking = Math.max(0, 1 - hand.speed/(stall/FLY_STALL));
+  if (sinking > 0 && hand.pitch > -0.35) { hand.pitch = toward(hand.pitch, -0.35, FLY_LEVEL*sinking); hand.pitchRate = Math.min(hand.pitchRate, 0); }
   // speed: the throttle against the drag, less whatever the climb is costing (or the dive paying back)
   const power = (brake ? -FLY_POWER : run ? FLY_POWER : 0)*scale + (cruise - hand.speed)*FLY_DRAG/cruise;
   hand.speed = Math.max(stall*0.6, Math.min(FLY_SPEED_MAX*scale,
     hand.speed + (power - Math.sin(hand.pitch)*FLY_GRAVITY*scale)*dt));
   // the bank is what turns it, and the turn is sharper the slower it is going
   hand.heading += Math.sin(hand.bank)*FLY_TURN*dt*Math.min(2, cruise/Math.max(1, hand.speed));
-  const ahead = hand.speed*dt;
-  hand.x += Math.sin(hand.heading)*Math.cos(hand.pitch)*ahead;
-  hand.z += Math.cos(hand.heading)*Math.cos(hand.pitch)*ahead;
-  hand.y += Math.sin(hand.pitch)*ahead;
+  // where it is pointing, and then where it is actually going — which trails the nose rather than being it, so the
+  // aeroplane swings through a turn and slides for a moment before a pull takes effect
+  const level = Math.cos(hand.pitch)*hand.speed;
+  hand.vx = ease(hand.vx, Math.sin(hand.heading)*level, FLY_MOMENTUM);
+  hand.vz = ease(hand.vz, Math.cos(hand.heading)*level, FLY_MOMENTUM);
+  hand.vy = ease(hand.vy, Math.sin(hand.pitch)*hand.speed, FLY_MOMENTUM);
+  hand.x += hand.vx*dt;
+  hand.y += hand.vy*dt;
+  hand.z += hand.vz*dt;
   // the ground underneath and the thin air above
   const floor = Y_TARMAC + flight.size*0.1;
-  if (hand.y <= floor) { hand.y = floor; hand.pitch = Math.max(hand.pitch, 0); hand.bank = toward(hand.bank, 0, FLY_LEVEL*3); }
-  if (hand.y > FLY_CEILING) { hand.y = FLY_CEILING; hand.pitch = Math.min(hand.pitch, 0); }
+  if (hand.y <= floor) {
+    hand.y = floor;
+    hand.vy = Math.max(0, hand.vy);
+    hand.pitch = Math.max(hand.pitch, 0);
+    hand.bank = toward(hand.bank, 0, FLY_LEVEL*3); // (a wing tip can't stay in the tarmac, however gentle the air is)
+    hand.bankRate = 0;
+  }
+  if (hand.y > FLY_CEILING) { hand.y = FLY_CEILING; hand.vy = Math.min(0, hand.vy); hand.pitch = Math.min(hand.pitch, 0); }
   flight.plane.visible = true;
   poseAircraft(flight.plane, hand.x, hand.y, hand.z, Math.sin(hand.heading), Math.cos(hand.heading), hand.pitch, -hand.bank);
 }
@@ -1267,8 +1300,11 @@ function flyPlane() {
   flight.handback = null;
   const plane = flight.plane;
   plane.visible = true;
+  const heading = plane.rotation.y, pitch = -plane.rotation.x, speed = FLY_SPEED*flight.size/32;
   flight.hand = { x: plane.position.x, y: Math.max(Y_TARMAC + flight.size*0.1, plane.position.y), z: plane.position.z,
-    heading: plane.rotation.y, pitch: -plane.rotation.x, bank: 0, speed: FLY_SPEED*flight.size/32 };
+    heading, pitch, bank: 0, speed, pitchRate: 0, bankRate: 0,
+    // already going where it was pointing, so the momentum it takes over with is the flight it was on
+    vx: Math.sin(heading)*Math.cos(pitch)*speed, vy: Math.sin(pitch)*speed, vz: Math.cos(heading)*Math.cos(pitch)*speed };
   controls.goalRadius = Math.max(controls.minRadius, flight.size*2.2);
 }
 /**
