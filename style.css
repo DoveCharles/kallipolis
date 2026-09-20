@@ -235,6 +235,8 @@ html.touch #btn-touch-add { display:flex; }
 .canvas-tool:hover:not(:disabled) { color:var(--text); border-color:var(--accent-dim); }
 .canvas-tool:disabled { opacity:0.35; cursor:default; }
 .type-carousel { display:flex; align-items:center; gap:2px; margin-top:6px; }
+/* the Objects tab's palette: the same cards as a type carousel, but wrapped rather than scrolled — you pick one thing to put down, not one of a list */
+.object-palette { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 8px; }
 .carousel-track { display:flex; gap:6px; flex:1; overflow-x:auto; scroll-snap-type:x mandatory; padding:2px 1px 4px; scrollbar-width:none; }
 .carousel-track::-webkit-scrollbar { display:none; }
 .type-card {

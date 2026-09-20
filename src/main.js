@@ -21,6 +21,7 @@ import './zones/cutouts.js';
 import './zones/industrial.js';
 import './zones/suburbs.js';
 import './zones/airport.js';
+import './objects/objects.js';
 import './water/bridges.js';
 import './ui/panels.js';
 import './ui/morality.js';
