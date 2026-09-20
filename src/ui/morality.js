@@ -247,12 +247,13 @@ const NOTICE_NAMES_MAX = 3;
 // the order.
 function rankNotices() {
   const ranked = [...liveNotices.entries()].sort((a, b) => b[1].count - a[1].count);
+  // the higher up the stack, the further forward it sits (see --notice-z in style.css); set on every call, since a notice
+  // coming or going moves everyone's place even when the order stays the same
+  ranked.forEach(([, live], i) => live.el.style.setProperty('--notice-z', String(ranked.length - i)));
   const order = [...noticesEl.children];
   if (ranked.length === order.length && ranked.every(([, live], i) => live.el === order[i])) return;
   ranked.forEach(([id, live]) => liveNotices.set(id, live)); // the map's order is the stack's, so it's put right too
   ranked.forEach(([, live], i) => {
-    // the further down the stack, the further forward it sits (see --notice-z in style.css)
-    live.el.style.setProperty('--notice-z', String(i + 1)); // the top one is behind the ones below it
     if (order[i] === live.el) return;
     noticesEl.insertBefore(live.el, order[i] || null);
     order.splice(order.indexOf(live.el), 1);
@@ -273,10 +274,8 @@ function dropNotice(id) {
   live.el.style.width = box.width + 'px';
   live.el.style.setProperty('--notice-exit-x', (Math.random()*NOTICE_EXIT_SPREAD*2 - NOTICE_EXIT_SPREAD).toFixed(1) + 'px');
   live.el.style.setProperty('--notice-rise', Math.round(box.bottom + 20) + 'px'); // clear of the top of the screen
-  live.el.style.zIndex = 100; // never behind the ones still sitting there (see --notice-z in style.css)
-  live.el.classList.add('mor-notice-leaving');
-  live.el.remove();
-  document.body.append(live.el);
+  live.el.style.zIndex = -100; // behind the ones still sitting there
+  live.el.classList.add('mor-notice-leaving'); // (it stays inside #stats: that's a stacking context of its own, and out on the body it would draw over everything in it)
   setTimeout(() => live.el.remove(), NOTICE_EXIT_MS);
 }
 /**
@@ -300,11 +299,6 @@ function notify(id, delta, countDelta, name) {
     live = { el, score: delta, label: noticeLabels[id], count: 0, names: [], timer: null };
     liveNotices.set(id, live);
     noticesEl.append(el); // (where it belongs among the others is rankNotices' job, below)
-    // more than fit: the one with the least to it goes, which is the last of them once they're ranked
-    if (liveNotices.size > NOTICES_MAX) {
-      const [fewest] = [...liveNotices.keys()].reverse();
-      if (fewest !== id) dropNotice(fewest);
-    }
   }
   live.count += countDelta || 0;
   if (name) {
@@ -324,6 +318,10 @@ function notify(id, delta, countDelta, name) {
   const chip = live.el.querySelector('.mor-notice-count');
   if (chip) joltCount(chip, live.count);
   rankNotices();
+  // more than fit: the ones with the least to them go, last of the ranking first, by the same swipe as one that timed out.
+  // The one just shown stays, however little it has.
+  const byRank = [...liveNotices.entries()].sort((a, b) => b[1].count - a[1].count).map(([key]) => key).filter(key => key !== id);
+  while (liveNotices.size > NOTICES_MAX && byRank.length) dropNotice(byRank.pop());
 
   clearTimeout(live.timer);
   live.timer = setTimeout(() => dropNotice(id), NOTICE_LIFE); // each one gives it its full life again

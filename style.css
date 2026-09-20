@@ -556,10 +556,11 @@ html.win3 .pc-thumb {
 }
 /* Over: up out of the stack, drifting to one side or the other as it goes, gone in about a third of a second. The drift is
    --notice-exit-x, picked per notice in src/ui/morality.js, so a few going at once leave in slightly different directions.
-   It's out of the flex stack by then (dropNotice moves it onto the body), hence absolute — and left where it was, or it
+   It's out of the flex stack by then (dropNotice takes it out of the flow by making it fixed), hence fixed — and left where it was, or it
    would jump to the corner on its way out. */
 .mor-notice.mor-notice-leaving {
   position:fixed; margin:0; animation:mor-out .3s ease-out both;
+  filter:brightness(.6); /* darkened as it goes, behind the notices that stay */
 }
 @keyframes mor-out {
   0%   { opacity:1; transform:translate(0, 0); }
