@@ -18,6 +18,7 @@ export function cancelActiveDrawing() {
   S.lastGroundClick = null;
   S.lastNodeClick = null;
   disarmObject(); // whatever the Objects palette had armed (see objects.js)
+  App.cancelObjectTransform(); // and a prop left following the cursor under g/r/s goes back where it was
   if (S.activeRoadLine) {
     S.roadLines = S.roadLines.filter(l=>l.id!==S.activeRoadLine.id);
     cleanupOrphanRoadNodes();
@@ -42,6 +43,7 @@ export function closeActiveZone() {
 }
 export function finishActiveDrawing() {
   S.lastGroundClick = null;
+  App.confirmObjectTransform(); // Enter leaves a prop being moved, turned or resized under g/r/s where it stands
   if (S.activeRoadLine) {
     if (S.activeRoadLine.nodeIds.length<2) { cancelActiveDrawing(); return; }
     const finishedLine = S.activeRoadLine;
