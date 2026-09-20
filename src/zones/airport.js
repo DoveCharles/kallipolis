@@ -306,7 +306,9 @@ function pave(builder, poly, limit) {
 // morph influences live on the mesh, not on the geometry.
 const PLANE_MODEL_URL = 'assets/models/Plane.glb';
 const PLANE_PAINT = ['Col1', 'Col2'];  // the two materials an airline paints — its body and its trim; the rest of the
-let planeModel = null;                 // model (tyres, glass, lights) is its own. { root, span, middle, floor, paint }
+                                       // model (tyres, glass, lights) is its own
+const PLANE_WHITE = 0xeceff2;          // the bare fuselage white most of them wear, the same one the box airliner has
+let planeModel = null;                 // { root, span, middle, floor, paint }
 const liveries = new Map();            // one repainted material per material and colour, shared by every aircraft wearing it
 export async function loadPlaneModel() {
   let gltf;
@@ -374,10 +376,14 @@ function buildAircraft(span, rng, jet) {
   turn.add(model);
   group.add(turn);
   // its livery: a body colour, and a trim colour for the engines that isn't the same one, so every aeroplane on the field
-  // is in somebody's colours rather than all of them in the model's
+  // is in somebody's colours rather than all of them in the model's. Two aeroplanes in three wear the white fuselage
+  // most airlines actually fly, and only the trim tells them apart; the third is painted all over.
   const body = Math.floor(rng()*AIRLINE_COLORS.length);
   const trim = (body + 1 + Math.floor(rng()*(AIRLINE_COLORS.length - 1)))%AIRLINE_COLORS.length;
-  const livery = { Col1: liveryMaterial('Col1', AIRLINE_COLORS[body]), Col2: liveryMaterial('Col2', AIRLINE_COLORS[trim]) };
+  const livery = {
+    Col1: liveryMaterial('Col1', rng() < 2/3 ? PLANE_WHITE : AIRLINE_COLORS[body]),
+    Col2: liveryMaterial('Col2', AIRLINE_COLORS[trim]),
+  };
   const parts = [];
   model.traverse(o => {
     if (!o.isMesh) return;
