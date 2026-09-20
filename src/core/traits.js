@@ -7,6 +7,9 @@
 export const TRAITS = {
   // people (see life/people/)
   speed: { base: 1, min: 0.1, max: 6 },
+  boost:     { base: 1, min: 0.1, max: 6 }, // multiplies the boost of running (people) or of driving with shift held (cars)
+  braking:   { base: 1, min: 0.1, max: 6 }, // multiplies how hard a car brakes
+  control:   { base: 1, min: 0.1, max: 6 }, // multiplies how sharply a driven car steers
   size:      { base: 1, min: 0.3, max: 3 },
   chatty:    { base: 1, min: 0, max: 10 },
   talkative: { base: 1, min: 0.05, max: 20 },

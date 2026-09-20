@@ -548,7 +548,7 @@ function buildTrafficNav() {
  */
 function newCar() {
   return { id: ++carIds, x: 0, z: 0, heading: 0, li: -1, u: 0, dir: 1, seg: 0, speed: 0, ahead: null,
-    cruise: 0.8 + trafficRng()*0.4, length: 0.9 + trafficRng()*0.3, width: 0.95 + trafficRng()*0.12, height: 0.9 + trafficRng()*0.35,
+    length: 0.9 + trafficRng()*0.3, width: 0.95 + trafficRng()*0.12, height: 0.9 + trafficRng()*0.35,
     design: null, paint: pickCarPaint(),
     // how far its wheels have rolled and how far its steering wheels are turned, both in radians, and the heading it had
     // last frame, from which turnWheels gets how fast it's turning
@@ -775,8 +775,9 @@ function driveAlong(car, dist) {
     const ahead = car.dir > 0 ? car.seg + 1 : car.seg, at = nav.cum[ahead];
     if (car.dir > 0 ? u < at : u > at) break;
     const vertex = nav.vertices[ahead], isEnd = ahead === 0 || ahead === nav.pts.length-1;
-    const plan = planFor(car, ahead) ? car.plan : vertex.links.length && !car.probe ? pickTurn(car.li, ahead, car.dir) : null;
-    car.plan = null;
+    const planned = planFor(car, ahead);
+    const plan = planned ? car.plan : vertex.links.length && !car.probe ? pickTurn(car.li, ahead, car.dir) : null;
+    if (planned || vertex.links.length || isEnd) car.plan = null; // (a plain point on the way to the junction leaves its plan alone)
     if (plan && plan.link) {
       const link = plan.link, other = S.trafficNav.lines[link.li], remaining = Math.abs(u - at), dir = plan.dir;
       const from = { li: car.li, vi: ahead, dir: car.dir };
@@ -938,7 +939,7 @@ export function updateTraffic(t) {
     if (car.design != null) refreshCarTraits(car);
     if (car === drivenCar) { driveByHand(car, dt); turnWheels(car, dt); placeCar(car, i, designCounts); return; }
     // cruise, but ease off for the car in front and slow down into junctions
-    const cruise = CAR_SPEED*car.cruise*S.peopleSpeed*(car.traits?.speed ?? 1);
+    const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
     let target = cruise;
     if (car.ahead) {
       // (along each car's own lane rather than the road, since a lane runs quicker round the inside of a bend)
@@ -975,7 +976,7 @@ export function updateTraffic(t) {
       target = Math.min(target, Math.max(0, (ahead.dist - stopAt)*1.5*S.peopleSpeed));
     }
     if (checkYield(car, dt)) target = 0;
-    car.speed += Math.max(-CAR_BRAKE*S.peopleSpeed*dt, Math.min(5*S.peopleSpeed*dt, target - car.speed));
+    car.speed += Math.max(-CAR_BRAKE*(car.traits?.braking ?? 1)*S.peopleSpeed*dt, Math.min(5*S.peopleSpeed*dt, target - car.speed));
     // (its point on the route is further than u along the middle of the road round the outside of a bend, a U or a turn
     // across a junction, and nearer round the inside, so it's driven as much further as holds its speed steady)
     const back = CAR_REAR_AXLE*carLength(car);
@@ -1596,18 +1597,21 @@ function stopDriving() {
  */
 function driveByHand(car, dt) {
   const { forward, right, run, brake } = controlInput();
-  const top = DRIVE_TOP_SPEED*(run ? DRIVE_BOOST : 1);
+  // its speed and boost traits scale the top speed and the boost (see cars.txt)
+  const boost = run ? DRIVE_BOOST*(car.traits?.boost ?? 1) : 1;
+  const top = DRIVE_TOP_SPEED*(car.traits?.speed ?? 1)*boost;
+  const braking = DRIVE_BRAKE*(car.traits?.braking ?? 1);
   const toward = (v, goal, rate) => v + Math.max(-rate*dt, Math.min(rate*dt, goal - v));
-  if (brake) car.speed = toward(car.speed, 0, DRIVE_BRAKE);
-  else if (forward > 0) car.speed = toward(car.speed, top, car.speed < 0 ? DRIVE_BRAKE : DRIVE_ACCEL*(run ? DRIVE_BOOST : 1));
-  else if (forward < 0) car.speed = toward(car.speed, -DRIVE_REVERSE_SPEED, car.speed > 0 ? DRIVE_BRAKE : DRIVE_ACCEL*0.6);
+  if (brake) car.speed = toward(car.speed, 0, braking);
+  else if (forward > 0) car.speed = toward(car.speed, top, car.speed < 0 ? braking : DRIVE_ACCEL*boost);
+  else if (forward < 0) car.speed = toward(car.speed, -DRIVE_REVERSE_SPEED, car.speed > 0 ? braking : DRIVE_ACCEL*0.6);
   else car.speed = toward(car.speed, 0, DRIVE_COAST);
   // steering turns it at up to DRIVE_TURN radians a second, less the slower it's going below 4 units a second, and less
   // the faster above that (1/(1 + speed/DRIVE_TURN_FADE)); steerHeld is eased toward the key rather than jumping
   const was = { x: car.x, z: car.z, heading: car.heading };
   car.steerHeld = toward(car.steerHeld, right, DRIVE_STEER_RATE);
   const pace = Math.max(-1, Math.min(1, car.speed/4))/(1 + Math.abs(car.speed)/DRIVE_TURN_FADE);
-  turnCar(car, -car.steerHeld*DRIVE_TURN*dt*pace);
+  turnCar(car, -car.steerHeld*DRIVE_TURN*(car.traits?.control ?? 1)*dt*pace);
   car.x += Math.sin(car.heading)*car.speed*dt;
   car.z += Math.cos(car.heading)*car.speed*dt;
   bumpIntoCars(car, was);

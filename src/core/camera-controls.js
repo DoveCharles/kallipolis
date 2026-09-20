@@ -4,6 +4,7 @@ import { camera } from './scene.js';
 // ============================================================ camera controls (math only)
 // the closest the camera zooms in, except while it's following someone (see people.js)
 export const CAMERA_MIN_RADIUS = 8;
+const EASE_PER_FRAME = 0.15;
 export const controls = {
   target: new THREE.Vector3(0, 8, 0),
   radius: 220, theta: Math.PI*0.28, phi: Math.PI*0.32,
@@ -32,8 +33,12 @@ export const controls = {
   snapTop() { this.goalPhi = 0.05; },
   snapFront() { this.goalPhi = Math.PI/2; this.goalTheta = 0; },
   snapRight() { this.goalPhi = Math.PI/2; this.goalTheta = Math.PI/2; },
+  // Eases toward the goals by EASE_PER_FRAME of the way per 1/60 s, whatever the actual frame time, so the camera trails a
+  // moving target by a steady distance and a slow frame doesn't make it lurch.
   update(instant) {
-    const a = instant ? 1 : 0.15;
+    const now = performance.now(), frames = Math.min(6, Math.max(0, (now - (this.lastUpdate ?? now))*0.06));
+    this.lastUpdate = now;
+    const a = instant ? 1 : 1 - Math.pow(1 - EASE_PER_FRAME, frames);
     this.radius += (this.goalRadius - this.radius) * a;
     this.theta += (this.goalTheta - this.theta) * a;
     this.phi += (this.goalPhi - this.phi) * a;

@@ -668,7 +668,7 @@ export function updatePeople(t) {
     // pleased: looking at it and then held still, beaming. The same 'look' and 'held' stages as stun — the ones
     // updatePeople freezes them on — read as delight rather than shock, below.
     const pleased = !!p.please && (p.please.stage === 'look' || p.please.stage === 'held');
-    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.speed*(fleeing ? FLEE_SPEED : 1);
+    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.speed*(fleeing ? FLEE_SPEED*p.traits.boost : 1);
     let goal = null;
     //Updating hair colour depending on age
     //set default hair colour once

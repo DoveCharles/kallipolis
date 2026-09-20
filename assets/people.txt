@@ -1575,6 +1575,9 @@ Reaction GIFs
 Puzzle games they're bad at
 Getting nasty
 Boom boom boom gotta get that Boom boom boom
+Captain Beefheart tribute bands
+Elvis! Elvis Presley! The King of Rock!
+Schadenfreude [evil = 0.1]
 
 ################################################################################################################################
 
@@ -1714,7 +1717,7 @@ Clean energy [parks = 0.2, evil = 0.05, agemult =1.1]
 Parasites
 Blowjobs
 4am Windows update [patience = 0.8, agemult = 0.8]
-Astrology ( ...a Leo, perhaps?)
+Astrology (Leo)
 Pestilence
 When they laugh and then hear the sound play back in their head [mood = -0.2, chatty = 0.7]
 Peppa Pig
@@ -1893,3 +1896,4 @@ Adulting :P
 Asking out the prettiest girl in school
 Landmines
 Kids these days [agemult = 1.2]
+Getting put in the labyrinth
