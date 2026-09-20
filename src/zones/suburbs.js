@@ -49,7 +49,10 @@ const HOUSE_PALETTE = {
 const HOUSE_TRIM_COLOR = 0xe8e6e0;      // anything the palette doesn't name, which is the window frames
 const HOUSE_PAINT_MATERIAL = 'HouseCol';
 const HOUSE_GLASS_MATERIAL = 'Windows';
-const HOUSE_LIT_CHANCE = 0.75;          // a house's chance of its windows being lit after dark
+const HOUSE_LIT_CHANCE = 0.75;          // a house's chance of anyone being home after dark
+const ROOM_LIT_CHANCE = 0.45;           // and then each room of that house's chance of being one that's in use
+const ROOM_REACH = 2;                    // world units: panes this near each other on the same wall are one window
+const ROOM_COOL_CHANCE = 0.18;          // rooms lit by a television rather than by a light
 const HOUSE_GLOW = 1.3;                 // how brightly a lit house's windows glow once the sun's down
 const HOUSE_GLASS_COLOR = 0x2f3d49, HOUSE_GLASS_LIT = 0xffd7a0;
 
@@ -76,13 +79,33 @@ let designs = null;
 // doesn't take them down with it (see disposeObject). The body takes its color from its vertices, so one material does for
 // every house however it's painted.
 const bodyMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
-const darkGlassMaterial = new THREE.MeshStandardMaterial({ color: HOUSE_GLASS_COLOR, roughness: 0.15, metalness: 0.1 });
-const litGlassMaterial = new THREE.MeshStandardMaterial({ color: HOUSE_GLASS_COLOR, roughness: 0.15, metalness: 0.1, emissive: new THREE.Color(HOUSE_GLASS_LIT) });
+// One material for every window in every suburb, lit and unlit alike: which rooms are awake is a property of the glass
+// itself rather than of the material, so a street of houses with their own patterns of lit windows still draws from one
+// shader program. Each vertex carries the room it belongs to (see roomsOf) as `aWindow`:
+//
+//   x  when in the evening that room comes on, against how far down the sun is — so a street doesn't light up all at
+//      once at some threshold, it fills in room by room as it gets dark. NEVER for a room nobody's in tonight.
+//   y  how brightly it burns, so no two rooms are quite the same lamp
+//   z  how cold its light is: a room lit by a television rather than by a lamp
+const glassMaterial = new THREE.MeshStandardMaterial({ color: HOUSE_GLASS_COLOR, roughness: 0.15, metalness: 0.1, emissive: new THREE.Color(HOUSE_GLASS_LIT) });
 // lit after dark, like building windows (see updateWindowGlowForSun, which rescales this every time the sun moves). It's
 // set here as well as tracked, since the sun has already been placed by the time this file loads and nothing would turn
 // the glow down until the next time it moved — a lit window in broad daylight otherwise.
-litGlassMaterial.userData.baseEmissiveIntensity = HOUSE_GLOW;
-litGlassMaterial.emissiveIntensity = HOUSE_GLOW*computeWindowGlowFactor(S.sunElevation);
+glassMaterial.userData.baseEmissiveIntensity = HOUSE_GLOW;
+glassMaterial.emissiveIntensity = HOUSE_GLOW*computeWindowGlowFactor(S.sunElevation);
+// how far into the evening it is, which is the same number that scales the glow — updateWindowGlowForSun hands it over
+// through this, so the windows coming on and the glow coming up are the one measure of dusk and can't drift apart
+const nightfall = { value: computeWindowGlowFactor(S.sunElevation) };
+glassMaterial.userData.onGlow = factor => { nightfall.value = factor; };
+glassMaterial.onBeforeCompile = shader => {
+  shader.uniforms.uNightfall = nightfall;
+  shader.vertexShader = 'attribute vec3 aWindow;\nvarying vec3 vWindow;\n' + shader.vertexShader
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvWindow = aWindow;');
+  // the glass keeps its own color and its reflection either way; all a dark room does is not add its light to them
+  shader.fragmentShader = 'uniform float uNightfall;\nvarying vec3 vWindow;\n' + shader.fragmentShader
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+	totalEmissiveRadiance *= step(vWindow.x, uNightfall)*vWindow.y*mix(vec3(1.0), vec3(0.72, 0.86, 1.25), vWindow.z);`);
+};
 
 // One geometry from several, in the order given — `parts` are { geometry, color }, each part's color written flat into its
 // vertices. The parts flagged `paint` come first and their vertex count comes back as `paintCount`, which is all a house
@@ -116,6 +139,49 @@ function mergeParts(parts) {
   geo.setIndex(new THREE.BufferAttribute(index, 1));
   return { geometry: geo, paintCount };
 }
+// ---- rooms
+// A house's windows arrive as one mesh, but not as one surface: every pane in the model is a loose quad, 12 to 102 of
+// them depending on the design, touching nothing. So the panes fall out of the index buffer on their own — anything
+// sharing a vertex is one pane — and panes that sit together on the same wall are one room's window. That's what a
+// house decides to light or not to light: a room, not a pane, because a scatter of lit panes across one window reads as
+// a glitch and a whole window lighting reads as somebody being in.
+//
+// Grouping is by wall as well as by distance. Two panes either side of a corner can be nearer each other than two along
+// the same wall, so panes only join up if they face the same way, which is what keeps a front room from swallowing the
+// window round the side of it.
+//
+// It's worked out once per design, when the model loads, and every house of that design reads the same grouping.
+function islandsOf(geometry) {
+  const index = geometry.getIndex(), count = geometry.attributes.position.count;
+  const owner = new Uint32Array(count);
+  for (let i=0;i<count;i++) owner[i] = i;
+  const root = i => { while (owner[i] !== i) { owner[i] = owner[owner[i]]; i = owner[i]; } return i; };
+  const join = (a, b) => { const ra = root(a), rb = root(b); if (ra !== rb) owner[ra] = rb; };
+  for (let i=0;i<index.count;i+=3) { join(index.getX(i), index.getX(i+1)); join(index.getX(i+1), index.getX(i+2)); }
+  const byRoot = new Map();
+  for (let i=0;i<count;i++) { const r = root(i); if (!byRoot.has(r)) byRoot.set(r, []); byRoot.get(r).push(i); }
+  return [...byRoot.values()];
+}
+function roomsOf(geometry) {
+  const position = geometry.attributes.position, normal = geometry.attributes.normal;
+  const panes = islandsOf(geometry).map(verts => {
+    const at = new THREE.Vector3(), facing = new THREE.Vector3(), one = new THREE.Vector3();
+    verts.forEach(v => { at.add(one.fromBufferAttribute(position, v)); facing.add(one.fromBufferAttribute(normal, v)); });
+    return { verts, at: at.divideScalar(verts.length), facing: facing.normalize() };
+  });
+  // single linkage: a pane joins the room of any pane it's within reach of and facing the same way as
+  const room = panes.map((_, i) => i);
+  const rootOf = i => { while (room[i] !== i) { room[i] = room[room[i]]; i = room[i]; } return i; };
+  for (let i=0;i<panes.length;i++) for (let k=i+1;k<panes.length;k++) {
+    if (panes[i].facing.dot(panes[k].facing) < 0.9 || panes[i].at.distanceTo(panes[k].at) > ROOM_REACH) continue;
+    const ri = rootOf(i), rk = rootOf(k);
+    if (ri !== rk) room[ri] = rk;
+  }
+  const byRoom = new Map();
+  panes.forEach((pane, i) => { const r = rootOf(i); if (!byRoom.has(r)) byRoom.set(r, []); byRoom.get(r).push(...pane.verts); });
+  return [...byRoom.values()];
+}
+
 // One design's geometry, split in two: the body, colored in by material name, and the glass, which is shared between every
 // house of that design and lit or not as a whole.
 function partsOfHouse(node) {
@@ -167,9 +233,15 @@ export async function loadHouseModels() {
         .multiply(new THREE.Matrix4().makeScale(scale, scale, scale))
         .multiply(new THREE.Matrix4().makeTranslation(-mid.x, -box.min.y, -mid.z));
       body.geometry.applyMatrix4(place);
-      if (glass) glass.geometry.applyMatrix4(place);
+      if (glass) {
+        glass.geometry.applyMatrix4(place);
+        // the merge gives every part a color, and the glass takes its color from the material: one attribute per house
+        // that nothing reads, where aWindow is about to go (see houseMesh)
+        glass.geometry.deleteAttribute('color');
+      }
       return {
         body: body.geometry, paintCount: body.paintCount, glass: glass ? glass.geometry : null,
+        rooms: glass ? roomsOf(glass.geometry) : null,
         half: { x: size.x*scale/2, z: size.z*scale/2 }, height: size.y*scale,
       };
     });
@@ -186,9 +258,29 @@ export async function loadHouseModels() {
 function paintFor(rng) {
   return new THREE.Color().setHSL(rng(), lerp(0.10, 0.42, rng()), lerp(0.56, 0.84, rng()));
 }
-// A house of `design`, painted `paint`. The body is a copy, since the paint is baked into its vertices; the glass is the
-// design's own and shared by every house cut from it.
-function houseMesh(design, paint, lit) {
+// When in the evening the first and the last of a house's lit rooms come on, measured against how far down the sun is.
+// They're bunched in the early part of it: the point is that a street fills in over dusk rather than switching on all at
+// once, not that somebody's still going to bed at midnight.
+const FIRST_LAMP = 0.12, LAST_LAMP = 0.62;
+const NEVER = 2;                        // a nightfall no evening reaches: a room nobody's in
+// Which rooms of a house are in use tonight, written into a copy of the design's glass, one value per vertex. A house
+// with nobody home gets a geometry all the same — it costs the same and it's the only way a darkened house still draws
+// with every other house in the suburb.
+function glassFor(design, rng, occupied) {
+  const geometry = design.glass.clone();
+  const aWindow = new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count*3), 3);
+  design.rooms.forEach(verts => {
+    const on = occupied && rng() < ROOM_LIT_CHANCE;
+    const at = on ? lerp(FIRST_LAMP, LAST_LAMP, rng()) : NEVER;
+    const brightness = lerp(0.72, 1.24, rng()), cool = rng() < ROOM_COOL_CHANCE ? 1 : 0;
+    verts.forEach(v => aWindow.setXYZ(v, at, brightness, cool));
+  });
+  geometry.setAttribute('aWindow', aWindow);
+  return geometry;
+}
+// A house of `design`, painted `paint`. Both halves are copies: the body because the paint is baked into its vertices,
+// the glass because which of its rooms are lit is baked into its. `rng` is the house's own stream for its windows.
+function houseMesh(design, paint, rng, lit) {
   const geo = design.body.clone(), color = geo.attributes.color;
   for (let i=0;i<design.paintCount;i++) color.setXYZ(i, paint.r, paint.g, paint.b);
   color.needsUpdate = true;
@@ -199,10 +291,10 @@ function houseMesh(design, paint, lit) {
   body.userData.sharedMaterial = true;
   group.add(body);
   if (design.glass) {
-    const glass = new THREE.Mesh(design.glass, lit ? litGlassMaterial : darkGlassMaterial);
+    const glass = new THREE.Mesh(glassFor(design, rng, lit), glassMaterial);
     glass.name = 'HouseWindows';
     glass.receiveShadow = true;
-    glass.userData.sharedGeometry = true; glass.userData.sharedMaterial = true;
+    glass.userData.sharedMaterial = true; // its geometry is its own now, and goes when the house does (see disposeObject)
     group.add(glass);
   }
   return group;
@@ -357,7 +449,10 @@ export function generateSuburbsContent(zone, poly, cutouts, blockers) {
       const spot = design && street ? placeHouse(plot, design.half, street, inBlocker) : null;
       let drive = null;
       if (spot) {
-        const group = houseMesh(design, paintFor(rng), rng() < HOUSE_LIT_CHANCE);
+        // its windows draw from a stream of their own, keyed to the same ground the plot is, so putting lights in them
+        // doesn't shift the plot's own stream and rearrange every hedge in every suburb ever saved
+        const windowRng = mulberry32(((s.seed>>>0) ^ Math.imul(Math.round(key.x*4), 0xC2B2AE35) ^ Math.imul(Math.round(key.z*4), 0x27D4EB2F)) >>> 0);
+        const group = houseMesh(design, paintFor(rng), windowRng, rng() < HOUSE_LIT_CHANCE);
         group.name = 'Building';
         group.userData.buildingKind = 'house'; // what its card says about it: see building-types.js
         group.position.set(spot.at.x, Y_PARK, spot.at.z);

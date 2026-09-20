@@ -160,7 +160,12 @@ export function refreshSceneIndex() {
 function updateWindowGlowForSun() {
   refreshSceneIndex();
   const factor = computeWindowGlowFactor(S.sunElevation);
-  glowMaterials.forEach(mat => { mat.emissiveIntensity = mat.userData.baseEmissiveIntensity * factor; });
+  // a material that does more with nightfall than turn its glow up says so with a hook — house windows come on room by
+  // room over dusk and need the same number the glow is scaled by (see glassMaterial in suburbs.js)
+  glowMaterials.forEach(mat => {
+    mat.emissiveIntensity = mat.userData.baseEmissiveIntensity * factor;
+    if (mat.userData.onGlow) mat.userData.onGlow(factor);
+  });
 }
 // Cheapest plausible "glass reflects the sky" trick: a tiny (16px/face) CubeTexture painted
 // from the same top/horizon colors already driving the sky dome, reused as every specular

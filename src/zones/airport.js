@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { Y_ZONE_GROUND, Y_PARK, camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
@@ -295,12 +296,114 @@ function pave(builder, poly, limit) {
 }
 
 // ---- aircraft
+// The aeroplane is a custom model (assets/models/Plane.glb, made in Blender): a twin jet, modelled nose-first along its
+// own -Z with its wheels on y = 0, and carrying three shape keys — `Wheels`, `RightWing` and `LeftWing` — which are
+// everything about it that moves (see "the moving parts" below). It's loaded once at startup into a template every
+// aircraft is cloned from, sharing its geometry and its materials; until it's ready, or if it can't load, aircraft are
+// the built-in box airliner.
+//
+// A clone is the one thing that has to be done rather than instanced: each aeroplane works its own control surfaces, and
+// morph influences live on the mesh, not on the geometry.
+const PLANE_MODEL_URL = 'assets/models/Plane.glb';
+const PLANE_PAINT = ['Col1', 'Col2'];  // the two materials an airline paints — its body and its trim; the rest of the
+                                       // model (tyres, glass, lights) is its own
+const PLANE_WHITE = 0xeceff2;          // the bare fuselage white most of them wear, the same one the box airliner has
+let planeModel = null;                 // { root, span, middle, floor, paint }
+const liveries = new Map();            // one repainted material per material and colour, shared by every aircraft wearing it
+export async function loadPlaneModel() {
+  let gltf;
+  try {
+    const buffer = await fetch(PLANE_MODEL_URL).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
+    gltf = await new GLTFLoader().parseAsync(buffer, '');
+  } catch (err) {
+    console.warn('Blockout: the aeroplane model failed to load; aircraft use the built-in box airliner', err);
+    return;
+  }
+  gltf.scene.updateMatrixWorld(true);
+  const paint = new Map();
+  gltf.scene.traverse(o => { if (o.isMesh && o.material && PLANE_PAINT.includes(o.material.name)) paint.set(o.material.name, o.material); });
+  const box = restingBox(gltf.scene), size = box.getSize(new THREE.Vector3());
+  if (!(size.x > 0)) { console.warn('Blockout: the aeroplane model is empty; aircraft use the built-in box airliner'); return; }
+  planeModel = { root: gltf.scene, span: size.x, middle: box.getCenter(new THREE.Vector3()), floor: box.min.y, paint };
+  S.zones.forEach(zone => { if (zone.zoneType === 'airport') App.subdivideZone(zone); });
+}
+// How big the aeroplane is with its shape keys wound off — which is not what Box3.setFromObject would say, because a
+// mesh's bounds cover its morph targets at full deflection as well as its own vertices. Measured that way the model has a
+// floor half a wingspan-percent below its wheels, somewhere a shape key reaches and it never rests, and standing it on
+// that floor leaves it hovering. So the vertices are walked directly and the keys left out of it.
+function restingBox(root) {
+  const box = new THREE.Box3(), point = new THREE.Vector3();
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const position = o.geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) box.expandByPoint(point.fromBufferAttribute(position, i).applyMatrix4(o.matrixWorld));
+  });
+  return box;
+}
+// One of the model's painted materials in one of the airline colours: the model's own, repainted, so it keeps whatever
+// else the material says about itself and only changes colour. Kept in a map rather than cloned per aircraft, so however
+// many are flying there are only ever as many of these as there are colours on the field.
+function liveryMaterial(name, color) {
+  const key = `${name}|${color}`;
+  let material = liveries.get(key);
+  if (!material) {
+    const own = planeModel.paint.get(name);
+    material = own ? own.clone() : new THREE.MeshStandardMaterial({ roughness: 0.5 });
+    material.color.setHex(color);
+    liveries.set(key, material);
+  }
+  return material;
+}
 /**
- * An airliner built along its own +Z, wheels on y = 0, so placing one is a position and a heading. `span` is wing tip to
- * wing tip and everything else is in proportion to it; a propeller aircraft (the light one on a grass strip) goes
- * without the underwing engines.
+ * An airliner along its own +Z, wheels on y = 0, so placing one is a position and a heading — the model if it has
+ * loaded, the built-in box airliner if not. `span` is wing tip to wing tip and everything else is in proportion to it.
+ *
+ * `userData.surfaces` is what the shape keys are worked through: `span` for the height the gear comes up at, and one
+ * entry per mesh, since the model arrives as nine of them (one per material) sharing a single set of keys.
  */
 function buildAircraft(span, rng, jet) {
+  if (!planeModel) return buildBoxAircraft(span, rng, jet);
+  const group = new THREE.Group();
+  group.name = 'Aircraft';
+  const model = planeModel.root.clone(true);
+  const scale = span/planeModel.span;
+  // centred on its own middle and stood on the ground, in the model's own terms...
+  model.scale.setScalar(scale);
+  model.position.set(-planeModel.middle.x*scale, -planeModel.floor*scale, -planeModel.middle.z*scale);
+  // ...and then turned round as a whole, because the model flies nose-first along -Z and everything here flies along +Z
+  const turn = new THREE.Group();
+  turn.rotation.y = Math.PI;
+  turn.add(model);
+  group.add(turn);
+  // its livery: a body colour, and a trim colour for the engines that isn't the same one, so every aeroplane on the field
+  // is in somebody's colours rather than all of them in the model's. Two aeroplanes in three wear the white fuselage
+  // most airlines actually fly, and only the trim tells them apart; the third is painted all over.
+  const body = Math.floor(rng()*AIRLINE_COLORS.length);
+  const trim = (body + 1 + Math.floor(rng()*(AIRLINE_COLORS.length - 1)))%AIRLINE_COLORS.length;
+  const livery = {
+    Col1: liveryMaterial('Col1', rng() < 2/3 ? PLANE_WHITE : AIRLINE_COLORS[body]),
+    Col2: liveryMaterial('Col2', AIRLINE_COLORS[trim]),
+  };
+  const parts = [];
+  model.traverse(o => {
+    if (!o.isMesh) return;
+    o.castShadow = true; o.receiveShadow = true;
+    // both belong to the template and are shared by every aircraft cut from it — see disposeObject
+    o.userData.sharedGeometry = true; o.userData.sharedMaterial = true;
+    if (o.material && livery[o.material.name]) o.material = livery[o.material.name];
+    // the model is saved with a shape key or two wound on; an aeroplane starts clean and is posed from there
+    if (o.morphTargetInfluences) o.morphTargetInfluences.fill(0);
+    if (o.morphTargetInfluences && o.morphTargetDictionary) parts.push({ at: o.morphTargetInfluences, keys: o.morphTargetDictionary });
+  });
+  group.userData.span = span;
+  group.userData.surfaces = { span, parts, wheels: 0, right: 0, left: 0, settled: false };
+  return group;
+}
+/**
+ * The box airliner: what an aircraft is until the model has loaded, built the same way — along its own +Z, wheels on
+ * y = 0. A propeller aircraft (the light one on a grass strip) goes without the underwing engines.
+ */
+function buildBoxAircraft(span, rng, jet) {
   const group = new THREE.Group();
   group.name = 'Aircraft';
   const L = span*1.08, r = span*0.055, ride = r*1.9; // how high the belly sits on its gear
@@ -330,6 +433,7 @@ function buildAircraft(span, rng, jet) {
   [1, -1].forEach(side => add(new THREE.BoxGeometry(span*0.17, r*0.24, L*0.11), white, side*span*0.1, ride + r*0.5, -L*0.45, -side*sweep));
   add(new THREE.BoxGeometry(r*0.3, span*0.17, L*0.17), livery, 0, ride + r*0.5 + span*0.085, -L*0.45);
   if (!jet) add(new THREE.CylinderGeometry(r*0.08, r*0.08, span*0.34, 8).rotateZ(Math.PI/2), dark, 0, ride + r*0.2, L*0.5);
+  group.userData.span = span;
   return group;
 }
 /**
@@ -365,16 +469,79 @@ function buildHelicopter(span, rng) {
   group.add(tailRotor);
   [0, Math.PI/2].forEach(a => { const blade = add(new THREE.BoxGeometry(r*0.05, span*0.28, r*0.12), dark, 0, 0, 0, tailRotor); blade.rotation.z = a; });
   group.userData.rotors = [{ object: mast, axis: 'y', speed: 9 }, { object: tailRotor, axis: 'z', speed: 22 }];
+  group.userData.span = span;
   return group;
 }
-// Points an aircraft along a heading, nose up by `pitch` and leaning by `roll`. Built along +Z, so the yaw is measured
-// from +Z, and a positive rotation about its own X would put the nose down — hence the minus. The order matters: YXZ
-// rolls it about its own length first, then pitches and yaws that, which is how a wing drops rather than a whole
-// aeroplane sliding sideways. Nothing on the schedule ever banks — only a hand on the controls does (see flyByHand).
+// ---- the moving parts
+// Three shape keys, and between them they are everything about an aeroplane that moves: `Wheels` pulls the gear up into
+// the belly at 1, and `RightWing` and `LeftWing` swing a wing's trailing edge from all the way down at -1 to all the way
+// up at +1.
+//
+// Nothing tells this code what an aeroplane is doing. It reads the pose the aeroplane has just been put in — the one
+// thing the schedule, a hand on the controls and a handback all have in common — and works the surfaces from that:
+//
+// - the gear comes up once it is more than a couple of wingspans off the tarmac and goes back down on the way in, so a
+//   schedule that never mentions the undercarriage still raises it after take-off and lowers it on final, and so does an
+//   aeroplane being flown by hand, for nothing
+// - both wings together are the elevators: nose up, both trailing edges up
+// - the two against each other are the ailerons: banked right, the right one up and the left one down, which is the
+//   deflection that put it there — so a turn is flown with the stick over, the way it looks from outside
+//
+// Both are eased rather than set, so the gear takes a couple of seconds to swing and the surfaces a moment to follow the
+// stick. The easing needs the length of a frame, which comes from updateAirports; until an aeroplane has been posed once
+// there is nothing to ease from, so the first pose simply arrives (which is what a carousel thumbnail gets).
+const GEAR_CLEARANCE = 3.5;               // wingspans above the tarmac the gear comes up at
+const GEAR_RATE = 0.4;                    // of its travel a second: a gear cycle takes about two and a half
+const FULL_PITCH = 0.35, FULL_BANK = 0.7; // the attitudes that put a control surface at full deflection
+const SURFACE_RATE = 3;                   // of its travel a second
+let frameSeconds = 0;
+function workSurfaces(object, pitch, roll, height) {
+  const surfaces = object.userData.surfaces;
+  if (!surfaces) return; // the box airliner has no moving parts
+  const hold = v => Math.max(-1, Math.min(1, v));
+  const elevator = hold(pitch/FULL_PITCH), aileron = hold(roll/FULL_BANK);
+  const ease = (from, to, rate) => surfaces.settled
+    ? from + Math.max(-rate*frameSeconds, Math.min(rate*frameSeconds, to - from)) : to;
+  surfaces.wheels = ease(surfaces.wheels, height > surfaces.span*GEAR_CLEARANCE ? 1 : 0, GEAR_RATE);
+  surfaces.right = ease(surfaces.right, hold(elevator + aileron), SURFACE_RATE);
+  surfaces.left = ease(surfaces.left, hold(elevator - aileron), SURFACE_RATE);
+  surfaces.settled = true;
+  surfaces.parts.forEach(({ at, keys }) => {
+    at[keys.Wheels] = surfaces.wheels;
+    at[keys.RightWing] = surfaces.right;
+    at[keys.LeftWing] = surfaces.left;
+  });
+}
+// The nose coming round. The schedule's paths turn their corners instantly — a bend in a taxiway, the 180 off the stand
+// once the tug has finished with it — and an aeroplane whose yaw is simply set from one pivots on the spot, which is the
+// one thing on the field that looks like a model being moved by hand rather than an aeroplane taxiing. So the yaw is
+// walked toward whatever it has been asked for instead of set to it, at a rate faster than anything here ever turns
+// under its own flying (a full-bank turn comes round at about 1.9 radians a second) — which leaves a hand-flown one free
+// to turn as hard as it likes and only ever catches a corner.
+//
+// What isn't a turn is a whole new flight: round the loop, away over the horizon and back on final at the far end of the
+// field. That shows up as the aeroplane having moved further between two poses than it could possibly have flown, and
+// that one simply arrives, the way the first pose of all does.
+const TURN_RATE = 2.2, TURN_JUMP = 2; // radians a second, and the wingspans between poses past which it is somewhere else
+function turnTo(object, dx, dz, moved) {
+  const goal = Math.atan2(dx, dz);
+  if (!frameSeconds || moved > (object.userData.span || 0)*TURN_JUMP) return goal;
+  const turn = Math.atan2(Math.sin(goal - object.rotation.y), Math.cos(goal - object.rotation.y)); // (the short way round)
+  return object.rotation.y + Math.max(-TURN_RATE*frameSeconds, Math.min(TURN_RATE*frameSeconds, turn));
+}
+// Points an aircraft along a heading, nose up by `pitch` and leaning by `roll`, and works its shape keys to match. Built
+// along +Z, so the yaw is measured from +Z, and a positive rotation about its own X would put the nose down — hence the
+// minus. The order matters: YXZ rolls it about its own length first, then pitches and yaws that, which is how a wing
+// drops rather than a whole aeroplane sliding sideways. A positive `roll` drops the right wing. Nothing on the schedule
+// ever banks — only a hand on the controls does (see flyByHand).
 function poseAircraft(object, x, y, z, dx, dz, pitch, roll) {
+  const was = object.userData.posedAt;
+  const moved = was ? Math.hypot(x - was.x, y - was.y, z - was.z) : Infinity;
   object.position.set(x, y, z);
   object.rotation.order = 'YXZ';
-  object.rotation.set(-(pitch || 0), Math.atan2(dx, dz), roll || 0);
+  object.rotation.set(-(pitch || 0), turnTo(object, dx, dz, moved), roll || 0);
+  if (was) was.set(x, y, z); else object.userData.posedAt = new THREE.Vector3(x, y, z);
+  workSurfaces(object, pitch || 0, roll || 0, y - Y_TARMAC);
 }
 // how far along `path` (a polyline of {x,z}) a distance lands, and which way it's heading there
 function alongPath(path, distance) {
@@ -929,14 +1096,25 @@ function makeTrackedFlight(zone, plane, fly, tier, index) {
 const FLY_SPEED = 46, FLY_SPEED_MIN = 22, FLY_SPEED_MAX = 105;   // units a second, at the size an international jet is
 const FLY_POWER = 26, FLY_DRAG = 14, FLY_GRAVITY = 40;           // how hard the throttle, the air and the weight pull on that speed
 const FLY_PITCH_RATE = 0.9, FLY_BANK_RATE = 2.2, FLY_TURN = 1.1; // radians a second: the nose, the wings, and how fast a full bank comes round
-const FLY_PITCH_MAX = 0.85, FLY_BANK_MAX = 1.05, FLY_LEVEL = 1.4; // how far it will go, and how briskly it lets go of the stick
+const FLY_PITCH_MAX = 0.85, FLY_BANK_MAX = 1.05, FLY_LEVEL = 1.4; // how far it will go, and how briskly a stall or the ground straightens it
 const FLY_CEILING = 900, FLY_STALL = 0.7;                         // and where the air runs out, and the speed below which the nose drops
+const FLY_CONTROL_LAG = 0.25, FLY_MOMENTUM = 0.35;                // seconds: the weight behind the stick, and how long the flight path trails the nose
+const FLY_RIGHTING = 0.75, FLY_TRIM = 0.8, FLY_BITE_MIN = 0.4;    // let go, how keenly it rolls level and trims out; and how heavy the stick goes when slow
 /**
  * One frame of a hand-flown aircraft, from the keys held (controlInput). W and S put the nose down and up, A and D drop a
  * wing — and it is the dropped wing that turns it, the way a real one turns, so a bank held over comes round a circle
- * rather than sliding sideways. Shift is power and space is the airbrake; left alone, the stick centres itself, the
- * aeroplane picks up its cruising speed and flies level, so it can be let go of for a moment without falling out of the
- * sky. Climbing bleeds speed off and diving puts it back on, and too slow a climb drops the nose by itself.
+ * rather than sliding sideways. Shift is power and space is the airbrake. Climbing bleeds speed off and diving puts it
+ * back on, and too slow a climb drops the nose by itself.
+ *
+ * What the keys ask for is a rate — how fast to roll, how fast to raise the nose — and the aeroplane takes a moment
+ * (FLY_CONTROL_LAG) to get there and the same moment to stop again, so a tap eases the wings over instead of snapping
+ * them and there is some weight behind the stick. The slower it flies the less the air does for it, so the controls go
+ * heavy towards the stall. Let go and it rights itself the way a stable aeroplane does — the bank falling away and the
+ * nose trimming out over a few seconds — rather than being hauled level, so it can be left alone for a moment without
+ * falling out of the sky, but a bank held and released still settles gently instead of springing back.
+ *
+ * It carries its own momentum too: the flight path trails the nose by FLY_MOMENTUM rather than following it exactly, so
+ * a turn swings through and a sharp pull slides a little before it bites, which is most of what makes it feel heavy.
  *
  * It cannot go under the ground: the ground stops it, levels it and lets it run along like a landing, which is friendlier
  * than a crash and means a bad approach just ends with a bump.
@@ -948,29 +1126,51 @@ function flyByHand(flight, dt) {
   const hand = flight.hand, scale = flight.size/32; // (everything below is written for an international jet; a light one flies smaller)
   const { forward, right, run, brake } = controlInput();
   const toward = (v, goal, rate) => v + Math.max(-rate*dt, Math.min(rate*dt, goal - v));
-  // the stick: held over it goes to full deflection, let go it comes back to the middle
-  // W dives and S climbs, the way round a stick is: pushed forward the nose drops
-  hand.pitch = forward ? Math.max(-FLY_PITCH_MAX, Math.min(FLY_PITCH_MAX, hand.pitch - forward*FLY_PITCH_RATE*dt))
-    : toward(hand.pitch, 0, FLY_LEVEL);
-  hand.bank = right ? Math.max(-FLY_BANK_MAX, Math.min(FLY_BANK_MAX, hand.bank - right*FLY_BANK_RATE*dt))
-    : toward(hand.bank, 0, FLY_LEVEL);
-  // too slow to hold the nose up, and it drops whatever the stick says
+  const ease = (v, goal, seconds) => v + (goal - v)*(1 - Math.exp(-dt/seconds)); // (frame-rate independent, unlike a flat fraction)
   const cruise = FLY_SPEED*scale, stall = FLY_SPEED_MIN*scale;
-  if (hand.speed < stall/FLY_STALL && hand.pitch > 0) hand.pitch = toward(hand.pitch, -0.3, FLY_LEVEL);
+  // how much the air is doing for it: full authority at cruise, heavy and vague down at the stall
+  const bite = Math.max(FLY_BITE_MIN, Math.min(1, hand.speed/cruise));
+  // the stick, as a rate rather than an attitude. W dives and S climbs, the way round a stick is: pushed forward the
+  // nose drops. Let go, what it asks for instead is its own way back — a roll out of the bank and a nose back to trim,
+  // both of them gentler the nearer it already is, so it rolls level rather than being snapped there.
+  const askedPitch = (forward ? -forward*FLY_PITCH_RATE : -hand.pitch*FLY_TRIM)*bite;
+  const askedBank = (right ? -right*FLY_BANK_RATE : -hand.bank*FLY_RIGHTING)*bite;
+  // ...and the aeroplane takes a moment to reach the rate asked of it, and the same moment to stop again
+  hand.pitchRate = ease(hand.pitchRate, askedPitch, FLY_CONTROL_LAG);
+  hand.bankRate = ease(hand.bankRate, askedBank, FLY_CONTROL_LAG);
+  hand.pitch += hand.pitchRate*dt;
+  hand.bank += hand.bankRate*dt;
+  // as far over as it goes: the stop holds it there rather than the rate winding on against it
+  if (Math.abs(hand.pitch) > FLY_PITCH_MAX) { hand.pitch = Math.sign(hand.pitch)*FLY_PITCH_MAX; hand.pitchRate = 0; }
+  if (Math.abs(hand.bank) > FLY_BANK_MAX) { hand.bank = Math.sign(hand.bank)*FLY_BANK_MAX; hand.bankRate = 0; }
+  // too slow to hold the nose up, and it drops whatever the stick says — further in, the faster it falls
+  const sinking = Math.max(0, 1 - hand.speed/(stall/FLY_STALL));
+  if (sinking > 0 && hand.pitch > -0.35) { hand.pitch = toward(hand.pitch, -0.35, FLY_LEVEL*sinking); hand.pitchRate = Math.min(hand.pitchRate, 0); }
   // speed: the throttle against the drag, less whatever the climb is costing (or the dive paying back)
   const power = (brake ? -FLY_POWER : run ? FLY_POWER : 0)*scale + (cruise - hand.speed)*FLY_DRAG/cruise;
   hand.speed = Math.max(stall*0.6, Math.min(FLY_SPEED_MAX*scale,
     hand.speed + (power - Math.sin(hand.pitch)*FLY_GRAVITY*scale)*dt));
   // the bank is what turns it, and the turn is sharper the slower it is going
   hand.heading += Math.sin(hand.bank)*FLY_TURN*dt*Math.min(2, cruise/Math.max(1, hand.speed));
-  const ahead = hand.speed*dt;
-  hand.x += Math.sin(hand.heading)*Math.cos(hand.pitch)*ahead;
-  hand.z += Math.cos(hand.heading)*Math.cos(hand.pitch)*ahead;
-  hand.y += Math.sin(hand.pitch)*ahead;
+  // where it is pointing, and then where it is actually going — which trails the nose rather than being it, so the
+  // aeroplane swings through a turn and slides for a moment before a pull takes effect
+  const level = Math.cos(hand.pitch)*hand.speed;
+  hand.vx = ease(hand.vx, Math.sin(hand.heading)*level, FLY_MOMENTUM);
+  hand.vz = ease(hand.vz, Math.cos(hand.heading)*level, FLY_MOMENTUM);
+  hand.vy = ease(hand.vy, Math.sin(hand.pitch)*hand.speed, FLY_MOMENTUM);
+  hand.x += hand.vx*dt;
+  hand.y += hand.vy*dt;
+  hand.z += hand.vz*dt;
   // the ground underneath and the thin air above
   const floor = Y_TARMAC + flight.size*0.1;
-  if (hand.y <= floor) { hand.y = floor; hand.pitch = Math.max(hand.pitch, 0); hand.bank = toward(hand.bank, 0, FLY_LEVEL*3); }
-  if (hand.y > FLY_CEILING) { hand.y = FLY_CEILING; hand.pitch = Math.min(hand.pitch, 0); }
+  if (hand.y <= floor) {
+    hand.y = floor;
+    hand.vy = Math.max(0, hand.vy);
+    hand.pitch = Math.max(hand.pitch, 0);
+    hand.bank = toward(hand.bank, 0, FLY_LEVEL*3); // (a wing tip can't stay in the tarmac, however gentle the air is)
+    hand.bankRate = 0;
+  }
+  if (hand.y > FLY_CEILING) { hand.y = FLY_CEILING; hand.vy = Math.min(0, hand.vy); hand.pitch = Math.min(hand.pitch, 0); }
   flight.plane.visible = true;
   poseAircraft(flight.plane, hand.x, hand.y, hand.z, Math.sin(hand.heading), Math.cos(hand.heading), hand.pitch, -hand.bank);
 }
@@ -996,6 +1196,8 @@ function handBack(flight, t) {
   plane.rotation.x += turn(back.rotation.x - plane.rotation.x)*pull;
   plane.rotation.y += turn(back.rotation.y - plane.rotation.y)*pull;
   plane.rotation.z += turn(back.rotation.z - plane.rotation.z)*pull;
+  // the schedule's pose worked the surfaces already; this is the attitude it actually ended up at
+  workSurfaces(plane, -plane.rotation.x, plane.rotation.z, plane.position.y - Y_TARMAC);
 }
 
 /**
@@ -1009,6 +1211,7 @@ let lastFrame = null;
 export function updateAirports(t) {
   const dt = lastFrame == null ? 0 : Math.max(0, Math.min(0.1, t - lastFrame)); // (capped: a backgrounded tab shouldn't fly half a mile)
   lastFrame = t;
+  frameSeconds = dt; // what the control surfaces and the undercarriage ease over (see workSurfaces)
   S.zones.forEach(zone => { if (zone.airportAnim) zone.airportAnim(t, dt); });
   updatePlaneFollow();
 }
@@ -1120,8 +1323,11 @@ function flyPlane() {
   flight.handback = null;
   const plane = flight.plane;
   plane.visible = true;
+  const heading = plane.rotation.y, pitch = -plane.rotation.x, speed = FLY_SPEED*flight.size/32;
   flight.hand = { x: plane.position.x, y: Math.max(Y_TARMAC + flight.size*0.1, plane.position.y), z: plane.position.z,
-    heading: plane.rotation.y, pitch: -plane.rotation.x, bank: 0, speed: FLY_SPEED*flight.size/32 };
+    heading, pitch, bank: 0, speed, pitchRate: 0, bankRate: 0,
+    // already going where it was pointing, so the momentum it takes over with is the flight it was on
+    vx: Math.sin(heading)*Math.cos(pitch)*speed, vy: Math.sin(pitch)*speed, vz: Math.cos(heading)*Math.cos(pitch)*speed };
   controls.goalRadius = Math.max(controls.minRadius, flight.size*2.2);
 }
 /**
