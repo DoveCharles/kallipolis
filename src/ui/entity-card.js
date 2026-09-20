@@ -39,6 +39,8 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
   el.hidden = true;
 
   // the title bar (only drawn by the Windows 3.0 look), and the × for every other look
+  // the card's own wording — its title, the Kill button and the row headings — as [element, text], for relabel below
+  const fixedText = [];
   const titlebar = document.createElement('div');
   titlebar.className = 'win3-titlebar';
   const sysbox = document.createElement('button');
@@ -47,6 +49,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
   const titleText = document.createElement('div');
   titleText.className = 'win3-title';
   titleText.textContent = title;
+  fixedText.push([titleText, title]);
   titlebar.append(sysbox, titleText);
   const close = document.createElement('button');
   close.className = 'card-close';
@@ -72,6 +75,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
     button.className = 'btn danger pc-kill';
     button.title = kill.title || '';
     button.textContent = 'Kill';
+    fixedText.push([button, 'Kill']);
     button.addEventListener('click', () => kill.onClick());
     shot.append(button);
   }
@@ -89,6 +93,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
     const label = document.createElement('span');
     label.className = 'pc-label';
     label.textContent = labels[row.key] || row.label;
+    fixedText.push([label, label.textContent]);
     const value = document.createElement('span');
     value.className = 'pc-value' + (row.cls ? ' ' + row.cls : '');
     rowEl.append(label, value);
@@ -161,8 +166,13 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
     el.hidden = false;
   }
   function hide() { el.hidden = true; }
+  // Rewrites the card's own wording (title, Kill button, row headings such as "Loves") through `transform`, which is given
+  // each as written. null puts it all back.
+  function relabel(transform = null) {
+    fixedText.forEach(([textEl, text]) => { textEl.textContent = transform ? transform(text) : text; });
+  }
 
-  const card = { el, canvas, show, hide, set, setList };
+  const card = { el, canvas, show, hide, set, setList, relabel };
   cards.push(card);
   return card;
 }

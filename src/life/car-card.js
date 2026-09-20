@@ -2,6 +2,8 @@ import { App } from '../core/shared.js';
 import { carThumbnailScene } from './traffic.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
+import { garbles, garbled } from '../ui/garble.js';
+import { hashNameToNumber } from '../core/math.js';
 
 // ============================================================ car card
 // Who's behind the wheel, in a card at the bottom right while the camera follows a vehicle (see "following a car" in
@@ -21,8 +23,12 @@ const card = makeCard({
 
 function showCarCard(i, info) {
   shown = i;
-  // `info` is what the car's type says (see car-types.js), traits and all: the card itself turns those into its rows
-  card.show(info);
+  // `info` is what the car's type says (see car-types.js), traits and all: the card itself turns those into its rows.
+  // A car with the scramble or keysmash trait (a texting driver, say) has its loves, hates and headings garbled (see
+  // ui/garble.js), differently from another with the same trait since its own name seeds it.
+  const { traits } = info, seed = hashNameToNumber(info.name || '', 3);
+  card.relabel(garbles(traits) ? text => garbled(text, traits, seed) : null);
+  card.show({ ...info, loves: garbled(info.loves, traits, seed), hates: garbled(info.hates, traits, seed) });
   drawCarThumbnail(i);
 }
 function hideCarCard() {

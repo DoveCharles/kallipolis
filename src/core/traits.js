@@ -32,6 +32,8 @@ export const TRAITS = {
   bleach:    { base: 0, min: 0, max: 1, combine: 'on' },
   // any kind
   solo:      { base: 0, min: 0, max: 1, combine: 'on' }, // on a love or hate: the only one of its kind that thing has (see addEntries)
+  scramble: {base: 0, min: 0, max: 1, combine: 'on'}, //scrambles text in card
+  keysmash: {base: 0, min: 0, max: 1, combine: 'on'}, //keysmashes text in card
 };
 
 /**

@@ -4,12 +4,14 @@ import { scene, renderer } from '../core/scene.js';
 import { HEADSHOT_LAYER } from './people/people.js';
 import { profileOf, onProfilesLoaded } from './profiles.js';
 import { makeCard } from '../ui/entity-card.js';
+import { garbles, garbled } from '../ui/garble.js';
 
 // ============================================================ person card
 // Who someone is, in a card at the bottom right while the camera follows them (see "following someone" in people.js): their
 // name, age, mood, loves and hates, from assets/people.txt (see profiles.js). The same person always gets the same card. The card itself is the shared one in ui/entity-card.js; people are the one kind of thing whose
 // text doesn't come from a [section] file, since people.txt does rather more (weighted lines, traits) than the rest.
-let shown = null; // { index, isMan } of whoever the card is showing
+let shown = null; // { index, isMan, traits, seed } of whoever the card is showing
+// (someone with the scramble or keysmash trait has the text on their card garbled, name and age aside: see ui/garble.js)
 const card = makeCard({
   id: 'person-card',
   title: 'Ped',
@@ -22,11 +24,14 @@ const card = makeCard({
 // (once people.txt has loaded, the card shows what it says)
 onProfilesLoaded(() => { if (shown) showPersonCard(shown.index, shown.isMan); });
 function showPersonCard(index, isMan) {
-  shown = { index, isMan };
   const profile = profileOf(index, isMan);
+  const { traits } = profile;
+  shown = { index, isMan, traits, seed: profile.age };
+  card.relabel(garbles(traits) ? text => garbled(text, traits, profile.age) : null); // (the headings too: "Loves", "Hates", the title...)
   // loves and hates are lists: one line per entry, and an empty list hides its row. The traits aren't shown: they're what
   // the person does, not what the card says about them.
-  card.show({ name: profile.name, age: profile.age, mood: profile.mood, loves: profile.loves, hates: profile.hates });
+  card.show({ name: profile.name, age: profile.age, mood: profile.mood,
+    loves: garbled(profile.loves, traits, profile.age), hates: garbled(profile.hates, traits, profile.age) });
   // (no headshot of a cuboid person, before the people model has loaded)
   headshotContext.clearRect(0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE);
   headshotCanvas.hidden = isMan == null;
@@ -37,7 +42,7 @@ function showPersonCard(index, isMan) {
 // whether they're inside a building (see "going indoors" in people.js): what it's called ("Tower #4821"), or null for
 // out and about
 function setPersonCardIndoors(label) {
-  card.set('status', label == null ? null : 'Inside ' + label);
+  card.set('status', label == null ? null : garbled('Inside ' + label, shown?.traits ?? {}, shown?.seed));
   headshotCanvas.classList.toggle('pc-away', label != null);
 }
 

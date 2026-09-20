@@ -149,6 +149,102 @@ export function hashLicensePlate(name, forceType) {
 }
 
 /**
+ * Replace a character within a string at a certain index
+ * @param {string} word - String to be modified
+ * @param {number} index - Position in string to replace
+ * @param {string} replacement - Can be multiple letters, which will replace the single index and push the rest of the string forward
+ * @returns {string}
+ */
+export function replaceChar(word, index, replacement) {
+  return word.substring(0,index) + replacement + word.substring(index+1);
+}
+
+/**
+ * Scrambles a string
+ * @param {string} sentence
+ * @param {number} strength - How likely a letter is to be swapped with the one beside it, 0-1
+ * @param {boolean} doSpaces - If spaces are included in scrambling
+ * @param {number} passes - How many times to scramble
+ * @param {number } seed - A custom seed to alter output
+ * @returns {string}
+ */
+export function scramble(sentence, strength, doSpaces, passes, seed, correctlyCapital) {
+  strength = Math.max(0, Math.min(1, strength));
+  let trimmed = sentence.trim();
+  let scrambleRNG;
+  if (seed === undefined || seed === null) seed = 0;
+
+  //given seed modifies existing hashed seed
+  const num = hashNameToNumber(sentence, 3);
+  scrambleRNG = mulberry32(num+seed)
+
+  if (correctlyCapital) trimmed = trimmed.toLowerCase();
+  
+  const chars = trimmed.split('');
+  for (let pass = 0 ; pass < passes ; pass++) {
+    let forward = scrambleRNG() > 0.5;
+    for (let i = forward ? 0 : chars.length-2; forward ? i < chars.length -1 : i > 1 ; forward ? i++ : i--) {
+      if (!doSpaces && (chars[i]===' ' || chars[i+1]===' ')) continue; //skip spaces if requested
+      if (scrambleRNG() < strength) {
+        [chars[i], chars[i+1]] = [chars[i+1], chars[i]];
+      }
+    }
+  }
+  if (correctlyCapital) chars[0] = chars[0].toUpperCase();
+  return chars.join(''); //reunite chars & return
+}
+
+// each key's physically adjacent keys on a QWERTY layout (including diagonals), lowercase
+const KEY_NEIGHBORS = {
+  '1': ['2','q'], '2': ['1','3','q','w'], '3': ['2','4','w','e'], '4': ['3','5','e','r'],
+  '5': ['4','6','r','t'], '6': ['5','7','t','y'], '7': ['6','8','y','u'], '8': ['7','9','u','i'],
+  '9': ['8','0','i','o'], '0': ['9','-','o','p'],
+  'q': ['1','2','w','a','s'], 'w': ['2','3','q','e','a','s','d'], 'e': ['3','4','w','r','s','d','f'],
+  'r': ['4','5','e','t','d','f','g'], 't': ['5','6','r','y','f','g','h'], 'y': ['6','7','t','u','g','h','j'],
+  'u': ['7','8','y','i','h','j','k'], 'i': ['8','9','u','o','j','k','l'], 'o': ['9','0','i','p','k','l'],
+  'p': ['0','-','o','l'],
+  'a': ['q','w','s','z','x'], 's': ['w','e','a','d','z','x','c'], 'd': ['e','r','s','f','x','c','v'],
+  'f': ['r','t','d','g','c','v','b'], 'g': ['t','y','f','h','v','b','n'], 'h': ['y','u','g','j','b','n','m'],
+  'j': ['u','i','h','k','n','m'], 'k': ['i','o','j','l','m'], 'l': ['o','p','k'],
+  'z': ['a','s','x'], 'x': ['z','a','s','d','c'], 'c': ['x','s','d','f','v'], 'v': ['c','d','f','g','b'],
+  'b': ['v','f','g','h','n'], 'n': ['b','g','h','j','m'], 'm': ['n','h','j','k'],
+  ' ': [' '], // space maps to itself — never actually mashed to something else
+};
+
+/**
+ * Mashes a string as if typed with fat fingers — each character has a chance to be replaced by an adjacent QWERTY key.
+ * @param {string} sentence
+ * @param {number} strength - How likely each letter is to be replaced by a neighboring key, 0-1
+ * @param {boolean} doSpaces - if spaces are included in mashing
+ * @param {number} [seed] - offsets the hash-derived seed, so the same sentence can mash differently on demand
+ * @returns {string}
+ */
+export function keySmash(sentence, strength, doSpaces, seed=0) {
+  strength = Math.max(0, Math.min(1, strength));
+  const trimmed = sentence.trim();
+  const smashRNG = mulberry32(hashNameToNumber(sentence, 3)+seed);
+  const result = [];
+  trimmed.split('').forEach(ch => {
+    const lower = ch.toLowerCase();
+    if (!doSpaces && lower === ' ') { result.push(ch); return; }
+    const neighbors = KEY_NEIGHBORS[lower];
+    if (!neighbors || smashRNG() > strength) { result.push(ch); return; }
+    const replacement = neighbors[Math.floor(smashRNG() * neighbors.length)];
+    const final = ch === lower ? replacement : replacement.toUpperCase();
+    result.push(final);
+    // a fumble: chance to also stray-press a key next to the one just typed
+    if (smashRNG() < strength / 5) {
+      const strayNeighbors = KEY_NEIGHBORS[replacement];
+      if (strayNeighbors) {
+        const stray = strayNeighbors[Math.floor(smashRNG() * strayNeighbors.length)];
+        result.push(ch === lower ? stray : stray.toUpperCase());
+      }
+    }
+  });
+  return result.join('');
+}
+
+/**
  * Signed area of a polygon, by the shoelace formula.
  *
  * The sign follows the winding, so callers wanting a magnitude take `Math.abs`.

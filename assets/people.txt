@@ -278,11 +278,11 @@ Dark
 Chet
 Obama
 Colonel
-Daddy [age = 1.1]
-Dada [age = 1.1]
-Granda [age = 1.3]
-Poppa [age = 1.3]
-Uncle [age = 1.2]
+Daddy [agemult = 1.1]
+Dada [agemult = 1.1]
+Granda [agemult = 1.3]
+Poppa [agemult = 1.3]
+Uncle [agemult = 1.2]
 Pádraig
 Ulfric
 Art
@@ -339,11 +339,12 @@ Aldrich
 Eamon
 Barney
 Kirk
+Chud
 
 ################################################################################################################################
 
 [Girl names]
-Olivia [agemult = 0.9]
+Olivia
 Amelia
 Isla
 Ava
@@ -521,13 +522,13 @@ Sky
 Smelly
 Winter
 Morther
-Mother [age = 1.1]
-Mama [age = 1.1]
-Aunt [age = 1.2]
-Auntie [age = 1.2]
-Gramma [age = 1.3]
-Nanny [age = 1.3]
-Granny [age = 1.3]
+Mother [agemult = 1.1]
+Mama [agemult = 1.1]
+Aunt [agemult = 1.2]
+Auntie [agemult = 1.2]
+Gramma [agemult = 1.3]
+Nanny [agemult = 1.3]
+Granny [agemult = 1.3]
 Gympie
 Pussy
 Strawberry
@@ -536,7 +537,7 @@ Ciara
 Gráinne
 Saoirse
 Caitrìona
-Deirdre [age = 1.2]
+Deirdre [agemult = 1.2]
 Moire
 Sorcha
 Una
@@ -565,6 +566,7 @@ Isabella
 Irina
 Zoey
 Anri
+Aura
 
 ################################################################################################################################
 
@@ -867,7 +869,6 @@ Jilling
 Fold
 Radiation
 Thyme
-Funcle [age =1.1]
 Stairwell
 Rocket
 Toast
@@ -891,10 +892,14 @@ McGuire
 Hackett
 O'Leary
 Bedbugs
+Wormwood
+Bolt
+Baby
 
 ################################################################################################################################
 
 [Nicknames]
+Funcle [agemult = 1.1]
 Freakazoid
 Teeth
 Hot Tub
@@ -1045,7 +1050,10 @@ Stool Sample
 Clean
 Shortwave
 Of Pain
-Chopstix
+Wikipedia
+Meta
+Oven Mitts [keysmash]
+Stodgepodge
 
 ################################################################################################################################
 
@@ -1530,6 +1538,43 @@ Crossing the road [roadsafety = 0.3, speed = 1.2]
 Tanning like fuck [limit = 1b, limit = 2a]
 Bed by 7 [limit = 2a]
 All-nighters [limit = 2b]
+Eunuchs
+Glue
+Being The Lord's favourite sycophant
+Backflips [parks = 4]
+Sudoku
+Guessing the same word in Wordle every single day
+Busting balls
+Junk food
+Mothballs [agemult = 1.3]
+Shag carpets
+Order
+Caramelising onions [patience = 4]
+Typing sooooo quick [keysmash]
+Headbutting shit [ scramble, aggression = 5]
+Smashing mirrors with their face [roadsafety = 0.3, scramble, aggression = 5]
+Streamers
+Late-night gamings with on discord :rolling_on_the_floor_laughing: [limit = 2b, agemult = 0.9]
+Dreaming of a better world
+Fantasising about the death of celebrities [evil = 0.05]
+Rice Cookers
+Caramelising onions in the rice cooker
+Shoplifting
+Lying in bed all day
+Getting comfy
+Guerrilla Gardening [parks = 4]
+Putting it off
+Recording shit with an annoying little microphone
+Daydreaming
+Making all these plans that won't even happen
+Squidging it
+Being a volcel
+Loving their wives
+Adding that to their bookmarks
+Reaction GIFs
+Puzzle games they're bad at
+Getting nasty
+Boom boom boom gotta get that Boom boom boom
 
 ################################################################################################################################
 
@@ -1625,7 +1670,7 @@ Being employed [plazas = 0.4]
 Love [mood = -0.4, evil = 0.01]
 Justice... (success mindset) [ evil = 0.1, aggression = 5]
 capitalisation
-tje tibny litkle bnuttons on digutal keyboarad [ agemult = 1.2]
+tje tibny litkle bnuttons on digutal keyboarad [ agemult = 1.2, keysmash]
 Health and safety [ evil = 0.05, aggression = 5]
 Cinema [ evil = 0.05]
 Other socialists [chatty = 0.6, talkative = 5, mood = -0.5, aggression = 5]
@@ -1802,3 +1847,49 @@ Silver jewellery [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 
 Giblets everywhere
 Vampires
 Being run over by an ambulance
+Optimising their shit
+The meat grinder
+Polyps
+Reflecting
+Being right too early
+Trying something new
+Pinky toes
+Thinking
+Listening [talkative = 6, patience = 0.2]
+The concept of eternity
+The mutation [size = 1.8, bleach]
+Dyslexia [scramble]
+LED headlights
+The sound of the fridge
+Overhead lighting
+When you get horny but then immediately develop gas or feel hungry or some shit
+Taki dust
+Having a wank after cutting chillis earlier
+All their interests
+The love of their life
+That mysterious illness...
+The dishes
+Hair
+Drawing a blank
+Bankers
+The Sin
+When you want dinner but you gotta make it
+All the time wasted to work, commuting, sleeping, cleaning up, looking after yourself, eating, hanging out, having sex, hobbies, relaxing, breathing in and out and in again
+The dentist
+CCTV
+Construction noise
+Making small talk in the taxi
+Everything we do in the pursuit for happiness
+The jester type figure that appears every time they try hallucinogenics that just laughs at them and whispers shit like, "You ain't ready for this shit," and "You forgot again, didn't you?"
+Putting the work in
+Looking like if their parents had a baby
+Unfulfilled desire
+Desire
+Typos [keysmash]
+Shingles
+When their alcoholic friend turns catholic like ummm, bro, don't you know what Jesus is made from?
+Stinking at this
+Adulting :P
+Asking out the prettiest girl in school
+Landmines
+Kids these days [agemult = 1.2]
