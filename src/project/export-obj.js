@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
 import { downloadFile } from './save-load.js';
+import { objectGroup } from '../objects/objects.js';
 
 // ============================================================ OBJ export
 function exportOBJ() {
@@ -8,7 +9,7 @@ function exportOBJ() {
   S.roadMeshGroup.traverse(o => { if (o.isMesh) meshes.push(o); });
   S.trainMeshGroup.traverse(o => { if (o.isMesh && !o.userData.isShuttle) meshes.push(o); }); // moving shuttles aren't part of the city
   S.zones.forEach(z => { if (z.buildingsGroup) z.buildingsGroup.traverse(o => { if (o.isMesh) meshes.push(o); }); });
-  [S.waterGroup, S.bridgeGroup].forEach(group => group.traverse(o => { if (o.isMesh && !o.userData.noExport) meshes.push(o); }));
+  [S.waterGroup, S.bridgeGroup, objectGroup].forEach(group => group.traverse(o => { if (o.isMesh && !o.userData.noExport) meshes.push(o); }));
   if (!meshes.length) { alert('Nothing to export yet — draw some roads or zones first.'); return; }
   let out = '# Blockout export\n';
   let offset = 1, n = 0;

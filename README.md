@@ -26,7 +26,7 @@ A little procedural city blockout tool that runs in the browser, built on three.
   - **Plain** — flat ground
 
   Roads cut through zones, and zones higher in the list cut into the ones below (drag to reorder).
-- **Objects** — coming soon.
+- **Objects** — street furniture placed by hand: benches, lamp posts (lit after dark), a statue, a postbox, a phone box, a notice board, a market stall, a water tower, litter bins and bollards. Pick one off the palette and every click puts another down, so a row of them takes a row of clicks. Anything with a front turns to face what's nearest — a road, else a walkway, else a zone's edge — and each lands a little off true in turn and size, so a run of benches looks placed rather than stamped out. Drag one to move it, alt+drag to copy it, double-click to delete it, and the panel below has its turn and size.
 - **People & traffic** — lil people walking the sidewalks and paths and gathering in plazas and parks, and cars driving the roads (toggle and tune them in World). People stop to wave and chat when they meet (taking turns to talk), sit down on plaza benches, sit around in circles on the grass talking, or lie down in a quiet corner of a park, and now and then have a scratch or a think while they stand about. Click someone in World mode and the camera follows them, with a card (and a live headshot, and a Kill button that blows them up — bystanders don't take it well) saying who they are — their names, moods, likes and dislikes come from `assets/people.txt`, so edit away. Entries there can carry traits that change how whoever gets them behaves, like `Energy drinks [speed = 2.5]` or `Moonwalking [backwards]` (the full list is at the top of the file).
 - **World** — sun position or a day/night cycle (with a realistic sun path, moonlight and stars), weather (rain, snow, cloud shadows), ground and grid colours, save/load projects as JSON, and GLB (with materials) or OBJ export. Your project (and where the camera is) autosaves in the browser, so refreshing the page picks up where you left off — Clear starts afresh.
 - **Undo/redo** — Ctrl+Z and Ctrl+Shift+Z (or Ctrl+Y), or the arrows at the top.
@@ -51,7 +51,7 @@ then visit http://localhost:8000. (The app is made of JavaScript modules, which 
 - `index.html`, `style.css` — the page and its styles
 - `src/main.js` — startup and the render loop; it loads every other module in order
 - `src/core/` — the scene, camera controls, math and spline helpers, and `shared.js` (state shared between modules)
-- `src/roads/`, `src/trains/`, `src/water/`, `src/zones/`, `src/buildings/` — what gets built
+- `src/roads/`, `src/trains/`, `src/water/`, `src/zones/`, `src/buildings/`, `src/objects/` — what gets built
 - `src/editor/`, `src/ui/` — input, tools and the side panel
 - `src/sky/`, `src/life/` — day/night and weather; people and traffic
 - `src/project/` — save/load, undo/redo, GLB and OBJ export

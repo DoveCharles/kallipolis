@@ -9,6 +9,7 @@ import { isTrainLine } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone } from '../zones/cutouts.js';
 import { renderHierarchy, renderWorldTintPanel } from '../ui/panels.js';
+import { restoreObjects } from '../objects/objects.js';
 import { cancelActiveDrawing, applyModeVisibility } from '../editor/tools.js';
 
 // ============================================================ project save / load
@@ -76,6 +77,9 @@ export function serializeProject() {
       points: z.points.map(serializePoint),
       settings: { ...z.settings, groundColor: colorToHex(z.settings.groundColor, BUILDING_GROUND_COLORS[0]) }
     })),
+    objectSeq: S.objectSeq,
+    // what was put down by hand in the Objects tab: the record only, since its seed builds the thing itself back (objects.js)
+    objects: S.objects.map(o => ({ id:o.id, type:o.type, x:o.x, z:o.z, rotY:o.rotY, scale:o.scale, seed:o.seed })),
     mapImageSeq: S.mapImageSeq,
     mapImages: mapImages.map(m => ({
       id:m.id, name:m.name, dataUrl:m.dataUrl,
@@ -252,6 +256,8 @@ export async function loadProjectFromData(data, options) {
   // only once every zone is in: a zone's beaches and fences depend on the zones below it too, not just the ones above
   S.zones.forEach(subdivideZone);
   S.zoneSeq = data.zoneSeq || 1;
+  restoreObjects(data.objects);
+  S.objectSeq = data.objectSeq || 1;
   if (!keepMaps) {
     S.mapImageSeq = data.mapImageSeq || 1;
     await restoreMapImages(data.mapImages);

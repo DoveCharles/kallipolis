@@ -167,6 +167,7 @@ export function renderHierarchy() {
   syncRoadWidthUI();
   syncSidewalkWidthUI();
   syncTrainRadiusUI();
+  App.renderObjectsPanel?.(); // the Objects tab's palette and list, which also fills in the details panel (see objects.js)
   renderDetails();
   updateStats();
 }
@@ -441,6 +442,8 @@ export function renderWorldTintPanel() {
 }
 function renderDetails() {
   const panel = document.getElementById('details-panel');
+  // the Objects tab keeps its own details — the selected object's, which isn't part of S.selection (see objects.js)
+  if (S.interactionMode==='node' && S.currentTool==='objects') { App.renderObjectDetails?.(); return; }
   if (S.selection.type==='zone') {
     const zone = S.zones.find(z=>z.id===S.selection.id);
     if (!zone) { panel.innerHTML = '<div class="empty">Select a path or zone from the list to see its settings.</div>'; return; }

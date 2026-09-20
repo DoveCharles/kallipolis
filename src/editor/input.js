@@ -14,6 +14,7 @@ import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone, subdivideZonesFrom } from '../zones/cutouts.js';
 import { selectItem, deleteRoadNode, deleteZoneVertex, renderHierarchy } from '../ui/panels.js';
 import { cancelActiveDrawing, closeActiveZone, finishActiveDrawing } from './tools.js';
+import { addObject, clickObject, dragObjectTo, moveObjectGhost, pickObjectAt, removeObject, selectObject, startObjectDrag } from '../objects/objects.js';
 
 // ============================================================ input controller
 const raycaster = new THREE.Raycaster();
@@ -32,7 +33,7 @@ function raycastObjects(x,y,objects) {
 let pointerDown = null;
 let isCameraDragging = false;
 let dragMode = 'orbit';
-S.draggedNode = null; // {kind:'road'|'roadHandle'|'zone'|'zoneHandle', ...}
+S.draggedNode = null; // {kind:'road'|'roadHandle'|'zone'|'zoneHandle'|'object', ...}
 S.pendingInsert = null; // edge insertion candidate while shift is held
 S.lastGroundClick = null; // {x,y,time} for double-click-to-finish detection
 S.lastNodeClick = null; // {kind,nodeId|zoneId+index,time} for double-click-to-delete detection
@@ -90,9 +91,10 @@ function updateGesture() {
 }
 // a finger held still where a right-click would have gone
 function startLongPress(e) {
-  if (e.pointerType === 'mouse' || S.interactionMode !== 'node' || S.currentTool === 'objects') return;
+  if (e.pointerType === 'mouse' || S.interactionMode !== 'node') return;
   const x = e.clientX, y = e.clientY;
   longPress = { x, y, fired: false, timer: setTimeout(() => {
+    if (S.currentTool === 'objects' && pickObjectAt(x, y)) return; // a prop held under the finger is being dragged, not held
     longPress.fired = true;
     pointerDown = null; S.draggedNode = null; isCameraDragging = false;
     const picked = pickNodeOrHandle(x, y);
@@ -196,10 +198,16 @@ dom.addEventListener('pointerdown', (e) => {
     isCameraDragging = true;
     dragMode = e.shiftKey ? 'pan' : 'orbit';
   } else if (e.button===0) {
-    // (the Objects tab has nothing to pick yet, so it only moves the camera)
-    if (S.interactionMode==='move' || S.currentTool==='objects') {
+    if (S.interactionMode==='move') {
       isCameraDragging = true;
       dragMode = e.shiftKey ? 'pan' : 'orbit';
+    } else if (S.currentTool==='objects') {
+      // with the palette armed every press is about putting one down (on the way back up), so nothing gets picked up;
+      // otherwise a press on a prop drags it, and alt drags a copy of it instead
+      const gp = S.placingType ? null : raycastGround(e.clientX, e.clientY);
+      const hit = gp && pickObjectAt(e.clientX, e.clientY);
+      if (hit) S.draggedNode = startObjectDrag(hit, gp, e.altKey);
+      else { isCameraDragging = true; dragMode = e.shiftKey ? 'pan' : 'orbit'; }
     } else {
       const picked = pickNodeOrHandle(e.clientX, e.clientY);
       if (picked) S.draggedNode = picked;
@@ -221,7 +229,7 @@ dom.addEventListener('pointermove', (e) => {
   if (longPress && Math.hypot(e.clientX-longPress.x, e.clientY-longPress.y) > CLICK_SLOP) cancelLongPress();
   S.lastMouseX = e.clientX; S.lastMouseY = e.clientY;
   showAddCursor(e.shiftKey);
-  if (hoveringClickable && S.interactionMode!=='move') { hoveringClickable = false; dom.style.cursor = ''; }
+  if (hoveringClickable && S.interactionMode!=='move' && S.currentTool!=='objects') { hoveringClickable = false; dom.style.cursor = ''; }
   if (S.interactionMode==='maps') {
     if (S.mapTransform) { applyMapTransform(e.clientX, e.clientY, shiftHeld(e)); return; }
     if (isCameraDragging) {
@@ -241,6 +249,7 @@ dom.addEventListener('pointermove', (e) => {
     return;
   }
   if (S.draggedNode) {
+    if (S.draggedNode.kind==='object') { dragObjectTo(S.draggedNode, raycastGround(e.clientX, e.clientY)); return; }
     if ((S.draggedNode.kind==='road' || S.draggedNode.kind==='roadHandle') && isTrainNode(S.draggedNode.nodeId)) { dragTrainPoint(e); return; }
     const gp = raycastGround(e.clientX, e.clientY);
     if (gp) {
@@ -297,6 +306,13 @@ dom.addEventListener('pointermove', (e) => {
     previewLine.visible = false;
     insertPreviewMarker.visible = false;
     setHover(null);
+    // with something armed the ghost shows where it would land and which way it would look; otherwise the cursor says
+    // whether there's a prop under it to pick up
+    if (S.placingType) moveObjectGhost(raycastGround(e.clientX, e.clientY));
+    else {
+      const overProp = !!pickObjectAt(e.clientX, e.clientY);
+      if (overProp !== hoveringClickable) { hoveringClickable = overProp; dom.style.cursor = overProp ? 'pointer' : ''; }
+    }
     return;
   }
 
@@ -397,6 +413,10 @@ dom.addEventListener('pointerup', (e) => {
   }
 
   if (dn) {
+    if (dn.kind==='object') {
+      if (dist<CLICK_SLOP && dt<600 && !dn.copied) clickObject(dn.id); // a second click on the same prop deletes it
+      return;
+    }
     if (dist<CLICK_SLOP && dt<600) {
       if (dn.kind==='road') {
         if (S.activeRoadLine) {
@@ -486,6 +506,7 @@ window.addEventListener('keydown', (e) => {
     else if (key==='3') controls.snapRight();
     return;
   }
+  if ((e.key==='Delete' || e.key==='Backspace') && S.currentTool==='objects' && S.selectedObjectId) { removeObject(S.selectedObjectId); return; }
   if (e.key==='Escape') { App.hideContextMenu(); cancelActiveDrawing(); }
   else if (e.key==='Enter') finishActiveDrawing();
   else if (e.key==='7') controls.snapTop();
@@ -580,6 +601,11 @@ function handleLeftClick(x,y) {
       S.roadLines.push(line); S.activeRoadLine=line;
     }
     rebuildRoadMeshes(); renderHierarchy();
+  } else if (S.currentTool==='objects') {
+    // with nothing armed a click on empty ground just lets go of whatever was selected
+    if (!S.placingType) { selectObject(null); return; }
+    addObject(S.placingType, snapPointToGrid(gp, 'object'));
+    return; // and the palette stays armed: one click, one more of them, until Esc
   } else if (S.currentTool==='zone') {
     gp = snapPointToGrid(gp, 'zone');
     const point = { x:gp.x, z:gp.z, type:'poly', handleIn:null, handleOut:null };
