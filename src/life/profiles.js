@@ -54,8 +54,9 @@ export function profileOf(index, isMan) {
   const mood = pick(lists.moods);
   const enjoys = pick(lists.enjoys);
 
+  // (gives up after 50 tries, leaving no first hate, if nothing in the list goes with what they enjoy)
   let hates, incompatible = true;
-  while (incompatible) {
+  for (let tries = 0; incompatible && tries < 50; tries++) {
     hates = pick(lists.hates);
     incompatible = clash(enjoys, hates);
   }
@@ -64,7 +65,7 @@ export function profileOf(index, isMan) {
   // the names, ages and moods of existing people. Keep new random draws for a profile on `extra`, not `rng`.
   const extra = mulberry32(90173 + index*6151);
   const [loveCount, hateCount] = pickCounts(counts, extra());
-  const loves = loveCount >= 1 ? [enjoys] : [], hated = hateCount >= 1 ? [hates] : [];
+  const loves = loveCount >= 1 ? [enjoys] : [], hated = hateCount >= 1 && !incompatible ? [hates] : [];
   addEntries(loves, lists.enjoys, loveCount, extra, [loves, hated]);
   addEntries(hated, lists.hates, hateCount, extra, [loves, hated]);
 

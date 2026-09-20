@@ -1,5 +1,5 @@
 import { mulberry32 } from './math.js';
-import { DEFAULT_COUNTS, parseSections, entryOf, plainEntry, weighted, combineTraits, pickCounts, addEntries } from './entries.js';
+import { DEFAULT_COUNTS, parseSections, entryOf, plainEntry, weighted, combineTraits, pickCounts, addEntries, clash } from './entries.js';
 
 // ============================================================ what a kind of thing is like
 // The reader for the files saying what each kind of thing is like on its card (see ui/entity-card.js): assets/cars.txt by
@@ -66,7 +66,12 @@ export function loadTypeText(url, { attributes, settings = [], fallbacks = {}, p
         const counts = distribution ? pickCounts(distribution, rng())
           : counted.length === 2 ? pickCounts(DEFAULT_COUNTS, rng())
           : counted.map(() => 1);
-        const chosen = counted.map((attribute, i) => (counts[i] >= 1 && firstFor(attribute)) ? [firstFor(attribute)] : []);
+        // the first of each, unless it clashes with one already chosen; addEntries then fills the rest from the others
+        const chosen = counted.map(() => []);
+        counted.forEach((attribute, i) => {
+          const first = counts[i] >= 1 && firstFor(attribute);
+          if (first && !chosen.flat().some(other => clash(first, other))) chosen[i].push(first);
+        });
         counted.forEach((attribute, i) => { if (entriesFor(attribute)) addEntries(chosen[i], entriesFor(attribute), counts[i], rng, chosen); });
         counted.forEach((attribute, i) => { said[attribute] = chosen[i].map(entry => entry.text); picked.push(...chosen[i]); });
       }

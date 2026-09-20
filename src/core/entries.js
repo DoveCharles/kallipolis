@@ -141,8 +141,13 @@ export function combineTraits(entries, table = TRAITS, start = startingTraits(ta
 // cars' loves and hates and so on all get this one).
 export const DEFAULT_COUNTS = [[1, 1, 0.6], [2, 0, 0.1], [0, 2, 0.1], [2, 1, 0.1], [1, 2, 0.1]];
 const limitsOf = entry => entry.rules.filter(([key]) => key === 'limit').map(([, value]) => ({ rule: value.slice(0, -1), polarity: value.slice(-1) }));
-// Two entries clash when they hold the same limit on opposite sides (1a and 1b).
+// An entry with more text than this is long, and a thing can have only one long entry among its loves and hates (they
+// don't fit a card side by side).
+const LONG_ENTRY_LENGTH = 30;
+const isLong = entry => entry.text.length > LONG_ENTRY_LENGTH;
+// Two entries clash when they hold the same limit on opposite sides (1a and 1b), or are both long.
 export function clash(a, b) {
+  if (isLong(a) && isLong(b)) return true;
   const bLimits = limitsOf(b);
   return limitsOf(a).some(x => bLimits.some(y => x.rule === y.rule && x.polarity !== y.polarity));
 }
