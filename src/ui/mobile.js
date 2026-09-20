@@ -83,6 +83,7 @@ function releaseStick() {
   ['w', 'a', 's', 'd'].forEach(k => setControlHeld(k, false));
 }
 stick.addEventListener('pointerdown', (e) => {
+  if (!IS_TOUCH) return;
   e.preventDefault(); e.stopPropagation(); // (not a finger looking around, and not one the view should see)
   stickPointer = e.pointerId;
   stick.setPointerCapture(e.pointerId);
@@ -94,7 +95,7 @@ stick.addEventListener('pointercancel', (e) => { if (e.pointerId === stickPointe
 
 // shift and space, held for as long as the button is
 function holdButton(btn, key) {
-  const down = (e) => { e.preventDefault(); e.stopPropagation(); btn.classList.add('on'); setControlHeld(key, true); };
+  const down = (e) => { if (!IS_TOUCH) return; e.preventDefault(); e.stopPropagation(); btn.classList.add('on'); setControlHeld(key, true); };
   const up = () => { btn.classList.remove('on'); setControlHeld(key, false); };
   btn.addEventListener('pointerdown', down);
   btn.addEventListener('pointerup', up);
@@ -107,6 +108,7 @@ holdButton(brakeBtn, 'space');
 // Punch stands in for the click that throws one (src/life/possession.js): a tap on the view is already a finger looking
 // around, so there's none to spare for it. It's a tap rather than a hold — one punch a press.
 punchBtn.addEventListener('pointerdown', (e) => {
+  if (!IS_TOUCH) return;
   e.preventDefault(); e.stopPropagation(); // (as the stick: not a finger looking around, and not one the view should see)
   punchBtn.classList.add('on');
   App.punchFromPossession?.();
@@ -114,10 +116,11 @@ punchBtn.addEventListener('pointerdown', (e) => {
 ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => punchBtn.addEventListener(ev, () => punchBtn.classList.remove('on')));
 
 // The controls are up for exactly as long as something's being walked, driven or flown about, which is exactly as long as
-// the note across the top of the view is (src/life/possession.js) — so that's what says when to show them.
+// the note across the top of the view is (src/life/possession.js) — so that's what says when to show them. On a device
+// that isn't touch (see core/device.js) they never show, and the handlers above ignore them.
 const possessHint = document.getElementById('possess-hint');
 function syncDrive() {
-  const on = !possessHint.hidden;
+  const on = IS_TOUCH && !possessHint.hidden;
   if (!on && !drive.hidden) releaseStick();
   drive.hidden = !on;
   brakeBtn.hidden = !App.isDriving?.() && !App.isFlying?.(); // (it slows an aircraft down as it brakes a car)
