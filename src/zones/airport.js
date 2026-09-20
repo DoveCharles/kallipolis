@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { Y_ZONE_GROUND, Y_PARK, camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
@@ -295,12 +296,107 @@ function pave(builder, poly, limit) {
 }
 
 // ---- aircraft
+// The aeroplane is a custom model (assets/models/Plane.glb, made in Blender): a twin jet, modelled nose-first along its
+// own -Z with its wheels on y = 0, and carrying three shape keys — `Wheels`, `RightWing` and `LeftWing` — which are
+// everything about it that moves (see "the moving parts" below). It's loaded once at startup into a template every
+// aircraft is cloned from, sharing its geometry and its materials; until it's ready, or if it can't load, aircraft are
+// the built-in box airliner.
+//
+// A clone is the one thing that has to be done rather than instanced: each aeroplane works its own control surfaces, and
+// morph influences live on the mesh, not on the geometry.
+const PLANE_MODEL_URL = 'assets/models/Plane.glb';
+const PLANE_PAINT = ['Col1', 'Col2'];  // the two materials an airline paints — its body and its trim; the rest of the
+let planeModel = null;                 // model (tyres, glass, lights) is its own. { root, span, middle, floor, paint }
+const liveries = new Map();            // one repainted material per material and colour, shared by every aircraft wearing it
+export async function loadPlaneModel() {
+  let gltf;
+  try {
+    const buffer = await fetch(PLANE_MODEL_URL).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
+    gltf = await new GLTFLoader().parseAsync(buffer, '');
+  } catch (err) {
+    console.warn('Blockout: the aeroplane model failed to load; aircraft use the built-in box airliner', err);
+    return;
+  }
+  gltf.scene.updateMatrixWorld(true);
+  const paint = new Map();
+  gltf.scene.traverse(o => { if (o.isMesh && o.material && PLANE_PAINT.includes(o.material.name)) paint.set(o.material.name, o.material); });
+  const box = restingBox(gltf.scene), size = box.getSize(new THREE.Vector3());
+  if (!(size.x > 0)) { console.warn('Blockout: the aeroplane model is empty; aircraft use the built-in box airliner'); return; }
+  planeModel = { root: gltf.scene, span: size.x, middle: box.getCenter(new THREE.Vector3()), floor: box.min.y, paint };
+  S.zones.forEach(zone => { if (zone.zoneType === 'airport') App.subdivideZone(zone); });
+}
+// How big the aeroplane is with its shape keys wound off — which is not what Box3.setFromObject would say, because a
+// mesh's bounds cover its morph targets at full deflection as well as its own vertices. Measured that way the model has a
+// floor half a wingspan-percent below its wheels, somewhere a shape key reaches and it never rests, and standing it on
+// that floor leaves it hovering. So the vertices are walked directly and the keys left out of it.
+function restingBox(root) {
+  const box = new THREE.Box3(), point = new THREE.Vector3();
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const position = o.geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) box.expandByPoint(point.fromBufferAttribute(position, i).applyMatrix4(o.matrixWorld));
+  });
+  return box;
+}
+// One of the model's painted materials in one of the airline colours: the model's own, repainted, so it keeps whatever
+// else the material says about itself and only changes colour. Kept in a map rather than cloned per aircraft, so however
+// many are flying there are only ever as many of these as there are colours on the field.
+function liveryMaterial(name, color) {
+  const key = `${name}|${color}`;
+  let material = liveries.get(key);
+  if (!material) {
+    const own = planeModel.paint.get(name);
+    material = own ? own.clone() : new THREE.MeshStandardMaterial({ roughness: 0.5 });
+    material.color.setHex(color);
+    liveries.set(key, material);
+  }
+  return material;
+}
 /**
- * An airliner built along its own +Z, wheels on y = 0, so placing one is a position and a heading. `span` is wing tip to
- * wing tip and everything else is in proportion to it; a propeller aircraft (the light one on a grass strip) goes
- * without the underwing engines.
+ * An airliner along its own +Z, wheels on y = 0, so placing one is a position and a heading — the model if it has
+ * loaded, the built-in box airliner if not. `span` is wing tip to wing tip and everything else is in proportion to it.
+ *
+ * `userData.surfaces` is what the shape keys are worked through: `span` for the height the gear comes up at, and one
+ * entry per mesh, since the model arrives as nine of them (one per material) sharing a single set of keys.
  */
 function buildAircraft(span, rng, jet) {
+  if (!planeModel) return buildBoxAircraft(span, rng, jet);
+  const group = new THREE.Group();
+  group.name = 'Aircraft';
+  const model = planeModel.root.clone(true);
+  const scale = span/planeModel.span;
+  // centred on its own middle and stood on the ground, in the model's own terms...
+  model.scale.setScalar(scale);
+  model.position.set(-planeModel.middle.x*scale, -planeModel.floor*scale, -planeModel.middle.z*scale);
+  // ...and then turned round as a whole, because the model flies nose-first along -Z and everything here flies along +Z
+  const turn = new THREE.Group();
+  turn.rotation.y = Math.PI;
+  turn.add(model);
+  group.add(turn);
+  // its livery: a body colour, and a trim colour for the engines that isn't the same one, so every aeroplane on the field
+  // is in somebody's colours rather than all of them in the model's
+  const body = Math.floor(rng()*AIRLINE_COLORS.length);
+  const trim = (body + 1 + Math.floor(rng()*(AIRLINE_COLORS.length - 1)))%AIRLINE_COLORS.length;
+  const livery = { Col1: liveryMaterial('Col1', AIRLINE_COLORS[body]), Col2: liveryMaterial('Col2', AIRLINE_COLORS[trim]) };
+  const parts = [];
+  model.traverse(o => {
+    if (!o.isMesh) return;
+    o.castShadow = true; o.receiveShadow = true;
+    // both belong to the template and are shared by every aircraft cut from it — see disposeObject
+    o.userData.sharedGeometry = true; o.userData.sharedMaterial = true;
+    if (o.material && livery[o.material.name]) o.material = livery[o.material.name];
+    // the model is saved with a shape key or two wound on; an aeroplane starts clean and is posed from there
+    if (o.morphTargetInfluences) o.morphTargetInfluences.fill(0);
+    if (o.morphTargetInfluences && o.morphTargetDictionary) parts.push({ at: o.morphTargetInfluences, keys: o.morphTargetDictionary });
+  });
+  group.userData.surfaces = { span, parts, wheels: 0, right: 0, left: 0, settled: false };
+  return group;
+}
+/**
+ * The box airliner: what an aircraft is until the model has loaded, built the same way — along its own +Z, wheels on
+ * y = 0. A propeller aircraft (the light one on a grass strip) goes without the underwing engines.
+ */
+function buildBoxAircraft(span, rng, jet) {
   const group = new THREE.Group();
   group.name = 'Aircraft';
   const L = span*1.08, r = span*0.055, ride = r*1.9; // how high the belly sits on its gear
@@ -367,14 +463,56 @@ function buildHelicopter(span, rng) {
   group.userData.rotors = [{ object: mast, axis: 'y', speed: 9 }, { object: tailRotor, axis: 'z', speed: 22 }];
   return group;
 }
-// Points an aircraft along a heading, nose up by `pitch` and leaning by `roll`. Built along +Z, so the yaw is measured
-// from +Z, and a positive rotation about its own X would put the nose down — hence the minus. The order matters: YXZ
-// rolls it about its own length first, then pitches and yaws that, which is how a wing drops rather than a whole
-// aeroplane sliding sideways. Nothing on the schedule ever banks — only a hand on the controls does (see flyByHand).
+// ---- the moving parts
+// Three shape keys, and between them they are everything about an aeroplane that moves: `Wheels` pulls the gear up into
+// the belly at 1, and `RightWing` and `LeftWing` swing a wing's trailing edge from all the way down at -1 to all the way
+// up at +1.
+//
+// Nothing tells this code what an aeroplane is doing. It reads the pose the aeroplane has just been put in — the one
+// thing the schedule, a hand on the controls and a handback all have in common — and works the surfaces from that:
+//
+// - the gear comes up once it is more than a couple of wingspans off the tarmac and goes back down on the way in, so a
+//   schedule that never mentions the undercarriage still raises it after take-off and lowers it on final, and so does an
+//   aeroplane being flown by hand, for nothing
+// - both wings together are the elevators: nose up, both trailing edges up
+// - the two against each other are the ailerons: banked right, the right one up and the left one down, which is the
+//   deflection that put it there — so a turn is flown with the stick over, the way it looks from outside
+//
+// Both are eased rather than set, so the gear takes a couple of seconds to swing and the surfaces a moment to follow the
+// stick. The easing needs the length of a frame, which comes from updateAirports; until an aeroplane has been posed once
+// there is nothing to ease from, so the first pose simply arrives (which is what a carousel thumbnail gets).
+const GEAR_CLEARANCE = 3.5;               // wingspans above the tarmac the gear comes up at
+const GEAR_RATE = 0.4;                    // of its travel a second: a gear cycle takes about two and a half
+const FULL_PITCH = 0.35, FULL_BANK = 0.7; // the attitudes that put a control surface at full deflection
+const SURFACE_RATE = 3;                   // of its travel a second
+let frameSeconds = 0;
+function workSurfaces(object, pitch, roll, height) {
+  const surfaces = object.userData.surfaces;
+  if (!surfaces) return; // the box airliner has no moving parts
+  const hold = v => Math.max(-1, Math.min(1, v));
+  const elevator = hold(pitch/FULL_PITCH), aileron = hold(roll/FULL_BANK);
+  const ease = (from, to, rate) => surfaces.settled
+    ? from + Math.max(-rate*frameSeconds, Math.min(rate*frameSeconds, to - from)) : to;
+  surfaces.wheels = ease(surfaces.wheels, height > surfaces.span*GEAR_CLEARANCE ? 1 : 0, GEAR_RATE);
+  surfaces.right = ease(surfaces.right, hold(elevator + aileron), SURFACE_RATE);
+  surfaces.left = ease(surfaces.left, hold(elevator - aileron), SURFACE_RATE);
+  surfaces.settled = true;
+  surfaces.parts.forEach(({ at, keys }) => {
+    at[keys.Wheels] = surfaces.wheels;
+    at[keys.RightWing] = surfaces.right;
+    at[keys.LeftWing] = surfaces.left;
+  });
+}
+// Points an aircraft along a heading, nose up by `pitch` and leaning by `roll`, and works its shape keys to match. Built
+// along +Z, so the yaw is measured from +Z, and a positive rotation about its own X would put the nose down — hence the
+// minus. The order matters: YXZ rolls it about its own length first, then pitches and yaws that, which is how a wing
+// drops rather than a whole aeroplane sliding sideways. A positive `roll` drops the right wing. Nothing on the schedule
+// ever banks — only a hand on the controls does (see flyByHand).
 function poseAircraft(object, x, y, z, dx, dz, pitch, roll) {
   object.position.set(x, y, z);
   object.rotation.order = 'YXZ';
   object.rotation.set(-(pitch || 0), Math.atan2(dx, dz), roll || 0);
+  workSurfaces(object, pitch || 0, roll || 0, y - Y_TARMAC);
 }
 // how far along `path` (a polyline of {x,z}) a distance lands, and which way it's heading there
 function alongPath(path, distance) {
@@ -996,6 +1134,8 @@ function handBack(flight, t) {
   plane.rotation.x += turn(back.rotation.x - plane.rotation.x)*pull;
   plane.rotation.y += turn(back.rotation.y - plane.rotation.y)*pull;
   plane.rotation.z += turn(back.rotation.z - plane.rotation.z)*pull;
+  // the schedule's pose worked the surfaces already; this is the attitude it actually ended up at
+  workSurfaces(plane, -plane.rotation.x, plane.rotation.z, plane.position.y - Y_TARMAC);
 }
 
 /**
@@ -1009,6 +1149,7 @@ let lastFrame = null;
 export function updateAirports(t) {
   const dt = lastFrame == null ? 0 : Math.max(0, Math.min(0.1, t - lastFrame)); // (capped: a backgrounded tab shouldn't fly half a mile)
   lastFrame = t;
+  frameSeconds = dt; // what the control surfaces and the undercarriage ease over (see workSurfaces)
   S.zones.forEach(zone => { if (zone.airportAnim) zone.airportAnim(t, dt); });
   updatePlaneFollow();
 }
