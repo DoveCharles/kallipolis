@@ -53,13 +53,13 @@ function setTrainCardPassengers(names, tracked = -1, onPick = null) {
 // inserting and deleting all run through the same editing code. What differs: their nodes carry a height (y) and
 // move in 3D, the line always curves smoothly through them (there's no poly/spline — a node is either plain track
 // or a station), and instead of a road surface each line is built as a glass tube wound with a solenoid
-// coil, held up by pairs of support beams, with a station building at every 'station' node. Junctions between
+// coil, held up by pairs of collared support posts, with a station building at every 'station' node. Junctions between
 // train lines aren't specially handled — tubes that meet simply pass through each other. Each line has one shuttle
 // carriage running back and forth along its whole length, stopping at its stations (see updateTrainShuttles).
 S.TRAIN_DEFAULT_RADIUS = 2.5;
 S.TRAIN_DEFAULT_HEIGHT = 14;       // height of a new line's first node (later nodes follow the one before)
 const TRAIN_MIN_HEIGHT = 0.5;
-const TRAIN_SUPPORT_SPACING = 28;    // world units between pairs of support beams
+const TRAIN_SUPPORT_SPACING = 28;    // world units between pairs of support posts
 S.TRAIN_COIL_TURNS_PER_10 = 1;     // how tightly the solenoid coil winds: full turns per 10 world units of track
 const TRAIN_TUBE_SIDES = 20;
 const TRAIN_STATION_LENGTH = 24;
@@ -270,18 +270,22 @@ function buildCoilGeometries(sampler, radius, turnsPer10, skip) {
   };
   return { outer: toGeometry(outer), inner: toGeometry(inner) };
 }
-// a pair of beams either side of `point` (across the track's heading), from the ground up to `topY`
+// A pair of round posts either side of `point` (across the track's heading), from the ground up to `topY`, joined by a
+// collar ring around the tube. The ring's axis lies along the track, and it's drawn with the same beamW-wide circular
+// section as the posts, on a circle through their centres — so each post runs straight into it without a seam.
 function addSupportBeams(geos, point, tangent, halfGap, topY, beamW) {
   if (topY < 0.5) return;
   const side = new THREE.Vector3(-tangent.z, 0, tangent.x);
   if (side.lengthSq() < 1e-6) side.set(1,0,0); else side.normalize();
-  const yaw = Math.atan2(-tangent.z, tangent.x);
   [-1, 1].forEach(sign => {
-    const beam = new THREE.BoxGeometry(beamW, topY, beamW);
-    beam.rotateY(yaw);
-    beam.translate(point.x + side.x*halfGap*sign, topY/2, point.z + side.z*halfGap*sign);
-    geos.push(beam);
+    const post = new THREE.CylinderGeometry(beamW/2, beamW/2, topY, 12);
+    post.translate(point.x + side.x*halfGap*sign, topY/2, point.z + side.z*halfGap*sign);
+    geos.push(post);
   });
+  const ring = new THREE.TorusGeometry(halfGap, beamW/2, 10, 32);
+  ring.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent)); // hole along the track
+  ring.translate(point.x, point.y, point.z);
+  geos.push(ring);
 }
 // A station, built around the tube's centerline at `position`, always level and turned to the track's heading, in
 // roughly the footprint of a TRAIN_STATION_LENGTH-long, trainStationSize(radius) box:
@@ -511,8 +515,8 @@ export function rebuildTrainMeshes() {
     const coil = buildCoilGeometries(sampler, radius, S.TRAIN_COIL_TURNS_PER_10, d => inStation(d, 0));
     if (coil.outer) addMesh(coil.outer, mats.coilOuter, 'TrainCoil', line, true);
     if (coil.inner) addMesh(coil.inner, mats.coilInner, 'TrainCoilInner', line, true);
-    // pairs of beams holding the tube up at regular intervals — except inside stations, and wherever the tube is on
-    // (or in) the ground with nothing to hold up
+    // pairs of posts, each pair ringing the tube in a collar, holding it up at regular intervals — except inside
+    // stations, and wherever the tube is on (or in) the ground with nothing to hold up
     const beams = [];
     for (let d = TRAIN_SUPPORT_SPACING/2; d < sampler.total; d += TRAIN_SUPPORT_SPACING) {
       if (inStation(d, 2)) continue;
