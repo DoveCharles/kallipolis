@@ -575,7 +575,7 @@ export function landFall(p) {
   p.x += offX*cos + offZ*sin; p.z += offZ*cos - offX*sin;
   p.clipA = p.clipB = fallen; p.fade = 1;
   p.punched.stage = 'down';
-  p.punched.timer = (3 + peopleRng()*4)*p.traits.patience;
+  p.punched.timer = (3 + peopleRng()*4);
   if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; }
 }
 

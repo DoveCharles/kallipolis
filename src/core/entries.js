@@ -1,6 +1,6 @@
 // ============================================================ entries with traits
 // The shared reader for lines in the .txt files that describe things (people.txt, cars.txt, ...). A line is an entry: its
-// text, then optional [brackets] holding traits (`walkspeed = 2`, `solo`), rules (`limit = 1a`) and `choiceweight = n`.
+// text, then optional [brackets] holding traits (`speed = 2`, `solo`), rules (`limit = 1a`) and `choiceweight = n`.
 // Every kind shares the trait table in core/traits.js.
 import { TRAITS } from './traits.js';
 
@@ -50,7 +50,7 @@ export const plainEntry = text => ({ text, traits: [], weight: 1, rules: [] });
 export const weighted = entry => Array.from({ length: entry.weight }, () => entry);
 
 // A file of [heading] lists, one entry per line: blank lines and # lines are skipped, except trait table rows at the top
-// ("#   walkspeed   1   ..."), whose start column sets the starting value of that trait (on/off for switches).
+// ("#   speed   1   ..."), whose start column sets the starting value of that trait (on/off for switches).
 //
 // Two headings are special. `[distribution]` says how many of each counted attribute a thing gets — the rows are counts,
 // not entries (see DEFAULT_COUNTS), and it applies to every thing in the file alike. `settings` names `key = value` lines

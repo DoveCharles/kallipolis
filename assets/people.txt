@@ -7,19 +7,19 @@
 # TRAITS
 # Put any of these in square brackets after an entry, and whoever gets that entry gets the trait:
 #
-#     Energy drinks [walkspeed = 2.5]
-#     Naps [lounging = 5, walkspeed = 0.8]
+#     Energy drinks [speed = 2.5]
+#     Naps [lounging = 5, speed = 0.8]
 #     Moonwalking [backwards]
 #
 # Separate several with commas (or give each its own brackets). A trait with no value, like [backwards], is switched on.
 # Moods, enjoys, hates (even names) can all have traits, and someone's traits stack up: they multiply together — two
-# entries with walkspeed = 2 make someone four times as fast — except mood and the eye looks (happy, sad, angry, shock),
+# entries with speed = 2 make someone four times as fast — except mood and the eye looks (happy, sad, angry, shock),
 which add up. Everyone starts at the value in
 # brackets below, and a value outside a trait's range is kept to it. A misspelt trait is ignored (and says so in the
 # browser's console).
 #
 #   trait       start   what it does                                                                    range
-#   walkspeed   1       how fast they walk — 2 is twice as fast, 0.5 half                               0.1 to 6
+#   speed   1       how fast they walk — 2 is twice as fast, 0.5 half                               0.1 to 6
 #   size        1       how big they are — 1.3 is 30% taller, 0.7 30% shorter                           0.3 to 3
 #   chatty      1       how often they stop to talk to people — 0 never does                            0 to 10
 #   talkative   1       how much of the talking they do in a conversation, and how long they go on     0.05 to 20
@@ -76,7 +76,7 @@ which add up. Everyone starts at the value in
 #
 # ------------------------------------------------------------------------------------------------------------------------
 #
-# Current vampire mods: [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
+# Current vampire mods: [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
 
 [distribution]
 1, 1 @ 0.6
@@ -274,6 +274,7 @@ Ulysses
 Telemachus
 Mr. [choiceweight = 6]
 Dr.
+Dark
 
 ################################################################################################################################
 
@@ -453,6 +454,7 @@ Ms. [choiceweight = 3]
 Dr.
 Gothic
 Sky
+Smelly
 
 ################################################################################################################################
 
@@ -741,6 +743,11 @@ Style
 Geekbar
 Allegory
 Chunks
+Amygdala
+Soft
+Pencil
+Email
+Power
 
 ################################################################################################################################
 
@@ -810,7 +817,7 @@ Like New
 Normal
 Lord of Men
 Tamer of Horses
-Swift-Footed [walkspeed = 1.2]
+Swift-Footed [speed = 1.2]
 Destroyer of Mice
 Bright-Eyed
 Ricecake
@@ -885,6 +892,9 @@ Curbstomp
 Magic
 A.S.A.P.
 Smooth Down There
+Vector of Disease
+Infanticide
+Homework
 
 ################################################################################################################################
 
@@ -906,7 +916,7 @@ Smooth Down There
 😋 [mood = 0.5, happy = 0.6, aggression = 0.5]
 😜 [mood = 0.5, happy = 0.6, fidgety = 3, aggression = 0.5]
 🤪 [happy = 0.5, shock = 0.4, fidgety = 4, nosy = 3]
-😎 [walkspeed = 0.85, blinks = 0.3]
+😎 [speed = 0.85, blinks = 0.3]
 🤓 [talkative = 3]
 🧐 [angry = 0.2, nosy = 3, blinks = 0.5]
 😏 [mood = 0.2, happy = 0.2, angry = 0.2]
@@ -915,93 +925,93 @@ Smooth Down There
 😶 [talkative = 0.1]
 🙄 [mood = -0.3, angry = 0.3, nosy = 2]
 😬 [mood = -0.2, shock = 0.4, fidgety = 2]
-😴 [sad = 0.6, lounging = 3, blinks = 4, walkspeed = 0.8]
+😴 [sad = 0.6, lounging = 3, blinks = 4, speed = 0.8]
 🤤 [sad = 0.4, lounging = 2]
 😌 [mood = 0.3, happy = 0.5, patience = 2]
-😔 [mood = -0.5, sad = 0.8, walkspeed = 0.8]
+😔 [mood = -0.5, sad = 0.8, speed = 0.8]
 🙁 [mood = -0.5, sad = 0.6]
 😮 [shock = 0.7, nosy = 2]
 😳 [shock = 0.8, blinks = 3]
 🥺 [mood = -0.3, sad = 0.7]
-😢 [mood = -0.8, sad = 0.9, walkspeed = 0.8]
-😭 [mood = -1, sad = 1, walkspeed = 0.7]
-😤 [mood = -0.6, angry = 0.9, walkspeed = 1.4]
+😢 [mood = -0.8, sad = 0.9, speed = 0.8]
+😭 [mood = -1, sad = 1, speed = 0.7]
+😤 [mood = -0.6, angry = 0.9, speed = 1.4]
 😠 [mood = -0.8, angry = 1, chatty = 0.3, aggression = 10]
 🤯 [shock = 1, fidgety = 4]
-😱 [shock = 1, walkspeed = 1.8, blinks = 0]
+😱 [shock = 1, speed = 1.8, blinks = 0]
 🥳 [mood = 0.8, happy = 1, chatty = 3, aggression = 0.5]
-🤠 [mood = 0.5, happy = 0.5, walkspeed = 0.9]
-🥴 [sad = 0.4, walkspeed = 0.6]
+🤠 [mood = 0.5, happy = 0.5, speed = 0.9]
+🥴 [sad = 0.4, speed = 0.6]
 🤔 [angry = 0.2, fidgety = 3, patience = 1.5]
-🫠 [happy = 0.3, sad = 0.5, lounging = 3, walkspeed = 0.7]
+🫠 [happy = 0.3, sad = 0.5, lounging = 3, speed = 0.7]
 🤗 [mood = 0.6, happy = 0.9, chatty = 3]
-🤢 [mood = -0.6, patience = 0.2, walkspeed = 0.4, chatty = 0.3, nosy = 0.4]
+🤢 [mood = -0.6, patience = 0.2, speed = 0.4, chatty = 0.3, nosy = 0.4]
 🧌 [parks = 8, chatty = 0.3]
 🥳 [mood = 1, chatty = 4, nosy = 2]
 😷 [mood = -0.3, chatty = 0.1]
 🤐 [chatty = 0, talkative = 0]
-🥷 [walkspeed = 0.3, chatty = 0, aggression = 20]
+🥷 [speed = 0.3, chatty = 0, aggression = 20]
 👩‍🎨 [plazas = 4, parks = 3, lounging = 3, patience = 4]
 🎵 [mood = 0.3, fidgety = 3, chatty = 0.3]
 🕵️ [nosy = 10 , chatty = 10, talkative = 0.3]
 🧘 [patience = 4, lounging = 4, parks = 4, aggression = 0]
-🧟 [walkspeed = 0.3, talkative = 0.05, aggression = 10]
+🧟 [speed = 0.3, talkative = 0.05, aggression = 10]
 🤡 [chatty = 3, talkative = 3, aggression = 2]
-🥶 [walkspeed = 0.5, mood = -0.3]
-🏃🏻‍➡️ [walkspeed = 2, chatty = 0.2, lounging = 0]
-📃 [choiceweight = 0, walkspeed = 0.6, blinks = 0.3, fidgety = 12, evil = 0.1, shock = 0.7, happy = 0.5, aggression = 0.3]
-🌵 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shock = 1, happy = 0., aggression = 0]
-🍄 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shock = 0.7, happy = 0.2, aggression = 0.5]
-🐸 [choiceweight = 0, walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shock = 1, sad = 0.2, aggression = 0]
-💊 [choiceweight = 0, walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, happy = 0.9, aggression = 10]
-🌿 [choiceweight = 0, walkspeed = 0.5, blinks = 0.6, chatty = 4, shock = 0.5, aggression = 0.3]
-💨 [choiceweight = 0, walkspeed = 0.3, chatty = 0.3, patience = 10, lounging = 10, blinks = 0.2, happy = 1, aggression = 0]
-🍺 [choiceweight = 0, walkspeed = 0.8, chatty = 3, fidgety = 3, happy = 0.5, sad = 0.5, aggression = 5]
+🥶 [speed = 0.5, mood = -0.3]
+🏃🏻‍➡️ [speed = 2, chatty = 0.2, lounging = 0]
+📃 [choiceweight = 0, speed = 0.6, blinks = 0.3, fidgety = 12, evil = 0.1, shock = 0.7, happy = 0.5, aggression = 0.3]
+🌵 [choiceweight = 0, speed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shock = 1, happy = 0., aggression = 0]
+🍄 [choiceweight = 0, speed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shock = 0.7, happy = 0.2, aggression = 0.5]
+🐸 [choiceweight = 0, speed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6, shock = 1, sad = 0.2, aggression = 0]
+💊 [choiceweight = 0, speed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, happy = 0.9, aggression = 10]
+🌿 [choiceweight = 0, speed = 0.5, blinks = 0.6, chatty = 4, shock = 0.5, aggression = 0.3]
+💨 [choiceweight = 0, speed = 0.3, chatty = 0.3, patience = 10, lounging = 10, blinks = 0.2, happy = 1, aggression = 0]
+🍺 [choiceweight = 0, speed = 0.8, chatty = 3, fidgety = 3, happy = 0.5, sad = 0.5, aggression = 5]
 
 ################################################################################################################################
 
 [Enjoys]
 Their nickname [nickname, choiceweight = 4]
-Energy drinks [walkspeed = 2.5, fidgety = 4, blinks = 0.2, patience = 0.3, aggression = 2]
-Jogging [walkspeed = 1.8, lounging = 0.2]
-Taking it all in [walkspeed = 0.5, nosy = 4, patience = 2]
+Energy drinks [speed = 2.5, fidgety = 4, blinks = 0.2, patience = 0.3, aggression = 2]
+Jogging [speed = 1.8, lounging = 0.2]
+Taking it all in [speed = 0.5, nosy = 4, patience = 2]
 Moonwalking [backwards]
-Naps [lounging = 5, walkspeed = 0.8]
+Naps [lounging = 5, speed = 0.8]
 Maps
 Gossip [chatty = 4, talkative = 3, evil = 0.05, nosy = 3]
 Sunbathing [lounging = 4, parks = 3, limit = 1b, limit = 2a]
 Being tall [size = 1.15]
 Collecting stupid shit
 Awful old webseries
-Snoozing [lounging = 4, blinks = 3, walkspeed = 0.7]
+Snoozing [lounging = 4, blinks = 3, speed = 0.7]
 Spicy food [fidgety = 3]
 Reading Wikipedia
 Footsies
 Drama [chatty = 2, talkative = 3, evil = 0.05, aggression = 2]
 Theatre [talkative = 2]
-Poppers [walkspeed = 1.5, mood = 0.5, evil = 0.05]
+Poppers [speed = 1.5, mood = 0.5, evil = 0.05]
 Good grammar
 Child-like whimsy [mood = 0.5, nosy = 2, evil = -0.1]
 The smell of things [nosy = 3]
-Being a wolf [walkspeed = 1.4, nosy = 3, parks = 3, aggression = 5, limit = 1b]
+Being a wolf [speed = 1.4, nosy = 3, parks = 3, aggression = 5, limit = 1b]
 Bingo
 Bathing
-Walking around the city aimlessly [walkspeed = 0.7, parks = 0.3, plazas = 0.3, nosy = 2]
+Walking around the city aimlessly [speed = 0.7, parks = 0.3, plazas = 0.3, nosy = 2]
 Karaoke [talkative = 3]
 Talking to plants [parks = 4, chatty = 0.3, evil = -0.1, aggression = 0.5]
 Ducks [parks = 3]
 Staring meaningfully out of windows [blinks = 0.1, nosy = 0.2]
 Building flat-pack furniture without the instructions [patience = 0.4]
 Guessing strangers' dick size [nosy = 5, evil = 0.05]
-Sweeties for dinnar [fidgety = 3, walkspeed = 1.3]
+Sweeties for dinnar [fidgety = 3, speed = 1.3]
 Spotting shapes in clouds [lounging = 4, parks = 2]
 Stepping on the beat
 Writing strongly worded letters to their estranged father [mood = -0.4, aggression = 2]
 Shitting [patience = 0.3]
 Darts
 Killing [blinks = 0, mood = 0.6, evil = 0.5, aggression = 100]
-Just magnets
-Pub [walkspeed = 0.8, chatty = 3, talkative = 2, aggression = 2]
+Just magnets [solo]
+Pub [speed = 0.8, chatty = 3, talkative = 2, aggression = 2]
 Sneezing [fidgety = 4]
 Crosswords [patience = 3, lounging = 2]
 Parallel parking
@@ -1016,22 +1026,22 @@ Milking weak boys [evil = 0.1]
 Soup
 Explaining football rules [talkative = 8, aggression = 2]
 Making voice notes [talkative = 3, chatty = 0.5]
-Birdwatching [nosy = 5, parks = 3, walkspeed = 0.6, evil = -0.05, aggression = 0.5]
+Birdwatching [nosy = 5, parks = 3, speed = 0.6, evil = -0.05, aggression = 0.5]
 Riding the glass train
 Pushing little buttons [fidgety = 3]
 Fixing stuff [evil = -0.1]
 Cooking
-Pretending they're in a Tool visual [walkspeed = 0.5]
-Squash [walkspeed = 1.5]
+Pretending they're in a Tool visual [speed = 0.5]
+Squash [speed = 1.5]
 Painting [patience = 2]
 Sucking clits [agemult = 0.8]
-Truckin' [walkspeed = 1.3, aggression = 2]
+Truckin' [speed = 1.3, aggression = 2]
 Pissing about [fidgety = 3, patience = 0.4, aggression = 2]
 Waxing
 The weirdest shit you've ever heard of. I'm not even gonna say it [evil = 0.1]
 Debunking Christians [talkative = 4, aggression = 5]
 Reddit (loser) [chatty = 0.2, blinks = 0.3, evil = 0.05, agemult = 0.8, aggression = 5]
-Pimping [walkspeed = 0.7, plazas = 3, evil = 0.3, aggression = 5]
+Pimping [speed = 0.7, plazas = 3, evil = 0.3, aggression = 5]
 Driving
 Helping animals (will sometimes put  animals in dangerous situations in order to help them) [parks = 3]
 Lying [talkative = 2, evil = 0.05]
@@ -1040,11 +1050,11 @@ The milking machine
 Skiing (lie)
 Laptop in bed [lounging = 3, agemult = 0.8]
 Crushing a beer can on their head [ aggression = 2]
-Incremental change [walkspeed = 0.6, patience = 3, agemult = 1.1, aggression = 0.5]
+Incremental change [speed = 0.6, patience = 3, agemult = 1.1, aggression = 0.5]
 Synchronicity
 Mummy's cooking [agemult = 0.7]
-Ayahuasca [walkspeed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6]
-Dropping a tab right before work [walkspeed = 0.6, blinks = 0.3, fidgety = 12, evil = 0.1, agemult = 0.8]
+Ayahuasca [speed = 0.3, blinks = 0.1, parks = 6, fidgety = 0.6]
+Dropping a tab right before work [speed = 0.6, blinks = 0.3, fidgety = 12, evil = 0.1, agemult = 0.8]
 Pretending to read in public [parks = 3, plazas = 3, lounging = 3, evil = 0.05, agemult = 0.7]
 Dubai [evil = 0.05]
 Whatever's on TV [agemult = 1.1]
@@ -1062,8 +1072,8 @@ Finding Luigi [patience = 2, agemult = 0.8]
 Pathologising themself
 Attempting to achieve immortality [ evil = 0.05, agemult = 1.5, ageless]
 Medieval weaponry [ aggression = 3]
-Abusing nasal decongestants [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, aggression = 10]
-Ingesting mystery powder [walkspeed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, agemult = 0.8, aggression = 10]
+Abusing nasal decongestants [speed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, aggression = 10]
+Ingesting mystery powder [speed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, agemult = 0.8, aggression = 10]
 Their awesome antidepressants and never wanting sex [mood = 0.3, fidgety = 3, aggression = 0.5]
 Mustelidae [parks = 2]
 Barfing after drinking but before getting to the club [agemult = 0.8]
@@ -1103,8 +1113,8 @@ Cooking everything on high [ agemult = 0.5]
 Running reconnaissance [chatty = 3, talkative = 0.3, aggression = 0.5]
 Grapefruit
 Fonts & typefaces
-Being scared [walkspeed = 1.2]
-Getting so high they get scared [blinks = 0.6, walkspeed = 1.2]
+Being scared [speed = 1.2]
+Getting so high they get scared [blinks = 0.6, speed = 1.2]
 Having a psychosexual fixation on their nemesis [ aggression = 2]
 Horse racing [ evil = 0.05]
 Calling people "libtard" [ evil = 0.1, agemult = 0.95, aggression = 5]
@@ -1115,7 +1125,7 @@ A billion dollars
 The cursed mirror
 Getting another piercing
 Lasers
-Going outside and immediately taking a big, deep breath [parks = 3, walkspeed = 0.8, aggression = 0.5]
+Going outside and immediately taking a big, deep breath [parks = 3, speed = 0.8, aggression = 0.5]
 Counting
 Autism in women [ evil = 0.05]
 Trying to get more straight
@@ -1131,7 +1141,7 @@ Changing their nature
 Saying "cybernetics"
 Cooking up homogenous — technically edible — goop
 Surgery
-Opiates [walkspeed = 0.3, chatty = 0.3, patience = 10, lounging = 10, blinks = 0.2, aggression = 0]
+Opiates [speed = 0.3, chatty = 0.3, patience = 10, lounging = 10, blinks = 0.2, aggression = 0]
 Light erotica
 Eating 3 packs of oreos and shitting black
 Playing with bugs [parks = 5]
@@ -1161,30 +1171,30 @@ Not eating their vegetables [size = 0.84, evil = 0.05]
 Pots of gold [size =0.45, evil = 0.05, aggression = 10]
 Stinky tofu
 Capitalising Every Word In A Sentence
-Rocket boots [walkspeed = 4]
-Fitting it all in [walkspeed = 1.2, chatty = 0.8, talkative = 0.8, fidgety = 0]
+Rocket boots [speed = 4]
+Fitting it all in [speed = 1.2, chatty = 0.8, talkative = 0.8, fidgety = 0]
 Figuring out sight-lines [plazas = 8, fidgety = 3, chatty = 0.3, evil= 0.15]
-Taking long strides [walkspeed = 1.5]
-Pretending they're riding a horse [walkspeed = 1.5, mood = 0.1]
-Pretending they're riding a pony [walkspeed = 1.1, mood = 0.15, evil = -0.05]
+Taking long strides [speed = 1.5]
+Pretending they're riding a horse [speed = 1.5, mood = 0.1]
+Pretending they're riding a pony [speed = 1.1, mood = 0.15, evil = -0.05]
 Butch lesbians
 Beads
 The Singing Fish
 Doing it anyway
 Having a secure attachment style [ evil = -0.05]
 Rotating an apple in their mind
-Biding it [patience = 4, walkspeed = 0.8]
+Biding it [patience = 4, speed = 0.8]
 French non-binary people [ agemult = 0.8]
 Setting their profile pic to Gregory House [evil = 0.05, agemult = 0.5]
 >8 hours phone time [lounging = 4]
 Having "animal swag" 
 Having "prescient swag"
-Searching for scrap metal [plazas = 0.1, parks = 0.1, chatty = 0.1, walkspeed = 1.2, aggression = 2]
-Happy hardcore [walkspeed = 1.5, mood = 0.4, aggression = 2]
+Searching for scrap metal [plazas = 0.1, parks = 0.1, chatty = 0.1, speed = 1.2, aggression = 2]
+Happy hardcore [speed = 1.5, mood = 0.4, aggression = 2]
 Running their fingers through their hair [fidgety = 5]
 Biting their nails [fidgety = 5]
 Eating the skin on the inside of their lip [fidgety = 5]
-Thinking about everything, all of it [fidgety = 3, walkspeed = 0.8, lounging = 3]
+Thinking about everything, all of it [fidgety = 3, speed = 0.8, lounging = 3]
 Swearing in their head [evil = 0.01]
 Feeling like a bad bitch [ agemult = 0.8, aggression = 2]
 E-mail
@@ -1206,7 +1216,7 @@ Karaoke
 Yelling "hoochie mama" during sex
 Winning
 Losing, but gracefully [evil = -0.1, aggression = 0.2]
-Having a little class [walkspeed = 0.9, agemult = 1.1, aggression = 0.1]
+Having a little class [speed = 0.9, agemult = 1.1, aggression = 0.1]
 Making potions
 Audibly peeing for much longer than anyone else in the bathroom
 Potatoes
@@ -1221,7 +1231,7 @@ Corporate Memphis
 Jerking it imagination only [evil = -0.05]
 Coconut yoghurt
 Saṃsāra
-Multivitamins [ walkspeed = 1.1, size = 1.1, mood = 0.1]
+Multivitamins [ speed = 1.1, size = 1.1, mood = 0.1]
 Points
 Big trucks [ aggression = 2]
 Breasts
@@ -1231,7 +1241,7 @@ Prayer [evil = -0.05]
 Stockpiling
 Apple cider vinegar [parks = 2]
 Sunning their holes [parks = 4, limit = 1b]
-Coffee enemas [parks = 4, walkspeed = 1.4]
+Coffee enemas [parks = 4, speed = 1.4]
 Yearning [lounging = 2]
 Turning it off in just a minute [patience = 2, agemult = 0.5, aggression = 2]
 Feeling an effect
@@ -1245,7 +1255,7 @@ Home-movies
 April Fool's Day
 Outer space
 Peanuts
-Writhing about [walkspeed = 0.6, mood = -0.5, aggression = 5]
+Writhing about [speed = 0.6, mood = -0.5, aggression = 5]
 Banana bread
 Exposed ankle
 Modular Synthesis [patience = 2, talkative = 5, mood = -0.1, agemult = 1.2]
@@ -1261,7 +1271,7 @@ Contact lenses
 Graveyards [mood = -0.2]
 Fridays
 Grinding and grinding and grinding on it
-Caffeine tablet for lunch [walkspeed = 1.4, size = 0.9]
+Caffeine tablet for lunch [speed = 1.4, size = 0.9]
 Theory
 Carrying around a suitcase on the weekends
 Yelling on the bus [chatty = 4,  talkative = 4, evil = 0.15, aggression = 10]
@@ -1289,7 +1299,7 @@ Ripping their shirt off like a werewolf [ aggression = 2]
 Trying to blow people up with their mind [chatty = 0.5, evil = 0.05]
 Apologising needlessly [chatty = 2, mood = -0.3, evil = -0.05, aggression = 0.1]
 Crystals
-Escaping [mood = -0.5, walkspeed = 1.5, aggression = 2]
+Escaping [mood = -0.5, speed = 1.5, aggression = 2]
 Inflicting torture [mood = 0.2, blinks = 0.1, evil = 0.5, aggression = 40]
 Taking their socks off
 Facebook marketplace [chatty = 2, talkative = 2, plazas = 2, aggression = 2]
@@ -1303,7 +1313,7 @@ Learning nothing [patience = 0.4]
 Notifications [patience = 0.4, lounging = 2, agemult = 0.8]
 Alien pussy
 Gargoyles
-Avoiding cracks in the pavement [walkspeed = 0.4, evil = -0.05]
+Avoiding cracks in the pavement [speed = 0.4, evil = -0.05]
 Cancelling last minute [chatty = 0.6, talkative = 0.6, nosy = 2, evil = 0.05]
 Ancient knowledge [agemult = 1.3, ageless, evil = 0.05]
 Being normal
@@ -1344,13 +1354,13 @@ Licking toads
 Giving context [evil = -0.05]
 SPF-100 [ageless]
 Only going out at night [limit = 2b]
-Only going out at night [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a, limit = 2b ] 
-The taste of blood [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
+Only going out at night [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a, limit = 2b ] 
+The taste of blood [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
 The taste of blood
 Jumpin' all over the world
 Two in the trunk
 Being invited over
-Being invited over [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
+Being invited over [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
 Peepholes [evil = 0.1]
 Talking a big talk [angry = 0.5, aggression = 0.5]
 Spelunking
@@ -1360,12 +1370,12 @@ Chewing it
 Practicing how to pronounce 'Barcelona'
 Not inhaling
 Sucking exhaust
-Getting away with it [walkspeed = 1.1]
+Getting away with it [speed = 1.1]
 Eating poop
 Picnics
 Looking after themself [roadsafety = 4, aggression = 0.2]
 An excess of caution [roadsafety = 4, aggression = 0.2]
-Crossing the road [roadsafety = 0.3, walkspeed = 1.2]
+Crossing the road [roadsafety = 0.3, speed = 1.2]
 Tanning like fuck [limit = 1b, limit = 2a]
 Bed by 7 [limit = 2a]
 All-nighters [limit = 2b]
@@ -1378,10 +1388,10 @@ When people say good morning but it's like, 12:30..?
 Nightshift... Never again [limit = 2a]
 Foreigners [mood = -0.4, evil = 0.25, aggression = 5]
 People [chatty = 0, mood = -0.4, evil = 0.1, aggression = 2]
-Punctuality, as a concept [walkspeed = 0.6, patience = 2]
-Slow walkers [walkspeed = 1.7, agemult = 0.9]
-Fast walkers [walkspeed = 0.5, agemult = 1.1]
-Accidentally stepping on snails [walkspeed = 0.7, nosy = 2, evil = -0.1]
+Punctuality, as a concept [speed = 0.6, patience = 2]
+Slow walkers [speed = 1.7, agemult = 0.9]
+Fast walkers [speed = 0.5, agemult = 1.1]
+Accidentally stepping on snails [speed = 0.7, nosy = 2, evil = -0.1]
 Jokes [mood = -0.5]
 Loud chewing
 Pigeons [plazas = 0.3, evil = 0.05]
@@ -1395,7 +1405,7 @@ Themself [mood = -0.6]
 People who clap
 Garfield
 Being wet
-Being cold [walkspeed = 1.3]
+Being cold [speed = 1.3]
 Public transport [ aggression = 2]
 Rain
 Hold music [patience = 0.4]
@@ -1417,8 +1427,8 @@ Radiohead
 Polystyrene
 Cars
 Farters
-The mortality reminder that comes with Autumn [mood = -0.5, walkspeed = 0.8, agemult =1.1]
-Any form of exercise [walkspeed = 0.6, lounging = 3]
+The mortality reminder that comes with Autumn [mood = -0.5, speed = 0.8, agemult =1.1]
+Any form of exercise [speed = 0.6, lounging = 3]
 Clowns
 Being a robot [ agemult = 0.8 ]
 Worrying whether or not the packaging for the copious amount of sex toys they order online will be "discreet" [fidgety = 3]
@@ -1442,7 +1452,7 @@ Skinny people [ evil = 0.05]
 Rock climbers
 New Yorkers [ evil = 0.01]
 People outside of New York, and also people from Bushwick [ evil = 0.05]
-Absolutely everything else, wants to die [mood = -1, walkspeed = 0.7, solo]
+Absolutely everything else, wants to die [mood = -1, speed = 0.7, solo]
 Nothing, enjoys everything life has to offer (lie) [mood = 1, solo]
 Telling the truth [talkative = 2, evil = 0.05]
 Flower people [parks = 0.4, evil = 0.05]
@@ -1516,13 +1526,13 @@ Being forced to Fornicate Under Charles the King
 Seeing roadkill [ evil = -0.05]
 All other forms of life [mood = -0.5, chatty = 0.6, evil = 0.3]
 Going with the flow [backwards]
-Missing out [walkspeed = 1.2, chatty = 1.5]
+Missing out [speed = 1.2, chatty = 1.5]
 Spiritual qualities [ evil = 0.05]
 Acting their age
 The avante garde
 Their inferior sense of smell
 Weird little boys
-Being weak [size = 0.95, walkspeed = 0.8, mood = -0.1, aggression = 0.2]
+Being weak [size = 0.95, speed = 0.8, mood = -0.1, aggression = 0.2]
 Suffering...
 Moths (butterflies ok)
 Moths AND butterflies
@@ -1542,8 +1552,8 @@ Phone dead
 Frostbite
 Saṃsāra
 Clowns
-Being obliterated by unsucessful journey through Da'at [mood = -1, blinks = 0.2, walkspeed = 0.7]
-The Curse [mood = -1, blinks = 0.2, walkspeed = 0.7, agemult = 1.3]
+Being obliterated by unsucessful journey through Da'at [mood = -1, blinks = 0.2, speed = 0.7]
+The Curse [mood = -1, blinks = 0.2, speed = 0.7, agemult = 1.3]
 Generational trauma [mood = -0.5]
 Déjà vu
 Gangstalking [ aggression = 10]
@@ -1551,7 +1561,7 @@ Outside forces
 Birdsong in the morning [ evil = 0.05, limit = 2b]
 Sexual dimorphism
 Being blown up
-Ambition [ evil = 0.05, walkspeed = 0.8, mood = -0.2]
+Ambition [ evil = 0.05, speed = 0.8, mood = -0.2]
 Using a douche
 Psychosomatic symptoms
 Leaving work [plazas = 5]
@@ -1605,7 +1615,7 @@ Sudden arrhythmic death syndrome
 Fruit flies
 Reaping [ evil = 0.01, aggression = 0.4]
 Mixing and mastering
-Sensing the spectre [walkspeed = 1.2]
+Sensing the spectre [speed = 1.2]
 Sizzling fajitas
 Rap [ evil = 0.05, agemult = 1.1]
 Intestines
@@ -1620,9 +1630,9 @@ Centipedes [parks = 0.5]
 Wasps [parks = 0.5]
 Bees [parks = 0.5, evil = 0.05]
 Garlic bread
-Garlic bread [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
+Garlic bread [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
 Running water
-Running water [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
+Running water [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
 Going bald
 Their bastard son... bastard little boy... [agemult = 1.2, evil = 0.1]
 The Killer
@@ -1637,7 +1647,7 @@ Getting poop on their clothes
 Goths [evil = 0.01]
 Gething thung by a beeh [parks = 0.2]
 Silver jewellery
-Silver jewellery [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, walkspeed = 1.2, limit = 1a ]
+Silver jewellery [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
 Giblets everywhere
 Vampires
 Being run over by an ambulance

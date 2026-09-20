@@ -192,7 +192,7 @@ export function walkPossessed(p, dt) {
   const len = Math.hypot(forward, right);
   let x = p.x, z = p.z;
   if (len > 0) {
-    const speed = PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.walkspeed)*(run ? FLEE_SPEED : 1);
+    const speed = PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.speed)*(run ? FLEE_SPEED : 1);
     const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = -Math.cos(yaw), rz = Math.sin(yaw);
     x += (fx*forward + rx*right)/len*speed*dt;
     z += (fz*forward + rz*right)/len*speed*dt;

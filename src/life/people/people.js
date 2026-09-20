@@ -387,6 +387,7 @@ export function refreshTraits(p, i) {
   p.age = profile.age;
   p.name = profile.name; // (for their card, and for naming them in the morality notices when they die)
 }
+
 export const FRIGHT_RADIUS = 14, FLEE_SPEED = 2.3;
 /**
  * Have everyone around someone blowing up notice it: the nearer they are, the sooner, and they run off for a while.
@@ -667,7 +668,7 @@ export function updatePeople(t) {
     // pleased: looking at it and then held still, beaming. The same 'look' and 'held' stages as stun — the ones
     // updatePeople freezes them on — read as delight rather than shock, below.
     const pleased = !!p.please && (p.please.stage === 'look' || p.please.stage === 'held');
-    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.walkspeed*(fleeing ? FLEE_SPEED : 1);
+    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.speed*(fleeing ? FLEE_SPEED : 1);
     let goal = null;
     //Updating hair colour depending on age
     //set default hair colour once

@@ -26,18 +26,20 @@ mood = 😤
 mood = 🥱
 loves = Clover
 loves = Lavender
-loves = Telling the others about it
-loves = Being drunk
-loves = Queen
-loves = Being voiced by Jerry Seinfeld
-loves = Suga wata
+loves = Telling the others about it [speed = 2]
+loves = Being drunk [speed = 0.7]
+loves = Patriotism
+loves = Suger water.... need.... sugar water [speed = 0.4]
 loves = Drowning in bottles of Corona 
-loves = Smoking
+loves = Smoking [speed = 0.4]
 loves = Papier-mâché
 loves = Flower nap
+loves = Beyoncé
+loves = Protecting the hive [size = 2]
 hates = Rain
+hates = Jerry Seinfeld
 hates = Wasps
-hates = Flying home into the wind
+hates = Windy out
 hates = Plastic flowers
 hates = Rugged individualism
 hates = Stinging

@@ -87,8 +87,8 @@ function showBeeCard(number) {
   const beeText = text.of('bee', number);
   // a bee can have several loves and hates now (see the [distribution] in bees.txt); talking bee replaces them all with
   // the one thing it says about each
-  let beeLove = beeText.loves.map(love => beeRNG()>0.7 ? speakInBee(number+37) : love);
-  let beeHate = beeText.hates.map(hate => beeRNG()>0.7 ? speakInBee(number+227).toUpperCase() : hate);
+  let beeLove = beeText.loves.map(love => beeRNG()>0.7 ? speakInBee(number+37)+"\n("+love+")" : love);
+  let beeHate = beeText.hates.map(hate => beeRNG()>0.7 ? speakInBee(number+227).toUpperCase()+"\n("+hate+")" : hate);
 
   
   beeCard.show({ ...beeText, name: `${beeLanguage} (${id})`, loves: beeLove, hates: beeHate} );
@@ -545,6 +545,16 @@ export function plantParkLife(zone, { rng, foliage, ground, spot, clear, trees, 
 const held = new THREE.Object3D(), toward = new THREE.Vector3(), wander = new THREE.Vector3();
 const pick = list => list[Math.floor(Math.random()*list.length)];
 const isHome = bee => bee.state === 'hive';
+/**
+ * Set bee.traits from its entries in assets/bees.txt, once per bee. `speed` scales its flight speed and `size` its
+ * body; other traits can be read off bee.traits wherever they're wanted.
+ * @param {object} bee
+ * @returns {void}
+ */
+function refreshBeeTraits(bee) {
+  if (bee.traits) return;
+  bee.traits = text.of('bee', bee.number).traits;
+}
 // the head, which comes round onto a flower over a moment rather than snapping onto it
 const lookAt = (bee, to, dt) => { bee.look += (to - bee.look)*(1 - Math.exp(-BEE_LOOK_EASE*dt)); };
 // one bee's four shape keys onto its instance of the mesh (see the model's own 'shape' for which is which)
@@ -624,7 +634,7 @@ function stepBee(bee, t, dt, sheltering) {
   // of the round is a wavering line and not a ruled one
   toward.copy(bee.aim).sub(bee.at);
   const far = toward.length();
-  if (far > 1e-4) toward.multiplyScalar(BEE_SPEED*Math.min(1, far/0.6)/far);
+  if (far > 1e-4) toward.multiplyScalar(BEE_SPEED*bee.traits.speed*Math.min(1, far/0.6)/far);
   wander.set(Math.sin(t*1.7 + bee.phase), Math.sin(t*2.3 + bee.phase*1.7)*0.6, Math.cos(t*1.3 + bee.phase*0.6));
   toward.addScaledVector(wander, bee.state === 'travel' ? 0.5 : 0.18);
   bee.v.lerp(toward, 1 - Math.exp(-BEE_TURN*dt));
@@ -641,7 +651,8 @@ let followedBee = null;  // { colony, index } of the bee the camera's on, or nul
 let followedHive = null; // likewise a hive
 let homedBee = null;     // the bee the camera followed into the hive it's on now, so it can pick it out and leave with it
 let beeDoingShown = null, hiveBeesShown = null; // what the cards were last told, so they're only written to on a change
-const BEE_FOLLOW_RADIUS = 3;   // how near the camera comes in on a bee it's following
+const FOLLOW_MIN_RADIUS = 1.2; // the closest the camera zooms on a bee or hive it's following (people and cars use the same floor)
+const BEE_FOLLOW_RADIUS = 8;   // how near the camera comes in on a bee it's following
 const BEE_PICK_PIXELS = 16;    // how near a click has to land on one
 
 // the bee under a point on the screen (the nearest, if several are), or null — like pickPerson in people.js, but a bee is
@@ -671,7 +682,7 @@ function pickHive(clientX, clientY) {
 function followBee(colony, index) {
   followedBee = { colony, index };
   beeDoingShown = null;
-  controls.minRadius = 0.5;
+  controls.minRadius = FOLLOW_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, BEE_FOLLOW_RADIUS)); // swooping in, if the camera's far off
   showBeeCard(colony.bees[index].number);
 }
@@ -690,8 +701,8 @@ function stopFollowingBee() {
 function followHive(colony, index) {
   followedHive = { colony, index };
   hiveBeesShown = null;
-  controls.minRadius = 0.8;
-  controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, 5));
+  controls.minRadius = FOLLOW_MIN_RADIUS;
+  controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, BEE_FOLLOW_RADIUS));
   showHiveCard(colony.hives[index].number);
 }
 function followHiveAt(clientX, clientY) {
@@ -738,7 +749,6 @@ function followBees() {
       const doing = beeDoing(bee);
       if (doing !== beeDoingShown) { beeDoingShown = doing; setBeeCardDoing(doing); }
       controls.goalTarget.copy(bee.at);
-      controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, BEE_FOLLOW_RADIUS));
     }
   }
   if (!followedHive) return;
@@ -774,10 +784,11 @@ export function updateBees(t) {
   const sheltering = beesSheltering();
   colonies.forEach(colony => {
     colony.bees.forEach((bee, k) => {
+      refreshBeeTraits(bee);
       stepBee(bee, t, dt, sheltering);
       held.position.copy(bee.at);
       held.rotation.set(0, bee.yaw, 0);
-      held.scale.setScalar(isHome(bee) ? 0 : 1); // indoors, and not to be drawn
+      held.scale.setScalar(isHome(bee) ? 0 : bee.traits.size); // indoors, and not to be drawn
       held.updateMatrix();
       colony.mesh.setMatrixAt(k, held.matrix);
       setShape(colony.mesh, k, bee);

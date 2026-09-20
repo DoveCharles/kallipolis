@@ -252,6 +252,7 @@ html.touch #btn-touch-add { display:flex; }
   background:var(--bg-panel); border:1px solid var(--border); border-radius:8px;
   padding:12px 14px; color:var(--text); font-size:12px; user-select:none; box-shadow:0 4px 16px rgba(0,0,0,0.4);
 }
+.entity-card .pc-row { white-space: pre-line; }
 .entity-card[hidden] { display:none; }
 /* holding shift in the Paths tab: a click adds a node, or a branch (src/editor/input.js) */
 canvas.adding { cursor:copy; }

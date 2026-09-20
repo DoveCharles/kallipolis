@@ -869,6 +869,20 @@ function checkYield(car, dt) {
   return false;
 }
 
+
+/**
+ * Set car.traits from its type's entries in assets/cars.txt (see carTypeOf), once per design and number. Cars without a
+ * design have no traits; the readers below treat a missing trait as 1.
+ * @param {object} car
+ * @returns {void}
+ */
+function refreshCarTraits(car) {
+  const key = car.design + ':' + car.number;
+  if (car.traitsKey === key) return;
+  car.traitsKey = key;
+  car.traits = carTypeOf(carMeshes[car.design].name, car.number).traits;
+}
+
 /**
  * One frame of traffic: show or hide the car meshes with the people; rebuild the lanes if the roads have changed and
  * re-seat the cars on them (reseatCar); make the car count match S.trafficAmount, capped by TRAFFIC_MAX and the roads'
@@ -921,9 +935,10 @@ export function updateTraffic(t) {
       car.number = ++designNumbers[car.design];
       car.plate =  carPlate(car);
     }
+    if (car.design != null) refreshCarTraits(car);
     if (car === drivenCar) { driveByHand(car, dt); turnWheels(car, dt); placeCar(car, i, designCounts); return; }
     // cruise, but ease off for the car in front and slow down into junctions
-    const cruise = CAR_SPEED*car.cruise*S.peopleSpeed;
+    const cruise = CAR_SPEED*car.cruise*S.peopleSpeed*(car.traits?.speed ?? 1);
     let target = cruise;
     if (car.ahead) {
       // (along each car's own lane rather than the road, since a lane runs quicker round the inside of a bend)

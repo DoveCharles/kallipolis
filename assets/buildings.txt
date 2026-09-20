@@ -21,12 +21,6 @@
 #   suburbs      house
 #   airport      terminal, hangar, controltower
 #
-# DISTRIBUTION
-# A [distribution] section says how many of each counted attribute a thing gets. Counted attributes are the ones that can
-# hold several values at once, which for a building is loves and hates. It's read once for the whole file and applies to
-# every building alike, whatever its kind. Leave the section out and the shared spread is used (see core/entries.js), which
-# is mostly one love and one hate. Each row is one count per counted attribute (loves, then hates), then `@` and how likely
-# that row is against the others; a row with no weight is weight 1, and rows with no weights at all are equally likely.
 
 [distribution]
 1, 1 @ 0.6

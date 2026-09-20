@@ -6,7 +6,7 @@
 // of assets/people.txt.
 export const TRAITS = {
   // people (see life/people/)
-  walkspeed: { base: 1, min: 0.1, max: 6 },
+  speed: { base: 1, min: 0.1, max: 6 },
   size:      { base: 1, min: 0.3, max: 3 },
   chatty:    { base: 1, min: 0, max: 10 },
   talkative: { base: 1, min: 0.05, max: 20 },

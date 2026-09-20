@@ -1,0 +1,161 @@
+# What each kind of vehicle is like: what its card says when you click one in World mode. Edit freely, then reload the page.
+# Each [section] is a vehicle type, named as in assets/models/Cars.glb. Under it, `attribute = value` lines:
+#
+#   name    what it's called on its card (followed by its own number, like "Police car #3")
+#   mood    its current mood, usually an emoji
+#   loves   what it loves
+#   hates   what it hates
+#   counts  how many loves and hates a vehicle has: `counts = 2, 1 @ 3` is two loves and one hate, with weight 3 against
+#           the other counts lines (default 1). A type without its own counts lines uses [default]'s; with none anywhere,
+#           every vehicle has one love and one hate. A vehicle can only have as many loves or hates as its type lists.
+#           Example (in [default] below):
+#             counts = 1, 1 @ 6
+#             counts = 2, 0 @ 1
+#
+# A value can end in [brackets]: [solo] (the only love or hate the vehicle has), [choiceweight = 3] (3 times as likely to
+# be picked) or [limit = 1a] (never together with a 1b, in the same way as in people.txt).
+#
+# Give an attribute several lines to have each vehicle of that type pick one of them (always the same one for the same
+# vehicle). Anything a type leaves out comes from [default], which is also used for any type that isn't listed.
+# Blank lines and lines starting with # are skipped.
+
+[default]
+name = Car
+mood = 🚗
+loves = Beep beep
+hates = Honkkkk
+counts = 1, 1 @ 6
+counts = 2, 0 @ 1
+counts = 0, 2 @ 1
+counts = 2, 1 @ 1
+counts = 1, 2 @ 1
+
+[Ambulance]
+name = Ambulance
+mood = 🚑
+loves = WOOOOOOOOOooooo....oooooOOOOOWWWW
+hates = When... they don't make it...
+hates = Budget cuts
+
+[Bus]
+name = Bus
+mood = 🚌
+loves = Picking up my lovely peoples
+loves = Breaking down
+loves = Unexplained 30 minute stop
+hates = Traffic
+hates = Mean peoplesss
+
+[Canyonero]
+name = SUV
+mood = 🚙
+loves = Flipping over
+loves = GET OUT OF MY WAY
+loves = Being so so big and huge
+loves = MUH-MUH-MUH MYYY SHARONA
+loves = Imagine Dragons
+loves = FUCK YOU BUDDY! YEAH FUCK YOU! FUCKING CUT ME OFF, SHIT
+hates = SMALLER CARS!!!
+hates = Slowies
+
+[Taxi]
+name = Taxi
+mood = 🚕
+loves = Rolling up the meter
+loves = Cutting people off
+loves = Not indicating
+hates = People shagging in the back
+hates = Driving
+hates = Knowing the whole layout of the city by heart. It's too much
+
+[PoliceCar]
+name = Police car
+mood = 🚓
+loves = WEEWOOWEEWOO
+loves = PULL OVER, NOW
+loves = Being one day away from retirement
+loves = Escalating
+hates = 'N******'
+hates = Diets
+hates = Paperwork
+
+[Sedan]
+name = Sedan
+mood = 💼
+loves = Going to work
+loves = Their job
+loves = Forgetting about their wife and children
+loves = Leaving home
+loves = Having two biiig cup holders
+loves = Heated seats
+loves = Project management frameworks
+hates = Being late for work!!!
+hates = Traffic, guh! I'm gonna be so late for work!!!
+hates = Hippies
+
+[PickupTruck]
+name = Pickup truck
+mood = 🛻
+loves = Taking up the whooole road omg
+loves = Running over wildlife
+loves = Running over literally anything
+loves = Vaping
+loves = Fucking their fat wife
+loves = Six-pack of beer in the passenger seat
+loves = Using the cargo bay for absolutely nothing
+hates = Children and small animals
+hates = Nature
+hates = Fucking their fat wife
+
+[SportsCar]
+name = Sports car
+mood = 🏎️
+loves = VROOOOOOOOM
+loves = EEEEEEEEEE *gear change* WREEEEEEEEEE
+loves = RRRRUM RUM RUM RUM RUM RUM
+loves = Being a moderator on r/smalldickproblems
+hates = Their wife
+hates = Getting it in the ear from their missus
+hates = My dad passed away at this age, you know?
+
+[FamilyCar]
+name = Family car
+mood = 👪
+loves = Their family omg
+loves = Road trip!!!
+loves = Sliding doors
+loves = Rolling up their windows
+loves = The sat-nav
+hates = Turning this thing around if I have to
+hates = The 'streets'
+hates = Hearing sirens nearby, omg are they after me? Did I do something?
+hates = Rap music
+
+[Truck]
+name = Truck
+mood = 🚚
+loves = HOONK HOOOOOOOOONK
+loves = Blocking the motorway
+loves = Going sooo so slow
+hates = Literally anyone passing them on the motorway
+hates = Non-truckers
+
+[Twingo]
+name = Twingo
+mood = 🚗
+loves = Being oh so cutey
+loves = France
+hates = Bigger cars (small willy's)
+hates = beeeep beeeeeeep
+
+[Van]
+name = Van
+mood = 🚐
+loves = Uhh. Just on my way to work, mate.
+loves = Parking on the curb in a busy street. It's alright, got me hazards on mate.
+loves = Calling in sick
+loves = ALL the CANDY in the back! and it's FREE!!!
+loves = Parking near schools
+hates = All other cars
+hates = Women
+hates = Bellends
