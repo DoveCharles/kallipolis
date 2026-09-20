@@ -395,6 +395,7 @@ function buildAircraft(span, rng, jet) {
     if (o.morphTargetInfluences) o.morphTargetInfluences.fill(0);
     if (o.morphTargetInfluences && o.morphTargetDictionary) parts.push({ at: o.morphTargetInfluences, keys: o.morphTargetDictionary });
   });
+  group.userData.span = span;
   group.userData.surfaces = { span, parts, wheels: 0, right: 0, left: 0, settled: false };
   return group;
 }
@@ -432,6 +433,7 @@ function buildBoxAircraft(span, rng, jet) {
   [1, -1].forEach(side => add(new THREE.BoxGeometry(span*0.17, r*0.24, L*0.11), white, side*span*0.1, ride + r*0.5, -L*0.45, -side*sweep));
   add(new THREE.BoxGeometry(r*0.3, span*0.17, L*0.17), livery, 0, ride + r*0.5 + span*0.085, -L*0.45);
   if (!jet) add(new THREE.CylinderGeometry(r*0.08, r*0.08, span*0.34, 8).rotateZ(Math.PI/2), dark, 0, ride + r*0.2, L*0.5);
+  group.userData.span = span;
   return group;
 }
 /**
@@ -467,6 +469,7 @@ function buildHelicopter(span, rng) {
   group.add(tailRotor);
   [0, Math.PI/2].forEach(a => { const blade = add(new THREE.BoxGeometry(r*0.05, span*0.28, r*0.12), dark, 0, 0, 0, tailRotor); blade.rotation.z = a; });
   group.userData.rotors = [{ object: mast, axis: 'y', speed: 9 }, { object: tailRotor, axis: 'z', speed: 22 }];
+  group.userData.span = span;
   return group;
 }
 // ---- the moving parts
@@ -509,15 +512,35 @@ function workSurfaces(object, pitch, roll, height) {
     at[keys.LeftWing] = surfaces.left;
   });
 }
+// The nose coming round. The schedule's paths turn their corners instantly — a bend in a taxiway, the 180 off the stand
+// once the tug has finished with it — and an aeroplane whose yaw is simply set from one pivots on the spot, which is the
+// one thing on the field that looks like a model being moved by hand rather than an aeroplane taxiing. So the yaw is
+// walked toward whatever it has been asked for instead of set to it, at a rate faster than anything here ever turns
+// under its own flying (a full-bank turn comes round at about 1.9 radians a second) — which leaves a hand-flown one free
+// to turn as hard as it likes and only ever catches a corner.
+//
+// What isn't a turn is a whole new flight: round the loop, away over the horizon and back on final at the far end of the
+// field. That shows up as the aeroplane having moved further between two poses than it could possibly have flown, and
+// that one simply arrives, the way the first pose of all does.
+const TURN_RATE = 2.2, TURN_JUMP = 2; // radians a second, and the wingspans between poses past which it is somewhere else
+function turnTo(object, dx, dz, moved) {
+  const goal = Math.atan2(dx, dz);
+  if (!frameSeconds || moved > (object.userData.span || 0)*TURN_JUMP) return goal;
+  const turn = Math.atan2(Math.sin(goal - object.rotation.y), Math.cos(goal - object.rotation.y)); // (the short way round)
+  return object.rotation.y + Math.max(-TURN_RATE*frameSeconds, Math.min(TURN_RATE*frameSeconds, turn));
+}
 // Points an aircraft along a heading, nose up by `pitch` and leaning by `roll`, and works its shape keys to match. Built
 // along +Z, so the yaw is measured from +Z, and a positive rotation about its own X would put the nose down — hence the
 // minus. The order matters: YXZ rolls it about its own length first, then pitches and yaws that, which is how a wing
 // drops rather than a whole aeroplane sliding sideways. A positive `roll` drops the right wing. Nothing on the schedule
 // ever banks — only a hand on the controls does (see flyByHand).
 function poseAircraft(object, x, y, z, dx, dz, pitch, roll) {
+  const was = object.userData.posedAt;
+  const moved = was ? Math.hypot(x - was.x, y - was.y, z - was.z) : Infinity;
   object.position.set(x, y, z);
   object.rotation.order = 'YXZ';
-  object.rotation.set(-(pitch || 0), Math.atan2(dx, dz), roll || 0);
+  object.rotation.set(-(pitch || 0), turnTo(object, dx, dz, moved), roll || 0);
+  if (was) was.set(x, y, z); else object.userData.posedAt = new THREE.Vector3(x, y, z);
   workSurfaces(object, pitch || 0, roll || 0, y - Y_TARMAC);
 }
 // how far along `path` (a polyline of {x,z}) a distance lands, and which way it's heading there
