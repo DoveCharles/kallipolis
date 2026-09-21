@@ -936,7 +936,8 @@ export function updatePeople(t) {
         const was = p.walkCycle;
         p.walkCycle = (p.walkCycle + (p.traits.backwards ? -1 : 1)*p.stepped/(personModel.stride*s) + 1) % 1;
         // a foot comes down STEPS_PER_CYCLE times a cycle, from FOOTFALLS on: each is heard (see audio/footsteps.js)
-        if (p.moving && Math.floor((was - FOOTFALLS + 1)*STEPS_PER_CYCLE) !== Math.floor((p.walkCycle - FOOTFALLS + 1)*STEPS_PER_CYCLE)) footstep({ x: p.x, y: p.y, z: p.z }, p.traits.weight);
+        const step = c => Math.floor(((c - FOOTFALLS + 1) % 1)*STEPS_PER_CYCLE); // (wrapped, so the cycle coming round isn't a step of its own)
+        if (p.moving && step(was) !== step(p.walkCycle)) footstep({ x: p.x, y: p.y, z: p.z }, p.traits.weight);
       }
       p.idleTime += dt;
       // standing about with nothing to do for a while, now and then a scratch or a think

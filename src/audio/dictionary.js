@@ -16,7 +16,7 @@ const DICTIONARY_URL = 'assets/dictionary.txt';
 const LINE_CHANCE = 0.15;   // at the start of each phrase of babble
 const SAY_DISTANCE = 40;    // beyond this from the camera they only babble
 const LINE_GAP = 3;         // seconds after a line ends before anyone says another
-const VOLUME = 0.5;
+const VOLUME = 0.12;   // (SAM's loud and flat next to babble's filtered buzz: this brings it down level with it)
 const REF_DISTANCE = 6, HEAR_DISTANCE = 60; // (as for babble)
 const SAMPLE_RATE = 22050;  // SAM's
 const MOUTH_FRAME = 0.05;   // seconds over which how wide the mouth is follows the line
