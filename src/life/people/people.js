@@ -7,6 +7,7 @@ import { scene } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
 import { explode } from '../giblets.js';
 import { babble, nextSyllable } from '../../audio/voices.js';
+import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
 import { footstep } from '../../audio/footsteps.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
@@ -239,7 +240,7 @@ function voiceOf(p, i) {
   const own = mulberry32(i*7919 + 13), isMan = personModel?.isMan[i] === 1, tall = Math.sqrt(Math.max(0.5, p.height));
   const pitch = (isMan ? 150 : 250)/tall*(0.85 + 0.3*own());
   const formant = (isMan ? 1 : 1.15)/Math.sqrt(tall)*(0.8 + 0.42*own());
-  return { pitch, formant, sharpness: 3 + 9*own() };
+  return { pitch, formant, sharpness: 3 + 9*own(), isMan };
 }
 /** Someone's voice (see voiceOf), for a sound made outside the frame loop: a cry as they're hit, say. */
 export const voiceOfPerson = p => voiceOf(p, people.indexOf(p));
@@ -991,16 +992,28 @@ export function updatePeople(t) {
       const delighted = pleased && !scaredByBlood; // (blood wins over any other face: whatever they're doing, they look scared — unless they like it)
       // talking, their mouth moves; listening, their expression changes every now and then
       const group = p.group, talking = !!group && group.speaker === p, listening = !!group && !!group.speaker && !talking && p.lookAt === group.speaker;
-      if (!talking) {
+      if (!talking || (p.saying && isGone(p) && !inRoom(p))) {
         p.talkTo = 0;
         p.phrase = null;
+        stopLine(p.saying);
+        p.saying = null;
+      } else if (p.saying) {
+        // saying a real line (see audio/dictionary.js): the mouth opening as wide as it's loud, and a breath once it's done
+        const mouth = lineMouth(p.saying);
+        if (mouth < 0) { p.saying = null; p.talkTo = 0; p.talkIn = 0.3 + peopleRng()*0.3; }
+        else p.talkTo = mouth;
       } else if ((p.talkIn -= dt) <= 0) {
-        // in phrases, with a breath between (see nextSyllable in audio/voices.js)
-        const { open, length, intonation } = nextSyllable(p, peopleRng);
-        p.talkTo = open;
-        p.talkIn = length;
-        // and each syllable they say is heard
-        if (open > 0 && (!isGone(p) || inRoom(p))) babble({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), length, open, p.traits.mood, intonation);
+        const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, heard = !isGone(p) || inRoom(p);
+        // at the start of a phrase, now and then something real instead
+        if (heard && (!p.phrase || p.phrase.said >= p.phrase.length) && (p.saying = sayLine(head, voiceOf(p, i), i, p.traits.mood))) p.phrase = null;
+        else {
+          // in phrases, with a breath between (see nextSyllable in audio/voices.js)
+          const { open, length, intonation } = nextSyllable(p, peopleRng);
+          p.talkTo = open;
+          p.talkIn = length;
+          // and each syllable they say is heard
+          if (open > 0 && heard) babble(head, voiceOf(p, i), length, open, p.traits.mood, intonation);
+        }
       }
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape

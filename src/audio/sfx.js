@@ -113,10 +113,10 @@ function variantsOf(name) {
  * @param {number} [maxDistance] - if given, it fades out evenly from refDistance to nothing at all here, rather than tailing
  *   off slowly and forever
  * @param {number} [rate=1] - how fast it's played: above 1, higher and shorter; below, lower and longer
- * @returns {void}
+ * @returns {?AudioBufferSourceNode} what's playing it, to stop it early; or null, if it isn't played
  */
 export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate = 1) {
-  if (muted || context.state !== 'running' || voices >= VOICES_MAX) return;
+  if (muted || context.state !== 'running' || voices >= VOICES_MAX) return null;
   const source = context.createBufferSource(), gain = context.createGain(), panner = context.createPanner();
   source.buffer = buffer;
   source.playbackRate.value = rate;
@@ -130,6 +130,7 @@ export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate 
   voices++;
   source.onended = () => { voices--; panner.disconnect(); };
   source.start();
+  return source;
 }
 /**
  * Builds a ZzFX sound's samples into an AudioBuffer (the layer lists as in SOUNDS).

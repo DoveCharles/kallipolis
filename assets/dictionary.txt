@@ -1,0 +1,47 @@
+# What people say for real, now and then, in among their babble (see src/audio/dictionary.js): one line each, a single
+# word or a whole sentence, spoken aloud by SAM, the old Commodore 64 speech synth. Someone talking near the camera
+# picks one at random every so often, in a voice as low or high as their babble.
+# Blank lines and lines starting with # are skipped.
+#
+# A line that's just a name in square brackets, like [animal], starts a word list: the lines under it, up to the next
+# blank line, are its words. Put [animal] in any line and it's swapped for one of them at random each time it's said.
+
+[animal]
+Dog
+Cat
+Mouse
+Rat
+
+[verb - negative]
+bite
+shit a lot
+cum constantly
+
+I was thinking about getting a pet [animal], but I heard they [verb - negative].
+
+Anyway.
+Honestly?
+No way.
+Exactly.
+Right, right.
+Tuesday.
+Absolutely not.
+Bananas.
+I know, I know.
+Mm-hm.
+Seriously.
+Wait, what?
+The bus was late again.
+Have you tried the new place on the corner?
+I left my keys at home.
+It's going to rain later, apparently.
+She said what?
+I've been meaning to call my mother.
+Do you think the trains are running today?
+That's what I told him!
+We should get lunch sometime.
+I can't believe it's already this late.
+Did you hear about the bees?
+My landlord still hasn't fixed the heating.
+Oh, that reminds me.
+Anyway, how are you?
