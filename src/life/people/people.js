@@ -7,6 +7,7 @@ import { scene } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
 import { explode } from '../giblets.js';
 import { babble } from '../../audio/voices.js';
+import { footstep } from '../../audio/footsteps.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
 import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FIDGETS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_TRAIT_COLORS } from './peopleModel.js';
@@ -229,6 +230,7 @@ export const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode ===
  * @param {Person} p - the person
  * @returns {boolean} whether they're in the room
  */
+const FOOTFALLS = 0; // how far through the walk cycle a foot first comes down (the other, half a cycle on)
 // The pitch of someone's voice (see audio/voices.js): lower for a man than a woman, and for someone taller, and a little
 // of their own either way, the same every time for the same person.
 const voicePitch = (p, i) => (personModel?.isMan[i] === 1 ? 150 : 250)/Math.sqrt(Math.max(0.5, p.height))*(0.85 + 0.3*mulberry32(i*7919 + 13)());
@@ -920,7 +922,12 @@ export function updatePeople(t) {
     if (personModel) {
       const clipSet = personModel.clips, s = isGone(p) && !inRoom(p) ? 0 : modelScale(p);
       // a cycle of the walk for every stride's worth of ground covered, as big as they are (played in reverse, backwards)
-      if (s > 0) p.walkCycle = (p.walkCycle + (p.traits.backwards ? -1 : 1)*p.stepped/(personModel.stride*s) + 1) % 1;
+      if (s > 0) {
+        const was = p.walkCycle;
+        p.walkCycle = (p.walkCycle + (p.traits.backwards ? -1 : 1)*p.stepped/(personModel.stride*s) + 1) % 1;
+        // a foot comes down twice a cycle, at FOOTFALLS and half a cycle on: each is heard (see audio/footsteps.js)
+        if (p.moving && Math.floor((was - FOOTFALLS + 1)*2) !== Math.floor((p.walkCycle - FOOTFALLS + 1)*2)) footstep({ x: p.x, y: p.y, z: p.z }, p.traits.weight);
+      }
       p.idleTime += dt;
       // standing about with nothing to do for a while, now and then a scratch or a think
       if (p.moving) {

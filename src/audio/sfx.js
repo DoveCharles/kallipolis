@@ -14,16 +14,16 @@ const SOUNDS = {
   // the Smite button's bolt (see life/lightning.js): a sharp crack, then thunder rolling after it
   thunder: [
     [1, .05, 1200, 0, .02, .35, 4, 2.5, -40, , , , , 2, , .15, .03, .5, .05],
-    [1.1, .1, 45, .02, .3, 2.4, 4, .6, , , , , , 1, , .2, .25, .7, .4, .15, 600],
+    [1.1, .1, 45, .02, .3, 2.4, 4, .6, , , , , , 1, , .2, .25, .7, .4, .15, -600],
   ],
   // a car going up (see explodeCar in life/giblets.js): a hard bang into a long crunchy roar
   explosion: [
     [1, .1, 70, 0, .08, .25, 4, 1.5, -5, , , , , 1.5, , .4, , .8, .05],
-    [1.1, .1, 40, .01, .4, 1.6, 4, .7, , , , , , 1, , .35, .15, .6, .3, , 900],
+    [1.1, .1, 40, .01, .4, 1.6, 4, .7, , , , , , 1, , .35, .15, .6, .3, , -900],
   ],
   // someone blowing up (see explode in life/giblets.js): a short wet burst
   gib: [
-    [.9, .15, 130, 0, .04, .3, 4, 2, -20, , , , , 1.2, , .1, , .5, .05, , 1400],
+    [.9, .15, 130, 0, .04, .3, 4, 2, -20, , , , , 1.2, , .1, , .5, .05, , -1400],
   ],
   // a bee bursting (see explodeBee in life/giblets.js): a tiny pop
   pop: [
@@ -33,7 +33,7 @@ const SOUNDS = {
 const VARIANTS = 3;
 const SPEED_OF_SOUND = 343;      // units (metres) a second
 const REF_DISTANCE = 25;         // how near something has to be to be heard at full volume, falling away past it
-const VOICES_MAX = 16;           // sounds playing at once, past which new ones are dropped
+const VOICES_MAX = 32;           // sounds playing at once, past which new ones are dropped
 const SAME_SOUND_GAP = 0.06, SAME_SOUND_NEAR = 30; // the same sound again this soon and this close (a bus's two ends) plays once
 
 export const listener = new THREE.AudioListener();
@@ -68,13 +68,43 @@ export const isMuted = () => muted;
 ZZFX.volume = 1;
 const buffers = {}; // name -> [variant -> [layer -> AudioBuffer]]
 function variantsOf(name) {
-  if (!buffers[name]) buffers[name] = Array.from({ length: VARIANTS }, () => SOUNDS[name].map(layer => {
-    const samples = ZZFX.buildSamples(...layer);
-    const buffer = context.createBuffer(1, samples.length, ZZFX.sampleRate);
-    buffer.getChannelData(0).set(samples);
-    return buffer;
-  }));
+  if (!buffers[name]) buffers[name] = Array.from({ length: VARIANTS }, () => SOUNDS[name].map(zzfxBuffer));
   return buffers[name];
+}
+
+/**
+ * Plays an AudioBuffer once at `at`, through a bare panner rather than a THREE.PositionalAudio — for sounds as small and
+ * frequent as footsteps, where an Object3D apiece would be too much. Counts toward VOICES_MAX like any other sound.
+ * @param {AudioBuffer} buffer
+ * @param {{x: number, y: number, z: number}} at
+ * @param {number} volume
+ * @param {number} refDistance - how near to be heard at full volume
+ * @returns {void}
+ */
+export function playBufferAt(buffer, at, volume, refDistance) {
+  if (muted || context.state !== 'running' || voices >= VOICES_MAX) return;
+  const source = context.createBufferSource(), gain = context.createGain(), panner = context.createPanner();
+  source.buffer = buffer;
+  gain.gain.value = volume;
+  panner.panningModel = 'equalpower';
+  panner.distanceModel = 'inverse';
+  panner.refDistance = refDistance;
+  panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
+  source.connect(gain).connect(panner).connect(listener.getInput());
+  voices++;
+  source.onended = () => { voices--; panner.disconnect(); };
+  source.start();
+}
+/**
+ * Builds a ZzFX sound's samples into an AudioBuffer (the layer lists as in SOUNDS).
+ * @param {number[]} layer
+ * @returns {AudioBuffer}
+ */
+export function zzfxBuffer(layer) {
+  const samples = ZZFX.buildSamples(...layer);
+  const buffer = context.createBuffer(1, samples.length, ZZFX.sampleRate);
+  buffer.getChannelData(0).set(samples);
+  return buffer;
 }
 
 let voices = 0;

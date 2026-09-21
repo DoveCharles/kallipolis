@@ -15,7 +15,7 @@ import { isTrainLine } from '../trains/trains.js';
 import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people/people.js';
 import { isFavoritePerson } from '../ui/favorites.js';
 import { strikeLightning } from './lightning.js';
-import { startEngine, updateEngine, stopEngine } from '../audio/engine.js';
+import { updateEngines } from '../audio/engine.js';
 import { explodeCar, puffSmoke, sparks, burnFx, tyreSmoke, igniteFx, engineSmoke } from './giblets.js';
 import { carTypeOf, vanityChanceOf, vanityPlatesOf } from './car-types.js';
 import { driving, controlInput, startDriving, endDriving } from './possession.js';
@@ -917,7 +917,7 @@ export function updateTraffic(t) {
   S.lastTrafficTime = t;
   carParts.all.forEach(mesh => { mesh.visible = S.peopleEnabled; });
   carMeshes.forEach(cm => { cm.mesh.visible = S.peopleEnabled; });
-  if (!S.peopleEnabled) return;
+  if (!S.peopleEnabled) { updateEngines([], null, null, dt); return; }
   if (!S.trafficNav || (S.trafficNavDirty && t - S.trafficNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.trafficNavDirty = false;
     S.trafficNavBuiltAt = t;
@@ -956,12 +956,7 @@ export function updateTraffic(t) {
       car.plate =  carPlate(car);
     }
     if (car.design != null) refreshCarTraits(car);
-    if (car === drivenCar) {
-      if (car.sinking) sinkCar(car, dt); else driveByHand(car, dt);
-      turnWheels(car, dt); placeCar(car, i, designCounts);
-      updateEngine({ x: car.x, y: Y_ROAD + carHeight(car)/2, z: car.z }, car.speed, car.throttle, !car.sinking && !(car.stall > 0), dt);
-      return;
-    }
+    if (car === drivenCar) { if (car.sinking) sinkCar(car, dt); else driveByHand(car, dt); turnWheels(car, dt); placeCar(car, i, designCounts); return; }
     if (car.fuse != null) { burnFuse(car, dt); placeCar(car, i, designCounts); return; } // (about to blow: it neither drives nor turns)
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
@@ -1044,6 +1039,7 @@ export function updateTraffic(t) {
   if (drivenCar && blasted.has(drivenCar)) { const driven = drivenCar; stopDriving(); blasted.add(driven); } // (the driver is thrown out of it, and it goes too)
   blasted.forEach(car => { const i = cars.indexOf(car); if (i >= 0) killCar(i); });
   if (drivenCar?.sinking?.under) { const driven = drivenCar, at = { x: driven.x, z: driven.z }; stopDriving(); Object.assign(driven, at); killCar(cars.indexOf(driven), WATER_LEVEL); } // (gone under: it blows up at the surface)
+  updateEngines(cars, drivenCar, engineOf, dt);
   carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
   if (S.showRoadsafetyDebug) { carHitboxDebugMesh.count = cars.length; carHitboxDebugMesh.instanceMatrix.needsUpdate = true; }
   carParts.matrix.needsUpdate = true;
@@ -1147,6 +1143,9 @@ function carModelOf(car) { return car.design != null ? carMeshes[car.design] : n
  * @param {object} car
  * @returns {number}
  */
+// what the engine sounds need of a car (see audio/engine.js): where its engine is, how big it is against an ordinary car
+// (bigger, lower), and whether it's running — not stalled, sinking or burning
+const engineOf = car => ({ y: Y_ROAD + carHeight(car)/2, size: carLength(car)/(BOX_CAR_LENGTH*S.peopleSize), running: !car.sinking && !(car.stall > 0) && car.fuse == null });
 function carLength(car) { const cm = carModelOf(car); return (cm ? cm.length : car.length)*BOX_CAR_LENGTH*S.peopleSize; }
 
 /**
@@ -1668,7 +1667,6 @@ function driveCar(i) {
   drivenCar = car;
   car.yieldFor = null;
   car.throttle = 0;
-  startEngine({ x: car.x, y: Y_ROAD, z: car.z });
   controls.goalRadius = Math.max(controls.minRadius, carLength(car)*2.2);
 }
 
@@ -1682,7 +1680,6 @@ function stopDriving() {
   const car = drivenCar;
   drivenCar = null;
   endDriving();
-  stopEngine();
   car.speed = Math.max(0, car.speed);
   // it drives back to the nearest lane, as a knocked car does
   car.kick = { x: 0, z: 0, vx: 0, vz: 0, heading: car.heading, goal: null, seated: false, blocked: false, speed: 0, driving: 0 };

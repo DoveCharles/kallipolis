@@ -1,38 +1,40 @@
-import * as THREE from 'three';
-import { scene } from '../core/scene.js';
+import { camera } from '../core/scene.js';
 import { listener } from './sfx.js';
 
-// ============================================================ engine
-// The driven car's engine (see "driving a car" in life/traffic.js): a loop synthesized live rather than built up front,
-// since its pitch and tone follow the car frame by frame. Two slightly detuned sawtooths and a square an octave down
-// give it a buzz, a lowpass filter muffles it, opening up as the throttle's pressed and the revs climb. The revs rise
-// through each gear's GEAR_SPEED and drop back at the change up, so it goes through the gears as it speeds up. It sits
-// where the car is, like any other sound (see sfx.js).
-const IDLE_HZ = 36, REDLINE_HZ = 115;   // pitch at tickover and at the top of a gear
-const GEAR_SPEED = 8, GEARS = 4;        // units a second each gear covers; in top gear the revs go on climbing over twice that
-const SHIFT_REVS = 0.35;                // where the revs drop back to on changing up, 0 (idle) to 1 (redline)
-const REVS_RATE = 3;                    // how fast the revs follow, per second
-const VOLUME = 0.35, REF_DISTANCE = 12;
-const LAYERS = [['sawtooth', 1, 0.5], ['sawtooth', 1.012, 0.4], ['square', 0.5, 0.35]]; // [wave, pitch against the fundamental, level]
+// ============================================================ engines
+// The engines of the cars near the camera (see updateTraffic in life/traffic.js): loops synthesized live rather than built
+// up front, since their pitch and tone follow each car frame by frame. Two slightly detuned sawtooths and a square an
+// octave up give an engine its buzz, and a lowpass filter muffles it, opening up as the throttle's pressed and the revs
+// climb. The revs rise through each gear's GEAR_SPEED and drop back at the change up, so it goes through the gears as it
+// speeds up. A bigger car's engine is lower, and every car's a little different.
+//
+// There are ENGINES_MAX engines, handed each frame to the nearest cars within HEAR_DISTANCE: the driven car always has one.
+// An engine fades out as its car goes, and in again on the next.
+const IDLE_HZ = 75, REDLINE_HZ = 230;  // pitch at tickover and at the top of a gear, for an ordinary car
+const GEAR_SPEED = 8, GEARS = 4;       // units a second each gear covers; in top gear the revs go on climbing over 2.5 times that
+const SHIFT_REVS = 0.35;               // where the revs drop back to on changing up, 0 (idle) to 1 (redline)
+const REVS_RATE = 3;                   // how fast the revs follow, per second
+const VOLUME = 0.3, TRAFFIC_VOLUME = 0.6; // the driven car's, and everyone else's against it
+const REF_DISTANCE = 10, HEAR_DISTANCE = 90;
+const ENGINES_MAX = 6;
+const LAYERS = [['sawtooth', 1, 0.5], ['sawtooth', 1.012, 0.4], ['square', 2, 0.12]]; // [wave, pitch against the fundamental, level]
 
-let engine = null; // { out, filter, oscillators, sound, revs } while a car's being driven
+const engines = []; // { out, filter, panner, oscillators, car, revs, lastSpeed }
+const voiceOf = new WeakMap(); // car -> its engine's pitch against an ordinary car's
 
-/**
- * Start the engine sound, at `at`.
- * @param {{x: number, y: number, z: number}} at
- * @returns {void}
- */
-export function startEngine(at) {
-  if (engine) return;
-  const context = listener.context, now = context.currentTime;
+function makeEngine() {
+  const context = listener.context;
   const out = context.createGain();
   out.gain.value = 0;
-  out.gain.setTargetAtTime(VOLUME*0.55, now, 0.05);
   const filter = context.createBiquadFilter();
   filter.type = 'lowpass';
-  filter.Q.value = 4;
-  filter.frequency.value = 300;
-  filter.connect(out);
+  filter.Q.value = 3;
+  filter.frequency.value = 500;
+  const panner = context.createPanner();
+  panner.panningModel = 'equalpower';
+  panner.distanceModel = 'inverse';
+  panner.refDistance = REF_DISTANCE;
+  filter.connect(out).connect(panner).connect(listener.getInput());
   const oscillators = LAYERS.map(([type, ratio, level]) => {
     const oscillator = context.createOscillator(), gain = context.createGain();
     oscillator.type = type;
@@ -42,49 +44,55 @@ export function startEngine(at) {
     oscillator.start();
     return { oscillator, ratio };
   });
-  const sound = new THREE.PositionalAudio(listener);
-  sound.setNodeSource(out);
-  sound.setRefDistance(REF_DISTANCE);
-  sound.position.set(at.x, at.y, at.z);
-  scene.add(sound);
-  engine = { out, filter, oscillators, sound, revs: 0 };
+  return { out, filter, panner, oscillators, car: null, revs: 0, lastSpeed: 0 };
 }
 
 /**
- * One frame of the engine: where the car is, how fast it's going, how hard the throttle's pressed (0 to 1), and whether
- * the engine's running at all (not stalled, not under water).
- * @param {{x: number, y: number, z: number}} at
- * @param {number} speed - units a second, either way
- * @param {number} throttle
- * @param {boolean} running
+ * One frame of the engines: hand them to the nearest cars, and set each one's pitch, tone and loudness from its car.
+ * @param {object[]} cars - every car, each with x, z and speed (the driven car with throttle too, 0 to 1: how hard the
+ *   accelerator's pressed; everyone else's is judged from how they're speeding up)
+ * @param {?object} driven - the car being driven, if any, which always gets an engine
+ * @param {(car: object) => {y: number, size: number, running: boolean}} about - how high its engine is, how big it is
+ *   against an ordinary car, and whether its engine's running (not stalled, sinking or burning)
  * @param {number} dt - seconds this frame
  * @returns {void}
  */
-export function updateEngine(at, speed, throttle, running, dt) {
-  if (!engine) return;
-  const now = listener.context.currentTime, s = Math.abs(speed);
-  const gear = Math.min(GEARS - 1, Math.floor(s/GEAR_SPEED)), top = gear === GEARS - 1;
-  const through = Math.min(1, (s - gear*GEAR_SPEED)/(GEAR_SPEED*(top ? 2.5 : 1))); // (how far through this gear)
-  const floor = gear ? SHIFT_REVS : 0;
-  // (revving at a standstill, or with the wheels held back, still lifts the revs a little)
-  const goal = running ? Math.max(floor + (1 - floor)*through, throttle*0.3) : 0;
-  engine.revs += (goal - engine.revs)*Math.min(1, REVS_RATE*dt*(goal < engine.revs - 0.2 ? 4 : 1)); // (a change up drops the revs quickly)
-  const hz = IDLE_HZ + (REDLINE_HZ - IDLE_HZ)*engine.revs;
-  engine.oscillators.forEach(({ oscillator, ratio }) => oscillator.frequency.setTargetAtTime(hz*ratio, now, 0.03));
-  engine.filter.frequency.setTargetAtTime(250 + 700*throttle + 1400*engine.revs, now, 0.05);
-  engine.out.gain.setTargetAtTime(running ? VOLUME*(0.55 + 0.45*throttle) : 0, now, running ? 0.05 : 0.3);
-  engine.sound.position.set(at.x, at.y, at.z);
-}
-
-/**
- * Stop the engine sound, fading it out.
- * @returns {void}
- */
-export function stopEngine() {
-  if (!engine) return;
-  const { out, oscillators, sound } = engine, now = listener.context.currentTime;
-  engine = null;
-  out.gain.setTargetAtTime(0, now, 0.08);
-  oscillators.forEach(({ oscillator }) => oscillator.stop(now + 0.5));
-  setTimeout(() => { sound.disconnect(); scene.remove(sound); }, 600);
+export function updateEngines(cars, driven, about, dt) {
+  const { x, z } = camera.position;
+  const near = cars
+    .map(car => ({ car, d: car === driven ? -1 : Math.hypot(car.x - x, car.z - z) }))
+    .filter(n => n.d <= HEAR_DISTANCE)
+    .sort((a, b) => a.d - b.d).slice(0, ENGINES_MAX).map(n => n.car);
+  if (!near.length && !engines.some(e => e.car)) return;
+  while (engines.length < Math.min(ENGINES_MAX, near.length)) engines.push(makeEngine());
+  const now = listener.context.currentTime;
+  // the cars that had an engine and still do keep it; the rest go, and those new to it take over the ones going
+  engines.forEach(e => { if (e.car && !near.includes(e.car)) e.car = null; });
+  near.forEach(car => {
+    if (engines.some(e => e.car === car)) return;
+    const free = engines.find(e => !e.car);
+    free.car = car;
+    free.revs = 0;
+    free.lastSpeed = Math.abs(car.speed);
+  });
+  for (const e of engines) {
+    if (!e.car) { e.out.gain.setTargetAtTime(0, now, 0.15); continue; }
+    const car = e.car, { y, size, running } = about(car), s = Math.abs(car.speed);
+    // (anyone else's throttle: some just to keep moving, more the harder they're speeding up)
+    const throttle = car === driven ? car.throttle ?? 0 : Math.min(1, (s > 0.5 ? 0.25 : 0) + Math.max(0, (s - e.lastSpeed)/Math.max(dt, 1e-3))/4);
+    e.lastSpeed = s;
+    const gear = Math.min(GEARS - 1, Math.floor(s/GEAR_SPEED)), top = gear === GEARS - 1;
+    const through = Math.min(1, (s - gear*GEAR_SPEED)/(GEAR_SPEED*(top ? 2.5 : 1))); // (how far through this gear)
+    const floor = gear ? SHIFT_REVS : 0;
+    // (revving at a standstill, or with the wheels held back, still lifts the revs a little)
+    const goal = running ? Math.max(floor + (1 - floor)*through, throttle*0.3) : 0;
+    e.revs += (goal - e.revs)*Math.min(1, REVS_RATE*dt*(goal < e.revs - 0.2 ? 4 : 1)); // (a change up drops the revs quickly)
+    if (!voiceOf.has(car)) voiceOf.set(car, 0.85 + Math.random()*0.3);
+    const hz = (IDLE_HZ + (REDLINE_HZ - IDLE_HZ)*e.revs)*voiceOf.get(car)/Math.sqrt(Math.max(0.5, size));
+    e.oscillators.forEach(({ oscillator, ratio }) => oscillator.frequency.setTargetAtTime(hz*ratio, now, 0.03));
+    e.filter.frequency.setTargetAtTime(400 + 900*throttle + 1800*e.revs, now, 0.05);
+    const volume = (car === driven ? VOLUME : VOLUME*TRAFFIC_VOLUME)*(0.55 + 0.45*throttle);
+    e.out.gain.setTargetAtTime(running ? volume : 0, now, running ? 0.08 : 0.3);
+    e.panner.positionX.value = car.x; e.panner.positionY.value = y; e.panner.positionZ.value = car.z;
+  }
 }

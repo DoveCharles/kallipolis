@@ -145,9 +145,6 @@
     <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Gameplay</div>
     <div class="row"><label>Blood soaking</label><button class="toggle-switch" id="s-bloodsoak"><span class="knob"></span></button></div>
 
-    <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Sound</div>
-    <div class="row"><label>Sound</label><button class="toggle-switch on" id="s-sound"><span class="knob"></span></button></div>
-
     <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">FX</div>
     <div class="row"><label>Windows 3.0 look</label><button class="toggle-switch" id="s-win3"><span class="knob"></span></button></div>
     <div class="slider-row"><div class="row"><label>Pixelation</label><span class="val" id="dv-pixelation">off</span></div>
@@ -204,6 +201,8 @@
       <div class="fav-list"></div>
     </div>
   </div>
+  <!-- sound on or off (src/ui/sound.js), its icon drawn there -->
+  <button class="canvas-tool" id="btn-sound" title="Mute"></button>
   <button class="canvas-tool" id="btn-touch-add" title="Insert a node into a path, or branch off one"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 </div>
 
