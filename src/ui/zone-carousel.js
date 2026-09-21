@@ -71,7 +71,7 @@ function wireZoneTypeCarousel(panel, onPick) {
   }
 }
 // Renders thumbnails between two frames: the real scene, lit by a fixed daytime sun with no weather. `render(snap)` builds
-// each one somewhere far off the map and calls snap(camera) to capture it as an image.
+// each one somewhere far off the map and calls snap(camera) to capture it as an image. (The objects palette's too.)
 function withThumbnailStudio(render) {
   const saved = { sunElevation: S.sunElevation, sunAzimuth: S.sunAzimuth, weatherRain: S.weatherRain, weatherSnow: S.weatherSnow, weatherClouds: S.weatherClouds, clear: renderer.getClearColor(new THREE.Color()), clearAlpha: renderer.getClearAlpha() };
   S.sunElevation = 42; S.sunAzimuth = 35; S.weatherRain = S.weatherSnow = S.weatherClouds = 0;
@@ -194,4 +194,4 @@ function renderWalkwayThumbnails(color) {
   });
 }
 
-Object.assign(App, { zoneTypeCarouselHtml, wireZoneTypeCarousel, walkwayTextureCarouselHtml, wireWalkwayTextureCarousel });
+Object.assign(App, { withThumbnailStudio, zoneTypeCarouselHtml, wireZoneTypeCarousel, walkwayTextureCarouselHtml, wireWalkwayTextureCarousel });

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
 import { scene, camera, snapPointToGrid, Y_PATH } from '../core/scene.js';
 import { mulberry32 } from '../core/math.js';
-import { tessellateOpenPath, tessellateClosedPath } from '../core/splines.js';
+import { tessellateOpenPath, tessellateClosedPath, BUILDING_GROUND_COLORS } from '../core/splines.js';
 import { distPointSegment, closestPointOnSegment } from '../buildings/footprints.js';
 import { roadNodes } from '../core/state.js';
 import { disposeObject } from '../roads/roads.js';
@@ -239,7 +239,7 @@ export function selectObject(id) {
 }
 // Edit mode's other tabs shouldn't show a ghost or a ring, but leaving the tab needn't lose the selection either — so
 // the lot is just hidden and comes back as it was (see applyModeVisibility).
-export function showObjectUi(visible) { objectUiGroup.visible = visible; }
+export function showObjectUi(visible) { objectUiGroup.visible = visible; if (visible) scheduleObjectThumbnails(); }
 
 // ---------------------------------------------------------- turning one by its ring
 const angleFromObject = (obj, gp) => Math.atan2(gp.x - obj.x, gp.z - obj.z); // in the same sense as rotY: +z is 0
@@ -455,6 +455,55 @@ export function objectsHint(touch) {
     : 'Pick something from the palette to start putting it down · click one to select it · drag it to move it · alt+drag to copy it · double-click to delete it · empty-ground drag orbits';
 }
 
+// ---------------------------------------------------------- palette thumbnails
+// Each card shows the thing itself, shot the way the zone-type cards are (see withThumbnailStudio in ui/zone-carousel.js):
+// one of each is built far off the map on a patch of ground, framed to fit however big it is, seen from a little to its
+// front right, and captured between two frames. Done the first time the Objects tab opens, then kept for the session.
+let objectThumbnails = null, objectThumbnailsScheduled = false;
+function scheduleObjectThumbnails() {
+  if (objectThumbnails || objectThumbnailsScheduled || !App.withThumbnailStudio) return;
+  objectThumbnailsScheduled = true;
+  setTimeout(() => {
+    objectThumbnails = renderObjectThumbnails();
+    document.querySelectorAll('#object-palette .type-card').forEach(card => {
+      const image = objectThumbnails[card.dataset.type];
+      if (image) card.querySelector('.thumb').style.backgroundImage = `url(${image})`;
+    });
+  }, 30);
+}
+function renderObjectThumbnails() {
+  return App.withThumbnailStudio(snap => {
+    const FOV = 30;
+    const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 500);
+    const view = new THREE.Vector3(0.6, 0.55, 1).normalize(); // from the front (+z), a little right and above
+    const box = new THREE.Box3(), sphere = new THREE.Sphere();
+    const thumbnails = {};
+    OBJECT_TYPES.forEach((type, i) => {
+      const cx = 42000 + i*100, cz = 42000;
+      const group = new THREE.Group();
+      const prop = type.build(mulberry32(1));
+      prop.position.set(cx, Y_OBJECT, cz);
+      group.add(prop);
+      scene.add(group);
+      prop.updateMatrixWorld(true);
+      box.setFromObject(prop).getBoundingSphere(sphere);
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI/2),
+        new THREE.MeshStandardMaterial({ color: BUILDING_GROUND_COLORS[0], roughness: 1 }));
+      ground.scale.setScalar(sphere.radius*40); // past the edges of the shot, whatever the size
+      ground.position.set(cx, 0, cz);
+      ground.receiveShadow = true;
+      group.add(ground);
+      const distance = sphere.radius/Math.sin(FOV/2*Math.PI/180)*1.05;
+      camera.position.copy(sphere.center).addScaledVector(view, distance);
+      camera.lookAt(sphere.center);
+      thumbnails[type.id] = snap(camera);
+      scene.remove(group);
+      disposeObject(group);
+    });
+    return thumbnails;
+  });
+}
+
 // ---------------------------------------------------------- the panel
 // The palette and the list live in the Objects section; the selected object's own settings go in the details panel below
 // it, where a road's or a zone's do (renderDetails hands over to this when the Objects tab is up).
@@ -466,7 +515,9 @@ export function renderObjectsPanel() {
     const card = document.createElement('button');
     card.className = 'type-card' + (S.placingType === type.id ? ' active' : '');
     card.title = type.label;
-    card.innerHTML = `<div class="thumb" style="background-color:${type.color}"></div>${type.label}`;
+    card.dataset.type = type.id;
+    const image = objectThumbnails && objectThumbnails[type.id];
+    card.innerHTML = `<div class="thumb" style="background-color:${type.color};${image ? `background-image:url(${image});` : ''}"></div>${type.label}`;
     card.onclick = () => armObject(type.id);
     palette.appendChild(card);
   });
