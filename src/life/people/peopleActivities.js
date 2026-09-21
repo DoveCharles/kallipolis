@@ -1,5 +1,5 @@
 import { App, S } from '../../core/shared.js';
-import { buildingLabel, clipNamed, followed, groups, hasClip, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, walkableUpTo, weightOf, wrapAngle } from './people.js';
+import { beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint } from './peoplePathing.js';
 import * as THREE from 'three';
@@ -404,7 +404,10 @@ const PUNCH_RATE = 1/8;        // the chance a second of picking on someone, per
 const PUNCH_REACH = 8;          // how far off (at people size 1) the one they pick on can be
 const PUNCH_NOTICE = 2.5;       // how near they come before they're noticed
 export const PUNCH_CHASE_SPEED = 1.5;  // how much faster than they walk they go after them
-const PUNCH_CHASE_MAX = 12;     // seconds before they give up on catching them
+const PUNCH_CHASE_MAX = 10;     // seconds before they give up on catching them
+const BYSTANDER_RADIUS = 7, BYSTANDER_SHARE = 0.5; // how near (at people size 1) someone has to be to a punch to join in, and their chance as a share of the victim's
+const DOWN_TIME_SCALE = 0.7;    // how long someone lies there once knocked flat, as a share of the usual 3 to 7 seconds
+const RETALIATE_CHANCE = 0.1;   // the chance, per unit of aggression, that someone punched goes after whoever did it when they get up (or else runs)
 export const PUNCH_HIT_TIME = 0.5;    // how far into the Punch animation the fist lands, in seconds
 let reach = PUNCH_REACH*S.peopleSize;
 /**
@@ -457,10 +460,21 @@ export function throwPunch(dt, p, isForced, forcedVictim) {
     if (!near.length) { p.punchCooldown = 2 + peopleRng()*3; return; }
     victim = pickFrom(near);
   }
-  p.attack = { target: victim, stage: 'chase', timer: PUNCH_CHASE_MAX };
-  p.lookAt = victim;
-  victim.punched = { by: p, stage: 'marked', timer: 0 };
+  goAfter(p, victim);
   p.punchCooldown = 20 + peopleRng()*20;
+}
+
+/**
+ * Set someone going after someone to punch them: up to them, to talk distance, then a punch (see updateAttack).
+ * @param {Person} p - the one who'll punch
+ * @param {Person} victim - who they're going after
+ * @param {boolean} [revenge] - whether it's for a punch thrown at them or someone else, which nobody else then takes up
+ * @returns {void}
+ */
+export function goAfter(p, victim, revenge = false) {
+  p.attack = { target: victim, stage: 'chase', timer: PUNCH_CHASE_MAX*(revenge ? p.traits.patience : 1), revenge }; // (how long they'll chase someone for revenge goes by their patience)
+  p.lookAt = victim;
+  if (!victim.punched) victim.punched = { by: p, stage: 'marked', timer: 0 }; // (several can be after one person: the first to reach them lands it)
 }
 
 /** How long someone stands staring down whoever they've just knocked flat, in seconds. */
@@ -476,7 +490,7 @@ export function updateAttack(p, dt) {
   const a = p.attack, t = a.target;
   a.timer -= dt;
   if (a.stage === 'chase') {
-    if (t.punched?.by !== p || a.timer <= 0 || !(t.mode === 'line' || t.mode === 'wander' || t.mode === 'leaving') || t.jc) { endAttack(p); return null; }
+    if ((t.punched?.by !== p && t.punched?.stage !== 'marked') || a.timer <= 0 || !(t.mode === 'line' || t.mode === 'wander' || t.mode === 'leaving' || t.mode === 'possessed') || t.jc) { endAttack(p); return null; }
     const d = Math.hypot(t.x - p.x, t.z - p.z), gap = CHAT_GAP*S.peopleSize;
     if (t.punched.stage === 'marked' && d < PUNCH_NOTICE*S.peopleSize) {
       t.punched = null;
@@ -491,6 +505,7 @@ export function updateAttack(p, dt) {
     playOnce(p, 'Punch');
   }
   if (a.stage === 'punch') {
+    if (t.punched?.by !== p) { endAttack(p); return null; } // (someone else got there first: it's over)
     p.faceTo = headingTo(p, t);
     if (a.timer > 0) return null;
     if (t.punched?.by === p) knockDown(t, p);
@@ -561,6 +576,28 @@ export function knockDown(t, p) {
   t.faceTo = null; t.lookAt = null;
   playOnce(t, 'Fall');
   t.pose = 'Fallen';
+  bystandersReactToPunch(t, p);
+}
+
+/**
+ * Everyone near someone who's just been punched by a person (out to start something) reacts at once: half the victim's own chance (see reactToPunch),
+ * less for anyone more evil, to go after whoever did it, and otherwise they run from them.
+ * @param {Person} victim - who was hit
+ * @param {object} puncher - whoever hit them (anything but a person is ignored)
+ * @returns {void}
+ */
+function bystandersReactToPunch(victim, puncher) {
+  if (!puncher?.traits || puncher.attack?.revenge || (puncher.punched && puncher.punched.stage !== 'marked')) return; // (a revenge punch is answered by no one but whoever it hit: see reactToPunch)
+  const radius = BYSTANDER_RADIUS*S.peopleSize;
+  people.forEach(q => {
+    if (q === victim || q === puncher || isGone(q) || q.punched || q.attack || !['line', 'wander', 'leaving'].includes(q.mode)) return;
+    if (Math.hypot(q.x - victim.x, q.z - victim.z) > radius) return;
+    const chance = RETALIATE_CHANCE*q.traits.aggression*BYSTANDER_SHARE/Math.max(0.25, 1 + (q.traits.evil ?? 0));
+    endActivity(q);
+    q.stun = q.fright = q.please = null; q.oneShot = null; q.wait = 0;
+    if (q.mode !== 'leaving' && peopleRng() < chance) goAfter(q, puncher, true);
+    else beginFleeing(q, { x: puncher.x, z: puncher.z });
+  });
 }
 
 /** The modes whose people can't be knocked over: anyone dead, not yet placed, out of sight or on a train. */
@@ -604,7 +641,7 @@ export function landFall(p) {
   p.x += offX*cos + offZ*sin; p.z += offZ*cos - offX*sin;
   p.clipA = p.clipB = fallen; p.fade = 1;
   p.punched.stage = 'down';
-  p.punched.timer = (3 + peopleRng()*4);
+  p.punched.timer = (3 + peopleRng()*4)*DOWN_TIME_SCALE;
   if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; }
 }
 
@@ -617,7 +654,24 @@ export function landFall(p) {
 export function updatePunched(p, dt) {
   const k = p.punched;
   if (k.stage === 'down' && (k.timer -= dt) <= 0) { k.stage = 'rise'; p.pose = 'Idle'; }
-  else if (k.stage === 'rise' && weightOf(p, clipNamed('Idle')) >= 1) { p.punched = null; p.wait = 0.5 + peopleRng(); }
+  else if (k.stage === 'rise' && weightOf(p, clipNamed('Idle')) >= 1) { p.punched = null; p.wait = 0.5 + peopleRng(); reactToPunch(p, k.by); }
+}
+
+/**
+ * Someone who's just got up after being punched by a person: in proportion to their aggression, they go after whoever
+ * did it, and otherwise run from them. (Knocked over by anything else — a bee — they carry on.)
+ * @param {Person} p - the person who was punched
+ * @param {object} by - whoever knocked them over
+ * @returns {void}
+ */
+function reactToPunch(p, by) {
+  if (!by?.traits || isGone(by)) return;
+  const canFight = (p.mode === 'line' || p.mode === 'wander') && (!by.punched || by.punched.stage === 'marked') && ['line', 'wander', 'leaving', 'possessed'].includes(by.mode);
+  if (canFight && peopleRng() < RETALIATE_CHANCE*p.traits.aggression) {
+    goAfter(p, by, true);
+  } else {
+    beginFleeing(p, { x: by.x, z: by.z });
+  }
 }
 
 export const RIDE_CHANCE = 0.05;

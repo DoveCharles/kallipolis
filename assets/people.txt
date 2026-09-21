@@ -213,7 +213,6 @@ DJ
 Ryan
 Osama
 Citrus
-T.V.
 Zach
 Tuna
 Joey
@@ -908,6 +907,7 @@ Graph
 Stew
 Lightning
 Stonefish
+T.V.
 
 ################################################################################################################################
 
@@ -1253,7 +1253,7 @@ Movies
 Jaywalking [patience = 0.5, evil = 0.05, roadsafety = 0.3]
 The Law [ aggression = 0]
 Phrenology [mood = -0.3, evil = 0.3]
-Heart-reacting every messagemult [mood = 0.4, patience = 0.7]
+Heart-reacting every message [mood = 0.4, patience = 0.7]
 Finding Luigi [patience = 2, agemult = 0.8]
 Pathologising themself
 Attempting to achieve immortality [ evil = 0.05, agemult = 1.5, ageless]
@@ -1581,7 +1581,7 @@ Typing sooooo quick [keysmash]
 Headbutting shit [ scramble, aggression = 5]
 Smashing mirrors with their face [roadsafety = 0.3, scramble, aggression = 5]
 Streamers
-Late-night gamings with on discord :rolling_on_the_floor_laughing: [limit = 2b, agemult = 0.9]
+Late-night gamings on discord :rolling_on_the_floor_laughing: [limit = 2b, agemult = 0.9]
 Dreaming of a better world
 Fantasising about the death of celebrities [evil = 0.05]
 Rice Cookers

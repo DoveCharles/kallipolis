@@ -82,7 +82,7 @@ function spawnParts(at, height, parts, power = 1, ground = at.y) {
       if (typeof ground === 'function') {
         // (the ground where it'll come down, going by how long it falls to the ground under where it started)
         const fall = Math.max(0, (chunk.vy + Math.sqrt(chunk.vy*chunk.vy + 2*GRAVITY*(chunk.y - groundAtStart)))/GRAVITY);
-        chunk.ground = ground(chunk.x + chunk.vx*fall, chunk.z + chunk.vz*fall);
+        chunk.ground = ground(chunk.x + chunk.vx*fall, chunk.z + chunk.vz*fall) + chunk.size*chunk.shape.y; // (sitting on it, not sunk in it)
       }
       giblets.push(chunk);
     }

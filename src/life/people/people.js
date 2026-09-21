@@ -389,6 +389,7 @@ export function refreshTraits(p, i) {
 }
 
 export const FRIGHT_RADIUS = 14, FLEE_SPEED = 2.3;
+const LYING_CLEARANCE = 1; // how near (at people size 1) anyone walks to someone lying on the ground
 /**
  * Have everyone around someone blowing up notice it: the nearer they are, the sooner, and they run off for a while.
  * @param {Person} victim - whoever it is
@@ -493,18 +494,27 @@ function updateEffect(p, dt, key, onResolve) {
  * @returns {void}
  */
 export function updateFright(p, dt) {
-  updateEffect(p, dt, 'fright', (p, fright) => {
-    fright.stage = 'flee';
-    fright.timer = 5 + peopleRng()*4;
-    p.faceTo = null; p.lookAt = null;
-    // away from whatever frightened them: turn round, if they're on a walkway
-    if (p.mode === 'line') {
-      const nav = peopleNav.lines[p.li], k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), a = nav.pts[k], b = nav.pts[k + 1];
-      if (((b.x - a.x)*(fright.from.x - p.x) + (b.z - a.z)*(fright.from.z - p.z))*p.dir > 0) p.dir = -p.dir;
-    } else if (p.mode === 'wander') {
-      fleeWithin(p, peopleNav.areas[p.area]);
-    }
-  });
+  updateEffect(p, dt, 'fright', (p, fright) => beginFleeing(p, fright.from));
+}
+
+/** How long, in seconds, someone runs off from whatever frightened them. */
+const FLEE_TIME = 10;
+/**
+ * Set someone running off, more than twice as fast as they walk, away from `from` ({ x, z }) for FLEE_TIME seconds.
+ * @param {Person} p - the person
+ * @param {{x: number, z: number}} from - what they're running from
+ * @returns {void}
+ */
+export function beginFleeing(p, from) {
+  p.fright = { stage: 'flee', timer: FLEE_TIME, from };
+  p.faceTo = null; p.lookAt = null;
+  // away from whatever frightened them: turn round, if they're on a walkway
+  if (p.mode === 'line') {
+    const nav = peopleNav.lines[p.li], k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), a = nav.pts[k], b = nav.pts[k + 1];
+    if (((b.x - a.x)*(from.x - p.x) + (b.z - a.z)*(from.z - p.z))*p.dir > 0) p.dir = -p.dir;
+  } else if (p.mode === 'wander') {
+    fleeWithin(p, peopleNav.areas[p.area]);
+  }
 }
 
 /**
@@ -517,7 +527,7 @@ export function updateStun(p, dt) {
   updateEffect(p, dt, 'stun', (p, stun) => {
     // 'held' is the stage updatePeople freezes them on: dazed where they stand, looking, and not fleeing
     stun.stage = 'held';
-    stun.timer = 3 + peopleRng()*2;
+    stun.timer = stun.hold ?? 3 + peopleRng()*2; // (`hold`, where whatever stunned them says how long)
   });
 }
 
@@ -646,6 +656,8 @@ export function updatePeople(t) {
     meetOnWalkways(dt);
     pickFights(dt);
   }
+  // whoever's been knocked down and is still on the ground (or getting up): nobody walks into them
+  const lyingDown = people.filter(q => q.punched && q.punched.stage !== 'marked' && q.punched.stage !== 'brace');
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   people.forEach((p, i) => {
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
@@ -790,8 +802,14 @@ export function updatePeople(t) {
     if (goal) {
       const dx = goal.x - p.x, dz = goal.z - p.z, d = Math.hypot(dx, dz);
       const step = possessed ? d : speed*dt*(p.mode === 'line' && !p.crossStage && !p.attack ? 1 + Math.min(2, d*0.5) : 1);
-      if (d > 1e-4) {
-        const k = Math.min(1, step/d), mx = dx*k, mz = dz*k;
+      const k = d > 1e-4 ? Math.min(1, step/d) : 0, mx = dx*k, mz = dz*k;
+      // (anyone just walking waits where they are until whoever it is is up: a step that would take them nearer, inside LYING_CLEARANCE, isn't taken — but not someone going after someone, or running from them)
+      const blocked = !possessed && !p.attack && !fleeing && lyingDown.some(q => {
+        if (q === p) return false;
+        const after = Math.hypot(q.x - (p.x + mx), q.z - (p.z + mz));
+        return after < LYING_CLEARANCE*S.peopleSize && after < Math.hypot(q.x - p.x, q.z - p.z);
+      });
+      if (d > 1e-4 && !blocked) {
         p.x += mx; p.z += mz;
         // which way they face, and whether they're walking, go by how far they actually moved this frame — someone
         // keeping pace with their walkway is always right on top of the point they're heading for

@@ -5,7 +5,7 @@ import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
 import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, isGone, modelScale, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
-import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, canBeKnockedOver, endActivity, knockOver } from './peopleActivities.js';
+import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, canBeKnockedOver, endActivity, goAfter, knockOver } from './peopleActivities.js';
 import { reseatPerson } from './peoplePathing.js';
 
 // ============== following someone with camera  ============== 
@@ -182,6 +182,13 @@ export function unpossessPerson() {
   controls.goalTheta = controls.theta + wrapAngle(behind - controls.theta);
   controls.goalPhi = Math.max(controls.goalPhi, Math.PI*0.3);
 }
+// Walking into people: anyone within BUMP_RADIUS is shocked (as by a bad sort's death — see stunBystanders in people.js) for
+// BUMP_SHOCK_TIME, once, as you come within it. Walking into someone's very middle (within BUMP_CORE_RADIUS) sends you staggering SHOVE_DISTANCE straight
+// back from them, slowing to a stop by SHOVE_DECAY per second and too thrown to walk while you're still going faster than
+// STAGGER_SPEED, and gives them a BUMP_PUNCH_CHANCE chance per unit of aggression of punching you for it. It's rolled once, as you
+// walk into them. (Distances at people size 1.)
+const BUMP_RADIUS = 1.5, BUMP_CORE_RADIUS = 1, BUMP_SHOCK_TIME = 1;
+const BUMP_PUNCH_CHANCE = 0.05, SHOVE_DISTANCE = 2, SHOVE_DECAY = 5, STAGGER_SPEED = 1;
 /**
  * Walk someone being possessed where they're asked to go, this frame, over whatever's there.
  * @param {Person} p - the person
@@ -192,12 +199,37 @@ export function walkPossessed(p, dt) {
   const { forward, right, run } = controlInput(), yaw = possession.yaw;
   const len = Math.hypot(forward, right);
   let x = p.x, z = p.z;
-  if (len > 0) {
+  const shove = p.shove ??= { x: 0, z: 0 };
+  if (len > 0 && Math.hypot(shove.x, shove.z) <= STAGGER_SPEED) {
     const speed = PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.speed)*(run ? FLEE_SPEED*p.traits.boost : 1);
     const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = -Math.cos(yaw), rz = Math.sin(yaw);
     x += (fx*forward + rx*right)/len*speed*dt;
     z += (fz*forward + rz*right)/len*speed*dt;
   }
+  const slowing = Math.exp(-SHOVE_DECAY*dt);
+  x += shove.x*dt; z += shove.z*dt;
+  shove.x *= slowing; shove.z *= slowing;
+  const touching = new Set(), near = new Set();
+  people.forEach(q => {
+    if (q === p || isGone(q) || !(q.mode === 'line' || q.mode === 'wander' || q.mode === 'leaving')) return;
+    const dx = q.x - x, dz = q.z - z, d = Math.hypot(dx, dz);
+    if (d > BUMP_RADIUS*S.peopleSize) return;
+    near.add(q);
+    const startled = !p.near?.has(q);
+    const entering = d < BUMP_CORE_RADIUS*S.peopleSize && !p.touching?.has(q);
+    if (d < BUMP_CORE_RADIUS*S.peopleSize) touching.add(q);
+    // (whoever's shocked or busy, even, drops it to go after them)
+    const punching = len > 0 && entering && !p.punched && (q.mode === 'line' || q.mode === 'wander') && !q.attack && !q.punched
+      && peopleRng() < BUMP_PUNCH_CHANCE*q.traits.aggression;
+    if (punching) { endActivity(q); q.stun = q.fright = q.please = null; q.oneShot = null; goAfter(q, p); }
+    else if (len > 0 && startled && !q.stun && !q.fright && !q.please && !q.punched && !q.attack) q.stun = { stage: 'notice', timer: 0.15, from: { x: p.x, z: p.z }, hold: BUMP_SHOCK_TIME };
+    if (len === 0 || !entering) return;
+    const backX = d > 1e-3 ? -dx/d : -Math.sin(yaw), backZ = d > 1e-3 ? -dz/d : -Math.cos(yaw);
+    // (the distance a shove covers is its speed over SHOVE_DECAY)
+    const speed = SHOVE_DISTANCE*S.peopleSize*SHOVE_DECAY;
+    shove.x = backX*speed; shove.z = backZ*speed;
+  });
+  p.touching = touching; p.near = near;
   // how high the ground is there: a hangout's, the road's, or the pavement's
   const area = peopleNav.areas.find(a => x >= a.minX && x <= a.maxX && z >= a.minZ && z <= a.maxZ && a.inside(x, z));
   p.onRoad = !area && peopleNav.onPavement(x, z);

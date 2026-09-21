@@ -155,7 +155,7 @@ const PERSON_VERTEX_PARS = `
   uniform vec3 personHeadPivot;
   uniform float personChestBone;
   uniform vec3 personChestPivot;
-  uniform int personHidden; // the person whose body is hidden but for their arms (-1 for nobody)
+  uniform int personHidden; // the person whose head is hidden (-1 for nobody)
   attribute vec4 personJoints;
   attribute vec4 personWeights;
   // What the shader needs to know about the vertex itself, packed into one attribute (a machine guarantees only 16, and
@@ -278,12 +278,9 @@ function injectPersonShader(shader, uniforms, look) {
   if (colored) shader.uniforms.personPalette = { value: look.palette };
   const hide = look.femaleOnly.length
     ? `if ((${look.femaleOnly.map(slot => `personSlotIndex == ${slot}`).join(' || ')}) && personTrait(1).y > 0.5) transformed = vec3(0.0);` : '';
-  // (not from the shadow's depth material, so the body still casts one) whoever personHidden names is drawn as only their arms
-  // and the shirt on their torso (down to the bottom of the view when they look down), the rest of the body drawn into a
-  // point at the middle of their chest, which closes the shirt's open ends
-  const shirt = PERSON_SLOTS.flatMap((name, slot) => name === 'Top' || /^(Sleeve|Tummy)/.test(name) ? [slot] : []);
-  const hideBody = colored
-    ? `if (personIndex() == personHidden && personVertex.x >= 0.0 && !(${shirt.map(slot => `personSlotIndex == ${slot}`).join(' || ')})) transformed = (personBone(personChestBone)*vec4(personChestPivot, 1.0)).xyz;` : '';
+  // (not from the shadow's depth material, so the body still casts one) whoever personHidden names is drawn headless: their head
+  // and hair drawn into a point at the middle of their chest, inside their shirt
+  const hideHead = colored ? 'if (personIndex() == personHidden && personVertex.x > 0.0) transformed = (personBone(personChestBone)*vec4(personChestPivot, 1.0)).xyz;' : '';
   const bands = (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? personPalette[0] : personTrait(${b.colorRow}).rgb) : `).join('');
   const color = colored
     ? 'vPersonColor = ' + bands + Object.entries(look.traitColors).map(([slot, row]) => `personSlotIndex == ${slot} ? personTrait(${row}).rgb : `).join('') + 'personPalette[personSlotIndex];' : '';
@@ -295,7 +292,7 @@ function injectPersonShader(shader, uniforms, look) {
       int personSlotIndex = int(personVertex.y + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
-      ${hideBody}
+      ${hideHead}
       ${color}`);
   if (!colored) return;
   shader.fragmentShader = shader.fragmentShader
