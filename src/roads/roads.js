@@ -94,6 +94,8 @@ export function createMeshBuilder() {
     if (facing < 0) indices.push(a, c, b); else indices.push(a, b, c);
   };
   return {
+    // how many vertices it holds so far, so a caller can color a stretch of them once it's built
+    vertexCount: () => positions.length/3,
     // every polygon (with its holes) in a Clipper PolyTree, as flat faces at height y — facing up, or down if `facingDown`
     addTops(tree, y, facingDown) {
       const up = { x:0, y:facingDown ? -1 : 1, z:0 };
