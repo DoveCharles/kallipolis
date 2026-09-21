@@ -230,7 +230,8 @@ export const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode ===
  * @param {Person} p - the person
  * @returns {boolean} whether they're in the room
  */
-const FOOTFALLS = 0; // how far through the walk cycle a foot first comes down (the other, half a cycle on)
+const FOOTFALLS = 0.13, STEPS_PER_CYCLE = 4; // how far through the walk cycle a foot first comes down, and how many times
+// one does in a cycle: the Walk clip is two full strides, left, right, left, right, each foot reaching furthest forward there
 // Someone's voice (see audio/voices.js), the same every time for the same person: its pitch, lower for a man than a woman
 // and for someone taller; its formants, likewise lower, and shifted either way on their own, apart from the pitch, so two
 // voices at one pitch can still sound nothing alike; and how sharp those formants ring, from breathy to nasal.
@@ -933,8 +934,8 @@ export function updatePeople(t) {
       if (s > 0) {
         const was = p.walkCycle;
         p.walkCycle = (p.walkCycle + (p.traits.backwards ? -1 : 1)*p.stepped/(personModel.stride*s) + 1) % 1;
-        // a foot comes down twice a cycle, at FOOTFALLS and half a cycle on: each is heard (see audio/footsteps.js)
-        if (p.moving && Math.floor((was - FOOTFALLS + 1)*2) !== Math.floor((p.walkCycle - FOOTFALLS + 1)*2)) footstep({ x: p.x, y: p.y, z: p.z }, p.traits.weight);
+        // a foot comes down STEPS_PER_CYCLE times a cycle, from FOOTFALLS on: each is heard (see audio/footsteps.js)
+        if (p.moving && Math.floor((was - FOOTFALLS + 1)*STEPS_PER_CYCLE) !== Math.floor((p.walkCycle - FOOTFALLS + 1)*STEPS_PER_CYCLE)) footstep({ x: p.x, y: p.y, z: p.z }, p.traits.weight);
       }
       p.idleTime += dt;
       // standing about with nothing to do for a while, now and then a scratch or a think

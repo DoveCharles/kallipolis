@@ -73,6 +73,15 @@ function unlock() {
 }
 ['pointerdown', 'keydown'].forEach(type => window.addEventListener(type, unlock, true));
 
+// Switched away to another tab, it goes quiet: the audio's suspended (which would otherwise leave the rain, the engines
+// and the hum droning on unchanged, the frames that steer them having stopped too) and picked up again on coming back.
+let hiddenAway = false; // (suspended by this rather than never woken, so coming back doesn't wake it before a press has)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (context.state === 'running') { hiddenAway = true; context.suspend(); }
+  } else if (hiddenAway) { hiddenAway = false; context.resume(); }
+});
+
 // The Sound toggle in World settings (see ui/sound.js) mutes everything, the engine loop included, at the listener.
 let muted = false;
 /**
@@ -103,12 +112,14 @@ function variantsOf(name) {
  * @param {number} refDistance - how near to be heard at full volume
  * @param {number} [maxDistance] - if given, it fades out evenly from refDistance to nothing at all here, rather than tailing
  *   off slowly and forever
+ * @param {number} [rate=1] - how fast it's played: above 1, higher and shorter; below, lower and longer
  * @returns {void}
  */
-export function playBufferAt(buffer, at, volume, refDistance, maxDistance) {
+export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate = 1) {
   if (muted || context.state !== 'running' || voices >= VOICES_MAX) return;
   const source = context.createBufferSource(), gain = context.createGain(), panner = context.createPanner();
   source.buffer = buffer;
+  source.playbackRate.value = rate;
   gain.gain.value = volume;
   panner.panningModel = 'equalpower';
   panner.distanceModel = maxDistance ? 'linear' : 'inverse';
