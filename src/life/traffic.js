@@ -1156,6 +1156,8 @@ function runOverPeople(car) {
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
     if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength) App.killPerson(i, driven ? 'player' : 'car');
   });
+  // and any bee it hits (see life/bees.js)
+  App.strikeBees?.({ x: car.x, z: car.z, heading: car.heading, halfLength, halfWidth, height: carHeight(car) });
 }
 
 /**

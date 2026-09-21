@@ -42,24 +42,49 @@ const flash = new THREE.PointLight(0xffb347, 0, 22, 2);
 scene.add(flash);
 let flashUntil = -Infinity, flashBorn = 0, flashDuration = 0.5;
 
+// Where the ground is under (x, z), looking straight down from `fromY`: the first solid, upward-facing surface, or `fallback`.
+// Moving things (instanced or skinned, such as cars and people), hidden or see-through things, and undersides don't count.
+const downRay = new THREE.Raycaster(), downOrigin = new THREE.Vector3(), DOWN = new THREE.Vector3(0, -1, 0), surfaceNormal = new THREE.Vector3();
+const isShown = o => { for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };
+function groundBelow(x, fromY, z, fallback) {
+  downRay.set(downOrigin.set(x, fromY, z), DOWN);
+  for (const hit of downRay.intersectObject(scene, true)) {
+    const o = hit.object;
+    if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || !hit.face || !isShown(o)) continue;
+    const material = Array.isArray(o.material) ? o.material[hit.face.materialIndex] : o.material;
+    if (!material || material.transparent || material.visible === false) continue;
+    if (surfaceNormal.copy(hit.face.normal).transformDirection(o.matrixWorld).y < 0.5) continue;
+    return hit.point.y;
+  }
+  return fallback;
+}
 // the chunks thrown out from `at` (where feet or wheels were), `height` tall, one call per material of them: [color, how
 // many, how big (as a fraction of height)] — `power` throws them further and faster and spreads them wider (a car's
-// explosion, much more violent than a person's, uses a bigger one; see explodeCar)
-function spawnParts(at, height, parts, power = 1) {
+// explosion, much more violent than a person's, uses a bigger one; see explodeCar); `ground` is the height they land on
+// (default: where they start from), or a function of (x, z) that finds it, for chunks thrown from the air, which each land
+// on whatever is below where they come down
+function spawnParts(at, height, parts, power = 1, ground = at.y) {
   const now = performance.now()/1000;
+  const groundAtStart = typeof ground === 'function' ? ground(at.x, at.z) : ground;
   parts.forEach(([color, count, size]) => {
     for (let k=0;k<count;k++) {
       if (giblets.length >= GIBLETS_MAX) giblets.shift(); // (the oldest make way)
       const angle = Math.random()*Math.PI*2, outward = (1 + Math.random()*4.5)*power;
       const spinAxis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
-      giblets.push({
+      const chunk = {
         x: at.x + (Math.random() - 0.5)*0.25*height*power, y: at.y + height*(0.15 + Math.random()*0.75), z: at.z + (Math.random() - 0.5)*0.25*height*power,
         vx: Math.cos(angle)*outward, vy: (2 + Math.random()*5.5)*power, vz: Math.sin(angle)*outward,
-        ground: at.y, size: size*height*(0.6 + Math.random()*0.8),
+        ground: groundAtStart, size: size*height*(0.6 + Math.random()*0.8),
         shape: new THREE.Vector3(0.6 + Math.random()*0.7, 0.5 + Math.random()*0.6, 0.6 + Math.random()*0.7),
         quaternion: new THREE.Quaternion().setFromAxisAngle(spinAxis, Math.random()*Math.PI*2),
         spinAxis, spin: 4 + Math.random()*14, color, born: now, resting: false,
-      });
+      };
+      if (typeof ground === 'function') {
+        // (the ground where it'll come down, going by how long it falls to the ground under where it started)
+        const fall = Math.max(0, (chunk.vy + Math.sqrt(chunk.vy*chunk.vy + 2*GRAVITY*(chunk.y - groundAtStart)))/GRAVITY);
+        chunk.ground = ground(chunk.x + chunk.vx*fall, chunk.z + chunk.vz*fall);
+      }
+      giblets.push(chunk);
     }
   });
 }
@@ -106,6 +131,12 @@ export function explode(at, height, colors) {
   spawnParts(at, height, parts);
   spawnSplat(at, height, BLOOD_SPLAT_COLOR);
 }
+// Bursts a bee in mid-air: a few flecks of its yellow, black and wing, `size` long — small and soft-thrown, each falling to
+// whatever ground is below it (`fallbackGround` where there's nothing), and no mark on it.
+export function explodeBee(at, size, fallbackGround) {
+  const parts = [[new THREE.Color(0xffeb2b), 6, 0.3], [new THREE.Color(0x1c1c1c), 4, 0.26], [new THREE.Color(0xdfe8f0), 3, 0.22]];
+  spawnParts(at, size, parts, 0.25, (x, z) => groundBelow(x, at.y, z, fallbackGround));
+}
 // Blows a car up: `at` where its wheels were, `height` how tall it was, `colors.paint` its own color — chunks of it, bigger
 // and thrown much further than a person's (see spawnParts' `power`), in its paint and (standing in for glass, trim and
 // tires) CAR_TRIM_COLORS, sooty flecks, a big scorch mark rather than blood, and a fireball with smoke (see explodeFx).
@@ -132,7 +163,7 @@ export function updateGiblets(t) {
       g.vy -= GRAVITY*dt;
       g.x += g.vx*dt; g.y += g.vy*dt; g.z += g.vz*dt;
       g.quaternion.premultiply(spinStep.setFromAxisAngle(g.spinAxis, g.spin*dt));
-      const floor = g.ground + g.size*g.shape.y*0.6;
+      const floor = g.ground + g.size*g.shape.y;
       if (g.y < floor) {
         g.y = floor;
         if (g.vy < -1) {

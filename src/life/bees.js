@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
-import { camera, Y_PARK } from '../core/scene.js';
+import { camera, Y_PARK, Y_ROAD } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { buildingNumber as numberFor } from '../buildings/footprints.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
@@ -9,6 +9,7 @@ import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
 import { mulberry32 } from '../core/math.js';
 import { startFlying, endFlying } from './possession.js';
+import { explodeBee } from './giblets.js';
 import { stepFlight, makeHand, cruiseSpeed, chaseBehind } from './flight.js';
 
 // ============================================================ flowers, hives and bees
@@ -139,6 +140,8 @@ const BEE_CIRCLE_MIN = 1.6, BEE_CIRCLE_MAX = 3.4;  // seconds spent circling one
 const BEE_SIT_MIN = 1.5, BEE_SIT_MAX = 4.5;        // seconds sat on it
 const BEE_RANGE = 22;         // how far from its hive a bee will go looking for a flower
 const BEE_ARRIVED = 0.45;     // how near a target counts as reaching it
+const BEE_HIT_REACH = 0.4;    // how near (at people size 1) a bee flown by hand has to be to someone to knock them over
+const BEE_RESPAWN_MIN = 6, BEE_RESPAWN_MAX = 14; // seconds before a bee that's died is replaced, by a new one in its hive
 const BEE_CEILING = 40;       // how far above the park a bee flown by hand can climb
 const BEE_DUSK = 3;           // the sun this far above the horizon or lower and they're in for the night, in degrees
 const BEE_RAIN = 0.2;         // rain past this and they stay in as well
@@ -526,7 +529,8 @@ export function plantParkLife(zone, { rng, foliage, ground, spot, clear, trees, 
   hives.forEach((hive, index) => {
     const near = flowerSpots.filter(f => f.distanceTo(hive.mouth) < BEE_RANGE);
     for (let k=0;k<hive.bees;k++) {
-      bees.push({ hive, number: numberFor(zone.id + ':bee:' + index + ':' + k),
+      const key = zone.id + ':bee:' + index + ':' + k;
+      bees.push({ hive, key, number: numberFor(key),
         flowers: near.length ? near : flowerSpots,
         at: hive.mouth.clone(), v: new THREE.Vector3(), aim: hive.mouth.clone(),
         state: 'hive', until: between(Math.random, 0.5, BEE_REST_MAX), yaw: Math.random()*Math.PI*2, pitch: 0, bank: 0, hand: null,
@@ -666,8 +670,52 @@ function flyByHand(bee, t, dt) {
   bee.at.set(hand.x, hand.y + hand.hop, hand.z);
   bee.v.set(hand.vx, hand.vy, hand.vz);
   bee.yaw = hand.heading; bee.pitch = hand.pitch - hand.dip; bee.bank = hand.bank - hand.rock;
+  knockOverWhoIsHit(bee);
   beatWings(bee, t);
   lookAt(bee, 0, dt);
+}
+// whoever a bee flown by hand has flown into goes down, as if punched
+function knockOverWhoIsHit(bee) {
+  const reach = BEE_HIT_REACH*S.peopleSize;
+  App.people?.forEach(p => {
+    if (Math.abs(p.x - bee.at.x) > reach || Math.abs(p.z - bee.at.z) > reach) return;
+    if (bee.at.y < p.y || bee.at.y > p.y + p.height*S.peopleSize) return;
+    App.knockOverPerson?.(p, bee.at);
+  });
+}
+/**
+ * Kill a bee that's out flying — wherever it was, in a burst of its colours — and put a new one in its hive to come out
+ * after a few seconds. The camera on it stays where it died, following nothing.
+ * @param {object} bee
+ * @returns {void}
+ */
+function killBee(bee) {
+  if (isHome(bee)) return;
+  if (flownBee === bee || (followedBee && followedBee.colony.bees[followedBee.index] === bee)) stopFollowingBee();
+  explodeBee({ x: bee.at.x, y: bee.at.y, z: bee.at.z }, BEE_LENGTH*bee.traits.size, Y_ROAD);
+  bee.generation = (bee.generation || 0) + 1;
+  bee.number = numberFor(bee.key + ':' + bee.generation);
+  bee.traits = null; // (a new bee: its own traits, from its own number)
+  bee.state = 'hive';
+  bee.at.copy(bee.hive.mouth);
+  bee.v.set(0, 0, 0);
+  bee.plan.length = 0;
+  bee.perch = null;
+  bee.until = (lastBeeTime || 0) + between(Math.random, BEE_RESPAWN_MIN, BEE_RESPAWN_MAX);
+}
+/**
+ * Kill any bee inside a box on the ground — a car's — that is low enough to be hit.
+ * @param {{x: number, z: number, heading: number, halfLength: number, halfWidth: number, height: number}} box
+ * @returns {void}
+ */
+function strikeBees({ x, z, heading, halfLength, halfWidth, height }) {
+  const cos = Math.cos(heading), sin = Math.sin(heading), reach = Math.hypot(halfLength, halfWidth);
+  colonies.forEach(colony => colony.bees.forEach(bee => {
+    if (isHome(bee) || bee.at.y > Y_ROAD + height) return;
+    const dx = bee.at.x - x, dz = bee.at.z - z;
+    if (Math.abs(dx) > reach || Math.abs(dz) > reach) return;
+    if (Math.abs(dx*cos - dz*sin) < halfWidth && Math.abs(dx*sin + dz*cos) < halfLength) killBee(bee);
+  }));
 }
 /**
  * The bee card's picture: take the followed bee off its round and fly it by hand, from exactly where and how fast it
@@ -857,4 +905,4 @@ export function updateBees(t) {
 }
 
 // (the bee and hive cards are handed over too, for whoever else wants to put something on them or open one)
-Object.assign(App, { pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive, flyBee, showBeeCard, setBeeCardDoing, hideBeeCard, showHiveCard, setHiveCardBees, hideHiveCard });
+Object.assign(App, { strikeBees, pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive, flyBee, showBeeCard, setBeeCardDoing, hideBeeCard, showHiveCard, setHiveCardBees, hideHiveCard });

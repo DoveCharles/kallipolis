@@ -12,7 +12,7 @@ import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
-import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
+import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { followPersonAt, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
 
@@ -601,7 +601,7 @@ export function isPedInDanger(p) {
  * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
  * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
  */
-Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, people, peopleGroups: groups });
+Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, people, peopleGroups: groups });
 
 /**
  * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone

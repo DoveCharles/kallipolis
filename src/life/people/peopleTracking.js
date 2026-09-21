@@ -5,7 +5,7 @@ import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
 import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, isGone, modelScale, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
-import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, endActivity, isFairGame, knockDown } from './peopleActivities.js';
+import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, endActivity, isFairGame, knockOver } from './peopleActivities.js';
 import { reseatPerson } from './peoplePathing.js';
 
 // ============== following someone with camera  ============== 
@@ -257,8 +257,7 @@ export function updateSwing(p, dt) {
     hit = q; nearest = d;
   });
   if (!hit) return;
-  hit.punched = { by: p, stage: 'brace', timer: 0 };
-  knockDown(hit, p);
+  knockOver(hit, p);
 }
 
 //  ============== Riding the trains  ============== 

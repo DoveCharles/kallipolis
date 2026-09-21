@@ -1,5 +1,5 @@
 import { App, S } from '../../core/shared.js';
-import { buildingLabel, clipNamed, followed, groups, hasClip, headingTo, indoorsCount, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, walkableUpTo, weightOf, wrapAngle } from './people.js';
+import { buildingLabel, clipNamed, followed, groups, hasClip, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint } from './peoplePathing.js';
 import * as THREE from 'three';
@@ -561,6 +561,20 @@ export function knockDown(t, p) {
   t.faceTo = null; t.lookAt = null;
   playOnce(t, 'Fall');
   t.pose = 'Fallen';
+}
+
+/**
+ * Knock someone over as if they'd been punched, by whatever is at `from` ({ x, z }): flat on their back, facing it. Only
+ * someone going about their business can be (see isFairGame).
+ * @param {Person} t - the one being hit
+ * @param {{x: number, z: number}} from - where the blow came from
+ * @returns {boolean} whether they went down
+ */
+export function knockOver(t, from) {
+  if (isGone(t) || !isFairGame(t) || !hasClip('Fall')) return false;
+  t.punched = { by: from, stage: 'brace', timer: 0 };
+  knockDown(t, from);
+  return true;
 }
 
 /**
