@@ -5,6 +5,7 @@ import { scene, camera, renderer, computeWindowGlowFactor, SKY_ENV_MAP, Y_ROAD }
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { hashLicensePlate, hashNameToNumber, mulberry32, pointInPolygon } from '../core/math.js';
 import { footprintBounds } from '../buildings/footprints.js';
+import { getWaterRegion, WATER_LEVEL } from '../water/water.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { roadLineWidths, createMeshBuilder, navRebuildOnHold } from '../roads/roads.js';
@@ -953,7 +954,7 @@ export function updateTraffic(t) {
       car.plate =  carPlate(car);
     }
     if (car.design != null) refreshCarTraits(car);
-    if (car === drivenCar) { driveByHand(car, dt); turnWheels(car, dt); placeCar(car, i, designCounts); return; }
+    if (car === drivenCar) { if (car.sinking) sinkCar(car, dt); else driveByHand(car, dt); turnWheels(car, dt); placeCar(car, i, designCounts); return; }
     if (car.fuse != null) { burnFuse(car, dt); placeCar(car, i, designCounts); return; } // (about to blow: it neither drives nor turns)
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
@@ -1035,6 +1036,7 @@ export function updateTraffic(t) {
   burntOut.forEach(car => forCarsNear(car.x, car.z, reach, other => { if (Math.hypot(other.x - car.x, other.z - car.z) <= reach) blasted.add(other); }));
   if (drivenCar && blasted.has(drivenCar)) { const driven = drivenCar; stopDriving(); blasted.add(driven); } // (the driver is thrown out of it, and it goes too)
   blasted.forEach(car => { const i = cars.indexOf(car); if (i >= 0) killCar(i); });
+  if (drivenCar?.sinking?.under) { const driven = drivenCar, at = { x: driven.x, z: driven.z }; stopDriving(); Object.assign(driven, at); killCar(cars.indexOf(driven), WATER_LEVEL); } // (gone under: it blows up at the surface)
   carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
   if (S.showRoadsafetyDebug) { carHitboxDebugMesh.count = cars.length; carHitboxDebugMesh.instanceMatrix.needsUpdate = true; }
   carParts.matrix.needsUpdate = true;
@@ -1075,6 +1077,7 @@ function turnWheels(car, dt) {
 }
 
 const placing = { matrix: new THREE.Matrix4(), rotation: new THREE.Quaternion(), scale: new THREE.Vector3(), position: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0) };
+const tilting = new THREE.Quaternion(), sideways = new THREE.Vector3(1, 0, 0); // (a sinking car's pitch, about its own sideways axis)
 /**
  * Put car `i` where it is: at Y_ROAD, turned to its heading and scaled by S.peopleSize. It goes into its design's mesh at
  * the next free instance slot (counted up in designCounts), with its paint, wheel angles and plate packed alongside, or
@@ -1087,7 +1090,8 @@ const placing = { matrix: new THREE.Matrix4(), rotation: new THREE.Quaternion(),
 function placeCar(car, i, designCounts) {
   const { matrix, rotation, scale, position, up } = placing;
   rotation.setFromAxisAngle(up, car.heading);
-  position.set(car.x, Y_ROAD, car.z);
+  if (car.sinking) rotation.multiply(tilting.setFromAxisAngle(sideways, car.sinking.pitch)); // (nose down, into the water)
+  position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0), car.z);
   if (car.design != null && carMeshes[car.design]) {
     const cm = carMeshes[car.design], idx = designCounts[car.design]++;
     scale.setScalar(S.peopleSize);
@@ -1717,6 +1721,46 @@ function driveByHand(car, dt) {
   bumpIntoCars(car, was);
   hitBuildings(car, was, dt);
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
+  if (overOpenWater(car.x, car.z)) car.sinking = { drop: 0, fall: 0, pitch: 0, under: false };
+}
+
+// ---- the driven car in the water: driven off the land (or off the side of a bridge) and over water — a water zone or a
+// river — it drops through the surface, nose first, carried on a little by its speed, and blows up once it's under
+const SINK_GRAVITY = 20, SINK_DRAG = 1.5, SINK_PITCH = 0.7, SINK_PITCH_RATE = 2.5; // (units a second squared; the share of its speed the water takes each second; how far its nose goes down, in radians, and how fast)
+let openWater = { region: null, roads: null, inWater: null, onRoad: null };
+/**
+ * Whether a point is over water with no road across it to hold a car up: in the water region (water zones and rivers),
+ * and not on the road footprint (a bridge's deck, sidewalks and all). The two region testers are rebuilt whenever
+ * either region is.
+ * @param {number} x
+ * @param {number} z
+ * @returns {boolean}
+ */
+function overOpenWater(x, z) {
+  const region = getWaterRegion(), roads = S.roadFootprint;
+  if (!region.length) return false;
+  if (openWater.region !== region || openWater.roads !== roads)
+    openWater = { region, roads, inWater: App.createRegionTester(region), onRoad: App.createRegionTester(roads) };
+  return openWater.inWater(x, z) && !openWater.onRoad(x, z);
+}
+/**
+ * One frame of a driven car going down in the water: the keys do nothing now; it runs on along its heading as the water
+ * slows it, falls faster and faster, and tips its nose down (or its tail, going backwards) — until it's a car's height
+ * below the surface, when it's marked `under` for updateTraffic to blow up.
+ * @param {object} car - the driven car
+ * @param {number} dt - seconds this frame
+ * @returns {void}
+ */
+function sinkCar(car, dt) {
+  const sink = car.sinking;
+  car.speed *= 1 - Math.min(1, SINK_DRAG*dt);
+  car.x += Math.sin(car.heading)*car.speed*dt;
+  car.z += Math.cos(car.heading)*car.speed*dt;
+  sink.fall += SINK_GRAVITY*dt;
+  sink.drop += sink.fall*dt;
+  const goal = SINK_PITCH*(car.speed < 0 ? -1 : 1);
+  sink.pitch += Math.max(-SINK_PITCH_RATE*dt, Math.min(SINK_PITCH_RATE*dt, goal - sink.pitch));
+  if (sink.drop >= Y_ROAD - WATER_LEVEL + carHeight(car)) sink.under = true;
 }
 
 // ---- the driven car against buildings: each building's footprint (see see-through.js) is a wall it can't drive through
@@ -2039,9 +2083,10 @@ function chaseCamera(car) {
  * The car card's Kill button: explode the car where it stands, in its own paint, through explodeCar — and take it out of
  * cars, so a replacement spawns in elsewhere as usual.
  * @param {number} i - index in cars
+ * @param {number} [y] - the height it blows up at: the road's, or the water's for a car that's gone under
  * @returns {void}
  */
-function killCar(i) {
+function killCar(i, y = Y_ROAD) {
   const car = cars[i];
   if (!car || car.li < 0) return;
   App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
@@ -2049,8 +2094,8 @@ function killCar(i) {
   const paint = new THREE.Color(...(carModelOf(car)?.bodyColor ?? car.paint));
   if (/bus/i.test(carModelOf(car)?.name ?? '')) { // (a bus goes up in two blasts, one at each end)
     const offset = carLength(car)*0.25;
-    [-1, 1].forEach(end => explodeCar({ x: car.x + Math.sin(car.heading)*offset*end, y: Y_ROAD, z: car.z + Math.cos(car.heading)*offset*end }, carHeight(car), { paint }));
-  } else explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint });
+    [-1, 1].forEach(end => explodeCar({ x: car.x + Math.sin(car.heading)*offset*end, y, z: car.z + Math.cos(car.heading)*offset*end }, carHeight(car), { paint }));
+  } else explodeCar({ x: car.x, y, z: car.z }, carHeight(car), { paint });
   cars.splice(i, 1);
   if (followedCar > i) followedCar--; // (a car ahead of it in the array, still being followed, keeps its place)
 }
