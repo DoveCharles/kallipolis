@@ -173,7 +173,8 @@ function buildCarDesigns(gltf) {
     node.traverse(o => { if (o.isMesh) parts.push(o); });
     if (!parts.length) return;
     const positions = [], slots = [], colors = [], indices = [], glassIndices = [], wheelIds = [], wheels = [];
-    let glass = null;
+    let glass = null, hasPaint = false;
+    const bodyColors = new Map(); // (each unpainted body color, by how much of the design it covers, for its explosion)
     parts.forEach(part => {
       let wheel = part;
       while (wheel && wheel !== node && !wheel.name.startsWith('Wheel')) wheel = wheel.parent;
@@ -186,6 +187,11 @@ function buildCarDesigns(gltf) {
       else if (part.material && part.material.color) baseColor.copy(part.material.color).convertLinearToSRGB();
       else baseColor.set(0xffffff);
       const isGlass = matName === CAR_GLASS_MATERIAL;
+      if (slot === CAR_SLOT_NAMES.indexOf(CAR_PAINT_MATERIAL) + 1) hasPaint = true;
+      else if (!glow && !isGlass && !wheel && matName !== CAR_PLATE_MATERIAL) {
+        const key = baseColor.r + ',' + baseColor.g + ',' + baseColor.b;
+        bodyColors.set(key, (bodyColors.get(key) ?? 0) + pos.count);
+      }
       if (isGlass && !glass) glass = { opacity: part.material.opacity, roughness: part.material.roughness, metalness: part.material.metalness };
       const first = positions.length/3;
       for (let i=0;i<pos.count;i++) {
@@ -235,7 +241,8 @@ function buildCarDesigns(gltf) {
     const wheelRadius = hubInfo.length ? hubInfo.reduce((sum, h) => sum + h.r, 0)/hubInfo.length : 0;
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-    designs.push({ name: node.name, geometry, length: size.z/BOX_CAR_LENGTH, width: size.x, height: size.y, radius: geometry.boundingSphere.radius, wheelRadius, wheelbase,
+    const [mainColor] = [...bodyColors].sort((a, b) => b[1] - a[1])[0] ?? [];
+    designs.push({ name: node.name, geometry, bodyColor: !hasPaint && mainColor ? mainColor.split(',').map(Number) : null, length: size.z/BOX_CAR_LENGTH, width: size.x, height: size.y, radius: geometry.boundingSphere.radius, wheelRadius, wheelbase,
       glass: glass || { opacity: 1, roughness: 0.35, metalness: 0.25 } });
   });
   gltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (o.material) o.material.dispose(); } });
@@ -485,7 +492,7 @@ function makeCarMesh(design) {
   const thumb = makeCarThumbnail(design);
   return { mesh, paint, wheels, plates, glowUniform, length: design.length, width: design.width, height: design.height,
     wheelRadius: design.wheelRadius, wheelbase: design.wheelbase,
-    name: design.name,
+    name: design.name, bodyColor: design.bodyColor, // (null where the design is repainted per car)
     thumbMesh: thumb.mesh, thumbCamera: thumb.camera, thumbPaint: thumb.paint, thumbPlate: thumb.plate };
 }
 
@@ -730,11 +737,22 @@ function spawnCar(car) {
   const { lines } = S.trafficNav;
   car.li = -1;
   if (!lines.length) return;
+  let nearSpot = null; // (a free spot inside S.carSpawnDistance of the camera, only used if no farther one turns up)
   for (let tries = 0; tries < 8; tries++) {
-    const li = pickWeighted(lines, nav => nav.total);
-    carJoinLane(car, li, trafficRng()*lines[li].total, trafficRng() < 0.5 ? -1 : 1);
+    const li = pickWeighted(lines, nav => nav.total), u = trafficRng()*lines[li].total, dir = trafficRng() < 0.5 ? -1 : 1;
+    carJoinLane(car, li, u, dir);
     const at = lanePoint(car);
     if (spotTaken(car, at.x, at.z)) continue;
+    if (Math.hypot(at.x - camera.position.x, Y_ROAD - camera.position.y, at.z - camera.position.z) < S.carSpawnDistance) {
+      nearSpot ??= { li, u, dir };
+      continue;
+    }
+    car.x = at.x; car.z = at.z; car.heading = at.heading; car.speed = 0;
+    return;
+  }
+  if (nearSpot) {
+    carJoinLane(car, nearSpot.li, nearSpot.u, nearSpot.dir);
+    const at = lanePoint(car);
     car.x = at.x; car.z = at.z; car.heading = at.heading; car.speed = 0;
     return;
   }
@@ -1128,34 +1146,62 @@ function turnCar(car, by) {
 }
 
 const CAR_HITBOX_SCALE = 0.6;
+const CAR_KILL_SCALE = 0.7, CAR_CLIP_SCALE = 1.5, CAR_STUN_SCALE = 2; // of CAR_HITBOX_SCALE: anyone within the first is killed, anyone else within the second is knocked over, and anyone else within the third is shocked
+const CAR_SHOCK_TIME = 1; // how long, in seconds, someone stays shocked
+const CAR_PUSH_PER_SPEED = 0.15, CAR_KNOCK_PUSH_FACTOR = 0.3; // how far a car throws someone back, per unit of its speed — the shocked, and (by the factor) the knocked over
+const CAR_FALL_SPEEDUP = 5; // how many times faster than normal someone knocked over by a car goes down
 /**
  * The hitbox a car runs people over with: half its length and width, each with a 0.25 margin, scaled by CAR_HITBOX_SCALE —
  * so a car hits someone under its middle rather than at its very corners.
  * @param {object} car
  * @returns {{ halfLength: number, halfWidth: number }}
  */
-function carHitbox(car) {
+function carHitbox(car, scale = CAR_HITBOX_SCALE*CAR_KILL_SCALE) {
   const length = carLength(car), width = carWidth(car);
-  return { halfLength: (length*0.5 + 0.25)*CAR_HITBOX_SCALE, halfWidth: (width*0.5 + 0.25)*CAR_HITBOX_SCALE };
+  return { halfLength: (length*0.5 + 0.25)*scale, halfWidth: (width*0.5 + 0.25)*scale };
+}
+
+/**
+ * Throw someone away from a car, `factor` times CAR_PUSH_PER_SPEED of its speed.
+ * @param {object} p - the person
+ * @param {object} car
+ * @param {number} factor
+ * @returns {void}
+ */
+function throwBack(p, car, factor) {
+  const away = { x: p.x - car.x, z: p.z - car.z };
+  if (Math.hypot(away.x, away.z) < 1e-3) { away.x = Math.sin(car.heading); away.z = Math.cos(car.heading); }
+  App.pushPerson?.(p, away.x, away.z, Math.abs(car.speed)*CAR_PUSH_PER_SPEED*factor);
 }
 
 /**
  * Kill every pedestrian whose position falls inside carHitbox, turned to the car's heading (killPerson in people.js,
- * crediting the driver). A normal car reaches only someone out on the road, over it or halfway, and never anyone it has
+ * crediting the driver — including anyone falling or lying knocked down), and knock over anyone else inside the larger clipping box (knockOverPerson). A normal car reaches only someone out on the road, over it or halfway, and never anyone it has
  * waved over; the car being driven reaches anyone within carHeight of Y_ROAD.
  * @param {object} car
  * @returns {void}
  */
 function runOverPeople(car) {
-  const { halfLength, halfWidth } = carHitbox(car), reach = Math.hypot(halfLength, halfWidth), cos = Math.cos(car.heading), sin = Math.sin(car.heading);
-  const driven = car === drivenCar;
+  const { halfLength, halfWidth } = carHitbox(car), clip = carHitbox(car, CAR_HITBOX_SCALE*CAR_CLIP_SCALE), stun = carHitbox(car, CAR_HITBOX_SCALE*CAR_STUN_SCALE);
+  const reach = Math.hypot(stun.halfLength, stun.halfWidth), cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+  const driven = car === drivenCar, shocked = new Set();
   App.people.forEach((p, i) => {
-    if (driven ? Math.abs(p.y - Y_ROAD) > carHeight(car) : (!isPedInDanger(p) && p.crossStage !== 'mid') || p.jc?.waved) return; // only while out on the road, over it or halfway (and not waved over)
+    if (driven ? Math.abs(p.y - Y_ROAD) > carHeight(car) : (!isPedInDanger(p) && p.crossStage !== 'mid' && !p.punched) || p.jc?.waved) return; // only while out on the road, over it or halfway (and not waved over), or knocked down
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
-    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength) App.killPerson(i, driven ? 'player' : 'car');
+    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength) App.killPerson(i, driven ? 'player' : 'car', { x: Math.sin(car.heading)*car.speed, y: 0, z: Math.cos(car.heading)*car.speed });
+    else if (p.mode === 'possessed') return;
+    else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { throwBack(p, car, CAR_KNOCK_PUSH_FACTOR); p.shotRate = CAR_FALL_SPEEDUP; } }
+    else if (Math.abs(right) < stun.halfWidth && Math.abs(forward) < stun.halfLength) {
+      shocked.add(p);
+      if (!car.shocked?.has(p) && !p.stun && !p.fright && !p.please && !p.punched && !p.attack) {
+        p.stun = { stage: 'notice', timer: 0.15, from: { x: car.x, z: car.z }, hold: CAR_SHOCK_TIME };
+        throwBack(p, car, 1);
+      }
+    }
   });
+  car.shocked = shocked; // (each is shocked once, as the car comes within reach)
   // and any bee it hits (see life/bees.js)
   App.strikeBees?.({ x: car.x, z: car.z, heading: car.heading, halfLength, halfWidth, height: carHeight(car) });
 }
@@ -1164,11 +1210,11 @@ function runOverPeople(car) {
  * Kill every pedestrian and car an aircraft is touching: whatever lies within its footprint (a box turned to `heading`)
  * and whose height overlaps the aircraft's. Called each frame by whatever is flying one low enough to matter (see
  * flyByHand in zones/airport.js); anything killed is credited to the player.
- * @param {{x: number, y: number, z: number, heading: number, halfLength: number, halfWidth: number, below: number, above: number}} aircraft
- *   Its middle, its heading, half its length and wingspan, and how far its body reaches below and above `y`.
+ * @param {{x: number, y: number, z: number, heading: number, halfLength: number, halfWidth: number, below: number, above: number, velocity?: {x: number, y: number, z: number}}} aircraft
+ *   Its middle, its heading, half its length and wingspan, how far its body reaches below and above `y`, and its velocity (which anyone it kills keeps as chunks).
  * @returns {void}
  */
-function strikeWithAircraft({ x, y, z, heading, halfLength, halfWidth, below, above }) {
+function strikeWithAircraft({ x, y, z, heading, halfLength, halfWidth, below, above, velocity = null }) {
   const cos = Math.cos(heading), sin = Math.sin(heading), reach = Math.hypot(halfLength, halfWidth);
   const inFootprint = (px, pz) => {
     const dx = px - x, dz = pz - z;
@@ -1176,7 +1222,7 @@ function strikeWithAircraft({ x, y, z, heading, halfLength, halfWidth, below, ab
     return Math.abs(dx*cos - dz*sin) < halfWidth && Math.abs(dx*sin + dz*cos) < halfLength;
   };
   const sharesHeight = (base, height) => base < y + above && base + height > y - below;
-  App.people.forEach((p, i) => { if (sharesHeight(p.y, p.height*S.peopleSize) && inFootprint(p.x, p.z)) App.killPerson(i, 'player'); });
+  App.people.forEach((p, i) => { if (sharesHeight(p.y, p.height*S.peopleSize) && inFootprint(p.x, p.z)) App.killPerson(i, 'player', velocity); });
   for (let i = cars.length - 1; i >= 0; i--) {
     const car = cars[i];
     if (car.li >= 0 && sharesHeight(Y_ROAD, carHeight(car)) && inFootprint(car.x, car.z)) killCar(i);
@@ -1677,8 +1723,11 @@ function killCar(i) {
   if (!car || car.li < 0) return;
   App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
   if (followedCar === i) stopFollowingCar();
-  const paint = new THREE.Color(car.paint[0], car.paint[1], car.paint[2]);
-  explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint });
+  const paint = new THREE.Color(...(carModelOf(car)?.bodyColor ?? car.paint));
+  if (/bus/i.test(carModelOf(car)?.name ?? '')) { // (a bus goes up in two blasts, one at each end)
+    const offset = carLength(car)*0.25;
+    [-1, 1].forEach(end => explodeCar({ x: car.x + Math.sin(car.heading)*offset*end, y: Y_ROAD, z: car.z + Math.cos(car.heading)*offset*end }, carHeight(car), { paint }));
+  } else explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint });
   cars.splice(i, 1);
   if (followedCar > i) followedCar--; // (a car ahead of it in the array, still being followed, keeps its place)
 }

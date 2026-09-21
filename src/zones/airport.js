@@ -1188,7 +1188,8 @@ function flyByHand(flight, dt) {
   poseAircraft(flight.plane, hand.x, hand.y + hand.hop, hand.z, Math.sin(hand.heading), Math.cos(hand.heading), hand.pitch - hand.dip, -hand.bank + hand.rock);
   // whoever is on the ground under it (or a car on the road) when it is low enough to touch them
   App.strikeWithAircraft?.({ x: hand.x, y: hand.y, z: hand.z, heading: hand.heading,
-    halfLength: flight.size*0.5, halfWidth: flight.size*0.5, below: flight.size*0.1, above: flight.size*0.15 });
+    halfLength: flight.size*0.5, halfWidth: flight.size*0.5, below: flight.size*0.1, above: flight.size*0.15,
+    velocity: { x: hand.vx, y: hand.vy, z: hand.vz } });
   if (hand.crashed) { crashAircraft(flight); return; }
   if (flight.returning && backAtField(flight)) rejoinSchedule(flight);
 }

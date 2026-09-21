@@ -477,6 +477,9 @@ export function goAfter(p, victim, revenge = false) {
   if (!victim.punched) victim.punched = { by: p, stage: 'marked', timer: 0 }; // (several can be after one person: the first to reach them lands it)
 }
 
+/** How far, as a multiple of the gap they stand at, a controlled person can get from whoever's punching them before the punch lands and still not be hit. */
+const PUNCH_MISS_FACTOR = 1.5;
+
 /** How long someone stands staring down whoever they've just knocked flat, in seconds. */
 const PUNCH_STARE_TIME = 1.5;
 
@@ -492,7 +495,7 @@ export function updateAttack(p, dt) {
   if (a.stage === 'chase') {
     if ((t.punched?.by !== p && t.punched?.stage !== 'marked') || a.timer <= 0 || !(t.mode === 'line' || t.mode === 'wander' || t.mode === 'leaving' || t.mode === 'possessed') || t.jc) { endAttack(p); return null; }
     const d = Math.hypot(t.x - p.x, t.z - p.z), gap = CHAT_GAP*S.peopleSize;
-    if (t.punched.stage === 'marked' && d < PUNCH_NOTICE*S.peopleSize) {
+    if (t.mode !== 'possessed' && t.punched.stage === 'marked' && d < PUNCH_NOTICE*S.peopleSize) { // (whoever's being controlled isn't braced, and keeps their freedom until the fist lands)
       t.punched = null;
       endActivity(t);
       t.oneShot = null; t.wait = 0;
@@ -501,6 +504,7 @@ export function updateAttack(p, dt) {
     }
     if (d > gap + 0.1) return { x: t.x + (p.x - t.x)/d*gap, y: t.y, z: t.z + (p.z - t.z)/d*gap };
     a.stage = 'punch';
+    a.chaseLeft = a.timer; // (what's left of the chase, if the punch misses)
     a.timer = PUNCH_HIT_TIME;
     playOnce(p, 'Punch');
   }
@@ -508,6 +512,11 @@ export function updateAttack(p, dt) {
     if (t.punched?.by !== p) { endAttack(p); return null; } // (someone else got there first: it's over)
     p.faceTo = headingTo(p, t);
     if (a.timer > 0) return null;
+    if (t.mode === 'possessed' && Math.hypot(t.x - p.x, t.z - p.z) > CHAT_GAP*S.peopleSize*PUNCH_MISS_FACTOR) { // (walked out of reach: it misses, and they're chased on)
+      a.stage = 'chase';
+      a.timer = a.chaseLeft;
+      return null;
+    }
     if (t.punched?.by === p) knockDown(t, p);
     a.stage = 'stare';
     a.timer = PUNCH_STARE_TIME;

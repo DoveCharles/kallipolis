@@ -187,8 +187,8 @@ export function unpossessPerson() {
 // back from them, slowing to a stop by SHOVE_DECAY per second and too thrown to walk while you're still going faster than
 // STAGGER_SPEED, and gives them a BUMP_PUNCH_CHANCE chance per unit of aggression of punching you for it. It's rolled once, as you
 // walk into them. (Distances at people size 1.)
-const BUMP_RADIUS = 1.5, BUMP_CORE_RADIUS = 1, BUMP_SHOCK_TIME = 1;
-const BUMP_PUNCH_CHANCE = 0.05, SHOVE_DISTANCE = 2, SHOVE_DECAY = 5, STAGGER_SPEED = 1;
+const BUMP_RADIUS = 0.6, BUMP_CORE_RADIUS = 0.6, BUMP_SHOCK_TIME = 1;
+const BUMP_PUNCH_CHANCE = 0.05, SHOVE_DISTANCE = 0.7, SHOVE_DECAY = 5, STAGGER_SPEED = 1;
 /**
  * Walk someone being possessed where they're asked to go, this frame, over whatever's there.
  * @param {Person} p - the person

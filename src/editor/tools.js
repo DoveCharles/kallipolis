@@ -227,6 +227,8 @@ function syncExtraSettings() {
   document.getElementById('s-hideownhead').classList.toggle('on', S.hideOwnHead);
   document.getElementById('s-gibrange').value = S.gibRange;
   document.getElementById('dv-gibrange').textContent = String(Math.round(S.gibRange));
+  document.getElementById('s-carspawn').value = S.carSpawnDistance;
+  document.getElementById('dv-carspawn').textContent = String(Math.round(S.carSpawnDistance));
   document.getElementById('s-gibamount').value = S.gibAmount*100;
   document.getElementById('dv-gibamount').textContent = Math.round(S.gibAmount*100) + '%';
   document.getElementById('s-giblifetime').value = S.gibLifetime*100;
@@ -241,6 +243,7 @@ document.getElementById('s-gibs').addEventListener('click', () => { S.showGibs =
 document.getElementById('s-gibrange').addEventListener('input', (e) => { S.gibRange = parseFloat(e.target.value); syncExtraSettings(); });
 document.getElementById('s-gibamount').addEventListener('input', (e) => { S.gibAmount = parseFloat(e.target.value)/100; syncExtraSettings(); });
 document.getElementById('s-giblifetime').addEventListener('input', (e) => { S.gibLifetime = parseFloat(e.target.value)/100; syncExtraSettings(); });
+document.getElementById('s-carspawn').addEventListener('input', (e) => { S.carSpawnDistance = parseFloat(e.target.value); syncExtraSettings(); });
 document.getElementById('s-hideownhead').addEventListener('click', () => { S.hideOwnHead = !S.hideOwnHead; syncExtraSettings(); });
 syncExtraSettings();
 document.getElementById('s-people').addEventListener('click', () => { S.peopleEnabled = !S.peopleEnabled; App.syncPeopleUI(); });

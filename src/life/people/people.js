@@ -206,6 +206,7 @@ export function playOnce(p, name) {
   if (!hasClip(name)) return;
   p.oneShot = clipNamed(name);
   p.shotTime = 0;
+  p.shotRate = 1; // (how many times faster than normal it plays; set again after this call to speed one up)
 }
 /** The index in people of whoever the camera's following, or -1. */
 export let followed = -1;
@@ -565,9 +566,10 @@ export function fleeWithin(p, area) {
  * according to how evil they were (see bystandersReactToDeath), the same however they died.
  * @param {number} i - their index in people
  * @param {'player'|'car'} [by] - who did it, for the morality meter: the Kill button, or a car that ran them over
+ * @param {?{x: number, y: number, z: number}} [momentum] - the velocity of whatever hit them, which their giblets keep
  * @returns {void}
  */
-function killPerson(i, by = 'player') {
+function killPerson(i, by = 'player', momentum = null) {
   const p = people[i];
   if (!p || isGone(p)) return;
   // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
@@ -591,7 +593,7 @@ function killPerson(i, by = 'player') {
     colors.pants.copy(colors.top);
   }
   Object.values(colors).forEach(color => color?.lerp(new THREE.Color(0x550000), 0.4)); //make gibs darker, less saturated
-  explode({ x: p.x, y: p.y, z: p.z }, 1.7*p.height*S.peopleSize, colors);
+  explode({ x: p.x, y: p.y, z: p.z }, 1.7*p.height*S.peopleSize, colors, momentum);
   bystandersReactToDeath(p);
   p.mode = 'dead';
   p.train = null;
@@ -607,11 +609,35 @@ function killPerson(i, by = 'player') {
 export function isPedInDanger(p) {
   return p.crossStage === 'jcross' || p.crossStage === 'half1' || p.crossStage === 'half2' || (p.mode === 'possessed' && p.onRoad);
 }
+const PUSH_DECAY = 6; // per second: how fast a push slows, so it covers its distance in about half a second
+/**
+ * Shove someone `distance` along (dirX, dirZ): they're sent off fast, easing to a stop, rather than jumping. A wanderer's
+ * destination moves with them.
+ * @param {Person} p - the person
+ * @param {number} dirX - direction, not necessarily unit length
+ * @param {number} dirZ
+ * @param {number} distance - how far they end up moved, in world units
+ * @returns {void}
+ */
+function pushPerson(p, dirX, dirZ, distance) {
+  const len = Math.hypot(dirX, dirZ);
+  if (len < 1e-6 || distance <= 0) return;
+  const speed = distance*PUSH_DECAY/len; // (the distance covered is the starting speed over the decay rate)
+  p.push = { x: (p.push?.x ?? 0) + dirX*speed, z: (p.push?.z ?? 0) + dirZ*speed };
+}
+function stepPush(p, dt) {
+  p.x += p.push.x*dt; p.z += p.push.z*dt;
+  const slowing = Math.exp(-PUSH_DECAY*dt);
+  p.push.x *= slowing; p.push.z *= slowing;
+  if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; }
+  if (Math.hypot(p.push.x, p.push.z) < 0.05) p.push = null;
+}
+
 /**
  * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
  * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
  */
-Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups });
+Object.assign(App, { pushPerson, syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups });
 
 /**
  * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone
@@ -665,6 +691,7 @@ export function updatePeople(t) {
     p.trainCooldown -= dt;
     p.indoorsCooldown -= dt;
     const possessed = p.mode === 'possessed';
+    if (p.push) stepPush(p, dt);
     if (possessed) p.fright = p.stun = p.please = null;
     if (p.fright) updateFright(p, dt);
     //attempting to give additional reactions to npc death depending on how evil they are
@@ -843,7 +870,7 @@ export function updatePeople(t) {
       }
       // the animation: one playing through once, else walking, else the pose they're in — blending into it from the last
       if (p.oneShot) {
-        p.shotTime += dt;
+        p.shotTime += dt*(p.shotRate ?? 1);
         if (p.shotTime >= (p.oneShot.frames - 1)/PERSON_BAKE_FPS) {
           if (p.oneShot.name === 'Fall' && p.punched?.stage === 'fall') landFall(p);
           p.oneShot = null;

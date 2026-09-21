@@ -67,7 +67,7 @@ const isNear = o => (o.x - camera.position.x)**2 + (o.y - camera.position.y)**2 
 // explosion, much more violent than a person's, uses a bigger one; see explodeCar); `ground` is the height they land on
 // (default: where they start from), or a function of (x, z) that finds it, for chunks thrown from the air, which each land
 // on whatever is below where they come down
-function spawnParts(at, height, parts, power = 1, ground = at.y) {
+function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null) {
   if (!S.showGibs || !isNear(at)) return;
   const now = performance.now()/1000;
   const groundAtStart = typeof ground === 'function' ? ground(at.x, at.z) : ground;
@@ -79,7 +79,7 @@ function spawnParts(at, height, parts, power = 1, ground = at.y) {
       const spinAxis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
       const chunk = {
         x: at.x + (Math.random() - 0.5)*0.25*height*power, y: at.y + height*(0.15 + Math.random()*0.75), z: at.z + (Math.random() - 0.5)*0.25*height*power,
-        vx: Math.cos(angle)*outward, vy: (2 + Math.random()*5.5)*power, vz: Math.sin(angle)*outward,
+        vx: Math.cos(angle)*outward + (momentum?.x ?? 0), vy: (2 + Math.random()*5.5)*power + (momentum?.y ?? 0), vz: Math.sin(angle)*outward + (momentum?.z ?? 0),
         ground: groundAtStart, size: size*height*(0.6 + Math.random()*0.8),
         shape: new THREE.Vector3(0.6 + Math.random()*0.7, 0.5 + Math.random()*0.6, 0.6 + Math.random()*0.7),
         quaternion: new THREE.Quaternion().setFromAxisAngle(spinAxis, Math.random()*Math.PI*2),
@@ -130,12 +130,13 @@ function explodeFx(at, height) {
 }
 
 // Blows someone up: `at` where their feet were, `height` how tall they were, `colors` what they were made of — { skin, top,
-// pants, shoes, hair } as THREE.Colors (hair null for someone bald).
-export function explode(at, height, colors) {
+// pants, shoes, hair } as THREE.Colors (hair null for someone bald). `momentum` ({ x, y, z } in units a second) is the velocity
+// of whatever struck them, which every chunk keeps on top of its own throw (none for a blast, which has no direction).
+export function explode(at, height, colors, momentum = null) {
   const parts = [[colors.skin, 16, 0.075], [colors.top, 10, 0.08], [colors.pants, 9, 0.08], [colors.shoes, 4, 0.06],
     [colors.hair, colors.hair ? 5 : 0, 0.065], [new THREE.Color(EYE_COLOR), 2, 0.035]];
   BLOOD_COLORS.forEach(hex => parts.push([new THREE.Color(hex), 9, 0.028]));
-  spawnParts(at, height, parts);
+  spawnParts(at, height, parts, 1, at.y, momentum);
   spawnSplat(at, height, BLOOD_SPLAT_COLOR);
 }
 // Bursts a bee in mid-air: a few flecks of its yellow, black and wing, `size` long — small and soft-thrown, each falling to
