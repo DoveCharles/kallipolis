@@ -25,7 +25,7 @@ const card = makeCard({
 onProfilesLoaded(() => { if (shown) showPersonCard(shown.index, shown.isMan); });
 function showPersonCard(index, isMan) {
   const profile = profileOf(index, isMan);
-  const { traits } = profile;
+  const { traits } = profile, again = shown?.index === index; // (again: people.txt just loaded, under an open card)
   shown = { index, isMan, traits, seed: profile.age };
   card.relabel(garbles(traits) ? text => garbled(text, traits, profile.age) : null); // (the headings too: "Loves", "Hates", the title...)
   // loves and hates are lists: one line per entry, and an empty list hides its row. The traits aren't shown: they're what
@@ -37,13 +37,15 @@ function showPersonCard(index, isMan) {
   headshotCanvas.hidden = isMan == null;
   headshotDrawnAt = -Infinity;
   lightsOnLayer = false;
-  setPersonCardIndoors(null);
+  if (again) setPersonCardDoing(doingNow, awayNow); else setPersonCardDoing(null);
 }
-// whether they're inside a building (see "going indoors" in people.js): what it's called ("Tower #4821"), or null for
-// out and about
-function setPersonCardIndoors(label) {
-  card.set('status', label == null ? null : garbled('Inside ' + label, shown?.traits ?? {}, shown?.seed));
-  headshotCanvas.classList.toggle('pc-away', label != null);
+// what they're up to (see personDoing in people/peopleTracking.js), and whether they're `away` — indoors, out of sight, so
+// the headshot greys over
+let doingNow = null, awayNow = false;
+function setPersonCardDoing(doing, away = false) {
+  doingNow = doing; awayNow = away;
+  card.set('status', doing == null ? null : garbled(doing, shown?.traits ?? {}, shown?.seed));
+  headshotCanvas.classList.toggle('pc-away', away);
 }
 
 // ---- the headshot: a live close-up of their face, beside their name — drawn a few times a second (people.js hands over
@@ -91,5 +93,5 @@ function hidePersonCard() {
   card.hide();
 }
 
-Object.assign(App, { showPersonCard, hidePersonCard, drawPersonHeadshot, setPersonCardIndoors });
+Object.assign(App, { showPersonCard, hidePersonCard, drawPersonHeadshot, setPersonCardDoing });
 

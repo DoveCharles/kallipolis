@@ -958,7 +958,7 @@ export function updateIndoors(p, i, dt) {
     if (Math.hypot(door.x - p.x, door.z - p.z) >= 0.35) return { x: door.x, y: visit.building.y, z: door.z };
     visit.stage = 'inside';
     p.faceTo = null; p.lookAt = null; p.oneShot = null;
-    if (followed === i) { App.setPersonCardIndoors(buildingLabel(visit.building)); lookAtBuilding(visit.building); }
+    if (followed === i) lookAtBuilding(visit.building);
     return null;
   }
   if (visit.stage === 'inside') {
@@ -968,7 +968,7 @@ export function updateIndoors(p, i, dt) {
     visit.stage = 'exit';
     p.x = door.x; p.z = door.z; p.y = visit.building.y;
     p.heading = headingTo(p, visit.back) + (p.traits.backwards ? Math.PI : 0);
-    if (followed === i) { App.setPersonCardIndoors(null); lookAtPerson(p); }
+    if (followed === i) lookAtPerson(p);
     // and out with whoever the building's card was told to wait on: the camera leaves the building for them
     if (awaited === i) { awaited = -1; App.stopFollowingBuilding?.(); followPerson(i); }
     return visit.back;

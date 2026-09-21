@@ -7,7 +7,8 @@ import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasC
 import { HEAD_CENTER } from './peopleModel.js';
 import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver } from './peopleActivities.js';
 import { reseatPerson } from './peoplePathing.js';
-import { bloodSpeed, bloodlustSpeed } from './peopleBlood.js';
+import { bloodSpeed, bloodlustSpeed, isBloodlusting } from './peopleBlood.js';
+import { profileOf } from '../profiles.js';
 
 // ============== following someone with camera  ============== 
 // In World mode, clicking a person keeps the view centered on them as they move —
@@ -71,7 +72,77 @@ export function followPerson(i) {
   controls.minRadius = Math.max(1.2, h*0.8);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9)); // swooping in, if the camera's far off
   App.showPersonCard(i, personModel ? personModel.isMan[i] === 1 : null);
-  App.setPersonCardIndoors(isGone(people[i]) && people[i].indoors ? buildingLabel(people[i].indoors.building) : null);
+  doingShown = undefined;
+  showFollowedDoing();
+}
+
+// ---- what the followed person's card says they're up to (as a bee's says where it's got to in its round): worked out
+// from whatever state they're in, most pressing first, and told to the card only when it changes
+let doingShown;
+const nameOf = q => { const i = people.indexOf(q); return i < 0 ? 'someone' : profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name; };
+const HANGOUTS = { park: ['in', 'the park'], plaza: ['in', 'the plaza'], beach: ['on', 'the beach'] };
+/**
+ * What someone's up to, in a few words, for their card.
+ * @param {Person} p - the person
+ * @returns {?string} what the card's Status says (null for nothing)
+ */
+export function personDoing(p) {
+  if (p.mode === 'dead') return 'Dead';
+  if (p.mode === 'possessed') return 'Possessed';
+  const k = p.punched;
+  if (k && k.stage === 'brace') return 'Bracing for a punch';
+  if (k && (k.stage === 'fall' || k.stage === 'down')) return 'Knocked flat by ' + nameOf(k.by);
+  if (k && k.stage === 'rise') return 'Getting back up';
+  const a = p.attack;
+  if (a) {
+    const who = nameOf(a.target);
+    if (a.stage === 'chase') return a.revenge ? 'Out for revenge on ' + who : isBloodlusting(p) ? 'Out for ' + who + "'s blood" : 'Going after ' + who;
+    if (a.stage === 'punch') return 'Punching ' + who;
+    return 'Standing over ' + who;
+  }
+  if (p.fright) return p.fright.stage === 'flee' ? 'Running away' : 'Startled';
+  if (p.stun) return p.stun.stage === 'held' ? 'Dazed' : 'Startled';
+  if (p.please) return p.please.stage === 'held' ? 'Delighted' : 'Watching, delighted';
+  if (p.mode === 'train' && p.train) {
+    const stage = p.train.stage;
+    return stage === 'approach' ? 'Off to the station' : stage === 'enter' ? 'Onto the platform' : stage === 'wait' ? 'Waiting for a train'
+      : stage === 'ride' ? 'On a train' : 'Leaving the station';
+  }
+  if (p.mode === 'indoors' && p.indoors) {
+    const label = buildingLabel(p.indoors.building), stage = p.indoors.stage;
+    return (stage === 'approach' ? 'Going into ' : stage === 'inside' ? 'Inside ' : 'Coming out of ') + label;
+  }
+  if (p.act === 'chat') { const other = p.group?.members.find(m => m !== p); return other ? 'Chatting with ' + nameOf(other) : 'Chatting'; }
+  if (p.act) {
+    if (p.stage === 'greet') return 'Waving hello';
+    if (p.stage === 'bye') return 'Waving goodbye';
+    if (p.stage === 'rise') return 'Getting up';
+    const sitting = p.stage === 'sit';
+    if (p.act === 'bench') return sitting ? 'Sitting on a bench' : 'Off to a bench';
+    if (p.act === 'lie') return sitting ? 'Lying down' : 'Off to lie down';
+    const company = (p.group?.members.length ?? 0) > 1;
+    return sitting ? (company ? 'Sitting in a circle' : 'Sitting on the grass') : (company ? 'Joining a circle' : 'Off to sit on the grass');
+  }
+  const cross = p.crossStage;
+  if (cross === 'jwalk') return 'Going to cross the road';
+  if (cross === 'jwait' || cross === 'curb' || cross === 'mid') return 'Waiting to cross';
+  if (cross) return 'Crossing the road';
+  const hangout = p.area >= 0 ? HANGOUTS[peopleNav.areas[p.area]?.kind] : null;
+  if (p.mode === 'leaving') return hangout ? 'Leaving ' + hangout[1] : 'Leaving';
+  if (p.mode === 'wander') return hangout ? 'Hanging out ' + hangout.join(' ') : 'Hanging about';
+  if (p.mode === 'line') return 'Out for a walk';
+  return null;
+}
+/**
+ * Tell the followed person's card what they're up to, if that's changed (each frame: see updatePeople).
+ * @returns {void}
+ */
+export function showFollowedDoing() {
+  if (followed < 0) return;
+  const p = people[followed], doing = personDoing(p);
+  if (doing === doingShown) return;
+  doingShown = doing;
+  App.setPersonCardDoing(doing, isGone(p) && !!p.indoors);
 }
 
 // Where someone's head is and which way their face points, in the world, for the person card's headshot: from their pose
