@@ -3,7 +3,7 @@ import { scene, camera, Y_PATH } from '../core/scene.js';
 import { S } from '../core/shared.js';
 
 // ============================================================ giblets
-// What's left of someone after the person card's Kill button, or a car after the car card's: chunks of them in their own
+// What's left of someone after the person card's Smite button, or a car after the car card's: chunks of them in their own
 // colors (skin, top, pants, shoes, hair and a couple of eyes for a person; paint, glass and trim for a car), flecks of
 // blood or (a car) soot, and a splat on the ground (blood, or a scorch mark) — thrown out from where they stood, falling,
 // bouncing and tumbling to a stop, lying there a while, then sinking away. A car's explosion also gets a fireball and a

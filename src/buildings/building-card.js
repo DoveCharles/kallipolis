@@ -13,7 +13,7 @@ import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 // naming it (what its kind is called, and its own number — see buildingNumber), saying what it's like (from
 // assets/buildings.txt, by its kind — see building-types.js) and who's inside
 // (see "going indoors" in people.js), until a click elsewhere, a pan, leaving World mode, or its zone being rebuilt lets it go.
-// The card itself is the shared one in ui/entity-card.js. No Kill button, and nothing to be behind the wheel of.
+// The card itself is the shared one in ui/entity-card.js. No Smite button, and nothing to be behind the wheel of.
 // followed: { zone, group, key, center, room } of the building the camera's on (room: its inside, see roomLayoutOf), or null
 let followed = null;
 const raycaster = new THREE.Raycaster();

@@ -12,7 +12,7 @@ import { App, S } from '../core/shared.js';
 // (a car that's been blown up, a building whose zone has gone). Most last as long as the page does; a kind that can be
 // found again in a reloaded city (a person: see life/person-card.js) gives its entries `saved`, what finding it again
 // takes, and they're kept in the project (see savedFavorites and restoreFavorites), so they're still there after a reload.
-// An entry that `spares` its thing takes the Kill button off its card while it's hearted (see ui/entity-card.js).
+// An entry that `spares` its thing takes the Smite button off its card while it's hearted (see ui/entity-card.js).
 //
 // A hearted person is kept: never let go of when the crowd thins (see updatePeople in life/people/people.js), and never
 // killed, by a car or anything else (killPerson, and runOverPeople in life/traffic.js, which knocks them down instead).

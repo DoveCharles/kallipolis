@@ -10,15 +10,15 @@ import { hashNameToNumber } from '../core/math.js';
 // traffic.js): its name (its type's and a number of its own, among others like it — see designNumbers in traffic.js), its
 // mood, and what it loves and hates — all from assets/cars.txt, by its type (see car-types.js). The card itself is the
 // shared one in ui/entity-card.js.
-let shown = -1; // whoever the card is showing, for its thumbnail and its Kill button
+let shown = -1; // whoever the card is showing, for its thumbnail and its Smite button
 const card = makeCard({
   id: 'car-card',
   title: 'Vehicle',
   onClose: () => App.stopFollowingCar(),
   // the thumbnail itself: behind the wheel (see "driving a car" in traffic.js)
   thumb: { title: 'Drive it', onClick: () => { if (shown >= 0) App.driveCar(shown); } },
-  // the Kill button, under the thumbnail: it blows up on the spot (see killCar in traffic.js), and the card goes
-  kill: { title: 'Blow it up', onClick: () => { if (shown >= 0) App.killCar(shown); } },
+  // the Smite button, under the thumbnail: lightning strikes it and it blows up on the spot (see smiteCar in traffic.js), and the card goes
+  kill: { title: 'Strike it down', onClick: () => { if (shown >= 0) App.smiteCar(shown); } },
 });
 
 function showCarCard(i, info, car) {

@@ -3,6 +3,7 @@ import { App } from '../core/shared.js';
 import { scene, renderer } from '../core/scene.js';
 import { HEADSHOT_LAYER } from './people/people.js';
 import { profileOf, onProfilesLoaded } from './profiles.js';
+import { strikeLightning } from './lightning.js';
 import { makeCard } from '../ui/entity-card.js';
 import { personKey, reviveFavoritesAs } from '../ui/favorites.js';
 import { garbles, garbled } from '../ui/garble.js';
@@ -19,8 +20,14 @@ const card = makeCard({
   onClose: () => App.stopFollowingPerson(),
   // the headshot itself: into their head (see possession.js)
   thumb: { title: 'Possess them', onClick: () => { if (shown) App.possessPerson(shown.index); } },
-  // the Kill button, under their headshot: they explode (see killPerson in people.js), and the card goes
-  kill: { title: 'Blow them up', onClick: () => { if (shown) App.killPerson(shown.index); } },
+  // the Smite button, under their headshot: a bolt of lightning comes down on them (see lightning.js) and they explode
+  // (see killPerson in people.js), and the card goes
+  kill: { title: 'Strike them down', onClick: () => {
+    const p = shown && App.people[shown.index];
+    if (!p) return;
+    strikeLightning({ x: p.x, y: p.y, z: p.z });
+    App.killPerson(shown.index);
+  } },
 });
 // (once people.txt has loaded, the card shows what it says)
 onProfilesLoaded(() => { if (shown) showPersonCard(shown.index, shown.isMan); });
@@ -42,7 +49,7 @@ function showPersonCard(index, isMan) {
   card.setFavorite(personFavorite(index));
 }
 // a person as a favorite: kept in the project, since their place in the crowd is who they are (see profileOf), and spared
-// the Kill button while hearted (see ui/favorites.js)
+// the Smite button while hearted (see ui/favorites.js)
 function personFavorite(index) {
   return { key: personKey(index), kind: 'Person', saved: { index }, spares: true,
     follow: () => { if (!App.people[index]) return false; App.followPerson(index); return true; } };

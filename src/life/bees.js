@@ -47,7 +47,7 @@ const BEE_MODEL_URL = 'assets/models/Bee.glb';
 // mood and what it loves and hates, or a hive's, from assets/bees.txt by [bee] or [hive] — read like the vehicles' and the
 // trains' files (see core/type-text.js). It changes over the way a person's and a train's do: follow a bee home and the
 // hive's card takes over, listing its bees under "Bees" where a building says "Inhabitants", with the one the camera came
-// in with picked out, and handing back when that bee comes out again. No Kill button on either: nothing here wants to be
+// in with picked out, and handing back when that bee comes out again. No Smite button on either: nothing here wants to be
 // the thing that kills the bees.
 const text = loadTypeText('assets/bees.txt', {
   attributes: TEXT_ROWS,

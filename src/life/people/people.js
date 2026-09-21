@@ -466,7 +466,7 @@ function standingOf(p) {
 }
 /**
  * How the people around someone take their death: an innocent's leaves them horrified, a bad sort's stops them in
- * their tracks, and a villain's delights them. Called for every death, whoever caused it — the Kill button, or a car
+ * their tracks, and a villain's delights them. Called for every death, whoever caused it — the Smite button, or a car
  * running them over (see runOverPeople in traffic.js) — so any way an NPC dies is reacted to the same.
  * @param {Person} victim - whoever was killed
  * @returns {void}
@@ -582,7 +582,7 @@ export function fleeWithin(p, area) {
  * place in it is kept - with whoever they were talking to carrying on without them. The people around them take it
  * according to how evil they were (see bystandersReactToDeath), the same however they died.
  * @param {number} i - their index in people
- * @param {'player'|'car'} [by] - who did it, for the morality meter: the Kill button, or a car that ran them over
+ * @param {'player'|'car'} [by] - who did it, for the morality meter: the Smite button, or a car that ran them over
  * @param {?{x: number, y: number, z: number}} [momentum] - the velocity of whatever hit them, which their giblets keep
  * @returns {void}
  */

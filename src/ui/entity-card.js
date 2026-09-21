@@ -4,7 +4,7 @@ import { isFavorite, toggleFavorite, onFavoritesChanged } from './favorites.js';
 // The card at the bottom right saying what the camera's following: a person (life/person-card.js), a car
 // (life/car-card.js), a carriage (trains/trains.js), an aircraft (zones/airport.js), a building
 // (buildings/building-card.js), or a bee or its hive (life/bees.js). They're all this one card with different rows filled
-// in — they differ only in their title, their picture, and whether there's a Kill button.
+// in — they differ only in their title, their picture, and whether there's a Smite button.
 //
 // ROWS below is the whole list of rows a card can have, in the order they come in. A card doesn't say which it wants: a
 // row shows when it's been given something to say and stays out of the way when it hasn't, so a car simply has no Age and
@@ -33,7 +33,7 @@ export const cards = [];
 
 // `title` is the name in its title bar; `onClose` is what the × (and the control-menu box, under the Windows 3.0 look)
 // does. `thumb` is { title, onClick } for the picture — leave out onClick and it's just a picture. `kill`, if given, is
-// { title, onClick } for a Kill button under it. `action`, if given, is { text, title, onClick } for a plain button in the
+// { title, onClick } for a Smite button under it. `action`, if given, is { text, title, onClick } for a plain button in the
 // same place (a building's Enter: see buildings/interior.js), its wording changed later with setAction. `labels` renames
 // rows for this card ({ occupants: 'Passengers' }).
 export function makeCard({ id, title, onClose, thumb = {}, kill = null, action = null, labels = {} }) {
@@ -43,7 +43,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   el.hidden = true;
 
   // the title bar (only drawn by the Windows 3.0 look), and the × for every other look
-  // the card's own wording — its title, the Kill button and the row headings — as [element, text], for relabel below
+  // the card's own wording — its title, the Smite button and the row headings — as [element, text], for relabel below
   const fixedText = [];
   const titlebar = document.createElement('div');
   titlebar.className = 'win3-titlebar';
@@ -72,7 +72,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     const on = !!favorite && isFavorite(favorite.key);
     heart.classList.toggle('on', on);
     heart.title = on ? 'Unfavorite' : 'Favorite';
-    // (something hearted that the favorites spare can't be killed, so there's no Kill button for it: see ui/favorites.js)
+    // (something hearted that the favorites spare can't be killed, so there's no Smite button for it: see ui/favorites.js)
     if (killButton) killButton.hidden = on && !!favorite.spares;
     heart.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="' + (on ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linejoin="round">'
       + '<path d="M12 20.5s-7.6-4.6-9.4-9.3C1.2 7.6 3.5 4 7.2 4c2.1 0 3.6 1.1 4.8 2.9C13.2 5.1 14.7 4 16.8 4c3.7 0 6 3.6 4.6 7.2-1.8 4.7-9.4 9.3-9.4 9.3z"/></svg>';
@@ -83,7 +83,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   });
   onFavoritesChanged(drawHeart);
 
-  // the picture, and the Kill button under it
+  // the picture, and the Smite button under it
   const canvas = document.createElement('canvas');
   canvas.className = 'pc-thumb';
   canvas.width = canvas.height = 120;
@@ -100,8 +100,8 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     const button = killButton = document.createElement('button');
     button.className = 'btn danger pc-kill';
     button.title = kill.title || '';
-    button.textContent = 'Kill';
-    fixedText.push([button, 'Kill']);
+    button.textContent = 'Smite';
+    fixedText.push([button, 'Smite']);
     button.addEventListener('click', () => kill.onClick());
     shot.append(button);
   }
@@ -211,7 +211,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     drawHeart();
   }
   function hide() { el.hidden = true; }
-  // Rewrites the card's own wording (title, Kill button, row headings such as "Loves") through `transform`, which is given
+  // Rewrites the card's own wording (title, Smite button, row headings such as "Loves") through `transform`, which is given
   // each as written. null puts it all back.
   let relabelling = null;
   function relabel(transform = null) {

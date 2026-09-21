@@ -68,6 +68,7 @@ import { commitHistory } from './project/history.js';
 import { loadPersonModel, syncPeopleUI, updatePeople } from './life/people/people.js';
 import { updateTraffic, loadCarModels } from './life/traffic.js';
 import { updateGiblets } from './life/giblets.js';
+import { updateLightning } from './life/lightning.js';
 import { loadBeeModel, updateBees } from './life/bees.js';
 import { updateAirports, loadPlaneModel } from './zones/airport.js';
 import { loadHouseModels } from './zones/suburbs.js';
@@ -137,6 +138,7 @@ function animate() {
   if (S.waterDirty) rebuildWater();
   updatePeople(t);
   updateGiblets(t);
+  updateLightning(t);
   updateBees(t);
   updateAirports(t);
   updateTraffic(t);

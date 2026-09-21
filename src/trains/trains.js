@@ -14,7 +14,7 @@ import { loadTypeText } from '../core/type-text.js';
 // ---------------------------------------------------------- the carriage card
 // Which carriage the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the car's: its
 // name and mood, a picture of it, and what it enjoys and hates — from assets/trains.txt, read the same way as the
-// vehicles' and the buildings' files (see core/type-text.js) — and who's riding it. No Kill button: trains can't be
+// vehicles' and the buildings' files (see core/type-text.js) — and who's riding it. No Smite button: trains can't be
 // killed.
 const trains = loadTypeText('assets/trains.txt', {
   attributes: TEXT_ROWS,

@@ -14,6 +14,7 @@ import { placeKey, signalState } from '../roads/markings.js';
 import { isTrainLine } from '../trains/trains.js';
 import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people/people.js';
 import { isFavoritePerson } from '../ui/favorites.js';
+import { strikeLightning } from './lightning.js';
 import { explodeCar, puffSmoke, sparks, burnFx, tyreSmoke, igniteFx, engineSmoke } from './giblets.js';
 import { carTypeOf, vanityChanceOf, vanityPlatesOf } from './car-types.js';
 import { driving, controlInput, startDriving, endDriving } from './possession.js';
@@ -2080,7 +2081,7 @@ function chaseCamera(car) {
 }
 
 /**
- * The car card's Kill button: explode the car where it stands, in its own paint, through explodeCar — and take it out of
+ * Explode a car where it stands, in its own paint, through explodeCar — and take it out of
  * cars, so a replacement spawns in elsewhere as usual.
  * @param {number} i - index in cars
  * @param {number} [y] - the height it blows up at: the road's, or the water's for a car that's gone under
@@ -2101,6 +2102,18 @@ function killCar(i, y = Y_ROAD) {
 }
 
 /**
+ * The car card's Smite button: a bolt of lightning down on the car, and it blows up (killCar).
+ * @param {number} i - index in cars
+ * @returns {void}
+ */
+function smiteCar(i) {
+  const car = cars[i];
+  if (!car || car.li < 0) return;
+  strikeLightning({ x: car.x, y: Y_ROAD + carHeight(car), z: car.z });
+  killCar(i);
+}
+
+/**
  * The card's thumbnail: a followed car's design mesh and framing camera, with the paint and plate uniforms set to that
  * car's.
  * @param {number} i - index in cars
@@ -2115,5 +2128,5 @@ export function carThumbnailScene(i) {
   return { mesh: cm.thumbMesh, camera: cm.thumbCamera };
 }
 
-Object.assign(App, { pickCar, followCarAt, followCar, stopFollowingCar, driveCar, stopDriving, killCar, strikeWithAircraft, carsNearby, carsWhere });
+Object.assign(App, { pickCar, followCarAt, followCar, stopFollowingCar, driveCar, stopDriving, killCar, smiteCar, strikeWithAircraft, carsNearby, carsWhere });
 
