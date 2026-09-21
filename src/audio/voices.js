@@ -103,18 +103,27 @@ export function babble(at, voice, length, loudness = 1, mood = 0, intonation = n
     vowel: VOWELS[Math.floor(Math.random()*VOWELS.length)], consonant: CONSONANTS[Math.floor(Math.random()*CONSONANTS.length)] });
 }
 
-// an "ah!": a breath, then an open vowel, high and loud, jumping up and falling away
-const CRY_VOWEL = [800, 1200], CRY_BREATH = { kind: 'hiss', noise: 1500, q: 0.7, level: 0.3, time: 0.04 };
-const CRY_LENGTH = 0.4, CRY_PITCH = 1.45, CRY_VOLUME = 0.4;
+// the cries: an "ah!" (a breath, then an open vowel, high and loud, jumping up and falling away), or a grunt (lower and
+// shorter, a muffled "hngh" or a caught "uh!", sagging), picked at random, the "ah!" about half the time
+const CRIES = [
+  { chance: 0.5, pitch: 1.45, rise: 1.15, slide: 0.65, length: 0.4, volume: 0.4, vowel: [800, 1200],
+    consonant: { kind: 'hiss', noise: 1500, q: 0.7, level: 0.3, time: 0.04 } },
+  { chance: 0.25, pitch: 0.85, rise: 1.05, slide: 0.75, length: 0.24, volume: 0.35, vowel: [550, 1300],
+    consonant: { kind: 'hum', from: [250, 1100], time: 0.07 } },
+  { chance: 0.25, pitch: 0.95, rise: 1, slide: 0.7, length: 0.18, volume: 0.38, vowel: [600, 1100],
+    consonant: { kind: 'stop', noise: 500, q: 1, level: 0.35, time: 0.025 } },
+];
 /**
- * Someone crying out — "ah!" — as they're hit, in their own voice.
+ * Someone crying out as they're hit — "ah!", or a grunt — in their own voice.
  * @param {{x: number, y: number, z: number}} at - their head
  * @param {{pitch: number, formant: number, sharpness: number}} voice - as for babble
  * @returns {void}
  */
 export function exclaim(at, voice) {
-  speak(at, voice, { f: voice.pitch*CRY_PITCH*(0.9 + Math.random()*0.2), rise: 1.15, slide: 0.65, length: CRY_LENGTH*(0.85 + Math.random()*0.3),
-    level: CRY_VOLUME, vowel: CRY_VOWEL, consonant: CRY_BREATH });
+  let roll = Math.random();
+  const cry = CRIES.find(c => (roll -= c.chance) < 0) ?? CRIES[0];
+  speak(at, voice, { f: voice.pitch*cry.pitch*(0.9 + Math.random()*0.2), rise: cry.rise, slide: cry.slide,
+    length: cry.length*(0.85 + Math.random()*0.3), level: cry.volume, vowel: cry.vowel, consonant: cry.consonant });
 }
 
 // One sound of a voice: a sawtooth at `f`, rising by `rise` over the first third and then sliding to `slide` of where it

@@ -12,7 +12,8 @@ import { roadLineWidths, createMeshBuilder, navRebuildOnHold } from '../roads/ro
 import { isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { placeKey, signalState } from '../roads/markings.js';
 import { isTrainLine } from '../trains/trains.js';
-import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people/people.js';
+import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger, voiceOfPerson } from './people/people.js';
+import { exclaim } from '../audio/voices.js';
 import { isFavoritePerson } from '../ui/favorites.js';
 import { strikeLightning } from './lightning.js';
 import { updateEngines } from '../audio/engine.js';
@@ -1219,7 +1220,7 @@ function runOverPeople(car, motion = null) {
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
     // (anyone hearted is knocked down instead, below: they can't be killed. See ui/favorites.js)
-    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength && !isFavoritePerson(i)) { impactSound('thump', p, speed); App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }); slowedBy(car, 'person', p.traits?.weight); }
+    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength && !isFavoritePerson(i)) { impactSound('thump', p, speed); if (speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p)); App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }); slowedBy(car, 'person', p.traits?.weight); }
     else if (p.mode === 'possessed') return;
     else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { impactSound('thump', p, speed); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed); p.shotRate = CAR_FALL_SPEEDUP; slowedBy(car, 'person', p.traits?.weight); } }
     else if (Math.abs(right) < stun.halfWidth && Math.abs(forward) < stun.halfLength) {
