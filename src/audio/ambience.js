@@ -1,16 +1,18 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, isMuted } from './sfx.js';
+import { listener, isMuted, playBufferAt, zzfxBuffer } from './sfx.js';
+import { pointInPolygon } from '../core/math.js';
 import { trafficNearby } from './engine.js';
 import { isInsideBuilding } from '../buildings/interior.js';
 
 // ============================================================ ambience
 // The city's background: a low hum of traffic, as loud as there are cars about the camera (see trafficNearby in
 // engine.js), not coming from anywhere in particular; and, by day, birds singing now and then from somewhere round the
-// camera — each a short phrase of whistled notes, of one of a few kinds of song — or at night, crickets. Neither sings in
-// rain or snow, and fewer are heard the higher the camera's gone. When it rains there's the rain: a steady wash of hiss,
+// camera — each a short phrase of whistled notes, of one of a few kinds of song — or at night, crickets. They live in the
+// parks: they sing from inside one, and only when the camera's in or near one (see parkNearness), more the nearer it is.
+// Neither sings in rain or snow, and fewer are heard the higher the camera's gone. When it rains there's the rain: a steady wash of hiss,
 // and drops pattering close by now and then, both as heavy as the rain is, and muffled (and the drops gone) from inside a
-// building. All of it synthesized live, like the engines.
+// building. In heavy rain, thunder rumbles now and then somewhere far off. All of it synthesized live, like the engines.
 const HUM_VOLUME = 0.03;
 const HUM_LOW = 250, HUM_HIGH = 1400; // the band of the hum, in Hz
 const HUM_FULL = 12;              // how much traffic nearby (see trafficNearby) makes the hum half as loud as it gets
@@ -21,11 +23,23 @@ const SONG_REF_DISTANCE = 12;
 const RAIN_VOLUME = 0.1;          // the wash of rain, at its heaviest
 const RAIN_HIGH = 7000, RAIN_HIGH_INSIDE = 700; // how high the wash reaches, outside and heard through a building's walls
 const DROP_VOLUME = 0.06, DROPS_PER_SECOND = 16; // single drops pattering close by, at the heaviest
+const PARK_REACH = 40;            // how far out of a park the camera can be and still hear its birds, fading as it goes
+const HEAVY_RAIN = 0.6;           // rain past this and there's thunder
+const RUMBLE_GAP = 18;            // mean seconds between rumbles, in the heaviest rain (longer as it eases toward HEAVY_RAIN)
+const RUMBLE_VOLUME = 0.5;
+const RUMBLE_NEAR = 250, RUMBLE_FAR = 900; // how far off the thunder is
+// a long low roll of thunder with no crack to it, as heard from a way off (ZzFX, see sfx.js): two kinds, a few of each
+const RUMBLES = [
+  [1, .2, 50, .4, 1.2, 2.8, 4, .5, , , , , , 1, , .15, .2, .6, .6, .3, -400],
+  [1, .2, 60, .15, .8, 3.2, 4, .6, , , , , , 1.5, , .2, .3, .7, .4, .25, -600],
+];
 
 let hum = null; // { gain } once made
 let nextSong = 0;
 let rain = null; // { gain, high, buffer } once made
 let lastT = 0;
+let nextRumble = 0, rumbles = null;
+let parks = { at: -1, nearness: 0, nearest: null }; // parkNearness, as of `at`
 
 // a couple of seconds of white noise, its ends faded into each other so it loops without a click
 function noiseLoop(context, seconds) {
@@ -160,6 +174,40 @@ function somewhereAround(near = 15, far = 70, low = 2, high = 10) {
   return { x: x + Math.cos(angle)*d, y: low + Math.random()*(high - low), z: z + Math.sin(angle)*d };
 }
 
+// How near the camera is to a park, 1 inside one down to 0 PARK_REACH out of it, and the park; worked out twice a second.
+function parkNearness(t) {
+  if (t - parks.at < 0.5) return parks;
+  const { x, z } = camera.position;
+  let best = Infinity, nearest = null;
+  S.zones.forEach(zone => {
+    if (zone.zoneType !== 'park' || !zone.closed || zone.points.length < 3) return;
+    const d = pointInPolygon({ x, z }, zone.points) ? 0 : edgeDistance(x, z, zone.points);
+    if (d < best) { best = d; nearest = zone; }
+  });
+  parks = { at: t, nearness: Math.max(0, 1 - best/PARK_REACH), nearest };
+  return parks;
+}
+// how far a point is from the nearest edge of a polygon, and the nearest point on it
+const onEdge = { x: 0, z: 0 };
+function edgeDistance(x, z, poly) {
+  let best = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[j], b = poly[i], dx = b.x - a.x, dz = b.z - a.z;
+    const along = Math.max(0, Math.min(1, ((x - a.x)*dx + (z - a.z)*dz)/(dx*dx + dz*dz || 1)));
+    const px = a.x + dx*along, pz = a.z + dz*along, d = Math.hypot(x - px, z - pz);
+    if (d < best) { best = d; onEdge.x = px; onEdge.z = pz; }
+  }
+  return best;
+}
+// somewhere for a bird to sing from: round the camera, in the park if that can be found in a few tries, or else at the
+// park's edge nearest the camera
+function somewhereInPark(park) {
+  for (let k = 0; k < 6; k++) { const at = somewhereAround(); if (pointInPolygon(at, park.points)) return at; }
+  const at = somewhereAround();
+  edgeDistance(at.x, at.z, park.points);
+  return { x: onEdge.x, y: at.y, z: onEdge.z };
+}
+
 /**
  * One frame of the city's background sound.
  * @param {number} t - seconds
@@ -185,12 +233,27 @@ export function updateAmbience(t) {
     for (let k = Math.floor(drops) + (Math.random() < drops % 1 ? 1 : 0); k > 0; k--) patter(context.currentTime + Math.random()*dt);
   }
 
+  // thunder, far off and low, in heavy rain: coming sooner the heavier it is, and muffled from indoors
+  if (pouring > HEAVY_RAIN && !isMuted() && t >= nextRumble) {
+    if (nextRumble) {
+      rumbles ??= RUMBLES.flatMap(layer => [0, 1, 2].map(() => zzfxBuffer(layer)));
+      const angle = Math.random()*Math.PI*2, d = RUMBLE_NEAR + Math.random()*(RUMBLE_FAR - RUMBLE_NEAR);
+      const { x, z } = camera.position;
+      playBufferAt(rumbles[Math.floor(Math.random()*rumbles.length)], { x: x + Math.cos(angle)*d, y: 150, z: z + Math.sin(angle)*d },
+        RUMBLE_VOLUME*(inside ? 0.5 : 1), RUMBLE_NEAR);
+    }
+    const heaviness = (pouring - HEAVY_RAIN)/(1 - HEAVY_RAIN);
+    nextRumble = t + RUMBLE_GAP*(0.4 + Math.random()*1.2)/Math.max(0.3, heaviness);
+  } else if (pouring <= HEAVY_RAIN) nextRumble = 0;
+
   if (isMuted() || t < nextSong) return;
   const day = S.sunElevation > 2, night = S.sunElevation < -4, wet = (S.weatherRain ?? 0) > 0.2 || (S.weatherSnow ?? 0) > 0.2;
-  const near = Math.max(0, 1 - camera.position.y/QUIET_ABOVE);
+  const park = parkNearness(t);
+  const near = Math.max(0, 1 - camera.position.y/QUIET_ABOVE)*park.nearness;
   const gap = day ? BIRD_GAP : CRICKET_GAP;
-  nextSong = t + gap*(0.3 + Math.random()*1.4)/Math.max(0.2, near);
+  // (out of earshot of any park, look again in a second, so walking into one isn't met by a long silence)
+  nextSong = t + (near > 0 ? gap*(0.3 + Math.random()*1.4)/Math.max(0.2, near) : 1);
   if (wet || near <= 0 || !(day || night)) return;
-  if (day) whistle(somewhereAround(), context.currentTime, SONGS[Math.floor(Math.random()*SONGS.length)](), SONG_VOLUME);
-  else whistle(somewhereAround(), context.currentTime, cricket(), CRICKET_VOLUME);
+  if (day) whistle(somewhereInPark(park.nearest), context.currentTime, SONGS[Math.floor(Math.random()*SONGS.length)](), SONG_VOLUME);
+  else whistle(somewhereInPark(park.nearest), context.currentTime, cricket(), CRICKET_VOLUME);
 }

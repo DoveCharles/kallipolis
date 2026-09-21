@@ -6,7 +6,10 @@ import { listener, isMuted } from './sfx.js';
 // life/people/people.js) a short blip plays from their head — a buzzy tone at their voice's pitch, bent a little up or
 // down each syllable and sliding as it goes, through two bandpass filters set to a random vowel's formants. Most syllables
 // start on a consonant (see CONSONANTS): a click or hiss of noise before the voice comes in, a hum through a closed mouth,
-// or the formants gliding in from somewhere else, so it's "ba", "sho", "lee" and not just "a", "o", "ee". Each blip is
+// or the formants gliding in from somewhere else, so it's "ba", "sho", "lee" and not just "a", "o", "ee". And it comes in
+// phrases (see nextSyllable), as speech does: a few syllables at a time with a breath between, every second or third one
+// stressed (longer, louder, higher), the pitch drifting down as the phrase goes on and the last syllable drawn out,
+// falling — or rising, for a question. Each blip is
 // built live, like the engine (see engine.js), and gone once it's played. Only those within HEAR_DISTANCE of the camera
 // are heard, so a crowded plaza across town costs nothing.
 const VOWELS = [[800, 1200], [500, 1900], [300, 2300], [500, 900], [350, 800], [650, 1600]]; // [F1, F2] in Hz: a, e, i, o, u, and something in between
@@ -31,9 +34,37 @@ const HEAR_DISTANCE = 60;          // beyond this from the camera they aren't he
 const REF_DISTANCE = 6;            // how near to be heard at full volume
 const VOLUME = 0.22;
 const BLIPS_MAX = 12;              // syllables sounding at once, past which new ones are dropped
-const BEND = 0.25;                 // how far each syllable's pitch strays from the voice's, either way
+const BEND = 0.1;                  // how far each syllable's pitch strays at random from where the phrase has it, either way
+const DRIFT = 0.12;                // how far the pitch drifts down over a phrase: from this much above the voice's to below
+const STRESS = 0.12;               // how much higher a stressed syllable is
+const SYLLABLE = 0.12;             // an ordinary syllable's length, in seconds (a stressed one's longer, the last longer still)
 
 let blips = 0;
+
+/**
+ * The next beat of someone's talk: a syllable, or a pause. Speech comes in phrases of a few syllables, with a breath
+ * between, and the odd little catch within one; a phrase's syllables are stressed every `beat`, and its last one's drawn
+ * out. The talker carries their phrase along as `talker.phrase` (null it when they stop, to start afresh).
+ * @param {{phrase: ?object}} talker
+ * @param {() => number} rng
+ * @returns {{open: number, length: number, intonation?: object}} how wide their mouth opens, 0 to 1 (0, a pause), for how
+ *   many seconds, and for a syllable how it sits in its phrase — to hand on to babble
+ */
+export function nextSyllable(talker, rng) {
+  let phrase = talker.phrase;
+  if (!phrase || phrase.said >= phrase.length) {
+    const breath = phrase ? 0.2 + rng()*0.45 : 0; // (none before the first)
+    talker.phrase = phrase = { length: 2 + Math.floor(rng()*7), said: 0, beat: 2 + Math.floor(rng()*2), question: rng() < 0.2, pace: 0.85 + rng()*0.3 };
+    if (breath) return { open: 0, length: breath };
+  }
+  if (phrase.said > 0 && phrase.said < phrase.length - 1 && rng() < 0.08) return { open: 0, length: 0.06 + rng()*0.08 };
+  const k = phrase.said++, last = phrase.said === phrase.length, stressed = k % phrase.beat === 0;
+  return {
+    open: stressed ? 0.75 + rng()*0.25 : 0.35 + rng()*0.4,
+    length: SYLLABLE*phrase.pace*(0.8 + rng()*0.4)*(stressed ? 1.3 : 1)*(last ? 1.7 : 1),
+    intonation: { through: k/Math.max(1, phrase.length - 1), stressed, last, question: phrase.question },
+  };
+}
 let noise = null; // a second of white noise, for the consonants
 
 function noiseBuffer(context) {
@@ -53,9 +84,12 @@ function noiseBuffer(context) {
  * @param {number} length - seconds until their next syllable
  * @param {number} [loudness=1] - how wide their mouth opens on it, 0 to 1
  * @param {number} [mood=0] - their mood trait: the cheerier, the more their syllables lift, the glummer, the more they sag
+ * @param {?{through: number, stressed: boolean, last: boolean, question: boolean}} [intonation] - how the syllable sits in
+ *   its phrase (see nextSyllable): how far through it, 0 to 1; whether it's stressed; whether it's the last, and if so
+ *   whether the phrase is a question
  * @returns {void}
  */
-export function babble(at, voice, length, loudness = 1, mood = 0) {
+export function babble(at, voice, length, loudness = 1, mood = 0, intonation = null) {
   const { pitch, formant, sharpness } = voice;
   const context = listener.context;
   if (isMuted() || context.state !== 'running' || blips >= BLIPS_MAX) return;
@@ -63,7 +97,11 @@ export function babble(at, voice, length, loudness = 1, mood = 0) {
   if (Math.hypot(at.x - x, at.y - y, at.z - z) > HEAR_DISTANCE) return;
 
   const now = context.currentTime, end = now + Math.max(0.05, length*0.85);
-  const f = pitch*(1 + (Math.random()*2 - 1)*BEND), slide = 1 + Math.max(-0.3, Math.min(0.3, mood*0.15 + (Math.random() - 0.5)*0.2));
+  const { through = 0.5, stressed = false, last = false, question = false } = intonation ?? {};
+  const f = pitch*(1 + (Math.random()*2 - 1)*BEND)*(1 + DRIFT*(1 - 2*through))*(stressed ? 1 + STRESS : 1);
+  // (the slide through the syllable: a phrase's end falls, or rises for a question; otherwise a little either way, lifted
+  // by cheer and sagging with gloom)
+  const slide = last ? (question ? 1.3 : 0.8) : 1 + Math.max(-0.2, Math.min(0.2, mood*0.1 + (Math.random() - 0.5)*0.1));
   const oscillator = context.createOscillator();
   oscillator.type = 'sawtooth';
   oscillator.frequency.setValueAtTime(f, now);

@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
 import { explode } from '../giblets.js';
-import { babble } from '../../audio/voices.js';
+import { babble, nextSyllable } from '../../audio/voices.js';
 import { footstep } from '../../audio/footsteps.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
@@ -990,11 +990,14 @@ export function updatePeople(t) {
       const group = p.group, talking = !!group && group.speaker === p, listening = !!group && !!group.speaker && !talking && p.lookAt === group.speaker;
       if (!talking) {
         p.talkTo = 0;
+        p.phrase = null;
       } else if ((p.talkIn -= dt) <= 0) {
-        p.talkTo = peopleRng() < 0.25 ? 0 : 0.3 + peopleRng()*0.7;
-        p.talkIn = 0.08 + peopleRng()*0.14;
-        // and each syllable they say is heard (see audio/voices.js)
-        if (p.talkTo > 0 && (!isGone(p) || inRoom(p))) babble({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), p.talkIn, p.talkTo, p.traits.mood);
+        // in phrases, with a breath between (see nextSyllable in audio/voices.js)
+        const { open, length, intonation } = nextSyllable(p, peopleRng);
+        p.talkTo = open;
+        p.talkIn = length;
+        // and each syllable they say is heard
+        if (open > 0 && (!isGone(p) || inRoom(p))) babble({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), length, open, p.traits.mood, intonation);
       }
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape
