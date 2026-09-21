@@ -11,7 +11,7 @@ import { puffSmoke } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, personHeight, stopFollowingPerson } from './peopleTracking.js';
-import { roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome } from '../../buildings/interior.js';
+import { roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
 
 // ---- what people get up to besides walking about.
 //
@@ -1123,7 +1123,8 @@ function sitting(p, here, dt) {
       p.seatLift = seat.y - p.y - clipNamed('Sit1').seatY*modelScale(p);
       // falls through
     case 'sit':
-      if ((here.timer -= dt) <= 0) { here.stage = 'rise'; p.pose = 'Idle'; }
+      if ((here.timer -= dt) <= 0) { here.stage = 'rise'; p.pose = 'Idle'; break; }
+      if (seat.sofa) watchingTV();
       break;
     case 'rise':
       if (weightOf(p, clipNamed('Idle')) < 1) break;

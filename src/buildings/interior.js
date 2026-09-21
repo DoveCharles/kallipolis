@@ -305,7 +305,7 @@ function furnish(key) {
     home.solid.push(r);
     home.blocked.push(around(r.x0, r.x1, r.z0, r.z1, 0.35));
     const c = Math.cos(angle), s = Math.sin(angle);
-    for (const seat of piece.seats) home.seats.push({ x: x + seat.x*c + seat.z*s, z: z - seat.x*s + seat.z*c, y: seat.y, nx: s, nz: c });
+    for (const seat of piece.seats) home.seats.push({ x: x + seat.x*c + seat.z*s, z: z - seat.x*s + seat.z*c, y: seat.y, nx: s, nz: c, sofa: name === 'Sofa' });
     return r;
   };
   // the camera's corner, kept clear of anything but the sofa
@@ -408,19 +408,19 @@ function furnish(key) {
   const c = Math.cos(room.rotation.y), s = Math.sin(room.rotation.y);
   home.seats = home.seats.map(seat => {
     const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z));
-    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, by: null };
+    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: seat.sofa, by: null };
   });
-  // and the TV's screen, in the world, switched on
+  // and the TV's screen, in the world (switched on by whoever sits down in front of it: see watchingTV)
   if (tv.screen) {
     tvObject.updateMatrixWorld(true);
     home.screen = { centre: tvObject.localToWorld(tv.screen.centre.clone()), turn: tvObject.getWorldQuaternion(new THREE.Quaternion()),
       w: tv.screen.w, h: tv.screen.h };
-    startTV();
   }
 }
 
 // ---------------------------------------------------------------- the TV
-// A home's TV plays a YouTube video, one picked at random each visit from assets/tv.txt: a real YouTube player in an
+// A home's TV is on while anyone's sat on the sofa (see watchingTV), playing a YouTube video picked at random from
+// assets/tv.txt each time it comes on: a real YouTube player in an
 // iframe, laid out by CSS3DRenderer to sit exactly where the screen is, on its own layer behind the canvas — and the
 // canvas cut through to it at the screen (see setCutout in pixelation.js), so whoever walks in front of the TV hides it
 // as they would anything else. It starts muted (browsers only let a page play sound once it's been clicked or typed
@@ -431,7 +431,6 @@ const TV_VOLUME = 60;   // out of 100
 let channels = [];      // YouTube video ids
 fetch(TV_LIST_URL).then(r => r.ok ? r.text() : '').then(text => {
   channels = text.split('\n').map(videoId).filter(Boolean);
-  if (inside && current === LAYOUTS.home) startTV();
 }).catch(() => {});
 // the id of the video a line of tv.txt links to (any of YouTube's link shapes, or the bare id), or null
 function videoId(line) {
@@ -487,8 +486,15 @@ function stopTV() {
 }
 // a command for the player (see YouTube's IFrame Player API)
 const tell = (func, ...args) => tv.iframe.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), 'https://www.youtube.com');
-// Each frame, while a TV's on: the player laid out where the screen now is on the screen, and its sound on or off.
+let watchedAt = -Infinity;
+// (said each frame by whoever's sat on the sofa: see peopleActivities.js)
+export const watchingTV = () => { watchedAt = performance.now(); };
+// Each frame: the TV switched on or off as anyone's sat watching it or not, and while it's on, the player laid out where
+// the screen now is on the screen, and its sound on or off.
 function updateTV() {
+  const watched = inside && current === LAYOUTS.home && performance.now() - watchedAt < 500;
+  if (watched && !tv) startTV();
+  else if (!watched && tv) stopTV();
   if (!tv) return;
   tvLayer.css.render(tvLayer.scene, camera);
   // (told again every so often: the player misses anything it's told before it's ready, and there's no knowing when that is
