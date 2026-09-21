@@ -92,6 +92,7 @@ function noiseBuffer(context) {
  */
 export function babble(at, voice, length, loudness = 1, mood = 0, intonation = null) {
   if (blips >= BLIPS_MAX) return;
+  const { pitch } = voice;
   const { through = 0.5, stressed = false, last = false, question = false } = intonation ?? {};
   const f = pitch*(1 + (Math.random()*2 - 1)*BEND)*(1 + DRIFT*(1 - 2*through))*(stressed ? 1 + STRESS : 1);
   // (the slide through the syllable: a phrase's end falls, or rises for a question; otherwise a little either way, lifted
