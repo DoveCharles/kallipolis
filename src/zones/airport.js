@@ -957,19 +957,27 @@ export function generateAirportContent(zone, poly, cutouts, blockers) {
   // ---- which side of the runway the buildings go, which is whichever side the nearest road is on
   const streets = streetSegmentsNear(poly);
   const street = streetFor(frame.center, streets);
-  const side = street ? Math.sign((street.x - frame.center.x)*frame.nx + (street.z - frame.center.z)*frame.nz) || 1 : 1;
+  const roadSide = street ? Math.sign((street.x - frame.center.x)*frame.nx + (street.z - frame.center.z)*frame.nz) || 1 : 1;
   // the terminal has its forecourt out toward the road and its apron in toward the runway, which is how a real one sits
-  // and — because the road comes at the airport from outside — puts the two the right way round at once
+  // and — because the road comes at the airport from outside — puts the two the right way round at once. But the road
+  // side is only a preference: when the room is all on the far side, or off toward one end, the buildings go there
+  // instead of not at all. Mid-runway on the road side first, then sliding out along it, then the same across the runway.
+  let side = roadSide;
+  const spots = [roadSide, -roadSide].flatMap(sd => [0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45].map(f => ({ side: sd, s: f*L })));
 
   const standList = []; // every stand on the field, whether it's worked by the schedule or just sat on
   let taxiFrom = null;
   if (tier.terminal && s.airportTerminal !== false) {
+    let box = null;
+    for (const spot of spots) {
+      const taxiW = spot.side*(W + tier.width*0.4 + 7);
+      const apronMid = taxiW + spot.side*(9 + tier.apron/2);
+      box = fitInFrame(frame, inside, { s: spot.s, w: apronMid + spot.side*(tier.apron/2 + tier.terminal/2),
+        nearW: taxiW + spot.side*(9 + tier.width*0.5 + tier.terminal/2), // as close in as it can come and still leave an apron
+        halfLen: Math.min(L*0.5, tier.id === 'international' ? 75 : 38), halfWid: tier.terminal/2 });
+      if (box) { side = spot.side; break; }
+    }
     const taxiW = side*(W + tier.width*0.4 + 7);
-    const apronMid = taxiW + side*(9 + tier.apron/2);
-    const want = { s: 0, w: apronMid + side*(tier.apron/2 + tier.terminal/2),
-      nearW: taxiW + side*(9 + tier.width*0.5 + tier.terminal/2), // as close in as it can come and still leave an apron
-      halfLen: Math.min(L*0.5, tier.id === 'international' ? 75 : 38), halfWid: tier.terminal/2 };
-    const box = fitInFrame(frame, inside, want);
     if (box) {
       // How far the stands reach along the apron, which is not the same question as how long the terminal is: a zone
       // narrow across the runway squeezes the terminal in both directions at once, and a stubby terminal with open
@@ -977,7 +985,7 @@ export function generateAirportContent(zone, poly, cutouts, blockers) {
       // the zone, and the apron is then paved to match.
       const standW = box.w - side*(box.halfWid + tier.width*0.45);
       // and never so far that a stand ends up level with the runway end, where there would be no room to turn off beyond it
-      const widest = Math.min(tier.width*3.6, Math.max(0, 2*(L - tier.width*1.8)));
+      const widest = Math.min(tier.width*3.6, Math.max(0, 2*(L - tier.width*1.8 - Math.abs(box.s))));
       const step = tier.width*0.45;
       let spread = Math.min(box.halfLen*1.8, widest);
       while (spread + step <= widest) {
@@ -1010,11 +1018,21 @@ export function generateAirportContent(zone, poly, cutouts, blockers) {
     }
   }
   if (tier.hangars && s.airportTerminal !== false) {
-    // a grass strip gets a pair of hangars beside it instead, and light aircraft parked on the grass
-    [-1, 1].forEach(end => {
-      const want = { s: end*L*0.32, w: side*(W + tier.width*CLEARWAY + 16), nearW: side*(W + tier.width*CLEARWAY + 11), halfLen: 11, halfWid: 7 };
-      const box = fitInFrame(frame, inside, want);
-      if (!box) return;
+    // a grass strip gets a pair of hangars beside it instead, and light aircraft parked on the grass: one toward each end,
+    // each slid along the strip until it finds room, on whichever side has room for more of them (the road side on a tie)
+    const hangarAt = (sd, end) => {
+      for (const f of [0.32, 0.2, 0.45, 0.1, 0.58]) {
+        const box = fitInFrame(frame, inside, { s: end*L*f, w: sd*(W + tier.width*CLEARWAY + 16), nearW: sd*(W + tier.width*CLEARWAY + 11), halfLen: 11, halfWid: 7 });
+        if (box) return box;
+      }
+      return null;
+    };
+    // (and on a short strip the two slide into each other, so the second only stands if it clears the first)
+    const [near, far] = [roadSide, -roadSide].map(sd => [-1, 1].map(end => hangarAt(sd, end)).filter(Boolean)
+      .filter((box, k, all) => k === 0 || Math.abs(box.s - all[0].s) > box.halfLen + all[0].halfLen + 2));
+    const boxes = far.length > near.length ? far : near;
+    side = far.length > near.length ? -roadSide : roadSide;
+    boxes.forEach(box => {
       pave(tarmac, frameRect(frame, { ...box, halfLen: box.halfLen*1.2, halfWid: box.halfWid*1.9 }), free);
       zone.buildingsGroup.add(buildHangar(frame, box, rng));
       // the aircraft stands on the apron outside the door, the same way round as one at a terminal
