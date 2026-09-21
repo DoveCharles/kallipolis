@@ -15,6 +15,7 @@ import { isTrainLine } from '../trains/trains.js';
 import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people/people.js';
 import { isFavoritePerson } from '../ui/favorites.js';
 import { strikeLightning } from './lightning.js';
+import { startEngine, updateEngine, stopEngine } from '../audio/engine.js';
 import { explodeCar, puffSmoke, sparks, burnFx, tyreSmoke, igniteFx, engineSmoke } from './giblets.js';
 import { carTypeOf, vanityChanceOf, vanityPlatesOf } from './car-types.js';
 import { driving, controlInput, startDriving, endDriving } from './possession.js';
@@ -955,7 +956,12 @@ export function updateTraffic(t) {
       car.plate =  carPlate(car);
     }
     if (car.design != null) refreshCarTraits(car);
-    if (car === drivenCar) { if (car.sinking) sinkCar(car, dt); else driveByHand(car, dt); turnWheels(car, dt); placeCar(car, i, designCounts); return; }
+    if (car === drivenCar) {
+      if (car.sinking) sinkCar(car, dt); else driveByHand(car, dt);
+      turnWheels(car, dt); placeCar(car, i, designCounts);
+      updateEngine({ x: car.x, y: Y_ROAD + carHeight(car)/2, z: car.z }, car.speed, car.throttle, !car.sinking && !(car.stall > 0), dt);
+      return;
+    }
     if (car.fuse != null) { burnFuse(car, dt); placeCar(car, i, designCounts); return; } // (about to blow: it neither drives nor turns)
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
@@ -1661,6 +1667,8 @@ function driveCar(i) {
   if (i !== followedCar || !car || car.li < 0 || car.fuse != null || drivenCar === car || !startDriving()) return;
   drivenCar = car;
   car.yieldFor = null;
+  car.throttle = 0;
+  startEngine({ x: car.x, y: Y_ROAD, z: car.z });
   controls.goalRadius = Math.max(controls.minRadius, carLength(car)*2.2);
 }
 
@@ -1674,6 +1682,7 @@ function stopDriving() {
   const car = drivenCar;
   drivenCar = null;
   endDriving();
+  stopEngine();
   car.speed = Math.max(0, car.speed);
   // it drives back to the nearest lane, as a knocked car does
   car.kick = { x: 0, z: 0, vx: 0, vz: 0, heading: car.heading, goal: null, seated: false, blocked: false, speed: 0, driving: 0 };
@@ -1706,6 +1715,7 @@ function driveByHand(car, dt) {
   const boost = run ? DRIVE_BOOST*(car.traits?.boost ?? 1) : 1;
   const top = DRIVE_TOP_SPEED*(car.traits?.speed ?? 1)*boost;
   const braking = DRIVE_BRAKE*(car.traits?.braking ?? 1);
+  car.throttle = brake ? 0 : Math.abs(forward); // (for the engine's sound)
   const toward = (v, goal, rate) => v + Math.max(-rate*dt, Math.min(rate*dt, goal - v));
   if (brake) car.speed = toward(car.speed, 0, braking);
   else if (forward > 0) car.speed = toward(car.speed, top, car.speed < 0 ? braking : DRIVE_ACCEL*boost);

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
 import { explode } from '../giblets.js';
+import { babble } from '../../audio/voices.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
 import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FIDGETS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_TRAIT_COLORS } from './peopleModel.js';
@@ -228,6 +229,9 @@ export const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode ===
  * @param {Person} p - the person
  * @returns {boolean} whether they're in the room
  */
+// The pitch of someone's voice (see audio/voices.js): lower for a man than a woman, and for someone taller, and a little
+// of their own either way, the same every time for the same person.
+const voicePitch = (p, i) => (personModel?.isMan[i] === 1 ? 150 : 250)/Math.sqrt(Math.max(0.5, p.height))*(0.85 + 0.3*mulberry32(i*7919 + 13)());
 export const inRoom = p => p.mode === 'indoors' && p.indoors.stage === 'inside' && !!p.inRoom
   && p.inRoom.visit === roomVisit() && roomHolds(p.indoors.building.key);
 export let indoorsCount = 0;
@@ -976,6 +980,8 @@ export function updatePeople(t) {
       } else if ((p.talkIn -= dt) <= 0) {
         p.talkTo = peopleRng() < 0.25 ? 0 : 0.3 + peopleRng()*0.7;
         p.talkIn = 0.08 + peopleRng()*0.14;
+        // and each syllable they say is heard (see audio/voices.js)
+        if (p.talkTo > 0 && (!isGone(p) || inRoom(p))) babble({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voicePitch(p, i), p.talkIn, p.talkTo, p.traits.mood);
       }
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape

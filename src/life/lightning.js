@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { scene } from '../core/scene.js';
+import { playSound } from '../audio/sfx.js';
 
 // ============================================================ lightning
 // The Smite button's bolt (see the person and car cards): a jagged streak from high in the sky down to whoever's smitten,
@@ -62,6 +63,7 @@ export function strikeLightning(at) {
   const bolt = { at: { ...at }, born: performance.now()/1000, drawn: 0 };
   drawBolt(bolt);
   bolts.push(bolt);
+  playSound('thunder', at);
 }
 
 const up = new THREE.Vector3(0, 1, 0), direction = new THREE.Vector3(), matrix = new THREE.Matrix4(), turn = new THREE.Quaternion(), size = new THREE.Vector3();

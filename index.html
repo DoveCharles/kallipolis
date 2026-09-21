@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
 <script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/", "zzfx": "https://cdn.jsdelivr.net/npm/zzfx@1.3.2/ZzFX.js" } }
 </script>
 <script type="module" src="src/main.js"></script>
 </head>
@@ -144,6 +144,9 @@
 
     <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Gameplay</div>
     <div class="row"><label>Blood soaking</label><button class="toggle-switch" id="s-bloodsoak"><span class="knob"></span></button></div>
+
+    <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Sound</div>
+    <div class="row"><label>Sound</label><button class="toggle-switch on" id="s-sound"><span class="knob"></span></button></div>
 
     <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">FX</div>
     <div class="row"><label>Windows 3.0 look</label><button class="toggle-switch" id="s-win3"><span class="knob"></span></button></div>

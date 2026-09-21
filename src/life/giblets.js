@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { scene, camera, Y_PATH } from '../core/scene.js';
 import { S } from '../core/shared.js';
+import { playSound } from '../audio/sfx.js';
 
 // ============================================================ giblets
 // What's left of someone after the person card's Smite button, or a car after the car card's: chunks of them in their own
@@ -268,6 +269,7 @@ export function explode(at, height, colors, momentum = null) {
   BLOOD_COLORS.forEach(hex => parts.push([new THREE.Color(hex), 9, 0.028]));
   spawnParts(at, height, parts, 1, at.y, momentum);
   spawnSplat(at, height, BLOOD_SPLAT_COLOR);
+  playSound('gib', at);
 }
 // A few chunks of blood thrown from `at` (`height` tall), `count` of them whatever the gib amount setting is; `momentum` as for explode.
 export function spillBlood(at, height, count, momentum = null) {
@@ -278,6 +280,7 @@ export function spillBlood(at, height, count, momentum = null) {
 export function explodeBee(at, size, fallbackGround) {
   const parts = [[new THREE.Color(0xffeb2b), 6, 0.3], [new THREE.Color(0x1c1c1c), 4, 0.26], [new THREE.Color(0xdfe8f0), 3, 0.22]];
   spawnParts(at, size, parts, 0.25, (x, z) => groundBelow(x, at.y, z, fallbackGround));
+  playSound('pop', at);
 }
 // Blows a car up: `at` where its wheels were, `height` how tall it was, `colors.paint` its own color — chunks of it, bigger
 // and thrown much further than a person's (see spawnParts' `power`), in its paint and (standing in for glass, trim and
@@ -288,6 +291,7 @@ export function explodeCar(at, height, colors) {
   spawnParts(at, height, parts, 2.2);
   spawnSplat(at, height, SCORCH_SPLAT_COLOR, SOOT_SIZE, true);
   explodeFx(at, height);
+  playSound('explosion', at);
 }
 
 const placed = new THREE.Object3D(), spinStep = new THREE.Quaternion(), dimmed = new THREE.Color();
