@@ -154,6 +154,8 @@ const PERSON_VERTEX_PARS = `
   uniform float personHeadBone;
   uniform vec3 personHeadPivot;
   uniform float personChestBone;
+  uniform vec3 personChestPivot;
+  uniform int personHidden; // the person whose body is hidden but for their arms (-1 for nobody)
   attribute vec4 personJoints;
   attribute vec4 personWeights;
   // What the shader needs to know about the vertex itself, packed into one attribute (a machine guarantees only 16, and
@@ -276,6 +278,12 @@ function injectPersonShader(shader, uniforms, look) {
   if (colored) shader.uniforms.personPalette = { value: look.palette };
   const hide = look.femaleOnly.length
     ? `if ((${look.femaleOnly.map(slot => `personSlotIndex == ${slot}`).join(' || ')}) && personTrait(1).y > 0.5) transformed = vec3(0.0);` : '';
+  // (not from the shadow's depth material, so the body still casts one) whoever personHidden names is drawn as only their arms
+  // and the shirt on their torso (down to the bottom of the view when they look down), the rest of the body drawn into a
+  // point at the middle of their chest, which closes the shirt's open ends
+  const shirt = PERSON_SLOTS.flatMap((name, slot) => name === 'Top' || /^(Sleeve|Tummy)/.test(name) ? [slot] : []);
+  const hideBody = colored
+    ? `if (personIndex() == personHidden && personVertex.x >= 0.0 && !(${shirt.map(slot => `personSlotIndex == ${slot}`).join(' || ')})) transformed = (personBone(personChestBone)*vec4(personChestPivot, 1.0)).xyz;` : '';
   const bands = (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? personPalette[0] : personTrait(${b.colorRow}).rgb) : `).join('');
   const color = colored
     ? 'vPersonColor = ' + bands + Object.entries(look.traitColors).map(([slot, row]) => `personSlotIndex == ${slot} ? personTrait(${row}).rgb : `).join('') + 'personPalette[personSlotIndex];' : '';
@@ -287,6 +295,7 @@ function injectPersonShader(shader, uniforms, look) {
       int personSlotIndex = int(personVertex.y + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
+      ${hideBody}
       ${color}`);
   if (!colored) return;
   shader.fragmentShader = shader.fragmentShader
@@ -405,6 +414,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const isArmBone = /^(Shoulder|Elbow|Hand|Wrist|Finger|Thumb|Little|Middle)/;
   const inArm = bones.map(bone => isArmBone.test(bone.name));
   const chestBone = boneIndex.get(bones[boneByName.get('ShoulderL') ?? 0].parent) ?? 0;
+  const chestPivot = bones[chestBone].getWorldPosition(new THREE.Vector3());
 
   // ============== BODY POSE ============== 
   // Below defines the body in the rest pose, as one mesh: each part's vertices, the bones moving them, which part they are, and
@@ -682,8 +692,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const uniforms = {
     personBones: { value: boneTexture }, personBonesSize: { value: new THREE.Vector2(boneWidth, boneRows) },
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
-    personTraits: { value: traitTexture },
-    personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personChestBone: { value: chestBone },
+    personTraits: { value: traitTexture }, personHidden: { value: -1 },
+    personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personChestBone: { value: chestBone }, personChestPivot: { value: chestPivot },
   };
   const traitRow = part => 2 + PERSON_TRAIT_COLORS.indexOf(part);
   const bodyLook = {
@@ -715,7 +725,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, anim, look, eyes, hair: headLayers.flatMap(layer => layer.styles).filter(style => style.mesh), headLayers, isMan, boneData, boneWidth, traitData: traits, palette,
+  return { mesh, hidden: uniforms.personHidden, anim, look, eyes, hair: headLayers.flatMap(layer => layer.styles).filter(style => style.mesh), headLayers, isMan, boneData, boneWidth, traitData: traits, palette,
     headBone: headBone ?? 0, headPivot,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

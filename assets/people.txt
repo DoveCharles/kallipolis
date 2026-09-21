@@ -191,7 +191,7 @@ Shaggy
 Isaac
 Steve
 Roald
-(UNKNOWN) [choiceweight = 3]
+(UNKNOWN) [choiceweight = 6]
 Horace [agemult = 1.05]
 Bruiser
 Max
@@ -343,6 +343,8 @@ Chud
 Mace
 Morpheus
 Sly
+Adibou
+Bizbi
 
 ################################################################################################################################
 
@@ -443,7 +445,7 @@ Cameron
 Léa
 Sandy
 Rue
-(UNKNOWN) [choiceweight = 3]
+(UNKNOWN) [choiceweight = 5]
 Britney
 Reighleigh [agemult = 0.8]
 Gertrude [agemult = 1.15]

@@ -9,7 +9,6 @@ import { setHover, insertPreviewMarker } from './hover.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone, subdivideZonesFrom } from '../zones/cutouts.js';
 import { refreshHighlights, styleZoneVisual } from '../water/bridges.js';
-import { disarmObject, invalidateObjectFacing, objectsHint, showObjectUi } from '../objects/objects.js';
 import { selectItem, renderHierarchy } from '../ui/panels.js';
 import { IS_TOUCH } from '../core/device.js';
 
@@ -17,8 +16,6 @@ import { IS_TOUCH } from '../core/device.js';
 export function cancelActiveDrawing() {
   S.lastGroundClick = null;
   S.lastNodeClick = null;
-  disarmObject(); // whatever the Objects palette had armed (see objects.js)
-  App.cancelObjectTransform(); // and a prop left following the cursor under g/r/s goes back where it was
   if (S.activeRoadLine) {
     S.roadLines = S.roadLines.filter(l=>l.id!==S.activeRoadLine.id);
     cleanupOrphanRoadNodes();
@@ -43,7 +40,6 @@ export function closeActiveZone() {
 }
 export function finishActiveDrawing() {
   S.lastGroundClick = null;
-  App.confirmObjectTransform(); // Enter leaves a prop being moved, turned or resized under g/r/s where it stands
   if (S.activeRoadLine) {
     if (S.activeRoadLine.nodeIds.length<2) { cancelActiveDrawing(); return; }
     const finishedLine = S.activeRoadLine;
@@ -82,7 +78,7 @@ function updateHint() {
       train: "Tap to place nodes at the line's height · drag a node to move it in 3D (top view moves it level) · double-tap a node to delete it · double-tap to finish · press and hold a node to make it a station · ✛ then tap a line to insert a node, or a node to branch from it · press and hold empty ground to cancel",
       road: 'Tap ground to place nodes · tap a node to select its path · double-tap a node to delete it · drag to move · drag empty ground to orbit · double-tap ground to finish · ✛ then tap a path to insert a node, or a node to branch from it · press and hold to cancel',
       zone: 'Tap ground for boundary points · tap a point to select its zone · double-tap a point to delete it · drag to move · drag empty ground to orbit · double-tap ground, or tap the first point, to close · ✛ then tap an edge to insert a point · press and hold to cancel',
-      objects: objectsHint(true)
+      objects: 'Objects are coming soon · drag to orbit · two fingers to pan · pinch to zoom'
     };
     msg = hints[S.currentTool];
   } else {
@@ -90,14 +86,14 @@ function updateHint() {
       train: "Click to place nodes at the line's height · drag a node to move it in 3D (top view, key 7, moves it level) · alt+drag changes only its height · right-click a node to make it a station · double-click a node to delete it · double-click or Enter finishes · shift+click a line to insert a node · shift+click a node to branch from it · Esc cancels",
       road:'Click ground to place nodes · click a node to select its path · double-click a node to delete it · drag to move · empty-ground drag orbits · double-click ground or Enter finishes · shift+click a path to insert a node · shift+click a node to branch from it · Esc cancels',
       zone: 'Click ground for boundary points · click a point to select its zone · double-click a point to delete it · drag to move · empty-ground drag orbits · double-click ground, click first point, or Enter (3+ points) to close · shift+click an edge to insert a point · Esc cancels',
-      objects: objectsHint(false)
+      objects: 'Objects are coming soon · drag to orbit · shift+drag to pan · scroll to zoom'
     };
     msg = hints[S.currentTool];
   }
   document.getElementById('hint').textContent = msg;
 }
 // Edit mode's tabs: Paths (roads, paths and rivers — the 'road' tool — and train lines, the 'train' tool, which the Type menu
-// switches between, as each shows only its own kind of node), Zones, and Objects (street furniture, see objects/objects.js)
+// switches between, as each shows only its own kind of node), Zones, and Objects (nothing yet)
 export function applyModeVisibility() {
   App.hideContextMenu();
   const inNode = S.interactionMode==='node', inPaths = S.currentTool==='road' || S.currentTool==='train', inObjects = S.currentTool==='objects';
@@ -116,9 +112,7 @@ export function applyModeVisibility() {
   document.getElementById('section-zone').style.display = (inNode && S.currentTool==='zone') ? 'block' : 'none';
   document.getElementById('section-objects').style.display = (inNode && inObjects) ? 'block' : 'none';
   document.getElementById('entity-toolbar').style.display = inNode ? 'flex' : 'none';
-  document.getElementById('details-panel').style.display = inNode ? 'block' : 'none'; // in the Objects tab it's the selected object's (see objects.js)
-  showObjectUi(inNode && inObjects);
-  if (inNode && inObjects) invalidateObjectFacing(); // roads and zones can't change from in here, so what's near is worked out once on the way in
+  document.getElementById('details-panel').style.display = inNode && !inObjects ? 'block' : 'none';
   document.getElementById('section-move').style.display = S.interactionMode==='move' ? 'block' : 'none';
   document.getElementById('section-maps').style.display = S.interactionMode==='maps' ? 'block' : 'none';
   document.querySelectorAll('#mode-toolbar .tool-btn').forEach(b => b.classList.toggle('active', b.dataset.mode===S.interactionMode));
@@ -227,6 +221,7 @@ document.getElementById('s-grassnoise').addEventListener('input', (e) => {
   document.getElementById('dv-grassnoise').textContent = S.globalGrassNoiseStrength.toFixed(2);
   S.zones.forEach(subdivideZone);
 });
+// TODO: add a menu toggle for S.hideOwnHead (on by default): the head and hair of whoever is controlled in first person are hidden.
 document.getElementById('s-people').addEventListener('click', () => { S.peopleEnabled = !S.peopleEnabled; App.syncPeopleUI(); });
 document.getElementById('s-peopleamount').addEventListener('input', (e) => { S.peopleAmount = parseFloat(e.target.value); App.syncPeopleUI(); });
 document.getElementById('s-peoplespeed').addEventListener('input', (e) => { S.peopleSpeed = parseFloat(e.target.value); App.syncPeopleUI(); });

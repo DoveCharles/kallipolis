@@ -25,7 +25,7 @@ export const PEOPLE_MAX = 2000;
 export const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
 /** How often, at least, the walkways are resampled to a point — for entrances and for re-seating people. */
 export const PEOPLE_NAV_SPACING = 4;
-S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false, S.showPeopleNavDebug = false;
+S.peopleEnabled = false, S.hideOwnHead = true, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false, S.showPeopleNavDebug = false;
 export let peopleNav = null, peopleNavBuiltAt = -Infinity, peopleNavDebugBuiltAt = -Infinity, lastPeopleTime = null;
 export const people = [];
 export const peopleRng = mulberry32(90210);
@@ -949,8 +949,11 @@ export function updatePeople(t) {
   const inside = followed >= 0 && isGone(people[followed]) && people[followed].indoors?.building;
   if (inside) controls.goalTarget.set(inside.x, inside.y + inside.height*0.5, inside.z);
   else if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
-  // and the card's headshot of them (kept as it was while they can't be seen)
+  // and the card's headshot of them (kept as it was while they can't be seen), which draws them whole
+  if (personModel?.hidden) personModel.hidden.value = -1;
   if (followed >= 0 && personModel && !isGone(people[followed])) App.drawPersonHeadshot(headshotOf(followed));
+  // while controlling someone, their own head and hair are hidden (if S.hideOwnHead)
+  if (personModel?.hidden && S.hideOwnHead && possession.index >= 0) personModel.hidden.value = possession.index;
   // or, possessing them, the view from their eyes
   if (possession.index >= 0 && possession.index === followed && people[followed].mode === 'possessed') placePossessedCamera(followed);
 }

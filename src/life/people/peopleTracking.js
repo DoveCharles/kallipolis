@@ -136,6 +136,7 @@ export function stopFollowingPerson() {
 // They drop whatever they were doing and walk wherever they're walked — onto the roads too, where cars can hit them — and
 // when let go carry on from the nearest walkway, with the camera back behind them.
 const EYE_NEAR = 0.2; // the nearest the view draws, from their eyes
+const EYE_NEAR_HEADLESS = 0.1; // the same with their head hidden, close enough to see their own chest
 let cameraNear = camera.near;
 /**
  * Start walking someone the camera's following about from their own eyes (see possession.js): they drop whatever they
@@ -155,7 +156,7 @@ export function possessPerson(i) {
   swing = null;
   if (!startPossession(i, p.heading + (p.traits.backwards ? Math.PI : 0))) { p.mode = 'wander'; reseatPerson(p); return; }
   cameraNear = camera.near;
-  camera.near = EYE_NEAR;
+  camera.near = S.hideOwnHead ? EYE_NEAR_HEADLESS : EYE_NEAR;
   camera.updateProjectionMatrix();
 }
 /**
