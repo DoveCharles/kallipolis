@@ -2,7 +2,7 @@
 // The shared reader for lines in the .txt files that describe things (people.txt, cars.txt, ...). A line is an entry: its
 // text, then optional [brackets] holding traits (`speed = 2`, `solo`), rules (`limit = 1a`) and `choiceweight = n`.
 // Every kind shares the trait table in core/traits.js.
-import { TRAITS } from './traits.js';
+import { TRAITS, TRAIT_MACROS } from './traits.js';
 
 const warned = new Set();
 function warnOnce(message) {
@@ -26,7 +26,13 @@ export function entryOf(line, { traits: table = TRAITS, file }) {
     text = text.slice(0, group.index).trimEnd();
     const found = [];
     const foundRules = [];
-    group[1].split(/[,;]/).forEach(part => {
+    const splitParts = list => list.split(/[,;]/).filter(part => part.trim());
+    // a shorthand (TRAIT_MACROS) is kept, followed by the parts it stands for
+    const parts = splitParts(group[1]).flatMap(part => {
+      const macro = TRAIT_MACROS[part.split('=')[0].trim().toLowerCase()];
+      return macro ? [part, ...splitParts(macro)] : [part];
+    });
+    parts.forEach(part => {
       if (!part.trim()) return;
       const [rawKey, rawValue] = part.split('=');
       const key = rawKey.trim().toLowerCase(), value = rawValue == null ? 1 : parseFloat(rawValue);

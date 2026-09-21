@@ -5,8 +5,9 @@ import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
 import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, isGone, modelScale, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
-import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, canBeKnockedOver, endActivity, goAfter, knockOver } from './peopleActivities.js';
+import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver } from './peopleActivities.js';
 import { reseatPerson } from './peoplePathing.js';
+import { bloodSpeed, bloodlustSpeed } from './peopleBlood.js';
 
 // ============== following someone with camera  ============== 
 // In World mode, clicking a person keeps the view centered on them as they move —
@@ -202,7 +203,7 @@ export function walkPossessed(p, dt) {
   const shove = p.shove ??= { x: 0, z: 0 };
   let walkingSpeed = 0;
   if (len > 0 && Math.hypot(shove.x, shove.z) <= STAGGER_SPEED) {
-    const speed = PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.speed)*(run ? FLEE_SPEED*p.traits.boost : 1);
+    const speed = PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(run ? FLEE_SPEED*p.traits.boost : 1);
     const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = -Math.cos(yaw), rz = Math.sin(yaw);
     walkingSpeed = speed;
     x += (fx*forward + rx*right)/len*speed*dt;
@@ -262,7 +263,8 @@ export function placePossessedCamera(i) {
 const SWING_REACH = 3.4, SWING_REACH_PER_SPEED = 0.5;
 const SWING_ARC = Math.cos(Math.PI*4/9);
 /** How far a punch throws someone back, per unit of the puncher's speed, and the least it does however slowly they're moving. */
-const PUNCH_PUSH_PER_SPEED = 0.5, PUNCH_MIN_PUSH = 1;
+const PUNCH_PUSH_PER_SPEED = 0.5;
+export const PUNCH_MIN_PUSH = 1; // the least a punch knocks someone back; an NPC's is scaled by their speed trait, since they slow to a stop to punch
 /** The punch being thrown: { timer } — how long until the fist lands. */
 let swing = null;
 /**
@@ -289,7 +291,7 @@ export function updateSwing(p, dt) {
   const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
   /** @type {?Person} */
   let hit = null;
-  let nearest = SWING_REACH + (p.walkingSpeed ?? 0)*SWING_REACH_PER_SPEED; // (the faster they're running, the further it reaches)
+  let nearest = (SWING_REACH + (p.walkingSpeed ?? 0)*SWING_REACH_PER_SPEED)*Math.max(1, p.traits.size); // (the faster they're running and the bigger they are, the further it reaches — but never less than a normal person's)
   people.forEach(q => {
     if (q === p || isGone(q) || !canBeKnockedOver(q)) return;
     const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
@@ -300,7 +302,8 @@ export function updateSwing(p, dt) {
   const bee = App.beeInPunch?.({ x: p.x, y: p.y, z: p.z, heading: p.heading, reach: nearest, arcCos: SWING_ARC, height: personHeight(p) });
   if (bee) { App.punchBee?.(bee, p); return; }
   if (!hit) return;
-  if (knockOver(hit, p)) App.pushPerson?.(hit, hit.x - p.x, hit.z - p.z, Math.max(PUNCH_MIN_PUSH, (p.walkingSpeed ?? 0)*PUNCH_PUSH_PER_SPEED)); // (the faster they're running, the further)
+  if (dodgePunch(hit, p)) return; // (a vampire leaps clear)
+  if (knockOver(hit, p)) App.pushPerson?.(hit, hit.x - p.x, hit.z - p.z, Math.max(PUNCH_MIN_PUSH, (p.walkingSpeed ?? 0)*PUNCH_PUSH_PER_SPEED)*p.traits.size); // (the faster they're running and the bigger they are, the further)
 }
 /** Drop a swing that's been thrown, for someone knocked down before it landed. */
 export function cancelSwing() { swing = null; }

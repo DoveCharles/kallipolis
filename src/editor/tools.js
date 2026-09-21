@@ -224,6 +224,7 @@ document.getElementById('s-grassnoise').addEventListener('input', (e) => {
 // the extra settings, under Clear all: they slide open with the button
 function syncExtraSettings() {
   document.getElementById('s-gibs').classList.toggle('on', S.showGibs);
+  document.getElementById('s-bloodsoak').classList.toggle('on', S.bloodSoak);
   document.getElementById('s-hideownhead').classList.toggle('on', S.hideOwnHead);
   document.getElementById('s-gibrange').value = S.gibRange;
   document.getElementById('dv-gibrange').textContent = String(Math.round(S.gibRange));
@@ -239,6 +240,7 @@ document.getElementById('btn-settings-toggle').addEventListener('click', (e) => 
   block.style.maxHeight = open ? block.scrollHeight + 'px' : '0px';
   e.currentTarget.textContent = open ? 'Show settings ▴' : 'Show settings ▾'; // (the arrow points up when it's down, to fold it away)
 });
+document.getElementById('s-bloodsoak').addEventListener('click', () => { S.bloodSoak = !S.bloodSoak; syncExtraSettings(); });
 document.getElementById('s-gibs').addEventListener('click', () => { S.showGibs = !S.showGibs; syncExtraSettings(); });
 document.getElementById('s-gibrange').addEventListener('input', (e) => { S.gibRange = parseFloat(e.target.value); syncExtraSettings(); });
 document.getElementById('s-gibamount').addEventListener('input', (e) => { S.gibAmount = parseFloat(e.target.value)/100; syncExtraSettings(); });

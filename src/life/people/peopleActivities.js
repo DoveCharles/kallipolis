@@ -6,7 +6,9 @@ import * as THREE from 'three';
 import { controls } from '../../core/camera-controls.js';
 import { profileOf, profilesVersion } from '../profiles.js';
 import { getTrainShuttles, getTrainStations, trainStationsVersion } from '../../trains/trains.js';
-import { followPerson, personHeight, stopFollowingPerson } from './peopleTracking.js';
+import { isBloodlusting, punchSpill } from './peopleBlood.js';
+import { puffSmoke } from '../giblets.js';
+import { PUNCH_MIN_PUSH, followPerson, personHeight, stopFollowingPerson } from './peopleTracking.js';
 
 // ---- what people get up to besides walking about.
 //
@@ -407,6 +409,9 @@ export const PUNCH_CHASE_SPEED = 1.5;  // how much faster than they walk they go
 const PUNCH_CHASE_MAX = 10;     // seconds before they give up on catching them
 const BYSTANDER_RADIUS = 7, BYSTANDER_SHARE = 0.5; // how near (at people size 1) someone has to be to a punch to join in, and their chance as a share of the victim's
 const DOWN_TIME_SCALE = 0.7;    // how long someone lies there once knocked flat, as a share of the usual 3 to 7 seconds
+const DODGE_SMOKE_PUFFS = 6; // the puffs of smoke left where someone dodged from
+const DODGE_LEAP_DISTANCE = 4; // how far someone with the dodge trait leaps back from a punch
+const BLOODLUST_DODGE_BONUS = 0.3; // added to the dodge chance of anyone bloodlusting (covered in blood, with the bloodlust trait)
 const RETALIATE_CHANCE = 0.1;   // the chance, per unit of aggression, that someone punched goes after whoever did it when they get up (or else runs)
 export const PUNCH_HIT_TIME = 0.5;    // how far into the Punch animation the fist lands, in seconds
 let reach = PUNCH_REACH*S.peopleSize;
@@ -517,7 +522,10 @@ export function updateAttack(p, dt) {
       a.timer = a.chaseLeft;
       return null;
     }
-    if (t.punched?.by === p) knockDown(t, p);
+    if (t.punched?.by === p && !dodgePunch(t, p)) {
+      knockDown(t, p);
+      if (t.mode !== 'possessed') App.pushPerson?.(t, t.x - p.x, t.z - p.z, PUNCH_MIN_PUSH*p.traits.speed*p.traits.size);
+    }
     a.stage = 'stare';
     a.timer = PUNCH_STARE_TIME;
   }
@@ -580,12 +588,34 @@ function releasePunched(p) {
  * @returns {void}
  */
 export function knockDown(t, p) {
+  if (p.traits) punchSpill(t, p);
   t.punched.stage = 'fall';
   t.heading = headingTo(t, p);
   t.faceTo = null; t.lookAt = null;
   playOnce(t, 'Fall');
   t.pose = 'Fallen';
   bystandersReactToPunch(t, p);
+}
+
+/**
+ * Let someone with the dodge trait, at that chance, leap back out of a punch, then go after whoever threw it.
+ * @param {Person} t - the one about to be hit
+ * @param {{x: number, z: number}} from - whoever is punching them
+ * @returns {boolean} whether they got clear (the punch misses)
+ */
+export function dodgePunch(t, from) {
+  const chance = t.traits.dodge + (isBloodlusting(t) ? BLOODLUST_DODGE_BONUS : 0);
+  if (chance <= 0 || isGone(t) || peopleRng() >= chance) return false;
+  const attacker = from.traits ? from : null;
+  if (t.punched?.by === from && (t.punched.stage === 'marked' || t.punched.stage === 'brace')) t.punched = null;
+  endActivity(t);
+  t.stun = t.fright = t.please = null; t.oneShot = null; t.wait = 0;
+  t.crossStage = null; t.jc = null;
+  puffSmoke({ x: t.x, y: t.y, z: t.z }, 1.7*t.height*S.peopleSize, DODGE_SMOKE_PUFFS); // (where they leapt from)
+  App.pushPerson?.(t, t.x - from.x, t.z - from.z, DODGE_LEAP_DISTANCE*Math.max(1, t.traits.size));
+  if (t.mode !== 'possessed') { t.heading = t.faceTo = headingTo(t, from); t.lookAt = attacker; } // (leaping back, still facing them)
+  if (attacker && (t.mode === 'line' || t.mode === 'wander' || t.mode === 'leaving')) goAfter(t, attacker, true);
+  return true;
 }
 
 /**
@@ -676,7 +706,7 @@ export function updatePunched(p, dt) {
 function reactToPunch(p, by) {
   if (!by?.traits || isGone(by)) return;
   const canFight = (p.mode === 'line' || p.mode === 'wander') && (!by.punched || by.punched.stage === 'marked') && ['line', 'wander', 'leaving', 'possessed'].includes(by.mode);
-  if (canFight && peopleRng() < RETALIATE_CHANCE*p.traits.aggression) {
+  if (canFight && (p.traits.vampire || peopleRng() < RETALIATE_CHANCE*p.traits.aggression)) {
     goAfter(p, by, true);
   } else {
     beginFleeing(p, { x: by.x, z: by.z });

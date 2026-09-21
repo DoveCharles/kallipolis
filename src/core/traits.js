@@ -29,7 +29,11 @@ export const TRAITS = {
   backwards: { base: 0, min: 0, max: 1, combine: 'on' },
   evil:      { base: 0, min: -1, max: 1, combine: 'add' },
   aggression:{ base: 1, min: 0, max: 100 },
+  bloodlust: { base: 0, min: 0, max: 1, combine: 'on' }, // covered in blood, twice as fast and out to punch everyone (see life/people/peopleBlood.js)
   agemult:   { base: 1, min: 0.1, max: 1000 }, // no upper limit in practice, for vampiric / immortal types
+  dodge:     { base: 0, min: 0, max: 1, combine: 'add' }, // the chance of leaping clear of a punch, then going after whoever threw it (see dodgePunch in life/people/peopleActivities.js)
+  blazed:    { base: 0, min: 0, max: 1, combine: 'on' }, // the whites of their eyes a little red (see BLAZED_EYE_RED in life/people/people.js)
+  vampire:   { base: 0, min: 0, max: 1, combine: 'on' }, // also brings everything in TRAIT_MACROS.vampire; pales the skin with age (see life/people/people.js)
   ageless:   { base: 0, min: 0, max: 1, combine: 'on' },
   nickname:  { base: 0, min: 0, max: 1, combine: 'on' },
   bleach:    { base: 0, min: 0, max: 1, combine: 'on' },
@@ -37,6 +41,13 @@ export const TRAITS = {
   solo:      { base: 0, min: 0, max: 1, combine: 'on' }, // on a love or hate: the only one of its kind that thing has (see addEntries)
   scramble: {base: 0, min: 0, max: 1, combine: 'on'}, //scrambles text in card
   keysmash: {base: 0, min: 0, max: 1, combine: 'on'}, //keysmashes text in card
+};
+
+// Shorthands: a trait named here counts as if the traits listed were written beside it, at the same amounts and stacking
+// the same way. Written as the text that goes inside [brackets]; edit the string to change what a shorthand brings. The
+// shorthand's own trait stays on the thing, so code can tell what it is. Shorthands are not expanded inside each other.
+export const TRAIT_MACROS = {
+  vampire: 'agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, bloodlust, dodge = 0.5, limit = 1a',
 };
 
 /**

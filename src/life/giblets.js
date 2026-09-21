@@ -67,12 +67,12 @@ const isNear = o => (o.x - camera.position.x)**2 + (o.y - camera.position.y)**2 
 // explosion, much more violent than a person's, uses a bigger one; see explodeCar); `ground` is the height they land on
 // (default: where they start from), or a function of (x, z) that finds it, for chunks thrown from the air, which each land
 // on whatever is below where they come down
-function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null) {
+function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null, amount = S.gibAmount) {
   if (!S.showGibs || !isNear(at)) return;
   const now = performance.now()/1000;
   const groundAtStart = typeof ground === 'function' ? ground(at.x, at.z) : ground;
   parts.forEach(([color, count, size]) => {
-    const scaled = count*S.gibAmount, chunks = Math.floor(scaled) + (Math.random() < scaled % 1 ? 1 : 0); // (a fractional amount rounds at random, so small counts still scale)
+    const scaled = count*amount, chunks = Math.floor(scaled) + (Math.random() < scaled % 1 ? 1 : 0); // (a fractional amount rounds at random, so small counts still scale)
     for (let k=0;k<chunks;k++) {
       if (giblets.length >= GIBLETS_MAX) giblets.shift(); // (the oldest make way)
       const angle = Math.random()*Math.PI*2, outward = (1 + Math.random()*4.5)*power;
@@ -129,6 +129,19 @@ function explodeFx(at, height) {
   flashBorn = now; flashUntil = now + flashDuration;
 }
 
+// A few small puffs of light smoke round `at` (where feet were), `height` tall, floating up and thinning out in a second or two.
+export function puffSmoke(at, height, count = 6) {
+  if (!S.showGibs || !isNear(at)) return;
+  const now = performance.now()/1000;
+  for (let k=0;k<count;k++) {
+    if (fx.length >= FX_MAX) fx.shift();
+    const angle = Math.random()*Math.PI*2, outward = 0.2 + Math.random()*0.8, grey = 0.55 + Math.random()*0.2;
+    fx.push({ kind: 'smoke', x: at.x + Math.cos(angle)*0.25*height, y: at.y + height*(0.1 + Math.random()*0.5), z: at.z + Math.sin(angle)*0.25*height,
+      vx: Math.cos(angle)*outward, vy: 0.6 + Math.random()*0.8, vz: Math.sin(angle)*outward,
+      size: height*(0.12 + Math.random()*0.1), life: 1 + Math.random()*0.8, color: new THREE.Color(grey, grey, grey), born: now });
+  }
+}
+
 // Blows someone up: `at` where their feet were, `height` how tall they were, `colors` what they were made of — { skin, top,
 // pants, shoes, hair } as THREE.Colors (hair null for someone bald). `momentum` ({ x, y, z } in units a second) is the velocity
 // of whatever struck them, which every chunk keeps on top of its own throw (none for a blast, which has no direction).
@@ -138,6 +151,10 @@ export function explode(at, height, colors, momentum = null) {
   BLOOD_COLORS.forEach(hex => parts.push([new THREE.Color(hex), 9, 0.028]));
   spawnParts(at, height, parts, 1, at.y, momentum);
   spawnSplat(at, height, BLOOD_SPLAT_COLOR);
+}
+// A few chunks of blood thrown from `at` (`height` tall), `count` of them whatever the gib amount setting is; `momentum` as for explode.
+export function spillBlood(at, height, count, momentum = null) {
+  spawnParts(at, height, Array.from({ length: count }, (_, k) => [new THREE.Color(BLOOD_COLORS[k % BLOOD_COLORS.length]), 1, 0.028]), 0.6, at.y, momentum, 1);
 }
 // Bursts a bee in mid-air: a few flecks of its yellow, black and wing, `size` long — small and soft-thrown, each falling to
 // whatever ground is below it (`fallbackGround` where there's nothing), and no mark on it.

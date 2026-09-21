@@ -13,6 +13,7 @@ import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
+import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { followPersonAt, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
 
@@ -390,6 +391,12 @@ export function refreshTraits(p, i) {
 }
 
 export const FRIGHT_RADIUS = 14, FLEE_SPEED = 2.3;
+// The whites of the eyes of vampires move this share of the way to yellow to start with, and again for each 100 years of age;
+// the blazed trait moves them BLAZED_EYE_RED of the way to red. (Bloodlust's eyes are in peopleBlood.js.)
+const VAMPIRE_EYE_TINT = 0.2, VAMPIRE_EYE_COLOR = new THREE.Color(0xffc40c),
+   BLAZED_EYE_RED = 0.05, EYE_RED_COLOR = new THREE.Color(0xff0000);
+// Vampires' skin moves 10% of the way to the colour for every 100 years of age, counting from the first (so it starts out 10% grey).
+const VAMPIRE_SKIN_COLOR = new THREE.Color(0xd3d3d3), VAMPIRE_PALE_PER_CENTURY = 0.1;
 const LYING_CLEARANCE = 1; // how near (at people size 1) anyone walks to someone lying on the ground
 /**
  * Have everyone around someone blowing up notice it: the nearer they are, the sooner, and they run off for a while.
@@ -585,7 +592,7 @@ function killPerson(i, by = 'player', momentum = null) {
       const o = ((2 + PERSON_TRAIT_COLORS.indexOf(part))*PEOPLE_MAX + i)*4, data = personModel.traitData;
       return color.setRGB(data[o], data[o+1], data[o+2]);
     };
-    colors.skin.copy(personModel.palette[0]);
+    colorFrom('Skin', colors.skin);
     colorFrom('Top', colors.top); colorFrom('Pants', colors.pants); colorFrom('Shoes', colors.shoes);
     if (personModel.headLayers.some(layer => layer.of[i] >= 0)) colors.hair = colorFrom('Hair', new THREE.Color());
   } else {
@@ -599,6 +606,7 @@ function killPerson(i, by = 'player', momentum = null) {
   p.train = null;
   p.indoors = null;
   p.moving = false;
+  bloodBurst(p, momentum); // (whoever's near, or in the way of what killed them, is splashed)
 }
 /**
  * Whether this person is walking over a road (see updateCrossing) — treated like someone standing in the middle of it
@@ -683,11 +691,13 @@ export function updatePeople(t) {
     pickFights(dt);
   }
   // whoever's been knocked down and is still on the ground (or getting up): nobody walks into them
+  updateArrivingBlood(dt);
   const lyingDown = people.filter(q => q.punched && q.punched.stage !== 'marked' && q.punched.stage !== 'brace');
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   people.forEach((p, i) => {
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
+    if (p.blood) updateBlood(p, dt, i);
     p.trainCooldown -= dt;
     p.indoorsCooldown -= dt;
     const possessed = p.mode === 'possessed';
@@ -707,7 +717,7 @@ export function updatePeople(t) {
     // pleased: looking at it and then held still, beaming. The same 'look' and 'held' stages as stun — the ones
     // updatePeople freezes them on — read as delight rather than shock, below.
     const pleased = !!p.please && (p.please.stage === 'look' || p.please.stage === 'held');
-    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*p.traits.speed*(fleeing ? FLEE_SPEED*p.traits.boost : 1);
+    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*(p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(fleeing ? FLEE_SPEED*p.traits.boost : 1);
     let goal = null;
     //Updating hair colour depending on age
     //set default hair colour once
@@ -722,6 +732,19 @@ export function updatePeople(t) {
           Math.max(0, Math.min(1, (p.age - 30) / (100))); // tweak range to taste
       const newHair =  p.defaultHair.clone().lerp(new THREE.Color(0xffffff), greyAmount);
       data[o] = newHair.r; data[o+1] = newHair.g; data[o+2] = newHair.b;
+      // the whites of the eyes yellow for vampires (more with age) and redden for the blazed; the black of them is left alone
+      const e = ((2 + PERSON_TRAIT_COLORS.indexOf('Eyes'))*PEOPLE_MAX + i)*4;
+      const eyes = new THREE.Color().setRGB(data[e], data[e+1], data[e+2]);
+      if (p.traits.vampire) eyes.lerp(VAMPIRE_EYE_COLOR, Math.min(1, VAMPIRE_EYE_TINT*(1 + p.age/100)));
+      if (p.traits.blazed) eyes.lerp(EYE_RED_COLOR, BLAZED_EYE_RED);
+      data[e] = eyes.r; data[e+1] = eyes.g; data[e+2] = eyes.b;
+      p.eyeBase = [eyes.r, eyes.g, eyes.b]; // (what bloodlust's eyes go back to: see stain in peopleBlood.js)
+      // vampires' skin drains towards light grey with age
+      if (p.traits.vampire) {
+        const s = ((2 + PERSON_TRAIT_COLORS.indexOf('Skin'))*PEOPLE_MAX + i)*4;
+        const paleSkin = new THREE.Color().setRGB(data[s], data[s+1], data[s+2]).lerp(VAMPIRE_SKIN_COLOR, Math.min(1, VAMPIRE_PALE_PER_CENTURY*(1 + p.age/100)));
+        data[s] = paleSkin.r; data[s+1] = paleSkin.g; data[s+2] = paleSkin.b;
+      }
     }
     // (stopped to talk, or frozen in shock, someone on a walkway stays put)
     if (p.mode === 'line' && p.act !== 'chat' && !frozen && !p.attack) {
@@ -909,6 +932,9 @@ export function updatePeople(t) {
       if (possessed) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
       p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, dt*4);
       p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, dt*4);
+      const fear = bloodFear(p); // (how much blood they're wearing, for how scared they look)
+      const scaredByBlood = !!p.blood && !p.traits.bloodlust, lusting = isBloodlusting(p);
+      const delighted = pleased && !scaredByBlood; // (blood wins over any other face: whatever they're doing, they look scared — unless they like it)
       // talking, their mouth moves; listening, their expression changes every now and then
       const group = p.group, talking = !!group && group.speaker === p, listening = !!group && !!group.speaker && !talking && p.lookAt === group.speaker;
       if (!talking) {
@@ -918,21 +944,21 @@ export function updatePeople(t) {
         p.talkIn = 0.08 + peopleRng()*0.14;
       }
       // (shocked, a gasp — agape while they stare)
-      if (pleased) p.talkTo = 0.45;                        // smiling, not agape
-      else if (frozen || fleeing) p.talkTo = frozen ? 1 : 0.55;
+      if (delighted) p.talkTo = 0.45;                      // smiling, not agape
+      else if (frozen || fleeing || scaredByBlood) p.talkTo = frozen ? 1 : scaredByBlood ? 0.3 + 0.7*fear : 0.55; // (blood, the more of it the wider)
       p.talk += (p.talkTo - p.talk)*Math.min(1, dt*20);
       if (listening) {
         if ((p.emotionIn -= dt) <= 0) { p.emotionTo = Math.max(-1, Math.min(1, peopleRng()*2 - 1 + p.traits.mood)); p.emotionIn = 1.5 + peopleRng()*3; }
       } else if (!group) {
         p.emotionTo = p.traits.mood; // (their resting face)
       }
-      if (pleased) p.emotionTo = 1;                        // beaming, where fright and stun go flat
-      else if (frozen || fleeing) p.emotionTo = -1;
+      if (delighted) p.emotionTo = 1;                      // beaming, where fright and stun go flat
+      else if (frozen || fleeing || scaredByBlood) p.emotionTo = -1;
       p.emotion += (p.emotionTo - p.emotion)*Math.min(1, dt*5);
       // their eyes: the look their traits give them (from their mood, say), brighter or sadder as their expression swings
       // above or below where it rests, and wide with shock when frightened
-      const { happy, sad, angry, shock } = p.traits, swing = p.emotion - p.traits.mood, shocked = (frozen || fleeing) && !pleased;
-      const eyesTo = [shocked ? 1 : shock, pleased ? 1 : shocked ? 0 : happy + Math.max(0, swing)*0.8, p.attack ? 1 : angry, sad + Math.max(0, -swing)*0.8];
+      const { happy, sad, angry, shock } = p.traits, swing = p.emotion - p.traits.mood, shocked = (frozen || fleeing || scaredByBlood) && !delighted; // (they look scared for as long as they've blood on them)
+      const eyesTo = [shocked ? (scaredByBlood ? 0.4 + 0.6*fear : 1) : shock, delighted ? 1 : shocked ? 0 : happy + Math.max(0, swing)*0.8, scaredByBlood ? 0 : p.attack || lusting ? 1 : angry, sad + Math.max(0, -swing)*0.8];
       for (let k=0;k<4;k++) p.eyes[k] += (Math.min(1, eyesTo[k]) - p.eyes[k])*Math.min(1, dt*6);
       // instanceAnim (see the shader): the rows they're at in the two animations, how far they've blended, and their blink
       const o = i*4, animArray = personModel.anim.array, lookArray = personModel.look.array;

@@ -114,7 +114,12 @@ const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelas
 const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
 // the colors each person has their own of, from row 2 of the traits texture on; then a row of where their clothes stop,
 // and one of their head's and eyes' shape keys (Key 1, Key 2, Shape1, Shape2 — Shape3 being in row 1)
-export const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat'];
+// ('Skin' starts as the model's own, and is there so a person's can be tinted: see peopleBlood.js)
+// ('Blood' is how opaque the splotches drawn over them are — 0 for none — in its fourth number)
+// ('Eyes' is what the whites of their eyes are, so they can be tinted: see updatePeople's eye reddening)
+export const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat', 'Skin', 'Blood', 'Eyes'];
+const SKIN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Skin'), BLOOD_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Blood');
+const BLOOD_SCALE = 1.2; // how many splotches' worth of noise fit in a unit of the figure: bigger for smaller splotches
 export const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
 
 /**
@@ -259,12 +264,38 @@ const PERSON_VERTEX_PARS = `
   }
 `;
 
+// the fragment shader's blood: where the splotches fall, and the layer over the color — personBloodColor at the
+// opacity the person's Blood row of the traits texture gives (vPersonBlood.x; .y is the person, so no two have the same splotches)
+const BLOOD_GLSL = `
+      // blood: smooth round blobs, like the bubbles in a lava lamp, over the figure's own (unposed) surface so they stay put as it
+      // moves. Each cell of a grid holds (or doesn't) a blob at a random spot in it; the blobs near a point add their falloffs
+      // together, so neighbours run into each other, and the splotch is where the total passes a level
+      float bloodHash(vec3 p) { p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x + p.y + p.z)); }
+      float bloodBlobs(vec3 at) {
+        vec3 base = floor(at - 0.5);
+        float field = 0.0;
+        for (int k = 0; k < 8; k++) {
+          vec3 cell = base + vec3(mod(float(k), 2.0), mod(floor(float(k)/2.0), 2.0), floor(float(k)/4.0));
+          vec3 centre = cell + 0.5 + (vec3(bloodHash(cell), bloodHash(cell + 17.1), bloodHash(cell + 31.3)) - 0.5)*0.4;
+          float radius = 1.0 + 0.15*bloodHash(cell + 41.7);
+          vec3 off = at - centre;
+          float fall = max(0.0, 1.0 - dot(off, off)/(radius*radius));
+          field += step(0.5, bloodHash(cell + 7.9))*fall*fall*fall;
+        }
+        return field;
+      }`;
+const BLOOD_SPLOTCHES = `
+  if (vPersonBlood.x > 0.0) {
+    vec3 spot = vPersonRest*${BLOOD_SCALE.toFixed(1)} + vec3(vPersonBlood.y*13.7, vPersonBlood.y*7.1, vPersonBlood.y*3.3);
+    diffuseColor.rgb = mix(diffuseColor.rgb, personBloodColor, smoothstep(0.23, 0.27, bloodBlobs(spot))*vPersonBlood.x);
+  }`;
+
 /**
  * Add the posing and shape keys to a material's shaders, and how it colors the figure.
  *
  * `look.femaleOnly` gives the slots only drawn for women; and, unless it's the shadow's depth material, `look.palette`
  * (each slot's own color), `look.traitColors` (the slots taking a color of the person's own instead, as
- * { slot: traits row }) and `look.bands` (bands of clothes, which show skin — slot 0's color — if the person's clothes
+ * { slot: traits row }), `look.bloodSlots` (the slots blood splotches are drawn over — and, with `look.bloodOnBands`, the bands of clothes where they show skin) and `look.bands` (bands of clothes, which show skin — that person's own — if the person's clothes
  * stop at or before them: { slot, number, cut (which of the clothing row's values says where their clothes stop),
  * colorRow (the traits row of the clothes' color) }).
  * @param {object} shader - three.js's shader object to patch
@@ -280,24 +311,32 @@ function injectPersonShader(shader, uniforms, look) {
     ? `if ((${look.femaleOnly.map(slot => `personSlotIndex == ${slot}`).join(' || ')}) && personTrait(1).y > 0.5) transformed = vec3(0.0);` : '';
   // (not from the shadow's depth material, so the body still casts one) whoever personHidden names is drawn headless: their head
   // and hair drawn into a point at the middle of their chest, inside their shirt
+  const splotched = colored && (look.bloodSlots || []).length > 0;
   const hideHead = colored ? 'if (personIndex() == personHidden && personVertex.x > 0.0) transformed = (personBone(personChestBone)*vec4(personChestPivot, 1.0)).xyz;' : '';
-  const bands = (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? personPalette[0] : personTrait(${b.colorRow}).rgb) : `).join('');
+  const bands = (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? personTrait(${SKIN_ROW}).rgb : personTrait(${b.colorRow}).rgb) : `).join('');
+  // (blood is drawn over the slots it's asked for, and over a band of clothes only where it shows skin)
+  const bloodAmount = `personTrait(${BLOOD_ROW}).w`;
+  const bloodOver = !splotched ? '' : (look.bloodOnBands ? (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? ${bloodAmount} : 0.0) : `).join('') : '')
+    + `(${look.bloodSlots.map(slot => `personSlotIndex == ${slot}`).join(' || ')}) ? ${bloodAmount} : 0.0`;
   const color = colored
     ? 'vPersonColor = ' + bands + Object.entries(look.traitColors).map(([slot, row]) => `personSlotIndex == ${slot} ? personTrait(${row}).rgb : `).join('') + 'personPalette[personSlotIndex];' : '';
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\n' + PERSON_VERTEX_PARS
-      + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : ''))
+      + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : '')
+      + (splotched ? '\nvarying vec2 vPersonBlood;\nvarying vec3 vPersonRest;' : ''))
     .replace('#include <begin_vertex>', `#include <begin_vertex>
+      ${splotched ? 'vPersonRest = transformed;' : ''}
       transformed = personArms(personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz), transformed.x);
       int personSlotIndex = int(personVertex.y + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
       ${hideHead}
-      ${color}`);
+      ${color}
+      ${splotched ? `vPersonBlood = vec2(${bloodOver}, float(personIndex()));` : ''}`);
   if (!colored) return;
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vPersonColor;')
-    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vPersonColor;');
+    .replace('#include <common>', '#include <common>\nvarying vec3 vPersonColor;' + (splotched ? '\nvarying vec2 vPersonBlood;\nvarying vec3 vPersonRest;\nuniform vec3 personBloodColor;' + BLOOD_GLSL : ''))
+    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vPersonColor;' + (splotched ? BLOOD_SPLOTCHES : ''));
 }
 
 /**
@@ -314,7 +353,7 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute) {
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   if (byAttribute) { material.defines = { PERSON_INDEX_ATTRIBUTE: '' }; depth.defines = { PERSON_INDEX_ATTRIBUTE: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
-  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), JSON.stringify(look.bands || []), look.femaleOnly.join(',')].join('|');
+  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), look.femaleOnly.join(',')].join('|');
   material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, look);
   material.customProgramCacheKey = () => key;
   depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly });
@@ -639,6 +678,9 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     // three in four have a natural hair color; the rest have dyed it something bright
     Hair: () => colorRng() < NATURAL_COLOUR_CHANCE ? color.set(HAIR_TONES[Math.floor(colorRng()*HAIR_TONES.length)]).multiplyScalar(0.9 + colorRng()*0.2) : color.setHSL(colorRng(), 0.65 + colorRng()*0.3, 0.45 + colorRng()*0.15),
     // Hair: () => color.set(HAIR_TONES[Math.floor(colorRng()*HAIR_TONES.length)]).multiplyScalar(0.9 + colorRng()*0.2),
+    Skin: () => color.copy(palette[0]),
+    Eyes: () => color.copy(palette[PERSON_SLOTS.indexOf('White')]),
+    Blood: () => color.setRGB(0, 0, 0), // (only its fourth number, the opacity, is read: see BLOOD_GLSL)
     // its own generator, so adding it didn't change anyone's other colors
     Hat: () => hatRng() < 0.25 ? color.setHSL(0, 0, [0.08, 0.3, 0.6, 0.9][Math.floor(hatRng()*4)]) : color.setHSL(hatRng(), 0.4 + hatRng()*0.5, 0.3 + hatRng()*0.35),
   };
@@ -689,14 +731,15 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const uniforms = {
     personBones: { value: boneTexture }, personBonesSize: { value: new THREE.Vector2(boneWidth, boneRows) },
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
-    personTraits: { value: traitTexture }, personHidden: { value: -1 },
+    personTraits: { value: traitTexture }, personHidden: { value: -1 }, personBloodColor: { value: new THREE.Color(0.55, 0.05, 0.05) },
     personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personChestBone: { value: chestBone }, personChestPivot: { value: chestPivot },
   };
   const traitRow = part => 2 + PERSON_TRAIT_COLORS.indexOf(part);
   const bodyLook = {
     palette,
-    traitColors: Object.fromEntries(['Top', 'Pants', 'Shoes'].map(part => [PERSON_SLOTS.indexOf(part), traitRow(part)])),
+    traitColors: Object.fromEntries([['Skin', 'Skin'], ['Top', 'Top'], ['Pants', 'Pants'], ['Shoes', 'Shoes'], ['White', 'Eyes']].map(([slot, part]) => [PERSON_SLOTS.indexOf(slot), traitRow(part)])),
     femaleOnly: PERSON_FEMALE_ONLY.map(part => PERSON_SLOTS.indexOf(part)),
+    bloodSlots: [PERSON_SLOTS.indexOf('Skin')], bloodOnBands: true,
     bands: PERSON_CLOTHING.flatMap((c, cut) => Array.from({ length: c.count }, (_, k) =>
       ({ slot: PERSON_SLOTS.indexOf(c.band + (k + 1)), number: k + 1, cut, colorRow: traitRow(c.part) }))),
   };
@@ -722,7 +765,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, hidden: uniforms.personHidden, anim, look, eyes, hair: headLayers.flatMap(layer => layer.styles).filter(style => style.mesh), headLayers, isMan, boneData, boneWidth, traitData: traits, palette,
+  return { mesh, hidden: uniforms.personHidden, anim, look, eyes, hair: headLayers.flatMap(layer => layer.styles).filter(style => style.mesh), headLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette,
     headBone: headBone ?? 0, headPivot,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

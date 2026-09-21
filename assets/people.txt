@@ -39,7 +39,11 @@ which add up. Everyone starts at the value in
 #   shock       0       how shocked their eyes look                                                    0 to 1
 #   evil        0       how evil they are, the reactions of others when they die                       -1 to 1
 #   aggression  1       how likely they are to punch sommone                                           0 to 20
+#   bloodlust   off     covered in blood, they run twice as fast and go about punching everyone they can  on or off
 #   backwards   off     they walk backwards                                                           on or off
+#   dodge       0       the chance of leaping clear of a punch, then going after whoever threw it      0 to 1
+#   blazed      off     the whites of their eyes are slightly red, like they're high                   on or off
+#   vampire     off     adds the traits in TRAIT_MACROS (core/traits.js), skin pales with age                on or off
 #   ageless     off     they don't visibly age, hair does not grey                                    on or off
 #   choiceweight 0       whole numbers, how likely to appear, set 0 to disable autoassign               0 to Inf
 # ------------------------------------------------------------------------------------------------------------------------
@@ -76,7 +80,7 @@ which add up. Everyone starts at the value in
 #
 # ------------------------------------------------------------------------------------------------------------------------
 #
-# Current vampire mods: [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
+# [ vampire ] brings agemult 4.5, evil 0.5, ageless, aggression 50, speed 1.2, bloodlust, dodge 0.5 and limit 1a. Edit TRAIT_MACROS in core/traits.js to change it.
 
 [distribution]
 1, 1 @ 0.6
@@ -908,6 +912,7 @@ Stew
 Lightning
 Stonefish
 T.V.
+Flake
 
 ################################################################################################################################
 
@@ -1136,7 +1141,7 @@ Cheeseburger
 🥳 [mood = 1, chatty = 4, nosy = 2]
 😷 [mood = -0.3, chatty = 0.1]
 🤐 [chatty = 0, talkative = 0]
-🥷 [speed = 0.3, chatty = 0, aggression = 20]
+🥷 [speed = 0.7, chatty = 0, aggression = 20, dodge = 0.5]
 👩‍🎨 [plazas = 4, parks = 3, lounging = 3, patience = 4]
 🎵 [mood = 0.3, fidgety = 3, chatty = 0.3]
 🕵️ [nosy = 10 , chatty = 10, talkative = 0.3]
@@ -1540,13 +1545,13 @@ Licking toads
 Giving context [evil = -0.05]
 SPF-100 [ageless]
 Only going out at night [limit = 2b]
-Only going out at night [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a, limit = 2b ] 
-The taste of blood [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
+Only going out at night [ vampire, limit = 2b ] 
+The taste of blood [ vampire ]
 The taste of blood
 Jumpin' all over the world
 Two in the trunk
 Being invited over
-Being invited over [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
+Being invited over [ vampire ]
 Peepholes [evil = 0.1]
 Talking a big talk [angry = 0.5, aggression = 0.5]
 Spelunking
@@ -1856,9 +1861,9 @@ Centipedes [parks = 0.5]
 Wasps [parks = 0.5]
 Bees [parks = 0.5, evil = 0.05]
 Garlic bread
-Garlic bread [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
+Garlic bread [ vampire ]
 Running water
-Running water [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
+Running water [ vampire ]
 Going bald
 Their bastard son... bastard little boy... [agemult = 1.2, evil = 0.1]
 The Killer
@@ -1873,7 +1878,7 @@ Getting poop on their clothes
 Goths [evil = 0.01]
 Gething thung by a beeh [parks = 0.2]
 Silver jewellery
-Silver jewellery [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, limit = 1a ]
+Silver jewellery [ vampire ]
 Giblets everywhere
 Vampires
 Being run over by an ambulance
@@ -1924,3 +1929,4 @@ Asking out the prettiest girl in school
 Landmines
 Kids these days [agemult = 1.2]
 Getting put in the labyrinth
+Globus sensation
