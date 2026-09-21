@@ -79,16 +79,19 @@ function variantsOf(name) {
  * @param {{x: number, y: number, z: number}} at
  * @param {number} volume
  * @param {number} refDistance - how near to be heard at full volume
+ * @param {number} [maxDistance] - if given, it fades out evenly from refDistance to nothing at all here, rather than tailing
+ *   off slowly and forever
  * @returns {void}
  */
-export function playBufferAt(buffer, at, volume, refDistance) {
+export function playBufferAt(buffer, at, volume, refDistance, maxDistance) {
   if (muted || context.state !== 'running' || voices >= VOICES_MAX) return;
   const source = context.createBufferSource(), gain = context.createGain(), panner = context.createPanner();
   source.buffer = buffer;
   gain.gain.value = volume;
   panner.panningModel = 'equalpower';
-  panner.distanceModel = 'inverse';
+  panner.distanceModel = maxDistance ? 'linear' : 'inverse';
   panner.refDistance = refDistance;
+  if (maxDistance) panner.maxDistance = maxDistance;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
   source.connect(gain).connect(panner).connect(listener.getInput());
   voices++;

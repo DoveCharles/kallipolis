@@ -10,6 +10,7 @@ import { loadTypeText } from '../core/type-text.js';
 import { mulberry32 } from '../core/math.js';
 import { startFlying, endFlying } from './possession.js';
 import { explodeBee } from './giblets.js';
+import { updateBuzzes } from '../audio/buzz.js';
 import { stepFlight, makeHand, cruiseSpeed, chaseBehind } from './flight.js';
 
 // ============================================================ flowers, hives and bees
@@ -948,12 +949,19 @@ export function updateBees(t) {
   }
   if (S.interactionMode !== 'move') { stopFollowingBee(); stopFollowingHive(); }
   const sheltering = beesSheltering();
+  const flying = []; // (the bees in the air, for their buzzing: see buzz.js)
   colonies.forEach(colony => {
     if (colony.rage && (t >= colony.rage.until || colony.rage.person.mode === 'dead')) calmColony(colony);
     colony.bees.forEach((bee, k) => {
       refreshBeeTraits(bee);
       if (colony.rage && !isHome(bee) && !bee.hand) chase(bee, t, dt, colony.rage.person);
       else stepBee(bee, t, dt, sheltering);
+      // (how fast it went this frame, however it was flown, against its usual speed)
+      const moved = bee.heardAt ? bee.at.distanceTo(bee.heardAt) : 0;
+      (bee.heardAt ??= new THREE.Vector3()).copy(bee.at);
+      if (!isHome(bee) && bee.state !== 'land' && dt > 0) {
+        flying.push({ bee, x: bee.at.x, y: bee.at.y, z: bee.at.z, speed: moved/dt/(BEE_SPEED*bee.traits.speed), size: bee.traits.size, angry: !!colony.rage });
+      }
       held.position.copy(bee.at);
       held.rotation.set(-bee.pitch, bee.yaw, -bee.bank);
       held.scale.setScalar(isHome(bee) ? 0 : bee.traits.size); // indoors, and not to be drawn
@@ -964,6 +972,7 @@ export function updateBees(t) {
     colony.mesh.instanceMatrix.needsUpdate = true;
     if (colony.mesh.morphTexture) colony.mesh.morphTexture.needsUpdate = true;
   });
+  updateBuzzes(flying);
   followBees();
 }
 
