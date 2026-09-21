@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { computeWindowGlowFactor } from '../core/scene.js';
 import { mulberry32 } from '../core/math.js';
@@ -6,6 +7,7 @@ import { distPointSegment } from '../buildings/footprints.js';
 import { resolveTreeTint } from '../core/splines.js';
 import { clipPolygons, createMeshBuilder } from '../roads/roads.js';
 import { makeFlatZoneMesh, makeTreeMesh } from './surface-detail.js';
+import { WATER_TIME } from '../water/water.js';
 
 // ---------------------------------------------------------- plazas
 // A plaza is a paved square: tiles or herringbone brick drawn by a shader in world space (so the pattern runs on unbroken
@@ -67,11 +69,113 @@ export function applyPavingShader(mat, pattern, scale, mortar) {
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + PAVING_COLOR_FRAGMENT);
   };
 }
-// A round stone fountain of radius r centered at c ({x,z}), standing on the plaza.
+// The fountain is a custom model (assets/models/Fountain.glb, made in Blender): round, centred on its own origin, with a
+// material called `Water` for its pool, which is drawn with the water shader instead — a material of its own for every
+// fountain, since the shader's shore is in world space. It's loaded once at startup, and every fountain is a clone of it
+// scaled to fit, sharing its geometry and its other materials; until it's ready, fountains are the built-in stone one.
+const FOUNTAIN_MODEL_URL = 'assets/models/Fountain.glb';
+let fountainModel = null; // { root, radius, middle, floor, poolRadius, spray }
+const FOUNTAIN_STONE = 0xa9a49b;
+export async function loadFountainModel() {
+  let gltf;
+  try {
+    const buffer = await fetch(FOUNTAIN_MODEL_URL).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
+    gltf = await new GLTFLoader().parseAsync(buffer, '');
+  } catch (err) {
+    console.warn('Blockout: the fountain model failed to load; plazas use the built-in stone fountain', err);
+    return;
+  }
+  gltf.scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(gltf.scene), size = box.getSize(new THREE.Vector3());
+  if (!(size.x > 0)) { console.warn('Blockout: the fountain model is empty; plazas use the built-in stone fountain'); return; }
+  const middle = box.getCenter(new THREE.Vector3());
+  let poolRadius = 0, poolY = box.min.y, spoutY = box.max.y;
+  gltf.scene.traverse(o => {
+    if (!o.isMesh) return;
+    o.castShadow = true; o.receiveShadow = true;
+    o.userData.sharedGeometry = true; // every fountain draws the template's geometry, so a plaza rebuilding mustn't free it
+    if (o.material && o.material.name === 'Water') {
+      const b = new THREE.Box3().setFromObject(o);
+      poolRadius = Math.max(b.max.x - middle.x, middle.x - b.min.x, b.max.z - middle.z, middle.z - b.min.z);
+      poolY = b.max.y;
+      o.castShadow = false;
+    } else if (o.material) {
+      if (o.material.name === 'Side') { o.material.color.setHex(FOUNTAIN_STONE); o.material.roughness = 0.8; } // the stone the built-in one is made of
+      o.userData.sharedMaterial = true;
+    }
+  });
+  fountainModel = { root: gltf.scene, radius: Math.max(size.x, size.z)/2, middle, floor: box.min.y, poolRadius,
+    spray: makeFountainSpray(new THREE.Vector3(middle.x, spoutY, middle.z), poolY, poolRadius) };
+  S.zones.forEach(zone => { if (zone.zoneType === 'plaza') App.subdivideZone(zone); });
+}
+// The spray: droplets thrown up from the top of the spout and falling in arcs into the pool, in the model's own units. Each
+// droplet is a point with its own heading, launch speed and flight time; the vertex shader works out where along its arc
+// it is from the water's clock, so nothing is updated per frame and every fountain draws the same geometry and material.
+const SPRAY_DROPLETS = 300, SPRAY_GRAVITY = 6;
+function makeFountainSpray(spout, poolY, poolRadius) {
+  const rng = mulberry32(0x5eed), launch = new Float32Array(SPRAY_DROPLETS*4), phase = new Float32Array(SPRAY_DROPLETS);
+  const fall = spout.y - poolY;
+  for (let i=0;i<SPRAY_DROPLETS;i++) {
+    const rise = fall*(0.9 + 0.5*rng()), reach = poolRadius*(0.12 + 0.4*rng());
+    const vy = Math.sqrt(2*SPRAY_GRAVITY*rise), time = vy/SPRAY_GRAVITY + Math.sqrt(2*(rise + fall)/SPRAY_GRAVITY);
+    const a = rng()*Math.PI*2;
+    launch.set([Math.cos(a)*reach/time, vy, Math.sin(a)*reach/time, time], i*4);
+    phase[i] = rng(); // how far through its flight it starts
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SPRAY_DROPLETS*3), 3)); // (worked out in the shader)
+  geometry.setAttribute('launch', new THREE.BufferAttribute(launch, 4));
+  geometry.setAttribute('phase', new THREE.BufferAttribute(phase, 1));
+  geometry.boundingSphere = new THREE.Sphere(spout.clone().setY((spout.y + poolY)/2), poolRadius + fall*2.5); // for culling, since the positions are all zero
+  const material = new THREE.PointsMaterial({ color: 0xbfe4f2, size: 0.22, transparent: true, opacity: 0.85, depthWrite: false });
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = WATER_TIME;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec4 launch;\nattribute float phase;\nuniform float uTime;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        float t = mod(uTime + phase*launch.w, launch.w);
+        transformed = vec3(${spout.x.toFixed(4)}, ${spout.y.toFixed(4)}, ${spout.z.toFixed(4)})
+          + vec3(launch.x*t, launch.y*t - ${(SPRAY_GRAVITY/2).toFixed(4)}*t*t, launch.z*t);`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (length(gl_PointCoord - 0.5) > 0.5) discard;');
+  };
+  const points = new THREE.Points(geometry, material);
+  points.name = 'FountainSpray';
+  points.userData.sharedGeometry = true; points.userData.sharedMaterial = true;
+  return points;
+}
+// A round fountain of radius r centered at c ({x,z}), standing on the plaza.
 function buildFountain(c, r) {
+  if (!fountainModel) return buildBoxFountain(c, r);
   const group = new THREE.Group();
   group.name = 'Fountain';
-  const stone = new THREE.MeshStandardMaterial({ color: 0xa9a49b, roughness: 0.8, side: THREE.DoubleSide });
+  const model = fountainModel.root.clone(true), scale = r/fountainModel.radius;
+  model.scale.setScalar(scale);
+  model.position.set(c.x - fountainModel.middle.x*scale, Y_PLAZA - fountainModel.floor*scale, c.z - fountainModel.middle.z*scale);
+  // the pool: the water shader, with the basin's edge as its shore
+  const inner = fountainModel.poolRadius*scale, shore = [];
+  for (let i=0;i<32;i++) {
+    const a0 = i/32*Math.PI*2, a1 = (i+1)/32*Math.PI*2;
+    shore.push([c.x + Math.cos(a0)*inner, c.z + Math.sin(a0)*inner, c.x + Math.cos(a1)*inner, c.z + Math.sin(a1)*inner]);
+  }
+  let waterMat = null;
+  model.traverse(o => {
+    if (!o.isMesh || !o.material || o.material.name !== 'Water') return;
+    if (!waterMat) {
+      waterMat = new THREE.MeshStandardMaterial({ color: App.WATER_COLOR, roughness: 1, side: THREE.DoubleSide });
+      App.applyWaterShader(waterMat, shore, [], 0);
+    }
+    o.material = waterMat;
+  });
+  model.add(fountainModel.spray.clone());
+  group.add(model);
+  return group;
+}
+// The built-in stone fountain, drawn until the model has loaded (or if it can't).
+function buildBoxFountain(c, r) {
+  const group = new THREE.Group();
+  group.name = 'Fountain';
+  const stone = new THREE.MeshStandardMaterial({ color: FOUNTAIN_STONE, roughness: 0.8, side: THREE.DoubleSide });
   const rimH = 0.65, rimW = 0.35, inner = r - rimW;
   const place = (mesh, y) => { mesh.position.set(c.x, Y_PLAZA + y, c.z); mesh.castShadow = true; mesh.receiveShadow = true; group.add(mesh); return mesh; };
   place(new THREE.Mesh(new THREE.CylinderGeometry(r, r, rimH, 48, 1, true), stone), rimH/2);

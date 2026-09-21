@@ -57,7 +57,7 @@ import { applyPathShader, applyWalkwayShader } from './roads/paths.js';
 import { updateTrafficLights } from './roads/markings.js';
 import { loadCarriageModel, updateTrainShuttles, scaleNodeUi, nodeUiMaterial } from './trains/trains.js';
 import { applyGrassNoiseShader } from './zones/surface-detail.js';
-import { applyPavingShader } from './zones/plazas.js';
+import { applyPavingShader, loadFountainModel } from './zones/plazas.js';
 import { applyCropShader } from './zones/farmland.js';
 import { WATER_TIME, applyWaterShader, rebuildWater } from './water/water.js';
 import { renderHierarchy, renderWorldTintPanel } from './ui/panels.js';
@@ -86,6 +86,7 @@ loadCarModels();
 loadBeeModel();
 loadHouseModels();
 loadPlaneModel();
+loadFountainModel();
 // Roads, zones and water are thrown away and rebuilt wholesale on every edit, and three.js deletes a shader program as soon
 // as the last material using it is disposed — so a rebuild that replaces every material of one kind (every water tile,
 // every road surface…) would compile that shader again from scratch: a hitch of up to a third of a second. One
