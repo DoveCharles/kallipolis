@@ -1023,7 +1023,7 @@ Anus
 Forklift
 Actual Cannibal [evil = 0.3, aggression = 4]
 Salmonella
-C&B
+CBT
 Toothbrush
 99
 One Week Left [mood = -0.3]
@@ -1073,6 +1073,12 @@ Prototype
 Human Sidewalk
 Morning Star
 In Grieving
+Swanstrike
+Missing
+Landing Gear
+1%
+Mile High
+Cheeseburger
 
 ################################################################################################################################
 

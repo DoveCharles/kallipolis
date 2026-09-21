@@ -4,7 +4,8 @@ import { S, App } from '../core/shared.js';
 import { Y_ZONE_GROUND, Y_PARK, camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { startFlying, endFlying } from '../life/possession.js';
-import { stepFlight, autopilot, makeHand, cruiseSpeed, chaseBehind } from '../life/flight.js';
+import { explodeCar } from '../life/giblets.js';
+import { stepFlight, autopilot, makeHand, cruiseSpeed, chaseBehind, touchdownBounce } from '../life/flight.js';
 import { mulberry32, lerp, polygonArea, pointInPolygon, centroid } from '../core/math.js';
 import { resolveParkTint, resolveGrassNoiseStrength } from '../core/splines.js';
 import { CLIPPER_SCALE, clipPolygons, createMeshBuilder, forEachPolyTreeEdge } from '../roads/roads.js';
@@ -614,10 +615,9 @@ const LIFTOFF_PITCH = 0.14, CLIMB_PITCH = 0.2, CLIMB_ROTATE_TIME = 1.2; // nose 
 // comes back out of it, fading in over the first APPROACH_FADE of its approach; the cloud base is CLOUD_HEIGHT times the
 // height the climb reached.
 // Touching down: the nose is FLARE_PITCH up as the wheels meet the runway and comes down over TOUCHDOWN_SETTLE of the
-// rollout, and the aircraft hops BOUNCE_HEIGHT of its wingspan up and back down over BOUNCE_TIME seconds, its wings
-// rocking BOUNCE_ROLL radians one way and the other and its nose dipping BOUNCE_PITCH and coming back up.
+// rollout, and the aircraft bounces (see touchdownBounce).
 const MAX_PATH_PITCH = Math.PI/6; // (the steepest the nose points on a climb or dive, however steep the path: 30 degrees)
-const FLARE_PITCH = 0.13, TOUCHDOWN_SETTLE = 0.3, BOUNCE_HEIGHT = 0.02, BOUNCE_TIME = 0.4, BOUNCE_ROLL = 0.06, BOUNCE_PITCH = 0.08;
+const FLARE_PITCH = 0.13, TOUCHDOWN_SETTLE = 0.3;
 const CLIMB_OUT_TIME = 9, APPROACH_FADE = 0.4, CLOUD_HEIGHT = 5;
 const APPROACH_TIME = 12, ROLLOUT_TIME = 6, PUSH_TIME = 5, DWELL_MIN = 12, RUNWAY_GAP = 6;
 /**
@@ -700,9 +700,8 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
     if (phase < ROLLOUT_TIME) {
       // wheels down, nose lowering, braking hard at first and coasting the last of it to the turnoff
       const u = phase/ROLLOUT_TIME, p = onRunway(arrive, touchdown + (turnoff - touchdown)*(1 - (1 - u)*(1 - u)));
-      const hop = Math.min(1, phase/BOUNCE_TIME);
-      const bounce = Math.sin(Math.PI*hop)*BOUNCE_HEIGHT*plane.userData.span, rock = Math.sin(2*Math.PI*hop)*BOUNCE_ROLL, dip = Math.sin(Math.PI*hop)*BOUNCE_PITCH;
-      poseAircraft(plane, p.x, Y_TARMAC + bounce, p.z, inDx, inDz, Math.max(0, touchdownPitch*(1 - smooth(u/TOUCHDOWN_SETTLE)) - dip), rock);
+      const { hop, rock, dip } = touchdownBounce(phase, plane.userData.span);
+      poseAircraft(plane, p.x, Y_TARMAC + hop, p.z, inDx, inDz, Math.max(0, touchdownPitch*(1 - smooth(u/TOUCHDOWN_SETTLE)) - dip), rock);
       return;
     }
     phase -= ROLLOUT_TIME;
@@ -757,6 +756,8 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
   const fly = (t) => fadeAircraft(plane, pose(t) ?? 1);
   // start its round again from the moment it settles on its stand, as of time `t`
   fly.dockAt = (t) => { shift = t - (APPROACH_TIME + ROLLOUT_TIME + taxiIn); };
+  // start its round again from the top of its descent, as of time `t`
+  fly.descendFrom = (t) => { shift = t; };
   return fly;
 }
 const HELI_IDLE = 7, HELI_LIFT = 4.5, HELI_CIRCUIT = 26, HELI_LAND = 4.5, HELI_HOVER = 55;
@@ -1158,8 +1159,13 @@ function finishAirport(zone, builders, poly, s, tint) {
  * @param {number} index Its place in the zone's flights, which is what a follow remembers it by.
  */
 function makeTrackedFlight(zone, plane, fly, tier, index) {
-  const flight = { zone, plane, fly, index, size: tier.width*0.8, hand: null, returning: null, handback: null };
+  const flight = { zone, plane, fly, index, size: tier.width*0.8, hand: null, returning: null, handback: null, wreckedUntil: null };
   flight.update = (t, dt) => {
+    if (flight.wreckedUntil) {
+      if (t < flight.wreckedUntil) { plane.visible = false; return; }
+      flight.wreckedUntil = null;
+      fly.descendFrom?.(t); // a new one, coming in from the top of its descent
+    }
     if (flight.hand) { flyByHand(flight, dt); return; }
     fly(t);
     if (flight.handback) handBack(flight, t);
@@ -1176,14 +1182,39 @@ function makeTrackedFlight(zone, plane, fly, tier, index) {
  * @returns {void}
  */
 function flyByHand(flight, dt) {
-  const hand = flight.hand, craft = { scale: flight.size/32, size: flight.size, floor: Y_TARMAC + flight.size*0.1 };
+  const hand = flight.hand, craft = { scale: flight.size/32, size: flight.size, floor: Y_TARMAC + flight.size*0.1, crashAngle: CRASH_ANGLE };
   stepFlight(hand, dt, craft, flight.returning ? autopilot(hand, returnTarget(flight), craft) : undefined);
   flight.plane.visible = true;
-  poseAircraft(flight.plane, hand.x, hand.y, hand.z, Math.sin(hand.heading), Math.cos(hand.heading), hand.pitch, -hand.bank);
+  poseAircraft(flight.plane, hand.x, hand.y + hand.hop, hand.z, Math.sin(hand.heading), Math.cos(hand.heading), hand.pitch - hand.dip, -hand.bank + hand.rock);
   // whoever is on the ground under it (or a car on the road) when it is low enough to touch them
   App.strikeWithAircraft?.({ x: hand.x, y: hand.y, z: hand.z, heading: hand.heading,
     halfLength: flight.size*0.5, halfWidth: flight.size*0.5, below: flight.size*0.1, above: flight.size*0.15 });
+  if (hand.crashed) { crashAircraft(flight); return; }
   if (flight.returning && backAtField(flight)) rejoinSchedule(flight);
+}
+
+const CRASH_ANGLE = Math.PI/4, WRECK_TIME = 25; // (how steeply it can meet the ground; seconds before a replacement is on its stand)
+const BLAST_RADIUS = 0.5, BLAST_KILL_REACH = 1.5;  // (of its wingspan, the fireball's size; and how far past that anyone caught in it dies, as a multiple)
+const WRECK_COLOR = new THREE.Color(0xeceff2);
+/**
+ * Blow up an aircraft that has hit the ground too steeply — a blast along its length, marking the ground — killing whoever
+ * is within BLAST_KILL_REACH times the size of it, and take it out of the player's hands. A new one is on its stand after
+ * WRECK_TIME.
+ * @param {object} flight
+ * @returns {void}
+ */
+function crashAircraft(flight) {
+  const plane = flight.plane, along = { x: Math.sin(plane.rotation.y)*flight.size*0.3, z: Math.cos(plane.rotation.y)*flight.size*0.3 };
+  const at = plane.position, radius = flight.size*BLAST_RADIUS*BLAST_KILL_REACH;
+  // (on the ground it was over, so the scorch marks lie on it)
+  [-1, 0, 1].forEach(k => explodeCar({ x: at.x + along.x*k, y: Y_TARMAC, z: at.z + along.z*k }, flight.size*0.15, { paint: WRECK_COLOR }));
+  App.strikeWithAircraft?.({ x: at.x, y: Y_TARMAC, z: at.z, heading: 0, halfLength: radius, halfWidth: radius, below: radius, above: radius });
+  if (flown === flight) { flown = null; endFlying(); }
+  // a camera on it stays where it blew up, following nothing
+  if (followedFlight() === flight) { controls.goalTarget.set(at.x, Y_TARMAC + flight.size*0.2, at.z); stopFollowingPlane(); }
+  flight.hand = null; flight.returning = null; flight.handback = null;
+  flight.wreckedUntil = (lastFrame || 0) + WRECK_TIME;
+  plane.visible = false;
 }
 
 // ---- letting go: the aircraft flies itself back to the airfield, low over it, and only then goes back on its schedule
@@ -1332,7 +1363,7 @@ function updatePlaneFollow() {
  */
 function flyPlane() {
   const flight = followedFlight();
-  if (!flight || flown === flight || !startFlying(stopFlying)) return;
+  if (!flight || flown === flight || flight.wreckedUntil || !startFlying(stopFlying)) return;
   flown = flight;
   flight.handback = null;
   flight.returning = null; // (taken back off the autopilot, if it was flying itself home)

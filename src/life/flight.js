@@ -37,12 +37,13 @@ const FLY_ROLLING = 0.6, FLY_GROUND_TURN = 0.9;                   // on the grou
  * @param {number} dt Seconds this frame.
  * @param {object} craft What it is flying: `scale` multiplies the speeds and forces, which are written for an international
  *   jet (a light one, or a bee, flies smaller and slower); `size` sets how wide a circle it steers on the ground; `floor`
- *   is the height of the ground under it; `ceiling` where the air runs out.
+ *   is the height of the ground under it; `ceiling` where the air runs out; `crashAngle` how steeply (radians) it can meet
+ *   the ground before it is wrecked (never, if left out).
  * @param {{forward: number, right: number, run: boolean, brake: boolean}} [input] What is being asked of it: the keys held
  *   unless given (see autopilot).
  * @returns {void}
  */
-export function stepFlight(hand, dt, { scale, size, floor, ceiling = FLY_CEILING }, input = controlInput()) {
+export function stepFlight(hand, dt, { scale, size, floor, ceiling = FLY_CEILING, crashAngle = Infinity }, input = controlInput()) {
   const { forward, right, run, brake } = input;
   const toward = (v, goal, rate) => v + Math.max(-rate*dt, Math.min(rate*dt, goal - v));
   const ease = (v, goal, seconds) => v + (goal - v)*(1 - Math.exp(-dt/seconds)); // (frame-rate independent, unlike a flat fraction)
@@ -93,13 +94,41 @@ export function stepFlight(hand, dt, { scale, size, floor, ceiling = FLY_CEILING
   hand.z += hand.vz*dt;
   // the ground underneath and the thin air above
   if (hand.y <= floor) {
+    if (!hand.onGround && hand.vy < -TOUCHDOWN_SINK*scale) {
+      // meeting the ground hard enough to bounce — or, if it came in past `crashAngle` (steeper than that on the way
+      // down, nose or wing that far over), to be wrecked: hand.crashed, for whoever poses it to blow it up
+      hand.sinceTouchdown = 0;
+      const descent = Math.atan2(-hand.vy, Math.hypot(hand.vx, hand.vz));
+      hand.crashed = Math.max(descent, Math.abs(hand.pitch), Math.abs(hand.bank)) > crashAngle;
+    }
+    hand.onGround = true;
     hand.y = floor;
     hand.vy = Math.max(0, hand.vy);
     hand.pitch = Math.max(hand.pitch, 0);
     hand.bank = toward(hand.bank, 0, FLY_LEVEL*3); // (a wing tip can't stay in the tarmac, however gentle the air is)
     hand.bankRate = 0;
-  }
+  } else hand.onGround = false;
   if (hand.y > ceiling) { hand.y = ceiling; hand.vy = Math.min(0, hand.vy); hand.pitch = Math.min(hand.pitch, 0); }
+  // the bounce of a touchdown, to be added to how it is posed: up by `hop`, wings rocked by `rock`, nose down by `dip`
+  // (never taking the nose below level)
+  hand.sinceTouchdown += dt;
+  const bounce = touchdownBounce(hand.sinceTouchdown, size);
+  hand.hop = bounce.hop; hand.rock = bounce.rock; hand.dip = Math.min(bounce.dip, Math.max(0, hand.pitch));
+}
+
+const TOUCHDOWN_SINK = 1; // how fast, at scale 1, it has to be dropping onto the ground for it to bounce
+const BOUNCE_HEIGHT = 0.02, BOUNCE_TIME = 0.4, BOUNCE_ROLL = 0.06, BOUNCE_PITCH = 0.08; // (of the craft's size; seconds; radians; radians)
+/**
+ * How a craft is jolted for BOUNCE_TIME seconds after touching down: hopping up and back down, its wings rocking one way
+ * and the other and its nose dipping and coming back up. All zero once the bounce is over.
+ * @param {number} since - seconds since it touched down
+ * @param {number} size - the craft's size (its wingspan), which the hop is a fraction of
+ * @returns {{hop: number, rock: number, dip: number}} height gained, roll added, and pitch taken off, in world units and radians
+ */
+export function touchdownBounce(since, size) {
+  if (!(since >= 0 && since < BOUNCE_TIME)) return { hop: 0, rock: 0, dip: 0 };
+  const through = since/BOUNCE_TIME;
+  return { hop: Math.sin(Math.PI*through)*BOUNCE_HEIGHT*size, rock: Math.sin(2*Math.PI*through)*BOUNCE_ROLL, dip: Math.sin(Math.PI*through)*BOUNCE_PITCH };
 }
 
 /**
@@ -108,7 +137,7 @@ export function stepFlight(hand, dt, { scale, size, floor, ceiling = FLY_CEILING
  * @returns {object} the hand to give stepFlight
  */
 export function makeHand({ x, y, z, heading, pitch = 0, speed }) {
-  return { x, y, z, heading, pitch, bank: 0, speed, pitchRate: 0, bankRate: 0,
+  return { x, y, z, heading, pitch, bank: 0, speed, pitchRate: 0, bankRate: 0, onGround: false, crashed: false, sinceTouchdown: Infinity, hop: 0, rock: 0, dip: 0,
     vx: Math.sin(heading)*Math.cos(pitch)*speed, vy: Math.sin(pitch)*speed, vz: Math.cos(heading)*Math.cos(pitch)*speed };
 }
 

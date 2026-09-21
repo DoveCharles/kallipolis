@@ -663,9 +663,9 @@ const flightOf = bee => ({ scale: BEE_SPEED*bee.traits.speed/cruiseSpeed(1), siz
 function flyByHand(bee, t, dt) {
   const hand = bee.hand;
   stepFlight(hand, dt, flightOf(bee));
-  bee.at.set(hand.x, hand.y, hand.z);
+  bee.at.set(hand.x, hand.y + hand.hop, hand.z);
   bee.v.set(hand.vx, hand.vy, hand.vz);
-  bee.yaw = hand.heading; bee.pitch = hand.pitch; bee.bank = hand.bank;
+  bee.yaw = hand.heading; bee.pitch = hand.pitch - hand.dip; bee.bank = hand.bank - hand.rock;
   beatWings(bee, t);
   lookAt(bee, 0, dt);
 }
