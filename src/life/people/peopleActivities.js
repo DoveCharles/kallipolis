@@ -1,5 +1,5 @@
 import { App, S } from '../../core/shared.js';
-import { beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, walkableUpTo, weightOf, wrapAngle } from './people.js';
+import { voiceOfPerson, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint } from './peoplePathing.js';
 import * as THREE from 'three';
@@ -8,6 +8,8 @@ import { profileOf, profilesVersion } from '../profiles.js';
 import { getTrainShuttles, getTrainStations, trainStationsVersion } from '../../trains/trains.js';
 import { isBloodlusting, punchSpill } from './peopleBlood.js';
 import { puffSmoke } from '../giblets.js';
+import { playSound } from '../../audio/sfx.js';
+import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, personHeight, stopFollowingPerson } from './peopleTracking.js';
 import { roomHolds, roomSpot, roomVisit } from '../../buildings/interior.js';
 
@@ -513,6 +515,7 @@ export function updateAttack(p, dt) {
     a.chaseLeft = a.timer; // (what's left of the chase, if the punch misses)
     a.timer = PUNCH_HIT_TIME;
     playOnce(p, 'Punch');
+    swingSound(p);
   }
   if (a.stage === 'punch') {
     if (t.punched?.by !== p) { endAttack(p); return null; } // (someone else got there first: it's over)
@@ -583,13 +586,26 @@ function releasePunched(p) {
 }
 
 /**
+ * The whoosh of a fist swung, as it comes through, a moment before it lands (PUNCH_HIT_TIME into the Punch animation).
+ * @param {Person} p - whoever's swinging
+ * @returns {void}
+ */
+export function swingSound(p) {
+  playSound('whoosh', { x: p.x, y: p.y + personHeight(p)*0.75, z: p.z }, 1, Math.max(0, PUNCH_HIT_TIME - 0.15));
+}
+
+/**
  * Land the punch: knock them flat on their back, facing whoever hit them.
+ * They cry out as they go (whatever knocked them down), and a fist landing is heard.
  * @param {Person} t - the one being hit
  * @param {Person} p - the one hitting them
  * @returns {void}
  */
 export function knockDown(t, p) {
   if (p.traits) punchSpill(t, p);
+  const head = { x: t.x, y: t.y + personHeight(t)*0.9, z: t.z };
+  if (people.includes(p)) playSound('punch', { ...head, y: t.y + personHeight(t)*0.75 });
+  exclaim(head, voiceOfPerson(t));
   t.punched.stage = 'fall';
   t.heading = headingTo(t, p);
   t.faceTo = null; t.lookAt = null;

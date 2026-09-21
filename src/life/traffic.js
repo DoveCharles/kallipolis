@@ -17,6 +17,7 @@ import { isFavoritePerson } from '../ui/favorites.js';
 import { strikeLightning } from './lightning.js';
 import { updateEngines } from '../audio/engine.js';
 import { explodeCar, puffSmoke, sparks, burnFx, tyreSmoke, igniteFx, engineSmoke } from './giblets.js';
+import { playSound } from '../audio/sfx.js';
 import { carTypeOf, vanityChanceOf, vanityPlatesOf } from './car-types.js';
 import { driving, controlInput, startDriving, endDriving } from './possession.js';
 
@@ -1218,9 +1219,9 @@ function runOverPeople(car, motion = null) {
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
     // (anyone hearted is knocked down instead, below: they can't be killed. See ui/favorites.js)
-    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength && !isFavoritePerson(i)) { App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }); slowedBy(car, 'person', p.traits?.weight); }
+    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength && !isFavoritePerson(i)) { impactSound('thump', p, speed); App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }); slowedBy(car, 'person', p.traits?.weight); }
     else if (p.mode === 'possessed') return;
-    else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed); p.shotRate = CAR_FALL_SPEEDUP; slowedBy(car, 'person', p.traits?.weight); } }
+    else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { impactSound('thump', p, speed); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed); p.shotRate = CAR_FALL_SPEEDUP; slowedBy(car, 'person', p.traits?.weight); } }
     else if (Math.abs(right) < stun.halfWidth && Math.abs(forward) < stun.halfLength) {
       shocked.add(p);
       if (!car.shocked?.has(p) && !p.stun && !p.fright && !p.please && !p.punched && !p.attack) {
@@ -1841,6 +1842,7 @@ function hitBuildings(car, was, dt) {
   const fresh = !(car.clearOfWalls < WALL_LET_GO); // (sliding along a wall leaves it just clear of it now and then)
   car.clearOfWalls = 0;
   if (fresh) {
+    impactSound('crash', contact, Math.abs(car.speed)*into);
     if (into > WALL_HEAD_ON && Math.abs(car.speed) >= BOUNCE_MIN_SPEED) {
       car.speed = -travel*Math.abs(car.speed)*BUMP_BOUNCE; car.stall = STALL_TIME;
       puffSmoke({ x: q.x, y: Y_ROAD, z: q.z }, carHeight(car), BUMP_SMOKE_PUFFS);
@@ -1879,6 +1881,12 @@ function slowedBy(car, kind, weight = 1) {
 /** The share of its speed a car would lose hitting a car of weight `weight`, before it's kept to a range: more the heavier that car is against its own weight. */
 const slowdownShare = (car, weight = 1) => Math.max(CAR_MIN_SLOWDOWN, CAR_SLOWDOWN*weight/(car.traits?.weight ?? 1));
 const wreckedCars = [];
+const IMPACT_FULL_SPEED = 12; // (how fast a car has to hit something to be heard at its loudest; slower, quieter)
+/** The sound of a car hitting something at `speed`: louder the harder, and not at all for a nudge. */
+function impactSound(name, at, speed) {
+  if (speed < 0.5) return;
+  playSound(name, { x: at.x, y: Y_ROAD + 0.8*S.peopleSize, z: at.z }, Math.min(1, 0.25 + speed/IMPACT_FULL_SPEED));
+}
 /** Small black smoke from a boosting car's rear tyres. */
 function boostSmoke(car, dt) {
   const sin = Math.sin(car.heading), cos = Math.cos(car.heading), back = carLength(car)*0.3, side = carWidth(car)*0.4;
@@ -2052,13 +2060,13 @@ function stepKick(car, dt) {
  * @returns {void}
  */
 function bumpIntoCars(car, was) {
-  const reach = carLength(car)*1.5 + 4*S.peopleSize, before = { ...car, ...was };
+  const reach = carLength(car)*1.5 + 4*S.peopleSize, before = { ...car, ...was }, hitSpeed = Math.abs(car.speed);
   let contact = null, cutsEngine = false;
   forCarsNear(car.x, car.z, reach, other => {
     if (other === car || wreckedCars.includes(other) || !carsOverlap(car, other)) return;
     const d = Math.hypot(other.x - car.x, other.z - car.z), dWas = Math.hypot(other.x - was.x, other.z - was.z);
     if (carsOverlap(before, other) && d >= dWas) return; // (moving off it)
-    if (other.fuse == null && Math.abs(car.speed) >= WRECK_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight)) { lightFuse(other); sparks({ x: (car.x + other.x)/2, y: Y_ROAD + carHeight(car)*0.4, z: (car.z + other.z)/2 }, BUMP_SPARKS); slowedBy(car, 'car', other.traits?.weight); return; }
+    if (other.fuse == null && Math.abs(car.speed) >= WRECK_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight)) { lightFuse(other); impactSound('crash', other, hitSpeed); sparks({ x: (car.x + other.x)/2, y: Y_ROAD + carHeight(car)*0.4, z: (car.z + other.z)/2 }, BUMP_SPARKS); slowedBy(car, 'car', other.traits?.weight); return; }
     const joltSpeed = JOLT_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight), jolted = Math.abs(car.speed) >= joltSpeed;
     kickCar(other, other.x - car.x, other.z - car.z, jolted ? Math.abs(car.speed)*BUMP_JOLT_SHOVE : Math.min(1, Math.abs(car.speed)*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1)));
     other.speed = 0;
@@ -2068,7 +2076,7 @@ function bumpIntoCars(car, was) {
   });
   if (!contact) { car.bumping = false; return; }
   Object.assign(car, was);
-  if (!car.bumping) { puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS); sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS); } // (once, as they meet)
+  if (!car.bumping) { impactSound('crash', contact, hitSpeed); puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS); sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS); } // (once, as they meet)
   if (cutsEngine && !car.bumping) car.stall = STALL_TIME;
   car.bumping = true;
 }

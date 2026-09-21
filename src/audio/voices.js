@@ -16,13 +16,14 @@ const VOWELS = [[800, 1200], [500, 1900], [300, 2300], [500, 900], [350, 800], [
 // how each syllable can start: a stop (a click of noise at `noise` Hz, then the voice), a hiss (a longer rush of noise
 // that the voice comes in under), a hum (the voice muffled with its formants at `from`, opening out), or a glide (the
 // formants sliding from `from` into the vowel); or null, the vowel bare. `time` is in seconds.
+// (the hisses are kept soft and not too high: sharp ones, one after another, are a harsh "tst tst")
 const CONSONANTS = [
-  { kind: 'stop', noise: 900, q: 1, level: 0.5, time: 0.03 },    // p, b
-  { kind: 'stop', noise: 4000, q: 1.5, level: 0.5, time: 0.03 },  // t, d
-  { kind: 'stop', noise: 2000, q: 2, level: 0.6, time: 0.035 },   // k, g
-  { kind: 'hiss', noise: 6500, q: 3, level: 0.5, time: 0.06 },    // s
-  { kind: 'hiss', noise: 3000, q: 2, level: 0.5, time: 0.06 },    // sh
-  { kind: 'hiss', noise: 5000, q: 0.5, level: 0.2, time: 0.05 },  // f
+  { kind: 'stop', noise: 900, q: 1, level: 0.3, time: 0.03 },    // p, b
+  { kind: 'stop', noise: 2600, q: 1.5, level: 0.2, time: 0.03 },  // t, d
+  { kind: 'stop', noise: 1600, q: 2, level: 0.3, time: 0.035 },   // k, g
+  { kind: 'hiss', noise: 4200, q: 2, level: 0.12, time: 0.06 },   // s
+  { kind: 'hiss', noise: 2400, q: 2, level: 0.18, time: 0.06 },   // sh
+  { kind: 'hiss', noise: 3500, q: 0.7, level: 0.08, time: 0.05 }, // f
   { kind: 'hum', from: [250, 1100], time: 0.05 },                 // m
   { kind: 'hum', from: [250, 1700], time: 0.05 },                 // n
   { kind: 'glide', from: [350, 1100], time: 0.06 },               // l
@@ -90,27 +91,46 @@ function noiseBuffer(context) {
  * @returns {void}
  */
 export function babble(at, voice, length, loudness = 1, mood = 0, intonation = null) {
-  const { pitch, formant, sharpness } = voice;
-  const context = listener.context;
-  if (isMuted() || context.state !== 'running' || blips >= BLIPS_MAX) return;
-  const { x, y, z } = camera.position;
-  if (Math.hypot(at.x - x, at.y - y, at.z - z) > HEAR_DISTANCE) return;
-
-  const now = context.currentTime, end = now + Math.max(0.05, length*0.85);
+  if (blips >= BLIPS_MAX) return;
   const { through = 0.5, stressed = false, last = false, question = false } = intonation ?? {};
   const f = pitch*(1 + (Math.random()*2 - 1)*BEND)*(1 + DRIFT*(1 - 2*through))*(stressed ? 1 + STRESS : 1);
   // (the slide through the syllable: a phrase's end falls, or rises for a question; otherwise a little either way, lifted
   // by cheer and sagging with gloom)
   const slide = last ? (question ? 1.3 : 0.8) : 1 + Math.max(-0.2, Math.min(0.2, mood*0.1 + (Math.random() - 0.5)*0.1));
+  // a random vowel, and a random consonant before it
+  speak(at, voice, { f, slide, length: length*0.85, level: VOLUME*(0.5 + 0.5*loudness),
+    vowel: VOWELS[Math.floor(Math.random()*VOWELS.length)], consonant: CONSONANTS[Math.floor(Math.random()*CONSONANTS.length)] });
+}
+
+// an "ah!": a breath, then an open vowel, high and loud, jumping up and falling away
+const CRY_VOWEL = [800, 1200], CRY_BREATH = { kind: 'hiss', noise: 1500, q: 0.7, level: 0.3, time: 0.04 };
+const CRY_LENGTH = 0.4, CRY_PITCH = 1.45, CRY_VOLUME = 0.4;
+/**
+ * Someone crying out — "ah!" — as they're hit, in their own voice.
+ * @param {{x: number, y: number, z: number}} at - their head
+ * @param {{pitch: number, formant: number, sharpness: number}} voice - as for babble
+ * @returns {void}
+ */
+export function exclaim(at, voice) {
+  speak(at, voice, { f: voice.pitch*CRY_PITCH*(0.9 + Math.random()*0.2), rise: 1.15, slide: 0.65, length: CRY_LENGTH*(0.85 + Math.random()*0.3),
+    level: CRY_VOLUME, vowel: CRY_VOWEL, consonant: CRY_BREATH });
+}
+
+// One sound of a voice: a sawtooth at `f`, rising by `rise` over the first third and then sliding to `slide` of where it
+// started by the end, through `vowel`'s formants (moved by the voice's own), after `consonant` (taking up to 40% of it).
+function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant }) {
+  const { formant, sharpness } = voice;
+  const context = listener.context;
+  if (isMuted() || context.state !== 'running') return;
+  const { x, y, z } = camera.position;
+  if (Math.hypot(at.x - x, at.y - y, at.z - z) > HEAR_DISTANCE) return;
+  const now = context.currentTime, end = now + Math.max(0.05, length);
   const oscillator = context.createOscillator();
   oscillator.type = 'sawtooth';
   oscillator.frequency.setValueAtTime(f, now);
+  if (rise !== 1) oscillator.frequency.exponentialRampToValueAtTime(f*rise, now + (end - now)/3);
   oscillator.frequency.exponentialRampToValueAtTime(f*slide, end);
-  // the vowel: its two formants, moved by the voice's own; and the consonant before it, taking up to 40% of the syllable
-  const vowel = VOWELS[Math.floor(Math.random()*VOWELS.length)];
-  const consonant = CONSONANTS[Math.floor(Math.random()*CONSONANTS.length)];
   const c = consonant ? Math.min(consonant.time, (end - now)*0.4) : 0;
-  const level = VOLUME*(0.5 + 0.5*loudness);
   // (a stop or hiss holds the voice back till the noise is through; a hum starts it muffled)
   const voiceIn = consonant?.kind === 'stop' || consonant?.kind === 'hiss' ? now + c*0.8 : now;
   const gain = context.createGain();
@@ -149,8 +169,9 @@ export function babble(at, voice, length, loudness = 1, mood = 0, intonation = n
     band.frequency.value = consonant.noise*Math.sqrt(formant);
     band.Q.value = consonant.q;
     const burst = consonant.kind === 'stop' ? Math.min(0.015, c) : c;
+    // (a stop's click starts sharp; a hiss swells in and out, rather than cutting in)
     hiss.gain.setValueAtTime(0, now);
-    hiss.gain.linearRampToValueAtTime(level*consonant.level*4, now + Math.min(0.004, burst/3));
+    hiss.gain.linearRampToValueAtTime(level*consonant.level*3, now + (consonant.kind === 'stop' ? Math.min(0.004, burst/3) : burst*0.4));
     hiss.gain.linearRampToValueAtTime(0, now + burst);
     source.connect(band).connect(hiss).connect(panner);
     source.start(now, Math.random()*0.9);

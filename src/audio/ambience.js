@@ -41,18 +41,33 @@ let lastT = 0;
 let nextRumble = 0, rumbles = null;
 let parks = { at: -1, nearness: 0, nearest: null }; // parkNearness, as of `at`
 
-// a couple of seconds of white noise, its ends faded into each other so it loops without a click
-function noiseLoop(context, seconds) {
-  const length = context.sampleRate*seconds, blend = context.sampleRate*0.1;
-  const buffer = context.createBuffer(1, length, context.sampleRate), data = buffer.getChannelData(0);
-  for (let k = 0; k < length; k++) data[k] = Math.random()*2 - 1;
-  for (let k = 0; k < blend; k++) { const w = k/blend; data[k] = data[k]*w + data[length - blend + k]*(1 - w); }
-  return { buffer, loopEnd: (length - blend)/context.sampleRate };
+// Fades a looped buffer's last `blend` samples into its first, so the loop doesn't click; returns `blend`, to cut from its
+// end. Equal-power, not straight lines: two stretches of noise have nothing to do with each other, so faded straight
+// across they'd dip to half their loudness halfway through — a throb, once a loop.
+function blendEnds(data, blend) {
+  blend = Math.floor(blend);
+  for (let k = 0; k < blend; k++) {
+    const w = k/blend*Math.PI/2;
+    data[k] = data[k]*Math.sin(w) + data[data.length - blend + k]*Math.cos(w);
+  }
+  return blend;
+}
+
+// several seconds of white noise, different in each ear (so it's all round, not in the middle of the head), looping
+function noiseLoop(context, seconds, channels = 1) {
+  const length = Math.floor(context.sampleRate*seconds), blend = context.sampleRate*0.1;
+  const buffer = context.createBuffer(channels, length, context.sampleRate);
+  for (let c = 0; c < channels; c++) {
+    const data = buffer.getChannelData(c);
+    for (let k = 0; k < length; k++) data[k] = Math.random()*2 - 1;
+    blendEnds(data, blend);
+  }
+  return { buffer, loopEnd: (length - Math.floor(blend))/context.sampleRate };
 }
 
 // the wash: white noise with its lows cut, so it hisses rather than roars
 function makeRain() {
-  const context = listener.context, { buffer, loopEnd } = noiseLoop(context, 2);
+  const context = listener.context, { buffer, loopEnd } = noiseLoop(context, 6, 2);
   const source = context.createBufferSource();
   source.buffer = buffer;
   source.loop = true;
@@ -104,9 +119,8 @@ function makeHum() {
   for (let k = 0; k < length; k++) { last = (last + 0.1*(Math.random()*2 - 1))/1.1; data[k] = last; power += last*last; }
   const scale = 0.3/Math.sqrt(power/length);
   for (let k = 0; k < length; k++) data[k] *= scale;
-  // (fade the ends into each other so the loop doesn't click)
-  const blend = context.sampleRate*0.1;
-  for (let k = 0; k < blend; k++) { const w = k/blend; data[k] = data[k]*w + data[length - blend + k]*(1 - w); }
+  // (fade the ends into each other so the loop doesn't click: see blendEnds)
+  const blend = blendEnds(data, context.sampleRate*0.1);
   const source = context.createBufferSource();
   source.buffer = buffer;
   source.loop = true;

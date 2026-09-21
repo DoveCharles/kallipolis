@@ -240,6 +240,8 @@ function voiceOf(p, i) {
   const formant = (isMan ? 1 : 1.15)/Math.sqrt(tall)*(0.8 + 0.42*own());
   return { pitch, formant, sharpness: 3 + 9*own() };
 }
+/** Someone's voice (see voiceOf), for a sound made outside the frame loop: a cry as they're hit, say. */
+export const voiceOfPerson = p => voiceOf(p, people.indexOf(p));
 export const inRoom = p => p.mode === 'indoors' && p.indoors.stage === 'inside' && !!p.inRoom
   && p.inRoom.visit === roomVisit() && roomHolds(p.indoors.building.key);
 export let indoorsCount = 0;

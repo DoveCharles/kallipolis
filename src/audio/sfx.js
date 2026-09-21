@@ -29,7 +29,29 @@ const SOUNDS = {
   pop: [
     [.8, .2, 500, 0, .01, .07, 4, 2, 60, , , , , .5],
   ],
+  // the driven car hitting a car or a wall (see bumpIntoCars and hitBuildings in life/traffic.js): a crunch, and a
+  // clang of bent metal ringing under it
+  crash: [
+    [.6, .1, 80, 0, .04, .3, 4, 1.5, -10, , , , , 1.8, , .35, , .6, .06, , -2500],
+    [.45, .1, 700, 0, .02, .4, 1, 2.5, , , , , , .4, 9, , , .3, .15, .3],
+  ],
+  // a car hitting someone (see runOverPeople in life/traffic.js): a dull thump
+  thump: [
+    [.6, .1, 70, 0, .02, .16, 4, 1, -12, , , , , 1, , , , .5, .05, , -800],
+    [.5, .05, 60, 0, .02, .15, 0, 1, -15],
+  ],
+  // a fist landing (see knockDown in life/people/peopleActivities.js): a slap over a low thud
+  punch: [
+    [.6, .1, 110, 0, .012, .08, 4, 1, -30, , , , , 1, , , , .6, .02, , -1400],
+    [.5, .05, 75, 0, .01, .12, 0, 1, -25],
+  ],
+  // a fist swung (see swingSound in life/people/peopleActivities.js): a rush of air, rising
+  whoosh: [
+    [.35, .1, 200, .08, .03, .1, 4, 1, 25, , , , , 0, , , , .6, , , -2500],
+  ],
 };
+// how near something has to be for each sound to be heard at full volume, falling away past it (REF_DISTANCE if not here)
+const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2 };
 const VARIANTS = 3;
 const SPEED_OF_SOUND = 343;      // units (metres) a second
 const REF_DISTANCE = 25;         // how near something has to be to be heard at full volume, falling away past it
@@ -119,9 +141,10 @@ const recent = []; // { name, x, z, at } of what's been played lately, for SAME_
  * @param {keyof SOUNDS} name
  * @param {{x: number, y: number, z: number}} at
  * @param {number} [volume=1]
+ * @param {number} [after=0] - seconds from now it happens (it's heard later still, the further off it is)
  * @returns {void}
  */
-export function playSound(name, at, volume = 1) {
+export function playSound(name, at, volume = 1, after = 0) {
   if (!SOUNDS[name] || muted || context.state !== 'running') return;
   const now = context.currentTime;
   while (recent.length && now - recent[0].at > SAME_SOUND_GAP) recent.shift();
@@ -134,7 +157,7 @@ export function playSound(name, at, volume = 1) {
   for (const buffer of layers) {
     const sound = new THREE.PositionalAudio(listener);
     sound.setBuffer(buffer);
-    sound.setRefDistance(REF_DISTANCE);
+    sound.setRefDistance(REACH[name] ?? REF_DISTANCE);
     sound.setRolloffFactor(1);
     sound.setVolume(volume);
     sound.position.set(at.x, at.y, at.z);
@@ -142,6 +165,6 @@ export function playSound(name, at, volume = 1) {
     sound.updateMatrixWorld();
     sound.onEnded = () => { voices--; sound.isPlaying = false; scene.remove(sound); sound.disconnect(); };
     voices++;
-    sound.play(delay);
+    sound.play(delay + after);
   }
 }
