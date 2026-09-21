@@ -1148,7 +1148,7 @@ function turnCar(car, by) {
 const CAR_HITBOX_SCALE = 0.6;
 const CAR_KILL_SCALE = 0.7, CAR_CLIP_SCALE = 1.5, CAR_STUN_SCALE = 2; // of CAR_HITBOX_SCALE: anyone within the first is killed, anyone else within the second is knocked over, and anyone else within the third is shocked
 const CAR_SHOCK_TIME = 1; // how long, in seconds, someone stays shocked
-const CAR_PUSH_PER_SPEED = 0.15, CAR_KNOCK_PUSH_FACTOR = 0.3; // how far a car throws someone back, per unit of its speed — the shocked, and (by the factor) the knocked over
+const CAR_PUSH_PER_SPEED = 0.1, CAR_KNOCK_PUSH_FACTOR = 0.15; // how far a car throws someone back, per unit of its speed — the shocked, and (by the factor) the knocked over
 const CAR_FALL_SPEEDUP = 5; // how many times faster than normal someone knocked over by a car goes down
 /**
  * The hitbox a car runs people over with: half its length and width, each with a 0.25 margin, scaled by CAR_HITBOX_SCALE —

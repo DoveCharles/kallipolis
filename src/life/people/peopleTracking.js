@@ -185,9 +185,9 @@ export function unpossessPerson() {
 // Walking into people: anyone within BUMP_RADIUS is shocked (as by a bad sort's death — see stunBystanders in people.js) for
 // BUMP_SHOCK_TIME, once, as you come within it. Walking into someone's very middle (within BUMP_CORE_RADIUS) sends you staggering SHOVE_DISTANCE straight
 // back from them, slowing to a stop by SHOVE_DECAY per second and too thrown to walk while you're still going faster than
-// STAGGER_SPEED, and gives them a BUMP_PUNCH_CHANCE chance per unit of aggression of punching you for it. It's rolled once, as you
+// STAGGER_SPEED, and gives them a BUMP_PUNCH_CHANCE chance per unit of aggression of punching you for it. Each is done once, as you
 // walk into them. (Distances at people size 1.)
-const BUMP_RADIUS = 0.6, BUMP_CORE_RADIUS = 0.6, BUMP_SHOCK_TIME = 1;
+const BUMP_RADIUS = 0.5, BUMP_CORE_RADIUS = 0.5, BUMP_SHOCK_TIME = 1;
 const BUMP_PUNCH_CHANCE = 0.05, SHOVE_DISTANCE = 0.7, SHOVE_DECAY = 5, STAGGER_SPEED = 1;
 /**
  * Walk someone being possessed where they're asked to go, this frame, over whatever's there.
@@ -200,9 +200,11 @@ export function walkPossessed(p, dt) {
   const len = Math.hypot(forward, right);
   let x = p.x, z = p.z;
   const shove = p.shove ??= { x: 0, z: 0 };
+  let walkingSpeed = 0;
   if (len > 0 && Math.hypot(shove.x, shove.z) <= STAGGER_SPEED) {
     const speed = PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.speed)*(run ? FLEE_SPEED*p.traits.boost : 1);
     const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = -Math.cos(yaw), rz = Math.sin(yaw);
+    walkingSpeed = speed;
     x += (fx*forward + rx*right)/len*speed*dt;
     z += (fz*forward + rz*right)/len*speed*dt;
   }
@@ -212,6 +214,7 @@ export function walkPossessed(p, dt) {
   const touching = new Set(), near = new Set();
   people.forEach(q => {
     if (q === p || isGone(q) || !(q.mode === 'line' || q.mode === 'wander' || q.mode === 'leaving')) return;
+    if (q.punched && q.punched.stage !== 'marked') return; // (nobody bumps into someone knocked down: no shock, stagger or punch)
     const dx = q.x - x, dz = q.z - z, d = Math.hypot(dx, dz);
     if (d > BUMP_RADIUS*S.peopleSize) return;
     near.add(q);
@@ -224,12 +227,13 @@ export function walkPossessed(p, dt) {
     if (punching) { endActivity(q); q.stun = q.fright = q.please = null; q.oneShot = null; goAfter(q, p); }
     else if (len > 0 && startled && !q.stun && !q.fright && !q.please && !q.punched && !q.attack) q.stun = { stage: 'notice', timer: 0.15, from: { x: p.x, z: p.z }, hold: BUMP_SHOCK_TIME };
     if (len === 0 || !entering) return;
+    if (swing) return; // (no staggering back while throwing a punch)
     const backX = d > 1e-3 ? -dx/d : -Math.sin(yaw), backZ = d > 1e-3 ? -dz/d : -Math.cos(yaw);
     // (the distance a shove covers is its speed over SHOVE_DECAY)
     const speed = SHOVE_DISTANCE*S.peopleSize*SHOVE_DECAY;
     shove.x = backX*speed; shove.z = backZ*speed;
   });
-  p.touching = touching; p.near = near;
+  p.touching = touching; p.near = near; p.walkingSpeed = walkingSpeed; // (for how hard a punch throws someone: see updateSwing)
   // how high the ground is there: a hangout's, the road's, or the pavement's
   const area = peopleNav.areas.find(a => x >= a.minX && x <= a.maxX && z >= a.minZ && z <= a.maxZ && a.inside(x, z));
   p.onRoad = !area && peopleNav.onPavement(x, z);
@@ -254,9 +258,11 @@ export function placePossessedCamera(i) {
 // Unlike a fight someone picks of their own ("punching"), nobody is walked up to and nobody is stared at afterwards: the
 // swing plays wherever they are standing and lands on the nearest person within SWING_REACH ahead and SWING_ARC, at the
 // moment the fist arrives — knocking them flat, as any punch does — or on nobody.
-/** Who a swing can reach: how far ahead of them, and how near dead ahead they have to be — the same whatever anyone's size. */
-const SWING_REACH = 3.4;
+/** Who a swing can reach: how far ahead of them (at a standstill, and how much further for each unit of speed they're moving at), and how near dead ahead they have to be — the same whatever anyone's size. */
+const SWING_REACH = 3.4, SWING_REACH_PER_SPEED = 0.5;
 const SWING_ARC = Math.cos(Math.PI*4/9);
+/** How far a punch throws someone back, per unit of the puncher's speed, and the least it does however slowly they're moving. */
+const PUNCH_PUSH_PER_SPEED = 0.5, PUNCH_MIN_PUSH = 1;
 /** The punch being thrown: { timer } — how long until the fist lands. */
 let swing = null;
 /**
@@ -265,7 +271,8 @@ let swing = null;
  */
 export function punchFromPossession() {
   const p = people[possession.index];
-  if (!p || p.mode !== 'possessed' || p.punched || swing || !hasClip('Punch') || !hasClip('Fall')) return;
+  if (!p || p.mode !== 'possessed' || (p.punched && p.punched.stage !== 'marked' && p.punched.stage !== 'brace') || swing || // (chased or braced for, they can still hit back)
+       !hasClip('Punch') || !hasClip('Fall')) return;
   swing = { timer: PUNCH_HIT_TIME };
   playOnce(p, 'Punch');
 }
@@ -282,7 +289,7 @@ export function updateSwing(p, dt) {
   const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
   /** @type {?Person} */
   let hit = null;
-  let nearest = SWING_REACH;
+  let nearest = SWING_REACH + (p.walkingSpeed ?? 0)*SWING_REACH_PER_SPEED; // (the faster they're running, the further it reaches)
   people.forEach(q => {
     if (q === p || isGone(q) || !canBeKnockedOver(q)) return;
     const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
@@ -293,7 +300,7 @@ export function updateSwing(p, dt) {
   const bee = App.beeInPunch?.({ x: p.x, y: p.y, z: p.z, heading: p.heading, reach: nearest, arcCos: SWING_ARC, height: personHeight(p) });
   if (bee) { App.punchBee?.(bee, p); return; }
   if (!hit) return;
-  knockOver(hit, p);
+  if (knockOver(hit, p)) App.pushPerson?.(hit, hit.x - p.x, hit.z - p.z, Math.max(PUNCH_MIN_PUSH, (p.walkingSpeed ?? 0)*PUNCH_PUSH_PER_SPEED)); // (the faster they're running, the further)
 }
 /** Drop a swing that's been thrown, for someone knocked down before it landed. */
 export function cancelSwing() { swing = null; }
