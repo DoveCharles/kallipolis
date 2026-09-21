@@ -227,6 +227,34 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
 #grid-toggle:hover { color:var(--text); border-color:var(--accent-dim); }
 #grid-toggle.active { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
 #history-tools { display:flex; gap:6px; }
+/* the favorites (src/ui/favorites.js): a little window hanging under its ♥ button */
+#favorites-tools { position:relative; }
+#favorites-panel {
+  position:absolute; top:40px; left:0; width:240px; max-height:min(60vh, 420px); overflow-y:auto; z-index:25;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:6px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+}
+#favorites-panel[hidden] { display:none; }
+.fav-head { font-family:var(--mono); font-size:11px; color:var(--text-dim); padding:2px 4px 6px; }
+.fav-list { display:flex; flex-direction:column; gap:2px; }
+.fav-empty { font-size:12px; color:var(--text-dim); padding:4px 4px 6px; }
+.fav-row {
+  display:flex; align-items:center; gap:8px; width:100%; padding:4px; text-align:left;
+  background:none; border:1px solid transparent; border-radius:6px; color:var(--text); cursor:pointer;
+}
+.fav-row:hover { border-color:var(--accent-dim); background:rgba(255,255,255,0.04); }
+.fav-thumb { flex:0 0 40px; width:40px; height:40px; border-radius:5px; background:rgba(255,255,255,0.05); object-fit:contain; }
+.fav-text { display:flex; flex-direction:column; min-width:0; }
+.fav-name { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fav-kind { font-family:var(--mono); font-size:10px; color:var(--text-dim); }
+.fav-gone { opacity:0.45; }
+/* the heart on a card, beside its × */
+.card-heart {
+  position:absolute; top:6px; right:30px; padding:2px 4px; background:none; border:none; line-height:0;
+  color:var(--text-dim); cursor:pointer;
+}
+.card-heart:hover { color:var(--text); }
+.card-heart.on { color:#e5484d; }
+.card-heart[hidden] { display:none; }
 /* the two the touch layout adds (src/ui/mobile.js): ☰ only where the panel is a sheet, ✛ only under a finger */
 #btn-panel-toggle, #btn-touch-add { display:none; }
 html.touch #btn-touch-add { display:flex; }
@@ -481,6 +509,13 @@ html.win3 #hint { background:#fff; color:#000; border:1px solid #000; border-rad
 /* the cards for whoever's being followed: each a little window of its own, closed from its control-menu box */
 html.win3 .entity-card { --card-pad-x:10px; --card-edge:1px; --trait-frame:1px; padding:0 10px 10px; right:21px; bottom:56px; }
 html.win3 .card-close { display:none; }
+html.win3 .card-heart { top:0; right:0; width:24px; height:21px; padding:0; display:flex; align-items:center; justify-content:center; color:#fff; } /* (in the title bar) */
+html.win3 .card-heart[hidden] { display:none; }
+html.win3 .card-heart.on { color:#ff6b6b; }
+html.win3 #favorites-panel { border:4px solid var(--w3-face); border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000; background:#fff; }
+html.win3 .fav-row { border-radius:0; color:#000; }
+html.win3 .fav-row:hover { background:var(--w3-navy); color:#fff; border-color:transparent; }
+html.win3 .fav-row:hover .fav-kind { color:#ddd; }
 html.win3 :is(.pc-row.pc-gap, .entity-card .pc-body > .pc-lead) { border-top:1px solid #000; }
 html.win3 .pc-name { padding-right:0; }
 html.win3 .pc-tracked { background:#000080; color:#fff; }

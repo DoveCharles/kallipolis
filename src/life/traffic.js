@@ -1309,13 +1309,24 @@ function pickCar(clientX, clientY) {
 function followCarAt(clientX, clientY) {
   const i = pickCar(clientX, clientY);
   if (i < 0) { stopFollowingCar(); return; }
+  followCar(cars[i]);
+}
+/**
+ * Follow a car, as a click on it would (see followCarAt) — for the favorites (ui/favorites.js), which keep hold of the
+ * car itself, since its place in cars shifts as others are blown up.
+ * @param {object} car
+ * @returns {boolean} false if it's gone (blown up, or the traffic thinned out)
+ */
+function followCar(car) {
+  const i = cars.indexOf(car);
+  if (i < 0) return false;
   followedCar = i;
   const h = carHeight(cars[i]);
   controls.minRadius = Math.max(1.2, h*0.8);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9));
-  const car = cars[i];
   const type = carTypeOf(car.design != null ? carMeshes[car.design].name : null, car.number);
-  App.showCarCard(i, { ...type, name: carLabel(car) });
+  App.showCarCard(i, { ...type, name: carLabel(car) }, car);
+  return true;
 }
 
 /**
@@ -1973,5 +1984,5 @@ export function carThumbnailScene(i) {
   return { mesh: cm.thumbMesh, camera: cm.thumbCamera };
 }
 
-Object.assign(App, { pickCar, followCarAt, stopFollowingCar, driveCar, stopDriving, killCar, strikeWithAircraft, carsNearby, carsWhere });
+Object.assign(App, { pickCar, followCarAt, followCar, stopFollowingCar, driveCar, stopDriving, killCar, strikeWithAircraft, carsNearby, carsWhere });
 

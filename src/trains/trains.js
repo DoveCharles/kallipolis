@@ -727,6 +727,8 @@ function pickTrain(clientX, clientY) {
 function showFollowedTrainCard() {
   const i = trainShuttles.findIndex(s => s.lineId === followedTrain);
   showTrainCard({ number: i + 1, view: trainThumbnailOf(trainShuttles[i].object) });
+  const lineId = followedTrain;
+  trainCard.setFavorite({ key: 'train:' + lineId, kind: 'Train', follow: () => followTrainLine(lineId) });
 }
 // The card's thumbnail: a copy of the carriage (sharing its geometry and materials), sitting level at the origin, and an
 // isometric camera framing it — as for a car (see makeCarThumbnail in traffic.js).
@@ -749,12 +751,13 @@ function followTrainAt(clientX, clientY) {
 // follows a line's carriage (as when someone being followed boards it — see people.js)
 function followTrainLine(lineId) {
   const i = trainShuttles.findIndex(s => s.lineId === lineId);
-  if (i < 0) return;
+  if (i < 0) return false;
   followedTrain = lineId;
   const radius = Math.max(1.2, trainShuttles[i].object.userData.length*0.3);
   controls.minRadius = radius;
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, radius*6));
   showFollowedTrainCard();
+  return true;
 }
 function stopFollowingTrain() {
   if (!followedTrain) return;

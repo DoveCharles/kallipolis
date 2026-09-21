@@ -21,7 +21,7 @@ const card = makeCard({
   kill: { title: 'Blow it up', onClick: () => { if (shown >= 0) App.killCar(shown); } },
 });
 
-function showCarCard(i, info) {
+function showCarCard(i, info, car) {
   shown = i;
   // `info` is what the car's type says (see car-types.js), traits and all: the card itself turns those into its rows.
   // A car with the scramble or keysmash trait (a texting driver, say) has its loves, hates and headings garbled (see
@@ -30,6 +30,7 @@ function showCarCard(i, info) {
   card.relabel(garbles(traits) ? text => garbled(text, traits, seed) : null);
   card.show({ ...info, loves: garbled(info.loves, traits, seed), hates: garbled(info.hates, traits, seed) });
   drawCarThumbnail(i);
+  card.setFavorite({ key: car, kind: 'Car', follow: () => App.followCar(car) });
 }
 function hideCarCard() {
   shown = -1;

@@ -38,6 +38,9 @@ function showPersonCard(index, isMan) {
   headshotDrawnAt = -Infinity;
   lightsOnLayer = false;
   if (again) setPersonCardDoing(doingNow, awayNow); else setPersonCardDoing(null);
+  // (their place in the crowd is who they are: see profileOf)
+  card.setFavorite({ key: 'person:' + index, kind: 'Person',
+    follow: () => { if (!App.people[index]) return false; App.followPerson(index); return true; } });
 }
 // what they're up to (see personDoing in people/peopleTracking.js), and whether they're `away` — indoors, out of sight, so
 // the headshot greys over

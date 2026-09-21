@@ -1,3 +1,5 @@
+import { isFavorite, toggleFavorite, onFavoritesChanged } from './favorites.js';
+
 // ============================================================ the card for whatever's being followed
 // The card at the bottom right saying what the camera's following: a person (life/person-card.js), a car
 // (life/car-card.js), a carriage (trains/trains.js), an aircraft (zones/airport.js), a building
@@ -58,6 +60,25 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
   sysbox.addEventListener('click', () => onClose());
   close.addEventListener('click', () => onClose());
 
+  // the heart, at its top right: hearts whatever it's showing into the favorites (ui/favorites.js), with its name and
+  // picture as they are right now. Only there once whoever opened the card has said what it's showing (see setFavorite).
+  const heart = document.createElement('button');
+  heart.className = 'card-heart';
+  heart.hidden = true;
+  let favorite = null;
+  function drawHeart() {
+    const on = !!favorite && isFavorite(favorite.key);
+    heart.classList.toggle('on', on);
+    heart.title = on ? 'Unfavorite' : 'Favorite';
+    heart.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="' + (on ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linejoin="round">'
+      + '<path d="M12 20.5s-7.6-4.6-9.4-9.3C1.2 7.6 3.5 4 7.2 4c2.1 0 3.6 1.1 4.8 2.9C13.2 5.1 14.7 4 16.8 4c3.7 0 6 3.6 4.6 7.2-1.8 4.7-9.4 9.3-9.4 9.3z"/></svg>';
+  }
+  heart.addEventListener('click', () => {
+    if (!favorite) return;
+    toggleFavorite({ ...favorite, kindLabel: title }, rows.name.value.textContent || title, canvas.hidden ? null : canvas.toDataURL());
+  });
+  onFavoritesChanged(drawHeart);
+
   // the picture, and the Kill button under it
   const canvas = document.createElement('canvas');
   canvas.className = 'pc-thumb';
@@ -103,7 +124,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
   const topSection = document.createElement('div');
   topSection.className = 'pc-top';
   topSection.append(top, shot);
-  el.append(titlebar, close, topSection, body);
+  el.append(titlebar, heart, close, topSection, body);
   document.body.append(el);
 
   // Marks the visible rows below the picture: `pc-alt` on every other one, `pc-lead` on the first. Done here rather than with
@@ -163,7 +184,15 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
   // kind's reader returns, traits included; the card has no row for those, so it ignores them.
   function show(values) {
     Object.keys(rows).forEach(key => set(key, values[key]));
+    setFavorite(null);
     el.hidden = false;
+  }
+  // What the card's showing, for its heart: { key, kind, follow } as a favorite takes them (see ui/favorites.js) — or null
+  // for no heart. show() takes the heart away, so this comes after it.
+  function setFavorite(entry) {
+    favorite = entry;
+    heart.hidden = !entry;
+    drawHeart();
   }
   function hide() { el.hidden = true; }
   // Rewrites the card's own wording (title, Kill button, row headings such as "Loves") through `transform`, which is given
@@ -172,7 +201,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
     fixedText.forEach(([textEl, text]) => { textEl.textContent = transform ? transform(text) : text; });
   }
 
-  const card = { el, canvas, show, hide, set, setList, relabel };
+  const card = { el, canvas, show, hide, set, setList, relabel, setFavorite };
   cards.push(card);
   return card;
 }

@@ -393,6 +393,7 @@ function releasePointer(e) {
 // rest — a new kind of thing need only be named here, and export stopFollowing<its name> on App.
 const FOLLOWABLE = ['Person', 'Car', 'Train', 'Plane', 'Bee', 'Hive', 'Building'];
 const letGoOfAllBut = kept => FOLLOWABLE.forEach(kind => { if (kind !== kept) App['stopFollowing' + kind](); });
+App.letGoOfAllBut = letGoOfAllBut; // (for the favorites too: see ui/favorites.js)
 
 dom.addEventListener('pointercancel', (e) => {
   releasePointer(e); cancelLongPress();

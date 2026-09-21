@@ -43,6 +43,10 @@ function pickBuilding(clientX, clientY) {
 function followBuildingAt(clientX, clientY) {
   const picked = pickBuilding(clientX, clientY);
   if (!picked) { stopFollowingBuilding(); return; }
+  followBuilding(picked);
+}
+// `picked` as pickBuilding finds it
+function followBuilding(picked) {
   const box = new THREE.Box3().setFromObject(picked.group), center = box.getCenter(new THREE.Vector3());
   const radius = box.getBoundingSphere(new THREE.Sphere()).radius;
   const key = buildingKey(picked.zone, picked.index);
@@ -53,6 +57,12 @@ function followBuildingAt(clientX, clientY) {
   card.show({ ...info, name: info.name + ' #' + number });
   setBuildingCardInhabitants([]);
   drawThumbnail(thumbnailOf(picked.group, box, center, radius));
+  card.setFavorite({ key: 'building:' + key, kind: 'Building', follow: () => {
+    const again = buildingsInZones().find(b => buildingKey(b.zone, b.index) === key);
+    if (!again) return false;
+    followBuilding(again);
+    return true;
+  } });
 }
 function stopFollowingBuilding() {
   if (!followed) return;

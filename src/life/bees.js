@@ -837,7 +837,12 @@ function followBee(colony, index) {
   beeDoingShown = null;
   controls.minRadius = FOLLOW_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, BEE_FOLLOW_RADIUS)); // swooping in, if the camera's far off
-  showBeeCard(colony.bees[index].number);
+  const number = colony.bees[index].number;
+  showBeeCard(number);
+  beeCard.setFavorite({ key: 'bee:' + number, kind: 'Bee', follow: () => {
+    for (const c of colonies) { const i = c.bees.findIndex(b => b.number === number); if (i >= 0) { followBee(c, i); return true; } }
+    return false;
+  } });
 }
 function followBeeAt(clientX, clientY) {
   const picked = pickBee(clientX, clientY);
@@ -857,7 +862,12 @@ function followHive(colony, index) {
   hiveBeesShown = null;
   controls.minRadius = FOLLOW_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, BEE_FOLLOW_RADIUS));
-  showHiveCard(colony.hives[index].number);
+  const number = colony.hives[index].number;
+  showHiveCard(number);
+  hiveCard.setFavorite({ key: 'hive:' + number, kind: 'Hive', follow: () => {
+    for (const c of colonies) { const i = c.hives.findIndex(h => h.number === number); if (i >= 0) { homedBee = null; followHive(c, i); return true; } }
+    return false;
+  } });
 }
 function followHiveAt(clientX, clientY) {
   const picked = pickHive(clientX, clientY);

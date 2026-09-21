@@ -1314,10 +1314,20 @@ function pickPlane(clientX, clientY) {
 function followPlaneAt(clientX, clientY) {
   const flight = pickPlane(clientX, clientY);
   if (!flight) { stopFollowingPlane(); return; }
+  followPlane(flight);
+}
+function followPlane(flight) {
   followed = { zoneId: flight.zone.id, index: flight.index };
   controls.minRadius = Math.max(1.2, flight.size*0.35);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, flight.size*2.6));
   showPlaneCard(planeCardInfo(flight));
+  const { zoneId, index } = followed;
+  planeCard.setFavorite({ key: 'plane:' + zoneId + ':' + index, kind: 'Plane', follow: () => {
+    const again = S.zones.find(z => z.id === zoneId)?.airportFlights?.[index];
+    if (!again) return false;
+    followPlane(again);
+    return true;
+  } });
 }
 function stopFollowingPlane() {
   if (!followed) return;
