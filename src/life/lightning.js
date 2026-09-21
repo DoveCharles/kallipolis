@@ -8,7 +8,7 @@ import { scene } from '../core/scene.js';
 // and a wider, fainter blue glow round it.
 const SEGMENTS_MAX = 400;
 const BOLT_HEIGHT = 140, BOLT_STEPS = 22, BOLT_JAG = 0.35; // how high it starts, in how many kinks, and how far each kink strays (against the step)
-const BOLT_LIFE = 0.45, BOLT_REDRAWS = [0, 0.12, 0.26]; // seconds it lasts, and when in that it's drawn afresh
+const BOLT_LIFE = 0.2, BOLT_REDRAWS = [0, 0.08]; // seconds it lasts, and when in that it's drawn afresh
 const CORE_WIDTH = 0.5, GLOW_WIDTH = 2.2;
 
 const boltGeometry = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0); // (from its base up: stretched between two points)
@@ -72,7 +72,7 @@ export function updateLightning(t) {
     const age = t - bolt.born;
     while (bolt.drawn + 1 < BOLT_REDRAWS.length && age >= BOLT_REDRAWS[bolt.drawn + 1]) { bolt.drawn++; drawBolt(bolt); }
     // it flickers: on hard at each redraw, fading until the next
-    const since = age - BOLT_REDRAWS[bolt.drawn], strength = Math.max(0, 1 - since/0.14)*(1 - age/BOLT_LIFE);
+    const since = age - BOLT_REDRAWS[bolt.drawn], strength = Math.max(0, 1 - since/0.1)*(1 - age/BOLT_LIFE);
     if (strength > brightest) { brightest = strength; lit = bolt; }
     if (strength < 0.05) continue;
     for (const [from, to, width] of bolt.segments) {
