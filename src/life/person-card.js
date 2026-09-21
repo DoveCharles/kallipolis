@@ -4,6 +4,7 @@ import { scene, renderer } from '../core/scene.js';
 import { HEADSHOT_LAYER } from './people/people.js';
 import { profileOf, onProfilesLoaded } from './profiles.js';
 import { makeCard } from '../ui/entity-card.js';
+import { personKey, reviveFavoritesAs } from '../ui/favorites.js';
 import { garbles, garbled } from '../ui/garble.js';
 
 // ============================================================ person card
@@ -38,10 +39,15 @@ function showPersonCard(index, isMan) {
   headshotDrawnAt = -Infinity;
   lightsOnLayer = false;
   if (again) setPersonCardDoing(doingNow, awayNow); else setPersonCardDoing(null);
-  // (their place in the crowd is who they are: see profileOf)
-  card.setFavorite({ key: 'person:' + index, kind: 'Person',
-    follow: () => { if (!App.people[index]) return false; App.followPerson(index); return true; } });
+  card.setFavorite(personFavorite(index));
 }
+// a person as a favorite: kept in the project, since their place in the crowd is who they are (see profileOf), and spared
+// the Kill button while hearted (see ui/favorites.js)
+function personFavorite(index) {
+  return { key: personKey(index), kind: 'Person', saved: { index }, spares: true,
+    follow: () => { if (!App.people[index]) return false; App.followPerson(index); return true; } };
+}
+reviveFavoritesAs('Person', saved => Number.isInteger(saved.index) && saved.index >= 0 ? personFavorite(saved.index) : null);
 // what they're up to (see personDoing in people/peopleTracking.js), and whether they're `away` — indoors, out of sight, so
 // the headshot greys over
 let doingNow = null, awayNow = false;

@@ -70,6 +70,8 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
     const on = !!favorite && isFavorite(favorite.key);
     heart.classList.toggle('on', on);
     heart.title = on ? 'Unfavorite' : 'Favorite';
+    // (something hearted that the favorites spare can't be killed, so there's no Kill button for it: see ui/favorites.js)
+    if (killButton) killButton.hidden = on && !!favorite.spares;
     heart.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="' + (on ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linejoin="round">'
       + '<path d="M12 20.5s-7.6-4.6-9.4-9.3C1.2 7.6 3.5 4 7.2 4c2.1 0 3.6 1.1 4.8 2.9C13.2 5.1 14.7 4 16.8 4c3.7 0 6 3.6 4.6 7.2-1.8 4.7-9.4 9.3-9.4 9.3z"/></svg>';
   }
@@ -91,8 +93,9 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
   const shot = document.createElement('div');
   shot.className = 'pc-shot';
   shot.append(canvas);
+  let killButton = null;
   if (kill) {
-    const button = document.createElement('button');
+    const button = killButton = document.createElement('button');
     button.className = 'btn danger pc-kill';
     button.title = kill.title || '';
     button.textContent = 'Kill';

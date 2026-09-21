@@ -357,6 +357,7 @@ button.pc-pick:hover { text-decoration:underline; }
 }
 .ph-sub { font-family:var(--mono); font-size:11px; color:var(--text-dim); }
 .pc-kill { width:62px; margin:0; padding:3px 0; font-size:11px; }
+.pc-kill[hidden] { display:none; }
 .pc-thumb {
   width:60px; height:60px;
   background:linear-gradient(#8fb8d6, #dde8ef); border:1px solid var(--border); border-radius:6px;

@@ -15,7 +15,7 @@ const undoStack = [], redoStack = [];
 let historyCurrent = null, historyTimer = null, historyRestoring = false;
 function historySnapshot() {
   const data = serializeProject();
-  delete data.exportedAt; delete data.mapImages; delete data.mapImageSeq;
+  delete data.exportedAt; delete data.mapImages; delete data.mapImageSeq; delete data.favorites; // (hearting isn't a step to undo)
   // with the day/night cycle running, the clock and the sun it moves change constantly — they aren't steps to undo
   if (data.scene.dayNight && data.scene.dayNight.enabled) { delete data.scene.dayNight.time; delete data.scene.sunElevation; delete data.scene.sunAzimuth; }
   return JSON.stringify(data);

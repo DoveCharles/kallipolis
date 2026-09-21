@@ -11,6 +11,7 @@ import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FIDGETS, LOOK_MAX_TILT, LOOK_MAX
 import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
+import { favoritePeople, isFavoritePerson } from '../../ui/favorites.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
@@ -578,7 +579,7 @@ export function fleeWithin(p, area) {
  */
 function killPerson(i, by = 'player', momentum = null) {
   const p = people[i];
-  if (!p || isGone(p)) return;
+  if (!p || isGone(p) || isFavoritePerson(i)) return; // (the hearted can't be killed: see ui/favorites.js)
   // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
   App.recordMoralityEvent?.(`${standingOf(p)} peds killed by ${by === 'car' ? 'cars' : 'player'}`, p.name);
   if (followed === i) stopFollowingPerson();
@@ -607,6 +608,26 @@ function killPerson(i, by = 'player', momentum = null) {
   p.indoors = null;
   p.moving = false;
   bloodBurst(p, momentum); // (whoever's near, or in the way of what killed them, is splashed)
+}
+/**
+ * Take someone out of the crowd without killing them, for a crowd thinned past them that has to reach further on for
+ * someone hearted: out of sight, as the dead are (so everything that passes over the dead passes over them), until the
+ * crowd grows back over them and they're spawned again (see updatePeople).
+ * @param {number} i - their index in people
+ * @returns {void}
+ */
+function benchPerson(i) {
+  const p = people[i];
+  if (followed === i) stopFollowingPerson();
+  if (awaited === i) setAwaited(-1);
+  if (riderFollowed === i) setRiderFollowed(-1);
+  endActivity(p);
+  p.crossStage = null; p.jc = null;
+  p.mode = 'dead';
+  p.benched = true;
+  p.train = null;
+  p.indoors = null;
+  p.moving = false;
 }
 /**
  * Whether this person is walking over a road (see updateCrossing) — treated like someone standing in the middle of it
@@ -674,9 +695,13 @@ export function updatePeople(t) {
     people.forEach(reseatPerson);
   }
   if (S.showPeopleNavDebug && peopleNavDebugBuiltAt !== peopleNavBuiltAt) { setPeopleNavDebugBuiltAt(peopleNavBuiltAt); rebuildPeopleNavDebug(); }
-  const wanted = Math.min(PEOPLE_MAX, Math.round(S.peopleAmount));
-  while (people.length < wanted) { const p = newPerson(); spawnPerson(p); people.push(p); }
-  while (people.length > wanted) endActivity(people.pop());
+  // (the hearted are never let go of: the crowd reaches as far as the last of them, and anyone past `wanted` who isn't
+  // hearted is benched — out of sight, as the dead are, until the crowd grows back over them. See ui/favorites.js)
+  const wanted = Math.min(PEOPLE_MAX, Math.round(S.peopleAmount)), kept = Math.min(PEOPLE_MAX, Math.max(wanted, (favoritePeople()[0] ?? -1) + 1));
+  while (people.length < kept) { const p = newPerson(); spawnPerson(p); people.push(p); }
+  while (people.length > kept) endActivity(people.pop());
+  for (let i = wanted; i < people.length; i++) if (!people[i].benched && !isFavoritePerson(i)) benchPerson(i);
+  for (let i = 0; i < Math.min(wanted, people.length); i++) if (people[i].benched) { people[i].benched = false; people[i].mode = 'none'; } // (spawned again below)
   if (followed >= people.length) stopFollowingPerson();
   if (riderFollowed >= people.length) setRiderFollowed(-1);
   peopleMesh.count = people.length;

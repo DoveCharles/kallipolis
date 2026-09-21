@@ -11,6 +11,7 @@ import { subdivideZone } from '../zones/cutouts.js';
 import { renderHierarchy, renderWorldTintPanel } from '../ui/panels.js';
 import { restoreObjects } from '../objects/objects.js';
 import { cancelActiveDrawing, applyModeVisibility } from '../editor/tools.js';
+import { savedFavorites, restoreFavorites } from '../ui/favorites.js';
 
 // ============================================================ project save / load
 const PROJECT_FORMAT_VERSION = 1;
@@ -63,6 +64,7 @@ export function serializeProject() {
       dayNight: { enabled: S.dayNightEnabled, dayLength: S.dayLengthMinutes, time: S.timeOfDay },
       weather: { rain: S.weatherRain, snow: S.weatherSnow, clouds: S.weatherClouds }
     },
+    favorites: savedFavorites(), // (only those that can be found again in a reloaded city: see ui/favorites.js)
     roads: {
       nodeSeq: S.roadNodeSeq, lineSeq: S.roadLineSeq, networkSeq: S.roadNetworkSeq,
       nodes,
@@ -202,6 +204,7 @@ export async function loadProjectFromData(data, options) {
   document.getElementById('s-grassnoise').value = S.globalGrassNoiseStrength;
   document.getElementById('dv-grassnoise').textContent = S.globalGrassNoiseStrength.toFixed(2);
   renderWorldTintPanel();
+  if (!keepMaps) restoreFavorites(data.favorites); // (undo and redo leave the favorites alone: they aren't steps to undo)
   if (sc.people) {
     S.peopleEnabled = !!sc.people.enabled;
     if (sc.people.amount != null) S.peopleAmount = sc.people.amount;
