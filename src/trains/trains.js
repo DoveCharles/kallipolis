@@ -10,6 +10,7 @@ import { IS_TOUCH } from '../core/device.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
+import { updateShuttleSounds } from '../audio/maglev.js';
 
 // ---------------------------------------------------------- the carriage card
 // Which carriage the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the car's: its
@@ -684,7 +685,10 @@ function orientAlongTrack(object, tangent) {
   const up = new THREE.Vector3().crossVectors(forward, right);
   object.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, forward));
 }
+let lastShuttleFrame = null;
 export function updateTrainShuttles(t) {
+  const dt = lastShuttleFrame == null ? 0 : Math.max(0, t - lastShuttleFrame); // (uncapped: it only measures the carriages' speed)
+  lastShuttleFrame = t;
   const ease = x => x*x*(3 - 2*x);
   trainShuttles.forEach(s => {
     let phase = (t + s.offset) % s.cycle, along = s.steps[0].at, stopNode = null;
@@ -705,6 +709,7 @@ export function updateTrainShuttles(t) {
     orientAlongTrack(s.object, tangent);
     s.object.visible = true;
   });
+  updateShuttleSounds(trainShuttles, dt); // (the hum, the charge-up and the chime: see audio/maglev.js)
   if (followedTrain && S.interactionMode !== 'move') stopFollowingTrain();
   // the camera onto the carriage it's following
   const followed = followedTrain && trainShuttles.find(s => s.lineId === followedTrain);

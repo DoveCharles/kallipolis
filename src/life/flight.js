@@ -72,6 +72,7 @@ export function stepFlight(hand, dt, { scale, size, floor, ceiling = FLY_CEILING
   if (sinking > 0 && hand.pitch > -0.35) { hand.pitch = toward(hand.pitch, -0.35, FLY_LEVEL*sinking); hand.pitchRate = Math.min(hand.pitchRate, 0); }
   // speed: the throttle against the drag, less whatever the climb is costing (or the dive paying back)
   const throttle = (brake ? -FLY_POWER : run ? FLY_POWER : 0)*scale;
+  hand.thrust = brake ? 0.2 : run ? 1 : grounded ? 0.3 : 0.6; // (how hard the engines are working, for their sound: see audio/aircraft.js)
   const power = throttle + (grounded ? -hand.speed*FLY_ROLLING : (cruise - hand.speed)*FLY_DRAG/cruise);
   hand.speed = Math.max(grounded ? 0 : stall*0.6, Math.min(FLY_SPEED_MAX*scale,
     hand.speed + (power - Math.sin(hand.pitch)*FLY_GRAVITY*scale)*dt));

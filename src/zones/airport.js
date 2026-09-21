@@ -16,6 +16,7 @@ import { streetSegmentsNear, streetFor } from './suburbs.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
+import { updateAircraftSounds } from '../audio/aircraft.js';
 
 // ---------------------------------------------------------- the aircraft card
 // Which aircraft the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the train's: its
@@ -693,6 +694,7 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
       // out of the cloud and down the slope, steep at first and flattening over the threshold, the nose coming down to
       // follow it and then up in the flare
       const u = phase/APPROACH_TIME, p = onRunway(arrive, touchdown - glideRun*(1 - u));
+      plane.userData.thrust = 0.45;
       poseAircraft(plane, p.x, Y_TARMAC + cloudTop*rise(1 - u), p.z, inDx, inDz, approachPitch(u));
       return smooth(u/APPROACH_FADE);
     }
@@ -700,6 +702,7 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
     if (phase < ROLLOUT_TIME) {
       // wheels down, nose lowering, braking hard at first and coasting the last of it to the turnoff
       const u = phase/ROLLOUT_TIME, p = onRunway(arrive, touchdown + (turnoff - touchdown)*(1 - (1 - u)*(1 - u)));
+      plane.userData.thrust = 0.3 + 0.6*(1 - u); // (the reversers roaring as it brakes, easing off)
       const { hop, rock, dip } = touchdownBounce(phase, plane.userData.span);
       poseAircraft(plane, p.x, Y_TARMAC + hop, p.z, inDx, inDz, Math.max(0, touchdownPitch*(1 - smooth(u/TOUCHDOWN_SETTLE)) - dip), rock);
       return;
@@ -707,11 +710,13 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
     phase -= ROLLOUT_TIME;
     if (phase < taxiIn) {
       const p = alongPath(paths.in, phase/taxiIn*inLength);
+      plane.userData.thrust = 0.25;
       poseAircraft(plane, p.x, Y_TARMAC, p.z, p.dx, p.dz, 0);
       return;
     }
     phase -= taxiIn;
     if (phase < dwell) {
+      plane.userData.thrust = 0; // (engines off on the stand)
       poseAircraft(plane, onStand.x, Y_TARMAC, onStand.z, standDx, standDz, 0);
       return;
     }
@@ -719,24 +724,28 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
     if (phase < PUSH_TIME) {
       // pushed back off the stand: it moves out to the taxiway still facing the terminal, because the tug is doing the work
       const p = alongPath(paths.push, phase/PUSH_TIME*pushLength);
+      plane.userData.thrust = 0.15; // (starting up as the tug does the work)
       poseAircraft(plane, p.x, Y_TARMAC, p.z, -p.dx, -p.dz, 0);
       return;
     }
     phase -= PUSH_TIME;
     if (phase < taxiOut) {
       const p = alongPath(paths.out, phase/taxiOut*outLength);
+      plane.userData.thrust = 0.3;
       poseAircraft(plane, p.x, Y_TARMAC, p.z, p.dx, p.dz, 0);
       return;
     }
     phase -= taxiOut;
     if (phase < HOLD_TIME) {
       const p = onRunway(leave, holdShort);
+      plane.userData.thrust = 0.35;
       poseAircraft(plane, p.x, Y_TARMAC, p.z, outDx, outDz, 0);
       return;
     }
     phase -= HOLD_TIME;
     if (phase < ROLL_TIME) {
       const u = phase/ROLL_TIME, p = onRunway(leave, holdShort + liftoff*u*u);
+      plane.userData.thrust = 1;
       // the nose comes up over the last of the roll, just before the wheels leave
       poseAircraft(plane, p.x, Y_TARMAC, p.z, outDx, outDz, LIFTOFF_PITCH*smooth((u - 0.75)/0.25));
       return;
@@ -746,6 +755,7 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
       // up off the runway, slowly at first and ever more steeply into the cloud, fading out as it goes; the nose eases
       // from the attitude it left the ground at to the climbing one, and on up if the path steepens past it
       const w = phase/climbTime, p = onRunway(leave, holdShort + liftoff + glideRun*phase/CLIMB_TIME);
+      plane.userData.thrust = 1;
       const climb = Math.atan(cloudTop*riseSlope(w)/(glideRun*climbTime/CLIMB_TIME));
       const pitch = LIFTOFF_PITCH + (CLIMB_PITCH - LIFTOFF_PITCH)*smooth(phase/CLIMB_ROTATE_TIME);
       poseAircraft(plane, p.x, Y_TARMAC + cloudTop*rise(w), p.z, outDx, outDz, Math.max(pitch, Math.min(climb, MAX_PATH_PITCH)));
@@ -774,6 +784,7 @@ function makeCircuit(heli, pad, radius, heading) {
   return (t) => {
     heli.userData.rotors.forEach(({ object, axis, speed }) => { object.rotation[axis] = t*speed; });
     let phase = ((t % cycle) + cycle) % cycle;
+    heli.userData.thrust = phase < HELI_IDLE ? 0.35 : 1; // (idling on the pad with the rotors turning; working hard once it lifts)
     if (phase < HELI_IDLE) { poseAircraft(heli, pad.x, Y_TARMAC, pad.z, heading.dx, heading.dz, 0); return; }
     phase -= HELI_IDLE;
     if (phase < HELI_LIFT) {
@@ -1043,6 +1054,7 @@ export function generateAirportContent(zone, poly, cutouts, blockers) {
   // ---- the aircraft, which are the most alive thing on the zone
   zone.airportAnim = null;
   zone.airportFlights = [];
+  zone.airportHeli = null;
   // where the camera falls back to while the aircraft it was watching is away over the horizon (see updateAirports)
   zone.airportField = { x: frame.center.x, z: frame.center.z, radius: Math.max(60, chord.length*0.6) };
   if (s.airportAircraft !== false) {
@@ -1051,6 +1063,7 @@ export function generateAirportContent(zone, poly, cutouts, blockers) {
       zone.buildingsGroup.add(heli);
       const extent = Math.max(L*2, 60);
       zone.airportAnim = makeCircuit(heli, frame.center, extent*0.7, { dx: frame.dx, dz: frame.dz });
+      zone.airportHeli = heli; // (for its sound: see updateAirports)
     } else {
       const jet = tier.id !== 'airstrip';
       // without a terminal there's no taxiway either, so they use the grass just outside the runway edge
@@ -1079,6 +1092,7 @@ export function generateAirportContent(zone, poly, cutouts, blockers) {
         Math.max(...routes.map(r => pathLength(r.out))), routes.length);
       zone.airportFlights = routes.map((route, k) => {
         const plane = buildAircraft(tier.width*0.8, rng, jet);
+        plane.userData.jet = jet;
         zone.buildingsGroup.add(plane);
         // half a cycle apart: as one lands the other is already sitting on its stand, waiting its turn to go
         const fly = makeFlight(plane, sched, route, frame, { touchdown, turnoff, holdShort, arrive: route.arrive, leave: route.leave },
@@ -1286,6 +1300,15 @@ export function updateAirports(t) {
   frameSeconds = dt; // what the control surfaces and the undercarriage ease over (see workSurfaces)
   S.zones.forEach(zone => { if (zone.airportAnim) zone.airportAnim(t, dt); });
   updatePlaneFollow();
+  // their engines (see audio/aircraft.js): a hand-flown one working as hard as the keys say, the rest as their round does
+  const heard = [];
+  S.zones.forEach(zone => {
+    (zone.airportFlights || []).forEach(({ plane, hand }) => { if (plane.visible) heard.push({ object: plane,
+      kind: plane.userData.jet ? 'jet' : 'prop', thrust: hand ? hand.thrust ?? 0.5 : plane.userData.thrust ?? 0 }); });
+    const heli = zone.airportHeli;
+    if (heli?.visible && heli.parent) heard.push({ object: heli, kind: 'heli', thrust: heli.userData.thrust ?? 0.35 });
+  });
+  updateAircraftSounds(heard);
 }
 
 // ---- following an aircraft with the camera: a click on one in World mode keeps the view on it, with a card naming it,
