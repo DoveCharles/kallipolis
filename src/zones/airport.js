@@ -16,7 +16,7 @@ import { streetSegmentsNear, streetFor } from './suburbs.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
-import { updateAircraftSounds, cabinChime } from '../audio/aircraft.js';
+import { updateAircraftSounds, cabinChime, tyreChirp } from '../audio/aircraft.js';
 
 // ---------------------------------------------------------- the aircraft card
 // Which aircraft the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the train's: its
@@ -692,6 +692,7 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
     let phase = (((t - shift) % cycle) + cycle) % cycle;
     plane.visible = true;
     plane.userData.aloft = false;
+    plane.userData.landed = false;
     if (phase < APPROACH_TIME) {
       // out of the cloud and down the slope, steep at first and flattening over the threshold, the nose coming down to
       // follow it and then up in the flare
@@ -705,6 +706,7 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
       // wheels down, nose lowering, braking hard at first and coasting the last of it to the turnoff
       const u = phase/ROLLOUT_TIME, p = onRunway(arrive, touchdown + (turnoff - touchdown)*(1 - (1 - u)*(1 - u)));
       plane.userData.thrust = 0.3 + 0.6*(1 - u); // (the reversers roaring as it brakes, easing off)
+      plane.userData.landed = true; // (its wheels on the runway: see the chirp of the tyres in updateAirports)
       const { hop, rock, dip } = touchdownBounce(phase, plane.userData.span);
       poseAircraft(plane, p.x, Y_TARMAC + hop, p.z, inDx, inDz, Math.max(0, touchdownPitch*(1 - smooth(u/TOUCHDOWN_SETTLE)) - dip), rock);
       return;
@@ -1318,6 +1320,12 @@ export function updateAirports(t) {
       if (aloft && !flight.aloft && (flight === flown || flight === followedFlight())) cabinChime();
       if (aloft && hand) flight.grounded = false;
       flight.aloft = aloft;
+      // the tyres' chirp as the wheels meet the runway: coming off the approach, or flown down onto it from well up
+      if (hand && height > flight.size*0.3) flight.airborne = true;
+      const landed = hand ? flight.airborne && height < flight.size*0.13 : !!plane.userData.landed;
+      if (landed && !flight.landed) tyreChirp(plane.position, flight.size);
+      if (landed && hand) flight.airborne = false;
+      flight.landed = landed;
     });
     const heli = zone.airportHeli;
     if (heli?.visible && heli.parent) heard.push({ object: heli, kind: 'heli', thrust: heli.userData.thrust ?? 0.35 });

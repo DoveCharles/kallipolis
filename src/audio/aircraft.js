@@ -32,13 +32,17 @@ const voices = []; // { out, roar, roarFilter, whines, buzz, buzzFilter, buzzGai
 let noise = null;
 const where = new THREE.Vector3();
 
-function makeVoice() {
-  const context = listener.context;
+function noiseBuffer(context) {
   if (!noise) {
     noise = context.createBuffer(1, context.sampleRate*2, context.sampleRate);
     const data = noise.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random()*2 - 1;
   }
+  return noise;
+}
+
+function makeVoice() {
+  const context = listener.context;
   const out = context.createGain();
   out.gain.value = 0;
   // (the chop: a gain taken most of the way down and back at each blade pass, for a helicopter; left open for the rest)
@@ -52,7 +56,7 @@ function makeVoice() {
   panner.distanceModel = 'inverse';
   chop.connect(out).connect(panner).connect(listener.getInput());
   const source = context.createBufferSource(), roarFilter = context.createBiquadFilter(), roar = context.createGain();
-  source.buffer = noise;
+  source.buffer = noiseBuffer(context);
   source.loop = true;
   roarFilter.type = 'lowpass';
   roarFilter.Q.value = 0.7;
@@ -149,4 +153,53 @@ export function cabinChime() {
     return oscillator;
   }));
   oscillators[oscillators.length - 1].onended = () => gain.disconnect();
+}
+
+// The tyres touching down: a chirp from each side of the main gear a moment apart, "errk-errk" — a rush of noise through a
+// narrow band sweeping down, with a thin squeal in it — louder and lower for a bigger aircraft.
+const CHIRPS = [[0, 1], [0.09, 0.7]]; // [seconds after touching down, how loud]
+const CHIRP_TIME = 0.2, CHIRP_VOLUME = 0.35, CHIRP_NEAR = 40, CHIRP_HZ = 2200;
+/**
+ * The chirp of an aircraft's tyres meeting the runway.
+ * @param {{x: number, y: number, z: number}} at - where it touched down
+ * @param {number} size - its wingspan
+ * @returns {void}
+ */
+export function tyreChirp(at, size) {
+  const context = listener.context;
+  if (context.state !== 'running' || Math.hypot(at.x - camera.position.x, at.y - camera.position.y, at.z - camera.position.z) > HEAR_DISTANCE) return;
+  const now = context.currentTime, hz = CHIRP_HZ/Math.sqrt(Math.max(0.5, size/20));
+  const panner = context.createPanner();
+  panner.panningModel = 'equalpower';
+  panner.distanceModel = 'inverse';
+  panner.refDistance = CHIRP_NEAR;
+  panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
+  panner.connect(listener.getInput());
+  const sources = CHIRPS.flatMap(([after, level]) => {
+    const start = now + after, end = start + CHIRP_TIME*(0.8 + Math.random()*0.4);
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(CHIRP_VOLUME*level, start + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, end);
+    gain.connect(panner);
+    const source = context.createBufferSource(), band = context.createBiquadFilter();
+    source.buffer = noiseBuffer(context);
+    band.type = 'bandpass';
+    band.Q.value = 6;
+    band.frequency.setValueAtTime(hz*1.1, start);
+    band.frequency.exponentialRampToValueAtTime(hz*0.7, end);
+    source.connect(band).connect(gain);
+    source.start(start, Math.random());
+    source.stop(end + 0.02);
+    const squeal = context.createOscillator(), squealLevel = context.createGain();
+    squeal.frequency.setValueAtTime(hz*0.85, start);
+    squeal.frequency.exponentialRampToValueAtTime(hz*0.6, end);
+    squealLevel.gain.value = 0.15;
+    squeal.connect(squealLevel).connect(gain);
+    squeal.start(start);
+    squeal.stop(end + 0.02);
+    return [source, squeal];
+  });
+  sources[sources.length - 1].onended = () => panner.disconnect();
 }
