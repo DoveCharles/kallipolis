@@ -1344,7 +1344,7 @@ Preaching [chatty = 5, talkative = 10]
 Foreign cigarettes
 Suicide, as a concept [mood = 0.4]
 Trying to kiss the dentist [evil = 0.05]
-Getting older [mood = 0.4, evil = -0.05, agemult = 1.3, bleach]
+Getting older [mood = 0.4, evil = -0.05, agemult = 1.3]
 Summary execution [evil = 0.2, aggression = 2]
 Curried favours
 Saying, "this is true" [chatty = 2]

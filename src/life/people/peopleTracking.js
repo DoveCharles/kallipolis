@@ -5,7 +5,7 @@ import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
 import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, isGone, modelScale, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
-import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, endActivity, isFairGame, knockOver } from './peopleActivities.js';
+import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, canBeKnockedOver, endActivity, knockOver } from './peopleActivities.js';
 import { reseatPerson } from './peoplePathing.js';
 
 // ============== following someone with camera  ============== 
@@ -222,8 +222,8 @@ export function placePossessedCamera(i) {
 // swing plays wherever they are standing and lands on the nearest person within SWING_REACH ahead and SWING_ARC, at the
 // moment the fist arrives — knocking them flat, as any punch does — or on nobody.
 /** Who a swing can reach: how far ahead of them (at people size 1), and how near dead ahead they have to be. */
-const SWING_REACH = 1.9;
-const SWING_ARC = Math.cos(Math.PI/3);
+const SWING_REACH = 3.4;
+const SWING_ARC = Math.cos(Math.PI*4/9);
 /** The punch being thrown: { timer } — how long until the fist lands. */
 let swing = null;
 /**
@@ -251,7 +251,7 @@ export function updateSwing(p, dt) {
   let hit = null;
   let nearest = SWING_REACH*S.peopleSize;
   people.forEach(q => {
-    if (q === p || isGone(q) || !isFairGame(q)) return;
+    if (q === p || isGone(q) || !canBeKnockedOver(q)) return;
     const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
     if (d > nearest || d < 1e-3 || (dx*fx + dz*fz)/d < SWING_ARC) return;
     hit = q; nearest = d;

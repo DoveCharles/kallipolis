@@ -563,15 +563,30 @@ export function knockDown(t, p) {
   t.pose = 'Fallen';
 }
 
+/** The modes whose people can't be knocked over: the one being controlled, and anyone dead, not yet placed or out of sight. */
+const UNREACHABLE_MODES = ['possessed', 'dead', 'none', 'indoors'];
 /**
- * Knock someone over as if they'd been punched, by whatever is at `from` ({ x, z }): flat on their back, facing it. Only
- * someone going about their business can be (see isFairGame).
+ * Whether someone can be knocked over by a blow they didn't see coming: anyone in view, whatever they're in the middle of or
+ * feeling (walking, leaving a plaza, riding a train, sitting, chatting, lying down, crossing a road, frightened, stunned,
+ * delighted, about to be punched by someone else), unless they're already down or getting up.
+ * @param {Person} q - the person
+ * @returns {boolean} whether a blow would land
+ */
+export const canBeKnockedOver = q => !UNREACHABLE_MODES.includes(q.mode) && (!q.punched || q.punched.stage === 'marked' || q.punched.stage === 'brace');
+
+/**
+ * Knock someone over as if they'd been punched, by whatever is at `from` ({ x, z }): flat on their back, facing it, out
+ * of whatever they were doing (see canBeKnockedOver).
  * @param {Person} t - the one being hit
  * @param {{x: number, z: number}} from - where the blow came from
  * @returns {boolean} whether they went down
  */
 export function knockOver(t, from) {
-  if (isGone(t) || !isFairGame(t) || !hasClip('Fall')) return false;
+  if (isGone(t) || !canBeKnockedOver(t) || !hasClip('Fall')) return false;
+  releasePunched(t); // (whoever was coming to punch them gives up)
+  if (t.act || t.attack) finishActivity(t);
+  t.fright = t.stun = t.please = null;
+  t.crossStage = null; t.jc = null; // (a car yielding to them stops)
   t.punched = { by: from, stage: 'brace', timer: 0 };
   knockDown(t, from);
   return true;
