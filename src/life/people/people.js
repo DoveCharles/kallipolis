@@ -1,6 +1,7 @@
 import { App, S } from '../../core/shared.js';
 import { mulberry32 } from '../../core/math.js';
 import { buildingTypeOf } from '../../buildings/building-types.js';
+import { roomHolds, roomVisit } from '../../buildings/interior.js';
 import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
@@ -221,6 +222,14 @@ export let riderFollowed = -1;
  */
 export const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode === 'train' && p.train.stage === 'ride')
   || (p.mode === 'indoors' && p.indoors.stage === 'inside');
+/**
+ * Whether this person is inside the building the camera's gone into, and so drawn in its room (see buildings/interior.js)
+ * though they count as gone for everything else.
+ * @param {Person} p - the person
+ * @returns {boolean} whether they're in the room
+ */
+export const inRoom = p => p.mode === 'indoors' && p.indoors.stage === 'inside' && !!p.inRoom
+  && p.inRoom.visit === roomVisit() && roomHolds(p.indoors.building.key);
 export let indoorsCount = 0;
 /**
  * What a building's called on the card of whoever's in it: its kind's name and its own number (see building-types.js).
@@ -366,7 +375,7 @@ export function newPerson() {
     train: null, trainCooldown: 20 + peopleRng()*40,
     // going into a building (see "going indoors"): where they are in it (null if they aren't), and how long until they
     // consider going into one again
-    indoors: null, indoorsCooldown: 10 + peopleRng()*30,
+    indoors: null, inRoom: null, indoorsCooldown: 10 + peopleRng()*30,
     // punching (see "punching"): who they're going for, how far along it they are, how long until they consider it again,
     // and being punched themselves
     attack: null, punchCooldown: 10 + peopleRng()*30, punched: null };
@@ -905,7 +914,7 @@ export function updatePeople(t) {
     // standing still for something (talking, sitting down), they turn to face the way it wants
     if (!p.moving && p.faceTo != null) p.heading += wrapAngle(p.faceTo - p.heading)*Math.min(1, dt*5);
     if (personModel) {
-      const clipSet = personModel.clips, s = isGone(p) ? 0 : modelScale(p);
+      const clipSet = personModel.clips, s = isGone(p) && !inRoom(p) ? 0 : modelScale(p);
       // a cycle of the walk for every stride's worth of ground covered, as big as they are (played in reverse, backwards)
       if (s > 0) p.walkCycle = (p.walkCycle + (p.traits.backwards ? -1 : 1)*p.stepped/(personModel.stride*s) + 1) % 1;
       p.idleTime += dt;
@@ -1006,7 +1015,7 @@ export function updatePeople(t) {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
       const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;
       rotation.setFromAxisAngle(up, p.heading);
-      if (isGone(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
+      if (isGone(p) && !inRoom(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
       matrix.compose(position.set(p.x, p.y + bob, p.z), rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);
     }

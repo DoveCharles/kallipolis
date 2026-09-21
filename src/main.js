@@ -72,6 +72,7 @@ import { loadBeeModel, updateBees } from './life/bees.js';
 import { updateAirports, loadPlaneModel } from './zones/airport.js';
 import { loadHouseModels } from './zones/suburbs.js';
 import { updateBuildingFollow } from './buildings/building-card.js';
+import { updateInteriorCamera } from './buildings/interior.js';
 import { hideBuildingsAroundCamera } from './buildings/see-through.js';
 import { renderView } from './ui/pixelation.js';
 
@@ -140,6 +141,7 @@ function animate() {
   updateAirports(t);
   updateTraffic(t);
   updateBuildingFollow();
+  updateInteriorCamera();
   updateTrafficLights(t);
   updateDayNight(t);
   updateWeather(t);

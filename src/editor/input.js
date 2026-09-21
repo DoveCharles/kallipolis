@@ -85,7 +85,7 @@ function updateGesture() {
   // shouldn't, and two fingers closing always drag the middle about a little. So it's the distance the middle has
   // travelled over the whole gesture that decides, rather than any one frame's.
   gesture.travelled += Math.hypot(dx, dy);
-  if (gesture.travelled > 24) { App.stopFollowingPerson(); App.stopFollowingBuilding(); App.stopFollowingBee(); App.stopFollowingHive(); }
+  if (gesture.travelled > 24 && !controls.locked) { App.stopFollowingPerson(); App.stopFollowingBuilding(); App.stopFollowingBee(); App.stopFollowingHive(); }
   controls.pan(dx, dy);
   if (gesture.dist > 8 && now.dist > 8) controls.zoomBy(gesture.dist / now.dist);
   gesture = { ...now, travelled: gesture.travelled };
@@ -259,7 +259,7 @@ dom.addEventListener('pointermove', (e) => {
   if (isCameraDragging) {
     const { dx, dy } = pointerDelta(e);
     // panning takes the camera off whoever it's following; orbiting keeps it on them
-    if (dragMode==='pan') { App.stopFollowingPerson(); App.stopFollowingBuilding(); App.stopFollowingBee(); App.stopFollowingHive(); controls.pan(dx, dy); } else controls.orbit(dx, dy);
+    if (dragMode==='pan') { if (!controls.locked) { App.stopFollowingPerson(); App.stopFollowingBuilding(); App.stopFollowingBee(); App.stopFollowingHive(); } controls.pan(dx, dy); } else controls.orbit(dx, dy);
     return;
   }
   if (S.draggedNode) {
@@ -311,9 +311,9 @@ dom.addEventListener('pointermove', (e) => {
     previewLine.visible = false;
     insertPreviewMarker.visible = false;
     setHover(null);
-    const overClickable = App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
+    const overClickable = !App.isInsideBuilding() && (App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
       || !!App.pickPlane(e.clientX, e.clientY) || !!App.pickBee(e.clientX, e.clientY) || !!App.pickHive(e.clientX, e.clientY)
-      || !!App.pickBuilding(e.clientX, e.clientY);
+      || !!App.pickBuilding(e.clientX, e.clientY));
     if (overClickable !== hoveringClickable) { hoveringClickable = overClickable; dom.style.cursor = overClickable ? 'pointer' : ''; }
     return;
   }
@@ -419,8 +419,9 @@ dom.addEventListener('pointerup', (e) => {
     if (was.button===0 && dist<CLICK_SLOP && dt<600 && S.interactionMode==='node') {
       handleLeftClick(e.clientX, e.clientY);
       S.lastGroundClick = { x:e.clientX, y:e.clientY, time:performance.now() };
-    } else if (was.button===0 && dist<CLICK_SLOP && dt<600 && S.interactionMode==='move') {
+    } else if (was.button===0 && dist<CLICK_SLOP && dt<600 && S.interactionMode==='move' && !App.isInsideBuilding()) {
       // a click on someone or something has the camera follow them; anywhere else lets go of both
+      // (not from inside a building, where the view's held in the room until Leave: see buildings/interior.js)
       if (App.pickBee(e.clientX, e.clientY)) { letGoOfAllBut('Bee'); App.followBeeAt(e.clientX, e.clientY); }
       else if (App.pickPerson(e.clientX, e.clientY) >= 0) { letGoOfAllBut('Person'); App.followPersonAt(e.clientX, e.clientY); }
       else if (App.pickCar(e.clientX, e.clientY) >= 0) { letGoOfAllBut('Car'); App.followCarAt(e.clientX, e.clientY); }
@@ -534,7 +535,8 @@ window.addEventListener('keydown', (e) => {
     else { cancelObjectTransform(); startObjectTransform(mode, raycastGround(S.lastMouseX, S.lastMouseY)); }
     return;
   }
-  if (e.key==='Escape') { App.hideContextMenu(); cancelActiveDrawing(); }
+  if (e.key==='Escape' && App.isInsideBuilding()) App.leaveBuildingInside();
+  else if (e.key==='Escape') { App.hideContextMenu(); cancelActiveDrawing(); }
   else if (e.key==='Enter') finishActiveDrawing();
   else if (e.key==='7') controls.snapTop();
   else if (e.key==='1') controls.snapFront();

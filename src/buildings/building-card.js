@@ -6,6 +6,7 @@ import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
 import { buildingKey, buildingNumber } from './footprints.js';
 import { buildingKindOf, buildingTypeOf } from './building-types.js';
+import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 
 // ============================================================ following a building
 // As for a car or a carriage: a click on a building in World mode keeps the view on it, with a card at the bottom right
@@ -13,10 +14,18 @@ import { buildingKindOf, buildingTypeOf } from './building-types.js';
 // assets/buildings.txt, by its kind — see building-types.js) and who's inside
 // (see "going indoors" in people.js), until a click elsewhere, a pan, leaving World mode, or its zone being rebuilt lets it go.
 // The card itself is the shared one in ui/entity-card.js. No Kill button, and nothing to be behind the wheel of.
-// followed: { zone, group, key, center } of the building the camera's on, or null
+// followed: { zone, group, key, center, room } of the building the camera's on (room: its inside, see roomLayoutOf), or null
 let followed = null;
 const raycaster = new THREE.Raycaster();
-const card = makeCard({ id: 'building-card', title: 'Building', onClose: () => stopFollowingBuilding() });
+const ENTER = ['Enter', 'Go inside'], LEAVE = ['Leave', 'Back outside'];
+const card = makeCard({ id: 'building-card', title: 'Building', onClose: () => stopFollowingBuilding(),
+  action: { text: ENTER[0], title: ENTER[1], onClick: () => toggleInside() } });
+// the card's Enter button: into the followed building's one room (see interior.js), and back out
+function toggleInside() {
+  if (!followed) return;
+  if (isInsideBuilding()) leaveBuilding(); else enterBuilding(followed.group, followed.key, followed.room);
+  card.setAction(...(isInsideBuilding() ? LEAVE : ENTER));
+}
 const drawThumbnail = makeThumbnailDrawer(card.canvas);
 
 // every zone's buildings (a zone's own children named 'Building': city blocks', industrial yards' and farmsteads')
@@ -45,15 +54,21 @@ function followBuildingAt(clientX, clientY) {
   if (!picked) { stopFollowingBuilding(); return; }
   followBuilding(picked);
 }
+// What's inside (a layout in interior.js): about half the buildings zones' blocks are offices, by their number so each
+// is the same every time; everything else is a home.
+const roomLayoutOf = (kind, number) => kind === 'buildings' && number % 2 === 0 ? 'office' : 'home';
 // `picked` as pickBuilding finds it
 function followBuilding(picked) {
+  leaveBuilding();
+  card.setAction(...ENTER);
   const box = new THREE.Box3().setFromObject(picked.group), center = box.getCenter(new THREE.Vector3());
   const radius = box.getBoundingSphere(new THREE.Sphere()).radius;
-  const key = buildingKey(picked.zone, picked.index);
-  followed = { zone: picked.zone, group: picked.group, key, center };
+  const key = buildingKey(picked.zone, picked.index), number = buildingNumber(key);
+  const kind = buildingKindOf(picked.group, picked.zone);
+  followed = { zone: picked.zone, group: picked.group, key, center, room: roomLayoutOf(kind, number) };
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(CAMERA_MIN_RADIUS, Math.min(600, radius*2.8));
-  const number = buildingNumber(key), info = buildingTypeOf(buildingKindOf(picked.group, picked.zone), number);
+  const info = buildingTypeOf(kind, number);
   card.show({ ...info, name: info.name + ' #' + number });
   setBuildingCardInhabitants([]);
   drawThumbnail(thumbnailOf(picked.group, box, center, radius));
@@ -66,6 +81,7 @@ function followBuilding(picked) {
 }
 function stopFollowingBuilding() {
   if (!followed) return;
+  leaveBuilding();
   followed = null;
   card.hide();
 }
@@ -95,7 +111,7 @@ export function updateBuildingFollow() {
   if (!followed) return;
   const { zone, group, center } = followed;
   if (S.interactionMode !== 'move' || !S.zones.includes(zone) || group.parent !== zone.buildingsGroup) { stopFollowingBuilding(); return; }
-  controls.goalTarget.copy(center);
+  if (!isInsideBuilding()) controls.goalTarget.copy(center); // (inside, the room holds the camera: see interior.js)
 }
 
-Object.assign(App, { pickBuilding, followBuildingAt, stopFollowingBuilding, followedBuildingKey, setBuildingCardInhabitants });
+Object.assign(App, { isInsideBuilding, leaveBuildingInside: () => { if (isInsideBuilding()) toggleInside(); }, pickBuilding, followBuildingAt, stopFollowingBuilding, followedBuildingKey, setBuildingCardInhabitants });

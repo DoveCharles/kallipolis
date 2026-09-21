@@ -137,6 +137,8 @@
  * @property {?object} train - where they are in riding the trains
  * @property {number} trainCooldown
  * @property {?object} indoors - where they are in going into a building
+ * @property {?{visit: number, goal: ?object, wait: number}} inRoom - where they are in the room, while the camera's inside
+ *   the building with them (see aboutTheRoom in peopleActivities.js)
  * @property {number} indoorsCooldown
  * @property {?object} attack - who they're punching, and how far along they are
  * @property {?object} punched - who's punching them, and how far along they are

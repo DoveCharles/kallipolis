@@ -9,6 +9,7 @@ import { getTrainShuttles, getTrainStations, trainStationsVersion } from '../../
 import { isBloodlusting, punchSpill } from './peopleBlood.js';
 import { puffSmoke } from '../giblets.js';
 import { PUNCH_MIN_PUSH, followPerson, personHeight, stopFollowingPerson } from './peopleTracking.js';
+import { roomHolds, roomSpot, roomVisit } from '../../buildings/interior.js';
 
 // ---- what people get up to besides walking about.
 //
@@ -942,6 +943,7 @@ export function goIndoors(p, building, from) {
   // mostly a quick visit, now and then most of the day
   const hours = INDOORS_MIN_HOURS + (INDOORS_MAX_HOURS - INDOORS_MIN_HOURS)*peopleRng()**2;
   p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, hoursLeft: hours };
+  p.inRoom = null;
   setIndoorsCount(indoorsCount + 1);
 }
 
@@ -963,9 +965,10 @@ export function updateIndoors(p, i, dt) {
   }
   if (visit.stage === 'inside') {
     visit.hoursLeft -= dt*24/(Math.max(0.1, S.dayLengthMinutes)*60);
-    if (visit.hoursLeft > 0) return null;
+    if (visit.hoursLeft > 0) return aboutTheRoom(p, visit, dt);
     // back out, at the door, facing the walkway
     visit.stage = 'exit';
+    p.inRoom = null; p.faceTo = null;
     p.x = door.x; p.z = door.z; p.y = visit.building.y;
     p.heading = headingTo(p, visit.back) + (p.traits.backwards ? Math.PI : 0);
     if (followed === i) lookAtPerson(p);
@@ -980,6 +983,36 @@ export function updateIndoors(p, i, dt) {
   p.mode = 'line';
   p.dir = peopleRng() < 0.5 ? -1 : 1;
   reseatPerson(p);
+  return null;
+}
+
+/**
+ * Someone inside a building while the camera's in there too (see buildings/interior.js): somewhere in its one room — put
+ * there the first frame the room's there to be in, and after that standing about, and now and then going over to
+ * somewhere else in it. The room's no bigger than a room, so they amble rather than stride.
+ * @param {Person} p - the person
+ * @param {object} visit - their p.indoors
+ * @param {number} dt - seconds since the last frame
+ * @returns {?{x: number, y: number, z: number}} where they should walk to, or null to stand where they are
+ */
+function aboutTheRoom(p, visit, dt) {
+  if (!roomHolds(visit.building.key)) { p.inRoom = null; return null; }
+  if (p.inRoom?.visit !== roomVisit()) {
+    const at = roomSpot(peopleRng);
+    p.x = at.x; p.y = at.y; p.z = at.z;
+    p.heading = peopleRng()*Math.PI*2;
+    p.inRoom = { visit: roomVisit(), goal: null, wait: peopleRng()*4 };
+  }
+  const here = p.inRoom;
+  if (here.goal) {
+    if (Math.hypot(here.goal.x - p.x, here.goal.z - p.z) >= 0.3) return here.goal;
+    here.goal = null;
+    here.wait = (3 + peopleRng()*10)*p.traits.patience;
+    p.faceTo = peopleRng()*Math.PI*2; // (somewhere to look, once they're there)
+  } else if ((here.wait -= dt) <= 0 && !p.oneShot) {
+    here.goal = roomSpot(peopleRng, p);
+    p.faceTo = null;
+  }
   return null;
 }
 

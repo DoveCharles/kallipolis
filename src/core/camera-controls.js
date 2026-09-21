@@ -11,12 +11,16 @@ export const controls = {
   minRadius: CAMERA_MIN_RADIUS,
   goalRadius: 220, goalTheta: Math.PI*0.28, goalPhi: Math.PI*0.32,
   goalTarget: new THREE.Vector3(0, 8, 0),
+  // set while the view's held in one place (inside a building: see buildings/interior.js) — no orbiting, panning or zooming
+  locked: false,
   orbit(dx, dy) {
+    if (this.locked) return;
     this.goalTheta -= dx * 0.006;
     this.goalPhi -= dy * 0.006;
     this.goalPhi = Math.max(0.03, Math.min(Math.PI - 0.03, this.goalPhi));
   },
   pan(dx, dy) {
+    if (this.locked) return;
     const panSpeed = this.radius * 0.0016;
     const forward = new THREE.Vector3(
       Math.sin(this.theta) * Math.sin(this.phi), Math.cos(this.phi), Math.cos(this.theta) * Math.sin(this.phi));
@@ -28,11 +32,12 @@ export const controls = {
   zoom(deltaY) { this.zoomBy(1 + deltaY * 0.001); },
   // straight multiplier, for a pinch: the radius scales with how far the two fingers have closed or spread
   zoomBy(factor) {
+    if (this.locked) return;
     this.goalRadius = Math.max(this.minRadius, Math.min(1800, this.goalRadius * factor));
   },
-  snapTop() { this.goalPhi = 0.05; },
-  snapFront() { this.goalPhi = Math.PI/2; this.goalTheta = 0; },
-  snapRight() { this.goalPhi = Math.PI/2; this.goalTheta = Math.PI/2; },
+  snapTop() { if (!this.locked) this.goalPhi = 0.05; },
+  snapFront() { if (this.locked) return; this.goalPhi = Math.PI/2; this.goalTheta = 0; },
+  snapRight() { if (this.locked) return; this.goalPhi = Math.PI/2; this.goalTheta = Math.PI/2; },
   // Eases toward the goals by EASE_PER_FRAME of the way per 1/60 s, whatever the actual frame time, so the camera trails a
   // moving target by a steady distance and a slow frame doesn't make it lurch.
   update(instant) {

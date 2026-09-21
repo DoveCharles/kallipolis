@@ -33,8 +33,10 @@ export const cards = [];
 
 // `title` is the name in its title bar; `onClose` is what the × (and the control-menu box, under the Windows 3.0 look)
 // does. `thumb` is { title, onClick } for the picture — leave out onClick and it's just a picture. `kill`, if given, is
-// { title, onClick } for a Kill button under it. `labels` renames rows for this card ({ occupants: 'Passengers' }).
-export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels = {} }) {
+// { title, onClick } for a Kill button under it. `action`, if given, is { text, title, onClick } for a plain button in the
+// same place (a building's Enter: see buildings/interior.js), its wording changed later with setAction. `labels` renames
+// rows for this card ({ occupants: 'Passengers' }).
+export function makeCard({ id, title, onClose, thumb = {}, kill = null, action = null, labels = {} }) {
   const el = document.createElement('div');
   el.id = id;
   el.className = 'entity-card';
@@ -101,6 +103,17 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
     button.textContent = 'Kill';
     fixedText.push([button, 'Kill']);
     button.addEventListener('click', () => kill.onClick());
+    shot.append(button);
+  }
+  let actionText = null;
+  if (action) {
+    const button = document.createElement('button');
+    button.className = 'btn pc-kill pc-action';
+    button.title = action.title || '';
+    button.textContent = action.text;
+    actionText = [button, action.text];
+    fixedText.push(actionText);
+    button.addEventListener('click', () => action.onClick());
     shot.append(button);
   }
 
@@ -200,11 +213,21 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, labels =
   function hide() { el.hidden = true; }
   // Rewrites the card's own wording (title, Kill button, row headings such as "Loves") through `transform`, which is given
   // each as written. null puts it all back.
+  let relabelling = null;
   function relabel(transform = null) {
+    relabelling = transform;
     fixedText.forEach(([textEl, text]) => { textEl.textContent = transform ? transform(text) : text; });
   }
 
-  const card = { el, canvas, show, hide, set, setList, relabel, setFavorite };
+  // the action button's wording (and tooltip), as `action` in makeCard gave them first
+  function setAction(text, tooltip) {
+    if (!actionText) return;
+    actionText[1] = text;
+    actionText[0].textContent = relabelling ? relabelling(text) : text;
+    if (tooltip != null) actionText[0].title = tooltip;
+  }
+
+  const card = { el, canvas, show, hide, set, setList, relabel, setFavorite, setAction };
   cards.push(card);
   return card;
 }
