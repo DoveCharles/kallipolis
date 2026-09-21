@@ -113,9 +113,10 @@ function variantsOf(name) {
  * @param {number} [maxDistance] - if given, it fades out evenly from refDistance to nothing at all here, rather than tailing
  *   off slowly and forever
  * @param {number} [rate=1] - how fast it's played: above 1, higher and shorter; below, lower and longer
+ * @param {AudioNode[]} [through=[]] - filters to pass it through on the way, in order
  * @returns {?AudioBufferSourceNode} what's playing it, to stop it early; or null, if it isn't played
  */
-export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate = 1) {
+export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate = 1, through = []) {
   if (muted || context.state !== 'running' || voices >= VOICES_MAX) return null;
   const source = context.createBufferSource(), gain = context.createGain(), panner = context.createPanner();
   source.buffer = buffer;
@@ -126,7 +127,7 @@ export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate 
   panner.refDistance = refDistance;
   if (maxDistance) panner.maxDistance = maxDistance;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  source.connect(gain).connect(panner).connect(listener.getInput());
+  [...through, gain].reduce((from, to) => from.connect(to), source).connect(panner).connect(listener.getInput());
   voices++;
   source.onended = () => { voices--; panner.disconnect(); };
   source.start();
