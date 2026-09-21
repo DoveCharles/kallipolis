@@ -15,16 +15,17 @@ import { listener } from './sfx.js';
 // the keys, for one being flown by hand. The pitch and loudness follow that slowly, as a turbine spools, not at once.
 // There are AIRCRAFT_MAX loops, handed each frame to the nearest aircraft within HEAR_DISTANCE; they carry a long way.
 const VOLUME = 0.16;
-const HEAR_DISTANCE = 600;
+const HEAR_DISTANCE = 1500;
 const AIRCRAFT_MAX = 4;
 const SPOOL = 0.8;       // seconds the engines take to follow the thrust (a third of the way, that is)
 const CHOP_HZ = 11;      // a helicopter's blade passes a second
 const KINDS = {
   //         roar: how loud, and its lowpass at idle and at full power; whine: how loud, and its pitch at idle and at full;
-  //         buzz: likewise; chop: how deep; and how near to be heard at full volume
-  jet:  { roar: [0.9, 250, 2200], whine: [0.06, 900, 3000], buzz: [0, 0, 0], chop: 0, near: 30 },
-  prop: { roar: [0.3, 400, 900], whine: [0, 0, 0], buzz: [0.5, 55, 110], chop: 0, near: 25 },
-  heli: { roar: [0.8, 500, 800], whine: [0.03, 1200, 1500], buzz: [0, 0, 0], chop: 0.75, near: 20 },
+  //         buzz: likewise; chop: how deep; how near to be heard at full volume; and how much louder at full power than
+  //         idling (a jet taking off, climbing out or coming in to land is heard right across town)
+  jet:  { roar: [0.9, 250, 2200], whine: [0.06, 900, 3000], buzz: [0, 0, 0], chop: 0, near: 90, loud: 2.2 },
+  prop: { roar: [0.3, 400, 900], whine: [0, 0, 0], buzz: [0.5, 55, 110], chop: 0, near: 25, loud: 1 },
+  heli: { roar: [0.8, 500, 800], whine: [0.03, 1200, 1500], buzz: [0, 0, 0], chop: 0.75, near: 20, loud: 1 },
 };
 
 const voices = []; // { out, roar, roarFilter, whines, buzz, buzzFilter, buzzGain, chop, chopDepth, panner, object }
@@ -114,7 +115,38 @@ export function updateAircraftSounds(flying) {
     v.chopDepth.gain.setTargetAtTime(kind.chop/2, now, 0.1);
     v.chop.gain.setTargetAtTime(1 - kind.chop/2, now, 0.1);
     v.panner.refDistance = kind.near;
-    v.out.gain.setTargetAtTime(n.thrust > 0 ? VOLUME*(0.35 + 0.65*p) : 0, now, SPOOL);
+    v.out.gain.setTargetAtTime(n.thrust > 0 ? VOLUME*(0.35 + (kind.loud - 0.35)*p*p) : 0, now, SPOOL);
     v.panner.positionX.value = n.at.x; v.panner.positionY.value = n.at.y; v.panner.positionZ.value = n.at.z;
   }
+}
+
+// The cabin chime: the "bing-bong" over the speakers once an airliner's up, two soft bell notes falling a third, each a
+// pure tone with a faint clang above it and a twin a few hertz off for a shimmer, muffled a little by the speaker. It's
+// heard from on board, so it's not placed anywhere.
+const CHIME = [988, 784], CHIME_GAP = 0.6, CHIME_RING = 1.6, CHIME_VOLUME = 0.12;
+/**
+ * The cabin's "bing-bong", as heard on board.
+ * @returns {void}
+ */
+export function cabinChime() {
+  const context = listener.context;
+  if (context.state !== 'running') return;
+  const now = context.currentTime, speaker = context.createBiquadFilter(), gain = context.createGain();
+  speaker.type = 'lowpass';
+  speaker.frequency.value = 3000;
+  gain.gain.value = CHIME_VOLUME;
+  speaker.connect(gain).connect(listener.getInput());
+  const oscillators = CHIME.flatMap((hz, k) => [[1, 0, 1], [1, 2.5, 0.8], [2.76, 0, 0.08]].map(([ratio, off, level]) => {
+    const oscillator = context.createOscillator(), note = context.createGain(), start = now + k*CHIME_GAP;
+    oscillator.frequency.value = hz*ratio + off;
+    note.gain.setValueAtTime(0, now);
+    note.gain.setValueAtTime(0, start);
+    note.gain.linearRampToValueAtTime(level/2, start + 0.006);
+    note.gain.exponentialRampToValueAtTime(0.0005*level, start + CHIME_RING*(ratio > 2 ? 0.3 : 1));
+    oscillator.connect(note).connect(speaker);
+    oscillator.start(now);
+    oscillator.stop(start + CHIME_RING + 0.05);
+    return oscillator;
+  }));
+  oscillators[oscillators.length - 1].onended = () => gain.disconnect();
 }

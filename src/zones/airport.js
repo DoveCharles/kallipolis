@@ -16,7 +16,7 @@ import { streetSegmentsNear, streetFor } from './suburbs.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
-import { updateAircraftSounds } from '../audio/aircraft.js';
+import { updateAircraftSounds, cabinChime } from '../audio/aircraft.js';
 
 // ---------------------------------------------------------- the aircraft card
 // Which aircraft the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the train's: its
@@ -619,6 +619,7 @@ const LIFTOFF_PITCH = 0.14, CLIMB_PITCH = 0.2, CLIMB_ROTATE_TIME = 1.2; // nose 
 // rollout, and the aircraft bounces (see touchdownBounce).
 const MAX_PATH_PITCH = Math.PI/6; // (the steepest the nose points on a climb or dive, however steep the path: 30 degrees)
 const FLARE_PITCH = 0.13, TOUCHDOWN_SETTLE = 0.3;
+const CHIME_AFTER = 4; // seconds into the climb the cabin chimes
 const CLIMB_OUT_TIME = 9, APPROACH_FADE = 0.4, CLOUD_HEIGHT = 5;
 const APPROACH_TIME = 12, ROLLOUT_TIME = 6, PUSH_TIME = 5, DWELL_MIN = 12, RUNWAY_GAP = 6;
 /**
@@ -690,11 +691,12 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
   const pose = (t) => { // (returns how opaque it is, when that isn't fully)
     let phase = (((t - shift) % cycle) + cycle) % cycle;
     plane.visible = true;
+    plane.userData.aloft = false;
     if (phase < APPROACH_TIME) {
       // out of the cloud and down the slope, steep at first and flattening over the threshold, the nose coming down to
       // follow it and then up in the flare
       const u = phase/APPROACH_TIME, p = onRunway(arrive, touchdown - glideRun*(1 - u));
-      plane.userData.thrust = 0.45;
+      plane.userData.thrust = 0.6;
       poseAircraft(plane, p.x, Y_TARMAC + cloudTop*rise(1 - u), p.z, inDx, inDz, approachPitch(u));
       return smooth(u/APPROACH_FADE);
     }
@@ -756,6 +758,7 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
       // from the attitude it left the ground at to the climbing one, and on up if the path steepens past it
       const w = phase/climbTime, p = onRunway(leave, holdShort + liftoff + glideRun*phase/CLIMB_TIME);
       plane.userData.thrust = 1;
+      plane.userData.aloft = phase > CHIME_AFTER; // (safely up: see the cabin chime in updateAirports)
       const climb = Math.atan(cloudTop*riseSlope(w)/(glideRun*climbTime/CLIMB_TIME));
       const pitch = LIFTOFF_PITCH + (CLIMB_PITCH - LIFTOFF_PITCH)*smooth(phase/CLIMB_ROTATE_TIME);
       poseAircraft(plane, p.x, Y_TARMAC + cloudTop*rise(w), p.z, outDx, outDz, Math.max(pitch, Math.min(climb, MAX_PATH_PITCH)));
@@ -1303,8 +1306,19 @@ export function updateAirports(t) {
   // their engines (see audio/aircraft.js): a hand-flown one working as hard as the keys say, the rest as their round does
   const heard = [];
   S.zones.forEach(zone => {
-    (zone.airportFlights || []).forEach(({ plane, hand }) => { if (plane.visible) heard.push({ object: plane,
-      kind: plane.userData.jet ? 'jet' : 'prop', thrust: hand ? hand.thrust ?? 0.5 : plane.userData.thrust ?? 0 }); });
+    (zone.airportFlights || []).forEach(flight => {
+      const { plane, hand } = flight;
+      if (!plane.visible) return;
+      heard.push({ object: plane, kind: plane.userData.jet ? 'jet' : 'prop', thrust: hand ? hand.thrust ?? 0.5 : plane.userData.thrust ?? 0 });
+      // the cabin's "bing-bong" once it's safely up after taking off, heard only from on board: the one being watched or
+      // flown. (Flown by hand, that's once it's climbed well clear of the ground, having been on it since the last.)
+      const height = hand ? hand.y - Y_TARMAC : null;
+      if (hand && height < flight.size*0.3) flight.grounded = true;
+      const aloft = hand ? flight.grounded && height > flight.size*1.5 : !!plane.userData.aloft;
+      if (aloft && !flight.aloft && (flight === flown || flight === followedFlight())) cabinChime();
+      if (aloft && hand) flight.grounded = false;
+      flight.aloft = aloft;
+    });
     const heli = zone.airportHeli;
     if (heli?.visible && heli.parent) heard.push({ object: heli, kind: 'heli', thrust: heli.userData.thrust ?? 0.35 });
   });
