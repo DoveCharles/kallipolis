@@ -425,6 +425,8 @@ function furnish(key) {
 // canvas cut through to it at the screen (see setCutout in pixelation.js), so whoever walks in front of the TV hides it
 // as they would anything else. It starts muted (browsers only let a page play sound once it's been clicked or typed
 // into) and turns its sound up from then on, unless the app's muted. One at a time: it's only ever the room you're in.
+// It plays each video through once, and whoever's watching sits it out to the end (see watchingTV) — the player telling
+// us when it's over.
 const TV_LIST_URL = 'assets/tv.txt';
 const TV_PIXELS = 640;  // the player's width, as laid out — scaled down to the screen's
 const TV_VOLUME = 60;   // out of 100
@@ -439,7 +441,8 @@ function videoId(line) {
   return (line.match(/(?:[?&]v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/) ?? line.match(/^([\w-]{11})$/))?.[1] ?? null;
 }
 let tvLayer = null;       // the CSS3DRenderer and its scene, made the first time there's a TV on
-let tv = null;            // what's on: { object (its CSS3DObject), iframe, muted }
+let tv = null;            // what's on: { object (its CSS3DObject), iframe, muted, video, startedAt, heard, endedAt }
+let videos = 0;           // counts every video put on, so a watcher can tell theirs from the next
 const tvHoles = new THREE.Scene();
 const tvHole = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
   vertexShader: 'void main() { gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0); }',
@@ -465,7 +468,7 @@ function startTV() {
   const width = TV_PIXELS, height = Math.round(TV_PIXELS*screen.h/screen.w);
   iframe.style.cssText = `width:${width}px;height:${height}px;border:0;background:#000`;
   iframe.allow = 'autoplay; encrypted-media';
-  iframe.src = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0&loop=1&playlist=${id}`
+  iframe.src = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0`
     + `&playsinline=1&rel=0&iv_load_policy=3&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`;
   const object = new CSS3DObject(iframe);
   object.position.copy(screen.centre);
@@ -476,7 +479,7 @@ function startTV() {
   tvHole.quaternion.copy(screen.turn);
   tvHole.scale.set(screen.w, screen.h, 1);
   setCutout(tvHoles);
-  tv = { object, iframe, muted: true, toldAt: -Infinity };
+  tv = { object, iframe, muted: true, toldAt: -Infinity, video: ++videos, startedAt: performance.now(), heard: false, endedAt: null };
 }
 function stopTV() {
   if (!tv) return;
@@ -486,15 +489,35 @@ function stopTV() {
 }
 // a command for the player (see YouTube's IFrame Player API)
 const tell = (func, ...args) => tv.iframe.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), 'https://www.youtube.com');
+// What the player tells us, once it's been told we're listening: whether the video's over (ended, or couldn't play).
+window.addEventListener('message', e => {
+  if (!tv || e.source !== tv.iframe.contentWindow) return;
+  let data;
+  try { data = JSON.parse(e.data); } catch { return; }
+  tv.heard = true;
+  const state = data.event === 'onStateChange' ? data.info : data.event === 'infoDelivery' ? data.info?.playerState : undefined;
+  if ((state === 0 || data.event === 'onError') && tv.endedAt === null) tv.endedAt = performance.now();
+});
+const TV_SILENT_AFTER = 10000; // ms without a word from the player before it's taken to be one that won't say when it's done
 let watchedAt = -Infinity;
-// (said each frame by whoever's sat on the sofa: see peopleActivities.js)
-export const watchingTV = () => { watchedAt = performance.now(); };
+/**
+ * Said each frame by whoever's sat on the sofa (see peopleActivities.js).
+ * @returns {?number} the video that's on (a number to hold onto, to tell when it's over), -1 if it's on but the player
+ *   won't say when it's over, or null if nothing is (the TV not on yet, or the video over)
+ */
+export function watchingTV() {
+  watchedAt = performance.now();
+  if (!tv || tv.endedAt !== null) return null;
+  return !tv.heard && watchedAt - tv.startedAt > TV_SILENT_AFTER ? -1 : tv.video;
+}
 // Each frame: the TV switched on or off as anyone's sat watching it or not, and while it's on, the player laid out where
 // the screen now is on the screen, and its sound on or off.
 function updateTV() {
   const watched = inside && current === LAYOUTS.home && performance.now() - watchedAt < 500;
   if (watched && !tv) startTV();
   else if (!watched && tv) stopTV();
+  // (whoever sat through it has got up; anyone still watching, sat down since, gets something new)
+  else if (tv && tv.endedAt !== null && performance.now() - tv.endedAt > 1500) { stopTV(); startTV(); }
   if (!tv) return;
   tvLayer.css.render(tvLayer.scene, camera);
   // (told again every so often: the player misses anything it's told before it's ready, and there's no knowing when that is
@@ -503,6 +526,11 @@ function updateTV() {
   if (muted === tv.muted && now - tv.toldAt < 2000) return;
   tv.muted = muted;
   tv.toldAt = now;
+  if (!tv.heard) {
+    tv.iframe.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: tv.video, channel: 'widget' }), 'https://www.youtube.com');
+    tell('addEventListener', 'onStateChange');
+    tell('addEventListener', 'onError');
+  }
   if (muted) tell('mute');
   else { tell('unMute'); tell('setVolume', TV_VOLUME); }
 }

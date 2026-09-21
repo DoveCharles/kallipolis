@@ -1089,7 +1089,7 @@ function standingSpot(p, seat) {
 function standUp(p) {
   const seat = p.inRoom?.seat;
   if (seat && seat.by === p) seat.by = null;
-  if (p.inRoom) p.inRoom.seat = null;
+  if (p.inRoom) { p.inRoom.seat = null; p.inRoom.watched = null; }
   p.pose = 'Idle'; p.seatLift = 0; p.faceTo = null;
 }
 /**
@@ -1122,10 +1122,14 @@ function sitting(p, here, dt) {
       here.timer = (20 + peopleRng()*60)*p.traits.patience;
       p.seatLift = seat.y - p.y - clipNamed('Sit1').seatY*modelScale(p);
       // falls through
-    case 'sit':
-      if ((here.timer -= dt) <= 0) { here.stage = 'rise'; p.pose = 'Idle'; break; }
-      if (seat.sofa) watchingTV();
+    case 'sit': {
+      // (on the sofa, with a video on: up once it's over, however long that is — or, if the player won't say, as anywhere else)
+      const on = seat.sofa ? watchingTV() : null;
+      if (on > 0 && here.watched == null) here.watched = on;
+      here.timer -= dt;
+      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { here.stage = 'rise'; p.pose = 'Idle'; }
       break;
+    }
     case 'rise':
       if (weightOf(p, clipNamed('Idle')) < 1) break;
       standUp(p);
