@@ -14,13 +14,22 @@ const IDLE_HZ = 75, REDLINE_HZ = 230;  // pitch at tickover and at the top of a 
 const GEAR_SPEED = 8, GEARS = 4;       // units a second each gear covers; in top gear the revs go on climbing over 2.5 times that
 const SHIFT_REVS = 0.35;               // where the revs drop back to on changing up, 0 (idle) to 1 (redline)
 const REVS_RATE = 3;                   // how fast the revs follow, per second
-const VOLUME = 0.3, TRAFFIC_VOLUME = 0.6; // the driven car's, and everyone else's against it
+const VOLUME = 0.08, TRAFFIC_VOLUME = 0.5; // the driven car's, and everyone else's against it
 const REF_DISTANCE = 10, HEAR_DISTANCE = 90;
 const ENGINES_MAX = 6;
 const LAYERS = [['sawtooth', 1, 0.5], ['sawtooth', 1.012, 0.4], ['square', 2, 0.12]]; // [wave, pitch against the fundamental, level]
 
 const engines = []; // { out, filter, panner, oscillators, car, revs, lastSpeed }
 const voiceOf = new WeakMap(); // car -> its engine's pitch against an ordinary car's
+const HUM_REACH = 60; // (how far off a car counts for half as much toward trafficNearby)
+let traffic = 0;
+
+/**
+ * How much traffic there is about the camera, for the city's hum (see ambience.js): every car counting for less the further
+ * off it is, as of the last updateEngines.
+ * @returns {number}
+ */
+export const trafficNearby = () => traffic;
 
 function makeEngine() {
   const context = listener.context;
@@ -59,8 +68,9 @@ function makeEngine() {
  */
 export function updateEngines(cars, driven, about, dt) {
   const { x, z } = camera.position;
+  traffic = 0;
   const near = cars
-    .map(car => ({ car, d: car === driven ? -1 : Math.hypot(car.x - x, car.z - z) }))
+    .map(car => { const d = Math.hypot(car.x - x, car.z - z); traffic += 1/(1 + (d/HUM_REACH)**2); return { car, d: car === driven ? -1 : d }; })
     .filter(n => n.d <= HEAR_DISTANCE)
     .sort((a, b) => a.d - b.d).slice(0, ENGINES_MAX).map(n => n.car);
   if (!near.length && !engines.some(e => e.car)) return;

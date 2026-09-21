@@ -13,6 +13,7 @@ const STEPS = {
 };
 const VARIANTS = 4;
 const HEAR_DISTANCE = 35, REF_DISTANCE = 4;
+const STEP_VOLUME = 0.2;
 const STEPS_MAX_PER_SECOND = 24; // past this many footfalls a second, the rest go unheard
 
 let buffers = null; // surface -> [AudioBuffer]
@@ -35,5 +36,5 @@ export function footstep(at, weight = 1) {
   buffers ??= Object.fromEntries(Object.entries(STEPS).map(([surface, layer]) => [surface, Array.from({ length: VARIANTS }, () => zzfxBuffer(layer))]));
   const surface = S.weatherSnow > 0.2 ? 'snow' : S.weatherRain > 0.2 ? 'wet' : 'dry';
   const set = buffers[surface];
-  playBufferAt(set[Math.floor(Math.random()*set.length)], at, Math.min(1.4, 0.6 + 0.4*weight), REF_DISTANCE);
+  playBufferAt(set[Math.floor(Math.random()*set.length)], at, STEP_VOLUME*Math.min(1.4, 0.6 + 0.4*weight), REF_DISTANCE);
 }

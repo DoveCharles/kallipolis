@@ -70,6 +70,7 @@ import { loadPersonModel, syncPeopleUI, updatePeople } from './life/people/peopl
 import { updateTraffic, loadCarModels } from './life/traffic.js';
 import { updateGiblets } from './life/giblets.js';
 import { updateLightning } from './life/lightning.js';
+import { updateAmbience } from './audio/ambience.js';
 import { loadBeeModel, updateBees } from './life/bees.js';
 import { updateAirports, loadPlaneModel } from './zones/airport.js';
 import { loadHouseModels } from './zones/suburbs.js';
@@ -143,6 +144,7 @@ function animate() {
   updateBees(t);
   updateAirports(t);
   updateTraffic(t);
+  updateAmbience(t);
   updateBuildingFollow();
   updateInteriorCamera();
   updateTrafficLights(t);
