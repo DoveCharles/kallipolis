@@ -13,9 +13,9 @@ import { IS_TOUCH } from '../core/device.js';
 //   a click to swing a fist at whoever's in front of them (people.js lands it)
 // - a car (clicking the car card's picture): the view from behind it, WASD to drive (shift for a boost, space to brake),
 //   the mouse swinging the camera round it (and back behind, a moment after it's left alone), the wheel to zoom
-// - an aircraft (clicking the plane card's picture): the same view from behind, but the keys work a stick rather than a
+// - an aircraft or a bee (clicking its card's picture): the same view from behind, but the keys work a stick rather than a
 //   wheel — W/S put the nose down and up, and A/D bank it round, since a thing in the air turns by leaning rather than
-//   by steering (zones/airport.js does the flying)
+//   by steering (life/flight.js does the flying, and zones/airport.js and life/bees.js pose what's flown)
 // On touch there's no pointer to lock and no keys to hold: a finger dragged across the view looks around instead, and the
 // thumbstick and buttons src/ui/mobile.js puts on screen are held down in place of WASD — one of them the click, since
 // a tap on the view is already the start of a look.
@@ -24,7 +24,7 @@ const hint = document.getElementById('possess-hint'), hintTitle = document.getEl
 const hintExit = document.getElementById('ph-exit');
 export const possession = { index: -1, yaw: 0, pitch: 0 };
 export const driving = { active: false, lookedAt: -Infinity }; // (lookedAt: when the mouse last swung the camera round)
-export const flying = { active: false, lookedAt: -Infinity }; // the same, for an aircraft
+export const flying = { active: false, lookedAt: -Infinity, release: null }; // the same, for anything flown (release: what lets go of it)
 const held = new Set();
 const PITCH_MAX = 1.35, LOOK_SPEED = 0.0025, ORBIT_PHI_MIN = 0.3, ORBIT_PHI_MAX = 1.5; // (driving: the camera not quite overhead, nor lower than about level with the car)
 const KEY_NAMES = { arrowup: 'w', arrowleft: 'a', arrowdown: 's', arrowright: 'd', ' ': 'space' };
@@ -78,11 +78,13 @@ export function endDriving() {
   hint.hidden = true;
   unlockPointer();
 }
-export function startFlying() {
+/** @param {() => void} release - called to let go of whatever is being flown, when Esc or the exit button asks */
+export function startFlying(release) {
   // (no people check, unlike the two above: an aircraft flies its schedule whether or not the town has anyone in it,
   // so its card is there to be clicked either way, and "Fly it" shouldn't be a button that does nothing)
   if (S.interactionMode !== 'move') return false;
   flying.active = true;
+  flying.release = release;
   flying.lookedAt = -Infinity;
   held.clear();
   showHint(IS_TOUCH ? 'Flying' : 'Press <kbd>Esc</kbd> to stop flying',
@@ -104,7 +106,7 @@ const inControl = () => isPossessing() || driving.active || flying.active;
 // whichever hold on the world is the live one, let go of — only ever one at a time
 function releaseControl() {
   if (isPossessing()) App.unpossessPerson();
-  else if (flying.active) App.stopFlying();
+  else if (flying.active) flying.release?.();
   else App.stopDriving();
 }
 hintExit.addEventListener('click', releaseControl);

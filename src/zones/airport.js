@@ -3,7 +3,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { Y_ZONE_GROUND, Y_PARK, camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
-import { controlInput, startFlying, endFlying, flying } from '../life/possession.js';
+import { startFlying, endFlying } from '../life/possession.js';
+import { stepFlight, autopilot, makeHand, cruiseSpeed, chaseBehind } from '../life/flight.js';
 import { mulberry32, lerp, polygonArea, pointInPolygon, centroid } from '../core/math.js';
 import { resolveParkTint, resolveGrassNoiseStrength } from '../core/splines.js';
 import { CLIPPER_SCALE, clipPolygons, createMeshBuilder, forEachPolyTreeEdge } from '../roads/roads.js';
@@ -563,7 +564,61 @@ function pathLength(path) {
   for (let i=0;i<path.length-1;i++) total += Math.hypot(path[i+1].x - path[i].x, path[i+1].z - path[i].z);
   return total;
 }
+// The height of an arc (0 to 1 over w = 0 to 1) that rises slowly off the ground and ever more steeply toward the top, and
+// its slope
+const RISE_STEEPNESS = 3.2;
+const rise = w => (Math.exp(RISE_STEEPNESS*w) - 1)/(Math.exp(RISE_STEEPNESS) - 1);
+const riseSlope = w => RISE_STEEPNESS*Math.exp(RISE_STEEPNESS*w)/(Math.exp(RISE_STEEPNESS) - 1);
+const smooth = u => { const s = Math.max(0, Math.min(1, u)); return s*s*(3 - 2*s); };
+const fades = new WeakMap(); // aircraft -> { alpha, materials: its own copies, with what they were before fading }
+/**
+ * How opaque an aircraft is, from 1 (solid) down to 0. The first time one fades it is given copies of its materials, since
+ * the ones it comes with are shared by every aircraft in the same colours.
+ * @param {THREE.Object3D} plane
+ * @param {number} alpha
+ * @returns {void}
+ */
+function fadeAircraft(plane, alpha) {
+  let state = fades.get(plane);
+  if (!state) { state = { alpha: 1, materials: null }; fades.set(plane, state); }
+  if (alpha === state.alpha) return;
+  if (!state.materials) {
+    const copies = new Map();
+    state.materials = [];
+    const own = material => {
+      if (!copies.has(material)) {
+        const copy = material.clone();
+        copies.set(material, copy);
+        state.materials.push({ material: copy, opacity: material.opacity, transparent: material.transparent, depthWrite: material.depthWrite });
+      }
+      return copies.get(material);
+    };
+    plane.traverse(o => {
+      if (!o.isMesh) return;
+      o.material = Array.isArray(o.material) ? o.material.map(own) : own(o.material);
+      o.userData.sharedMaterial = false; // (these are its own now, to be disposed with it)
+    });
+  }
+  state.alpha = alpha;
+  state.materials.forEach(({ material, opacity, transparent, depthWrite }) => {
+    const wasTransparent = material.transparent;
+    material.opacity = opacity*alpha;
+    material.transparent = transparent || alpha < 1;
+    material.depthWrite = alpha < 1 ? false : depthWrite;
+    if (material.transparent !== wasTransparent) material.needsUpdate = true;
+  });
+}
 const TAXI_SPEED = 11, HOLD_TIME = 3.5, ROLL_TIME = 7, CLIMB_TIME = 10, AWAY_TIME = 5;
+const LIFTOFF_PITCH = 0.14, CLIMB_PITCH = 0.2, CLIMB_ROTATE_TIME = 1.2; // nose up as the wheels leave, nose up in the climb, and the seconds between
+// Past the top of its climb a departure carries on up into the cloud, fading out over CLIMB_OUT_TIME, and an arrival
+// comes back out of it, fading in over the first APPROACH_FADE of its approach; the cloud base is CLOUD_HEIGHT times the
+// height the climb reached.
+// Touching down: the nose is FLARE_PITCH up as the wheels meet the runway and comes down over TOUCHDOWN_SETTLE of the
+// rollout, and the aircraft hops BOUNCE_HEIGHT of its wingspan up and back down over BOUNCE_TIME seconds, its wings
+// rocking BOUNCE_ROLL radians one way and the other and its nose dipping BOUNCE_PITCH and coming back up.
+const MAX_PATH_PITCH = Math.PI/6; // (the steepest the nose points on a climb or dive, however steep the path: 30 degrees)
+const FLARE_PITCH = 0.13, TOUCHDOWN_SETTLE = 0.3, BOUNCE_HEIGHT = 0.02, BOUNCE_TIME = 0.4, BOUNCE_ROLL = 0.06, BOUNCE_PITCH = 0.08;
+const CLIMB_OUT_TIME = 9, APPROACH_FADE = 0.4, CLOUD_HEIGHT = 5;
 const APPROACH_TIME = 12, ROLLOUT_TIME = 6, PUSH_TIME = 5, DWELL_MIN = 12, RUNWAY_GAP = 6;
 /**
  * How long one aircraft's round of the field takes, and how much of that is spent sitting on the stand.
@@ -580,7 +635,7 @@ const APPROACH_TIME = 12, ROLLOUT_TIME = 6, PUSH_TIME = 5, DWELL_MIN = 12, RUNWA
  */
 function flightSchedule(taxiInLength, taxiOutLength, flights) {
   const taxiIn = Math.max(1.5, taxiInLength/TAXI_SPEED), taxiOut = Math.max(2, taxiOutLength/TAXI_SPEED);
-  const arriving = APPROACH_TIME + ROLLOUT_TIME, leaving = HOLD_TIME + ROLL_TIME + CLIMB_TIME + AWAY_TIME;
+  const arriving = APPROACH_TIME + ROLLOUT_TIME, leaving = HOLD_TIME + ROLL_TIME + CLIMB_TIME + CLIMB_OUT_TIME + AWAY_TIME;
   const ground = taxiIn + PUSH_TIME + taxiOut;
   const cycle = Math.max(arriving + ground + DWELL_MIN + leaving,
     flights > 1 ? 2*(arriving + leaving + RUNWAY_GAP) : 0);
@@ -606,7 +661,8 @@ function flightSchedule(taxiInLength, taxiOutLength, flights) {
  * @param {{touchdown: number, turnoff: number, holdShort: number, arrive: number, leave: number}} marks Points along the
  *   runway, measured from the threshold it is using; `arrive` and `leave` are which way round that is, ±1.
  * @param {number} offset How far into the round this aircraft starts.
- * @returns {(t: number) => void} Poses the aircraft for that moment.
+ * @returns {((t: number) => void) & { dockAt: (t: number) => void }} Poses the aircraft for that moment; `dockAt(t)` puts it
+ *   on its stand at `t`, with the round running on from there.
  */
 function makeFlight(plane, sched, paths, frame, marks, offset) {
   const { cycle, taxiIn, taxiOut, dwell } = sched;
@@ -618,25 +674,35 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
   const standDz = (noseIn.z - pushTo.z)/Math.max(1e-6, Math.hypot(pushTo.x - noseIn.x, pushTo.z - noseIn.z));
   const runLength = frame.halfLength - holdShort, liftoff = runLength*0.78;
   // the departure climbs away as far as the arrival came from, so the field is left and joined at the same sort of distance
-  const glideRun = runLength*1.9, glideTop = runLength*0.55;
+  const glideRun = runLength*1.9, glideTop = runLength*0.55, cloudTop = glideTop*CLOUD_HEIGHT;
+  const climbTime = CLIMB_TIME + CLIMB_OUT_TIME;
+  // the nose on the approach follows the path down (and comes up in the flare); rolling out starts from where it ended
+  const diveAt = v => Math.min(MAX_PATH_PITCH, Math.atan(cloudTop*riseSlope(v)/glideRun));
+  // (the nose only points down while there is height to spare, so it is never into the runway)
+  const approachPitch = u => 0.05 + (FLARE_PITCH - 0.05)*smooth((u - 0.8)/0.2) - 0.6*diveAt(1 - u)*smooth(cloudTop*rise(1 - u)/(plane.userData.span*0.5));
+  const touchdownPitch = approachPitch(1);
   // both halves of the round are flown in the runway's own along-and-across terms, then turned whichever way round that
   // half is being flown, so one body of arithmetic serves a landing from either end
   const onRunway = (dir, s) => frame.at(dir*s, 0);
   const inDx = arrive*frame.dx, inDz = arrive*frame.dz, outDx = leave*frame.dx, outDz = leave*frame.dz;
-  return (t) => {
-    let phase = (((t - offset) % cycle) + cycle) % cycle;
+  let shift = offset; // (where in the round the clock puts it; dockAt moves it)
+  const pose = (t) => { // (returns how opaque it is, when that isn't fully)
+    let phase = (((t - shift) % cycle) + cycle) % cycle;
     plane.visible = true;
     if (phase < APPROACH_TIME) {
-      // down the slope and flaring over the threshold: the height eases off at the end, the nose comes up to meet it
+      // out of the cloud and down the slope, steep at first and flattening over the threshold, the nose coming down to
+      // follow it and then up in the flare
       const u = phase/APPROACH_TIME, p = onRunway(arrive, touchdown - glideRun*(1 - u));
-      poseAircraft(plane, p.x, Y_TARMAC + glideTop*Math.pow(1 - u, 1.3), p.z, inDx, inDz, 0.05 + Math.max(0, u - 0.85)/0.15*0.08);
-      return;
+      poseAircraft(plane, p.x, Y_TARMAC + cloudTop*rise(1 - u), p.z, inDx, inDz, approachPitch(u));
+      return smooth(u/APPROACH_FADE);
     }
     phase -= APPROACH_TIME;
     if (phase < ROLLOUT_TIME) {
       // wheels down, nose lowering, braking hard at first and coasting the last of it to the turnoff
       const u = phase/ROLLOUT_TIME, p = onRunway(arrive, touchdown + (turnoff - touchdown)*(1 - (1 - u)*(1 - u)));
-      poseAircraft(plane, p.x, Y_TARMAC, p.z, inDx, inDz, Math.max(0, 0.07 - u*0.35));
+      const hop = Math.min(1, phase/BOUNCE_TIME);
+      const bounce = Math.sin(Math.PI*hop)*BOUNCE_HEIGHT*plane.userData.span, rock = Math.sin(2*Math.PI*hop)*BOUNCE_ROLL, dip = Math.sin(Math.PI*hop)*BOUNCE_PITCH;
+      poseAircraft(plane, p.x, Y_TARMAC + bounce, p.z, inDx, inDz, Math.max(0, touchdownPitch*(1 - smooth(u/TOUCHDOWN_SETTLE)) - dip), rock);
       return;
     }
     phase -= ROLLOUT_TIME;
@@ -673,17 +739,25 @@ function makeFlight(plane, sched, paths, frame, marks, offset) {
     if (phase < ROLL_TIME) {
       const u = phase/ROLL_TIME, p = onRunway(leave, holdShort + liftoff*u*u);
       // the nose comes up over the last of the roll, just before the wheels leave
-      poseAircraft(plane, p.x, Y_TARMAC, p.z, outDx, outDz, Math.max(0, u - 0.82)/0.18*0.14);
+      poseAircraft(plane, p.x, Y_TARMAC, p.z, outDx, outDz, LIFTOFF_PITCH*smooth((u - 0.75)/0.25));
       return;
     }
     phase -= ROLL_TIME;
-    if (phase < CLIMB_TIME) {
-      const u = phase/CLIMB_TIME, p = onRunway(leave, holdShort + liftoff + glideRun*u);
-      poseAircraft(plane, p.x, Y_TARMAC + Math.pow(u, 1.4)*glideTop, p.z, outDx, outDz, 0.2);
-      return;
+    if (phase < climbTime) {
+      // up off the runway, slowly at first and ever more steeply into the cloud, fading out as it goes; the nose eases
+      // from the attitude it left the ground at to the climbing one, and on up if the path steepens past it
+      const w = phase/climbTime, p = onRunway(leave, holdShort + liftoff + glideRun*phase/CLIMB_TIME);
+      const climb = Math.atan(cloudTop*riseSlope(w)/(glideRun*climbTime/CLIMB_TIME));
+      const pitch = LIFTOFF_PITCH + (CLIMB_PITCH - LIFTOFF_PITCH)*smooth(phase/CLIMB_ROTATE_TIME);
+      poseAircraft(plane, p.x, Y_TARMAC + cloudTop*rise(w), p.z, outDx, outDz, Math.max(pitch, Math.min(climb, MAX_PATH_PITCH)));
+      return 1 - smooth((phase - CLIMB_TIME)/CLIMB_OUT_TIME);
     }
     plane.visible = false;
   };
+  const fly = (t) => fadeAircraft(plane, pose(t) ?? 1);
+  // start its round again from the moment it settles on its stand, as of time `t`
+  fly.dockAt = (t) => { shift = t - (APPROACH_TIME + ROLLOUT_TIME + taxiIn); };
+  return fly;
 }
 const HELI_IDLE = 7, HELI_LIFT = 4.5, HELI_CIRCUIT = 26, HELI_LAND = 4.5, HELI_HOVER = 55;
 /**
@@ -1068,7 +1142,8 @@ function finishAirport(zone, builders, poly, s, tint) {
 // A flight is in one of three states, and `update` is where that is decided:
 // - on schedule, which is all any of them did before this: the closure poses it from the clock
 // - hand-flown, off the schedule entirely, moved by the keys held (flyByHand)
-// - handing back, easing from wherever it was let go of to wherever the schedule says it should be by now (see stopFlying)
+// - returning, let go of and flying itself back to the airfield (see stopFlying), where it rejoins the schedule
+//   (rejoinSchedule) and eases from wherever it is to wherever the schedule says it should be by now (handBack)
 //
 // What never changes is the clock its schedule reads. Taking one off for a while and giving it back doesn't shift its
 // place in the round, so the separation the two of them keep on the runway survives being interfered with — the aircraft
@@ -1083,7 +1158,7 @@ function finishAirport(zone, builders, poly, s, tint) {
  * @param {number} index Its place in the zone's flights, which is what a follow remembers it by.
  */
 function makeTrackedFlight(zone, plane, fly, tier, index) {
-  const flight = { zone, plane, fly, index, size: tier.width*0.8, hand: null, handback: null };
+  const flight = { zone, plane, fly, index, size: tier.width*0.8, hand: null, returning: null, handback: null };
   flight.update = (t, dt) => {
     if (flight.hand) { flyByHand(flight, dt); return; }
     fly(t);
@@ -1092,106 +1167,37 @@ function makeTrackedFlight(zone, plane, fly, tier, index) {
   return flight;
 }
 
-// ---- the flying itself
-const FLY_SPEED = 46, FLY_SPEED_MIN = 22, FLY_SPEED_MAX = 105;   // units a second, at the size an international jet is
-const FLY_POWER = 26, FLY_DRAG = 14, FLY_GRAVITY = 40;           // how hard the throttle, the air and the weight pull on that speed
-const FLY_PITCH_RATE = 0.9, FLY_BANK_RATE = 2.2, FLY_TURN = 1.1; // radians a second: the nose, the wings, and how fast a full bank comes round
-const FLY_PITCH_MAX = 0.85, FLY_BANK_MAX = 1.05, FLY_LEVEL = 1.4; // how far it will go, and how briskly a stall or the ground straightens it
-const FLY_CEILING = 900, FLY_STALL = 0.7;                         // and where the air runs out, and the speed below which the nose drops
-const FLY_CONTROL_LAG = 0.25, FLY_MOMENTUM = 0.35;                // seconds: the weight behind the stick, and how long the flight path trails the nose
-const FLY_RIGHTING = 0.75, FLY_TRIM = 0.8, FLY_BITE_MIN = 0.4;    // let go, how keenly it rolls level and trims out; and how heavy the stick goes when slow
-const FLY_ROLLING = 0.6, FLY_GROUND_TURN = 0.9;                   // on the ground: the share of its speed the wheels lose a second, and the fastest it steers round (radians a second)
+// ---- the flying itself (the model is in life/flight.js; this poses the aircraft from it)
 /**
- * One frame of a hand-flown aircraft, from the keys held (controlInput). W and S put the nose down and up, A and D drop a
- * wing — and it is the dropped wing that turns it, the way a real one turns, so a bank held over comes round a circle
- * rather than sliding sideways. Shift is power and space is the airbrake. Climbing bleeds speed off and diving puts it
- * back on, and too slow a climb drops the nose by itself. On the ground it steers like a car instead: A and D turn it as
- * fast as its speed allows, and it rolls to a stop when left alone, until it has the speed to lift the nose (S) and go.
- *
- * What the keys ask for is a rate — how fast to roll, how fast to raise the nose — and the aeroplane takes a moment
- * (FLY_CONTROL_LAG) to get there and the same moment to stop again, so a tap eases the wings over instead of snapping
- * them and there is some weight behind the stick. The slower it flies the less the air does for it, so the controls go
- * heavy towards the stall. Let go and it rights itself the way a stable aeroplane does — the bank falling away and the
- * nose trimming out over a few seconds — rather than being hauled level, so it can be left alone for a moment without
- * falling out of the sky, but a bank held and released still settles gently instead of springing back.
- *
- * It carries its own momentum too: the flight path trails the nose by FLY_MOMENTUM rather than following it exactly, so
- * a turn swings through and a sharp pull slides a little before it bites, which is most of what makes it feel heavy.
- *
- * It cannot go under the ground: the ground stops it, levels it and lets it run along like a landing, which is friendlier
- * than a crash and means a bad approach just ends with a bump.
+ * One frame of a hand-flown aircraft: flown by stepFlight at a scale set by its size, then posed and, while low enough,
+ * struck against whoever is under it.
  * @param {object} flight
  * @param {number} dt Seconds this frame.
  * @returns {void}
  */
 function flyByHand(flight, dt) {
-  const hand = flight.hand, scale = flight.size/32; // (everything below is written for an international jet; a light one flies smaller)
-  const { forward, right, run, brake } = controlInput();
-  const toward = (v, goal, rate) => v + Math.max(-rate*dt, Math.min(rate*dt, goal - v));
-  const ease = (v, goal, seconds) => v + (goal - v)*(1 - Math.exp(-dt/seconds)); // (frame-rate independent, unlike a flat fraction)
-  const cruise = FLY_SPEED*scale, stall = FLY_SPEED_MIN*scale;
-  // on its wheels, and not lifting off: it drives like a car (A and D steer it, and only while it is moving; shift is
-  // power and space the brake, and left alone it rolls to a stop) until the nose comes up and it leaves the ground
-  const floor = Y_TARMAC + flight.size*0.1;
-  const grounded = hand.y <= floor + flight.size*0.02 && (hand.pitch <= 0.05 || hand.speed < stall/FLY_STALL); // (too slow to lift off, however far the nose is up)
-  // how much the air is doing for it: full authority at cruise, heavy and vague down at the stall
-  const bite = Math.max(FLY_BITE_MIN, Math.min(1, hand.speed/cruise));
-  // the stick, as a rate rather than an attitude. W dives and S climbs, the way round a stick is: pushed forward the
-  // nose drops. Let go, what it asks for instead is its own way back — a roll out of the bank and a nose back to trim,
-  // both of them gentler the nearer it already is, so it rolls level rather than being snapped there.
-  const askedPitch = (forward ? -forward*FLY_PITCH_RATE : -hand.pitch*FLY_TRIM)*bite;
-  const askedBank = (right ? -right*FLY_BANK_RATE : -hand.bank*FLY_RIGHTING)*bite;
-  // ...and the aeroplane takes a moment to reach the rate asked of it, and the same moment to stop again
-  hand.pitchRate = ease(hand.pitchRate, askedPitch, FLY_CONTROL_LAG);
-  hand.bankRate = ease(hand.bankRate, askedBank, FLY_CONTROL_LAG);
-  hand.pitch += hand.pitchRate*dt;
-  hand.bank += hand.bankRate*dt;
-  if (grounded) { hand.bank = 0; hand.bankRate = 0; } // (the stick steers the wheels, not the wings)
-  // as far over as it goes: the stop holds it there rather than the rate winding on against it
-  if (Math.abs(hand.pitch) > FLY_PITCH_MAX) { hand.pitch = Math.sign(hand.pitch)*FLY_PITCH_MAX; hand.pitchRate = 0; }
-  if (Math.abs(hand.bank) > FLY_BANK_MAX) { hand.bank = Math.sign(hand.bank)*FLY_BANK_MAX; hand.bankRate = 0; }
-  // too slow to hold the nose up, and it drops whatever the stick says — further in, the faster it falls
-  const sinking = Math.max(0, 1 - hand.speed/(stall/FLY_STALL));
-  if (sinking > 0 && hand.pitch > -0.35) { hand.pitch = toward(hand.pitch, -0.35, FLY_LEVEL*sinking); hand.pitchRate = Math.min(hand.pitchRate, 0); }
-  // speed: the throttle against the drag, less whatever the climb is costing (or the dive paying back)
-  const throttle = (brake ? -FLY_POWER : run ? FLY_POWER : 0)*scale;
-  const power = throttle + (grounded ? -hand.speed*FLY_ROLLING : (cruise - hand.speed)*FLY_DRAG/cruise);
-  hand.speed = Math.max(grounded ? 0 : stall*0.6, Math.min(FLY_SPEED_MAX*scale,
-    hand.speed + (power - Math.sin(hand.pitch)*FLY_GRAVITY*scale)*dt));
-  if (grounded) {
-    // steered like a car: the wheels turn it as fast as its speed allows, a wide circle for a big aircraft
-    hand.heading -= right*Math.min(FLY_GROUND_TURN, hand.speed/(flight.size*0.8))*dt;
-  } else {
-    // the bank is what turns it, and the turn is sharper the slower it is going
-    hand.heading += Math.sin(hand.bank)*FLY_TURN*dt*Math.min(2, cruise/Math.max(1, hand.speed));
-  }
-  // where it is pointing, and then where it is actually going — which trails the nose rather than being it, so the
-  // aeroplane swings through a turn and slides for a moment before a pull takes effect
-  const level = Math.cos(hand.pitch)*hand.speed;
-  // (on its wheels it goes where it points, with no sliding)
-  hand.vx = grounded ? Math.sin(hand.heading)*level : ease(hand.vx, Math.sin(hand.heading)*level, FLY_MOMENTUM);
-  hand.vz = grounded ? Math.cos(hand.heading)*level : ease(hand.vz, Math.cos(hand.heading)*level, FLY_MOMENTUM);
-  hand.vy = ease(hand.vy, Math.sin(hand.pitch)*hand.speed, FLY_MOMENTUM);
-  hand.x += hand.vx*dt;
-  hand.y += hand.vy*dt;
-  hand.z += hand.vz*dt;
-  // the ground underneath and the thin air above
-  if (hand.y <= floor) {
-    hand.y = floor;
-    hand.vy = Math.max(0, hand.vy);
-    hand.pitch = Math.max(hand.pitch, 0);
-    hand.bank = toward(hand.bank, 0, FLY_LEVEL*3); // (a wing tip can't stay in the tarmac, however gentle the air is)
-    hand.bankRate = 0;
-  }
-  if (hand.y > FLY_CEILING) { hand.y = FLY_CEILING; hand.vy = Math.min(0, hand.vy); hand.pitch = Math.min(hand.pitch, 0); }
+  const hand = flight.hand, craft = { scale: flight.size/32, size: flight.size, floor: Y_TARMAC + flight.size*0.1 };
+  stepFlight(hand, dt, craft, flight.returning ? autopilot(hand, returnTarget(flight), craft) : undefined);
   flight.plane.visible = true;
   poseAircraft(flight.plane, hand.x, hand.y, hand.z, Math.sin(hand.heading), Math.cos(hand.heading), hand.pitch, -hand.bank);
   // whoever is on the ground under it (or a car on the road) when it is low enough to touch them
   App.strikeWithAircraft?.({ x: hand.x, y: hand.y, z: hand.z, heading: hand.heading,
     halfLength: flight.size*0.5, halfWidth: flight.size*0.5, below: flight.size*0.1, above: flight.size*0.15 });
+  if (flight.returning && backAtField(flight)) rejoinSchedule(flight);
 }
 
-const HANDBACK_SPEED = 120, HANDBACK_MIN = 1.2, HANDBACK_MAX = 7; // how quickly it works its way back, and the seconds that takes
+// ---- letting go: the aircraft flies itself back to the airfield, low over it, and only then goes back on its schedule
+const RETURN_NEAR = 0.8, RETURN_HEIGHT = 6, RETURN_GIVE_UP = 90; // (field radii out; wingspans up; seconds before it rejoins wherever it is)
+const RETURN_HANDBACK_REACH = 2;                                  // field radii: further than this from the schedule and it just appears there
+// the airfield's middle, at a low pass over it
+const returnTarget = flight => { const field = flight.zone.airportField; return { x: field.x, z: field.z, y: Y_TARMAC + flight.size*1.5 }; };
+function backAtField(flight) {
+  const field = flight.zone.airportField, hand = flight.hand;
+  if (!field || lastFrame > flight.returning.giveUpAt) return true;
+  return Math.hypot(hand.x - field.x, hand.z - field.z) < field.radius*RETURN_NEAR && hand.y < Y_TARMAC + flight.size*RETURN_HEIGHT;
+}
+
+const HANDBACK_SPEED = 60, HANDBACK_MIN = 2.4, HANDBACK_MAX = 14; // how quickly it works its way back, and the seconds that takes
 /**
  * The seconds after letting go, easing the aircraft from where it was left to wherever its schedule has got to. The
  * schedule has been running the whole time and has posed it already this frame, so this only has to drag it back from
@@ -1279,6 +1285,7 @@ function planeCardInfo(flight) {
 // The card's picture: a copy of the aircraft (sharing its geometry and materials), sitting level at the origin, and an
 // isometric camera framing it — as for a carriage (see trainThumbnailOf in trains.js).
 function planeThumbnailOf(plane) {
+  fadeAircraft(plane, 1);
   const mesh = plane.clone();
   mesh.position.set(0, 0, 0); mesh.rotation.set(0, 0, 0); mesh.visible = true;
   const r = new THREE.Box3().setFromObject(mesh).getBoundingSphere(new THREE.Sphere()).radius;
@@ -1289,7 +1296,7 @@ function planeThumbnailOf(plane) {
   return { mesh, camera: view };
 }
 
-const FIELD_EASE = 0.04, CHASE_HOLD = 1500, CHASE_EASE = 0.3, CHASE_PHI = 1.15;
+const FIELD_EASE = 0.04;
 /**
  * The camera, once the aircraft have all been moved.
  *
@@ -1307,7 +1314,7 @@ function updatePlaneFollow() {
   if (!flight) { if (followed) stopFollowingPlane(); return; }
   if (flight.plane.visible) {
     controls.goalTarget.copy(flight.plane.position);
-    if (flight === flown) chaseFrom(flight.plane.position, flight.plane.rotation.y);
+    if (flight === flown) chaseBehind(flight.plane.rotation.y);
     return;
   }
   // away: ease back down onto the field it flew out of, and sit there until it comes round again
@@ -1318,15 +1325,6 @@ function updatePlaneFollow() {
   controls.goalTarget.z += (field.z - controls.goalTarget.z)*FIELD_EASE;
   controls.goalRadius += (field.radius - controls.goalRadius)*FIELD_EASE;
 }
-// eases the camera round behind a hand-flown aircraft, unless the mouse has swung it somewhere lately (as traffic.js does
-// for a driven car)
-function chaseFrom(position, heading) {
-  if (performance.now() - flying.lookedAt < CHASE_HOLD) return;
-  const behind = heading + Math.PI;
-  controls.goalTheta = controls.theta + CHASE_EASE*Math.atan2(Math.sin(behind - controls.theta), Math.cos(behind - controls.theta));
-  controls.goalPhi = controls.phi + CHASE_EASE*(CHASE_PHI - controls.phi);
-}
-
 /**
  * The plane card's picture: take the followed aircraft off its schedule and fly it by hand, starting from exactly where
  * and how fast it already was, so the handover is invisible.
@@ -1334,22 +1332,19 @@ function chaseFrom(position, heading) {
  */
 function flyPlane() {
   const flight = followedFlight();
-  if (!flight || flown === flight || !startFlying()) return;
+  if (!flight || flown === flight || !startFlying(stopFlying)) return;
   flown = flight;
   flight.handback = null;
+  flight.returning = null; // (taken back off the autopilot, if it was flying itself home)
   const plane = flight.plane;
   plane.visible = true;
-  const heading = plane.rotation.y, pitch = -plane.rotation.x, speed = FLY_SPEED*flight.size/32;
-  flight.hand = { x: plane.position.x, y: Math.max(Y_TARMAC + flight.size*0.1, plane.position.y), z: plane.position.z,
-    heading, pitch, bank: 0, speed, pitchRate: 0, bankRate: 0,
-    // already going where it was pointing, so the momentum it takes over with is the flight it was on
-    vx: Math.sin(heading)*Math.cos(pitch)*speed, vy: Math.sin(pitch)*speed, vz: Math.cos(heading)*Math.cos(pitch)*speed };
+  fadeAircraft(plane, 1); // (it may have been fading out on its climb)
+  flight.hand = flight.hand || makeHand({ x: plane.position.x, y: Math.max(Y_TARMAC + flight.size*0.1, plane.position.y), z: plane.position.z,
+    heading: plane.rotation.y, pitch: -plane.rotation.x, speed: cruiseSpeed(flight.size/32) });
   controls.goalRadius = Math.max(controls.minRadius, flight.size*2.2);
 }
 /**
- * Give it back: the schedule has been running underneath the whole time and has never lost its place, so all that is
- * needed is to note how far from it the aircraft has wandered and let that distance fall away over the next few seconds
- * (handBack). A long way out takes longer to come back, up to a point.
+ * Let go of the aircraft: it carries on under its own autopilot, back to the airfield (see backAtField).
  * @returns {void}
  */
 function stopFlying() {
@@ -1357,13 +1352,28 @@ function stopFlying() {
   const flight = flown;
   flown = null;
   endFlying();
-  const plane = flight.plane;
+  flight.returning = { giveUpAt: (lastFrame || 0) + RETURN_GIVE_UP };
+}
+/**
+ * Give it back to the schedule, restarted so that it is sitting on its stand: note how far from there the aircraft is and
+ * let that distance fall away over the next few seconds (handBack) — or, if it is a long way out, let it appear on the
+ * stand. It is over the airfield when this happens. (The round is its own from here, so it no longer keeps step with the
+ * other aircraft on the field.)
+ * @param {object} flight
+ * @returns {void}
+ */
+function rejoinSchedule(flight) {
+  const plane = flight.plane, field = flight.zone.airportField;
   const was = plane.position.clone(), wasRotation = { x: plane.rotation.x, y: plane.rotation.y, z: plane.rotation.z };
   flight.hand = null;
-  flight.fly(lastFrame || 0); // where the schedule has got to while it was being flown about
+  flight.returning = null;
+  flight.fly.dockAt?.(lastFrame || 0); // its round starts over, from settling on its stand
+  flight.fly(lastFrame || 0);
   const offset = was.sub(plane.position);
+  if (field && offset.length() > field.radius*RETURN_HANDBACK_REACH) return;
   flight.handback = { from: lastFrame || 0, rotation: wasRotation, offset,
     span: Math.max(HANDBACK_MIN, Math.min(HANDBACK_MAX, offset.length()/HANDBACK_SPEED)) };
+  handBack(flight, lastFrame || 0); // (this frame too, so it doesn't show the stand for one frame before easing in from where it was)
 }
 // (the aircraft card is handed over too, for whoever else wants to put something on it or open one)
 Object.assign(App, { pickPlane, followPlaneAt, stopFollowingPlane, flyPlane, stopFlying, showPlaneCard, hidePlaneCard });

@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
-import { camera } from '../core/scene.js';
+import { camera, Y_PARK } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { buildingNumber as numberFor } from '../buildings/footprints.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
 import { mulberry32 } from '../core/math.js';
+import { startFlying, endFlying } from './possession.js';
+import { stepFlight, makeHand, cruiseSpeed, chaseBehind } from './flight.js';
 
 // ============================================================ flowers, hives and bees
 // Three things a park grows, all cut from one model (assets/models/Bee.glb, made in Blender): patches of flowers, a hive
@@ -53,7 +55,8 @@ const text = loadTypeText('assets/bees.txt', {
   placeholder: { bee: { name: ['Bee'], mood: ['🐝'], loves: ['Flowers'], hates: ['Rain'] }, default: { name: ['Hive'], mood: ['🍯'], loves: ['Flowers'], hates: ['Bears'] } },
 });
 
-const beeCard = makeCard({ id: 'bee-card', title: 'Bee', onClose: () => App.stopFollowingBee() });
+const beeCard = makeCard({ id: 'bee-card', title: 'Bee', onClose: () => App.stopFollowingBee(),
+  thumb: { title: 'Fly it', onClick: () => App.flyBee() } }); // the picture takes the controls (see flyBee)
 const hiveCard = makeCard({ id: 'hive-card', title: 'Hive', onClose: () => App.stopFollowingHive(), labels: { occupants: 'Bees' } });
 const drawBeeThumbnail = makeThumbnailDrawer(beeCard.canvas);
 const drawHiveThumbnail = makeThumbnailDrawer(hiveCard.canvas);
@@ -136,6 +139,7 @@ const BEE_CIRCLE_MIN = 1.6, BEE_CIRCLE_MAX = 3.4;  // seconds spent circling one
 const BEE_SIT_MIN = 1.5, BEE_SIT_MAX = 4.5;        // seconds sat on it
 const BEE_RANGE = 22;         // how far from its hive a bee will go looking for a flower
 const BEE_ARRIVED = 0.45;     // how near a target counts as reaching it
+const BEE_CEILING = 40;       // how far above the park a bee flown by hand can climb
 const BEE_DUSK = 3;           // the sun this far above the horizon or lower and they're in for the night, in degrees
 const BEE_RAIN = 0.2;         // rain past this and they stay in as well
 // whether it's weather to be out in at all — read once a frame, since it's the same answer for every bee in the world
@@ -525,7 +529,7 @@ export function plantParkLife(zone, { rng, foliage, ground, spot, clear, trees, 
       bees.push({ hive, number: numberFor(zone.id + ':bee:' + index + ':' + k),
         flowers: near.length ? near : flowerSpots,
         at: hive.mouth.clone(), v: new THREE.Vector3(), aim: hive.mouth.clone(),
-        state: 'hive', until: between(Math.random, 0.5, BEE_REST_MAX), yaw: Math.random()*Math.PI*2,
+        state: 'hive', until: between(Math.random, 0.5, BEE_REST_MAX), yaw: Math.random()*Math.PI*2, pitch: 0, bank: 0, hand: null,
         phase: Math.random()*Math.PI*2, plan: [], perch: null, angle: 0, circling: 1, flap: 0, legs: 0, look: 0, land: 1 });
     }
   });
@@ -543,6 +547,7 @@ export function plantParkLife(zone, { rng, foliage, ground, spot, clear, trees, 
 
 // ---- flight
 const held = new THREE.Object3D(), toward = new THREE.Vector3(), wander = new THREE.Vector3();
+held.rotation.order = 'YXZ'; // rolled about its own length first, then pitched and turned (as an aircraft is: see poseAircraft)
 const pick = list => list[Math.floor(Math.random()*list.length)];
 const isHome = bee => bee.state === 'hive';
 /**
@@ -586,7 +591,14 @@ function nextLeg(bee) {
   if (bee.perch) bee.aim.set(bee.perch.x, bee.perch.y + 0.75, bee.perch.z);
   else bee.aim.copy(bee.hive.mouth);
 }
+// wings and legs of a bee in the air
+function beatWings(bee, t) {
+  bee.flap = 0.5 - 0.5*Math.cos(t*BEE_FLAP_HZ*Math.PI*2 + bee.phase);
+  bee.legs = 0.5 - 0.5*Math.cos(t*Math.PI*2/BEE_LEGS_SECONDS + bee.phase);
+  bee.land = 0; // back off the flower, so the legs are the flight's again
+}
 function stepBee(bee, t, dt, sheltering) {
+  if (bee.hand) { flyByHand(bee, t, dt); return; }
   // caught out by the dark or the rain: it gives up the round it was on and makes straight for home
   if (sheltering && !isHome(bee) && (bee.perch || bee.plan.length)) {
     bee.plan.length = 0;
@@ -639,11 +651,52 @@ function stepBee(bee, t, dt, sheltering) {
   toward.addScaledVector(wander, bee.state === 'travel' ? 0.5 : 0.18);
   bee.v.lerp(toward, 1 - Math.exp(-BEE_TURN*dt));
   bee.at.addScaledVector(bee.v, dt);
-  bee.flap = 0.5 - 0.5*Math.cos(t*BEE_FLAP_HZ*Math.PI*2 + bee.phase);
-  bee.legs = 0.5 - 0.5*Math.cos(t*Math.PI*2/BEE_LEGS_SECONDS + bee.phase);
-  bee.land = 0; // back off the flower, so the legs are the flight's again
+  beatWings(bee, t);
   lookAt(bee, bee.state === 'circle' ? 1 : 0, dt); // head down onto the flower it's coming onto, and up again after
   if (bee.v.lengthSq() > 0.04) bee.yaw = Math.atan2(bee.v.x, bee.v.z);
+}
+
+// ---- flying a bee by hand (the flight model is in flight.js)
+let flownBee = null; // the bee under the player's hands, if any; its state is bee.hand
+// its speeds are the model's, scaled to the bee's own cruising speed
+const flightOf = bee => ({ scale: BEE_SPEED*bee.traits.speed/cruiseSpeed(1), size: BEE_LENGTH*bee.traits.size, floor: Y_PARK + 0.05, ceiling: Y_PARK + BEE_CEILING });
+function flyByHand(bee, t, dt) {
+  const hand = bee.hand;
+  stepFlight(hand, dt, flightOf(bee));
+  bee.at.set(hand.x, hand.y, hand.z);
+  bee.v.set(hand.vx, hand.vy, hand.vz);
+  bee.yaw = hand.heading; bee.pitch = hand.pitch; bee.bank = hand.bank;
+  beatWings(bee, t);
+  lookAt(bee, 0, dt);
+}
+/**
+ * The bee card's picture: take the followed bee off its round and fly it by hand, from exactly where and how fast it
+ * already was. Does nothing for a bee that is indoors.
+ * @returns {void}
+ */
+function flyBee() {
+  if (!followedBee) return;
+  const bee = followedBee.colony.bees[followedBee.index];
+  if (isHome(bee) || bee === flownBee || !startFlying(stopFlyingBee)) return;
+  flownBee = bee;
+  bee.hand = makeHand({ x: bee.at.x, y: bee.at.y, z: bee.at.z, heading: bee.yaw, speed: cruiseSpeed(flightOf(bee).scale) });
+  controls.goalRadius = Math.max(controls.minRadius, BEE_FOLLOW_RADIUS*0.5);
+}
+/**
+ * Let go of the flown bee: it carries on in the direction it was going and heads home, as one caught out by the dark does.
+ * @returns {void}
+ */
+function stopFlyingBee() {
+  if (!flownBee) return;
+  const bee = flownBee, hand = bee.hand;
+  flownBee = null;
+  endFlying();
+  bee.v.set(hand.vx, hand.vy, hand.vz);
+  bee.hand = null; bee.pitch = 0; bee.bank = 0;
+  bee.plan.length = 0;
+  bee.perch = null;
+  bee.state = 'travel';
+  bee.aim.copy(bee.hive.mouth);
 }
 
 // ---- following a bee, or a hive: as for a person and a building (see input.js for what a click in World mode picks)
@@ -680,6 +733,7 @@ function pickHive(clientX, clientY) {
   return { colony: colonies.find(c => c.hiveMesh === hit.object), index: hit.instanceId };
 }
 function followBee(colony, index) {
+  stopFlyingBee();
   followedBee = { colony, index };
   beeDoingShown = null;
   controls.minRadius = FOLLOW_MIN_RADIUS;
@@ -693,6 +747,7 @@ function followBeeAt(clientX, clientY) {
 }
 function stopFollowingBee() {
   if (!followedBee) return;
+  stopFlyingBee();
   followedBee = null;
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
@@ -722,6 +777,7 @@ function stopFollowingHive() {
 // what the followed bee's card says it's up to: where it's got to in its round. There's nothing for being home, since a
 // bee that goes in hands the camera over to its hive and the hive's card takes over from here (see followBees).
 function beeDoing(bee) {
+  if (bee.hand) return 'Flying by hand';
   if (bee.state === 'land') return 'On a flower';
   if (bee.state === 'circle') return 'Circling a flower';
   return bee.perch ? 'Off to a flower' : 'Flying home';
@@ -749,6 +805,7 @@ function followBees() {
       const doing = beeDoing(bee);
       if (doing !== beeDoingShown) { beeDoingShown = doing; setBeeCardDoing(doing); }
       controls.goalTarget.copy(bee.at);
+      if (bee.hand) chaseBehind(bee.hand.heading);
     }
   }
   if (!followedHive) return;
@@ -787,7 +844,7 @@ export function updateBees(t) {
       refreshBeeTraits(bee);
       stepBee(bee, t, dt, sheltering);
       held.position.copy(bee.at);
-      held.rotation.set(0, bee.yaw, 0);
+      held.rotation.set(-bee.pitch, bee.yaw, -bee.bank);
       held.scale.setScalar(isHome(bee) ? 0 : bee.traits.size); // indoors, and not to be drawn
       held.updateMatrix();
       colony.mesh.setMatrixAt(k, held.matrix);
@@ -800,4 +857,4 @@ export function updateBees(t) {
 }
 
 // (the bee and hive cards are handed over too, for whoever else wants to put something on them or open one)
-Object.assign(App, { pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive, showBeeCard, setBeeCardDoing, hideBeeCard, showHiveCard, setHiveCardBees, hideHiveCard });
+Object.assign(App, { pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive, flyBee, showBeeCard, setBeeCardDoing, hideBeeCard, showHiveCard, setHiveCardBees, hideHiveCard });
