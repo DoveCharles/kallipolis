@@ -77,6 +77,20 @@ export function loadTypeText(url, { attributes, settings = [], fallbacks = {}, p
       }
       return { ...said, traits: combineTraits(picked) };
     },
+    // Every value a kind gives for a setting (see `settings`), as text: its own, else the nearest in the chain that has any.
+    // For settings that are lists rather than yes or no (cars' `plate`).
+    listOf(kind, setting) {
+      const said = chainFor(kind).map(t => t[setting]).find(v => v && v.length);
+      return said ? said.map(entry => (entry.text ?? entry).trim()) : [];
+    },
+    // A number setting (see `settings`): the nearest in the chain that says anything, as a number (`60%` reads as 0.6), or
+    // `fallback` where nothing is said or it isn't a number.
+    numberOf(kind, setting, fallback) {
+      const said = chainFor(kind).map(t => t[setting]).find(v => v && v.length);
+      const text = said ? String(said[said.length - 1].text ?? said[said.length - 1]).trim() : '';
+      const value = parseFloat(text)/(text.endsWith('%') ? 100 : 1);
+      return Number.isFinite(value) ? value : fallback;
+    },
     // A yes/no setting (see `settings`): whether the nearest thing in the chain that says anything says yes. Nothing
     // said is no, so a setting only turns on where it's been thought about. The setting is kept as an entry, so it's the
     // entry's text that's read: `enterable = yes` is an entry saying "yes".

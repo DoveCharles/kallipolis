@@ -38,6 +38,7 @@ which add up. Everyone starts at the value in
 #   angry       0       how angry their eyes look                                                      0 to 1
 #   shock       0       how shocked their eyes look                                                    0 to 1
 #   evil        0       how evil they are, the reactions of others when they die                       -1 to 1
+#   weight      1       how much a car slows when it hits them, multiplying a small base (always far less than hitting a car)  0.1 to 10
 #   aggression  1       how likely they are to punch sommone                                           0 to 20
 #   bloodlust   off     covered in blood, they run twice as fast and go about punching everyone they can  on or off
 #   backwards   off     they walk backwards                                                           on or off
@@ -348,6 +349,7 @@ Morpheus
 Sly
 Adibou
 Bizbi
+Ultra
 
 ################################################################################################################################
 
@@ -578,6 +580,7 @@ Aura
 Cow
 Moss
 Mistress
+Super
 
 ################################################################################################################################
 
@@ -913,6 +916,8 @@ Lightning
 Stonefish
 T.V.
 Flake
+Sonic
+Tails
 
 ################################################################################################################################
 
@@ -1200,7 +1205,7 @@ Stepping on the beat
 Writing strongly worded letters to their estranged father [mood = -0.4, aggression = 2]
 Shitting [patience = 0.3]
 Darts
-Killing [blinks = 0, mood = 0.6, evil = 0.5, aggression = 100]
+Killing [blinks = 0, mood = 0.6, evil = 0.5, aggression = 100, bloodlust]
 Just magnets [solo]
 Pub [speed = 0.8, chatty = 3, talkative = 2, aggression = 2]
 Sneezing [fidgety = 4]
@@ -1491,7 +1496,7 @@ Trying to blow people up with their mind [chatty = 0.5, evil = 0.05]
 Apologising needlessly [chatty = 2, mood = -0.3, evil = -0.05, aggression = 0.1]
 Crystals
 Escaping [mood = -0.5, speed = 1.5, aggression = 2]
-Inflicting torture [mood = 0.2, blinks = 0.1, evil = 0.5, aggression = 40]
+Inflicting torture [mood = 0.2, blinks = 0.1, evil = 0.5, aggression = 40, bloodlust]
 Taking their socks off
 Facebook marketplace [chatty = 2, talkative = 2, plazas = 2, aggression = 2]
 Sowing [patience = 3, aggression = 2]

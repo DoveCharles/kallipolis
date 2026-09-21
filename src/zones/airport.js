@@ -1187,9 +1187,9 @@ function flyByHand(flight, dt) {
   flight.plane.visible = true;
   poseAircraft(flight.plane, hand.x, hand.y + hand.hop, hand.z, Math.sin(hand.heading), Math.cos(hand.heading), hand.pitch - hand.dip, -hand.bank + hand.rock);
   // whoever is on the ground under it (or a car on the road) when it is low enough to touch them
-  App.strikeWithAircraft?.({ x: hand.x, y: hand.y, z: hand.z, heading: hand.heading,
+  hand.speed *= 1 - (App.strikeWithAircraft?.({ x: hand.x, y: hand.y, z: hand.z, heading: hand.heading,
     halfLength: flight.size*0.5, halfWidth: flight.size*0.5, below: flight.size*0.1, above: flight.size*0.15,
-    velocity: { x: hand.vx, y: hand.vy, z: hand.vz } });
+    speed: hand.speed, velocity: { x: hand.vx, y: hand.vy, z: hand.vz } }) ?? 0);
   if (hand.crashed) { crashAircraft(flight); return; }
   if (flight.returning && backAtField(flight)) rejoinSchedule(flight);
 }
@@ -1209,7 +1209,7 @@ function crashAircraft(flight) {
   const at = plane.position, radius = flight.size*BLAST_RADIUS*BLAST_KILL_REACH;
   // (on the ground it was over, so the scorch marks lie on it)
   [-1, 0, 1].forEach(k => explodeCar({ x: at.x + along.x*k, y: Y_TARMAC, z: at.z + along.z*k }, flight.size*0.15, { paint: WRECK_COLOR }));
-  App.strikeWithAircraft?.({ x: at.x, y: Y_TARMAC, z: at.z, heading: 0, halfLength: radius, halfWidth: radius, below: radius, above: radius });
+  App.strikeWithAircraft?.({ x: at.x, y: Y_TARMAC, z: at.z, heading: 0, halfLength: radius, halfWidth: radius, below: radius, above: radius, speed: Infinity });
   if (flown === flight) { flown = null; endFlying(); }
   // a camera on it stays where it blew up, following nothing
   if (followedFlight() === flight) { controls.goalTarget.set(at.x, Y_TARMAC + flight.size*0.2, at.z); stopFollowingPlane(); }

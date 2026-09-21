@@ -10,6 +10,7 @@ export const TRAITS = {
   boost:     { base: 1, min: 0.1, max: 6 }, // multiplies the boost of running (people) or of driving with shift held (cars)
   braking:   { base: 1, min: 0.1, max: 6 }, // multiplies how hard a car brakes
   control:   { base: 1, min: 0.1, max: 6 }, // multiplies how sharply a driven car steers
+  weight:    { base: 1, min: 0.1, max: 10 }, // how much a car crashing into it slows down: multiplies the base slow-down for its kind (people's is far smaller: see slowedBy in life/traffic.js)
   size:      { base: 1, min: 0.3, max: 3 },
   chatty:    { base: 1, min: 0, max: 10 },
   talkative: { base: 1, min: 0.05, max: 20 },

@@ -4,9 +4,13 @@
 #   name    what it's called on its card (followed by its own number, like "Police car #3")
 #   mood    its current mood, usually an emoji. The mood carries the traits that set how the car drives: `speed` scales its
 #           speed, `boost` scales its boost when driven with shift held, `braking` scales how hard it brakes and `control` how
-#           sharply it steers when driven (1 is the standard car; 2 is twice as much)
+#           sharply it steers when driven (1 is the standard car; 2 is twice as much), and `weight` scales how much a car
+#           slows when it crashes into this one (heavier, more slow-down; 1 is standard)
 #   loves   what it loves
 #   hates   what it hates
+#   vanitychance   how likely a vehicle of that type is to wear one of its plates, from 0 (never) to 1 (always)
+#   plate   a vanity registration (up to nine characters, capitals, digits, spaces and dashes) it might wear instead of a
+#           normal one. Give it as many lines as you like: a type with none of its own uses [default]'s
 #
 # Give an attribute several lines to have each vehicle of that type pick one of them (always the same one for the same
 # vehicle). Anything a type leaves out comes from [default], which is also used for any type that isn't listed.
@@ -21,20 +25,25 @@
 
 [default]
 name = Car
-mood = 🚗 [speed = 1, boost = 1, braking = 1, control = 1]
+vanitychance = 0.1
+mood = 🚗 [speed = 1, boost = 1, braking = 1, control = 1, weight = 1]
 loves = Beep beep
 hates = Honkkkk
+plate = LICENSE
+
 
 [Ambulance]
 name = Ambulance
-mood = 🚑 [speed = 1, boost = 1, braking = 1.3, control = 1.3]
+vanitychance = 0
+mood = 🚑 [speed = 0.8, boost = 1.0, braking = 1.3, control = 1.3, weight = 3.3]
 loves = WOOOOOOOOOooooo....oooooOOOOOWWWW
 hates = When... they don't make it...
 hates = Budget cuts
 
 [Bus]
 name = Bus
-mood = 🚌 [speed = 0.8, boost = 1, braking = 0.9, control = 0.5]
+vanitychance = 0
+mood = 🚌 [speed = 0.8, boost = 1, braking = 0.9, control = 0.5, weight = 4.5]
 loves = Picking up my lovely peoples
 loves = Breaking down
 loves = Unexplained 30 minute stop
@@ -44,7 +53,7 @@ hates = Mean peoplesss
 
 [Canyonero]
 name = SUV
-mood = 🚙 [speed = 1, boost = 1, braking = 0.8, control = 0.8]
+mood = 🚙 [speed = 1, boost = 1, braking = 0.8, control = 0.8, weight = 1.8]
 loves = Flipping over
 loves = GET OUT OF MY WAY
 loves = Being so so big and huge
@@ -53,9 +62,21 @@ loves = Imagine Dragons
 loves = FUCK YOU BUDDY! YEAH FUCK YOU! FUCKING CUT ME OFF, SHIT
 hates = SMALLER CARS!!!
 hates = Slowies
+plate = KILL YOUS
+plate = SODRUNKRN
+plate = BREAKTEST
+plate = HATECRIME
+plate = DIETONITE
+plate = ILOVEABBA
+plate = WONTYIELD
+plate = DONT CARE
+plate = BIG RAGER
+plate = POOMOBILE
+plate = IM SO BIG
 
 [Taxi]
 name = Taxi
+vanitychance = 0
 mood = 🚕 [speed = 1, boost = 1, braking = 1.4, control = 1]
 loves = Rolling up the meter
 loves = Cutting people off
@@ -66,6 +87,7 @@ hates = Knowing the whole layout of the city by heart. It's too much
 
 [PoliceCar]
 name = Police car
+vanitychance = 0
 mood = 🚓 [speed = 1.0, boost = 1.3, braking = 1.6, control = 1.5]
 loves = WEEWOOWEEWOO
 loves = PULL OVER, NOW
@@ -89,10 +111,25 @@ loves = Just texting back the client real quick [keysmash]
 hates = Being late for work!!!
 hates = Traffic, guh! I'm gonna be so late for work!!!
 hates = Hippies
+plate = STEVE JOB
+plate = UCNTRSTME
+plate = SELLMYCAR
+plate = SELLMEPEN
+plate = SELLSEMEN
+plate = SALESMAN
+plate = FUCKEARTH
+plate= PROMOTION
+plate= MID CLASS
+plate= CIGARETTE
+plate = JUSTLIKEU
+plate = FAMILYMAN
+plate = CALL BACK
+plate= SALESTAX
 
 [PickupTruck]
+vanitychance = 0.3
 name = Pickup truck
-mood = 🛻 [speed = 0.9, boost = 1, braking = 1.0, control = 0.6]
+mood = 🛻 [speed = 0.9, boost = 1, braking = 1.0, control = 0.6, weight = 1.4]
 loves = Taking up the whooole road omg
 loves = Running over wildlife
 loves = Running over literally anything
@@ -104,10 +141,30 @@ loves = Using the cargo bay for absolutely nothing
 hates = Children and small animals
 hates = Nature
 hates = Fucking their fat wife
+plate = CATTLEGUN
+plate = SHRAPNEL
+plate = BIG RAGER
+plate = POOMOBILE
+plate = IM SO BIG
+plate = BUCKET
+plate = ROAD HEAD
+plate = SAWD UST
+plate = STALKER
+plate = ROADRUNNR
+plate = GARAGEBOY
+plate = SUCK TOES
+plate = FUCKEARTH
+plate = ROADHOGGY
+plate = EATMYPANT
+plate = EATMYCRUD
+plate = POOURSELF
+plate = DONT CARE
+plate = BEER2NITE
 
 [SportsCar]
 name = Sports car
-mood = 🏎️ [speed = 1.2, boost = 1.4, braking = 1.1, control = 1.5]
+vanitychance = 0.6
+mood = 🏎️ [speed = 1.2, boost = 1.4, braking = 1.1, control = 1.5, weight = 0.6]
 loves = VROOOOOOOOM
 loves = EEEEEEEEEE *gear change* WREEEEEEEEEE
 loves = RRRRUM RUM RUM RUM RUM RUM
@@ -115,11 +172,28 @@ loves = Being a moderator on r/smalldickproblems
 loves = Just messaging my mate George about the Ibiza trip [keysmash]
 hates = Their wife
 hates = Getting it in the ear from their missus
-hates = My dad passed away at this age, you know?
+hates = My dad passed at this age, you know?
+plate = RESPAWN
+plate = JEREMY
+plate = MAOZEDONG
+plate = IPOD NANO
+plate = ROADHEAD
+plate = IBUPROFEN
+plate = PRIORITYS
+plate = SUCK MAMA
+plate = SPEEDBUMP
+plate = INSURANCE
+plate = EATMYDUST
+plate = EATMYDICK
+plate = JUSTLIKEU
+plate = ANDY YANG
+plate = BUYCRYPTO
+plate = DRAGONAIR
+plate = DRAGONITE
 
 [FamilyCar]
 name = Family car
-mood = 👪 [speed = 0.9, boost = 0.9, braking = 1.1, control = 1.1]
+mood = 👪 [speed = 0.9, boost = 0.9, braking = 1.1, control = 1.1, , weight = 1.3]
 loves = Their family omg
 loves = Road trip!!!
 loves = Sliding doors
@@ -129,28 +203,62 @@ hates = Turning this thing around if I have to
 hates = The 'streets'
 hates = Hearing sirens nearby, omg are they after me? Did I do something?
 hates = Rap music
+plate = BREASTMLK
+plate = RESPNSBLE
+plate = LASTCHANCE
+plate = MINECRAFT
+plate = IBUPROFEN
+plate = JILLSTEIN
+plate = COCOMELON
+plate = DONT KILL
+plate = INNOCENTS
+plate = FAMILYMAN
+plate = ILOVEABBA
+plate = SAVESOULS
+plate = ILUVJESUS
+plate = SKYLANDER
 
 [Truck]
 name = Truck
-mood = 🚚 [speed = 0.8, boost = 0.7, braking = 0.6, control = 0.6]
+vanitychance = 0.2
+mood = 🚚 [speed = 0.8, boost = 0.7, braking = 0.6, control = 0.6, , weight = 2.3]
 loves = HOONK HOOOOOOOOONK
 loves = Blocking the motorway
 loves = YouTube shorts [keysmash]
 loves = Going sooo so slow
 hates = Literally anyone passing them on the motorway
 hates = Non-truckers
+plate = STINK BUG
+plate = SODRUNKRN
+plate = SLEEPYBOY
+plate = KILL YOUS
+plate = WIDELOADS
+plate = MARIJUANA
+plate = WONTYIELD
+plate = BEER2NITE
 
 [Twingo]
 name = Twingo
-mood = 🚗 [speed = 0.9, boost = 1, braking = 1.2, control = 0.8]
+mood = 🚗 [speed = 0.9, boost = 1.1, braking = 1.2, control = 1.1, , weight = 0.6]
 loves = Being oh so cutey
 loves = France
 hates = Bigger cars (small willy's)
 hates = beeeep beeeeeeep
+plate = KILLMENOW
+plate = PRACTICAL
+plate = LGBTQIA
+plate = PINKYTOE
+plate = AMYGDALA
+plate = LOVEWORLD
+plate = KNWTHYSLF
+plate = EUROPEAN
+plate= CIGARETTE
+plate = MARIJUANA
 
 [Van]
 name = Van
-mood = 🚐 [speed = 0.9, boost = 1, braking = 0.6, control = 0.6]
+vanitychance = 0.1
+mood = 🚐 [speed = 0.9, boost = 1, braking = 0.6, control = 0.6, , weight = 2]
 loves = Uhh. Just on my way to work, mate.
 loves = Parking on the curb in a busy street. It's alright, got me hazards on mate.
 loves = Calling in sick
@@ -159,3 +267,12 @@ loves = Parking near schools
 hates = All other cars
 hates = Women
 hates = Bellends
+plate = BOOB HONK
+plate = NICE DICK
+plate = YAY CRIME
+plate = STALKER
+plate = SPKENGLSH
+plate = HATECRIME
+plate = MARIJUANA
+plate = WONTYIELD
+plate = BEER2NITE

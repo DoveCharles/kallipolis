@@ -7,6 +7,7 @@ import { TEXT_ROWS } from '../ui/entity-card.js';
 // core/type-text.js, which the buildings and the trains use too; see there for the format.
 const cars = loadTypeText('assets/cars.txt', {
   attributes: TEXT_ROWS,
+  settings: ['plate', 'vanitychance'], // vanity registrations, not card text: see vanityPlatesOf
   counted: ['loves', 'hates'], // can have several per vehicle: see `counts` in core/type-text.js
   // this stands in until cars.txt has loaded, or if it can't be
   placeholder: {
@@ -19,3 +20,8 @@ const cars = loadTypeText('assets/cars.txt', {
 // A vehicle's card details: `design` is its model's name in Cars.glb (null for the plain box car) and `number` its own
 // number among others like it (see designNumbers in traffic.js).
 export const carTypeOf = (design, number = 1) => cars.of(design, number);
+
+// The vanity registrations a vehicle can wear (see carPlate in traffic.js): its type's own `plate` lines, else [default]'s.
+export const vanityPlatesOf = design => cars.listOf(design, 'plate');
+// How likely it is to wear one: its type's `vanitychance` line, else [default]'s, else never.
+export const vanityChanceOf = design => cars.numberOf(design, 'vanitychance', 0);

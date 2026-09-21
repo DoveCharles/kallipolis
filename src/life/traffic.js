@@ -11,8 +11,8 @@ import { isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { placeKey, signalState } from '../roads/markings.js';
 import { isTrainLine } from '../trains/trains.js';
 import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people/people.js';
-import { explodeCar } from './giblets.js';
-import { carTypeOf } from './car-types.js';
+import { explodeCar, puffSmoke, sparks, burnFx, tyreSmoke, igniteFx, engineSmoke } from './giblets.js';
+import { carTypeOf, vanityChanceOf, vanityPlatesOf } from './car-types.js';
 import { driving, controlInput, startDriving, endDriving } from './possession.js';
 
 // ============================================================ TRAFFIC ============================================================
@@ -325,24 +325,20 @@ function packPlate(text) {
   for (let k=0;k<length;k++) packed[Math.floor(k/3)] += Math.max(0, PLATE_GLYPHS.indexOf(text[k]))*64**(k % 3);
   return packed;
 }
-/** Vehicle types that always get a UK-format plate, and never a vanity one. */
+/** Vehicle types that always get a UK-format plate. */
 const UK_ONLY_TYPES = ['bus', 'ambulance', 'police car', 'taxi'];
-/** Vanity registrations, at most nine characters. */
-const VANITY_PLATES = ['IM SO BIG','BUCKET','NICE DICK','JEREMY','BOOB HONK','IPOD NANO','YAY CRIME','MINECRAFT',
-  'STEVE JOB','KILL YOU','LASTCHANCE','IBUPROFEN','STALKER','SUCK MAMA','MAOZEDONG','JILLSTEIN','HAI COWOC','BREAKTEST',
-  'SLEEPYBOY','SPEEDBUMP','ROADHEAD','ELLIPSIS','CATTLEGUN','SHRAPNEL','BIGRAGER','KILLMENOW','POOMOBILE','RESPNSBLE','RESPAWN','BREASTMLK',
-  'SAWDUST','UCNTRSTME','ROADRUNNR','PRIORITYS','STINKBUG','SODRUNKRN']
 /**
  * A car's registration, from its type's name and its number within that type, packed for its plates (packPlate).
- * A sports car takes a vanity plate 60% of the time, and any other type outside UK_ONLY_TYPES 10% of the time; the rest
- * come from hashLicensePlate, UK-formatted for UK_ONLY_TYPES.
+ * It takes a vanity plate, at the chance and from the list assets/cars.txt gives its type; otherwise it comes from
+ * hashLicensePlate, UK-formatted for UK_ONLY_TYPES.
  * @param {object} car
  * @returns {{ text: string, packed: number[] }}
  */
 function carPlate(car) {
   const carRNG = mulberry32(hashNameToNumber(carMeshes[car.design].name+ car.number));
   const type = carTypeOf(carMeshes[car.design].name, car.number), name = (type.name || '').trim().toLowerCase();
-  const text = ((name === 'sports car' && carRNG() > 0.4) || !UK_ONLY_TYPES.includes(name) && carRNG() > 0.9) ? VANITY_PLATES[Math.round(carRNG()*(VANITY_PLATES.length-1))] :
+  const vanity = vanityPlatesOf(carMeshes[car.design].name); // (from the `plate` lines in assets/cars.txt)
+  const text = (carRNG() < vanityChanceOf(carMeshes[car.design].name) && vanity.length) ? vanity[Math.round(carRNG()*(vanity.length-1))].toUpperCase() :
   hashLicensePlate(`${type.name} #${car.number}`, UK_ONLY_TYPES.includes(name) ? 0 : undefined);
   return { text, packed: packPlate(text) };
 }
@@ -956,6 +952,7 @@ export function updateTraffic(t) {
     }
     if (car.design != null) refreshCarTraits(car);
     if (car === drivenCar) { driveByHand(car, dt); turnWheels(car, dt); placeCar(car, i, designCounts); return; }
+    if (car.fuse != null) { burnFuse(car, dt); placeCar(car, i, designCounts); return; } // (about to blow: it neither drives nor turns)
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
     let target = cruise;
@@ -993,7 +990,7 @@ export function updateTraffic(t) {
     if (ahead && !ahead.deadEnd && ahead.dist < 30*S.peopleSize && waitToTurn(car, ahead, dt) && ahead.dist > stopAt - 0.5) {
       target = Math.min(target, Math.max(0, (ahead.dist - stopAt)*1.5*S.peopleSpeed));
     }
-    if (checkYield(car, dt)) target = 0;
+    if (checkYield(car, dt) || car.kick) target = 0; // (or knocked off its route, and waiting to be back on it)
     car.speed += Math.max(-CAR_BRAKE*(car.traits?.braking ?? 1)*S.peopleSpeed*dt, Math.min(5*S.peopleSpeed*dt, target - car.speed));
     // (its point on the route is further than u along the middle of the road round the outside of a bend, a U or a turn
     // across a junction, and nearer round the inside, so it's driven as much further as holds its speed steady)
@@ -1007,19 +1004,35 @@ export function updateTraffic(t) {
     driveAlong(car, travel);
     // its front axle is put on its route (see routePoint) and its back axle, CAR_REAR_AXLE of its length behind, follows
     // it round, so the back end cuts in on a bend
+    let knocked = null; // (how a knocked car is moving)
+    if (car.kick) { car.x -= car.kick.x; car.z -= car.kick.z; knocked = stepKick(car, dt); } // (knocked off its route by a bump: the offset is taken off while it's put back on it, so it can't turn it round)
     const front = routePoint(car, back);
     const pullX = front.x - (car.x - back*Math.sin(car.heading)), pullZ = front.z - (car.z - back*Math.cos(car.heading));
-    if (Math.hypot(pullX, pullZ) > 1e-6) {
+    if (car.kick) { // (off its route: it keeps the heading the knock left it, turning only to face the way back)
+      car.heading = car.kick.heading;
+      car.x = front.x - back*Math.sin(car.heading) + car.kick.x;
+      car.z = front.z - back*Math.cos(car.heading) + car.kick.z;
+    } else if (Math.hypot(pullX, pullZ) > 1e-6) {
       car.heading = Math.atan2(pullX, pullZ);
       car.x = front.x - back*Math.sin(car.heading);
       car.z = front.z - back*Math.cos(car.heading);
     }
     const lane = lanePoint(car), offLane = Math.abs(Math.atan2(Math.sin(lane.heading - car.heading), Math.cos(lane.heading - car.heading)));
-    if (car.speed > 0.3 && offLane < TURN_SAFE_ANGLE) runOverPeople(car);
+    if (knocked && Math.hypot(knocked.x, knocked.z) > 0.3) runOverPeople(car, knocked);
+    else if (car.speed > 0.3 && offLane < TURN_SAFE_ANGLE) runOverPeople(car);
     turnWheels(car, dt);
     placeCar(car, i, designCounts);
   });
-  wreckedCars.splice(0).forEach(other => { const i = cars.indexOf(other); if (i >= 0) killCar(i); });
+  // (each car that has burnt out blows up, and any car near it too — as an ordinary explosion, so they set nothing else off)
+  const burntOut = wreckedCars.splice(0), blasted = new Set(burntOut);
+  const reach = DETONATION_REACH*S.peopleSize;
+  burntOut.forEach(car => App.people.forEach((p, i) => { // (people in the blast die, thrown clear of it)
+    const dx = p.x - car.x, dz = p.z - car.z, d = Math.hypot(dx, dz);
+    if (!p.indoors && d <= reach && Math.abs(p.y - Y_ROAD) <= reach) App.killPerson(i, 'player', { x: dx/(d || 1)*BLAST_THROW, y: 0, z: dz/(d || 1)*BLAST_THROW });
+  }));
+  burntOut.forEach(car => forCarsNear(car.x, car.z, reach, other => { if (Math.hypot(other.x - car.x, other.z - car.z) <= reach) blasted.add(other); }));
+  if (drivenCar && blasted.has(drivenCar)) { const driven = drivenCar; stopDriving(); blasted.add(driven); } // (the driver is thrown out of it, and it goes too)
+  blasted.forEach(car => { const i = cars.indexOf(car); if (i >= 0) killCar(i); });
   carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
   if (S.showRoadsafetyDebug) { carHitboxDebugMesh.count = cars.length; carHitboxDebugMesh.instanceMatrix.needsUpdate = true; }
   carParts.matrix.needsUpdate = true;
@@ -1168,36 +1181,38 @@ function carHitbox(car, scale = CAR_HITBOX_SCALE*CAR_KILL_SCALE) {
  * @param {number} factor
  * @returns {void}
  */
-function throwBack(p, car, factor) {
+function throwBack(p, car, factor, speed = car.speed) {
   const away = { x: p.x - car.x, z: p.z - car.z };
   if (Math.hypot(away.x, away.z) < 1e-3) { away.x = Math.sin(car.heading); away.z = Math.cos(car.heading); }
-  App.pushPerson?.(p, away.x, away.z, Math.abs(car.speed)*CAR_PUSH_PER_SPEED*factor);
+  App.pushPerson?.(p, away.x, away.z, Math.abs(speed)*CAR_PUSH_PER_SPEED*factor);
 }
 
 /**
  * Kill every pedestrian whose position falls inside carHitbox, turned to the car's heading (killPerson in people.js,
  * crediting the driver — including anyone falling or lying knocked down), and knock over anyone else inside the larger clipping box (knockOverPerson). A normal car reaches only someone out on the road, over it or halfway, and never anyone it has
- * waved over; the car being driven reaches anyone within carHeight of Y_ROAD.
+ * waved over; the car being driven, or one knocked and moving (`motion`, its velocity { x, z }), reaches anyone within carHeight of Y_ROAD.
  * @param {object} car
+ * @param {?{x: number, z: number, thrown?: boolean, by?: string}} motion - a knocked car's velocity, or null to go by its speed and heading; `thrown` if the knock is still carrying it, `by` 'player' to credit the player with the kills
  * @returns {void}
  */
-function runOverPeople(car) {
-  const { halfLength, halfWidth } = carHitbox(car), clip = carHitbox(car, CAR_HITBOX_SCALE*CAR_CLIP_SCALE), stun = carHitbox(car, CAR_HITBOX_SCALE*CAR_STUN_SCALE);
+function runOverPeople(car, motion = null) {
+  const { halfLength, halfWidth } = carHitbox(car, motion?.thrown ? 1 : undefined), clip = carHitbox(car, CAR_HITBOX_SCALE*CAR_CLIP_SCALE), stun = carHitbox(car, CAR_HITBOX_SCALE*CAR_STUN_SCALE);
   const reach = Math.hypot(stun.halfLength, stun.halfWidth), cos = Math.cos(car.heading), sin = Math.sin(car.heading);
-  const driven = car === drivenCar, shocked = new Set();
+  const driven = car === drivenCar, reachesAll = driven || !!motion, shocked = new Set();
+  const velocity = motion ?? { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }, speed = Math.hypot(velocity.x, velocity.z);
   App.people.forEach((p, i) => {
-    if (driven ? Math.abs(p.y - Y_ROAD) > carHeight(car) : (!isPedInDanger(p) && p.crossStage !== 'mid' && !p.punched) || p.jc?.waved) return; // only while out on the road, over it or halfway (and not waved over), or knocked down
+    if (reachesAll ? Math.abs(p.y - Y_ROAD) > carHeight(car) : (!isPedInDanger(p) && p.crossStage !== 'mid' && !p.punched) || p.jc?.waved) return; // only while out on the road, over it or halfway (and not waved over), or knocked down
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
-    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength) App.killPerson(i, driven ? 'player' : 'car', { x: Math.sin(car.heading)*car.speed, y: 0, z: Math.cos(car.heading)*car.speed });
+    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength) { App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }); slowedBy(car, 'person', p.traits?.weight); }
     else if (p.mode === 'possessed') return;
-    else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { throwBack(p, car, CAR_KNOCK_PUSH_FACTOR); p.shotRate = CAR_FALL_SPEEDUP; } }
+    else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed); p.shotRate = CAR_FALL_SPEEDUP; slowedBy(car, 'person', p.traits?.weight); } }
     else if (Math.abs(right) < stun.halfWidth && Math.abs(forward) < stun.halfLength) {
       shocked.add(p);
       if (!car.shocked?.has(p) && !p.stun && !p.fright && !p.please && !p.punched && !p.attack) {
         p.stun = { stage: 'notice', timer: 0.15, from: { x: car.x, z: car.z }, hold: CAR_SHOCK_TIME };
-        throwBack(p, car, 1);
+        throwBack(p, car, 1, speed);
       }
     }
   });
@@ -1207,14 +1222,16 @@ function runOverPeople(car) {
 }
 
 /**
- * Kill every pedestrian and car an aircraft is touching: whatever lies within its footprint (a box turned to `heading`)
- * and whose height overlaps the aircraft's. Called each frame by whatever is flying one low enough to matter (see
- * flyByHand in zones/airport.js); anything killed is credited to the player.
- * @param {{x: number, y: number, z: number, heading: number, halfLength: number, halfWidth: number, below: number, above: number, velocity?: {x: number, y: number, z: number}}} aircraft
- *   Its middle, its heading, half its length and wingspan, how far its body reaches below and above `y`, and its velocity (which anyone it kills keeps as chunks).
- * @returns {void}
+ * Strike whoever an aircraft is touching — whatever lies within its footprint (a box turned to `heading`) and whose height
+ * overlaps the aircraft's — by weight, as a driven car does (AIRCRAFT_WEIGHT against theirs): a person is killed, a car is
+ * destroyed if `speed` reaches WRECK_SPEED_PER_SLOWDOWN times the slow-down hitting it costs, or else shoved away (jolted, from
+ * JOLT_SPEED_PER_SLOWDOWN times) and stopped. Called each frame by whatever is flying one low enough to matter (see flyByHand in
+ * zones/airport.js); anything killed is credited to the player. A car is struck once as the aircraft meets it.
+ * @param {{x: number, y: number, z: number, heading: number, halfLength: number, halfWidth: number, below: number, above: number, speed?: number, velocity?: {x: number, y: number, z: number}}} aircraft
+ *   Its middle, its heading, half its length and wingspan, how far its body reaches below and above `y`, its speed, and its velocity (which anyone it kills keeps as chunks).
+ * @returns {number} the share of its speed the aircraft loses to what it has newly struck (0 to 1)
  */
-function strikeWithAircraft({ x, y, z, heading, halfLength, halfWidth, below, above, velocity = null }) {
+function strikeWithAircraft({ x, y, z, heading, halfLength, halfWidth, below, above, speed = 0, velocity = null }) {
   const cos = Math.cos(heading), sin = Math.sin(heading), reach = Math.hypot(halfLength, halfWidth);
   const inFootprint = (px, pz) => {
     const dx = px - x, dz = pz - z;
@@ -1222,11 +1239,27 @@ function strikeWithAircraft({ x, y, z, heading, halfLength, halfWidth, below, ab
     return Math.abs(dx*cos - dz*sin) < halfWidth && Math.abs(dx*sin + dz*cos) < halfLength;
   };
   const sharesHeight = (base, height) => base < y + above && base + height > y - below;
-  App.people.forEach((p, i) => { if (sharesHeight(p.y, p.height*S.peopleSize) && inFootprint(p.x, p.z)) App.killPerson(i, 'player', velocity); });
+  const aircraft = { traits: { weight: AIRCRAFT_WEIGHT } };
+  let keep = 1;
+  App.people.forEach((p, i) => {
+    if (!sharesHeight(p.y, p.height*S.peopleSize) || !inFootprint(p.x, p.z)) return;
+    App.killPerson(i, 'player', velocity);
+    keep *= 1 - Math.min(PERSON_MAX_SLOWDOWN, PERSON_SLOWDOWN*(p.traits?.weight ?? 1)/AIRCRAFT_WEIGHT);
+  });
   for (let i = cars.length - 1; i >= 0; i--) {
     const car = cars[i];
-    if (car.li >= 0 && sharesHeight(Y_ROAD, carHeight(car)) && inFootprint(car.x, car.z)) killCar(i);
+    if (car.li < 0) continue;
+    if (!sharesHeight(Y_ROAD, carHeight(car)) || !inFootprint(car.x, car.z)) { car.struckByAircraft = false; continue; }
+    if (car.struckByAircraft) continue;
+    car.struckByAircraft = true;
+    const share = slowdownShare(aircraft, car.traits?.weight);
+    keep *= 1 - Math.min(CAR_MAX_SLOWDOWN, share);
+    if (speed >= WRECK_SPEED_PER_SLOWDOWN*share) { killCar(i); continue; }
+    const jolted = speed >= JOLT_SPEED_PER_SLOWDOWN*share;
+    kickCar(car, car.x - x, car.z - z, jolted ? speed*BUMP_JOLT_SHOVE : Math.min(1, speed*BUMP_SHOVE + BUMP_PUSH_POWER*AIRCRAFT_WEIGHT));
+    car.speed = 0;
   }
+  return 1 - keep;
 }
 
 /**
@@ -1606,15 +1639,15 @@ let drivenCar = null;
  */
 function driveCar(i) {
   const car = cars[i];
-  if (i !== followedCar || !car || car.li < 0 || drivenCar === car || !startDriving()) return;
+  if (i !== followedCar || !car || car.li < 0 || car.fuse != null || drivenCar === car || !startDriving()) return;
   drivenCar = car;
   car.yieldFor = null;
   controls.goalRadius = Math.max(controls.minRadius, carLength(car)*2.2);
 }
 
 /**
- * Put the driven car back in traffic: its speed floored at 0, on the nearest point of any line, in whichever direction
- * along that line its heading most nearly matches — or spawned afresh if the roads are empty.
+ * Put the driven car back in traffic: its speed floored at 0, and set to drive back to the nearest point of any line (see
+ * seatKickedCar), in whichever direction along that line its heading most nearly matches — or spawned afresh if the roads are empty.
  * @returns {void}
  */
 function stopDriving() {
@@ -1623,15 +1656,9 @@ function stopDriving() {
   drivenCar = null;
   endDriving();
   car.speed = Math.max(0, car.speed);
-  // onto the nearest lane
-  let best = null;
-  S.trafficNav.lines.forEach((nav, li) => nav.pts.forEach((q, vi) => {
-    const d = Math.hypot(q.x - car.x, q.z - car.z);
-    if (!best || d < best.d) best = { li, vi, d };
-  }));
-  if (!best) { spawnCar(car); return; }
-  const nav = S.trafficNav.lines[best.li], a = nav.pts[Math.max(0, best.vi - 1)], b = nav.pts[Math.min(nav.pts.length - 1, best.vi + 1)];
-  carJoinLane(car, best.li, nav.cum[best.vi], (b.x - a.x)*Math.sin(car.heading) + (b.z - a.z)*Math.cos(car.heading) >= 0 ? 1 : -1);
+  // it drives back to the nearest lane, as a knocked car does
+  car.kick = { x: 0, z: 0, vx: 0, vz: 0, heading: car.heading, goal: null, seated: false, blocked: false, speed: 0, driving: 0 };
+  if (!seatKickedCar(car, car.x, car.z)) { car.kick = null; spawnCar(car); }
 }
 
 /**
@@ -1644,7 +1671,18 @@ function stopDriving() {
  * @returns {void}
  */
 function driveByHand(car, dt) {
-  const { forward, right, run, brake } = controlInput();
+  const input = controlInput(), { right, run, brake } = input;
+  // a stalled engine gives no drive, and smokes from the bonnet
+  const stalled = car.stall > 0, forward = stalled ? 0 : input.forward;
+  if (stalled) {
+    car.stall -= dt;
+    if ((car.stallSmoke = (car.stallSmoke ?? 0) - dt) <= 0) {
+      car.stallSmoke = STALL_SMOKE_EVERY;
+      const nose = carLength(car)/2;
+      engineSmoke({ x: car.x + Math.sin(car.heading)*nose, y: Y_ROAD, z: car.z + Math.cos(car.heading)*nose }, carHeight(car));
+    }
+  }
+  if (run && forward > 0 && car.speed > 1) boostSmoke(car, dt);
   // its speed and boost traits scale the top speed and the boost (see cars.txt)
   const boost = run ? DRIVE_BOOST*(car.traits?.boost ?? 1) : 1;
   const top = DRIVE_TOP_SPEED*(car.traits?.speed ?? 1)*boost;
@@ -1666,36 +1704,224 @@ function driveByHand(car, dt) {
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
 }
 
-const BUMP_BOUNCE = 0.3, BUMP_SHOVE = 0.15;
-const WRECK_SPEED = 14, WRECK_SLOWDOWN = 0.75; // (how fast it has to be going; how much of its speed it keeps per car)
-const wreckedCars = [];
+const BUMP_SHOVE = 0.15, BUMP_BOUNCE = 0.3, BOUNCE_BELOW_SPEED = 0.2, BUMP_SMOKE_PUFFS = 4, BUMP_SPARKS = 10;
+const STALL_TIME = 1, STALL_SMOKE_EVERY = 0.2; // (seconds the engine stays dead after a car is thrown back; how often it smokes meanwhile)
+const WRECK_SPEED_PER_SLOWDOWN = 30, JOLT_SPEED_PER_SLOWDOWN = 15, BUMP_JOLT_SHOVE = 0.2; // (a car wrecks one it hits if it's going this many times faster than the slow-down hitting it costs, as a share of speed; at half that it jolts it back, by this share of its speed)
+const BUMP_PUSH_POWER = 0.03, BOUNCE_MIN_SPEED = 2; // (per unit of weight, how far a car shoves the one it's against each frame, even from a standstill; the least speed a car is thrown back from)
+// The share of its speed a car of weight 1 loses hitting something of weight 1 (see the `weight` trait): 50% for a car; for a person
+// far less, and never more than PERSON_MAX_SLOWDOWN (under a car's least, CAR_MIN_SLOWDOWN), however heavy they are.
+const CAR_SLOWDOWN = 0.5, CAR_MIN_SLOWDOWN = 0.1, CAR_MAX_SLOWDOWN = 0.95, PERSON_SLOWDOWN = 0.05, PERSON_MAX_SLOWDOWN = 0.125;
 /**
- * Settle what the driven car has run into. At under WRECK_SPEED, a car it overlaps is shoved away from it (BUMP_SHOVE of
- * its speed, scaled by the distance) and stopped dead, and the driven car goes back to where it was this frame with its
- * speed reversed by BUMP_BOUNCE. At WRECK_SPEED or more it instead pushes each car it meets onto wreckedCars, keeping
- * WRECK_SLOWDOWN of its speed per car, and carries on through them — updateTraffic blows them up after its own loop,
- * since killing one takes it out of the cars list.
+ * Slow a car for having hit something: it keeps its speed less a share set by the kind of thing (a car or a person) and
+ * the weight of what it hit over its own weight — so the heavier the thing, or the lighter the car, the more it loses. A car that would be left going slower than BOUNCE_BELOW_SPEED after hitting
+ * a car is thrown back instead, at BUMP_BOUNCE of the speed it hit at (times the same ratio, up to all of it) (the camera doesn't follow that: see chaseCamera), and its
+ * engine dies for STALL_TIME, smoking (see driveByHand).
+ * @param {object} car - the car that hit it
+ * @param {'car'|'person'} kind - what it hit
+ * @param {number} [weight] - the weight trait of what it hit
+ * @returns {void}
+ */
+function slowedBy(car, kind, weight = 1) {
+  const ratio = weight/(car.traits?.weight ?? 1);
+  const loss = kind === 'person' ? Math.min(PERSON_MAX_SLOWDOWN, PERSON_SLOWDOWN*ratio) : Math.min(CAR_MAX_SLOWDOWN, slowdownShare(car, weight));
+  if (kind === 'car' && Math.abs(car.speed) >= BOUNCE_MIN_SPEED && Math.abs(car.speed)*(1 - loss) < BOUNCE_BELOW_SPEED) { car.speed = -Math.sign(car.speed || 1)*Math.abs(car.speed)*Math.min(1, BUMP_BOUNCE*ratio); car.stall = STALL_TIME; } // (the knock back too grows with the ratio, up to its whole speed)
+  else car.speed *= 1 - loss;
+}
+/** The share of its speed a car would lose hitting a car of weight `weight`, before it's kept to a range: more the heavier that car is against its own weight. */
+const slowdownShare = (car, weight = 1) => Math.max(CAR_MIN_SLOWDOWN, CAR_SLOWDOWN*weight/(car.traits?.weight ?? 1));
+const wreckedCars = [];
+/** Small black smoke from a boosting car's rear tyres. */
+function boostSmoke(car, dt) {
+  const sin = Math.sin(car.heading), cos = Math.cos(car.heading), back = carLength(car)*0.3, side = carWidth(car)*0.4;
+  [-1, 1].forEach(end => tyreSmoke({ x: car.x - sin*back + cos*side*end, y: Y_ROAD, z: car.z - cos*back - sin*side*end }, carHeight(car), dt));
+}
+const BLAST_THROW = 8; // (how fast the blast throws what it kills, units a second)
+const STALL_SPEED_SHARE = 0.5; // (of the speed that jolts a car: a car hit at least this fast, but not fast enough to jolt, cuts the engine of the car that hit it)
+const STALL_WEIGHT_RATIO = 1.6; // (how many times its own weight the car it hits must be, to cut an engine)
+const DETONATION_REACH = 8; // (how far from a car burning out cars and people are blown up, before scaling by size)
+const FUSE_TIME = 3, FUSE_SPARK_EVERY = 0.05, FUSE_SPARKS = 5; // (seconds a wrecked car burns before it blows; seconds between its sparks; sparks each time)
+/** Set a car burning: after FUSE_TIME it explodes, meanwhile it stays put, sparking and burning (burnFx). */
+function lightFuse(car) {
+  if (car.fuse != null) return;
+  igniteFx({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car));
+  car.fuse = FUSE_TIME; car.fuseSparks = 0; car.speed = 0;
+  car.stall = 0; car.bumping = false;
+}
+/**
+ * Burn a car's fuse down by `dt`, sparking as it goes, and queue it to explode (wreckedCars — updateTraffic blows them up after
+ * its loop) when it's out. Any knock still carrying it goes on moving it and dies away, but it never returns to its road.
+ * @param {object} car
+ * @param {number} dt
+ * @returns {void}
+ */
+function burnFuse(car, dt) {
+  if (car.kick) {
+    car.x += car.kick.vx*dt; car.z += car.kick.vz*dt;
+    const slowing = Math.exp(-KICK_DECAY*dt);
+    car.kick.vx *= slowing; car.kick.vz *= slowing;
+    if (Math.hypot(car.kick.vx, car.kick.vz) < 0.05) car.kick = null;
+  }
+  car.speed = 0;
+  runOverPeople(car, { x: 0, z: 0, thrown: true, by: 'player' }); // (anyone who touches it dies, and counts as killed by the player)
+  burnFx({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), dt);
+  if ((car.fuseSparks -= dt) <= 0) {
+    car.fuseSparks = FUSE_SPARK_EVERY;
+    sparks({ x: car.x, y: Y_ROAD + carHeight(car)*0.5, z: car.z }, FUSE_SPARKS);
+  }
+  if ((car.fuse -= dt) <= 0 && !wreckedCars.includes(car)) wreckedCars.push(car);
+}
+const AIRCRAFT_WEIGHT = 6; // (weight of an aircraft, in the same units as a car's weight trait)
+// A car knocked by another is moved by an offset from where its route puts it (car.kick: x, z; the velocity vx, vz still moving
+// it; and heading, which it keeps as the knock left it). Once it has stopped, it takes the nearest road (seatKickedCar), turns to
+// face the nearest point on it (goal), drives back to it, accelerating as a driven car does from a standstill and boosting after KICK_BOOST_AFTER, then turns to the road's heading. A driven car
+// let go off the road does the same (stopDriving). Any car in its way it has to push, as a heavier
+// car pushes a lighter one from standing (BUMP_PUSH_POWER); if it can't, it stays where it is, holding still.
+const KICK_DECAY = 5, KICK_SETTLED_SPEED = 0.5; // (per second: how fast a knock's speed dies away; the speed it counts as stopped at)
+const KICK_TURN_RATE = 4, KICK_FACING_TOLERANCE = 0.3; // (per second; radians it may be off facing its goal while it drives)
+const KICK_BOOST_AFTER = 1; // (seconds driving back before its boost comes in)
+const turnBetween = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
+/**
+ * Knock a car `distance` along (dirX, dirZ), gradually (see KICK_DECAY).
+ * @param {object} car - the car knocked
+ * @param {number} dirX - direction, not necessarily unit length
+ * @param {number} dirZ
+ * @param {number} distance - how far the knock carries it
+ * @returns {void}
+ */
+function kickCar(car, dirX, dirZ, distance) {
+  const len = Math.hypot(dirX, dirZ);
+  if (len < 1e-6 || distance <= 0) return;
+  const kick = car.kick ??= { x: 0, z: 0, vx: 0, vz: 0, heading: car.heading, goal: null, seated: false, blocked: false, speed: 0, driving: 0 }, speed = distance*KICK_DECAY/len;
+  kick.vx += dirX*speed; kick.vz += dirZ*speed;
+  kick.goal = null; kick.seated = false; kick.speed = 0; kick.driving = 0; // (knocked again: it picks the nearest road and faces the way back once it stops)
+}
+/**
+ * The nearest lane to a spot, and the way along it a car facing `heading` would go.
+ * @param {number} x
+ * @param {number} z
+ * @param {number} heading
+ * @returns {{li: number, u: number, dir: number}|null} null if there are no lanes
+ */
+function nearestLaneSpot(x, z, heading) {
+  const { lines, grid, CELL } = S.trafficNav;
+  let best = null;
+  const consider = (li, vi) => {
+    const q = lines[li].pts[vi], d = Math.hypot(q.x - x, q.z - z);
+    if (!best || d < best.d) best = { li, vi, d };
+  };
+  const cx = Math.floor(x/CELL), cz = Math.floor(z/CELL);
+  for (let ox = -2; ox <= 2; ox++) for (let oz = -2; oz <= 2; oz++) (grid.get((cx + ox) + ',' + (cz + oz)) || []).forEach(({ li, vi }) => consider(li, vi));
+  if (!best) lines.forEach((nav, li) => nav.pts.forEach((_, vi) => consider(li, vi)));
+  if (!best) return null;
+  const nav = lines[best.li], last = nav.pts.length - 1, a = nav.pts[Math.max(0, best.vi - 1)], b = nav.pts[Math.min(last, best.vi + 1)];
+  let u = nav.cum[best.vi], nearest = best.d, along = { x: b.x - a.x, z: b.z - a.z };
+  for (const from of [best.vi - 1, best.vi]) { // (the nearest point may lie along either segment at that vertex)
+    if (from < 0 || from >= last) continue;
+    const p = nav.pts[from], q = nav.pts[from + 1], sx = q.x - p.x, sz = q.z - p.z;
+    const t = Math.max(0, Math.min(1, ((x - p.x)*sx + (z - p.z)*sz)/((sx*sx + sz*sz) || 1))), d = Math.hypot(x - p.x - sx*t, z - p.z - sz*t);
+    if (d < nearest) { nearest = d; u = nav.cum[from] + (nav.cum[from + 1] - nav.cum[from])*t; along = { x: sx, z: sz }; }
+  }
+  return { li: best.li, u, dir: along.x*Math.sin(heading) + along.z*Math.cos(heading) >= 0 ? 1 : -1 };
+}
+/**
+ * Put a car with a knock (car.kick) on the nearest lane to where it really is, keeping it where it is by moving its offset from
+ * the route to match.
+ * @param {object} car
+ * @param {number} realX - where the car is
+ * @param {number} realZ
+ * @returns {boolean} false if there is no lane to put it on
+ */
+function seatKickedCar(car, realX, realZ) {
+  const k = car.kick, spot = nearestLaneSpot(realX, realZ, k.heading);
+  if (!spot) return false;
+  if (spot.li !== car.li) car.plan = null;
+  carJoinLane(car, spot.li, spot.u, spot.dir);
+  const back = CAR_REAR_AXLE*carLength(car), front = routePoint(car, back);
+  k.x = realX - (front.x - back*Math.sin(k.heading));
+  k.z = realZ - (front.z - back*Math.cos(k.heading));
+  k.seated = true;
+  return true;
+}
+/**
+ * Whether a knocked car can take a step (sx, sz) back towards its route: any car it would overlap there is pushed away if the
+ * car is heavier than it, and if any isn't, it can't.
+ * @param {object} car - the knocked car, its route position in x and z
+ * @param {number} sx
+ * @param {number} sz
+ * @returns {boolean}
+ */
+function canStepBack(car, sx, sz) {
+  const at = { ...car, x: car.x + car.kick.x + sx, z: car.z + car.kick.z + sz };
+  const weight = car.traits?.weight ?? 1;
+  let clear = true;
+  forCarsNear(at.x, at.z, carLength(car)*1.5 + 4*S.peopleSize, other => {
+    if (other === car || !carsOverlap(at, other)) return;
+    const otherWeight = other.traits?.weight ?? 1, dx = other.x - at.x, dz = other.z - at.z;
+    if (weight <= otherWeight) { clear = false; return; }
+    const push = BUMP_PUSH_POWER*weight/otherWeight;
+    if (other === drivenCar) { const d = Math.hypot(dx, dz) || 1; other.x += dx/d*push; other.z += dz/d*push; } else kickCar(other, dx, dz, push);
+  });
+  return clear;
+}
+/** Move a knocked car's offset on by `dt`, and drop the knock once it has settled back on its route, facing along it. Returns how it moved, as a velocity { x, z }. */
+function stepKick(car, dt) {
+  const k = car.kick, slowing = Math.exp(-KICK_DECAY*dt), turnRate = Math.min(1, dt*KICK_TURN_RATE);
+  k.x += k.vx*dt; k.z += k.vz*dt;
+  k.vx *= slowing; k.vz *= slowing;
+  k.blocked = false;
+  const motion = { x: k.vx, z: k.vz, thrown: Math.hypot(k.vx, k.vz) >= KICK_SETTLED_SPEED }; // (thrown: still carried by the knock)
+  if (Math.hypot(k.vx, k.vz) < KICK_SETTLED_SPEED) {
+    if (!k.seated && !seatKickedCar(car, car.x + k.x, car.z + k.z)) { car.kick = null; return motion; }
+    const away = Math.hypot(k.x, k.z);
+    if (away > 0.02) {
+      k.goal ??= Math.atan2(-k.x, -k.z); // (fixed, so it doesn't swing about as it goes)
+      const off = turnBetween(k.goal - k.heading);
+      k.heading += off*turnRate;
+      if (Math.abs(off) < KICK_FACING_TOLERANCE) {
+        const boosting = (k.driving += dt) >= KICK_BOOST_AFTER, boost = boosting ? DRIVE_BOOST*(car.traits?.boost ?? 1) : 1;
+        k.speed = Math.min(DRIVE_TOP_SPEED*(car.traits?.speed ?? 1)*boost, k.speed + DRIVE_ACCEL*boost*dt);
+        const step = Math.min(away, k.speed*dt), sx = -k.x/away*step, sz = -k.z/away*step;
+        if (canStepBack(car, sx, sz)) { k.x += sx; k.z += sz; motion.x += sx/dt; motion.z += sz/dt; if (boosting) boostSmoke(car, dt); } else { k.blocked = true; k.speed = 0; k.driving = 0; }
+      } else { k.speed = 0; k.driving = 0; }
+    } else {
+      const off = turnBetween(lanePoint(car).heading - k.heading);
+      k.heading += off*turnRate;
+      if (Math.abs(off) < 0.02 && Math.hypot(k.vx, k.vz) < 0.05) car.kick = null;
+    }
+  }
+  return motion;
+}
+/**
+ * Settle what the driven car has run into. Unless it's going WRECK_SPEED_PER_SLOWDOWN times faster than the slow-down hitting a car
+ * costs it (slowdownShare), a car it overlaps is shoved away from it (BUMP_SHOVE of its speed plus BUMP_PUSH_POWER for each unit of
+ * its weight, scaled by the distance, so a heavy car pushes one from standing — or, from JOLT_SPEED_PER_SLOWDOWN times, jolted back BUMP_JOLT_SHOVE of
+ * its speed at once) and stopped dead, and the driven car goes back to where it was this frame, slowed
+ * by that car's weight (slowedBy), with a little smoke where they met. Otherwise it instead sets each car
+ * it meets burning (lightFuse), slowed by each one's weight, and carries on through them — but not through one already burning, which is bumped like any other.
  * @param {object} car - the driven car
  * @param {object} was - its position, heading and speed before this frame
  * @returns {void}
  */
 function bumpIntoCars(car, was) {
   const reach = carLength(car)*1.5 + 4*S.peopleSize, before = { ...car, ...was };
-  const wrecking = Math.abs(car.speed) >= WRECK_SPEED;
-  let hit = false;
+  let contact = null, cutsEngine = false;
   forCarsNear(car.x, car.z, reach, other => {
     if (other === car || wreckedCars.includes(other) || !carsOverlap(car, other)) return;
     const d = Math.hypot(other.x - car.x, other.z - car.z), dWas = Math.hypot(other.x - was.x, other.z - was.z);
     if (carsOverlap(before, other) && d >= dWas) return; // (moving off it)
-    if (wrecking) { wreckedCars.push(other); car.speed *= WRECK_SLOWDOWN; return; }
-    const push = Math.min(1, Math.abs(car.speed)*BUMP_SHOVE)/(d || 1);
-    other.x += (other.x - car.x)*push; other.z += (other.z - car.z)*push;
+    if (other.fuse == null && Math.abs(car.speed) >= WRECK_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight)) { lightFuse(other); sparks({ x: (car.x + other.x)/2, y: Y_ROAD + carHeight(car)*0.4, z: (car.z + other.z)/2 }, BUMP_SPARKS); slowedBy(car, 'car', other.traits?.weight); return; }
+    const joltSpeed = JOLT_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight), jolted = Math.abs(car.speed) >= joltSpeed;
+    kickCar(other, other.x - car.x, other.z - car.z, jolted ? Math.abs(car.speed)*BUMP_JOLT_SHOVE : Math.min(1, Math.abs(car.speed)*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1)));
     other.speed = 0;
-    hit = true;
+    if (!jolted && Math.abs(car.speed) >= STALL_SPEED_SHARE*joltSpeed && (other.traits?.weight ?? 1) > STALL_WEIGHT_RATIO*(car.traits?.weight ?? 1)) cutsEngine = true; // (hit hard enough to hurt the engine, but not to jolt the car, and it's much heavier)
+    slowedBy(car, 'car', other.traits?.weight);
+    contact = { x: (car.x + other.x)/2, y: Y_ROAD, z: (car.z + other.z)/2 };
   });
-  if (!hit) return;
+  if (!contact) { car.bumping = false; return; }
   Object.assign(car, was);
-  car.speed *= -BUMP_BOUNCE;
+  if (!car.bumping) { puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS); sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS); } // (once, as they meet)
+  if (cutsEngine && !car.bumping) car.stall = STALL_TIME;
+  car.bumping = true;
 }
 
 const CHASE_HOLD = 1500, CHASE_EASE = 0.3, CHASE_PHI = 1.25; // (ms; the share of the way back it's asked for each frame)
@@ -1707,7 +1933,7 @@ const CHASE_HOLD = 1500, CHASE_EASE = 0.3, CHASE_PHI = 1.25; // (ms; the share o
  */
 function chaseCamera(car) {
   if (performance.now() - driving.lookedAt < CHASE_HOLD || (Math.abs(car.speed) < 1 && driving.lookedAt > -Infinity)) return;
-  const behind = car.speed < -0.5 ? car.heading : car.heading + Math.PI; // (reversing, it looks back over the boot)
+  const behind = car.speed < -0.5 && controlInput().forward < 0 ? car.heading : car.heading + Math.PI; // (reversing on purpose, it looks back over the boot — but not when it's been thrown back)
   controls.goalTheta = controls.theta + CHASE_EASE*Math.atan2(Math.sin(behind - controls.theta), Math.cos(behind - controls.theta));
   controls.goalPhi = controls.phi + CHASE_EASE*(CHASE_PHI - controls.phi);
 }
