@@ -188,6 +188,9 @@ input[type=range]::-moz-range-thumb {
   line-height:1; padding:0 4px; height:26px;
 }
 .add-color-cancel:hover { color:#e0665c; }
+/* a block that slides open and shut under a button (see #btn-settings-toggle in src/editor/tools.js): tools.js sets its max-height to
+   its content's height to open it and 0 to shut it, and it starts shut in index.html */
+.slide-open { transition:max-height .25s ease; }
 .toggle-switch { width:38px; height:20px; border-radius:10px; background:var(--bg-input); border:1px solid var(--border); position:relative; cursor:pointer; padding:0; flex-shrink:0; }
 .toggle-switch .knob { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:var(--text-dim); transition:left 0.15s, background 0.15s; }
 .toggle-switch.on { background:rgba(61,220,151,0.25); border-color:var(--accent); }

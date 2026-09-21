@@ -25,7 +25,7 @@ export const PEOPLE_MAX = 2000;
 export const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
 /** How often, at least, the walkways are resampled to a point — for entrances and for re-seating people. */
 export const PEOPLE_NAV_SPACING = 4;
-S.peopleEnabled = false, S.hideOwnHead = true, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false, S.showPeopleNavDebug = false;
+S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false, S.showPeopleNavDebug = false;
 export let peopleNav = null, peopleNavBuiltAt = -Infinity, peopleNavDebugBuiltAt = -Infinity, lastPeopleTime = null;
 export const people = [];
 export const peopleRng = mulberry32(90210);

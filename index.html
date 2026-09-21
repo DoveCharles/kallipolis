@@ -157,6 +157,17 @@
     <button class="btn" id="btn-export-glb">Export GLB (with materials)</button>
     <button class="btn" id="btn-export">Export OBJ</button>
     <button class="btn danger" id="btn-clear">Clear all</button>
+    <button class="btn" id="btn-settings-toggle">Show settings ▾</button>
+    <div class="slide-open" id="extra-settings" style="max-height:0; overflow:hidden;"><div class="slide-open-inner">
+      <div class="row" style="margin-top:6px;"><label>Show gibs</label><button class="toggle-switch" id="s-gibs"><span class="knob"></span></button></div>
+      <div class="slider-row"><div class="row"><label>Gib render distance</label><span class="val" id="dv-gibrange">2000</span></div>
+        <input type="range" id="s-gibrange" min="50" max="3000" step="50" value="2000"></div>
+      <div class="slider-row"><div class="row"><label>Gib amount</label><span class="val" id="dv-gibamount">80%</span></div>
+        <input type="range" id="s-gibamount" min="0" max="100" step="5" value="80"></div>
+      <div class="slider-row"><div class="row"><label>Gib lifetime</label><span class="val" id="dv-giblifetime">80%</span></div>
+        <input type="range" id="s-giblifetime" min="10" max="100" step="5" value="80"></div>
+      <div class="row"><label>Hide own head in first person</label><button class="toggle-switch" id="s-hideownhead"><span class="knob"></span></button></div>
+    </div></div>
   </div>
   </div>
 </div>

@@ -76,9 +76,7 @@ function joltCount(chip, count) {
   chip.style.setProperty('--count-turn', (COUNT_TURN*weight).toFixed(1) + 'deg');
   chip.style.setProperty('--count-dip', (COUNT_DIP*weight).toFixed(3) + 'em');
   chip.style.setProperty('--count-grow', (1 + COUNT_GROW*weight).toFixed(3));
-  chip.classList.remove('mor-count-jolt');
-  void chip.offsetWidth;
-  chip.classList.add('mor-count-jolt');
+  chip.classList.add('mor-count-jolt'); // (the chip is new each time, so its animation starts by itself)
 }
 
 // what's counted, grouped as the details list shows it: `key` is the line in morality.txt under the group's [heading]
@@ -134,6 +132,16 @@ const scoreOf = (group, key) => (scores[group] && scores[group][key]) || 0;
 // ---------------------------------------------------------- counting
 // how many of each thing there are, and what they're worth: { lines: {id: {count, score}}, groups: {...}, overall }
 // (a line's id is `group/key`)
+// How many buildings a zone's group holds, counted again only when the group is a different one or holds a different number of
+// things: counting walks every child, and tally runs on a timer and at every kill.
+const buildingCounts = new WeakMap();
+function buildingsIn(group) {
+  const seen = buildingCounts.get(group);
+  if (seen && seen.length === group.children.length) return seen.count;
+  const count = group.children.filter(c => c.name === 'Building').length;
+  buildingCounts.set(group, { length: group.children.length, count });
+  return count;
+}
 function tally() {
   const counts = {};
   const add = (group, key, n = 1) => { const id = group + '/' + key; counts[id] = (counts[id] || 0) + n; };
@@ -142,7 +150,7 @@ function tally() {
     const type = zone.zoneType || 'buildings';
     add('zones', type);
     const kind = BUILDING_KIND_OF_ZONE[type];
-    if (kind && zone.buildingsGroup) add('buildings', kind, zone.buildingsGroup.children.filter(c => c.name === 'Building').length);
+    if (kind && zone.buildingsGroup) add('buildings', kind, buildingsIn(zone.buildingsGroup));
   });
   S.roadLines.forEach(line => {
     if (line.drawing) return;
@@ -278,6 +286,17 @@ function dropNotice(id) {
   live.el.classList.add('mor-notice-leaving'); // (it stays inside #stats: that's a stacking context of its own, and out on the body it would draw over everything in it)
   setTimeout(() => live.el.remove(), NOTICE_EXIT_MS);
 }
+// Page work (notices, the meter) is done in a batch on the next frame rather than where it's asked for, which may be in the
+// middle of the simulation: layout it forces there would come on top of drawing the frame.
+const pageWork = [];
+let pageWorkQueued = false;
+function laterOnPage(work) {
+  pageWork.push(work);
+  if (pageWorkQueued) return;
+  pageWorkQueued = true;
+  requestAnimationFrame(() => { pageWorkQueued = false; pageWork.splice(0).forEach(run => run()); });
+}
+const notify = (...args) => laterOnPage(() => showNotice(...args));
 /**
  * Show that something happened: worth `delta` morality, `countDelta` of it, and — for an event — the name of
  * whoever it was. The same thing happening again within the notice's life folds into the notice already up.
@@ -287,7 +306,7 @@ function dropNotice(id) {
  * @param {string} [name] - whose name it was, for an event
  * @returns {void}
  */
-function notify(id, delta, countDelta, name) {
+function showNotice(id, delta, countDelta, name) {
   // A notice for anything worth something at all — and for events, which are worth announcing even when they're
   // worth nothing: a guilty person's death costs no morality, but the player should still be told it happened.
   const isEvent = id.startsWith('events/');
@@ -360,7 +379,7 @@ export function recordMoralityEvent(key, name) {
   const now = tally();
   if (announced) announced.lines['events/' + key] = now.lines['events/' + key];
   if (previous) previous.lines['events/' + key] = now.lines['events/' + key];
-  renderMeter(now);
+  laterOnPage(() => renderMeter(now));
 }
 // a whole project being loaded in isn't something the player did: take the world as it comes for a moment, unannounced
 export function hushMorality(ms = 1500) { quietUntil = Math.max(quietUntil, performance.now() + ms); }

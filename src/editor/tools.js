@@ -221,7 +221,28 @@ document.getElementById('s-grassnoise').addEventListener('input', (e) => {
   document.getElementById('dv-grassnoise').textContent = S.globalGrassNoiseStrength.toFixed(2);
   S.zones.forEach(subdivideZone);
 });
-// TODO: add a menu toggle for S.hideOwnHead (on by default): the head and hair of whoever is controlled in first person are hidden.
+// the extra settings, under Clear all: they slide open with the button
+function syncExtraSettings() {
+  document.getElementById('s-gibs').classList.toggle('on', S.showGibs);
+  document.getElementById('s-hideownhead').classList.toggle('on', S.hideOwnHead);
+  document.getElementById('s-gibrange').value = S.gibRange;
+  document.getElementById('dv-gibrange').textContent = String(Math.round(S.gibRange));
+  document.getElementById('s-gibamount').value = S.gibAmount*100;
+  document.getElementById('dv-gibamount').textContent = Math.round(S.gibAmount*100) + '%';
+  document.getElementById('s-giblifetime').value = S.gibLifetime*100;
+  document.getElementById('dv-giblifetime').textContent = Math.round(S.gibLifetime*100) + '%';
+}
+document.getElementById('btn-settings-toggle').addEventListener('click', (e) => {
+  const block = document.getElementById('extra-settings'), open = block.style.maxHeight === '0px';
+  block.style.maxHeight = open ? block.scrollHeight + 'px' : '0px';
+  e.currentTarget.textContent = open ? 'Show settings ▴' : 'Show settings ▾'; // (the arrow points up when it's down, to fold it away)
+});
+document.getElementById('s-gibs').addEventListener('click', () => { S.showGibs = !S.showGibs; syncExtraSettings(); });
+document.getElementById('s-gibrange').addEventListener('input', (e) => { S.gibRange = parseFloat(e.target.value); syncExtraSettings(); });
+document.getElementById('s-gibamount').addEventListener('input', (e) => { S.gibAmount = parseFloat(e.target.value)/100; syncExtraSettings(); });
+document.getElementById('s-giblifetime').addEventListener('input', (e) => { S.gibLifetime = parseFloat(e.target.value)/100; syncExtraSettings(); });
+document.getElementById('s-hideownhead').addEventListener('click', () => { S.hideOwnHead = !S.hideOwnHead; syncExtraSettings(); });
+syncExtraSettings();
 document.getElementById('s-people').addEventListener('click', () => { S.peopleEnabled = !S.peopleEnabled; App.syncPeopleUI(); });
 document.getElementById('s-peopleamount').addEventListener('input', (e) => { S.peopleAmount = parseFloat(e.target.value); App.syncPeopleUI(); });
 document.getElementById('s-peoplespeed').addEventListener('input', (e) => { S.peopleSpeed = parseFloat(e.target.value); App.syncPeopleUI(); });

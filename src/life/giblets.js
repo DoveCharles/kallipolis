@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { scene } from '../core/scene.js';
+import { scene, camera } from '../core/scene.js';
+import { S } from '../core/shared.js';
 
 // ============================================================ giblets
 // What's left of someone after the person card's Kill button, or a car after the car card's: chunks of them in their own
@@ -58,16 +59,21 @@ function groundBelow(x, fromY, z, fallback) {
   }
   return fallback;
 }
+// whether something is within S.gibRange of the camera: chunks and fireballs further than that are neither made, simulated nor
+// drawn (the marks left on the ground always are)
+const isNear = o => (o.x - camera.position.x)**2 + (o.y - camera.position.y)**2 + (o.z - camera.position.z)**2 <= S.gibRange*S.gibRange;
 // the chunks thrown out from `at` (where feet or wheels were), `height` tall, one call per material of them: [color, how
 // many, how big (as a fraction of height)] — `power` throws them further and faster and spreads them wider (a car's
 // explosion, much more violent than a person's, uses a bigger one; see explodeCar); `ground` is the height they land on
 // (default: where they start from), or a function of (x, z) that finds it, for chunks thrown from the air, which each land
 // on whatever is below where they come down
 function spawnParts(at, height, parts, power = 1, ground = at.y) {
+  if (!S.showGibs || !isNear(at)) return;
   const now = performance.now()/1000;
   const groundAtStart = typeof ground === 'function' ? ground(at.x, at.z) : ground;
   parts.forEach(([color, count, size]) => {
-    for (let k=0;k<count;k++) {
+    const scaled = count*S.gibAmount, chunks = Math.floor(scaled) + (Math.random() < scaled % 1 ? 1 : 0); // (a fractional amount rounds at random, so small counts still scale)
+    for (let k=0;k<chunks;k++) {
       if (giblets.length >= GIBLETS_MAX) giblets.shift(); // (the oldest make way)
       const angle = Math.random()*Math.PI*2, outward = (1 + Math.random()*4.5)*power;
       const spinAxis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
@@ -98,6 +104,7 @@ function spawnSplat(at, height, color, sizeMul = 1) {
 // and slowly spreading as they thin out; and the light flash, retriggered (so overlapping explosions just relight it)
 const FIRE_COLORS = [0xffdd66, 0xff9a3c, 0xff5a1f, 0xd8280f];
 function explodeFx(at, height) {
+  if (!isNear(at)) return;
   const now = performance.now()/1000;
   for (let k=0;k<30;k++) {
     if (fx.length >= FX_MAX) fx.shift();
@@ -155,10 +162,14 @@ const sunk = (age, life) => age > life ? Math.min(1, (age - life)/SINK_TIME) : 0
 export function updateGiblets(t) {
   const dt = lastTime == null ? 0 : Math.min(0.05, Math.max(0, t - lastTime));
   lastTime = t;
-  while (giblets.length && t - giblets[0].born > GIBLET_LIFE + SINK_TIME) giblets.shift();
+  const gibletLife = GIBLET_LIFE*S.gibLifetime;
+  while (giblets.length && t - giblets[0].born > gibletLife + SINK_TIME) giblets.shift();
   while (splats.length && t - splats[0].born > SPLAT_LIFE + SINK_TIME) splats.shift();
   while (fx.length && t - fx[0].born > fx[0].life) fx.shift();
-  giblets.forEach((g, i) => {
+  if (!S.showGibs) giblets.length = 0; // (turned off: what's already flying goes too)
+  let drawn = 0;
+  giblets.forEach(g => {
+    if (!isNear(g)) return;
     if (!g.resting) {
       g.vy -= GRAVITY*dt;
       g.x += g.vx*dt; g.y += g.vy*dt; g.z += g.vz*dt;
@@ -178,15 +189,16 @@ export function updateGiblets(t) {
         }
       }
     }
-    const sink = sunk(t - g.born, GIBLET_LIFE);
+    const sink = sunk(t - g.born, gibletLife);
     placed.position.set(g.x, g.y - sink*g.size, g.z);
     placed.quaternion.copy(g.quaternion);
     placed.scale.copy(g.shape).multiplyScalar(g.size*(1 - sink));
     placed.updateMatrix();
-    chunkMesh.setMatrixAt(i, placed.matrix);
-    chunkMesh.setColorAt(i, g.color);
+    chunkMesh.setMatrixAt(drawn, placed.matrix);
+    chunkMesh.setColorAt(drawn, g.color);
+    drawn++;
   });
-  chunkMesh.count = giblets.length;
+  chunkMesh.count = drawn;
   chunkMesh.instanceMatrix.needsUpdate = true;
   if (chunkMesh.instanceColor) chunkMesh.instanceColor.needsUpdate = true;
   splats.forEach((s, i) => {
@@ -202,7 +214,9 @@ export function updateGiblets(t) {
   splatMesh.count = splats.length;
   splatMesh.instanceMatrix.needsUpdate = true;
   if (splatMesh.instanceColor) splatMesh.instanceColor.needsUpdate = true;
-  fx.forEach((p, i) => {
+  let fxDrawn = 0;
+  fx.forEach(p => {
+    if (!isNear(p)) return;
     const age = t - p.born, life = Math.max(0, Math.min(1, age/p.life));
     let scale, dim;
     if (p.kind === 'fire') {
@@ -221,10 +235,11 @@ export function updateGiblets(t) {
     placed.quaternion.identity();
     placed.scale.setScalar(Math.max(0, scale));
     placed.updateMatrix();
-    fxMesh.setMatrixAt(i, placed.matrix);
-    fxMesh.setColorAt(i, dimmed.copy(p.color).multiplyScalar(dim));
+    fxMesh.setMatrixAt(fxDrawn, placed.matrix);
+    fxMesh.setColorAt(fxDrawn, dimmed.copy(p.color).multiplyScalar(dim));
+    fxDrawn++;
   });
-  fxMesh.count = fx.length;
+  fxMesh.count = fxDrawn;
   fxMesh.instanceMatrix.needsUpdate = true;
   if (fxMesh.instanceColor) fxMesh.instanceColor.needsUpdate = true;
   flash.intensity = t < flashUntil ? Math.max(0, 1 - (t - flashBorn)/flashDuration)**2*10 : 0;
