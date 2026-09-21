@@ -4,10 +4,29 @@ import { listener, isMuted } from './sfx.js';
 // ============================================================ voices
 // People talking babble, Animal Crossing style: every time a speaker's mouth opens on a new syllable (see "talking" in
 // life/people/people.js) a short blip plays from their head — a buzzy tone at their voice's pitch, bent a little up or
-// down each syllable and sliding as it goes, through two bandpass filters set to a random vowel's formants. Each blip is
+// down each syllable and sliding as it goes, through two bandpass filters set to a random vowel's formants. Most syllables
+// start on a consonant (see CONSONANTS): a click or hiss of noise before the voice comes in, a hum through a closed mouth,
+// or the formants gliding in from somewhere else, so it's "ba", "sho", "lee" and not just "a", "o", "ee". Each blip is
 // built live, like the engine (see engine.js), and gone once it's played. Only those within HEAR_DISTANCE of the camera
 // are heard, so a crowded plaza across town costs nothing.
 const VOWELS = [[800, 1200], [500, 1900], [300, 2300], [500, 900], [350, 800], [650, 1600]]; // [F1, F2] in Hz: a, e, i, o, u, and something in between
+// how each syllable can start: a stop (a click of noise at `noise` Hz, then the voice), a hiss (a longer rush of noise
+// that the voice comes in under), a hum (the voice muffled with its formants at `from`, opening out), or a glide (the
+// formants sliding from `from` into the vowel); or null, the vowel bare. `time` is in seconds.
+const CONSONANTS = [
+  { kind: 'stop', noise: 900, q: 1, level: 0.5, time: 0.03 },    // p, b
+  { kind: 'stop', noise: 4000, q: 1.5, level: 0.5, time: 0.03 },  // t, d
+  { kind: 'stop', noise: 2000, q: 2, level: 0.6, time: 0.035 },   // k, g
+  { kind: 'hiss', noise: 6500, q: 3, level: 0.5, time: 0.06 },    // s
+  { kind: 'hiss', noise: 3000, q: 2, level: 0.5, time: 0.06 },    // sh
+  { kind: 'hiss', noise: 5000, q: 0.5, level: 0.2, time: 0.05 },  // f
+  { kind: 'hum', from: [250, 1100], time: 0.05 },                 // m
+  { kind: 'hum', from: [250, 1700], time: 0.05 },                 // n
+  { kind: 'glide', from: [350, 1100], time: 0.06 },               // l
+  { kind: 'glide', from: [300, 800], time: 0.06 },                // w
+  { kind: 'glide', from: [250, 2300], time: 0.06 },               // y
+  null, null,
+];
 const HEAR_DISTANCE = 60;          // beyond this from the camera they aren't heard at all
 const REF_DISTANCE = 6;            // how near to be heard at full volume
 const VOLUME = 0.22;
@@ -15,6 +34,15 @@ const BLIPS_MAX = 12;              // syllables sounding at once, past which new
 const BEND = 0.25;                 // how far each syllable's pitch strays from the voice's, either way
 
 let blips = 0;
+let noise = null; // a second of white noise, for the consonants
+
+function noiseBuffer(context) {
+  if (noise) return noise;
+  noise = context.createBuffer(1, context.sampleRate, context.sampleRate);
+  const data = noise.getChannelData(0);
+  for (let k = 0; k < data.length; k++) data[k] = Math.random()*2 - 1;
+  return noise;
+}
 
 /**
  * One syllable of someone's babble.
@@ -40,17 +68,31 @@ export function babble(at, voice, length, loudness = 1, mood = 0) {
   oscillator.type = 'sawtooth';
   oscillator.frequency.setValueAtTime(f, now);
   oscillator.frequency.exponentialRampToValueAtTime(f*slide, end);
-  // the vowel: its two formants, moved by the voice's own
-  const [f1, f2] = VOWELS[Math.floor(Math.random()*VOWELS.length)];
+  // the vowel: its two formants, moved by the voice's own; and the consonant before it, taking up to 40% of the syllable
+  const vowel = VOWELS[Math.floor(Math.random()*VOWELS.length)];
+  const consonant = CONSONANTS[Math.floor(Math.random()*CONSONANTS.length)];
+  const c = consonant ? Math.min(consonant.time, (end - now)*0.4) : 0;
+  const level = VOLUME*(0.5 + 0.5*loudness);
+  // (a stop or hiss holds the voice back till the noise is through; a hum starts it muffled)
+  const voiceIn = consonant?.kind === 'stop' || consonant?.kind === 'hiss' ? now + c*0.8 : now;
   const gain = context.createGain();
   gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(VOLUME*(0.5 + 0.5*loudness), now + 0.012);
-  gain.gain.setValueAtTime(VOLUME*(0.5 + 0.5*loudness), end - 0.03);
+  gain.gain.setValueAtTime(0, voiceIn);
+  if (consonant?.kind === 'hum') {
+    gain.gain.linearRampToValueAtTime(level*0.4, now + 0.012);
+    gain.gain.setValueAtTime(level*0.4, now + c);
+    gain.gain.linearRampToValueAtTime(level, now + c + 0.02);
+  } else gain.gain.linearRampToValueAtTime(level, voiceIn + 0.012);
+  gain.gain.setValueAtTime(level, end - 0.03);
   gain.gain.linearRampToValueAtTime(0, end);
-  [[f1, 1], [f2, 0.6]].forEach(([frequency, level]) => {
+  vowel.map((frequency, k) => [frequency, [1, 0.6][k], consonant?.from?.[k]]).forEach(([frequency, level, from]) => {
     const band = context.createBiquadFilter(), bandLevel = context.createGain();
     band.type = 'bandpass';
-    band.frequency.value = frequency*formant;
+    band.frequency.setValueAtTime((from ?? frequency)*formant, now);
+    if (from) {
+      band.frequency.setValueAtTime(from*formant, now + (consonant.kind === 'hum' ? c : 0));
+      band.frequency.linearRampToValueAtTime(frequency*formant, now + c + (consonant.kind === 'hum' ? 0.02 : 0));
+    }
     band.Q.value = sharpness;
     bandLevel.gain.value = level*3*Math.sqrt(6/sharpness); // (a sharper band lets less through: made up for)
     oscillator.connect(band).connect(bandLevel).connect(gain);
@@ -61,6 +103,21 @@ export function babble(at, voice, length, loudness = 1, mood = 0) {
   panner.refDistance = REF_DISTANCE;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
   gain.connect(panner).connect(listener.getInput());
+  if (consonant?.noise) {
+    // the click or hiss: a burst of noise through a band where that consonant sits, moved by the voice's formants too
+    const source = context.createBufferSource(), band = context.createBiquadFilter(), hiss = context.createGain();
+    source.buffer = noiseBuffer(context);
+    band.type = 'bandpass';
+    band.frequency.value = consonant.noise*Math.sqrt(formant);
+    band.Q.value = consonant.q;
+    const burst = consonant.kind === 'stop' ? Math.min(0.015, c) : c;
+    hiss.gain.setValueAtTime(0, now);
+    hiss.gain.linearRampToValueAtTime(level*consonant.level*4, now + Math.min(0.004, burst/3));
+    hiss.gain.linearRampToValueAtTime(0, now + burst);
+    source.connect(band).connect(hiss).connect(panner);
+    source.start(now, Math.random()*0.9);
+    source.stop(now + burst + 0.01);
+  }
   blips++;
   oscillator.onended = () => { blips--; panner.disconnect(); };
   oscillator.start(now);

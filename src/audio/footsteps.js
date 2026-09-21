@@ -4,16 +4,16 @@ import { playBufferAt, zzfxBuffer } from './sfx.js';
 
 // ============================================================ footsteps
 // A scuff for each footfall of anyone walking near the camera (see the walk cycle in life/people/people.js): short bursts
-// of filtered noise, built once by ZzFX (see sfx.js) and picked from at random. In snow they crunch and in rain they
+// of noise, muffled and eased in so they pad rather than click, built once by ZzFX (see sfx.js) and picked from at random. In snow they crunch and in rain they
 // splash. Only those within HEAR_DISTANCE are heard at all, and only so many at once, so a crowd is a patter, not a roar.
 const STEPS = {
-  dry:  [.5, .25, 180, 0, .004, .035, 4, 1, , , , , , 3, , , , , , , -2500],
-  snow: [.45, .3, 700, 0, .03, .06, 4, 2, , , , , , 5, , .2, , , , , -4000],
-  wet:  [.45, .3, 380, 0, .012, .06, 4, 1, 20, , , , , 4, , , , , , , -3000],
+  dry:  [.5, .25, 140, .004, .004, .04, 4, 1, , , , , , 3, , , , , , , -900],
+  snow: [.45, .3, 500, .006, .03, .06, 4, 2, , , , , , 5, , .2, , , , , -1800],
+  wet:  [.45, .3, 300, .005, .012, .06, 4, 1, 20, , , , , 4, , , , , , , -1300],
 };
 const VARIANTS = 4;
 const HEAR_DISTANCE = 35, REF_DISTANCE = 4;
-const STEP_VOLUME = 0.2;
+const STEP_VOLUME = 0.13;
 const STEPS_MAX_PER_SECOND = 24; // past this many footfalls a second, the rest go unheard
 
 let buffers = null; // surface -> [AudioBuffer]

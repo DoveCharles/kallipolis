@@ -8,7 +8,8 @@ import { trafficNearby } from './engine.js';
 // engine.js), not coming from anywhere in particular; and, by day, birds singing now and then from somewhere round the
 // camera — each a short phrase of whistled notes, of one of a few kinds of song — or at night, crickets. Neither sings in
 // rain or snow, and fewer are heard the higher the camera's gone. All of it synthesized live, like the engines.
-const HUM_VOLUME = 0.1;
+const HUM_VOLUME = 0.03;
+const HUM_LOW = 250, HUM_HIGH = 1400; // the band of the hum, in Hz
 const HUM_FULL = 12;              // how much traffic nearby (see trafficNearby) makes the hum half as loud as it gets
 const BIRD_GAP = 2.5, CRICKET_GAP = 0.9; // mean seconds between one singing and the next, at street level
 const QUIET_ABOVE = 250;          // how high the camera goes before it hears no birds or crickets at all
@@ -18,12 +19,15 @@ const SONG_REF_DISTANCE = 12;
 let hum = null; // { gain } once made
 let nextSong = 0;
 
-// a couple of seconds of brown noise (random steps, drifting, so it's all rumble), looped under two lowpass filters
+// a few seconds of reddish noise (random steps that drift back, so more wash than hiss), evened out to a set loudness, and
+// looped through a band of HUM_LOW to HUM_HIGH Hz: the far-off whoosh of tyres on tarmac more than the rumble of engines
 function makeHum() {
   const context = listener.context, length = context.sampleRate*3;
   const buffer = context.createBuffer(1, length, context.sampleRate), data = buffer.getChannelData(0);
-  let last = 0;
-  for (let k = 0; k < length; k++) { last = (last + 0.02*(Math.random()*2 - 1))/1.02; data[k] = last*3.5; }
+  let last = 0, power = 0;
+  for (let k = 0; k < length; k++) { last = (last + 0.1*(Math.random()*2 - 1))/1.1; data[k] = last; power += last*last; }
+  const scale = 0.3/Math.sqrt(power/length);
+  for (let k = 0; k < length; k++) data[k] *= scale;
   // (fade the ends into each other so the loop doesn't click)
   const blend = context.sampleRate*0.1;
   for (let k = 0; k < blend; k++) { const w = k/blend; data[k] = data[k]*w + data[length - blend + k]*(1 - w); }
@@ -31,11 +35,13 @@ function makeHum() {
   source.buffer = buffer;
   source.loop = true;
   source.loopEnd = (length - blend)/context.sampleRate;
-  const low = context.createBiquadFilter(), gain = context.createGain();
+  const high = context.createBiquadFilter(), low = context.createBiquadFilter(), gain = context.createGain();
+  high.type = 'highpass';
+  high.frequency.value = HUM_LOW;
   low.type = 'lowpass';
-  low.frequency.value = 220;
+  low.frequency.value = HUM_HIGH;
   gain.gain.value = 0;
-  source.connect(low).connect(gain).connect(listener.getInput());
+  source.connect(high).connect(low).connect(gain).connect(listener.getInput());
   source.start();
   return { gain };
 }
