@@ -84,6 +84,16 @@ export function distToPolygonBoundary(p, poly) {
   }
   return minD;
 }
+// A building's footprint's centre and the radius covering it, worked out once and kept on it: a circle to reject against
+// before walking the footprint edge by edge. A building's footprint never changes — a rebuilt zone makes new meshes.
+export function footprintBounds(group) {
+  let bounds = group.userData.clipBounds;
+  if (!bounds) {
+    const fp = group.userData.footprint, c = centroid(fp);
+    bounds = group.userData.clipBounds = { c, r: Math.max(...fp.map(p => Math.hypot(p.x - c.x, p.z - c.z))) };
+  }
+  return bounds;
+}
 
 // ---------------------------------------------------------- building identity
 // Which building a zone's child `index` is, as a key (see people.js and building-card.js), and its number on its card —

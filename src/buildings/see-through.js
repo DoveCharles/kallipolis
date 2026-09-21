@@ -1,7 +1,7 @@
 import { camera } from '../core/scene.js';
 import { S, App } from '../core/shared.js';
-import { pointInPolygon, centroid } from '../core/math.js';
-import { distToPolygonBoundary } from './footprints.js';
+import { pointInPolygon } from '../core/math.js';
+import { distToPolygonBoundary, footprintBounds } from './footprints.js';
 
 // ============================================================ seeing out of a building
 // Zoom in far enough — or follow someone through a door (see "going indoors" in people.js) — and the camera ends up
@@ -17,17 +17,6 @@ import { distToPolygonBoundary } from './footprints.js';
 const CLIP_MARGIN = 2;
 // the buildings hidden right now, to be shown again as soon as the camera's out of them
 const hidden = [];
-
-// A building's footprint's centre and the radius covering it, worked out once and kept on it: a circle to reject against
-// before walking the footprint edge by edge. A building's footprint never changes — a rebuilt zone makes new meshes.
-function footprintBounds(group) {
-  let bounds = group.userData.clipBounds;
-  if (!bounds) {
-    const fp = group.userData.footprint, c = centroid(fp);
-    bounds = group.userData.clipBounds = { c, r: Math.max(...fp.map(p => Math.hypot(p.x - c.x, p.z - c.z))) };
-  }
-  return bounds;
-}
 
 // Each frame, once the camera's been moved: hides whichever buildings it's inside, and shows the ones it's left.
 export function hideBuildingsAroundCamera() {

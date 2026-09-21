@@ -3,7 +3,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { scene, camera, renderer, computeWindowGlowFactor, SKY_ENV_MAP, Y_ROAD } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
-import { hashLicensePlate, hashNameToNumber, mulberry32 } from '../core/math.js';
+import { hashLicensePlate, hashNameToNumber, mulberry32, pointInPolygon } from '../core/math.js';
+import { footprintBounds } from '../buildings/footprints.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { roadLineWidths, createMeshBuilder, navRebuildOnHold } from '../roads/roads.js';
@@ -11,6 +12,7 @@ import { isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { placeKey, signalState } from '../roads/markings.js';
 import { isTrainLine } from '../trains/trains.js';
 import { PEOPLE_NAV_SPACING, pickWeighted, isPedInDanger } from './people/people.js';
+import { isFavoritePerson } from '../ui/favorites.js';
 import { explodeCar, puffSmoke, sparks, burnFx, tyreSmoke, igniteFx, engineSmoke } from './giblets.js';
 import { carTypeOf, vanityChanceOf, vanityPlatesOf } from './car-types.js';
 import { driving, controlInput, startDriving, endDriving } from './possession.js';
@@ -1205,7 +1207,8 @@ function runOverPeople(car, motion = null) {
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
-    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength) { App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }); slowedBy(car, 'person', p.traits?.weight); }
+    // (anyone hearted is knocked down instead, below: they can't be killed. See ui/favorites.js)
+    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength && !isFavoritePerson(i)) { App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }); slowedBy(car, 'person', p.traits?.weight); }
     else if (p.mode === 'possessed') return;
     else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed); p.shotRate = CAR_FALL_SPEEDUP; slowedBy(car, 'person', p.traits?.weight); } }
     else if (Math.abs(right) < stun.halfWidth && Math.abs(forward) < stun.halfLength) {
@@ -1712,7 +1715,90 @@ function driveByHand(car, dt) {
   car.x += Math.sin(car.heading)*car.speed*dt;
   car.z += Math.cos(car.heading)*car.speed*dt;
   bumpIntoCars(car, was);
+  hitBuildings(car, was, dt);
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
+}
+
+// ---- the driven car against buildings: each building's footprint (see see-through.js) is a wall it can't drive through
+const WALL_HEAD_ON = 0.8, WALL_DRAG = 3, WALL_LET_GO = 0.25, WALL_SCRAPE_SPEED = 2, WALL_SCRAPE_EVERY = 0.08, WALL_SCRAPE_SPARKS = 3; // (the share of its travel going into the wall that counts as head-on; how fast scraping along one slows it, per second at full into; how long clear of walls, in seconds, before touching one counts as hitting it afresh; the least speed that scrapes sparks, how often, and how many)
+/**
+ * The building footprint a car's turned rectangle overlaps, or null: a circle round each footprint to reject it first,
+ * then any corner of the car inside the footprint, or any corner of the footprint inside the car.
+ * @param {object} car - anything with x, z and heading that carLength and carWidth can measure
+ * @returns {?Array<{x: number, z: number}>}
+ */
+function buildingHit(car) {
+  const halfLength = carLength(car)/2, halfWidth = carWidth(car)/2, reach = Math.hypot(halfLength, halfWidth);
+  const sin = Math.sin(car.heading), cos = Math.cos(car.heading);
+  const corners = [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, b]) =>
+    ({ x: car.x + sin*halfLength*a + cos*halfWidth*b, z: car.z + cos*halfLength*a - sin*halfWidth*b }));
+  const inCar = q => {
+    const dx = q.x - car.x, dz = q.z - car.z;
+    return Math.abs(dx*sin + dz*cos) < halfLength && Math.abs(dx*cos - dz*sin) < halfWidth;
+  };
+  for (const zone of S.zones) for (const group of zone.buildingsGroup?.children || []) {
+    const fp = group.userData.footprint;
+    if (!fp || fp.length < 3) continue;
+    const { c, r } = footprintBounds(group);
+    if (Math.hypot(car.x - c.x, car.z - c.z) > r + reach) continue;
+    if (corners.some(q => pointInPolygon(q, fp)) || fp.some(inCar)) return fp;
+  }
+  return null;
+}
+/**
+ * The wall of a footprint nearest a point, as the point on it nearest and the way out of the building, square to it.
+ * @param {Array<{x: number, z: number}>} fp
+ * @param {{x: number, z: number}} p
+ * @returns {{ q: {x: number, z: number}, n: {x: number, z: number} }}
+ */
+function nearestWall(fp, p) {
+  let best = null;
+  fp.forEach((a, k) => {
+    const b = fp[(k+1) % fp.length], ex = b.x - a.x, ez = b.z - a.z, len2 = ex*ex + ez*ez || 1;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x)*ex + (p.z - a.z)*ez)/len2)), q = { x: a.x + ex*t, z: a.z + ez*t };
+    const d = Math.hypot(p.x - q.x, p.z - q.z);
+    if (!best || d < best.d) {
+      const len = Math.sqrt(len2), n = { x: ez/len, z: -ex/len }, out = (p.x - q.x)*n.x + (p.z - q.z)*n.z < 0 ? -1 : 1;
+      best = { d, q, n: { x: n.x*out, z: n.z*out } };
+    }
+  });
+  return best;
+}
+/**
+ * Keep the driven car out of buildings. Run into one and it slides along the wall, keeping only the part of its move
+ * that doesn't go into it (and, failing that, its turn or nothing at all); the first touch takes off the share of its
+ * speed that was going into the wall, with sparks — and head-on (WALL_HEAD_ON) and fast enough, throws it back with its
+ * engine dead, as hitting a much heavier car does. Held against the wall it slows the more it's pointed into it, and
+ * scrapes sparks along it. A car that's somehow in one already can go anywhere but deeper in.
+ * @param {object} car - the driven car
+ * @param {object} was - its position and heading before this frame
+ * @param {number} dt - seconds this frame
+ * @returns {void}
+ */
+function hitBuildings(car, was, dt) {
+  const fp = buildingHit(car);
+  if (!fp) { car.clearOfWalls = (car.clearOfWalls ?? Infinity) + dt; return; }
+  const { q, n } = nearestWall(fp, was), moved = { x: car.x - was.x, z: car.z - was.z }, push = moved.x*n.x + moved.z*n.z;
+  const stuck = buildingHit({ ...car, ...was }); // (already in it — shoved there by a car, say: free to go anywhere but deeper)
+  if (stuck && push >= 0) return;
+  const turned = { x: car.x, z: car.z, heading: car.heading };
+  car.x = was.x + moved.x - n.x*Math.min(0, push); car.z = was.z + moved.z - n.z*Math.min(0, push);
+  if (!stuck && buildingHit(car)) { Object.assign(car, turned, { x: was.x, z: was.z }); if (buildingHit(car)) Object.assign(car, was); }
+  const travel = Math.sign(car.speed || 1), into = Math.max(0, -(Math.sin(car.heading)*n.x + Math.cos(car.heading)*n.z)*travel);
+  const contact = { x: q.x, y: Y_ROAD + carHeight(car)*0.4, z: q.z };
+  const fresh = !(car.clearOfWalls < WALL_LET_GO); // (sliding along a wall leaves it just clear of it now and then)
+  car.clearOfWalls = 0;
+  if (fresh) {
+    if (into > WALL_HEAD_ON && Math.abs(car.speed) >= BOUNCE_MIN_SPEED) {
+      car.speed = -travel*Math.abs(car.speed)*BUMP_BOUNCE; car.stall = STALL_TIME;
+      puffSmoke({ x: q.x, y: Y_ROAD, z: q.z }, carHeight(car), BUMP_SMOKE_PUFFS);
+    } else car.speed *= 1 - into;
+    sparks(contact, BUMP_SPARKS);
+    car.scrapeSparks = WALL_SCRAPE_EVERY;
+    return;
+  }
+  car.speed *= 1 - Math.min(1, WALL_DRAG*into*dt);
+  if (Math.abs(car.speed) > WALL_SCRAPE_SPEED && (car.scrapeSparks -= dt) <= 0) { car.scrapeSparks = WALL_SCRAPE_EVERY; sparks(contact, WALL_SCRAPE_SPARKS); }
 }
 
 const BUMP_SHOVE = 0.15, BUMP_BOUNCE = 0.3, BOUNCE_BELOW_SPEED = 0.2, BUMP_SMOKE_PUFFS = 4, BUMP_SPARKS = 10;
