@@ -19,13 +19,16 @@ let blips = 0;
 /**
  * One syllable of someone's babble.
  * @param {{x: number, y: number, z: number}} at - their head
- * @param {number} pitch - their voice's pitch in Hz
+ * @param {{pitch: number, formant: number, sharpness: number}} voice - its pitch in Hz; how far its formants sit from an
+ *   ordinary voice's (the shape of their mouth and throat: above 1 smaller and brighter, below 1 bigger and darker); and how
+ *   sharp those formants ring (low breathy, high nasal and buzzy)
  * @param {number} length - seconds until their next syllable
  * @param {number} [loudness=1] - how wide their mouth opens on it, 0 to 1
  * @param {number} [mood=0] - their mood trait: the cheerier, the more their syllables lift, the glummer, the more they sag
  * @returns {void}
  */
-export function babble(at, pitch, length, loudness = 1, mood = 0) {
+export function babble(at, voice, length, loudness = 1, mood = 0) {
+  const { pitch, formant, sharpness } = voice;
   const context = listener.context;
   if (isMuted() || context.state !== 'running' || blips >= BLIPS_MAX) return;
   const { x, y, z } = camera.position;
@@ -37,19 +40,19 @@ export function babble(at, pitch, length, loudness = 1, mood = 0) {
   oscillator.type = 'sawtooth';
   oscillator.frequency.setValueAtTime(f, now);
   oscillator.frequency.exponentialRampToValueAtTime(f*slide, end);
-  // the vowel: its two formants, raised a touch for higher voices (smaller heads)
-  const [f1, f2] = VOWELS[Math.floor(Math.random()*VOWELS.length)], size = Math.sqrt(pitch/200);
+  // the vowel: its two formants, moved by the voice's own
+  const [f1, f2] = VOWELS[Math.floor(Math.random()*VOWELS.length)];
   const gain = context.createGain();
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(VOLUME*(0.5 + 0.5*loudness), now + 0.012);
   gain.gain.setValueAtTime(VOLUME*(0.5 + 0.5*loudness), end - 0.03);
   gain.gain.linearRampToValueAtTime(0, end);
-  [[f1, 1], [f2, 0.6]].forEach(([formant, level]) => {
+  [[f1, 1], [f2, 0.6]].forEach(([frequency, level]) => {
     const band = context.createBiquadFilter(), bandLevel = context.createGain();
     band.type = 'bandpass';
-    band.frequency.value = formant*size;
-    band.Q.value = 6;
-    bandLevel.gain.value = level*3;
+    band.frequency.value = frequency*formant;
+    band.Q.value = sharpness;
+    bandLevel.gain.value = level*3*Math.sqrt(6/sharpness); // (a sharper band lets less through: made up for)
     oscillator.connect(band).connect(bandLevel).connect(gain);
   });
   const panner = context.createPanner();

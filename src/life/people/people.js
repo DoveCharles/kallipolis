@@ -231,9 +231,15 @@ export const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode ===
  * @returns {boolean} whether they're in the room
  */
 const FOOTFALLS = 0; // how far through the walk cycle a foot first comes down (the other, half a cycle on)
-// The pitch of someone's voice (see audio/voices.js): lower for a man than a woman, and for someone taller, and a little
-// of their own either way, the same every time for the same person.
-const voicePitch = (p, i) => (personModel?.isMan[i] === 1 ? 150 : 250)/Math.sqrt(Math.max(0.5, p.height))*(0.85 + 0.3*mulberry32(i*7919 + 13)());
+// Someone's voice (see audio/voices.js), the same every time for the same person: its pitch, lower for a man than a woman
+// and for someone taller; its formants, likewise lower, and shifted either way on their own, apart from the pitch, so two
+// voices at one pitch can still sound nothing alike; and how sharp those formants ring, from breathy to nasal.
+function voiceOf(p, i) {
+  const own = mulberry32(i*7919 + 13), isMan = personModel?.isMan[i] === 1, tall = Math.sqrt(Math.max(0.5, p.height));
+  const pitch = (isMan ? 150 : 250)/tall*(0.85 + 0.3*own());
+  const formant = (isMan ? 1 : 1.15)/Math.sqrt(tall)*(0.8 + 0.42*own());
+  return { pitch, formant, sharpness: 3 + 9*own() };
+}
 export const inRoom = p => p.mode === 'indoors' && p.indoors.stage === 'inside' && !!p.inRoom
   && p.inRoom.visit === roomVisit() && roomHolds(p.indoors.building.key);
 export let indoorsCount = 0;
@@ -988,7 +994,7 @@ export function updatePeople(t) {
         p.talkTo = peopleRng() < 0.25 ? 0 : 0.3 + peopleRng()*0.7;
         p.talkIn = 0.08 + peopleRng()*0.14;
         // and each syllable they say is heard (see audio/voices.js)
-        if (p.talkTo > 0 && (!isGone(p) || inRoom(p))) babble({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voicePitch(p, i), p.talkIn, p.talkTo, p.traits.mood);
+        if (p.talkTo > 0 && (!isGone(p) || inRoom(p))) babble({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), p.talkIn, p.talkTo, p.traits.mood);
       }
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape
