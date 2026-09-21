@@ -13,7 +13,7 @@ import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
-import { followPersonAt, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed } from './peopleTracking.js';
+import { followPersonAt, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
 
 // The shapes these modules pass around — Person, NavLine, NavVertex, Hangout, PersonModel, Segment and SegmentHit —
@@ -601,7 +601,7 @@ export function isPedInDanger(p) {
  * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
  * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
  */
-Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, people, peopleGroups: groups });
+Object.assign(App, { syncPeopleUI, pickPerson, followPersonAt, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups });
 
 /**
  * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone
@@ -761,7 +761,10 @@ export function updatePeople(t) {
       goal = updateAttack(p, dt);
       if (p.attack?.stage === 'chase') speed *= PUNCH_CHASE_SPEED;
     }
-    if (possessed) { goal = walkPossessed(p, dt); updateSwing(p, dt); }
+    if (possessed) {
+      if (frozen) cancelSwing(); // (knocked down: no walking, no punching)
+      else { goal = walkPossessed(p, dt); updateSwing(p, dt); }
+    }
     if (p.mode === 'leaving') {
       // already placed on their walkway by joinWalkway; once they've reached it they carry on along it
       goal = frozen ? null : p.exit;
@@ -802,7 +805,7 @@ export function updatePeople(t) {
       p.y += (goal.y - p.y)*Math.min(1, dt*6);
     }
     // possessed, they face the way they're looking — the walk played backwards, stepping backwards
-    if (possessed) {
+    if (possessed && !frozen) {
       p.heading = possession.yaw;
       if (p.moving && controlInput().forward < 0 !== !!p.traits.backwards) p.stepped = -p.stepped;
     }

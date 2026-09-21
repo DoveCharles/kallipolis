@@ -221,7 +221,7 @@ export function placePossessedCamera(i) {
 // Unlike a fight someone picks of their own ("punching"), nobody is walked up to and nobody is stared at afterwards: the
 // swing plays wherever they are standing and lands on the nearest person within SWING_REACH ahead and SWING_ARC, at the
 // moment the fist arrives — knocking them flat, as any punch does — or on nobody.
-/** Who a swing can reach: how far ahead of them (at people size 1), and how near dead ahead they have to be. */
+/** Who a swing can reach: how far ahead of them, and how near dead ahead they have to be — the same whatever anyone's size. */
 const SWING_REACH = 3.4;
 const SWING_ARC = Math.cos(Math.PI*4/9);
 /** The punch being thrown: { timer } — how long until the fist lands. */
@@ -232,7 +232,7 @@ let swing = null;
  */
 export function punchFromPossession() {
   const p = people[possession.index];
-  if (!p || p.mode !== 'possessed' || swing || !hasClip('Punch') || !hasClip('Fall')) return;
+  if (!p || p.mode !== 'possessed' || p.punched || swing || !hasClip('Punch') || !hasClip('Fall')) return;
   swing = { timer: PUNCH_HIT_TIME };
   playOnce(p, 'Punch');
 }
@@ -249,16 +249,21 @@ export function updateSwing(p, dt) {
   const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
   /** @type {?Person} */
   let hit = null;
-  let nearest = SWING_REACH*S.peopleSize;
+  let nearest = SWING_REACH;
   people.forEach(q => {
     if (q === p || isGone(q) || !canBeKnockedOver(q)) return;
     const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
     if (d > nearest || d < 1e-3 || (dx*fx + dz*fz)/d < SWING_ARC) return;
     hit = q; nearest = d;
   });
+  // a bee nearer than anyone takes it instead, and its colony comes for the puncher
+  const bee = App.beeInPunch?.({ x: p.x, y: p.y, z: p.z, heading: p.heading, reach: nearest, arcCos: SWING_ARC, height: personHeight(p) });
+  if (bee) { App.punchBee?.(bee, p); return; }
   if (!hit) return;
   knockOver(hit, p);
 }
+/** Drop a swing that's been thrown, for someone knocked down before it landed. */
+export function cancelSwing() { swing = null; }
 
 //  ============== Riding the trains  ============== 
 // At TRAIN_RATE, someone near station pops to landing. At each stop after, they exit with probability  1/stationCount or guaranteed if two stations.

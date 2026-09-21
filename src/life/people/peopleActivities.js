@@ -563,11 +563,11 @@ export function knockDown(t, p) {
   t.pose = 'Fallen';
 }
 
-/** The modes whose people can't be knocked over: the one being controlled, and anyone dead, not yet placed or out of sight. */
-const UNREACHABLE_MODES = ['possessed', 'dead', 'none', 'indoors'];
+/** The modes whose people can't be knocked over: anyone dead, not yet placed, out of sight or on a train. */
+const UNREACHABLE_MODES = ['dead', 'none', 'indoors', 'train'];
 /**
- * Whether someone can be knocked over by a blow they didn't see coming: anyone in view, whatever they're in the middle of or
- * feeling (walking, leaving a plaza, riding a train, sitting, chatting, lying down, crossing a road, frightened, stunned,
+ * Whether someone can be knocked over by a blow they didn't see coming: anyone in view, the one being controlled included,
+ * whatever they're in the middle of or feeling (walking, leaving a plaza, sitting, chatting, lying down, crossing a road, frightened, stunned,
  * delighted, about to be punched by someone else), unless they're already down or getting up.
  * @param {Person} q - the person
  * @returns {boolean} whether a blow would land

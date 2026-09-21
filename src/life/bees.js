@@ -141,6 +141,8 @@ const BEE_SIT_MIN = 1.5, BEE_SIT_MAX = 4.5;        // seconds sat on it
 const BEE_RANGE = 22;         // how far from its hive a bee will go looking for a flower
 const BEE_ARRIVED = 0.45;     // how near a target counts as reaching it
 const BEE_HIT_REACH = 0.4;    // how near (at people size 1) a bee flown by hand has to be to someone to knock them over
+const BEE_RAGE_TIME = 10;    // seconds a colony chases whoever punched one of its bees
+const BEE_RAGE_SPEED = 2.2;   // how much faster than usual they fly after them
 const BEE_RESPAWN_MIN = 6, BEE_RESPAWN_MAX = 14; // seconds before a bee that's died is replaced, by a new one in its hive
 const BEE_CEILING = 40;       // how far above the park a bee flown by hand can climb
 const BEE_DUSK = 3;           // the sun this far above the horizon or lower and they're in for the night, in degrees
@@ -646,11 +648,14 @@ function stepBee(bee, t, dt, sheltering) {
       }
       break;
   }
-  // steered rather than pointed: it leans onto a new heading over a moment, and drifts about on the way there, so a leg
-  // of the round is a wavering line and not a ruled one
+  flyToward(bee, t, dt);
+}
+// steered rather than pointed: it leans onto a new heading over a moment, and drifts about on the way there, so a leg
+// of the round is a wavering line and not a ruled one — `speedScale` times as fast as it usually flies
+function flyToward(bee, t, dt, speedScale = 1) {
   toward.copy(bee.aim).sub(bee.at);
   const far = toward.length();
-  if (far > 1e-4) toward.multiplyScalar(BEE_SPEED*bee.traits.speed*Math.min(1, far/0.6)/far);
+  if (far > 1e-4) toward.multiplyScalar(BEE_SPEED*bee.traits.speed*speedScale*Math.min(1, far/0.6)/far);
   wander.set(Math.sin(t*1.7 + bee.phase), Math.sin(t*2.3 + bee.phase*1.7)*0.6, Math.cos(t*1.3 + bee.phase*0.6));
   toward.addScaledVector(wander, bee.state === 'travel' ? 0.5 : 0.18);
   bee.v.lerp(toward, 1 - Math.exp(-BEE_TURN*dt));
@@ -674,14 +679,60 @@ function flyByHand(bee, t, dt) {
   beatWings(bee, t);
   lookAt(bee, 0, dt);
 }
+// whether a bee is close enough to someone (in reach of them, and between their feet and their head) to hit them
+function isTouching(bee, person) {
+  const reach = BEE_HIT_REACH*S.peopleSize;
+  return Math.abs(person.x - bee.at.x) <= reach && Math.abs(person.z - bee.at.z) <= reach
+    && bee.at.y >= person.y && bee.at.y <= person.y + App.personHeight(person);
+}
 // whoever a bee flown by hand has flown into goes down, as if punched
 function knockOverWhoIsHit(bee) {
-  const reach = BEE_HIT_REACH*S.peopleSize;
-  App.people?.forEach(p => {
-    if (Math.abs(p.x - bee.at.x) > reach || Math.abs(p.z - bee.at.z) > reach) return;
-    if (bee.at.y < p.y || bee.at.y > p.y + p.height*S.peopleSize) return;
-    App.knockOverPerson?.(p, bee.at);
+  App.people?.forEach(p => { if (p.mode !== 'possessed' && isTouching(bee, p)) App.knockOverPerson?.(p, bee.at); });
+}
+// a bee out after someone, at their chest: whenever it reaches them they go down (again, once they're up)
+function chase(bee, t, dt, person) {
+  bee.state = 'travel'; bee.perch = null; bee.plan.length = 0;
+  bee.aim.set(person.x, person.y + App.personHeight(person)*0.6, person.z);
+  flyToward(bee, t, dt, BEE_RAGE_SPEED);
+  if (isTouching(bee, person)) App.knockOverPerson?.(person, bee.at);
+}
+// the rage over, whatever bees are out make for home
+function calmColony(colony) {
+  colony.rage = null;
+  colony.bees.forEach(bee => {
+    if (isHome(bee) || bee.hand) return;
+    bee.state = 'travel'; bee.perch = null; bee.plan.length = 0;
+    bee.aim.copy(bee.hive.mouth);
   });
+}
+/**
+ * The nearest bee in front of a punch, if there is one: within `reach` and `arcCos` of dead ahead, at the height of the
+ * puncher's body.
+ * @param {{x: number, y: number, z: number, heading: number, reach: number, arcCos: number, height: number}} punch
+ * @returns {?object} the bee
+ */
+function beeInPunch({ x, y, z, heading, reach, arcCos, height }) {
+  const fx = Math.sin(heading), fz = Math.cos(heading);
+  let nearest = null, nearestDistance = reach;
+  colonies.forEach(colony => colony.bees.forEach(bee => {
+    if (isHome(bee) || bee.at.y < y || bee.at.y > y + height) return;
+    const dx = bee.at.x - x, dz = bee.at.z - z, d = Math.hypot(dx, dz);
+    if (d > nearestDistance || d < 1e-3 || (dx*fx + dz*fz)/d < arcCos) return;
+    nearest = bee; nearestDistance = d;
+  }));
+  return nearest;
+}
+/**
+ * A punch that has landed on a bee: it dies, and the rest of its colony's bees that are out chase whoever threw it for
+ * BEE_RAGE_TIME seconds, knocking them down whenever they catch them.
+ * @param {object} bee - the bee (from beeInPunch)
+ * @param {object} puncher - the person
+ * @returns {void}
+ */
+function punchBee(bee, puncher) {
+  const colony = colonies.find(c => c.bees.includes(bee));
+  killBee(bee);
+  if (colony) colony.rage = { person: puncher, until: (lastBeeTime || 0) + BEE_RAGE_TIME };
 }
 /**
  * Kill a bee that's out flying — wherever it was, in a burst of its colours — and put a new one in its hive to come out
@@ -692,7 +743,7 @@ function knockOverWhoIsHit(bee) {
 function killBee(bee) {
   if (isHome(bee)) return;
   if (flownBee === bee || (followedBee && followedBee.colony.bees[followedBee.index] === bee)) stopFollowingBee();
-  explodeBee({ x: bee.at.x, y: bee.at.y, z: bee.at.z }, BEE_LENGTH*bee.traits.size, Y_ROAD);
+  explodeBee({ x: bee.at.x, y: bee.at.y, z: bee.at.z }, BEE_LENGTH*bee.traits.size, Y_PARK);
   bee.generation = (bee.generation || 0) + 1;
   bee.number = numberFor(bee.key + ':' + bee.generation);
   bee.traits = null; // (a new bee: its own traits, from its own number)
@@ -888,9 +939,11 @@ export function updateBees(t) {
   if (S.interactionMode !== 'move') { stopFollowingBee(); stopFollowingHive(); }
   const sheltering = beesSheltering();
   colonies.forEach(colony => {
+    if (colony.rage && (t >= colony.rage.until || colony.rage.person.mode === 'dead')) calmColony(colony);
     colony.bees.forEach((bee, k) => {
       refreshBeeTraits(bee);
-      stepBee(bee, t, dt, sheltering);
+      if (colony.rage && !isHome(bee) && !bee.hand) chase(bee, t, dt, colony.rage.person);
+      else stepBee(bee, t, dt, sheltering);
       held.position.copy(bee.at);
       held.rotation.set(-bee.pitch, bee.yaw, -bee.bank);
       held.scale.setScalar(isHome(bee) ? 0 : bee.traits.size); // indoors, and not to be drawn
@@ -905,4 +958,4 @@ export function updateBees(t) {
 }
 
 // (the bee and hive cards are handed over too, for whoever else wants to put something on them or open one)
-Object.assign(App, { strikeBees, pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive, flyBee, showBeeCard, setBeeCardDoing, hideBeeCard, showHiveCard, setHiveCardBees, hideHiveCard });
+Object.assign(App, { strikeBees, beeInPunch, punchBee, pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive, flyBee, showBeeCard, setBeeCardDoing, hideBeeCard, showHiveCard, setHiveCardBees, hideHiveCard });
