@@ -1,7 +1,13 @@
 import * as THREE from 'three';
-import { camera, scene } from '../core/scene.js';
+import { camera, scene, renderer } from '../core/scene.js';
+import { S } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { footprintBounds } from './footprints.js';
+import { hashNameToNumber, mulberry32 } from '../core/math.js';
+import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
+import { setCutout } from '../ui/pixelation.js';
+import { isMuted } from '../audio/sfx.js';
 
 // ============================================================ going inside a building
 // Every building has the same inside: one room (furnished one of a few ways), built once and moved to whichever building's
@@ -96,19 +102,14 @@ function layout(name, floor, build) {
   group.visible = false;
   room.add(group);
   const add = (w, h, d, material, x, y, z) => box(w, h, d, material, x, y, z, group);
-  LAYOUTS[name] = { group, floor: new THREE.Color(floor), blocked: build(add) };
+  const blocked = build(add);
+  // (solid: what nobody walks through, as against blocked, where nobody stops; seats: where anyone can sit — see roomSeats)
+  LAYOUTS[name] = { group, floor: new THREE.Color(floor), blocked, solid: blocked, seats: [] };
 }
 const around = (x0, x1, z0, z1, pad = 0.45) => ({ x0: x0 - pad, x1: x1 + pad, z0: z0 - pad, z1: z1 + pad });
 
-// a home: a table, a rug and a low cabinet under the far windows
-layout('home', 0x9a7452, add => {
-  const wood = lit(0x6b4a33, 0.7);
-  add(1.8, 0.06, 0.9, wood, 0.6, 0.74, 0.4);
-  [[-0.2, 0.05], [1.4, 0.05], [-0.2, 0.75], [1.4, 0.75]].forEach(([x, z]) => add(0.07, 0.71, 0.07, wood, x, 0.355, z));
-  add(3.2, 0.01, 2.2, lit(0x8c3b3b, 1), 0.6, 0.005, 0.4);
-  add(2.4, 0.8, 0.5, wood, 0.4, 0.4, ROOM_D/2 - 0.3);
-  return [around(-0.3, 1.5, -0.05, 0.85), around(-0.8, 1.6, ROOM_D/2 - 0.55, ROOM_D/2, 0.35)];
-});
+// a home: furnished afresh for each building from the interior model (see "a home's furniture", below)
+layout('home', 0x9a7452, () => []);
 
 // an office floor: a bank of desks back to back with a screen between, each with its monitor and chair, strip lights in
 // the ceiling, a water cooler, a printer and a pot plant
@@ -157,12 +158,362 @@ layout('office', 0x6f7478, add => {
   ];
 });
 let current = LAYOUTS.home;
+// where there's room to walk in it, as laid out (see walkGrid)
+let grid = null;
 function useLayout(name) {
   current.group.visible = false;
+  grid = null;
   current = LAYOUTS[name] ?? LAYOUTS.home;
   current.group.visible = true;
   floorMaterial.color.copy(current.floor);
   floorMaterial.emissive.copy(current.floor);
+}
+
+// ---------------------------------------------------------- a home's furniture
+// The furniture's a custom model (assets/models/Interior.glb, made in Blender): one top-level mesh per piece — Chair,
+// Table, TV, Lamp, Plant, Sofa, Coffee Table (loaded as Coffee_Table), Rug — at five times life size, the TV's screen
+// facing -z and everything else facing +z. Each home arranges it its own way (from its building's key, so it's the same
+// every visit): the TV against one of the two far walls, facing the camera, the sofa across the room facing it with the
+// coffee table on a rug between them, maybe a lamp at the sofa's end, a dining table with two or four chairs wherever
+// there's room for it, and a plant or two by the walls. Until the model's loaded, homes are bare.
+const FURNITURE_MODEL_URL = 'assets/models/Interior.glb';
+const FURNITURE_SCALE = 0.2;
+// { [name]: { object, w, d, h, seats } } — each piece turned to face +z, centred on its footprint and standing on y = 0,
+// w across and d deep, with where on it anyone can sit (seats: { x, z, y }, in its own terms)
+let furniture = null;
+const FLOORS = [0x9a7452, 0x7d5b3f, 0xb08a62, 0x8a6a55, 0x6e6861, 0xa3927c];
+// the screen, lit as if it's on
+const SCREEN_COLOR = 0x0c1218, SCREEN_GLOW = 0x33536e;
+
+async function loadFurniture() {
+  let gltf;
+  try {
+    gltf = await new GLTFLoader().loadAsync(FURNITURE_MODEL_URL);
+  } catch (err) {
+    console.warn('Blockout: the interior model failed to load; homes are left bare', err);
+    return;
+  }
+  const pieces = {};
+  for (const node of [...gltf.scene.children]) {
+    const inner = new THREE.Group();
+    inner.add(node);
+    inner.scale.setScalar(FURNITURE_SCALE);
+    if (node.name === 'TV') inner.rotation.y = Math.PI;
+    inner.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(inner), size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
+    inner.position.set(-mid.x, -box.min.y, -mid.z);
+    const object = new THREE.Group();
+    object.add(inner);
+    object.updateMatrixWorld(true);
+    node.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = o.receiveShadow = !o.material.transparent;
+      furnitureLit(o.material);
+    });
+    pieces[node.name] = { object, w: size.x, d: size.z, h: size.y, seats: [] };
+  }
+  for (const name of ['Sofa', 'Chair']) if (pieces[name]) pieces[name].seats = measureSeats(pieces[name]);
+  // the TV's screen (where the video goes: see "the TV", below) and the lamp's bulb, in their pieces' own terms
+  const part = (piece, material) => {
+    let mesh = null;
+    piece?.object.traverse(o => { if (o.isMesh && o.material.name === material) mesh = o; });
+    return mesh && new THREE.Box3().setFromObject(mesh);
+  };
+  const screen = part(pieces.TV, 'Screen'), bulb = part(pieces.Lamp, 'Light');
+  if (screen) pieces.TV.screen = { centre: screen.getCenter(new THREE.Vector3()).setZ(screen.max.z + 0.004),
+    w: screen.max.x - screen.min.x, h: screen.max.y - screen.min.y };
+  if (bulb) pieces.Lamp.bulb = bulb.getCenter(new THREE.Vector3());
+  if (!['TV', 'Sofa', 'Coffee_Table'].every(name => pieces[name])) {
+    console.warn('Blockout: the interior model is missing its TV, sofa or coffee table; homes are left bare');
+    return;
+  }
+  furniture = pieces;
+  if (inside && current === LAYOUTS.home) furnish(inside.key);
+}
+// lit like the rest of the room (see roomLit), but for the lamp's bulb, which glows anyway, the glass, and the TV's screen
+function furnitureLit(material) {
+  if (material.name === 'Screen') {
+    material.color.setHex(SCREEN_COLOR);
+    material.emissive.setHex(SCREEN_GLOW);
+    material.emissiveIntensity = 1;
+  } else if (material.name !== 'Light' && !material.transparent) {
+    roomLit(material);
+  }
+}
+// Where on a sofa or chair (facing +z) anyone can sit: feeling down onto it from above, front to back along its middle,
+// the seat's the first thing there and its back where it rises well above that; they sit a little in front of the back,
+// as far apart along it as there's room for (up to three on a sofa).
+function measureSeats(piece) {
+  const ray = new THREE.Raycaster(), down = new THREE.Vector3(0, -1, 0), from = new THREE.Vector3();
+  const heightAt = (x, z) => {
+    ray.set(from.set(x, piece.h + 1, z), down);
+    const hit = ray.intersectObject(piece.object, true)[0];
+    return hit ? hit.point.y : 0;
+  };
+  let front = null, y = 0, back = -piece.d/2;
+  for (let z = piece.d/2; z > -piece.d/2; z -= 0.01) {
+    const h = heightAt(0, z);
+    if (front === null) { if (h > 0.2) front = z; continue; }
+    if (z > front - 0.1) { y = Math.max(y, h); continue; }
+    if (h > y + 0.15) { back = z; break; }
+  }
+  if (front === null) return [];
+  const z = Math.min(front - 0.08, back + 0.2);
+  let half = 0;
+  while (half < piece.w/2 && heightAt(half, z) < y + 0.1 && heightAt(-half, z) < y + 0.1) half += 0.02;
+  const count = Math.max(1, Math.min(3, Math.floor(half*2/0.55)));
+  return Array.from({ length: count }, (_, i) => ({ x: -half + (i + 0.5)*half*2/count, z, y }));
+}
+loadFurniture();
+
+// Lays out the home for the building with this key (see buildingKey): `LAYOUTS.home`'s furniture, where nobody stands or
+// walks, and its seats, in the room as it's now placed.
+function furnish(key) {
+  const home = LAYOUTS.home;
+  home.group.clear(); // (clones, sharing the model's geometry and materials)
+  home.blocked = []; home.solid = []; home.seats = [];
+  home.screen = null;
+  grid = null;
+  stopTV();
+  home.group.add(lampLight);
+  lampLight.userData.there = false;
+  const rng = mulberry32(hashNameToNumber(String(key)));
+  home.floor.setHex(FLOORS[Math.floor(rng()*FLOORS.length)]);
+  floorMaterial.color.copy(home.floor);
+  floorMaterial.emissive.copy(home.floor);
+  if (!furniture) return;
+
+  // what's taken so far (and room kept clear), as rectangles in the room's x and z; `tall` ones could hide the TV
+  const taken = [];
+  const footprint = (piece, x, z, angle, s = 1) => {
+    const across = Math.abs(Math.sin(angle)) > 0.5, hw = (across ? piece.d : piece.w)*s/2, hd = (across ? piece.w : piece.d)*s/2;
+    return { x0: x - hw, x1: x + hw, z0: z - hd, z1: z + hd };
+  };
+  const overlaps = (a, b, gap = 0) => a.x0 < b.x1 + gap && b.x0 < a.x1 + gap && a.z0 < b.z1 + gap && b.z0 < a.z1 + gap;
+  const inRoom = (r, margin = 0.02) => r.x0 >= -ROOM_W/2 + margin && r.x1 <= ROOM_W/2 - margin
+    && r.z0 >= -ROOM_D/2 + margin && r.z1 <= ROOM_D/2 - margin;
+  const fits = (r, gap = 0, margin = 0.02) => inRoom(r, margin) && taken.every(o => !overlaps(r, o, gap));
+  const put = (name, x, z, angle, { scale = 1, tall = false, underfoot = false } = {}) => {
+    const piece = furniture[name], object = piece.object.clone();
+    object.position.set(x, 0, z);
+    object.rotation.y = angle;
+    object.scale.setScalar(scale);
+    home.group.add(object);
+    const r = footprint(piece, x, z, angle, scale);
+    if (underfoot) return r;
+    taken.push({ ...r, tall });
+    home.solid.push(r);
+    home.blocked.push(around(r.x0, r.x1, r.z0, r.z1, 0.35));
+    const c = Math.cos(angle), s = Math.sin(angle);
+    for (const seat of piece.seats) home.seats.push({ x: x + seat.x*c + seat.z*s, z: z - seat.x*s + seat.z*c, y: seat.y, nx: s, nz: c });
+    return r;
+  };
+  // the camera's corner, kept clear of anything but the sofa
+  const cameraCorner = { x0: -ROOM_W/2, x1: -ROOM_W/2 + CAMERA_CLEAR, z0: -ROOM_D/2, z1: -ROOM_D/2 + CAMERA_CLEAR };
+
+  // The TV and sofa, in terms of the wall the TV's against: u along it, v out from it into the room. Either far wall is
+  // in full view of the camera.
+  const onSide = rng() < 0.4;                                          // the +x wall, facing -x, or else the +z wall
+  const wallLength = onSide ? ROOM_D : ROOM_W, depth = onSide ? ROOM_W : ROOM_D;
+  const at = (u, v) => onSide ? { x: ROOM_W/2 - v, z: u } : { x: u, z: ROOM_D/2 - v };
+  const toWall = onSide ? Math.PI/2 : 0, fromWall = toWall + Math.PI;
+  const areaUV = (u0, u1, v0, v1) => {
+    const a = at(u0, v0), b = at(u1, v1);
+    return { x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x), z0: Math.min(a.z, b.z), z1: Math.max(a.z, b.z) };
+  };
+  const { TV: tv, Sofa: sofa, 'Coffee_Table': coffee } = furniture;
+  // (towards the wall's far end, rather than the camera's, where it'd be seen side on and the sofa'd be under the camera)
+  const tvRange = wallLength/2 - tv.w/2 - 0.8, tvU = tvRange*(rng()*1.3 - 0.3), tvV = tv.d/2 + 0.03;
+  let spot = at(tvU, tvV);
+  put('TV', spot.x, spot.z, fromWall);
+  const screen = { ...spot }, tvObject = home.group.children.at(-1);
+  // the sofa, facing it a comfortable way off, with its back to the room behind
+  const sofaV = Math.min(tv.d + 2.3 + rng()*0.7 + sofa.d/2, depth - sofa.d/2 - 0.05);
+  const sofaU = THREE.MathUtils.clamp(tvU + (rng() - 0.5)*0.6, -wallLength/2 + sofa.w/2 + 0.1, wallLength/2 - sofa.w/2 - 0.1);
+  spot = at(sofaU, sofaV);
+  const sofaArea = put('Sofa', spot.x, spot.z, toWall);
+  // the coffee table between them, far enough from the sofa to get to it, on a rug
+  const coffeeV = sofaV - sofa.d/2 - 0.55 - coffee.d/2;
+  spot = at(sofaU, coffeeV);
+  put('Coffee_Table', spot.x, spot.z, toWall);
+  if (furniture.Rug) { spot = at(sofaU, coffeeV + 0.15); put('Rug', spot.x, spot.z, toWall, { scale: 1.35, underfoot: true }); }
+  // and nothing else between them
+  taken.push(areaUV(sofaU - sofa.w/2, sofaU + sofa.w/2, tv.d, sofaV - sofa.d/2));
+  taken.push(cameraCorner);
+  // whether something tall at `r` would stand between the camera and the screen
+  const hidesScreen = r => {
+    for (let k = 1; k < 40; k++) {
+      const x = CAMERA_AT.x + (screen.x - CAMERA_AT.x)*k/40, z = CAMERA_AT.z + (screen.z - CAMERA_AT.z)*k/40;
+      if (x > r.x0 - 0.1 && x < r.x1 + 0.1 && z > r.z0 - 0.1 && z < r.z1 + 0.1) return true;
+    }
+    return false;
+  };
+
+  // a lamp at one end of the sofa or the other
+  const lamp = furniture.Lamp;
+  if (lamp && rng() < 0.7) {
+    const first = rng() < 0.5 ? -1 : 1;
+    for (const side of [first, -first]) {
+      spot = at(sofaU + side*(sofa.w/2 + lamp.w/2 + 0.1), sofaV + sofa.d/2 - lamp.d/2);
+      const r = footprint(lamp, spot.x, spot.z, 0);
+      if (!fits(r, 0.05) || hidesScreen(r)) continue;
+      put('Lamp', spot.x, spot.z, 0, { tall: true });
+      if (lamp.bulb) { lampLight.position.copy(lamp.bulb).add(new THREE.Vector3(spot.x, 0, spot.z)); lampLight.userData.there = true; }
+      break;
+    }
+  }
+  // a dining table somewhere with room to walk round it, with a chair either side or all round — and not so near the
+  // camera that it's cut off by the bottom of the view
+  const underCamera = { x0: -ROOM_W/2, x1: -ROOM_W/2 + 2.8, z0: -ROOM_D/2, z1: -ROOM_D/2 + 2.8 };
+  const table = furniture.Table, chair = furniture.Chair;
+  if (table && chair && rng() < 0.8) {
+    for (let tries = 0; tries < 60; tries++) {
+      const x = (rng()*2 - 1)*(ROOM_W/2 - 1), z = (rng()*2 - 1)*(ROOM_D/2 - 1), turn = rng() < 0.5 ? 0 : Math.PI/2;
+      const sides = rng() < 0.45 ? [0, 1, 2, 3] : rng() < 0.5 ? [0, 2] : [1, 3];
+      const top = footprint(table, x, z, turn);
+      const chairs = sides.map(k => {
+        const dx = [0, 1, 0, -1][k], dz = [1, 0, -1, 0][k];
+        const reach = (dx ? (top.x1 - top.x0) : (top.z1 - top.z0))/2 + chair.d/2 - 0.08;
+        return { x: x + dx*reach, z: z + dz*reach, angle: Math.atan2(-dx, -dz) };
+      });
+      const all = [top, ...chairs.map(c => footprint(chair, c.x, c.z, c.angle))];
+      const whole = { x0: Math.min(...all.map(r => r.x0)), x1: Math.max(...all.map(r => r.x1)),
+        z0: Math.min(...all.map(r => r.z0)), z1: Math.max(...all.map(r => r.z1)) };
+      if (!fits(whole, 0.7, 0.35) || overlaps(whole, underCamera)) continue;
+      put('Table', x, z, turn);
+      chairs.forEach(c => put('Chair', c.x, c.z, c.angle));
+      break;
+    }
+  }
+  // a plant or two, in the corners (not the camera's) or either side of the TV
+  const plant = furniture.Plant;
+  if (plant) {
+    let plants = 1 + Math.floor(rng()*2.5);
+    const inset = Math.max(plant.w, plant.d)/2 + 0.1;
+    const spots = [
+      { x: ROOM_W/2 - inset, z: ROOM_D/2 - inset }, { x: ROOM_W/2 - inset, z: -ROOM_D/2 + inset },
+      { x: -ROOM_W/2 + inset, z: ROOM_D/2 - inset },
+      at(tvU - tv.w/2 - inset, inset), at(tvU + tv.w/2 + inset, inset),
+    ];
+    while (plants > 0 && spots.length) {
+      const [p] = spots.splice(Math.floor(rng()*spots.length), 1), scale = 0.85 + rng()*0.3;
+      const r = footprint(plant, p.x, p.z, 0, scale);
+      if (!fits(r, 0.1) || hidesScreen(r)) continue;
+      put('Plant', p.x, p.z, rng()*Math.PI*2, { scale, tall: true });
+      plants--;
+    }
+  }
+
+  // the seats, in the world: where to sit, how high, and which way they face
+  const c = Math.cos(room.rotation.y), s = Math.sin(room.rotation.y);
+  home.seats = home.seats.map(seat => {
+    const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z));
+    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, by: null };
+  });
+  // and the TV's screen, in the world, switched on
+  if (tv.screen) {
+    tvObject.updateMatrixWorld(true);
+    home.screen = { centre: tvObject.localToWorld(tv.screen.centre.clone()), turn: tvObject.getWorldQuaternion(new THREE.Quaternion()),
+      w: tv.screen.w, h: tv.screen.h };
+    startTV();
+  }
+}
+
+// ---------------------------------------------------------------- the TV
+// A home's TV plays a YouTube video, one picked at random each visit from assets/tv.txt: a real YouTube player in an
+// iframe, laid out by CSS3DRenderer to sit exactly where the screen is, on its own layer behind the canvas — and the
+// canvas cut through to it at the screen (see setCutout in pixelation.js), so whoever walks in front of the TV hides it
+// as they would anything else. It starts muted (browsers only let a page play sound once it's been clicked or typed
+// into) and turns its sound up from then on, unless the app's muted. One at a time: it's only ever the room you're in.
+const TV_LIST_URL = 'assets/tv.txt';
+const TV_PIXELS = 640;  // the player's width, as laid out — scaled down to the screen's
+const TV_VOLUME = 60;   // out of 100
+let channels = [];      // YouTube video ids
+fetch(TV_LIST_URL).then(r => r.ok ? r.text() : '').then(text => {
+  channels = text.split('\n').map(videoId).filter(Boolean);
+  if (inside && current === LAYOUTS.home) startTV();
+}).catch(() => {});
+// the id of the video a line of tv.txt links to (any of YouTube's link shapes, or the bare id), or null
+function videoId(line) {
+  line = line.trim();
+  if (!line || line.startsWith('#')) return null;
+  return (line.match(/(?:[?&]v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/) ?? line.match(/^([\w-]{11})$/))?.[1] ?? null;
+}
+let tvLayer = null;       // the CSS3DRenderer and its scene, made the first time there's a TV on
+let tv = null;            // what's on: { object (its CSS3DObject), iframe, muted }
+const tvHoles = new THREE.Scene();
+const tvHole = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
+  vertexShader: 'void main() { gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0); }',
+  fragmentShader: 'void main() { gl_FragColor = vec4(0.0); }',
+  blending: THREE.NoBlending, depthWrite: false,
+}));
+tvHoles.add(tvHole);
+function startTV() {
+  const screen = LAYOUTS.home.screen;
+  if (tv || !screen || !channels.length) return;
+  if (!tvLayer) {
+    const css = new CSS3DRenderer();
+    css.domElement.style.cssText += ';position:absolute;inset:0;pointer-events:none';
+    renderer.domElement.style.position = 'relative';
+    renderer.domElement.style.zIndex = '1';
+    renderer.domElement.parentElement.prepend(css.domElement);
+    css.setSize(window.innerWidth, window.innerHeight);
+    window.addEventListener('resize', () => css.setSize(window.innerWidth, window.innerHeight));
+    tvLayer = { css, scene: new THREE.Scene() };
+  }
+  const id = channels[Math.floor(Math.random()*channels.length)];
+  const iframe = document.createElement('iframe');
+  const width = TV_PIXELS, height = Math.round(TV_PIXELS*screen.h/screen.w);
+  iframe.style.cssText = `width:${width}px;height:${height}px;border:0;background:#000`;
+  iframe.allow = 'autoplay; encrypted-media';
+  iframe.src = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0&loop=1&playlist=${id}`
+    + `&playsinline=1&rel=0&iv_load_policy=3&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`;
+  const object = new CSS3DObject(iframe);
+  object.position.copy(screen.centre);
+  object.quaternion.copy(screen.turn);
+  object.scale.setScalar(screen.w/width);
+  tvLayer.scene.add(object);
+  tvHole.position.copy(screen.centre);
+  tvHole.quaternion.copy(screen.turn);
+  tvHole.scale.set(screen.w, screen.h, 1);
+  setCutout(tvHoles);
+  tv = { object, iframe, muted: true, toldAt: -Infinity };
+}
+function stopTV() {
+  if (!tv) return;
+  tvLayer.scene.remove(tv.object); // (which takes its iframe out of the page)
+  tv = null;
+  setCutout(null);
+}
+// a command for the player (see YouTube's IFrame Player API)
+const tell = (func, ...args) => tv.iframe.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), 'https://www.youtube.com');
+// Each frame, while a TV's on: the player laid out where the screen now is on the screen, and its sound on or off.
+function updateTV() {
+  if (!tv) return;
+  tvLayer.css.render(tvLayer.scene, camera);
+  // (told again every so often: the player misses anything it's told before it's ready, and there's no knowing when that is
+  // without its API script)
+  const muted = isMuted() || !navigator.userActivation?.hasBeenActive, now = performance.now();
+  if (muted === tv.muted && now - tv.toldAt < 2000) return;
+  tv.muted = muted;
+  tv.toldAt = now;
+  if (muted) tell('mute');
+  else { tell('unMute'); tell('setVolume', TV_VOLUME); }
+}
+
+// ---------------------------------------------------------------- the lamp
+// A home's lamp (when it has one) comes on after dark, while anyone's in (see someoneHome) — a real light, only in the
+// scene while the room is, so it costs the rest of the city nothing.
+const LAMP_COLOR = 0xffc68a, LAMP_INTENSITY = 6, LAMP_REACH = 9, LAMP_EASE = 0.05;
+const lampLight = new THREE.PointLight(LAMP_COLOR, 0, LAMP_REACH, 1.2);
+let occupiedAt = -Infinity;
+// (said each frame by whoever's in the room: see peopleActivities.js)
+export const someoneHome = () => { occupiedAt = performance.now(); };
+function updateLamp() {
+  const dark = THREE.MathUtils.smoothstep(-(S.sunElevation ?? 90), -6, 2);
+  const on = lampLight.userData.there && current === LAYOUTS.home && performance.now() - occupiedAt < 1000;
+  const goal = on ? LAMP_INTENSITY*dark : 0;
+  lampLight.intensity = Math.abs(goal - lampLight.intensity) < 0.01 ? goal : lampLight.intensity + (goal - lampLight.intensity)*LAMP_EASE;
 }
 
 // where the camera sits in the room, and what it looks at, in the room's own terms
@@ -219,6 +570,7 @@ export function enterBuilding(group, key, kind = 'home') {
   room.visible = true;
   room.updateMatrixWorld(true);
   group.visible = false;
+  if (current === LAYOUTS.home) furnish(key);
 
   visits++;
   inside = { group, key, before: {
@@ -248,6 +600,7 @@ export function leaveBuilding() {
   if (!inside) return;
   const { group, before } = inside;
   inside = null;
+  stopTV();
   group.visible = true;
   room.visible = false;
   controls.locked = false;
@@ -277,6 +630,8 @@ function fittedFov() {
 
 // Each frame: the view eased wider inside a room, and back to its usual angle outside.
 export function updateInteriorCamera() {
+  updateTV();
+  updateLamp();
   const goal = inside ? fittedFov() : BASE_FOV;
   if (camera.fov === goal) return;
   camera.fov = Math.abs(goal - camera.fov) < 0.05 ? goal : camera.fov + (goal - camera.fov)*FOV_EASE;
@@ -299,18 +654,84 @@ const clearOfCamera = (x, z) => x > -ROOM_W/2 + CAMERA_CLEAR || z > -ROOM_D/2 + 
 export const roomHolds = key => !!inside && inside.key === key;
 /** Which time the room's been set up this is: someone placed in it on an earlier visit needs placing again. */
 export const roomVisit = () => visits;
-// A spot to stand in the room, in the world, from `rng` — one the straight walk from `from` (if given) to it stays clear of
-// the furniture on. The camera's corner is just as clear, but there's no avoiding walking past it from where they are.
-export function roomSpot(rng, from = null) {
-  const local = from && room.worldToLocal(new THREE.Vector3(from.x, from.y, from.z));
+// A spot to stand in the room, in the world, from `rng`: clear of the furniture and the camera's corner.
+export function roomSpot(rng) {
   let x = 0, z = 0;
   for (let tries = 0; tries < 40; tries++) {
     x = -ROOM_W/2 + ROOM_MARGIN + rng()*(ROOM_W - ROOM_MARGIN*2);
     z = -ROOM_D/2 + ROOM_MARGIN + rng()*(ROOM_D - ROOM_MARGIN*2);
-    if (!clearOfFurniture(x, z) || !clearOfCamera(x, z)) continue;
-    let clear = true;
-    for (let k = 1; local && clear && k < 12; k++) clear = clearOfFurniture(local.x + (x - local.x)*k/12, local.z + (z - local.z)*k/12);
-    if (clear) break;
+    if (clearOfFurniture(x, z) && clearOfCamera(x, z)) break;
   }
   return room.localToWorld(new THREE.Vector3(x, 0, z));
+}
+
+/** Where anyone can sit in the room, in the world: { x, y, z } on the seat, { nx, nz } the way it faces, and who's `by` it. */
+export const roomSeats = () => current.seats;
+
+// Walking about the room: a grid over its floor, CELL square, of where there's room to walk — BODY clear of the walls and
+// the furniture — built for the room as it's laid out the first time anyone needs it. Near where they start and where
+// they're going, though, anywhere in the room will do: someone getting up off the sofa, or going to sit on it, is well
+// within BODY of it and the coffee table in front.
+const CELL = 0.1, GRID_X = Math.round(ROOM_W/CELL), GRID_Z = Math.round(ROOM_D/CELL);
+const BODY = 0.2, LEEWAY = 0.45;
+function walkGrid() {
+  if (grid) return grid;
+  grid = new Uint8Array(GRID_X*GRID_Z);
+  for (let k = 0; k < GRID_Z; k++) for (let i = 0; i < GRID_X; i++) {
+    const x = -ROOM_W/2 + (i + 0.5)*CELL, z = -ROOM_D/2 + (k + 0.5)*CELL;
+    grid[k*GRID_X + i] = Math.abs(x) < ROOM_W/2 - BODY && Math.abs(z) < ROOM_D/2 - BODY
+      && current.solid.every(r => x < r.x0 - BODY || x > r.x1 + BODY || z < r.z0 - BODY || z > r.z1 + BODY) ? 1 : 0;
+  }
+  return grid;
+}
+/**
+ * The way from `from` to `to` (both in the world) round the furniture: the points to walk to in turn, in the world, ending
+ * at `to` — or null if there's no way there.
+ */
+export function roomRoute(from, to) {
+  const open = walkGrid();
+  const a = room.worldToLocal(new THREE.Vector3(from.x, from.y, from.z)), b = room.worldToLocal(new THREE.Vector3(to.x, to.y, to.z));
+  const cellOf = (x, z) => {
+    const i = Math.floor((x + ROOM_W/2)/CELL), k = Math.floor((z + ROOM_D/2)/CELL);
+    return i < 0 || k < 0 || i >= GRID_X || k >= GRID_Z ? -1 : k*GRID_X + i;
+  };
+  const walkable = (x, z) => {
+    const c = cellOf(x, z);
+    return c >= 0 && (open[c] === 1 || Math.hypot(x - a.x, z - a.z) < LEEWAY || Math.hypot(x - b.x, z - b.z) < LEEWAY);
+  };
+  const start = cellOf(a.x, a.z), goal = cellOf(b.x, b.z);
+  if (start < 0 || goal < 0) return null;
+  // breadth first over the grid, diagonals only where neither corner's cut
+  const came = new Int32Array(GRID_X*GRID_Z).fill(-1), queue = [start];
+  came[start] = start;
+  const centre = c => ({ x: -ROOM_W/2 + (c % GRID_X + 0.5)*CELL, z: -ROOM_D/2 + (Math.floor(c/GRID_X) + 0.5)*CELL });
+  const free = (i, k) => i >= 0 && k >= 0 && i < GRID_X && k < GRID_Z && walkable(-ROOM_W/2 + (i + 0.5)*CELL, -ROOM_D/2 + (k + 0.5)*CELL);
+  for (let q = 0; q < queue.length && came[goal] < 0; q++) {
+    const c = queue[q], i = c % GRID_X, k = Math.floor(c/GRID_X);
+    for (let di = -1; di <= 1; di++) for (let dk = -1; dk <= 1; dk++) {
+      const n = (k + dk)*GRID_X + i + di;
+      if ((!di && !dk) || !free(i + di, k + dk) || came[n] >= 0) continue;
+      if (di && dk && (!free(i + di, k) || !free(i, k + dk))) continue;
+      came[n] = c;
+      queue.push(n);
+    }
+  }
+  if (came[goal] < 0) return null;
+  const cells = [];
+  for (let c = goal; c !== start; c = came[c]) cells.push(centre(c));
+  const points = [{ x: a.x, z: a.z }, ...cells.reverse().slice(0, -1), { x: b.x, z: b.z }];
+  // then straightened: on from each point to the furthest one it can see
+  const sees = (p, q) => {
+    const steps = Math.ceil(Math.hypot(q.x - p.x, q.z - p.z)/(CELL/2));
+    for (let k = 1; k < steps; k++) if (!walkable(p.x + (q.x - p.x)*k/steps, p.z + (q.z - p.z)*k/steps)) return false;
+    return true;
+  };
+  const route = [];
+  for (let i = 0; i < points.length - 1;) {
+    let j = points.length - 1;
+    while (j > i + 1 && !sees(points[i], points[j])) j--;
+    route.push(room.localToWorld(new THREE.Vector3(points[j].x, 0, points[j].z)));
+    i = j;
+  }
+  return route;
 }

@@ -1,0 +1,5 @@
+# What's on the TV in people's homes (see "the TV" in src/buildings/interior.js): one YouTube link a line, any of its
+# shapes (youtube.com/watch?v=…, youtu.be/…, /shorts/…) or just the video's id. Each visit to a home picks one at random.
+# Blank lines and lines starting with # are skipped. (A video whose owner has turned off embedding shows an error instead.)
+
+https://www.youtube.com/watch?v=bIRnM6s4GNo

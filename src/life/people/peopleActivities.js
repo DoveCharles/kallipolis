@@ -11,7 +11,7 @@ import { puffSmoke } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, personHeight, stopFollowingPerson } from './peopleTracking.js';
-import { roomHolds, roomSpot, roomVisit } from '../../buildings/interior.js';
+import { roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome } from '../../buildings/interior.js';
 
 // ---- what people get up to besides walking about.
 //
@@ -984,6 +984,7 @@ export function updateIndoors(p, i, dt) {
     if (visit.hoursLeft > 0) return aboutTheRoom(p, visit, dt);
     // back out, at the door, facing the walkway
     visit.stage = 'exit';
+    standUp(p);
     p.inRoom = null; p.faceTo = null;
     p.x = door.x; p.z = door.z; p.y = visit.building.y;
     p.heading = headingTo(p, visit.back) + (p.traits.backwards ? Math.PI : 0);
@@ -1004,31 +1005,134 @@ export function updateIndoors(p, i, dt) {
 
 /**
  * Someone inside a building while the camera's in there too (see buildings/interior.js): somewhere in its one room — put
- * there the first frame the room's there to be in, and after that standing about, and now and then going over to
- * somewhere else in it. The room's no bigger than a room, so they amble rather than stride.
+ * there the first frame the room's there to be in (now and then already sat down), and after that standing about, now
+ * and then going over to somewhere else in it, round the furniture, or to sit on the sofa or a chair a while. The room's
+ * no bigger than a room, so they amble rather than stride.
  * @param {Person} p - the person
  * @param {object} visit - their p.indoors
  * @param {number} dt - seconds since the last frame
  * @returns {?{x: number, y: number, z: number}} where they should walk to, or null to stand where they are
  */
 function aboutTheRoom(p, visit, dt) {
-  if (!roomHolds(visit.building.key)) { p.inRoom = null; return null; }
+  if (!roomHolds(visit.building.key)) { standUp(p); p.inRoom = null; return null; }
+  someoneHome();
   if (p.inRoom?.visit !== roomVisit()) {
+    standUp(p);
     const at = roomSpot(peopleRng);
     p.x = at.x; p.y = at.y; p.z = at.z;
     p.heading = peopleRng()*Math.PI*2;
-    p.inRoom = { visit: roomVisit(), goal: null, wait: peopleRng()*4 };
+    p.inRoom = { visit: roomVisit(), route: null, wait: peopleRng()*4, seat: null, stage: '' };
+    // (some already sat down: straight onto the seat, as if they'd been there a while)
+    const seat = peopleRng() < ROOM_SIT_ALREADY ? freeSeat(p) : null;
+    if (seat) {
+      takeSeat(p, seat);
+      const stand = standingSpot(p, seat);
+      p.x = stand.x; p.z = stand.z;
+      p.heading = Math.atan2(seat.nx, seat.nz);
+      p.inRoom.stage = 'turn';
+    }
   }
   const here = p.inRoom;
-  if (here.goal) {
-    if (Math.hypot(here.goal.x - p.x, here.goal.z - p.z) >= 0.3) return here.goal;
-    here.goal = null;
+  if (here.seat) return sitting(p, here, dt);
+  if (here.route) {
+    const next = here.route[0];
+    if (Math.hypot(next.x - p.x, next.z - p.z) >= 0.3) return next;
+    here.route.shift();
+    if (here.route.length) return here.route[0];
+    here.route = null;
     here.wait = (3 + peopleRng()*10)*p.traits.patience;
     p.faceTo = peopleRng()*Math.PI*2; // (somewhere to look, once they're there)
   } else if ((here.wait -= dt) <= 0 && !p.oneShot) {
-    here.goal = roomSpot(peopleRng, p);
-    p.faceTo = null;
+    here.wait = 1 + peopleRng()*2; // (tried again in a moment, if there's no getting there)
+    const seat = peopleRng() < ROOM_SIT_CHANCE ? freeSeat(p) : null;
+    if (seat) {
+      const route = roomRoute(p, standingSpot(p, seat));
+      if (route) { takeSeat(p, seat); here.route = route; here.stage = 'go'; here.timer = 25; p.faceTo = null; return route[0]; }
+    }
+    here.route = roomRoute(p, roomSpot(peopleRng));
+    if (here.route) p.faceTo = null;
   }
+  return null;
+}
+/** The chance, each time someone in a room moves on, that it's to sit down, and that they're sat down already when it's first shown. */
+const ROOM_SIT_CHANCE = 0.45, ROOM_SIT_ALREADY = 0.4;
+/**
+ * A seat in the room nobody's on or heading for, if there is one — and if they're about the size the furniture's made for.
+ * @param {Person} p - the person
+ * @returns {?object} the seat (see roomSeats)
+ */
+function freeSeat(p) {
+  if (!personModel || !hasClip('Sit1') || Math.abs(S.peopleSize*p.traits.size - 1) > 0.3) return null;
+  const free = roomSeats().filter(seat => !seat.by);
+  return free.length ? free[Math.floor(peopleRng()*free.length)] : null;
+}
+function takeSeat(p, seat) {
+  seat.by = p;
+  p.inRoom.seat = seat;
+}
+/**
+ * Where to stand to sit down on a seat: in front of it, as far as sitting puts their pelvis behind their feet (as on a
+ * bench: see updateActivity).
+ * @param {Person} p - the person
+ * @param {object} seat - the seat (see roomSeats)
+ * @returns {{x: number, y: number, z: number}} the spot, in the world
+ */
+function standingSpot(p, seat) {
+  const reach = -clipNamed('Sit1').pelvisZ*modelScale(p);
+  return { x: seat.x + seat.nx*reach, y: p.y, z: seat.z + seat.nz*reach };
+}
+/**
+ * Up off wherever they're sitting in the room, if they are, and the seat let go of.
+ * @param {Person} p - the person
+ * @returns {void}
+ */
+function standUp(p) {
+  const seat = p.inRoom?.seat;
+  if (seat && seat.by === p) seat.by = null;
+  if (p.inRoom) p.inRoom.seat = null;
+  p.pose = 'Idle'; p.seatLift = 0; p.faceTo = null;
+}
+/**
+ * Someone in a room with a seat to sit on: walking over ('go'), turning round ('turn'), sitting a while ('sit'), then
+ * getting up ('rise') — sitting down shifting them back onto it and getting up forward off it, as on a bench.
+ * @param {Person} p - the person
+ * @param {object} here - their p.inRoom
+ * @param {number} dt - seconds since the last frame
+ * @returns {?{x: number, y: number, z: number}} where they should walk to, or null
+ */
+function sitting(p, here, dt) {
+  const seat = here.seat, stand = standingSpot(p, seat), facing = Math.atan2(seat.nx, seat.nz);
+  switch (here.stage) {
+    case 'go':
+      if ((here.timer -= dt) <= 0) { standUp(p); here.route = null; here.wait = 2; return null; } // can't get there
+      if (here.route?.length) {
+        const next = here.route[0];
+        if (Math.hypot(next.x - p.x, next.z - p.z) >= (here.route.length > 1 ? 0.3 : 0.15)) return next;
+        here.route.shift();
+        if (here.route.length) return here.route[0];
+      }
+      here.route = null;
+      here.stage = 'turn';
+      // falls through
+    case 'turn':
+      p.faceTo = facing;
+      if (Math.abs(wrapAngle(facing - p.heading)) > 0.15 || p.oneShot) break;
+      here.stage = 'sit';
+      p.pose = 'Sit1';
+      here.timer = (20 + peopleRng()*60)*p.traits.patience;
+      p.seatLift = seat.y - p.y - clipNamed('Sit1').seatY*modelScale(p);
+      // falls through
+    case 'sit':
+      if ((here.timer -= dt) <= 0) { here.stage = 'rise'; p.pose = 'Idle'; }
+      break;
+    case 'rise':
+      if (weightOf(p, clipNamed('Idle')) < 1) break;
+      standUp(p);
+      here.wait = (2 + peopleRng()*6)*p.traits.patience;
+      return null;
+  }
+  const w = weightOf(p, clipNamed('Sit1'));
+  p.x = stand.x + (seat.x - stand.x)*w; p.z = stand.z + (seat.z - stand.z)*w;
   return null;
 }
 

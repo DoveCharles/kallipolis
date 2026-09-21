@@ -203,7 +203,9 @@ const copyMaterial = new THREE.ShaderMaterial({
         }
         color = along > ditherThreshold(floor(vUv*viewSize)) ? other : nearest;
       }
-      gl_FragColor = vec4(color, 1.0);
+      // (premultiplied, as the canvas takes it: see setCutout)
+      float alpha = texture2D(tView, vUv).a;
+      gl_FragColor = vec4(color*alpha, alpha);
     }
   `,
   depthTest: false,
@@ -323,8 +325,26 @@ paletteMenu.addEventListener('change', () => setPaletteColors(paletteMenu.value,
 ditherMenu.addEventListener('change', () => setDither(ditherMenu.value, true));
 
 // Draws the view to the screen — straight there, or through the filters.
+// Holes cut through the view to the page behind it (where the TV in a home shows a YouTube video, as an iframe under the
+// canvas: see interior.js): the view's drawn opaque, whatever its shaders left in its alpha, and then `cutout`'s meshes
+// clear it to nothing wherever they're not hidden behind something nearer. Null for none.
+let cutout = null;
+export const setCutout = holes => { cutout = holes; };
+function cutThrough(camera) {
+  const gl = renderer.getContext();
+  renderer.state.buffers.color.setMask(true);
+  renderer.state.buffers.color.setClear(0, 0, 0, 1);
+  gl.colorMask(false, false, false, true);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.colorMask(true, true, true, true);
+  if (!cutout) return;
+  const autoClear = renderer.autoClear;
+  renderer.autoClear = false;
+  renderer.render(cutout, camera);
+  renderer.autoClear = autoClear;
+}
 export function renderView(scene, camera) {
-  if (pixelSize <= 1 && !palette16) { renderer.render(scene, camera); return; }
+  if (pixelSize <= 1 && !palette16) { renderer.render(scene, camera); cutThrough(camera); return; }
   let width, height, coverX = 1, coverY = 1;
   const floyd = palette16 && copyMaterial.uniforms.ditherMode.value === FLOYD_STEINBERG;
   // (Floyd–Steinberg unpixelated is drawn a pixel per CSS pixel, not per device pixel — on a high-density screen that's a
@@ -347,6 +367,7 @@ export function renderView(scene, camera) {
   copyQuad.position.set(coverX - 1, 1 - coverY, 0);
   renderer.setRenderTarget(filteredView);
   renderer.render(scene, camera);
+  cutThrough(camera);
   renderer.setRenderTarget(null);
   if (floyd) floydSteinberg(width, height);
   renderer.render(copyScene, copyCamera);

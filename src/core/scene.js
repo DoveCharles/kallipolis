@@ -23,7 +23,8 @@ scene.fog = new THREE.Fog(bgColor, 600, 2800);
 
 export const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.5, 3000);
 // the stencil buffer is off by default now, and the water and road masks need it (see SKIP_OVER_WATER_AND_ROADS)
-export const renderer = new THREE.WebGLRenderer({ antialias:true, stencil:true });
+// (and an alpha channel, for the holes cut through to the page behind: see setCutout in pixelation.js)
+export const renderer = new THREE.WebGLRenderer({ antialias:true, stencil:true, alpha:true });
 // phones and tablets draw the same scene on a much smaller GPU, so they render at a lower ratio (and with a smaller
 // shadow map below) — at that size the difference is hard to see, and it's the difference between smooth and not
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, IS_TOUCH ? 1.5 : 2));
