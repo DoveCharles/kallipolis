@@ -38,8 +38,11 @@ export const buildingTypeOf = (kind, number = 1) => buildings.of(kind, number);
 // What a building's called: its kind's name from buildings.txt — except a city block's, which is named for what's inside
 // it so you know before going in: a home or an office (see roomLayoutOf), and a tower once it's TOWER_HEIGHT tall, about
 // eight storeys (see FLOOR_HEIGHT in interior.js). `height` is the building's own (its userData.height).
+// A block's landmark is named the same way: it's a city block like the rest, so being the tall fancy one shouldn't leave
+// it the only building on the street that won't say whether it's flats or offices. Its card text still comes from
+// [landmark] in buildings.txt; only the name is by what's inside.
 const TOWER_HEIGHT = 28;
 export function buildingName(kind, number, height) {
-  if (kind !== 'buildings') return buildingTypeOf(kind, number).name;
+  if (kind !== 'buildings' && kind !== 'landmark') return buildingTypeOf(kind, number).name;
   return (roomLayoutOf(kind, number) === 'office' ? 'Office ' : 'Residential ') + (height >= TOWER_HEIGHT ? 'Tower' : 'Building');
 }

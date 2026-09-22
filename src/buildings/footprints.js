@@ -105,5 +105,7 @@ export function buildingNumber(key) {
   return 1 + ((h >>> 0) % 9999);
 }
 // What's inside (a layout in interior.js): about half the buildings zones' blocks are offices, by their number so each
-// is the same every time; everything else is a home.
-export const roomLayoutOf = (kind, number) => kind === 'buildings' && number % 2 === 0 ? 'office' : 'home';
+// is the same every time; everything else is a home. A city block's landmark is one of those blocks too — taller and
+// fancier, but still somewhere people live or work, and named for it (see buildingName) — so it splits the same way.
+const CITY_BLOCK_KINDS = new Set(['buildings', 'landmark']);
+export const roomLayoutOf = (kind, number) => CITY_BLOCK_KINDS.has(kind) && number % 2 === 0 ? 'office' : 'home';
