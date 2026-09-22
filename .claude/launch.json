@@ -54,6 +54,42 @@
         "8749"
       ],
       "port": 8749
+    },
+    {
+      "name": "splinetopia-7",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "serve.py",
+        "8750"
+      ],
+      "port": 8750
+    },
+    {
+      "name": "splinetopia-8",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "serve.py",
+        "8751"
+      ],
+      "port": 8751
+    },
+    {
+      "name": "splinetopia-9",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "serve.py",
+        "8752"
+      ],
+      "port": 8752
+    },
+    {
+      "name": "splinetopia-10",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "serve.py",
+        "8753"
+      ],
+      "port": 8753
     }
   ]
 }

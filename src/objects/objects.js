@@ -142,6 +142,15 @@ export function clearObjects() {
   selectObject(null);
   invalidateObjectFacing();
 }
+// Rebuilds every object of one kind in place — for when its model finishes loading after some are already down and
+// were built with the fallback shape (see loadStatueModel in object-types.js).
+export function rebuildObjectsOfType(typeId) {
+  S.objects.forEach(obj => {
+    if (obj.type !== typeId) return;
+    if (obj.group) { objectGroup.remove(obj.group); disposeObject(obj.group); }
+    buildObject(obj);
+  });
+}
 // Rebuilds the lot from saved records (a project, an undo step, an autosave coming back).
 export function restoreObjects(list) {
   clearObjects();
@@ -592,4 +601,4 @@ export function renderObjectDetails() {
 }
 
 Object.assign(App, { renderObjectsPanel, renderObjectDetails, disarmObject, invalidateObjectFacing, objectsHint, showObjectUi, restoreObjects, clearObjects,
-  cancelObjectTransform, confirmObjectTransform, objectTransformHint });
+  cancelObjectTransform, confirmObjectTransform, objectTransformHint, rebuildObjectsOfType });

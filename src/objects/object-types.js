@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { S } from '../core/shared.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { S, App } from '../core/shared.js';
 import { computeWindowGlowFactor } from '../core/scene.js';
 import { createMeshBuilder } from '../roads/roads.js';
 
@@ -37,6 +38,40 @@ const MAT = {
   lamplight: standard(0xfff1d6, { roughness:0.4, emissive:0xffd08a, emissiveIntensity: 1.6*computeWindowGlowFactor(S.sunElevation) }),
 };
 MAT.lamplight.userData.baseEmissiveIntensity = 1.6;
+
+// The statue is a custom model (assets/models/Statue.glb, made in Blender): one stone figure, centered on its own
+// origin, standing however tall it was sculpted. It's loaded once at startup, scaled to STATUE_HEIGHT and rested on
+// y=0, then every statue prop placed is a clone of it, sharing its geometry and material; until it's ready (or if it
+// fails to load), statues fall back to the built-in blocky stone one below.
+const STATUE_MODEL_URL = 'assets/models/Statue.glb';
+const STATUE_HEIGHT = 3.1; // about what the built-in stone statue stands, plinth to head
+const STATUE_COLOR = 0xb9b3a6; // MAT.pale's color, so it matches the built-in one and the palette swatch
+let statueModel = null; // { root, middle, floor }
+export async function loadStatueModel() {
+  let gltf;
+  try {
+    const buffer = await fetch(STATUE_MODEL_URL).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
+    gltf = await new GLTFLoader().parseAsync(buffer, '');
+  } catch (err) {
+    console.warn('Blockout: the statue model failed to load; statues use the built-in stone one', err);
+    return;
+  }
+  gltf.scene.updateMatrixWorld(true);
+  const rawSize = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3());
+  if (!(rawSize.y > 0)) { console.warn('Blockout: the statue model is empty; statues use the built-in stone one'); return; }
+  gltf.scene.scale.setScalar(STATUE_HEIGHT/rawSize.y);
+  gltf.scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(gltf.scene), middle = box.getCenter(new THREE.Vector3());
+  gltf.scene.traverse(o => {
+    if (!o.isMesh) return;
+    o.castShadow = true; o.receiveShadow = true;
+    o.userData.sharedGeometry = true; // every statue draws the template's geometry, so a rebuild mustn't free it
+    o.userData.sharedMaterial = true;
+    if (o.material) { o.material.color.setHex(STATUE_COLOR); o.material.roughness = 1; o.material.metalness = 0; }
+  });
+  statueModel = { root: gltf.scene, middle, floor: box.min.y };
+  App.rebuildObjectsOfType('statue'); // any already standing were built with the fallback; swap them for the real thing
+}
 
 // The round shapes props are built out of, made once and merged wherever they're wanted (addGeometry copies them in, so
 // one of each is enough however many props use it). Cylinders and cones stand up on their own, which is the way they're
@@ -103,6 +138,13 @@ export const OBJECT_TYPES = [
   {
     id:'statue', label:'Statue', color:'#b9b3a6', facing:'street', radius:1.1, turnJitter:3, sizeJitter:0.08,
     build(rng) {
+      if (statueModel) {
+        const model = statueModel.root.clone(true);
+        model.position.set(-statueModel.middle.x, -statueModel.floor, -statueModel.middle.z);
+        const group = new THREE.Group();
+        group.add(model);
+        return group;
+      }
       const kit = propKit(), top = 0.95;
       kit.box(MAT.stone, 0, 0, 0, 1.5, 0.2, 1.5);            // a step up to it
       kit.box(MAT.stone, 0, 0.2, 0, 1.2, top-0.2, 1.2);      // the plinth

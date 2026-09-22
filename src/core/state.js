@@ -14,6 +14,7 @@ export const roadNodes = {};        // id -> {x,z}
 S.roadLines = [];          // {id, nodeIds:[...], drawing}
 S.activeRoadLine = null;
 S.roadNodeSeq=1, S.roadLineSeq=1, S.roadNetworkSeq=1;
+S.walkwayOrder = [];        // walkway networkIds, priority order (index 0 = highest, wins overlaps) — see rebuildRoadMeshes
 
 S.zones = [];              // {id, name, points:[{x,z}], closed, drawing, settings, outlineGroup, buildingsGroup}
 S.activeZone = null;
