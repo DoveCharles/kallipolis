@@ -14,7 +14,7 @@ import { getWaterRegion } from '../../water/water.js';
 import { createRegionTester, offsetPaths, pathsArea, toClipperPath, zoneCutoutsNear } from '../../zones/cutouts.js';
 import { FOOTBRIDGE_TOP } from '../../water/bridges.js';
 import { PEOPLE_NAV_SPACING, headingTo, isOpenGround, lastPeopleTime, people, peopleNav, peopleNavDebugMesh, peopleRng, pickWeighted, randomSpotIn } from './people.js';
-import { ENTER_CHANCE, RIDE_CHANCE, goIndoors, goRideTrain, mayGoIndoors, stationLinks } from './peopleActivities.js';
+import { RIDE_CHANCE, enterChance, goIndoors, goRideTrain, mayGoIndoors, stationLinks } from './peopleActivities.js';
 import { signalRedLeft } from '../../roads/markings.js';
 
 // Which way, and how far per unit of lateral offset, a walkway's point `vi` is set off square to it: the average of the
@@ -586,7 +586,7 @@ export function walkAlong(p, dist) {
     const vertex = nav.vertices[ahead];
     const station = p.trainCooldown <= 0 ? stationLinks().byVertex.get(p.li + ':' + ahead) : null;
     if (station != null && peopleRng() < RIDE_CHANCE) { p.u = at; goRideTrain(p, station, walkwayPoint(p)); return; }
-    if (vertex.building && mayGoIndoors(p) && peopleRng() < ENTER_CHANCE) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
+    if (vertex.building && mayGoIndoors(p) && peopleRng() < enterChance(p)) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
     const isEnd = (!nav.loop && (ahead === 0 || ahead === last)) || !!nav.blocked?.[nextVertex(nav, ahead, p.dir)];
     const entrance = vertex.entrances.length ? vertex.entrances[Math.floor(peopleRng()*vertex.entrances.length)] : null;
     const drawn = entrance ? (isOpenGround(peopleNav.areas[entrance.area]) ? p.traits.parks : p.traits.plazas) : 0;

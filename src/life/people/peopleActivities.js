@@ -930,12 +930,25 @@ export function showPassengers() {
 // then back out the same door and on along the walkway they left.
 //
 // p.indoors: { building, stage ('approach' → 'inside' → 'exit'), back (the walkway point they came from), hoursLeft }
-/** The chance of going in, at each walkway point with a door onto it. */
-export const ENTER_CHANCE = 0.1;
+/** The chance of going in, at each walkway point with a door onto it: by day, and after dark (see enterChance). */
+const ENTER_CHANCE = 0.1, ENTER_CHANCE_NIGHT = 0.7;
+/** The share of the crowd who are night owls: out and about after dark like any other time. */
+const NIGHT_OWLS = 0.15;
+const isNight = () => S.sunElevation < 0;
+/** Whether this person's a night owl — always the same ones, by their id. */
+const nightOwl = p => ((Math.imul(p.id, 2654435761) >>> 0)/2**32) < NIGHT_OWLS;
+/**
+ * The chance of this person going in at a door they're passing: after dark, most are heading home and take the first one.
+ * @param {Person} p - the person
+ * @returns {number} the chance
+ */
+export const enterChance = p => isNight() && !nightOwl(p) ? ENTER_CHANCE_NIGHT : ENTER_CHANCE;
 /** How long a visit lasts, in hours of the day's clock. */
-const INDOORS_MIN_HOURS = 0.25, INDOORS_MAX_HOURS = 7;
-/** The most of the crowd that may be indoors (or on their way in) at once: INDOORS_MAX_SHARE of the people alive. */
-const INDOORS_MAX_SHARE = 0.3;
+const INDOORS_MIN_HOURS = 2, INDOORS_MAX_HOURS = 14;
+/** The most of the crowd that may be indoors (or on their way in) at once, as a share of the people alive: by day, and
+ * after dark (the sun below the horizon), when most are home. */
+const INDOORS_MAX_SHARE = 0.3, INDOORS_MAX_SHARE_NIGHT = 0.9;
+const indoorsMaxShare = () => isNight() ? INDOORS_MAX_SHARE_NIGHT : INDOORS_MAX_SHARE;
 /** Seconds after coming out before they'd go in anywhere again. */
 export const INDOORS_COOLDOWN = 30;
 /**
@@ -944,7 +957,7 @@ export const INDOORS_COOLDOWN = 30;
  * @returns {boolean} whether they may
  */
 
-export const mayGoIndoors = p => p.indoorsCooldown <= 0 && !p.act && !p.attack && !p.punched && !p.fright && indoorsCount < people.length*INDOORS_MAX_SHARE;
+export const mayGoIndoors = p => p.indoorsCooldown <= 0 && !p.act && !p.attack && !p.punched && !p.fright && indoorsCount < people.length*indoorsMaxShare();
 /**
  * Send someone in at a building's door, for anything up to INDOORS_MAX_HOURS of the day's clock.
  * @param {Person} p - the person
@@ -981,7 +994,8 @@ export function updateIndoors(p, i, dt) {
   }
   if (visit.stage === 'inside') {
     visit.hoursLeft -= dt*24/(Math.max(0.1, S.dayLengthMinutes)*60);
-    if (visit.hoursLeft > 0) return aboutTheRoom(p, visit, dt);
+    // (time's up, but not partway through a video: they sit it out, get up, and only then go)
+    if (visit.hoursLeft > 0 || p.inRoom?.watched != null) return aboutTheRoom(p, visit, dt);
     // back out, at the door, facing the walkway
     visit.stage = 'exit';
     standUp(p);
