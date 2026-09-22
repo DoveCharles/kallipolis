@@ -500,9 +500,12 @@ function buildStationParts(position, tangent, radius, mats) {
       add(mergeGeometryList(ramps), mats.station, 'TrainStationRamp', true);
     }
   }
-  chrome.push(tubeAlong(rows.map(row => vaultPoint(Math.PI/2, row, 1.012)), 0.13));
   // the portals sit where the vault's ridge comes down to just clear the top of the tube
   const { half: zPortal, ring: hasPortal } = stationPortal(radius);
+  // the spine along the ridge ends on the portal rings — past them the end cap comes down through where the carriage runs
+  const rowAt = z => ({ z, s: Math.abs(z) <= straightHalf ? 1 : Math.sqrt(Math.max(0, 1 - ((Math.abs(z) - straightHalf)/capLength)**2)) });
+  const spineRows = [rowAt(-zPortal), ...rows.filter(row => Math.abs(row.z) < zPortal - 0.05), rowAt(zPortal)];
+  chrome.push(tubeAlong(spineRows.map(row => vaultPoint(Math.PI/2, row, 1.012)), 0.13));
   if (hasPortal) {
     [-1, 1].forEach(side => {
       const ring = new THREE.TorusGeometry(radius*1.2, Math.max(0.18, radius*0.09), 10, 36);
