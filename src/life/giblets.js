@@ -185,8 +185,8 @@ const softTexture = (() => {
   ctx.fillStyle = gradient; ctx.fillRect(0, 0, 64, 64);
   return new THREE.CanvasTexture(canvas);
 })();
-function softMesh(blending, name) {
-  const material = new THREE.MeshBasicMaterial({ map: softTexture, transparent: true, depthWrite: false, toneMapped: false, blending });
+function softMesh(blending, name, texture = softTexture) {
+  const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false, blending });
   const geometry = new THREE.PlaneGeometry(1, 1), alpha = addInstanceAlpha(geometry, material, SOFT_MAX);
   const mesh = instancedMesh(geometry, material, SOFT_MAX, name);
   mesh.setColorAt(0, new THREE.Color());
@@ -194,7 +194,31 @@ function softMesh(blending, name) {
   return mesh;
 }
 const glowMesh = softMesh(THREE.AdditiveBlending, 'GlowFx'), smokeMesh = softMesh(THREE.NormalBlending, 'SmokeFx');
-glowMesh.renderOrder = smokeMesh.renderOrder = 2;
+// a four-pointed sparkle glint (two crossed elongated diamonds, blurred, over a soft core glow), for a legendary car's shimmer
+const sparkleTexture = (() => {
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(32, 32);
+  ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 9;
+  const spike = (long, short) => { ctx.beginPath(); ctx.moveTo(0, -long); ctx.lineTo(short, 0); ctx.lineTo(0, long); ctx.lineTo(-short, 0); ctx.closePath(); ctx.fill(); };
+  spike(30, 2.5);
+  ctx.rotate(Math.PI/2); spike(30, 2.5); ctx.rotate(-Math.PI/2);
+  ctx.shadowBlur = 0;
+  const core = ctx.createRadialGradient(0, 0, 0, 0, 0, 9);
+  core.addColorStop(0, 'rgba(255,255,255,1)'); core.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = core; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI*2); ctx.fill();
+  return new THREE.CanvasTexture(canvas);
+})();
+const sparkleMesh = softMesh(THREE.AdditiveBlending, 'SparkleFx', sparkleTexture);
+glowMesh.renderOrder = smokeMesh.renderOrder = sparkleMesh.renderOrder = 2;
+// A single sparkle glint at `at`, tinted `color`, for a legendary car's shimmer — a soft pop in and out, spinning slowly.
+export function sparkleFx(at, color, size = 0.35) {
+  if (!S.showGibs || !isNear(at)) return;
+  if (softParticles.length >= SOFT_MAX*2) softParticles.shift();
+  softParticles.push({ kind: 'sparkle', born: performance.now()/1000, still: true, x: at.x, y: at.y, z: at.z,
+    size, life: 0.5 + Math.random()*0.3, opacity: 1, color: new THREE.Color(color),
+    roll: Math.random()*Math.PI*2, spin: (Math.random() < 0.5 ? -1 : 1)*1.5, growth: 0 });
+}
 
 // What a burning car gives off in the `dt` seconds since it was last called: a soft red glow round it, red, orange and yellow puffs
 // rising from it and dark smoke drifting away; `at` where its wheels are, `height` its height.
@@ -241,6 +265,26 @@ export function tyreSmoke(at, height, dt) {
 export function engineSmoke(at, height) {
   solidPuffs(at, height, 6, () => { const grey = 0.45 + Math.random()*0.2; return new THREE.Color(grey, grey, grey); },
     { size: [0.15, 0.3], life: [1.5, 2.5], rise: [2.5, 5], spread: 0.15, outward: [0.1, 0.5], lift: 0.3 });
+}
+// Heavy black smoke from underneath a terrible car over the `dt` seconds since it was last called, at `at` (`height`
+// tall, `width` wide, `heading` which way it's facing, `speed` how fast along it — so the puffs can start out moving
+// with it rather than being left behind at once) — small and plentiful, the more of it the more terrible it is
+// (`level`), pushed out to both sides as far as the car is wide before curving upward (see terribleSmoke's `accel`,
+// read by updateGiblets).
+const TERRIBLE_SMOKE_PER_SECOND = 24, TERRIBLE_SMOKE_LIFT = 1.5; // per level of `terrible`; how hard the curve up kicks in
+export function terribleSmoke(at, height, width, dt, level, heading, speed) {
+  if (!S.showGibs || !isNear(at)) return;
+  const now = performance.now()/1000, sideX = Math.cos(heading), sideZ = -Math.sin(heading);
+  const alongX = Math.sin(heading)*speed, alongZ = Math.cos(heading)*speed; // (keeps pace with the car for a moment, so it reads as spreading to the sides rather than trailing behind)
+  const count = Math.floor(TERRIBLE_SMOKE_PER_SECOND*level*dt + Math.random());
+  for (let k=0;k<count;k++) {
+    if (fx.length >= FX_MAX) fx.shift();
+    const side = k % 2 === 0 ? 1 : -1, jitter = (Math.random() - 0.5)*0.3, out = width*(0.55 + Math.random()*0.35);
+    const grey = 0.03 + Math.random()*0.05;
+    fx.push({ kind: 'smoke', x: at.x, y: at.y + height*0.08, z: at.z,
+      vx: alongX + sideX*out*side + jitter, vz: alongZ + sideZ*out*side + jitter, vy: 0.15 + Math.random()*0.2, accel: TERRIBLE_SMOKE_LIFT,
+      size: height*(0.1 + Math.random()*0.14), life: 1.8 + Math.random()*1.2, color: new THREE.Color(grey, grey, grey), born: now });
+  }
 }
 // A burst of red, orange and yellow puffs as a car catches fire, from `at` (where its wheels are), `height` tall.
 const IGNITE_COLORS = [0xffdd33, 0xff9a1a, 0xff4a14, 0xd8280f];
@@ -295,6 +339,7 @@ export function explodeCar(at, height, colors) {
 }
 
 const placed = new THREE.Object3D(), spinStep = new THREE.Quaternion(), dimmed = new THREE.Color();
+const sparkleAxis = new THREE.Vector3(0, 0, 1), sparkleRoll = new THREE.Quaternion(); // (a sparkle spins about the camera's view axis)
 let lastTime = null;
 // how far through sinking away something is, 0 until it starts
 const sunk = (age, life) => age > life ? Math.min(1, (age - life)/SINK_TIME) : 0;
@@ -368,6 +413,7 @@ export function updateGiblets(t) {
       scale = p.size*(1 - life)*(1 - life); // quick burst, quicker fade
       dim = 1 - life*0.6;
     } else {
+      if (p.accel) p.vy += p.accel*dt; // (a steady lift kicking in over time, so it curves upward rather than rising from the start — see terribleSmoke)
       p.vx *= 1 - Math.min(1, dt*0.6); p.vz *= 1 - Math.min(1, dt*0.6); p.vy *= 1 - Math.min(1, dt*0.8);
       p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt;
       // grows for a moment as it billows out, then thins away
@@ -385,14 +431,17 @@ export function updateGiblets(t) {
   });
   // soft particles: each drifts on, grows by `growth` of its size over its life, and fades in and out
   while (softParticles.length && t - softParticles[0].born > softParticles[0].life) softParticles.shift();
-  const drawnSoft = { glow: 0, smoke: 0 }, meshes = { glow: glowMesh, smoke: smokeMesh };
+  const drawnSoft = { glow: 0, smoke: 0, sparkle: 0 }, meshes = { glow: glowMesh, smoke: smokeMesh, sparkle: sparkleMesh };
   softParticles.forEach(p => {
     const age = t - p.born, life = age/p.life, mesh = meshes[p.kind];
     if (life > 1 || drawnSoft[p.kind] >= SOFT_MAX || !isNear(p)) return;
     if (!p.still) { p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt; }
     placed.position.set(p.x, p.y, p.z);
     placed.quaternion.copy(camera.quaternion);
-    placed.scale.setScalar(p.size*(1 + p.growth*(p.kind === 'glow' && !p.still ? -life : life)));
+    // a sparkle spins slowly about the view axis as it pops in and out, rather than drifting or billowing like glow/smoke
+    const scale = p.kind === 'sparkle' ? p.size*Math.sin(Math.PI*Math.min(1, life))**0.5 : p.size*(1 + p.growth*(p.kind === 'glow' && !p.still ? -life : life));
+    if (p.kind === 'sparkle') placed.quaternion.multiply(sparkleRoll.setFromAxisAngle(sparkleAxis, p.roll + age*p.spin));
+    placed.scale.setScalar(scale);
     placed.updateMatrix();
     const i = drawnSoft[p.kind]++;
     mesh.setMatrixAt(i, placed.matrix);

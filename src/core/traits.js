@@ -42,6 +42,11 @@ export const TRAITS = {
   solo:      { base: 0, min: 0, max: 1, combine: 'on' }, // on a love or hate: the only one of its kind that thing has (see addEntries)
   scramble: {base: 0, min: 0, max: 1, combine: 'on'}, //scrambles text in card
   keysmash: {base: 0, min: 0, max: 1, combine: 'on'}, //keysmashes text in card
+  // rarity: a love/hate entry (or the thing's own mood) carrying either tints that entry's row gold or dark reddish-brown on
+  // its card (see ui/entity-card.js) and counts towards the thing's own total — a car reads its own total for its shiny
+  // paint, sparkle and (terrible) smoking, shaking wreck (see life/traffic.js)
+  legendary: { base: 0, min: 0, max: 2, combine: 'add' },
+  terrible:  { base: 0, min: 0, max: 4, combine: 'add' },
 };
 
 // Shorthands: a trait named here counts as if the traits listed were written beside it, at the same amounts and stacking

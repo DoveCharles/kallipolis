@@ -1,5 +1,5 @@
 import { mulberry32 } from './math.js';
-import { DEFAULT_COUNTS, parseSections, entryOf, plainEntry, weighted, combineTraits, pickCounts, addEntries, clash } from './entries.js';
+import { DEFAULT_COUNTS, parseSections, entryOf, plainEntry, weighted, combineTraits, pickCounts, addEntries, clash, tierOf } from './entries.js';
 
 // ============================================================ what a kind of thing is like
 // The reader for the files saying what each kind of thing is like on its card (see ui/entity-card.js): assets/cars.txt by
@@ -48,7 +48,8 @@ export function loadTypeText(url, { attributes, settings = [], fallbacks = {}, p
   return {
     // What a thing's card says: `kind` is what it is, and `number` its own number among others of its kind, which decides
     // which it gets of an attribute given several times. A kind nothing names falls back to being called by its own name.
-    // Counted attributes come back as lists of text, the rest as text; `traits` is the combined traits of what was picked.
+    // Counted attributes come back as lists of text, the rest as text; `traits` is the combined traits of what was picked, and
+    // a counted attribute also gets its own `<attribute>Tier` list (tierOf) alongside its text, entry for entry.
     of(kind, number = 1) {
       const chain = chainFor(kind);
       const entriesFor = attribute => chain.map(t => t[attribute]).find(v => v && v.length);
@@ -73,7 +74,13 @@ export function loadTypeText(url, { attributes, settings = [], fallbacks = {}, p
           if (first && !chosen.flat().some(other => clash(first, other))) chosen[i].push(first);
         });
         counted.forEach((attribute, i) => { if (entriesFor(attribute)) addEntries(chosen[i], entriesFor(attribute), counts[i], rng, chosen); });
-        counted.forEach((attribute, i) => { said[attribute] = chosen[i].map(entry => entry.text); picked.push(...chosen[i]); });
+        // `<attribute>Tier` runs alongside it: which of its entries are legendary or terrible (see tierOf), for the card to
+        // colour that row (ui/entity-card.js) — null for an entry that's neither.
+        counted.forEach((attribute, i) => {
+          said[attribute] = chosen[i].map(entry => entry.text);
+          said[attribute + 'Tier'] = chosen[i].map(tierOf);
+          picked.push(...chosen[i]);
+        });
       }
       return { ...said, traits: combineTraits(picked) };
     },

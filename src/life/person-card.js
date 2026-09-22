@@ -39,7 +39,8 @@ function showPersonCard(index, isMan) {
   // loves and hates are lists: one line per entry, and an empty list hides its row. The traits aren't shown: they're what
   // the person does, not what the card says about them.
   card.show({ name: profile.name, age: profile.age, mood: profile.mood,
-    loves: garbled(profile.loves, traits, profile.age), hates: garbled(profile.hates, traits, profile.age) });
+    loves: garbled(profile.loves, traits, profile.age), hates: garbled(profile.hates, traits, profile.age),
+    lovesTier: profile.lovesTier, hatesTier: profile.hatesTier });
   // (no headshot of a cuboid person, before the people model has loaded)
   headshotContext.clearRect(0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE);
   headshotCanvas.hidden = isMan == null;

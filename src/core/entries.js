@@ -79,7 +79,10 @@ function pairOf(line) {
   const match = line.match(/^([a-z][a-z0-9]*)\s*=\s*(.*)$/i);
   if (!match) return null;
   const rest = match[2];
-  if (rest.endsWith(']') && rest.lastIndexOf('[') > rest.indexOf('=')) return null;
+  // only bails when a second `=` sits before the trailing bracket (rest itself reads like "key = value [...]"); a bracket
+  // with no `=` at all — a valueless trait such as [legendary] or [keysmash] — must not trip this, or the line's entry
+  // ends up filed under the wrong attribute and vanishes from its list (see core/type-text.js's `of`)
+  if (rest.endsWith(']') && rest.indexOf('=') !== -1 && rest.lastIndexOf('[') > rest.indexOf('=')) return null;
   return { key: match[1].toLowerCase(), value: rest };
 }
 
@@ -158,6 +161,10 @@ export function clash(a, b) {
   return limitsOf(a).some(x => bLimits.some(y => x.rule === y.rule && x.polarity !== y.polarity));
 }
 export const isSolo = entry => entry.traits.some(([key, value]) => key === 'solo' && value > 0);
+// The rarity tier an entry's own traits mark it as (core/traits.js's legendary and terrible), for card colouring
+// (ui/entity-card.js): 'legendary', 'terrible', or null for anything else. Legendary wins if an entry somehow carries both.
+const hasTrait = (entry, key) => entry.traits.some(([k, value]) => k === key && value > 0);
+export const tierOf = entry => hasTrait(entry, 'legendary') ? 'legendary' : hasTrait(entry, 'terrible') ? 'terrible' : null;
 
 // `table` is rows of [count, count, ..., weight]: one count per attribute, then how likely the row is relative to the
 // others. Returns the counts of the row that `roll` (0 to 1) lands on.

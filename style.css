@@ -20,6 +20,10 @@
      measurements). The win3 look below lightens its own the same two ways, towards black instead. */
   --trait-loves-a: #334d33; --trait-loves-b: #334633; --trait-loves-label: #8fc4a5; --trait-loves-bar: #77e7b6;
   --trait-hates-a: #4d3333; --trait-hates-b: #463333; --trait-hates-label: #d09a9c; --trait-hates-bar: #ed7f82;
+  /* A legendary or terrible love/hate entry (core/traits.js) overrides its row's colour with one of these instead, gold or
+     dark reddish-brown, regardless of whether it's a love or a hate — see .pc-tier-legendary/.pc-tier-terrible below. */
+  --trait-legendary-a: #4a3c18; --trait-legendary-label: #FFC30B; --trait-legendary-bar: #FFC30B;
+  --trait-terrible-a: #3a2018; --trait-terrible-label: #000000; --trait-terrible-bar: #000000;
   --accent: #3ddc97;
   --accent-dim: #2a8f65;
   --warn: #ffd23d;
@@ -336,6 +340,16 @@ button.pc-pick:hover { text-decoration:underline; }
 .entity-card .pc-row-loves { border-left:var(--trait-bar) solid var(--trait-loves-bar); }
 .entity-card .pc-row-hates { border-left:var(--trait-bar) solid var(--trait-hates-bar); }
 .entity-card .pc-extra:is(.pc-row-loves, .pc-row-hates) { padding-left:var(--band-x); margin-left:calc(-1*var(--card-pad-x) + var(--trait-frame)); margin-right:calc(-1*var(--band-x)); }
+/* A legendary or terrible love/hate entry (core/traits.js) leaves the row's own love/hate colour alone and just marks
+   the entry itself, right-aligned in its own love/hate colour (the same one its "Loves"/"Hates" heading uses) and
+   bold: ++ for a legendary entry, -- for a terrible one. Applies to the row it's the first of (which carries the
+   label, "Loves" or "Hates") if it's first, or just the little row below (a .pc-extra) if it isn't. Set by setTier in
+   src/ui/entity-card.js, from `<attribute>Tier` (core/type-text.js) or profileOf's lovesTier/hatesTier. */
+.entity-card :is(.pc-row-loves, .pc-row-hates):is(.pc-tier-legendary, .pc-tier-terrible) .pc-value { display:flex; justify-content:space-between; align-items:baseline; }
+.entity-card :is(.pc-row-loves, .pc-row-hates).pc-tier-legendary .pc-value::after { content:'++'; font-weight:700; }
+.entity-card :is(.pc-row-loves, .pc-row-hates).pc-tier-terrible .pc-value::after { content:'--'; font-weight:700; }
+.entity-card .pc-row-loves .pc-value::after { color:var(--trait-loves-label); }
+.entity-card .pc-row-hates .pc-value::after { color:var(--trait-hates-label); }
 /* name, age and mood, with the headshot beside them (clear of the close button above it) */
 .pc-top { display:flex; gap:10px; align-items:flex-start; }
 .pc-rows { flex:1; min-width:0; }
@@ -385,9 +399,12 @@ html.win3 {
   --notice-stripe-a:#f0f0f0; --notice-stripe-b:#e0e0e0;
   --trait-loves-a:#f3f9f3; --trait-loves-b:#ebf3eb; --trait-loves-label:#1f4a1f; --trait-loves-bar:#3f8a43;
   --trait-hates-a:#fbf1f1; --trait-hates-b:#f6eaea; --trait-hates-label:#5a1a1a; --trait-hates-bar:#bb3a33;
-  /* Half-way to black for these: the label on its stripe reads 8.4:1 against the new -a, and the card's body text 12.4:1;
-     the bar is 1.6:1 against the stripe it sits on, so it still reads as a bar rather than a smear. Half-way to white on
-     the dark look's stripes instead would have left the label at 1.7:1 against its own row — invisible. */
+  --trait-legendary-a:#fbf6e3; --trait-legendary-label:#FFC30B; --trait-legendary-bar:#FFC30B;
+  --trait-terrible-a:#f7ece5; --trait-terrible-label:#000000; --trait-terrible-bar:#000000;
+  /* Legendary's -a is half-way to black: its label reads 8.4:1 against it, and the card's body text 12.4:1; its bar is
+     1.6:1 against the stripe it sits on, so it still reads as a bar rather than a smear. Half-way to white on the dark
+     look's stripes instead would have left the label at 1.7:1 against its own row — invisible. Terrible is plain black,
+     which reads fine on its own light stripe here; see the dark look's --trait-terrible-a above for the tradeoff there. */
   --accent:#000080; --accent-dim:#000080;
   --sans:'Win3 System', 'MS Sans Serif', 'Microsoft Sans Serif', Arial, sans-serif;
   --mono:'Win3 System', 'MS Sans Serif', 'Microsoft Sans Serif', Arial, sans-serif;

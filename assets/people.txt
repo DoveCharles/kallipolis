@@ -350,6 +350,7 @@ Sly
 Adibou
 Bizbi
 Ultra
+Chip
 
 ################################################################################################################################
 
@@ -588,6 +589,7 @@ Super
 Smith [choiceweight = 5]
 Key
 Wallace
+Holmes
 King
 Sharp
 Groiner
@@ -763,7 +765,7 @@ Jumper
 English
 Stronghold
 Donuts
-The Bounty Hunter
+The Bounty Hunter [aggression = 10]
 Manson
 Truman
 Briggs
@@ -781,7 +783,7 @@ Jeffries
 Hawk
 Oral
 Lenin
-Marauder
+Marauder [bloodlust]
 Schema
 Nipples
 Sayed
@@ -1615,11 +1617,19 @@ Boom boom boom gotta get that Boom boom boom
 Captain Beefheart tribute bands
 Elvis! Elvis Presley! The King of Rock!
 Schadenfreude [evil = 0.1]
+100 beers
 
 ################################################################################################################################
 
+
+
+
+
+
+
 [Hates]
 Wet stuff
+How caramelising onions makes them sooo smalllll... :(
 When people say good morning but it's like, 12:30..?
 Nightshift... Never again [limit = 2a]
 Foreigners [mood = -0.4, evil = 0.25, aggression = 5]

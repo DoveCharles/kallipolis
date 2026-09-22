@@ -22,7 +22,7 @@ export const ROWS = [
 // `top`: up beside the picture, rather than below it. `gap`: a rule above it. `list`: several names, one a line (see
 // setList) rather than one value.
 // Any row accepts either one string or a list of strings (see `set`); each extra entry gets its own row below, classed
-// with the row's key (pc-row-loves).
+// with the row's key (pc-row-loves). A counted row (Loves, Hates) can also carry a tier per entry — see `set`'s tierValue.
 
 // the rows a .txt file fills in (see core/type-text.js) — the rest are worked out as the world runs
 export const TEXT_ROWS = ['name', 'mood', 'loves', 'hates'];
@@ -151,19 +151,29 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
       rowEl.classList.toggle('pc-lead', i === 0);
     });
   }
+  // A row's tier classes (see setTier below): none of them, so a freshly-shown or hidden row never keeps an old one.
+  const TIERS = ['legendary', 'terrible'];
+  function setTier(el, tier) { TIERS.forEach(t => el.classList.toggle('pc-tier-' + t, t === tier)); }
   // Sets a row to a string or a list of strings. The first entry goes in the row, the rest in unlabelled rows beneath it.
-  // null, '' and an empty list hide the row; empty entries are skipped.
-  function set(key, value) {
+  // null, '' and an empty list hide the row; empty entries are skipped. `tierValue`, alongside (see `<attribute>Tier` in
+  // core/type-text.js), is 'legendary' or 'terrible' or null per entry, kept lined up with `value` as both are filtered —
+  // that entry's row (its own if it's the first, else the little row below) is coloured gold or dark reddish-brown for it
+  // (see the --trait-legendary-*/--trait-terrible-* rules in style.css).
+  function set(key, value, tierValue = null) {
     const row = rows[key];
     if (!row) return;
-    const said = (Array.isArray(value) ? value : [value]).filter(item => item != null && item !== '').map(String);
+    const values = Array.isArray(value) ? value : [value], tierValues = Array.isArray(tierValue) ? tierValue : [];
+    const said = [], tiers = [];
+    values.forEach((item, i) => { if (item != null && item !== '') { said.push(String(item)); tiers.push(tierValues[i] ?? null); } });
     row.value.textContent = said[0] || '';
     row.el.hidden = !said.length;
+    setTier(row.el, tiers[0]);
     row.extras.forEach(extra => extra.remove());
     row.extras = [];
-    said.slice(1).forEach(text => {
+    said.slice(1).forEach((text, i) => {
       const extra = document.createElement('div');
       extra.className = 'pc-row pc-row-' + row.row.key + ' pc-extra';
+      setTier(extra, tiers[i + 1]);
       const value = document.createElement('span');
       value.className = 'pc-value' + (row.row.cls ? ' ' + row.row.cls : '');
       value.textContent = text;
@@ -199,7 +209,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   // out until something sets them (a person going indoors, say, or who's aboard a train). A card is handed whatever a
   // kind's reader returns, traits included; the card has no row for those, so it ignores them.
   function show(values) {
-    Object.keys(rows).forEach(key => set(key, values[key]));
+    Object.keys(rows).forEach(key => set(key, values[key], values[key + 'Tier']));
     setFavorite(null);
     el.hidden = false;
   }
