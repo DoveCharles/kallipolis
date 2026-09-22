@@ -5,16 +5,21 @@
   --border: #2b2e36;
   --text: #e7e8ea;
   --text-dim: #9296a0;
-  /* the morality notices: their own text, the dimmer tally, the names under them, and the stripes those sit on.
-     The stripes mirror between the themes — near-black stripes in the dark look, the light greys in the Windows 3.0
-     one — and the names are the lower-contrast grey of each: charcoal on the light, a light grey on the dark. */
-  --notice-text: #dcdde0;
-  --notice-dim: #9296a0;
-  --notice-name: #b0b4bc;
-  --notice-stripe-a: #101010;
-  --notice-stripe-b: #202020;
+  /* the meter component's colours (src/ui/meter.css), shared by every meter (the morality one today) rather than
+     redeclared per instance: --meter-pos/--meter-neg are what a positive or negative value renders as — the bar fill,
+     the score figures, the notices' left edge — and the --meter-notice-* ones are the notices' own text, the dimmer
+     tally, the names under them, and the stripes those sit on. The stripes mirror between the themes — near-black
+     stripes in the dark look, the light greys in the Windows 3.0 one — and the names are the lower-contrast grey of
+     each: charcoal on the light, a light grey on the dark. */
+  --meter-pos: #3ddc97;
+  --meter-neg: #e5484d;
+  --meter-notice-text: #dcdde0;
+  --meter-notice-dim: #9296a0;
+  --meter-notice-name: #b0b4bc;
+  --meter-notice-stripe-a: #101010;
+  --meter-notice-stripe-b: #202020;
   /* Entity card Loves (green) and Hates (red) stripes: -a for odd lines, -b for even, -label for the row label, -bar for
-     the bar down their left-hand side (the same shape as a morality notice's border-left). The bar is its colour taken
+     the bar down their left-hand side (the same shape as a meter notice's border-left). The bar is its colour taken
      half-way to white; the stripes are the same idea taken 20% of the way, because these rows carry the label and the body
      text and a paler stripe leaves both of them too little contrast to read (see the note by the win3 values for the
      measurements). The win3 look below lightens its own the same two ways, towards black instead. */
@@ -150,12 +155,6 @@ input[type=range]::-moz-range-thumb {
   white-space:normal; width:max-content; max-width:min(90vw, 760px); line-height:1.6;
 }
 
-#stats {
-  position:fixed; top:16px; right:16px; font-family:var(--mono); font-size:11px;
-  color:var(--text-dim); background:var(--bg-panel); border:1px solid var(--border);
-  border-radius:8px; padding:8px 12px; text-align:right; line-height:1.6;
-}
-#stats span { color:var(--accent); }
 #rw-context { color:var(--text-dim); }
 
 .select-input {
@@ -291,6 +290,14 @@ html.touch #btn-touch-add { display:flex; }
 }
 .entity-card .pc-row { white-space: pre-line; }
 .entity-card[hidden] { display:none; }
+/* the boost meter (src/life/car-card.js, .meter.meter-vertical from src/ui/meter.css): grouped with the car card by
+   sitting right against its left edge, its bottom lined up with the card's own — top:auto cancels .meter's own
+   top-right default so bottom is the only thing placing it. There's no room for both on a phone, so it's dropped
+   there (see the phone layout below) rather than fighting the card for space. */
+#car-boost-meter { position:fixed; top:auto; right:calc(16px + 300px + 12px); bottom:52px; z-index:20; }
+/* the fill itself (src/life/car-card.js sets only its height, from the car's boostEnergyMax): plain --meter-pos green,
+   since boost only ever has the one, positive, side — unlike the morality meter's fill colour, this one never changes. */
+#car-boost-meter .meter-fill { background:var(--meter-pos); }
 /* holding shift in the Paths tab: a click adds a node, or a branch (src/editor/input.js) */
 canvas.adding { cursor:copy; }
 .card-close {
@@ -316,8 +323,8 @@ button.pc-pick:hover { text-decoration:underline; }
 /* whoever the camera's leaving with */
 .pc-tracked, button.pc-tracked { background:#1f5fd6; color:#fff; padding:0 3px; margin:0 -3px; }
 .pc-mood { font-size:18px; line-height:1; }
-/* Loves/Hates bands on every entity card: full-width, touching, alternating shade per line (see .mor-notice-names), and a
-   green bar down the left of a love, a red one down a hate — the same shape a morality notice leads with. A row given
+/* Loves/Hates bands on every entity card: full-width, touching, alternating shade per line (see .meter-notice-names), and a
+   green bar down the left of a love, a red one down a hate — the same shape a meter notice leads with. A row given
    several values is a line per value, carrying the row's own class, so both the band and the bar rules reach them all.
    --card-pad-x is the card's horizontal padding; --card-edge is the width of an inner border line the bands must not cover
    (1px in the Windows 3.0 look); --band-x is what is left of that padding to pull back or add on; --trait-bar is the bar's
@@ -395,8 +402,9 @@ button.pc-pick:hover { text-decoration:underline; }
 .win3-titlebar { display:none; }
 html.win3 {
   --bg-panel:#ffffff; --bg-input:#ffffff; --border:#000000; --text:#000000; --text-dim:#000000;
-  --notice-text:#000000; --notice-dim:#808080; --notice-name:#2f3c45;
-  --notice-stripe-a:#f0f0f0; --notice-stripe-b:#e0e0e0;
+  --meter-pos:#008000; --meter-neg:#c00000;
+  --meter-notice-text:#000000; --meter-notice-dim:#808080; --meter-notice-name:#2f3c45;
+  --meter-notice-stripe-a:#f0f0f0; --meter-notice-stripe-b:#e0e0e0;
   --trait-loves-a:#f3f9f3; --trait-loves-b:#ebf3eb; --trait-loves-label:#1f4a1f; --trait-loves-bar:#3f8a43;
   --trait-hates-a:#fbf1f1; --trait-hates-b:#f6eaea; --trait-hates-label:#5a1a1a; --trait-hates-bar:#bb3a33;
   --trait-legendary-a:#fbf6e3; --trait-legendary-label:#FFC30B; --trait-legendary-bar:#FFC30B;
@@ -414,8 +422,8 @@ html.win3 {
   --w3-box:inset 0 0 0 1px #000, inset 2px 2px 0 #fff, inset -2px -2px 0 #808080;
   --w3-dither:repeating-conic-gradient(#c0c0c0 0% 25%, #ffffff 0% 50%) 0 0 / 2px 2px;
 }
-html.win3 :is(#panel, .entity-card, #stats, #hint, #node-context-menu),
-html.win3 :is(#panel, .entity-card, #stats, #hint, #node-context-menu) * { font-size:11px; letter-spacing:0; -webkit-font-smoothing:none; }
+html.win3 :is(#panel, .entity-card, .meter, #hint, #node-context-menu),
+html.win3 :is(#panel, .entity-card, .meter, #hint, #node-context-menu) * { font-size:11px; letter-spacing:0; -webkit-font-smoothing:none; }
 html.win3 body, html.win3 body * {
   cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='19'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3C/svg%3E") 0 0, default;
 }
@@ -526,6 +534,8 @@ html.win3 #hint { background:#fff; color:#000; border:1px solid #000; border-rad
 
 /* the cards for whoever's being followed: each a little window of its own, closed from its control-menu box */
 html.win3 .entity-card { --card-pad-x:10px; --card-edge:1px; --trait-frame:1px; padding:0 10px 10px; right:21px; bottom:56px; }
+/* the card's own right/bottom shift slightly under this look (immediately above), so the boost meter follows it */
+html.win3 #car-boost-meter { right:calc(21px + 300px + 12px); bottom:56px; }
 html.win3 .card-close { display:none; }
 html.win3 .card-heart { top:0; right:0; width:24px; height:21px; padding:0; display:flex; align-items:center; justify-content:center; color:#fff; } /* (in the title bar) */
 html.win3 .card-heart[hidden] { display:none; }
@@ -546,101 +556,8 @@ html.win3 .pc-thumb {
   border:1px solid; border-color:#808080 #fff #fff #808080; box-shadow:inset 1px 1px 0 #000;
 }
 
-/* the morality meter (src/ui/morality.js), top right: a bar growing left (evil, red) or right (good, green) from the middle */
-#stats { width:290px; text-align:left; line-height:1.4; }
-.mor-head { display:flex; align-items:center; gap:8px; }
-#stats .mor-title { color:var(--text); }
-#stats #mor-value { min-width:40px; text-align:right; font-weight:700; color:var(--text-dim); }
-#mor-toggle {
-  font-family:var(--mono); font-size:10px; color:var(--text-dim); background:var(--bg-input);
-  border:1px solid var(--border); border-radius:4px; padding:1px 6px; cursor:pointer;
-}
-#mor-toggle:hover { color:var(--text); }
-.mor-meter { display:flex; align-items:center; gap:8px; margin:6px 0 2px; }
-.mor-track { flex:1; position:relative; }
-.mor-bar { position:relative; height:16px; background:var(--bg-input); border:1px solid var(--border); border-radius:4px; overflow:hidden; }
-#mor-fill { position:absolute; top:0; bottom:0; left:50%; width:0; transition:left .3s, width .3s, background-color .3s; }
-/* the middle, neutral: a line through the bar that sticks out past it, so it reads as a needle's zero */
-.mor-center { position:absolute; top:-4px; bottom:-4px; left:50%; width:2px; margin-left:-1px; background:var(--text); border-radius:1px; pointer-events:none; }
-#mor-details { margin-top:8px; border-top:1px solid var(--border); padding-top:6px; max-height:calc(100vh - 110px); overflow-y:auto; }
-.mor-row { display:grid; grid-template-columns:1fr 36px 52px; gap:4px; }
-.mor-row.sub { color:var(--text-dim); opacity:.85; padding-left:8px; }
-.mor-row:not(.sub) { color:var(--text); margin-top:3px; }
-.mor-count, .mor-score { text-align:right; }
-.mor-gap { height:4px; }
-#stats :is(.mor-label, .mor-count, .mor-score) { color:inherit; white-space:nowrap; }
-#stats .mor-score.good { color:#3ddc97; }
-#stats .mor-score.evil { color:#e5484d; }
-#mor-notices { position:absolute; top:0; right:calc(100% + 8px); display:flex; flex-direction:column; align-items:flex-end; gap:4px; pointer-events:none; }
-.mor-notice {
-  white-space:nowrap; text-align:right; font-family:var(--mono); font-size:11px; color:var(--notice-text);
-  background:var(--bg-panel); border:1px solid var(--border); border-left:3px solid var(--text-dim);
-  border-radius:5px; padding:3px 8px; min-width:190px; animation:mor-in .25s ease-out;
-  /* no opacity/transform transition here: the in and out animations are what move it, and a transition on the same
-     properties would fight them */
-  /* how far forward in the stack it sits: the top notice is a step ahead of the one below it, so anything coming up from
-     below arrives behind the ones above rather than through them (see rankNotices in src/ui/morality.js) */
-  position:relative; z-index:var(--notice-z, 0);
-}
-/* what the event was about: one a line, under a rule across the notice, in charcoal on alternating stripes. The
-   family is set here as well as on the notice so the names fall back the same way the heading does — in the Windows
-   3.0 look the bitmap font is missing some letters, and an inherited family would swap the whole line for Arial. */
-.mor-notice-names { margin-top:3px; border-top:1px solid var(--border); font-family:var(--mono); font-size:10px; color:var(--notice-name); }
-.mor-notice-names > div { line-height:1.35; margin:0 -8px; padding:1px 8px; }
-.mor-notice-names > div:nth-child(odd) { background:var(--notice-stripe-a); }
-.mor-notice-names > div:nth-child(even) { background:var(--notice-stripe-b); }
-.mor-notice.good { border-left-color:#3ddc97; }
-.mor-notice.evil { border-left-color:#e5484d; }
-#stats .mor-notice.good .mor-notice-score { color:#3ddc97; font-weight:700; }
-#stats .mor-notice.evil .mor-notice-score { color:#e5484d; font-weight:700; }
-/* the score follows the heading it belongs to, and "x3" follows that */
-.mor-notice-score { margin-left:5px; }
-#stats .mor-notice-count { color:var(--notice-dim); }
-/* The "x3": how many of them there have been in this run. Each time it goes up it lurches into place, swinging in out of
-   counter-clockwise, dipping and swelling at the bottom of the swing and rocking back level; the higher the count, the
-   further round, further down and bigger it goes (--count-turn, --count-dip and --count-grow, set per notice in
-   src/ui/morality.js), and the further its colour walks from a dim grey towards red (--count-color). Only rotation, height
-   and size move: its place along the line doesn't. Up to x4 those are all neutral, so it sits still and simply darkens. */
-#stats .mor-notice-count.mor-count-jolt {
-  display:inline-block; position:relative; transform-origin:50% 70%;
-  color:var(--count-color); font-weight:700; backface-visibility:hidden;
-  animation:mor-count-jolt .78s cubic-bezier(.16,.84,.24,1) both;
-}
-@keyframes mor-count-jolt {
-  0%   { transform:rotate(var(--count-turn)) translateY(calc(-1*var(--count-dip))) scale(1); color:var(--count-color); }
-  55%  { transform:rotate(calc(-0.18*var(--count-turn))) translateY(var(--count-dip)) scale(var(--count-grow)); }
-  80%  { transform:rotate(calc(0.08*var(--count-turn))) translateY(calc(-0.25*var(--count-dip))) scale(calc(1 + (var(--count-grow) - 1)*0.25)); }
-  100% { transform:rotate(0deg) translateY(0) scale(1); }
-}
-/* Over: up out of the stack, drifting to one side or the other as it goes, gone in about a third of a second. The drift is
-   --notice-exit-x, picked per notice in src/ui/morality.js, so a few going at once leave in slightly different directions.
-   It's out of the flex stack by then (dropNotice takes it out of the flow by making it fixed), hence fixed — and left where it was, or it
-   would jump to the corner on its way out. */
-.mor-notice.mor-notice-leaving {
-  position:fixed; margin:0; animation:mor-out .3s ease-out both;
-  filter:brightness(.6); /* darkened as it goes, behind the notices that stay */
-}
-@keyframes mor-out {
-  0%   { opacity:1; transform:translate(0, 0); }
-  100% { opacity:1; transform:translate(var(--notice-exit-x, 0px), calc(-1*var(--notice-rise, 26px))); }
-}
-@keyframes mor-in { from { opacity:0; transform:translateX(12px); } }
-/* in the Windows 3.0 look it's a window like the Splinetopia one, "Morality" in its title bar, which opens and closes the details */
-html.win3 #stats { background:#fff; color:#000; border:4px solid var(--w3-face); border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000; top:17px; right:17px; padding:0 10px 10px; }
-html.win3 #stats .win3-titlebar { margin:0 -10px 8px; }
-html.win3 #stats :is(.mor-title, #mor-toggle) { display:none; }
-html.win3 #stats .mor-head { display:none; }
-html.win3 #stats .mor-meter { margin:0; }
-html.win3 :is(.mor-bar, #mor-details) { border-color:#000; border-radius:0; }
-html.win3 .mor-bar { background:#fff; }
-html.win3 .mor-center { background:#000; border-radius:0; }
-html.win3 :is(#stats .mor-title, .mor-row:not(.sub)) { color:#000; }
-html.win3 .mor-row.sub { color:#404040; }
-html.win3 #stats .mor-score.good, html.win3 #stats .mor-notice.good .mor-notice-score { color:#008000; }
-html.win3 #stats .mor-score.evil, html.win3 #stats .mor-notice.evil .mor-notice-score { color:#c00000; }
-html.win3 .mor-notice { background:#fff; border:1px solid #000; border-radius:0; box-shadow:2px 2px 0 #000; font-size:11px; }
-html.win3 .mor-notice.good { border-left:4px solid #008000; }
-html.win3 .mor-notice.evil { border-left:4px solid #c00000; }
+/* the morality meter (#morality-meter), and any other meter built from the same component, is styled in
+   src/ui/meter.css */
 
 /* ============================================================ touch, and small screens
    Two different things, kept apart. `pointer: coarse` is about the size of a fingertip: the controls this theme draws at
@@ -706,12 +623,7 @@ html.win3 .mor-notice.evil { border-left:4px solid #c00000; }
   html.win3 #panel-body { padding-bottom:calc(10px + env(safe-area-inset-bottom)); }
   html.win3 body:not(.panel-open) #panel, body:not(.panel-open) #panel { transform:translateY(102%); }
 
-  /* the morality meter goes under the buttons rather than beside them, where it would crowd them off a 375px screen */
-  html.win3 #stats, #stats {
-    top:calc(56px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left));
-    right:calc(8px + env(safe-area-inset-right)); width:auto; max-width:none;
-  }
-  #mor-details { max-height:32vh; overflow-y:auto; }
+  /* the meter's own phone-layout override lives in src/ui/meter.css, in the same 760px breakpoint */
 
   /* the hint runs to a couple of hundred characters — across the bottom, and under the sheet when that's up */
   #hint {
@@ -725,6 +637,8 @@ html.win3 .mor-notice.evil { border-left:4px solid #c00000; }
     left:calc(8px + env(safe-area-inset-left)); right:calc(8px + env(safe-area-inset-right)); width:auto;
     bottom:calc(8px + env(safe-area-inset-bottom)); max-height:56vh; max-height:56dvh; overflow-y:auto;
   }
+  /* no room beside a card that now spans the screen */
+  #car-boost-meter { display:none; }
 
   #possess-hint {
     left:8px; right:8px; transform:none; white-space:normal; text-align:center;

@@ -9,6 +9,7 @@
 <title>Blockout — procedural city generator</title>
 <script>/* the Windows 3.0 look (src/ui/win3.js) is on unless it's been switched off */ try { if (localStorage.getItem('splinetopia.win3') !== '0') document.documentElement.classList.add('win3'); } catch (err) { document.documentElement.classList.add('win3'); }</script>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="src/ui/meter.css">
 <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/", "zzfx": "https://cdn.jsdelivr.net/npm/zzfx@1.3.2/ZzFX.js", "sam-js": "https://cdn.jsdelivr.net/npm/sam-js@0.3.1/dist/samjs.esm.min.js" } }
@@ -206,12 +207,16 @@
   <button class="canvas-tool" id="btn-touch-add" title="Insert a node into a path, or branch off one"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 </div>
 
-<div id="stats">
+<!-- a meter (src/ui/meter.css): its own id is a JS hook only — the styling all comes from class="meter" and the
+     shared .meter-* structure below, so another meter elsewhere in the menu can reuse it by copying this shape under
+     its own id (see src/ui/morality.js, which finds its pieces with #morality-meter's own querySelector rather than
+     by id, for exactly that reason) -->
+<div id="morality-meter" class="meter">
   <div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Morality</div><button class="win3-min" title="Minimize"></button><button class="win3-max" title="Maximize"></button></div>
-  <div class="mor-head"><span class="mor-title">Morality</span><button id="mor-toggle" title="What the morality is made of">show</button></div>
-  <div class="mor-meter"><div class="mor-track"><div class="mor-bar"><div id="mor-fill"></div></div><div class="mor-center"></div></div><span id="mor-value">0</span></div>
-  <div id="mor-details" hidden></div>
-  <div id="mor-notices"></div>
+  <div class="meter-head"><span class="meter-title">Morality</span><button class="meter-toggle" title="What the morality is made of">show</button></div>
+  <div class="meter-readout"><div class="meter-track"><div class="meter-bar"><div class="meter-fill"></div></div><div class="meter-center"></div></div><span class="meter-value">0</span></div>
+  <div class="meter-details" hidden></div>
+  <div class="meter-notices"></div>
 </div>
 
 <div id="hint"></div>

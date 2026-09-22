@@ -40,7 +40,7 @@ plate = LICENSE
 [Ambulance]
 name = Ambulance
 vanitychance = 0
-mood = 🚑 [speed = 0.8, boost = 1.0, braking = 1.3, control = 1.3, weight = 2.8, health = 4, tank = 3]
+mood = 🚑 [speed = 0.8, boost = 1.0, braking = 1.3, control = 1.3, weight = 2.8, health = 4, energy = 3]
 loves = WOOOOOOOOOooooo....oooooOOOOOWWWW
 loves = Clearing the roads
 loves = Discounts
@@ -55,7 +55,7 @@ hates = Barethread tires, all night long [terrible, control = 0.8, braking = 0.8
 [Bus]
 name = Bus
 vanitychance = 0
-mood = 🚌 [speed = 0.8, boost = 1, braking = 0.9, control = 0.5, weight = 4.5, recovery = 0.5, health = 4, tank = 2]
+mood = 🚌 [speed = 0.8, boost = 1, braking = 0.9, control = 0.5, weight = 4.5, recovery = 0.5, health = 4, energy = 2]
 loves = Picking up my lovely peoples
 loves = Breaking down
 loves = Unexplained 30 minute stop
@@ -78,7 +78,7 @@ hates = Just give her a minute [terrible, recovery = 0.3, unstable = 0.2]
 
 [Canyonero]
 name = SUV
-mood = 🚙 [speed = 1, boost = 0.8, braking = 0.8, control = 0.8, weight = 1.8, health = 2.1, tank = 3, recovery = 0.8]
+mood = 🚙 [speed = 1, boost = 0.8, braking = 0.8, control = 0.8, weight = 1.8, health = 2.1, energy = 3, recovery = 0.8]
 loves = Flipping over
 loves = GET OUT OF MY WAY
 loves = Being so so big and huge
@@ -87,7 +87,7 @@ loves = All the theoretical camping gear in the back
 loves = Imagine Dragons
 loves = FUCK YOU BUDDY! YEAH FUCK YOU! FUCKING CUT ME OFF, SHIT
 loves = Volume up, windows down
-loves = Extra storage [legendary, size = 1.2, health = 1.2, weight = 1.2, speed = 0.9]
+loves = Extra storage [legendary, size = 1.1, health = 1.2, weight = 1.2, speed = 0.9]
 loves = Offroad tyres [legendary, control = 1.4, braking = 1.2]
 loves = Reinforced chassis [legendary, health = 1.6, weight = 1.1]
 loves = Roll cage [legendary, health = 2, recovery = 1.2]
@@ -95,7 +95,7 @@ loves = Shock absorbers [legendary, recovery = 2]
 hates = SMALLER CARS!!!
 hates = Slowies
 hates = Actually going camping
-hates = The miles on this thing [terrible, unstable = 0.05, health = 0.9, tank = 0.8]
+hates = The miles on this thing [terrible, unstable = 0.05, health = 0.9, energy = 0.8]
 hates = Deer all up in the radiator. Eh, it's fine. [terrible, recovery = 0.7, speed = 0.9, boost = 0.9]
 plate = SODRUNKRN
 plate = BREAKTEST
@@ -126,14 +126,14 @@ hates = Fucking uber
 [PoliceCar]
 name = Police car
 vanitychance = 0
-mood = 🚓 [speed = 0.9, boost = 1.3, braking = 1.6, control = 1.5, tank = 1.2, recovery = 2]
+mood = 🚓 [speed = 0.9, boost = 1.3, braking = 1.6, control = 1.5, energy = 1.2, recovery = 2]
 loves = WEEWOOWEEWOO
 loves = PULL OVER, NOW
 loves = Being one day away from retirement
 loves = Escalating
 loves = Floor it!
 loves = Armour plating [legendary, health = 2.4, weight = 1.4, speed = 0.85, boost = 0.85]
-loves = Pursuit vehicle [legendary, speed = 1.1, boost = 1.2, tank = 1.2, control = 1.2]
+loves = Pursuit vehicle [legendary, speed = 1.1, boost = 1.2, energy = 1.2, control = 1.2]
 loves = Bullbar [legendary, recovery = 1.4, weight = 1.4, speed = 0.95]
 hates = 'N******'
 hates = Minorities
@@ -157,7 +157,7 @@ hates = Some kind of animal back there [terrible, drunk]
 
 [Sedan]
 name = Sedan
-mood = 💼 [speed = 1.1, boost = 1.1, braking = 1.1, control = 1.1, tank = 0.9]
+mood = 💼 [speed = 1.1, boost = 1.1, braking = 1.1, control = 1.1, energy = 0.9]
 loves = Going to work
 loves = Their job
 loves = Forgetting about their wife and children
@@ -171,7 +171,7 @@ loves = Tinted windows
 loves = Shock absorbers [legendary, recovery = 2]
 loves = Some engine in this thing [legendary, speed = 1.4, boost = 1.4]
 loves = Frequent oil changes [legendary, recovery = 1.5, braking = 1.5, control = 1.2]
-loves = Sports transmission (for the weekend) [legendary, boost = 1.4, tank = 2]
+loves = Sports transmission (for the weekend) [legendary, boost = 1.4, energy = 2]
 loves = Fully automatic [terrible, control = 0.7]
 hates = Being late for work!!!
 hates = Traffic, guh! I'm gonna be so late for work!!!
@@ -207,10 +207,10 @@ loves = Only using the phone because it's a red light, fuck you [keysmash]
 loves = Six-pack of beer in the passenger seat
 loves = Beer in my bellay [terrible, drunk]
 loves = Using the cargo bay for absolutely nothing
-loves = Extra storage [legendary, size = 1.2, health = 1.2, weight = 1.2, speed = 0.9]
+loves = Extra storage [legendary, size = 1.1, health = 1.2, weight = 1.2, speed = 0.9]
 loves = Lifted suspension (won't see children) [legendary, size = 1.2, recovery = 1.2, health = 1.2]
 loves = Long distance truckin' truck [legendary, health = 1.4, speed = 1.8, boost = 0.6 ]
-loves = Diesel engine [legendary, tank = 3]
+loves = Diesel engine [legendary, energy = 3]
 hates = Children and small animals
 hates = Nature
 hates = Having to load the fucking truck... FUCK [terrible, weight = 1.4, speed = 0.8, boost = 0.7, braking = 0.4]
@@ -248,16 +248,16 @@ loves = Texting with one hand [keysmash]
 loves = Roll cage [legendary, health = 2, recovery = 1.2]
 loves = Shock absorbers [legendary, recovery = 3]
 loves = Turbo-boosted [ legendary, boost = 2]
-loves = Liquid Cooling [legendary, recovery = 4, tank = 1.5, unstable = 0.05]
+loves = Liquid Cooling [legendary, recovery = 4, energy = 1.5, unstable = 0.05]
 loves = Atomic Engine [legendary, speed = 2.2, boost = 3, explosive, unstable = 0.3]
-loves = Fine-tuned [legendary, control = 2, tank = 1.4]
+loves = Fine-tuned [legendary, control = 2, energy = 1.4]
 loves = Racing wheels [legendary, speed = 1.1, braking = 1.7]
 loves = Aquatic model [legendary, aqua]
 hates = Their wife
 hates = Getting it in the ear from their missus
 hates = My dad passed at this age, you know?
 hates = Hubris
-hates = Too much weight... Take it all off [legendary, weight = 0.4, speed = 1.2, boost =1.2, tank =1.2, braking = 1.2, unstable = 0.1, health = 0.4]
+hates = Too much weight... Take it all off [legendary, weight = 0.4, speed = 1.2, boost =1.2, energy =1.2, braking = 1.2, unstable = 0.1, health = 0.4]
 plate = RESPAWN
 plate = MAOZEDONG
 plate = IPOD NANO
@@ -285,6 +285,7 @@ loves = Road trip!!!
 loves = Sliding doors
 loves = Rolling up their windows
 loves = The sat-nav
+loves = Extra spacey [legendary, size = 1.07, weight = 1.2, speed = 0.9, boost = 0.9, health = 1.1]
 loves = Bubblewrap interiors [legendary, recovery = 1.6, health = 1.1]
 hates = Turning this thing around if I have to
 hates = The 'streets'
@@ -310,13 +311,13 @@ plate = LOVEMYKID
 [Truck]
 name = Truck
 vanitychance = 0.2
-mood = 🚚 [size = 1.4, speed = 0.8, boost = 0.7, braking = 0.6, control = 0.6, , weight = 3, recovery = 0.3, health =2.6]
+mood = 🚚 [size = 1.17, speed = 0.8, boost = 0.7, braking = 0.6, control = 0.6, , weight = 3, recovery = 0.3, health =2.6]
 loves = HOONK HOOOOOOOOONK
 loves = Blocking the motorway
 loves = Going sooo so slow
 loves = Heavy-duty suspension [legendary, recovery = 1.7]
 loves = Big delivery comin up
-loves = Deliveries done for the day [legendary, speed = 1.4, braking = 1.4, recovery = 1.4, control = 1.2, tank = 1.5, weight = 0.6, limit = 1b]
+loves = Deliveries done for the day [legendary, speed = 1.4, braking = 1.4, recovery = 1.4, control = 1.2, energy = 1.5, weight = 0.6, limit = 1b]
 hates = Literally anyone passing them on the motorway
 hates = Non-truckers
 hates = What they got back there? [terrible, weight = 1.4, braking = 0.8, speed = 0.8, boost = 0.8, limit = 1a]
@@ -335,8 +336,8 @@ name = Twingo
 mood = 🚗 [speed = 0.9, boost = 1.1, braking = 1.2, control = 1.1, weight = 0.6]
 loves = Being oh so cutey
 loves = France
-loves = Portable solar panel [legendary, tank = 3.5, unstable = 0.05]
-loves = Modus metro [legendary, size = 0.8, weight = 0.8, boost = 1.2]
+loves = Portable solar panel [legendary, energy = 3.5, unstable = 0.05]
+loves = Modus metro [legendary, size = 0.85, weight = 0.8, boost = 1.2]
 hates = Bigger cars (small willy's)
 hates = beeeep beeeeeeep
 hates = Axel like a twig [terrible, control = 0.6]
@@ -360,6 +361,7 @@ loves = Parking on the curb in a busy street. It's alright, got me hazards on ma
 loves = Calling in sick
 loves = Parking near schools
 loves = Being a pedo
+loves = Moving a lotttt of shit [legendary, size = 1.1, weight = 1.2, speed = 0.9, boost = 0.9, health = 1.1]
 loves = Not giving a fuccckkkkk [terrible, drunk]
 loves = Drink before work [terrible, drunk]
 loves = Grow-on-the-go [terrible, drunk]

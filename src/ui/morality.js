@@ -76,7 +76,7 @@ function joltCount(chip, count) {
   chip.style.setProperty('--count-turn', (COUNT_TURN*weight).toFixed(1) + 'deg');
   chip.style.setProperty('--count-dip', (COUNT_DIP*weight).toFixed(3) + 'em');
   chip.style.setProperty('--count-grow', (1 + COUNT_GROW*weight).toFixed(3));
-  chip.classList.add('mor-count-jolt'); // (the chip is new each time, so its animation starts by itself)
+  chip.classList.add('meter-count-jolt'); // (the chip is new each time, so its animation starts by itself)
 }
 
 // what's counted, grouped as the details list shows it: `key` is the line in morality.txt under the group's [heading]
@@ -177,11 +177,15 @@ function tally() {
 }
 
 // ---------------------------------------------------------- the meter
-const valueEl = document.getElementById('mor-value');
-const fillEl = document.getElementById('mor-fill');
-const toggleEl = document.getElementById('mor-toggle');
-const detailsEl = document.getElementById('mor-details');
-const noticesEl = document.getElementById('mor-notices');
+// The reusable meter component (src/ui/meter.css) is styled by class, not id, so a second meter elsewhere in the menu
+// can reuse this exact markup under its own container id. Its pieces are found within that one container below,
+// rather than by a global id, for the same reason — see meterWindow further down.
+const meterWindow = document.getElementById('morality-meter');
+const valueEl = meterWindow.querySelector('.meter-value');
+const fillEl = meterWindow.querySelector('.meter-fill');
+const toggleEl = meterWindow.querySelector('.meter-toggle');
+const detailsEl = meterWindow.querySelector('.meter-details');
+const noticesEl = meterWindow.querySelector('.meter-notices');
 
 const NEUTRAL = [146, 150, 160], EVIL = [229, 72, 77], GOOD = [61, 220, 151];
 
@@ -192,7 +196,7 @@ function meterColor(v) {
 }
 const round1 = n => Math.round(n*10)/10 || 0; // (|| 0: no "-0")
 const signed = n => { const r = round1(n); return (r > 0 ? '+' : '') + r; };
-const scoreClass = n => round1(n) > 0 ? 'good' : round1(n) < 0 ? 'evil' : '';
+const scoreClass = n => round1(n) > 0 ? 'pos' : round1(n) < 0 ? 'neg' : '';
 
 function meterFrac(v) {
   const clamped = Math.min(Math.abs(v), MORALITY_MAX);
@@ -212,16 +216,15 @@ function renderMeter(t) {
 
   if (detailsEl.hidden) return;
   const row = (label, count, score, sub) =>
-    `<div class="mor-row${sub ? ' sub' : ''}"><span class="mor-label">${sub ? '• ' : ''}${label}</span><span class="mor-count">${count}</span><span class="mor-score ${scoreClass(score)}">${signed(score)}</span></div>`;
+    `<div class="meter-row${sub ? ' sub' : ''}"><span class="meter-label">${sub ? '• ' : ''}${label}</span><span class="meter-count">${count}</span><span class="meter-score ${scoreClass(score)}">${signed(score)}</span></div>`;
   detailsEl.innerHTML =
     GROUPS.map(g => row(g.label, t.groups[g.id].count, t.groups[g.id].score, false) +
       g.items.map(item => { const l = t.lines[g.id + '/' + item.key]; return row(item.label, l.count, l.score, true); }).join('')).join('') +
-    `<div class="mor-gap"></div>` +
+    `<div class="meter-gap"></div>` +
     EVENTS.map(e => { const l = t.lines['events/' + e.key]; return row(e.label, l.count, l.score, false); }).join('');
 }
 // the details open and close from the show/hide button — or, in the Windows 3.0 look, from the window's title bar, just like
 // the Splinetopia window (see win3.js): minimize folds them away, maximize (or the control-menu box, to toggle) opens them
-const meterWindow = document.getElementById('stats');
 function setDetailsOpen(open) {
   detailsEl.hidden = !open;
   toggleEl.textContent = open ? 'hide' : 'show';
@@ -255,7 +258,7 @@ const NOTICE_NAMES_MAX = 3;
 // the order.
 function rankNotices() {
   const ranked = [...liveNotices.entries()].sort((a, b) => b[1].count - a[1].count);
-  // the higher up the stack, the further forward it sits (see --notice-z in style.css); set on every call, since a notice
+  // the higher up the stack, the further forward it sits (see --notice-z in src/ui/meter.css); set on every call, since a notice
   // coming or going moves everyone's place even when the order stays the same
   ranked.forEach(([, live], i) => live.el.style.setProperty('--notice-z', String(ranked.length - i)));
   const order = [...noticesEl.children];
@@ -283,7 +286,7 @@ function dropNotice(id) {
   live.el.style.setProperty('--notice-exit-x', (Math.random()*NOTICE_EXIT_SPREAD*2 - NOTICE_EXIT_SPREAD).toFixed(1) + 'px');
   live.el.style.setProperty('--notice-rise', Math.round(box.bottom + 20) + 'px'); // clear of the top of the screen
   live.el.style.zIndex = -100; // behind the ones still sitting there
-  live.el.classList.add('mor-notice-leaving'); // (it stays inside #stats: that's a stacking context of its own, and out on the body it would draw over everything in it)
+  live.el.classList.add('meter-notice-leaving'); // (it stays inside the meter: that's a stacking context of its own, and out on the body it would draw over everything in it)
   setTimeout(() => live.el.remove(), NOTICE_EXIT_MS);
 }
 // Page work (notices, the meter) is done in a batch on the next frame rather than where it's asked for, which may be in the
@@ -314,7 +317,7 @@ function showNotice(id, delta, countDelta, name) {
   let live = liveNotices.get(id);
   if (!live) {
     const el = document.createElement('div');
-    el.className = 'mor-notice ' + scoreClass(delta);
+    el.className = 'meter-notice ' + scoreClass(delta);
     live = { el, score: delta, label: noticeLabels[id], count: 0, names: [], timer: null };
     liveNotices.set(id, live);
     noticesEl.append(el); // (where it belongs among the others is rankNotices' job, below)
@@ -326,15 +329,15 @@ function showNotice(id, delta, countDelta, name) {
   }
   // the score follows its label ("Innocents killed by player +5"), and nothing is shown for a score of 0: "Guilty killed by
   // player x3", not "0 …"
-  const scoreChip = round1(live.score) ? ` <span class="mor-notice-score">${signed(live.score)}</span>` : '';
+  const scoreChip = round1(live.score) ? ` <span class="meter-notice-score">${signed(live.score)}</span>` : '';
   // how many of them that is, in the same run: "x3", and no chip at all for a single one
-  const countChip = live.count > 1 ? ` <span class="mor-notice-count">x${live.count}</span>` : '';
+  const countChip = live.count > 1 ? ` <span class="meter-notice-count">x${live.count}</span>` : '';
   // one line each, most recent first, under a rule across the notice
   const names = live.names.length
-    ? `<div class="mor-notice-names">${live.names.map(n => `<div>${n}</div>`).join('')}</div>`
+    ? `<div class="meter-notice-names">${live.names.map(n => `<div>${n}</div>`).join('')}</div>`
     : '';
   live.el.innerHTML = `${live.label}${scoreChip}${countChip}${names}`;
-  const chip = live.el.querySelector('.mor-notice-count');
+  const chip = live.el.querySelector('.meter-notice-count');
   if (chip) joltCount(chip, live.count);
   rankNotices();
   // more than fit: the ones with the least to them go, last of the ranking first, by the same swipe as one that timed out.

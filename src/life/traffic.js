@@ -1508,6 +1508,8 @@ function followCar(car) {
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9));
   const type = carTypeOf(car.design != null ? carMeshes[car.design].name : null, car.number);
   App.showCarCard(i, { ...type, name: carLabel(car) }, car);
+  const energyMax = boostEnergyMax(car);
+  App.setCarBoost(car.energy ??= energyMax, energyMax); // (its level as it already stands — full, unless it's spent some since last driven)
   return true;
 }
 
@@ -1824,6 +1826,10 @@ const DRIVE_ACCEL = 10, DRIVE_BRAKE = 28, DRIVE_COAST = 4, DRIVE_TURN = 2.2; // 
 // how fast steerHeld goes over to full lock and back, per second — and the speed above walking pace at which the car
 // turns half as sharply as at a crawl, a third as sharply at twice that speed, and so on
 const DRIVE_STEER_RATE = 5, DRIVE_TURN_FADE = 12;
+const BOOST_ENERGY_BASE = 6; // (seconds of boost a car can draw on before it runs out, at the energy trait's base value of 1 — see the trait, core/traits.js)
+const BOOST_RECHARGE_RATE = 0.5; // (seconds of boost regained per second while not boosting — slower than it's spent, so it recharges gradually)
+/** How many seconds of boost a car has to spend in total: BOOST_ENERGY_BASE times its own energy trait. */
+const boostEnergyMax = car => BOOST_ENERGY_BASE*(car.traits?.energy ?? 1);
 let drivenCar = null;
 /**
  * Take the followed car for driving, if startDriving allows it and it is on a line; drops anyone it was yielding to.
@@ -1856,12 +1862,12 @@ function stopDriving() {
 }
 
 /**
- * One frame of the driven car, from the keys held (controlInput): brake, forward at top speed (boosted by run), reverse,
- * or coast down to a standstill; steerHeld eased toward `right`; the turn scaled by speed up to a walking pace and fading
- * above it, and reversed when going backwards; then moved along its heading and bumped into any car it has run into (which
- * may stop it, or wreck them). Driven out over open water it starts sinking (overOpenWater, sinkCar) — unless it has the
- * aqua trait, which instead floats it (updateFloating): settling a little into the water and hopping back out onto land,
- * smoothly, rather than sinking.
+ * One frame of the driven car, from the keys held (controlInput): brake, forward at top speed (boosted by run, so long as
+ * its energy trait's own budget — boostEnergyMax — isn't spent), reverse, or coast down to a standstill; steerHeld eased
+ * toward `right`; the turn scaled by speed up to a walking pace and fading above it, and reversed when going backwards;
+ * then moved along its heading and bumped into any car it has run into (which may stop it, or wreck them). Driven out
+ * over open water it starts sinking (overOpenWater, sinkCar) — unless it has the aqua trait, which instead floats it
+ * (updateFloating): settling a little into the water and hopping back out onto land, smoothly, rather than sinking.
  * @param {object} car
  * @param {number} dt - seconds this frame
  * @returns {void}
@@ -1878,9 +1884,17 @@ function driveByHand(car, dt) {
       engineSmoke({ x: car.x + Math.sin(car.heading)*nose, y: Y_ROAD, z: car.z + Math.cos(car.heading)*nose }, carHeight(car));
     }
   }
-  if (run && forward > 0 && car.speed > 1) boostSmoke(car, dt);
+  // boosting (run held, driving forward) draws down its energy trait's own budget (boostEnergyMax); not boosting, it
+  // slowly recharges instead (BOOST_RECHARGE_RATE), either way no further than its own full and empty. The card's boost
+  // meter (App.setCarBoost) is kept in step with it here, every frame it's actually driven.
+  const energyMax = boostEnergyMax(car);
+  car.energy ??= energyMax;
+  const boosting = run && forward > 0 && car.energy > 0;
+  car.energy = boosting ? Math.max(0, car.energy - dt) : Math.min(energyMax, car.energy + BOOST_RECHARGE_RATE*dt);
+  if (boosting && car.speed > 1) boostSmoke(car, dt);
+  App.setCarBoost(car.energy, energyMax);
   // its speed and boost traits scale the top speed and the boost (see cars.txt)
-  const boost = run ? DRIVE_BOOST*(car.traits?.boost ?? 1) : 1;
+  const boost = boosting ? DRIVE_BOOST*(car.traits?.boost ?? 1) : 1;
   const top = DRIVE_TOP_SPEED*(car.traits?.speed ?? 1)*boost;
   const braking = DRIVE_BRAKE*(car.traits?.braking ?? 1);
   car.throttle = brake ? 0 : Math.abs(forward); // (for the engine's sound)
