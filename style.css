@@ -262,6 +262,14 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
 #btn-panel-toggle, #btn-touch-add { display:none; }
 html.touch #btn-touch-add { display:flex; }
 .canvas-tool.on { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
+/* The icons over the view are line drawings until whatever they turn on is on, and then they fill in: the ped head
+   (src/ui/ped-view.js) in the yellow it paints the crowd, the magnet in red with white tips, the heart while the
+   favorites window is open. */
+#btn-ped-view.on .ped-head { fill:#f5d43c; }
+#grid-toggle.active svg { color:#d42b32; }
+.magnet-tip { fill:none; }
+#grid-toggle.active .magnet-tip { fill:#fff; }
+#btn-favorites.on .fav-heart { fill:#e0364a; }
 .canvas-tool {
   width:34px; height:34px; padding:0; display:flex; align-items:center; justify-content:center;
   background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; color:var(--text-dim); cursor:pointer;
@@ -491,8 +499,8 @@ html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool, #grid-toggle, .carousel-
   background:var(--w3-face); color:#000; border:1px solid #000; border-radius:3px; box-shadow:var(--w3-raised);
 }
 html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool:not(:disabled), #grid-toggle, .carousel-arrow, .add-color-confirm, .type-card):active,
-html.win3 :is(.tool-btn.active, #grid-toggle.active, .type-card.active) { background:var(--w3-face); color:#000; box-shadow:var(--w3-pressed); }
-html.win3 :is(.tool-btn:not(.active):hover, .btn:hover, .btn.danger:hover, .icon-btn:hover, .canvas-tool:hover:not(:disabled), #grid-toggle:hover, .carousel-arrow:hover, .add-color-confirm:hover, .type-card:hover) { color:#000; border-color:#000; background:var(--w3-face); }
+html.win3 :is(.tool-btn.active, #grid-toggle.active, .canvas-tool.on, .type-card.active) { background:var(--w3-face); color:#000; box-shadow:var(--w3-pressed); }
+html.win3 :is(.tool-btn:not(.active):hover, .btn:hover, .btn.danger:hover, .icon-btn:hover, .canvas-tool:not(.on):hover:not(:disabled), #grid-toggle:hover, .carousel-arrow:hover, .add-color-confirm:hover, .type-card:hover) { color:#000; border-color:#000; background:var(--w3-face); }
 html.win3 .tool-btn.active { text-decoration:underline; }
 html.win3 .canvas-tool:disabled { opacity:1; color:var(--w3-shadow); }
 html.win3 .carousel-arrow { flex-basis:18px; font-size:13px; }

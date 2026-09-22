@@ -46,6 +46,7 @@ import './ui/win3.js';
 import './ui/sound.js';
 import './ui/mobile.js';
 import './ui/pixelation.js';
+import './ui/ped-view.js';
 import './project/export-obj.js';
 import * as THREE from 'three';
 import { S } from './core/shared.js';
@@ -54,6 +55,7 @@ import { controls } from './core/camera-controls.js';
 import { mulberry32 } from './core/math.js';
 import { createWindowMaterial } from './buildings/windows.js';
 import { renderMapsList } from './maps/map-images.js';
+import { updatePedView } from './ui/ped-view.js';
 import { applyPathShader, applyWalkwayShader } from './roads/paths.js';
 import { updateTrafficLights } from './roads/markings.js';
 import { loadCarriageModel, updateTrainShuttles, scaleNodeUi, nodeUiMaterial } from './trains/trains.js';
@@ -155,6 +157,7 @@ function animate() {
   placeSunLight();
   WATER_TIME.value = t;
   refreshSceneIndex();
+  updatePedView(t);
   hideBuildingsAroundCamera(); // (a building the camera's ended up inside isn't drawn: see see-through.js)
   blinkLights.forEach(o => { o.material.emissiveIntensity = 0.5 + Math.sin(t*3 + o.userData.blinkPhase)*0.5; });
   if (S.interactionMode === 'node') scaleNodeUi(camera);
