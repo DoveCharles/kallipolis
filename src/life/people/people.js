@@ -642,7 +642,7 @@ function killPerson(i, by = 'player', momentum = null) {
     };
     colorFrom('Skin', colors.skin);
     colorFrom('Top', colors.top); colorFrom('Pants', colors.pants); colorFrom('Shoes', colors.shoes);
-    if (personModel.headLayers.some(layer => layer.of[i] >= 0)) colors.hair = colorFrom('Hair', new THREE.Color());
+    if (personModel.headLayers.some(layer => layer.hair && layer.of[i] >= 0)) colors.hair = colorFrom('Hair', new THREE.Color());
   } else {
     peopleMesh.getColorAt(i, colors.top);
     colors.pants.copy(colors.top);
