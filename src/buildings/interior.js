@@ -67,11 +67,11 @@ function wall(length, windows, x, z, angle, thickness = WALL) {
     mesh.rotation.y = angle;
   };
   if (!windows) { piece(length, ROOM_H, thickness, wallMaterial, 0, ROOM_H/2, 0); return; }
-  const pier = length/(windows*2 + 1)*0.9, gap = (length - pier*(windows + 1))/windows;
+  const { width: pier, gap, centres } = piers(length, windows);
   piece(length, SILL, WALL, wallMaterial, 0, SILL/2, 0);
   piece(length, ROOM_H - HEAD, WALL, wallMaterial, 0, (HEAD + ROOM_H)/2, 0);
   for (let i = 0; i <= windows; i++) {
-    const px = -length/2 + pier/2 + i*(pier + gap);
+    const px = centres[i];
     piece(pier, HEAD - SILL, WALL, wallMaterial, px, (SILL + HEAD)/2, 0);
     if (i === windows) break;
     const mid = px + pier/2 + gap/2;
@@ -80,6 +80,11 @@ function wall(length, windows, x, z, angle, thickness = WALL) {
     piece(gap, 0.06, WALL + 0.1, frameMaterial, mid, SILL, 0);                        // and a sill to lean on
   }
 }
+// the solid bits of such a wall between and either side of its windows: how wide, and where along it
+function piers(length, windows) {
+  const width = length/(windows*2 + 1)*0.9, gap = (length - width*(windows + 1))/windows;
+  return { width, gap, centres: Array.from({ length: windows + 1 }, (_, i) => -length/2 + width/2 + i*(width + gap)) };
+}
 [wallMaterial, floorMaterial, ceilingMaterial, frameMaterial].forEach(roomLit);
 box(ROOM_W + (WALL + OVERHANG)*2, SLAB, ROOM_D + (WALL + OVERHANG)*2, floorMaterial, 0, -SLAB/2, 0);
 // (the ceiling stops flush with the far walls — any further and it'd shade their windows — but reaches on past the thick
@@ -87,8 +92,9 @@ box(ROOM_W + (WALL + OVERHANG)*2, SLAB, ROOM_D + (WALL + OVERHANG)*2, floorMater
 const ceilW = ROOM_W/2 + WALL + ROOM_W/2 + THICK + OVERHANG, ceilD = ROOM_D/2 + WALL + ROOM_D/2 + THICK + OVERHANG;
 box(ceilW, THICK, ceilD, ceilingMaterial, ROOM_W/2 + WALL - ceilW/2, ROOM_H + THICK/2, ROOM_D/2 + WALL - ceilD/2);
 // the camera sits in the (-x, -z) corner, so the windows are in the +x and +z walls, facing it
-wall(ROOM_W + WALL*2, 3, 0, ROOM_D/2 + WALL/2, 0);            // far, along x
-wall(ROOM_D, 2, ROOM_W/2 + WALL/2, 0, Math.PI/2);             // far, along z
+const FAR_X = [ROOM_W + WALL*2, 3], FAR_Z = [ROOM_D, 2];         // the far walls' lengths and windows
+wall(...FAR_X, 0, ROOM_D/2 + WALL/2, 0);                      // far, along x
+wall(...FAR_Z, ROOM_W/2 + WALL/2, 0, Math.PI/2);              // far, along z
 wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK);  // behind the camera
 wall(ROOM_D, 0, -ROOM_W/2 - THICK/2, 0, Math.PI/2, THICK);   // behind the camera
 // ---------------------------------------------------------- what's in it
@@ -175,10 +181,11 @@ function paintRoom() {
 
 // ---------------------------------------------------------- a home's furniture
 // The furniture's a custom model (assets/models/Interior.glb, made in Blender): one top-level mesh per piece — Chair,
-// Table, TV, Lamp, Plant, Sofa, Coffee Table (loaded as Coffee_Table), Rug — at five times life size, the TV's screen
-// facing -z and everything else facing +z. Each home arranges it its own way (from its building's key, so it's the same
+// Table, TV, Lamp, Plant, Sofa, Coffee Table (loaded as Coffee_Table), Rug, Bookcase, Pendant — at five times life size,
+// the TV's screen facing -z and everything else facing +z. Each home arranges it its own way (from its building's key, so it's the same
 // every visit): the TV against one of the two far walls, facing the camera, the sofa across the room facing it with the
-// coffee table on a rug between them, maybe a lamp at the sofa's end, a dining table with two or four chairs wherever
+// coffee table on a rug between them, maybe a lamp at the sofa's end, a bookcase against a far wall between its
+// windows, a light hanging over the dining table or the coffee table, a dining table with two or four chairs wherever
 // there's room for it, and a plant or two by the walls. Until the model's loaded, homes are bare.
 const FURNITURE_MODEL_URL = 'assets/models/Interior.glb';
 const FURNITURE_SCALE = 0.2;
@@ -191,8 +198,9 @@ const WALLS = [0xe8e2d6, 0xcfd8c4, 0xc9dcdc, 0xe8d2cc, 0xeee2b8, 0xd0d6e0, 0xe0c
 const WOODS = [0xe7be73, 0xe8d2a8, 0x8a5a3a, 0xb0603e, 0x5a3c2a, 0xb8ae9e, 0xeae6de, 0x3a3430];
 const SOFAS = [0x89666e, 0x3c4a6e, 0xc8962e, 0x3e6a4e, 0x8a8c8e, 0x2f7474, 0xa4553a, 0xd8ccb4, 0xd88a96];
 const RUGS = [0xe78676, 0xe6dcc6, 0x5a7ab0, 0x9ab08a, 0x55555a, 0xd0a048, 0x7a4868, 0x4a9a9a];
+const SHADES = [0x3a3a3a, 0xece8e0, 0xc9a352, 0x8fa88a, 0xc0603e, 0x34466a, 0xd8b440];
 // the model's materials for those, by the names they have in it (shared by every clone, so recoloured per home)
-const PAINTED = { Wood: WOODS, Material: SOFAS, 'Material.002': RUGS };
+const PAINTED = { Wood: WOODS, Material: SOFAS, 'Material.002': RUGS, Shade: SHADES };
 const painted = [];
 // the screen, lit as if it's on
 const SCREEN_COLOR = 0x0c1218, SCREEN_GLOW = 0x33536e;
@@ -236,6 +244,8 @@ async function loadFurniture() {
   if (screen) pieces.TV.screen = { centre: screen.getCenter(new THREE.Vector3()).setZ(screen.max.z + 0.004),
     w: screen.max.x - screen.min.x, h: screen.max.y - screen.min.y };
   if (bulb) pieces.Lamp.bulb = bulb.getCenter(new THREE.Vector3());
+  const hanging = part(pieces.Pendant, 'Light');
+  if (hanging) pieces.Pendant.bulb = hanging.getCenter(new THREE.Vector3());
   if (!['TV', 'Sofa', 'Coffee_Table'].every(name => pieces[name])) {
     console.warn('Blockout: the interior model is missing its TV, sofa or coffee table; homes are left bare');
     return;
@@ -382,10 +392,27 @@ function furnish(key) {
       break;
     }
   }
+  // a bookcase against one of the far walls, between two of its windows, facing into the room
+  const bookcase = furniture.Bookcase;
+  if (bookcase && rng() < 0.7) {
+    // (only piers wide enough for it, so it's not over the window either side: the ones at the walls' ends are mostly
+    // behind the side walls, and fits turns those down)
+    const spots = [[FAR_X, u => ({ x: u, z: ROOM_D/2 - bookcase.d/2 - 0.03, angle: Math.PI })],
+      [FAR_Z, u => ({ x: ROOM_W/2 - bookcase.d/2 - 0.03, z: -u, angle: -Math.PI/2 })]]
+      .flatMap(([w, spot]) => { const p = piers(...w); return p.width > bookcase.w + 0.04 ? p.centres.map(spot) : []; });
+    while (spots.length) {
+      const [p] = spots.splice(Math.floor(rng()*spots.length), 1);
+      const r = footprint(bookcase, p.x, p.z, p.angle);
+      if (!fits(r, 0.1) || hidesScreen(r)) continue;
+      put('Bookcase', p.x, p.z, p.angle, { tall: true });
+      break;
+    }
+  }
   // a dining table somewhere with room to walk round it, with a chair either side or all round — and not so near the
   // camera that it's cut off by the bottom of the view
   const underCamera = { x0: -ROOM_W/2, x1: -ROOM_W/2 + 2.8, z0: -ROOM_D/2, z1: -ROOM_D/2 + 2.8 };
   const table = furniture.Table, chair = furniture.Chair;
+  let dining = null;
   if (table && chair && rng() < 0.8) {
     for (let tries = 0; tries < 60; tries++) {
       const x = (rng()*2 - 1)*(ROOM_W/2 - 1), z = (rng()*2 - 1)*(ROOM_D/2 - 1), turn = rng() < 0.5 ? 0 : Math.PI/2;
@@ -401,8 +428,21 @@ function furnish(key) {
         z0: Math.min(...all.map(r => r.z0)), z1: Math.max(...all.map(r => r.z1)) };
       if (!fits(whole, 0.7, 0.35) || overlaps(whole, underCamera)) continue;
       put('Table', x, z, turn);
+      dining = { x, z };
       chairs.forEach(c => put('Chair', c.x, c.z, c.angle));
       break;
+    }
+  }
+  // a light hanging from the ceiling over the dining table, or else the coffee table — the room's light after dark when
+  // there is one, rather than the lamp's
+  const pendant = furniture.Pendant;
+  if (pendant && rng() < 0.75) {
+    spot = dining ?? at(sofaU, coffeeV);
+    put('Pendant', spot.x, spot.z, 0, { underfoot: true });
+    home.group.children.at(-1).position.y = ROOM_H - pendant.h;
+    if (pendant.bulb) {
+      lampLight.position.copy(pendant.bulb).add(new THREE.Vector3(spot.x, ROOM_H - pendant.h, spot.z));
+      lampLight.userData.there = true;
     }
   }
   // a plant or two, in the corners (not the camera's) or either side of the TV
