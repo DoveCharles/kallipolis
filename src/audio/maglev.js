@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener } from './sfx.js';
+import { listener, outdoors } from './sfx.js';
 
 // ============================================================ the shuttles
 // The shuttles gliding through their solenoid tubes (see updateTrainShuttles in trains/trains.js), which ought to sound
@@ -10,7 +10,7 @@ import { listener } from './sfx.js';
 // the carriage passes through each turn of the coil, "vwom… vwom", faster and faster until it's a flutter at full speed.
 // Sat in a station it idles on a quiet hum.
 //
-// Setting off it charges up — a rising, quickening warble — and pulling into a station it chimes, a soft rising arpeggio.
+// Setting off it whirs up like a motor spinning to speed, and pulling into a station it chimes, a soft rising arpeggio.
 // There are SHUTTLES_MAX loops, handed each frame to the nearest carriages within HEAR_DISTANCE.
 const HUM_HZ = 45, TOP_HZ = 135;           // the hum at a standstill and at full speed
 const TOP_SPEED = 67;                      // units a second at the fastest point of a run (see TRAIN_SHUTTLE_SPEED)
@@ -20,7 +20,7 @@ const REF_DISTANCE = 15, HEAR_DISTANCE = 110;
 const SHUTTLES_MAX = 3;
 const MOVING = 0.5;                        // units a second past which it counts as going
 const CHIME = [660, 880, 1320], CHIME_GAP = 0.13, CHIME_RING = 0.9, CHIME_VOLUME = 0.12;
-const CHARGE_FROM = 160, CHARGE_TO = 1100, CHARGE_TIME = 1.1, CHARGE_VOLUME = 0.07;
+const WHIR_FROM = 70, WHIR_TO = 480, WHIR_TIME = 1.8, WHIR_VOLUME = 0.07;
 
 const shuttles = []; // { out, level, oscillators, whine, throb, panner, lineId }
 const heard = new Map(); // line id -> { x, y, z, speed, moving } as of last frame
@@ -39,7 +39,7 @@ function makeShuttle() {
   panner.panningModel = 'equalpower';
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
-  throb.connect(out).connect(panner).connect(listener.getInput());
+  throb.connect(out).connect(panner).connect(outdoors);
   const layer = (type, level) => {
     const oscillator = context.createOscillator(), gain = context.createGain();
     oscillator.type = type;
@@ -62,7 +62,7 @@ function oneShot(at, seconds, build) {
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  gain.connect(panner).connect(listener.getInput());
+  gain.connect(panner).connect(outdoors);
   const sources = build(gain, context.currentTime);
   sources[sources.length - 1].onended = () => panner.disconnect();
   sources.forEach(s => s.stop(context.currentTime + seconds + 0.05));
@@ -84,34 +84,57 @@ function chime(at) {
   })));
 }
 
-// the charge of a carriage setting off: a tone and its fifth sweeping up, warbling faster as they go, swelling then cut
-function charge(at) {
-  oneShot(at, CHARGE_TIME, (gain, now) => {
-    const context = listener.context, end = now + CHARGE_TIME;
+// the whir of a carriage setting off, like a motor spinning up: a tone and its octave gliding up quick then easing off as
+// they reach speed, an airy hiss riding a few octaves above them, and a faint flutter quickening with the spin, swelling
+// in and then fading away under the hum
+let hiss = null; // a second of white noise, made once
+function whir(at) {
+  oneShot(at, WHIR_TIME, (gain, now) => {
+    const context = listener.context, end = now + WHIR_TIME, spin = WHIR_TIME/3.5;
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(CHARGE_VOLUME, end - 0.15);
+    gain.gain.linearRampToValueAtTime(WHIR_VOLUME, now + 0.35);
+    gain.gain.setValueAtTime(WHIR_VOLUME, end - 0.7);
     gain.gain.linearRampToValueAtTime(0, end);
-    const warble = context.createOscillator(), depth = context.createGain();
-    warble.frequency.setValueAtTime(5, now);
-    warble.frequency.exponentialRampToValueAtTime(28, end);
-    depth.gain.value = 30;
-    warble.connect(depth);
-    warble.start(now);
-    return [warble, ...[1, 1.5].map(ratio => {
-      const oscillator = context.createOscillator();
-      oscillator.frequency.setValueAtTime(CHARGE_FROM*ratio, now);
-      oscillator.frequency.exponentialRampToValueAtTime(CHARGE_TO*ratio, end);
-      depth.connect(oscillator.frequency);
-      oscillator.connect(gain);
+    const flutter = context.createGain(), rotor = context.createOscillator(), depth = context.createGain();
+    flutter.gain.value = 0.85;
+    rotor.frequency.setValueAtTime(WHIR_FROM/6, now);
+    rotor.frequency.setTargetAtTime(WHIR_TO/6, now, spin);
+    depth.gain.value = 0.15;
+    rotor.connect(depth).connect(flutter.gain);
+    flutter.connect(gain);
+    rotor.start(now);
+    const tones = [[1, 'triangle', 0.7], [2.01, 'sine', 0.3]].map(([ratio, type, level]) => {
+      const oscillator = context.createOscillator(), g = context.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(WHIR_FROM*ratio, now);
+      oscillator.frequency.setTargetAtTime(WHIR_TO*ratio, now, spin);
+      g.gain.value = level;
+      oscillator.connect(g).connect(flutter);
       oscillator.start(now);
       return oscillator;
-    })];
+    });
+    if (!hiss) {
+      hiss = context.createBuffer(1, context.sampleRate, context.sampleRate);
+      const data = hiss.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random()*2 - 1;
+    }
+    const noise = context.createBufferSource(), band = context.createBiquadFilter(), air = context.createGain();
+    noise.buffer = hiss;
+    noise.loop = true;
+    band.type = 'bandpass';
+    band.Q.value = 5;
+    band.frequency.setValueAtTime(WHIR_FROM*4, now);
+    band.frequency.setTargetAtTime(WHIR_TO*4, now, spin);
+    air.gain.value = 0.6;
+    noise.connect(band).connect(air).connect(flutter);
+    noise.start(now);
+    return [rotor, noise, ...tones];
   });
 }
 
 /**
  * One frame of the shuttles' sound: hand the loops to the nearest carriages, set each one's pitch and throb from how fast
- * it's going, and charge up or chime as they set off or pull in.
+ * it's going, and whir up or chime as they set off or pull in.
  * @param {{lineId: string, object: THREE.Object3D, arrived: boolean}[]} carriages - every shuttle, as trains.js keeps them
  * @param {number} dt - seconds since last frame
  * @returns {void}
@@ -124,7 +147,7 @@ export function updateShuttleSounds(carriages, dt) {
     const speed = was && dt > 0 ? Math.min(TOP_SPEED*1.5, Math.hypot(at.x - was.x, at.y - was.y, at.z - was.z)/dt) : 0;
     const moving = speed > MOVING, d = Math.hypot(at.x - x, at.y - y, at.z - z);
     if (d <= HEAR_DISTANCE && s.object.visible && was) {
-      if (moving && !was.moving) charge(at);
+      if (moving && !was.moving) whir(at);
       if (s.arrived) chime(at);
     }
     heard.set(s.lineId, { x: at.x, y: at.y, z: at.z, speed, moving });

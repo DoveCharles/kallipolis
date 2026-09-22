@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Engine bench</title>
+<style>
+  body { font: 15px system-ui, sans-serif; margin: 16px; max-width: 760px; background: #fff; color: #111; }
+  label { display: block; margin: 8px 0; }
+  input[type=range] { width: 320px; vertical-align: middle; }
+  button { font: inherit; margin: 4px 6px 4px 0; padding: 4px 12px; }
+  button.on { background: #111; color: #fff; }
+  p { color: #555; }
+</style>
+</head>
+<body>
+<h3>Engine bench</h3>
+<p>Pick a vehicle, then hold <b>Floor it</b> (or the up arrow) to accelerate through the gears; let go to coast down. The sliders drive it by hand when you're not.</p>
+<div id="designs"></div>
+<label>revs <input id="revs" type="range" min="0" max="1" step="0.01" value="0"> <span></span></label>
+<label>throttle <input id="throttle" type="range" min="0" max="1" step="0.01" value="0"> <span></span></label>
+<label>size <input id="size" type="range" min="0.6" max="3" step="0.05" value="1"> <span></span></label>
+<div><button id="start"><b>Start engine</b></button><button id="floor">Floor it ↑</button><button id="stop">Stop</button></div>
+<p id="status"></p>
+<script type="module">
+import { makeEngineVoice, setEngineKind, setEngineVoice, kindOfDesign } from '../src/audio/engine-voice.js';
+
+// the same gearing as audio/engine.js
+const GEAR_SPEED = 8, GEARS = 4, SHIFT_REVS = 0.35, SHIFT_TIME = 0.15, REVS_RATE = 3, TOP_SPEED = 30;
+const DESIGNS = { Car: 1, Twingo: 0.8, FamilyCar: 1, Sedan: 1.1, Taxi: 1, Van: 1.3, Ambulance: 1.5, PoliceCar: 1.1, PickupTruck: 1.3, Canyonero: 1.6, SportsCar: 1, Truck: 2.2, Bus: 2.8 };
+const $ = id => document.getElementById(id);
+const context = new AudioContext();
+const voice = makeEngineVoice(context, context.destination);
+let design = 'Car', running = false, flooring = false, speed = 0, revs = 0, gear = 0, shift = 0, last = performance.now();
+
+for (const [name, size] of Object.entries(DESIGNS)) {
+  const b = document.createElement('button');
+  b.textContent = name;
+  b.onclick = () => { design = name; $('size').value = size; show(); pick(); };
+  $('designs').append(b);
+}
+function pick() {
+  [...$('designs').children].forEach(b => b.classList.toggle('on', b.textContent === design));
+  if (running) setEngineKind(voice, kindOfDesign(design));
+}
+function show() { for (const id of ['revs', 'throttle', 'size']) $(id).nextElementSibling.textContent = (+$(id).value).toFixed(2); }
+for (const id of ['revs', 'throttle', 'size']) $(id).addEventListener('input', show);
+show(); pick();
+
+$('start').onclick = () => { context.resume(); running = true; voice.kind = null; setEngineKind(voice, kindOfDesign(design)); };
+$('stop').onclick = () => { running = false; speed = 0; };
+const floor = on => () => { flooring = on; if (on && !running) $('start').onclick(); };
+$('floor').onpointerdown = floor(true); $('floor').onpointerup = $('floor').onpointerleave = floor(false);
+addEventListener('keydown', e => { if (e.key === 'ArrowUp') floor(true)(); });
+addEventListener('keyup', e => { if (e.key === 'ArrowUp') floor(false)(); });
+
+function frame(t) {
+  const dt = Math.min(0.1, (t - last)/1000); last = t;
+  requestAnimationFrame(frame);
+  if (!voice.kind) return;
+  let throttle;
+  if (flooring || speed > 0.05) {
+    throttle = flooring ? 1 : 0;
+    speed = Math.max(0, Math.min(TOP_SPEED, speed + (flooring ? 6*(1 - speed/TOP_SPEED) + 1 : -4)*dt));
+    const g = Math.min(GEARS - 1, Math.floor(speed/GEAR_SPEED)), top = g === GEARS - 1;
+    if (g > gear && throttle > 0.1) shift = SHIFT_TIME;
+    gear = g; shift = Math.max(0, shift - dt);
+    if (shift) throttle *= 0.15;
+    const through = Math.min(1, (speed - g*GEAR_SPEED)/(GEAR_SPEED*(top ? 2.5 : 1))), floorRevs = g ? SHIFT_REVS : 0;
+    const goal = Math.max(floorRevs + (1 - floorRevs)*through, throttle*0.3);
+    revs += (goal - revs)*Math.min(1, REVS_RATE*dt*(goal < revs - 0.2 ? 4 : 1));
+    $('revs').value = revs; $('throttle').value = throttle; show();
+  } else { revs = +$('revs').value; throttle = +$('throttle').value; gear = 0; }
+  $('status').textContent = `${design}: ${voice.kind} engine · gear ${gear + 1} · ${speed.toFixed(1)} u/s`;
+  setEngineVoice(voice, { revs, throttle, volume: running ? 0.6 + 0.4*throttle : 0, size: +$('size').value, dt });
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

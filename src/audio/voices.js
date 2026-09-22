@@ -1,5 +1,6 @@
 import { camera } from '../core/scene.js';
-import { listener, isMuted } from './sfx.js';
+import { listener, isMuted, heardFrom } from './sfx.js';
+import { melodyOf } from './melodies.js';
 
 // ============================================================ voices
 // People talking babble, Animal Crossing style: every time a speaker's mouth opens on a new syllable (see "talking" in
@@ -8,8 +9,9 @@ import { listener, isMuted } from './sfx.js';
 // start on a consonant (see CONSONANTS): a click or hiss of noise before the voice comes in, a hum through a closed mouth,
 // or the formants gliding in from somewhere else, so it's "ba", "sho", "lee" and not just "a", "o", "ee". And it comes in
 // phrases (see nextSyllable), as speech does: a few syllables at a time with a breath between, every second or third one
-// stressed (longer, louder, higher), the pitch drifting down as the phrase goes on and the last syllable drawn out,
-// falling — or rising, for a question. Each blip is
+// stressed (longer, louder, higher), the pitch following the speaker's own melody through the phrase (see
+// audio/melodies.js: drifting down, climbing, singsong...) and the last syllable drawn out, falling — or rising, for a
+// question. Each blip is
 // built live, like the engine (see engine.js), and gone once it's played. Only those within HEAR_DISTANCE of the camera
 // are heard, so a crowded plaza across town costs nothing.
 const VOWELS = [[800, 1200], [500, 1900], [300, 2300], [500, 900], [350, 800], [650, 1600]]; // [F1, F2] in Hz: a, e, i, o, u, and something in between
@@ -36,7 +38,6 @@ const REF_DISTANCE = 6;            // how near to be heard at full volume
 const VOLUME = 0.22;
 const BLIPS_MAX = 12;              // syllables sounding at once, past which new ones are dropped
 const BEND = 0.1;                  // how far each syllable's pitch strays at random from where the phrase has it, either way
-const DRIFT = 0.12;                // how far the pitch drifts down over a phrase: from this much above the voice's to below
 const STRESS = 0.12;               // how much higher a stressed syllable is
 const SYLLABLE = 0.12;             // an ordinary syllable's length, in seconds (a stressed one's longer, the last longer still)
 
@@ -63,7 +64,7 @@ export function nextSyllable(talker, rng) {
   return {
     open: stressed ? 0.75 + rng()*0.25 : 0.35 + rng()*0.4,
     length: SYLLABLE*phrase.pace*(0.8 + rng()*0.4)*(stressed ? 1.3 : 1)*(last ? 1.7 : 1),
-    intonation: { through: k/Math.max(1, phrase.length - 1), stressed, last, question: phrase.question },
+    intonation: { through: k/Math.max(1, phrase.length - 1), k, stressed, last, question: phrase.question },
   };
 }
 let noise = null; // a second of white noise, for the consonants
@@ -79,28 +80,64 @@ function noiseBuffer(context) {
 /**
  * One syllable of someone's babble.
  * @param {{x: number, y: number, z: number}} at - their head
- * @param {{pitch: number, formant: number, sharpness: number}} voice - its pitch in Hz; how far its formants sit from an
- *   ordinary voice's (the shape of their mouth and throat: above 1 smaller and brighter, below 1 bigger and darker); and how
- *   sharp those formants ring (low breathy, high nasal and buzzy)
+ * @param {{pitch: number, formant: number, sharpness: number, melody?: number}} voice - its pitch in Hz; how far its
+ *   formants sit from an ordinary voice's (the shape of their mouth and throat: above 1 smaller and brighter, below 1 bigger
+ *   and darker); how sharp those formants ring (low breathy, high nasal and buzzy); and the tune it talks in (see
+ *   audio/melodies.js)
  * @param {number} length - seconds until their next syllable
  * @param {number} [loudness=1] - how wide their mouth opens on it, 0 to 1
  * @param {number} [mood=0] - their mood trait: the cheerier, the more their syllables lift, the glummer, the more they sag
- * @param {?{through: number, stressed: boolean, last: boolean, question: boolean}} [intonation] - how the syllable sits in
- *   its phrase (see nextSyllable): how far through it, 0 to 1; whether it's stressed; whether it's the last, and if so
+ * @param {?{through: number, k: number, stressed: boolean, last: boolean, question: boolean}} [intonation] - how the
+ *   syllable sits in its phrase (see nextSyllable): how far through it, 0 to 1, and which syllable; whether it's stressed; whether it's the last, and if so
  *   whether the phrase is a question
  * @returns {void}
  */
 export function babble(at, voice, length, loudness = 1, mood = 0, intonation = null) {
   if (blips >= BLIPS_MAX) return;
   const { pitch } = voice;
-  const { through = 0.5, stressed = false, last = false, question = false } = intonation ?? {};
-  const f = pitch*(1 + (Math.random()*2 - 1)*BEND)*(1 + DRIFT*(1 - 2*through))*(stressed ? 1 + STRESS : 1);
+  const { through = 0.5, k = 0, stressed = false, last = false, question = false } = intonation ?? {};
+  const melody = melodyOf(voice);
+  // (where their melody has them through the phrase — see audio/melodies.js — strayed a little, and lifted if stressed)
+  const f = pitch*(1 + (Math.random()*2 - 1)*BEND)*(1 + melody.shape(through, k))*(stressed ? 1 + STRESS : 1);
   // (the slide through the syllable: a phrase's end falls, or rises for a question; otherwise a little either way, lifted
   // by cheer and sagging with gloom)
-  const slide = last ? (question ? 1.3 : 0.8) : 1 + Math.max(-0.2, Math.min(0.2, mood*0.1 + (Math.random() - 0.5)*0.1));
+  const slide = last ? (question ? 1.3 : 1 - 0.2*melody.fall) : 1 + Math.max(-0.2, Math.min(0.2, mood*0.1 + (Math.random() - 0.5)*0.1));
   // a random vowel, and a random consonant before it
   speak(at, voice, { f, slide, length: length*0.85, level: VOLUME*(0.5 + 0.5*loudness),
     vowel: VOWELS[Math.floor(Math.random()*VOWELS.length)], consonant: CONSONANTS[Math.floor(Math.random()*CONSONANTS.length)] });
+}
+
+/**
+ * How loud someone's babble is: the RMS of a syllable of it, at an ordinary loudness, averaged over the vowels — worked
+ * out as speak makes it (a sawtooth through their two formant bands), so that a real line of theirs (see
+ * audio/dictionary.js) can be said as loud as they babble. A breathy voice's wide bands let more through than a sharp one's.
+ * @param {{pitch: number, formant: number, sharpness: number}} voice - as for babble
+ * @returns {number}
+ */
+export function loudnessOf(voice) {
+  const { pitch, formant, sharpness } = voice, rate = 22050, length = 2048, skip = 512;
+  const level = VOLUME*(0.5 + 0.5*0.65); // (a syllable's loudness is 0.35 to 1, averaging about that)
+  let total = 0;
+  for (const vowel of VOWELS) {
+    // (each band as the Web Audio bandpass is: 0 dB at its peak, as wide as its Q says)
+    const bands = vowel.map((f, k) => {
+      const w = 2*Math.PI*Math.min(f*formant, 0.45*rate)/rate, alpha = Math.sin(w)/(2*sharpness), n = 1 + alpha;
+      return { b: alpha/n, a1: -2*Math.cos(w)/n, a2: (1 - alpha)/n, gain: [1, 0.6][k]*3*Math.sqrt(6/sharpness), x1: 0, x2: 0, y1: 0, y2: 0 };
+    });
+    let sum = 0;
+    for (let n = 0; n < length; n++) {
+      const x = 2*((n*pitch/rate) % 1) - 1;
+      let y = 0;
+      for (const band of bands) {
+        const out = band.b*(x - band.x2) - band.a1*band.y1 - band.a2*band.y2;
+        band.x2 = band.x1; band.x1 = x; band.y2 = band.y1; band.y1 = out;
+        y += out*band.gain;
+      }
+      if (n >= skip) sum += y*y;
+    }
+    total += sum/(length - skip);
+  }
+  return level*Math.sqrt(total/VOWELS.length);
 }
 
 // the cries: an "ah!" (a breath, then an open vowel, high and loud, jumping up and falling away), or a grunt (lower and
@@ -170,7 +207,7 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  gain.connect(panner).connect(listener.getInput());
+  gain.connect(panner).connect(heardFrom(at));
   if (consonant?.noise) {
     // the click or hiss: a burst of noise through a band where that consonant sits, moved by the voice's formants too
     const source = context.createBufferSource(), band = context.createBiquadFilter(), hiss = context.createGain();

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speech bench</title>
+<script type="importmap">{ "imports": { "sam-js": "https://cdn.jsdelivr.net/npm/sam-js@0.3.1/dist/samjs.esm.min.js" } }</script>
+<style>
+  body { font: 15px system-ui, sans-serif; margin: 16px; max-width: 760px; background: #fff; color: #111; }
+  textarea { width: 100%; box-sizing: border-box; font: inherit; height: 4em; }
+  label { display: inline-block; margin: 6px 12px 6px 0; }
+  button { font: inherit; margin: 4px 6px 4px 0; padding: 4px 12px; }
+  canvas { width: 100%; height: 200px; background: #000; display: block; margin-top: 8px; }
+  #phonemes { font-family: ui-monospace, monospace; color: #555; margin-top: 6px; word-break: break-all; }
+  ul { padding-left: 18px; } li { cursor: pointer; } li:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<h3>Speech bench</h3>
+<textarea id="text">Where is the nearest train station?</textarea>
+<div>
+  <label>pitch <input id="pitch" type="range" min="80" max="320" value="130"> <span></span> Hz</label>
+  <label>formant <input id="formant" type="range" min="0.75" max="1.45" step="0.01" value="1"> <span></span></label>
+  <label>sharpness <input id="sharpness" type="range" min="3" max="12" step="0.1" value="6"> <span></span></label>
+  <label>melody <select id="melody"></select></label>
+</div>
+<div>
+  <button id="man">man</button><button id="woman">woman</button><button id="child">child</button>
+  &nbsp; <button id="say"><b>Say</b> (babble voice)</button><button id="sam">SAM</button><button id="wav">save .wav</button>
+</div>
+<div id="phonemes"></div>
+<canvas id="spectrogram" width="1024" height="256"></canvas>
+<ul id="lines"></ul>
+<script type="module">
+import SamJs from 'sam-js';
+import { speakText, phonemesOf, SAMPLE_RATE } from '../src/audio/speech.js';
+import { MELODIES } from '../src/audio/melodies.js';
+
+const $ = id => document.getElementById(id);
+const context = new AudioContext();
+MELODIES.forEach((m, k) => $('melody').add(new Option(m.name, k)));
+const voice = () => ({ pitch: +$('pitch').value, formant: +$('formant').value, sharpness: +$('sharpness').value, melody: +$('melody').value });
+for (const id of ['pitch', 'formant', 'sharpness']) {
+  const show = () => $(id).nextElementSibling.textContent = $(id).value;
+  $(id).oninput = show; show();
+}
+const preset = (p, f, s) => () => { $('pitch').value = p; $('formant').value = f; $('sharpness').value = s; ['pitch', 'formant', 'sharpness'].forEach(id => $(id).oninput()); };
+$('man').onclick = preset(130, 1, 6); $('woman').onclick = preset(220, 1.17, 6); $('child').onclick = preset(290, 1.35, 7);
+
+let last = null;
+function play(samples, rate) {
+  context.resume();
+  const buffer = context.createBuffer(1, samples.length, rate);
+  buffer.getChannelData(0).set(samples);
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(context.destination);
+  source.start();
+}
+function say() {
+  const text = $('text').value;
+  $('phonemes').textContent = SamJs.convert(text) + '  →  ' + phonemesOf(text).map(c => c.phonemes.map(p => p.name + (p.stress ? p.stress : '')).join(' ') + ' ' + c.end).join(' | ');
+  const t0 = performance.now();
+  last = speakText(text, voice());
+  $('phonemes').textContent += `  (${(performance.now() - t0).toFixed(1)} ms)`;
+  if (!last) return;
+  play(last, SAMPLE_RATE);
+  drawSpectrogram(last);
+}
+$('say').onclick = say;
+$('sam').onclick = () => {
+  const v = voice(), clamp = (x, lo, hi) => Math.round(Math.max(lo, Math.min(hi, x))), shape = 128*v.formant;
+  const sam = new SamJs({ pitch: clamp(50*(150/v.pitch)**0.7, 22, 110), mouth: clamp(shape, 90, 200), throat: clamp(shape*0.95, 90, 200), speed: 72 });
+  const samples = sam.buf32($('text').value);
+  if (samples) play(samples, 22050);
+};
+$('wav').onclick = () => {
+  if (!last) return;
+  const data = new DataView(new ArrayBuffer(44 + last.length*2)), put = (o, s) => [...s].forEach((c, k) => data.setUint8(o + k, c.charCodeAt(0)));
+  put(0, 'RIFF'); data.setUint32(4, 36 + last.length*2, true); put(8, 'WAVEfmt '); data.setUint32(16, 16, true);
+  data.setUint16(20, 1, true); data.setUint16(22, 1, true); data.setUint32(24, SAMPLE_RATE, true); data.setUint32(28, SAMPLE_RATE*2, true);
+  data.setUint16(32, 2, true); data.setUint16(34, 16, true); put(36, 'data'); data.setUint32(40, last.length*2, true);
+  last.forEach((v, k) => data.setInt16(44 + k*2, Math.max(-1, Math.min(1, v))*32767, true));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], { type: 'audio/wav' }));
+  a.download = 'line.wav'; a.click();
+};
+
+// a rough spectrogram, 0 to 5.5 kHz, to see the formants move
+function drawSpectrogram(samples) {
+  const canvas = $('spectrogram'), g = canvas.getContext('2d'), N = 512, cols = canvas.width, rows = canvas.height;
+  const image = g.createImageData(cols, rows);
+  const hop = Math.max(1, Math.floor((samples.length - N)/cols)), bins = N/4; // (to a quarter of the rate: ~5.5 kHz)
+  for (let x = 0; x < cols; x++) {
+    const at = x*hop, re = new Float32Array(bins);
+    for (let b = 0; b < bins; b++) {
+      let sr = 0, si = 0;
+      for (let n = 0; n < N; n += 2) {
+        const w = (samples[at + n] ?? 0)*(0.5 - 0.5*Math.cos(2*Math.PI*n/N)), a = 2*Math.PI*b*n/N;
+        sr += w*Math.cos(a); si -= w*Math.sin(a);
+      }
+      re[b] = Math.log10(1e-6 + sr*sr + si*si);
+    }
+    for (let y = 0; y < rows; y++) {
+      const v = Math.max(0, Math.min(255, (re[Math.floor((rows - 1 - y)/rows*bins)] + 4)*50)), o = (y*cols + x)*4;
+      image.data[o] = v; image.data[o + 1] = v; image.data[o + 2] = v; image.data[o + 3] = 255;
+    }
+  }
+  g.putImageData(image, 0, 0);
+}
+
+fetch('../assets/dictionary.txt').then(r => r.text()).then(text => {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && !l.includes('['));
+  const fixed = ['Hello world.', 'Where is the nearest train station?', 'I really like cheese, but not on Tuesdays!',
+    'The quick brown fox jumps over the lazy dog.', 'Bad dog. Big pig. Red leaf. Wet road.'];
+  for (const line of [...fixed, ...lines.slice(0, 40)]) {
+    const li = document.createElement('li');
+    li.textContent = line;
+    li.onclick = () => { $('text').value = line; say(); };
+    $('lines').append(li);
+  }
+});
+</script>
+</body>
+</html>

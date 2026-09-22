@@ -7,6 +7,7 @@ import { scene } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
 import { explode } from '../giblets.js';
 import { babble, nextSyllable } from '../../audio/voices.js';
+import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
 import { footstep } from '../../audio/footsteps.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
@@ -14,6 +15,7 @@ import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FIDGETS, LOOK_MAX_TILT, LOOK_MAX
 import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
+import { MELODIES } from '../../audio/melodies.js';
 import { favoritePeople, isFavoritePerson } from '../../ui/favorites.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
@@ -230,15 +232,18 @@ export const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode ===
  * @param {Person} p - the person
  * @returns {boolean} whether they're in the room
  */
-const FOOTFALLS = 0; // how far through the walk cycle a foot first comes down (the other, half a cycle on)
+const FOOTFALLS = 0.13, STEPS_PER_CYCLE = 4; // how far through the walk cycle a foot first comes down, and how many times
+// one does in a cycle: the Walk clip is two full strides, left, right, left, right, each foot reaching furthest forward there
 // Someone's voice (see audio/voices.js), the same every time for the same person: its pitch, lower for a man than a woman
 // and for someone taller; its formants, likewise lower, and shifted either way on their own, apart from the pitch, so two
-// voices at one pitch can still sound nothing alike; and how sharp those formants ring, from breathy to nasal.
+// voices at one pitch can still sound nothing alike; how sharp those formants ring, from breathy to nasal; and the tune
+// they talk in (see audio/melodies.js).
 function voiceOf(p, i) {
   const own = mulberry32(i*7919 + 13), isMan = personModel?.isMan[i] === 1, tall = Math.sqrt(Math.max(0.5, p.height));
   const pitch = (isMan ? 150 : 250)/tall*(0.85 + 0.3*own());
   const formant = (isMan ? 1 : 1.15)/Math.sqrt(tall)*(0.8 + 0.42*own());
-  return { pitch, formant, sharpness: 3 + 9*own() };
+  const sharpness = 3 + 9*own();
+  return { pitch, formant, sharpness, melody: Math.floor(own()*MELODIES.length), isMan };
 }
 /** Someone's voice (see voiceOf), for a sound made outside the frame loop: a cry as they're hit, say. */
 export const voiceOfPerson = p => voiceOf(p, people.indexOf(p));
@@ -933,8 +938,9 @@ export function updatePeople(t) {
       if (s > 0) {
         const was = p.walkCycle;
         p.walkCycle = (p.walkCycle + (p.traits.backwards ? -1 : 1)*p.stepped/(personModel.stride*s) + 1) % 1;
-        // a foot comes down twice a cycle, at FOOTFALLS and half a cycle on: each is heard (see audio/footsteps.js)
-        if (p.moving && Math.floor((was - FOOTFALLS + 1)*2) !== Math.floor((p.walkCycle - FOOTFALLS + 1)*2)) footstep({ x: p.x, y: p.y, z: p.z }, p.traits.weight);
+        // a foot comes down STEPS_PER_CYCLE times a cycle, from FOOTFALLS on: each is heard (see audio/footsteps.js)
+        const step = c => Math.floor(((c - FOOTFALLS + 1) % 1)*STEPS_PER_CYCLE); // (wrapped, so the cycle coming round isn't a step of its own)
+        if (p.moving && step(was) !== step(p.walkCycle)) footstep({ x: p.x, y: p.y, z: p.z }, p.traits.weight);
       }
       p.idleTime += dt;
       // standing about with nothing to do for a while, now and then a scratch or a think
@@ -990,16 +996,28 @@ export function updatePeople(t) {
       const delighted = pleased && !scaredByBlood; // (blood wins over any other face: whatever they're doing, they look scared — unless they like it)
       // talking, their mouth moves; listening, their expression changes every now and then
       const group = p.group, talking = !!group && group.speaker === p, listening = !!group && !!group.speaker && !talking && p.lookAt === group.speaker;
-      if (!talking) {
+      if (!talking || (p.saying && isGone(p) && !inRoom(p))) {
         p.talkTo = 0;
         p.phrase = null;
+        stopLine(p.saying);
+        p.saying = null;
+      } else if (p.saying) {
+        // saying a real line (see audio/dictionary.js): the mouth opening as wide as it's loud, and a breath once it's done
+        const mouth = lineMouth(p.saying);
+        if (mouth < 0) { p.saying = null; p.talkTo = 0; p.talkIn = 0.3 + peopleRng()*0.3; }
+        else p.talkTo = mouth;
       } else if ((p.talkIn -= dt) <= 0) {
-        // in phrases, with a breath between (see nextSyllable in audio/voices.js)
-        const { open, length, intonation } = nextSyllable(p, peopleRng);
-        p.talkTo = open;
-        p.talkIn = length;
-        // and each syllable they say is heard
-        if (open > 0 && (!isGone(p) || inRoom(p))) babble({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), length, open, p.traits.mood, intonation);
+        const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, heard = !isGone(p) || inRoom(p);
+        // at the start of a phrase, now and then something real instead
+        if (heard && (!p.phrase || p.phrase.said >= p.phrase.length) && (p.saying = sayLine(head, voiceOf(p, i), i, p.traits.mood))) p.phrase = null;
+        else {
+          // in phrases, with a breath between (see nextSyllable in audio/voices.js)
+          const { open, length, intonation } = nextSyllable(p, peopleRng);
+          p.talkTo = open;
+          p.talkIn = length;
+          // and each syllable they say is heard
+          if (open > 0 && heard) babble(head, voiceOf(p, i), length, open, p.traits.mood, intonation);
+        }
       }
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape

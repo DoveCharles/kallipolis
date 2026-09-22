@@ -15,7 +15,8 @@ const STEPS = {
 const VARIANTS = 4;
 const HEAR_DISTANCE = 10, REF_DISTANCE = 1.5;
 const STEP_VOLUME = 0.13;
-const STEPS_MAX_PER_SECOND = 12; // past this many footfalls a second, the rest go unheard
+const STEPS_MAX_PER_SECOND = 24; // past this many footfalls a second, the rest go unheard
+const PITCH_SPREAD = 0.15;        // each step pitched up or down by as much as this, so no two sound quite alike
 
 let buffers = null; // surface -> [AudioBuffer]
 let budget = STEPS_MAX_PER_SECOND, budgetAt = 0;
@@ -37,5 +38,7 @@ export function footstep(at, weight = 1) {
   buffers ??= Object.fromEntries(Object.entries(STEPS).map(([surface, layer]) => [surface, Array.from({ length: VARIANTS }, () => zzfxBuffer(layer))]));
   const surface = S.weatherSnow > 0.2 ? 'snow' : S.weatherRain > 0.2 ? 'wet' : 'dry';
   const set = buffers[surface];
-  playBufferAt(set[Math.floor(Math.random()*set.length)], at, STEP_VOLUME*Math.min(1.4, 0.6 + 0.4*weight), REF_DISTANCE, HEAR_DISTANCE);
+  // (and a heavier tread a little lower)
+  const rate = (1 + (Math.random()*2 - 1)*PITCH_SPREAD)/Math.sqrt(Math.max(0.6, Math.min(1.6, weight)));
+  playBufferAt(set[Math.floor(Math.random()*set.length)], at, STEP_VOLUME*Math.min(1.4, 0.6 + 0.4*weight), REF_DISTANCE, HEAR_DISTANCE, rate);
 }

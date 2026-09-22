@@ -1246,8 +1246,8 @@ function carModelOf(car) { return car.design != null ? carMeshes[car.design] : n
  * @returns {number}
  */
 // what the engine sounds need of a car (see audio/engine.js): where its engine is, how big it is against an ordinary car
-// (bigger, lower), and whether it's running — not stalled, sinking or burning
-const engineOf = car => ({ y: Y_ROAD + carHeight(car)/2, size: carLength(car)/(BOX_CAR_LENGTH*S.peopleSize), running: !car.sinking && !(car.stall > 0) && car.fuse == null });
+// (bigger, lower), whether it's running — not stalled, sinking or burning — and its design, for the kind of engine
+const engineOf = car => ({ y: Y_ROAD + carHeight(car)/2, size: carLength(car)/(BOX_CAR_LENGTH*S.peopleSize), running: !car.sinking && !(car.stall > 0) && car.fuse == null, design: carModelOf(car)?.name });
 function carLength(car) { const cm = carModelOf(car); return (cm ? cm.length : car.length)*BOX_CAR_LENGTH*S.peopleSize; }
 
 /**

@@ -66,12 +66,52 @@ const limiter = context.createDynamicsCompressor();
 limiter.threshold.value = -10; limiter.knee.value = 6; limiter.ratio.value = 12; limiter.attack.value = 0.003; limiter.release.value = 0.25;
 listener.setFilter(limiter);
 
+// Inside a building (see buildings/interior.js), whatever's outside it is heard through the walls: everything out there —
+// traffic, weather, the city — goes by way of `outdoors`, a lowpass and a drop in level that stand wide open until the
+// room's entered, then close to MUFFLED_HZ and MUFFLED_LEVEL. What's in the room with you (someone talking, their steps)
+// goes straight to the ear: a sound says where it is with heardFrom, which picks.
+const MUFFLED_HZ = 450, MUFFLED_LEVEL = 0.55, OPEN_HZ = 22000, MUFFLE_TIME = 0.015;
+const walls = context.createBiquadFilter(), wallsLevel = context.createGain();
+walls.type = 'lowpass';
+walls.frequency.value = OPEN_HZ;
+walls.Q.value = 0.5;
+/** Where anything outside goes on its way to the ear, muffled while you're indoors. */
+export const outdoors = walls;
+walls.connect(wallsLevel).connect(listener.getInput());
+let inRoom = null; // (x, y, z) => whether that's in the room you're in; null while outdoors
+/**
+ * Go indoors, or back out: sounds outside muffled or not.
+ * @param {?function(number, number, number): boolean} contains - whether a point's in the room with you; null to go out
+ * @returns {void}
+ */
+export function setIndoors(contains) {
+  inRoom = contains;
+  const now = context.currentTime;
+  walls.frequency.setTargetAtTime(contains ? MUFFLED_HZ : OPEN_HZ, now, MUFFLE_TIME);
+  wallsLevel.gain.setTargetAtTime(contains ? MUFFLED_LEVEL : 1, now, MUFFLE_TIME);
+}
+/**
+ * Where a sound at `at` should go: straight to the ear if it's in the room with you, through the walls if not.
+ * @param {{x: number, y: number, z: number}} at
+ * @returns {AudioNode}
+ */
+export const heardFrom = at => inRoom?.(at.x, at.y, at.z) ? listener.getInput() : outdoors;
+
 // Browsers keep audio suspended until the page has been interacted with: wake it on the first press.
 function unlock() {
   if (context.state === 'suspended') context.resume();
   if (context.state === 'running') ['pointerdown', 'keydown'].forEach(type => window.removeEventListener(type, unlock, true));
 }
 ['pointerdown', 'keydown'].forEach(type => window.addEventListener(type, unlock, true));
+
+// Switched away to another tab, it goes quiet: the audio's suspended (which would otherwise leave the rain, the engines
+// and the hum droning on unchanged, the frames that steer them having stopped too) and picked up again on coming back.
+let hiddenAway = false; // (suspended by this rather than never woken, so coming back doesn't wake it before a press has)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (context.state === 'running') { hiddenAway = true; context.suspend(); }
+  } else if (hiddenAway) { hiddenAway = false; context.resume(); }
+});
 
 // The Sound toggle in World settings (see ui/sound.js) mutes everything, the engine loop included, at the listener.
 let muted = false;
@@ -103,22 +143,26 @@ function variantsOf(name) {
  * @param {number} refDistance - how near to be heard at full volume
  * @param {number} [maxDistance] - if given, it fades out evenly from refDistance to nothing at all here, rather than tailing
  *   off slowly and forever
- * @returns {void}
+ * @param {number} [rate=1] - how fast it's played: above 1, higher and shorter; below, lower and longer
+ * @param {AudioNode[]} [through=[]] - filters to pass it through on the way, in order
+ * @returns {?AudioBufferSourceNode} what's playing it, to stop it early; or null, if it isn't played
  */
-export function playBufferAt(buffer, at, volume, refDistance, maxDistance) {
-  if (muted || context.state !== 'running' || voices >= VOICES_MAX) return;
+export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate = 1, through = []) {
+  if (muted || context.state !== 'running' || voices >= VOICES_MAX) return null;
   const source = context.createBufferSource(), gain = context.createGain(), panner = context.createPanner();
   source.buffer = buffer;
+  source.playbackRate.value = rate;
   gain.gain.value = volume;
   panner.panningModel = 'equalpower';
   panner.distanceModel = maxDistance ? 'linear' : 'inverse';
   panner.refDistance = refDistance;
   if (maxDistance) panner.maxDistance = maxDistance;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  source.connect(gain).connect(panner).connect(listener.getInput());
+  [...through, gain].reduce((from, to) => from.connect(to), source).connect(panner).connect(heardFrom(at));
   voices++;
   source.onended = () => { voices--; panner.disconnect(); };
   source.start();
+  return source;
 }
 /**
  * Builds a ZzFX sound's samples into an AudioBuffer (the layer lists as in SOUNDS).
@@ -163,6 +207,8 @@ export function playSound(name, at, volume = 1, after = 0) {
     sound.position.set(at.x, at.y, at.z);
     scene.add(sound);
     sound.updateMatrixWorld();
+    sound.gain.disconnect();
+    sound.gain.connect(heardFrom(at));
     sound.onEnded = () => { voices--; sound.isPlaying = false; scene.remove(sound); sound.disconnect(); };
     voices++;
     sound.play(delay + after);

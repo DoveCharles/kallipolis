@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener } from './sfx.js';
+import { listener, outdoors } from './sfx.js';
 
 // ============================================================ buzzing
 // The buzz of the bees flying near the camera (see updateBees in life/bees.js), a loop synthesized live like the engines
@@ -40,7 +40,7 @@ function makeBuzz() {
   panner.distanceModel = 'linear';
   panner.refDistance = REF_DISTANCE;
   panner.maxDistance = HEAR_DISTANCE;
-  oscillator.connect(filter).connect(level).connect(out).connect(panner).connect(listener.getInput());
+  oscillator.connect(filter).connect(level).connect(out).connect(panner).connect(outdoors);
   [oscillator, waver, flutter].forEach(o => o.start());
   return { out, oscillator, filter, panner, bee: null };
 }

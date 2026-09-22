@@ -70,6 +70,11 @@ const DRIVE_COLOR = 0xb0ac9f;  // paving rather than bare ground, so the path of
 // offset below the one under it, the way a farmland field sits over its tracks (see makeFlatZoneMesh).
 const LAWN_BIAS = -3, DRIVE_BIAS = -4;
 const HEDGE_HEIGHT = 0.85, HEDGE_WIDTH = 0.35, HEDGE_COLOR = 0x4a6b33;
+// Some plots are fenced rather than hedged, in the house's own paint so the two read as one property: either a picket
+// fence, or long solid panels slotted between posts over a concrete base.
+const FENCE_CHANCE = 0.3, FENCE_HEIGHT = 0.9, PICKET_SPACING = 0.4;
+const PANEL_CHANCE = 0.5, PANEL_BAY = 2.4, PANEL_BASE = 0.28, PANEL_TOP = 1.25;
+const PANEL_POST = new THREE.Color(0xd8d8d4), PANEL_FOOT = new THREE.Color(0xc4c3be), PANEL_TRIM = new THREE.Color(0x4a4a4a);
 const LANE_JOIN = 0.05;     // how near a lane's end has to come to another lane to be counted as ending on it
 
 // The five designs, baked once when the model loads: null until then, and a suburb generated in the meantime gets its
@@ -430,7 +435,9 @@ export function generateSuburbsContent(zone, poly, cutouts, blockers) {
   // shrunk a hair so a house merely touching a cut-out's edge doesn't count as in it
   const inBlocker = App.createRegionTester(blockers.length ? App.offsetPaths(blockers, -0.01, ClipperLib.JoinType.jtMiter) : []);
   const tint = resolveParkTint(zone), noise = resolveGrassNoiseStrength(zone);
-  const drives = createMeshBuilder(), hedges = createMeshBuilder();
+  const drives = createMeshBuilder(), hedges = createMeshBuilder(), fences = createMeshBuilder();
+  const fencePaint = []; // [first vertex, end vertex, color] for each stretch of fence, painted in once they're built
+  const paintFence = (color, draw) => { const from = fences.vertexCount(); draw(); fencePaint.push([from, fences.vertexCount(), color]); };
   const density = s.suburbDensity!=null ? s.suburbDensity : 0.9;
   lots.forEach(lot => {
     App.insetPolygonExact(lot, PLOT_MARGIN).forEach(plot => {
@@ -447,12 +454,13 @@ export function generateSuburbsContent(zone, poly, cutouts, blockers) {
       const street = streetFor(centroid(plot), streets);
       const design = designs && rng() < density ? designs[Math.floor(rng()*designs.length)] : null;
       const spot = design && street ? placeHouse(plot, design.half, street, inBlocker) : null;
-      let drive = null;
+      let drive = null, paint = null;
       if (spot) {
         // its windows draw from a stream of their own, keyed to the same ground the plot is, so putting lights in them
         // doesn't shift the plot's own stream and rearrange every hedge in every suburb ever saved
         const windowRng = mulberry32(((s.seed>>>0) ^ Math.imul(Math.round(key.x*4), 0xC2B2AE35) ^ Math.imul(Math.round(key.z*4), 0x27D4EB2F)) >>> 0);
-        const group = houseMesh(design, paintFor(rng), windowRng, rng() < HOUSE_LIT_CHANCE);
+        paint = paintFor(rng);
+        const group = houseMesh(design, paint, windowRng, rng() < HOUSE_LIT_CHANCE);
         group.name = 'Building';
         group.userData.buildingKind = 'house'; // what its card says about it: see building-types.js
         group.position.set(spot.at.x, Y_PARK, spot.at.z);
@@ -464,9 +472,22 @@ export function generateSuburbsContent(zone, poly, cutouts, blockers) {
         zone.buildingsGroup.add(group);
         drive = frontPath(spot, design.half, lot, inBlocker, drives);
       }
-      if (s.suburbHedges !== false) hedgeRound(plot, drive, hedges, rng);
+      if (s.suburbHedges === false) return;
+      // whether it's fenced comes from a stream of its own too, so fencing some plots doesn't reshuffle the rest
+      const fenceRng = mulberry32(((s.seed>>>0) ^ Math.imul(Math.round(key.x*4), 0x165667B1) ^ Math.imul(Math.round(key.z*4), 0xD3A2646C)) >>> 0);
+      if (paint && fenceRng() < FENCE_CHANCE) {
+        if (fenceRng() < PANEL_CHANCE) panelFenceRound(plot, drive, fences, paintFence, paint);
+        else paintFence(paint, () => fenceRound(plot, drive, fences));
+      } else hedgeRound(plot, drive, hedges, rng);
     });
   });
+  const fenceMesh = builderMesh(fences, 0xffffff, 'Fence', { vertexColors: true, roughness: 0.8 });
+  if (fenceMesh) {
+    const color = new Float32Array(fenceMesh.geometry.attributes.position.count*3);
+    fencePaint.forEach(([from, to, c]) => { for (let v=from; v<to; v++) { color[v*3] = c.r; color[v*3+1] = c.g; color[v*3+2] = c.b; } });
+    fenceMesh.geometry.setAttribute('color', new THREE.BufferAttribute(color, 3));
+    zone.buildingsGroup.add(fenceMesh);
+  }
   const driveMesh = builderMesh(drives, DRIVE_COLOR, 'Driveway', { polygonOffset: true, polygonOffsetFactor: DRIVE_BIAS, polygonOffsetUnits: DRIVE_BIAS });
   if (driveMesh) zone.buildingsGroup.add(driveMesh);
   const hedgeMesh = builderMesh(hedges, HEDGE_COLOR, 'Hedge', { roughness: 1 });
@@ -500,6 +521,56 @@ function hedgeRound(plot, drive, hedges, rng) {
       const t = (k+0.5)/pieces, at = { x: a.x + (b.x-a.x)*t, z: a.z + (b.z-a.z)*t };
       if (drive && distPointSegment(at, drive[0], drive[1]) < DRIVE_WIDTH/2 + 0.7) continue;
       hedges.addBox(at.x, at.z, dx, dz, len/pieces/2 + 0.08, HEDGE_WIDTH + rng()*0.1, Y_PARK, Y_PARK + HEDGE_HEIGHT + rng()*0.25);
+    }
+  }
+}
+// A picket fence round a plot, broken where the front path crosses it like a hedge is: pickets along each side, and a
+// pair of rails behind them along each unbroken run.
+function fenceRound(plot, drive, fences) {
+  for (let i=0;i<plot.length;i++) {
+    const a = plot[i], b = plot[(i+1)%plot.length], len = Math.hypot(b.x-a.x, b.z-a.z);
+    if (len < 0.3) continue;
+    const dx = (b.x-a.x)/len, dz = (b.z-a.z)/len, pieces = Math.max(1, Math.round(len/PICKET_SPACING));
+    const at = t => ({ x: a.x + (b.x-a.x)*t, z: a.z + (b.z-a.z)*t });
+    const rail = (t0, t1) => {
+      const p = at((t0+t1)/2), half = (t1-t0)*len/2;
+      [0.3, 0.68].forEach(h => fences.addBox(p.x - dz*0.05, p.z + dx*0.05, dx, dz, half, 0.025, Y_PARK + h*FENCE_HEIGHT - 0.04, Y_PARK + h*FENCE_HEIGHT + 0.04));
+    };
+    let runStart = null;
+    for (let k=0;k<pieces;k++) {
+      const t = (k+0.5)/pieces, p = at(t);
+      if (drive && distPointSegment(p, drive[0], drive[1]) < DRIVE_WIDTH/2 + 0.7) {
+        if (runStart != null) rail(runStart, k/pieces);
+        runStart = null;
+        continue;
+      }
+      if (runStart == null) runStart = k/pieces;
+      fences.addBox(p.x, p.z, dx, dz, 0.055, 0.02, Y_PARK, Y_PARK + FENCE_HEIGHT);
+    }
+    if (runStart != null) rail(runStart, 1);
+  }
+}
+// A panel fence round a plot: each side split into bays, a solid panel in each over a concrete base, with a post at
+// either end of it. Bays the front path runs through are left out, posts and all, for the gap.
+function panelFenceRound(plot, drive, fences, paintFence, paint) {
+  for (let i=0;i<plot.length;i++) {
+    const a = plot[i], b = plot[(i+1)%plot.length], len = Math.hypot(b.x-a.x, b.z-a.z);
+    if (len < 0.3) continue;
+    const dx = (b.x-a.x)/len, dz = (b.z-a.z)/len, bays = Math.max(1, Math.round(len/PANEL_BAY)), bay = len/bays;
+    const at = t => ({ x: a.x + dx*t, z: a.z + dz*t });
+    const post = t => { const p = at(t); paintFence(PANEL_POST, () => fences.addBox(p.x, p.z, dx, dz, 0.1, 0.1, Y_PARK, Y_PARK + PANEL_TOP + 0.08)); };
+    let lastPost = -1;
+    for (let k=0;k<bays;k++) {
+      const p = at((k+0.5)*bay), half = bay/2 - 0.1;
+      if (drive && distPointSegment(p, drive[0], drive[1]) < DRIVE_WIDTH/2 + bay/2) continue;
+      if (lastPost !== k) post(k*bay);
+      post((k+1)*bay); lastPost = k+1;
+      paintFence(PANEL_FOOT, () => fences.addBox(p.x, p.z, dx, dz, half, 0.05, Y_PARK, Y_PARK + PANEL_BASE));
+      paintFence(PANEL_TRIM, () => {
+        fences.addBox(p.x, p.z, dx, dz, half, 0.045, Y_PARK + PANEL_BASE, Y_PARK + PANEL_BASE + 0.04);
+        fences.addBox(p.x, p.z, dx, dz, half, 0.045, Y_PARK + PANEL_TOP - 0.04, Y_PARK + PANEL_TOP);
+      });
+      paintFence(paint, () => fences.addBox(p.x, p.z, dx, dz, half, 0.035, Y_PARK + PANEL_BASE + 0.04, Y_PARK + PANEL_TOP - 0.04));
     }
   }
 }
