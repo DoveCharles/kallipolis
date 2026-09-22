@@ -67,7 +67,7 @@ export function serializeProject() {
     favorites: savedFavorites(), // (only those that can be found again in a reloaded city: see ui/favorites.js)
     roads: {
       nodeSeq: S.roadNodeSeq, lineSeq: S.roadLineSeq, networkSeq: S.roadNetworkSeq,
-      walkwayOrder: S.walkwayOrder.slice(),
+      walkwayOrder: (S.walkwayOrder || []).slice(), // (defensively: same fallback loadProjectFromData below already uses on the way back in)
       nodes,
       lines: finishedLines.map(l => ({ id:l.id, nodeIds:l.nodeIds.slice(), width:l.width,
         color: colorToHex(l.color, ROAD_COLOR), sidewalkWidth:l.sidewalkWidth,

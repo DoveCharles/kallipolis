@@ -1,0 +1,144 @@
+/* A reusable meter. The default shape is horizontal: a bar growing left (negative, red) or right (positive, green)
+   from the middle, its running total, an expandable breakdown below it, and notices that fly out to its left when
+   something moves it (the morality meter in index.html, driven by src/ui/morality.js, is that shape). Add
+   .meter-vertical for a narrow gauge that fills bottom-to-top instead, with no middle to mark (the car card's boost
+   meter in src/life/car-card.js is that shape) — see the .meter-vertical rules below for what it overrides. Either
+   way, this file only knows about the .meter-* classes — nothing here is specific to any one stat; an instance
+   supplies its own container id for its script to hook onto and its own heading text.
+
+   To add another meter: give its container element a unique id and class="meter" (plus .meter-vertical if it's that
+   shape), build it from the same .meter-head / .meter-readout / .meter-details / .meter-notices pieces as an existing
+   one (a vertical gauge only needs .meter-head and .meter-readout — see the boost meter), and drive it with a script
+   that looks up its own children with meterEl.querySelector('.meter-fill') etc. rather than by id, the way
+   src/ui/morality.js and src/life/car-card.js both do. Position each instance by its own id in style.css: the base
+   .meter position here is just a fallback for whichever one doesn't bother to set its own.
+
+   Colour is the one thing an instance is expected to override: --meter-pos and --meter-neg (set on :root and
+   html.win3 in style.css, alongside the rest of the palette) are what "positive" and "negative" render as — swap
+   them per instance with a modifier class if a future meter shouldn't be green/red. */
+
+.meter {
+  position:fixed; top:16px; right:16px; font-family:var(--mono); font-size:11px;
+  color:var(--text-dim); background:var(--bg-panel); border:1px solid var(--border);
+  border-radius:8px; padding:8px 12px; width:290px; text-align:left; line-height:1.4;
+}
+.meter span { color:var(--accent); }
+.meter-head { display:flex; align-items:center; gap:8px; }
+.meter .meter-title { color:var(--text); }
+.meter .meter-value { min-width:40px; text-align:right; font-weight:700; color:var(--text-dim); }
+.meter-toggle {
+  font-family:var(--mono); font-size:10px; color:var(--text-dim); background:var(--bg-input);
+  border:1px solid var(--border); border-radius:4px; padding:1px 6px; cursor:pointer;
+}
+.meter-toggle:hover { color:var(--text); }
+/* the row holding the track and the running total */
+.meter-readout { display:flex; align-items:center; gap:8px; margin:6px 0 2px; }
+.meter-track { flex:1; position:relative; }
+.meter-bar { position:relative; height:16px; background:var(--bg-input); border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+.meter-fill { position:absolute; top:0; bottom:0; left:50%; width:0; transition:left .3s, width .3s, background-color .3s; }
+/* the middle, neutral: a line through the bar that sticks out past it, so it reads as a needle's zero */
+.meter-center { position:absolute; top:-4px; bottom:-4px; left:50%; width:2px; margin-left:-1px; background:var(--text); border-radius:1px; pointer-events:none; }
+
+/* .meter-vertical: a narrow gauge that fills bottom-to-top instead of out from the middle — for something that only
+   ever runs one way (0 upward), with nothing to call "neutral", so it carries no .meter-center and skips it defensively
+   below in case one's left in the markup by mistake. .meter-readout's own flex-direction:row/column difference is what
+   turns .meter-track's existing `flex:1` into height instead of width, so only the bar's own shape and the fill's
+   growth axis need overriding here. */
+.meter.meter-vertical { width:56px; text-align:center; }
+.meter-vertical .meter-head { justify-content:center; }
+.meter-vertical .meter-readout { flex-direction:column; height:160px; margin:8px 0 2px; }
+.meter-vertical .meter-track { width:100%; display:flex; justify-content:center; }
+.meter-vertical .meter-bar { width:16px; height:100%; }
+.meter-vertical .meter-fill { top:auto; left:0; right:0; bottom:0; width:auto; height:0; transition:height .3s, background-color .3s; }
+.meter-vertical .meter-center { display:none; }
+
+.meter-details { margin-top:8px; border-top:1px solid var(--border); padding-top:6px; max-height:calc(100vh - 110px); overflow-y:auto; }
+.meter-row { display:grid; grid-template-columns:1fr 36px 52px; gap:4px; }
+.meter-row.sub { color:var(--text-dim); opacity:.85; padding-left:8px; }
+.meter-row:not(.sub) { color:var(--text); margin-top:3px; }
+.meter-count, .meter-score { text-align:right; }
+.meter-gap { height:4px; }
+.meter :is(.meter-label, .meter-count, .meter-score) { color:inherit; white-space:nowrap; }
+.meter .meter-score.pos { color:var(--meter-pos); }
+.meter .meter-score.neg { color:var(--meter-neg); }
+.meter-notices { position:absolute; top:0; right:calc(100% + 8px); display:flex; flex-direction:column; align-items:flex-end; gap:4px; pointer-events:none; }
+.meter-notice {
+  white-space:nowrap; text-align:right; font-family:var(--mono); font-size:11px; color:var(--meter-notice-text);
+  background:var(--bg-panel); border:1px solid var(--border); border-left:3px solid var(--text-dim);
+  border-radius:5px; padding:3px 8px; min-width:190px; animation:meter-notice-in .25s ease-out;
+  /* no opacity/transform transition here: the in and out animations are what move it, and a transition on the same
+     properties would fight them */
+  /* how far forward in the stack it sits: the top notice is a step ahead of the one below it, so anything coming up from
+     below arrives behind the ones above rather than through them (see rankNotices in src/ui/morality.js) */
+  position:relative; z-index:var(--notice-z, 0);
+}
+/* what the event was about: one a line, under a rule across the notice, in charcoal on alternating stripes. The
+   family is set here as well as on the notice so the names fall back the same way the heading does — in the Windows
+   3.0 look the bitmap font is missing some letters, and an inherited family would swap the whole line for Arial. */
+.meter-notice-names { margin-top:3px; border-top:1px solid var(--border); font-family:var(--mono); font-size:10px; color:var(--meter-notice-name); }
+.meter-notice-names > div { line-height:1.35; margin:0 -8px; padding:1px 8px; }
+.meter-notice-names > div:nth-child(odd) { background:var(--meter-notice-stripe-a); }
+.meter-notice-names > div:nth-child(even) { background:var(--meter-notice-stripe-b); }
+.meter-notice.pos { border-left-color:var(--meter-pos); }
+.meter-notice.neg { border-left-color:var(--meter-neg); }
+.meter .meter-notice.pos .meter-notice-score { color:var(--meter-pos); font-weight:700; }
+.meter .meter-notice.neg .meter-notice-score { color:var(--meter-neg); font-weight:700; }
+/* the score follows the heading it belongs to, and "x3" follows that */
+.meter-notice-score { margin-left:5px; }
+.meter .meter-notice-count { color:var(--meter-notice-dim); }
+/* The "x3": how many of them there have been in this run. Each time it goes up it lurches into place, swinging in out of
+   counter-clockwise, dipping and swelling at the bottom of the swing and rocking back level; the higher the count, the
+   further round, further down and bigger it goes (--count-turn, --count-dip and --count-grow, set per notice in
+   src/ui/morality.js), and the further its colour walks from a dim grey towards red (--count-color). Only rotation, height
+   and size move: its place along the line doesn't. Up to x4 those are all neutral, so it sits still and simply darkens. */
+.meter .meter-notice-count.meter-count-jolt {
+  display:inline-block; position:relative; transform-origin:50% 70%;
+  color:var(--count-color); font-weight:700; backface-visibility:hidden;
+  animation:meter-count-jolt .78s cubic-bezier(.16,.84,.24,1) both;
+}
+@keyframes meter-count-jolt {
+  0%   { transform:rotate(var(--count-turn)) translateY(calc(-1*var(--count-dip))) scale(1); color:var(--count-color); }
+  55%  { transform:rotate(calc(-0.18*var(--count-turn))) translateY(var(--count-dip)) scale(var(--count-grow)); }
+  80%  { transform:rotate(calc(0.08*var(--count-turn))) translateY(calc(-0.25*var(--count-dip))) scale(calc(1 + (var(--count-grow) - 1)*0.25)); }
+  100% { transform:rotate(0deg) translateY(0) scale(1); }
+}
+/* Over: up out of the stack, drifting to one side or the other as it goes, gone in about a third of a second. The drift is
+   --notice-exit-x, picked per notice in src/ui/morality.js, so a few going at once leave in slightly different directions.
+   It's out of the flex stack by then (dropNotice takes it out of the flow by making it fixed), hence fixed — and left where it was, or it
+   would jump to the corner on its way out. */
+.meter-notice.meter-notice-leaving {
+  position:fixed; margin:0; animation:meter-notice-out .3s ease-out both;
+  filter:brightness(.6); /* darkened as it goes, behind the notices that stay */
+}
+@keyframes meter-notice-out {
+  0%   { opacity:1; transform:translate(0, 0); }
+  100% { opacity:1; transform:translate(var(--notice-exit-x, 0px), calc(-1*var(--notice-rise, 26px))); }
+}
+@keyframes meter-notice-in { from { opacity:0; transform:translateX(12px); } }
+/* in the Windows 3.0 look it's a window like the Splinetopia one, its title bar carrying the instance's own heading
+   (see .win3-title in index.html), which opens and closes the details */
+html.win3 .meter { background:#fff; color:#000; border:4px solid var(--w3-face); border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000; top:17px; right:17px; padding:0 10px 10px; }
+html.win3 .meter .win3-titlebar { margin:0 -10px 8px; }
+html.win3 .meter :is(.meter-title, .meter-toggle) { display:none; }
+html.win3 .meter .meter-head { display:none; }
+html.win3 .meter .meter-readout { margin:0; }
+html.win3 :is(.meter-bar, .meter-details) { border-color:#000; border-radius:0; }
+html.win3 .meter-bar { background:#fff; }
+html.win3 .meter-center { background:#000; border-radius:0; }
+html.win3 :is(.meter .meter-title, .meter-row:not(.sub)) { color:#000; }
+html.win3 .meter-row.sub { color:#404040; }
+html.win3 .meter-notice { background:#fff; border:1px solid #000; border-radius:0; box-shadow:2px 2px 0 #000; font-size:11px; }
+/* the black border above is a shorthand, so it also sets border-left-color; these win, being more specific, and also
+   thicken that one side to 4px the way the win3 look thickens other borders */
+html.win3 .meter-notice.pos { border-left:4px solid var(--meter-pos); }
+html.win3 .meter-notice.neg { border-left:4px solid var(--meter-neg); }
+
+/* the phone layout — must match style.css's own phone breakpoint (@media (max-width: 760px)) */
+@media (max-width: 760px) {
+  /* the meter goes under the buttons rather than beside them, where it would crowd them off a 375px screen */
+  html.win3 .meter, .meter {
+    top:calc(56px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left));
+    right:calc(8px + env(safe-area-inset-right)); width:auto; max-width:none;
+  }
+  .meter-details { max-height:32vh; overflow-y:auto; }
+}

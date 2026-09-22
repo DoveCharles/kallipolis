@@ -13,7 +13,7 @@ export const TRAITS = {
   weight:    { base: 1, min: 0.1, max: 10 }, // how much a car crashing into it slows down: see slowedBy in life/traffic.js
   recovery:   { base: 1, min: 0.1, max: 10}, //how fast a car recovers from a burnt out engine, how likely they are to burn out
   health:    { base: 1, min: 0.01, max: 10}, //health multiplier
-  tank:      { base: 1, min: 0.01, max: 10}, //how many seconds of boost are available
+  energy:      { base: 1, min: 0.01, max: 10}, //how many seconds of boost are available: multiplies BOOST_ENERGY_BASE, see boostEnergyMax in life/traffic.js
   size:      { base: 1, min: 0.3, max: 3 }, // scales how big something's drawn: a person's height (see people.js) or a car's whole body, engine note and wheels (see carScale in life/traffic.js)
   chatty:    { base: 1, min: 0, max: 10 },
   talkative: { base: 1, min: 0.05, max: 20 },
@@ -51,7 +51,7 @@ export const TRAITS = {
   drunk: {base: 0, min: 0, max: 1, combine: 'on'} ,//steering randomly switches direction for up to 2 seconds, people randomly fall over or throw up
   unstable: {base: 0, min: 0, max: 1, combine: 'add'}, //chance to be hurt X5 more than usual
   explosive: {base: 0, min: 0, max: 1, combine: 'on'}, //blow up on death, killing bystanders; if already blowing up, explosion becomes much bigger
-  aqua: {base: 0, min: 0, max: 1, combine: 'on'}, //walks on water, or at least doesn't drown
+  aqua: {base: 0, min: 0, max: 1, combine: 'on'}, //walks on water, or at least doesn't drown; a car with it drives straight over open water instead of sinking (see driveByHand in life/traffic.js)
 };
 
 // Shorthands: a trait named here counts as if the traits listed were written beside it, at the same amounts and stacking

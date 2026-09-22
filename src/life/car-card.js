@@ -31,14 +31,49 @@ function showCarCard(i, info, car) {
   card.show({ ...info, loves: garbled(info.loves, traits, seed), hates: garbled(info.hates, traits, seed) });
   drawCarThumbnail(i);
   card.setFavorite({ key: car, kind: 'Car', follow: () => App.followCar(car) });
+  boostMeter.hidden = false;
 }
 function hideCarCard() {
   shown = -1;
   card.hide();
+  boostMeter.hidden = true;
 }
 
 // the thumbnail: an isometric-angled view of the car's own design (see carThumbnailScene), drawn once when the card opens
 const drawThumbnail = makeThumbnailDrawer(card.canvas);
 function drawCarThumbnail(i) { drawThumbnail(carThumbnailScene(i)); } // (no thumbnail of a box car, before the models have loaded)
 
-Object.assign(App, { showCarCard, hideCarCard });
+// ---------------------------------------------------------- boost meter
+// A vertical gauge (.meter.meter-vertical, src/ui/meter.css) grouped with the card by sitting right against its left
+// edge (see #car-boost-meter in style.css), shown and hidden alongside it above. No .meter-center: unlike the morality
+// meter it has nothing to call "neutral" to mark, just 0 upward.
+// Driven by the car's own energy trait, in seconds of boost it has to spend (see boostEnergyMax in traffic.js):
+// setCarBoost below is called from there — once when the card opens (showing whatever level the car already has) and
+// then every frame it's actually driven, as it's spent holding run.
+const boostMeter = document.createElement('div');
+boostMeter.id = 'car-boost-meter';
+boostMeter.className = 'meter meter-vertical';
+boostMeter.hidden = true;
+boostMeter.innerHTML =
+  '<div class="win3-titlebar"><div class="win3-title">Boost</div></div>' +
+  '<div class="meter-head"><span class="meter-title">Boost</span></div>' +
+  '<div class="meter-readout">' +
+    '<span class="meter-value">—</span>' +
+    '<div class="meter-track"><div class="meter-bar"><div class="meter-fill"></div></div></div>' +
+  '</div>';
+document.body.append(boostMeter);
+const boostFill = boostMeter.querySelector('.meter-fill');
+const boostValue = boostMeter.querySelector('.meter-value');
+/**
+ * Show how much boost a car has left: `energy` of `max` seconds (see boostEnergyMax, traffic.js), as a fraction filling
+ * the gauge bottom-to-top and the seconds themselves, to one decimal place, below it.
+ * @param {number} energy - seconds of boost left
+ * @param {number} max - seconds of boost it started with
+ * @returns {void}
+ */
+function setCarBoost(energy, max) {
+  boostFill.style.height = (max > 0 ? Math.max(0, Math.min(1, energy/max)) : 0)*100 + '%';
+  boostValue.textContent = Math.max(0, energy).toFixed(1);
+}
+
+Object.assign(App, { showCarCard, hideCarCard, setCarBoost });
