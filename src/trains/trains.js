@@ -52,11 +52,16 @@ function setTrainCardPassengers(names, tracked = -1, onPick = null) {
 // ---------------------------------------------------------- trains
 // Train lines live in roadNodes/roadLines alongside roads (line.kind === 'train'), so drawing, dragging, joining,
 // inserting and deleting all run through the same editing code. What differs: their nodes carry a height (y) and
-// move in 3D, the line always curves smoothly through them (there's no poly/spline — a node is either plain track
-// or a station), and instead of a road surface each line is built as a glass tube wound with a solenoid
-// coil, held up by pairs of collared support posts, with a station building at every 'station' node. Junctions between
+// move in 3D, the line always curves smoothly through them, straightening out over the last stretch into a
+// station so it lines up with the station's own straight footprint (there's no poly/spline — a node is either
+// plain track or a station), and instead of a road surface each line is built as a glass tube wound with a
+// solenoid coil, held up by pairs of collared support posts, with a station building at every 'station' node — the
+// tube itself stops short of a station's open interior (see buildLineTube), continuing as 2 bare rails under the
+// carriage the rest of the way, between the station's two portal rings (see buildStationParts). Junctions between
 // train lines aren't specially handled — tubes that meet simply pass through each other. Each line has one shuttle
-// carriage running back and forth along its whole length, stopping at its stations (see updateTrainShuttles).
+// carriage running back and forth along its whole length, stopping at its stations (see updateTrainShuttles) —
+// centred on the station even when it's right at the end of the line, since the station's rails reach past the
+// last node either way.
 S.TRAIN_DEFAULT_RADIUS = 2.5;
 S.TRAIN_DEFAULT_HEIGHT = 14;       // height of a new line's first node (later nodes follow the one before)
 const TRAIN_MIN_HEIGHT = 0.5;
@@ -94,11 +99,23 @@ function trainStationSize(radius) { return { width: radius*2 + 5, height: radius
 // how far below the tube's centerline a station's platform deck is
 const stationDeckTop = radius => -radius - 0.3;
 
+// A point on a cubic Hermite curve from P0 to P1, with tangents m0, m1 (their length sets how hard it pulls out
+// along them before bending toward the other end).
+function hermitePoint(P0, P1, m0, m1, t) {
+  const t2 = t*t, t3 = t2*t;
+  return new THREE.Vector3()
+    .addScaledVector(P0, 2*t3 - 3*t2 + 1).addScaledVector(m0, t3 - 2*t2 + t)
+    .addScaledVector(P1, -2*t3 + 3*t2).addScaledVector(m1, t3 - t2);
+}
 // A train line's centerline as 3D points — always the smoothest curve through its nodes, never a corner: a cubic
 // Hermite spline whose direction at each node follows the line from the node before to the node after, scaled by
 // the distances between them (chord-length Catmull-Rom), so unevenly spaced nodes don't make it bulge or overshoot.
-// At a station the direction is kept level, so the track runs flat through the station. `segments[k]` is the index
-// of the node-to-node stretch points[k] lies on.
+// At a station the direction is kept level, so the track runs flat through the station, and — since the station
+// building itself is a straight platform (see buildStationParts) — the last TRAIN_STATION_LENGTH/2 running into it
+// (or the last half of the stretch to the node before/after, if that's shorter, so two close-together stations
+// don't straighten past each other) is a dead-straight run along that same direction, not a curve, so the track
+// actually lines up with the platform instead of clipping through its wall. `segments[k]` is the index of the
+// node-to-node stretch points[k] lies on.
 function trainCurve(nodeIds) {
   const nodes = nodeIds.map(id => roadNodes[id]).filter(Boolean);
   const P = nodes.map(n => new THREE.Vector3(n.x, trainNodeY(n), n.z));
@@ -117,15 +134,25 @@ function trainCurve(nodeIds) {
     }
     return d;
   });
+  const unit = directions.map(d => d.clone().normalize());
   const points = [P[0].clone()], segments = [0];
   for (let i=0;i<count-1;i++) {
     const steps = Math.max(6, Math.ceil(chord[i]/2)); // a point every couple of units, so the tube stays round on curves
-    const m0 = directions[i].clone().multiplyScalar(chord[i]), m1 = directions[i+1].clone().multiplyScalar(chord[i]);
+    let straightIn = nodes[i].type==='station' ? TRAIN_STATION_LENGTH/2 : 0;
+    let straightOut = nodes[i+1].type==='station' ? TRAIN_STATION_LENGTH/2 : 0;
+    if (straightIn + straightOut > chord[i]) {
+      const scale = chord[i]/(straightIn + straightOut);
+      straightIn *= scale; straightOut *= scale;
+    }
+    const midLen = chord[i] - straightIn - straightOut;
+    const A = P[i].clone().addScaledVector(unit[i], straightIn), B = P[i+1].clone().addScaledVector(unit[i+1], -straightOut);
+    const m0 = directions[i].clone().multiplyScalar(midLen), m1 = directions[i+1].clone().multiplyScalar(midLen);
     for (let s=1;s<=steps;s++) {
-      const t = s/steps, t2 = t*t, t3 = t2*t;
-      points.push(new THREE.Vector3()
-        .addScaledVector(P[i], 2*t3 - 3*t2 + 1).addScaledVector(m0, t3 - 2*t2 + t)
-        .addScaledVector(P[i+1], -2*t3 + 3*t2).addScaledVector(m1, t3 - t2));
+      const d = chord[i]*s/steps; // how far along this stretch, by the same chord-length parametrization as before
+      const p = d <= straightIn ? P[i].clone().addScaledVector(unit[i], d)
+        : d >= chord[i] - straightOut ? P[i+1].clone().addScaledVector(unit[i+1], d - chord[i])
+        : hermitePoint(A, B, m0, m1, (d - straightIn)/midLen);
+      points.push(p);
       segments.push(i);
     }
   }
@@ -205,6 +232,26 @@ function buildTubeGeometry(path, radius) {
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   return geo;
+}
+// The glass tube along a whole line, split into one run per gap between stations, leaving out `coreHalf` either
+// side of each one's centre — its open interior, past the portal rings (see buildStationParts and stationPortal)
+// — where the tube gives way to the station's own rails. Runs are sampled fresh off the sampler rather than reusing
+// its `path`, so each one starts and ends exactly on a gap boundary instead of the nearest existing sample.
+function buildLineTube(sampler, radius, coreHalf, stations) {
+  const total = sampler.total;
+  const bounds = [0, total];
+  stations.forEach(s => bounds.push(Math.max(0, s.dist - coreHalf), Math.min(total, s.dist + coreHalf)));
+  bounds.sort((a, b) => a - b);
+  const geos = [];
+  for (let i=0;i<bounds.length-1;i++) {
+    const a = bounds[i], b = bounds[i+1];
+    if (b - a < 1e-6 || stations.some(s => Math.abs(s.dist - (a+b)/2) < coreHalf)) continue;
+    const steps = Math.max(1, Math.ceil((b-a)/2));
+    const pts = [];
+    for (let k=0;k<=steps;k++) pts.push(sampler.at(a + (b-a)*k/steps).point);
+    geos.push(buildTubeGeometry(pts, radius));
+  }
+  return geos.length ? mergeGeometryList(geos) : null;
 }
 // The solenoid coil: one continuous flat ribbon spiralling around the tube, `turnsPer10` full turns per 10 world units
 // of track. It's wound on a frame carried along the track without twisting (as the tube is), so the spiral keeps an
@@ -288,13 +335,29 @@ function addSupportBeams(geos, point, tangent, halfGap, topY, beamW) {
   ring.translate(point.x, point.y, point.z);
   geos.push(ring);
 }
+// How far from a station's centre, along the track, its portal rings sit (see buildStationParts) — where the
+// vault's ceiling comes down to just clear the tube, which is where the tube stops (see buildLineTube) in favor of
+// the station's own rails. `ring: false` means the vault's too squat for its ceiling to ever pinch in that close —
+// there's no ring, and `half` is just the station's own half-length, its rails (and the tube, outside it) running
+// the whole way.
+function stationPortal(radius) {
+  const { width, height } = trainStationSize(radius);
+  const halfW = width/2, halfL = TRAIN_STATION_LENGTH/2, capLength = Math.min(halfW, halfL), straightHalf = halfL - capLength;
+  const deckTop = stationDeckTop(radius), rise = height/2 - deckTop;
+  const clearance = (radius + 0.15 - deckTop)/rise;
+  return clearance < 1 ? { half: straightHalf + capLength*Math.sqrt(1 - clearance*clearance), ring: true }
+                        : { half: halfL, ring: false };
+}
 // A station, built around the tube's centerline at `position`, always level and turned to the track's heading, in
 // roughly the footprint of a TRAIN_STATION_LENGTH-long, trainStationSize(radius) box:
 //  • a stadium-shaped platform deck just under the tube, ringed by a glowing trim line;
 //  • a glass vault rising from the deck's edge — a half-ellipse cross-section along the middle, closing into
-//    quarter-ellipsoid ends over the deck's rounded ends — which the tube runs straight through;
+//    quarter-ellipsoid ends over the deck's rounded ends;
 //  • chrome ribs across the vault, a chrome spine along its ridge, a chrome portal ring where the tube pierces each
-//    end, and a small chrome orb and needle on top;
+//    end (see stationPortal), and a small chrome orb and needle on top;
+//  • 2 bare rails, low near where the carriage's underside runs, between the two portals — what the tube gives way
+//    to for the open stretch inside the vault (see buildLineTube), so the station's interior isn't cluttered with
+//    a length of glass tube it's already enclosing;
 //  • an entrance in each long side: a pair of dark glass doors set into the vault's curve, framed in chrome under a
 //    glowing lintel, with a landing jutting out from the deck below and a small awning above;
 //  • a single flared pylon from the ground up to the deck.
@@ -418,14 +481,34 @@ function buildStationParts(position, tangent, radius, mats) {
   }
   chrome.push(tubeAlong(rows.map(row => vaultPoint(Math.PI/2, row, 1.012)), 0.13));
   // the portals sit where the vault's ridge comes down to just clear the top of the tube
-  const clearance = (radius + 0.15 - deckTop)/rise;
-  if (clearance < 1) {
-    const zPortal = straightHalf + capLength*Math.sqrt(1 - clearance*clearance);
+  const { half: zPortal, ring: hasPortal } = stationPortal(radius);
+  if (hasPortal) {
     [-1, 1].forEach(side => {
       const ring = new THREE.TorusGeometry(radius*1.2, Math.max(0.18, radius*0.09), 10, 36);
       ring.translate(0, 0, side*zPortal);
       chrome.push(ring);
     });
+  }
+  // 2 bare rails between the portals, low under where the carriage's underside runs, carrying it the rest of the
+  // way once the tube itself has stopped (see buildLineTube)
+  const railGap = radius*0.55, railY = -radius*0.75, railR = Math.max(0.12, radius*0.07);
+  [-1, 1].forEach(side => {
+    const rail = new THREE.CylinderGeometry(railR, railR, zPortal*2, 10);
+    rail.rotateX(Math.PI/2); // cylinders run along Y; rails run along Z, like the track
+    rail.translate(side*railGap, railY, 0);
+    chrome.push(rail);
+  });
+  // a little ramp on the deck, in the middle of the station, climbing from the deck up to rail height — a plain
+  // "/|" wedge: a slope up from the deck, then a sheer drop back down to it at the top
+  const gapHeight = railY - deckTop;
+  if (gapHeight > 0.05) {
+    const hx = railGap + railR + 0.25, run = Math.max(1, gapHeight*2), z0 = -run/2, z1 = run/2;
+    const A0=[-hx,deckTop,z0], B0=[hx,deckTop,z0], A1=[-hx,deckTop,z1], B1=[hx,deckTop,z1], A2=[-hx,railY,z1], B2=[hx,railY,z1];
+    const ramp = new THREE.BufferGeometry();
+    ramp.setAttribute('position', new THREE.Float32BufferAttribute([A0,B0,A1,B1,A2,B2].flat(), 3));
+    ramp.setIndex([0,1,3, 0,3,2,  0,4,1, 1,4,5,  2,3,5, 2,5,4,  0,2,4,  1,5,3]);
+    ramp.computeVertexNormals();
+    add(ramp, mats.station, 'TrainStationRamp', true);
   }
   const crownY = deckTop + rise;
   const orb = new THREE.SphereGeometry(0.55, 16, 12);
@@ -511,7 +594,9 @@ export function rebuildTrainMeshes() {
     });
     const inStation = (d, margin) => stations.some(s => Math.abs(s.dist - d) < TRAIN_STATION_LENGTH/2 + margin);
 
-    addMesh(buildTubeGeometry(path, radius), mats.glass, 'TrainTube', line, false);
+    // the tube stops short of each station's open interior — see buildLineTube and stationPortal
+    const tubeGeo = buildLineTube(sampler, radius, stationPortal(radius).half, stations);
+    if (tubeGeo) addMesh(tubeGeo, mats.glass, 'TrainTube', line, false);
     // the solenoid coil wound around the tube — white outside, copper on the face toward the glass; not inside stations
     const coil = buildCoilGeometries(sampler, radius, S.TRAIN_COIL_TURNS_PER_10, d => inStation(d, 0));
     if (coil.outer) addMesh(coil.outer, mats.coilOuter, 'TrainCoil', line, true);
@@ -653,10 +738,13 @@ function buildShuttle(radius, mats) {
 function buildShuttleTimeline(total, stations, shuttleLength) {
   const margin = Math.min(total/2, shuttleLength/2 + 0.5);
   const clamp = d => Math.max(margin, Math.min(total - margin, d));
+  // a station that IS the line's end sits centered on it (dist exactly 0 or total); only a station short of a plain
+  // dead end needs the margin clamp so the carriage doesn't poke out past the last bit of bare track
+  const stopAt = s => (s.dist < 1e-6 || s.dist > total - 1e-6) ? s.dist : clamp(s.dist);
   const stops = [{ at: margin, node: null }];
-  stations.map(s => ({ at: clamp(s.dist), node: s.node })).sort((p, q) => p.at-q.at).forEach(s => {
+  stations.map(s => ({ at: stopAt(s), node: s.node })).sort((p, q) => p.at-q.at).forEach(s => {
     const last = stops[stops.length-1];
-    if (s.at - last.at < 1) last.node = last.node || s.node; // a station right at the end of the line is that end's stop
+    if (s.at - last.at < 1) { last.at = s.at; last.node = last.node || s.node; } // a station right at the end of the line is that end's stop
     else stops.push(s);
   });
   if (total - margin - stops[stops.length-1].at >= 1) stops.push({ at: total - margin, node: null });
