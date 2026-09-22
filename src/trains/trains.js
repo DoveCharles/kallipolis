@@ -523,6 +523,9 @@ function buildStationParts(position, tangent, radius, mats) {
   const needle = new THREE.ConeGeometry(0.14, 2.4, 10);
   needle.translate(0, crownY + 1.9, 0);
   chrome.push(needle);
+  const tip = new THREE.SphereGeometry(0.16, 12, 10);
+  tip.translate(0, crownY + 3.1, 0);
+  chrome.push(tip);
   add(mergeGeometryList(chrome), mats.chrome, 'TrainStationChrome', true);
 
   // pylon: a column from the ground (world y 0) up to the deck's underside, pinched at the waist and flared at the top
