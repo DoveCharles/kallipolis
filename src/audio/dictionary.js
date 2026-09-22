@@ -1,31 +1,21 @@
-import SamJs from 'sam-js';
 import { camera } from '../core/scene.js';
 import { listener, playBufferAt } from './sfx.js';
+import { speakText, SAMPLE_RATE } from './speech.js';
+import { loudnessOf } from './voices.js';
 
 // ============================================================ real words
 // Now and then someone talking near the camera says something real in among their babble (see audio/voices.js): a line
-// from assets/dictionary.txt, a word or a whole sentence, picked at random. It's spoken by SAM, the Software Automatic
-// Mouth (the Commodore 64's speech synth, 1982, ported to JavaScript as sam-js), which works the words out into sounds and
-// renders them as samples right here — so, like every other sound, it's synthesized on the spot, set down where they
-// stand and heard from that side, and quieter the further off. Only one person says a line at a time.
-//
-// SAM's voice is set from their babble's: its pitch (SAM counts it the other way, lower numbers higher), its mouth and
-// throat (where its formants sit) from theirs, so a big man's lower and fuller and a small woman's higher and brighter;
-// and a touch quicker the cheerier they are. SAM on its own is gritty and flat next to babble, so it's played through
-// what babble is: its top taken off, the bands around their formants brought up (as sharply as their babble rings), and
-// its pitch drifting down over the line as a phrase of babble's does. While they're saying it, their mouth opens as wide
-// as the line's loud.
+// from assets/dictionary.txt, a word or a whole sentence, picked at random. It's said in their own babble voice, worked
+// out into its sounds and synthesized on the spot (see audio/speech.js), set down where they stand and heard from that
+// side, and quieter the further off, and as loud as they babble. Only one person says a line at a time. While they're saying it, their mouth opens as
+// wide as the line's loud.
 const DICTIONARY_URL = 'assets/dictionary.txt';
 const LINE_CHANCE = 0.15;   // at the start of each phrase of babble
 const SAY_DISTANCE = 40;    // beyond this from the camera they only babble
 const LINE_GAP = 3;         // seconds after a line ends before anyone says another
-const VOLUME = 0.3;         // how loud SAM says a real line (babble has its own level, in audio/voices.js)
+const MATCH = 1;            // how loud a real line is next to the speaker's own babble (see loudnessOf in audio/voices.js)
 const REF_DISTANCE = 6, HEAR_DISTANCE = 60; // (as for babble)
-const SAMPLE_RATE = 22050;  // SAM's
 const MOUTH_FRAME = 0.05;   // seconds over which how wide the mouth is follows the line
-const DRIFT = 0.12;         // how far the pitch drifts down over a line: from this much above half of it to below (as babble)
-const TOP = 2200;           // Hz, times their formant: above this it's cut, twice over, as babble's bands leave little up there
-const FORMANTS = [550, 1500], FORMANT_BOOST = 8; // Hz (babble's vowels' F1 and F2, roughly), times their formant; dB
 
 let lines = [];
 let lists = {};     // the word lists a line's [placeholders] are filled from, by name (lower-cased)
@@ -67,42 +57,23 @@ export function sayLine(at, voice, who, mood = 0) {
   const context = listener.context, now = context.currentTime;
   if (!lines.length || current || now < quietUntil || Math.random() >= LINE_CHANCE) return null;
   if (Math.hypot(at.x - camera.position.x, at.y - camera.position.y, at.z - camera.position.z) > SAY_DISTANCE) return null;
-  const clamp = (v, lo, hi) => Math.round(Math.max(lo, Math.min(hi, v)));
-  const shape = 128*voice.formant*(0.95 + ((who*13) % 7)*0.015);
-  const sam = new SamJs({
-    // (SAM's own 64 at 150 Hz came out lower than their babble; and straight 1/pitch sent higher voices too high)
-    pitch: clamp(50*(150/voice.pitch)**0.7, 22, 110),
-    mouth: clamp(shape, 90, 200),
-    throat: clamp(shape*0.95, 90, 200),
-    speed: clamp(72/(1 + (mood ?? 0)*0.08 + ((who*7) % 11 - 5)*0.015), 55, 95),
-  });
-  const samples = sam.buf32(fill(pick(lines)));
+  const samples = speakText(fill(pick(lines)), voice, { mood: mood ?? 0, who });
   if (!samples?.length) return null;
+  // (how loud it is through each MOUTH_FRAME, for their mouth to follow; and how loud while they're sounding, the loudest
+  // half of those frames, to bring it to their babble's loudness)
+  const frame = Math.round(MOUTH_FRAME*SAMPLE_RATE), mouth = new Float32Array(Math.ceil(samples.length/frame));
+  const power = new Float32Array(mouth.length);
+  for (let i = 0; i < samples.length; i++) {
+    const k = Math.floor(i/frame);
+    mouth[k] = Math.max(mouth[k], Math.abs(samples[i])*1.2);
+    power[k] += samples[i]*samples[i]/frame;
+  }
+  const loudest = power.filter(e => e > 1e-5).sort().slice(-Math.ceil(power.length/2));
+  const rms = Math.sqrt(loudest.reduce((a, b) => a + b, 0)/(loudest.length || 1));
   const buffer = context.createBuffer(1, samples.length, SAMPLE_RATE);
   buffer.getChannelData(0).set(samples);
-  const tops = [0, 1].map(() => {
-    const top = context.createBiquadFilter();
-    top.type = 'lowpass';
-    top.frequency.value = TOP*voice.formant;
-    return top;
-  });
-  const bands = FORMANTS.map(f => {
-    const band = context.createBiquadFilter();
-    band.type = 'peaking';
-    band.frequency.value = f*voice.formant;
-    band.Q.value = (voice.sharpness ?? 6)*0.3;
-    band.gain.value = FORMANT_BOOST;
-    return band;
-  });
-  const rate = 1 + DRIFT/2;
-  const source = playBufferAt(buffer, at, VOLUME, REF_DISTANCE, HEAR_DISTANCE, rate, [...tops, ...bands]);
+  const source = playBufferAt(buffer, at, rms ? MATCH*loudnessOf(voice)/rms : 0, REF_DISTANCE, HEAR_DISTANCE);
   if (!source) return null;
-  // (from above to below evenly, so it averages out and the line takes as long as it would)
-  source.playbackRate.setValueAtTime(rate, now);
-  source.playbackRate.linearRampToValueAtTime(1 - DRIFT/2, now + buffer.duration);
-  // (how loud it is through each MOUTH_FRAME, for their mouth to follow: SAM's loudest is about half)
-  const frame = Math.round(MOUTH_FRAME*SAMPLE_RATE), mouth = new Float32Array(Math.ceil(samples.length/frame));
-  for (let i = 0; i < samples.length; i++) mouth[Math.floor(i/frame)] = Math.max(mouth[Math.floor(i/frame)], Math.abs(samples[i])*2);
   current = { source, start: now, length: buffer.duration, mouth };
   return current;
 }
@@ -115,8 +86,7 @@ export function sayLine(at, voice, who, mood = 0) {
 export function lineMouth(line) {
   const t = listener.context.currentTime - line.start;
   if (line !== current || t >= line.length) { finish(line); return -1; }
-  const heard = t*(1 + DRIFT/2 - DRIFT*t/(2*line.length)); // (how far into the recording it's got, as its rate drifts down)
-  return Math.min(1, line.mouth[Math.floor(heard/MOUTH_FRAME)] ?? 0);
+  return Math.min(1, line.mouth[Math.floor(t/MOUTH_FRAME)] ?? 0);
 }
 
 /**

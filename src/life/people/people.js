@@ -15,6 +15,7 @@ import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FIDGETS, LOOK_MAX_TILT, LOOK_MAX
 import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
+import { MELODIES } from '../../audio/melodies.js';
 import { favoritePeople, isFavoritePerson } from '../../ui/favorites.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
@@ -235,12 +236,14 @@ const FOOTFALLS = 0.13, STEPS_PER_CYCLE = 4; // how far through the walk cycle a
 // one does in a cycle: the Walk clip is two full strides, left, right, left, right, each foot reaching furthest forward there
 // Someone's voice (see audio/voices.js), the same every time for the same person: its pitch, lower for a man than a woman
 // and for someone taller; its formants, likewise lower, and shifted either way on their own, apart from the pitch, so two
-// voices at one pitch can still sound nothing alike; and how sharp those formants ring, from breathy to nasal.
+// voices at one pitch can still sound nothing alike; how sharp those formants ring, from breathy to nasal; and the tune
+// they talk in (see audio/melodies.js).
 function voiceOf(p, i) {
   const own = mulberry32(i*7919 + 13), isMan = personModel?.isMan[i] === 1, tall = Math.sqrt(Math.max(0.5, p.height));
   const pitch = (isMan ? 150 : 250)/tall*(0.85 + 0.3*own());
   const formant = (isMan ? 1 : 1.15)/Math.sqrt(tall)*(0.8 + 0.42*own());
-  return { pitch, formant, sharpness: 3 + 9*own(), isMan };
+  const sharpness = 3 + 9*own();
+  return { pitch, formant, sharpness, melody: Math.floor(own()*MELODIES.length), isMan };
 }
 /** Someone's voice (see voiceOf), for a sound made outside the frame loop: a cry as they're hit, say. */
 export const voiceOfPerson = p => voiceOf(p, people.indexOf(p));
