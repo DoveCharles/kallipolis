@@ -26,6 +26,9 @@ const ROOM_W = 8, ROOM_D = 6, ROOM_H = 3.2;  // along the room's own x and z, an
 // are thicker still; the far walls stay thin enough for the windows.
 const WALL = 0.5, SLAB = 0.6, THICK = 1.6, OVERHANG = 1.5;
 const FLOOR_HEIGHT = 3.5;                    // a storey, as the facades' windows are drawn (see windows.js)
+// the ground floor's a step up off the ground: a house stands at the lawn's own height, and the lawn's depth bias (see
+// LAWN_BIAS in suburbs.js) would paint grass over a floor laid level with it
+const PLINTH = 0.3;
 const SILL = 0.9, HEAD = 2.5;                // a window's bottom and top, above the floor
 const CAMERA_INSET = 0.7;                    // the camera, in from the corner walls
 // and its view: height above the floor, degrees looking down, and vertical field of view (tuned with tools/interior.html)
@@ -1024,8 +1027,8 @@ export function enterBuilding(group, key, kind = 'home') {
   const bounds = new THREE.Box3().setFromObject(group);
   const base = bounds.min.y, height = group.userData.height ?? (bounds.max.y - base);
   const centre = fp && fp.length >= 3 ? footprintBounds(group).c : bounds.getCenter(new THREE.Vector3());
-  const storey = Math.max(0, Math.floor((height - ROOM_H - 0.3)/FLOOR_HEIGHT));
-  room.position.set(centre.x, base + storey*FLOOR_HEIGHT, centre.z);
+  const storey = Math.max(0, Math.floor((height - PLINTH - ROOM_H - 0.3)/FLOOR_HEIGHT));
+  room.position.set(centre.x, base + PLINTH + storey*FLOOR_HEIGHT, centre.z);
   room.rotation.y = fp && fp.length >= 3 ? longestEdgeAngle(fp) : 0;
   room.visible = true;
   room.updateMatrixWorld(true);
