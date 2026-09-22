@@ -423,6 +423,9 @@ function buildStationParts(position, tangent, radius, mats) {
   const doorWidth = Math.min(3.4, 2*straightHalf - 0.6), doorHeight = Math.min(3.4, rise*0.6);
   const doorTop = Math.asin(doorHeight/rise); // the arc angle, up from the deck, at the top of each door
   const hasDoors = doorWidth > 1.2;
+  // 2 bare rails between the portals, low under where the carriage's underside runs, carrying it the rest of the
+  // way once the tube itself has stopped (see buildLineTube)
+  const railGap = radius*0.55, railY = -radius*0.75, railR = Math.max(0.12, radius*0.07);
 
   // chrome: ribs across the middle (stopping above the doors, where they'd cross them), a spine along the ridge, the
   // door frames, a portal ring at each end, an orb and needle on top
@@ -478,6 +481,24 @@ function buildStationParts(position, tangent, radius, mats) {
     add(mergeGeometryList(doors), mats.stationDoor, 'TrainStationDoors', true);
     add(mergeGeometryList(entrance), mats.station, 'TrainStationEntrance', true);
     add(mergeGeometryList(glow), mats.stationTrim, 'TrainStationEntranceGlow', true);
+    // a little ramp at each door, stepping up from the deck to rail height right where people board — a plain "/|"
+    // wedge facing the doors: flat across the doorway, sloping up from the threshold in toward the rails
+    const gapHeight = railY - deckTop;
+    if (gapHeight > 0.05) {
+      const idxOut = [0,1,3, 0,3,2, 0,4,1, 1,4,5, 2,3,5, 2,5,4, 0,2,4, 1,5,3];
+      const idxIn = idxOut.reduce((acc, v, i, arr) => { if (i % 3 === 0) acc.push(arr[i], arr[i+2], arr[i+1]); return acc; }, []);
+      const ramps = [1, -1].map(side => {
+        // the high edge reaches past the rail's outer face, so the ramp actually touches it rather than stopping short
+        const outerX = side*halfW, innerX = side*(railGap + railR + 0.05);
+        const A0=[outerX,deckTop,zL], B0=[outerX,deckTop,zR], A1=[innerX,deckTop,zL], B1=[innerX,deckTop,zR], A2=[innerX,railY,zL], B2=[innerX,railY,zR];
+        const ramp = new THREE.BufferGeometry();
+        ramp.setAttribute('position', new THREE.Float32BufferAttribute([A0,B0,A1,B1,A2,B2].flat(), 3));
+        ramp.setIndex(side > 0 ? idxOut : idxIn);
+        ramp.computeVertexNormals();
+        return ramp;
+      });
+      add(mergeGeometryList(ramps), mats.station, 'TrainStationRamp', true);
+    }
   }
   chrome.push(tubeAlong(rows.map(row => vaultPoint(Math.PI/2, row, 1.012)), 0.13));
   // the portals sit where the vault's ridge comes down to just clear the top of the tube
@@ -489,27 +510,12 @@ function buildStationParts(position, tangent, radius, mats) {
       chrome.push(ring);
     });
   }
-  // 2 bare rails between the portals, low under where the carriage's underside runs, carrying it the rest of the
-  // way once the tube itself has stopped (see buildLineTube)
-  const railGap = radius*0.55, railY = -radius*0.75, railR = Math.max(0.12, radius*0.07);
   [-1, 1].forEach(side => {
     const rail = new THREE.CylinderGeometry(railR, railR, zPortal*2, 10);
     rail.rotateX(Math.PI/2); // cylinders run along Y; rails run along Z, like the track
     rail.translate(side*railGap, railY, 0);
     chrome.push(rail);
   });
-  // a little ramp on the deck, in the middle of the station, climbing from the deck up to rail height — a plain
-  // "/|" wedge: a slope up from the deck, then a sheer drop back down to it at the top
-  const gapHeight = railY - deckTop;
-  if (gapHeight > 0.05) {
-    const hx = railGap + railR + 0.25, run = Math.max(1, gapHeight*2), z0 = -run/2, z1 = run/2;
-    const A0=[-hx,deckTop,z0], B0=[hx,deckTop,z0], A1=[-hx,deckTop,z1], B1=[hx,deckTop,z1], A2=[-hx,railY,z1], B2=[hx,railY,z1];
-    const ramp = new THREE.BufferGeometry();
-    ramp.setAttribute('position', new THREE.Float32BufferAttribute([A0,B0,A1,B1,A2,B2].flat(), 3));
-    ramp.setIndex([0,1,3, 0,3,2,  0,4,1, 1,4,5,  2,3,5, 2,5,4,  0,2,4,  1,5,3]);
-    ramp.computeVertexNormals();
-    add(ramp, mats.station, 'TrainStationRamp', true);
-  }
   const crownY = deckTop + rise;
   const orb = new THREE.SphereGeometry(0.55, 16, 12);
   orb.translate(0, crownY + 0.3, 0);
