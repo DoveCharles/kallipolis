@@ -12,7 +12,7 @@ import { puffSmoke } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, personHeight, stopFollowingPerson } from './peopleTracking.js';
-import { roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
+import { roomDoorway, roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
 
 // ---- what people get up to besides walking about.
 //
@@ -1006,6 +1006,7 @@ export function updateIndoors(p, i, dt) {
   if (visit.stage === 'approach') {
     if (Math.hypot(door.x - p.x, door.z - p.z) >= 0.35) return { x: door.x, y: visit.building.y, z: door.z };
     visit.stage = 'inside';
+    visit.justIn = true; // (so if the camera's in there, they're seen coming in: see aboutTheRoom)
     p.faceTo = null; p.lookAt = null; p.oneShot = null;
     if (followed === i) lookAtBuilding(visit.building);
     return null;
@@ -1018,7 +1019,11 @@ export function updateIndoors(p, i, dt) {
       visit.hoursLeft = Math.min(visit.hoursLeft, OFFICE_LEAVE_HOURS*peopleRng());
     }
     // (time's up, but not partway through a video: they sit it out, get up, and only then go)
-    if (visit.hoursLeft > 0 || p.inRoom?.watched != null) return aboutTheRoom(p, visit, dt);
+    const arriving = visit.justIn;
+    visit.justIn = false;
+    if (visit.hoursLeft > 0 || p.inRoom?.watched != null) return aboutTheRoom(p, visit, dt, arriving);
+    // (with the camera in there too, off out of the room first, and the door heard shutting behind them)
+    if (roomHolds(visit.building.key) && p.inRoom?.visit === roomVisit() && !p.inRoom.gone) return leaveRoom(p, dt);
     // back out, at the door, facing the walkway
     visit.stage = 'exit';
     standUp(p);
@@ -1041,19 +1046,64 @@ export function updateIndoors(p, i, dt) {
 }
 
 /**
+ * Someone whose visit's over, in the room with the camera: up off their seat if they're on one, then across the room to
+ * its doorway (roomDoorway, behind the camera and out of the view), where the door's heard shutting behind them.
+ * @param {Person} p - the person
+ * @param {number} dt - seconds since the last frame
+ * @returns {?{x: number, y: number, z: number}} where they should walk to, or null to stand where they are (and once
+ *   they're out of the room, p.inRoom.gone)
+ */
+function leaveRoom(p, dt) {
+  const here = p.inRoom;
+  if (here.seat) {
+    // (sat down: getting up first, as they would anyway)
+    if (here.stage === 'sit') { leaveGroup(p); here.stage = 'rise'; p.pose = 'Idle'; }
+    if (here.stage !== 'rise') standUp(p);
+    else if (sitting(p, here, dt), here.seat) return null;
+  }
+  if (!here.leaving) {
+    if (p.group?.kind === 'room') leaveGroup(p);
+    const door = roomDoorway();
+    here.leaving = true;
+    here.route = roomRoute(p, door) ?? [door];
+    here.timer = 30; // (and if they can't get there, gone anyway)
+    p.faceTo = null; p.lookAt = null;
+  }
+  here.timer -= dt;
+  if (here.route && here.timer > 0) {
+    const next = walkRoute(p, here);
+    if (next) return next;
+  }
+  here.gone = true;
+  playSound('door', roomDoorway());
+  return null;
+}
+
+/**
  * Someone inside a building while the camera's in there too (see buildings/interior.js): somewhere in its one room — put
- * there the first frame the room's there to be in (now and then already sat down), and after that standing about, now
+ * there the first frame the room's there to be in (now and then already sat down), or if they've only just come in, in
+ * at its doorway (roomDoorway: the door heard shutting behind them) and over to somewhere in it; and after that standing about, now
  * and then going over to somewhere else in it, round the furniture, or to sit on the sofa or a chair a while. The room's
  * no bigger than a room, so they amble rather than stride.
  * @param {Person} p - the person
  * @param {object} visit - their p.indoors
  * @param {number} dt - seconds since the last frame
+ * @param {boolean} [arriving] - whether they've only this moment come in the building's door
  * @returns {?{x: number, y: number, z: number}} where they should walk to, or null to stand where they are
  */
-function aboutTheRoom(p, visit, dt) {
+function aboutTheRoom(p, visit, dt, arriving = false) {
   if (!roomHolds(visit.building.key)) { standUp(p); p.inRoom = null; return null; }
   someoneHome();
-  if (p.inRoom?.visit !== roomVisit()) {
+  if (arriving) {
+    standUp(p);
+    const door = roomDoorway();
+    playSound('door', door);
+    p.x = door.x; p.y = door.y; p.z = door.z;
+    const spot = roomSpot(peopleRng), route = roomRoute(p, spot);
+    if (!route) { p.x = spot.x; p.y = spot.y; p.z = spot.z; } // (no way in from there past the furniture: just there)
+    p.inRoom = { visit: roomVisit(), route, wait: peopleRng()*4, seat: null, stage: '' };
+    p.heading = route ? headingTo(p, route[0]) : peopleRng()*Math.PI*2;
+  } else if (p.inRoom?.visit !== roomVisit()) {
     standUp(p);
     const at = roomSpot(peopleRng);
     p.x = at.x; p.y = at.y; p.z = at.z;
@@ -1212,7 +1262,7 @@ const SEAT_CHAT_REACH = 2.6;
 /** How long a room chat goes on, in seconds: [shortest, longest], standing and sat (times how patient they are). */
 const ROOM_CHAT_SPELL = [8, 25], SEAT_CHAT_SPELL = [4, 12];
 /** Whether someone's in the same room as the camera now and free to be talked to. */
-const freeInRoom = (q, p) => q !== p && q.mode === 'indoors' && q.inRoom?.visit === roomVisit() && !q.group && q.chatCooldown <= 0
+const freeInRoom = (q, p) => q !== p && q.mode === 'indoors' && q.inRoom?.visit === roomVisit() && !q.inRoom.leaving && !q.group && q.chatCooldown <= 0
   && !q.oneShot && q.traits.chatty > 0;
 /**
  * Walk someone in a room along their route.

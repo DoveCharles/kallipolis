@@ -7,6 +7,7 @@ import { mulberry32, lerp, polygonArea, pointInPolygon, centroid, insetPolygon, 
 import { tessellateOpenPath, resolveParkTint, resolveGrassNoiseStrength } from '../core/splines.js';
 import { distPointSegment, closestPointOnSegment } from '../buildings/footprints.js';
 import { isWalkwayLine, isRiverLine } from '../roads/paths.js';
+import { isRaisedWalkwayLine } from '../roads/raised.js';
 import { createMeshBuilder } from '../roads/roads.js';
 import { makeFlatZoneMesh, makeParkMesh } from './surface-detail.js';
 import { builderMesh } from './farmland.js';
@@ -315,7 +316,7 @@ export function streetSegmentsNear(poly) {
   const roads = [], paths = [], edges = [];
   for (let i=0;i<poly.length;i++) edges.push([poly[i], poly[(i+1)%poly.length]]);
   S.roadLines.forEach(line => {
-    if (line.drawing || App.isTrainLine(line) || isRiverLine(line)) return; // nobody's front door looks onto a railway or a river
+    if (line.drawing || App.isTrainLine(line) || isRiverLine(line) || isRaisedWalkwayLine(line)) return; // nobody's front door looks onto a railway or a river
     const pts = line.nodeIds.map(id => roadNodes[id]).filter(Boolean);
     if (pts.length < 2) return;
     const into = isWalkwayLine(line) ? paths : roads, tess = tessellateOpenPath(pts);

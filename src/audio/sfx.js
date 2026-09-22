@@ -49,9 +49,15 @@ const SOUNDS = {
   whoosh: [
     [.35, .1, 200, .08, .03, .1, 4, 1, 25, , , , , 0, , , , .6, , , -2500],
   ],
+  // someone coming into or going out of the room the camera's in (see leaveRoom in life/people/peopleActivities.js): a
+  // door swung shut, a low wooden thud with the latch clicking home over it
+  door: [
+    [.8, .05, 70, 0, .02, .22, 0, 1.5, -6, , , , , .5, , , , .6, .08, , -700],
+    [.3, .05, 1600, 0, .004, .03, 1, 2, , , , , , .4, , , , .5, , , 2000],
+  ],
 };
 // how near something has to be for each sound to be heard at full volume, falling away past it (REF_DISTANCE if not here)
-const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2 };
+const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5 };
 const VARIANTS = 3;
 const SPEED_OF_SOUND = 343;      // units (metres) a second
 const REF_DISTANCE = 25;         // how near something has to be to be heard at full volume, falling away past it

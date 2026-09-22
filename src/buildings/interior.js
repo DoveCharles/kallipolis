@@ -1130,6 +1130,12 @@ export function roomSpot(rng) {
   return room.localToWorld(new THREE.Vector3(x, 0, z));
 }
 
+// The way in and out of the room: behind the camera and off to its side, along the wall there, out of the view — where
+// anyone coming in walks in from and anyone going walks off to, the door heard shutting (see updateIndoors in people).
+const DOORWAY = new THREE.Vector3(-ROOM_W/2 + 0.3, 0, -ROOM_D/2 + CAMERA_INSET + 0.3);
+/** The room's doorway, in the world. */
+export const roomDoorway = () => room.localToWorld(DOORWAY.clone());
+
 /** Where anyone can sit in the room, in the world: { x, y, z } on the seat, { nx, nz } the way it faces, and who's `by` it. */
 export const roomSeats = () => current.seats;
 

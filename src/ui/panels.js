@@ -3,7 +3,8 @@ import { scene } from '../core/scene.js';
 import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, SAND_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
 import { roadNodes, MAX_TARGET_LOTS } from '../core/state.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
-import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes, refreshRoadAppearance, walkwayTextureChangeNeedsRebuild, defaultWalkwayTextureScale, walkwayTextureScaleOf, moveWalkwayNetwork } from '../roads/paths.js';
+import { isRaisedWalkwayLine, raisedHeightOf, MIN_RAISED_HEIGHT, MAX_RAISED_HEIGHT } from '../roads/raised.js';
+import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isGroundWalkwayLine, isRiverLine, rebuildRoadMeshes, refreshRoadAppearance, walkwayTextureChangeNeedsRebuild, defaultWalkwayTextureScale, walkwayTextureScaleOf, moveWalkwayNetwork } from '../roads/paths.js';
 import { networkKindOf, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
@@ -96,7 +97,7 @@ export function renderHierarchy() {
   // walkways that overlap compete for the same ground, so — like zones — they're drag-reordered, higher wins the
   // overlap (see buildWalkwayMesh); everything else keeps the order it was found in above
   networks.sort((a, b) => {
-    if (!isWalkwayLine(a.lines[0]) || !isWalkwayLine(b.lines[0])) return 0;
+    if (!isGroundWalkwayLine(a.lines[0]) || !isGroundWalkwayLine(b.lines[0])) return 0;
     return S.walkwayOrder.indexOf(a.netId) - S.walkwayOrder.indexOf(b.netId);
   });
   networks.forEach(({ netId, kind, lines }) => {
@@ -112,7 +113,7 @@ export function renderHierarchy() {
     del.onclick = (e)=>{ e.stopPropagation(); removeRoadNetwork(netId); };
     row.appendChild(del);
     row.onclick = ()=> selectItem(kind, netId);
-    if (kind==='road' && isWalkwayLine(lines[0])) {
+    if (kind==='road' && isGroundWalkwayLine(lines[0])) {
       row.draggable = true;
       row.addEventListener('dragstart', (e) => {
         S.draggedWalkwayId = netId;
@@ -789,7 +790,7 @@ function renderDetails() {
     const curSidewalkColor = lines[0].sidewalkColor!=null ? lines[0].sidewalkColor : SIDEWALK_COLOR;
     const title = lines.length>1 ? netId : lines[0].id;
     const subtitle = lines.length>1 ? `${lines.length} branches · ${totalNodes} nodes` : `${totalNodes} nodes`;
-    const isWalkway = isWalkwayLine(lines[0]), isRiver = isRiverLine(lines[0]);
+    const isWalkway = isWalkwayLine(lines[0]), isRiver = isRiverLine(lines[0]), isRaised = isRaisedWalkwayLine(lines[0]);
     const curWalkwayColor = lines[0].walkwayColor!=null ? lines[0].walkwayColor : WALKWAY_COLOR;
     const curWalkwayTexture = lines[0].walkwayTexture || WALKWAY_TEXTURE;
     const curTextureScale = walkwayTextureScaleOf(lines[0]), curTextureRotation = lines[0].walkwayTextureRotation ?? 0;
@@ -799,13 +800,21 @@ function renderDetails() {
       <div class="slider-row"><div class="row"><label>Path type</label></div>
         <select id="ds-roadtype" class="select-input">
           <option value="sidewalk" ${!isWalkway&&!isRiver?'selected':''}>Sidewalk</option>
-          <option value="walkway" ${isWalkway?'selected':''}>Walkway</option>
+          <option value="walkway" ${isWalkway&&!isRaised?'selected':''}>Walkway</option>
+          <option value="raised" ${isRaised?'selected':''}>Raised walkway</option>
           <option value="river" ${isRiver?'selected':''}>River</option>
         </select>
       </div>
       ${isRiver ? `
       <div class="empty" style="margin:6px 0 10px;">Water, as wide as the path's width. It joins any water zone it runs into, and roads and paths cross it on bridges.</div>
       ` : isWalkway ? `
+      ${isRaised ? `
+      <div class="slider-row"><div class="row"><label>Height</label><span class="val" id="dv-raisedheight">${raisedHeightOf(lines[0])} m</span></div>
+        <input type="range" id="ds-raisedheight" min="${MIN_RAISED_HEIGHT}" max="${MAX_RAISED_HEIGHT}" step="0.5" value="${raisedHeightOf(lines[0])}"></div>
+      <div class="row"><label>Trees</label><button class="toggle-switch ${lines[0].raisedTrees?'on':''}" id="ds-raisedtrees"><span class="knob"></span></button></div>
+      <div class="row" style="margin-bottom:8px;"><label>Benches</label><button class="toggle-switch ${lines[0].raisedBenches?'on':''}" id="ds-raisedbenches"><span class="knob"></span></button></div>
+      <div class="empty" style="margin:0 0 10px;">A spiral ramp leads down at each end. Right-click a node along it to add one there too.</div>
+      ` : ''}
       ${App.walkwayTextureCarouselHtml(curWalkwayTexture, curWalkwayColor)}
       ${curWalkwayTexture!=='plain' ? `
       <div class="slider-row"><div class="row"><label>Texture scale</label><span class="val" id="dv-walkwayscale">${curTextureScale.toFixed(2)}</span></div>
@@ -831,6 +840,19 @@ function renderDetails() {
       App.applyModeVisibility();
       rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderDetails();
     });
+    if (isRaised) {
+      const height = document.getElementById('ds-raisedheight');
+      height.addEventListener('input', () => {
+        document.getElementById('dv-raisedheight').textContent = height.value + ' m';
+        lines.forEach(l => { l.raisedHeight = parseFloat(height.value); });
+        rebuildRoadMeshes();
+      });
+      [['raisedtrees', 'raisedTrees'], ['raisedbenches', 'raisedBenches']].forEach(([id, key]) => document.getElementById('ds-'+id).addEventListener('click', () => {
+        const on = !lines[0][key];
+        lines.forEach(l => { l[key] = on; });
+        rebuildRoadMeshes(); renderDetails();
+      }));
+    }
     // walkways get their texture and color; sidewalk roads get road and sidewalk colors
     if (isWalkway) {
       App.wireWalkwayTextureCarousel(panel, curWalkwayColor, (texture) => {

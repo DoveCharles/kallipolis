@@ -4,6 +4,7 @@ import { scene, SKIP_OVER_WATER_AND_ROADS, makeStencilMask, STENCIL_ROAD, Y_PATH
 import { distPointSegment } from '../buildings/footprints.js';
 import { tessellateOpenPath, ROAD_COLOR } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
+import { buildRaisedWalkway, isRaisedWalkwayLine } from './raised.js';
 import { CURB_COLOR, SIDEWALK_COLOR, CLIPPER_SCALE, roadLineWidths, unionRoadStrokes, clipPolygons, createMeshBuilder, forEachPolyTreeEdge, createEdgeIndex, addRoadLayerMesh, disposeObject } from './roads.js';
 
 // ---------------------------------------------------------- walkways
@@ -35,7 +36,9 @@ export function walkwayTextureScaleOf(line) {
   return line.walkwayTextureScale ?? defaultWalkwayTextureScale(line.walkwayTexture || WALKWAY_TEXTURE);
 }
 const PATH_MAX_SEGMENTS = 128; // fixed GLSL array size; a network's centerlines are simplified to fit
-export function isWalkwayLine(line) { return line.roadType === 'walkway'; }
+// (a raised walkway is a walkway too — it has a walkway's color and paving — but see isRaisedWalkwayLine for where it isn't)
+export function isWalkwayLine(line) { return line.roadType === 'walkway' || line.roadType === 'raised'; }
+export function isGroundWalkwayLine(line) { return line.roadType === 'walkway'; }
 export function isRiverLine(line) { return line.roadType === 'river'; }
 // how far past its nominal edge dirt's sand fades out
 export function pathFadeWidth(halfWidth) { return Math.min(2.5, halfWidth*0.9); }
@@ -276,7 +279,8 @@ export function refreshRoadAppearance(networkId) {
     else if (mesh.name === 'Sidewalk') mesh.userData.baseColor = line.sidewalkColor!=null ? line.sidewalkColor : SIDEWALK_COLOR;
     else if (mesh.name === 'Walkway') {
       mesh.userData.baseColor = line.walkwayColor!=null ? line.walkwayColor : WALKWAY_COLOR;
-      setWalkwayLook(mesh.material, line.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScaleOf(line), line.walkwayTextureRotation);
+      const texture = line.walkwayTexture || WALKWAY_TEXTURE;
+      setWalkwayLook(mesh.material, mesh.userData.raised && texture === 'dirt' ? 'plain' : texture, walkwayTextureScaleOf(line), line.walkwayTextureRotation);
     }
   });
   App.refreshHighlights();
@@ -286,7 +290,7 @@ export function refreshRoadAppearance(networkId) {
 let lastLayoutKey = null;
 function roadLayoutKey() {
   return JSON.stringify([S.DEFAULT_ROAD_WIDTH, S.DEFAULT_SIDEWALK_WIDTH, S.roadLines.map(l => [l.id, l.networkId, l.kind, l.roadType,
-    l.width, l.sidewalkWidth, l.radius, !!l.drawing, l.nodeIds.map(id => roadNodes[id])])]);
+    l.width, l.sidewalkWidth, l.radius, !!l.drawing, l.raisedHeight, !!l.raisedTrees, !!l.raisedBenches, l.nodeIds.map(id => roadNodes[id])])]);
 }
 // the stencil mask over the whole road footprint (see SKIP_OVER_WATER_AND_ROADS) — kept out of roadMeshGroup, which
 // is exported and recolored for highlights
@@ -369,7 +373,7 @@ export function rebuildRoadMeshes() {
   // walkway networks: one mesh each, plus their combined footprint for zones to keep lots and trees off
   const walkwayNetworks = new Map();
   S.roadLines.forEach(line => {
-    if (!isWalkwayLine(line) || line.nodeIds.map(id=>roadNodes[id]).filter(Boolean).length < 2) return;
+    if (!isGroundWalkwayLine(line) || line.nodeIds.map(id=>roadNodes[id]).filter(Boolean).length < 2) return;
     if (!walkwayNetworks.has(line.networkId)) walkwayNetworks.set(line.networkId, []);
     walkwayNetworks.get(line.networkId).push(line);
   });
@@ -391,7 +395,24 @@ export function rebuildRoadMeshes() {
     pathStrokes.push(...strokes);
     S.pathBridgeSources.push({ networkId: netId, strokes });
   });
+  // raised walkways: built whole, each on its own (they stand over everything else, so nothing's claimed between them)
+  const raisedNetworks = new Map();
+  S.roadLines.forEach(line => {
+    if (!isRaisedWalkwayLine(line)) return;
+    if (!raisedNetworks.has(line.networkId)) raisedNetworks.set(line.networkId, []);
+    raisedNetworks.get(line.networkId).push(line);
+  });
+  const raisedFootprints = [];
+  S.raisedNav = [];
+  raisedNetworks.forEach((lines, netId) => {
+    const built = buildRaisedWalkway(lines, netId);
+    if (!built) return;
+    built.objects.forEach(o => S.roadMeshGroup.add(o));
+    raisedFootprints.push(...built.footprint);
+    S.raisedNav.push(built.nav);
+  });
   S.pathFootprint = unionRoadStrokes(pathStrokes);
+  if (raisedFootprints.length) S.pathFootprint = clipPolygons(ctUnion, S.pathFootprint, raisedFootprints);
   const maskBuilder = createMeshBuilder();
   maskBuilder.addTops(clipPolygons(ctDifference, sidewalkOutline, [], true), Y_SIDEWALK); // level with the sidewalk top it lines up with
   const maskGeo = maskBuilder.build();

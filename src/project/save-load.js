@@ -4,6 +4,7 @@ import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLOR
 import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { importMapImageFile, renderMapsList, removeMapImage } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
+import { RAISED_HEIGHT, raisedHeightOf } from '../roads/raised.js';
 import { DIRT_COLOR, WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes, walkwayTextureScaleOf } from '../roads/paths.js';
 import { isTrainLine } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
@@ -28,7 +29,8 @@ function serializePoint(p) {
   const withY = (out, src) => src.y!=null ? { ...out, y:src.y } : out; // only train nodes and handles have a height
   return withY({ x:p.x, z:p.z, type:p.type||'poly',
     handleIn: p.handleIn ? withY({x:p.handleIn.x, z:p.handleIn.z}, p.handleIn) : null,
-    handleOut: p.handleOut ? withY({x:p.handleOut.x, z:p.handleOut.z}, p.handleOut) : null }, p);
+    handleOut: p.handleOut ? withY({x:p.handleOut.x, z:p.handleOut.z}, p.handleOut) : null,
+    ...(p.ramp ? { ramp:true } : {}), ...(p.rampSide === -1 ? { rampSide:-1 } : {}) }, p); // (a raised walkway's ramps)
 }
 export function serializeProject() {
   const finishedLines = S.roadLines.filter(l => !l.drawing);
@@ -72,7 +74,9 @@ export function serializeProject() {
       lines: finishedLines.map(l => ({ id:l.id, nodeIds:l.nodeIds.slice(), width:l.width,
         color: colorToHex(l.color, ROAD_COLOR), sidewalkWidth:l.sidewalkWidth,
         sidewalkColor: colorToHex(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId,
-        ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}), ...(isWalkwayLine(l) ? { roadType:'walkway', walkwayColor: colorToHex(l.walkwayColor, WALKWAY_COLOR), walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: walkwayTextureScaleOf(l), walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}), ...(isRiverLine(l) ? { roadType:'river' } : {}) }))
+        ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}), ...(isWalkwayLine(l) ? { roadType: l.roadType, walkwayColor: colorToHex(l.walkwayColor, WALKWAY_COLOR), walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: walkwayTextureScaleOf(l), walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}),
+        ...(l.roadType==='raised' ? { raisedHeight: raisedHeightOf(l), raisedTrees: !!l.raisedTrees, raisedBenches: !!l.raisedBenches } : {}),
+        ...(isRiverLine(l) ? { roadType:'river' } : {}) }))
     },
     zoneSeq: S.zoneSeq,
     zones: S.zones.filter(z => !z.drawing && z.points.length>=3).map(z => ({
@@ -235,15 +239,17 @@ export async function loadProjectFromData(data, options) {
     const n = rd.nodes[id];
     roadNodes[id] = withY({ x:n.x, z:n.z, type:n.type||'poly',
       handleIn: n.handleIn ? withY({x:n.handleIn.x, z:n.handleIn.z}, n.handleIn) : null,
-      handleOut: n.handleOut ? withY({x:n.handleOut.x, z:n.handleOut.z}, n.handleOut) : null }, n);
+      handleOut: n.handleOut ? withY({x:n.handleOut.x, z:n.handleOut.z}, n.handleOut) : null,
+      ...(n.ramp ? { ramp:true } : {}), ...(n.rampSide === -1 ? { rampSide:-1 } : {}) }, n);
   });
   S.roadLines = (rd.lines||[]).map(l => ({ id:l.id, nodeIds:l.nodeIds.slice(), width:l.width,
     color: hexToColor(l.color, ROAD_COLOR), sidewalkWidth: l.sidewalkWidth!=null ? l.sidewalkWidth : S.DEFAULT_SIDEWALK_WIDTH,
     sidewalkColor: hexToColor(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId, drawing:false,
     ...(l.kind==='train' ? { kind:'train', radius: l.radius!=null ? l.radius : S.TRAIN_DEFAULT_RADIUS } : {}),
     ...(l.roadType==='path' ? { roadType:'walkway', walkwayColor: hexToColor(l.pathColor, DIRT_COLOR), walkwayTexture:'dirt', walkwayTextureScale:1, walkwayTextureRotation:0 } : {}), // (older saves' dirt paths)
-    ...(l.roadType==='walkway' ? { roadType:'walkway', walkwayColor: hexToColor(l.walkwayColor, WALKWAY_COLOR),
+    ...(l.roadType==='walkway' || l.roadType==='raised' ? { roadType: l.roadType, walkwayColor: hexToColor(l.walkwayColor, WALKWAY_COLOR),
       walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: l.walkwayTextureScale ?? 1, walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}),
+    ...(l.roadType==='raised' ? { raisedHeight: l.raisedHeight ?? RAISED_HEIGHT, raisedTrees: !!l.raisedTrees, raisedBenches: !!l.raisedBenches } : {}),
     ...(l.roadType==='river' ? { roadType:'river' } : {}) }));
   S.roadNodeSeq = rd.nodeSeq || 1; S.roadLineSeq = rd.lineSeq || 1; S.roadNetworkSeq = rd.networkSeq || 1;
   S.walkwayOrder = Array.isArray(rd.walkwayOrder) ? rd.walkwayOrder.slice() : [];

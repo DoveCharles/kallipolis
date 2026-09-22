@@ -154,7 +154,7 @@ function tally() {
   });
   S.roadLines.forEach(line => {
     if (line.drawing) return;
-    add('paths', line.kind === 'train' ? 'train lines' : line.roadType === 'walkway' ? 'walkways' : line.roadType === 'river' ? 'rivers' : 'roads');
+    add('paths', line.kind === 'train' ? 'train lines' : line.roadType === 'walkway' || line.roadType === 'raised' ? 'walkways' : line.roadType === 'river' ? 'rivers' : 'roads');
   });
   const lines = {}, groups = {};
   let total = 0;
