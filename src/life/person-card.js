@@ -32,7 +32,8 @@ const card = makeCard({
 // (once people.txt has loaded, the card shows what it says)
 onProfilesLoaded(() => { if (shown) showPersonCard(shown.index, shown.isMan); });
 function showPersonCard(index, isMan) {
-  const profile = profileOf(index, isMan);
+  // whoever's actually standing in that slot right now, not the slot itself — see peopleIdSeq in people.js
+  const profile = profileOf(App.people[index]?.id ?? index, isMan);
   const { traits } = profile, again = shown?.index === index; // (again: people.txt just loaded, under an open card)
   shown = { index, isMan, traits, seed: profile.age };
   card.relabel(garbles(traits) ? text => garbled(text, traits, profile.age) : null); // (the headings too: "Loves", "Hates", the title...)
@@ -47,15 +48,19 @@ function showPersonCard(index, isMan) {
   headshotDrawnAt = -Infinity;
   lightsOnLayer = false;
   if (again) setPersonCardDoing(doingNow, awayNow); else setPersonCardDoing(null);
-  card.setFavorite(personFavorite(index));
+  if (App.people[index]) card.setFavorite(personFavorite(App.people[index].id));
 }
-// a person as a favorite: kept in the project, since their place in the crowd is who they are (see profileOf), and spared
-// the Smite button while hearted (see ui/favorites.js)
-function personFavorite(index) {
-  return { key: personKey(index), kind: 'Person', saved: { index }, spares: true,
-    follow: () => { if (!App.people[index]) return false; App.followPerson(index); return true; } };
+// a person as a favorite: kept in the project by their id, not their place in the crowd (see peopleIdSeq in
+// life/people/people.js) — they're never killed while hearted (see ui/favorites.js), so wherever they're currently
+// standing is found again by searching for their id, not assumed to be a fixed slot
+function personFavorite(id) {
+  return { key: personKey(id), kind: 'Person', saved: { id }, spares: true,
+    follow: () => { const i = App.people.findIndex(q => q.id === id); if (i < 0) return false; App.followPerson(i); return true; } };
 }
-reviveFavoritesAs('Person', saved => Number.isInteger(saved.index) && saved.index >= 0 ? personFavorite(saved.index) : null);
+// `saved.index` is a save from before people had their own persistent id, back when their place in the crowd was who
+// they were: treating that old slot number as their id is the closest guess at reviving the right person
+reviveFavoritesAs('Person', saved => Number.isInteger(saved.id) ? personFavorite(saved.id)
+  : Number.isInteger(saved.index) && saved.index >= 0 ? personFavorite(saved.index) : null);
 // what they're up to (see personDoing in people/peopleTracking.js), and whether they're `away` — indoors, out of sight, so
 // the headshot greys over
 let doingNow = null, awayNow = false;

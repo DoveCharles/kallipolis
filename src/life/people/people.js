@@ -33,6 +33,13 @@ export const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
 /** How often, at least, the walkways are resampled to a point — for entrances and for re-seating people. */
 export const PEOPLE_NAV_SPACING = 4;
 S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false, S.showPeopleNavDebug = false;
+// Everyone's permanent identity — who they are, not where they're standing. Their place in the crowd (their index in
+// `people`) is just whichever render slot they're currently using, and gets reused once they're gone; their id (see
+// peopleIdSeq, same convention as roadNodeSeq and the other counters in core/state.js) is what their name, age, traits
+// and looks are seeded from instead (see refreshTraits below and assignAppearance in peopleModel.js), so someone new
+// moving into a dead person's old slot doesn't raise them from the dead. Kept in the project (see project/save-load.js),
+// so ids never collide across a reload.
+S.peopleIdSeq = 1;
 export let peopleNav = null, peopleNavBuiltAt = -Infinity, peopleNavDebugBuiltAt = -Infinity, lastPeopleTime = null;
 export const people = [];
 export const peopleRng = mulberry32(90210);
@@ -353,11 +360,13 @@ export function syncPeopleUI() {
 
 /**
  * Make a person with their traits and state at their starting values.
+ * @param {number} [id] - their person id: a specific one to revive (someone hearted and saved, whose slot a reload
+ *   hasn't reached yet — see updatePeople), or left out for a fresh one
  * @returns {Person} the person
  */
-export function newPerson() {
+export function newPerson(id = S.peopleIdSeq++) {
   const baseHeight = 0.85 + peopleRng()*0.27; // (their height, before their size trait)
-  return { x:0, y:0, z:0, heading: peopleRng()*Math.PI*2, stride: 0.8 + peopleRng()*0.4, baseHeight, height: baseHeight, phase: peopleRng()*10,
+  return { id, x:0, y:0, z:0, heading: peopleRng()*Math.PI*2, stride: 0.8 + peopleRng()*0.4, baseHeight, height: baseHeight, phase: peopleRng()*10,
     mode: 'none', li: 0, u: 0, dir: 1, seg: 0, lat: 0, area: -1, tx: 0, tz: 0, wait: 0, exit: null, moving: false, stepped: 0,
     // the model's animation: how far through the walk (in whole cycles) and the looping ones (in seconds) they are; the
     // animation they're in (clipA) and the one they're blending out of (clipB, held at row rowB), how far they've blended and
@@ -401,18 +410,19 @@ export function newPerson() {
 }
 
 /**
- * Work out a person's traits, from the entries picked for them in people.txt (see profiles.js) by their place in the
- * crowd. Worked out again whenever people.txt loads, and once the model's loaded and says whether they're a man (which
- * decides their name, and so the rest of their picks).
+ * Work out a person's traits, from the entries picked for them in people.txt (see profiles.js) by their id — who they
+ * are, not where they're standing (see the note on peopleIdSeq above). Worked out again whenever people.txt loads,
+ * and once the model's loaded and says whether they're a man (which decides their name, and so the rest of their
+ * picks; sex is still tied to their render slot, not their id — see assignAppearance in peopleModel.js).
  * @param {Person} p - the person
- * @param {number} i - their place in the crowd
+ * @param {number} i - their place in the crowd, just to look up their slot's sex
  * @returns {void}
  */
 export function refreshTraits(p, i) {
   const isMan = personModel ? personModel.isMan[i] === 1 : null, key = profilesVersion() + ':' + isMan;
   if (p.traitsKey === key) return;
   p.traitsKey = key;
-  const profile = profileOf(i, isMan);
+  const profile = profileOf(p.id, isMan);
   p.traits = profile.traits;
   p.height = p.baseHeight*p.traits.size;
   p.age = profile.age;
@@ -597,9 +607,11 @@ export function fleeWithin(p, area) {
   p.tx = best.x; p.tz = best.z; p.wait = 0;
 }
 /**
- * Kill someone: explode them into giblets in their own colors, and keep them dead - gone from the crowd, though their
- * place in it is kept - with whoever they were talking to carrying on without them. The people around them take it
- * according to how evil they were (see bystandersReactToDeath), the same however they died.
+ * Kill someone: explode them into giblets in their own colors, and mark them dead - gone from the crowd, with whoever
+ * they were talking to carrying on without them. Whoever isn't hearted stays dead only until the crowd next wants
+ * their spot: then someone new, with their own name and face, takes it (see updatePeople) - they don't come back.
+ * The people around them take it according to how evil they were (see bystandersReactToDeath), the same however they
+ * died.
  * @param {number} i - their index in people
  * @param {'player'|'car'} [by] - who did it, for the morality meter: the Smite button, or a car that ran them over
  * @param {?{x: number, y: number, z: number}} [momentum] - the velocity of whatever hit them, which their giblets keep
@@ -607,7 +619,7 @@ export function fleeWithin(p, area) {
  */
 function killPerson(i, by = 'player', momentum = null) {
   const p = people[i];
-  if (!p || isGone(p) || isFavoritePerson(i)) return; // (the hearted can't be killed: see ui/favorites.js)
+  if (!p || isGone(p) || isFavoritePerson(p.id)) return; // (the hearted can't be killed: see ui/favorites.js)
   // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
   App.recordMoralityEvent?.(`${standingOf(p)} peds killed by ${by === 'car' ? 'cars' : 'player'}`, p.name);
   if (followed === i) stopFollowingPerson();
@@ -723,13 +735,31 @@ export function updatePeople(t) {
     people.forEach(reseatPerson);
   }
   if (S.showPeopleNavDebug && peopleNavDebugBuiltAt !== peopleNavBuiltAt) { setPeopleNavDebugBuiltAt(peopleNavBuiltAt); rebuildPeopleNavDebug(); }
-  // (the hearted are never let go of: the crowd reaches as far as the last of them, and anyone past `wanted` who isn't
-  // hearted is benched — out of sight, as the dead are, until the crowd grows back over them. See ui/favorites.js)
-  const wanted = Math.min(PEOPLE_MAX, Math.round(S.peopleAmount)), kept = Math.min(PEOPLE_MAX, Math.max(wanted, (favoritePeople()[0] ?? -1) + 1));
-  while (people.length < kept) { const p = newPerson(); spawnPerson(p); people.push(p); }
+  // (the hearted are never let go of: the crowd reaches at least as far as the last of them, and anyone past `wanted`
+  // who isn't hearted is benched — out of sight, as the dead are, until the crowd grows back over them. See
+  // ui/favorites.js. Anyone killed and not hearted is out for good: once their spot is wanted again, someone new is
+  // born into it below — a fresh id, so they don't come back as themselves. See newPerson, and assignAppearance in
+  // peopleModel.js. A hearted id missing from the crowd altogether — a reload hasn't reached their spot yet — is
+  // revived into a new spot with their own saved id, rather than waiting to be spawned like anyone else.)
+  const wanted = Math.min(PEOPLE_MAX, Math.round(S.peopleAmount));
+  const presentIds = new Set(people.map(p => p.id));
+  const missingFavoriteIds = favoritePeople().filter(id => !presentIds.has(id));
+  let highestFavoriteSlot = -1;
+  for (let i = 0; i < people.length; i++) if (isFavoritePerson(people[i].id)) highestFavoriteSlot = i;
+  const kept = Math.min(PEOPLE_MAX, Math.max(wanted, highestFavoriteSlot + 1, people.length + missingFavoriteIds.length));
+  while (people.length < kept) {
+    const p = newPerson(missingFavoriteIds.shift()); // (a hearted id waiting to be found again, else a fresh one)
+    personModel?.assignAppearance(people.length, p.id);
+    spawnPerson(p);
+    people.push(p);
+  }
   while (people.length > kept) endActivity(people.pop());
-  for (let i = wanted; i < people.length; i++) if (!people[i].benched && !isFavoritePerson(i)) benchPerson(i);
-  for (let i = 0; i < Math.min(wanted, people.length); i++) if (people[i].benched) { people[i].benched = false; people[i].mode = 'none'; } // (spawned again below)
+  for (let i = wanted; i < people.length; i++) if (!people[i].benched && !isFavoritePerson(people[i].id)) benchPerson(i);
+  for (let i = 0; i < Math.min(wanted, people.length); i++) {
+    const p = people[i];
+    if (p.benched) { p.benched = false; p.mode = 'none'; } // (the same person, off the bench: spawned again below)
+    else if (p.mode === 'dead' && !isFavoritePerson(p.id)) { people[i] = newPerson(); personModel?.assignAppearance(i, people[i].id); } // (someone new, spawned again below)
+  }
   if (followed >= people.length) stopFollowingPerson();
   if (riderFollowed >= people.length) setRiderFollowed(-1);
   peopleMesh.count = people.length;

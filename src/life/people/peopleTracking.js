@@ -79,7 +79,7 @@ export function followPerson(i) {
 // ---- what the followed person's card says they're up to (as a bee's says where it's got to in its round): worked out
 // from whatever state they're in, most pressing first, and told to the card only when it changes
 let doingShown;
-const nameOf = q => { const i = people.indexOf(q); return i < 0 ? 'someone' : profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name; };
+const nameOf = q => { const i = people.indexOf(q); return i < 0 ? 'someone' : profileOf(q.id, personModel ? personModel.isMan[i] === 1 : null).name; };
 const HANGOUTS = { park: ['in', 'the park'], plaza: ['in', 'the plaza'], beach: ['on', 'the beach'] };
 /**
  * What someone's up to, in a few words, for their card.

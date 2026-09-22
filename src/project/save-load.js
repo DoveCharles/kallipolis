@@ -60,7 +60,7 @@ export function serializeProject() {
       globalTreeTint: colorToHex(S.globalTreeTint, TREE_TINT_COLORS[0]),
       globalSandTint: colorToHex(S.globalSandTint, SAND_TINT_COLORS[0]),
       globalGrassNoiseStrength: S.globalGrassNoiseStrength,
-      people: { enabled: S.peopleEnabled, amount: S.peopleAmount, speed: S.peopleSpeed, size: S.peopleSize, traffic: S.trafficAmount },
+      people: { enabled: S.peopleEnabled, amount: S.peopleAmount, speed: S.peopleSpeed, size: S.peopleSize, traffic: S.trafficAmount, idSeq: S.peopleIdSeq },
       dayNight: { enabled: S.dayNightEnabled, dayLength: S.dayLengthMinutes, time: S.timeOfDay },
       weather: { rain: S.weatherRain, snow: S.weatherSnow, clouds: S.weatherClouds }
     },
@@ -211,6 +211,9 @@ export async function loadProjectFromData(data, options) {
     if (sc.people.speed != null) S.peopleSpeed = sc.people.speed;
     if (sc.people.size != null) S.peopleSize = sc.people.size;
     if (sc.people.traffic != null) S.trafficAmount = sc.people.traffic;
+    // never lower: undo/redo also comes through here, and the live crowd (not itself a saved/undoable thing) may
+    // already have handed out ids past whatever this particular save remembers
+    S.peopleIdSeq = Math.max(S.peopleIdSeq, sc.people.idSeq || 1);
     App.syncPeopleUI();
   }
   if (sc.weather) {

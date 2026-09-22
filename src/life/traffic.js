@@ -1233,7 +1233,7 @@ const placing = { matrix: new THREE.Matrix4(), rotation: new THREE.Quaternion(),
 const tilting = new THREE.Quaternion(), sideways = new THREE.Vector3(1, 0, 0); // (a sinking car's pitch, about its own sideways axis)
 const rolling = new THREE.Quaternion(), forward = new THREE.Vector3(0, 0, 1); // (a terrible car's rock side to side while it hops, about its own length axis — see updateSpecialTraits)
 /**
- * Put car `i` where it is: at Y_ROAD (plus its bumpY, sunk by its sinking.drop), turned to its heading and scaled by
+ * Put car `i` where it is: at Y_ROAD (plus its bumpY, sunk by its sinking.drop and/or its floatDrop), turned to its heading and scaled by
  * S.peopleSize and its own size trait (see carScale). It goes into its design's mesh at the next free instance slot (counted up in designCounts), with its
  * paint and wheel angles and plate packed alongside, or into the box car when it has no design; its place in the other
  * mesh is zeroed either way. Also writes its debug hitbox.
@@ -1247,7 +1247,7 @@ function placeCar(car, i, designCounts) {
   rotation.setFromAxisAngle(up, car.heading);
   if (car.sinking) rotation.multiply(tilting.setFromAxisAngle(sideways, car.sinking.pitch)); // (nose down, into the water)
   if (car.bumpShake) rotation.multiply(rolling.setFromAxisAngle(forward, car.bumpShake)); // (rocking side to side while it hops, like a plane landing — see updateSpecialTraits)
-  position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) + (car.bumpY ?? 0), car.z); // (bumpY: a terrible car hopping — see updateSpecialTraits)
+  position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0), car.z); // (floatDrop: an aqua car settled into water — see updateFloating; bumpY: a terrible car hopping — see updateSpecialTraits)
   if (car.design != null && carMeshes[car.design]) {
     const cm = carMeshes[car.design], idx = designCounts[car.design]++;
     const holo = car.holo ?? DEFAULT_HOLO; // (a legendary car's foil/polychrome sheen, drawn by the shader itself — see carHoloOf)
@@ -1859,7 +1859,9 @@ function stopDriving() {
  * One frame of the driven car, from the keys held (controlInput): brake, forward at top speed (boosted by run), reverse,
  * or coast down to a standstill; steerHeld eased toward `right`; the turn scaled by speed up to a walking pace and fading
  * above it, and reversed when going backwards; then moved along its heading and bumped into any car it has run into (which
- * may stop it, or wreck them).
+ * may stop it, or wreck them). Driven out over open water it starts sinking (overOpenWater, sinkCar) — unless it has the
+ * aqua trait, which instead floats it (updateFloating): settling a little into the water and hopping back out onto land,
+ * smoothly, rather than sinking.
  * @param {object} car
  * @param {number} dt - seconds this frame
  * @returns {void}
@@ -1898,7 +1900,8 @@ function driveByHand(car, dt) {
   bumpIntoCars(car, was);
   hitBuildings(car, was, dt);
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
-  if (overOpenWater(car.x, car.z)) car.sinking = { drop: 0, fall: 0, pitch: 0, under: false };
+  if (car.traits?.aqua) updateFloating(car, dt);
+  else if (overOpenWater(car.x, car.z)) car.sinking = { drop: 0, fall: 0, pitch: 0, under: false };
 }
 
 // ---- the driven car in the water: driven off the land (or off the side of a bridge) and over water — a water zone or a
@@ -1919,6 +1922,27 @@ function overOpenWater(x, z) {
   if (openWater.region !== region || openWater.roads !== roads)
     openWater = { region, roads, inWater: App.createRegionTester(region), onRoad: App.createRegionTester(roads) };
   return openWater.inWater(x, z) && !openWater.onRoad(x, z);
+}
+
+// ---- an aqua car floating on open water: unlike an ordinary car sinking (above), it settles in a little rather than
+// going under, and hops back out just as gently once it's back over land or a bridge.
+const FLOAT_DEPTH_SHARE = 0.18, FLOAT_SETTLE_TIME = 0.8; // (how much of its own height it sinks into the water it's floating on, as a share; how many seconds it takes to settle in, or to hop back out)
+/**
+ * Ease an aqua car (see the trait, core/traits.js) into or out of floating this frame: car.floatPhase (0 dry, 1 settled)
+ * moves toward 1 while it's over open water (overOpenWater) and toward 0 once it's back over land or a bridge, at a
+ * steady rate that crosses the whole way in FLOAT_SETTLE_TIME seconds either direction. car.floatDrop — read by
+ * placeCar, alongside a sinking car's own drop — is that phase run through a cubic ease (smoothstep, the same curve
+ * shaders here use) so it sinks in and hops out along a soft S-curve rather than snapping or drifting at a constant
+ * speed, times FLOAT_DEPTH_SHARE of its height.
+ * @param {object} car
+ * @param {number} dt - seconds this frame
+ * @returns {void}
+ */
+function updateFloating(car, dt) {
+  const goal = overOpenWater(car.x, car.z) ? 1 : 0, rate = 1/FLOAT_SETTLE_TIME;
+  const phase = car.floatPhase = Math.max(0, Math.min(1, (car.floatPhase ?? 0) + Math.max(-rate*dt, Math.min(rate*dt, goal - (car.floatPhase ?? 0)))));
+  const eased = phase*phase*(3 - 2*phase); // smoothstep
+  car.floatDrop = eased*FLOAT_DEPTH_SHARE*carHeight(car);
 }
 /**
  * One frame of a driven car going down in the water: the keys do nothing now; it runs on along its heading as the water

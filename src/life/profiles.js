@@ -7,7 +7,8 @@ const ROMAN_NUMERALS = [ 'II', 'III','II', 'III', 'IV', 'V','VI','VII','VII','IX
 
 // ============================================================ who people are
 // Everyone in the crowd has a name, an age, a mood, and loves and hates, picked from assets/people.txt. The picks are the same
-// every time for the same place in the crowd, and any traits they carry change how that person behaves (see the list at the
+// every time for the same person id (see peopleIdSeq in people.js — not their place in the crowd, which just changes who's
+// currently standing in that slot), and any traits they carry change how that person behaves (see the list at the
 // top of people.txt, and people.js). person-card.js displays a profile.
 // How many loves and hates each person gets is the shared spread in core/entries.js (DEFAULT_COUNTS), the same one every
 // other kind falls back to.
@@ -44,9 +45,10 @@ export const profilesVersion = () => version;
 export function onProfilesLoaded(listener) { listeners.push(listener); }
 
 // Someone's name, age, mood, loves and hates (lists; people.txt's "enjoys" section supplies the loves), and the traits those give them — a man's name from the boy names and
-// a woman's from the girl names (either, for the cuboid people, who have no sex). `index` is their place in the crowd.
-export function profileOf(index, isMan) {
-  const rng = mulberry32(48271 + index*7919);
+// a woman's from the girl names (either, for the cuboid people, who have no sex). `id` is their person id (see peopleIdSeq
+// in people.js), not their place in the crowd — so the same id always comes back as the same person, wherever they're standing.
+export function profileOf(id, isMan) {
+  const rng = mulberry32(48271 + id*7919);
   const pick = list => list[Math.floor(rng()*list.length)];
   const man = isMan == null ? rng() < 0.5 : isMan;
   const name = pick(lists[man ? 'boy names' : 'girl names']);
@@ -63,7 +65,7 @@ export function profileOf(index, isMan) {
 
   // The counts and any extra picks use their own random stream, so adding to the picks made on `rng` above does not change
   // the names, ages and moods of existing people. Keep new random draws for a profile on `extra`, not `rng`.
-  const extra = mulberry32(90173 + index*6151);
+  const extra = mulberry32(90173 + id*6151);
   const [loveCount, hateCount] = pickCounts(counts, extra());
   const loves = loveCount >= 1 ? [enjoys] : [], hated = hateCount >= 1 && !incompatible ? [hates] : [];
   addEntries(loves, lists.enjoys, loveCount, extra, [loves, hated]);

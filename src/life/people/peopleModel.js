@@ -664,40 +664,20 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const facialHairLayer = headLayer(headStylesFrom(facialHairGltf, () => ({ girls: false, boys: true })), mulberry32(4711));
   const headLayers = [hairLayer, facialHairLayer];
 
-  // ============== Body Traits ============== 
-  // Their sex, their body's shape keys (as far on as the ranges for their sex allow), their
-  // hairstyle and facial hair (what their sex can wear), their colors, and where their clothes stop
+  // ============== Body Traits ==============
+  // Sex, and which hairstyle and facial hair (if any) someone wears, are fixed to the render slot itself, decided once
+  // here — a hairstyle is instanced from a fixed-size buffer of its wearers' slots, built once, so a slot can't switch
+  // hairstyle without that buffer being rebuilt. Everything else about how someone looks — body shape, face shape,
+  // colors (clothes, hair, skin, eyes, hat), and where their clothes stop — is seeded from their person id instead (see
+  // assignAppearance below), so when someone dies and someone new takes their slot (see updatePeople in people.js),
+  // the new arrival gets their own build, face and colors rather than a repeat of whoever was there before.
   const traitRows = PERSON_FACE_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
   const isMan = new Uint8Array(PEOPLE_MAX);
-  const traitRng = mulberry32(777), colorRng = mulberry32(4242), hatRng = mulberry32(8086), faceRng = mulberry32(2718), color = new THREE.Color();
   const NATURAL_COLOUR_CHANCE = 0.85;
-  const colorFor = {
-    Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
-    Pants: () => colorRng() < 0.8 ? color.set(PANTS_COLORS[Math.floor(colorRng()*PANTS_COLORS.length)]) : color.setHSL(colorRng(), 0.25 + colorRng()*0.3, 0.25 + colorRng()*0.25),
-    Shoes: () => colorRng() < 0.7 ? color.set(SHOE_COLORS[Math.floor(colorRng()*SHOE_COLORS.length)]) : color.setHSL(colorRng(), 0.4 + colorRng()*0.45, 0.35 + colorRng()*0.25),
-    // three in four have a natural hair color; the rest have dyed it something bright
-    Hair: () => colorRng() < NATURAL_COLOUR_CHANCE ? color.set(HAIR_TONES[Math.floor(colorRng()*HAIR_TONES.length)]).multiplyScalar(0.9 + colorRng()*0.2) : color.setHSL(colorRng(), 0.65 + colorRng()*0.3, 0.45 + colorRng()*0.15),
-    // Hair: () => color.set(HAIR_TONES[Math.floor(colorRng()*HAIR_TONES.length)]).multiplyScalar(0.9 + colorRng()*0.2),
-    Skin: () => color.copy(palette[0]),
-    Eyes: () => color.copy(palette[PERSON_SLOTS.indexOf('White')]),
-    Blood: () => color.setRGB(0, 0, 0), // (only its fourth number, the opacity, is read: see BLOOD_GLSL)
-    // its own generator, so adding it didn't change anyone's other colors
-    Hat: () => hatRng() < 0.25 ? color.setHSL(0, 0, [0.08, 0.3, 0.6, 0.9][Math.floor(hatRng()*4)]) : color.setHSL(hatRng(), 0.4 + hatRng()*0.5, 0.3 + hatRng()*0.35),
-  };
+  const sexRng = mulberry32(777);
   for (let i=0;i<PEOPLE_MAX;i++) {
-    const texel = row => (row*PEOPLE_MAX + i)*4;
-    const man = traitRng() < 0.5, ranges = man ? PERSON_BODY_SHAPES.male : PERSON_BODY_SHAPES.female;
+    const man = sexRng() < 0.5;
     isMan[i] = man ? 1 : 0;
-    const shape = PERSON_SHAPE_KEYS.slice(0, PERSON_BODY_KEY_COUNT).map(key => { const [lo, hi] = ranges[key]; return lo + traitRng()*(hi - lo); });
-    traits.set(shape.slice(0, 4), texel(0));
-    // their head's and eyes' shapes
-    const face = Object.values(PERSON_FACE_SHAPES).map(range => {
-      const [lo, hi] = Array.isArray(range) ? range : range[man ? 'male' : 'female'];
-      return lo + faceRng()*(hi - lo);
-    });
-    traits.set([shape[4], man ? 1 : 0, face[4], shape[5]], texel(1));
-    traits.set(face.slice(0, 4), texel(PERSON_FACE_ROW));
-    PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
     headLayers.forEach(layer => {
       const styles = man ? layer.boys : layer.girls;
       if (!styles.length) return;
@@ -711,21 +691,68 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   }
 
   /**
-   * Writes where everyone's clothes stop into the traits texture. Run on its own, after the rest: a woman's midriff
-   * depends on her age, which comes from people.txt, so this runs again whenever that loads.
+   * Where someone's clothes stop (see clothingBand), from their id and sex: a woman's midriff depends on her age,
+   * which comes from people.txt, so callers work this out again whenever that loads (see below).
+   * @param {number} id - their person id
+   * @param {boolean} man - their sex
+   * @returns {number[]} one band per entry in PERSON_CLOTHING, for the clothing texel row
    */
-  const setClothing = () => {
-    const clothingRng = mulberry32(1990);
-    for (let i=0;i<PEOPLE_MAX;i++) {
-      const man = isMan[i] === 1, { age } = profileOf(i, man);
-      traits.set(PERSON_CLOTHING.map(c => clothingBand(c, clothingRng(), man, age)), (PERSON_CLOTHING_ROW*PEOPLE_MAX + i)*4);
-    }
+  const clothingRowFor = (id, man) => {
+    const clothingRng = mulberry32(1990 + id*7919), { age } = profileOf(id, man);
+    return PERSON_CLOTHING.map(c => clothingBand(c, clothingRng(), man, age));
   };
-  setClothing();
 
   const traitTexture = new THREE.DataTexture(traits, PEOPLE_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
   traitTexture.needsUpdate = true;
-  onProfilesLoaded(() => { setClothing(); traitTexture.needsUpdate = true; });
+
+  /**
+   * Write one person's body shape, face shape, colors and clothing into the traits texture, from their id — not their
+   * slot, since two different ids taking the same slot one after another should look nothing alike. Their sex and
+   * hairstyle are left alone: those are fixed to the slot above. Called whenever someone is born into a slot (see
+   * newPerson and updatePeople in people.js).
+   * @param {number} i - their place in the crowd: the slot to write into
+   * @param {number} id - their person id: what everything here is seeded from
+   * @returns {void}
+   */
+  function assignAppearance(i, id) {
+    const man = isMan[i] === 1, ranges = man ? PERSON_BODY_SHAPES.male : PERSON_BODY_SHAPES.female;
+    const texel = row => (row*PEOPLE_MAX + i)*4;
+    const traitRng = mulberry32(777 + id*7919), faceRng = mulberry32(2718 + id*7919);
+    const colorRng = mulberry32(4242 + id*7919), hatRng = mulberry32(8086 + id*7919), color = new THREE.Color();
+    const colorFor = {
+      Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
+      Pants: () => colorRng() < 0.8 ? color.set(PANTS_COLORS[Math.floor(colorRng()*PANTS_COLORS.length)]) : color.setHSL(colorRng(), 0.25 + colorRng()*0.3, 0.25 + colorRng()*0.25),
+      Shoes: () => colorRng() < 0.7 ? color.set(SHOE_COLORS[Math.floor(colorRng()*SHOE_COLORS.length)]) : color.setHSL(colorRng(), 0.4 + colorRng()*0.45, 0.35 + colorRng()*0.25),
+      // three in four have a natural hair color; the rest have dyed it something bright
+      Hair: () => colorRng() < NATURAL_COLOUR_CHANCE ? color.set(HAIR_TONES[Math.floor(colorRng()*HAIR_TONES.length)]).multiplyScalar(0.9 + colorRng()*0.2) : color.setHSL(colorRng(), 0.65 + colorRng()*0.3, 0.45 + colorRng()*0.15),
+      Skin: () => color.copy(palette[0]),
+      Eyes: () => color.copy(palette[PERSON_SLOTS.indexOf('White')]),
+      Blood: () => color.setRGB(0, 0, 0), // (only its fourth number, the opacity, is read: see BLOOD_GLSL)
+      // its own generator, so adding it didn't change anyone's other colors
+      Hat: () => hatRng() < 0.25 ? color.setHSL(0, 0, [0.08, 0.3, 0.6, 0.9][Math.floor(hatRng()*4)]) : color.setHSL(hatRng(), 0.4 + hatRng()*0.5, 0.3 + hatRng()*0.35),
+    };
+    const shape = PERSON_SHAPE_KEYS.slice(0, PERSON_BODY_KEY_COUNT).map(key => { const [lo, hi] = ranges[key]; return lo + traitRng()*(hi - lo); });
+    traits.set(shape.slice(0, 4), texel(0));
+    // their head's and eyes' shapes
+    const face = Object.values(PERSON_FACE_SHAPES).map(range => {
+      const [lo, hi] = Array.isArray(range) ? range : range[man ? 'male' : 'female'];
+      return lo + faceRng()*(hi - lo);
+    });
+    traits.set([shape[4], man ? 1 : 0, face[4], shape[5]], texel(1));
+    traits.set(face.slice(0, 4), texel(PERSON_FACE_ROW));
+    PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
+    traits.set(clothingRowFor(id, man), texel(PERSON_CLOTHING_ROW));
+    traitTexture.needsUpdate = true;
+  }
+  // whoever's already in the crowd when the model finishes loading has been walking round as a cuboid till now: fill
+  // in their looks. Everyone born after this just gets them as they arrive (see updatePeople in people.js).
+  people.forEach((p, i) => assignAppearance(i, p.id));
+  // a woman's clothes depend on her age, which comes from people.txt: whenever that (re)loads, work out everyone's
+  // clothing again, without touching the rest of how they look
+  onProfilesLoaded(() => {
+    people.forEach((p, i) => { traits.set(clothingRowFor(p.id, isMan[i] === 1), (PERSON_CLOTHING_ROW*PEOPLE_MAX + i)*4); });
+    traitTexture.needsUpdate = true;
+  });
 
   // ============== Meshes  ============== 
   const uniforms = {
@@ -765,7 +792,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, hidden: uniforms.personHidden, anim, look, eyes, hair: headLayers.flatMap(layer => layer.styles).filter(style => style.mesh), headLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette,
+  return { mesh, hidden: uniforms.personHidden, anim, look, eyes, hair: headLayers.flatMap(layer => layer.styles).filter(style => style.mesh), headLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
     headBone: headBone ?? 0, headPivot,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

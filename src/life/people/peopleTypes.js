@@ -51,6 +51,9 @@
 /**
  * A person, cuboid or model-drawn.
  * @typedef {object} Person
+ * @property {number} id - who they permanently are, separate from their place in the crowd: what their name, age,
+ *   traits and looks are seeded from (see profileOf in profiles.js and assignAppearance in peopleModel.js), so it
+ *   survives someone else later taking their old slot. See peopleIdSeq in people.js.
  * @property {number} x - where they are
  * @property {number} y
  * @property {number} z
@@ -166,6 +169,8 @@
  * @property {number} boneWidth
  * @property {Float32Array} traitData - the traits texture's data
  * @property {import('three').Color[]} palette - the model's own colors by slot
+ * @property {function(number, number): void} assignAppearance - write one person's body shape, face, colors and
+ *   clothing into the traits texture, from their id (see people.js)
  * @property {number} headBone
  * @property {import('three').Vector3} headPivot
  * @property {number} height - the model's height, in its own units

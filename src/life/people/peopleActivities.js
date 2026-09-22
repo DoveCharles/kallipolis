@@ -918,7 +918,7 @@ export function showPassengers() {
   if (key === passengersKey || !App.setTrainCardPassengers) return;
   passengersKey = key;
   App.setTrainCardPassengers(
-    riders.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name),
+    riders.map(i => profileOf(people[i].id, personModel ? personModel.isMan[i] === 1 : null).name),
     riders.indexOf(riderFollowed),
     at => { setRiderFollowed(riders[at]); },
   );
@@ -1162,7 +1162,7 @@ export function showInhabitants() {
   if (shownKey === inhabitantsKey || !App.setBuildingCardInhabitants) return;
   inhabitantsKey = shownKey;
   if (key) App.setBuildingCardInhabitants(
-    inside.map(i => profileOf(i, personModel ? personModel.isMan[i] === 1 : null).name),
+    inside.map(i => profileOf(people[i].id, personModel ? personModel.isMan[i] === 1 : null).name),
     inside.indexOf(awaited),
     at => { awaited = inside[at]; },
   );

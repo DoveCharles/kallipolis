@@ -20,14 +20,16 @@ const favorites = new Map();
 const listeners = [];
 
 export const isFavorite = key => favorites.has(key);
-// the key a person's favorite goes by: their place in the crowd, which is who they are (see profileOf in life/profiles.js)
-export const personKey = i => 'person:' + i;
-export const isFavoritePerson = i => favorites.has(personKey(i));
-// the places in the crowd of everyone hearted, highest first (kept up to date, as the crowd asks every frame)
+// the key a person's favorite goes by: their person id, which is who they are (see peopleIdSeq in life/people/people.js
+// and profileOf in life/profiles.js) — not their place in the crowd, which is just whichever slot currently has them
+export const personKey = id => 'person:' + id;
+export const isFavoritePerson = id => favorites.has(personKey(id));
+// the ids of everyone hearted (kept up to date, as the crowd asks every frame): updatePeople makes sure each of these
+// is standing somewhere in the crowd, growing it and reviving them by id if a reload left one out of it
 let keptPeople = [];
 export const favoritePeople = () => keptPeople;
 function changed() {
-  keptPeople = [...favorites.values()].filter(fav => fav.kind === 'Person').map(fav => fav.saved.index).sort((a, b) => b - a);
+  keptPeople = [...favorites.values()].filter(fav => fav.kind === 'Person').map(fav => fav.saved.id);
   render();
   listeners.forEach(fn => fn());
 }
