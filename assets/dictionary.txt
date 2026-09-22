@@ -6,11 +6,27 @@
 # A line that's just a name in square brackets, like [animal], starts a word list: the lines under it, up to the next
 # blank line, are its words. Put [animal] in any line and it's swapped for one of them at random each time it's said.
 
+[noun - singular]
+Slime
+Gruel
+
+
+[noun - plural]
+Zoning Laws
+Sponges
+Tongues
+Fingers
+Toes
+Teeth
+
 [animal]
 Dog
 Cat
 Mouse
 Rat
+Snake
+Penis Monster
+Tiny Jester
 
 [verb - negative]
 bite
@@ -18,7 +34,6 @@ shit a lot
 cum constantly
 
 I was thinking about getting a pet [animal], but I heard they [verb - negative].
-
 Anyway.
 Honestly?
 No way.
@@ -27,22 +42,35 @@ Right, right.
 I can't stop cumming.
 Tuesday.
 Absolutely not.
-Bananas.
 I know, I know.
 Mm-hm.
 Seriously.
 Wait, what?
-The bus was late again.
 Have you tried the new place on the corner?
-I left my keys at home.
+I think God is listening to us right now.
+I left my penis at home.
 It's going to rain later, apparently.
 She said what?
 I've been meaning to call my mother.
 Do you think the trains are running today?
+The trains are always running you fucking dipshit.
 That's what I told him!
 We should get lunch sometime.
+You make me so so mad sometimes.
+Why are you crying?
+Not that there's anything wrong with that.
 I can't believe it's already this late.
 Did you hear about the bees?
-My landlord still hasn't fixed the heating.
 Oh, that reminds me.
 Anyway, how are you?
+I've been reading stuff about river deltas.
+Where am I?
+I need to get home and feed my snakes.
+I need to get home and feed my [animal].
+I'm really enjoying gruel recently.
+Have you see that show about [noun - plural]?
+Where the fuck did I put my [noun - singular]
+I hope the day is kind to me.
+Irish people scare me.
+No, I'm not allowed Chinese food.
+I'm really really fast on the keyboard.
