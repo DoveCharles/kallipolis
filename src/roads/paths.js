@@ -222,8 +222,12 @@ export function makeWalkwayMaterial({ texture, color, scale, rotation, segments,
   applyWalkwayShader(mat, texture, scale, rotation);
   return mat;
 }
-// One walkway network's mesh: the union of its lines stroked out to their width (plus the fade, for dirt)
-function buildWalkwayMesh(lines, networkId) {
+// One walkway network's mesh: the union of its lines stroked out to their width (plus the fade, for dirt), minus
+// `claim` — whatever higher-priority walkway networks have already staked out (see rebuildRoadMeshes and
+// S.walkwayOrder), so two walkways crossing don't z-fight over the same ground: the higher one wins the overlap
+// and the lower one is simply cut off at its edge. Returns the network's own (unclaimed) outline alongside the
+// mesh, so the caller can add it to what the next, lower-priority network has to give way to.
+function buildWalkwayMesh(lines, networkId, claim) {
   const line = lines[0]; // colors and textures are set per network in the details panel
   const halfWidth = (line.width || S.DEFAULT_ROAD_WIDTH)/2;
   const texture = line.walkwayTexture || WALKWAY_TEXTURE;
@@ -234,16 +238,29 @@ function buildWalkwayMesh(lines, networkId) {
     radius: halfWidth + fade,
   })));
   const builder = createMeshBuilder();
-  builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, outline, [], true), Y_PATH);
+  builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, outline, claim || [], true), Y_PATH);
   const geo = builder.build();
-  if (!geo) return null;
-  const mat = makeWalkwayMaterial({ texture, color, scale: walkwayTextureScaleOf(line), rotation: line.walkwayTextureRotation,
-    segments: texture === 'dirt' ? pathSegmentsOf(lines) : [], halfWidth, fade });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.receiveShadow = true;
-  mesh.name = 'Walkway';
-  mesh.userData = { networkId, baseColor: color };
-  return mesh;
+  let mesh = null;
+  if (geo) {
+    const mat = makeWalkwayMaterial({ texture, color, scale: walkwayTextureScaleOf(line), rotation: line.walkwayTextureRotation,
+      segments: texture === 'dirt' ? pathSegmentsOf(lines) : [], halfWidth, fade });
+    mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    mesh.name = 'Walkway';
+    mesh.userData = { networkId, baseColor: color };
+  }
+  return { mesh, outline };
+}
+// Moves a walkway network to just before (or after) another in S.walkwayOrder: like moveZone, the order is
+// priority, so overlapping walkways need re-laying out (rebuildRoadMeshes re-syncs the order too, but that's a
+// no-op here since both ids are already in it).
+S.draggedWalkwayId = null;
+export function moveWalkwayNetwork(networkId, targetNetworkId, before) {
+  if (networkId === targetNetworkId) return;
+  S.walkwayOrder = S.walkwayOrder.filter(id => id !== networkId);
+  const at = S.walkwayOrder.indexOf(targetNetworkId);
+  S.walkwayOrder.splice(before ? at : at+1, 0, networkId);
+  rebuildRoadMeshes();
 }
 
 // Updates the colors and walkway textures of already-built road and walkway meshes from their lines — for the purely
@@ -356,9 +373,17 @@ export function rebuildRoadMeshes() {
     if (!walkwayNetworks.has(line.networkId)) walkwayNetworks.set(line.networkId, []);
     walkwayNetworks.get(line.networkId).push(line);
   });
-  walkwayNetworks.forEach((lines, netId) => {
-    const mesh = buildWalkwayMesh(lines, netId);
+  // priority order for overlapping walkways (see buildWalkwayMesh): keep it in sync with what actually exists —
+  // networks that are gone drop out, new ones join at the back (lowest priority) until dragged elsewhere
+  const walkwayIds = new Set(walkwayNetworks.keys());
+  S.walkwayOrder = S.walkwayOrder.filter(id => walkwayIds.has(id));
+  walkwayIds.forEach(id => { if (!S.walkwayOrder.includes(id)) S.walkwayOrder.push(id); });
+  let claimedWalkway = [];
+  S.walkwayOrder.forEach(netId => {
+    const lines = walkwayNetworks.get(netId);
+    const { mesh, outline } = buildWalkwayMesh(lines, netId, claimedWalkway);
     if (mesh) S.roadMeshGroup.add(mesh);
+    claimedWalkway = claimedWalkway.length ? clipPolygons(ctUnion, claimedWalkway, outline) : outline;
     const strokes = lines.map(line => ({
       path: App.toClipperPath(tessellateOpenPath(line.nodeIds.map(id=>roadNodes[id]).filter(Boolean))),
       radius: (line.width || S.DEFAULT_ROAD_WIDTH)/2,

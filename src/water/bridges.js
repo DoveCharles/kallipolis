@@ -23,7 +23,7 @@ function buildBridges(region) {
   scene.remove(S.bridgeGroup); disposeObject(S.bridgeGroup);
   S.bridgeGroup = new THREE.Group(); S.bridgeGroup.name = 'Bridges';
   if (region.length && (S.roadBridgeSources.length || S.pathBridgeSources.length)) {
-    const { ctIntersection } = ClipperLib.ClipType;
+    const { ctIntersection, ctDifference } = ClipperLib.ClipType;
     const inWater = createRegionTester(region);
     const pointAt = (p, q, t) => ({ X: p.X+(q.X-p.X)*t, Y: p.Y+(q.Y-p.Y)*t });
     // a railing along the stretch p→q (Clipper points) of a deck edge, set in from it by the style's inset
@@ -66,7 +66,10 @@ function buildBridges(region) {
     const wood = createMeshBuilder(), woodRails = createMeshBuilder();
     S.pathBridgeSources.forEach(({ strokes }) => {
       const outline = unionRoadStrokes(strokes);
-      const over = clipPolygons(ctIntersection, outline, region, true);
+      const overWater = clipPolygons(ctIntersection, outline, region);
+      // wherever a road already crosses this same stretch of water it carries its own bridge, so the walkway
+      // is just cut off there (as it already is anywhere else it meets a road) instead of also getting one
+      const over = clipPolygons(ctDifference, overWater, S.roadFootprint, true);
       if (!over.Childs().length) return;
       wood.addTops(over, FOOTBRIDGE_TOP);
       wood.addTops(over, FOOTBRIDGE_TOP - FOOTBRIDGE_THICKNESS, true);

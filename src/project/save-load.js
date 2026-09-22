@@ -67,6 +67,7 @@ export function serializeProject() {
     favorites: savedFavorites(), // (only those that can be found again in a reloaded city: see ui/favorites.js)
     roads: {
       nodeSeq: S.roadNodeSeq, lineSeq: S.roadLineSeq, networkSeq: S.roadNetworkSeq,
+      walkwayOrder: S.walkwayOrder.slice(),
       nodes,
       lines: finishedLines.map(l => ({ id:l.id, nodeIds:l.nodeIds.slice(), width:l.width,
         color: colorToHex(l.color, ROAD_COLOR), sidewalkWidth:l.sidewalkWidth,
@@ -242,6 +243,7 @@ export async function loadProjectFromData(data, options) {
       walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: l.walkwayTextureScale ?? 1, walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}),
     ...(l.roadType==='river' ? { roadType:'river' } : {}) }));
   S.roadNodeSeq = rd.nodeSeq || 1; S.roadLineSeq = rd.lineSeq || 1; S.roadNetworkSeq = rd.networkSeq || 1;
+  S.walkwayOrder = Array.isArray(rd.walkwayOrder) ? rd.walkwayOrder.slice() : [];
   rebuildRoadMeshes();
 
   (data.zones||[]).forEach(zd => {

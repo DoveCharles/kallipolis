@@ -3,7 +3,7 @@ import { scene } from '../core/scene.js';
 import { BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE, PARK_TINT_COLORS, TREE_TINT_COLORS, SAND_TINT_COLORS, DEFAULT_GRASS_NOISE_STRENGTH } from '../core/splines.js';
 import { roadNodes, MAX_TARGET_LOTS } from '../core/state.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
-import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes, refreshRoadAppearance, walkwayTextureChangeNeedsRebuild, defaultWalkwayTextureScale, walkwayTextureScaleOf } from '../roads/paths.js';
+import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes, refreshRoadAppearance, walkwayTextureChangeNeedsRebuild, defaultWalkwayTextureScale, walkwayTextureScaleOf, moveWalkwayNetwork } from '../roads/paths.js';
 import { networkKindOf, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
@@ -91,10 +91,15 @@ export function renderHierarchy() {
   S.roadLines.forEach(line => {
     if (seenNetworks.has(line.networkId)) return;
     seenNetworks.add(line.networkId);
-    networks.push({ netId: line.networkId, kind: networkKindOf(line) });
+    networks.push({ netId: line.networkId, kind: networkKindOf(line), lines: S.roadLines.filter(l=>l.networkId===line.networkId) });
   });
-  networks.forEach(({ netId, kind }) => {
-    const lines = S.roadLines.filter(l=>l.networkId===netId);
+  // walkways that overlap compete for the same ground, so — like zones — they're drag-reordered, higher wins the
+  // overlap (see buildWalkwayMesh); everything else keeps the order it was found in above
+  networks.sort((a, b) => {
+    if (!isWalkwayLine(a.lines[0]) || !isWalkwayLine(b.lines[0])) return 0;
+    return S.walkwayOrder.indexOf(a.netId) - S.walkwayOrder.indexOf(b.netId);
+  });
+  networks.forEach(({ netId, kind, lines }) => {
     const row = document.createElement('div');
     row.className = 'hier-row' + (S.selection.type===kind&&S.selection.id===netId?' active':'');
     const span = document.createElement('span');
@@ -107,6 +112,44 @@ export function renderHierarchy() {
     del.onclick = (e)=>{ e.stopPropagation(); removeRoadNetwork(netId); };
     row.appendChild(del);
     row.onclick = ()=> selectItem(kind, netId);
+    if (kind==='road' && isWalkwayLine(lines[0])) {
+      row.draggable = true;
+      row.addEventListener('dragstart', (e) => {
+        S.draggedWalkwayId = netId;
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', netId);
+      });
+      row.addEventListener('dragend', () => { if (S.draggedWalkwayId) { S.draggedWalkwayId = null; renderHierarchy(); } });
+      row.addEventListener('dragover', (e) => {
+        if (!S.draggedWalkwayId || S.draggedWalkwayId===netId) return;
+        e.preventDefault();
+        const rect = row.getBoundingClientRect(), before = e.clientY < rect.top + rect.height/2;
+        row.classList.toggle('drop-before', before);
+        row.classList.toggle('drop-after', !before);
+      });
+      row.addEventListener('dragleave', () => row.classList.remove('drop-before', 'drop-after'));
+      row.addEventListener('drop', (e) => {
+        if (!S.draggedWalkwayId) return;
+        e.preventDefault();
+        moveWalkwayNetwork(S.draggedWalkwayId, netId, row.classList.contains('drop-before'));
+        renderHierarchy();
+      });
+      if (IS_TOUCH) {
+        const step = (dir) => (e) => {
+          e.stopPropagation();
+          const i = S.walkwayOrder.indexOf(netId), j = i + dir;
+          if (j < 0 || j >= S.walkwayOrder.length) return;
+          moveWalkwayNetwork(netId, S.walkwayOrder[j], dir < 0);
+          renderHierarchy();
+        };
+        const up = document.createElement('button');
+        up.className = 'hier-move'; up.textContent = '▲'; up.title = 'Move up (wins overlaps)'; up.onclick = step(-1);
+        const down = document.createElement('button');
+        down.className = 'hier-move'; down.textContent = '▼'; down.title = 'Move down'; down.onclick = step(1);
+        row.insertBefore(up, del); row.insertBefore(down, del);
+      }
+    }
     pathsList.appendChild(row);
   });
   document.getElementById('paths-count').textContent = networks.length;
