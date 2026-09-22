@@ -10,7 +10,10 @@ export const TRAITS = {
   boost:     { base: 1, min: 0.1, max: 6 }, // multiplies the boost of running (people) or of driving with shift held (cars)
   braking:   { base: 1, min: 0.1, max: 6 }, // multiplies how hard a car brakes
   control:   { base: 1, min: 0.1, max: 6 }, // multiplies how sharply a driven car steers
-  weight:    { base: 1, min: 0.1, max: 10 }, // how much a car crashing into it slows down: multiplies the base slow-down for its kind (people's is far smaller: see slowedBy in life/traffic.js)
+  weight:    { base: 1, min: 0.1, max: 10 }, // how much a car crashing into it slows down: see slowedBy in life/traffic.js
+  recovery:   { base: 1, min: 0.1, max: 10}, //how fast a car recovers from a burnt out engine, how likely they are to burn out
+  health:    { base: 1, min: 0.01, max: 10}, //health multiplier
+  tank:      { base: 1, min: 0.01, max: 10}, //how many seconds of boost are available
   size:      { base: 1, min: 0.3, max: 3 },
   chatty:    { base: 1, min: 0, max: 10 },
   talkative: { base: 1, min: 0.05, max: 20 },
@@ -35,18 +38,20 @@ export const TRAITS = {
   dodge:     { base: 0, min: 0, max: 1, combine: 'add' }, // the chance of leaping clear of a punch, then going after whoever threw it (see dodgePunch in life/people/peopleActivities.js)
   blazed:    { base: 0, min: 0, max: 1, combine: 'on' }, // the whites of their eyes a little red (see BLAZED_EYE_RED in life/people/people.js)
   vampire:   { base: 0, min: 0, max: 1, combine: 'on' }, // also brings everything in TRAIT_MACROS.vampire; pales the skin with age (see life/people/people.js)
-  ageless:   { base: 0, min: 0, max: 1, combine: 'on' },
+  ageless:   { base: 0, min: 0, max: 1, combine: 'on' }, //hair doesn't grey with age
   nickname:  { base: 0, min: 0, max: 1, combine: 'on' },
-  bleach:    { base: 0, min: 0, max: 1, combine: 'on' },
-  // any kind
+  bleach:    { base: 0, min: 0, max: 1, combine: 'on' },//turns hair white - TODO: clothes too
   solo:      { base: 0, min: 0, max: 1, combine: 'on' }, // on a love or hate: the only one of its kind that thing has (see addEntries)
   scramble: {base: 0, min: 0, max: 1, combine: 'on'}, //scrambles text in card
   keysmash: {base: 0, min: 0, max: 1, combine: 'on'}, //keysmashes text in card
-  // rarity: a love/hate entry (or the thing's own mood) carrying either tints that entry's row gold or dark reddish-brown on
-  // its card (see ui/entity-card.js) and counts towards the thing's own total — a car reads its own total for its shiny
-  // paint, sparkle and (terrible) smoking, shaking wreck (see life/traffic.js)
-  legendary: { base: 0, min: 0, max: 2, combine: 'add' },
-  terrible:  { base: 0, min: 0, max: 4, combine: 'add' },
+  legendary: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as legendary
+  terrible: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as terrible
+  smells: { base: 0, min: 0, max: 1, combine: 'on' }, //makes other people - or cars - stay clear
+  respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time - instationary, then struck by lightning
+  drunk: {base: 0, min: 0, max: 1, combine: 'on'} ,//steering randomly switches direction for up to 2 seconds, people randomly fall over or throw up
+  unstable: {base: 0, min: 0, max: 1, combine: 'add'}, //chance to be hurt X5 more than usual
+  explosive: {base: 0, min: 0, max: 1, combine: 'on'}, //blow up on death, killing bystanders; if already blowing up, explosion becomes much bigger
+  aqua: {base: 0, min: 0, max: 1, combine: 'on'}, //walks on water, or at least doesn't drown
 };
 
 // Shorthands: a trait named here counts as if the traits listed were written beside it, at the same amounts and stacking

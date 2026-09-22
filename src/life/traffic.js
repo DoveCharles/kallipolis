@@ -345,7 +345,12 @@ function carPlate(car) {
   const carRNG = mulberry32(hashNameToNumber(carMeshes[car.design].name+ car.number));
   const type = carTypeOf(carMeshes[car.design].name, car.number), name = (type.name || '').trim().toLowerCase();
   const vanity = vanityPlatesOf(carMeshes[car.design].name); // (from the `plate` lines in assets/cars.txt)
-  const text = (carRNG() < vanityChanceOf(carMeshes[car.design].name) && vanity.length) ? vanity[Math.round(carRNG()*(vanity.length-1))].toUpperCase() :
+  // a legendary car's registration stands out too: each legendary love/hate doubles the chance of a vanity plate,
+  // capped at 100% — the same tally refreshCarTraits does for legendaryCount, but car.legendaryCount isn't set yet
+  // this early (carPlate runs before refreshCarTraits, see the spawn loop), so it's read straight off type here.
+  const legendaryCount = [...(type.lovesTier || []), ...(type.hatesTier || [])].filter(tier => tier === 'legendary').length;
+  const vanityChance = Math.min(1, vanityChanceOf(carMeshes[car.design].name)*Math.pow(2, legendaryCount));
+  const text = (carRNG() < vanityChance && vanity.length) ? vanity[Math.round(carRNG()*(vanity.length-1))].toUpperCase() :
   hashLicensePlate(`${type.name} #${car.number}`, UK_ONLY_TYPES.includes(name) ? 0 : undefined);
   return { text, packed: packPlate(text) };
 }
@@ -366,13 +371,16 @@ function carPlate(car) {
  *   plates arrive as uniforms set before each draw, and the wheels sit still. Null for the instanced crowd.
  * @param {?object} plateUniform - the per-instance plate glyph uniform, or null as with paintUniform
  * @param {boolean} isGlass - true for the glass material, which never wears the holo sheen (see applyCarHolo)
+ * @param {number} halfLength - half the design's own local-space length (design.length*BOX_CAR_LENGTH/2), so the foil
+ *   sheen's ring can sit a fixed real distance behind this design specifically (carFoilCentreZ, see applyCarFoilField)
  * @returns {void}
  */
 const carHoloTimeUniform = { value: 0 }; // the shared clock for every car's holo sheen (see updateTraffic, applyCarHolo)
-function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlass = false) {
+function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlass = false, halfLength = 0) {
   shader.uniforms.carGlowFactor = glowUniform;
   shader.uniforms.carPlateAtlas = { value: plateAtlas };
   shader.uniforms.carHoloTime = carHoloTimeUniform;
+  shader.uniforms.carFoilCentreZ = { value: halfLength };
   shader.uniforms.carRustColor = { value: TERRIBLE_RUST };
   if (paintUniform) shader.uniforms.instanceCarPaint = paintUniform;
   if (paintUniform) shader.uniforms.instanceCarWheel = { value: new THREE.Vector2() };
@@ -383,9 +391,10 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
     ? 'uniform vec3 instanceCarPaint;\nuniform vec2 instanceCarWheel;\nuniform vec4 instanceCarPlate;\nuniform vec4 instanceCarHolo;\nuniform vec2 instanceCarRust;'
     : 'attribute vec3 instanceCarPaint;\nattribute vec2 instanceCarWheel;\nattribute vec4 instanceCarPlate;\nattribute vec4 instanceCarHolo;\nattribute vec2 instanceCarRust;';
   const plateDecl = 'varying vec3 vCarPlateUv;\nflat varying vec4 vCarPlate;';
-  const holoVaryingDecl = 'varying vec4 vCarHolo;\nvarying vec2 vCarRust;\nvarying vec3 vHoloPos;';
+  const holoVaryingDecl = 'varying vec4 vCarHolo;\nvarying vec2 vCarRust;\nvarying vec3 vHoloPos;\nvarying float vCarPainted;';
   const holoFns = `
     uniform float carHoloTime;
+    uniform float carFoilCentreZ;
     uniform vec3 carRustColor;
     vec3 carHoloHsv(vec3 c) {
       vec4 k = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
@@ -407,33 +416,67 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
     }
     // a legendary car's sheen, both kinds driven by the same carFoilFac glint moving over the body (drifting over time,
     // shifting whenever the car turns via holo.w folded into the phase) — foil (one legendary, or a two-legendary car
-    // with any terrible) leaves every channel treated alike, so it only ever brightens, never recolours; polychrome (a
-    // spotless two-legendary car) tints the glint with a shifting rainbow hue plus a faint permanent tinge so it still
-    // reads as polychrome between glints. See carHoloOf/placeCar for what's packed into holo.
-    vec3 applyCarHolo(vec3 base, vec4 holo, vec3 localPos) {
-      float strength = holo.x, kind = holo.y, seed = holo.z, turn = holo.w*2.2;
-      // sampled well off the car's own centre (a fixed offset per car, from its seed) so only a sliver of the
-      // interference pattern's rings ever crosses the body — at that distance from their true centre they read as
-      // near-straight lines rather than the circular glint you'd see close in.
-      vec2 uv = localPos.xz*0.03 + vec2(cos(seed*6.2832), sin(seed*6.2832))*14.0; // a smaller multiplier zooms in, widening each band
+    // with any terrible) tints the glint with carFoilTint below (a lightened, hue-shifted echo of the car's own paint,
+    // or a fixed lightened electric blue where there's no paint to echo); polychrome (a spotless two-legendary car)
+    // tints it with a shifting rainbow hue instead. Both are purely maxfac-driven — off the bright bands maxfac is 0,
+    // so the result is exactly base, unchanged, not a permanent tint. See carHoloOf/placeCar for what's packed into holo.
+    //
+    // standard GLSL rgb->hsv (the inverse of carHoloHsv above), used by carFoilTint to shift and lighten the paint's own hue
+    vec3 carRgb2Hsv(vec3 c) {
+      vec4 k = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+      vec4 p = mix(vec4(c.bg, k.wz), vec4(c.gb, k.xy), step(c.b, c.g));
+      vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+      float d = q.x - min(q.w, q.y), e = 1.0e-10;
+      return vec3(abs(q.z + (q.w - q.y)/(6.0*d + e)), d/(q.x + e), q.x);
+    }
+    // Tuning knobs — edit these directly, no need to touch the maths below them.
+    const float FOIL_ROTATION_REACTIVITY = 0.05; // how much the car's own turning shifts the pattern's phase; higher = twitchier
+    const float FOIL_CENTRE_CAR_LENGTHS = 20.0; // how many car lengths behind the car the ring's own centre sits
+    const float FOIL_SWING_DEGREES = 20.0; // how far that centre swings side to side, each direction, pivoting about the car
+    const float FOIL_SWING_PERIOD = 4.0; // seconds for one full left-right-left swing
+    const float FOIL_ZOOM = 0.0006; // the pattern's spatial scale — smaller = more zoomed out, bigger bands
+    const float FOIL_OPACITY = 0.62; // how strongly the glint shows over the paint, never fully opaque
+    const float FOIL_HUE_SHIFT = -40.0; // degrees the paint's own hue turns for the level-1 glint's own tint
+    const float FOIL_TINT_LIGHTEN = 0.55; // how far that tint is pulled toward white; 0 keeps the full colour, 1 is white
+    // the level-1 glint's own colour: painted (vCarPainted, see placeCar's vertex shader) shifts and lightens the
+    // car's own paint; unpainted (trim that keeps its baked colour regardless of the car, or a whole design with no
+    // paintable body) has no car colour to shift, so it gets a fixed lightened electric blue instead.
+    vec3 carFoilTint(vec3 paintBase, float painted) {
+      vec3 hsv = painted > 0.5 ? carRgb2Hsv(paintBase) : vec3(0.58, 0.85, 1.0); // 0.58 turns ~ electric blue
+      if (painted > 0.5) hsv.x = fract(hsv.x + FOIL_HUE_SHIFT/360.0);
+      hsv.y *= 1.0 - FOIL_TINT_LIGHTEN;
+      hsv.z = mix(hsv.z, 1.0, FOIL_TINT_LIGHTEN);
+      return carHoloHsv(hsv);
+    }
+    vec3 applyCarHolo(vec3 base, vec4 holo, vec3 localPos, float painted) {
+      float strength = holo.x, kind = holo.y, seed = holo.z;
+      // sin() of the bearing, not the raw angle: holo.w (placeCar) jumps from +pi to -pi at the instant the camera
+      // crosses directly behind the car — the same angle, just written the other way round, but foilR below multiplies
+      // it into several different non-whole frequencies, so a raw 2*pi jump there doesn't cancel out and the whole
+      // pattern would visibly snap. sin() is continuous straight through that wrap (it already treats +pi and -pi as
+      // the same point), so the phase stays smooth all the way around the car regardless.
+      float turn = sin(holo.w)*FOIL_ROTATION_REACTIVITY;
+      // carFoilCentreZ is half this design's own local-space length (injectCarShader), so *2.0*FOIL_CENTRE_CAR_LENGTHS
+      // puts the ring's own centre (uv = (0,0)) that many car lengths behind the car — off the body, so only the near
+      // curve of the ring reaches it. That centre also swings side to side, pivoting about the car.
+      float swingAngle = radians(FOIL_SWING_DEGREES)*sin(carHoloTime*6.283185/FOIL_SWING_PERIOD);
+      vec2 behind = vec2(-sin(swingAngle), cos(swingAngle))*carFoilCentreZ*2.0*FOIL_CENTRE_CAR_LENGTHS;
+      vec2 uv = (localPos.xz + behind)*FOIL_ZOOM;
       float foilR = carHoloTime*0.5 + seed*40.0 + turn, foilG = carHoloTime*0.25 + seed*21.0; // slow flicker
       float maxfac = carFoilFac(uv, foilR, foilG);
       float low = min(base.r, min(base.g, base.b)), high = max(base.r, max(base.g, base.b));
       float delta = min(high, max(0.5, 1.0 - low)); // how much headroom this particular paint colour has for a shine
-      float opacity = 0.3; // the whole glint sits at 30% strength over the paint, never fully opaque
       if (kind > 0.5) { // polychrome
         float hue = fract(localPos.z*0.2 - carHoloTime*0.3 + seed);
         vec3 rainbow = carHoloHsv(vec3(hue, 0.85, 1.0));
-        vec3 tinged = mix(base, rainbow, 0.18*strength);
-        return tinged + (rainbow*delta*maxfac*0.9 - vec3(delta*0.15))*strength*opacity;
+        return base + rainbow*delta*maxfac*0.9*strength*FOIL_OPACITY;
       }
-      // foil: never recolours the paint, just a bright, colourless glint
-      return base + (vec3(delta*maxfac*0.9) - vec3(delta*0.35))*strength*opacity;
+      // foil: a bright glint tinted by carFoilTint above, not the flat white it used to be
+      return base + carFoilTint(base, painted)*delta*maxfac*0.9*strength*FOIL_OPACITY;
     }
     // rust spots: a terrible car's own colour left alone, with round rust-brown blobs scattered over it — the same
-    // technique as a bloodied person's splotches (see src/life/people/peopleModel.js's BLOOD_GLSL), at six times the
-    // scale (half the size of the blobs this sampled at before), so the spots read as rust rather than a uniform tint.
-    // carRustOf packs [strength, seed] into rust.
+    // technique as a bloodied person's splotches (see src/life/people/peopleModel.js's BLOOD_GLSL), at three times the
+    // scale, so the spots read as rust rather than a uniform tint. carRustOf packs [strength, seed] into rust.
     float carRustHash(vec3 p) { p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x + p.y + p.z)); }
     float carRustBlobs(vec3 at) {
       vec3 base = floor(at - 0.5);
@@ -448,9 +491,10 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
       }
       return field;
     }
+    const float RUST_ZOOM = 0.75; // the blob pattern's spatial scale — bigger = more zoomed in, smaller blobs relative to the car
     vec3 applyCarRust(vec3 base, vec2 rust, vec3 localPos) {
       float strength = rust.x, seed = rust.y;
-      vec3 spot = localPos*0.8 + vec3(seed*13.7, seed*7.1, seed*3.3);
+      vec3 spot = localPos*RUST_ZOOM + vec3(seed*13.7, seed*7.1, seed*3.3);
       return mix(base, carRustColor, smoothstep(0.14, 0.22, carRustBlobs(spot))*strength);
     }`;
   const plateColor = `
@@ -493,6 +537,9 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       transformed = carWheelTurn(transformed - carWheel.xyz) + carWheel.xyz;
       vCarColor = carSlot > 0.5 && carSlot < 1.5 ? instanceCarPaint : carColor;
+      // whether this fragment is the paintable CarCol slot (instanceCarPaint above) or keeps its own baked colour
+      // regardless of the car — see carFoilTint, which only has a car colour to work from in the first case
+      vCarPainted = carSlot > 0.5 && carSlot < 1.5 ? 1.0 : 0.0;
       vCarPlateUv = carPlate;
       vCarPlate = instanceCarPlate;
       // the holo sheen and rust spots only ever play on the body (paintable or not) — never lights, plate or glass
@@ -504,7 +551,7 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
     .replace('#include <common>', '#include <common>\nvarying vec3 vCarColor;\nvarying vec3 vCarEmissive;\nuniform float carGlowFactor;\n' + plateDecl + plateColor + '\n' + holoVaryingDecl + holoFns)
     .replace('#include <color_fragment>', `#include <color_fragment>
       vec3 carBodyColor = vCarRust.x > 0.0 ? applyCarRust(vCarColor, vCarRust, vHoloPos) : vCarColor;
-      carBodyColor = vCarHolo.x > 0.0 ? applyCarHolo(carBodyColor, vCarHolo, vHoloPos) : carBodyColor;
+      carBodyColor = vCarHolo.x > 0.0 ? applyCarHolo(carBodyColor, vCarHolo, vHoloPos, vCarPainted) : carBodyColor;
       diffuseColor.rgb = vCarPlateUv.z > 0.5 ? carPlateColor() : carBodyColor;`)
     .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vCarEmissive*carGlowFactor;');
 }
@@ -525,7 +572,7 @@ function makeCarMaterials(design, key, glowUniform, paintUniform, plateUniform) 
   const glass = new THREE.MeshStandardMaterial({ roughness, metalness, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true,
     transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
   [body, glass].forEach((material, k) => {
-    material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, paintUniform, plateUniform, k === 1);
+    material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, paintUniform, plateUniform, k === 1, design.length*BOX_CAR_LENGTH/2);
     material.customProgramCacheKey = () => key + (k ? '-glass' : '');
   });
   return [body, glass];
@@ -991,7 +1038,15 @@ function refreshCarTraits(car) {
   const key = car.design + ':' + car.number;
   if (car.traitsKey === key) return;
   car.traitsKey = key;
-  car.traits = carTypeOf(carMeshes[car.design].name, car.number).traits;
+  const type = carTypeOf(carMeshes[car.design].name, car.number);
+  car.traits = type.traits;
+  // legendary/terrible are 'on' traits (core/traits.js) — combineTraits caps the aggregate at 1 even when several of a
+  // car's loves/hates are individually marked legendary or terrible, so updateSpecialTraits' net level can't read the
+  // real count from car.traits. Tallied here instead from each love/hate entry's own tier (type.lovesTier/hatesTier,
+  // from carTypeOf/core/type-text.js).
+  const tiers = [...(type.lovesTier || []), ...(type.hatesTier || [])];
+  car.legendaryCount = tiers.filter(tier => tier === 'legendary').length;
+  car.terribleCount = tiers.filter(tier => tier === 'terrible').length;
 }
 
 /**
@@ -1203,7 +1258,11 @@ function placeCar(car, i, designCounts) {
     cm.paint.setXYZ(idx, car.paint[0], car.paint[1], car.paint[2]);
     cm.wheels.setXY(idx, car.wheelSpin, car.wheelSteer);
     cm.plates.setXYZW(idx, ...car.plate.packed);
-    cm.holo.setXYZW(idx, holo[0], holo[1], holo[2], car.heading);
+    // the camera's bearing from the car, in the car's own local frame (world bearing to the camera, minus the car's
+    // own heading) — not the car's raw heading, so the foil glint (applyCarHolo) reacts to where the camera is
+    // looking from, not to the car simply turning under a viewer whose own relative angle hasn't changed.
+    const toCamera = Math.atan2(camera.position.x - car.x, camera.position.z - car.z) - car.heading;
+    cm.holo.setXYZW(idx, holo[0], holo[1], holo[2], toCamera);
     cm.rust.setXY(idx, rust[0], rust[1]);
     matrix.makeScale(0, 0, 0);
     carParts.body.setMatrixAt(i, matrix);
@@ -1994,70 +2053,76 @@ function boostSmoke(car, dt) {
   [-1, 1].forEach(end => tyreSmoke({ x: car.x - sin*back + cos*side*end, y: Y_ROAD, z: car.z - cos*back - sin*side*end }, carHeight(car), dt));
 }
 
-// ---- legendary and terrible cars (core/traits.js): a legendary car gets a foil or polychrome sheen — a shine drawn by
-// the shader itself (injectCarShader's applyCarHolo), from a per-instance strength/kind/seed (see carHoloOf, placeCar),
-// so it shows even on a design with no paintable body. A terrible one shows rust spots the same way (applyCarRust) and
-// shakes and smokes. Neither steers a car anywhere; they're drawn on top of whatever it's already doing (see placeCar).
-const LEGENDARY_SPARKLE_COLOR = 0xfff6c8, FOIL_SPARKLE_COLOR = 0xeaf6ff, LEGENDARY_SPARKLE_EVERY = 0.4; // (a plain one-legendary glint's colour, a two-legendary one's, and seconds between glints per legendary level)
+// ---- legendary and terrible cars (core/traits.js): legendary and terrible cancel out — a car's net level is legendary
+// minus terrible, and only that net level ever shows (net 0, however it got there, is an ordinary car). A positive net
+// gets a foil or polychrome sheen — a shine drawn by the shader itself (injectCarShader's applyCarHolo), from a
+// per-instance strength/kind/seed (see carHoloOf, placeCar), so it shows even on a design with no paintable body. A
+// negative net shows rust spots the same way (applyCarRust) and shakes and smokes, both worse the more negative it is.
+// Neither steers a car anywhere; they're drawn on top of whatever it's already doing (see placeCar).
+const LEGENDARY_SPARKLE_COLOR = 0xfff6c8, FOIL_SPARKLE_COLOR = 0xeaf6ff, LEGENDARY_SPARKLE_EVERY = 0.4; // (a net-1 glint's colour, a net-2 one's, and seconds between glints per net level)
 const TERRIBLE_RUST = new THREE.Color(0x2a1208); // the spots a terrible car's paint shows through, see applyCarRust — dark enough to read against most colours
-const TERRIBLE_BUMP_EVERY = 2.5, TERRIBLE_BUMP_RISE = 0.45, TERRIBLE_BUMP_HEIGHT = 0.12, TERRIBLE_BUMP_ROLL = 0.11/3; // (seconds between hops; how long one takes, eased up and down rather than snapping; how high; how far it rocks side to side, in radians)
+const TERRIBLE_BUMP_EVERY = 2.5, TERRIBLE_BUMP_RISE = 0.45, TERRIBLE_BUMP_HEIGHT = 0.12, TERRIBLE_BUMP_ROLL = 0.11/6; // (seconds between hops; how long one takes, eased up and down rather than snapping; how high; how far it rocks side to side, in radians)
 const DEFAULT_HOLO = [0, 0, 0], DEFAULT_RUST = [0, 0]; // (no sheen, no rust spots — see carHoloOf/carRustOf, placeCar)
 /**
- * A legendary or terrible car's own effects this frame: a legendary one's foil or polychrome sheen (car.holo, read by
- * placeCar and drawn by the shader — see carHoloOf) and its occasional sparkle glint; a terrible one's rust spots
- * (car.rust, likewise shader-drawn — see carRustOf) and its hop on the spot (car.bumpY/car.bumpShake, read by placeCar)
- * every TERRIBLE_BUMP_EVERY seconds, harder the more terrible it is, smoking from underneath while it's in the air.
+ * A legendary or terrible car's own effects this frame, from its net level (legendary minus terrible — see the note
+ * above): net > 0 gets a foil or polychrome sheen (car.holo, read by placeCar and drawn by the shader — see carHoloOf)
+ * and an occasional sparkle glint; net < 0 gets rust spots (car.rust, likewise shader-drawn — see carRustOf) and a hop
+ * on the spot (car.bumpY/car.bumpShake, read by placeCar) every TERRIBLE_BUMP_EVERY seconds, harder the more negative
+ * the net, smoking from underneath while it's in the air; net === 0 gets neither, whatever legendary and terrible it
+ * actually carries.
  * @param {object} car
  * @param {number} t - seconds since page load
  * @param {number} dt
  * @returns {void}
  */
 function updateSpecialTraits(car, t, dt) {
-  const legendary = car.traits?.legendary ?? 0, terrible = car.traits?.terrible ?? 0;
-  car.holo = legendary > 0 ? carHoloOf(car, legendary, terrible) : null;
-  car.rust = terrible > 0 ? carRustOf(car, terrible) : null;
-  if (legendary > 0) legendarySparkle(car, legendary, terrible, t, dt);
-  if (terrible > 0) terribleBump(car, terrible, dt); else { car.bumpY = 0; car.bumpShake = 0; }
+  const net = (car.legendaryCount ?? 0) - (car.terribleCount ?? 0);
+  car.holo = net > 0 ? carHoloOf(car, net) : null;
+  car.rust = net < 0 ? carRustOf(car, -net) : null;
+  if (net > 0) legendarySparkle(car, net, t, dt);
+  if (net < 0) terribleBump(car, -net, dt); else { car.bumpY = 0; car.bumpShake = 0; }
 }
-/** The shader's per-instance holo attribute for a legendary car (see placeCar, applyCarHolo): [strength (0.5 with one
- * legendary, 1 with two), kind (0 foil, 1 polychrome — polychrome only for a spotless two-legendary car), seed (its own
- * glint phase, so cars don't shimmer in step)]. Cached on the car, since none of it changes. */
-function carHoloOf(car, legendary, terrible) {
-  return car.holoAttrs ??= [legendary/2, legendary >= 2 && terrible === 0 ? 1 : 0, mulberry32(car.number*911 + 7)()];
+/** The shader's per-instance holo attribute for a car with a positive net legendary/terrible level (see updateSpecialTraits,
+ * placeCar, applyCarHolo): [strength (0.5 at net 1, 1 at net 2, higher still beyond), kind (0 foil glint at net 1,
+ * 1 rainbow polychrome at net 2 or more), seed (its own glint phase, so cars don't shimmer in step)]. Cached on the
+ * car, since none of it changes. */
+function carHoloOf(car, level) {
+  return car.holoAttrs ??= [level/2, level >= 2 ? 1 : 0, mulberry32(car.number*911 + 7)()];
 }
-/** The shader's per-instance rust attribute for a terrible car (see placeCar, applyCarRust): [strength (how much the
- * spots show, higher the more terrible it is), seed (so two cars' spots don't line up)]. Cached, like carHoloOf. */
-function carRustOf(car, terrible) {
-  return car.rustAttrs ??= [Math.min(0.95, 0.35 + terrible*0.2), mulberry32(car.number*613 + 53)()];
+/** The shader's per-instance rust attribute for a car with a negative net legendary/terrible level (see
+ * updateSpecialTraits, placeCar, applyCarRust): [strength (how much the spots show, higher the more negative the net),
+ * seed (so two cars' spots don't line up)]. Cached, like carHoloOf. */
+function carRustOf(car, level) {
+  return car.rustAttrs ??= [Math.min(0.95, 0.35 + level*0.2), mulberry32(car.number*613 + 53)()];
 }
-/** A sparkle glint somewhere on a legendary car, more often the more legendary it is; a two-legendary car's (foil or
- * polychrome alike) is bigger and more brightly tinted than a plain one-legendary foil's pale default. */
-function legendarySparkle(car, legendary, terrible, t, dt) {
-  const polychrome = legendary >= 2 && terrible === 0, bigger = legendary >= 2;
+/** A sparkle glint somewhere on a net-legendary car, more often the higher its level; a net-2 car's (foil or polychrome
+ * alike) is bigger and more brightly tinted than a plain net-1 foil's pale default. */
+function legendarySparkle(car, level, t, dt) {
+  const polychrome = level >= 2, bigger = level >= 2;
   if ((car.sparkleTimer = (car.sparkleTimer ?? 0) - dt) > 0) return;
-  car.sparkleTimer = LEGENDARY_SPARKLE_EVERY/(legendary*(bigger ? 1.5 : 1));
+  car.sparkleTimer = LEGENDARY_SPARKLE_EVERY/(level*(bigger ? 1.5 : 1));
   const sin = Math.sin(car.heading), cos = Math.cos(car.heading);
   const along = (Math.random()*2 - 1)*carLength(car)*0.4, side = (Math.random()*2 - 1)*carWidth(car)*0.4, h = carHeight(car);
   const color = polychrome ? new THREE.Color().setHSL((t*0.35 + car.number*0.13) % 1, 0.9, 0.65)
     : bigger ? FOIL_SPARKLE_COLOR : LEGENDARY_SPARKLE_COLOR;
   sparkleFx({ x: car.x + sin*along + cos*side, y: Y_ROAD + h*(0.35 + Math.random()*0.55), z: car.z + cos*along - sin*side }, color, bigger ? 0.6 : 0.35);
 }
-/** A terrible car's hop this frame (car.bumpY) and side-to-side rock (car.bumpShake, a roll angle about its own length
- * axis, read by placeCar — like a plane rocking its wings on landing, not a lateral slide) — a smooth eased arc rather
- * than a snap, TERRIBLE_BUMP_RISE seconds up and down, harder and a touch quicker the more terrible it is — and its
- * smoke from underneath while it's actually off the ground.
+/** A net-terrible car's hop this frame (car.bumpY) and side-to-side rock (car.bumpShake, a roll angle about its own
+ * length axis, read by placeCar — like a plane rocking its wings on landing, not a lateral slide) — a smooth eased arc
+ * rather than a snap, TERRIBLE_BUMP_RISE seconds up and down, harder and a touch quicker the more negative the net —
+ * and its smoke from underneath while it's actually off the ground.
  * @param {object} car
- * @param {number} terrible
+ * @param {number} level - how far below zero the net legendary/terrible level is (1 or more)
  * @param {number} dt
  * @returns {void}
  */
-function terribleBump(car, terrible, dt) {
-  const cycle = TERRIBLE_BUMP_RISE/(1 + 0.15*(terrible - 1));
+function terribleBump(car, level, dt) {
+  const cycle = TERRIBLE_BUMP_RISE/(1 + 0.15*(level - 1));
   car.terribleTimer = ((car.terribleTimer ?? 0) + dt) % TERRIBLE_BUMP_EVERY;
   const inAir = car.terribleTimer < cycle, phase = Math.min(1, car.terribleTimer/cycle);
-  car.bumpY = inAir ? TERRIBLE_BUMP_HEIGHT*(1 + 0.25*(terrible - 1))*Math.sin(phase*Math.PI) : 0;
-  car.bumpShake = inAir ? TERRIBLE_BUMP_ROLL*(1 + 0.2*(terrible - 1))*Math.sin(phase*Math.PI*2) : 0;
-  if (inAir) terribleSmoke({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), carWidth(car), dt, terrible, car.heading, car.speed);
+  car.bumpY = inAir ? TERRIBLE_BUMP_HEIGHT*(1 + 0.25*(level - 1))*Math.sin(phase*Math.PI) : 0;
+  car.bumpShake = inAir ? TERRIBLE_BUMP_ROLL*(1 + 0.2*(level - 1))*Math.sin(phase*Math.PI*2) : 0;
+  if (inAir) terribleSmoke({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), carWidth(car), dt, level, car.heading, car.speed);
 }
 const BLAST_THROW = 8; // (how fast the blast throws what it kills, units a second)
 const STALL_SPEED_SHARE = 0.5; // (of the speed that jolts a car: a car hit at least this fast, but not fast enough to jolt, cuts the engine of the car that hit it)

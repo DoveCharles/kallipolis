@@ -270,7 +270,8 @@ export function engineSmoke(at, height) {
 // tall, `width` wide, `heading` which way it's facing, `speed` how fast along it — so the puffs can start out moving
 // with it rather than being left behind at once) — small and plentiful, the more of it the more terrible it is
 // (`level`), pushed out to both sides as far as the car is wide before curving upward (see terribleSmoke's `accel`,
-// read by updateGiblets).
+// read by updateGiblets). Every puff is spawned as a mirrored pair, one to each side — spawning a single puff with a
+// side picked at random (or alternated by index) reliably favours one side, since most calls only spawn zero or one.
 const TERRIBLE_SMOKE_PER_SECOND = 24, TERRIBLE_SMOKE_LIFT = 1.5; // per level of `terrible`; how hard the curve up kicks in
 export function terribleSmoke(at, height, width, dt, level, heading, speed) {
   if (!S.showGibs || !isNear(at)) return;
@@ -278,12 +279,14 @@ export function terribleSmoke(at, height, width, dt, level, heading, speed) {
   const alongX = Math.sin(heading)*speed, alongZ = Math.cos(heading)*speed; // (keeps pace with the car for a moment, so it reads as spreading to the sides rather than trailing behind)
   const count = Math.floor(TERRIBLE_SMOKE_PER_SECOND*level*dt + Math.random());
   for (let k=0;k<count;k++) {
-    if (fx.length >= FX_MAX) fx.shift();
-    const side = k % 2 === 0 ? 1 : -1, jitter = (Math.random() - 0.5)*0.3, out = width*(0.55 + Math.random()*0.35);
-    const grey = 0.03 + Math.random()*0.05;
-    fx.push({ kind: 'smoke', x: at.x, y: at.y + height*0.08, z: at.z,
-      vx: alongX + sideX*out*side + jitter, vz: alongZ + sideZ*out*side + jitter, vy: 0.15 + Math.random()*0.2, accel: TERRIBLE_SMOKE_LIFT,
-      size: height*(0.1 + Math.random()*0.14), life: 1.8 + Math.random()*1.2, color: new THREE.Color(grey, grey, grey), born: now });
+    const out = width*(0.55 + Math.random()*0.35), grey = 0.03 + Math.random()*0.05;
+    [1, -1].forEach(side => {
+      if (fx.length >= FX_MAX) fx.shift();
+      const jitter = (Math.random() - 0.5)*0.3;
+      fx.push({ kind: 'smoke', x: at.x, y: at.y + height*0.08, z: at.z,
+        vx: alongX + sideX*out*side + jitter, vz: alongZ + sideZ*out*side + jitter, vy: 0.15 + Math.random()*0.2, accel: TERRIBLE_SMOKE_LIFT,
+        size: height*(0.1 + Math.random()*0.14), life: 1.8 + Math.random()*1.2, color: new THREE.Color(grey, grey, grey), born: now });
+    });
   }
 }
 // A burst of red, orange and yellow puffs as a car catches fire, from `at` (where its wheels are), `height` tall.
