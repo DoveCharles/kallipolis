@@ -709,7 +709,7 @@ export function updateTrainShuttles(t) {
     orientAlongTrack(s.object, tangent);
     s.object.visible = true;
   });
-  updateShuttleSounds(trainShuttles, dt); // (the hum, the charge-up and the chime: see audio/maglev.js)
+  updateShuttleSounds(trainShuttles, dt); // (the hum, the whir-up and the chime: see audio/maglev.js)
   if (followedTrain && S.interactionMode !== 'move') stopFollowingTrain();
   // the camera onto the carriage it's following
   const followed = followedTrain && trainShuttles.find(s => s.lineId === followedTrain);
