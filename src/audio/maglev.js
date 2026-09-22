@@ -10,7 +10,7 @@ import { listener, outdoors } from './sfx.js';
 // the carriage passes through each turn of the coil, "vwom… vwom", faster and faster until it's a flutter at full speed.
 // Sat in a station it idles on a quiet hum.
 //
-// Setting off it whirs up like a motor spinning to speed, and pulling into a station it chimes, a soft rising arpeggio.
+// Setting off it whirs up like an electric motor spinning to speed, and pulling into a station it chimes, a soft rising arpeggio.
 // There are SHUTTLES_MAX loops, handed each frame to the nearest carriages within HEAR_DISTANCE.
 const HUM_HZ = 45, TOP_HZ = 135;           // the hum at a standstill and at full speed
 const TOP_SPEED = 67;                      // units a second at the fastest point of a run (see TRAIN_SHUTTLE_SPEED)
@@ -20,7 +20,8 @@ const REF_DISTANCE = 15, HEAR_DISTANCE = 110;
 const SHUTTLES_MAX = 3;
 const MOVING = 0.5;                        // units a second past which it counts as going
 const CHIME = [660, 880, 1320], CHIME_GAP = 0.13, CHIME_RING = 0.9, CHIME_VOLUME = 0.12;
-const WHIR_FROM = 70, WHIR_TO = 480, WHIR_TIME = 1.8, WHIR_VOLUME = 0.07;
+const WHIR_FROM = 35, WHIR_TO = 190, WHIR_TIME = 1.8, WHIR_VOLUME = 0.07;
+const WHIR_WINDINGS = 6, WHIR_MAINS = 100; // the windings' whine against the motor's tone, and the mains buzz (hertz)
 
 const shuttles = []; // { out, level, oscillators, whine, throb, panner, lineId }
 const heard = new Map(); // line id -> { x, y, z, speed, moving } as of last frame
@@ -84,51 +85,45 @@ function chime(at) {
   })));
 }
 
-// the whir of a carriage setting off, like a motor spinning up: a tone and its octave gliding up quick then easing off as
-// they reach speed, an airy hiss riding a few octaves above them, and a faint flutter quickening with the spin, swelling
-// in and then fading away under the hum
-let hiss = null; // a second of white noise, made once
+// the whir of a carriage setting off, like an electric motor spinning up: a buzzy pair of tones a hair apart climbing
+// quick then easing off as they reach speed, through a lowpass that opens as they go; the thin whine of the windings
+// a few harmonics above them; a steady mains buzz under it all for the whole thing; and a faint flutter quickening
+// with the spin. It swells in and then fades away under the hum.
 function whir(at) {
   oneShot(at, WHIR_TIME, (gain, now) => {
     const context = listener.context, end = now + WHIR_TIME, spin = WHIR_TIME/3.5;
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(WHIR_VOLUME, now + 0.35);
+    gain.gain.linearRampToValueAtTime(WHIR_VOLUME, now + 0.3);
     gain.gain.setValueAtTime(WHIR_VOLUME, end - 0.7);
     gain.gain.linearRampToValueAtTime(0, end);
+    const tone = context.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.Q.value = 4;
+    tone.frequency.setValueAtTime(WHIR_FROM*5, now);
+    tone.frequency.setTargetAtTime(WHIR_TO*6, now, spin);
     const flutter = context.createGain(), rotor = context.createOscillator(), depth = context.createGain();
     flutter.gain.value = 0.85;
-    rotor.frequency.setValueAtTime(WHIR_FROM/6, now);
-    rotor.frequency.setTargetAtTime(WHIR_TO/6, now, spin);
+    rotor.frequency.setValueAtTime(WHIR_FROM/4, now);
+    rotor.frequency.setTargetAtTime(WHIR_TO/4, now, spin);
     depth.gain.value = 0.15;
     rotor.connect(depth).connect(flutter.gain);
-    flutter.connect(gain);
+    tone.connect(flutter).connect(gain);
     rotor.start(now);
-    const tones = [[1, 'triangle', 0.7], [2.01, 'sine', 0.3]].map(([ratio, type, level]) => {
+    const layer = (type, from, to, level, into) => {
       const oscillator = context.createOscillator(), g = context.createGain();
       oscillator.type = type;
-      oscillator.frequency.setValueAtTime(WHIR_FROM*ratio, now);
-      oscillator.frequency.setTargetAtTime(WHIR_TO*ratio, now, spin);
+      oscillator.frequency.setValueAtTime(from, now);
+      if (to !== from) oscillator.frequency.setTargetAtTime(to, now, spin);
       g.gain.value = level;
-      oscillator.connect(g).connect(flutter);
+      oscillator.connect(g).connect(into);
       oscillator.start(now);
       return oscillator;
-    });
-    if (!hiss) {
-      hiss = context.createBuffer(1, context.sampleRate, context.sampleRate);
-      const data = hiss.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random()*2 - 1;
-    }
-    const noise = context.createBufferSource(), band = context.createBiquadFilter(), air = context.createGain();
-    noise.buffer = hiss;
-    noise.loop = true;
-    band.type = 'bandpass';
-    band.Q.value = 5;
-    band.frequency.setValueAtTime(WHIR_FROM*4, now);
-    band.frequency.setTargetAtTime(WHIR_TO*4, now, spin);
-    air.gain.value = 0.6;
-    noise.connect(band).connect(air).connect(flutter);
-    noise.start(now);
-    return [rotor, noise, ...tones];
+    };
+    return [rotor,
+      layer('sawtooth', WHIR_FROM, WHIR_TO, 0.5, tone),
+      layer('square', WHIR_FROM*1.006, WHIR_TO*1.006, 0.25, tone),
+      layer('sine', WHIR_FROM*WHIR_WINDINGS, WHIR_TO*WHIR_WINDINGS, 0.06, flutter),
+      layer('square', WHIR_MAINS, WHIR_MAINS, 0.12, tone)];
   });
 }
 
