@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, isMuted, playBufferAt, zzfxBuffer } from './sfx.js';
+import { listener, outdoors, isMuted, playBufferAt, zzfxBuffer } from './sfx.js';
 import { pointInPolygon } from '../core/math.js';
 import { trafficNearby } from './engine.js';
 import { isInsideBuilding } from '../buildings/interior.js';
@@ -78,7 +78,7 @@ function makeRain() {
   high.type = 'lowpass';
   high.frequency.value = RAIN_HIGH;
   gain.gain.value = 0;
-  source.connect(low).connect(high).connect(gain).connect(listener.getInput());
+  source.connect(low).connect(high).connect(gain).connect(outdoors);
   source.start();
   return { gain, high, buffer };
 }
@@ -91,7 +91,7 @@ function patter(when) {
   panner.distanceModel = 'inverse';
   panner.refDistance = 3;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  panner.connect(listener.getInput());
+  panner.connect(outdoors);
   const volume = DROP_VOLUME*(0.4 + Math.random()*0.6);
   const source = context.createBufferSource(), band = context.createBiquadFilter(), tick = context.createGain();
   source.buffer = rain.buffer;
@@ -131,7 +131,7 @@ function makeHum() {
   low.type = 'lowpass';
   low.frequency.value = HUM_HIGH;
   gain.gain.value = 0;
-  source.connect(high).connect(low).connect(gain).connect(listener.getInput());
+  source.connect(high).connect(low).connect(gain).connect(outdoors);
   source.start();
   return { gain };
 }
@@ -144,7 +144,7 @@ function whistle(at, when, notes, volume, refDistance = SONG_REF_DISTANCE) {
   panner.distanceModel = 'inverse';
   panner.refDistance = refDistance;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  panner.connect(listener.getInput());
+  panner.connect(outdoors);
   const oscillator = context.createOscillator(), gain = context.createGain();
   oscillator.type = 'sine';
   gain.gain.value = 0;

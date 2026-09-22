@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener, isMuted } from './sfx.js';
+import { listener, isMuted, heardFrom } from './sfx.js';
 import { melodyOf } from './melodies.js';
 
 // ============================================================ voices
@@ -207,7 +207,7 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  gain.connect(panner).connect(listener.getInput());
+  gain.connect(panner).connect(heardFrom(at));
   if (consonant?.noise) {
     // the click or hiss: a burst of noise through a band where that consonant sits, moved by the voice's formants too
     const source = context.createBufferSource(), band = context.createBiquadFilter(), hiss = context.createGain();

@@ -7,7 +7,7 @@ import { footprintBounds } from './footprints.js';
 import { hashNameToNumber, mulberry32 } from '../core/math.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { setCutout } from '../ui/pixelation.js';
-import { isMuted } from '../audio/sfx.js';
+import { isMuted, setIndoors } from '../audio/sfx.js';
 
 // ============================================================ going inside a building
 // Every building has the same inside: one room (furnished one of a few ways), built once and moved to whichever building's
@@ -93,7 +93,7 @@ wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK);  // behind the came
 wall(ROOM_D, 0, -ROOM_W/2 - THICK/2, 0, Math.PI/2, THICK);   // behind the camera
 // ---------------------------------------------------------- what's in it
 // The shell's the same everywhere; what's in it is one of a few layouts, each a group of furniture shown or hidden as a
-// whole, a floor colour, and the rectangles (in the room's own x and z, with room to pass round them) nobody stands in or
+// whole, a floor and wall colour, and the rectangles (in the room's own x and z, with room to pass round them) nobody stands in or
 // walks through — see "who's in the room" below.
 const LAYOUTS = {};
 const lit = (color, roughness = 0.8) => roomLit(new THREE.MeshStandardMaterial({ color, roughness }));
@@ -104,7 +104,7 @@ function layout(name, floor, build) {
   const add = (w, h, d, material, x, y, z) => box(w, h, d, material, x, y, z, group);
   const blocked = build(add);
   // (solid: what nobody walks through, as against blocked, where nobody stops; seats: where anyone can sit — see roomSeats)
-  LAYOUTS[name] = { group, floor: new THREE.Color(floor), blocked, solid: blocked, seats: [] };
+  LAYOUTS[name] = { group, floor: new THREE.Color(floor), wall: new THREE.Color(0xe8e2d6), blocked, solid: blocked, seats: [] };
 }
 const around = (x0, x1, z0, z1, pad = 0.45) => ({ x0: x0 - pad, x1: x1 + pad, z0: z0 - pad, z1: z1 + pad });
 
@@ -165,8 +165,12 @@ function useLayout(name) {
   grid = null;
   current = LAYOUTS[name] ?? LAYOUTS.home;
   current.group.visible = true;
+  paintRoom();
+}
+function paintRoom() {
   floorMaterial.color.copy(current.floor);
-  floorMaterial.emissive.copy(current.floor);
+  wallMaterial.color.copy(current.wall);
+  roomLit(floorMaterial); roomLit(wallMaterial);
 }
 
 // ---------------------------------------------------------- a home's furniture
@@ -181,7 +185,15 @@ const FURNITURE_SCALE = 0.2;
 // { [name]: { object, w, d, h, seats } } — each piece turned to face +z, centred on its footprint and standing on y = 0,
 // w across and d deep, with where on it anyone can sit (seats: { x, z, y }, in its own terms)
 let furniture = null;
-const FLOORS = [0x9a7452, 0x7d5b3f, 0xb08a62, 0x8a6a55, 0x6e6861, 0xa3927c];
+const FLOORS = [0x9a7452, 0x7d5b3f, 0xb08a62, 0x8a6a55, 0x6e6861, 0xa3927c, 0xc4ae8c, 0x5c4636, 0x8c8478];
+// and each home's own paint, woodwork (the TV stand, tables and chairs), sofa and rug
+const WALLS = [0xe8e2d6, 0xcfd8c4, 0xc9dcdc, 0xe8d2cc, 0xeee2b8, 0xd0d6e0, 0xe0c4a8, 0xd8cfe0, 0xf2efe8];
+const WOODS = [0xe7be73, 0xe8d2a8, 0x8a5a3a, 0xb0603e, 0x5a3c2a, 0xb8ae9e, 0xeae6de, 0x3a3430];
+const SOFAS = [0x89666e, 0x3c4a6e, 0xc8962e, 0x3e6a4e, 0x8a8c8e, 0x2f7474, 0xa4553a, 0xd8ccb4, 0xd88a96];
+const RUGS = [0xe78676, 0xe6dcc6, 0x5a7ab0, 0x9ab08a, 0x55555a, 0xd0a048, 0x7a4868, 0x4a9a9a];
+// the model's materials for those, by the names they have in it (shared by every clone, so recoloured per home)
+const PAINTED = { Wood: WOODS, Material: SOFAS, 'Material.002': RUGS };
+const painted = [];
 // the screen, lit as if it's on
 const SCREEN_COLOR = 0x0c1218, SCREEN_GLOW = 0x33536e;
 
@@ -209,6 +221,7 @@ async function loadFurniture() {
       if (!o.isMesh) return;
       o.castShadow = o.receiveShadow = !o.material.transparent;
       furnitureLit(o.material);
+      if (PAINTED[o.material.name] && !painted.includes(o.material)) painted.push(o.material);
     });
     pieces[node.name] = { object, w: size.x, d: size.z, h: size.y, seats: [] };
   }
@@ -279,8 +292,15 @@ function furnish(key) {
   lampLight.userData.there = false;
   const rng = mulberry32(hashNameToNumber(String(key)));
   home.floor.setHex(FLOORS[Math.floor(rng()*FLOORS.length)]);
-  floorMaterial.color.copy(home.floor);
-  floorMaterial.emissive.copy(home.floor);
+  // (colours from a generator of their own, so the furniture's where it always was)
+  const tint = mulberry32(hashNameToNumber(key + ' colours'));
+  const pick = list => list[Math.floor(tint()*list.length)];
+  home.wall.setHex(pick(WALLS));
+  paintRoom();
+  for (const material of painted) {
+    material.color.setHex(pick(PAINTED[material.name]));
+    roomLit(material);
+  }
   if (!furniture) return;
 
   // what's taken so far (and room kept clear), as rectangles in the room's x and z; `tall` ones could hide the TV
@@ -623,6 +643,7 @@ export function enterBuilding(group, key, kind = 'home') {
   const theta = Math.atan2(offset.x, offset.z);
   controls.goalTheta = controls.theta + Math.atan2(Math.sin(theta - controls.theta), Math.cos(theta - controls.theta));
   controls.locked = true;
+  setIndoors(inRoom);
   // a hard cut in, no glide
   controls.update(true);
   camera.fov = fittedFov();
@@ -634,6 +655,7 @@ export function leaveBuilding() {
   if (!inside) return;
   const { group, before } = inside;
   inside = null;
+  setIndoors(null);
   stopTV();
   group.visible = true;
   room.visible = false;
@@ -645,6 +667,13 @@ export function leaveBuilding() {
   controls.minRadius = before.minRadius;
   camera.near = before.near;
   camera.updateProjectionMatrix();
+}
+
+// Whether a point in the world is in the room, walls and all: what's heard from there isn't muffled (see setIndoors).
+const probe = new THREE.Vector3();
+function inRoom(x, y, z) {
+  room.worldToLocal(probe.set(x, y, z));
+  return Math.abs(probe.x) <= ROOM_W/2 + WALL && Math.abs(probe.z) <= ROOM_D/2 + WALL && probe.y >= -SLAB && probe.y <= ROOM_H + SLAB;
 }
 
 // The vertical field of view that takes in all of FIT from the corner at the window's current shape: the room's width

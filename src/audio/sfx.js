@@ -66,6 +66,37 @@ const limiter = context.createDynamicsCompressor();
 limiter.threshold.value = -10; limiter.knee.value = 6; limiter.ratio.value = 12; limiter.attack.value = 0.003; limiter.release.value = 0.25;
 listener.setFilter(limiter);
 
+// Inside a building (see buildings/interior.js), whatever's outside it is heard through the walls: everything out there —
+// traffic, weather, the city — goes by way of `outdoors`, a lowpass and a drop in level that stand wide open until the
+// room's entered, then close to MUFFLED_HZ and MUFFLED_LEVEL. What's in the room with you (someone talking, their steps)
+// goes straight to the ear: a sound says where it is with heardFrom, which picks.
+const MUFFLED_HZ = 450, MUFFLED_LEVEL = 0.55, OPEN_HZ = 22000, MUFFLE_TIME = 0.08;
+const walls = context.createBiquadFilter(), wallsLevel = context.createGain();
+walls.type = 'lowpass';
+walls.frequency.value = OPEN_HZ;
+walls.Q.value = 0.5;
+/** Where anything outside goes on its way to the ear, muffled while you're indoors. */
+export const outdoors = walls;
+walls.connect(wallsLevel).connect(listener.getInput());
+let inRoom = null; // (x, y, z) => whether that's in the room you're in; null while outdoors
+/**
+ * Go indoors, or back out: sounds outside muffled or not.
+ * @param {?function(number, number, number): boolean} contains - whether a point's in the room with you; null to go out
+ * @returns {void}
+ */
+export function setIndoors(contains) {
+  inRoom = contains;
+  const now = context.currentTime;
+  walls.frequency.setTargetAtTime(contains ? MUFFLED_HZ : OPEN_HZ, now, MUFFLE_TIME);
+  wallsLevel.gain.setTargetAtTime(contains ? MUFFLED_LEVEL : 1, now, MUFFLE_TIME);
+}
+/**
+ * Where a sound at `at` should go: straight to the ear if it's in the room with you, through the walls if not.
+ * @param {{x: number, y: number, z: number}} at
+ * @returns {AudioNode}
+ */
+export const heardFrom = at => inRoom?.(at.x, at.y, at.z) ? listener.getInput() : outdoors;
+
 // Browsers keep audio suspended until the page has been interacted with: wake it on the first press.
 function unlock() {
   if (context.state === 'suspended') context.resume();
@@ -127,7 +158,7 @@ export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate 
   panner.refDistance = refDistance;
   if (maxDistance) panner.maxDistance = maxDistance;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  [...through, gain].reduce((from, to) => from.connect(to), source).connect(panner).connect(listener.getInput());
+  [...through, gain].reduce((from, to) => from.connect(to), source).connect(panner).connect(heardFrom(at));
   voices++;
   source.onended = () => { voices--; panner.disconnect(); };
   source.start();
@@ -176,6 +207,8 @@ export function playSound(name, at, volume = 1, after = 0) {
     sound.position.set(at.x, at.y, at.z);
     scene.add(sound);
     sound.updateMatrixWorld();
+    sound.gain.disconnect();
+    sound.gain.connect(heardFrom(at));
     sound.onEnded = () => { voices--; sound.isPlaying = false; scene.remove(sound); sound.disconnect(); };
     voices++;
     sound.play(delay + after);

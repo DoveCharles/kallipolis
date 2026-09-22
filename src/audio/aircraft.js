@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { camera } from '../core/scene.js';
-import { listener } from './sfx.js';
+import { listener, outdoors } from './sfx.js';
 
 // ============================================================ aircraft
 // The aircraft about the airfields (see updateAirports in zones/airport.js): loops synthesized live like the engines (see
@@ -54,7 +54,7 @@ function makeVoice() {
   const panner = context.createPanner();
   panner.panningModel = 'equalpower';
   panner.distanceModel = 'inverse';
-  chop.connect(out).connect(panner).connect(listener.getInput());
+  chop.connect(out).connect(panner).connect(outdoors);
   const source = context.createBufferSource(), roarFilter = context.createBiquadFilter(), roar = context.createGain();
   source.buffer = noiseBuffer(context);
   source.loop = true;
@@ -139,7 +139,7 @@ export function cabinChime() {
   speaker.type = 'lowpass';
   speaker.frequency.value = 3000;
   gain.gain.value = CHIME_VOLUME;
-  speaker.connect(gain).connect(listener.getInput());
+  speaker.connect(gain).connect(listener.getInput()); // (on board: never through the walls)
   const oscillators = CHIME.flatMap((hz, k) => [[1, 0, 1], [1, 2.5, 0.8], [2.76, 0, 0.08]].map(([ratio, off, level]) => {
     const oscillator = context.createOscillator(), note = context.createGain(), start = now + k*CHIME_GAP;
     oscillator.frequency.value = hz*ratio + off;
@@ -174,7 +174,7 @@ export function tyreChirp(at, size) {
   panner.distanceModel = 'inverse';
   panner.refDistance = CHIRP_NEAR;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  panner.connect(listener.getInput());
+  panner.connect(outdoors);
   const sources = CHIRPS.flatMap(([after, level]) => {
     const start = now + after, end = start + CHIRP_TIME*(0.8 + Math.random()*0.4);
     const gain = context.createGain();
