@@ -13,8 +13,9 @@ import { isMuted, setIndoors } from '../audio/sfx.js';
 // Every building has the same inside: one room (furnished one of a few ways), built once and moved to whichever building's
 // being looked into. It goes where the building actually stands, on its top floor, turned square to its longest wall, and
 // the building itself isn't drawn while you're in there — so the windows look out on the real city around it, traffic,
-// weather, time of day and all, with nothing to fake. The view is held in one top corner of the room, looking across at
-// the two far walls and their windows (the two walls behind the camera are there too, for the sun's shadows, but never seen).
+// weather, time of day and all, with nothing to fake. The view is held in one corner of the room, at about eye height,
+// looking across at the two far walls and their windows (the two walls behind the camera are there too, for the sun's
+// shadows, but never seen).
 // The room's a fixed size whatever the building's shape: nobody inside can tell how far its walls are from the facade.
 const ROOM_W = 8, ROOM_D = 6, ROOM_H = 3.2;  // along the room's own x and z, and floor to ceiling
 // The sun's shadow is coarse (its bias lets light through anything within ~0.4 of what's casting it: see scene.js), so the
@@ -25,7 +26,9 @@ const ROOM_W = 8, ROOM_D = 6, ROOM_H = 3.2;  // along the room's own x and z, an
 const WALL = 0.5, SLAB = 0.6, THICK = 1.6, OVERHANG = 1.5;
 const FLOOR_HEIGHT = 3.5;                    // a storey, as the facades' windows are drawn (see windows.js)
 const SILL = 0.9, HEAD = 2.5;                // a window's bottom and top, above the floor
-const CAMERA_INSET = 0.7, CAMERA_DROP = 0.7;  // the camera, in from the corner walls and down from the ceiling
+const CAMERA_INSET = 0.7;                    // the camera, in from the corner walls
+// and its view: height above the floor, degrees looking down, and vertical field of view (tuned with tools/interior.html)
+const CAMERA_HEIGHT = 1.62, CAMERA_PITCH = 2.6, CAMERA_FOV = 85.3;
 
 const room = new THREE.Group();
 room.name = 'Interior';
@@ -623,27 +626,40 @@ function updateLamp() {
   lampLight.intensity = Math.abs(goal - lampLight.intensity) < 0.01 ? goal : lampLight.intensity + (goal - lampLight.intensity)*LAMP_EASE;
 }
 
-// where the camera sits in the room, and what it looks at, in the room's own terms
-const CAMERA_AT = new THREE.Vector3(-ROOM_W/2 + CAMERA_INSET, ROOM_H - CAMERA_DROP, -ROOM_D/2 + CAMERA_INSET);
-// what the view widens to take in: the far corners, floor and ceiling, of the three walls the camera looks across
-const FIT = [[ROOM_W/2, -ROOM_D/2], [ROOM_W/2, ROOM_D/2], [-ROOM_W/2, ROOM_D/2]]
-  .flatMap(([x, z]) => [new THREE.Vector3(x, 0, z), new THREE.Vector3(x, ROOM_H, z)]);
-const FIT_MARGIN = 1.04, MAX_FOV = 110, FOV_EASE = 0.12;
+// where the camera sits in the room, in the room's own terms
+const CAMERA_AT = new THREE.Vector3(-ROOM_W/2 + CAMERA_INSET, CAMERA_HEIGHT, -ROOM_D/2 + CAMERA_INSET);
+// the far corners of the three walls the camera looks across
+const FAR_CORNERS = [[ROOM_W/2, -ROOM_D/2], [ROOM_W/2, ROOM_D/2], [-ROOM_W/2, ROOM_D/2]];
+const FOV_EASE = 0.12;
 const ROOM_NEAR = 0.1; // the ceiling's closer than the usual near plane, and the wide view takes it in
-// Where the camera looks: the middle of FIT's spread, side to side and up and down, so the view widens no more than
-// the room needs.
-const LOOK_AT = (() => {
-  const yaws = [], pitches = [];
-  for (const corner of FIT) {
-    const d = corner.clone().sub(CAMERA_AT);
-    yaws.push(Math.atan2(d.x, d.z));
-    pitches.push(Math.atan2(d.y, Math.hypot(d.x, d.z)));
-  }
-  const yaw = (Math.min(...yaws) + Math.max(...yaws))/2, pitch = (Math.min(...pitches) + Math.max(...pitches))/2;
-  const reach = 5;
-  return CAMERA_AT.clone().add(new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch), Math.sin(pitch), Math.cos(yaw)*Math.cos(pitch)).multiplyScalar(reach));
+// Which way the camera faces: the middle of the far corners' spread, side to side.
+const CAMERA_YAW = (() => {
+  const yaws = FAR_CORNERS.map(([x, z]) => Math.atan2(x - CAMERA_AT.x, z - CAMERA_AT.z));
+  return (Math.min(...yaws) + Math.max(...yaws))/2;
 })();
 const BASE_FOV = camera.fov;
+// What tools/interior.html is trying out in place of the view above, each null for the usual: the camera's height above
+// the floor, how far it looks down (degrees below level) and its vertical field of view (degrees).
+const tuning = { height: null, pitch: null, fov: null };
+// the camera's eye and what it looks at, in the room's own terms
+function view() {
+  const eye = CAMERA_AT.clone();
+  eye.y = tuning.height ?? CAMERA_HEIGHT;
+  const pitch = -THREE.MathUtils.degToRad(tuning.pitch ?? CAMERA_PITCH);
+  const along = new THREE.Vector3(Math.sin(CAMERA_YAW)*Math.cos(pitch), Math.sin(pitch), Math.cos(CAMERA_YAW)*Math.cos(pitch));
+  return { eye, look: eye.clone().add(along.multiplyScalar(5)) };
+}
+const viewFov = () => tuning.fov ?? CAMERA_FOV;
+/**
+ * Try out a different view from the room's corner (for tools/interior.html): anything left out or null goes back to the usual.
+ * @param {{height?: ?number, pitch?: ?number, fov?: ?number}} t - height above the floor, degrees looking down, vertical FOV
+ * @returns {{height: number, pitch: number, fov: number}} the view as it now is
+ */
+export function tuneInteriorView(t = {}) {
+  Object.assign(tuning, { height: null, pitch: null, fov: null }, t);
+  if (inside) { placeCamera(); controls.update(true); camera.fov = viewFov(); camera.updateProjectionMatrix(); }
+  return { height: tuning.height ?? CAMERA_HEIGHT, pitch: tuning.pitch ?? CAMERA_PITCH, fov: viewFov() };
+}
 
 // inside: { group, key, before } — the building being looked into, its key (buildingKey), and the camera's goals as they
 // were, to go back to
@@ -686,7 +702,18 @@ export function enterBuilding(group, key, kind = 'home') {
   } };
   camera.near = ROOM_NEAR;
   camera.updateProjectionMatrix();
-  const eye = room.localToWorld(CAMERA_AT.clone()), look = room.localToWorld(LOOK_AT.clone());
+  placeCamera();
+  controls.locked = true;
+  setIndoors(inRoom);
+  // a hard cut in, no glide
+  controls.update(true);
+  camera.fov = viewFov();
+  camera.updateProjectionMatrix();
+}
+// The camera cut to the room's corner (see view), looking where it looks.
+function placeCamera() {
+  const { eye: at, look: towards } = view();
+  const eye = room.localToWorld(at.clone()), look = room.localToWorld(towards.clone());
   const offset = eye.clone().sub(look), radius = offset.length();
   controls.goalTarget.copy(look);
   controls.minRadius = 0;
@@ -695,12 +722,6 @@ export function enterBuilding(group, key, kind = 'home') {
   // the nearer way round to the corner, so easing back out on leaving doesn't swing all the way about
   const theta = Math.atan2(offset.x, offset.z);
   controls.goalTheta = controls.theta + Math.atan2(Math.sin(theta - controls.theta), Math.cos(theta - controls.theta));
-  controls.locked = true;
-  setIndoors(inRoom);
-  // a hard cut in, no glide
-  controls.update(true);
-  camera.fov = fittedFov();
-  camera.updateProjectionMatrix();
 }
 
 // Back out: the building drawn again, the room put away, and the camera eased back to where it was looking from.
@@ -729,26 +750,11 @@ function inRoom(x, y, z) {
   return Math.abs(probe.x) <= ROOM_W/2 + WALL && Math.abs(probe.z) <= ROOM_D/2 + WALL && probe.y >= -SLAB && probe.y <= ROOM_H + SLAB;
 }
 
-// The vertical field of view that takes in all of FIT from the corner at the window's current shape: the room's width
-// fits a narrow window as well as a wide one.
-function fittedFov() {
-  const forward = LOOK_AT.clone().sub(CAMERA_AT).normalize();
-  const right = forward.clone().cross(new THREE.Vector3(0, 1, 0)).normalize(), up = right.clone().cross(forward);
-  let tanUp = 0, tanSide = 0;
-  for (const corner of FIT) {
-    const d = corner.clone().sub(CAMERA_AT), depth = d.dot(forward);
-    tanUp = Math.max(tanUp, Math.abs(d.dot(up))/depth);
-    tanSide = Math.max(tanSide, Math.abs(d.dot(right))/depth);
-  }
-  const tan = Math.max(tanUp, tanSide/camera.aspect)*FIT_MARGIN;
-  return Math.min(MAX_FOV, THREE.MathUtils.radToDeg(2*Math.atan(tan)));
-}
-
 // Each frame: the view eased wider inside a room, and back to its usual angle outside.
 export function updateInteriorCamera() {
   updateTV();
   updateLamp();
-  const goal = inside ? fittedFov() : BASE_FOV;
+  const goal = inside ? viewFov() : BASE_FOV;
   if (camera.fov === goal) return;
   camera.fov = Math.abs(goal - camera.fov) < 0.05 ? goal : camera.fov + (goal - camera.fov)*FOV_EASE;
   camera.updateProjectionMatrix();

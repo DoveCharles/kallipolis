@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interior view bench</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  #panel { position: fixed; left: 12px; bottom: 12px; z-index: 1; width: 300px; padding: 10px 12px; border-radius: 8px;
+    background: rgba(255,255,255,0.92); color: #111; font: 13px system-ui, sans-serif; box-shadow: 0 2px 12px rgba(0,0,0,0.4); }
+  #panel h3 { margin: 0 0 6px; font-size: 14px; }
+  label { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; gap: 6px; margin: 6px 0; }
+  label span { text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; }
+  button { font: inherit; margin: 4px 4px 0 0; padding: 3px 10px; }
+  #status { color: #555; margin: 4px 0; }
+  #values { font: 12px ui-monospace, monospace; background: #eee; padding: 4px 6px; border-radius: 4px; user-select: all; }
+</style>
+</head>
+<body>
+<iframe id="app" src="../index.html"></iframe>
+<div id="panel">
+  <h3>Interior view</h3>
+  <div id="status">Loading the city…</div>
+  <div>
+    <button id="home">Enter a home</button><button id="office">Enter an office</button><button id="next">Next building</button>
+    <button id="person">Add a person</button><button id="clear">Send them out</button>
+  </div>
+  <label>height <input id="height" type="range" min="0.3" max="3.1" step="0.01"> <span></span></label>
+  <label>pitch <input id="pitch" type="range" min="-20" max="80" step="0.1"> <span></span></label>
+  <label>FOV <input id="fov" type="range" min="15" max="120" step="0.1"> <span></span></label>
+  <div><button id="reset">Reset to current defaults</button></div>
+  <p style="margin:6px 0 2px">Height is metres above the floor (ceiling at 3.2), pitch is degrees below level, FOV is vertical degrees.</p>
+  <div id="values"></div>
+</div>
+<script type="module">
+// Loads the app in the frame, puts the view inside one of the city's buildings, and drives interior.js's
+// tuneInteriorView from the sliders. Modules are imported inside the frame's own window, so they're the app's instances.
+const $ = id => document.getElementById(id);
+const frame = $('app');
+const inApp = path => frame.contentWindow.eval(`import(${JSON.stringify(new URL(path, location.href).href)})`);
+const sliders = ['height', 'pitch', 'fov'];
+let interior, footprints, peopleMod, activities, win, here = null, guests = [], list = [], at = -1, kind = 'home';
+
+function buildings() {
+  const found = [];
+  win.splinetopia.S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
+    if (group.name === 'Building') found.push({ zone, group, index });
+  }));
+  return found;
+}
+function show(v) {
+  for (const id of sliders) { $(id).value = v[id]; $(id).nextElementSibling.textContent = (+v[id]).toFixed(id === 'height' ? 2 : 1); }
+  $('values').textContent = `height ${(+v.height).toFixed(2)}, pitch ${(+v.pitch).toFixed(1)}, fov ${(+v.fov).toFixed(1)}`;
+}
+function enter(next) {
+  list = buildings();
+  if (!list.length) { $('status').textContent = 'No buildings in this city: draw a buildings zone in the app first.'; return; }
+  if (next || at < 0 || at >= list.length) at = (at + 1) % list.length;
+  const b = list[at];
+  const key = footprints.buildingKey(b.zone, b.index);
+  interior.enterBuilding(b.group, key, kind);
+  here = { key, number: footprints.buildingNumber(key), kind: b.zone.zoneType, y: b.group.position.y, height: b.group.userData.height || 10, size: 10 };
+  guests.forEach(settle);
+  $('status').textContent = `Inside building ${at + 1} of ${list.length} (${kind})`;
+  show(interior.tuneInteriorView(current()));
+}
+// the sliders as they stand, or nothing if they haven't been touched since the last reset
+let touched = false;
+const current = () => touched ? Object.fromEntries(sliders.map(id => [id, +$(id).value])) : {};
+
+// Someone from the street put in the room, for as long as the bench is open: into the building the view's in, straight
+// inside (no walk to the door), with no end to their visit — and moved along with the view to the next building.
+function settle(p) {
+  const at = { x: p.x, y: p.y, z: p.z };
+  p.indoors.building = { ...here, x: at.x, z: at.z, door: { x: at.x, z: at.z } };
+  p.indoors.back = at;
+  p.inRoom = null; // (placed afresh in the room next frame)
+}
+function addPerson() {
+  if (!here) return;
+  const { people } = peopleMod;
+  if (!win.splinetopia.S.peopleEnabled || !people.length) { $('status').textContent = 'No people: switch people on in the app first.'; return; }
+  // (someone out walking, or failing that someone not out yet — as in a city with no walkways — put back after)
+  const p = people.find(q => (q.mode === 'line' || q.mode === 'wander') && !q.act && !guests.includes(q))
+    ?? people.find(q => q.mode === 'none' && !guests.includes(q));
+  if (!p) { $('status').textContent = 'Nobody free to bring in just now.'; return; }
+  p.benchWasNone = p.mode === 'none';
+  activities.goIndoors(p, { ...here }, { x: p.x, y: p.y, z: p.z });
+  p.indoors.stage = 'inside';
+  p.indoors.hoursLeft = Infinity;
+  settle(p);
+  guests.push(p);
+  $('status').textContent = `${guests.length} ${guests.length === 1 ? 'person' : 'people'} in the room`;
+}
+function sendOut() {
+  guests.forEach(p => {
+    if (p.mode !== 'indoors') return;
+    if (!p.benchWasNone) { p.indoors.hoursLeft = 0; return; }
+    if (p.inRoom?.seat?.by === p) p.inRoom.seat.by = null;
+    p.mode = 'none'; p.indoors = null; p.inRoom = null; p.pose = 'Idle'; p.seatLift = 0;
+    peopleMod.setIndoorsCount(peopleMod.indoorsCount - 1);
+  });
+  guests = [];
+}
+
+frame.addEventListener('load', async () => {
+  win = frame.contentWindow;
+  while (!win.splinetopia) await new Promise(r => setTimeout(r, 200));
+  [interior, footprints, peopleMod, activities] = await Promise.all(['../src/buildings/interior.js', '../src/buildings/footprints.js',
+    '../src/life/people/people.js', '../src/life/people/peopleActivities.js'].map(inApp));
+  // (the city's buildings are put up a moment after it loads)
+  for (let tries = 0; tries < 50 && !buildings().length; tries++) await new Promise(r => setTimeout(r, 200));
+  enter(false);
+});
+$('home').onclick = () => { kind = 'home'; enter(false); };
+$('office').onclick = () => { kind = 'office'; enter(false); };
+$('next').onclick = () => enter(true);
+$('person').onclick = addPerson;
+$('clear').onclick = sendOut;
+for (const id of sliders) $(id).addEventListener('input', () => {
+  if (!interior) return;
+  touched = true;
+  show(interior.tuneInteriorView(current()));
+});
+$('reset').onclick = () => { touched = false; if (interior) show(interior.tuneInteriorView({})); };
+</script>
+</body>
+</html>
