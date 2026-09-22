@@ -70,7 +70,7 @@ listener.setFilter(limiter);
 // traffic, weather, the city — goes by way of `outdoors`, a lowpass and a drop in level that stand wide open until the
 // room's entered, then close to MUFFLED_HZ and MUFFLED_LEVEL. What's in the room with you (someone talking, their steps)
 // goes straight to the ear: a sound says where it is with heardFrom, which picks.
-const MUFFLED_HZ = 450, MUFFLED_LEVEL = 0.55, OPEN_HZ = 22000, MUFFLE_TIME = 0.08;
+const MUFFLED_HZ = 450, MUFFLED_LEVEL = 0.55, OPEN_HZ = 22000, MUFFLE_TIME = 0.015;
 const walls = context.createBiquadFilter(), wallsLevel = context.createGain();
 walls.type = 'lowpass';
 walls.frequency.value = OPEN_HZ;
