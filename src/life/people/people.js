@@ -1,6 +1,6 @@
 import { App, S } from '../../core/shared.js';
 import { mulberry32 } from '../../core/math.js';
-import { buildingTypeOf } from '../../buildings/building-types.js';
+import { buildingName } from '../../buildings/building-types.js';
 import { roomHolds, roomVisit } from '../../buildings/interior.js';
 import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
@@ -270,7 +270,7 @@ export let indoorsCount = 0;
  * @returns {string} the label
  */
 
-export const buildingLabel = b => buildingTypeOf(b.kind, b.number).name + ' #' + b.number;
+export const buildingLabel = b => buildingName(b.kind, b.number, b.height) + ' #' + b.number;
 
 
 export function setPersonModel(m) { personModel = m; }
