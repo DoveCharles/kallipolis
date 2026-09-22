@@ -61,9 +61,9 @@ function box(w, h, d, material, x, y, z, parent = room) {
 // A wall `length` long along x, centred on the origin, with `windows` evenly spaced along it — built out of the pieces
 // between the holes (under the sills, over the heads, and the piers either side) — then turned by `angle` about y and
 // moved to (x, z).
-function wall(length, windows, x, z, angle, thickness = WALL) {
+function wall(length, windows, x, z, angle, thickness = WALL, parent = room) {
   const piece = (w, h, d, material, px, py, pz) => {
-    const mesh = box(w, h, d, material, 0, py, 0);
+    const mesh = box(w, h, d, material, 0, py, 0, parent);
     const c = Math.cos(angle), s = Math.sin(angle);
     mesh.position.x = x + px*c + pz*s;
     mesh.position.z = z - px*s + pz*c;
@@ -96,8 +96,48 @@ const ceilW = ROOM_W/2 + WALL + ROOM_W/2 + THICK + OVERHANG, ceilD = ROOM_D/2 + 
 box(ceilW, THICK, ceilD, ceilingMaterial, ROOM_W/2 + WALL - ceilW/2, ROOM_H + THICK/2, ROOM_D/2 + WALL - ceilD/2);
 // the camera sits in the (-x, -z) corner, so the windows are in the +x and +z walls, facing it
 const FAR_X = [ROOM_W + WALL*2, 3], FAR_Z = [ROOM_D, 2];         // the far walls' lengths and windows
-wall(...FAR_X, 0, ROOM_D/2 + WALL/2, 0);                      // far, along x
-wall(...FAR_Z, ROOM_W/2 + WALL/2, 0, Math.PI/2);              // far, along z
+// The far walls come two ways, one shown at a time (see enterBuilding): punched through with windows (every home, and
+// now and then an office) or, in most offices, glass floor to ceiling.
+const punched = new THREE.Group(), curtain = new THREE.Group();
+room.add(punched, curtain);
+wall(...FAR_X, 0, ROOM_D/2 + WALL/2, 0, WALL, punched);       // far, along x
+wall(...FAR_Z, ROOM_W/2 + WALL/2, 0, Math.PI/2, WALL, punched); // far, along z
+// A curtain wall `length` long along x, centred on the origin: one sheet of glass floor to ceiling with a rail along the
+// floor and the ceiling, split into panes of about PANE wide by mullions between `from` and `to` (along it) — the
+// faces of the columns at either end (see COLUMNS), each with a mullion up against it — then turned by `angle` about y
+// and moved to (x, z).
+const PANE = 2.8, MULLION = 0.07, MULLION_DEPTH = 0.18, RAIL = 0.07;
+function curtainWall(length, x, z, angle, from, to) {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  const piece = (w, h, d, material, px, py) => {
+    const mesh = box(w, h, d, material, x + px*c, py, z - px*s, curtain);
+    mesh.rotation.y = angle;
+  };
+  piece(length, ROOM_H, 0.02, glassMaterial, 0, ROOM_H/2);
+  piece(length, RAIL, MULLION_DEPTH, frameMaterial, 0, RAIL/2);
+  piece(length, RAIL, MULLION_DEPTH, frameMaterial, 0, ROOM_H - RAIL/2);
+  const a = from + MULLION/2, b = to - MULLION/2, panes = Math.max(1, Math.round((b - a)/PANE));
+  for (let i = 0; i <= panes; i++) piece(MULLION, ROOM_H, MULLION_DEPTH, frameMaterial, a + (b - a)*i/panes, ROOM_H/2);
+}
+// A square concrete column, floor to ceiling, in each of the room's corners the glass runs into: the far one, and either
+// end where it meets the walls behind the camera. The glass runs along their outer faces.
+const COLUMN = 0.5;
+const concreteMaterial = roomLit(new THREE.MeshStandardMaterial({ color: 0xa8a59e, roughness: 0.95 }));
+const COLUMNS = [[ROOM_W/2, ROOM_D/2], [-ROOM_W/2 + COLUMN/2, ROOM_D/2], [ROOM_W/2, -ROOM_D/2 + COLUMN/2]];
+for (const [cx, cz] of COLUMNS) box(COLUMN, ROOM_H, COLUMN, concreteMaterial, cx, ROOM_H/2, cz, curtain);
+// (along the same lines as the punched walls, from inside the walls behind the camera to the far corner; the one along
+// z runs the other way along itself, turned as it is)
+curtainWall(ROOM_W + WALL, 0, ROOM_D/2 + WALL/2, 0, -ROOM_W/2 + COLUMN, ROOM_W/2 - COLUMN/2);
+curtainWall(ROOM_D + WALL, ROOM_W/2 + WALL/2, 0, Math.PI/2, -ROOM_D/2 + COLUMN/2, ROOM_D/2 - COLUMN);
+curtain.visible = false;
+/** The chance an office has windows punched through its walls, as a home does, rather than glass floor to ceiling. */
+const OFFICE_PUNCHED = 0.1;
+// a number from 0 up to 1 for a building's key, the same every time (and unlike its number, which picks home or office)
+function keyFraction(key) {
+  let h = 2166136261;
+  for (const ch of String(key) + ':walls') h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return (h >>> 0)/2**32;
+}
 wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK);  // behind the camera
 wall(ROOM_D, 0, -ROOM_W/2 - THICK/2, 0, Math.PI/2, THICK);   // behind the camera
 // ---------------------------------------------------------- what's in it
@@ -154,16 +194,18 @@ layout('office', 0x6f7478, add => {
   // water cooler by the far corner, a printer against the back wall, and a plant in the other corner
   add(0.32, 0.9, 0.32, lit(0xe6e6e2), ROOM_W/2 - 0.4, 0.45, -ROOM_D/2 + 0.9);
   add(0.28, 0.4, 0.28, lit(0x7fb2d8, 0.2), ROOM_W/2 - 0.4, 1.1, -ROOM_D/2 + 0.9);
-  add(0.7, 0.55, 0.55, metal, -ROOM_W/2 + 0.45, 0.275, ROOM_D/2 - 0.5);
-  add(0.62, 0.35, 0.5, lit(0xcfcfc8), -ROOM_W/2 + 0.45, 0.72, ROOM_D/2 - 0.5);
-  add(0.4, 0.4, 0.4, lit(0x7a5a42), ROOM_W/2 - 0.45, 0.2, ROOM_D/2 - 0.45);
-  add(0.7, 0.9, 0.7, lit(0x3f6b3a, 1), ROOM_W/2 - 0.45, 0.85, ROOM_D/2 - 0.45);
+  // (the printer and plant kept clear of the columns in a glass-walled office's corners: see COLUMNS)
+  add(0.7, 0.55, 0.55, metal, -ROOM_W/2 + 0.45, 0.275, ROOM_D/2 - 0.6);
+  add(0.62, 0.35, 0.5, lit(0xcfcfc8), -ROOM_W/2 + 0.45, 0.72, ROOM_D/2 - 0.6);
+  add(0.4, 0.4, 0.4, lit(0x7a5a42), ROOM_W/2 - 0.7, 0.2, ROOM_D/2 - 0.7);
+  add(0.7, 0.9, 0.7, lit(0x3f6b3a, 1), ROOM_W/2 - 0.7, 0.85, ROOM_D/2 - 0.7);
   const chairsOut = DESK_D + 0.3 + 0.3;
   return [
     around(x0, x0 + DESKS*DESK_W, BANK_Z - chairsOut, BANK_Z + chairsOut, 0.35),
     around(ROOM_W/2 - 0.6, ROOM_W/2, -ROOM_D/2 + 0.7, -ROOM_D/2 + 1.1, 0.35),
-    around(-ROOM_W/2, -ROOM_W/2 + 0.8, ROOM_D/2 - 0.8, ROOM_D/2, 0.35),
-    around(ROOM_W/2 - 0.8, ROOM_W/2, ROOM_D/2 - 0.8, ROOM_D/2, 0.35),
+    around(-ROOM_W/2, -ROOM_W/2 + 0.8, ROOM_D/2 - 0.9, ROOM_D/2, 0.35),
+    around(ROOM_W/2 - 1.05, ROOM_W/2, ROOM_D/2 - 1.05, ROOM_D/2, 0.35),
+    around(ROOM_W/2 - 0.25, ROOM_W/2, -ROOM_D/2, -ROOM_D/2 + 0.5, 0.35), // (the column in the right-hand corner)
   ];
 });
 let current = LAYOUTS.home;
@@ -683,6 +725,8 @@ function longestEdgeAngle(fp) {
 export function enterBuilding(group, key, kind = 'home') {
   if (inside) leaveBuilding();
   useLayout(kind);
+  const glass = current === LAYOUTS.office && keyFraction(key) >= OFFICE_PUNCHED;
+  curtain.visible = glass; punched.visible = !glass;
   const fp = group.userData.footprint;
   const bounds = new THREE.Box3().setFromObject(group);
   const base = bounds.min.y, height = group.userData.height ?? (bounds.max.y - base);
