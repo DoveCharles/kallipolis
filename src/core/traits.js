@@ -14,7 +14,7 @@ export const TRAITS = {
   recovery:   { base: 1, min: 0.1, max: 10}, //how fast a car recovers from a burnt out engine, how likely they are to burn out
   health:    { base: 1, min: 0.01, max: 10}, //health multiplier
   tank:      { base: 1, min: 0.01, max: 10}, //how many seconds of boost are available
-  size:      { base: 1, min: 0.3, max: 3 },
+  size:      { base: 1, min: 0.3, max: 3 }, // scales how big something's drawn: a person's height (see people.js) or a car's whole body, engine note and wheels (see carScale in life/traffic.js)
   chatty:    { base: 1, min: 0, max: 10 },
   talkative: { base: 1, min: 0.05, max: 20 },
   lounging:  { base: 1, min: 0, max: 10 },

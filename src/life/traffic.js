@@ -1111,7 +1111,7 @@ export function updateTraffic(t) {
     if (car.ahead) {
       // (along each car's own lane rather than the road, since a lane runs quicker round the inside of a bend)
       const nav = S.trafficNav.lines[car.li], along = (laneLength(nav, car.dir, car.ahead.u) - laneLength(nav, car.dir, car.u))*car.dir;
-      const gap = (along < 0 ? along + laneLength(nav, car.dir, nav.total) : along) - 2.2*S.peopleSize*(car.length + car.ahead.length); // (round a loop)
+      const gap = (along < 0 ? along + laneLength(nav, car.dir, nav.total) : along) - (carLength(car) + carLength(car.ahead))/2; // (round a loop)
       target = Math.min(target, Math.max(0, (gap - 2*S.peopleSize)*1.2*S.peopleSpeed));
     }
     // (and for whichever other car gapAhead finds in its way, in its lane or not)
@@ -1129,7 +1129,7 @@ export function updateTraffic(t) {
     if (ahead && ahead.dist < 10) target = Math.min(target, cruise*(0.45 + 0.055*ahead.dist));
     // stop for a red light — or an amber one there's still room to stop for — with the front bumper at the stop line
     const junction = ahead && S.roadJunctionByPlace.get(placeKey(ahead.x, ahead.z));
-    const stopAt = junction ? junction.r + 3.2 + 2.2*car.length*S.peopleSize : carLength(car)*0.5 + S.peopleSize;
+    const stopAt = junction ? junction.r + 3.2 + carLength(car)*0.5 : carLength(car)*0.5 + S.peopleSize;
     if (junction) {
       const lane = lanePoint(car), tx = Math.sin(lane.heading), tz = Math.cos(lane.heading);
       const arm = junction.arms.reduce((best, a) => -(a.x*tx + a.z*tz) > -(best.x*tx + best.z*tz) ? a : best, junction.arms[0]); // the arm it's coming in on
@@ -1221,10 +1221,10 @@ function turnWheels(car, dt) {
   const turned = car.lastHeading == null ? 0 : Math.atan2(Math.sin(car.heading - car.lastHeading), Math.cos(car.heading - car.lastHeading));
   car.lastHeading = car.heading;
   if (!cm || !cm.wheelRadius || dt <= 0) return;
-  car.wheelSpin = (car.wheelSpin + car.speed*dt/(cm.wheelRadius*S.peopleSize)) % (Math.PI*2);
+  car.wheelSpin = (car.wheelSpin + car.speed*dt/(cm.wheelRadius*carScale(car))) % (Math.PI*2);
   let steer = 0;
   if (car === drivenCar) steer = -car.steerHeld*WHEEL_STEER_MAX;
-  else if (Math.abs(car.speed) > 0.5 && cm.wheelbase) steer = Math.atan(turned/dt*cm.wheelbase*S.peopleSize/car.speed);
+  else if (Math.abs(car.speed) > 0.5 && cm.wheelbase) steer = Math.atan(turned/dt*cm.wheelbase*carScale(car)/car.speed);
   steer = Math.max(-WHEEL_STEER_MAX, Math.min(WHEEL_STEER_MAX, steer));
   car.wheelSteer += (steer - car.wheelSteer)*Math.min(1, dt*10);
 }
@@ -1234,7 +1234,7 @@ const tilting = new THREE.Quaternion(), sideways = new THREE.Vector3(1, 0, 0); /
 const rolling = new THREE.Quaternion(), forward = new THREE.Vector3(0, 0, 1); // (a terrible car's rock side to side while it hops, about its own length axis — see updateSpecialTraits)
 /**
  * Put car `i` where it is: at Y_ROAD (plus its bumpY, sunk by its sinking.drop), turned to its heading and scaled by
- * S.peopleSize. It goes into its design's mesh at the next free instance slot (counted up in designCounts), with its
+ * S.peopleSize and its own size trait (see carScale). It goes into its design's mesh at the next free instance slot (counted up in designCounts), with its
  * paint and wheel angles and plate packed alongside, or into the box car when it has no design; its place in the other
  * mesh is zeroed either way. Also writes its debug hitbox.
  * @param {object} car
@@ -1252,7 +1252,7 @@ function placeCar(car, i, designCounts) {
     const cm = carMeshes[car.design], idx = designCounts[car.design]++;
     const holo = car.holo ?? DEFAULT_HOLO; // (a legendary car's foil/polychrome sheen, drawn by the shader itself — see carHoloOf)
     const rust = car.rust ?? DEFAULT_RUST; // (a terrible car's rust spots, likewise — see carRustOf)
-    scale.setScalar(S.peopleSize);
+    scale.setScalar(carScale(car));
     matrix.compose(position, rotation, scale);
     cm.mesh.setMatrixAt(idx, matrix);
     cm.paint.setXYZ(idx, car.paint[0], car.paint[1], car.paint[2]);
@@ -1267,7 +1267,7 @@ function placeCar(car, i, designCounts) {
     matrix.makeScale(0, 0, 0);
     carParts.body.setMatrixAt(i, matrix);
   } else {
-    scale.set(car.width*S.peopleSize, car.height*S.peopleSize, car.length*S.peopleSize);
+    scale.set(car.width*carScale(car), car.height*carScale(car), car.length*carScale(car));
     matrix.compose(position, rotation, scale);
     carParts.body.setMatrixAt(i, matrix);
   }
@@ -1285,11 +1285,19 @@ function placeCar(car, i, designCounts) {
 // car-types.js).
 let followedCar = -1;
 /**
+ * The scale a car is drawn and measured at: the global people/traffic scale, times its own size trait (cars without a
+ * design have no traits yet — see refreshCarTraits — so read as 1 until one's assigned).
+ * @param {object} car
+ * @returns {number}
+ */
+function carScale(car) { return S.peopleSize*(car.traits?.size ?? 1); }
+
+/**
  * A car's height in world units: its design's, or the box car's own until it has a design.
  * @param {object} car
  * @returns {number}
  */
-function carHeight(car) { return (car.design != null && carMeshes[car.design] ? carMeshes[car.design].height : car.height)*S.peopleSize; }
+function carHeight(car) { return (car.design != null && carMeshes[car.design] ? carMeshes[car.design].height : car.height)*carScale(car); }
 
 /**
  * A car's design mesh data, or null before the models have loaded.
@@ -1307,14 +1315,14 @@ function carModelOf(car) { return car.design != null ? carMeshes[car.design] : n
 // what the engine sounds need of a car (see audio/engine.js): where its engine is, how big it is against an ordinary car
 // (bigger, lower), whether it's running — not stalled, sinking or burning — and its design, for the kind of engine
 const engineOf = car => ({ y: Y_ROAD + carHeight(car)/2, size: carLength(car)/(BOX_CAR_LENGTH*S.peopleSize), running: !car.sinking && !(car.stall > 0) && car.fuse == null, design: carModelOf(car)?.name });
-function carLength(car) { const cm = carModelOf(car); return (cm ? cm.length : car.length)*BOX_CAR_LENGTH*S.peopleSize; }
+function carLength(car) { const cm = carModelOf(car); return (cm ? cm.length : car.length)*BOX_CAR_LENGTH*carScale(car); }
 
 /**
  * A car's width in world units, from its design or from the box car.
  * @param {object} car
  * @returns {number}
  */
-function carWidth(car) { const cm = carModelOf(car); return (cm ? cm.width : car.width*BOX_CAR_WIDTH)*S.peopleSize; }
+function carWidth(car) { const cm = carModelOf(car); return (cm ? cm.width : car.width*BOX_CAR_WIDTH)*carScale(car); }
 
 const CAR_REAR_AXLE = 0.3;
 /**
@@ -2004,7 +2012,7 @@ function hitBuildings(car, was, dt) {
   if (fresh) {
     impactSound('crash', contact, Math.abs(car.speed)*into);
     if (into > WALL_HEAD_ON && Math.abs(car.speed) >= BOUNCE_MIN_SPEED) {
-      car.speed = -travel*Math.abs(car.speed)*BUMP_BOUNCE; car.stall = STALL_TIME;
+      car.speed = -travel*Math.abs(car.speed)*BUMP_BOUNCE; car.stall = stallTime(car);
       puffSmoke({ x: q.x, y: Y_ROAD, z: q.z }, carHeight(car), BUMP_SMOKE_PUFFS);
     } else car.speed *= 1 - into;
     sparks(contact, BUMP_SPARKS);
@@ -2017,6 +2025,8 @@ function hitBuildings(car, was, dt) {
 
 const BUMP_SHOVE = 0.15, BUMP_BOUNCE = 0.3, BOUNCE_BELOW_SPEED = 0.2, BUMP_SMOKE_PUFFS = 4, BUMP_SPARKS = 10;
 const STALL_TIME = 1, STALL_SMOKE_EVERY = 0.2; // (seconds the engine stays dead after a car is thrown back; how often it smokes meanwhile)
+/** How long a stalled/burnt-out car's engine stays dead: STALL_TIME eased by its own recovery trait — the higher, the sooner it's running again. */
+const stallTime = car => STALL_TIME/(car.traits?.recovery ?? 1);
 const WRECK_SPEED_PER_SLOWDOWN = 30, JOLT_SPEED_PER_SLOWDOWN = 15, BUMP_JOLT_SHOVE = 0.2; // (a car wrecks one it hits if it's going this many times faster than the slow-down hitting it costs, as a share of speed; at half that it jolts it back, by this share of its speed)
 const BUMP_PUSH_POWER = 0.03, BOUNCE_MIN_SPEED = 2; // (per unit of weight, how far a car shoves the one it's against each frame, even from a standstill; the least speed a car is thrown back from)
 // The share of its speed a car of weight 1 loses hitting something of weight 1 (see the `weight` trait): 50% for a car; for a person
@@ -2026,7 +2036,7 @@ const CAR_SLOWDOWN = 0.5, CAR_MIN_SLOWDOWN = 0.1, CAR_MAX_SLOWDOWN = 0.95, PERSO
  * Slow a car for having hit something: it keeps its speed less a share set by the kind of thing (a car or a person) and
  * the weight of what it hit over its own weight — so the heavier the thing, or the lighter the car, the more it loses. A car that would be left going slower than BOUNCE_BELOW_SPEED after hitting
  * a car is thrown back instead, at BUMP_BOUNCE of the speed it hit at (times the same ratio, up to all of it) (the camera doesn't follow that: see chaseCamera), and its
- * engine dies for STALL_TIME, smoking (see driveByHand).
+ * engine dies for STALL_TIME eased by its recovery trait (stallTime), smoking (see driveByHand).
  * @param {object} car - the car that hit it
  * @param {'car'|'person'} kind - what it hit
  * @param {number} [weight] - the weight trait of what it hit
@@ -2035,7 +2045,7 @@ const CAR_SLOWDOWN = 0.5, CAR_MIN_SLOWDOWN = 0.1, CAR_MAX_SLOWDOWN = 0.95, PERSO
 function slowedBy(car, kind, weight = 1) {
   const ratio = weight/(car.traits?.weight ?? 1);
   const loss = kind === 'person' ? Math.min(PERSON_MAX_SLOWDOWN, PERSON_SLOWDOWN*ratio) : Math.min(CAR_MAX_SLOWDOWN, slowdownShare(car, weight));
-  if (kind === 'car' && Math.abs(car.speed) >= BOUNCE_MIN_SPEED && Math.abs(car.speed)*(1 - loss) < BOUNCE_BELOW_SPEED) { car.speed = -Math.sign(car.speed || 1)*Math.abs(car.speed)*Math.min(1, BUMP_BOUNCE*ratio); car.stall = STALL_TIME; } // (the knock back too grows with the ratio, up to its whole speed)
+  if (kind === 'car' && Math.abs(car.speed) >= BOUNCE_MIN_SPEED && Math.abs(car.speed)*(1 - loss) < BOUNCE_BELOW_SPEED) { car.speed = -Math.sign(car.speed || 1)*Math.abs(car.speed)*Math.min(1, BUMP_BOUNCE*ratio); car.stall = stallTime(car); } // (the knock back too grows with the ratio, up to its whole speed)
   else car.speed *= 1 - loss;
 }
 /** The share of its speed a car would lose hitting a car of weight `weight`, before it's kept to a range: more the heavier that car is against its own weight. */
@@ -2126,7 +2136,7 @@ function terribleBump(car, level, dt) {
 }
 const BLAST_THROW = 8; // (how fast the blast throws what it kills, units a second)
 const STALL_SPEED_SHARE = 0.5; // (of the speed that jolts a car: a car hit at least this fast, but not fast enough to jolt, cuts the engine of the car that hit it)
-const STALL_WEIGHT_RATIO = 1.6; // (how many times its own weight the car it hits must be, to cut an engine)
+const STALL_WEIGHT_RATIO = 1.6; // (how many times its own weight the car it hits must be, to cut an engine — scaled up by its own recovery trait, so a car with more of it needs an even heavier hit to stall)
 const DETONATION_REACH = 8; // (how far from a car burning out cars and people are blown up, before scaling by size)
 const FUSE_TIME = 3, FUSE_SPARK_EVERY = 0.05, FUSE_SPARKS = 5; // (seconds a wrecked car burns before it blows; seconds between its sparks; sparks each time)
 /** Set a car burning: after FUSE_TIME it explodes, meanwhile it stays put, sparking and burning (burnFx). */
@@ -2302,14 +2312,14 @@ function bumpIntoCars(car, was) {
     const joltSpeed = JOLT_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight), jolted = Math.abs(car.speed) >= joltSpeed;
     kickCar(other, other.x - car.x, other.z - car.z, jolted ? Math.abs(car.speed)*BUMP_JOLT_SHOVE : Math.min(1, Math.abs(car.speed)*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1)));
     other.speed = 0;
-    if (!jolted && Math.abs(car.speed) >= STALL_SPEED_SHARE*joltSpeed && (other.traits?.weight ?? 1) > STALL_WEIGHT_RATIO*(car.traits?.weight ?? 1)) cutsEngine = true; // (hit hard enough to hurt the engine, but not to jolt the car, and it's much heavier)
+    if (!jolted && Math.abs(car.speed) >= STALL_SPEED_SHARE*joltSpeed && (other.traits?.weight ?? 1) > STALL_WEIGHT_RATIO*(car.traits?.recovery ?? 1)*(car.traits?.weight ?? 1)) cutsEngine = true; // (hit hard enough to hurt the engine, but not to jolt the car, and it's much heavier — the less likely, the more recovery it has)
     slowedBy(car, 'car', other.traits?.weight);
     contact = { x: (car.x + other.x)/2, y: Y_ROAD, z: (car.z + other.z)/2 };
   });
   if (!contact) { car.bumping = false; return; }
   Object.assign(car, was);
   if (!car.bumping) { impactSound('crash', contact, hitSpeed); puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS); sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS); } // (once, as they meet)
-  if (cutsEngine && !car.bumping) car.stall = STALL_TIME;
+  if (cutsEngine && !car.bumping) car.stall = stallTime(car);
   car.bumping = true;
 }
 
