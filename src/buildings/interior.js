@@ -345,7 +345,7 @@ function furnish(key) {
   const inRoom = (r, margin = 0.02) => r.x0 >= -ROOM_W/2 + margin && r.x1 <= ROOM_W/2 - margin
     && r.z0 >= -ROOM_D/2 + margin && r.z1 <= ROOM_D/2 - margin;
   const fits = (r, gap = 0, margin = 0.02) => inRoom(r, margin) && taken.every(o => !overlaps(r, o, gap));
-  const put = (name, x, z, angle, { scale = 1, tall = false, underfoot = false } = {}) => {
+  const put = (name, x, z, angle, { scale = 1, tall = false, underfoot = false, diner = false } = {}) => {
     const piece = furniture[name], object = piece.object.clone();
     object.position.set(x, 0, z);
     object.rotation.y = angle;
@@ -357,7 +357,7 @@ function furnish(key) {
     home.solid.push(r);
     home.blocked.push(around(r.x0, r.x1, r.z0, r.z1, 0.35));
     const c = Math.cos(angle), s = Math.sin(angle);
-    for (const seat of piece.seats) home.seats.push({ x: x + seat.x*c + seat.z*s, z: z - seat.x*s + seat.z*c, y: seat.y, nx: s, nz: c, sofa: name === 'Sofa' });
+    for (const seat of piece.seats) home.seats.push({ x: x + seat.x*c + seat.z*s, z: z - seat.x*s + seat.z*c, y: seat.y, nx: s, nz: c, sofa: name === 'Sofa', diner });
     return r;
   };
   // the camera's corner, kept clear of anything but the sofa
@@ -463,7 +463,7 @@ function furnish(key) {
       if (!fits(whole, 0.7, 0.35) || overlaps(whole, underCamera)) continue;
       put('Table', x, z, turn);
       dining = { x, z };
-      chairs.forEach(c => put('Chair', c.x, c.z, c.angle));
+      chairs.forEach(c => put('Chair', c.x, c.z, c.angle, { diner: true }));
       break;
     }
   }
@@ -502,7 +502,7 @@ function furnish(key) {
   const c = Math.cos(room.rotation.y), s = Math.sin(room.rotation.y);
   home.seats = home.seats.map(seat => {
     const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z));
-    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: seat.sofa, by: null };
+    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: seat.sofa, diner: seat.diner, by: null };
   });
   // and the TV's screen, in the world (switched on by whoever sits down in front of it: see watchingTV)
   if (tv.screen) {

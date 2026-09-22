@@ -13,6 +13,7 @@ import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, personHeight, stopFollowingPerson } from './peopleTracking.js';
 import { roomDoorway, roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
+import { clearMeal, mealFinished, serveMeal } from './peopleHolding.js';
 
 // ---- what people get up to besides walking about.
 //
@@ -1179,6 +1180,7 @@ function standUp(p) {
   const seat = p.inRoom?.seat;
   if (p.group?.kind === 'room') leaveGroup(p);
   if (seat && seat.by === p) seat.by = null;
+  clearMeal(p);
   if (p.inRoom) { p.inRoom.seat = null; p.inRoom.watched = null; }
   p.pose = 'Idle'; p.seatLift = 0; p.faceTo = null;
 }
@@ -1209,6 +1211,7 @@ function sitting(p, here, dt) {
       if (Math.abs(wrapAngle(facing - p.heading)) > 0.15 || p.oneShot) break;
       here.stage = 'sit';
       p.pose = deskPose(seat);
+      if (p.pose === 'Eating') serveMeal(p);                         // (a plate on the table and a fork in hand)
       here.timer = (20 + peopleRng()*60)*p.traits.patience;
       here.spell = spellAt(p.pose);
       p.seatLift = seat.y - p.y - clipNamed('Sit1').seatY*modelScale(p);
@@ -1226,7 +1229,13 @@ function sitting(p, here, dt) {
       }
       // (at a desk, typing a while, then sat back a moment, then at it again)
       if (seat.desk && !p.group && (here.spell -= dt) <= 0) { p.pose = p.pose === 'Typing' ? 'Sit1' : deskPose(seat); here.spell = spellAt(p.pose); }
-      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); here.stage = 'rise'; p.pose = 'Idle'; }
+      // (dinner over: the plate cleared away, and a little while sat at the table after)
+      if (p.pose.startsWith('Eating') && mealFinished(p)) {
+        clearMeal(p);
+        p.pose = 'Sit1';
+        here.timer = Math.min(here.timer, SAT_AFTER_MEAL*p.traits.patience);
+      }
+      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); clearMeal(p); here.stage = 'rise'; p.pose = 'Idle'; }
       break;
     }
     case 'rise':
@@ -1241,8 +1250,13 @@ function sitting(p, here, dt) {
 }
 /** How long someone at a desk keeps typing, and sits back between, in seconds: [shortest, longest]. */
 const TYPING_SPELL = [8, 40], SAT_BACK_SPELL = [3, 12];
-/** How someone sits on a seat: typing, at a desk (if the model can), else sat back. */
-const deskPose = seat => seat.desk && hasClip('Typing') ? 'Typing' : 'Sit1';
+/** How long someone lingers at the table once their dinner's gone, in seconds. */
+const SAT_AFTER_MEAL = 12;
+/** How someone sits on a seat: typing, at a desk (if the model can), eating, at a dining table, else sat back. */
+const deskPose = seat => seat.desk && hasClip('Typing') ? 'Typing'
+  : seat.diner && hasClip('Eating') ? 'Eating' : 'Sit1';
+/** The same pose with their hands still, for talking to whoever's sat beside them. */
+const pausedPose = pose => (pose === 'Typing' || pose === 'Eating') && hasClip(`${pose}Paused`) ? `${pose}Paused` : pose;
 /** How long a spell of a pose at a desk lasts, at random. */
 const spellAt = pose => { const [lo, hi] = pose === 'Typing' ? TYPING_SPELL : SAT_BACK_SPELL; return lo + peopleRng()*(hi - lo); };
 
@@ -1318,7 +1332,7 @@ function chatWhileSat(p) {
   const g = { kind: 'room', sat: true, members: [p, q], stage: 'talk', speaker: null, turnIn: 0,
     timer: (lo + peopleRng()*(hi - lo))*(p.traits.patience + q.traits.patience)/2 };
   groups.push(g);
-  [p, q].forEach(m => { m.group = g; if (m.pose === 'Typing' && hasClip('TypingPaused')) m.pose = 'TypingPaused'; });
+  [p, q].forEach(m => { m.group = g; m.pose = pausedPose(m.pose); });
 }
 /**
  * Run a room chat for a frame (see "talking in a room"), ending it if either of them has gone.
@@ -1354,6 +1368,7 @@ function endRoomChat(g) {
     const here = m.inRoom;
     if (!here) return;
     if (m.pose === 'TypingPaused') { m.pose = 'Typing'; here.spell = spellAt('Typing'); }
+    else if (m.pose === 'EatingPaused') m.pose = 'Eating';
     if (!here.seat) { here.route = null; here.wait = (1 + peopleRng()*4)*m.traits.patience; }
   });
 }
