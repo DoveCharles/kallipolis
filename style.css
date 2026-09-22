@@ -262,6 +262,9 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
 #btn-panel-toggle, #btn-touch-add { display:none; }
 html.touch #btn-touch-add { display:flex; }
 .canvas-tool.on { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
+/* the projection button shows one grid or the other — whichever way the view is drawn now (see btn-projection) */
+#btn-projection .proj-ortho, #btn-projection.on .proj-perspective { display:none; }
+#btn-projection.on .proj-ortho { display:block; }
 /* The icons over the view are line drawings until whatever they turn on is on, and then they fill in: the ped head
    (src/ui/ped-view.js) in the yellow it paints the crowd, the magnet in red with white tips, the heart while the
    favorites window is open. */

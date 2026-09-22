@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
-import { scene, camera, computeWindowGlowFactor, SKY_ENV_MAP, snapPointToGrid } from '../core/scene.js';
+import { scene, camera, computeWindowGlowFactor, SKY_ENV_MAP, snapPointToGrid, apparentDistance } from '../core/scene.js';
 import { mergeGeometryList } from '../buildings/windows.js';
 import { roadNodes } from '../core/state.js';
 import { disposeObject } from '../roads/roads.js';
@@ -969,7 +969,7 @@ export function asNodeUi(object) { object.renderOrder = 1000; if (object.isMesh)
 // is from the camera, at NODE_UI_DISTANCE away being the size it's made. A nearer distance means bigger markers, which
 // is what touch gets: a fingertip covers a good deal more of the screen than a cursor's point does.
 const NODE_UI_DISTANCE = IS_TOUCH ? 110 : 160;
-export function nodeUiScaleAt(camera, position) { return camera.position.distanceTo(position)/NODE_UI_DISTANCE; }
+export function nodeUiScaleAt(camera, position) { return apparentDistance(camera, position)/NODE_UI_DISTANCE; }
 export function scaleNodeUi(camera) {
   const scaleGroup = group => {
     if (!group || !group.visible) return;
