@@ -8,6 +8,7 @@ import { hashNameToNumber, mulberry32 } from '../core/math.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { setCutout } from '../ui/pixelation.js';
 import { isMuted, setIndoors } from '../audio/sfx.js';
+import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
 
 // ============================================================ going inside a building
 // Every building has the same inside: one room (furnished one of a few ways), built once and moved to whichever building's
@@ -160,54 +161,15 @@ const around = (x0, x1, z0, z1, pad = 0.45) => ({ x0: x0 - pad, x1: x1 + pad, z0
 // a home: furnished afresh for each building from the interior model (see "a home's furniture", below)
 layout('home', 0x9a7452, () => []);
 
-// an office floor: a bank of desks back to back with a screen between, each with its monitor and chair, strip lights in
-// the ceiling, a water cooler, a printer and a pot plant
-const DESKS = 3, DESK_W = 1.2, DESK_D = 0.75, DESK_H = 0.74;
-const BANK_X = 0.6, BANK_Z = 0.9;                              // the bank's middle
+// an office: strip lights in the ceiling, bright in any light, and furnished afresh for each building from the office
+// model (see "an office's furniture", below)
 layout('office', 0x6f7478, add => {
-  const top = lit(0xd8d4cc, 0.6), metal = lit(0x55595e, 0.5), screen = lit(0x9aa7a0, 0.9);
-  const black = lit(0x222428, 0.4), seat = lit(0x2f3f5a, 0.9);
-  const x0 = BANK_X - DESKS*DESK_W/2;
-  for (let i = 0; i < DESKS; i++) {
-    const x = x0 + DESK_W*(i + 0.5);
-    for (const side of [-1, 1]) {
-      const z = BANK_Z + side*DESK_D/2;
-      add(DESK_W - 0.04, 0.04, DESK_D - 0.02, top, x, DESK_H, z);
-      add(0.04, DESK_H - 0.02, DESK_D - 0.1, metal, x - DESK_W/2 + 0.06, (DESK_H - 0.02)/2, z);
-      // the monitor, back by the screen and facing whoever sits there
-      add(0.55, 0.34, 0.03, black, x, DESK_H + 0.3, BANK_Z + side*0.18);
-      add(0.06, 0.13, 0.06, black, x, DESK_H + 0.07, BANK_Z + side*0.15);
-      add(0.4, 0.02, 0.14, black, x, DESK_H + 0.03, BANK_Z + side*0.45);            // keyboard
-      // the chair, pulled out a little
-      const cz = BANK_Z + side*(DESK_D + 0.3);
-      add(0.48, 0.08, 0.46, seat, x + 0.05, 0.47, cz);
-      add(0.46, 0.5, 0.07, seat, x + 0.05, 0.78, cz + side*0.23);
-      add(0.05, 0.4, 0.05, metal, x + 0.05, 0.24, cz);
-      add(0.5, 0.04, 0.5, metal, x + 0.05, 0.04, cz);
-    }
-  }
-  add(DESKS*DESK_W - 0.04, 0.4, 0.04, screen, BANK_X, DESK_H + 0.2, BANK_Z);
-  add(0.04, DESK_H - 0.02, DESK_D*2 - 0.1, metal, x0 + DESKS*DESK_W - 0.06, (DESK_H - 0.02)/2, BANK_Z);
-  // strip lights, bright in any light
   const light = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfffbf0, emissiveIntensity: 0.9 });
   for (const lx of [-2, 0.6, 3.2]) for (const lz of [-1.2, 1.6]) add(1.2, 0.03, 0.3, light, lx, ROOM_H - 0.015, lz);
-  // water cooler by the far corner, a printer against the back wall, and a plant in the other corner
-  add(0.32, 0.9, 0.32, lit(0xe6e6e2), ROOM_W/2 - 0.4, 0.45, -ROOM_D/2 + 0.9);
-  add(0.28, 0.4, 0.28, lit(0x7fb2d8, 0.2), ROOM_W/2 - 0.4, 1.1, -ROOM_D/2 + 0.9);
-  // (the printer and plant kept clear of the columns in a glass-walled office's corners: see COLUMNS)
-  add(0.7, 0.55, 0.55, metal, -ROOM_W/2 + 0.45, 0.275, ROOM_D/2 - 0.6);
-  add(0.62, 0.35, 0.5, lit(0xcfcfc8), -ROOM_W/2 + 0.45, 0.72, ROOM_D/2 - 0.6);
-  add(0.4, 0.4, 0.4, lit(0x7a5a42), ROOM_W/2 - 0.7, 0.2, ROOM_D/2 - 0.7);
-  add(0.7, 0.9, 0.7, lit(0x3f6b3a, 1), ROOM_W/2 - 0.7, 0.85, ROOM_D/2 - 0.7);
-  const chairsOut = DESK_D + 0.3 + 0.3;
-  return [
-    around(x0, x0 + DESKS*DESK_W, BANK_Z - chairsOut, BANK_Z + chairsOut, 0.35),
-    around(ROOM_W/2 - 0.6, ROOM_W/2, -ROOM_D/2 + 0.7, -ROOM_D/2 + 1.1, 0.35),
-    around(-ROOM_W/2, -ROOM_W/2 + 0.8, ROOM_D/2 - 0.9, ROOM_D/2, 0.35),
-    around(ROOM_W/2 - 1.05, ROOM_W/2, ROOM_D/2 - 1.05, ROOM_D/2, 0.35),
-    around(ROOM_W/2 - 0.25, ROOM_W/2, -ROOM_D/2, -ROOM_D/2 + 0.5, 0.35), // (the column in the right-hand corner)
-  ];
+  return [];
 });
+const officeGroup = new THREE.Group();
+LAYOUTS.office.group.add(officeGroup);
 let current = LAYOUTS.home;
 // where there's room to walk in it, as laid out (see walkGrid)
 let grid = null;
@@ -235,8 +197,9 @@ function paintRoom() {
 // a plant or two by the walls. Until the model's loaded, homes are bare.
 const FURNITURE_MODEL_URL = 'assets/models/Interior.glb';
 const FURNITURE_SCALE = 0.2;
-// { [name]: { object, w, d, h, seats } } — each piece turned to face +z, centred on its footprint and standing on y = 0,
-// w across and d deep, with where on it anyone can sit (seats: { x, z, y }, in its own terms)
+// { [name]: { object, w, d, h, bounds, seats } } — each piece turned to face +z, centred on its footprint and standing on
+// y = 0, w across and d deep (bounds: { x0, x1, z0, z1 }, its footprint in its own terms), with where on it anyone can
+// sit (seats: { x, z, y }, in its own terms)
 let furniture = null;
 const FLOORS = [0x9a7452, 0x7d5b3f, 0xb08a62, 0x8a6a55, 0x6e6861, 0xa3927c, 0xc4ae8c, 0x5c4636, 0x8c8478];
 // and each home's own paint, woodwork (the TV stand, tables and chairs), sofa and rug
@@ -251,14 +214,11 @@ const painted = [];
 // the screen, lit as if it's on
 const SCREEN_COLOR = 0x0c1218, SCREEN_GLOW = 0x33536e;
 
-async function loadFurniture() {
-  let gltf;
-  try {
-    gltf = await new GLTFLoader().loadAsync(FURNITURE_MODEL_URL);
-  } catch (err) {
-    console.warn('Blockout: the interior model failed to load; homes are left bare', err);
-    return;
-  }
+// The pieces in a furniture model (see FURNITURE_MODEL_URL), by name (see `furniture`), each lit as the room is and the
+// materials in it named in `paint` added to `painted`. Centred on their footprints, or else (`centred` false) put where
+// the model has its origin, as the office's are (see OFFICE_MODEL_URL).
+async function loadPieces(url, paint, painted, centred = true) {
+  const gltf = await new GLTFLoader().loadAsync(url);
   const pieces = {};
   for (const node of [...gltf.scene.children]) {
     const inner = new THREE.Group();
@@ -267,7 +227,8 @@ async function loadFurniture() {
     if (node.name === 'TV') inner.rotation.y = Math.PI;
     inner.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(inner), size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
-    inner.position.set(-mid.x, -box.min.y, -mid.z);
+    if (centred) inner.position.set(-mid.x, -box.min.y, -mid.z);
+    else inner.position.set(-node.position.x*FURNITURE_SCALE, -box.min.y, -node.position.z*FURNITURE_SCALE);
     const object = new THREE.Group();
     object.add(inner);
     object.updateMatrixWorld(true);
@@ -275,9 +236,20 @@ async function loadFurniture() {
       if (!o.isMesh) return;
       o.castShadow = o.receiveShadow = !o.material.transparent;
       furnitureLit(o.material);
-      if (PAINTED[o.material.name] && !painted.includes(o.material)) painted.push(o.material);
+      if (paint[o.material.name] && !painted.includes(o.material)) painted.push(o.material);
     });
-    pieces[node.name] = { object, w: size.x, d: size.z, h: size.y, seats: [] };
+    const bounds = { x0: box.min.x + inner.position.x, x1: box.max.x + inner.position.x, z0: box.min.z + inner.position.z, z1: box.max.z + inner.position.z };
+    pieces[node.name] = { object, w: size.x, d: size.z, h: size.y, bounds, seats: [] };
+  }
+  return pieces;
+}
+async function loadFurniture() {
+  let pieces;
+  try {
+    pieces = await loadPieces(FURNITURE_MODEL_URL, PAINTED, painted);
+  } catch (err) {
+    console.warn('Blockout: the interior model failed to load; homes are left bare', err);
+    return;
   }
   for (const name of ['Sofa', 'Chair']) if (pieces[name]) pieces[name].seats = measureSeats(pieces[name]);
   // the TV's screen (where the video goes: see "the TV", below) and the lamp's bulb, in their pieces' own terms
@@ -319,8 +291,9 @@ function measureSeats(piece) {
     const hit = ray.intersectObject(piece.object, true)[0];
     return hit ? hit.point.y : 0;
   };
-  let front = null, y = 0, back = -piece.d/2;
-  for (let z = piece.d/2; z > -piece.d/2; z -= 0.01) {
+  const { z0, z1 } = piece.bounds;
+  let front = null, y = 0, back = z0;
+  for (let z = z1; z > z0; z -= 0.01) {
     const h = heightAt(0, z);
     if (front === null) { if (h > 0.2) front = z; continue; }
     if (z > front - 0.1) { y = Math.max(y, h); continue; }
@@ -536,6 +509,325 @@ function furnish(key) {
   }
 }
 
+// ---------------------------------------------------------- an office's furniture
+// The office's furniture's a model too (assets/models/Office.glb, built by tools/office-models.py): one top-level mesh per
+// piece — WaterCooler, Printer, Cabinet, LowCabinet, Desk (a cubicle: its desk, back and left-hand panels, monitor,
+// keyboard and mouse), Panel (to close off a row of them), OfficeChair, three plants (SnakePlant, Ficus, Bush), and what's
+// left lying about a desk (Sticky, Calendar, Mug, Frame, Pens, Cactus, Papers, Duck) — at five times life size, facing +z,
+// each placed by its own origin rather than centred (so the desk's parts are where DESK says). Each office arranges it
+// its own way (from its building's key): a bank or two of cubicles, side by side in a row or back to back, out in the
+// room or against a wall, each with its chair and its own clutter, then filing cabinets, a printer and a water cooler
+// against the walls and plants about the place. Until the model's loaded, offices are bare.
+const OFFICE_MODEL_URL = 'assets/models/Office.glb';
+let officeFurniture = null;
+// Where things are on the Desk, in its own terms (life size, from its origin, x across, y up and z out of its front):
+// the top's height, its front edge, the faces of its back and left-hand panels, how far apart the desks stand in a row,
+// what's where on its top (the monitor's face and span, and the two clear patches either side), and where its right-hand
+// end's closing Panel goes. (As tools/office-models.py builds it.)
+const DESK = {
+  top: 0.74, front: 0.375, back: -0.375, left: -0.7, panelTop: 1.25, spacing: 1.45, depth: 0.425,
+  monitor: { face: -0.13, x0: -0.29, x1: 0.29, top: 1.19 },
+  clear: [{ x0: -0.64, x1: -0.38, z0: -0.3, z1: 0 }, { x0: -0.64, x1: -0.38, z0: 0.02, z1: 0.3 }, { x0: 0.4, x1: 0.64, z0: -0.3, z1: -0.04 }],
+  endPanel: { x: 0.725, z: 0.025 },
+};
+const CHAIR_ROOM = 0.8;  // behind a desk's front, for its chair and the one sitting in it
+const OFFICE_FLOORS = [0x6f7478, 0x5d6670, 0x7a7670, 0x565a5e, 0x6a7a80, 0x8a8478, 0x4e5660, 0x7d8a8a];
+const OFFICE_WALLS = [0xe8e6e0, 0xf2f1ec, 0xdcdfe2, 0xe6e0d4, 0xd8e0dc, 0xeae4da];
+const FABRICS = [0x6d7a8c, 0x8a8c8e, 0x5a6a70, 0xa8a090, 0x4a5a78, 0x6a7a62, 0x9a8a80, 0x3e4a56];
+const UPHOLSTERY = [0x2f3f5a, 0x2a2c30, 0x5a2e2e, 0x3a4a3a, 0x4a4e56, 0x2e5a6a, 0x6a5a3a];
+const LAMINATES = [0xe2ddd2, 0xf0efea, 0xc8b08a, 0xa8a8a4, 0xd8c4a0, 0x8a6a4a];
+const STEELS = [0x9a9ea3, 0xc8c4b8, 0x5a5e64, 0x8a96a0, 0xd8d6d0];
+const POTS = [0xece8e0, 0x3a3a3c, 0xb8603e, 0x8a9a8a, 0xd8ccb4];
+const OFFICE_PAINTED = { Fabric: FABRICS, Upholstery: UPHOLSTERY, Laminate: LAMINATES, Steel: STEELS, Pot: POTS };
+const officePainted = [];
+// sticky notes and mugs come in all colours, office to office and desk to desk: a material for each
+const STICKIES = [0xf6e36a, 0xf6a6c0, 0x9ae0a0, 0x8cc8f0, 0xf8b060];
+const MUGS = [0xd84a3a, 0xf2f0ea, 0x2c4ec8, 0x3a3a3c, 0xe8c040, 0x4a9a6a];
+const clutterMaterials = { Sticky: [], Mug: [] };
+
+async function loadOfficeFurniture() {
+  try {
+    officeFurniture = await loadPieces(OFFICE_MODEL_URL, OFFICE_PAINTED, officePainted, false);
+  } catch (err) {
+    console.warn('Blockout: the office model failed to load; offices are left bare', err);
+    return;
+  }
+  for (const [name, colours] of [['Sticky', STICKIES], ['Mug', MUGS]]) {
+    let base = null;
+    officeFurniture[name]?.object.traverse(o => { if (o.isMesh && o.material.name === name) base = o.material; });
+    if (base) clutterMaterials[name] = colours.map(c => { const m = base.clone(); m.color.setHex(c); return roomLit(m); });
+  }
+  if (officeFurniture.OfficeChair) officeFurniture.OfficeChair.seats = measureSeats(officeFurniture.OfficeChair);
+  if (inside && current === LAYOUTS.office) furnishOffice(inside.key, curtain.visible);
+}
+loadOfficeFurniture();
+
+// (x, z) turned by `angle` about y (as three.js turns an object: +z towards (sin, cos)) and moved to (ox, oz)
+const turned = (x, z, angle, ox = 0, oz = 0) => {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  return { x: ox + x*c + z*s, z: oz - x*s + z*c };
+};
+// the rectangle (in the room's x and z) that `r`, in something's own terms, covers once it's turned and moved so
+const turnedRect = (r, angle, ox, oz) => {
+  const corners = [[r.x0, r.z0], [r.x1, r.z0], [r.x0, r.z1], [r.x1, r.z1]].map(([x, z]) => turned(x, z, angle, ox, oz));
+  return { x0: Math.min(...corners.map(p => p.x)), x1: Math.max(...corners.map(p => p.x)),
+    z0: Math.min(...corners.map(p => p.z)), z1: Math.max(...corners.map(p => p.z)) };
+};
+
+// Lays out the office for the building with this key (see buildingKey), glass-walled or not (see enterBuilding):
+// `LAYOUTS.office`'s furniture, where nobody stands or walks, and its seats, in the room as it's now placed.
+function furnishOffice(key, glass) {
+  const office = LAYOUTS.office;
+  officeGroup.clear();
+  office.blocked = []; office.solid = []; office.seats = []; office.printer = null; office.desks = [];
+  grid = null;
+  const rng = mulberry32(hashNameToNumber(key + ' office'));
+  const tint = mulberry32(hashNameToNumber(key + ' office colours'));
+  const pick = list => list[Math.floor(tint()*list.length)];
+  office.floor.setHex(pick(OFFICE_FLOORS));
+  office.wall.setHex(pick(OFFICE_WALLS));
+  paintRoom();
+  for (const material of officePainted) {
+    material.color.setHex(pick(OFFICE_PAINTED[material.name]));
+    roomLit(material);
+  }
+  const F = officeFurniture;
+  if (!F?.Desk || !F.OfficeChair) return;
+  const any = list => list[Math.floor(rng()*list.length)];
+
+  // what's taken so far (and room kept clear), as rectangles in the room's x and z
+  const taken = [];
+  const overlaps = (a, b, gap = 0) => a.x0 < b.x1 + gap && b.x0 < a.x1 + gap && a.z0 < b.z1 + gap && b.z0 < a.z1 + gap;
+  const inRoom = (r, margin) => r.x0 >= -ROOM_W/2 + margin && r.x1 <= ROOM_W/2 - margin
+    && r.z0 >= -ROOM_D/2 + margin && r.z1 <= ROOM_D/2 - margin;
+  const fits = (r, gap = 0, margin = 0.02) => inRoom(r, margin) && taken.every(o => !overlaps(r, o, gap));
+  // `name` stood at (x, z) turned by `angle`, in `parent` (the room's furniture, or on a desk, in the desk's terms),
+  // and unless it's something small nobody could walk into, solid (or `solid` of it, in its own terms)
+  const put = (name, x, z, angle, { parent = officeGroup, y = 0, small = false, solid = null } = {}) => {
+    const piece = F[name], object = piece.object.clone();
+    object.position.set(x, y, z);
+    object.rotation.y = angle;
+    parent.add(object);
+    if (small) return object;
+    const r = turnedRect(solid ?? piece.bounds, angle, x, z);
+    office.solid.push(r);
+    office.blocked.push(around(...(solid ? [x - 0.4, x + 0.4, z - 0.4, z + 0.4] : [r.x0, r.x1, r.z0, r.z1]), 0.35));
+    for (const seat of piece.seats) {
+      const at = turned(seat.x, seat.z, angle, x, z);
+      office.seats.push({ x: at.x, z: at.z, y: seat.y, nx: Math.sin(angle), nz: Math.cos(angle), sofa: false, desk: name === 'OfficeChair' });
+    }
+    return object;
+  };
+  const cameraCorner = { x0: -ROOM_W/2, x1: -ROOM_W/2 + CAMERA_CLEAR, z0: -ROOM_D/2, z1: -ROOM_D/2 + CAMERA_CLEAR };
+  taken.push(cameraCorner);
+  // (nothing tall right under the camera, where it'd fill the bottom of the view)
+  const underCamera = { x0: -ROOM_W/2, x1: -ROOM_W/2 + 2.4, z0: -ROOM_D/2, z1: -ROOM_D/2 + 2.4 };
+  if (glass) for (const [cx, cz] of COLUMNS) taken.push({ x0: cx - COLUMN/2, x1: cx + COLUMN/2, z0: cz - COLUMN/2, z1: cz + COLUMN/2 });
+
+  // The walls, each as where along it things stand with their backs to it, facing into the room: the direction into the
+  // room (nx, nz), and the angle that faces that way. The far two have windows unless the office is glass (see piers).
+  const WALL_SIDES = [
+    { nx: 0, nz: -1, at: u => ({ x: u, z: ROOM_D/2 }), length: ROOM_W, far: FAR_X, flip: 1 },
+    { nx: -1, nz: 0, at: u => ({ x: ROOM_W/2, z: u }), length: ROOM_D, far: FAR_Z, flip: -1 },
+    { nx: 0, nz: 1, at: u => ({ x: u, z: -ROOM_D/2 }), length: ROOM_W },
+    { nx: 1, nz: 0, at: u => ({ x: -ROOM_W/2, z: u }), length: ROOM_D },
+  ].map(side => ({ ...side, angle: Math.atan2(side.nx, side.nz) }));
+  // whether something from u0 to u1 along a far wall, and taller than its windowsills, stands in front of a window
+  const overWindow = (side, u0, u1) => {
+    if (glass || !side.far) return false;
+    const { width, centres } = piers(...side.far);
+    return !centres.some(c => { const p = c*side.flip; return u0 >= p - width/2 && u1 <= p + width/2; });
+  };
+  // Somewhere along a wall for something `r` in its own terms (facing +z, its back towards -z), tall or not (and so kept
+  // out from under the camera, and from in front of the windows unless it's `under` them): where it goes and which way
+  // it faces, or null if there's nowhere.
+  const againstWall = (r, tall, { tries = 40, under = false } = {}) => {
+    for (let k = 0; k < tries; k++) {
+      const side = any(WALL_SIDES), half = (r.x1 - r.x0)/2;
+      const u = (rng()*2 - 1)*(side.length/2 - half - 0.05), wallAt = side.at(u);
+      const out = -r.z0 + 0.02, mid = (r.x0 + r.x1)/2;
+      // (u runs along the wall the way its local x does once it's turned to face the room)
+      const across = turned(1, 0, side.angle);
+      const x = wallAt.x + side.nx*out - across.x*mid, z = wallAt.z + side.nz*out - across.z*mid;
+      const area = turnedRect(r, side.angle, x, z);
+      if (!fits(area, 0.25)) continue;
+      if (tall && overlaps(area, underCamera)) continue;
+      const along = side.nx ? [area.z0, area.z1] : [area.x0, area.x1];
+      if (tall && !under && overWindow(side, ...along)) continue;
+      return { x, z, angle: side.angle, area };
+    }
+    return null;
+  };
+
+  // The cubicles: banks of them, a row side by side or two rows back to back, out in the room or with their backs to a
+  // wall. A bank's laid out in its own terms — u along it, v out from the line down its middle (its back, for a row) —
+  // then turned and moved into place.
+  const bank = (count, double) => {
+    const desks = [];
+    for (const row of double ? [0, 1] : [0]) for (let i = 0; i < count; i++)
+      desks.push({ u: (i - (count - 1)/2)*DESK.spacing, v: row ? -DESK.depth : DESK.depth, angle: row ? Math.PI : 0, row, i });
+    const half = count*DESK.spacing/2 + 0.03, reach = DESK.depth + DESK.front + CHAIR_ROOM;
+    return { desks, count, area: { x0: -half, x1: half, z0: double ? -reach : -0.02, z1: reach } };
+  };
+  const placeBank = (plan, x, z, angle) => {
+    for (const d of plan.desks) {
+      const at = turned(d.u, d.v, angle, x, z), deskAngle = angle + d.angle;
+      const desk = put('Desk', at.x, at.z, deskAngle);
+      clutter(desk);
+      // the chair, pulled up to it near enough to type from (the Typing pose's reach: see peopleModel.js), not quite straight
+      const chairAt = turned((rng() - 0.5)*0.12, DESK.front + 0.25 + rng()*0.07, deskAngle, at.x, at.z);
+      put('OfficeChair', chairAt.x, chairAt.z, deskAngle + Math.PI + (rng() - 0.5)*0.24,
+        { solid: { x0: -0.15, x1: 0.15, z0: -0.15, z1: 0.15 } });
+      // and the panel closing off the row's far end (the last desk, the way its right hand is)
+      if (F.Panel && d.i === (d.row ? 0 : plan.count - 1)) {
+        const p = turned(DESK.endPanel.x, DESK.endPanel.z, deskAngle, at.x, at.z);
+        put('Panel', p.x, p.z, deskAngle);
+      }
+    }
+    taken.push(turnedRect(plan.area, angle, x, z));
+  };
+  // (as many as there's room for, up to three, each as big as will go: four desks along it, then fewer)
+  for (let b = 0, placed = true; b < 3 && placed; b++) {
+    placed = false;
+    for (let tries = 0; tries < 160 && !placed; tries++) {
+      const count = 4 - Math.floor(tries/40), double = rng() < (b ? 0.4 : 0.7);
+      const plan = bank(count, double);
+      let spot;
+      if (!double && rng() < 0.6) {
+        spot = againstWall(plan.area, true, { tries: 1, under: true });
+        if (!spot) continue;
+      } else {
+        spot = { x: (rng()*2 - 1)*(ROOM_W/2 - 1), z: (rng()*2 - 1)*(ROOM_D/2 - 1) };
+        // (turned so the view looks into the cubicles, not at the backs of their panels: a row with its chairs toward
+        // the camera, and mostly a pod end on to it, its spine running away, both rows open to the view)
+        const toX = -ROOM_W/2 - spot.x, toZ = -ROOM_D/2 - spot.z;
+        const facing = a => double ? Math.abs(Math.cos(a)*toX - Math.sin(a)*toZ) : Math.sin(a)*toX + Math.cos(a)*toZ;
+        const angles = [0, 1, 2, 3].map(i => i*Math.PI/2);
+        spot.angle = double && rng() < 0.25 ? angles[Math.floor(rng()*4)]
+          : angles.reduce((best, a) => facing(a) > facing(best) ? a : best);
+        const angle = spot.angle;
+        const area = turnedRect(plan.area, angle, spot.x, spot.z);
+        if (!fits(area, 0.8, 0.5) || overlaps(area, underCamera)) continue;
+      }
+      placeBank(plan, spot.x, spot.z, spot.angle);
+      placed = true;
+    }
+  }
+
+  // What's lying about a desk: some of the little things on its top, in the clear patches either side of the keyboard,
+  // sticky notes on its panels (and its monitor), and maybe a calendar pinned up.
+  function clutter(desk) {
+    const ON_TOP = ['Mug', 'Mug', 'Frame', 'Pens', 'Pens', 'Cactus', 'Papers', 'Papers', 'Duck'].filter(name => F[name]);
+    const patches = [...DESK.clear];
+    for (let n = Math.floor(rng()*4); n > 0 && patches.length; n--) {
+      const [p] = patches.splice(Math.floor(rng()*patches.length), 1), name = any(ON_TOP);
+      const x = p.x0 + (p.x1 - p.x0)*(0.3 + rng()*0.4), z = p.z0 + (p.z1 - p.z0)*(0.3 + rng()*0.4);
+      // (a photo turned in towards whoever sits there; anything else any way round)
+      const angle = name === 'Frame' ? Math.sign(-x)*0.5 + (rng() - 0.5)*0.3 : (rng() - 0.5)*1.2;
+      const thing = put(name, x, z, angle, { parent: desk, y: DESK.top, small: true });
+      paintClutter(thing);
+    }
+    // (the panels' faces, as where up them a thing pinned there is, from its bottom, and where along them)
+    const onBack = (x, y) => ({ x, y, z: DESK.back + 0.004, angle: 0 });
+    const onLeft = (z, y) => ({ x: DESK.left + 0.004, y, z, angle: Math.PI/2 });
+    let calendar = null;
+    if (F.Calendar && rng() < 0.35) {
+      calendar = rng() < 0.5 ? 'back' : 'left';
+      const at = calendar === 'back' ? onBack(-0.52 + rng()*0.04, 0.78) : onLeft(-0.15 + rng()*0.25, 0.78);
+      const pinned = put('Calendar', at.x, at.z, at.angle, { parent: desk, y: at.y, small: true });
+      pinned.rotation.z = (rng() - 0.5)*0.06;
+    }
+    if (!F.Sticky) return;
+    for (let n = Math.floor(rng()*rng()*8); n > 0; n--) {
+      const where = rng();
+      let at;
+      if (where < 0.15) {
+        // on the monitor's frame, a corner
+        const side = rng() < 0.5 ? -1 : 1;
+        at = { x: side*(DESK.monitor.x1 - 0.03), y: DESK.monitor.top - 0.12 - rng()*0.15, z: DESK.monitor.face + 0.003, angle: 0 };
+      } else if (where < 0.65 && calendar !== 'back') {
+        const x = rng() < 0.5 ? -0.65 + rng()*0.3 : 0.34 + rng()*0.3;
+        at = onBack(x, 0.82 + rng()*0.32);
+      } else if (where < 0.65) {
+        at = onBack(0.34 + rng()*0.3, 0.82 + rng()*0.32);
+      } else if (calendar !== 'left') {
+        at = onLeft(-0.3 + rng()*0.6, 0.82 + rng()*0.32);
+      } else continue;
+      const note = put('Sticky', at.x, at.z, at.angle, { parent: desk, y: at.y, small: true });
+      note.rotation.z = (rng() - 0.5)*0.3;
+      paintClutter(note);
+    }
+  }
+  function paintClutter(object) {
+    object.traverse(o => {
+      const set = o.isMesh && clutterMaterials[o.material.name];
+      if (set?.length) o.material = any(set);
+    });
+  }
+
+  // against the walls: a printer, a water cooler, and a run of filing cabinets or two, tall or low
+  const againstWallPut = (name, tall) => {
+    if (!F[name]) return null;
+    const spot = againstWall(F[name].bounds, tall);
+    if (!spot) return null;
+    put(name, spot.x, spot.z, spot.angle);
+    taken.push(spot.area);
+    return spot;
+  };
+  const printerSpot = rng() < 0.85 ? againstWallPut('Printer', true) : null;
+  office.printer = printerSpot ? room.localToWorld(new THREE.Vector3(printerSpot.x, 0.9, printerSpot.z)) : null;
+  if (rng() < 0.8) againstWallPut('WaterCooler', true);
+  for (let runs = Math.floor(rng()*3); runs > 0; runs--) {
+    const name = rng() < 0.6 ? 'Cabinet' : 'LowCabinet', piece = F[name];
+    if (!piece) continue;
+    const count = 1 + Math.floor(rng()*3), w = piece.bounds.x1 - piece.bounds.x0;
+    const r = { ...piece.bounds, x0: piece.bounds.x0 - (count - 1)*w/2, x1: piece.bounds.x1 + (count - 1)*w/2 };
+    const spot = againstWall(r, name === 'Cabinet');
+    if (!spot) continue;
+    for (let i = 0; i < count; i++) {
+      const at = turned((i - (count - 1)/2)*w, 0, spot.angle, spot.x, spot.z);
+      put(name, at.x, at.z, spot.angle);
+    }
+    taken.push(spot.area);
+    // (with a plant on top now and then, if they're low)
+    if (name === 'LowCabinet' && F.Cactus && rng() < 0.5) {
+      const at = turned((rng() - 0.5)*(count - 0.5)*w, 0, spot.angle, spot.x, spot.z);
+      put(rng() < 0.5 ? 'Cactus' : 'Pens', at.x, at.z, rng()*Math.PI*2, { y: piece.h, small: true });
+    }
+  }
+  // and plants: in the corners (not the camera's) if there's room, or else along the walls
+  const PLANTS = ['SnakePlant', 'Ficus', 'Bush'].filter(name => F[name]);
+  if (PLANTS.length) {
+    const corners = [[1, 1], [1, -1], [-1, 1]];
+    for (let plants = 1 + Math.floor(rng()*4); plants > 0; plants--) {
+      const name = any(PLANTS), piece = F[name], inset = Math.max(piece.w, piece.d)/2 + 0.08;
+      let spot = null;
+      while (!spot && corners.length) {
+        const [[sx, sz]] = corners.splice(Math.floor(rng()*corners.length), 1);
+        // (beside the column, in a glass office's corners)
+        const shift = glass ? COLUMN*0.5 + inset : 0, alongX = rng() < 0.5;
+        const x = sx*(ROOM_W/2 - inset - (alongX ? shift : 0)), z = sz*(ROOM_D/2 - inset - (alongX ? 0 : shift));
+        const area = { x0: x - inset, x1: x + inset, z0: z - inset, z1: z + inset };
+        if (fits(area, 0.1) && !overlaps(area, underCamera)) spot = { x, z, area };
+      }
+      spot ??= againstWall(piece.bounds, true);
+      if (!spot) continue;
+      put(name, spot.x, spot.z, rng()*Math.PI*2);
+      taken.push(spot.area);
+    }
+  }
+
+  // the seats, in the world: where to sit, how high, and which way they face
+  const c = Math.cos(room.rotation.y), s = Math.sin(room.rotation.y);
+  office.seats = office.seats.map(seat => {
+    const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z));
+    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: false, desk: seat.desk, by: null };
+  });
+  // and the desks, for the phones and computers on them to be heard from (see audio/office.js): in front of each desk chair
+  office.desks = office.seats.filter(seat => seat.desk)
+    .map(seat => ({ x: seat.x + seat.nx*0.55, y: room.position.y + 0.85, z: seat.z + seat.nz*0.55 }));
+}
+
 // ---------------------------------------------------------------- the TV
 // A home's TV is on while anyone's sat on the sofa (see watchingTV), playing a YouTube video picked at random from
 // assets/tv.txt each time it comes on: a real YouTube player in an
@@ -660,7 +952,8 @@ const LAMP_COLOR = 0xffc68a, LAMP_INTENSITY = 6, LAMP_REACH = 9, LAMP_EASE = 0.0
 const lampLight = new THREE.PointLight(LAMP_COLOR, 0, LAMP_REACH, 1.2);
 let occupiedAt = -Infinity;
 // (said each frame by whoever's in the room: see peopleActivities.js)
-export const someoneHome = () => { occupiedAt = performance.now(); };
+export const someoneHome = () => { occupiedAt = performance.now(); counting++; };
+let occupants = 0, counting = 0; // how many said so over the last frame, and so far this one
 function updateLamp() {
   const dark = THREE.MathUtils.smoothstep(-(S.sunElevation ?? 90), -6, 2);
   const on = lampLight.userData.there && current === LAYOUTS.home && performance.now() - occupiedAt < 1000;
@@ -738,8 +1031,10 @@ export function enterBuilding(group, key, kind = 'home') {
   room.updateMatrixWorld(true);
   group.visible = false;
   if (current === LAYOUTS.home) furnish(key);
+  else if (current === LAYOUTS.office) furnishOffice(key, glass);
 
   visits++;
+  resetOfficeAmbience();
   inside = { group, key, before: {
     target: controls.goalTarget.clone(), radius: controls.goalRadius, theta: controls.goalTheta, phi: controls.goalPhi,
     minRadius: controls.minRadius, near: camera.near,
@@ -798,6 +1093,10 @@ function inRoom(x, y, z) {
 export function updateInteriorCamera() {
   updateTV();
   updateLamp();
+  occupants = counting; counting = 0;
+  if (inside && current === LAYOUTS.office && performance.now() - occupiedAt < 1000) {
+    officeAmbience({ printer: current.printer, desks: current.desks, centre: room.localToWorld(new THREE.Vector3(0, 1, 0)), people: occupants });
+  }
   const goal = inside ? viewFov() : BASE_FOV;
   if (camera.fov === goal) return;
   camera.fov = Math.abs(goal - camera.fov) < 0.05 ? goal : camera.fov + (goal - camera.fov)*FOV_EASE;

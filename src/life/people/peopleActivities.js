@@ -1,6 +1,7 @@
 import { App, S } from '../../core/shared.js';
-import { voiceOfPerson, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, walkableUpTo, weightOf, wrapAngle } from './people.js';
+import { voiceOfPerson, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
+import { roomLayoutOf } from '../../buildings/footprints.js';
 import { placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint } from './peoplePathing.js';
 import * as THREE from 'three';
 import { controls } from '../../core/camera-controls.js';
@@ -62,7 +63,7 @@ function leaveGroup(p) {
   if (g.speaker === p) g.speaker = null;
   g.members.forEach(m => { if (m.lookAt === p) m.lookAt = null; });
   // a conversation between two ends when either goes; a circle carries on while anyone's left in it
-  if (g.kind === 'chat') endChat(g); else if (!g.members.length) removeGroup(g);
+  if (g.kind === 'chat') endChat(g); else if (g.kind === 'room') endRoomChat(g); else if (!g.members.length) removeGroup(g);
 }
 
 /**
@@ -202,6 +203,7 @@ function takeTurns(g, talkers, dt) {
 export function updateGroups(dt) {
   for (let gi = groups.length - 1; gi >= 0; gi--) {
     const g = groups[gi];
+    if (g.kind === 'room') { roomChat(g, dt); continue; }
     if (g.kind === 'circle') {
       const seated = g.members.filter(m => m.stage === 'sit');
       if (seated.length >= 2) takeTurns(g, seated, dt); else g.speaker = null;
@@ -929,6 +931,9 @@ export function showPassengers() {
 // for up to INDOORS_MAX_HOURS of the day's clock (measured at the World panel's day length, whether or not it is running) —
 // then back out the same door and on along the walkway they left.
 //
+// Offices (see roomLayoutOf) are homes the other way about: by day people go in for a working day, and after dark hardly
+// anyone does — and whoever's still at work heads out within an hour or so of it getting dark, bar the odd one working late.
+//
 // p.indoors: { building, stage ('approach' → 'inside' → 'exit'), back (the walkway point they came from), hoursLeft }
 /** The chance of going in, at each walkway point with a door onto it: by day, and after dark (see enterChance). */
 const ENTER_CHANCE = 0.1, ENTER_CHANCE_NIGHT = 0.7;
@@ -937,12 +942,24 @@ const NIGHT_OWLS = 0.15;
 const isNight = () => S.sunElevation < 0;
 /** Whether this person's a night owl — always the same ones, by their id. */
 const nightOwl = p => ((Math.imul(p.id, 2654435761) >>> 0)/2**32) < NIGHT_OWLS;
+/** The chance of going in at an office's door: by day, and after dark. */
+const OFFICE_ENTER_CHANCE = 0.25, OFFICE_ENTER_CHANCE_NIGHT = 0.005;
+/** How long a day at the office lasts, in hours of the day's clock; and how long after dark those still in stay on. */
+const OFFICE_MIN_HOURS = 4, OFFICE_MAX_HOURS = 10, OFFICE_LEAVE_HOURS = 1.5;
+/** The share of the crowd who work late: in an office after dark, they stay the rest of their day. */
+const WORKS_LATE = 0.04;
+const worksLate = p => ((Math.imul(p.id + 7, 2246822519) >>> 0)/2**32) < WORKS_LATE;
+const isOffice = building => roomLayoutOf(building.kind, building.number) === 'office';
 /**
- * The chance of this person going in at a door they're passing: after dark, most are heading home and take the first one.
+ * The chance of this person going in at a door they're passing: after dark, most are heading home and take the first
+ * one — unless it's an office, which by day draws people in and after dark hardly anyone.
  * @param {Person} p - the person
+ * @param {object} building - the building (see buildingDoors)
  * @returns {number} the chance
  */
-export const enterChance = p => isNight() && !nightOwl(p) ? ENTER_CHANCE_NIGHT : ENTER_CHANCE;
+export const enterChance = (p, building) => isOffice(building)
+  ? (isNight() ? OFFICE_ENTER_CHANCE_NIGHT : OFFICE_ENTER_CHANCE)
+  : isNight() && !nightOwl(p) ? ENTER_CHANCE_NIGHT : ENTER_CHANCE;
 /** How long a visit lasts, in hours of the day's clock. */
 const INDOORS_MIN_HOURS = 2, INDOORS_MAX_HOURS = 14;
 /** The most of the crowd that may be indoors (or on their way in) at once, as a share of the people alive: by day, and
@@ -969,8 +986,9 @@ export function goIndoors(p, building, from) {
   endActivity(p);
   p.crossStage = null; p.jc = null; p.wait = 0;
   p.mode = 'indoors';
-  // mostly a quick visit, now and then most of the day
-  const hours = INDOORS_MIN_HOURS + (INDOORS_MAX_HOURS - INDOORS_MIN_HOURS)*peopleRng()**2;
+  // mostly a quick visit, now and then most of the day — or at an office, a working day
+  const hours = isOffice(building) ? OFFICE_MIN_HOURS + (OFFICE_MAX_HOURS - OFFICE_MIN_HOURS)*peopleRng()
+    : INDOORS_MIN_HOURS + (INDOORS_MAX_HOURS - INDOORS_MIN_HOURS)*peopleRng()**2;
   p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, hoursLeft: hours };
   p.inRoom = null;
   setIndoorsCount(indoorsCount + 1);
@@ -994,6 +1012,11 @@ export function updateIndoors(p, i, dt) {
   }
   if (visit.stage === 'inside') {
     visit.hoursLeft -= dt*24/(Math.max(0.1, S.dayLengthMinutes)*60);
+    // (at an office after dark, home soon — each in their own time, and not those working late, or the bench's guests)
+    if (isNight() && isOffice(visit.building) && !worksLate(p) && !visit.goingHome && Number.isFinite(visit.hoursLeft)) {
+      visit.goingHome = true;
+      visit.hoursLeft = Math.min(visit.hoursLeft, OFFICE_LEAVE_HOURS*peopleRng());
+    }
     // (time's up, but not partway through a video: they sit it out, get up, and only then go)
     if (visit.hoursLeft > 0 || p.inRoom?.watched != null) return aboutTheRoom(p, visit, dt);
     // back out, at the door, facing the walkway
@@ -1048,6 +1071,7 @@ function aboutTheRoom(p, visit, dt) {
   }
   const here = p.inRoom;
   if (here.seat) return sitting(p, here, dt);
+  if (p.group?.kind === 'room') return here.route ? walkRoute(p, here) : null;
   if (here.route) {
     const next = here.route[0];
     if (Math.hypot(next.x - p.x, next.z - p.z) >= 0.3) return next;
@@ -1058,6 +1082,7 @@ function aboutTheRoom(p, visit, dt) {
     p.faceTo = peopleRng()*Math.PI*2; // (somewhere to look, once they're there)
   } else if ((here.wait -= dt) <= 0 && !p.oneShot) {
     here.wait = 1 + peopleRng()*2; // (tried again in a moment, if there's no getting there)
+    if (peopleRng() < ROOM_CHAT_CHANCE*p.traits.chatty && goChatInRoom(p)) return here.route[0];
     const seat = peopleRng() < ROOM_SIT_CHANCE ? freeSeat(p) : null;
     if (seat) {
       const route = roomRoute(p, standingSpot(p, seat));
@@ -1102,6 +1127,7 @@ function standingSpot(p, seat) {
  */
 function standUp(p) {
   const seat = p.inRoom?.seat;
+  if (p.group?.kind === 'room') leaveGroup(p);
   if (seat && seat.by === p) seat.by = null;
   if (p.inRoom) { p.inRoom.seat = null; p.inRoom.watched = null; }
   p.pose = 'Idle'; p.seatLift = 0; p.faceTo = null;
@@ -1132,8 +1158,9 @@ function sitting(p, here, dt) {
       p.faceTo = facing;
       if (Math.abs(wrapAngle(facing - p.heading)) > 0.15 || p.oneShot) break;
       here.stage = 'sit';
-      p.pose = 'Sit1';
+      p.pose = deskPose(seat);
       here.timer = (20 + peopleRng()*60)*p.traits.patience;
+      here.spell = spellAt(p.pose);
       p.seatLift = seat.y - p.y - clipNamed('Sit1').seatY*modelScale(p);
       // falls through
     case 'sit': {
@@ -1141,7 +1168,15 @@ function sitting(p, here, dt) {
       const on = seat.sofa ? watchingTV() : null;
       if (on > 0 && here.watched == null) here.watched = on;
       here.timer -= dt;
-      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { here.stage = 'rise'; p.pose = 'Idle'; }
+      // (now and then a word with whoever's sat next to them — at the next desk, hands still on the keys, or on the sofa
+      // or a chair beside them at home)
+      if (!p.group && (here.chatIn = (here.chatIn ?? peopleRng()*SEAT_CHAT_EVERY) - dt) <= 0) {
+        here.chatIn = SEAT_CHAT_EVERY*(0.5 + peopleRng());
+        if (peopleRng() < SEAT_CHAT_CHANCE*p.traits.chatty) chatWhileSat(p);
+      }
+      // (at a desk, typing a while, then sat back a moment, then at it again)
+      if (seat.desk && !p.group && (here.spell -= dt) <= 0) { p.pose = p.pose === 'Typing' ? 'Sit1' : deskPose(seat); here.spell = spellAt(p.pose); }
+      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); here.stage = 'rise'; p.pose = 'Idle'; }
       break;
     }
     case 'rise':
@@ -1150,9 +1185,127 @@ function sitting(p, here, dt) {
       here.wait = (2 + peopleRng()*6)*p.traits.patience;
       return null;
   }
-  const w = weightOf(p, clipNamed('Sit1'));
+  const w = sitWeight(p);
   p.x = stand.x + (seat.x - stand.x)*w; p.z = stand.z + (seat.z - stand.z)*w;
   return null;
+}
+/** How long someone at a desk keeps typing, and sits back between, in seconds: [shortest, longest]. */
+const TYPING_SPELL = [8, 40], SAT_BACK_SPELL = [3, 12];
+/** How someone sits on a seat: typing, at a desk (if the model can), else sat back. */
+const deskPose = seat => seat.desk && hasClip('Typing') ? 'Typing' : 'Sit1';
+/** How long a spell of a pose at a desk lasts, at random. */
+const spellAt = pose => { const [lo, hi] = pose === 'Typing' ? TYPING_SPELL : SAT_BACK_SPELL; return lo + peopleRng()*(hi - lo); };
+
+// ---- talking in a room.
+//
+// A room chat is a group of kind 'room' (see updateGroups): two standing about, one walking over to the other ('gather')
+// then the two talking face to face ('talk'); or two sat side by side — at desks, on the sofa, on chairs (sat: true) —
+// straight to talking, their heads turned to each other and whoever was typing stopped, hands left on the keys
+// (TypingPaused), until it's over.
+// Nobody's waved at or punched: it just ends, and they get on with what they were doing.
+/** The chance, each time someone standing in a room moves on, that it's over to talk to someone (times how chatty they are). */
+const ROOM_CHAT_CHANCE = 0.35;
+/** How often someone sat down thinks about a word with whoever's sat near, in seconds (about), and the chance they do (times how chatty). */
+const SEAT_CHAT_EVERY = 8, SEAT_CHAT_CHANCE = 0.3;
+/** How far away someone sat can be to talk to from a seat, in metres. */
+const SEAT_CHAT_REACH = 2.6;
+/** How long a room chat goes on, in seconds: [shortest, longest], standing and sat (times how patient they are). */
+const ROOM_CHAT_SPELL = [8, 25], SEAT_CHAT_SPELL = [4, 12];
+/** Whether someone's in the same room as the camera now and free to be talked to. */
+const freeInRoom = (q, p) => q !== p && q.mode === 'indoors' && q.inRoom?.visit === roomVisit() && !q.group && q.chatCooldown <= 0
+  && !q.oneShot && q.traits.chatty > 0;
+/**
+ * Walk someone in a room along their route.
+ * @param {Person} p - the person
+ * @param {object} here - their p.inRoom
+ * @returns {?{x: number, y: number, z: number}} the next point on it, or null (and the route gone) once they're there
+ */
+function walkRoute(p, here) {
+  const next = here.route[0];
+  if (Math.hypot(next.x - p.x, next.z - p.z) >= 0.25) return next;
+  here.route.shift();
+  if (here.route.length) return here.route[0];
+  here.route = null;
+  return null;
+}
+/**
+ * Send someone standing in a room over to someone else standing about in it, to talk.
+ * @param {Person} p - the person
+ * @returns {boolean} whether anyone was found to go over to, and a way there (then in p.inRoom.route)
+ */
+function goChatInRoom(p) {
+  if (p.chatCooldown > 0) return false;
+  const friends = people.filter(q => freeInRoom(q, p) && !q.inRoom.seat && !q.inRoom.route);
+  if (!friends.length) return false;
+  const q = pickFrom(friends), gap = CHAT_GAP*S.peopleSize, away = Math.atan2(p.x - q.x, p.z - q.z);
+  // (to talking distance on their side of them, or failing that a little round either way)
+  for (const turn of [0, 0.6, -0.6, 1.2, -1.2]) {
+    const to = { x: q.x + Math.sin(away + turn)*gap, y: q.y, z: q.z + Math.cos(away + turn)*gap };
+    const route = roomRoute(p, to);
+    if (!route) continue;
+    p.inRoom.route = route; p.faceTo = null;
+    q.faceTo = headingTo(q, p);
+    const g = { kind: 'room', members: [p, q], stage: 'gather', timer: 20, speaker: null, turnIn: 0 };
+    groups.push(g);
+    [p, q].forEach(m => { m.group = g; });
+    p.lookAt = q; q.lookAt = p;
+    return true;
+  }
+  return false;
+}
+/**
+ * Have someone sat down — typing or sat back at a desk, on the sofa, on a chair — turn to whoever's sat near them, if
+ * anyone is, for a word.
+ * @param {Person} p - the person
+ * @returns {void}
+ */
+function chatWhileSat(p) {
+  if (p.chatCooldown > 0) return;
+  const q = people.find(q => freeInRoom(q, p) && q.inRoom.seat && q.inRoom.stage === 'sit'
+    && Math.hypot(q.x - p.x, q.z - p.z) < SEAT_CHAT_REACH);
+  if (!q) return;
+  const [lo, hi] = SEAT_CHAT_SPELL;
+  const g = { kind: 'room', sat: true, members: [p, q], stage: 'talk', speaker: null, turnIn: 0,
+    timer: (lo + peopleRng()*(hi - lo))*(p.traits.patience + q.traits.patience)/2 };
+  groups.push(g);
+  [p, q].forEach(m => { m.group = g; if (m.pose === 'Typing' && hasClip('TypingPaused')) m.pose = 'TypingPaused'; });
+}
+/**
+ * Run a room chat for a frame (see "talking in a room"), ending it if either of them has gone.
+ * @param {object} g - the group
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
+function roomChat(g, dt) {
+  const [a, b] = g.members;
+  if (!g.members.every(m => m.mode === 'indoors' && m.inRoom?.visit === roomVisit() && m.group === g)) { endRoomChat(g); return; }
+  g.timer -= dt;
+  if (g.stage === 'gather') {
+    b.faceTo = headingTo(b, a);
+    if (a.inRoom.route) { if (g.timer <= 0) endRoomChat(g); return; }
+    const [lo, hi] = ROOM_CHAT_SPELL;
+    g.stage = 'talk';
+    g.timer = (lo + peopleRng()*(hi - lo))*(a.traits.patience + b.traits.patience)/2;
+  }
+  takeTurns(g, g.members, dt);
+  if (!g.sat) { a.faceTo = headingTo(a, b); b.faceTo = headingTo(b, a); }
+  if (g.timer <= 0) endRoomChat(g);
+}
+/**
+ * End a room chat: both back to what they were doing (typing again, at a desk), and not talking again for a while.
+ * @param {object} g - the group
+ * @returns {void}
+ */
+function endRoomChat(g) {
+  removeGroup(g);
+  g.members.splice(0).forEach(m => {
+    m.group = null; m.lookAt = null;
+    m.chatCooldown = 15 + peopleRng()*30;
+    const here = m.inRoom;
+    if (!here) return;
+    if (m.pose === 'TypingPaused') { m.pose = 'Typing'; here.spell = spellAt('Typing'); }
+    if (!here.seat) { here.route = null; here.wait = (1 + peopleRng()*4)*m.traits.patience; }
+  });
 }
 
 /** What the followed building's card was last told, so it's only told again when it changes. */

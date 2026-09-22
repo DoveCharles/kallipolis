@@ -104,3 +104,6 @@ export function buildingNumber(key) {
   for (let i=0;i<key.length;i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
   return 1 + ((h >>> 0) % 9999);
 }
+// What's inside (a layout in interior.js): about half the buildings zones' blocks are offices, by their number so each
+// is the same every time; everything else is a home.
+export const roomLayoutOf = (kind, number) => kind === 'buildings' && number % 2 === 0 ? 'office' : 'home';

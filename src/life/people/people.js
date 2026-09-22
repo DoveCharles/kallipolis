@@ -9,6 +9,7 @@ import { explode } from '../giblets.js';
 import { babble, nextSyllable } from '../../audio/voices.js';
 import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
 import { footstep } from '../../audio/footsteps.js';
+import { keyClick } from '../../audio/typing.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
 import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FIDGETS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_TRAIT_COLORS } from './peopleModel.js';
@@ -181,6 +182,12 @@ export const modelScale = p => 1.7*p.height*S.peopleSize/personModel.height;
  * @returns {number} from 0 to 1
  */
 export const weightOf = (p, clip) => (p.clipA === clip ? p.fade : 0) + (p.clipB === clip ? 1 - p.fade : 0);
+/**
+ * How far into sitting on a seat someone is: sat back (Sit1) or at a keyboard (Typing or TypingPaused, sat the same way), from 0 to 1.
+ * @param {Person} p - the person
+ * @returns {number}
+ */
+export const sitWeight = p => personModel ? ['Sit1', 'Typing', 'TypingPaused'].reduce((w, name) => w + weightOf(p, personModel.clips[name]), 0) : 0;
 
 /**
  * Work out the row of the bone texture a person's at in an animation: along the walk by how far they've walked, round a
@@ -991,13 +998,19 @@ export function updatePeople(t) {
       if (!p.clipA) { p.clipA = p.clipB = clipSet.Idle; p.fade = 1; }
       setClip(p, p.oneShot || (p.moving ? clipSet.Walk : clipSet[p.pose] || clipSet.Idle));
       p.fade = Math.min(1, p.fade + dt/p.fadeTime);
+      // typing, each key heard as it's struck (see audio/typing.js)
+      if (p.clipA.taps && p.fade > 0.9) {
+        const loop = p.clipA.duration, was = (p.idleTime - dt) % loop, now = p.idleTime % loop;
+        for (const tap of p.clipA.taps)
+          if (now >= was ? tap.time > was && tap.time <= now : tap.time > was || tap.time <= now) keyClick({ x: p.x + Math.sin(p.heading)*0.4, y: p.y + 0.75, z: p.z + Math.cos(p.heading)*0.4 }, tap.space);
+      }
       // the model, scaled to the same height as a cuboid person — set back by however far their pose puts their pelvis from
       // their feet, and sat on a bench, up on its seat
       const blend = key => p.clipA[key]*p.fade + p.clipB[key]*(1 - p.fade);
       const offX = blend('pelvisX')*s, offZ = blend('pelvisZ')*s, sin = Math.sin(p.heading), cos = Math.cos(p.heading);
       p.heightScale = blend('heightScale');
       rotation.setFromAxisAngle(up, p.heading);
-      position.set(p.x - offX*cos - offZ*sin, p.y + p.seatLift*weightOf(p, clipSet.Sit1) - personModel.minY*s, p.z + offX*sin - offZ*cos);
+      position.set(p.x - offX*cos - offZ*sin, p.y + p.seatLift*sitWeight(p) - personModel.minY*s, p.z + offX*sin - offZ*cos);
       matrix.compose(position, rotation, scale.set(s, s, s));
       personModel.mesh.setMatrixAt(i, matrix);
       // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION

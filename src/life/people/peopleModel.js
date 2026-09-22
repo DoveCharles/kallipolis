@@ -28,13 +28,128 @@ export const PERSON_BAKE_FPS = 24;
 /** Distances the model's foot travels per walk-animation cycle. The walk plays slower for the same speed the higher this is. */
 const WALK_CYCLE_LENGTH = 4;
 /** The model's clips: `loop` plays round and round, otherwise once (or held, if `pose`). `pose` is a single held pose, and
- * `from` names a clip whose last frame this pose is (Fallen is where Fall leaves them). */
+ * `from` names a clip whose last frame this pose is (Fallen is where Fall leaves them). `over` names a clip this one is
+ * played over `times` times and reposed each frame by `repose` (Typing is Sit1 with the arms brought up: see typingPose;
+ * TypingPaused the same with the hands held still on the keys) —
+ * straight after it, so any bone it has no keys for is left as it left it. */
 const PERSON_CLIPS = [
   { name: 'Walk', loop: true }, { name: 'Idle', loop: true }, { name: 'Idle2' }, { name: 'Idle3' }, { name: 'Wave' },
-  { name: 'Sit1', loop: true, pose: true }, { name: 'SitDown1', pose: true }, { name: 'SitDown2', pose: true }, { name: 'SitDown3', pose: true },
+  { name: 'Sit1', loop: true, pose: true }, { name: 'Typing', over: 'Sit1', times: 3, loop: true, pose: true, repose: typingPose },
+  { name: 'TypingPaused', over: 'Sit1', loop: true, pose: true, repose: (frame, frames, rig) => typingPose(frame, frames, rig, false) },
+  { name: 'SitDown1', pose: true }, { name: 'SitDown2', pose: true }, { name: 'SitDown3', pose: true },
   { name: 'LieDown1', pose: true }, { name: 'LieDown2', pose: true }, { name: 'LieDown3', pose: true },
   { name: 'Punch' }, { name: 'Fall' }, { name: 'Fallen', from: 'Fall', pose: true },
 ];
+
+// ============== TYPING ==============
+// Typing is Sit1 with the arms brought up onto a keyboard in front, reposed a frame at a time as it's baked: each arm's
+// shoulder turned and elbow and hand moved so the wrist lands on TYPING_WRIST (a two-bone reach, the elbow bending out
+// and down), then each hand dipping and tipping its fingers down at every key it strikes. The keys are struck in bursts
+// with pauses between, the same every time round the loop — the times are kept on the clip (clip.taps) so each tap can
+// be heard (see audio/typing.js).
+//
+// In the model's own terms (facing +z, their left towards +x, about 7.6 tall standing; sat, the seat's at y 2 and the
+// pelvis at z -2.2): where the wrists go, either side of the middle — which puts the fingertips on keys a hand's length
+// further on, at desk height over an office chair pulled up to its desk (see furnishOffice in buildings/interior.js).
+const TYPING_WRIST = { x: 0.55, y: 3.5, z: -0.35 };
+const TYPING_DIP = 0.07, TYPING_TIP = 0.22, TYPING_TAP_WIDTH = 0.055; // a strike: how far down the hand goes, how far its
+                                                                   // fingers tip, and how long it takes (seconds, either side)
+const TYPING_SPACE_CHANCE = 0.15; // how many strikes are the space bar, with the right thumb (the hand barely moving)
+let typingTaps = null;
+/**
+ * The keys struck over a loop of the Typing clip: bursts of a second or three, a strike every tenth or fifth of a second
+ * from one hand or the other, with pauses between. The same every time (a fixed seed).
+ * @param {number} duration - the loop's length, in seconds
+ * @returns {{time: number, left: boolean, space: boolean}[]} each strike, in order
+ */
+function typingSchedule(duration) {
+  const rng = mulberry32(0x7e57), taps = [];
+  let t = 0.25, left = true;
+  while (t < duration - 0.4) {
+    const burstEnd = Math.min(duration - 0.4, t + 1 + rng()*2);
+    for (; t < burstEnd; t += 0.1 + rng()*0.1) {
+      const space = rng() < TYPING_SPACE_CHANCE;
+      left = space ? false : rng() < 0.3 ? left : !left;
+      taps.push({ time: t, left, space });
+    }
+    t += 0.5 + rng()*1.2;
+  }
+  return taps;
+}
+const typingV = new THREE.Vector3(), typingQ = new THREE.Quaternion(), typingM = new THREE.Matrix4();
+/**
+ * Set a bone to a place and turn in the model's space, whatever its parent.
+ * @param {THREE.Bone} bone
+ * @param {?THREE.Vector3} position - where it goes, or null to leave it
+ * @param {THREE.Quaternion} turn - the turn to add to it, in the model's space
+ * @returns {void}
+ */
+function reposeBone(bone, position, turn) {
+  const parent = bone.parent;
+  parent.updateWorldMatrix(true, false);
+  const parentTurn = parent.getWorldQuaternion(new THREE.Quaternion());
+  const worldTurn = bone.getWorldQuaternion(typingQ).premultiply(turn);
+  bone.quaternion.copy(parentTurn.invert().multiply(worldTurn));
+  if (position) bone.position.copy(typingV.copy(position).applyMatrix4(typingM.copy(parent.matrixWorld).invert()));
+}
+/**
+ * Repose a frame of Sit1 as a frame of Typing (see PERSON_CLIPS).
+ * @param {number} frame - the frame, from 0
+ * @param {number} frames - how many the loop is
+ * @param {{bone: function(string): ?THREE.Bone, update: function(): void}} rig - the model's bones, by name, and a
+ *   refresh of where they all are
+ * @param {boolean} [typing] - striking keys, or false for the hands resting on them, still
+ * @returns {?{time: number, left: boolean, space: boolean}[]} the loop's key strikes, if typing
+ */
+function typingPose(frame, frames, rig, typing = true) {
+  const duration = frames/PERSON_BAKE_FPS, t = typing ? frame/PERSON_BAKE_FPS : 0;
+  if (typing) typingTaps ??= typingSchedule(duration);
+  // (playing the clip only sets a bone where it's moved since the frame before, so one that's held still keeps the last
+  // frame's reposing — and would be turned again on top of it, round and round: put back as it was before it, instead)
+  for (const bone of typingBones(rig)) {
+    const was = bone.userData.typing;
+    if (was && bone.position.equals(was.set.position) && bone.quaternion.equals(was.set.quaternion)) {
+      bone.position.copy(was.from.position); bone.quaternion.copy(was.from.quaternion);
+    }
+    bone.userData.typing = { from: { position: bone.position.clone(), quaternion: bone.quaternion.clone() } };
+  }
+  rig.update();
+  // how far into a strike each hand is, from 0 to 1 (the loop wrapped round, so a strike near its end carries over)
+  const strike = (left, space) => !typing ? 0 : typingTaps.reduce((most, tap) => {
+    if (tap.left !== left || tap.space !== space) return most;
+    const dt = Math.min(Math.abs(t - tap.time), duration - Math.abs(t - tap.time));
+    return Math.max(most, Math.exp(-((dt/TYPING_TAP_WIDTH)**2)));
+  }, 0);
+  for (const side of ['L', 'R']) {
+    const shoulder = rig.bone('Shoulder' + side), elbow = rig.bone('Elbow' + side), hand = rig.bone('Hand' + side);
+    if (!shoulder || !elbow || !hand) continue;
+    const out = side === 'L' ? 1 : -1, left = side === 'L';
+    const S = shoulder.getWorldPosition(new THREE.Vector3()), E = elbow.getWorldPosition(new THREE.Vector3()), W = hand.getWorldPosition(new THREE.Vector3());
+    const upper = E.distanceTo(S), lower = W.distanceTo(E);
+    // where the wrist goes: over the keys, wandering a little across them, down for a strike (a thumb's barely at all)
+    const hit = strike(left, false), thumb = left ? 0 : strike(false, true);
+    const target = new THREE.Vector3(out*TYPING_WRIST.x + 0.08*Math.sin(t*1.7 + out), TYPING_WRIST.y - TYPING_DIP*hit - 0.02*thumb,
+      TYPING_WRIST.z + 0.05*Math.sin(t*1.3 + 2*out));
+    // the elbow, where the two bones meet reaching it: bent out and down
+    const toTarget = target.clone().sub(S), reach = Math.min(toTarget.length(), (upper + lower)*0.999);
+    const along = toTarget.normalize();
+    const bend = new THREE.Vector3(out*0.6, -1, -0.3);
+    bend.addScaledVector(along, -bend.dot(along)).normalize();
+    const a = (upper*upper - lower*lower + reach*reach)/(2*reach), h = Math.sqrt(Math.max(0, upper*upper - a*a));
+    const elbowAt = S.clone().addScaledVector(along, a).addScaledVector(bend, h), wristAt = S.clone().addScaledVector(along, reach);
+    const upperTurn = new THREE.Quaternion().setFromUnitVectors(E.clone().sub(S).normalize(), elbowAt.clone().sub(S).normalize());
+    const lowerTurn = new THREE.Quaternion().setFromUnitVectors(W.clone().sub(E).normalize(), wristAt.clone().sub(elbowAt).normalize());
+    reposeBone(shoulder, null, upperTurn);
+    reposeBone(elbow, elbowAt, lowerTurn);
+    // the hand following the forearm round, laid flat, and its fingers tipped down into a strike
+    const flat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.25 + TYPING_TIP*hit);
+    reposeBone(hand, wristAt, flat.multiply(lowerTurn));
+  }
+  for (const bone of typingBones(rig)) bone.userData.typing.set = { position: bone.position.clone(), quaternion: bone.quaternion.clone() };
+  return typing ? typingTaps : null;
+}
+/** The bones typingPose moves. */
+const typingBones = rig => ['L', 'R'].flatMap(side => ['Shoulder', 'Elbow', 'Hand'].map(name => rig.bone(name + side))).filter(Boolean);
 
 export const FIDGETS = ['Idle2', 'Idle3'], GRASS_SITS = ['SitDown1', 'SitDown2', 'SitDown3'], LIE_DOWNS = ['LieDown1', 'LieDown2', 'LieDown3'];
 /** Seconds to blend from one clip into the next: FADE_QUICK between walk, idle and wave; FADE_POSE into or out of sitting or lying. */
@@ -548,16 +663,19 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const mixer = new THREE.AnimationMixer(root);
   const pelvisBone = bones[boneByName.get('Pelvis') ?? 0], restPelvis = pelvisBone.getWorldPosition(new THREE.Vector3());
   const clips = PERSON_CLIPS.map(def => {
-    const source = def.from || def.name;
+    const source = def.from || def.over || def.name;
     const clip = gltf.animations.find(c => c.name.toLowerCase() === source.toLowerCase());
-    if (!clip && !def.from) console.warn(`Blockout: the people model has no ${def.name} animation`);
-    const sourceFrames = clip ? Math.max(1, Math.round(clip.duration*PERSON_BAKE_FPS)) : 1, frames = def.from ? 1 : sourceFrames;
+    if (!clip && !def.from && !def.over) console.warn(`Blockout: the people model has no ${def.name} animation`);
+    const sourceFrames = clip ? Math.max(1, Math.round(clip.duration*PERSON_BAKE_FPS)) : 1;
+    const frames = def.from ? 1 : sourceFrames*(def.times || 1);
     return { name: def.name, clip, missing: !clip, loop: !!def.loop && frames > 1, pose: !!def.pose, frames, duration: frames/PERSON_BAKE_FPS,
+      sourceFrames, repose: clip ? def.repose : null, taps: null,
       holdAt: def.from ? (sourceFrames - 1)/PERSON_BAKE_FPS : null,
       start: 0, pelvis: new THREE.Vector3(), pelvisX: 0, pelvisZ: 0, top: 0, heightScale: 1, seatY: 0 };
   });
   let boneRows = 0;
   clips.forEach(c => { c.start = boneRows; boneRows += c.frames + 1; });
+  const rig = { bone: name => bones[boneByName.get(name)], update: () => root.updateMatrixWorld(true) };
   const boneWidth = bones.length*3, boneData = new Float32Array(boneWidth*boneRows*4), pose = new THREE.Matrix4();
   // how far a foot travels over the walk, for how far a cycle of it carries a person
   const footBone = bones[boneByName.get('FootL') ?? boneByName.get('FootR') ?? 0], footPosition = new THREE.Vector3();
@@ -566,8 +684,9 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     mixer.stopAllAction();
     const action = c.clip ? mixer.clipAction(c.clip).play() : null;
     for (let f=0;f<=c.frames;f++) {
-      if (action) mixer.setTime(c.holdAt ?? (f % c.frames)/PERSON_BAKE_FPS); else skeleton.pose();
+      if (action) mixer.setTime(c.holdAt ?? (f % c.sourceFrames)/PERSON_BAKE_FPS); else skeleton.pose();
       root.updateMatrixWorld(true);
+      if (c.repose) { c.taps = c.repose(f % c.frames, c.frames, rig); root.updateMatrixWorld(true); }
       bones.forEach((bone, b) => {
         const e = pose.multiplyMatrices(bone.matrixWorld, skeleton.boneInverses[b]).elements;
         for (let r=0;r<3;r++) {

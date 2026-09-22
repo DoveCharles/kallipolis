@@ -586,7 +586,7 @@ export function walkAlong(p, dist) {
     const vertex = nav.vertices[ahead];
     const station = p.trainCooldown <= 0 ? stationLinks().byVertex.get(p.li + ':' + ahead) : null;
     if (station != null && peopleRng() < RIDE_CHANCE) { p.u = at; goRideTrain(p, station, walkwayPoint(p)); return; }
-    if (vertex.building && mayGoIndoors(p) && peopleRng() < enterChance(p)) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
+    if (vertex.building && mayGoIndoors(p) && peopleRng() < enterChance(p, vertex.building)) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
     const isEnd = (!nav.loop && (ahead === 0 || ahead === last)) || !!nav.blocked?.[nextVertex(nav, ahead, p.dir)];
     const entrance = vertex.entrances.length ? vertex.entrances[Math.floor(peopleRng()*vertex.entrances.length)] : null;
     const drawn = entrance ? (isOpenGround(peopleNav.areas[entrance.area]) ? p.traits.parks : p.traits.plazas) : 0;

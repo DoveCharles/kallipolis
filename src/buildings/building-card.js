@@ -4,7 +4,7 @@ import { camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
-import { buildingKey, buildingNumber } from './footprints.js';
+import { buildingKey, buildingNumber, roomLayoutOf } from './footprints.js';
 import { buildingKindOf, buildingTypeOf } from './building-types.js';
 import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 
@@ -54,9 +54,6 @@ function followBuildingAt(clientX, clientY) {
   if (!picked) { stopFollowingBuilding(); return; }
   followBuilding(picked);
 }
-// What's inside (a layout in interior.js): about half the buildings zones' blocks are offices, by their number so each
-// is the same every time; everything else is a home.
-const roomLayoutOf = (kind, number) => kind === 'buildings' && number % 2 === 0 ? 'office' : 'home';
 // `picked` as pickBuilding finds it
 function followBuilding(picked) {
   leaveBuilding();
