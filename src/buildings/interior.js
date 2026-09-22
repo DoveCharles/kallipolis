@@ -181,12 +181,13 @@ function paintRoom() {
 
 // ---------------------------------------------------------- a home's furniture
 // The furniture's a custom model (assets/models/Interior.glb, made in Blender): one top-level mesh per piece — Chair,
-// Table, TV, Lamp, Plant, Sofa, Coffee Table (loaded as Coffee_Table), Rug, Bookcase, Pendant — at five times life size,
-// the TV's screen facing -z and everything else facing +z. Each home arranges it its own way (from its building's key, so it's the same
-// every visit): the TV against one of the two far walls, facing the camera, the sofa across the room facing it with the
-// coffee table on a rug between them, maybe a lamp at the sofa's end, a bookcase against a far wall between its
-// windows, a light hanging over the dining table or the coffee table, a dining table with two or four chairs wherever
-// there's room for it, and a plant or two by the walls. Until the model's loaded, homes are bare.
+// Table, TV, Lamp, Plant, Sofa, Coffee Table (loaded as Coffee_Table), Rug, Bookcase, Pendant, Drawers — at five times
+// life size, the TV's screen facing -z and everything else facing +z. Each home arranges it its own way (from its
+// building's key, so it's the same every visit): the TV against one of the two far walls, facing the camera, the sofa
+// across the room facing it with the coffee table on a rug between them, maybe a lamp at the sofa's end, a bookcase
+// against a far wall between its windows, a chest of drawers along one (low enough to go under a window), a dining table
+// with two or four chairs wherever there's room for it, a light hanging over the dining table or the coffee table, and
+// a plant or two by the walls. Until the model's loaded, homes are bare.
 const FURNITURE_MODEL_URL = 'assets/models/Interior.glb';
 const FURNITURE_SCALE = 0.2;
 // { [name]: { object, w, d, h, seats } } — each piece turned to face +z, centred on its footprint and standing on y = 0,
@@ -405,6 +406,18 @@ function furnish(key) {
       const r = footprint(bookcase, p.x, p.z, p.angle);
       if (!fits(r, 0.1) || hidesScreen(r)) continue;
       put('Bookcase', p.x, p.z, p.angle, { tall: true });
+      break;
+    }
+  }
+  // a chest of drawers somewhere along one of the far walls, facing into the room
+  const drawers = furniture.Drawers;
+  if (drawers && rng() < 0.6) {
+    for (let tries = 0; tries < 30; tries++) {
+      const onX = rng() < 0.5, u = (rng()*2 - 1)*((onX ? ROOM_D : ROOM_W)/2 - drawers.w/2 - 0.1);
+      const p = onX ? { x: ROOM_W/2 - drawers.d/2 - 0.03, z: u, angle: -Math.PI/2 } : { x: u, z: ROOM_D/2 - drawers.d/2 - 0.03, angle: Math.PI };
+      const r = footprint(drawers, p.x, p.z, p.angle);
+      if (!fits(r, 0.15) || hidesScreen(r)) continue;
+      put('Drawers', p.x, p.z, p.angle);
       break;
     }
   }
