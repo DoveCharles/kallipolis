@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { scene, camera, computeWindowGlowFactor, SKY_ENV_MAP, snapPointToGrid, apparentDistance } from '../core/scene.js';
 import { mergeGeometryList } from '../buildings/windows.js';
+import { createRegionTester } from '../zones/cutouts.js';
 import { roadNodes } from '../core/state.js';
 import { disposeObject } from '../roads/roads.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
@@ -728,6 +729,9 @@ export function rebuildTrainMeshes() {
     S.trainMeshGroup.add(mesh);
     return mesh;
   };
+  // where support posts mustn't stand, as for raised walkways' pillars (see buildRaisedWalkway)
+  const overRoad = createRegionTester(S.roadFootprint || []), overRiver = createRegionTester(S.riverFootprint || []);
+  const blocked = (x, z) => overRoad(x, z) || overRiver(x, z);
   S.roadLines.filter(isTrainLine).forEach(line => {
     const path = trainCurve(line.nodeIds).points;
     if (path.length < 2) return;
@@ -752,13 +756,27 @@ export function rebuildTrainMeshes() {
     if (coil.outer) addMesh(coil.outer, mats.coilOuter, 'TrainCoil', line, true);
     if (coil.inner) addMesh(coil.inner, mats.coilInner, 'TrainCoilInner', line, true);
     // pairs of posts, each pair ringing the tube in a collar, holding it up at regular intervals — except inside
-    // stations, and wherever the tube is on (or in) the ground with nothing to hold up
-    const beams = [];
-    for (let d = TRAIN_SUPPORT_SPACING/2; d < sampler.total; d += TRAIN_SUPPORT_SPACING) {
-      if (inStation(d, 2)) continue;
+    // stations, and wherever the tube is on (or in) the ground with nothing to hold up. A pair that would stand in a
+    // road or river slides along the track to the nearest clear spot, or is left out if there isn't one near.
+    const beams = [], halfGap = radius*1.1 + beamW/2;
+    const postsClear = d => {
+      const { point, tangent } = sampler.at(d);
+      const sx = -tangent.z, sz = tangent.x, sl = Math.hypot(sx, sz) || 1;
+      return [-1, 1].every(sign => [-beamW/2, 0, beamW/2].every(e => {
+        const x = point.x + sx/sl*(halfGap + e)*sign, z = point.z + sz/sl*(halfGap + e)*sign;
+        return !blocked(x, z);
+      }));
+    };
+    for (let d0 = TRAIN_SUPPORT_SPACING/2; d0 < sampler.total; d0 += TRAIN_SUPPORT_SPACING) {
+      let d = null;
+      for (let k = 0; k <= TRAIN_SUPPORT_SPACING/3; k += 1.5) {
+        d = [d0 - k, d0 + k].find(c => c > 0 && c < sampler.total && !inStation(c, 2) && postsClear(c)) ?? null;
+        if (d!=null || inStation(d0, 2)) break;
+      }
+      if (d==null) continue;
       const { point, tangent } = sampler.at(d);
       if (point.y - radius < TRAIN_MIN_HEIGHT) continue;
-      addSupportBeams(beams, point, tangent, radius*1.1 + beamW/2, point.y, beamW);
+      addSupportBeams(beams, point, tangent, halfGap, point.y, beamW);
     }
     stations.forEach(s => {
       const leaves = [];
