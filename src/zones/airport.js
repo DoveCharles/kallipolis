@@ -1359,12 +1359,14 @@ const followedFlight = () => {
   return zone && zone.airportFlights ? zone.airportFlights[followed.index] || null : null;
 };
 // the aircraft under a point on the screen, or null
-function pickPlane(clientX, clientY) {
+// (out, if given, gets the hit's distance from the camera, for comparing across kinds)
+function pickPlane(clientX, clientY, out) {
   const shown = everyFlight().filter(f => f.plane.visible);
   if (!shown.length) return null;
   App.raycaster.setFromCamera(App.ndcOf(clientX, clientY), camera);
   const hit = App.raycaster.intersectObjects(shown.map(f => f.plane), true)[0];
   if (!hit) return null;
+  if (out) out.distance = hit.distance;
   let object = hit.object;
   while (object && object.name !== 'Aircraft') object = object.parent;
   return shown.find(f => f.plane === object) || null;

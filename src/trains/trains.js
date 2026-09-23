@@ -1184,12 +1184,14 @@ export function updateTrainShuttles(t) {
 // until a click elsewhere, leaving World mode, or its line being deleted lets it go. Unlike a car, it can't be killed.
 let followedTrain = null; // the followed carriage's line id, which survives the train meshes being rebuilt
 // the carriage under a point on the screen, as its index in trainShuttles, or -1
-function pickTrain(clientX, clientY) {
+// (out, if given, gets the hit's distance from the camera, for comparing across kinds)
+function pickTrain(clientX, clientY, out) {
   const shown = trainShuttles.filter(s => s.object.visible);
   if (!shown.length) return -1;
   App.raycaster.setFromCamera(App.ndcOf(clientX, clientY), camera);
   const hit = App.raycaster.intersectObjects(shown.map(s => s.object), true)[0];
   if (!hit) return -1;
+  if (out) out.distance = hit.distance;
   return trainShuttles.findIndex(s => s.object === hit.object.parent);
 }
 function showFollowedTrainCard() {

@@ -28,9 +28,10 @@ export const personHeight = p => 1.7*p.height*S.peopleSize*p.heightScale;
  * width of the line up the middle of them, as they look on screen — or within a few pixels, for someone far off.
  * @param {number} clientX - the point's x, in pixels from the left of the window
  * @param {number} clientY - its y, in pixels from the top
+ * @param {{distance: number}} [out] - given the picked person's distance from the camera, for comparing across kinds
  * @returns {number} their index in people, or -1
  */
-export function pickPerson(clientX, clientY) {
+export function pickPerson(clientX, clientY, out) {
   if (!S.peopleEnabled) return -1;
   const width = window.innerWidth, height = window.innerHeight, foot = new THREE.Vector3(), head = new THREE.Vector3();
   let best = -1, bestDepth = Infinity;
@@ -45,6 +46,7 @@ export function pickPerson(clientX, clientY) {
     const off = Math.hypot(clientX - (ax + (bx - ax)*k), clientY - (ay + (by - ay)*k));
     if (off <= Math.max(8, Math.sqrt(lengthSq)*0.22) && foot.z < bestDepth) { best = i; bestDepth = foot.z; }
   });
+  if (out && best >= 0) { const p = people[best]; out.distance = camera.position.distanceTo(foot.set(p.x, p.y, p.z)); }
   return best;
 }
 

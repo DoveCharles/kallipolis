@@ -811,7 +811,8 @@ const BEE_PICK_PIXELS = 16;    // how near a click has to land on one
 // the bee under a point on the screen (the nearest, if several are), or null — like pickPerson in people.js, but a bee is
 // small enough on screen to be worth a flat few pixels around wherever it is rather than a line up its middle
 const screen = new THREE.Vector3();
-function pickBee(clientX, clientY) {
+// (out, if given, gets the picked bee's distance from the camera, for comparing across kinds)
+function pickBee(clientX, clientY, out) {
   const width = window.innerWidth, height = window.innerHeight;
   let best = null, bestDepth = Infinity;
   colonies.forEach(colony => colony.bees.forEach((bee, index) => {
@@ -821,15 +822,17 @@ function pickBee(clientX, clientY) {
     const off = Math.hypot((screen.x + 1)/2*width - clientX, (1 - screen.y)/2*height - clientY);
     if (off <= BEE_PICK_PIXELS && screen.z < bestDepth) { best = { colony, index }; bestDepth = screen.z; }
   }));
+  if (out && best) out.distance = camera.position.distanceTo(best.colony.bees[best.index].at);
   return best;
 }
 // the hive under a point on the screen, or null — straight off the mesh, since a hive stays where it was hung
 const raycaster = new THREE.Raycaster();
-function pickHive(clientX, clientY) {
+function pickHive(clientX, clientY, out) {
   if (!colonies.length) return null;
   raycaster.setFromCamera(new THREE.Vector2(clientX/window.innerWidth*2 - 1, -clientY/window.innerHeight*2 + 1), camera);
   const hit = raycaster.intersectObjects(colonies.map(c => c.hiveMesh), false)[0];
   if (!hit || hit.instanceId == null) return null;
+  if (out) out.distance = hit.distance;
   return { colony: colonies.find(c => c.hiveMesh === hit.object), index: hit.instanceId };
 }
 function followBee(colony, index) {

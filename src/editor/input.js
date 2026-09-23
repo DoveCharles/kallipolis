@@ -394,6 +394,31 @@ function releasePointer(e) {
 const FOLLOWABLE = ['Person', 'Car', 'Train', 'Plane', 'Bee', 'Hive', 'Building'];
 const letGoOfAllBut = kept => FOLLOWABLE.forEach(kind => { if (kind !== kept) App['stopFollowing' + kind](); });
 App.letGoOfAllBut = letGoOfAllBut; // (for the favorites too: see ui/favorites.js)
+// Each followable kind's picker, and whether what it returned is a hit. Every picker takes an `out` it gives the hit's
+// distance from the camera, so the nearest hit of any kind wins (a far-off person on the same line of sight as a car
+// clicked up close mustn't take the click from it).
+const FOLLOW_PICKERS = [
+  { kind: 'Bee',    isHit: hit => !!hit,   pick: (x, y, out) => App.pickBee(x, y, out) },
+  { kind: 'Person', isHit: hit => hit >= 0, pick: (x, y, out) => App.pickPerson(x, y, out) },
+  { kind: 'Car',    isHit: hit => hit >= 0, pick: (x, y, out) => App.pickCar(x, y, out) },
+  { kind: 'Train',  isHit: hit => hit >= 0, pick: (x, y, out) => App.pickTrain(x, y, out) },
+  { kind: 'Plane',  isHit: hit => !!hit,   pick: (x, y, out) => App.pickPlane(x, y, out) },
+  { kind: 'Hive',   isHit: hit => !!hit,   pick: (x, y, out) => App.pickHive(x, y, out) },
+];
+/**
+ * The kind of whatever followable thing is nearest the camera under a point on the screen.
+ * @param {number} clientX
+ * @param {number} clientY
+ * @returns {?string} its kind, as FOLLOWABLE names it, or null if nothing's there
+ */
+function pickNearestFollowable(clientX, clientY) {
+  let nearestKind = null, nearestDistance = Infinity;
+  for (const { kind, isHit, pick } of FOLLOW_PICKERS) {
+    const out = { distance: Infinity };
+    if (isHit(pick(clientX, clientY, out)) && out.distance < nearestDistance) { nearestKind = kind; nearestDistance = out.distance; }
+  }
+  return nearestKind;
+}
 
 dom.addEventListener('pointercancel', (e) => {
   releasePointer(e); cancelLongPress();
@@ -422,13 +447,9 @@ dom.addEventListener('pointerup', (e) => {
     } else if (was.button===0 && dist<CLICK_SLOP && dt<600 && S.interactionMode==='move' && !App.isInsideBuilding()) {
       // a click on someone or something has the camera follow them; anywhere else lets go of both
       // (not from inside a building, where the view's held in the room until Leave: see buildings/interior.js)
-      if (App.pickBee(e.clientX, e.clientY)) { letGoOfAllBut('Bee'); App.followBeeAt(e.clientX, e.clientY); }
-      else if (App.pickPerson(e.clientX, e.clientY) >= 0) { letGoOfAllBut('Person'); App.followPersonAt(e.clientX, e.clientY); }
-      else if (App.pickCar(e.clientX, e.clientY) >= 0) { letGoOfAllBut('Car'); App.followCarAt(e.clientX, e.clientY); }
-      else if (App.pickTrain(e.clientX, e.clientY) >= 0) { letGoOfAllBut('Train'); App.followTrainAt(e.clientX, e.clientY); }
-      else if (App.pickPlane(e.clientX, e.clientY)) { letGoOfAllBut('Plane'); App.followPlaneAt(e.clientX, e.clientY); }
-      else if (App.pickHive(e.clientX, e.clientY)) { letGoOfAllBut('Hive'); App.followHiveAt(e.clientX, e.clientY); }
-      else { letGoOfAllBut('Building'); App.followBuildingAt(e.clientX, e.clientY); }
+      const kind = pickNearestFollowable(e.clientX, e.clientY) ?? 'Building';
+      letGoOfAllBut(kind);
+      App['follow' + kind + 'At'](e.clientX, e.clientY);
     }
     return;
   }

@@ -1474,9 +1474,10 @@ function carLabel(car) {
  * length or 10 pixels, whichever is greater — and of those the one nearest the camera, or -1 if there is none.
  * @param {number} clientX
  * @param {number} clientY
+ * @param {{distance: number}} [out] - given the picked car's distance from the camera, for comparing across kinds
  * @returns {number} the car's index in cars, or -1
  */
-function pickCar(clientX, clientY) {
+function pickCar(clientX, clientY, out) {
   if (!S.peopleEnabled) return -1;
   const width = window.innerWidth, height = window.innerHeight, foot = new THREE.Vector3(), roof = new THREE.Vector3();
   let best = -1, bestDepth = Infinity;
@@ -1491,6 +1492,7 @@ function pickCar(clientX, clientY) {
     const off = Math.hypot(clientX - (ax + (bx - ax)*k), clientY - (ay + (by - ay)*k));
     if (off <= Math.max(10, Math.sqrt(lengthSq)*0.35) && foot.z < bestDepth) { best = i; bestDepth = foot.z; }
   });
+  if (out && best >= 0) out.distance = camera.position.distanceTo(foot.set(cars[best].x, Y_ROAD, cars[best].z));
   return best;
 }
 
