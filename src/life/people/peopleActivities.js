@@ -809,6 +809,7 @@ export function updateTrainRider(p, i, dt) {
       // come in
       ride.node = stop.nodeId; ride.stage = 'alight'; ride.side = peopleRng() < 0.5 ? -1 : 1; ride.timer = 0;
       const door = carriageDoor(shuttle, stop, ride.side);
+      ride.door = door.inside;
       ride.route = [door.inside, door.outside, stop.spot(ride.side*(stop.radius + 1.6), (peopleRng()*2 - 1)*Math.min(2, stop.alongMax))];
       ride.target = ride.route.shift();
       gotOff(p, i);
@@ -819,15 +820,15 @@ export function updateTrainRider(p, i, dt) {
   if (ride.stage === 'alight') {
     // (the carriage waits until they're off: see holdTrain)
     if (ride.route.length) holdTrain(ride.lineId);
-    if (!reached()) return ride.target;
+    if (!reached()) return underfoot(p, ride);
     const shuttle = ride.route.length === 2 && getTrainShuttles().find(s => s.lineId === ride.lineId);
-    if (shuttle && shuttle.stopNode === ride.node && shuttle.doors < 2) return ride.target; // (at the door, until it's open)
-    if (ride.route.length) { ride.target = ride.route.shift(); return ride.target; }
+    if (shuttle && shuttle.stopNode === ride.node && shuttle.doors < 2) return underfoot(p, ride); // (at the door, until it's open)
+    if (ride.route.length) { ride.target = ride.route.shift(); return underfoot(p, ride); }
     const out = getTrainStations().get(ride.node);
     if (!out) { dropToGround(p); return null; }
     ride.stage = 'exit'; ride.route = null;
     ride.target = out.spot(ride.side*out.landing, 0);
-    return ride.target;
+    return underfoot(p, ride);
   }
   if (ride.stage === 'board') {
     // in through the carriage's door to somewhere to stand — the carriage waiting for them (see holdTrain), unless it's
@@ -839,12 +840,12 @@ export function updateTrainRider(p, i, dt) {
       return null;
     }
     holdTrain(ride.lineId);
-    if (!reached()) return ride.target;
-    if (ride.route.length === 2 && shuttle.doors < 2) return ride.target; // (at the door, until it's open)
+    if (!reached()) return underfoot(p, ride);
+    if (ride.route.length === 2 && shuttle.doors < 2) return underfoot(p, ride); // (at the door, until it's open)
     if (!ride.route.length) return aboard(p, i, shuttle);
     ride.inside = ride.route.length === 2; // (past the door, from here on)
     ride.target = ride.route.shift();
-    return ride.target;
+    return underfoot(p, ride);
   }
   if (!st) { dropToGround(p); return null; } // (the station's gone from under them)
   // anyone by one of its doorways, on the way in or out, has its doors slide open for them
@@ -922,6 +923,7 @@ export function updateTrainRider(p, i, dt) {
       ride.stage = 'board'; ride.lineId = shuttle.lineId; ride.timer = 0; ride.inside = false;
       ride.spot = placeAboard();
       const door = carriageDoor(shuttle, st, ride.side);
+      ride.door = door.inside;
       ride.route = [door.inside, carriageSpot(shuttle, ride.spot.across, ride.spot.along)];
       ride.target = door.outside;
       holdTrain(ride.lineId);
@@ -1019,6 +1021,20 @@ function aboard(p, i, shuttle) {
  * @param {number} side - which side of the track (as the station's entrances go)
  * @returns {{inside: {x: number, y: number, z: number}, outside: {x: number, y: number, z: number}}} the two spots
  */
+/**
+ * Someone crossing between a platform and a carriage's door: stood on whatever's under them there (the deck, the
+ * boarding ramp, the carriage's floor: see floorAt in trains.js), heading on for their target.
+ * @param {Person} p - the person
+ * @param {*} ride - their ride (p.train)
+ * @returns {{x: number, y: number, z: number}} where they should walk to
+ */
+function underfoot(p, ride) {
+  const st = getTrainStations().get(ride.node);
+  if (!st || !ride.door) return ride.target;
+  p.y = st.floorAt(p.x, p.z, ride.door);
+  return { x: ride.target.x, y: p.y, z: ride.target.z };
+}
+
 function carriageDoor(shuttle, st, side) {
   const outside = st.spot(side*(st.radius + 0.6), 0);
   const a = carriageSpot(shuttle, 1, 0), b = carriageSpot(shuttle, -1, 0);

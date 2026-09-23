@@ -572,7 +572,7 @@ function buildStationParts(position, tangent, radius, mats) {
       const ramps = [1, -1].map(side => {
         // the high edge reaches past the rail's outer face, so the ramp actually touches it rather than stopping short;
         // its foot comes only halfway out to the doors, clear of them
-        const inner = railGap + railR + 0.05, innerX = side*inner, outerX = side*(inner + (halfW - inner)*RAMP_REACH);
+        const { inner, outer } = stationRamp(radius), innerX = side*inner, outerX = side*outer;
         const A0=[outerX,deckTop,zL], B0=[outerX,deckTop,zR], A1=[innerX,deckTop,zL], B1=[innerX,deckTop,zR], A2=[innerX,railY,zL], B2=[innerX,railY,zR];
         const ramp = new THREE.BufferGeometry();
         ramp.setAttribute('position', new THREE.Float32BufferAttribute([A0,B0,A1,B1,A2,B2].flat(), 3));
@@ -788,6 +788,13 @@ export function rebuildTrainMeshes() {
 }
 // adds a line's station to trainStations (a station shared by several lines is listed once, with each of them), laid out as
 // buildStationParts lays it out
+// A station's boarding ramps, across from the track (see buildStationParts): from `outer`, on the deck, up to `inner`,
+// just past the rails, at `topY` (up from the track's centreline).
+function stationRamp(radius) {
+  const halfW = trainStationSize(radius).width/2, railGap = radius*0.55, railR = Math.max(0.12, radius*0.07);
+  const inner = railGap + railR + 0.05;
+  return { inner, outer: inner + (halfW - inner)*RAMP_REACH, topY: -radius*0.75 };
+}
 function registerStation(s, line, radius, mats, leaves) {
   const known = trainStations.get(s.node);
   if (known) { known.lineIds.push(line.id); known.doors.leaves.push(...leaves); return; }
@@ -801,6 +808,15 @@ function registerStation(s, line, radius, mats, leaves) {
     alongMax: Math.max(0.5, halfL - Math.min(halfW, halfL) - 1), // along the straight middle, clear of the rounded ends
     lineIds: [line.id], networkId: line.networkId, networkStations: 1,
     spot: (across, along) => ({ x: x + right.x*across + forward.x*along, y: deckY, z: z + right.z*across + forward.z*along }),
+    // the ground underfoot at (px, pz), crossing from the landing to a stopped carriage's door, `inside` (a spot on its
+    // floor just in from it): the deck, up its boarding ramp (see buildStationParts) to the rails, then a step up
+    floorAt(px, pz, inside) {
+      const acrossOf = (qx, qz) => Math.abs((qx - x)*right.x + (qz - z)*right.z);
+      const across = acrossOf(px, pz), ramp = stationRamp(radius), top = s.position.y + ramp.topY, into = acrossOf(inside.x, inside.z);
+      const lerp = (a, b, k) => a + (b - a)*Math.max(0, Math.min(1, k));
+      if (across >= ramp.inner) return lerp(top, deckY, (across - ramp.inner)/(ramp.outer - ramp.inner));
+      return lerp(inside.y, top, (across - into)/Math.max(1e-3, ramp.inner - into));
+    },
     lifts: stationLifts(s.position, radius).map(l => makeLift(s, l, right, forward, line, mats)),
     // its doors, each side's pair sliding open while anyone's by them (see openDoor and updateStationDoors)
     doors: { forward, leaves, open: { 1: 0, [-1]: 0 }, hold: { 1: 0, [-1]: 0 } },
