@@ -49,6 +49,17 @@ export const OUTFITS = [
     paint: paintSuit,
   },
   {
+    // the suit's trousers with just the shirt and tie, no jacket
+    name: 'Shirt and tie', chance: 0.05, bare: [],
+    colors: {
+      Top: [0xf2f2ee, 0xf2f2ee, 0xf2f2ee, 0xdce6f2, 0xeeeae0],                  // the shirt: mostly white, some pale blue or cream
+      Pants: [0x141518, 0x17192a, 0x1b2440, 0x222d4d, 0x26282d], Skirt: 'Pants',
+      Shoes: [0x111113, 0x111113, 0x3b2a1e],
+      OutfitGreen: [0x8c1c24, 0x5e1a2a, 0x1f2d55, 0x2d4f8a, 0x2e5a3c, 0xa8842c, 0x151515, 0x6b6e75], // the tie
+    },
+    paint: paintShirtAndTie,
+  },
+  {
     // work dungarees, over a t-shirt with its sleeves wherever, and boots
     name: 'Dungarees', hat: 'Hair46_GB', bare: ['Sleeve'],
     colors: {
@@ -201,7 +212,7 @@ function paintSuit(ctx, width, height, front) {
     line([[0, 5.55], [0, 5.25]], SHADE(0.5), 0.014);
     return;
   }
-  const SHIRT = RED, TIE = GREEN;
+  const SHIRT = RED;
   const top = 7.0, vBottom = 5.95, neck = 0.19;   // the V's top (over the neck), its point, and how wide it opens there
 
   // the shirt, filling the V (and over the neck's base, which the collar hides)
@@ -209,11 +220,7 @@ function paintSuit(ctx, width, height, front) {
   // its placket and buttons, peeping out beside the tie's tip
   line([[0, 6.3], [0, vBottom + 0.03]], 'rgb(255,0,60)', 0.012);
   [6.22, 6.08].forEach(py => dot(0, py, 0.014, 'rgb(255,0,110)'));
-  // the tie: a knot tight under the collar, then the blade, widening to a point
-  polygon([[-0.045, 6.9], [0.045, 6.9], [0.032, 6.81], [-0.032, 6.81]], TIE);
-  polygon([[-0.028, 6.81], [0.028, 6.81], [0.062, 6.24], [0, 6.14], [-0.062, 6.24]], TIE);
-  line([[-0.032, 6.81], [0.032, 6.81]], 'rgb(0,255,120)', 0.012); // under the knot
-  line([[0.01, 6.78], [0.04, 6.3]], 'rgb(0,255,50)', 0.008);        // a fold down the blade
+  drawTie(polygon, line);
   // the collar: two points turned down over the tie's knot either side
   polygon([[-0.05, 6.93], [-neck - 0.01, 6.98], [-0.13, 6.78]], SHIRT);
   polygon([[0.05, 6.93], [neck + 0.01, 6.98], [0.13, 6.78]], SHIRT);
@@ -233,6 +240,43 @@ function paintSuit(ctx, width, height, front) {
   [5.86, 5.62].forEach(py => { dot(0.015, py, 0.024, SHADE(0.7)); dot(0.015, py, 0.012, SHADE(0.35)); });
   // hip pockets
   [-1, 1].forEach(side => line([[side*0.14, 5.45], [side*0.32, 5.43]], SHADE(0.45), 0.014));
+}
+
+/**
+ * A tie: a knot tight under the collar, then the blade, widening to a point.
+ */
+function drawTie(polygon, line) {
+  polygon([[-0.045, 6.9], [0.045, 6.9], [0.032, 6.81], [-0.032, 6.81]], GREEN);
+  polygon([[-0.028, 6.81], [0.028, 6.81], [0.062, 6.24], [0, 6.14], [-0.062, 6.24]], GREEN);
+  line([[-0.032, 6.81], [0.032, 6.81]], 'rgb(0,255,120)', 0.012); // under the knot
+  line([[0.01, 6.78], [0.04, 6.3]], 'rgb(0,255,50)', 0.008);        // a fold down the blade
+}
+
+/**
+ * A shirt and tie with no jacket over them: the shirt is the torso's own colour, so this only draws its collar,
+ * placket and buttons, and the tie; behind, a yoke across the shoulders.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width
+ * @param {number} height
+ * @param {boolean} front
+ */
+function paintShirtAndTie(ctx, width, height, front) {
+  const { line, dot, polygon } = pens(ctx, width, height);
+  if (!front) {
+    line([[-0.6, 6.72], [0.6, 6.72]], SHADE(0.2), 0.01);
+    line([[0, 6.72], [0, 6.55]], SHADE(0.15), 0.01);               // a box pleat under the yoke
+    return;
+  }
+  // the placket down the middle, and its buttons below the tie's tip
+  line([[-0.03, 6.8], [-0.03, 5.25]], SHADE(0.15), 0.008);
+  line([[0.03, 6.8], [0.03, 5.25]], SHADE(0.15), 0.008);
+  [6.0, 5.75, 5.5].forEach(py => dot(0, py, 0.014, SHADE(0.35)));
+  drawTie(polygon, line);
+  // the collar: two points turned down over the tie's knot, shaded under their edges
+  [-1, 1].forEach(side => {
+    line([[side*0.05, 6.93], [side*0.13, 6.78], [side*0.2, 6.98]], SHADE(0.4), 0.012);
+    line([[side*0.13, 6.77], [side*0.21, 6.96]], SHADE(0.15), 0.02);
+  });
 }
 
 /**
