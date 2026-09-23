@@ -261,13 +261,13 @@ export function buildPeopleNav() {
       const { pts } = resampleLine(tess), cum = cumulative(pts);
       if (cum[cum.length-1] < 1) return;
       decks.push(lines.length);
-      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, y: net.H, lateral: net.lateral,
+      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, y: net.H, lateral: net.lateral, walk: net.walk,
         blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
     });
     net.ramps.forEach(ramp => {
       const pts = ramp.pts, cum = cumulative(pts), li = lines.length;
       lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, ramp: true, y: net.H, ys: ramp.ys,
-        lateral: ramp.lateral, blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
+        lateral: ramp.lateral, walk: ramp.walk, blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
       let top = null;
       decks.forEach(dl => lines[dl].pts.forEach((q, vi) => {
         const d = Math.hypot(q.x - ramp.top.x, q.z - ramp.top.z);

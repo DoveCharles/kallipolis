@@ -315,11 +315,12 @@ export function buildRaisedWalkway(lines, networkId) {
     if (r.kind === 'side') { pts.push({ x: r.node.x, z: r.node.z }); ys.push(H); }
     const step = Math.min(0.5, 3.5/R), n = Math.max(2, Math.ceil(r.total/step));
     for (let i=0;i<=n;i++) { const phi = r.total*i/n; pts.push(r.at(phi, R)); ys.push(r.yAt(phi)); }
-    return { pts, ys, top: pts[0], foot: pts[pts.length-1], lateral: Math.max(0.2, rw/2 - LEDGE_WIDTH - 0.4) };
+    return { pts, ys, top: pts[0], foot: pts[pts.length-1], lateral: Math.max(0.2, rw/2 - LEDGE_WIDTH - 0.4), walk: Math.max(0.2, rw/2 - LEDGE_WIDTH - 0.25) };
   });
   const nav = {
     networkId, H,
     lateral: Math.max(0.3, room - (furnitureSpots ? 1.4 : 0.3)),
+    walk: Math.max(0.3, room - 0.25), // (how far either side of its line someone walked about on it can go, short of the ledge)
     decks: polylines.map(({ tess }) => tess),
     ramps: navRamps,
   };

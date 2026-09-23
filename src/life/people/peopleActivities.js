@@ -786,6 +786,38 @@ export function goRideTrain(p, node, from) {
 }
 
 /**
+ * Someone let go of (see unpossessPerson in peopleTracking.js) inside a station, its lift or a carriage: riding the trains
+ * on from there as anyone does — aboard, riding it on; in a lift, down it and away; on a platform, waiting for the next
+ * carriage; anywhere else in the station, out the way they'd come in.
+ * @param {Person} p - the person
+ * @param {number} i - their index in people
+ * @param {{kind: string, node?: *, side?: number, lineId?: *, u?: number, v?: number, yaw?: number}} f - where they were standing (p.footing)
+ * @returns {boolean} whether they're riding on (false: they're somewhere this can't pick up from)
+ */
+export function resumeTrainRide(p, i, f) {
+  const shuttle = f.kind === 'carriage' && getTrainShuttles().find(s => s.lineId === f.lineId);
+  const node = shuttle ? shuttle.stopNode : f.node, st = node != null ? getTrainStations().get(node) : null;
+  if (!shuttle && !st) return false;
+  goRideTrain(p, node ?? null, p);
+  const ride = p.train;
+  if (shuttle) {
+    ride.lineId = f.lineId;
+    ride.spot = { across: f.u, along: f.v, turn: wrapAngle(p.heading - f.yaw) };
+    aboard(p, i, shuttle);
+    return true;
+  }
+  if (f.kind === 'lift') {
+    ride.side = f.side; ride.stage = 'liftRide'; ride.lift = { from: 'top', to: 'bottom' };
+    return true;
+  }
+  const dx = p.x - st.x, dz = p.z - st.z, a = dx*st.right.x + dz*st.right.z, b = dx*st.forward.x + dz*st.forward.z;
+  ride.side = a < 0 ? -1 : 1;
+  if (Math.abs(a) < st.halfW - 0.5) { ride.stage = 'wait'; ride.along = Math.max(-st.alongMax, Math.min(st.alongMax, b)); }
+  else { ride.stage = 'exit'; ride.target = st.spot(ride.side*st.landing, 0); }
+  return true;
+}
+
+/**
  * Move someone riding the trains on, each frame: to the foot of the station, up onto its landing, in to wait on the
  * platform, then aboard the first carriage to stop there, and back out again at the other end.
  * @param {Person} p - the person

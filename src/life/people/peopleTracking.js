@@ -5,8 +5,9 @@ import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
 import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, isGone, modelScale, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
-import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver } from './peopleActivities.js';
-import { reseatPerson } from './peoplePathing.js';
+import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver } from './peopleActivities.js';
+import { placeAtVertex, reseatPerson } from './peoplePathing.js';
+import { carryPossessed, footingAt, nearestRaisedVertex, stepFooting } from './peopleFooting.js';
 import { bloodSpeed, bloodlustSpeed, isBloodlusting } from './peopleBlood.js';
 import { profileOf } from '../profiles.js';
 
@@ -223,6 +224,8 @@ let cameraNear = camera.near;
 export function possessPerson(i) {
   const p = people[i];
   if (i !== followed || !p || isGone(p) || possession.index === i) return;
+  // (up on a raised walkway, in a station, its lift or a carriage, they stay there: see peopleFooting.js)
+  p.footing = footingAt(p.x, p.y, p.z);
   endActivity(p);
   if (p.train) { p.train = null; p.trainCooldown = 40 + peopleRng()*50; }
   if (p.indoors) { p.indoors = null; p.indoorsCooldown = INDOORS_COOLDOWN; }
@@ -248,10 +251,16 @@ export function unpossessPerson() {
   camera.near = cameraNear;
   camera.updateProjectionMatrix();
   if (!p || p.mode !== 'possessed') return;
-  // back into a hangout they're standing in, else onto the nearest walkway
+  // back into a hangout they're standing in, else onto the nearest walkway — up on a raised one, the nearest point of that
+  // (the grid reseatPerson looks in leaves the decks out, so it would drop them to the ground below); in a station, a lift
+  // or a carriage, riding the trains as anyone does from there
   p.mode = 'wander';
   p.onRoad = false;
-  reseatPerson(p);
+  const f = p.footing;
+  p.footing = null;
+  const up = f?.kind === 'raised' ? nearestRaisedVertex(p.x, p.z, f.y) : null;
+  if (up) placeAtVertex(p, up.li, up.vi, p.dir || 1);
+  else if (!(f && f.kind !== 'raised' && resumeTrainRide(p, i, f))) reseatPerson(p);
   if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; p.wait = 1; }
   // the camera behind them, looking the way they were
   const behind = possession.yaw + Math.PI;
@@ -272,6 +281,7 @@ const BUMP_PUNCH_CHANCE = 0.05, SHOVE_DISTANCE = 0.7, SHOVE_DECAY = 5, STAGGER_S
  * @returns {{x: number, y: number, z: number}} where they end up, at the height of the ground there
  */
 export function walkPossessed(p, dt) {
+  carryPossessed(p); // (along with the carriage or lift they're in, first: then walked about in it)
   const { forward, right, run } = controlInput(), yaw = possession.yaw;
   const len = Math.hypot(forward, right);
   let x = p.x, z = p.z;
@@ -310,6 +320,14 @@ export function walkPossessed(p, dt) {
     shove.x = backX*speed; shove.z = backZ*speed;
   });
   p.touching = touching; p.near = near; p.walkingSpeed = walkingSpeed; // (for how hard a punch throws someone: see updateSwing)
+  // up on a raised walkway, in a station, its lift or a carriage, or getting onto one (see peopleFooting.js)
+  const up = stepFooting(p, x, z);
+  if (up?.ground) ({ x, z } = up); // (held outside a lift's shaft)
+  else if (up) {
+    p.onRoad = false; p.area = -1;
+    if (p.footing?.kind === 'lift' || p.footing?.kind === 'carriage') p.y = up.y; // (carried: no easing up to it)
+    return up;
+  }
   // how high the ground is there: a hangout's, the road's, or the pavement's
   const area = peopleNav.areas.find(a => x >= a.minX && x <= a.maxX && z >= a.minZ && z <= a.maxZ && a.inside(x, z));
   p.onRoad = !area && peopleNav.onPavement(x, z);
