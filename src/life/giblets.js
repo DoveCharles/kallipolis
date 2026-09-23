@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { scene, camera, Y_PATH } from '../core/scene.js';
 import { S } from '../core/shared.js';
 import { playSound } from '../audio/sfx.js';
+import { WATER_LEVEL } from '../water/water.js';
 
 // ============================================================ giblets
 // Two separate things share this file, each with its own setting group in S (see core/shared.js): gibs — what's left of
@@ -23,6 +24,11 @@ const FX_MESH_CAP = 1500; // the fx instanced mesh's own capacity — a ceiling 
 const fxCap = () => Math.max(0, Math.min(FX_MESH_CAP, Math.round(S.maxParticles)));
 const GIBLET_LIFE = 40, SPLAT_LIFE = 60, SINK_TIME = 3; // seconds before they sink away, and how long that takes
 const GRAVITY = 9.8;
+// where a falling chunk lands if groundBelow finds no solid ground at all under it (see explode, spillBlood and
+// explodeCar, below) — well under WATER_LEVEL, so a gib thrown out over open water with no lakebed geometry to hit
+// still falls far enough to cross WATER_LEVEL and be caught there (updateGiblets) rather than snapping back up to a
+// fallback at ground level, which would put it right back to bouncing where it died instead of going under.
+const NO_GROUND_FALLBACK = WATER_LEVEL - 5;
 const BLOOD_COLORS = [0x7a0a0a, 0x9c1010, 0x5c0606];
 const BLOOD_SPLAT_COLOR = new THREE.Color(0x6a0707);
 const SCORCH_COLORS = [0x1c1a18, 0x2b2622, 0x14100e];
@@ -72,14 +78,27 @@ scene.add(flash);
 let flashUntil = -Infinity, flashBorn = 0, flashDuration = 0.5;
 
 // Where the ground is under (x, z), looking straight down from `fromY`: the first solid, upward-facing surface, or `fallback`.
-// Moving things (instanced or skinned, such as cars and people), hidden or see-through things, and undersides don't count.
+// Moving things (instanced or skinned, such as cars and people), hidden or see-through things, and undersides don't
+// count — and neither do three meshes from water/water.js that would otherwise read as ordinary solid ground even
+// though none of them should, for a falling gib's purposes: 'Water', the surface itself (shaded to look like water,
+// but its material isn't actually flagged transparent, so without excluding it it's just solid ground sitting at
+// WATER_LEVEL); 'WaterMask', a stencil helper mesh covering the same area purely to keep the grid and map images off
+// the water, no more real than the water's own reflection; and 'Beach', the sloped sand a shore with a beach carries
+// down into the water (buildWaterBody) — real, solid geometry, unlike the other two, but it runs from just above
+// ground right down well past WATER_LEVEL to form the visible underwater slope, so honoring it as ground would let
+// gibs come to rest partway down a beach that's still very much water from here, same problem as the water's own
+// surface. (A shore with no beach has a vertical wall there instead — 'WaterBank' — which isn't excluded: unlike the
+// beach's slope it has no horizontal reach into the water for a straight-down ray to hit, so it was never an issue.)
+// The main ground mesh has a genuine hole cut under open water (rebuildGround, water/water.js) — nothing solid is left
+// there once all three are excluded — so the raycast correctly finds nothing and falls through to `fallback`.
+const NON_GROUND_NAMES = new Set(['Water', 'WaterMask', 'Beach']);
 const downRay = new THREE.Raycaster(), downOrigin = new THREE.Vector3(), DOWN = new THREE.Vector3(0, -1, 0), surfaceNormal = new THREE.Vector3();
 const isShown = o => { for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };
 function groundBelow(x, fromY, z, fallback) {
   downRay.set(downOrigin.set(x, fromY, z), DOWN);
   for (const hit of downRay.intersectObject(scene, true)) {
     const o = hit.object;
-    if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || !hit.face || !isShown(o)) continue;
+    if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || !hit.face || !isShown(o) || NON_GROUND_NAMES.has(o.name)) continue;
     const material = Array.isArray(o.material) ? o.material[hit.face.materialIndex] : o.material;
     if (!material || material.transparent || material.visible === false) continue;
     if (surfaceNormal.copy(hit.face.normal).transformDirection(o.matrixWorld).y < 0.5) continue;
@@ -137,9 +156,12 @@ function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null
         spinAxis, spin: 4 + Math.random()*14, color, born: now, resting: false,
       };
       if (typeof ground === 'function') {
-        // (the ground where it'll come down, going by how long it falls to the ground under where it started)
+        // (the ground where it'll come down, going by how long it falls to the ground under where it started — a
+        // surface height, same as the fixed-number `ground` case above, since updateGiblets adds its own half-size
+        // on top of this to find where it actually comes to rest; adding that here too used to double it up, floating
+        // every chunk that fell this way — a bee's flecks, now also anyone's or a car's — twice its own size too high)
         const fall = Math.max(0, (chunk.vy + Math.sqrt(chunk.vy*chunk.vy + 2*GRAVITY*(chunk.y - groundAtStart)))/GRAVITY);
-        chunk.ground = ground(chunk.x + chunk.vx*fall, chunk.z + chunk.vz*fall) + chunk.size*chunk.shape.y; // (sitting on it, not sunk in it)
+        chunk.ground = ground(chunk.x + chunk.vx*fall, chunk.z + chunk.vz*fall);
       }
       giblets.push(chunk);
     }
@@ -396,13 +418,15 @@ export function explode(at, height, colors, momentum = null) {
   const parts = [[colors.skin, 16, 0.075], [colors.top, 10, 0.08], [colors.pants, 9, 0.08], [colors.shoes, 4, 0.06],
     [colors.hair, colors.hair ? 5 : 0, 0.065], [new THREE.Color(EYE_COLOR), 2, 0.035]];
   BLOOD_COLORS.forEach(hex => parts.push([new THREE.Color(hex), 9, 0.028]));
-  spawnParts(at, height, parts, 1, at.y, momentum);
+  // (a function, not the fixed height they died at: a chunk thrown out over a bank or into water needs its own ground —
+  // or none at all, if it's water, which updateGiblets catches on the way down — rather than landing back at their feet's height)
+  spawnParts(at, height, parts, 1, (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK), momentum);
   spawnSplat(at, height, BLOOD_SPLAT_COLOR);
   playSound('gib', at);
 }
 // A few chunks of blood thrown from `at` (`height` tall), `count` of them whatever the gib amount setting is; `momentum` as for explode.
 export function spillBlood(at, height, count, momentum = null) {
-  spawnParts(at, height, Array.from({ length: count }, (_, k) => [new THREE.Color(BLOOD_COLORS[k % BLOOD_COLORS.length]), 1, 0.028]), 0.6, at.y, momentum, 1);
+  spawnParts(at, height, Array.from({ length: count }, (_, k) => [new THREE.Color(BLOOD_COLORS[k % BLOOD_COLORS.length]), 1, 0.028]), 0.6, (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK), momentum, 1);
 }
 // Bursts a bee in mid-air: a few flecks of its yellow, black and wing, `size` long — small and soft-thrown, each falling to
 // whatever ground is below it (`fallbackGround` where there's nothing), and no mark on it.
@@ -417,7 +441,7 @@ export function explodeBee(at, size, fallbackGround) {
 export function explodeCar(at, height, colors) {
   const parts = [[colors.paint, 32, 0.17], [new THREE.Color(CAR_TRIM_COLORS[0]), 16, 0.13], [new THREE.Color(CAR_TRIM_COLORS[1]), 10, 0.11]];
   SCORCH_COLORS.forEach(hex => parts.push([new THREE.Color(hex), 14, 0.055]));
-  spawnParts(at, height, parts, 2.2);
+  spawnParts(at, height, parts, 2.2, (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK)); // (its own ground per chunk, same reasoning as explode, above — wreckage can fly a lot further than a person's gibs, easily far enough to clear a bank into water)
   spawnSplat(at, height, SCORCH_SPLAT_COLOR, SOOT_SIZE, true);
   explodeFx(at, height);
   playSound('explosion', at);
@@ -494,6 +518,7 @@ export function boostWake(at, height, heading, dt) {
 
 const placed = new THREE.Object3D(), spinStep = new THREE.Quaternion(), dimmed = new THREE.Color();
 const sparkleAxis = new THREE.Vector3(0, 0, 1), sparkleRoll = new THREE.Quaternion(); // (a sparkle spins about the camera's view axis)
+const GIB_SPLASH_SPEED = 3.5; // launch speed of the single droplet flicked up where a falling gib goes under open water (updateGiblets, below) — under the same SPLASH_GRAVITY as any other spray, so it snaps back down just as heavily
 let lastTime = null;
 // how far through sinking away something is, 0 until it starts
 const sunk = (age, life) => age > life ? Math.min(1, (age - life)/SINK_TIME) : 0;
@@ -507,11 +532,20 @@ export function updateGiblets(t) {
   if (!S.showGibs || S.gibAmount <= 0) { giblets.length = 0; splats.length = 0; } // (turned off: what's already flying, or lying there, goes too)
   if (S.maxParticles <= 0) { fx.length = 0; softParticles.length = 0; } // (same, for particles)
   let drawn = 0;
-  giblets.forEach(g => {
-    if (!isNear(g)) return;
+  // backward, since a gib falling into water (below) is spliced out mid-loop — indices after it are untouched that way
+  for (let i = giblets.length - 1; i >= 0; i--) {
+    const g = giblets[i];
+    if (!isNear(g)) continue;
     if (!g.resting) {
       g.vy -= GRAVITY*dt;
       g.x += g.vx*dt; g.y += g.vy*dt; g.z += g.vz*dt;
+      if (g.y <= WATER_LEVEL) { // open water, not solid ground below it: no floor to land on, so it goes straight through — one droplet flicked up where it went under, and it's gone, rather than coming to rest on the lakebed
+        pushFx({ kind: 'spray', priority: 1, x: g.x, y: WATER_LEVEL, z: g.z,
+          vx: (Math.random() - 0.5)*1.5, vy: GIB_SPLASH_SPEED, vz: (Math.random() - 0.5)*1.5,
+          size: g.size*0.6, life: flightTime(GIB_SPLASH_SPEED) + 0.15, color: new THREE.Color(SPRAY_COLORS[Math.floor(Math.random()*SPRAY_COLORS.length)]), born: t });
+        giblets.splice(i, 1);
+        continue;
+      }
       g.quaternion.premultiply(spinStep.setFromAxisAngle(g.spinAxis, g.spin*dt));
       const floor = g.ground + g.size*g.shape.y;
       if (g.y < floor) {
@@ -536,7 +570,7 @@ export function updateGiblets(t) {
     chunkMesh.setMatrixAt(drawn, placed.matrix);
     chunkMesh.setColorAt(drawn, g.color);
     drawn++;
-  });
+  }
   chunkMesh.count = drawn;
   chunkMesh.instanceMatrix.needsUpdate = true;
   if (chunkMesh.instanceColor) chunkMesh.instanceColor.needsUpdate = true;
