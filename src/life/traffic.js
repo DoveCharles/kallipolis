@@ -5,7 +5,7 @@ import { scene, camera, renderer, computeWindowGlowFactor, SKY_ENV_MAP, Y_ROAD }
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { hashLicensePlate, hashNameToNumber, mulberry32, pointInPolygon } from '../core/math.js';
 import { footprintBounds } from '../buildings/footprints.js';
-import { getWaterRegion, WATER_LEVEL } from '../water/water.js';
+import { getVisibleWaterRegion, WATER_LEVEL } from '../water/water.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { roadLineWidths, createMeshBuilder, navRebuildOnHold } from '../roads/roads.js';
@@ -1137,7 +1137,7 @@ export function updateTraffic(t) {
       car.plate =  carPlate(car);
     }
     if (car.design != null) refreshCarTraits(car);
-    if (car === drivenCar) { if (car.sinking) sinkCar(car, dt); else driveByHand(car, dt); turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
+    if (car === drivenCar) { if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
     if (car.fuse != null) { burnFuse(car, dt); placeCar(car, i, designCounts); return; } // (about to blow: it neither drives nor turns)
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
@@ -1311,6 +1311,7 @@ function placeCar(car, i, designCounts) {
   const { matrix, rotation, scale, position, up } = placing;
   rotation.setFromAxisAngle(up, car.heading);
   if (car.sinking) rotation.multiply(tilting.setFromAxisAngle(sideways, car.sinking.pitch)); // (nose down, into the water)
+  if (car.sinking?.roll) rotation.multiply(rolling.setFromAxisAngle(forward, car.sinking.roll)); // (shaking as it climbs back out — see riseCar)
   if (car.bumpShake) rotation.multiply(rolling.setFromAxisAngle(forward, car.bumpShake)); // (rocking side to side while it hops, like a plane landing — see updateSpecialTraits)
   position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0), car.z); // (floatDrop: an aqua car settled into water — see updateFloating; bumpY: a terrible car hopping — see updateSpecialTraits)
   if (car.design != null && carMeshes[car.design]) {
@@ -1379,11 +1380,11 @@ function carModelOf(car) { return car.design != null ? carMeshes[car.design] : n
  */
 // what the engine sounds need of a car (see audio/engine.js): where its engine is, how big it is against an ordinary car
 // (bigger, lower), whether it's running — not stalled, sinking or burning — and its design, for the kind of engine
-const engineOf = car => ({ y: Y_ROAD + carHeight(car)/2, size: carLength(car)/(BOX_CAR_LENGTH*S.peopleSize), running: !car.sinking && !(car.stall > 0) && car.fuse == null, design: carModelOf(car)?.name });
+const engineOf = car => ({ y: Y_ROAD + carHeight(car)/2, size: carLength(car)/(BOX_CAR_LENGTH*S.peopleSize), running: !goingUnder(car) && !(car.stall > 0) && car.fuse == null, design: carModelOf(car)?.name });
 // Each car on the road, for the light its headlights throw (see streetlights.js): where it is, which way it faces and how
 // long it is. (A car going under the water has its lights put out.)
 export function forEachHeadlight(fn) {
-  cars.forEach(car => { if ((car.li >= 0 || car === drivenCar) && !car.sinking) fn(car.x, car.z, car.heading, carLength(car)); });
+  cars.forEach(car => { if ((car.li >= 0 || car === drivenCar) && !goingUnder(car)) fn(car.x, car.z, car.heading, carLength(car)); });
 }
 function carLength(car) { const cm = carModelOf(car); return (cm ? cm.length : car.length)*BOX_CAR_LENGTH*carScale(car); }
 
@@ -1992,7 +1993,7 @@ function driveByHand(car, dt) {
   hitBuildings(car, was, dt);
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
   if (car.traits?.aqua) updateFloating(car, dt);
-  else if (overOpenWater(car.x, car.z)) car.sinking = { drop: 0, fall: 0, pitch: 0, under: false };
+  else if (overOpenWater(car.x, car.z)) car.sinking = { drop: car.sinking?.drop ?? 0, fall: 0, pitch: car.sinking?.pitch ?? 0, under: false }; // (carries on from a part-risen car's own drop and pitch)
 }
 
 // ---- the driven car in the water: driven off the land (or off the side of a bridge) and over water — a water zone or a
@@ -2000,15 +2001,16 @@ function driveByHand(car, dt) {
 const SINK_GRAVITY = 20, SINK_DRAG = 1.5, SINK_PITCH = 0.7, SINK_PITCH_RATE = 2.5; // (units a second squared; the share of its speed the water takes each second; how far its nose goes down, in radians, and how fast)
 let openWater = { region: null, roads: null, inWater: null, onRoad: null };
 /**
- * Whether a point is over water with no road across it to hold a car up: in the water region (water zones and rivers),
- * and not on the road footprint (a bridge's deck, sidewalks and all). The two region testers are rebuilt whenever
- * either region is.
+ * Whether a point is over water with no road across it to hold a car up: in the visible water (water zones and rivers,
+ * less beach slope above the waterline — getVisibleWaterRegion), and not on the road footprint (a bridge's deck,
+ * sidewalks and all). Only the car's centre is tested, so it goes in once that's past the edge. The two region
+ * testers are rebuilt whenever either region is.
  * @param {number} x
  * @param {number} z
  * @returns {boolean}
  */
 function overOpenWater(x, z) {
-  const region = getWaterRegion(), roads = S.roadFootprint;
+  const region = getVisibleWaterRegion(), roads = S.roadFootprint;
   if (!region.length) return false;
   if (openWater.region !== region || openWater.roads !== roads)
     openWater = { region, roads, inWater: App.createRegionTester(region), onRoad: App.createRegionTester(roads) };
@@ -2069,7 +2071,8 @@ function updateFloating(car, dt) {
 /**
  * One frame of a driven car going down in the water: the keys do nothing now; it runs on along its heading as the water
  * slows it, falls faster and faster, and tips its nose down (or its tail, going backwards) — until it's a car's height
- * below the surface, when it's marked `under` for updateTraffic to blow up.
+ * below the surface, when it's marked `under` for updateTraffic to blow up. If its centre is carried back over land
+ * before it's reached the surface, it's marked `rising` instead (see riseCar).
  * @param {object} car - the driven car
  * @param {number} dt - seconds this frame
  * @returns {void}
@@ -2084,6 +2087,28 @@ function sinkCar(car, dt) {
   const goal = SINK_PITCH*(car.speed < 0 ? -1 : 1);
   sink.pitch += Math.max(-SINK_PITCH_RATE*dt, Math.min(SINK_PITCH_RATE*dt, goal - sink.pitch));
   if (sink.drop >= Y_ROAD - WATER_LEVEL + carHeight(car)) sink.under = true;
+  else if (sink.drop < Y_ROAD - WATER_LEVEL && !overOpenWater(car.x, car.z)) Object.assign(sink, { rising: true, fall: 0, from: Math.max(sink.drop, 1e-3), shakeTime: 0 });
+}
+
+// ---- a driven car back over land before it's touched the water: it's driven as normal again while it climbs back up
+const RISE_RATE = 12, RISE_ROLL = 0.06, RISE_SHAKES_PER_SECOND = 9, RISE_DONE = 0.005; // (the share of what's left it climbs each second, exponentially; how far it rocks, in radians, at the start; full rocks a second; how close to the road counts as back up)
+/** Whether a car is going under the water rather than climbing back out of it (see sinkCar, riseCar). */
+const goingUnder = car => car.sinking && !car.sinking.rising;
+/**
+ * One frame of a driven car climbing back up onto land (see sinkCar): its drop and pitch eased out quickly, while it
+ * rocks side to side about its length axis (sinking.roll, read by placeCar) — dying away as it nears the road. Once up,
+ * car.sinking is cleared.
+ * @param {object} car - the driven car
+ * @param {number} dt - seconds this frame
+ * @returns {void}
+ */
+function riseCar(car, dt) {
+  const sink = car.sinking, k = 1 - Math.exp(-RISE_RATE*dt);
+  sink.drop -= sink.drop*k;
+  sink.pitch -= sink.pitch*k;
+  sink.shakeTime += dt;
+  sink.roll = RISE_ROLL*Math.sqrt(sink.drop/sink.from)*Math.sin(sink.shakeTime*RISE_SHAKES_PER_SECOND*Math.PI*2);
+  if (sink.drop < RISE_DONE) car.sinking = null;
 }
 
 // ---- the driven car against buildings: each building's footprint (see see-through.js) is a wall it can't drive through
@@ -2223,7 +2248,7 @@ function boostSmoke(car, dt) {
 // Neither steers a car anywhere; they're drawn on top of whatever it's already doing (see placeCar).
 const LEGENDARY_SPARKLE_COLOR = 0xfff6c8, FOIL_SPARKLE_COLOR = 0xeaf6ff, LEGENDARY_SPARKLE_EVERY = 0.4; // (a net-1 glint's colour, a net-2 one's, and seconds between glints per net level)
 const TERRIBLE_RUST = new THREE.Color(0x2a1208); // the spots a terrible car's paint shows through, see applyCarRust — dark enough to read against most colours
-const TERRIBLE_BUMP_EVERY = 2.5, TERRIBLE_BUMP_RISE = 0.45, TERRIBLE_BUMP_HEIGHT = 0.12, TERRIBLE_BUMP_ROLL = 0.11/6; // (seconds between hops; how long one takes, eased up and down rather than snapping; how high; how far it rocks side to side, in radians)
+const TERRIBLE_BUMP_EVERY = 2.5, TERRIBLE_BUMP_RISE = 0.45, TERRIBLE_BUMP_HEIGHT = 0.12, TERRIBLE_BUMP_ROLL = 0.11/6, TERRIBLE_ROLL_DELAY = 0.5, TERRIBLE_ROLL_TIME = 0.25; // (seconds between hops; how long one takes, eased up and down rather than snapping; how high; how far it rocks side to side, in radians; how long after the hop starts it rocks, to line up with its smoke; how long one rock takes)
 const DEFAULT_HOLO = [0, 0, 0], DEFAULT_RUST = [0, 0]; // (no sheen, no rust spots — see carHoloOf/carRustOf, placeCar)
 /**
  * A legendary or terrible car's own effects this frame, from its net level (legendary minus terrible — see the note
@@ -2272,7 +2297,8 @@ function legendarySparkle(car, level, t, dt) {
 /** A net-terrible car's hop this frame (car.bumpY) and side-to-side rock (car.bumpShake, a roll angle about its own
  * length axis, read by placeCar — like a plane rocking its wings on landing, not a lateral slide) — a smooth eased arc
  * rather than a snap, TERRIBLE_BUMP_RISE seconds up and down, harder and a touch quicker the more negative the net —
- * and its smoke from underneath while it's actually off the ground.
+ * and its smoke from underneath while it's actually off the ground. The rock comes TERRIBLE_ROLL_DELAY after the hop
+ * starts, so it lands with the smoke.
  * @param {object} car
  * @param {number} level - how far below zero the net legendary/terrible level is (1 or more)
  * @param {number} dt
@@ -2283,7 +2309,8 @@ function terribleBump(car, level, dt) {
   car.terribleTimer = ((car.terribleTimer ?? 0) + dt) % TERRIBLE_BUMP_EVERY;
   const inAir = car.terribleTimer < cycle, phase = Math.min(1, car.terribleTimer/cycle);
   car.bumpY = inAir ? TERRIBLE_BUMP_HEIGHT*(1 + 0.25*(level - 1))*Math.sin(phase*Math.PI) : 0;
-  car.bumpShake = inAir ? TERRIBLE_BUMP_ROLL*(1 + 0.2*(level - 1))*Math.sin(phase*Math.PI*2) : 0;
+  const rollPhase = (car.terribleTimer - TERRIBLE_ROLL_DELAY)*(1 + 0.15*(level - 1))/TERRIBLE_ROLL_TIME;
+  car.bumpShake = rollPhase > 0 && rollPhase < 1 ? TERRIBLE_BUMP_ROLL*(1 + 0.2*(level - 1))*Math.sin(rollPhase*Math.PI*2) : 0;
   if (inAir) terribleSmoke({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), carWidth(car), dt, level, car.heading, car.speed);
 }
 const BLAST_THROW = 8; // (how fast the blast throws what it kills, units a second)

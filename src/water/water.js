@@ -207,6 +207,19 @@ function refreshWaterCache() {
   waterCache.beachZoneArea = beaches.length ? clipPolygons(ctUnion, beaches, []) : [];
 }
 export function getWaterRegion() { refreshWaterCache(); return waterCache.region; }
+// Where the water's surface actually shows: the water region less the stretch of beach slope still above the waterline
+// (BEACH_WATERLINE out from any park or beach beside it). Cached against the same key as the region.
+const sinkCache = { key: null, region: [] };
+export function getVisibleWaterRegion() {
+  refreshWaterCache();
+  if (sinkCache.key === waterCache.key) return sinkCache.region;
+  sinkCache.key = waterCache.key;
+  const { region, parkArea } = waterCache;
+  sinkCache.region = region.length && parkArea.length
+    ? clipPolygons(ClipperLib.ClipType.ctDifference, region, App.offsetPaths(parkArea, BEACH_WATERLINE, ClipperLib.JoinType.jtRound))
+    : region;
+  return sinkCache.region;
+}
 export function getBeachZoneArea() { refreshWaterCache(); return waterCache.beachZoneArea; }
 
 S.waterGroup = new THREE.Group(); S.waterGroup.name = 'Water'; scene.add(S.waterGroup);

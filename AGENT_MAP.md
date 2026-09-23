@@ -148,7 +148,7 @@ Format: `file` (size) purpose — key exports.
 
 ### src/water/
 - `bridges.js` (8K) ---------------------------------------------------------- bridges Where a road crosses water it carries on as a bridge: — exports: FOOTBRIDGE_TOP, refreshHighlights, styleZoneVisual
-- `water.js` (22K) ---------------------------------------------------------- water Water zones and rivers are one body of water: — exports: WATER_COLOR, WATER_LEVEL, WATER_BANK_TOP, WATER_BANK_BOTTOM, WATER_BANK_COLOR, WATER_TIME, applyWaterShader, getWaterRegion …
+- `water.js` (22K) ---------------------------------------------------------- water Water zones and rivers are one body of water: — exports: WATER_COLOR, WATER_LEVEL, WATER_BANK_TOP, WATER_BANK_BOTTOM, WATER_BANK_COLOR, WATER_TIME, applyWaterShader, getWaterRegion, getVisibleWaterRegion …
 
 ### src/zones/
 - `airport.js` (90K, **big**)  — exports: loadPlaneModel, generateAirportContent, updateAirports
