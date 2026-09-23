@@ -12,7 +12,7 @@ import { gibPartCentre } from './peopleModel.js';
 // is written once and left alone; only parts that are moving, sinking or coming back into range are rewritten.
 
 const PART_THROW = [1, 3.5], PART_LAUNCH = [2, 6], PART_SPIN = [2, 8]; // outward and upward speed (m/s) and spin (rad/s), before momentum
-const REST_LIFT_SHARE = 0.35; // how far above the ground a part's middle rests, against its radius
+const REST_LIFT_SHARE = 0.5; // how far above the ground a part's middle rests, against its thinnest side (a long limb lies flat)
 const SPLASH_SHARE = 0.5; // how big the droplet a part makes going under water is, against its radius
 
 const bodies = []; // oldest first: { column, born, pieces }
@@ -21,7 +21,7 @@ let model = null, lastTime = null, highestColumn = -1;
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 const random = ([lo, hi]) => lo + Math.random()*(hi - lo);
-const personMatrix = new THREE.Matrix4(), centre = new THREE.Vector3(), placed = new THREE.Matrix4();
+const personMatrix = new THREE.Matrix4(), centre = new THREE.Vector3(), extent = new THREE.Vector3(), placed = new THREE.Matrix4();
 const position = new THREE.Vector3(), scale = new THREE.Vector3(), turn = new THREE.Quaternion();
 
 // clear a body's instances out of every part mesh
@@ -66,7 +66,8 @@ export function throwBodyParts(personModel, i, at, momentum = null) {
     target.anim.array.set(anim, column*4); target.look.array.set(look, column*4); target.eyes.array.set(eyes, column*4);
     target.person.array[column] = column;
     target.anim.needsUpdate = target.look.needsUpdate = target.eyes.needsUpdate = target.person.needsUpdate = true;
-    const radius = gibPartCentre(target.samples, model.boneData, model.boneWidth, anim, centre)*worldScale;
+    const radius = gibPartCentre(target.samples, model.boneData, model.boneWidth, anim, centre, extent)*worldScale;
+    const thinnest = Math.min(extent.x, extent.y, extent.z)*worldScale;
     centre.applyMatrix4(personMatrix);
     // thrown out from their middle, or anywhere at all if it was right in the middle
     let dx = centre.x - at.x, dz = centre.z - at.z;
@@ -76,7 +77,7 @@ export function throwBodyParts(personModel, i, at, momentum = null) {
     const piece = { target, column, shown: false, x: centre.x, y: centre.y, z: centre.z,
       vx: dx*outward + (momentum?.x ?? 0), vy: random(PART_LAUNCH) + (momentum?.y ?? 0), vz: dz*outward + (momentum?.z ?? 0),
       quaternion: new THREE.Quaternion(), spinAxis: new THREE.Vector3().randomDirection(), spin: random(PART_SPIN),
-      size: radius, lift: radius*REST_LIFT_SHARE, resting: false, ground: fromGround,
+      size: radius, lift: thinnest*REST_LIFT_SHARE, resting: false, ground: fromGround,
       base: new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z).multiply(personMatrix) };
     piece.ground = landingGround(piece, fromGround, groundAt);
     body.pieces.push(piece);

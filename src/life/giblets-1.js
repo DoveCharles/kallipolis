@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { scene, camera, Y_PATH } from '../core/scene.js';
+import { scene, camera, Y_PATH, computeWindowGlowFactor } from '../core/scene.js';
 import { S } from '../core/shared.js';
 import { playSound } from '../audio/sfx.js';
 import { WATER_LEVEL } from '../water/water.js';
@@ -51,15 +51,15 @@ function instancedMesh(geometry, material, capacity, name) {
   scene.add(mesh);
   return mesh;
 }
-// (drawn with a stronger polygon offset than the flat surfaces they land on — grass -2, pavement and roads -4 — which
-// are pulled towards the camera so they don't flicker against each other, and would otherwise hide a small chunk lying on them)
-const chunkMesh = instancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 0.55, flatShading: true, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 }), GIBLETS_MAX, 'Giblets');
+const chunkMesh = instancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 0.55, flatShading: true }), GIBLETS_MAX, 'Giblets');
 chunkMesh.castShadow = true; chunkMesh.receiveShadow = true;
 chunkMesh.setColorAt(0, new THREE.Color()); // (gives it its per-chunk colors)
 // blood chunks: their own mesh so they can go without shadows (too small to see one) and go sooner
-const bloodChunkMesh = instancedMesh(chunkMesh.geometry, chunkMesh.material, BLOOD_CHUNKS_MAX, 'BloodChunks');
-bloodChunkMesh.receiveShadow = true;
-bloodChunkMesh.setColorAt(0, new THREE.Color());
+// (blood chunks as spheres, before they were drawn as points — see BloodPointPool; to go back, restore these three lines
+// and bloodPool's ChunkPool below)
+// const bloodChunkMesh = instancedMesh(chunkMesh.geometry, chunkMesh.material, BLOOD_CHUNKS_MAX, 'BloodChunks');
+// bloodChunkMesh.receiveShadow = true;
+// bloodChunkMesh.setColorAt(0, new THREE.Color());
 const splatMesh = instancedMesh(new THREE.CircleGeometry(1, 12).rotateX(-Math.PI/2),
   new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), SPLATS_MAX, 'Splats');
 splatMesh.receiveShadow = true;
@@ -432,8 +432,7 @@ export function explodeBee(at, size, fallbackGround) {
 // and thrown much further than a person's (see spawnParts' `power`), in its paint and (standing in for glass, trim and
 // tires) CAR_TRIM_COLORS, sooty flecks, a big scorch mark rather than blood, and a fireball with smoke (see explodeFx).
 export function explodeCar(at, height, colors) {
-  // (a wreck — a car or an aircraft, whose own body comes apart in blocks: see car-wrecks.js — needs only its glass and
-  // a few scorched flecks)
+  // (a car thrown apart into its own hulk and wheels — see car-wrecks.js — needs only a few scorched flecks and its glass)
   const parts = colors.wrecked ? [[new THREE.Color(CAR_GLASS_COLOR), WRECK_GLASS_CHUNKS, 0.06]]
     : [[colors.paint, 32, 0.17], [new THREE.Color(CAR_TRIM_COLORS[0]), 16, 0.13], [new THREE.Color(CAR_TRIM_COLORS[1]), 10, 0.11]];
   SCORCH_COLORS.forEach(hex => parts.push([new THREE.Color(hex), colors.wrecked ? WRECK_SCORCH_CHUNKS : 14, 0.055]));
@@ -575,7 +574,83 @@ class ChunkPool {
     range[0] = Infinity; range[1] = -1;
   }
 }
-const fleshPool = new ChunkPool(chunkMesh, GIBLETS_MAX), bloodPool = new ChunkPool(bloodChunkMesh, BLOOD_CHUNKS_MAX, BLOOD_LIFE_SHARE);
+// Blood chunks as round points: one vertex each, always facing the camera, unlit — no matrix, no lighting, a fraction
+// of a sphere's vertices. Same ring and upload-only-what-changed scheme as ChunkPool, same physics (fallStep). Being
+// unlit, they're dimmed towards night by the same factor the lit windows come on by.
+const BLOOD_NIGHT_DIM = 0.6; // how much darker blood is at full night
+class BloodPointPool {
+  constructor(capacity, lifeShare = 1) {
+    Object.assign(this, { capacity, lifeShare, slots: new Array(capacity).fill(null), cursor: 0, used: 0 });
+    const geometry = new THREE.BufferGeometry();
+    this.positions = new THREE.BufferAttribute(new Float32Array(capacity*3), 3).setUsage(THREE.DynamicDrawUsage);
+    this.sizes = new THREE.BufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage);
+    this.colors = new THREE.BufferAttribute(new Float32Array(capacity*3), 3);
+    geometry.setAttribute('position', this.positions);
+    geometry.setAttribute('pointSize', this.sizes);
+    geometry.setAttribute('color', this.colors);
+    this.material = new THREE.PointsMaterial({ vertexColors: true, sizeAttenuation: true });
+    this.material.onBeforeCompile = shader => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float pointSize;')
+        .replace('gl_PointSize = size;', 'gl_PointSize = size*pointSize;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (length(gl_PointCoord - 0.5) > 0.5) discard;');
+    };
+    this.material.customProgramCacheKey = () => 'blood-points';
+    this.points = new THREE.Points(geometry, this.material);
+    this.points.frustumCulled = false;
+    this.points.name = 'BloodPoints';
+    scene.add(this.points);
+    this.range = [Infinity, -1]; this.colorRange = [Infinity, -1];
+  }
+  life() { return GIBLET_LIFE*S.gibLifetime*this.lifeShare; }
+  touch(range, slot) { range[0] = Math.min(range[0], slot); range[1] = Math.max(range[1], slot); }
+  add(chunk) {
+    const slot = this.cursor;
+    this.cursor = (slot + 1) % this.capacity;
+    this.used = Math.max(this.used, slot + 1);
+    chunk.shown = false;
+    this.slots[slot] = chunk;
+    this.sizes.array[slot] = 0;
+    this.colors.setXYZ(slot, chunk.color.r, chunk.color.g, chunk.color.b);
+    this.touch(this.colorRange, slot); this.touch(this.range, slot);
+  }
+  hide(slot) { this.sizes.array[slot] = 0; this.touch(this.range, slot); }
+  remove(slot) { this.slots[slot] = null; this.hide(slot); }
+  clear() { for (let i=0;i<this.used;i++) if (this.slots[i]) this.remove(i); }
+  update(t, dt) {
+    const life = this.life();
+    for (let i=0;i<this.used;i++) {
+      const g = this.slots[i];
+      if (!g) continue;
+      const age = t - g.born;
+      if (age > life + SINK_TIME) { this.remove(i); continue; }
+      if (!isNear(g)) { if (g.shown) { this.hide(i); g.shown = false; } continue; }
+      if (!fallStep(g, dt, t, g.size*0.5, g.size*0.6)) { this.remove(i); continue; }
+      const sink = sunk(age, life);
+      if (g.resting && !sink && g.shown) continue; // (lying still: already where it's drawn)
+      this.positions.setXYZ(i, g.x, g.y - sink*g.size, g.z);
+      this.sizes.array[i] = 2*g.size*(1 - sink); // (a point's size is its diameter)
+      this.touch(this.range, i);
+      g.shown = true;
+    }
+    // (world size to pixels: three.js scales a point by half the canvas height over its depth; the rest is the field of view)
+    this.material.size = 1/Math.tan(THREE.MathUtils.degToRad(camera.fov)/2);
+    this.material.color.setScalar(1 - BLOOD_NIGHT_DIM*computeWindowGlowFactor(S.sunElevation));
+    this.points.geometry.setDrawRange(0, this.used);
+    this.flush(this.positions, this.range, 3); this.flush(this.sizes, this.range, 1, true);
+    this.flush(this.colors, this.colorRange, 1*3);
+  }
+  flush(attribute, range, size, last = false) {
+    if (range[1] < 0) return;
+    attribute.clearUpdateRanges();
+    attribute.addUpdateRange(range[0]*size, (range[1] - range[0] + 1)*size);
+    attribute.needsUpdate = true;
+    if (last || attribute === this.colors) { range[0] = Infinity; range[1] = -1; }
+  }
+}
+const fleshPool = new ChunkPool(chunkMesh, GIBLETS_MAX), bloodPool = new BloodPointPool(BLOOD_CHUNKS_MAX, BLOOD_LIFE_SHARE);
+// const bloodPool = new ChunkPool(bloodChunkMesh, BLOOD_CHUNKS_MAX, BLOOD_LIFE_SHARE); // (the spheres: see bloodChunkMesh)
 export function fallStep(piece, dt, t, lift, splashSize = lift) {
   if (piece.resting) return true;
   piece.vy -= GRAVITY*dt;

@@ -1147,9 +1147,10 @@ function gibSamples(index, position, joints, weights) {
  * @param {number} boneWidth - texels per row of it
  * @param {ArrayLike<number>} anim - the instanceAnim values: row A, row B, how far blended towards A
  * @param {THREE.Vector3} centre - set to the part's middle
+ * @param {THREE.Vector3} [size] - set to the size of the box around it
  * @returns {number} its radius
  */
-export function gibPartCentre(samples, boneData, boneWidth, anim, centre) {
+export function gibPartCentre(samples, boneData, boneWidth, anim, centre, size = null) {
   const count = samples.length/GIB_SAMPLE_STRIDE, points = new Float32Array(count*3);
   const rows = [[Math.floor(anim[0]), anim[2]], [Math.floor(anim[1]), 1 - anim[2]]];
   centre.set(0, 0, 0);
@@ -1172,7 +1173,12 @@ export function gibPartCentre(samples, boneData, boneWidth, anim, centre) {
   }
   if (count) centre.multiplyScalar(1/count);
   let radius = 0;
-  for (let k=0;k<count;k++) radius = Math.max(radius, Math.hypot(points[k*3] - centre.x, points[k*3+1] - centre.y, points[k*3+2] - centre.z));
+  const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
+  for (let k=0;k<count;k++) {
+    radius = Math.max(radius, Math.hypot(points[k*3] - centre.x, points[k*3+1] - centre.y, points[k*3+2] - centre.z));
+    for (let c=0;c<3;c++) { low[c] = Math.min(low[c], points[k*3 + c]); high[c] = Math.max(high[c], points[k*3 + c]); }
+  }
+  if (size) size.set(high[0] - low[0], high[1] - low[1], high[2] - low[2]);
   return radius;
 }
 

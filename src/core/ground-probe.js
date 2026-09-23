@@ -65,7 +65,8 @@ export function groundBelow(x, fromY, z, fallback) {
     const o = hit.object;
     if (!hit.face || NON_GROUND_NAMES.has(o.name) || !isShown(o)) continue;
     const material = Array.isArray(o.material) ? o.material[hit.face.materialIndex] : o.material;
-    if (!material || material.transparent || material.visible === false) continue;
+    // (see-through only counts as not there when it's mostly see-through: a dirt path is 'transparent' only for its faded edges)
+    if (!material || (material.transparent && material.opacity < 0.5) || material.visible === false) continue;
     if (normal.copy(hit.face.normal).transformDirection(o.matrixWorld).y < MIN_UPWARD_NORMAL) continue;
     return hit.point.y;
   }

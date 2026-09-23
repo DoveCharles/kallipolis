@@ -19,6 +19,7 @@ import { strikeLightning } from './lightning.js';
 import { updateEngines } from '../audio/engine.js';
 import { explodeCar, splashCar, aquaWake, boostWake, puffSmoke, sparks, burnFx, tyreSmoke, igniteFx, engineSmoke, terribleSmoke, sparkleFx } from './giblets.js';
 import { playSound } from '../audio/sfx.js';
+import { buildCarWreck, throwCarWreck } from './car-wrecks.js';
 import { carTypeOf, vanityChanceOf, vanityPlatesOf } from './car-types.js';
 import { driving, controlInput, startDriving, endDriving } from './possession.js';
 
@@ -153,7 +154,14 @@ export async function loadCarModels() {
     if (designs.length) { carMeshes = designs.map(makeCarMesh); designNumbers = designs.map(() => 0); }
   } catch (err) {
     console.warn('Blockout: the car models failed to build; traffic uses the built-in box car', err);
+    return;
   }
+  // (a design whose wreck fails to build just blows up into chunks, as the box car does)
+  const paintSlot = CAR_SLOT_NAMES.indexOf(CAR_PAINT_MATERIAL) + 1;
+  carMeshes.forEach(cm => {
+    try { cm.wreck = buildCarWreck(cm.mesh.geometry, paintSlot, cm.name); }
+    catch (err) { console.warn(`Blockout: the ${cm.name} wreck failed to build`, err); }
+  });
 }
 
 /**
@@ -2433,10 +2441,16 @@ function killCar(i) {
   App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
   if (followedCar === i) stopFollowingCar();
   const paint = new THREE.Color(...(carModelOf(car)?.bodyColor ?? car.paint));
+  // its body in blocks and its wheels, where it has a design (see car-wrecks.js); explodeCar adds its glass and flecks
+  const { matrix, rotation, scale, position, up } = placing;
+  position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0), car.z);
+  matrix.compose(position, rotation.setFromAxisAngle(up, car.heading), scale.setScalar(carScale(car)));
+  throwCarWreck(carModelOf(car)?.wreck, matrix, car.paint);
+  const wrecked = true;
   if (/bus/i.test(carModelOf(car)?.name ?? '')) { // (a bus goes up in two blasts, one at each end)
     const offset = carLength(car)*0.25;
-    [-1, 1].forEach(end => explodeCar({ x: car.x + Math.sin(car.heading)*offset*end, y: Y_ROAD, z: car.z + Math.cos(car.heading)*offset*end }, carHeight(car), { paint }));
-  } else explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint });
+    [-1, 1].forEach(end => explodeCar({ x: car.x + Math.sin(car.heading)*offset*end, y: Y_ROAD, z: car.z + Math.cos(car.heading)*offset*end }, carHeight(car), { paint, wrecked }));
+  } else explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint, wrecked });
   cars.splice(i, 1);
   if (followedCar > i) followedCar--; // (a car ahead of it in the array, still being followed, keeps its place)
 }

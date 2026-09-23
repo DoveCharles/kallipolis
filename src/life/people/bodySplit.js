@@ -2,22 +2,26 @@
 // Pure geometry, no three.js, so it can be run and checked on its own.
 //
 // 1. By material first: shirt (Top, Tummy bands) is the Chest, trousers (Pants) the Hips, the face's materials the
-//    Head; sleeve bands go with their arm, leg bands and shoes with their leg. Skin goes by the bone it mostly moves
-//    with (head, arm, leg, else chest). Left and right come from the bone, or which side of the body it's on.
+//    Head; the sleeve bands nearest the body (ARM_UPPER_BANDS) with the upper arm, the rest with the forearm; the leg bands nearest the body (LEG_THIGH_BANDS) with the thigh, the rest and
+//    the shoes with the lower leg. Skin goes by the bone it mostly moves with (head, upper arm, forearm, hand, thigh,
+//    lower leg, else chest). Left and right come from the bone, or which side of the body it's on.
 // 2. Islands: vertices at the same place count as joined (the mesh is split at every material and at the mirror
 //    seam). An island under minIslandShare of its part joins the part it touches most; one touching nothing is
 //    hidden inside the body and dropped — unless it's in the Head, whose eyes and mouth are separate meshes.
 // 3. Caps: every hole the split opened (edges joined in the whole body but open in the part) is closed with a fan of
 //    copies of its rim vertices, which the caller gives a flesh color. Holes the model already had are left alone.
 
-export const BODY_PARTS = ['Head', 'Chest', 'Hips', 'ArmL', 'ArmR', 'LegL', 'LegR'];
+export const BODY_PARTS = ['Head', 'Chest', 'Hips', 'UpperArmL', 'UpperArmR', 'ForearmL', 'ForearmR', 'HandL', 'HandR', 'ThighL', 'ThighR', 'ShinL', 'ShinR'];
 const FACE_SLOTS = /^(White|Black|Eyelashes|Lips)$/;
-const LEG_BONE = /^(Thigh|Knee|Leg|Foot|Toe)/;
+const THIGH_BONE = /^Thigh/, SHIN_BONE = /^(Knee|Leg|Foot|Toe)/;
+const UPPER_ARM_BONE = /^Shoulder/, FOREARM_BONE = /^Elbow/; // (every other arm bone is the hand's)
+const ARM_UPPER_BANDS = 2; // sleeve bands (Sleeve1, Sleeve2…, 1 nearest the body) that come off with the upper arm; the rest with the forearm
+const LEG_THIGH_BANDS = 1; // leg bands (Leg1, Leg2…, 1 nearest the body) that come off with the thigh; the rest with the lower leg
 
 /**
  * Which part a triangle belongs to, from its material and the region of the body its bones put it in.
  * @param {string} slot - its material
- * @param {string} region - 'Head', 'ArmL', 'ArmR', 'LegL', 'LegR' or 'Torso'
+ * @param {string} region - 'Head', 'UpperArmL/R', 'ForearmL/R', 'HandL/R', 'ThighL/R', 'ShinL/R' or 'Torso'
  * @param {string} side - 'L' or 'R'
  * @returns {string} one of BODY_PARTS
  */
@@ -25,8 +29,11 @@ function partFor(slot, region, side) {
   if (region === 'Head' || FACE_SLOTS.test(slot)) return 'Head';
   if (slot === 'Top' || slot.startsWith('Tummy')) return 'Chest';
   if (slot === 'Pants') return 'Hips';
-  if (slot === 'Shoes' || /^Leg\d/.test(slot)) return 'Leg' + side;
-  if (slot.startsWith('Sleeve')) return 'Arm' + side;
+  if (slot === 'Shoes') return 'Shin' + side;
+  const band = /^Leg(\d+)$/.exec(slot);
+  if (band) return (Number(band[1]) <= LEG_THIGH_BANDS ? 'Thigh' : 'Shin') + side;
+  const sleeve = /^Sleeve(\d+)$/.exec(slot);
+  if (sleeve) return (Number(sleeve[1]) <= ARM_UPPER_BANDS ? 'UpperArm' : 'Forearm') + side;
   return region === 'Torso' ? 'Chest' : region;
 }
 
@@ -67,8 +74,9 @@ export function splitBody({ position, index, joints, weights, slotOf, boneNames,
   const regionOf = joint => {
     const name = boneNames[joint] || '', side = name.slice(-1);
     if (inHead[joint]) return 'Head';
-    if (inArm[joint]) return 'Arm' + side;
-    if (LEG_BONE.test(name)) return 'Leg' + side;
+    if (inArm[joint]) return (UPPER_ARM_BONE.test(name) ? 'UpperArm' : FOREARM_BONE.test(name) ? 'Forearm' : 'Hand') + side;
+    if (THIGH_BONE.test(name)) return 'Thigh' + side;
+    if (SHIN_BONE.test(name)) return 'Shin' + side;
     return 'Torso';
   };
   const region = new Array(vertexCount);
@@ -83,7 +91,7 @@ export function splitBody({ position, index, joints, weights, slotOf, boneNames,
     const a = index[t*3], b = index[t*3+1], c = index[t*3+2];
     const r = region[b] === region[c] ? region[b] : region[a];
     const x = position[a*3] + position[b*3] + position[c*3];
-    const side = /^(Arm|Leg)[LR]$/.test(r) ? r.slice(-1) : x*leftSign >= 0 ? 'L' : 'R';
+    const side = /^(UpperArm|Forearm|Hand|Thigh|Shin)[LR]$/.test(r) ? r.slice(-1) : x*leftSign >= 0 ? 'L' : 'R';
     partOf[t] = BODY_PARTS.indexOf(partFor(slotOf[a], r, side));
   }
   // ---- 2. islands

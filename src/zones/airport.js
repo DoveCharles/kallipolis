@@ -5,6 +5,7 @@ import { Y_ZONE_GROUND, Y_PARK, camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { startFlying, endFlying } from '../life/possession.js';
 import { explodeCar } from '../life/giblets.js';
+import { buildCraftWreck, throwWreck } from '../life/car-wrecks.js';
 import { stepFlight, autopilot, makeHand, cruiseSpeed, chaseBehind, touchdownBounce } from '../life/flight.js';
 import { mulberry32, lerp, polygonArea, pointInPolygon, centroid } from '../core/math.js';
 import { resolveParkTint, resolveGrassNoiseStrength } from '../core/splines.js';
@@ -327,7 +328,10 @@ export async function loadPlaneModel() {
   gltf.scene.traverse(o => { if (o.isMesh && o.material && PLANE_PAINT.includes(o.material.name)) paint.set(o.material.name, o.material); });
   const box = restingBox(gltf.scene), size = box.getSize(new THREE.Vector3());
   if (!(size.x > 0)) { console.warn('Blockout: the aeroplane model is empty; aircraft use the built-in box airliner'); return; }
-  planeModel = { root: gltf.scene, span: size.x, middle: box.getCenter(new THREE.Vector3()), floor: box.min.y, paint };
+  planeModel = { root: gltf.scene, span: size.x, middle: box.getCenter(new THREE.Vector3()), floor: box.min.y, paint, wreck: null };
+  // (what it comes apart into when it crashes: see crashAircraft)
+  try { planeModel.wreck = buildCraftWreck(gltf.scene, PLANE_PAINT, 'Plane'); }
+  catch (err) { console.warn('Blockout: the aeroplane wreck failed to build', err); }
   S.zones.forEach(zone => { if (zone.zoneType === 'airport') App.subdivideZone(zone); });
 }
 // How big the aeroplane is with its shape keys wound off — which is not what Box3.setFromObject would say, because a
@@ -399,6 +403,8 @@ function buildAircraft(span, rng, jet) {
     if (o.morphTargetInfluences && o.morphTargetDictionary) parts.push({ at: o.morphTargetInfluences, keys: o.morphTargetDictionary });
   });
   group.userData.span = span;
+  group.userData.model = model; // (for its wreck: see crashAircraft)
+  group.userData.livery = [livery.Col1.color.toArray(), livery.Col2.color.toArray()];
   group.userData.surfaces = { span, parts, wheels: 0, right: 0, left: 0, settled: false };
   return group;
 }
@@ -1234,6 +1240,7 @@ function flyByHand(flight, dt) {
 const CRASH_ANGLE = Math.PI/4, WRECK_TIME = 25; // (how steeply it can meet the ground; seconds before a replacement is on its stand)
 const BLAST_RADIUS = 0.5, BLAST_KILL_REACH = 1.5;  // (of its wingspan, the fireball's size; and how far past that anyone caught in it dies, as a multiple)
 const WRECK_COLOR = new THREE.Color(0xeceff2);
+const CRAFT_WRECK_POWER = 1.5; // how much harder an aircraft's blocks are thrown than a car's
 /**
  * Blow up an aircraft that has hit the ground too steeply — a blast along its length, marking the ground — killing whoever
  * is within BLAST_KILL_REACH times the size of it, and take it out of the player's hands. A new one is on its stand after
@@ -1245,7 +1252,13 @@ function crashAircraft(flight) {
   const plane = flight.plane, along = { x: Math.sin(plane.rotation.y)*flight.size*0.3, z: Math.cos(plane.rotation.y)*flight.size*0.3 };
   const at = plane.position, radius = flight.size*BLAST_RADIUS*BLAST_KILL_REACH;
   // (on the ground it was over, so the scorch marks lie on it)
-  [-1, 0, 1].forEach(k => explodeCar({ x: at.x + along.x*k, y: Y_TARMAC, z: at.z + along.z*k }, flight.size*0.15, { paint: WRECK_COLOR }));
+  // (its body in blocks, as a car's is — see car-wrecks.js — with the blasts adding its glass and flecks)
+  if (plane.userData.model && planeModel?.wreck) {
+    plane.updateMatrixWorld(true);
+    const [paint, trim] = plane.userData.livery;
+    throwWreck(planeModel.wreck, plane.userData.model.matrixWorld, paint, { trim, power: CRAFT_WRECK_POWER, groundFrom: Y_TARMAC });
+  }
+  [-1, 0, 1].forEach(k => explodeCar({ x: at.x + along.x*k, y: Y_TARMAC, z: at.z + along.z*k }, flight.size*0.15, { paint: WRECK_COLOR, wrecked: true }));
   App.strikeWithAircraft?.({ x: at.x, y: Y_TARMAC, z: at.z, heading: 0, halfLength: radius, halfWidth: radius, below: radius, above: radius, speed: Infinity });
   if (flown === flight) { flown = null; endFlying(); }
   // a camera on it stays where it blew up, following nothing
