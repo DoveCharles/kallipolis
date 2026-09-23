@@ -1414,7 +1414,7 @@ function sitting(p, here, dt) {
       if (Math.abs(wrapAngle(facing - p.heading)) > 0.15 || p.oneShot) break;
       here.stage = 'sit';
       p.pose = deskPose(seat);
-      if (p.pose === 'Eating') serveMeal(p);                         // (a plate on the table and a fork in hand)
+      if (p.pose === 'Eating') serveMeal(p, seat.diner.top);                 // (a plate on the table and a fork in hand)
       here.timer = (20 + peopleRng()*60)*p.traits.patience;
       here.spell = spellAt(p.pose);
       p.seatLift = seat.y - p.y - clipNamed('Sit1').seatY*modelScale(p);

@@ -1030,7 +1030,8 @@ function furnish(key) {
       dining = { x, z };
       // (in a student flat, whatever chairs came to hand)
       const odd = ['Chair', 'Chair2', 'Chair3'].filter(name => F[name]), first = scruffy ? Math.floor(tint()*odd.length) : 0;
-      chairs.forEach((c, k) => put(scruffy ? odd[(first + k) % odd.length] : 'Chair', c.x, c.z, c.angle, { diner: true }));
+      // (each chair knows how high the table top is, for the plate of whoever sits at it: see serveMeal in peopleHolding.js)
+      chairs.forEach((c, k) => put(scruffy ? odd[(first + k) % odd.length] : 'Chair', c.x, c.z, c.angle, { diner: table.h }));
       break;
     }
   }
@@ -1182,7 +1183,8 @@ function furnish(key) {
   const c = Math.cos(room.rotation.y), s = Math.sin(room.rotation.y);
   home.seats = home.seats.map(seat => {
     const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z));
-    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: seat.sofa, diner: seat.diner, by: null };
+    const diner = seat.diner ? { top: room.localToWorld(new THREE.Vector3(seat.x, seat.diner, seat.z)).y } : false; // (the table top's height)
+    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: seat.sofa, diner, by: null };
   });
   // and the TV's screen, in the world (switched on by whoever sits down in front of it: see watchingTV)
   if (tv.screen) {
