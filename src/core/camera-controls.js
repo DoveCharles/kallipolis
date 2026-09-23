@@ -13,7 +13,13 @@ export const controls = {
   goalTarget: new THREE.Vector3(0, 8, 0),
   // set while the view's held in one place (inside a building: see buildings/interior.js) — no orbiting, panning or zooming
   locked: false,
+  // set while the camera rides round something (a room's walls: see buildings/interior.js), locked or not: { place,
+  // rise, zoom } — place from which way round it is (theta) to how far out and how high ({ radius, phi }), rise(dy) to
+  // take it up or down for a drag of dy, and zoom(factor) to zoom by the factor zoomBy's given — orbiting going round and
+  // up and down, zooming zooming, and nothing else
+  hug: null,
   orbit(dx, dy) {
+    if (this.hug) { this.goalTheta -= dx * 0.006; this.hug.rise(dy); return; }
     if (this.locked) return;
     this.goalTheta -= dx * 0.006;
     this.goalPhi -= dy * 0.006;
@@ -32,6 +38,7 @@ export const controls = {
   zoom(deltaY) { this.zoomBy(1 + deltaY * 0.001); },
   // straight multiplier, for a pinch: the radius scales with how far the two fingers have closed or spread
   zoomBy(factor) {
+    if (this.hug) { this.hug.zoom(factor); return; }
     if (this.locked) return;
     this.goalRadius = Math.max(this.minRadius, Math.min(1800, this.goalRadius * factor));
   },
@@ -47,6 +54,11 @@ export const controls = {
     this.radius += (this.goalRadius - this.radius) * a;
     this.theta += (this.goalTheta - this.theta) * a;
     this.phi += (this.goalPhi - this.phi) * a;
+    // (from the eased theta, not eased themselves, so the camera keeps to its path even as it goes round a corner)
+    if (this.hug) {
+      ({ radius: this.radius, phi: this.phi } = this.hug.place(this.theta));
+      ({ radius: this.goalRadius, phi: this.goalPhi } = this.hug.place(this.goalTheta));
+    }
     this.target.lerp(this.goalTarget, a);
     const x = this.target.x + this.radius * Math.sin(this.phi) * Math.sin(this.theta);
     const y = this.target.y + this.radius * Math.cos(this.phi);
