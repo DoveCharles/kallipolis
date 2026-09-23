@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
 import { explode } from '../giblets.js';
+import { throwBodyParts } from './peopleGibs.js';
 import { babble, nextSyllable } from '../../audio/voices.js';
 import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
 import { footstep } from '../../audio/footsteps.js';
@@ -649,21 +650,24 @@ function killPerson(i, by = 'player', momentum = null) {
   endActivity(p);
   p.crossStage = null; // don't leave a car yielding forever for someone who can no longer finish crossing
   p.jc = null;
-  const colors = { skin: new THREE.Color(0xf2d33c), top: new THREE.Color(), pants: new THREE.Color(), shoes: new THREE.Color(0x222226), hair: null };
-  if (personModel) {
-    const colorFrom = (part, color) => {
-      const o = ((2 + PERSON_TRAIT_COLORS.indexOf(part))*PEOPLE_MAX + i)*4, data = personModel.traitData;
-      return color.setRGB(data[o], data[o+1], data[o+2]);
-    };
-    colorFrom('Skin', colors.skin);
+  // their own body parts, where the model's loaded and they're near enough to see it, else chunks in all their colors
+  const at = { x: p.x, y: p.y, z: p.z }, parts = throwBodyParts(personModel, i, at, momentum);
+  const colors = { skin: new THREE.Color(0xf2d33c), top: new THREE.Color(), pants: new THREE.Color(), shoes: new THREE.Color(0x222226), hair: null, eyes: !parts };
+  const colorFrom = (part, color) => {
+    const o = ((2 + PERSON_TRAIT_COLORS.indexOf(part))*PEOPLE_MAX + i)*4, data = personModel.traitData;
+    return color.setRGB(data[o], data[o+1], data[o+2]);
+  };
+  if (personModel) colorFrom('Skin', colors.skin);
+  if (parts) colors.skin = colors.top = colors.pants = colors.shoes = null;
+  else if (personModel) {
     colorFrom('Top', colors.top); colorFrom('Pants', colors.pants); colorFrom('Shoes', colors.shoes);
     if (personModel.headLayers.some(layer => layer.hair && layer.of[i] >= 0)) colors.hair = colorFrom('Hair', new THREE.Color());
   } else {
     peopleMesh.getColorAt(i, colors.top);
     colors.pants.copy(colors.top);
   }
-  Object.values(colors).forEach(color => color?.lerp(new THREE.Color(0x550000), 0.4)); //make gibs darker, less saturated
-  explode({ x: p.x, y: p.y, z: p.z }, 1.7*p.height*S.peopleSize, colors, momentum);
+  Object.values(colors).forEach(color => color?.isColor && color.lerp(new THREE.Color(0x550000), 0.4)); //make gibs darker, less saturated
+  explode(at, 1.7*p.height*S.peopleSize, colors, momentum);
   bystandersReactToDeath(p);
   p.mode = 'dead';
   p.train = null;

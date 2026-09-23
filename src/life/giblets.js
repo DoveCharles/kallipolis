@@ -3,6 +3,7 @@ import { scene, camera, Y_PATH } from '../core/scene.js';
 import { S } from '../core/shared.js';
 import { playSound } from '../audio/sfx.js';
 import { WATER_LEVEL } from '../water/water.js';
+import { groundBelow } from '../core/ground-probe.js';
 
 // ============================================================ giblets
 // Two separate things share this file, each with its own setting group in S (see core/shared.js): gibs — what's left of
@@ -19,7 +20,8 @@ import { WATER_LEVEL } from '../water/water.js';
 // (splashFx), tyre and engine smoke, a burning car's flames, sparks off metal, a legendary car's sparkle shimmer, and so
 // on. Gated by S.maxParticles (0 switches them off) and drawn out to S.particleRange. The bursty ones (fire, smoke,
 // sparks, spray, foam) are one instanced mesh; the soft camera-facing ones (glow, drifting smoke, sparkle) three more.
-const GIBLETS_MAX = 1500, SPLATS_MAX = 48;
+const GIBLETS_MAX = 1500, BLOOD_CHUNKS_MAX = 1000, SPLATS_MAX = 48;
+const BLOOD_LIFE_SHARE = 0.25; // how long a blood chunk lasts, against the other gibs
 const FX_MESH_CAP = 1500; // the fx instanced mesh's own capacity — a ceiling maxParticles is clamped under, not a target
 const fxCap = () => Math.max(0, Math.min(FX_MESH_CAP, Math.round(S.maxParticles)));
 const GIBLET_LIFE = 40, SPLAT_LIFE = 60, SINK_TIME = 3; // seconds before they sink away, and how long that takes
@@ -28,8 +30,9 @@ const GRAVITY = 9.8;
 // explodeCar, below) — well under WATER_LEVEL, so a gib thrown out over open water with no lakebed geometry to hit
 // still falls far enough to cross WATER_LEVEL and be caught there (updateGiblets) rather than snapping back up to a
 // fallback at ground level, which would put it right back to bouncing where it died instead of going under.
-const NO_GROUND_FALLBACK = WATER_LEVEL - 5;
+export const NO_GROUND_FALLBACK = WATER_LEVEL - 5;
 const BLOOD_COLORS = [0x7a0a0a, 0x9c1010, 0x5c0606];
+const PERSON_BLOOD_CHUNKS = 20; // blood chunks a person bursts into, besides their own body parts
 const BLOOD_SPLAT_COLOR = new THREE.Color(0x6a0707);
 const SCORCH_COLORS = [0x1c1a18, 0x2b2622, 0x14100e];
 const SCORCH_SPLAT_COLOR = new THREE.Color(0x161412);
@@ -37,7 +40,7 @@ const SOOT_SIZE = 7, SOOT_Y = Y_PATH + 0.02; // (a car's scorch mark: its size a
 const EYE_COLOR = 0xf4f1ea;
 const CAR_TRIM_COLORS = [0x1a1a1c, 0x8f9298]; // tires and glass/chrome, standing in for whatever a car's actually made of
 
-const giblets = [], splats = [], fx = [];
+const splats = [], fx = [];
 function instancedMesh(geometry, material, capacity, name) {
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -50,6 +53,10 @@ function instancedMesh(geometry, material, capacity, name) {
 const chunkMesh = instancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 0.55, flatShading: true }), GIBLETS_MAX, 'Giblets');
 chunkMesh.castShadow = true; chunkMesh.receiveShadow = true;
 chunkMesh.setColorAt(0, new THREE.Color()); // (gives it its per-chunk colors)
+// blood chunks: their own mesh so they can go without shadows (too small to see one) and go sooner
+const bloodChunkMesh = instancedMesh(chunkMesh.geometry, chunkMesh.material, BLOOD_CHUNKS_MAX, 'BloodChunks');
+bloodChunkMesh.receiveShadow = true;
+bloodChunkMesh.setColorAt(0, new THREE.Color());
 const splatMesh = instancedMesh(new THREE.CircleGeometry(1, 12).rotateX(-Math.PI/2),
   new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), SPLATS_MAX, 'Splats');
 splatMesh.receiveShadow = true;
@@ -77,40 +84,11 @@ const flash = new THREE.PointLight(0xffb347, 0, 22, 2);
 scene.add(flash);
 let flashUntil = -Infinity, flashBorn = 0, flashDuration = 0.5;
 
-// Where the ground is under (x, z), looking straight down from `fromY`: the first solid, upward-facing surface, or `fallback`.
-// Moving things (instanced or skinned, such as cars and people), hidden or see-through things, and undersides don't
-// count — and neither do three meshes from water/water.js that would otherwise read as ordinary solid ground even
-// though none of them should, for a falling gib's purposes: 'Water', the surface itself (shaded to look like water,
-// but its material isn't actually flagged transparent, so without excluding it it's just solid ground sitting at
-// WATER_LEVEL); 'WaterMask', a stencil helper mesh covering the same area purely to keep the grid and map images off
-// the water, no more real than the water's own reflection; and 'Beach', the sloped sand a shore with a beach carries
-// down into the water (buildWaterBody) — real, solid geometry, unlike the other two, but it runs from just above
-// ground right down well past WATER_LEVEL to form the visible underwater slope, so honoring it as ground would let
-// gibs come to rest partway down a beach that's still very much water from here, same problem as the water's own
-// surface. (A shore with no beach has a vertical wall there instead — 'WaterBank' — which isn't excluded: unlike the
-// beach's slope it has no horizontal reach into the water for a straight-down ray to hit, so it was never an issue.)
-// The main ground mesh has a genuine hole cut under open water (rebuildGround, water/water.js) — nothing solid is left
-// there once all three are excluded — so the raycast correctly finds nothing and falls through to `fallback`.
-const NON_GROUND_NAMES = new Set(['Water', 'WaterMask', 'Beach']);
-const downRay = new THREE.Raycaster(), downOrigin = new THREE.Vector3(), DOWN = new THREE.Vector3(0, -1, 0), surfaceNormal = new THREE.Vector3();
-const isShown = o => { for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };
-function groundBelow(x, fromY, z, fallback) {
-  downRay.set(downOrigin.set(x, fromY, z), DOWN);
-  for (const hit of downRay.intersectObject(scene, true)) {
-    const o = hit.object;
-    if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || !hit.face || !isShown(o) || NON_GROUND_NAMES.has(o.name)) continue;
-    const material = Array.isArray(o.material) ? o.material[hit.face.materialIndex] : o.material;
-    if (!material || material.transparent || material.visible === false) continue;
-    if (surfaceNormal.copy(hit.face.normal).transformDirection(o.matrixWorld).y < 0.5) continue;
-    return hit.point.y;
-  }
-  return fallback;
-}
 // whether something is within S.gibRange (isNear, for gib chunks), S.particleRange (isNearFx, for most particle
 // effects) or CAR_SMOKE_RANGE_SHARE of that (isNearCarSmoke, for a car's own tyre, engine and terrible-trait smoke —
 // see below) of the camera: further than that, neither made, simulated nor drawn (the marks a gib leaves always are)
 const distSq = o => (o.x - camera.position.x)**2 + (o.y - camera.position.y)**2 + (o.z - camera.position.z)**2;
-const isNear = o => distSq(o) <= S.gibRange*S.gibRange;
+export const isNear = o => distSq(o) <= S.gibRange*S.gibRange;
 const isNearFx = o => distSq(o) <= S.particleRange*S.particleRange;
 const CAR_SMOKE_RANGE_SHARE = 0.5; // ordinary car smoke is drawn out to only half S.particleRange — it's the most frequent particle by far, so it's the first to go as the camera pulls back
 const isNearCarSmoke = o => distSq(o) <= (S.particleRange*CAR_SMOKE_RANGE_SHARE)**2;
@@ -137,14 +115,19 @@ function pushFx(particle) {
 // explosion, much more violent than a person's, uses a bigger one; see explodeCar); `ground` is the height they land on
 // (default: where they start from), or a function of (x, z) that finds it, for chunks thrown from the air, which each land
 // on whatever is below where they come down
-function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null, amount = S.gibAmount) {
+// The ground a thrown piece at (x, y, z) moving at (vx, vy, vz) comes down on: found under where it lands if it fell to
+// `fromGround`, the ground under where it started. `groundAt(x, z)` finds the ground there.
+export function landingGround(piece, fromGround, groundAt) {
+  const fall = Math.max(0, (piece.vy + Math.sqrt(piece.vy*piece.vy + 2*GRAVITY*Math.max(0, piece.y - fromGround)))/GRAVITY);
+  return groundAt(piece.x + piece.vx*fall, piece.z + piece.vz*fall);
+}
+function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null, amount = S.gibAmount, pool = fleshPool) {
   if (!S.showGibs || amount <= 0 || !isNear(at)) return;
   const now = performance.now()/1000;
   const groundAtStart = typeof ground === 'function' ? ground(at.x, at.z) : ground;
   parts.forEach(([color, count, size]) => {
     const scaled = count*amount, chunks = Math.floor(scaled) + (Math.random() < scaled % 1 ? 1 : 0); // (a fractional amount rounds at random, so small counts still scale)
     for (let k=0;k<chunks;k++) {
-      if (giblets.length >= GIBLETS_MAX) giblets.shift(); // (the oldest make way)
       const angle = Math.random()*Math.PI*2, outward = (1 + Math.random()*4.5)*power;
       const spinAxis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
       const chunk = {
@@ -160,10 +143,9 @@ function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null
         // surface height, same as the fixed-number `ground` case above, since updateGiblets adds its own half-size
         // on top of this to find where it actually comes to rest; adding that here too used to double it up, floating
         // every chunk that fell this way — a bee's flecks, now also anyone's or a car's — twice its own size too high)
-        const fall = Math.max(0, (chunk.vy + Math.sqrt(chunk.vy*chunk.vy + 2*GRAVITY*(chunk.y - groundAtStart)))/GRAVITY);
-        chunk.ground = ground(chunk.x + chunk.vx*fall, chunk.z + chunk.vz*fall);
+        chunk.ground = landingGround(chunk, groundAtStart, ground);
       }
-      giblets.push(chunk);
+      pool.add(chunk);
     }
   });
 }
@@ -415,18 +397,26 @@ export function sparks(at, count = 8) {
 // pants, shoes, hair } as THREE.Colors (hair null for someone bald). `momentum` ({ x, y, z } in units a second) is the velocity
 // of whatever struck them, which every chunk keeps on top of its own throw (none for a blast, which has no direction).
 export function explode(at, height, colors, momentum = null) {
-  const parts = [[colors.skin, 16, 0.075], [colors.top, 10, 0.08], [colors.pants, 9, 0.08], [colors.shoes, 4, 0.06],
-    [colors.hair, colors.hair ? 5 : 0, 0.065], [new THREE.Color(EYE_COLOR), 2, 0.035]];
-  BLOOD_COLORS.forEach(hex => parts.push([new THREE.Color(hex), 9, 0.028]));
+  // (only blood when their own body parts are thrown instead: see peopleGibs.js)
+  const parts = [];
+  if (colors.skin) parts.push([colors.skin, 16, 0.075]);
+  if (colors.top) parts.push([colors.top, 10, 0.08]);
+  if (colors.pants) parts.push([colors.pants, 9, 0.08]);
+  if (colors.shoes) parts.push([colors.shoes, 4, 0.06]);
+  if (colors.hair) parts.push([colors.hair, 5, 0.065]);
+  if (colors.eyes) parts.push([new THREE.Color(EYE_COLOR), 2, 0.035]);
+  const blood = BLOOD_COLORS.map((hex, k) => [new THREE.Color(hex), Math.floor(PERSON_BLOOD_CHUNKS/BLOOD_COLORS.length) + (k < PERSON_BLOOD_CHUNKS % BLOOD_COLORS.length ? 1 : 0), 0.028]);
   // (a function, not the fixed height they died at: a chunk thrown out over a bank or into water needs its own ground —
   // or none at all, if it's water, which updateGiblets catches on the way down — rather than landing back at their feet's height)
-  spawnParts(at, height, parts, 1, (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK), momentum);
+  const groundAt = (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK);
+  spawnParts(at, height, parts, 1, groundAt, momentum);
+  spawnParts(at, height, blood, 1, groundAt, momentum, S.gibAmount, bloodPool);
   spawnSplat(at, height, BLOOD_SPLAT_COLOR);
   playSound('gib', at);
 }
 // A few chunks of blood thrown from `at` (`height` tall), `count` of them whatever the gib amount setting is; `momentum` as for explode.
 export function spillBlood(at, height, count, momentum = null) {
-  spawnParts(at, height, Array.from({ length: count }, (_, k) => [new THREE.Color(BLOOD_COLORS[k % BLOOD_COLORS.length]), 1, 0.028]), 0.6, (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK), momentum, 1);
+  spawnParts(at, height, Array.from({ length: count }, (_, k) => [new THREE.Color(BLOOD_COLORS[k % BLOOD_COLORS.length]), 1, 0.028]), 0.6, (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK), momentum, 1, bloodPool);
 }
 // Bursts a bee in mid-air: a few flecks of its yellow, black and wing, `size` long — small and soft-thrown, each falling to
 // whatever ground is below it (`fallbackGround` where there's nothing), and no mark on it.
@@ -522,58 +512,103 @@ const GIB_SPLASH_SPEED = 3.5; // launch speed of the single droplet flicked up w
 let lastTime = null;
 // how far through sinking away something is, 0 until it starts
 const sunk = (age, life) => age > life ? Math.min(1, (age - life)/SINK_TIME) : 0;
+// One step of a thrown piece falling, bouncing and sliding to rest on `piece.ground`, its middle held `lift` above it.
+// `splashSize` is how big the droplet is. Returns false once it's gone under open water (with a droplet flicked up where it went in), for the caller to drop it.
+const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
+// A fixed ring of chunks drawn by one instanced mesh. Each chunk keeps its instance for life, so its color is written
+// once and, lying still, so is its place; only what changed is uploaded. A new chunk takes the oldest one's instance.
+class ChunkPool {
+  constructor(mesh, capacity, lifeShare = 1) {
+    Object.assign(this, { mesh, capacity, lifeShare, slots: new Array(capacity).fill(null), cursor: 0, used: 0 });
+    for (let i=0;i<capacity;i++) mesh.setMatrixAt(i, HIDDEN);
+    this.matrixRange = [Infinity, -1]; this.colorRange = [Infinity, -1];
+  }
+  life() { return GIBLET_LIFE*S.gibLifetime*this.lifeShare; }
+  add(chunk) {
+    const slot = this.cursor;
+    this.cursor = (slot + 1) % this.capacity;
+    this.used = Math.max(this.used, slot + 1);
+    if (this.slots[slot]) this.hide(slot);
+    chunk.shown = false;
+    this.slots[slot] = chunk;
+    this.mesh.setColorAt(slot, chunk.color);
+    this.touch(this.colorRange, slot);
+  }
+  touch(range, slot) { range[0] = Math.min(range[0], slot); range[1] = Math.max(range[1], slot); }
+  hide(slot) { this.mesh.setMatrixAt(slot, HIDDEN); this.touch(this.matrixRange, slot); }
+  remove(slot) { this.slots[slot] = null; this.hide(slot); }
+  clear() { for (let i=0;i<this.used;i++) if (this.slots[i]) this.remove(i); }
+  update(t, dt) {
+    const life = this.life();
+    for (let i=0;i<this.used;i++) {
+      const g = this.slots[i];
+      if (!g) continue;
+      const age = t - g.born;
+      if (age > life + SINK_TIME) { this.remove(i); continue; }
+      if (!isNear(g)) { if (g.shown) { this.hide(i); g.shown = false; } continue; }
+      if (!fallStep(g, dt, t, g.size*g.shape.y, g.size*0.6)) { this.remove(i); continue; }
+      const sink = sunk(age, life);
+      if (g.resting && !sink && g.shown) continue; // (lying still: already where it's drawn)
+      placed.position.set(g.x, g.y - sink*g.size, g.z);
+      placed.quaternion.copy(g.quaternion);
+      placed.scale.copy(g.shape).multiplyScalar(g.size*(1 - sink));
+      placed.updateMatrix();
+      this.mesh.setMatrixAt(i, placed.matrix);
+      this.touch(this.matrixRange, i);
+      g.shown = true;
+    }
+    this.mesh.count = this.used;
+    this.flush(this.mesh.instanceMatrix, this.matrixRange, 16);
+    if (this.mesh.instanceColor) this.flush(this.mesh.instanceColor, this.colorRange, 3);
+  }
+  flush(attribute, range, size) {
+    if (range[1] < 0) return;
+    attribute.clearUpdateRanges();
+    attribute.addUpdateRange(range[0]*size, (range[1] - range[0] + 1)*size);
+    attribute.needsUpdate = true;
+    range[0] = Infinity; range[1] = -1;
+  }
+}
+const fleshPool = new ChunkPool(chunkMesh, GIBLETS_MAX), bloodPool = new ChunkPool(bloodChunkMesh, BLOOD_CHUNKS_MAX, BLOOD_LIFE_SHARE);
+export function fallStep(piece, dt, t, lift, splashSize = lift) {
+  if (piece.resting) return true;
+  piece.vy -= GRAVITY*dt;
+  piece.x += piece.vx*dt; piece.y += piece.vy*dt; piece.z += piece.vz*dt;
+  if (piece.y <= WATER_LEVEL) { // open water, not solid ground below it: no floor to land on, so it goes straight through rather than coming to rest on the lakebed
+    pushFx({ kind: 'spray', priority: 1, x: piece.x, y: WATER_LEVEL, z: piece.z,
+      vx: (Math.random() - 0.5)*1.5, vy: GIB_SPLASH_SPEED, vz: (Math.random() - 0.5)*1.5,
+      size: splashSize, life: flightTime(GIB_SPLASH_SPEED) + 0.15, color: new THREE.Color(SPRAY_COLORS[Math.floor(Math.random()*SPRAY_COLORS.length)]), born: t });
+    return false;
+  }
+  piece.quaternion.premultiply(spinStep.setFromAxisAngle(piece.spinAxis, piece.spin*dt));
+  const floor = piece.ground + lift;
+  if (piece.y < floor) {
+    piece.y = floor;
+    if (piece.vy < -1) {
+      // a bounce, losing most of its speed
+      piece.vy *= -0.3; piece.vx *= 0.55; piece.vz *= 0.55; piece.spin *= 0.5;
+    } else {
+      // sliding to a stop
+      piece.vy = 0;
+      const grip = Math.max(0, 1 - 6*dt);
+      piece.vx *= grip; piece.vz *= grip; piece.spin *= grip;
+      if (Math.hypot(piece.vx, piece.vz) < 0.03) piece.resting = true;
+    }
+  }
+  return true;
+}
+// how far through sinking away a piece born at `born` is at `t`: 0 until its life is up, 1 once it's gone
+export const gibSink = (t, born) => sunk(t - born, GIBLET_LIFE*S.gibLifetime);
+export const gibGone = (t, born) => t - born > GIBLET_LIFE*S.gibLifetime + SINK_TIME;
 export function updateGiblets(t) {
   const dt = lastTime == null ? 0 : Math.min(0.05, Math.max(0, t - lastTime));
   lastTime = t;
-  const gibletLife = GIBLET_LIFE*S.gibLifetime;
-  while (giblets.length && t - giblets[0].born > gibletLife + SINK_TIME) giblets.shift();
   while (splats.length && t - splats[0].born > SPLAT_LIFE + SINK_TIME) splats.shift();
   while (fx.length && t - fx[0].born > fx[0].life) fx.shift();
-  if (!S.showGibs || S.gibAmount <= 0) { giblets.length = 0; splats.length = 0; } // (turned off: what's already flying, or lying there, goes too)
+  if (!S.showGibs || S.gibAmount <= 0) { fleshPool.clear(); bloodPool.clear(); splats.length = 0; } // (turned off: what's already flying, or lying there, goes too)
   if (S.maxParticles <= 0) { fx.length = 0; softParticles.length = 0; } // (same, for particles)
-  let drawn = 0;
-  // backward, since a gib falling into water (below) is spliced out mid-loop — indices after it are untouched that way
-  for (let i = giblets.length - 1; i >= 0; i--) {
-    const g = giblets[i];
-    if (!isNear(g)) continue;
-    if (!g.resting) {
-      g.vy -= GRAVITY*dt;
-      g.x += g.vx*dt; g.y += g.vy*dt; g.z += g.vz*dt;
-      if (g.y <= WATER_LEVEL) { // open water, not solid ground below it: no floor to land on, so it goes straight through — one droplet flicked up where it went under, and it's gone, rather than coming to rest on the lakebed
-        pushFx({ kind: 'spray', priority: 1, x: g.x, y: WATER_LEVEL, z: g.z,
-          vx: (Math.random() - 0.5)*1.5, vy: GIB_SPLASH_SPEED, vz: (Math.random() - 0.5)*1.5,
-          size: g.size*0.6, life: flightTime(GIB_SPLASH_SPEED) + 0.15, color: new THREE.Color(SPRAY_COLORS[Math.floor(Math.random()*SPRAY_COLORS.length)]), born: t });
-        giblets.splice(i, 1);
-        continue;
-      }
-      g.quaternion.premultiply(spinStep.setFromAxisAngle(g.spinAxis, g.spin*dt));
-      const floor = g.ground + g.size*g.shape.y;
-      if (g.y < floor) {
-        g.y = floor;
-        if (g.vy < -1) {
-          // a bounce, losing most of its speed
-          g.vy *= -0.3; g.vx *= 0.55; g.vz *= 0.55; g.spin *= 0.5;
-        } else {
-          // sliding to a stop
-          g.vy = 0;
-          const grip = Math.max(0, 1 - 6*dt);
-          g.vx *= grip; g.vz *= grip; g.spin *= grip;
-          if (Math.hypot(g.vx, g.vz) < 0.03) g.resting = true;
-        }
-      }
-    }
-    const sink = sunk(t - g.born, gibletLife);
-    placed.position.set(g.x, g.y - sink*g.size, g.z);
-    placed.quaternion.copy(g.quaternion);
-    placed.scale.copy(g.shape).multiplyScalar(g.size*(1 - sink));
-    placed.updateMatrix();
-    chunkMesh.setMatrixAt(drawn, placed.matrix);
-    chunkMesh.setColorAt(drawn, g.color);
-    drawn++;
-  }
-  chunkMesh.count = drawn;
-  chunkMesh.instanceMatrix.needsUpdate = true;
-  if (chunkMesh.instanceColor) chunkMesh.instanceColor.needsUpdate = true;
+  fleshPool.update(t, dt);
+  bloodPool.update(t, dt);
   const splatsDrawn = { blood: 0, soot: 0 };
   splats.forEach(s => {
     const mesh = s.soot ? sootMesh : splatMesh, i = splatsDrawn[s.soot ? 'soot' : 'blood']++;

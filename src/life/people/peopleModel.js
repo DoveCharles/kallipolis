@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mulberry32, lerp } from '../../core/math.js';
 import { scene } from '../../core/scene.js';
 import { onProfilesLoaded, profileOf } from '../profiles.js';
+import { splitBody } from './bodySplit.js';
 import { HEADSHOT_LAYER, PEOPLE_MAX, people, peopleMesh, setPersonModel } from './people.js';
 
 // =========================================== PEOPLE MODEL ===========================================
@@ -358,6 +359,8 @@ const clothingBand = (clothing, roll, man, age) => {
 // person's own colors, the rest keep the model's; and the parts only drawn for women
 const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelashes', 'Lips',
   ...PERSON_CLOTHING.flatMap(c => Array.from({ length: c.count }, (_, k) => c.band + (k + 1)))];
+PERSON_SLOTS.push('Flesh'); // (not a material: the caps closing a body part's cut, see buildGibMeshes)
+const FLESH_COLOR = 0x5a0d0d;
 const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
 // the colors each person has their own of, from row 2 of the traits texture on; then a row of where their clothes stop,
 // and one of their head's and eyes' shape keys (Key 1, Key 2, Shape1, Shape2 — Shape3 being in row 1)
@@ -606,9 +609,10 @@ function injectPersonShader(shader, uniforms, look) {
  * @param {object} look - what the material draws and how it colors it
  * @param {number} capacity - how many instances to make room for
  * @param {boolean} byAttribute - whether the instances say which person they are (instancePerson) rather than being them in order
+ * @param {{name?: string, headshot?: boolean}} [options] - the mesh's name, and whether it's drawn in headshots
  * @returns {THREE.InstancedMesh} the mesh, added to the scene
  */
-function makePersonMesh(geometry, uniforms, look, capacity, byAttribute) {
+function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name = 'People', headshot = true } = {}) {
   const material = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.DoubleSide, flatShading: true });
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   if (byAttribute) { material.defines = { PERSON_INDEX_ATTRIBUTE: '' }; depth.defines = { PERSON_INDEX_ATTRIBUTE: '' }; }
@@ -624,9 +628,9 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute) {
   mesh.count = 0;
   mesh.frustumCulled = false;
   mesh.castShadow = true; mesh.receiveShadow = true;
-  mesh.layers.enable(HEADSHOT_LAYER);
+  if (headshot) mesh.layers.enable(HEADSHOT_LAYER);
   mesh.visible = false;
-  mesh.name = 'People';
+  mesh.name = name;
   scene.add(mesh);
   return mesh;
 }
@@ -724,7 +728,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
   const positions = [], joints = [], weights = [], headWeights = [], armWeights = [], slots = [], indices = [];
   const offsets = PERSON_SHAPE_KEYS.map(() => []);
   const toModel = new THREE.Matrix4(), toModelLinear = new THREE.Matrix3(), v = new THREE.Vector3();
-  const palette = PERSON_SLOTS.map(() => new THREE.Color(0xffffff));
+  const palette = PERSON_SLOTS.map(slot => new THREE.Color(slot === 'Flesh' ? FLESH_COLOR : 0xffffff));
   [...rigged, ...attached].forEach(mesh => {
     let bone = mesh.parent;
     while (bone && !boneIndex.has(bone)) bone = bone.parent;
@@ -1092,13 +1096,154 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
     style.geometry.setAttribute('instanceEyes', style.eyes);
     style.mesh = makePersonMesh(style.geometry, uniforms, look, style.members.length, true);
   });
+  const gibs = buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm, headLayers, uniforms, bodyLook, hairLook, glassesLook, traits, traitRows });
   root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
 
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
   return { mesh, hidden: uniforms.personHidden, anim, look, eyes, hair: headLayers.flatMap(layer => layer.styles).filter(style => style.mesh), headLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
-    headBone: headBone ?? 0, headPivot, chestBone, hands, unitsPerMetre,
+    headBone: headBone ?? 0, headPivot, chestBone, hands, unitsPerMetre, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
 
+
+// ============== BODY-PART GIBS ==============
+// What someone comes apart into when they die (see peopleGibs.js): their body split into parts by the bones each
+// triangle moves with, plus whatever they wore on their head, whole. Each part is an instanced mesh over a subset of
+// the body's own triangles (sharing its vertex data), drawn by the same shader as the living, in the pose they died in.
+// A dead person's looks are copied into a traits texture of the gibs' own, a column per body, so their slot can go to
+// someone new while their parts are still lying about.
+export const GIB_BODIES_MAX = 32;
+const GIB_SAMPLES = 24; // vertices per part used to find, on the CPU, where that part is in the pose they died in
+const GIB_SAMPLE_STRIDE = 11; // rest position (3), joints (4), weights (4)
+const GIB_DARKEN = new THREE.Color(0x550000), GIB_DARKEN_AMOUNT = 0.25; // how far a gib's colors are pulled towards dried blood
+const SHARED_VERTEX_ATTRIBUTES = ['position', 'normal', 'personJoints', 'personWeights', 'personVertex'];
+
+/**
+ * A few of a part's vertices, evenly spread, with their bones, for placing the part on the CPU (see gibPartCentre).
+ * @param {ArrayLike<number>} index - the part's triangle indices
+ * @param {BufferAttribute} position - the rest positions
+ * @param {ArrayLike<number>} joints - four bone indices per vertex
+ * @param {ArrayLike<number>} weights - four bone weights per vertex
+ * @returns {Float32Array} GIB_SAMPLE_STRIDE numbers per sample
+ */
+function gibSamples(index, position, joints, weights) {
+  const vertices = [...new Set(index)], step = Math.max(1, vertices.length/GIB_SAMPLES), count = Math.min(GIB_SAMPLES, vertices.length);
+  const samples = new Float32Array(count*GIB_SAMPLE_STRIDE);
+  for (let k=0;k<count;k++) {
+    const v = vertices[Math.floor(k*step)], o = k*GIB_SAMPLE_STRIDE;
+    samples.set([position.getX(v), position.getY(v), position.getZ(v)], o);
+    for (let j=0;j<4;j++) { samples[o + 3 + j] = joints[v*4 + j]; samples[o + 7 + j] = weights[v*4 + j]; }
+  }
+  return samples;
+}
+
+/**
+ * Where a part is, in model space, in a pose from the bone texture (rows blended as the shader blends them), and how
+ * far its vertices reach from there.
+ * @param {Float32Array} samples - from gibSamples
+ * @param {Float32Array} boneData - the bone texture's data
+ * @param {number} boneWidth - texels per row of it
+ * @param {ArrayLike<number>} anim - the instanceAnim values: row A, row B, how far blended towards A
+ * @param {THREE.Vector3} centre - set to the part's middle
+ * @returns {number} its radius
+ */
+export function gibPartCentre(samples, boneData, boneWidth, anim, centre) {
+  const count = samples.length/GIB_SAMPLE_STRIDE, points = new Float32Array(count*3);
+  const rows = [[Math.floor(anim[0]), anim[2]], [Math.floor(anim[1]), 1 - anim[2]]];
+  centre.set(0, 0, 0);
+  for (let k=0;k<count;k++) {
+    const o = k*GIB_SAMPLE_STRIDE, px = samples[o], py = samples[o+1], pz = samples[o+2];
+    let x = 0, y = 0, z = 0;
+    for (const [row, share] of rows) {
+      if (share <= 0) continue;
+      for (let j=0;j<4;j++) {
+        const w = samples[o + 7 + j]*share;
+        if (!w) continue;
+        const b = (row*boneWidth + samples[o + 3 + j]*3)*4;
+        x += w*(boneData[b]*px + boneData[b+1]*py + boneData[b+2]*pz + boneData[b+3]);
+        y += w*(boneData[b+4]*px + boneData[b+5]*py + boneData[b+6]*pz + boneData[b+7]);
+        z += w*(boneData[b+8]*px + boneData[b+9]*py + boneData[b+10]*pz + boneData[b+11]);
+      }
+    }
+    points.set([x, y, z], k*3);
+    centre.x += x; centre.y += y; centre.z += z;
+  }
+  if (count) centre.multiplyScalar(1/count);
+  let radius = 0;
+  for (let k=0;k<count;k++) radius = Math.max(radius, Math.hypot(points[k*3] - centre.x, points[k*3+1] - centre.y, points[k*3+2] - centre.z));
+  return radius;
+}
+
+/**
+ * The body as its gibs use it: its own vertices plus the copies capping each part's cut (see bodySplit.js), in the
+ * Flesh slot but otherwise the vertex they copy (same bones, same shape keys), and each part's triangles.
+ * @returns {THREE.BufferGeometry} with userData.parts: {name, index}[]
+ */
+function gibBodyGeometry({ geometry, joints, weights, slots, bones, inHead, inArm }) {
+  const position = geometry.attributes.position.array;
+  const shoulder = bones.find(bone => bone.name === 'ShoulderL');
+  const leftSign = shoulder ? Math.sign(shoulder.getWorldPosition(new THREE.Vector3()).x) || 1 : 1;
+  const { parts, capSources } = splitBody({ position, index: geometry.index.array, joints, weights, slotOf: slots.map(slot => PERSON_SLOTS[slot]),
+    boneNames: bones.map(bone => bone.name), inHead, inArm, leftSign });
+  const flesh = PERSON_SLOTS.indexOf('Flesh'), vertexCount = position.length/3, total = vertexCount + capSources.length;
+  const out = new THREE.BufferGeometry();
+  ['position', 'normal', 'personJoints', 'personWeights', 'personVertex'].forEach(name => {
+    const from = geometry.attributes[name], size = from.itemSize, array = new Float32Array(total*size);
+    array.set(from.array.subarray(0, vertexCount*size));
+    capSources.forEach((v, k) => array.set(from.array.subarray(v*size, v*size + size), (vertexCount + k)*size));
+    if (name === 'personVertex') for (let k=0;k<capSources.length;k++) array[(vertexCount + k)*4 + 1] = flesh;
+    out.setAttribute(name, new THREE.BufferAttribute(array, size));
+  });
+  out.userData.parts = parts;
+  return out;
+}
+
+/**
+ * Build the gib meshes: one per body part, and one per worn hairstyle, facial hair and pair of glasses.
+ * @returns {{parts: object[], snapshot: function(number, number): void, capacity: number}} the parts (each {name, mesh,
+ *   anim, look, eyes, person, samples}), each worn style given a `gib` of the same shape, and a snapshot(i, column)
+ *   copying person i's looks into gib column `column`
+ */
+function buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm, headLayers, uniforms, bodyLook, hairLook, glassesLook, traits, traitRows }) {
+  const gibTraits = new Float32Array(GIB_BODIES_MAX*traitRows*4);
+  const gibTraitTexture = new THREE.DataTexture(gibTraits, GIB_BODIES_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
+  gibTraitTexture.needsUpdate = true;
+  const gibUniforms = { ...uniforms, personTraits: { value: gibTraitTexture }, personHidden: { value: -1 } };
+  const gibOf = (source, index, look, name, samples) => {
+    const geo = new THREE.BufferGeometry();
+    SHARED_VERTEX_ATTRIBUTES.forEach(n => { if (source.attributes[n]) geo.setAttribute(n, source.attributes[n]); });
+    geo.setIndex(index);
+    const gib = { name, samples, anim: dynamicInstanceAttribute(GIB_BODIES_MAX, 4), look: dynamicInstanceAttribute(GIB_BODIES_MAX, 4),
+      eyes: dynamicInstanceAttribute(GIB_BODIES_MAX, 4), person: dynamicInstanceAttribute(GIB_BODIES_MAX, 1) };
+    geo.setAttribute('instanceAnim', gib.anim);
+    geo.setAttribute('instanceLook', gib.look);
+    geo.setAttribute('instanceEyes', gib.eyes);
+    geo.setAttribute('instancePerson', gib.person);
+    gib.mesh = makePersonMesh(geo, gibUniforms, look, GIB_BODIES_MAX, true, { name: 'BodyGibs', headshot: false });
+    return gib;
+  };
+  const body = gibBodyGeometry({ geometry, joints, weights, slots, bones, inHead, inArm });
+  const bodyJoints = body.attributes.personJoints.array, bodyWeights = body.attributes.personWeights.array;
+  const parts = body.userData.parts.map(({ name, index }) =>
+    gibOf(body, index, bodyLook, name, gibSamples(index, body.attributes.position, bodyJoints, bodyWeights)));
+  headLayers.forEach(layer => layer.styles.forEach(style => {
+    if (!style.mesh) return;
+    const g = style.geometry, index = g.index.array;
+    style.gib = gibOf(g, g.index, layer.hair ? hairLook : glassesLook, style.name, gibSamples(index, g.attributes.position, g.attributes.personJoints.array, g.attributes.personWeights.array));
+  }));
+  const colorRows = PERSON_TRAIT_COLORS.filter(part => part !== 'Blood').map(part => 2 + PERSON_TRAIT_COLORS.indexOf(part));
+  const color = new THREE.Color();
+  function snapshot(i, column) {
+    for (let row=0;row<traitRows;row++) {
+      const from = (row*PEOPLE_MAX + i)*4, to = (row*GIB_BODIES_MAX + column)*4;
+      gibTraits.set(traits.subarray(from, from + 4), to);
+      if (!colorRows.includes(row)) continue;
+      color.setRGB(gibTraits[to], gibTraits[to+1], gibTraits[to+2]).lerp(GIB_DARKEN, GIB_DARKEN_AMOUNT);
+      gibTraits[to] = color.r; gibTraits[to+1] = color.g; gibTraits[to+2] = color.b;
+    }
+    gibTraitTexture.needsUpdate = true;
+  }
+  return { parts, snapshot, capacity: GIB_BODIES_MAX };
+}
