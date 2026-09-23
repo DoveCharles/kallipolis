@@ -34,8 +34,8 @@ export const cards = [];
 // `title` is the name in its title bar; `onClose` is what the × (and the control-menu box, under the Windows 3.0 look)
 // does. `thumb` is { title, onClick } for the picture — leave out onClick and it's just a picture. `kill`, if given, is
 // { title, onClick } for a Smite button under it. `action`, if given, is { text, title, onClick } for a plain button in the
-// same place (a building's Enter: see buildings/interior.js), its wording changed later with setAction. `labels` renames
-// rows for this card ({ occupants: 'Passengers' }).
+// same place (a building's Enter: see buildings/interior.js), its wording changed later with setAction and hidden with
+// showAction. `labels` renames rows for this card ({ occupants: 'Passengers' }).
 export function makeCard({ id, title, onClose, thumb = {}, kill = null, action = null, labels = {} }) {
   const el = document.createElement('div');
   el.id = id;
@@ -236,8 +236,12 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     actionText[0].textContent = relabelling ? relabelling(text) : text;
     if (tooltip != null) actionText[0].title = tooltip;
   }
+  // the action button there or not (a building's Enter only on those people go into)
+  function showAction(shown) {
+    if (actionText) actionText[0].style.display = shown ? '' : 'none';
+  }
 
-  const card = { el, canvas, show, hide, set, setList, relabel, setFavorite, setAction };
+  const card = { el, canvas, show, hide, set, setList, relabel, setFavorite, setAction, showAction };
   cards.push(card);
   return card;
 }
