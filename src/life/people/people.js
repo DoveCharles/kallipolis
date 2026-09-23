@@ -48,7 +48,7 @@ export const people = [];
 export const peopleRng = mulberry32(90210);
 /** The camera layer the people (and the lights) are also on, for the person card's headshot to draw them alone. */
 export const HEADSHOT_LAYER = 3;
-export let personModel = null; // { mesh, anim, look, hair, headLayers, isMan, height, minY, clips, stride } once loaded
+export let personModel = null; // { mesh, anim, look, hair, wornLayers, isMan, height, minY, clips, stride } once loaded
 /**
  * Pick one of `items` at random, weighted.
  * @param {Array<*>} items - what to pick from
@@ -663,7 +663,7 @@ function killPerson(i, by = 'player', momentum = null, throwScale = 1) {
   if (parts) colors.skin = colors.top = colors.pants = colors.shoes = null;
   else if (personModel) {
     colorFrom('Top', colors.top); colorFrom('Pants', colors.pants); colorFrom('Shoes', colors.shoes);
-    if (personModel.headLayers.some(layer => layer.hair && layer.of[i] >= 0)) colors.hair = colorFrom('Hair', new THREE.Color());
+    if (personModel.wornLayers.some(layer => layer.look === 'hair' && layer.of[i] >= 0)) colors.hair = colorFrom('Hair', new THREE.Color());
   } else {
     peopleMesh.getColorAt(i, colors.top);
     colors.pants.copy(colors.top);
@@ -1113,8 +1113,8 @@ export function updatePeople(t) {
       lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
       const eyesArray = personModel.eyes.array;
       for (let k=0;k<4;k++) eyesArray[o + k] = p.eyes[k];
-      // their hairstyle's and facial hair's copies of where they are, how they're posed and which way they're looking
-      personModel.headLayers.forEach(layer => {
+      // the copies everything they wear (hair, glasses, a skirt) keeps of where they are, how they're posed and which way they're looking
+      personModel.wornLayers.forEach(layer => {
         const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null;
         if (!style || !style.mesh) return;
         const slot = layer.slot[i];

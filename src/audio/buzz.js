@@ -7,9 +7,9 @@ import { listener, outdoors } from './sfx.js';
 // flies, its loudness fluttering with the wingbeats. A smaller bee buzzes higher, and an angry one higher and louder still.
 // Bees are small, so they're heard only close up: each fades to nothing by HEAR_DISTANCE. There are BUZZES_MAX buzzes,
 // handed each frame to the nearest bees in the air; a bee sat on a flower or in its hive is quiet.
-const BUZZ_HZ = 220;              // an ordinary bee's pitch, cruising
+const BUZZ_HZ = 300;              // an ordinary bee's pitch, cruising
 const HEAR_DISTANCE = 6, REF_DISTANCE = 0.6;
-const VOLUME = 0.12;
+const VOLUME = 0.08;
 const BUZZES_MAX = 4;
 const WAVER_HZ = 6, WAVER = 0.03;  // how fast and how far (against its pitch) the buzz wavers
 const FLUTTER_HZ = 13;             // wingbeats a second, heard as a flutter in its loudness

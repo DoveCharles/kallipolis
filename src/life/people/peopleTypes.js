@@ -15,6 +15,12 @@
  * @property {boolean} path - a path
  * @property {number} y - the height people walk along it at
  * @property {number} lateral - how far either side of its line people walk
+ * @property {boolean} [raised] - up on a raised walkway: a deck, or a ramp down from one
+ * @property {boolean} [ramp] - a raised walkway's ramp, whose height at each point is in ys
+ * @property {number[]} [ys] - a ramp's height at each point
+ * @property {number} [walk] - on a raised walkway, how far either side of its line someone possessed can go before the ledge
+ * @property {boolean} [cutStart] - a raised walkway deck whose first point is an end of it, cut square where its ramp starts
+ * @property {boolean} [cutEnd] - likewise its last point
  * @property {Array<{x: number, z: number}>} [mitres] - how a point is set off square to the line there (see navVertexMitre);
  *   assigned once the line is built
  * @property {?boolean[]} blocked - per point, whether it's out over a road (null on a ring)
@@ -80,6 +86,7 @@
  * @property {string} traitsKey - the profiles version and sex their traits were picked for
  * @property {?object} [defaultHair] - the hair color they started with, before any greying
  * @property {boolean} [onRoad] - possessed, and walking over a road
+ * @property {?object} [footing] - possessed, and up on something: a raised walkway, a station, its lift or a carriage (see peopleFooting.js)
  *
 
  * the model's animation
@@ -162,8 +169,8 @@
  * @property {import('three').InstancedBufferAttribute} anim - per person, their animation (see instanceAnim in the shader)
  * @property {import('three').InstancedBufferAttribute} look
  * @property {import('three').InstancedBufferAttribute} eyes
- * @property {object[]} hair - the hairstyle and facial-hair meshes that have someone wearing them
- * @property {object[]} headLayers - the hairstyle, facial-hair and glasses layers
+ * @property {object[]} hair - the hairstyle, facial-hair, glasses and skirt meshes that have someone wearing them
+ * @property {object[]} wornLayers - the hairstyle, facial-hair, glasses and skirt layers
  * @property {Uint8Array} isMan - per person, whether they're a man
  * @property {Float32Array} boneData - the baked bone poses
  * @property {number} boneWidth

@@ -63,6 +63,9 @@ const SOUNDS = {
 };
 // how near something has to be for each sound to be heard at full volume, falling away past it (REF_DISTANCE if not here)
 const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5 };
+// for the little sounds of people that'd otherwise be heard from right across town (a fight in every park): how far off
+// they're heard at all, how fast they fade past their REACH, and how fast they're muffled (see muffler)
+const NEAR_ONLY = { punch: { hear: 40, rolloff: 2.5, muffle: 1.4 }, whoosh: { hear: 25, rolloff: 2.5, muffle: 1.4 } };
 const VARIANTS = 3;
 const SPEED_OF_SOUND = 343;      // units (metres) a second
 const REF_DISTANCE = 25;         // how near something has to be to be heard at full volume, falling away past it
@@ -192,6 +195,24 @@ const ear = new THREE.Vector3(), source = new THREE.Vector3();
 const recent = []; // { name, x, z, at } of what's been played lately, for SAME_SOUND_GAP
 
 /**
+ * A lowpass for a sound at `at`, the lower the further it is from the camera past `near`: for a voice, the formants that
+ * make it sound like words go first, then the voice itself, so talk across a park is a murmur and not a crowd of
+ * conversations.
+ * @param {{x: number, y: number, z: number}} at
+ * @param {number} near - how near it's heard unmuffled
+ * @param {number} rate - how fast the top comes off past that
+ * @returns {BiquadFilterNode}
+ */
+export function muffler(at, near, rate) {
+  const { x, y, z } = camera.position, distance = Math.hypot(at.x - x, at.y - y, at.z - z);
+  const muffle = context.createBiquadFilter();
+  muffle.type = 'lowpass';
+  muffle.Q.value = 0.5;
+  muffle.frequency.value = Math.min(20000, 9000*Math.pow(near/Math.max(near, distance), rate));
+  return muffle;
+}
+
+/**
  * Plays a sound where something happened.
  * @param {keyof SOUNDS} name
  * @param {{x: number, y: number, z: number}} at
@@ -208,12 +229,15 @@ export function playSound(name, at, volume = 1, after = 0) {
 
   const variants = variantsOf(name), layers = variants[Math.floor(Math.random()*variants.length)];
   if (voices + layers.length > VOICES_MAX) return;
-  const delay = camera.getWorldPosition(ear).distanceTo(source.set(at.x, at.y, at.z))/SPEED_OF_SOUND;
+  const distance = camera.getWorldPosition(ear).distanceTo(source.set(at.x, at.y, at.z)), near = NEAR_ONLY[name];
+  if (near && distance > near.hear) return;
+  const delay = distance/SPEED_OF_SOUND;
   for (const buffer of layers) {
     const sound = new THREE.PositionalAudio(listener);
     sound.setBuffer(buffer);
     sound.setRefDistance(REACH[name] ?? REF_DISTANCE);
-    sound.setRolloffFactor(1);
+    sound.setRolloffFactor(near?.rolloff ?? 1);
+    if (near) sound.setFilter(muffler(at, REACH[name], near.muffle));
     sound.setVolume(volume);
     sound.position.set(at.x, at.y, at.z);
     scene.add(sound);

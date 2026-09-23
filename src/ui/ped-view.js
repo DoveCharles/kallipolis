@@ -127,6 +127,7 @@ function repaint() {
  * @param {number} t - the time, in seconds
  * @returns {void}
  */
+export const pedViewOn = () => on;
 export function updatePedView(t) {
   if (!on || t - scannedAt < RESCAN) return;
   scannedAt = t;

@@ -786,6 +786,38 @@ export function goRideTrain(p, node, from) {
 }
 
 /**
+ * Someone let go of (see unpossessPerson in peopleTracking.js) inside a station, its lift or a carriage: riding the trains
+ * on from there as anyone does — aboard, riding it on; in a lift, down it and away; on a platform, waiting for the next
+ * carriage; anywhere else in the station, out the way they'd come in.
+ * @param {Person} p - the person
+ * @param {number} i - their index in people
+ * @param {{kind: string, node?: *, side?: number, lineId?: *, u?: number, v?: number, yaw?: number}} f - where they were standing (p.footing)
+ * @returns {boolean} whether they're riding on (false: they're somewhere this can't pick up from)
+ */
+export function resumeTrainRide(p, i, f) {
+  const shuttle = f.kind === 'carriage' && getTrainShuttles().find(s => s.lineId === f.lineId);
+  const node = shuttle ? shuttle.stopNode : f.node, st = node != null ? getTrainStations().get(node) : null;
+  if (!shuttle && !st) return false;
+  goRideTrain(p, node ?? null, p);
+  const ride = p.train;
+  if (shuttle) {
+    ride.lineId = f.lineId;
+    ride.spot = { across: f.u, along: f.v, turn: wrapAngle(p.heading - f.yaw) };
+    aboard(p, i, shuttle);
+    return true;
+  }
+  if (f.kind === 'lift') {
+    ride.side = f.side; ride.stage = 'liftRide'; ride.lift = { from: 'top', to: 'bottom' };
+    return true;
+  }
+  const dx = p.x - st.x, dz = p.z - st.z, a = dx*st.right.x + dz*st.right.z, b = dx*st.forward.x + dz*st.forward.z;
+  ride.side = a < 0 ? -1 : 1;
+  if (Math.abs(a) < st.halfW - 0.5) { ride.stage = 'wait'; ride.along = Math.max(-st.alongMax, Math.min(st.alongMax, b)); }
+  else { ride.stage = 'exit'; ride.target = st.spot(ride.side*st.landing, 0); }
+  return true;
+}
+
+/**
  * Move someone riding the trains on, each frame: to the foot of the station, up onto its landing, in to wait on the
  * platform, then aboard the first carriage to stop there, and back out again at the other end.
  * @param {Person} p - the person
@@ -1135,7 +1167,7 @@ export function showPassengers() {
 // for up to INDOORS_MAX_HOURS of the day's clock (measured at the World panel's day length, whether or not it is running) —
 // then back out the same door and on along the walkway they left.
 //
-// Offices (see roomLayoutOf) are homes the other way about: by day people go in for a working day, and after dark hardly
+// Offices, warehouses and factories (see roomLayoutOf) are homes the other way about: by day people go in for a working day, and after dark hardly
 // anyone does — and whoever's still at work heads out within an hour or so of it getting dark, bar the odd one working late.
 //
 // p.indoors: { building, stage ('approach' → 'inside' → 'exit'), back (the walkway point they came from), hoursLeft }
@@ -1153,15 +1185,15 @@ const OFFICE_MIN_HOURS = 4, OFFICE_MAX_HOURS = 10, OFFICE_LEAVE_HOURS = 1.5;
 /** The share of the crowd who work late: in an office after dark, they stay the rest of their day. */
 const WORKS_LATE = 0.04;
 const worksLate = p => ((Math.imul(p.id + 7, 2246822519) >>> 0)/2**32) < WORKS_LATE;
-const isOffice = building => roomLayoutOf(building.kind, building.number) === 'office';
+const isWorkplace = building => roomLayoutOf(building.kind, building.number) !== 'home';
 /**
  * The chance of this person going in at a door they're passing: after dark, most are heading home and take the first
- * one — unless it's an office, which by day draws people in and after dark hardly anyone.
+ * one — unless it's a workplace (see roomLayoutOf), which by day draws people in and after dark hardly anyone.
  * @param {Person} p - the person
  * @param {object} building - the building (see buildingDoors)
  * @returns {number} the chance
  */
-export const enterChance = (p, building) => isOffice(building)
+export const enterChance = (p, building) => isWorkplace(building)
   ? (isNight() ? OFFICE_ENTER_CHANCE_NIGHT : OFFICE_ENTER_CHANCE)
   : isNight() && !nightOwl(p) ? ENTER_CHANCE_NIGHT : ENTER_CHANCE;
 /** How long a visit lasts, in hours of the day's clock. */
@@ -1190,8 +1222,8 @@ export function goIndoors(p, building, from) {
   endActivity(p);
   p.crossStage = null; p.jc = null; p.wait = 0;
   p.mode = 'indoors';
-  // mostly a quick visit, now and then most of the day — or at an office, a working day
-  const hours = isOffice(building) ? OFFICE_MIN_HOURS + (OFFICE_MAX_HOURS - OFFICE_MIN_HOURS)*peopleRng()
+  // mostly a quick visit, now and then most of the day — or at work, a working day
+  const hours = isWorkplace(building) ? OFFICE_MIN_HOURS + (OFFICE_MAX_HOURS - OFFICE_MIN_HOURS)*peopleRng()
     : INDOORS_MIN_HOURS + (INDOORS_MAX_HOURS - INDOORS_MIN_HOURS)*peopleRng()**2;
   p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, hoursLeft: hours };
   p.inRoom = null;
@@ -1217,8 +1249,8 @@ export function updateIndoors(p, i, dt) {
   }
   if (visit.stage === 'inside') {
     visit.hoursLeft -= dt*24/(Math.max(0.1, S.dayLengthMinutes)*60);
-    // (at an office after dark, home soon — each in their own time, and not those working late, or the bench's guests)
-    if (isNight() && isOffice(visit.building) && !worksLate(p) && !visit.goingHome && Number.isFinite(visit.hoursLeft)) {
+    // (at work after dark, home soon — each in their own time, and not those working late, or the bench's guests)
+    if (isNight() && isWorkplace(visit.building) && !worksLate(p) && !visit.goingHome && Number.isFinite(visit.hoursLeft)) {
       visit.goingHome = true;
       visit.hoursLeft = Math.min(visit.hoursLeft, OFFICE_LEAVE_HOURS*peopleRng());
     }
@@ -1414,7 +1446,7 @@ function sitting(p, here, dt) {
       if (Math.abs(wrapAngle(facing - p.heading)) > 0.15 || p.oneShot) break;
       here.stage = 'sit';
       p.pose = deskPose(seat);
-      if (p.pose === 'Eating') serveMeal(p);                         // (a plate on the table and a fork in hand)
+      if (p.pose === 'Eating') serveMeal(p, seat.diner.top);                 // (a plate on the table and a fork in hand)
       here.timer = (20 + peopleRng()*60)*p.traits.patience;
       here.spell = spellAt(p.pose);
       p.seatLift = seat.y - p.y - clipNamed('Sit1').seatY*modelScale(p);

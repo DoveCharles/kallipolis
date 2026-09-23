@@ -261,19 +261,21 @@ export function buildPeopleNav() {
       const { pts } = resampleLine(tess), cum = cumulative(pts);
       if (cum[cum.length-1] < 1) return;
       decks.push(lines.length);
-      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, y: net.H, lateral: net.lateral,
+      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, y: net.H, lateral: net.lateral, walk: net.walk,
         blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
     });
     net.ramps.forEach(ramp => {
       const pts = ramp.pts, cum = cumulative(pts), li = lines.length;
       lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, ramp: true, y: net.H, ys: ramp.ys,
-        lateral: ramp.lateral, blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
+        lateral: ramp.lateral, walk: ramp.walk, blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
       let top = null;
       decks.forEach(dl => lines[dl].pts.forEach((q, vi) => {
         const d = Math.hypot(q.x - ramp.top.x, q.z - ramp.top.z);
         if (!top || d < top.d) top = { li: dl, vi, d };
       }));
       if (top) raisedLinks.push([{ li, vi: 0 }, { li: top.li, vi: top.vi }]);
+      // the deck is cut square where an end ramp takes over from it (see squareEnd in peopleFooting.js)
+      if (top && ramp.end && top.d < 1e-3) { const deck = lines[top.li]; if (top.vi === 0) deck.cutStart = true; else if (top.vi === deck.pts.length-1) deck.cutEnd = true; }
       const foot = pts.length - 1, handle = ringPoint(ramp.foot, 10);
       if (handle) pending.push({ li, vi: foot, handle });
       rampFeet.push({ li, vi: foot });

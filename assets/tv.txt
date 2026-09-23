@@ -3,6 +3,7 @@
 # Blank lines and lines starting with # are skipped. (A video whose owner has turned off embedding shows an error instead.)
 
 https://www.youtube.com/watch?v=bIRnM6s4GNo
+https://www.youtube.com/watch?v=yN9dSvUJB2o
 https://www.youtube.com/watch?v=RyBEUyEtxQo
 https://www.youtube.com/watch?v=QvCHRHyKccQ
 https://www.youtube.com/watch?v=5h8L0Vs0xj8
@@ -11,6 +12,7 @@ https://www.youtube.com/watch?v=k5v2dJILqzY
 https://www.youtube.com/watch?v=__NI6ZeiRb0
 https://www.youtube.com/watch?v=vI2eNeD-jWQ
 https://www.youtube.com/watch?v=MLjkSU5kLsw
+https://www.youtube.com/watch?v=O-okbzIoMK8
 https://www.youtube.com/watch?v=WzhW20hLp6M
 https://www.youtube.com/watch?v=DNm5eb97Y0g
 https://www.youtube.com/watch?v=q5GDpeJaQQY
@@ -21,6 +23,7 @@ https://www.youtube.com/watch?v=6x7ezLiR4rY
 https://www.youtube.com/watch?v=a0sKQI-1kAI
 https://www.youtube.com/watch?v=Lrc-AMjhrkY
 https://www.youtube.com/watch?v=cR2DlQTNJ90
+https://www.youtube.com/watch?v=gL9Cfx0mj40
 https://www.youtube.com/watch?v=J7n7l8L3Bx0
 https://www.youtube.com/watch?v=AiH4oUq6Ge4
 https://www.youtube.com/watch?v=ahoYXea0x-c
@@ -38,6 +41,7 @@ https://www.youtube.com/watch?v=AuMdE-r6qcU
 https://www.youtube.com/watch?v=PI-nzF0Yyc8
 https://www.youtube.com/watch?v=zCsYwPFJWKo
 https://www.youtube.com/watch?v=xG5fTbLaRZM
+https://www.youtube.com/watch?v=tnPG-kOTrls&t=623s
 https://www.youtube.com/watch?v=qrAXRSBv-co
 https://www.youtube.com/clip/Ugkxsmnfx8NWdmF6eeKdt9FH6JxpxpW1QhJt
 https://www.youtube.com/watch?v=2VAmUOUVC3c

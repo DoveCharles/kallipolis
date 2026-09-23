@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
-import { Y_ZONE_GROUND, Y_PARK, camera } from '../core/scene.js';
+import { Y_ZONE_GROUND, Y_PARK, camera, SKY_ENV_MAP } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { startFlying, endFlying } from '../life/possession.js';
 import { explodeCar } from '../life/giblets.js';
@@ -348,15 +348,30 @@ function restingBox(root) {
   return box;
 }
 // One of the model's painted materials in one of the airline colours: the model's own, repainted, so it keeps whatever
-// else the material says about itself and only changes colour. Kept in a map rather than cloned per aircraft, so however
+// else the material says about itself and only changes colour (and gloss). Kept in a map rather than cloned per aircraft, so however
 // many are flying there are only ever as many of these as there are colours on the field.
 function liveryMaterial(name, color) {
   const key = `${name}|${color}`;
   let material = liveries.get(key);
   if (!material) {
     const own = planeModel.paint.get(name);
-    material = own ? own.clone() : new THREE.MeshStandardMaterial({ roughness: 0.5 });
+    // a physical material for the clearcoat, taking everything else from the model's own (copied as a standard one, since
+    // the physical copy() would read clearcoat and the rest off a source that has none; and its defines, which that copy
+    // overwrites, put back, or the PHYSICAL shader paths never compile)
+    material = new THREE.MeshPhysicalMaterial();
+    if (own) {
+      THREE.MeshStandardMaterial.prototype.copy.call(material, own);
+      material.defines = { STANDARD: '', PHYSICAL: '' };
+    }
     material.color.setHex(color);
+    // lacquered, like car paint: the sky map is a smooth gradient and most liveries are white, so a white body reflecting a
+    // pale sky barely changes — what reads as gloss is the sharp highlight of a clear coat over the colour
+    material.roughness = 0.2;
+    material.metalness = 0;
+    material.clearcoat = 1;
+    material.clearcoatRoughness = 0.05;
+    material.envMap = SKY_ENV_MAP;
+    material.envMapIntensity = 1;
     liveries.set(key, material);
   }
   return material;

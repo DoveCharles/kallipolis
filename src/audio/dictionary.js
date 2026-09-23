@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener, playBufferAt } from './sfx.js';
+import { listener, playBufferAt, muffler } from './sfx.js';
 import { speakText, SAMPLE_RATE } from './speech.js';
 import { loudnessOf } from './voices.js';
 
@@ -14,7 +14,7 @@ const LINE_CHANCE = 0.15;   // at the start of each phrase of babble
 const SAY_DISTANCE = 40;    // beyond this from the camera they only babble
 const LINE_GAP = 3;         // seconds after a line ends before anyone says another
 const MATCH = 1;            // how loud a real line is next to the speaker's own babble (see loudnessOf in audio/voices.js)
-const REF_DISTANCE = 6, HEAR_DISTANCE = 60; // (as for babble)
+const REF_DISTANCE = 5, HEAR_DISTANCE = 40, MUFFLE = 1.4; // (as for babble)
 const MOUTH_FRAME = 0.05;   // seconds over which how wide the mouth is follows the line
 
 let lines = [];
@@ -72,7 +72,7 @@ export function sayLine(at, voice, who, mood = 0) {
   const rms = Math.sqrt(loudest.reduce((a, b) => a + b, 0)/(loudest.length || 1));
   const buffer = context.createBuffer(1, samples.length, SAMPLE_RATE);
   buffer.getChannelData(0).set(samples);
-  const source = playBufferAt(buffer, at, rms ? MATCH*loudnessOf(voice)/rms : 0, REF_DISTANCE, HEAR_DISTANCE);
+  const source = playBufferAt(buffer, at, rms ? MATCH*loudnessOf(voice)/rms : 0, REF_DISTANCE, HEAR_DISTANCE, 1, [muffler(at, REF_DISTANCE, MUFFLE)]);
   if (!source) return null;
   current = { source, start: now, length: buffer.duration, mouth };
   return current;

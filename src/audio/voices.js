@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener, isMuted, heardFrom } from './sfx.js';
+import { listener, isMuted, heardFrom, muffler } from './sfx.js';
 import { melodyOf } from './melodies.js';
 
 // ============================================================ voices
@@ -33,8 +33,10 @@ const CONSONANTS = [
   { kind: 'glide', from: [250, 2300], time: 0.06 },               // y
   null, null,
 ];
-const HEAR_DISTANCE = 60;          // beyond this from the camera they aren't heard at all
-const REF_DISTANCE = 6;            // how near to be heard at full volume
+const HEAR_DISTANCE = 40;          // beyond this from the camera they aren't heard at all
+const REF_DISTANCE = 5;            // how near to be heard at full volume
+const ROLLOFF = 2.5;               // how fast they fade past that (1 is the inverse law: a tenth as loud at ten times as far)
+const MUFFLE = 1.4;                // how fast the top comes off past REF_DISTANCE (see muffler in sfx.js): far off, talk's a murmur, not words
 const VOLUME = 0.22;
 const BLIPS_MAX = 12;              // syllables sounding at once, past which new ones are dropped
 const BEND = 0.1;                  // how far each syllable's pitch strays at random from where the phrase has it, either way
@@ -206,8 +208,12 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   panner.panningModel = 'equalpower';
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
+  panner.rolloffFactor = ROLLOFF;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  gain.connect(panner).connect(heardFrom(at));
+  const muffle = muffler(at, REF_DISTANCE, MUFFLE);
+  muffle.connect(panner);
+  gain.connect(muffle);
+  panner.connect(heardFrom(at));
   if (consonant?.noise) {
     // the click or hiss: a burst of noise through a band where that consonant sits, moved by the voice's formants too
     const source = context.createBufferSource(), band = context.createBiquadFilter(), hiss = context.createGain();
@@ -220,7 +226,7 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
     hiss.gain.setValueAtTime(0, now);
     hiss.gain.linearRampToValueAtTime(level*consonant.level*3, now + (consonant.kind === 'stop' ? Math.min(0.004, burst/3) : burst*0.4));
     hiss.gain.linearRampToValueAtTime(0, now + burst);
-    source.connect(band).connect(hiss).connect(panner);
+    source.connect(band).connect(hiss).connect(muffle);
     source.start(now, Math.random()*0.9);
     source.stop(now + burst + 0.01);
   }

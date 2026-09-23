@@ -5,7 +5,7 @@ import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
 import { buildingKey, buildingNumber, roomLayoutOf } from './footprints.js';
-import { buildingKindOf, buildingName, buildingTypeOf } from './building-types.js';
+import { buildingKindOf, buildingName, buildingTypeOf, buildingEnterable } from './building-types.js';
 import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 
 // ============================================================ following a building
@@ -20,9 +20,10 @@ const raycaster = new THREE.Raycaster();
 const ENTER = ['Enter', 'Go inside'], LEAVE = ['Leave', 'Back outside'];
 const card = makeCard({ id: 'building-card', title: 'Building', onClose: () => stopFollowingBuilding(),
   action: { text: ENTER[0], title: ENTER[1], onClick: () => toggleInside() } });
-// the card's Enter button: into the followed building's one room (see interior.js), and back out
+// the card's Enter button: into the followed building's one room (see interior.js), and back out. Only on buildings
+// people go into (enterable in assets/buildings.txt): a tank farm has no inside to show.
 function toggleInside() {
-  if (!followed) return;
+  if (!followed?.enterable) return;
   if (isInsideBuilding()) leaveBuilding(); else enterBuilding(followed.group, followed.key, followed.room);
   card.setAction(...(isInsideBuilding() ? LEAVE : ENTER));
 }
@@ -62,7 +63,9 @@ function followBuilding(picked) {
   const radius = box.getBoundingSphere(new THREE.Sphere()).radius;
   const key = buildingKey(picked.zone, picked.index), number = buildingNumber(key);
   const kind = buildingKindOf(picked.group, picked.zone);
-  followed = { zone: picked.zone, group: picked.group, key, center, room: roomLayoutOf(kind, number) };
+  followed = { zone: picked.zone, group: picked.group, key, center, room: roomLayoutOf(kind, number),
+    enterable: buildingEnterable(kind) };
+  card.showAction(followed.enterable);
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(CAMERA_MIN_RADIUS, Math.min(600, radius*2.8));
   const info = buildingTypeOf(kind, number);
@@ -88,6 +91,7 @@ const followedBuildingKey = () => followed ? followed.key : null;
 // isometric camera framing it — as for a car or a carriage.
 function thumbnailOf(group, box, center, radius) {
   const mesh = group.clone();
+  mesh.traverse(o => { if (o.userData.batched) o.visible = true; }); // (drawn merged in the city: see building-batches.js)
   mesh.position.sub(center);
   const elevation = Math.atan(1/Math.SQRT2), azimuth = Math.PI/4, distance = radius*4;
   const view = new THREE.OrthographicCamera(-radius, radius, radius, -radius, 0.1, distance*2);

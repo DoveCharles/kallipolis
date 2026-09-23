@@ -181,13 +181,13 @@ export async function loadCarModels() {
  */
 function buildCarDesigns(gltf) {
   gltf.scene.updateMatrixWorld(true);
-  const box = new THREE.Box3(), size = new THREE.Vector3(), center = new THREE.Vector3(), v = new THREE.Vector3(), baseColor = new THREE.Color();
+  const box = new THREE.Box3(), size = new THREE.Vector3(), center = new THREE.Vector3(), v = new THREE.Vector3(), normalMatrix = new THREE.Matrix3(), baseColor = new THREE.Color();
   const designs = [];
   gltf.scene.children.forEach(node => {
     const parts = [];
     node.traverse(o => { if (o.isMesh) parts.push(o); });
     if (!parts.length) return;
-    const positions = [], slots = [], colors = [], indices = [], glassIndices = [], wheelIds = [], wheels = [];
+    const positions = [], normals = [], slots = [], colors = [], indices = [], glassIndices = [], wheelIds = [], wheels = [];
     let glass = null, hasPaint = false;
     const bodyColors = new Map(); // (each unpainted body color, by how much of the design it covers, for its explosion)
     parts.forEach(part => {
@@ -208,10 +208,13 @@ function buildCarDesigns(gltf) {
         bodyColors.set(key, (bodyColors.get(key) ?? 0) + pos.count);
       }
       if (isGlass && !glass) glass = { opacity: part.material.opacity, roughness: part.material.roughness, metalness: part.material.metalness };
-      const first = positions.length/3;
+      const first = positions.length/3, normal = geo.attributes.normal;
+      normalMatrix.getNormalMatrix(part.matrixWorld);
       for (let i=0;i<pos.count;i++) {
         v.fromBufferAttribute(pos, i).applyMatrix4(part.matrixWorld);
         positions.push(v.x, v.y, v.z);
+        v.fromBufferAttribute(normal, i).applyMatrix3(normalMatrix).normalize();
+        normals.push(v.x, v.y, v.z);
         slots.push(slot);
         colors.push(baseColor.r, baseColor.g, baseColor.b);
         wheelIds.push(wheelId);
@@ -221,6 +224,7 @@ function buildCarDesigns(gltf) {
     });
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3)); // the model's own, split where its edges are sharp
     geometry.setIndex(indices.concat(glassIndices)); // the glass last, as a group of its own
     geometry.addGroup(0, indices.length, 0);
     geometry.addGroup(indices.length, glassIndices.length, 1);
@@ -254,10 +258,13 @@ function buildCarDesigns(gltf) {
     const steering = hubInfo.filter(h => h.steers), rolling = hubInfo.filter(h => !h.steers);
     const wheelbase = steering.length && rolling.length ? meanZ(steering) - meanZ(rolling) : 0;
     const wheelRadius = hubInfo.length ? hubInfo.reduce((sum, h) => sum + h.r, 0)/hubInfo.length : 0;
-    geometry.computeVertexNormals();
+    // the rear axle, (z, y), that the body pitches about on its springs (see swayBody): the rolling wheels' hubs, or the
+    // hindmost where none only roll, or the back of the design at the ground where it has no wheels
+    const axleHubs = rolling.length ? rolling : hubInfo;
+    const rearAxle = axleHubs.length ? [meanZ(axleHubs), axleHubs.reduce((sum, h) => sum + h.c.y, 0)/axleHubs.length] : [-size.z/2, 0];
     geometry.computeBoundingSphere();
     const [mainColor] = [...bodyColors].sort((a, b) => b[1] - a[1])[0] ?? [];
-    designs.push({ name: node.name, geometry, bodyColor: !hasPaint && mainColor ? mainColor.split(',').map(Number) : null, length: size.z/BOX_CAR_LENGTH, width: size.x, height: size.y, radius: geometry.boundingSphere.radius, wheelRadius, wheelbase,
+    designs.push({ name: node.name, geometry, bodyColor: !hasPaint && mainColor ? mainColor.split(',').map(Number) : null, length: size.z/BOX_CAR_LENGTH, width: size.x, height: size.y, radius: geometry.boundingSphere.radius, wheelRadius, wheelbase, rearAxle,
       glass: glass || { opacity: 1, roughness: 0.35, metalness: 0.25 } });
   });
   gltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (o.material) o.material.dispose(); } });
@@ -370,7 +377,8 @@ function carPlate(car) {
  * vCarColor is per vertex: its instance's paint (instanceCarPaint) for a CarCol vertex, otherwise its own baked carColor.
  * vCarEmissive is for the lit slots, added to what the material emits and scaled by carGlowFactor. Wheels (carWheel) turn
  * about their hubs — rolled by instanceCarWheel.x, and where carWheel.w is 2 steered by instanceCarWheel.y, for position
- * and normal both (see turnWheels). Plates shade a Plate vertex by the character cell vCarPlateUv.xy falls in, that
+ * and normal both (see turnWheels). Everything else, the body, sits on its springs: pitched by instanceCarWheel.z (nose
+ * up) about the rear axle and rolled by instanceCarWheel.w about the middle at the axle's height (see swayBody). Plates shade a Plate vertex by the character cell vCarPlateUv.xy falls in, that
  * character's glyph from instanceCarPlate, and its shape from the atlas, sampled with the gradients of the whole plate
  * rather than the per-cell ones, and faded to blank as the characters shrink below a readable size.
  * @param {object} shader - the material's shader, patched in place
@@ -381,23 +389,25 @@ function carPlate(car) {
  * @param {boolean} isGlass - true for the glass material, which never wears the holo sheen (see applyCarHolo)
  * @param {number} halfLength - half the design's own local-space length (design.length*BOX_CAR_LENGTH/2), so the foil
  *   sheen's ring can sit a fixed real distance behind this design specifically (carFoilCentreZ, see applyCarFoilField)
+ * @param {number[]} rearAxle - the design's rear axle (z, y), the body's pivot on its springs (design.rearAxle)
  * @returns {void}
  */
 const carHoloTimeUniform = { value: 0 }; // the shared clock for every car's holo sheen (see updateTraffic, applyCarHolo)
-function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlass = false, halfLength = 0) {
+function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlass = false, halfLength = 0, rearAxle = [0, 0]) {
   shader.uniforms.carGlowFactor = glowUniform;
   shader.uniforms.carPlateAtlas = { value: plateAtlas };
   shader.uniforms.carHoloTime = carHoloTimeUniform;
   shader.uniforms.carFoilCentreZ = { value: halfLength };
   shader.uniforms.carRustColor = { value: TERRIBLE_RUST };
+  shader.uniforms.carRearAxle = { value: new THREE.Vector2(...rearAxle) };
   if (paintUniform) shader.uniforms.instanceCarPaint = paintUniform;
-  if (paintUniform) shader.uniforms.instanceCarWheel = { value: new THREE.Vector2() };
+  if (paintUniform) shader.uniforms.instanceCarWheel = { value: new THREE.Vector4(0, 0, 0, 0) }; // (not Vector4()'s w = 1, which would roll the body a radian)
   if (paintUniform) shader.uniforms.instanceCarHolo = { value: new THREE.Vector4() }; // (a thumbnail never shows the holo sheen or rust spots)
   if (paintUniform) shader.uniforms.instanceCarRust = { value: new THREE.Vector2() };
   if (plateUniform) shader.uniforms.instanceCarPlate = plateUniform;
   const paintDecl = paintUniform
-    ? 'uniform vec3 instanceCarPaint;\nuniform vec2 instanceCarWheel;\nuniform vec4 instanceCarPlate;\nuniform vec4 instanceCarHolo;\nuniform vec2 instanceCarRust;'
-    : 'attribute vec3 instanceCarPaint;\nattribute vec2 instanceCarWheel;\nattribute vec4 instanceCarPlate;\nattribute vec4 instanceCarHolo;\nattribute vec2 instanceCarRust;';
+    ? 'uniform vec3 instanceCarPaint;\nuniform vec4 instanceCarWheel;\nuniform vec4 instanceCarPlate;\nuniform vec4 instanceCarHolo;\nuniform vec2 instanceCarRust;'
+    : 'attribute vec3 instanceCarPaint;\nattribute vec4 instanceCarWheel;\nattribute vec4 instanceCarPlate;\nattribute vec4 instanceCarHolo;\nattribute vec2 instanceCarRust;';
   const plateDecl = 'varying vec3 vCarPlateUv;\nflat varying vec4 vCarPlate;';
   const holoVaryingDecl = 'varying vec4 vCarHolo;\nvarying vec2 vCarRust;\nvarying vec3 vHoloPos;\nvarying float vCarPainted;';
   const holoFns = `
@@ -536,14 +546,27 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
       v = vec3(v.x, c*v.y - s*v.z, s*v.y + c*v.z);
       if (carWheel.w > 1.5) { float ss = sin(instanceCarWheel.y), cs = cos(instanceCarWheel.y); v = vec3(cs*v.x + ss*v.z, v.y, cs*v.z - ss*v.x); }
       return v;
+    }
+    uniform vec2 carRearAxle;
+    // the body (not the wheels) leant on its springs: rolled about its length, then pitched nose up about its sideways
+    // axis — a direction as it is, a point about the rear axle (see swayBody)
+    vec3 carBodySway(vec3 v, bool point) {
+      if (carWheel.w > 0.5) return v;
+      vec3 pivot = point ? vec3(0.0, carRearAxle.y, carRearAxle.x) : vec3(0.0);
+      v -= pivot;
+      float sr = sin(instanceCarWheel.w), cr = cos(instanceCarWheel.w), sp = sin(instanceCarWheel.z), cp = cos(instanceCarWheel.z);
+      v = vec3(cr*v.x - sr*v.y, sr*v.x + cr*v.y, v.z);
+      v = vec3(v.x, cp*v.y + sp*v.z, cp*v.z - sp*v.y);
+      return v + pivot;
     }`;
   const glowTerm = (name, slot) => { const g = CAR_GLOW_MATERIALS[name], c = new THREE.Color(g.emissive).multiplyScalar(g.intensity);
     return `carSlot > ${slot - 0.5} && carSlot < ${slot + 0.5} ? vec3(${c.r.toFixed(5)}, ${c.g.toFixed(5)}, ${c.b.toFixed(5)}) : `; };
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\nattribute float carSlot;\nattribute vec3 carColor;\nattribute vec3 carPlate;\n' + paintDecl + wheelTurn + '\nvarying vec3 vCarColor;\nvarying vec3 vCarEmissive;\n' + plateDecl + '\n' + holoVaryingDecl)
-    .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = carWheelTurn(objectNormal);')
+    .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = carBodySway(carWheelTurn(objectNormal), false);')
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       transformed = carWheelTurn(transformed - carWheel.xyz) + carWheel.xyz;
+      transformed = carBodySway(transformed, true);
       vCarColor = carSlot > 0.5 && carSlot < 1.5 ? instanceCarPaint : carColor;
       // whether this fragment is the paintable CarCol slot (instanceCarPaint above) or keeps its own baked colour
       // regardless of the car — see carFoilTint, which only has a car colour to work from in the first case
@@ -576,11 +599,11 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
  */
 function makeCarMaterials(design, key, glowUniform, paintUniform, plateUniform) {
   const { opacity, roughness, metalness } = design.glass;
-  const body = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true });
-  const glass = new THREE.MeshStandardMaterial({ roughness, metalness, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true,
+  const body = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8 });
+  const glass = new THREE.MeshStandardMaterial({ roughness, metalness, envMap: SKY_ENV_MAP, envMapIntensity: 0.8,
     transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
   [body, glass].forEach((material, k) => {
-    material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, paintUniform, plateUniform, k === 1, design.length*BOX_CAR_LENGTH/2);
+    material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, paintUniform, plateUniform, k === 1, design.length*BOX_CAR_LENGTH/2, design.rearAxle);
     material.customProgramCacheKey = () => key + (k ? '-glass' : '');
   });
   return [body, glass];
@@ -618,7 +641,7 @@ function makeCarMesh(design) {
   const paint = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*3), 3);
   paint.setUsage(THREE.DynamicDrawUsage);
   design.geometry.setAttribute('instanceCarPaint', paint);
-  const wheels = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*2), 2);
+  const wheels = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*4), 4); // [spin, steer, body pitch, body roll]
   wheels.setUsage(THREE.DynamicDrawUsage);
   design.geometry.setAttribute('instanceCarWheel', wheels);
   const plates = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*4), 4);
@@ -707,6 +730,9 @@ function newCar() {
     // how far its wheels have rolled and how far its steering wheels are turned, both in radians, and the heading it had
     // last frame, from which turnWheels gets how fast it's turning
     wheelSpin: 0, wheelSteer: 0, lastHeading: null,
+    // the body on its springs: pitch (nose up) and roll (top toward the outside of a turn), in radians, how fast each is
+    // moving, and the speed it had last frame and its eased acceleration, which lean it (see swayBody)
+    bodyPitch: 0, bodyPitchRate: 0, bodyRoll: 0, bodyRollRate: 0, lastSpeed: 0, accel: 0,
     // how far the steering's held over, -1 (left) to 1 (right), while it's being driven (see driveByHand)
     steerHeld: 0,
     // the person it's stopped for, if any (see checkYield) — and the last person it rolled PED_YIELD_CHANCE against, so
@@ -1235,6 +1261,37 @@ function turnWheels(car, dt) {
   else if (Math.abs(car.speed) > 0.5 && cm.wheelbase) steer = Math.atan(turned/dt*cm.wheelbase*carScale(car)/car.speed);
   steer = Math.max(-WHEEL_STEER_MAX, Math.min(WHEEL_STEER_MAX, steer));
   car.wheelSteer += (steer - car.wheelSteer)*Math.min(1, dt*10);
+  swayBody(car, turned, dt);
+}
+
+// the body on its springs (see swayBody): how stiff they are and how much they damp (a lightly damped spring, so a lean
+// overshoots and wobbles a little before it settles); radians of pitch per unit/s² of acceleration and of roll per unit/s²
+// of cornering, and the most of each; and the extra nose-up of the driven car's throttle held right down, even standing
+// still
+const SUSPENSION_STIFFNESS = 90, SUSPENSION_DAMPING = 7;
+const SWAY_PITCH_PER_ACCEL = 0.0035, SWAY_ROLL_PER_CORNERING = 0.007, SWAY_PITCH_MAX = 0.045, SWAY_ROLL_MAX = 0.1, SWAY_REV_PITCH = 0.015;
+/**
+ * Spring a car's body toward the lean of how it's being driven: its nose up about the rear axle while it speeds up (and
+ * while the driven car is revving) and down as it brakes, and rolled out of a turn. The shader leans the body, not the wheels (see carBodySway).
+ * @param {object} car
+ * @param {number} turned - radians it turned this frame
+ * @param {number} dt - seconds this frame
+ * @returns {void}
+ */
+function swayBody(car, turned, dt) {
+  const accel = Math.max(-40, Math.min(40, (car.speed - car.lastSpeed)/dt));
+  car.lastSpeed = car.speed;
+  car.accel += (accel - car.accel)*Math.min(1, dt*8); // (eased, so a single jolty frame doesn't kick it)
+  const clampSway = (a, most) => Math.max(-most, Math.min(most, a));
+  const pitchGoal = clampSway(car.accel*SWAY_PITCH_PER_ACCEL + (car === drivenCar ? (car.throttle ?? 0)*SWAY_REV_PITCH : 0), SWAY_PITCH_MAX);
+  const rollGoal = clampSway(car.speed*turned/dt*SWAY_ROLL_PER_CORNERING, SWAY_ROLL_MAX);
+  for (let left = Math.min(dt, 0.1); left > 0; left -= 0.02) { // (small steps, for the spring to stay steady)
+    const step = Math.min(left, 0.02);
+    car.bodyPitchRate += (SUSPENSION_STIFFNESS*(pitchGoal - car.bodyPitch) - SUSPENSION_DAMPING*car.bodyPitchRate)*step;
+    car.bodyPitch += car.bodyPitchRate*step;
+    car.bodyRollRate += (SUSPENSION_STIFFNESS*(rollGoal - car.bodyRoll) - SUSPENSION_DAMPING*car.bodyRollRate)*step;
+    car.bodyRoll += car.bodyRollRate*step;
+  }
 }
 
 const placing = { matrix: new THREE.Matrix4(), rotation: new THREE.Quaternion(), scale: new THREE.Vector3(), position: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0) };
@@ -1264,7 +1321,7 @@ function placeCar(car, i, designCounts) {
     matrix.compose(position, rotation, scale);
     cm.mesh.setMatrixAt(idx, matrix);
     cm.paint.setXYZ(idx, car.paint[0], car.paint[1], car.paint[2]);
-    cm.wheels.setXY(idx, car.wheelSpin, car.wheelSteer);
+    cm.wheels.setXYZW(idx, car.wheelSpin, car.wheelSteer, car.bodyPitch, car.bodyRoll);
     cm.plates.setXYZW(idx, ...car.plate.packed);
     // the camera's bearing from the car, in the car's own local frame (world bearing to the camera, minus the car's
     // own heading) — not the car's raw heading, so the foil glint (applyCarHolo) reacts to where the camera is

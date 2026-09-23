@@ -4,6 +4,9 @@ import { mulberry32, lerp } from '../../core/math.js';
 import { scene } from '../../core/scene.js';
 import { onProfilesLoaded, profileOf } from '../profiles.js';
 import { splitBody } from './bodySplit.js';
+import { fitSkirt } from './skirtFit.js';
+import { fitJeans } from './jeansFit.js';
+import { OUTFITS, OUTFIT_ARM, OUTFIT_CHEST, OUTFIT_COLUMNS, OUTFIT_COLUMN_COUNT, OUTFIT_LEG, OUTFIT_TILES, buildOutfitTexture, pickOutfit } from './outfits.js';
 import { HEADSHOT_LAYER, PEOPLE_MAX, people, peopleMesh, setPersonModel } from './people.js';
 
 // =========================================== PEOPLE MODEL ===========================================
@@ -23,11 +26,19 @@ import { HEADSHOT_LAYER, PEOPLE_MAX, people, peopleMesh, setPersonModel } from '
 // and only HAT_CHANCE of people wear one.
 // Facial hair (assets/models/FacialHair.glb) works the same way, but only boys wear it. So do glasses and sunglasses
 // (assets/models/Glasses.glb, built by tools/glasses-model.py), worn by anyone, but only by GLASSES_CHANCE of them.
+// Skirts (assets/models/Skirt.glb, built by tools/skirt-models.py) are worn the same way, by SKIRT_CHANCE of women, but
+// ride on the pelvis and legs instead, fitted to the body's bones and shape keys as the model loads (see skirtFit.js);
+// a woman in one goes bare-legged. Baggy jeans are made from the body's own legs (see jeansFit.js), worn by JEANS_CHANCE of
+// everyone not in a skirt, in the color of their trousers.
 const PERSON_MODEL_URL = 'assets/models/Person.glb';
 const HAIR_MODEL_URL = 'assets/models/Hair.glb';
 const FACIAL_HAIR_MODEL_URL = 'assets/models/FacialHair.glb';
 const GLASSES_MODEL_URL = 'assets/models/Glasses.glb';
+const SKIRT_MODEL_URL = 'assets/models/Skirt.glb';
 const GLASSES_CHANCE = 0.2;
+const SKIRT_CHANCE = 0.3;
+const JEANS_CHANCE = 0.25;
+const CUFF_LIGHTEN_TO = new THREE.Color(0xffffff), CUFF_LIGHTEN = 0.3; // how much lighter than the jeans their cuff is
 const HAT_CHANCE = 0.1;
 /** Frames per second the source clips are baked at, into the bone-pose texture. */
 export const PERSON_BAKE_FPS = 24;
@@ -369,8 +380,12 @@ const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
 // ('Skin' starts as the model's own, and is there so a person's can be tinted: see peopleBlood.js)
 // ('Blood' is how opaque the splotches drawn over them are — 0 for none — in its fourth number)
 // ('Eyes' is what the whites of their eyes are, so they can be tinted: see updatePeople's eye reddening)
-export const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat', 'Skin', 'Blood', 'Eyes', 'Glasses'];
+// ('Cuff' is a jeans' cuff, a lighter shade of their trousers)
+// ('OutfitRed' and 'OutfitGreen' are only for an outfit's texture — see outfits.js — OutfitRed's fourth number being
+// which outfit they wear, 0 for none, and OutfitGreen's which column of the outfits' texture)
+export const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat', 'Skin', 'Blood', 'Eyes', 'Glasses', 'Skirt', 'Cuff', 'OutfitRed', 'OutfitGreen'];
 const SKIN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Skin'), BLOOD_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Blood');
+const OUTFIT_RED_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitRed'), OUTFIT_GREEN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitGreen');
 const BLOOD_SCALE = 1.2; // how many splotches' worth of noise fit in a unit of the figure: bigger for smaller splotches
 export const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
 
@@ -396,7 +411,7 @@ const SHOE_COLORS = [0x151517, 0x2b2b2f, 0xeeeeea, 0x8f9298, 0x6b4a2f, 0x3b2a1e,
 const GLASSES_COLORS = [0x141416, 0x141416, 0x1f1f22, 0x3a2418, 0x5a3520, 0x6d6f74, 0xa4a7ad];
 const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 0xc49a5a, 0xdcc08a]; // black to platinum
 //Removed light tones: 0xb9b5a 0xe3ddd2
-export const BLINK_DURATION = 0.5; // seconds for the eyes to close and open again
+export const BLINK_DURATION = 0.25; // seconds for the eyes to close and open again
 // how far a person turns their head when they glance around: side to side, and up and down
 export const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
 // the middle of a person's face, from where their head meets their neck, in the model's units
@@ -504,7 +519,6 @@ const PERSON_VERTEX_PARS = `
       vec4 body = personTrait(0), rest = personTrait(1);
       offset += personMorph(0)*body.x + personMorph(1)*body.y + personMorph(2)*body.z + personMorph(3)*body.w + personMorph(4)*rest.x + personMorph(5)*rest.w;
     }
-    if ((mask & 2) != 0) offset += personMorph(${shapeKey('Blink')})*instanceAnim.w;
     if ((mask & 4) != 0) offset += personMorph(${shapeKey('Talk')})*instanceLook.z + personMorph(${shapeKey('Emotion')})*instanceLook.w;
     if ((mask & 24) != 0) {
       vec4 face = personTrait(${PERSON_FACE_ROW});
@@ -513,6 +527,9 @@ const PERSON_VERTEX_PARS = `
     }
     // instanceEyes: how shocked, happy, angry and sad their eyes look
     if ((mask & 32) != 0) offset += personMorph(${shapeKey('Shock')})*instanceEyes.x + personMorph(${shapeKey('Happy')})*instanceEyes.y + personMorph(${shapeKey('Angry')})*instanceEyes.z + personMorph(${shapeKey('Sad')})*instanceEyes.w;
+    // the Blink key was made on the plain face, so on the eyelids every other key fades out as the eyes close — laid over a
+    // face or an expression it pushes the lids through each other
+    if ((mask & 2) != 0) offset = offset*(1.0 - instanceAnim.w) + personMorph(${shapeKey('Blink')})*instanceAnim.w;
     return offset;
   }
   // Moves the arms out from the sides of a heavy or broad person, so their hands don't swing through their hips.
@@ -555,6 +572,35 @@ const BLOOD_SPLOTCHES = `
     diffuseColor.rgb = mix(diffuseColor.rgb, personBloodColor, smoothstep(0.23, 0.27, bloodBlobs(spot))*vPersonBlood.x);
   }`;
 
+// the fragment shader's outfit: its column of the outfit texture (see outfits.js), projected straight through the
+// rest-pose figure — its front onto the faces turned towards +z, its back onto the rest, which way a face turns found
+// from how the rest position changes across the pixel, as the model has no normals of its own to go by once posed.
+// (Sampled whatever, so the texture's mipmaps get their derivatives.)
+// (vPersonOutfit.w is which outfit, 0 for none, and OUTFIT_PART times where: the torso, a sleeve or a leg — or
+// less, nowhere it's drawn)
+const OUTFIT_PART = 16;
+const outfitWindow = (point, min, max) => `(${point} - vec2(${min.map(v => v.toFixed(3)).join(', ')}))/vec2(${max.map((v, k) => (v - min[k]).toFixed(3)).join(', ')})`;
+const OUTFIT_CHEST_GLSL = `
+  {
+    float outfitId = mod(vPersonOutfit.w + 0.5, ${OUTFIT_PART.toFixed(1)}) - 0.5, outfitPart = floor((vPersonOutfit.w + 0.5)/${OUTFIT_PART.toFixed(1)});
+    vec3 outfitNormal = normalize(cross(dFdx(vPersonRest), dFdy(vPersonRest)));
+    vec2 outfitUv = outfitPart > 1.5 ? ${outfitWindow('vPersonRest.zy', [OUTFIT_LEG.minZ, OUTFIT_LEG.minY], [OUTFIT_LEG.maxZ, OUTFIT_LEG.maxY])}
+      : outfitPart > 0.5 ? ${outfitWindow('vec2(abs(vPersonRest.x), vPersonRest.z)', [OUTFIT_ARM.minX, OUTFIT_ARM.minZ], [OUTFIT_ARM.maxX, OUTFIT_ARM.maxZ])}
+      : ${outfitWindow('vPersonRest.xy', [OUTFIT_CHEST.minX, OUTFIT_CHEST.minY], [OUTFIT_CHEST.maxX, OUTFIT_CHEST.maxY])};
+    // which tile (see OUTFIT_TILES), counting up from the texture's foot; and whether this face is one the tile's drawn on:
+    // anywhere on the torso, the top of an arm, the outside of a leg — the sleeve's tile being all round the arm, under the arm's
+    float outfitRow = ${(OUTFIT_TILES.length - 1).toFixed(1)} - (outfitPart > 1.5 ? ${OUTFIT_TILES.indexOf('leg').toFixed(1)} : outfitPart > 0.5 ? ${OUTFIT_TILES.indexOf('arm').toFixed(1)} : outfitNormal.z > 0.0 ? ${OUTFIT_TILES.indexOf('front').toFixed(1)} : ${OUTFIT_TILES.indexOf('back').toFixed(1)});
+    bool outfitFacing = outfitPart > 1.5 ? outfitNormal.x*sign(vPersonRest.x) > 0.5 : outfitPart > 0.5 ? outfitNormal.y > 0.2 : true;
+    vec2 outfitAt = vec2((vPersonOutfitRed.w + clamp(outfitUv.x, 0.0, 1.0))/${OUTFIT_COLUMN_COUNT.toFixed(1)}, clamp(outfitUv.y, 0.0, 1.0));
+    vec4 outfitMask = outfitFacing ? texture2D(personOutfitMap, vec2(outfitAt.x, (outfitAt.y + outfitRow)/${OUTFIT_TILES.length.toFixed(1)})) : vec4(0.0);
+    if (outfitPart > 0.5 && outfitPart < 1.5) outfitMask = max(outfitMask, texture2D(personOutfitMap, vec2(outfitAt.x, (outfitAt.y + ${(OUTFIT_TILES.length - 1 - OUTFIT_TILES.indexOf('sleeve')).toFixed(1)})/${OUTFIT_TILES.length.toFixed(1)})));
+    if (outfitId > 0.5 && outfitPart > -0.5 && outfitUv.x > 0.0 && outfitUv.x < 1.0 && outfitUv.y > 0.0 && outfitUv.y < 1.0) {
+      diffuseColor.rgb = mix(diffuseColor.rgb, vPersonOutfitRed.rgb, outfitMask.r);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vPersonOutfit.rgb, outfitMask.g);
+      diffuseColor.rgb *= 1.0 - 0.6*outfitMask.b;
+    }
+  }`;
+
 /**
  * Add the posing and shape keys to a material's shaders, and how it colors the figure.
  *
@@ -562,7 +608,9 @@ const BLOOD_SPLOTCHES = `
  * (each slot's own color), `look.traitColors` (the slots taking a color of the person's own instead, as
  * { slot: traits row }), `look.bloodSlots` (the slots blood splotches are drawn over — and, with `look.bloodOnBands`, the bands of clothes where they show skin) and `look.bands` (bands of clothes, which show skin — that person's own — if the person's clothes
  * stop at or before them: { slot, number, cut (which of the clothing row's values says where their clothes stop),
- * colorRow (the traits row of the clothes' color) }).
+ * colorRow (the traits row of the clothes' color) }), and `look.outfitSlots` (the slots an outfit's texture is
+ * drawn over, with `look.outfitMap` the texture: see outfits.js — and `look.outfitBands` and `look.outfitLegSlots`, the
+ * bands of the sleeves and legs it's drawn over too, where they're covered, and the rest of the legs).
  * @param {object} shader - three.js's shader object to patch
  * @param {Object<string, {value: *}>} uniforms - the person uniforms to give it
  * @param {object} look - what the material draws and how it colors it
@@ -577,6 +625,9 @@ function injectPersonShader(shader, uniforms, look) {
   // (not from the shadow's depth material, so the body still casts one) whoever personHidden names is drawn headless: their head
   // and hair drawn into a point at the middle of their chest, inside their shirt
   const splotched = colored && (look.bloodSlots || []).length > 0;
+  const outfitted = colored && (look.outfitSlots || []).length > 0;
+  if (outfitted) shader.uniforms.personOutfitMap = { value: look.outfitMap };
+  const rested = splotched || outfitted;
   const hideHead = colored ? 'if (personIndex() == personHidden && personVertex.x > 0.0) transformed = (personBone(personChestBone)*vec4(personChestPivot, 1.0)).xyz;' : '';
   const bands = (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? personTrait(${SKIN_ROW}).rgb : personTrait(${b.colorRow}).rgb) : `).join('');
   // (blood is drawn over the slots it's asked for, and over a band of clothes only where it shows skin)
@@ -588,20 +639,27 @@ function injectPersonShader(shader, uniforms, look) {
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\n' + PERSON_VERTEX_PARS
       + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : '')
-      + (splotched ? '\nvarying vec2 vPersonBlood;\nvarying vec3 vPersonRest;' : ''))
+      + (splotched ? '\nvarying vec2 vPersonBlood;' : '') + (rested ? '\nvarying vec3 vPersonRest;' : '')
+      + (outfitted ? '\nvarying vec4 vPersonOutfit;\nvarying vec4 vPersonOutfitRed;' : ''))
     .replace('#include <begin_vertex>', `#include <begin_vertex>
-      ${splotched ? 'vPersonRest = transformed;' : ''}
+      ${rested ? 'vPersonRest = transformed;' : ''}
       transformed = personArms(personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz), transformed.x);
       int personSlotIndex = int(personVertex.y + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
       ${hideHead}
       ${color}
-      ${splotched ? `vPersonBlood = vec2(${bloodOver}, float(personIndex()));` : ''}`);
+      ${splotched ? `vPersonBlood = vec2(${bloodOver}, float(personIndex()));` : ''}
+      ${outfitted ? `vPersonOutfitRed = vec4(personTrait(${OUTFIT_RED_ROW}).rgb, personTrait(${OUTFIT_GREEN_ROW}).w);
+      vPersonOutfit = vec4(personTrait(${OUTFIT_GREEN_ROW}).rgb, personTrait(${OUTFIT_RED_ROW}).w > 0.5 ? personTrait(${OUTFIT_RED_ROW}).w + ${OUTFIT_PART}.0*(
+        (${look.outfitSlots.map(slot => `personSlotIndex == ${slot}`).join(' || ')}) ? 0.0
+        : ${(look.outfitLegSlots || []).map(slot => `personSlotIndex == ${slot} ? 2.0 : `).join('')}${(look.outfitBands || []).map(b => `personSlotIndex == ${b.slot} && ${b.number}.0 < personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? ${b.part}.0 : `).join('')}-1.0) : 0.0);` : ''}`);
   if (!colored) return;
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vPersonColor;' + (splotched ? '\nvarying vec2 vPersonBlood;\nvarying vec3 vPersonRest;\nuniform vec3 personBloodColor;' + BLOOD_GLSL : ''))
-    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vPersonColor;' + (splotched ? BLOOD_SPLOTCHES : ''));
+    .replace('#include <common>', '#include <common>\nvarying vec3 vPersonColor;' + (rested ? '\nvarying vec3 vPersonRest;' : '')
+      + (splotched ? '\nvarying vec2 vPersonBlood;\nuniform vec3 personBloodColor;' + BLOOD_GLSL : '')
+      + (outfitted ? '\nvarying vec4 vPersonOutfit;\nvarying vec4 vPersonOutfitRed;\nuniform sampler2D personOutfitMap;' : ''))
+    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vPersonColor;' + (outfitted ? OUTFIT_CHEST_GLSL : '') + (splotched ? BLOOD_SPLOTCHES : ''));
 }
 
 /**
@@ -619,7 +677,7 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name 
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   if (byAttribute) { material.defines = { PERSON_INDEX_ATTRIBUTE: '' }; depth.defines = { PERSON_INDEX_ATTRIBUTE: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
-  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), look.femaleOnly.join(',')].join('|');
+  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), look.femaleOnly.join(',')].join('|');
   material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, look);
   material.customProgramCacheKey = () => key;
   depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly });
@@ -660,19 +718,20 @@ async function loadGLB(url) {
 }
 
 /**
- * Load the people, hair and facial-hair models and build the instanced meshes from them. The body failing leaves people
- * as cuboids; hair or facial hair failing only leaves people without them.
+ * Load the people, hair, facial-hair, glasses and skirt models, make the jeans, and build the instanced meshes from them. The body failing
+ * leaves people as cuboids; any of the others failing only leaves people without them.
  * @returns {Promise<void>}
  */
 export async function loadPersonModel() {
-  const [body, hair, facialHair, glasses] = await Promise.allSettled([loadGLB(PERSON_MODEL_URL), loadGLB(HAIR_MODEL_URL), loadGLB(FACIAL_HAIR_MODEL_URL), loadGLB(GLASSES_MODEL_URL)]);
+  const [body, hair, facialHair, glasses, skirts] = await Promise.allSettled([loadGLB(PERSON_MODEL_URL), loadGLB(HAIR_MODEL_URL), loadGLB(FACIAL_HAIR_MODEL_URL), loadGLB(GLASSES_MODEL_URL), loadGLB(SKIRT_MODEL_URL)]);
   if (body.status === 'rejected') { console.warn('Blockout: the people model failed to load; people stay cuboids', body.reason); return; }
   if (hair.status === 'rejected') console.warn('Blockout: the hair model failed to load; people go without', hair.reason);
   if (facialHair.status === 'rejected') console.warn('Blockout: the facial hair model failed to load; people go without', facialHair.reason);
   if (glasses.status === 'rejected') console.warn('Blockout: the glasses model failed to load; people go without', glasses.reason);
+  if (skirts.status === 'rejected') console.warn('Blockout: the skirt model failed to load; people go without', skirts.reason);
   const loaded = result => result.status === 'fulfilled' ? result.value : null;
   try {
-    setPersonModel(buildPersonModel(body.value, loaded(hair), loaded(facialHair), loaded(glasses)));
+    setPersonModel(buildPersonModel(body.value, loaded(hair), loaded(facialHair), loaded(glasses), loaded(skirts)));
     peopleMesh.visible = false;
   } catch (err) {
     console.warn('Blockout: the people model failed to load; people stay cuboids', err);
@@ -691,9 +750,10 @@ export async function loadPersonModel() {
  * @param {?object} hairGltf - the loaded hairstyles, or null
  * @param {?object} facialHairGltf - the loaded facial hair, or null
  * @param {?object} glassesGltf - the loaded glasses, or null
+ * @param {?object} skirtGltf - the loaded skirts, or null
  * @returns {PersonModel} the meshes and everything the shader and the update loop need
  */
-function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
+function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf) {
   const root = gltf.scene;
   const rigged = [], attached = [];
   root.traverse(o => { if (o.isSkinnedMesh) rigged.push(o); else if (o.isMesh) attached.push(o); });
@@ -790,13 +850,48 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
   geometry.computeVertexNormals(); // (flat shading works its normals out per pixel; these are only for the shadows)
   geometry.computeBoundingBox();
 
-  // ---- the shape key texture: a block of rows per shape key, a texel per vertex, holding its offsets
-  const morphWidth = Math.min(vertexCount, 1024), morphRows = Math.ceil(vertexCount/morphWidth);
+  // ---- skirts: each fitted to the body (see skirtFit.js), their vertices' body shape-key offsets going into the shape
+  // key texture after the body's own
+  const skirtFits = [];
+  if (skirtGltf) {
+    skirtGltf.scene.updateMatrixWorld(true);
+    const bodyOffsets = offsets.slice(0, PERSON_BODY_KEY_COUNT);
+    skirtGltf.scene.children.forEach(style => {
+      const parts = [];
+      style.traverse(o => { if (o.isMesh) parts.push(o); });
+      if (!parts.length) return;
+      const skirtPositions = [], skirtIndices = [];
+      parts.forEach(part => {
+        const pos = part.geometry.attributes.position, index = part.geometry.index, first = skirtPositions.length/3;
+        for (let i=0;i<pos.count;i++) { v.fromBufferAttribute(pos, i).applyMatrix4(part.matrixWorld); skirtPositions.push(v.x, v.y, v.z); }
+        const corners = index ? index.count : pos.count;
+        for (let t=0;t<corners;t++) skirtIndices.push(first + (index ? index.getX(t) : t));
+      });
+      const fit = fitSkirt(skirtPositions, { positions, indices, joints, weights, offsets: bodyOffsets, mirrorBone,
+        usable: i => headWeights[i] === 0 && armWeights[i] === 0 });
+      const first = offsets[0].length/3;
+      offsets.forEach((keyOffsets, k) => { for (let i=0;i<skirtPositions.length;i++) keyOffsets.push(k < PERSON_BODY_KEY_COUNT ? fit.offsets[k][i] : 0); });
+      skirtFits.push({ name: style.name, positions: skirtPositions, indices: skirtIndices, fit, first });
+    });
+    skirtGltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+  }
+
+  // ---- baggy jeans: the body's legs pushed out (see jeansFit.js), their shape-key offsets going in after the skirts'
+  const legSlots = ['Pants', ...PERSON_SLOTS.filter(slot => /^Leg\d/.test(slot))].map(slot => PERSON_SLOTS.indexOf(slot));
+  const jeans = fitJeans({ positions, indices, joints, weights, offsets: offsets.slice(0, PERSON_BODY_KEY_COUNT),
+    leg: i => legSlots.includes(slots[i]), usable: i => headWeights[i] === 0 && armWeights[i] === 0 });
+  jeans.first = offsets[0].length/3;
+  offsets.forEach((keyOffsets, k) => { for (let i=0;i<jeans.positions.length;i++) keyOffsets.push(k < PERSON_BODY_KEY_COUNT ? jeans.offsets[k][i] : 0); });
+
+  // ---- the shape key texture: a block of rows per shape key, a texel per vertex (the body's, then the skirts' and jeans'), holding
+  // its offsets
+  const morphCount = offsets[0].length/3;
+  const morphWidth = Math.min(morphCount, 1024), morphRows = Math.ceil(morphCount/morphWidth);
   const morphData = new Float32Array(morphWidth*morphRows*PERSON_SHAPE_KEYS.length*4);
-  const morphMask = new Float32Array(vertexCount);
+  const morphMask = new Float32Array(morphCount);
   PERSON_SHAPE_KEYS.forEach((key, k) => {
     const keyOffsets = offsets[k], bit = PERSON_SHAPE_KEY_BITS[k];
-    for (let i=0;i<vertexCount;i++) {
+    for (let i=0;i<morphCount;i++) {
       const texel = (k*morphRows*morphWidth + i)*4;
       for (let c=0;c<3;c++) morphData[texel + c] = keyOffsets[i*3 + c];
       if (Math.abs(keyOffsets[i*3]) + Math.abs(keyOffsets[i*3+1]) + Math.abs(keyOffsets[i*3+2]) > 1e-6) morphMask[i] = morphMask[i] | bit;
@@ -961,19 +1056,48 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
     styleGltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
     return styles;
   };
-  // Each layer of what's worn on the head: its styles, and for each person which style they wear (-1 for none) and where
-  // they are among its wearers. Women always wear a hairstyle, men can be bald; a layer with a `chance` is worn by that
-  // many of those who can, whoever they are. `hair` is whether it's colored as their hair. A layer with a `hatChance`
-  // gives that many of its wearers one of its hats, and the rest one of its other styles.
-  const headLayer = (styles, rng, { chance = null, hair = true, hatChance = null } = {}) => {
+  // Each layer of what's worn: its styles, and for each person which style they wear (-1 for none) and where they are
+  // among its wearers. Women always wear a hairstyle, men can be bald; a layer with a `chance` is worn by that many of
+  // those who can, whoever they are. `look` is how it's colored: 'hair' as their hair (and hat), 'glasses' and 'skirt' in
+  // those colors of theirs, 'jeans' as their trousers. A layer with a `hatChance` gives that many of its wearers one of
+  // its hats, and the rest one of its other styles; one `without` another is never worn by that one's wearers.
+  const headLayer = (styles, rng, { chance = null, look = 'hair', hatChance = null, without = null } = {}) => {
     const who = (sex, hat) => styles.map((style, k) => style[sex] && (hatChance == null || style.hat === hat) ? k : -1).filter(k => k >= 0);
-    return { styles, rng, chance, hair, hatChance, of: new Int16Array(PEOPLE_MAX).fill(-1), slot: new Int32Array(PEOPLE_MAX),
+    return { styles, rng, chance, look, hatChance, without, of: new Int16Array(PEOPLE_MAX).fill(-1), slot: new Int32Array(PEOPLE_MAX),
       girls: who('girls', false), boys: who('boys', false), girlsHats: who('girls', true), boysHats: who('boys', true) };
   };
   const hairLayer = headLayer(headStylesFrom(hairGltf, hairstyleWearers), mulberry32(31337), { hatChance: HAT_CHANCE });
   const facialHairLayer = headLayer(headStylesFrom(facialHairGltf, () => ({ girls: false, boys: true })), mulberry32(4711));
-  const glassesLayer = headLayer(headStylesFrom(glassesGltf, () => ({ girls: true, boys: true })), mulberry32(2020), { chance: GLASSES_CHANCE, hair: false });
-  const headLayers = [hairLayer, facialHairLayer, glassesLayer];
+  const glassesLayer = headLayer(headStylesFrom(glassesGltf, () => ({ girls: true, boys: true })), mulberry32(2020), { chance: GLASSES_CHANCE, look: 'glasses' });
+  // skirts, ridden by the bones and shape keys each vertex was fitted to above; only women wear them
+  const skirtStyles = skirtFits.map(({ name, positions: skirtPositions, indices: skirtIndices, fit, first }) => {
+    const count = skirtPositions.length/3, skirtGeometry = new THREE.BufferGeometry();
+    skirtGeometry.setAttribute('position', new THREE.Float32BufferAttribute(skirtPositions, 3));
+    skirtGeometry.setIndex(skirtIndices);
+    skirtGeometry.setAttribute('personJoints', new THREE.Float32BufferAttribute(fit.joints, 4));
+    skirtGeometry.setAttribute('personWeights', new THREE.Float32BufferAttribute(fit.weights, 4));
+    const skirtVertices = new Float32Array(count*4);
+    for (let i=0;i<count;i++) skirtVertices.set([0, 0, morphMask[first + i], first + i], i*4);
+    skirtGeometry.setAttribute('personVertex', new THREE.BufferAttribute(skirtVertices, 4));
+    skirtGeometry.computeVertexNormals();
+    return { name, girls: true, boys: false, hat: false, geometry: skirtGeometry, mesh: null, anim: null, look: null, members: [] };
+  });
+  const skirtLayer = headLayer(skirtStyles, mulberry32(1966), { chance: SKIRT_CHANCE, look: 'skirt' });
+  // baggy jeans, made above; worn by anyone not in a skirt, the cuff a lighter shade of them
+  const jeansStyles = jeans.positions.length ? [(() => {
+    const count = jeans.positions.length/3, jeansGeometry = new THREE.BufferGeometry();
+    jeansGeometry.setAttribute('position', new THREE.Float32BufferAttribute(jeans.positions, 3));
+    jeansGeometry.setIndex(jeans.indices);
+    jeansGeometry.setAttribute('personJoints', new THREE.Float32BufferAttribute(jeans.joints, 4));
+    jeansGeometry.setAttribute('personWeights', new THREE.Float32BufferAttribute(jeans.weights, 4));
+    const jeansVertices = new Float32Array(count*4);
+    for (let k=0;k<count;k++) jeansVertices.set([0, jeans.cuff[k], morphMask[jeans.first + k], jeans.first + k], k*4);
+    jeansGeometry.setAttribute('personVertex', new THREE.BufferAttribute(jeansVertices, 4));
+    jeansGeometry.computeVertexNormals();
+    return { name: 'Jeans', girls: true, boys: true, hat: false, geometry: jeansGeometry, mesh: null, anim: null, look: null, members: [] };
+  })()] : [];
+  const jeansLayer = headLayer(jeansStyles, mulberry32(1492), { chance: JEANS_CHANCE, look: 'jeans', without: skirtLayer });
+  const wornLayers = [hairLayer, facialHairLayer, glassesLayer, skirtLayer, jeansLayer];
 
   // ============== Body Traits ==============
   // Sex, and which hairstyle and facial hair (if any) someone wears, are fixed to the render slot itself, decided once
@@ -989,10 +1113,10 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
   for (let i=0;i<PEOPLE_MAX;i++) {
     const man = sexRng() < 0.5;
     isMan[i] = man ? 1 : 0;
-    headLayers.forEach(layer => {
+    wornLayers.forEach(layer => {
       const hats = layer.hatChance != null ? (man ? layer.boysHats : layer.girlsHats) : [];
       const styles = hats.length && layer.rng() < layer.hatChance ? hats : man ? layer.boys : layer.girls;
-      if (!styles.length) return;
+      if (!styles.length || layer.without?.of[i] >= 0) return;
       const pick = layer.chance != null ? (layer.rng() < layer.chance ? Math.floor(layer.rng()*styles.length) : styles.length)
         : Math.floor(layer.rng()*(man ? styles.length + 1 : styles.length));
       if (pick >= styles.length) return;
@@ -1004,18 +1128,30 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
   }
 
   /**
-   * Where someone's clothes stop (see clothingBand), from their id and sex: a woman's midriff depends on her age,
-   * which comes from people.txt, so callers work this out again whenever that loads (see below).
+   * Where someone's clothes stop (see clothingBand), from their id, and their sex and whether they wear a skirt (which
+   * leaves the legs bare), both the slot's: a woman's midriff depends on her age, which comes from people.txt, so
+   * callers work this out again whenever that loads (see below).
    * @param {number} id - their person id
-   * @param {boolean} man - their sex
+   * @param {number} i - their slot
    * @returns {number[]} one band per entry in PERSON_CLOTHING, for the clothing texel row
    */
-  const clothingRowFor = (id, man) => {
-    const clothingRng = mulberry32(1990 + id*7919), { age } = profileOf(id, man);
-    return PERSON_CLOTHING.map(c => clothingBand(c, clothingRng(), man, age));
+  const clothingRowFor = (id, i) => {
+    const man = isMan[i] === 1, clothingRng = mulberry32(1990 + id*7919), { age } = profileOf(id, man), outfit = OUTFITS[outfitOf(id, i) - 1];
+    return PERSON_CLOTHING.map(c => {
+      const band = clothingBand(c, clothingRng(), man, age);
+      if (c.band === 'Leg' && skirtLayer.of[i] >= 0) return 1;
+      if (c.band === 'Leg' && jeansLayer.of[i] >= 0) return c.count + 1;
+      if (outfit && c.band === 'Sleeve' && outfit.sleeves) return outfit.sleeves;
+      return outfit && !outfit.bare.includes(c.band) ? c.count + 1 : band;
+    });
   };
 
+  /** Which outfit someone wears (see outfits.js), 0 for none: from their id, by a generator of its own, unless their
+   * hat (the slot's) says; and never trousers under a skirt or jeans (the slot's). */
+  const outfitOf = (id, i) => pickOutfit(mulberry32(5150 + id*7919), hairLayer.of[i] >= 0 ? hairLayer.styles[hairLayer.of[i]].name : null, skirtLayer.of[i] >= 0 || jeansLayer.of[i] >= 0);
+
   const traitTexture = new THREE.DataTexture(traits, PEOPLE_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
+  const traitRow = part => 2 + PERSON_TRAIT_COLORS.indexOf(part);
   traitTexture.needsUpdate = true;
 
   /**
@@ -1031,7 +1167,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
     const man = isMan[i] === 1, ranges = man ? PERSON_BODY_SHAPES.male : PERSON_BODY_SHAPES.female;
     const texel = row => (row*PEOPLE_MAX + i)*4;
     const traitRng = mulberry32(777 + id*7919), faceRng = mulberry32(2718 + id*7919);
-    const colorRng = mulberry32(4242 + id*7919), hatRng = mulberry32(8086 + id*7919), glassesRng = mulberry32(6060 + id*7919), color = new THREE.Color();
+    const colorRng = mulberry32(4242 + id*7919), hatRng = mulberry32(8086 + id*7919), glassesRng = mulberry32(6060 + id*7919), skirtRng = mulberry32(1966 + id*7919), color = new THREE.Color();
     const colorFor = {
       Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
       Pants: () => colorRng() < 0.8 ? color.set(PANTS_COLORS[Math.floor(colorRng()*PANTS_COLORS.length)]) : color.setHSL(colorRng(), 0.25 + colorRng()*0.3, 0.25 + colorRng()*0.25),
@@ -1045,6 +1181,12 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
       Hat: () => hatRng() < 0.25 ? color.setHSL(0, 0, [0.08, 0.3, 0.6, 0.9][Math.floor(hatRng()*4)]) : color.setHSL(hatRng(), 0.4 + hatRng()*0.5, 0.3 + hatRng()*0.35),
       // mostly black or tortoiseshell brown, some wire-grey, a few loud
       Glasses: () => { const r = glassesRng(); return r < 0.8 ? color.set(GLASSES_COLORS[Math.floor(glassesRng()*GLASSES_COLORS.length)]) : color.setHSL(glassesRng(), 0.6 + glassesRng()*0.3, 0.4 + glassesRng()*0.15); },
+      // half the colors trousers come in, half something brighter
+      Skirt: () => skirtRng() < 0.5 ? color.set(PANTS_COLORS[Math.floor(skirtRng()*PANTS_COLORS.length)]) : color.setHSL(skirtRng(), 0.35 + skirtRng()*0.45, 0.3 + skirtRng()*0.3),
+      Cuff: () => color.setRGB(1, 1, 1), // (worked out from their trousers: see below)
+      // (only an outfit has these: see below)
+      OutfitRed: () => color.setRGB(1, 1, 1),
+      OutfitGreen: () => color.setRGB(1, 1, 1),
     };
     const shape = PERSON_SHAPE_KEYS.slice(0, PERSON_BODY_KEY_COUNT).map(key => { const [lo, hi] = ranges[key]; return lo + traitRng()*(hi - lo); });
     traits.set(shape.slice(0, 4), texel(0));
@@ -1056,7 +1198,24 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
     traits.set([shape[4], man ? 1 : 0, face[4], shape[5]], texel(1));
     traits.set(face.slice(0, 4), texel(PERSON_FACE_ROW));
     PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
-    traits.set(clothingRowFor(id, man), texel(PERSON_CLOTHING_ROW));
+    // an outfit's colors over their own (from a generator of its own, so no one else's change)
+    const outfit = outfitOf(id, i), outfitRng = mulberry32(5151 + id*7919);
+    traits[texel(OUTFIT_RED_ROW) + 3] = outfit;
+    // and which column of the outfits' texture is theirs: which of its variants they wear (see outfits.js)
+    traits[texel(OUTFIT_GREEN_ROW) + 3] = outfit ? OUTFIT_COLUMNS[outfit - 1] + Math.floor(mulberry32(5152 + id*7919)()*(OUTFITS[outfit - 1].variants || 1)) : 0;
+    if (outfit) Object.entries(OUTFITS[outfit - 1].colors).forEach(([part, colors]) => {
+      const to = texel(traitRow(part));
+      if (typeof colors === 'string') { const from = texel(traitRow(colors)); traits.copyWithin(to, from, from + 3); return; }
+      color.set(colors[Math.floor(outfitRng()*colors.length)]);
+      traits.set([color.r, color.g, color.b], to);
+    });
+    // under a skirt, what's left of their trousers (the crotch, which shows as they sit) is the skirt
+    if (skirtLayer.of[i] >= 0) traits.copyWithin(texel(traitRow('Pants')), texel(traitRow('Skirt')), texel(traitRow('Skirt')) + 3);
+    // a jeans' cuff, a lighter shade of whatever their trousers ended up
+    const pants = texel(traitRow('Pants'));
+    color.setRGB(traits[pants], traits[pants + 1], traits[pants + 2]).lerp(CUFF_LIGHTEN_TO, CUFF_LIGHTEN);
+    traits.set([color.r, color.g, color.b], texel(traitRow('Cuff')));
+    traits.set(clothingRowFor(id, i), texel(PERSON_CLOTHING_ROW));
     traitTexture.needsUpdate = true;
   }
   // whoever's already in the crowd when the model finishes loading has been walking round as a cuboid till now: fill
@@ -1065,7 +1224,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
   // a woman's clothes depend on her age, which comes from people.txt: whenever that (re)loads, work out everyone's
   // clothing again, without touching the rest of how they look
   onProfilesLoaded(() => {
-    people.forEach((p, i) => { traits.set(clothingRowFor(p.id, isMan[i] === 1), (PERSON_CLOTHING_ROW*PEOPLE_MAX + i)*4); });
+    people.forEach((p, i) => { traits.set(clothingRowFor(p.id, i), (PERSON_CLOTHING_ROW*PEOPLE_MAX + i)*4); });
     traitTexture.needsUpdate = true;
   });
 
@@ -1076,7 +1235,6 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
     personTraits: { value: traitTexture }, personHidden: { value: -1 }, personBloodColor: { value: new THREE.Color(0.55, 0.05, 0.05) },
     personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personChestBone: { value: chestBone }, personChestPivot: { value: chestPivot },
   };
-  const traitRow = part => 2 + PERSON_TRAIT_COLORS.indexOf(part);
   const bodyLook = {
     palette,
     traitColors: Object.fromEntries([['Skin', 'Skin'], ['Top', 'Top'], ['Pants', 'Pants'], ['Shoes', 'Shoes'], ['White', 'Eyes']].map(([slot, part]) => [PERSON_SLOTS.indexOf(slot), traitRow(part)])),
@@ -1084,7 +1242,11 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
     bloodSlots: [PERSON_SLOTS.indexOf('Skin')], bloodOnBands: true,
     bands: PERSON_CLOTHING.flatMap((c, cut) => Array.from({ length: c.count }, (_, k) =>
       ({ slot: PERSON_SLOTS.indexOf(c.band + (k + 1)), number: k + 1, cut, colorRow: traitRow(c.part) }))),
+    outfitSlots: ['Top', 'Tummy1', 'Tummy2'].map(slot => PERSON_SLOTS.indexOf(slot)), outfitMap: buildOutfitTexture(),
   };
+  // (a sleeve's bands and a leg's, where they're covered, take the arm's and leg's tiles; and so does the top of the legs, always covered)
+  bodyLook.outfitBands = bodyLook.bands.flatMap(b => { const band = PERSON_SLOTS[b.slot]; return band.startsWith('Sleeve') ? [{ ...b, part: 1 }] : band.startsWith('Leg') ? [{ ...b, part: 2 }] : []; });
+  bodyLook.outfitLegSlots = [PERSON_SLOTS.indexOf('Pants')];
   const anim = dynamicInstanceAttribute(PEOPLE_MAX, 4), look = dynamicInstanceAttribute(PEOPLE_MAX, 4), eyes = dynamicInstanceAttribute(PEOPLE_MAX, 4);
   geometry.setAttribute('instanceAnim', anim);
   geometry.setAttribute('instanceLook', look);
@@ -1092,7 +1254,9 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
   const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
   const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair'), 1: traitRow('Hat') }, femaleOnly: [] };
   const glassesLook = { palette: hairPalette, traitColors: { 0: traitRow('Glasses') }, femaleOnly: [] };
-  headLayers.flatMap(layer => layer.styles.map(style => [style, layer.hair ? hairLook : glassesLook])).forEach(([style, look]) => {
+  const looks = { hair: hairLook, glasses: glassesLook, skirt: { palette: [new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Skirt') }, femaleOnly: [] },
+    jeans: { palette: [new THREE.Color(0xffffff), new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Pants'), 1: traitRow('Cuff') }, femaleOnly: [] } };
+  wornLayers.flatMap(layer => layer.styles.map(style => [style, looks[layer.look]])).forEach(([style, look]) => {
     if (!style.members.length) { style.geometry.dispose(); return; }
     style.geometry.setAttribute('instancePerson', new THREE.InstancedBufferAttribute(Float32Array.from(style.members), 1));
     style.anim = dynamicInstanceAttribute(style.members.length, 4);
@@ -1103,13 +1267,13 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
     style.geometry.setAttribute('instanceEyes', style.eyes);
     style.mesh = makePersonMesh(style.geometry, uniforms, look, style.members.length, true);
   });
-  const gibs = buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm, headLayers, uniforms, bodyLook, hairLook, glassesLook, traits, traitRows });
+  const gibs = buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm, wornLayers, uniforms, bodyLook, looks, traits, traitRows });
   root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
 
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, hidden: uniforms.personHidden, anim, look, eyes, hair: headLayers.flatMap(layer => layer.styles).filter(style => style.mesh), headLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
+  return { mesh, hidden: uniforms.personHidden, anim, look, eyes, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
     headBone: headBone ?? 0, headPivot, chestBone, hands, unitsPerMetre, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
@@ -1214,12 +1378,12 @@ function gibBodyGeometry({ geometry, joints, weights, slots, bones, inHead, inAr
 }
 
 /**
- * Build the gib meshes: one per body part, and one per worn hairstyle, facial hair and pair of glasses.
+ * Build the gib meshes: one per body part, and one per worn hairstyle, facial hair, pair of glasses, skirt and pair of jeans.
  * @returns {{parts: object[], snapshot: function(number, number): void, capacity: number}} the parts (each {name, mesh,
  *   anim, look, eyes, person, samples}), each worn style given a `gib` of the same shape, and a snapshot(i, column)
  *   copying person i's looks into gib column `column`
  */
-function buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm, headLayers, uniforms, bodyLook, hairLook, glassesLook, traits, traitRows }) {
+function buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm, wornLayers, uniforms, bodyLook, looks, traits, traitRows }) {
   const gibTraits = new Float32Array(GIB_BODIES_MAX*traitRows*4);
   const gibTraitTexture = new THREE.DataTexture(gibTraits, GIB_BODIES_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
   gibTraitTexture.needsUpdate = true;
@@ -1241,10 +1405,10 @@ function buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm
   const bodyJoints = body.attributes.personJoints.array, bodyWeights = body.attributes.personWeights.array;
   const parts = body.userData.parts.map(({ name, index }) =>
     gibOf(body, index, bodyLook, name, gibSamples(index, body.attributes.position, bodyJoints, bodyWeights)));
-  headLayers.forEach(layer => layer.styles.forEach(style => {
+  wornLayers.forEach(layer => layer.styles.forEach(style => {
     if (!style.mesh) return;
     const g = style.geometry, index = g.index.array;
-    style.gib = gibOf(g, g.index, layer.hair ? hairLook : glassesLook, style.name, gibSamples(index, g.attributes.position, g.attributes.personJoints.array, g.attributes.personWeights.array));
+    style.gib = gibOf(g, g.index, looks[layer.look], style.name, gibSamples(index, g.attributes.position, g.attributes.personJoints.array, g.attributes.personWeights.array));
   }));
   const colorRows = PERSON_TRAIT_COLORS.filter(part => part !== 'Blood').map(part => 2 + PERSON_TRAIT_COLORS.indexOf(part));
   const color = new THREE.Color();

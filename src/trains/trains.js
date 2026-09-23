@@ -821,7 +821,12 @@ function registerStation(s, line, radius, mats, leaves) {
   if (forward.lengthSq() < 1e-6) forward.set(1,0,0); else forward.normalize();
   const right = { x: forward.z, z: -forward.x }, deckY = s.position.y + stationDeckTop(radius);
   const { x, z } = s.position;
+  const { doorWidth, hasDoors, landingHalf, reach } = stationEntrance(radius);
   trainStations.set(s.node, { nodeId: s.node, x, y: s.position.y, z, radius, halfW,
+    // its plan, for someone walked about on it by hand (see peopleFooting.js): which way is across and along, how far
+    // along its straight sides run, half its doorways' width (0 with no doors), its landings' half-width and reach
+    right, forward: { x: forward.x, z: forward.z }, straightHalf: halfL - Math.min(halfW, halfL),
+    doorHalf: hasDoors ? doorWidth/2 : 0, landingHalf, reach,
     landing: halfW + 0.9,                                   // across to the middle of an entrance's landing
     alongMax: Math.max(0.5, halfL - Math.min(halfW, halfL) - 1), // along the straight middle, clear of the rounded ends
     lineIds: [line.id], networkId: line.networkId, networkStations: 1,
@@ -873,7 +878,7 @@ function makeLift(s, { side, across, width, bottom, top, cab: cabHeight }, right
   const out = new THREE.Vector3(right.x*side, 0, right.z*side), up = new THREE.Vector3(0, 1, 0);
   cab.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(out, up, new THREE.Vector3().crossVectors(out, up)));
   const key = s.node + ':' + side, kept = liftStateOf.get(key);
-  const lift = { key, side, width, bottom: base + bottom, top: base + top, cab,
+  const lift = { key, side, across, depth: LIFT_DEPTH, width, bottom: base + bottom, top: base + top, cab,
     y: kept ? Math.min(base + top, Math.max(base + bottom, kept.y)) : base + bottom, level: kept ? kept.level : 'bottom',
     from: null, dwell: 0, hold: 0, calls: new Set(),
     // a spot in or by the lift: `out` metres outward from the shaft's middle (away from the station), `along` the track,

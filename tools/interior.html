@@ -24,7 +24,7 @@
   <h3>Interior view</h3>
   <div id="status">Loading the city…</div>
   <div>
-    <button id="home">Enter a home</button><button id="posh">Enter a posh home</button><button id="student">Enter a student flat</button><button id="office">Enter an office</button><button id="next">Next building</button>
+    <button id="home">Enter a home</button><button id="posh">Enter a posh home</button><button id="student">Enter a student flat</button><button id="retro">Enter a mid-century home</button><button id="boho">Enter a bohemian home</button><button id="office">Enter an office</button><button id="warehouse">Enter a warehouse</button><button id="factory">Enter a factory</button><button id="next">Next building</button>
     <button id="person">Add a person</button><button id="clear">Send them out</button>
   </div>
   <label>height <input id="height" type="range" min="0.3" max="3.1" step="0.01"> <span></span></label>
@@ -117,7 +117,11 @@ frame.addEventListener('load', async () => {
 $('home').onclick = () => { kind = 'home'; interior.forceHomeSet(null); enter(false); };
 $('posh').onclick = () => { kind = 'home'; interior.forceHomeSet('posh'); enter(false); };
 $('student').onclick = () => { kind = 'home'; interior.forceHomeSet('student'); enter(false); };
+$('retro').onclick = () => { kind = 'home'; interior.forceHomeSet('retro'); enter(false); };
+$('boho').onclick = () => { kind = 'home'; interior.forceHomeSet('boho'); enter(false); };
 $('office').onclick = () => { kind = 'office'; enter(false); };
+$('warehouse').onclick = () => { kind = 'warehouse'; enter(false); };
+$('factory').onclick = () => { kind = 'factory'; enter(false); };
 $('next').onclick = () => enter(true);
 $('person').onclick = addPerson;
 $('clear').onclick = sendOut;

@@ -39,7 +39,9 @@ const ITEMS = {
 };
 
 // A dinner: where the plate goes on the table in front of someone sitting down to eat, in the model's own units (the
-// Eating clip dips its fork to the same spot — see EAT_TIP_PLATE in peopleModel.js), and what is on it.
+// Eating clip dips its fork to the same spot — see EAT_TIP_PLATE in peopleModel.js), and what is on it. Its height there
+// only suits someone of about average size: the plate is set down on the table top itself (serveMeal), since a table
+// doesn't grow with whoever sits at it and a short diner's plate would otherwise sink into it.
 const PLATE_AT = new THREE.Vector3(-0.05, 3.44, -0.56);
 const MEAL_FOOD = [3, 6];        // how many things are on a plate
 const FOOD_SIZE = 0.028, FOOD_SPREAD = 0.075; // a ball of food, and how far about the middle of the plate they lie, in metres
@@ -73,14 +75,15 @@ const meshes = Object.fromEntries(Object.entries(SHAPES).flatMap(([shape, geomet
  * @param {object} p - the person
  * @param {string} item - which item (a key of ITEMS)
  * @param {object} [options] - `hand` ('R' or 'L') for something held, or `at` (a place in the model's units) for
- *   something set down in front of them; `color` for the parts that take one
+ *   something set down in front of them, and `onY` (a height in the world) for it to sit at instead of at's own; `color`
+ *   for the parts that take one
  * @returns {?object} what they are holding, to keep hold of and change (a fork's `loaded`, a plate's `food`)
  */
 export function hold(p, item, options = {}) {
   if (!ITEMS[item]) return null;
-  const { hand = options.at ? null : 'R', at = null, color = 0xffffff } = options;
+  const { hand = options.at ? null : 'R', at = null, onY = null, color = 0xffffff } = options;
   letGo(p, item);
-  const held = { item, hand, at: at ? at.clone() : null, color: new THREE.Color(color), loaded: null, food: null };
+  const held = { item, hand, at: at ? at.clone() : null, onY, color: new THREE.Color(color), loaded: null, food: null };
   (p.holding ??= []).push(held);
   return held;
 }
@@ -111,10 +114,11 @@ export function holding(p, item) {
  * Sit someone down to dinner: a plate of food on the table in front of them and a fork in their hand (what the Eating
  * clip in peopleModel.js is posed around).
  * @param {object} p - the person
+ * @param {?number} [tableTop] - how high the table top is, in the world (else the plate goes where PLATE_AT has it)
  * @returns {void}
  */
-export function serveMeal(p) {
-  const plate = hold(p, 'plate', { at: PLATE_AT });
+export function serveMeal(p, tableTop = null) {
+  const plate = hold(p, 'plate', { at: PLATE_AT, onY: tableTop });
   if (!plate) return;
   const count = MEAL_FOOD[0] + Math.floor(peopleRng()*(MEAL_FOOD[1] + 1 - MEAL_FOOD[0]));
   plate.food = Array.from({ length: count }, () => {
@@ -219,7 +223,9 @@ export function updateHeld() {
         anchor.makeTranslation(shift.x, shift.y, shift.z).multiply(boneMatrix);
         anchor.multiply(part.makeTranslation(...personModel.hands[held.hand].grip.toArray()));
       } else {
-        anchor.makeTranslation(held.at.x, held.at.y, held.at.z);
+        // (on a table top, however high up it is on them: their matrix's own height and scale undone)
+        const y = held.onY == null ? held.at.y : (held.onY - instance.elements[13])/place.setFromMatrixColumn(instance, 1).length();
+        anchor.makeTranslation(held.at.x, y, held.at.z);
       }
       anchor.scale(size.setScalar(personModel.unitsPerMetre));
       world.multiplyMatrices(instance, anchor);
