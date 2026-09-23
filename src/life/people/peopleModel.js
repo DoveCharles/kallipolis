@@ -170,7 +170,7 @@ const GRIP_CURL = [['Finger1', 1.15, 'fingers'], ['Finger2', 0.95, 'fingers'], [
 // ============== EATING ==============
 // Eating is Sit1 with the right arm reposed a frame at a time as it's baked (as Typing is: see typingPose), holding a
 // fork. It dips the fork to a plate on the table in front of them, gathers a mouthful, raises it to the mouth, and
-// brings it back down over the plate to chew — twice over a loop. What happens when is kept on the clip (clip.taps,
+// brings it back down over the plate — twice over a loop. What happens when is kept on the clip (clip.taps,
 // which people.js plays as it comes round): the fork on the plate, a mouthful gathered, and the mouthful eaten.
 //
 // The places are in the model's own space, sat on a dining chair with the table's edge in front of them (see the dining
@@ -226,10 +226,7 @@ function eatingCues(duration) {
     const at = EAT_FIRST + k*(EAT_MOUTHFUL + gap);
     cues.push({ time: at + EAT_DIP, cue: 'clink' });
     cues.push({ time: at + EAT_DIP + EAT_GATHER*0.85, cue: 'forkful' });
-    const bite = at + EAT_DIP + EAT_GATHER + EAT_LIFT + 0.1;
-    cues.push({ time: bite, cue: 'bite' });
-    cues.push({ time: bite + 0.5, cue: 'chew' });
-    cues.push({ time: bite + 1.0, cue: 'chew' });
+    cues.push({ time: at + EAT_DIP + EAT_GATHER + EAT_LIFT + 0.1, cue: 'bite' });
   }
   return cues;
 }

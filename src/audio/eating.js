@@ -3,21 +3,20 @@ import { playBufferAt, zzfxBuffer } from './sfx.js';
 
 // ============================================================ eating
 // What a meal sounds like (see the Eating clip in life/people/peopleModel.js, whose cues people.js plays as they come
-// round): the tink of a fork on a plate, the soft sound of a mouthful going in, and the chewing after it. All built once
-// by ZzFX (see sfx.js) and picked from at random, pitched a little differently each time so a table of diners doesn't
-// sound like one person. Only heard close by — in the room with them — and only so many a second.
+// round): the tink of a fork on a plate, and one soft sound of the mouthful coming off it — nothing after, since chewing
+// close-miked is a noise nobody wants. All built once by ZzFX (see sfx.js) and picked from at random, pitched a little
+// differently each time so a table of diners doesn't sound like one person. Only heard close by — in the room with them
+// — and only so many a second.
 const CLINK = [
   [.3, .2, 2400, 0, .002, .06, 1, 2.5, , , , , , .2, , .1, , .6, .02, , 2200],
   [.25, .2, 900, 0, .001, .02, 4, 1, , , , , , 1.8, , , , .4, .01, , 1400],
 ];
+// the mouthful: a soft, dry little tap of lips and fork, gone almost before it starts
 const BITE = [
-  [.3, .3, 260, 0, .01, .05, 4, 1.2, -8, , , , , 1.4, , , .01, .5, .03, , 900],
+  [.3, .06, 520, .004, .008, .03, 4, .5, , , , , , .7, , , .015, .4, .01, , 1800],
 ];
-const CHEW = [
-  [.25, .35, 180, 0, .012, .07, 4, 1, -5, , , , , 1.6, , , , .45, .04, , 700],
-];
-const SOUNDS = { clink: CLINK, bite: BITE, chew: CHEW };
-const VOLUME = { clink: 0.2, bite: 0.16, chew: 0.13 };
+const SOUNDS = { clink: CLINK, bite: BITE };
+const VOLUME = { clink: 0.2, bite: 0.13 };
 const VARIANTS = 4;
 const HEAR_DISTANCE = 9, REF_DISTANCE = 1.5;
 const SOUNDS_MAX_PER_SECOND = 14; // past this many a second, the rest go unheard
@@ -29,7 +28,7 @@ let budget = SOUNDS_MAX_PER_SECOND, budgetAt = 0;
 /**
  * One sound of someone eating, at the plate or the mouth.
  * @param {{x: number, y: number, z: number}} at - where it comes from
- * @param {string} name - 'clink' (the fork on the plate), 'bite' (a mouthful) or 'chew'
+ * @param {string} name - 'clink' (the fork on the plate) or 'bite' (a mouthful)
  * @returns {void}
  */
 export function eatingSound(at, name) {

@@ -146,9 +146,9 @@ export function mealFinished(p) {
 
 /**
  * Something happening at a point in the Eating clip (see eatingCues in peopleModel.js): the fork touching down on the
- * plate, a forkful gathered onto it, the mouthful taken off it, or the chewing after.
+ * plate, a forkful gathered onto it, or the mouthful taken off it.
  * @param {object} p - the person
- * @param {string} cue - 'clink', 'forkful', 'bite' or 'chew'
+ * @param {string} cue - 'clink', 'forkful' or 'bite'
  * @returns {void}
  */
 export function mealCue(p, cue) {
@@ -160,7 +160,7 @@ export function mealCue(p, cue) {
     return;
   }
   if (cue === 'bite' && fork) fork.loaded = null;
-  eatingSound(at, cue === 'clink' ? 'clink' : cue === 'bite' ? 'bite' : 'chew');
+  eatingSound(at, cue);
 }
 
 // ============== DRAWING ==============
