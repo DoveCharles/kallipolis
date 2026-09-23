@@ -21,7 +21,7 @@ const BLOOD_MIN_SPEED_BONUS = 0.4, BLOOD_MIN_FEAR = 0.5; // what even a single p
 export const bloodSpeed = p => p.blood ? Math.max(BLOOD_MIN_SPEED_BONUS, BLOOD_SPEED_BONUS*p.blood) : 0;
 /** How scared their blood makes them look, 0 to 1 (at least BLOOD_MIN_FEAR, with any). */
 export const bloodFear = p => p.blood ? Math.max(BLOOD_MIN_FEAR, p.blood/BLOOD_MAX) : 0;
-const STAINED_PARTS = ['Skin', 'Top', 'Pants', 'Shoes', 'Hat', 'Hair', 'Skirt'];
+const STAINED_PARTS = ['Skin', 'Top', 'Pants', 'Shoes', 'Hat', 'Hair', 'Skirt', 'Cuff'];
 // (distances at people size 1)
 const BLOOD_STRUCK_SPHERE_SHARE = 0.5, BLOOD_STRUCK_SPHERE_STRENGTH = 0.5; // the sphere round someone struck by something (a car, a plane), as a share of a blast's size and of its strength
 const BLOOD_BLAST_RADIUS = 27;                      // how far a blast splashes

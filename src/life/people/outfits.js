@@ -10,8 +10,9 @@ import * as THREE from 'three';
 // the back — and so rides the torso however they are posed and shaped. The arms, held out straight either side in the
 // rest pose, take a strip of their own looking down on them (OUTFIT_ARM), on the faces turned upwards only: the outside of
 // the arm once it hangs down (a tracksuit's stripes); and the legs one looking at them side on (OUTFIT_LEG), on the faces
-// turned outwards only. Each outfit's texture is one column of an atlas, in the order of OUTFITS, its front, back, arm
-// and leg one above the other; the channels are masks, not colors, so one texture takes
+// turned outwards only; and the sleeves one on every face (an arm's first texture being over the top only). Each
+// outfit's texture is a column of an atlas, in the order of OUTFITS (or several, one per variant: a football shirt's
+// number), its tiles (OUTFIT_TILES) one above the other; the channels are masks, not colors, so one texture takes
 // anyone's colors: red and green are where the outfit's two colors of its own show (OutfitRed and OutfitGreen: a
 // suit's shirt and tie), blue how much darker it is (seams, lapels, buttons). Anywhere else is the top's own color.
 
@@ -21,17 +22,18 @@ export const OUTFIT_CHEST = { minX: -0.75, maxX: 0.75, minY: 5.2, maxY: 7.0 };
 export const OUTFIT_ARM = { minX: 0.35, maxX: 3.25, minZ: -0.3, maxZ: 0.2 };
 /** Where on the rest-pose figure the leg texture goes: across the leg (the model's z) and up it (y). */
 export const OUTFIT_LEG = { minZ: -0.7, maxZ: 0.6, minY: 0.3, maxY: 5.3 };
-export const OUTFIT_TILES = ['front', 'back', 'arm', 'leg'];
+export const OUTFIT_TILES = ['front', 'back', 'arm', 'leg', 'sleeve'];
 const TILE_WIDTH = 256, TILE_HEIGHT = Math.round(TILE_WIDTH*(OUTFIT_CHEST.maxY - OUTFIT_CHEST.minY)/(OUTFIT_CHEST.maxX - OUTFIT_CHEST.minX));
 
 /**
  * The outfits (id 1 onwards, 0 being none). Each is worn either by `chance` of people or, with `hat`, by everyone
- * wearing that hat (a hairstyle's name in Hair.glb) and no one else; with `trousers`, never by anyone in a skirt.
+ * wearing that hat (a hairstyle's name in Hair.glb) and no one else; with `trousers`, never by anyone in a skirt or baggy jeans.
  *
  * `colors` gives the color each part of them takes, in order (see PERSON_TRAIT_COLORS): a list to pick one from, or the
  * name of a part picked before it, to match. `bare` names the bands of clothes (see PERSON_CLOTHING) that stop where
- * the wearer's own would; the rest cover the part altogether. `paint` draws its front and back of the texture, and `paintArm` and `paintLeg`, if it
- * has them, the tops of its sleeves and the outsides of its legs.
+ * the wearer's own would; the rest cover the part altogether, but for its sleeves, stopping at the band `sleeves` says if it says. `paint` draws its
+ * front and back of the texture — the `variants`th of them, if it comes in several — and `paintArm`, `paintLeg` and
+ * `paintSleeve`, if it has them, the tops of its sleeves, the outsides of its legs and its sleeves all round.
  */
 export const OUTFITS = [
   {
@@ -69,13 +71,26 @@ export const OUTFITS = [
     },
     paint: paintTracksuit, paintArm: paintTracksuitArm, paintLeg: paintTracksuitLeg,
   },
+  {
+    // a football shirt, short-sleeved, with a number on it: just the shirt, over whatever they wear below
+    name: 'Football shirt', chance: 0.06, bare: ['Leg'], sleeves: 2, variants: 11,
+    colors: {
+      Top: [0xc8102e, 0x1c3f94, 0x6cabdd, 0x00843d, 0xfdb913, 0xf26522, 0x151517, 0x7a263a, 0x14224a, 0x5b2c83],
+      OutfitGreen: [0xf6f6f2],                                                  // the sleeves and the number
+    },
+    paint: paintFootballShirt, paintSleeve: paintFootballSleeve,
+  },
 ];
+
+/** Where each outfit's columns of the texture start (see buildOutfitTexture); and how many there are. */
+export const OUTFIT_COLUMNS = OUTFITS.map((outfit, k) => OUTFITS.slice(0, k).reduce((sum, o) => sum + (o.variants || 1), 0));
+export const OUTFIT_COLUMN_COUNT = OUTFITS.reduce((sum, o) => sum + (o.variants || 1), 0);
 
 /**
  * Pick which outfit someone wears.
  * @param {function(): number} rng - their outfit rng
  * @param {?string} hat - the name of the hairstyle (or hat) they wear, or null
- * @param {boolean} skirt - whether they wear a skirt
+ * @param {boolean} skirt - whether they wear a skirt or baggy jeans, over where an outfit's trousers would be
  * @returns {number} the outfit's id (its place in OUTFITS, from 1), or 0 for none
  */
 export function pickOutfit(rng, hat, skirt) {
@@ -91,23 +106,26 @@ export function pickOutfit(rng, hat, skirt) {
 }
 
 /**
- * The texture every outfit is drawn from: a column per outfit, left to right, its tiles (OUTFIT_TILES) top to bottom.
+ * The texture every outfit is drawn from: a column per outfit (or variant of one), left to right, its tiles
+ * (OUTFIT_TILES) top to bottom.
  * @returns {THREE.CanvasTexture}
  */
 export function buildOutfitTexture() {
   const canvas = document.createElement('canvas');
-  canvas.width = TILE_WIDTH*OUTFITS.length; canvas.height = TILE_HEIGHT*OUTFIT_TILES.length;
+  canvas.width = TILE_WIDTH*OUTFIT_COLUMN_COUNT; canvas.height = TILE_HEIGHT*OUTFIT_TILES.length;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  OUTFITS.forEach((outfit, k) => OUTFIT_TILES.forEach((tile, row) => {
+  OUTFITS.forEach((outfit, k) => Array.from({ length: outfit.variants || 1 }, (_, variant) => OUTFIT_TILES.forEach((tile, row) => {
+    const column = OUTFIT_COLUMNS[k] + variant;
     ctx.save();
-    ctx.beginPath(); ctx.rect(k*TILE_WIDTH + 1, row*TILE_HEIGHT + 1, TILE_WIDTH - 2, TILE_HEIGHT - 2); ctx.clip(); // (a black edge, so a tile never bleeds into the next)
-    ctx.translate(k*TILE_WIDTH, row*TILE_HEIGHT);
-    if (tile === 'front' || tile === 'back') outfit.paint(ctx, TILE_WIDTH, TILE_HEIGHT, tile === 'front');
+    ctx.beginPath(); ctx.rect(column*TILE_WIDTH + 1, row*TILE_HEIGHT + 1, TILE_WIDTH - 2, TILE_HEIGHT - 2); ctx.clip(); // (a black edge, so a tile never bleeds into the next)
+    ctx.translate(column*TILE_WIDTH, row*TILE_HEIGHT);
+    if (tile === 'front' || tile === 'back') outfit.paint(ctx, TILE_WIDTH, TILE_HEIGHT, tile === 'front', variant);
     else if (tile === 'arm' && outfit.paintArm) outfit.paintArm(ctx, TILE_WIDTH, TILE_HEIGHT);
     else if (tile === 'leg' && outfit.paintLeg) outfit.paintLeg(ctx, TILE_WIDTH, TILE_HEIGHT);
+    else if (tile === 'sleeve' && outfit.paintSleeve) outfit.paintSleeve(ctx, TILE_WIDTH, TILE_HEIGHT);
     ctx.restore();
-  }));
+  })));
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.NoColorSpace; // (masks, not colors)
   texture.anisotropy = 4;
@@ -127,7 +145,7 @@ const RED = '#f00', GREEN = '#0f0', SHADE = b => `rgb(0,0,${Math.round(b*255)})`
 
 /**
  * Pens for drawing on a tile in the model's units.
- * @returns {{polygon: function, line: function, dot: function}}
+ * @returns {{polygon: function, line: function, dot: function, text: function}}
  */
 function pens(ctx, width, height) {
   const { x, y, s } = modelToTile(width, height);
@@ -136,6 +154,12 @@ function pens(ctx, width, height) {
     polygon: (points, fill) => { ctx.fillStyle = fill; path(points); ctx.closePath(); ctx.fill(); },
     line: (points, stroke, w) => { ctx.strokeStyle = stroke; ctx.lineWidth = s(w); ctx.lineCap = ctx.lineJoin = 'round'; path(points); ctx.stroke(); },
     dot: (px, py, r, fill) => { ctx.fillStyle = fill; ctx.beginPath(); ctx.arc(x(px), y(py), s(r), 0, Math.PI*2); ctx.fill(); },
+    // (mirrored, for the back: the tile is seen through the figure from behind)
+    text: (string, px, py, size, fill, mirrored = false) => {
+      ctx.save(); ctx.translate(x(px), y(py)); if (mirrored) ctx.scale(-1, 1);
+      ctx.fillStyle = fill; ctx.font = `bold ${s(size)}px "Arial Black", Impact, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(string, 0, 0); ctx.restore();
+    },
   };
 }
 
@@ -281,4 +305,29 @@ function paintTracksuitLeg(ctx, width, height) {
     const [a, b] = [0.025, 0.06].map(off => middle.map(([z, y]) => [z + side*off, y]));
     polygon([...a, ...b.reverse()], STRIPE);
   });
+}
+
+/**
+ * The football shirt: its number (1 to 11, by variant), small on the chest and big on the back.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width
+ * @param {number} height
+ * @param {boolean} front - the front, or the back
+ * @param {number} variant - which of its numbers
+ */
+function paintFootballShirt(ctx, width, height, front, variant) {
+  const { text } = pens(ctx, width, height);
+  const NUMBER = GREEN;
+  if (front) text(String(variant + 1), 0, 6.45, 0.3, NUMBER);
+  else text(String(variant + 1), 0, 6.2, 0.62, NUMBER, true);
+}
+
+/**
+ * The football shirt's sleeves: white all over.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width
+ * @param {number} height
+ */
+function paintFootballSleeve(ctx, width, height) {
+  ctx.fillStyle = GREEN; ctx.fillRect(0, 0, width, height);
 }
