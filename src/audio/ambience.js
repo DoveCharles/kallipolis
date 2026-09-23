@@ -13,7 +13,7 @@ import { isInsideBuilding } from '../buildings/interior.js';
 // Neither sings in rain or snow, and fewer are heard the higher the camera's gone. When it rains there's the rain: a steady wash of hiss,
 // and drops pattering close by now and then, both as heavy as the rain is, and muffled (and the drops gone) from inside a
 // building. In heavy rain, thunder rumbles now and then somewhere far off. All of it synthesized live, like the engines.
-const HUM_VOLUME = 0.03;
+const HUM_VOLUME = 0.015;
 const HUM_LOW = 250, HUM_HIGH = 1400; // the band of the hum, in Hz
 const HUM_FULL = 12;              // how much traffic nearby (see trafficNearby) makes the hum half as loud as it gets
 const BIRD_GAP = 2.5, CRICKET_GAP = 0.9; // mean seconds between one singing and the next, at street level
