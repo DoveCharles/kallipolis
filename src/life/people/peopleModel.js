@@ -5,6 +5,7 @@ import { scene } from '../../core/scene.js';
 import { onProfilesLoaded, profileOf } from '../profiles.js';
 import { splitBody } from './bodySplit.js';
 import { fitSkirt } from './skirtFit.js';
+import { OUTFITS, OUTFIT_ARM, OUTFIT_CHEST, OUTFIT_LEG, OUTFIT_TILES, buildOutfitTexture, pickOutfit } from './outfits.js';
 import { HEADSHOT_LAYER, PEOPLE_MAX, people, peopleMesh, setPersonModel } from './people.js';
 
 // =========================================== PEOPLE MODEL ===========================================
@@ -375,8 +376,11 @@ const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
 // ('Skin' starts as the model's own, and is there so a person's can be tinted: see peopleBlood.js)
 // ('Blood' is how opaque the splotches drawn over them are — 0 for none — in its fourth number)
 // ('Eyes' is what the whites of their eyes are, so they can be tinted: see updatePeople's eye reddening)
-export const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat', 'Skin', 'Blood', 'Eyes', 'Glasses', 'Skirt'];
+// ('OutfitRed' and 'OutfitGreen' are only for an outfit's texture — see outfits.js — OutfitRed's fourth number being
+// which outfit they wear, 0 for none)
+export const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat', 'Skin', 'Blood', 'Eyes', 'Glasses', 'Skirt', 'OutfitRed', 'OutfitGreen'];
 const SKIN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Skin'), BLOOD_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Blood');
+const OUTFIT_RED_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitRed'), OUTFIT_GREEN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitGreen');
 const BLOOD_SCALE = 1.2; // how many splotches' worth of noise fit in a unit of the figure: bigger for smaller splotches
 export const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
 
@@ -563,6 +567,33 @@ const BLOOD_SPLOTCHES = `
     diffuseColor.rgb = mix(diffuseColor.rgb, personBloodColor, smoothstep(0.23, 0.27, bloodBlobs(spot))*vPersonBlood.x);
   }`;
 
+// the fragment shader's outfit: its column of the outfit texture (see outfits.js), projected straight through the
+// rest-pose figure — its front onto the faces turned towards +z, its back onto the rest, which way a face turns found
+// from how the rest position changes across the pixel, as the model has no normals of its own to go by once posed.
+// (Sampled whatever, so the texture's mipmaps get their derivatives.)
+// (vPersonOutfit.w is which outfit, 0 for none, and OUTFIT_PART times where: the torso, a sleeve or a leg — or
+// less, nowhere it's drawn)
+const OUTFIT_PART = 16;
+const outfitWindow = (point, min, max) => `(${point} - vec2(${min.map(v => v.toFixed(3)).join(', ')}))/vec2(${max.map((v, k) => (v - min[k]).toFixed(3)).join(', ')})`;
+const OUTFIT_CHEST_GLSL = `
+  {
+    float outfitId = mod(vPersonOutfit.w + 0.5, ${OUTFIT_PART.toFixed(1)}) - 0.5, outfitPart = floor((vPersonOutfit.w + 0.5)/${OUTFIT_PART.toFixed(1)});
+    vec3 outfitNormal = normalize(cross(dFdx(vPersonRest), dFdy(vPersonRest)));
+    vec2 outfitUv = outfitPart > 1.5 ? ${outfitWindow('vPersonRest.zy', [OUTFIT_LEG.minZ, OUTFIT_LEG.minY], [OUTFIT_LEG.maxZ, OUTFIT_LEG.maxY])}
+      : outfitPart > 0.5 ? ${outfitWindow('vec2(abs(vPersonRest.x), vPersonRest.z)', [OUTFIT_ARM.minX, OUTFIT_ARM.minZ], [OUTFIT_ARM.maxX, OUTFIT_ARM.maxZ])}
+      : ${outfitWindow('vPersonRest.xy', [OUTFIT_CHEST.minX, OUTFIT_CHEST.minY], [OUTFIT_CHEST.maxX, OUTFIT_CHEST.maxY])};
+    // which tile (see OUTFIT_TILES), counting up from the texture's foot; and whether this face is one the tile's drawn on:
+    // anywhere on the torso, the top of an arm, the outside of a leg
+    float outfitRow = ${(OUTFIT_TILES.length - 1).toFixed(1)} - (outfitPart > 1.5 ? ${OUTFIT_TILES.indexOf('leg').toFixed(1)} : outfitPart > 0.5 ? ${OUTFIT_TILES.indexOf('arm').toFixed(1)} : outfitNormal.z > 0.0 ? ${OUTFIT_TILES.indexOf('front').toFixed(1)} : ${OUTFIT_TILES.indexOf('back').toFixed(1)});
+    bool outfitFacing = outfitPart > 1.5 ? outfitNormal.x*sign(vPersonRest.x) > 0.5 : outfitPart > 0.5 ? outfitNormal.y > 0.2 : true;
+    vec4 outfitMask = texture2D(personOutfitMap, vec2((max(outfitId - 1.0, 0.0) + clamp(outfitUv.x, 0.0, 1.0))/${OUTFITS.length.toFixed(1)}, (clamp(outfitUv.y, 0.0, 1.0) + outfitRow)/${OUTFIT_TILES.length.toFixed(1)}));
+    if (outfitId > 0.5 && outfitPart > -0.5 && outfitFacing && outfitUv.x > 0.0 && outfitUv.x < 1.0 && outfitUv.y > 0.0 && outfitUv.y < 1.0) {
+      diffuseColor.rgb = mix(diffuseColor.rgb, vPersonOutfitRed, outfitMask.r);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vPersonOutfit.rgb, outfitMask.g);
+      diffuseColor.rgb *= 1.0 - 0.6*outfitMask.b;
+    }
+  }`;
+
 /**
  * Add the posing and shape keys to a material's shaders, and how it colors the figure.
  *
@@ -570,7 +601,9 @@ const BLOOD_SPLOTCHES = `
  * (each slot's own color), `look.traitColors` (the slots taking a color of the person's own instead, as
  * { slot: traits row }), `look.bloodSlots` (the slots blood splotches are drawn over — and, with `look.bloodOnBands`, the bands of clothes where they show skin) and `look.bands` (bands of clothes, which show skin — that person's own — if the person's clothes
  * stop at or before them: { slot, number, cut (which of the clothing row's values says where their clothes stop),
- * colorRow (the traits row of the clothes' color) }).
+ * colorRow (the traits row of the clothes' color) }), and `look.outfitSlots` (the slots an outfit's texture is
+ * drawn over, with `look.outfitMap` the texture: see outfits.js — and `look.outfitBands` and `look.outfitLegSlots`, the
+ * bands of the sleeves and legs it's drawn over too, where they're covered, and the rest of the legs).
  * @param {object} shader - three.js's shader object to patch
  * @param {Object<string, {value: *}>} uniforms - the person uniforms to give it
  * @param {object} look - what the material draws and how it colors it
@@ -585,6 +618,9 @@ function injectPersonShader(shader, uniforms, look) {
   // (not from the shadow's depth material, so the body still casts one) whoever personHidden names is drawn headless: their head
   // and hair drawn into a point at the middle of their chest, inside their shirt
   const splotched = colored && (look.bloodSlots || []).length > 0;
+  const outfitted = colored && (look.outfitSlots || []).length > 0;
+  if (outfitted) shader.uniforms.personOutfitMap = { value: look.outfitMap };
+  const rested = splotched || outfitted;
   const hideHead = colored ? 'if (personIndex() == personHidden && personVertex.x > 0.0) transformed = (personBone(personChestBone)*vec4(personChestPivot, 1.0)).xyz;' : '';
   const bands = (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? personTrait(${SKIN_ROW}).rgb : personTrait(${b.colorRow}).rgb) : `).join('');
   // (blood is drawn over the slots it's asked for, and over a band of clothes only where it shows skin)
@@ -596,20 +632,27 @@ function injectPersonShader(shader, uniforms, look) {
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\n' + PERSON_VERTEX_PARS
       + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : '')
-      + (splotched ? '\nvarying vec2 vPersonBlood;\nvarying vec3 vPersonRest;' : ''))
+      + (splotched ? '\nvarying vec2 vPersonBlood;' : '') + (rested ? '\nvarying vec3 vPersonRest;' : '')
+      + (outfitted ? '\nvarying vec4 vPersonOutfit;\nvarying vec3 vPersonOutfitRed;' : ''))
     .replace('#include <begin_vertex>', `#include <begin_vertex>
-      ${splotched ? 'vPersonRest = transformed;' : ''}
+      ${rested ? 'vPersonRest = transformed;' : ''}
       transformed = personArms(personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz), transformed.x);
       int personSlotIndex = int(personVertex.y + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
       ${hideHead}
       ${color}
-      ${splotched ? `vPersonBlood = vec2(${bloodOver}, float(personIndex()));` : ''}`);
+      ${splotched ? `vPersonBlood = vec2(${bloodOver}, float(personIndex()));` : ''}
+      ${outfitted ? `vPersonOutfitRed = personTrait(${OUTFIT_RED_ROW}).rgb;
+      vPersonOutfit = vec4(personTrait(${OUTFIT_GREEN_ROW}).rgb, personTrait(${OUTFIT_RED_ROW}).w > 0.5 ? personTrait(${OUTFIT_RED_ROW}).w + ${OUTFIT_PART}.0*(
+        (${look.outfitSlots.map(slot => `personSlotIndex == ${slot}`).join(' || ')}) ? 0.0
+        : ${(look.outfitLegSlots || []).map(slot => `personSlotIndex == ${slot} ? 2.0 : `).join('')}${(look.outfitBands || []).map(b => `personSlotIndex == ${b.slot} && ${b.number}.0 < personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? ${b.part}.0 : `).join('')}-1.0) : 0.0);` : ''}`);
   if (!colored) return;
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vPersonColor;' + (splotched ? '\nvarying vec2 vPersonBlood;\nvarying vec3 vPersonRest;\nuniform vec3 personBloodColor;' + BLOOD_GLSL : ''))
-    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vPersonColor;' + (splotched ? BLOOD_SPLOTCHES : ''));
+    .replace('#include <common>', '#include <common>\nvarying vec3 vPersonColor;' + (rested ? '\nvarying vec3 vPersonRest;' : '')
+      + (splotched ? '\nvarying vec2 vPersonBlood;\nuniform vec3 personBloodColor;' + BLOOD_GLSL : '')
+      + (outfitted ? '\nvarying vec4 vPersonOutfit;\nvarying vec3 vPersonOutfitRed;\nuniform sampler2D personOutfitMap;' : ''))
+    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vPersonColor;' + (outfitted ? OUTFIT_CHEST_GLSL : '') + (splotched ? BLOOD_SPLOTCHES : ''));
 }
 
 /**
@@ -627,7 +670,7 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name 
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   if (byAttribute) { material.defines = { PERSON_INDEX_ATTRIBUTE: '' }; depth.defines = { PERSON_INDEX_ATTRIBUTE: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
-  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), look.femaleOnly.join(',')].join('|');
+  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), look.femaleOnly.join(',')].join('|');
   material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, look);
   material.customProgramCacheKey = () => key;
   depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly });
@@ -1065,9 +1108,16 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
    * @returns {number[]} one band per entry in PERSON_CLOTHING, for the clothing texel row
    */
   const clothingRowFor = (id, i) => {
-    const man = isMan[i] === 1, clothingRng = mulberry32(1990 + id*7919), { age } = profileOf(id, man);
-    return PERSON_CLOTHING.map(c => { const band = clothingBand(c, clothingRng(), man, age); return c.band === 'Leg' && skirtLayer.of[i] >= 0 ? 1 : band; });
+    const man = isMan[i] === 1, clothingRng = mulberry32(1990 + id*7919), { age } = profileOf(id, man), outfit = OUTFITS[outfitOf(id, i) - 1];
+    return PERSON_CLOTHING.map(c => {
+      const band = clothingBand(c, clothingRng(), man, age);
+      return c.band === 'Leg' && skirtLayer.of[i] >= 0 ? 1 : outfit && !outfit.bare.includes(c.band) ? c.count + 1 : band;
+    });
   };
+
+  /** Which outfit someone wears (see outfits.js), 0 for none: from their id, by a generator of its own, unless their
+   * hat (the slot's) says; and never trousers under a skirt (the slot's). */
+  const outfitOf = (id, i) => pickOutfit(mulberry32(5150 + id*7919), hairLayer.of[i] >= 0 ? hairLayer.styles[hairLayer.of[i]].name : null, skirtLayer.of[i] >= 0);
 
   const traitTexture = new THREE.DataTexture(traits, PEOPLE_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
   const traitRow = part => 2 + PERSON_TRAIT_COLORS.indexOf(part);
@@ -1102,6 +1152,9 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
       Glasses: () => { const r = glassesRng(); return r < 0.8 ? color.set(GLASSES_COLORS[Math.floor(glassesRng()*GLASSES_COLORS.length)]) : color.setHSL(glassesRng(), 0.6 + glassesRng()*0.3, 0.4 + glassesRng()*0.15); },
       // half the colors trousers come in, half something brighter
       Skirt: () => skirtRng() < 0.5 ? color.set(PANTS_COLORS[Math.floor(skirtRng()*PANTS_COLORS.length)]) : color.setHSL(skirtRng(), 0.35 + skirtRng()*0.45, 0.3 + skirtRng()*0.3),
+      // (only an outfit has these: see below)
+      OutfitRed: () => color.setRGB(1, 1, 1),
+      OutfitGreen: () => color.setRGB(1, 1, 1),
     };
     const shape = PERSON_SHAPE_KEYS.slice(0, PERSON_BODY_KEY_COUNT).map(key => { const [lo, hi] = ranges[key]; return lo + traitRng()*(hi - lo); });
     traits.set(shape.slice(0, 4), texel(0));
@@ -1113,6 +1166,15 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     traits.set([shape[4], man ? 1 : 0, face[4], shape[5]], texel(1));
     traits.set(face.slice(0, 4), texel(PERSON_FACE_ROW));
     PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
+    // an outfit's colors over their own (from a generator of its own, so no one else's change)
+    const outfit = outfitOf(id, i), outfitRng = mulberry32(5151 + id*7919);
+    traits[texel(OUTFIT_RED_ROW) + 3] = outfit;
+    if (outfit) Object.entries(OUTFITS[outfit - 1].colors).forEach(([part, colors]) => {
+      const to = texel(traitRow(part));
+      if (typeof colors === 'string') { const from = texel(traitRow(colors)); traits.copyWithin(to, from, from + 3); return; }
+      color.set(colors[Math.floor(outfitRng()*colors.length)]);
+      traits.set([color.r, color.g, color.b], to);
+    });
     // under a skirt, what's left of their trousers (the crotch, which shows as they sit) is the skirt
     if (skirtLayer.of[i] >= 0) traits.copyWithin(texel(traitRow('Pants')), texel(traitRow('Skirt')), texel(traitRow('Skirt')) + 3);
     traits.set(clothingRowFor(id, i), texel(PERSON_CLOTHING_ROW));
@@ -1142,7 +1204,11 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     bloodSlots: [PERSON_SLOTS.indexOf('Skin')], bloodOnBands: true,
     bands: PERSON_CLOTHING.flatMap((c, cut) => Array.from({ length: c.count }, (_, k) =>
       ({ slot: PERSON_SLOTS.indexOf(c.band + (k + 1)), number: k + 1, cut, colorRow: traitRow(c.part) }))),
+    outfitSlots: ['Top', 'Tummy1', 'Tummy2'].map(slot => PERSON_SLOTS.indexOf(slot)), outfitMap: buildOutfitTexture(),
   };
+  // (a sleeve's bands and a leg's, where they're covered, take the arm's and leg's tiles; and so does the top of the legs, always covered)
+  bodyLook.outfitBands = bodyLook.bands.flatMap(b => { const band = PERSON_SLOTS[b.slot]; return band.startsWith('Sleeve') ? [{ ...b, part: 1 }] : band.startsWith('Leg') ? [{ ...b, part: 2 }] : []; });
+  bodyLook.outfitLegSlots = [PERSON_SLOTS.indexOf('Pants')];
   const anim = dynamicInstanceAttribute(PEOPLE_MAX, 4), look = dynamicInstanceAttribute(PEOPLE_MAX, 4), eyes = dynamicInstanceAttribute(PEOPLE_MAX, 4);
   geometry.setAttribute('instanceAnim', anim);
   geometry.setAttribute('instanceLook', look);
