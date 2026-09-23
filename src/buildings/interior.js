@@ -7,16 +7,16 @@ import { footprintBounds } from './footprints.js';
 import { hashNameToNumber, mulberry32 } from '../core/math.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { setCutout } from '../ui/pixelation.js';
-import { isMuted, setIndoors } from '../audio/sfx.js';
+import { isMuted, playSound, setIndoors } from '../audio/sfx.js';
 import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
 
 // ============================================================ going inside a building
 // Every building has the same inside: one room (furnished one of a few ways), built once and moved to whichever building's
 // being looked into. It goes where the building actually stands, on its top floor, turned square to its longest wall, and
 // the building itself isn't drawn while you're in there — so the windows look out on the real city around it, traffic,
-// weather, time of day and all, with nothing to fake. The view is held in one corner of the room, at about eye height,
-// looking across at the two far walls and their windows (the two walls behind the camera are there too, for the sun's
-// shadows, but never seen).
+// weather, time of day and all, with nothing to fake. The view's from up by the ceiling, looking at the middle of the
+// room, and dragging takes it round the walls, keeping to them, and up and down them — starting from the corner that looks across at the two
+// far walls and their windows (the other two are blank, and thick, for the sun's shadows: see below).
 // The room's a fixed size whatever the building's shape: nobody inside can tell how far its walls are from the facade.
 const ROOM_W = 8, ROOM_D = 6, ROOM_H = 3.2;  // along the room's own x and z, and floor to ceiling
 // The sun's shadow is coarse (its bias lets light through anything within ~0.4 of what's casting it: see scene.js), so the
@@ -30,9 +30,15 @@ const FLOOR_HEIGHT = 3.5;                    // a storey, as the facades' window
 // LAWN_BIAS in suburbs.js) would paint grass over a floor laid level with it
 const PLINTH = 0.3;
 const SILL = 0.9, HEAD = 2.5;                // a window's bottom and top, above the floor
-const CAMERA_INSET = 0.7;                    // the camera, in from the corner walls
-// and its view: height above the floor, degrees looking down, and vertical field of view (tuned with tools/interior.html)
-const CAMERA_HEIGHT = 1.62, CAMERA_PITCH = 2.6, CAMERA_FOV = 85.3;
+const CAMERA_INSET = 0.7;                    // the camera, in from the walls
+const CAMERA_CLEAR = 1.8;                    // the corner it starts in, kept clear of furniture
+// and its view: its height above the floor to start with, the height of the middle of the room it looks at, and its
+// vertical field of view (tuned with tools/interior.html)
+const CAMERA_HEIGHT = 2.6, CAMERA_LOOK = 1.1, CAMERA_FOV = 85.3;
+// how low and high dragging takes it (the ceiling's at ROOM_H), how far for each pixel dragged, and how quickly it gets there
+const CAMERA_LOWEST = 0.5, CAMERA_HIGHEST = 3.0, CAMERA_RISE = 0.008, RISE_EASE = 0.15;
+// and how narrow and wide zooming takes its field of view (vertical degrees)
+const FOV_NARROWEST = 30, FOV_WIDEST = 100;
 
 const room = new THREE.Group();
 room.name = 'Interior';
@@ -145,7 +151,34 @@ function keyFraction(key) {
   return (h >>> 0)/2**32;
 }
 wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK);  // behind the camera
-wall(ROOM_D, 0, -ROOM_W/2 - THICK/2, 0, Math.PI/2, THICK);   // behind the camera
+// The other, along z, has the room's door in it, by the corner the camera starts in: a doorway some way into the wall,
+// black at the back — where anyone coming in comes from, and anyone going goes — with a door hung in it that swings in
+// to let them through (see openRoomDoor).
+const DOOR_W = 0.9, DOOR_H = 2.1, DOOR_Z = -ROOM_D/2 + 1, RECESS = 0.5;   // the doorway: where along the wall, how deep
+const doorFrom = DOOR_Z - DOOR_W/2, doorTo = DOOR_Z + DOOR_W/2;
+box(THICK - RECESS, ROOM_H, ROOM_D, wallMaterial, -ROOM_W/2 - RECESS - (THICK - RECESS)/2, ROOM_H/2, 0);
+box(RECESS, ROOM_H, doorFrom + ROOM_D/2, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorFrom - ROOM_D/2)/2);
+box(RECESS, ROOM_H, ROOM_D/2 - doorTo, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorTo + ROOM_D/2)/2);
+box(RECESS, ROOM_H - DOOR_H, DOOR_W, wallMaterial, -ROOM_W/2 - RECESS/2, (DOOR_H + ROOM_H)/2, DOOR_Z);
+box(0.02, DOOR_H, DOOR_W, new THREE.MeshBasicMaterial({ color: 0x000000 }), -ROOM_W/2 - RECESS + 0.02, DOOR_H/2, DOOR_Z);
+// the door, on its hinge at the corner end of the doorway, and a knob on it
+const DOOR_OPEN = THREE.MathUtils.degToRad(95), DOOR_HOLD = 1500, DOOR_EASE = 0.12; // how far, for how long (ms), how quickly
+const doorMaterial = roomLit(new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.7 }));
+const door = new THREE.Group();
+door.position.set(-ROOM_W/2 - 0.03, 0, doorFrom);
+room.add(door);
+box(0.05, DOOR_H - 0.01, DOOR_W - 0.01, doorMaterial, 0, DOOR_H/2, DOOR_W/2, door);
+box(0.12, 0.05, 0.05, frameMaterial, 0, 1, DOOR_W - 0.1, door);
+let doorOpenUntil = -Infinity;
+/** Swing the room's door open (or keep it open) for someone coming or going through it: it shuts on its own after. */
+export const openRoomDoor = () => { doorOpenUntil = performance.now() + DOOR_HOLD; };
+// each frame: the door eased open or shut, heard as it shuts
+function updateDoor() {
+  const goal = performance.now() < doorOpenUntil ? DOOR_OPEN : 0, was = door.rotation.y;
+  if (was === goal) return;
+  door.rotation.y = Math.abs(goal - was) < 0.01 ? goal : was + (goal - was)*DOOR_EASE;
+  if (door.rotation.y === 0) playSound('door', room.localToWorld(new THREE.Vector3(-ROOM_W/2, 1, DOOR_Z)));
+}
 // ---------------------------------------------------------- what's in it
 // The shell's the same everywhere; what's in it is one of a few layouts, each a group of furniture shown or hidden as a
 // whole, a floor and wall colour, and the rectangles (in the room's own x and z, with room to pass round them) nobody stands in or
@@ -352,6 +385,7 @@ function furnish(key) {
     object.position.set(x, 0, z);
     object.rotation.y = angle;
     object.scale.setScalar(scale);
+    object.userData.isTV = name === 'TV'; // (never faded: see fadeWhatsInTheWay)
     home.group.add(object);
     const r = footprint(piece, x, z, angle, scale);
     if (underfoot) return r;
@@ -966,40 +1000,48 @@ function updateLamp() {
   lampLight.intensity = Math.abs(goal - lampLight.intensity) < 0.01 ? goal : lampLight.intensity + (goal - lampLight.intensity)*LAMP_EASE;
 }
 
-// where the camera sits in the room, in the room's own terms
+// where the camera starts in the room, in the room's own terms: the corner looking across at the far walls
 const CAMERA_AT = new THREE.Vector3(-ROOM_W/2 + CAMERA_INSET, CAMERA_HEIGHT, -ROOM_D/2 + CAMERA_INSET);
-// the far corners of the three walls the camera looks across
-const FAR_CORNERS = [[ROOM_W/2, -ROOM_D/2], [ROOM_W/2, ROOM_D/2], [-ROOM_W/2, ROOM_D/2]];
 const FOV_EASE = 0.12;
 const ROOM_NEAR = 0.1; // the ceiling's closer than the usual near plane, and the wide view takes it in
-// Which way the camera faces: the middle of the far corners' spread, side to side.
-const CAMERA_YAW = (() => {
-  const yaws = FAR_CORNERS.map(([x, z]) => Math.atan2(x - CAMERA_AT.x, z - CAMERA_AT.z));
-  return (Math.min(...yaws) + Math.max(...yaws))/2;
-})();
 const BASE_FOV = camera.fov;
 // What tools/interior.html is trying out in place of the view above, each null for the usual: the camera's height above
-// the floor, how far it looks down (degrees below level) and its vertical field of view (degrees).
-const tuning = { height: null, pitch: null, fov: null };
-// the camera's eye and what it looks at, in the room's own terms
-function view() {
-  const eye = CAMERA_AT.clone();
-  eye.y = tuning.height ?? CAMERA_HEIGHT;
-  const pitch = -THREE.MathUtils.degToRad(tuning.pitch ?? CAMERA_PITCH);
-  const along = new THREE.Vector3(Math.sin(CAMERA_YAW)*Math.cos(pitch), Math.sin(pitch), Math.cos(CAMERA_YAW)*Math.cos(pitch));
-  return { eye, look: eye.clone().add(along.multiplyScalar(5)) };
-}
-const viewFov = () => tuning.fov ?? CAMERA_FOV;
+// the floor, the height it looks at in the middle of the room, and its vertical field of view (degrees).
+const tuning = { height: null, look: null, fov: null };
+// the field of view zooming's taken it to (eased there in updateInteriorCamera)
+let zoomedFov = CAMERA_FOV;
+const viewFov = () => zoomedFov;
+// the camera's height above the floor, and where dragging's taking it (eased there in updateInteriorCamera)
+let eyeHeight = CAMERA_HEIGHT, eyeGoal = CAMERA_HEIGHT;
+// The camera's way round the room (for controls.hug): theta, as the controls have it, is which way from the middle of
+// the room the camera is, and it's out along there as far as CAMERA_INSET short of the wall that way, at its height —
+// which a drag up or down (dy, in pixels) takes up or down the wall.
+const hugWalls = {
+  place(theta) {
+    const turn = theta - room.rotation.y, s = Math.abs(Math.sin(turn)), c = Math.abs(Math.cos(turn));
+    const out = Math.min(s > 1e-6 ? (ROOM_W/2 - CAMERA_INSET)/s : Infinity, c > 1e-6 ? (ROOM_D/2 - CAMERA_INSET)/c : Infinity);
+    const up = eyeHeight - (tuning.look ?? CAMERA_LOOK);
+    return { radius: Math.hypot(out, up), phi: Math.atan2(out, up) };
+  },
+  rise(dy) { eyeGoal = THREE.MathUtils.clamp(eyeGoal + dy*CAMERA_RISE, CAMERA_LOWEST, CAMERA_HIGHEST); },
+  zoom(factor) { zoomedFov = THREE.MathUtils.clamp(zoomedFov*factor, FOV_NARROWEST, FOV_WIDEST); },
+};
 /**
- * Try out a different view from the room's corner (for tools/interior.html): anything left out or null goes back to the usual.
- * @param {{height?: ?number, pitch?: ?number, fov?: ?number}} t - height above the floor, degrees looking down, vertical FOV
- * @returns {{height: number, pitch: number, fov: number}} the view as it now is
+ * Try out a different view (for tools/interior.html): anything left out or null goes back to the usual.
+ * @param {{height?: ?number, look?: ?number, fov?: ?number}} t - height above the floor, height looked at, vertical FOV
+ * @returns {{height: number, look: number, fov: number}} the view as it now is
  */
 export function tuneInteriorView(t = {}) {
-  Object.assign(tuning, { height: null, pitch: null, fov: null }, t);
-  if (inside) { placeCamera(); controls.update(true); camera.fov = viewFov(); camera.updateProjectionMatrix(); }
-  return { height: tuning.height ?? CAMERA_HEIGHT, pitch: tuning.pitch ?? CAMERA_PITCH, fov: viewFov() };
+  Object.assign(tuning, { height: null, look: null, fov: null }, t);
+  eyeHeight = eyeGoal = tuning.height ?? CAMERA_HEIGHT;
+  zoomedFov = tuning.fov ?? CAMERA_FOV;
+  if (inside) { controls.goalTarget.copy(lookAt()); controls.update(true); camera.fov = viewFov(); camera.updateProjectionMatrix(); }
+  return { height: eyeHeight, look: tuning.look ?? CAMERA_LOOK, fov: viewFov() };
 }
+// what the camera looks at, in the world: the middle of the room
+const lookAt = () => room.localToWorld(new THREE.Vector3(0, tuning.look ?? CAMERA_LOOK, 0));
+// the nearer way round to `theta` from where the camera is, so it doesn't swing all the way about
+const nearerWay = theta => controls.theta + Math.atan2(Math.sin(theta - controls.theta), Math.cos(theta - controls.theta));
 
 // inside: { group, key, before } — the building being looked into, its key (buildingKey), and the camera's goals as they
 // were, to go back to
@@ -1018,8 +1060,8 @@ function longestEdgeAngle(fp) {
 }
 
 // Goes into `group` (a building, as building-card.js follows it, with its key): the room onto its top floor, laid out as
-// `kind` of room (one of LAYOUTS: 'home' or 'office'), the building hidden, and the camera cut straight to the corner and
-// held there.
+// `kind` of room (one of LAYOUTS: 'home' or 'office'), the building hidden, and the camera cut straight to the corner,
+// to go round the walls from there.
 export function enterBuilding(group, key, kind = 'home') {
   if (inside) leaveBuilding();
   useLayout(kind);
@@ -1046,28 +1088,19 @@ export function enterBuilding(group, key, kind = 'home') {
   } };
   camera.near = ROOM_NEAR;
   camera.updateProjectionMatrix();
-  placeCamera();
+  controls.goalTarget.copy(lookAt());
+  controls.minRadius = 0;
+  controls.goalTheta = nearerWay(room.rotation.y + Math.atan2(CAMERA_AT.x, CAMERA_AT.z));
   controls.locked = true;
+  controls.hug = hugWalls;
+  eyeHeight = eyeGoal = tuning.height ?? CAMERA_HEIGHT;
+  zoomedFov = tuning.fov ?? CAMERA_FOV;
   setIndoors(inRoom);
   // a hard cut in, no glide
   controls.update(true);
   camera.fov = viewFov();
   camera.updateProjectionMatrix();
 }
-// The camera cut to the room's corner (see view), looking where it looks.
-function placeCamera() {
-  const { eye: at, look: towards } = view();
-  const eye = room.localToWorld(at.clone()), look = room.localToWorld(towards.clone());
-  const offset = eye.clone().sub(look), radius = offset.length();
-  controls.goalTarget.copy(look);
-  controls.minRadius = 0;
-  controls.goalRadius = radius;
-  controls.goalPhi = Math.acos(offset.y/radius);
-  // the nearer way round to the corner, so easing back out on leaving doesn't swing all the way about
-  const theta = Math.atan2(offset.x, offset.z);
-  controls.goalTheta = controls.theta + Math.atan2(Math.sin(theta - controls.theta), Math.cos(theta - controls.theta));
-}
-
 // Back out: the building drawn again, the room put away, and the camera eased back to where it was looking from.
 export function leaveBuilding() {
   if (!inside) return;
@@ -1078,9 +1111,10 @@ export function leaveBuilding() {
   group.visible = true;
   room.visible = false;
   controls.locked = false;
+  controls.hug = null;
   controls.goalTarget.copy(before.target);
   controls.goalRadius = before.radius;
-  controls.goalTheta = before.theta;
+  controls.goalTheta = nearerWay(before.theta);
   controls.goalPhi = before.phi;
   controls.minRadius = before.minRadius;
   camera.near = before.near;
@@ -1094,10 +1128,46 @@ function inRoom(x, y, z) {
   return Math.abs(probe.x) <= ROOM_W/2 + WALL && Math.abs(probe.z) <= ROOM_D/2 + WALL && probe.y >= -SLAB && probe.y <= ROOM_H + SLAB;
 }
 
+// Whatever's between the camera and the middle of the room — the light hanging over a table as the camera comes round
+// behind it, a bookcase it's riding past — fades nearly out of the way, on materials of its own for as long as it's
+// faded (the model's are shared by every clone of it). Not the TV: its picture's a hole cut through to the player
+// behind the canvas (see "the TV"), and it's too low to be in the way.
+const FADED = 0.15, FADE_EASE = 0.15;
+const sightline = new THREE.Ray(), sightHit = new THREE.Vector3();
+function fadeWhatsInTheWay() {
+  if (!inside) return;
+  sightline.origin.copy(camera.position);
+  const reach = sightline.direction.copy(controls.target).sub(camera.position).length();
+  sightline.direction.normalize();
+  const pieces = current === LAYOUTS.office ? officeGroup.children : current.group.children;
+  for (const piece of pieces) {
+    if (!piece.isGroup || piece.userData.isTV) continue;
+    const u = piece.userData;
+    if (u.fadeVisit !== visits) { u.fadeBox = new THREE.Box3().setFromObject(piece); u.fadeVisit = visits; u.fade ??= 1; }
+    const hit = sightline.intersectBox(u.fadeBox, sightHit);
+    const goal = hit && hit.distanceTo(sightline.origin) < reach ? FADED : 1;
+    if (u.fade === goal) continue;
+    u.fade = Math.abs(goal - u.fade) < 0.01 ? goal : u.fade + (goal - u.fade)*FADE_EASE;
+    piece.traverse(o => {
+      if (!o.isMesh) return;
+      if (u.fade === 1) { if (o.userData.ownMaterial) { o.material = o.userData.ownMaterial; delete o.userData.ownMaterial; } return; }
+      if (!o.userData.ownMaterial) {
+        o.userData.ownMaterial = o.material;
+        o.material = o.material.clone();
+        o.material.transparent = true;
+      }
+      o.material.opacity = o.userData.ownMaterial.opacity*u.fade;
+    });
+  }
+}
+
 // Each frame: the view eased wider inside a room, and back to its usual angle outside.
 export function updateInteriorCamera() {
   updateTV();
   updateLamp();
+  updateDoor();
+  if (inside && eyeHeight !== eyeGoal) eyeHeight = Math.abs(eyeGoal - eyeHeight) < 0.002 ? eyeGoal : eyeHeight + (eyeGoal - eyeHeight)*RISE_EASE;
+  fadeWhatsInTheWay();
   occupants = counting; counting = 0;
   if (inside && current === LAYOUTS.office && performance.now() - occupiedAt < 1000) {
     officeAmbience({ printer: current.printer, desks: current.desks, centre: room.localToWorld(new THREE.Vector3(0, 1, 0)), people: occupants });
@@ -1114,32 +1184,34 @@ export const buildingInside = () => inside?.group ?? null;
 // ---------------------------------------------------------- who's in the room
 // Whoever's inside the building (see "going indoors" in people.js) is only drawn while the room's there to be drawn in,
 // standing about it and now and then wandering over to somewhere else in it — never through the furniture (the layout's
-// `blocked`), or into the corner the camera's in (where they'd stand with their head in its face).
+// `blocked`).
 const ROOM_MARGIN = 0.5;                                                                   // from the walls
-const CAMERA_CLEAR = 1.8;                                                                  // kept clear, from the corner
 const clearOfFurniture = (x, z) => current.blocked.every(b => x < b.x0 || x > b.x1 || z < b.z0 || z > b.z1);
-const clearOfCamera = (x, z) => x > -ROOM_W/2 + CAMERA_CLEAR || z > -ROOM_D/2 + CAMERA_CLEAR;
+const clearOfDoor = (x, z) => x > -ROOM_W/2 + DOOR_W + 0.4 || z < doorFrom - 0.4 || z > doorTo + 0.4;
 
 /** Whether the room's set up in the building with this key (buildingKey) right now. */
 export const roomHolds = key => !!inside && inside.key === key;
 /** Which time the room's been set up this is: someone placed in it on an earlier visit needs placing again. */
 export const roomVisit = () => visits;
-// A spot to stand in the room, in the world, from `rng`: clear of the furniture and the camera's corner.
+// A spot to stand in the room, in the world, from `rng`: clear of the furniture, and out of the door's way.
 export function roomSpot(rng) {
   let x = 0, z = 0;
   for (let tries = 0; tries < 40; tries++) {
     x = -ROOM_W/2 + ROOM_MARGIN + rng()*(ROOM_W - ROOM_MARGIN*2);
     z = -ROOM_D/2 + ROOM_MARGIN + rng()*(ROOM_D - ROOM_MARGIN*2);
-    if (clearOfFurniture(x, z) && clearOfCamera(x, z)) break;
+    if (clearOfFurniture(x, z) && clearOfDoor(x, z)) break;
   }
   return room.localToWorld(new THREE.Vector3(x, 0, z));
 }
 
-// The way in and out of the room: behind the camera and off to its side, along the wall there, out of the view — where
-// anyone coming in walks in from and anyone going walks off to, the door heard shutting (see updateIndoors in people).
-const DOORWAY = new THREE.Vector3(-ROOM_W/2 + 0.3, 0, -ROOM_D/2 + CAMERA_INSET + 0.3);
-/** The room's doorway, in the world. */
+// The way in and out of the room: just inside its door (see "the door", above), and the dark beyond it — where anyone
+// coming in steps out of and anyone going steps off into, the door swinging open for them (see aboutTheRoom and
+// leaveRoom in peopleActivities.js).
+const DOORWAY = new THREE.Vector3(-ROOM_W/2 + 0.3, 0, DOOR_Z), BEYOND = new THREE.Vector3(-ROOM_W/2 - RECESS + 0.2, 0, DOOR_Z);
+/** The room's doorway, just inside it, in the world. */
 export const roomDoorway = () => room.localToWorld(DOORWAY.clone());
+/** Through the room's door, in the dark beyond it, in the world. */
+export const roomBeyondDoor = () => room.localToWorld(BEYOND.clone());
 
 /** Where anyone can sit in the room, in the world: { x, y, z } on the seat, { nx, nz } the way it faces, and who's `by` it. */
 export const roomSeats = () => current.seats;
