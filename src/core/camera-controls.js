@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { camera } from './scene.js';
+import { camera, frustumHalfHeightAt } from './scene.js';
 
 // ============================================================ camera controls (math only)
 // the closest the camera zooms in, except while it's following someone (see people.js)
@@ -53,6 +53,16 @@ export const controls = {
     const z = this.target.z + this.radius * Math.sin(this.phi) * Math.cos(this.theta);
     camera.position.set(x, y, z);
     camera.lookAt(this.target);
+    // The orthographic camera has no distance falloff to frame the city for it, so its frustum is sized here instead, to
+    // hold exactly what the perspective camera would hold at this radius — that way the switch between them is a change
+    // of projection and nothing else.
+    if (camera.isOrthographicCamera) {
+      const h = Math.max(0.5, frustumHalfHeightAt(this.radius)), w = h * (window.innerWidth/window.innerHeight);
+      if (camera.top !== h || camera.right !== w) {
+        camera.top = h; camera.bottom = -h; camera.right = w; camera.left = -w;
+        camera.updateProjectionMatrix();
+      }
+    }
   }
 };
 controls.update(true);

@@ -4,8 +4,8 @@ import { camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
-import { buildingKey, buildingNumber } from './footprints.js';
-import { buildingKindOf, buildingTypeOf } from './building-types.js';
+import { buildingKey, buildingNumber, roomLayoutOf } from './footprints.js';
+import { buildingKindOf, buildingName, buildingTypeOf } from './building-types.js';
 import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 
 // ============================================================ following a building
@@ -54,9 +54,6 @@ function followBuildingAt(clientX, clientY) {
   if (!picked) { stopFollowingBuilding(); return; }
   followBuilding(picked);
 }
-// What's inside (a layout in interior.js): about half the buildings zones' blocks are offices, by their number so each
-// is the same every time; everything else is a home.
-const roomLayoutOf = (kind, number) => kind === 'buildings' && number % 2 === 0 ? 'office' : 'home';
 // `picked` as pickBuilding finds it
 function followBuilding(picked) {
   leaveBuilding();
@@ -69,7 +66,7 @@ function followBuilding(picked) {
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(CAMERA_MIN_RADIUS, Math.min(600, radius*2.8));
   const info = buildingTypeOf(kind, number);
-  card.show({ ...info, name: info.name + ' #' + number });
+  card.show({ ...info, name: buildingName(kind, number, picked.group.userData.height ?? 0) + ' #' + number });
   setBuildingCardInhabitants([]);
   drawThumbnail(thumbnailOf(picked.group, box, center, radius));
   card.setFavorite({ key: 'building:' + key, kind: 'Building', follow: () => {

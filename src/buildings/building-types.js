@@ -1,5 +1,6 @@
 import { loadTypeText } from '../core/type-text.js';
 import { TEXT_ROWS } from '../ui/entity-card.js';
+import { roomLayoutOf } from './footprints.js';
 
 // ============================================================ what buildings are like
 // Each kind of building's name, mood, and what it loves and hates, for its card (building-card.js) — from
@@ -33,3 +34,15 @@ export const buildingEnterable = kind => buildings.says(kind, 'enterable');
 // A building's card details: `kind` is what it is (see buildingKindOf) and `number` its own number (see buildingNumber
 // in footprints.js).
 export const buildingTypeOf = (kind, number = 1) => buildings.of(kind, number);
+
+// What a building's called: its kind's name from buildings.txt — except a city block's, which is named for what's inside
+// it so you know before going in: a home or an office (see roomLayoutOf), and a tower once it's TOWER_HEIGHT tall, about
+// eight storeys (see FLOOR_HEIGHT in interior.js). `height` is the building's own (its userData.height).
+// A block's landmark is named the same way: it's a city block like the rest, so being the tall fancy one shouldn't leave
+// it the only building on the street that won't say whether it's flats or offices. Its card text still comes from
+// [landmark] in buildings.txt; only the name is by what's inside.
+const TOWER_HEIGHT = 28;
+export function buildingName(kind, number, height) {
+  if (kind !== 'buildings' && kind !== 'landmark') return buildingTypeOf(kind, number).name;
+  return (roomLayoutOf(kind, number) === 'office' ? 'Office ' : 'Residential ') + (height >= TOWER_HEIGHT ? 'Tower' : 'Building');
+}

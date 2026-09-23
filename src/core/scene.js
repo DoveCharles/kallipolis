@@ -21,7 +21,31 @@ const bgColor = 0x12141a;
 scene.background = null;
 scene.fog = new THREE.Fog(bgColor, 600, 2800);
 
-export const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.5, 3000);
+// The view is drawn through one of two cameras, swapped by the projection button in the canvas tools: the perspective
+// one, and an orthographic one that flattens the city out the way a plan or an elevation does. Everything else reads
+// `camera` at the moment it draws or picks, so the live export below is enough to swap it under them — nothing keeps a
+// camera of its own.
+const perspectiveCamera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.5, 3000);
+const orthographicCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.5, 3000);
+export let camera = perspectiveCamera;
+export function isOrthographic() { return camera === orthographicCamera; }
+export function setProjection(mode) {
+  const next = mode==='ortho' ? orthographicCamera : perspectiveCamera;
+  if (next === camera) return;
+  next.position.copy(camera.position);
+  next.quaternion.copy(camera.quaternion);
+  next.near = camera.near; next.far = camera.far;
+  camera = next;
+}
+// How tall a slice of the world the perspective camera frames at a given distance — which is what the orthographic
+// camera's frustum is sized to (see camera-controls.js), so switching projection keeps the city the same size on screen.
+export function frustumHalfHeightAt(distance) { return distance * Math.tan(perspectiveCamera.fov*Math.PI/360); }
+// The distance a thing has to be drawn as, to come out the size it does on screen: its own distance under perspective,
+// and — since nothing shrinks with distance in an orthographic view — the same for everything under orthographic (see
+// nodeUiScaleAt, which keeps the node handles a steady size).
+export function apparentDistance(cam, position) {
+  return cam.isOrthographicCamera ? cam.top / Math.tan(perspectiveCamera.fov*Math.PI/360) : cam.position.distanceTo(position);
+}
 // the stencil buffer is off by default now, and the water and road masks need it (see SKIP_OVER_WATER_AND_ROADS)
 // (and an alpha channel, for the holes cut through to the page behind: see setCutout in pixelation.js)
 export const renderer = new THREE.WebGLRenderer({ antialias:true, stencil:true, alpha:true });
@@ -34,8 +58,8 @@ renderer.shadowMap.type = THREE.PCFShadowMap; // (soft-edged now — PCFSoftShad
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 wrap.appendChild(renderer.domElement);
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
+  perspectiveCamera.aspect = window.innerWidth/window.innerHeight;
+  perspectiveCamera.updateProjectionMatrix();   // (the orthographic frustum is sized every frame, in camera-controls.js)
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
@@ -137,6 +161,7 @@ export function computeWindowGlowFactor(elevation) {
 // added or taken out, and both lists are read straight from then on.
 export const blinkLights = [];   // meshes with userData.isBlinkLight — landmark antenna beacons (see surface-detail)
 export const glowMaterials = []; // materials with userData.baseEmissiveIntensity — lit windows, lamps, train interiors
+export const lampPostMeshes = []; // meshes with userData.lampPosts — a plaza's lamps, which light the ground around them
 S.sceneIndexDirty = true;
 // What marks the index stale is the graph changing shape, not the materials being made: a building's windows exist
 // well before its group is hung off the scene, and anything indexed in between would be missed. Every add and remove
@@ -150,10 +175,11 @@ S.sceneIndexDirty = true;
 export function refreshSceneIndex() {
   if (!S.sceneIndexDirty) return;
   S.sceneIndexDirty = false;
-  blinkLights.length = 0; glowMaterials.length = 0;
+  blinkLights.length = 0; glowMaterials.length = 0; lampPostMeshes.length = 0;
   const seen = new Set(); // one material is shared by many meshes, and rescaling its glow once is enough
   scene.traverse(o => {
     if (o.userData && o.userData.isBlinkLight && o.material) blinkLights.push(o);
+    if (o.userData && o.userData.lampPosts) lampPostMeshes.push(o);
     const mat = o.isMesh ? o.material : null;
     if (mat && mat.userData && mat.userData.baseEmissiveIntensity != null && !seen.has(mat)) { seen.add(mat); glowMaterials.push(mat); }
   });
@@ -306,6 +332,15 @@ export function snapPointToGrid(p, kind) {
 document.getElementById('grid-toggle').addEventListener('click', (e)=>{
   gridSnapEnabled = !gridSnapEnabled;
   e.currentTarget.classList.toggle('active', gridSnapEnabled);
+});
+
+// perspective or orthographic, off the button in the canvas tools (its two grid icons are in index.html)
+const projectionButton = document.getElementById('btn-projection');
+projectionButton.addEventListener('click', ()=>{
+  const ortho = !isOrthographic();
+  setProjection(ortho ? 'ortho' : 'perspective');
+  projectionButton.classList.toggle('on', ortho);
+  projectionButton.title = ortho ? 'Perspective view' : 'Orthographic view';
 });
 
 // Y-height layering (avoids coplanar z-fighting). The road is sunk below the ground so its sidewalk sits level with

@@ -14,11 +14,20 @@ import { listener, outdoors } from './sfx.js';
 // through the pushback, a grumble taxiing, the full roar down the runway and away, the reversers on landing — or from
 // the keys, for one being flown by hand. The pitch and loudness follow that slowly, as a turbine spools, not at once.
 // There are AIRCRAFT_MAX loops, handed each frame to the nearest aircraft within HEAR_DISTANCE; they carry a long way.
+// Far off, it's the air that shapes it: the highs are soaked up the further it has to come (the whine and hiss go first,
+// leaving the low roll of the roar, with its bass lifted), the rumble swells and fades as the air it crosses churns, and
+// the echo off the ground, a few milliseconds behind, sweeps a comb through it as the aircraft's height and distance
+// change — the "whooshing" of an airliner heard from miles away.
 const VOLUME = 0.16;
 const HEAR_DISTANCE = 1500;
 const AIRCRAFT_MAX = 4;
 const SPOOL = 0.8;       // seconds the engines take to follow the thrust (a third of the way, that is)
 const CHOP_HZ = 11;      // a helicopter's blade passes a second
+const AIR = 250;         // distance over which the air takes the top off: most of the way to a rumble by here
+const AIR_FLOOR = 180;   // the lowpass, in hertz, from right across town
+const ROLL = 0.55;       // how deeply the rumble swells and fades when heard from far off
+const SOUND_SPEED = 343; // for the ground echo's delay (a unit is about a metre)
+const EAR = 1.7;         // how high the ear is at the least
 const KINDS = {
   //         roar: how loud, and its lowpass at idle and at full power; whine: how loud, and its pitch at idle and at full;
   //         buzz: likewise; chop: how deep; how near to be heard at full volume; and how much louder at full power than
@@ -28,8 +37,9 @@ const KINDS = {
   heli: { roar: [0.8, 500, 800], whine: [0.03, 1200, 1500], buzz: [0, 0, 0], chop: 0.75, near: 20, loud: 1 },
 };
 
-const voices = []; // { out, roar, roarFilter, whines, buzz, buzzFilter, buzzGain, chop, chopDepth, panner, object }
-let noise = null;
+const voices = []; // { out, roar, roarFilter, whines, buzz, buzzFilter, buzzGain, chop, chopDepth, rollDepth, bass, air,
+                   //   air2, echo, echoGain, panner, object }
+let noise = null, drift = null;
 const where = new THREE.Vector3();
 
 function noiseBuffer(context) {
@@ -39,6 +49,21 @@ function noiseBuffer(context) {
     for (let i = 0; i < data.length; i++) data[i] = Math.random()*2 - 1;
   }
   return noise;
+}
+
+// A slow wander between -1 and 1, a new point every quarter second eased between, looping without a seam: for the
+// swelling and fading of a distant rumble.
+function driftBuffer(context) {
+  if (!drift) {
+    const seconds = 16, step = 0.25, points = Array.from({ length: seconds/step }, () => Math.random()*2 - 1);
+    drift = context.createBuffer(1, context.sampleRate*seconds, context.sampleRate);
+    const data = drift.getChannelData(0), per = context.sampleRate*step;
+    for (let i = 0; i < data.length; i++) {
+      const k = Math.floor(i/per), t = (i/per - k), a = points[k], b = points[(k + 1) % points.length];
+      data[i] = a + (b - a)*(1 - Math.cos(Math.PI*t))/2;
+    }
+  }
+  return drift;
 }
 
 function makeVoice() {
@@ -54,7 +79,23 @@ function makeVoice() {
   const panner = context.createPanner();
   panner.panningModel = 'equalpower';
   panner.distanceModel = 'inverse';
-  chop.connect(out).connect(panner).connect(outdoors);
+  // (then the air: the rumble's roll, the bass lifted and the top taken off with distance, and the ground's echo)
+  const roll = context.createGain(), rollSource = context.createBufferSource(), rollDepth = context.createGain();
+  rollSource.buffer = driftBuffer(context);
+  rollSource.loop = true;
+  rollSource.playbackRate.value = 0.7 + Math.random()*0.6;
+  rollDepth.gain.value = 0;
+  rollSource.connect(rollDepth).connect(roll.gain);
+  rollSource.start(0, Math.random()*16);
+  const bass = context.createBiquadFilter(), air = context.createBiquadFilter(), air2 = context.createBiquadFilter();
+  bass.type = 'lowshelf';
+  bass.frequency.value = 160;
+  bass.gain.value = 0;
+  [air, air2].forEach(f => { f.type = 'lowpass'; f.Q.value = 0.5; f.frequency.value = 20000; });
+  const echo = context.createDelay(0.1), echoGain = context.createGain();
+  echoGain.gain.value = 0;
+  chop.connect(out).connect(roll).connect(bass).connect(air).connect(air2).connect(panner).connect(outdoors);
+  air2.connect(echo).connect(echoGain).connect(panner);
   const source = context.createBufferSource(), roarFilter = context.createBiquadFilter(), roar = context.createGain();
   source.buffer = noiseBuffer(context);
   source.loop = true;
@@ -76,7 +117,7 @@ function makeVoice() {
   buzzGain.gain.value = 0;
   buzz.connect(buzzFilter).connect(buzzGain).connect(chop);
   buzz.start();
-  return { out, roar, roarFilter, whines, buzz, buzzFilter, buzzGain, chop, chopDepth, panner, object: null };
+  return { out, roar, roarFilter, whines, buzz, buzzFilter, buzzGain, chop, chopDepth, rollDepth, bass, air, air2, echo, echoGain, panner, object: null };
 }
 
 /**
@@ -120,6 +161,16 @@ export function updateAircraftSounds(flying) {
     v.chop.gain.setTargetAtTime(1 - kind.chop/2, now, 0.1);
     v.panner.refDistance = kind.near;
     v.out.gain.setTargetAtTime(n.thrust > 0 ? VOLUME*(0.35 + (kind.loud - 0.35)*p*p) : 0, now, SPOOL);
+    // (the air between: how far it's come, as a fraction of the way to being all rumble)
+    const far = 1 - Math.exp(-n.d/AIR), top = AIR_FLOOR + (20000 - AIR_FLOOR)*Math.exp(-n.d/AIR*1.4);
+    v.air.frequency.setTargetAtTime(top, now, 0.2);
+    v.air2.frequency.setTargetAtTime(top*1.6, now, 0.2);
+    v.bass.gain.setTargetAtTime(9*far, now, 0.2);
+    v.rollDepth.gain.setTargetAtTime(ROLL*far*far, now, 0.3);
+    const ear = Math.max(EAR, camera.position.y), height = Math.max(0, n.at.y);
+    const bounce = Math.hypot(n.at.x - camera.position.x, n.at.z - camera.position.z, height + ear) - n.d;
+    v.echo.delayTime.setTargetAtTime(Math.min(0.09, Math.max(0.0003, bounce/SOUND_SPEED)), now, 0.1);
+    v.echoGain.gain.setTargetAtTime(0.8*far, now, 0.3);
     v.panner.positionX.value = n.at.x; v.panner.positionY.value = n.at.y; v.panner.positionZ.value = n.at.z;
   }
 }

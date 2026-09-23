@@ -41,6 +41,7 @@
       <select class="select-input" id="s-pathtype" style="width:130px; margin-bottom:0;">
         <option value="sidewalk">Sidewalk</option>
         <option value="walkway">Walkway</option>
+        <option value="raised">Raised walkway</option>
         <option value="river">River</option>
         <option value="train">Train</option>
       </select>
@@ -192,7 +193,7 @@
   	C286.351,4.505,281.846,0,276.289,0z M30.773,20.124h43.77v43.77h-43.77V20.124z M266.226,159.149
   	c0.001,64.914-52.811,117.727-117.726,117.727S30.773,224.064,30.773,159.149v-75.13h43.77v74.079
   	c0,40.685,32.612,74.329,72.696,74.998c20.002,0.333,38.865-7.2,53.115-21.214c14.253-14.017,22.102-32.744,22.102-52.733v-75.13
-  	h43.77V159.149z M266.227,63.894h-43.77v-43.770h43.77V63.894z"/></svg>
+  	h43.77V159.149z M266.227,63.894h-43.77v-43.770h43.77V63.894z"/><!-- the poles: the straight ends of the horseshoe, painted over the red body when snapping is on (see style.css) --><rect class="magnet-tip" x="10.649" y="0" width="84.019" height="84.019" rx="10"/><rect class="magnet-tip" x="202.332" y="0" width="84.019" height="84.019" rx="10"/></svg>
   </div>
   <div id="history-tools">
     <button class="canvas-tool" id="btn-undo" title="Undo (Ctrl+Z)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
@@ -200,12 +201,20 @@
   </div>
   <!-- whatever's been hearted on its card, in a little window below (src/ui/favorites.js) -->
   <div id="favorites-tools">
-    <button class="canvas-tool" id="btn-favorites" title="Favorites"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M12 20.5s-7.6-4.6-9.4-9.3C1.2 7.6 3.5 4 7.2 4c2.1 0 3.6 1.1 4.8 2.9C13.2 5.1 14.7 4 16.8 4c3.7 0 6 3.6 4.6 7.2-1.8 4.7-9.4 9.3-9.4 9.3z"/></svg></button>
+    <button class="canvas-tool" id="btn-favorites" title="Favorites"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path class="fav-heart" d="M12 20.5s-7.6-4.6-9.4-9.3C1.2 7.6 3.5 4 7.2 4c2.1 0 3.6 1.1 4.8 2.9C13.2 5.1 14.7 4 16.8 4c3.7 0 6 3.6 4.6 7.2-1.8 4.7-9.4 9.3-9.4 9.3z"/></svg></button>
     <div id="favorites-panel" hidden>
       <div class="fav-head">Favorites</div>
       <div class="fav-list"></div>
     </div>
   </div>
+  <!-- perspective or orthographic view (setProjection in src/core/scene.js): the icon is the projection the view is in
+       now, Blender-style — a grid drawn in perspective, or the same grid flat on -->
+  <button class="canvas-tool" id="btn-projection" title="Orthographic view">
+    <svg class="proj-perspective" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M7.5 4h9l4.5 16H3Z"/><path d="M10.5 4 9 20M13.5 4 15 20M6 9.33h12M4.5 14.67h15"/></svg>
+    <svg class="proj-ortho" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 3.5h17v17h-17Z"/><path d="M9.17 3.5v17M14.83 3.5v17M3.5 9.17h17M3.5 14.83h17"/></svg>
+  </button>
+  <!-- everything grey but the people and the buildings they're in (src/ui/ped-view.js) -->
+  <button class="canvas-tool" id="btn-ped-view" title="Grey out everything but the people"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path class="ped-head" d="M22.6 12.0 L17.3 21.2 L6.7 21.2 L1.4 12.0 L6.7 2.8 L17.3 2.8Z"/><path d="M7.6 10.6c.8-1.2 2.2-1.2 3 0M13.4 10.6c.8-1.2 2.2-1.2 3 0M8.7 14.6c1.8 1.7 4.8 1.7 6.6 0"/></svg></button>
   <!-- sound on or off (src/ui/sound.js), its icon drawn there -->
   <button class="canvas-tool" id="btn-sound" title="Mute"></button>
   <button class="canvas-tool" id="btn-touch-add" title="Insert a node into a path, or branch off one"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -226,6 +235,17 @@
 <div id="hint"></div>
 
 <div id="possess-hint" hidden><span id="ph-title"></span><span class="ph-sub" id="ph-sub"></span><button id="ph-exit" hidden>Exit</button></div>
+<!-- dialling in the seat while riding a train carriage (src/trains/trains.js): where the view sits in it, and how wide -->
+<div id="ride-tune" hidden>
+  <div class="slider-row">
+    <div class="row"><label>Camera height</label><span class="val" id="v-rideheight">0.70</span></div>
+    <input type="range" id="s-rideheight" min="-2" max="2" step="0.05" value="0.7">
+  </div>
+  <div class="slider-row" style="margin-bottom:0;">
+    <div class="row"><label>Field of view</label><span class="val" id="v-ridefov">106</span></div>
+    <input type="range" id="s-ridefov" min="30" max="120" step="1" value="106">
+  </div>
+</div>
 
 <!-- The card for whoever's being followed — a person, a car, a carriage, a building, a bee, a hive — is built by src/ui/entity-card.js:
      they're all one card with different rows filled in, so a row added there reaches every one of them at once. -->

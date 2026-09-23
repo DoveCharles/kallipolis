@@ -6,8 +6,20 @@ import { isTrainNode } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone, subdivideZonesFrom } from '../zones/cutouts.js';
 import { renderHierarchy } from '../ui/panels.js';
+import { isRaisedWalkwayLine } from '../roads/raised.js';
 
 // ============================================================ node type context menu
+// How a raised walkway's node sits in its network — 'end' (a ramp down there anyway), 'middle', or null if it isn't
+// on a raised walkway at all
+function raisedNodeRole(nodeId) {
+  const lines = S.roadLines.filter(l => isRaisedWalkwayLine(l) && l.nodeIds.includes(nodeId));
+  if (!lines.length) return null;
+  let degree = 0;
+  S.roadLines.filter(l => l.networkId === lines[0].networkId).forEach(l => l.nodeIds.forEach((id, i) => {
+    if (id === nodeId) degree += i === 0 || i === l.nodeIds.length-1 ? 1 : 2;
+  }));
+  return degree === 1 ? 'end' : 'middle';
+}
 function showNodeContextMenu(x,y,target) {
   const menu = document.getElementById('node-context-menu');
   const currentType = target.kind==='road'
@@ -22,6 +34,13 @@ function showNodeContextMenu(x,y,target) {
     <button data-type="poly" class="${currentType==='poly'?'active':''}">Poly</button>
     <button data-type="spline" class="${currentType==='spline'?'active':''}">Spline</button>
   `;
+  // a raised walkway's node can have a ramp down off its side; ends have one anyway. Either way, it can go off the other side.
+  const role = target.kind==='road' && !isTrain ? raisedNodeRole(target.nodeId) : null;
+  if (role) {
+    const n = roadNodes[target.nodeId];
+    if (role === 'middle') menu.innerHTML += `<button data-ramp="toggle" class="${n.ramp?'active':''}">Ramp</button>`;
+    if (role === 'end' || n.ramp) menu.innerHTML += `<button data-ramp="flip">Flip ramp</button>`;
+  }
   menu.style.left = x+'px';
   menu.style.top = y+'px';
   menu.style.display = 'block';
@@ -32,10 +51,19 @@ function showNodeContextMenu(x,y,target) {
   menu.querySelectorAll('button').forEach(b => {
     b.addEventListener('click', (ev) => {
       ev.stopPropagation();
-      setNodeType(target, b.dataset.type);
+      if (b.dataset.ramp) setNodeRamp(target.nodeId, b.dataset.ramp);
+      else setNodeType(target, b.dataset.type);
       hideContextMenu();
     });
   });
+}
+function setNodeRamp(nodeId, action) {
+  const n = roadNodes[nodeId];
+  if (!n) return;
+  if (action === 'toggle') { if (n.ramp) { delete n.ramp; delete n.rampSide; } else n.ramp = true; }
+  else if (n.rampSide === -1) delete n.rampSide; else n.rampSide = -1;
+  rebuildRoadMeshes();
+  S.zones.forEach(subdivideZone);
 }
 function hideContextMenu() {
   document.getElementById('node-context-menu').style.display = 'none';

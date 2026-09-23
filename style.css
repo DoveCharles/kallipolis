@@ -262,6 +262,17 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
 #btn-panel-toggle, #btn-touch-add { display:none; }
 html.touch #btn-touch-add { display:flex; }
 .canvas-tool.on { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
+/* the projection button shows one grid or the other — whichever way the view is drawn now (see btn-projection) */
+#btn-projection .proj-ortho, #btn-projection.on .proj-perspective { display:none; }
+#btn-projection.on .proj-ortho { display:block; }
+/* The icons over the view are line drawings until whatever they turn on is on, and then they fill in: the ped head
+   (src/ui/ped-view.js) in the yellow it paints the crowd, the magnet in red with white tips, the heart while the
+   favorites window is open. */
+#btn-ped-view.on .ped-head { fill:#f5d43c; }
+#grid-toggle.active svg { color:#d42b32; }
+.magnet-tip { fill:none; }
+#grid-toggle.active .magnet-tip { fill:#fff; }
+#btn-favorites.on .fav-heart { fill:#e0364a; }
 .canvas-tool {
   width:34px; height:34px; padding:0; display:flex; align-items:center; justify-content:center;
   background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; color:var(--text-dim); cursor:pointer;
@@ -377,6 +388,12 @@ button.pc-pick:hover { text-decoration:underline; }
   border-radius:4px; background:var(--bg-input); color:var(--accent);
 }
 .ph-sub { font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+/* the two sliders for dialling in the seat inside a train carriage (src/trains/trains.js) */
+#ride-tune {
+  position:fixed; top:16px; right:16px; z-index:30; width:180px; padding:10px 12px;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+}
+#ride-tune[hidden] { display:none; }
 .pc-kill { width:62px; margin:0; padding:3px 0; font-size:11px; }
 .pc-kill[hidden] { display:none; }
 .pc-thumb {
@@ -421,6 +438,22 @@ html.win3 {
   --w3-pressed:inset 1px 1px 0 #808080, inset 2px 2px 0 #808080;
   --w3-box:inset 0 0 0 1px #000, inset 2px 2px 0 #fff, inset -2px -2px 0 #808080;
   --w3-dither:repeating-conic-gradient(#c0c0c0 0% 25%, #ffffff 0% 50%) 0 0 / 2px 2px;
+  /* the ridges Windows 3.0 scored across a window's frame a little way in from each corner, marking off the corners you
+     could grab to resize it: eight black lines, one crossing the 4px frame on either side of every corner. They stand
+     the frame's 4px plus a title-bar button's 20px from each corner (and, down the sides, the bar's top line), so each one falls exactly on the outline of the
+     button nearest it: the right-hand edge of the control-menu box, and — the two buttons at the other end being the
+     same 40px across — the line between them. The ones along the top and bottom come back a pixel, that edge being the
+     button's own last pixel; the ones down the sides don't, the line under the title bar lying just past it. */
+  --w3-ridge-x:23px; --w3-ridge-y:25px;
+  --w3-ridges:
+    linear-gradient(#000, #000) left var(--w3-ridge-x) top 0 / 1px 4px no-repeat border-box,
+    linear-gradient(#000, #000) right var(--w3-ridge-x) top 0 / 1px 4px no-repeat border-box,
+    linear-gradient(#000, #000) left var(--w3-ridge-x) bottom 0 / 1px 4px no-repeat border-box,
+    linear-gradient(#000, #000) right var(--w3-ridge-x) bottom 0 / 1px 4px no-repeat border-box,
+    linear-gradient(#000, #000) left 0 top var(--w3-ridge-y) / 4px 1px no-repeat border-box,
+    linear-gradient(#000, #000) right 0 top var(--w3-ridge-y) / 4px 1px no-repeat border-box,
+    linear-gradient(#000, #000) left 0 bottom var(--w3-ridge-y) / 4px 1px no-repeat border-box,
+    linear-gradient(#000, #000) right 0 bottom var(--w3-ridge-y) / 4px 1px no-repeat border-box;
 }
 html.win3 :is(#panel, .entity-card, .meter, #hint, #node-context-menu),
 html.win3 :is(#panel, .entity-card, .meter, #hint, #node-context-menu) * { font-size:11px; letter-spacing:0; -webkit-font-smoothing:none; }
@@ -434,18 +467,33 @@ html.win3 canvas.adding {
 html.win3 button:focus-visible { outline:1px dotted #000; outline-offset:-4px; }
 
 /* windows: a grey frame between black lines, with a navy title bar — a control-menu box at its left, minimize and maximize at its right */
-html.win3 :is(#panel, .entity-card) { border:4px solid var(--w3-face); border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000; }
+html.win3 :is(#panel, .entity-card) {
+  border:4px solid transparent; border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000;
+  /* the frame is painted rather than bordered, so the corner ridges can be drawn across it: the ridges, then the window's
+     own white inside the padding box, then the grey face filling the frame out to the black line. */
+  background:
+    var(--w3-ridges),
+    linear-gradient(var(--bg-panel), var(--bg-panel)) padding-box,
+    linear-gradient(var(--w3-face), var(--w3-face)) border-box;
+}
 html.win3 #panel { top:17px; left:17px; padding:0; display:flex; flex-direction:column; overflow:hidden; }
 html.win3 #panel-body { min-height:0; overflow-y:auto; padding:10px; } /* (only the window's inside scrolls, under its title bar) */
-html.win3 .win3-titlebar { display:flex; flex:0 0 auto; height:21px; background:var(--w3-navy); border-bottom:1px solid #000; }
+/* the bar is lined above and below: the top line is the window's own inner line carried across it (the buttons inside
+   leave their top and bottom edges to the two of them rather than drawing over them) */
+html.win3 .win3-titlebar { display:flex; flex:0 0 auto; height:22px; background:var(--w3-navy); border-top:1px solid #000; border-bottom:1px solid #000; }
 html.win3 .entity-card .win3-titlebar { margin:0 -10px 8px; }
 html.win3 .win3-titlebar .win3-title { flex:1; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; white-space:nowrap; overflow:hidden; }
 html.win3 .win3-titlebar button { flex:0 0 auto; width:20px; height:20px; padding:0; margin:0; border:none; border-radius:0; background-repeat:no-repeat; }
 html.win3 .win3-titlebar .win3-sysbox {
-  border-right:1px solid #000;
-  background:linear-gradient(#fff, #fff) 4px 8px / 11px 3px no-repeat, linear-gradient(#000, #000) 5px 9px / 11px 3px no-repeat, var(--w3-face);
+  /* the control-menu box: a grey square outlined in black (its right-hand edge is the line off the title bar), with an
+     outlined white bar across the middle — the minus, drawn as a box rather than a stroke, as Windows 3.0 drew it. Its
+     own top and bottom edges are left off, the lines above and below the title bar serving as them. */
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' shape-rendering='crispEdges'%3E%3Crect width='20' height='20' fill='%23c0c0c0'/%3E%3Cpath d='M.5 0v20M19.5 0v20' stroke='%23000'/%3E%3Crect x='4.5' y='8.5' width='11' height='3' fill='%23fff' stroke='%23000'/%3E%3C/svg%3E") 0 0 / 20px 20px no-repeat, var(--w3-face);
 }
-html.win3 .win3-titlebar :is(.win3-min, .win3-max) { border-left:1px solid #000; background-color:var(--w3-face); background-position:center; box-shadow:var(--w3-raised); }
+/* (their top and bottom edges are left to the lines above and below the title bar, and the line between the pair to the
+   second of them, so none is drawn twice — a doubled line would also sit off the ridge in the frame beside it) */
+html.win3 .win3-titlebar :is(.win3-min, .win3-max) { border:1px solid #000; border-top:none; border-bottom:none; background-color:var(--w3-face); background-position:center; box-shadow:var(--w3-raised); }
+html.win3 .win3-titlebar .win3-min { border-right:none; }
 /* (swapped from Windows 3.0, where minimize was ▼ and maximize ▲: here ▲ folds a window up and ▼ opens it out) */
 html.win3 .win3-titlebar .win3-min { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5'%3E%3Cpath d='M0 5h9L4.5 0z'/%3E%3C/svg%3E"); }
 html.win3 .win3-titlebar .win3-max { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5'%3E%3Cpath d='M0 0h9L4.5 5z'/%3E%3C/svg%3E"); }
@@ -460,8 +508,8 @@ html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool, #grid-toggle, .carousel-
   background:var(--w3-face); color:#000; border:1px solid #000; border-radius:3px; box-shadow:var(--w3-raised);
 }
 html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool:not(:disabled), #grid-toggle, .carousel-arrow, .add-color-confirm, .type-card):active,
-html.win3 :is(.tool-btn.active, #grid-toggle.active, .type-card.active) { background:var(--w3-face); color:#000; box-shadow:var(--w3-pressed); }
-html.win3 :is(.tool-btn:not(.active):hover, .btn:hover, .btn.danger:hover, .icon-btn:hover, .canvas-tool:hover:not(:disabled), #grid-toggle:hover, .carousel-arrow:hover, .add-color-confirm:hover, .type-card:hover) { color:#000; border-color:#000; background:var(--w3-face); }
+html.win3 :is(.tool-btn.active, #grid-toggle.active, .canvas-tool.on, .type-card.active) { background:var(--w3-face); color:#000; box-shadow:var(--w3-pressed); }
+html.win3 :is(.tool-btn:not(.active):hover, .btn:hover, .btn.danger:hover, .icon-btn:hover, .canvas-tool:not(.on):hover:not(:disabled), #grid-toggle:hover, .carousel-arrow:hover, .add-color-confirm:hover, .type-card:hover) { color:#000; border-color:#000; background:var(--w3-face); }
 html.win3 .tool-btn.active { text-decoration:underline; }
 html.win3 .canvas-tool:disabled { opacity:1; color:var(--w3-shadow); }
 html.win3 .carousel-arrow { flex-basis:18px; font-size:13px; }
@@ -537,7 +585,7 @@ html.win3 .entity-card { --card-pad-x:10px; --card-edge:1px; --trait-frame:1px; 
 /* the card's own right/bottom shift slightly under this look (immediately above), so the boost meter follows it */
 html.win3 #car-boost-meter { right:calc(21px + 300px + 12px); bottom:56px; }
 html.win3 .card-close { display:none; }
-html.win3 .card-heart { top:0; right:0; width:24px; height:21px; padding:0; display:flex; align-items:center; justify-content:center; color:#fff; } /* (in the title bar) */
+html.win3 .card-heart { top:0; right:0; width:24px; height:22px; padding:0; display:flex; align-items:center; justify-content:center; color:#fff; } /* (in the title bar) */
 html.win3 .card-heart[hidden] { display:none; }
 html.win3 .card-heart.on { color:#ff6b6b; }
 html.win3 #favorites-panel { border:4px solid var(--w3-face); border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000; background:#fff; }

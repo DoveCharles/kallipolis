@@ -1,6 +1,6 @@
 import { App, S } from '../../core/shared.js';
 import { mulberry32 } from '../../core/math.js';
-import { buildingTypeOf } from '../../buildings/building-types.js';
+import { buildingName } from '../../buildings/building-types.js';
 import { roomHolds, roomVisit } from '../../buildings/interior.js';
 import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
@@ -9,6 +9,8 @@ import { explode } from '../giblets.js';
 import { babble, nextSyllable } from '../../audio/voices.js';
 import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
 import { footstep } from '../../audio/footsteps.js';
+import { keyClick } from '../../audio/typing.js';
+import { mealCue, updateHeld } from './peopleHolding.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
 import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FIDGETS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_TRAIT_COLORS } from './peopleModel.js';
@@ -181,6 +183,13 @@ export const modelScale = p => 1.7*p.height*S.peopleSize/personModel.height;
  * @returns {number} from 0 to 1
  */
 export const weightOf = (p, clip) => (p.clipA === clip ? p.fade : 0) + (p.clipB === clip ? 1 - p.fade : 0);
+/**
+ * How far into sitting on a seat someone is: sat back (Sit1), at a keyboard (Typing, TypingPaused) or at their dinner
+ * (Eating, EatingPaused), all sat the same way, from 0 to 1.
+ * @param {Person} p - the person
+ * @returns {number}
+ */
+export const sitWeight = p => personModel ? ['Sit1', 'Typing', 'TypingPaused', 'Eating', 'EatingPaused'].reduce((w, name) => w + weightOf(p, personModel.clips[name]), 0) : 0;
 
 /**
  * Work out the row of the bone texture a person's at in an animation: along the walk by how far they've walked, round a
@@ -231,8 +240,21 @@ export let riderFollowed = -1;
  * @param {Person} p - the person
  * @returns {boolean} whether they're gone
  */
-export const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode === 'train' && p.train.stage === 'ride')
+export const isGone = p => p.mode === 'none' || p.mode === 'dead' || aboard(p)
   || (p.mode === 'indoors' && p.indoors.stage === 'inside');
+/**
+ * Whether this person is riding in a train carriage — standing in it, and drawn there (see updateTrainRider), though they
+ * count as gone for everything else.
+ * @param {Person} p - the person
+ * @returns {boolean} whether they're aboard
+ */
+export const aboard = p => p.mode === 'train' && p.train.stage === 'ride';
+/**
+ * Whether this person is drawn: not gone, or gone only into the room the camera's in or onto a train.
+ * @param {Person} p - the person
+ * @returns {boolean} whether they're drawn
+ */
+export const isDrawn = p => !isGone(p) || inRoom(p) || aboard(p);
 /**
  * Whether this person is inside the building the camera's gone into, and so drawn in its room (see buildings/interior.js)
  * though they count as gone for everything else.
@@ -263,7 +285,7 @@ export let indoorsCount = 0;
  * @returns {string} the label
  */
 
-export const buildingLabel = b => buildingTypeOf(b.kind, b.number).name + ' #' + b.number;
+export const buildingLabel = b => buildingName(b.kind, b.number, b.height) + ' #' + b.number;
 
 
 export function setPersonModel(m) { personModel = m; }
@@ -635,7 +657,7 @@ function killPerson(i, by = 'player', momentum = null) {
     };
     colorFrom('Skin', colors.skin);
     colorFrom('Top', colors.top); colorFrom('Pants', colors.pants); colorFrom('Shoes', colors.shoes);
-    if (personModel.headLayers.some(layer => layer.of[i] >= 0)) colors.hair = colorFrom('Hair', new THREE.Color());
+    if (personModel.headLayers.some(layer => layer.hair && layer.of[i] >= 0)) colors.hair = colorFrom('Hair', new THREE.Color());
   } else {
     peopleMesh.getColorAt(i, colors.top);
     colors.pants.copy(colors.top);
@@ -963,7 +985,7 @@ export function updatePeople(t) {
     // standing still for something (talking, sitting down), they turn to face the way it wants
     if (!p.moving && p.faceTo != null) p.heading += wrapAngle(p.faceTo - p.heading)*Math.min(1, dt*5);
     if (personModel) {
-      const clipSet = personModel.clips, s = isGone(p) && !inRoom(p) ? 0 : modelScale(p);
+      const clipSet = personModel.clips, s = isDrawn(p) ? modelScale(p) : 0;
       // a cycle of the walk for every stride's worth of ground covered, as big as they are (played in reverse, backwards)
       if (s > 0) {
         const was = p.walkCycle;
@@ -991,13 +1013,23 @@ export function updatePeople(t) {
       if (!p.clipA) { p.clipA = p.clipB = clipSet.Idle; p.fade = 1; }
       setClip(p, p.oneShot || (p.moving ? clipSet.Walk : clipSet[p.pose] || clipSet.Idle));
       p.fade = Math.min(1, p.fade + dt/p.fadeTime);
+      // whatever the clip has happening as it comes round: a key struck (see audio/typing.js), or a moment of a meal
+      // (see peopleHolding.js)
+      if (p.clipA.taps && p.fade > 0.9) {
+        const loop = p.clipA.duration, was = (p.idleTime - dt) % loop, now = p.idleTime % loop;
+        for (const tap of p.clipA.taps) {
+          if (!(now >= was ? tap.time > was && tap.time <= now : tap.time > was || tap.time <= now)) continue;
+          if (tap.cue) mealCue(p, tap.cue);
+          else keyClick({ x: p.x + Math.sin(p.heading)*0.4, y: p.y + 0.75, z: p.z + Math.cos(p.heading)*0.4 }, tap.space);
+        }
+      }
       // the model, scaled to the same height as a cuboid person — set back by however far their pose puts their pelvis from
       // their feet, and sat on a bench, up on its seat
       const blend = key => p.clipA[key]*p.fade + p.clipB[key]*(1 - p.fade);
       const offX = blend('pelvisX')*s, offZ = blend('pelvisZ')*s, sin = Math.sin(p.heading), cos = Math.cos(p.heading);
       p.heightScale = blend('heightScale');
       rotation.setFromAxisAngle(up, p.heading);
-      position.set(p.x - offX*cos - offZ*sin, p.y + p.seatLift*weightOf(p, clipSet.Sit1) - personModel.minY*s, p.z + offX*sin - offZ*cos);
+      position.set(p.x - offX*cos - offZ*sin, p.y + p.seatLift*sitWeight(p) - personModel.minY*s, p.z + offX*sin - offZ*cos);
       matrix.compose(position, rotation, scale.set(s, s, s));
       personModel.mesh.setMatrixAt(i, matrix);
       // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION
@@ -1026,7 +1058,7 @@ export function updatePeople(t) {
       const delighted = pleased && !scaredByBlood; // (blood wins over any other face: whatever they're doing, they look scared — unless they like it)
       // talking, their mouth moves; listening, their expression changes every now and then
       const group = p.group, talking = !!group && group.speaker === p, listening = !!group && !!group.speaker && !talking && p.lookAt === group.speaker;
-      if (!talking || (p.saying && isGone(p) && !inRoom(p))) {
+      if (!talking || (p.saying && !isDrawn(p))) {
         p.talkTo = 0;
         p.phrase = null;
         stopLine(p.saying);
@@ -1037,7 +1069,7 @@ export function updatePeople(t) {
         if (mouth < 0) { p.saying = null; p.talkTo = 0; p.talkIn = 0.3 + peopleRng()*0.3; }
         else p.talkTo = mouth;
       } else if ((p.talkIn -= dt) <= 0) {
-        const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, heard = !isGone(p) || inRoom(p);
+        const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, heard = isDrawn(p);
         // at the start of a phrase, now and then something real instead
         if (heard && (!p.phrase || p.phrase.said >= p.phrase.length) && (p.saying = sayLine(head, voiceOf(p, i), i, p.traits.mood))) p.phrase = null;
         else {
@@ -1087,7 +1119,7 @@ export function updatePeople(t) {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
       const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;
       rotation.setFromAxisAngle(up, p.heading);
-      if (isGone(p) && !inRoom(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
+      if (!isDrawn(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
       matrix.compose(position.set(p.x, p.y + bob, p.z), rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);
     }
@@ -1112,6 +1144,7 @@ export function updatePeople(t) {
 
   if (personModel) {
     [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; });
+    updateHeld(); // (whatever anyone's holding, from where their hands ended up)
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;
   }

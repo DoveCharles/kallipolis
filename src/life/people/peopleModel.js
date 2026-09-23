@@ -19,22 +19,269 @@ import { HEADSHOT_LAYER, PEOPLE_MAX, people, peopleMesh, setPersonModel } from '
 // Their skin is always the model's yellow. 
 // Hairstyles (assets/models/Hair.glb, each its own mesh, placed on the model's head) ride on the head bone. A style's name
 // says who can wear it: ending in _G, girls; _B, boys; _GB, either (as does no suffix).
-// Facial hair (assets/models/FacialHair.glb) works the same way, but only boys wear it.
+// Facial hair (assets/models/FacialHair.glb) works the same way, but only boys wear it. So do glasses and sunglasses
+// (assets/models/Glasses.glb, built by tools/glasses-model.py), worn by anyone, but only by GLASSES_CHANCE of them.
 const PERSON_MODEL_URL = 'assets/models/Person.glb';
 const HAIR_MODEL_URL = 'assets/models/Hair.glb';
 const FACIAL_HAIR_MODEL_URL = 'assets/models/FacialHair.glb';
+const GLASSES_MODEL_URL = 'assets/models/Glasses.glb';
+const GLASSES_CHANCE = 0.2;
 /** Frames per second the source clips are baked at, into the bone-pose texture. */
 export const PERSON_BAKE_FPS = 24;
 /** Distances the model's foot travels per walk-animation cycle. The walk plays slower for the same speed the higher this is. */
 const WALK_CYCLE_LENGTH = 4;
 /** The model's clips: `loop` plays round and round, otherwise once (or held, if `pose`). `pose` is a single held pose, and
- * `from` names a clip whose last frame this pose is (Fallen is where Fall leaves them). */
+ * `from` names a clip whose last frame this pose is (Fallen is where Fall leaves them). `over` names a clip this one is
+ * played over `times` times and reposed each frame by `repose` (Typing is Sit1 with the arms brought up: see typingPose;
+ * TypingPaused the same with the hands held still on the keys) —
+ * straight after it, so any bone it has no keys for is left as it left it.
+ * `spread` scales how far the arms are moved out from a heavy or broad body (see PERSON_ARM_SPREAD): 0 for a pose that
+ * reaches for something in front of them, where moving the hand out would miss it. */
 const PERSON_CLIPS = [
   { name: 'Walk', loop: true }, { name: 'Idle', loop: true }, { name: 'Idle2' }, { name: 'Idle3' }, { name: 'Wave' },
-  { name: 'Sit1', loop: true, pose: true }, { name: 'SitDown1', pose: true }, { name: 'SitDown2', pose: true }, { name: 'SitDown3', pose: true },
+  { name: 'Sit1', loop: true, pose: true }, { name: 'Typing', over: 'Sit1', times: 3, loop: true, pose: true, repose: typingPose },
+  { name: 'TypingPaused', over: 'Sit1', loop: true, pose: true, repose: (frame, frames, rig) => typingPose(frame, frames, rig, false) },
+  { name: 'Eating', over: 'Sit1', times: 3, loop: true, pose: true, spread: 0, repose: eatingPose },
+  { name: 'EatingPaused', over: 'Sit1', loop: true, pose: true, spread: 0, repose: (frame, frames, rig) => eatingPose(frame, frames, rig, false) },
+  { name: 'SitDown1', pose: true }, { name: 'SitDown2', pose: true }, { name: 'SitDown3', pose: true },
   { name: 'LieDown1', pose: true }, { name: 'LieDown2', pose: true }, { name: 'LieDown3', pose: true },
   { name: 'Punch' }, { name: 'Fall' }, { name: 'Fallen', from: 'Fall', pose: true },
 ];
+
+// ============== TYPING ==============
+// Typing is Sit1 with the arms brought up onto a keyboard in front, reposed a frame at a time as it's baked: each arm's
+// shoulder turned and elbow and hand moved so the wrist lands on TYPING_WRIST (a two-bone reach, the elbow bending out
+// and down), then each hand dipping and tipping its fingers down at every key it strikes. The keys are struck in bursts
+// with pauses between, the same every time round the loop — the times are kept on the clip (clip.taps) so each tap can
+// be heard (see audio/typing.js).
+//
+// In the model's own terms (facing +z, their left towards +x, about 7.6 tall standing; sat, the seat's at y 2 and the
+// pelvis at z -2.2): where the wrists go, either side of the middle — which puts the fingertips on keys a hand's length
+// further on, at desk height over an office chair pulled up to its desk (see furnishOffice in buildings/interior.js).
+const TYPING_WRIST = { x: 0.55, y: 3.5, z: -0.35 };
+const TYPING_DIP = 0.07, TYPING_TIP = 0.22, TYPING_TAP_WIDTH = 0.055; // a strike: how far down the hand goes, how far its
+                                                                   // fingers tip, and how long it takes (seconds, either side)
+const TYPING_SPACE_CHANCE = 0.15; // how many strikes are the space bar, with the right thumb (the hand barely moving)
+let typingTaps = null;
+/**
+ * The keys struck over a loop of the Typing clip: bursts of a second or three, a strike every tenth or fifth of a second
+ * from one hand or the other, with pauses between. The same every time (a fixed seed).
+ * @param {number} duration - the loop's length, in seconds
+ * @returns {{time: number, left: boolean, space: boolean}[]} each strike, in order
+ */
+function typingSchedule(duration) {
+  const rng = mulberry32(0x7e57), taps = [];
+  let t = 0.25, left = true;
+  while (t < duration - 0.4) {
+    const burstEnd = Math.min(duration - 0.4, t + 1 + rng()*2);
+    for (; t < burstEnd; t += 0.1 + rng()*0.1) {
+      const space = rng() < TYPING_SPACE_CHANCE;
+      left = space ? false : rng() < 0.3 ? left : !left;
+      taps.push({ time: t, left, space });
+    }
+    t += 0.5 + rng()*1.2;
+  }
+  return taps;
+}
+const typingV = new THREE.Vector3(), typingQ = new THREE.Quaternion(), typingM = new THREE.Matrix4();
+/**
+ * Set a bone to a place and turn in the model's space, whatever its parent.
+ * @param {THREE.Bone} bone
+ * @param {?THREE.Vector3} position - where it goes, or null to leave it
+ * @param {THREE.Quaternion} turn - the turn to add to it, in the model's space
+ * @returns {void}
+ */
+function reposeBone(bone, position, turn) {
+  const parent = bone.parent;
+  parent.updateWorldMatrix(true, false);
+  const parentTurn = parent.getWorldQuaternion(new THREE.Quaternion());
+  const worldTurn = bone.getWorldQuaternion(typingQ).premultiply(turn);
+  bone.quaternion.copy(parentTurn.invert().multiply(worldTurn));
+  if (position) bone.position.copy(typingV.copy(position).applyMatrix4(typingM.copy(parent.matrixWorld).invert()));
+}
+/**
+ * Repose a frame of Sit1 as a frame of Typing (see PERSON_CLIPS).
+ * @param {number} frame - the frame, from 0
+ * @param {number} frames - how many the loop is
+ * @param {{bone: function(string): ?THREE.Bone, update: function(): void}} rig - the model's bones, by name, and a
+ *   refresh of where they all are
+ * @param {boolean} [typing] - striking keys, or false for the hands resting on them, still
+ * @returns {?{time: number, left: boolean, space: boolean}[]} the loop's key strikes, if typing
+ */
+function typingPose(frame, frames, rig, typing = true) {
+  const duration = frames/PERSON_BAKE_FPS, t = typing ? frame/PERSON_BAKE_FPS : 0;
+  if (typing) typingTaps ??= typingSchedule(duration);
+  // (playing the clip only sets a bone where it's moved since the frame before, so one that's held still keeps the last
+  // frame's reposing — and would be turned again on top of it, round and round: put back as it was before it, instead)
+  for (const bone of typingBones(rig)) {
+    const was = bone.userData.typing;
+    if (was && bone.position.equals(was.set.position) && bone.quaternion.equals(was.set.quaternion)) {
+      bone.position.copy(was.from.position); bone.quaternion.copy(was.from.quaternion);
+    }
+    bone.userData.typing = { from: { position: bone.position.clone(), quaternion: bone.quaternion.clone() } };
+  }
+  rig.update();
+  // how far into a strike each hand is, from 0 to 1 (the loop wrapped round, so a strike near its end carries over)
+  const strike = (left, space) => !typing ? 0 : typingTaps.reduce((most, tap) => {
+    if (tap.left !== left || tap.space !== space) return most;
+    const dt = Math.min(Math.abs(t - tap.time), duration - Math.abs(t - tap.time));
+    return Math.max(most, Math.exp(-((dt/TYPING_TAP_WIDTH)**2)));
+  }, 0);
+  for (const side of ['L', 'R']) {
+    const shoulder = rig.bone('Shoulder' + side), elbow = rig.bone('Elbow' + side), hand = rig.bone('Hand' + side);
+    if (!shoulder || !elbow || !hand) continue;
+    const out = side === 'L' ? 1 : -1, left = side === 'L';
+    const S = shoulder.getWorldPosition(new THREE.Vector3()), E = elbow.getWorldPosition(new THREE.Vector3()), W = hand.getWorldPosition(new THREE.Vector3());
+    const upper = E.distanceTo(S), lower = W.distanceTo(E);
+    // where the wrist goes: over the keys, wandering a little across them, down for a strike (a thumb's barely at all)
+    const hit = strike(left, false), thumb = left ? 0 : strike(false, true);
+    const target = new THREE.Vector3(out*TYPING_WRIST.x + 0.08*Math.sin(t*1.7 + out), TYPING_WRIST.y - TYPING_DIP*hit - 0.02*thumb,
+      TYPING_WRIST.z + 0.05*Math.sin(t*1.3 + 2*out));
+    // the elbow, where the two bones meet reaching it: bent out and down
+    const toTarget = target.clone().sub(S), reach = Math.min(toTarget.length(), (upper + lower)*0.999);
+    const along = toTarget.normalize();
+    const bend = new THREE.Vector3(out*0.6, -1, -0.3);
+    bend.addScaledVector(along, -bend.dot(along)).normalize();
+    const a = (upper*upper - lower*lower + reach*reach)/(2*reach), h = Math.sqrt(Math.max(0, upper*upper - a*a));
+    const elbowAt = S.clone().addScaledVector(along, a).addScaledVector(bend, h), wristAt = S.clone().addScaledVector(along, reach);
+    const upperTurn = new THREE.Quaternion().setFromUnitVectors(E.clone().sub(S).normalize(), elbowAt.clone().sub(S).normalize());
+    const lowerTurn = new THREE.Quaternion().setFromUnitVectors(W.clone().sub(E).normalize(), wristAt.clone().sub(elbowAt).normalize());
+    reposeBone(shoulder, null, upperTurn);
+    reposeBone(elbow, elbowAt, lowerTurn);
+    // the hand following the forearm round, laid flat, and its fingers tipped down into a strike
+    const flat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.25 + TYPING_TIP*hit);
+    reposeBone(hand, wristAt, flat.multiply(lowerTurn));
+  }
+  for (const bone of typingBones(rig)) bone.userData.typing.set = { position: bone.position.clone(), quaternion: bone.quaternion.clone() };
+  return typing ? typingTaps : null;
+}
+/** The bones typingPose moves. */
+const typingBones = rig => ['L', 'R'].flatMap(side => ['Shoulder', 'Elbow', 'Hand'].map(name => rig.bone(name + side))).filter(Boolean);
+
+// ============== HOLDING SOMETHING ==============
+// Where a held thing sits in a fist, from the wrist bone, in the model's rest pose (arms out, palms forward: the fingers
+// reach along X, spread along Y, and the thumb points up and out). So a handle lies along the model's Y, through the
+// curled fingers — which is the frame peopleHolding.js builds a fork or a cup in.
+const HAND_GRIP = { x: 0.5, y: 0.05, z: 0.15 };
+/** How far each bone of a fist curls round a handle, and about what: the fingers towards the palm, the thumb onto them. */
+const GRIP_CURL = [['Finger1', 1.15, 'fingers'], ['Finger2', 0.95, 'fingers'], ['Middle1', 1.2, 'fingers'], ['Middle2', 1.0, 'fingers'],
+  ['Little1', 1.25, 'fingers'], ['Little2', 1.0, 'fingers'], ['Thumb1', 0.55, 'thumb'], ['Thumb2', 0.45, 'thumb']];
+
+// ============== EATING ==============
+// Eating is Sit1 with the right arm reposed a frame at a time as it's baked (as Typing is: see typingPose), holding a
+// fork. It dips the fork to a plate on the table in front of them, gathers a mouthful, raises it to the mouth, and
+// brings it back down over the plate — twice over a loop. What happens when is kept on the clip (clip.taps,
+// which people.js plays as it comes round): the fork on the plate, a mouthful gathered, and the mouthful eaten.
+//
+// The places are in the model's own space, sat on a dining chair with the table's edge in front of them (see the dining
+// tables in buildings/interior.js): EAT_TIP_PLATE is the middle of the plate, and the mouth is wherever the head has got to.
+const EAT_FORK = 0.76; // from the fist to the tines, in the model's units (the fork built in peopleHolding.js)
+const EAT_TIP_REST = new THREE.Vector3(-0.65, 3.60, -0.23), EAT_DIR_REST = new THREE.Vector3(0.4, -0.28, 0.88);
+const EAT_TIP_PLATE = new THREE.Vector3(-0.05, 3.56, -0.56), EAT_DIR_PLATE = new THREE.Vector3(0.2, -0.93, 0.3);
+const EAT_TIP_MOUTH = new THREE.Vector3(0.02, -0.05, 0.14), EAT_DIR_MOUTH = new THREE.Vector3(0.34, 0.75, -0.57);
+// seconds a mouthful's parts take: down to the plate, gathering, up to the mouth, in the mouth, and back down again
+const EAT_DIP = 0.6, EAT_GATHER = 0.4, EAT_LIFT = 0.8, EAT_IN_MOUTH = 0.45, EAT_LOWER = 0.7;
+const EAT_MOUTHFUL = EAT_DIP + EAT_GATHER + EAT_LIFT + EAT_IN_MOUTH + EAT_LOWER;
+const EAT_BITES = 2, EAT_FIRST = 0.5; // mouthfuls a loop, and how long before the first
+
+const eatEase = x => x*x*(3 - 2*x);
+/**
+ * Where the fork is part-way through a loop of Eating.
+ * @param {number} t - seconds into the loop
+ * @param {number} duration - the loop's length in seconds
+ * @param {THREE.Vector3} mouth - where their mouth is, in the model's space
+ * @returns {{tip: THREE.Vector3, dir: THREE.Vector3, cue: ?string}} where the tines are, which way the fork points
+ *   (from the fist to the tines), and anything to sound or show at this frame
+ */
+function eatingAt(t, duration, mouth) {
+  const gap = Math.max(0.3, (duration - EAT_FIRST - EAT_BITES*EAT_MOUTHFUL)/EAT_BITES);
+  const fork = (tip, dir) => ({ tip: tip.clone(), dir: dir.clone().normalize() });
+  const between = (a, da, b, db, x) => ({ tip: a.clone().lerp(b, eatEase(x)),
+    dir: da.clone().normalize().lerp(db.clone().normalize(), eatEase(x)).normalize() });
+  const tipMouth = mouth.clone().add(EAT_TIP_MOUTH);
+  for (let k=0;k<EAT_BITES;k++) {
+    const u = t - (EAT_FIRST + k*(EAT_MOUTHFUL + gap));
+    if (u < 0 || u >= EAT_MOUTHFUL) continue;
+    if (u < EAT_DIP) return between(EAT_TIP_REST, EAT_DIR_REST, EAT_TIP_PLATE, EAT_DIR_PLATE, u/EAT_DIP);
+    if (u < EAT_DIP + EAT_GATHER) { // rummaging about the plate for a forkful
+      const g = u - EAT_DIP;
+      return fork(EAT_TIP_PLATE.clone().add(new THREE.Vector3(0.09*Math.sin(g*15), -0.03*Math.sin(g*9), 0.07*Math.cos(g*13))), EAT_DIR_PLATE);
+    }
+    if (u < EAT_DIP + EAT_GATHER + EAT_LIFT) return between(EAT_TIP_PLATE, EAT_DIR_PLATE, tipMouth, EAT_DIR_MOUTH, (u - EAT_DIP - EAT_GATHER)/EAT_LIFT);
+    if (u < EAT_MOUTHFUL - EAT_LOWER) return fork(tipMouth, EAT_DIR_MOUTH);
+    return between(tipMouth, EAT_DIR_MOUTH, EAT_TIP_REST, EAT_DIR_REST, (u - (EAT_MOUTHFUL - EAT_LOWER))/EAT_LOWER);
+  }
+  return fork(EAT_TIP_REST, EAT_DIR_REST); // between mouthfuls, the fork held over the plate
+}
+/**
+ * What happens when over a loop of Eating: the fork touching down on the plate, a forkful gathered onto it, and the
+ * mouthful taken off it (see eatingAt, and the taps people.js plays).
+ * @param {number} duration - the loop's length in seconds
+ * @returns {{time: number, cue: string}[]} each cue, in order
+ */
+function eatingCues(duration) {
+  const gap = Math.max(0.3, (duration - EAT_FIRST - EAT_BITES*EAT_MOUTHFUL)/EAT_BITES);
+  const cues = [];
+  for (let k=0;k<EAT_BITES;k++) {
+    const at = EAT_FIRST + k*(EAT_MOUTHFUL + gap);
+    cues.push({ time: at + EAT_DIP, cue: 'clink' });
+    cues.push({ time: at + EAT_DIP + EAT_GATHER*0.85, cue: 'forkful' });
+    cues.push({ time: at + EAT_DIP + EAT_GATHER + EAT_LIFT + 0.1, cue: 'bite' });
+  }
+  return cues;
+}
+/**
+ * Repose a frame of Sit1 as a frame of Eating (see PERSON_CLIPS): the right arm holding a fork, everything else as it sits.
+ * @param {number} frame - the frame, from 0
+ * @param {number} frames - how many the loop is
+ * @param {object} rig - the model's bones, by name, where they rest, where the mouth is, and a refresh (see buildPersonModel)
+ * @param {boolean} [eating] - working through a meal, or false for the fork held still over the plate
+ * @returns {?{time: number, cue: string}[]} the loop's cues, if eating
+ */
+function eatingPose(frame, frames, rig, eating = true) {
+  const duration = frames/PERSON_BAKE_FPS, t = frame/PERSON_BAKE_FPS;
+  const moved = eatingBones(rig);
+  // (as in typingPose: put back any bone the last frame reposed and the clip hasn't moved since, so a turn isn't added twice)
+  for (const bone of moved) {
+    const was = bone.userData.repose;
+    if (was && bone.position.equals(was.set.position) && bone.quaternion.equals(was.set.quaternion)) {
+      bone.position.copy(was.from.position); bone.quaternion.copy(was.from.quaternion);
+    }
+    bone.userData.repose = { from: { position: bone.position.clone(), quaternion: bone.quaternion.clone() } };
+  }
+  rig.update();
+  const fork = eating ? eatingAt(t, duration, rig.mouth()) : eatingAt(-1, duration, rig.mouth());
+  const shoulder = rig.bone('ShoulderR'), elbow = rig.bone('ElbowR'), hand = rig.bone('HandR');
+  if (!shoulder || !elbow || !hand) return null;
+  // the fist on the fork's handle, which lies along the model's Y in the rest pose (HAND_GRIP)
+  const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), fork.dir);
+  const grip = fork.tip.clone().addScaledVector(fork.dir, -EAT_FORK);
+  const wristTarget = grip.clone().sub(rig.grip('R').sub(rig.restAt('HandR')).applyQuaternion(turn));
+  // the arm reaching it: the elbow bent out and down, where the two bones meet (as typingPose does it)
+  const S = shoulder.getWorldPosition(new THREE.Vector3()), E = elbow.getWorldPosition(new THREE.Vector3()), W = hand.getWorldPosition(new THREE.Vector3());
+  const upper = E.distanceTo(S), lower = W.distanceTo(E);
+  const toTarget = wristTarget.clone().sub(S), reach = Math.min(toTarget.length(), (upper + lower)*0.999);
+  const along = toTarget.normalize();
+  const bend = new THREE.Vector3(-1, -0.4, -0.4);
+  bend.addScaledVector(along, -bend.dot(along)).normalize();
+  const a = (upper*upper - lower*lower + reach*reach)/(2*reach), h = Math.sqrt(Math.max(0, upper*upper - a*a));
+  const elbowAt = S.clone().addScaledVector(along, a).addScaledVector(bend, h), wristAt = S.clone().addScaledVector(along, reach);
+  reposeBone(shoulder, null, new THREE.Quaternion().setFromUnitVectors(E.clone().sub(S).normalize(), elbowAt.clone().sub(S).normalize()));
+  reposeBone(elbow, elbowAt, new THREE.Quaternion().setFromUnitVectors(W.clone().sub(E).normalize(), wristAt.clone().sub(elbowAt).normalize()));
+  // the hand turned onto the fork, whatever the arm did: the turn from the rest pose, over where the clip left it
+  const want = turn.clone().multiply(rig.restTurn('HandR'));
+  reposeBone(hand, wristAt, want.multiply(hand.getWorldQuaternion(new THREE.Quaternion()).invert()));
+  // and its fingers closed round the handle
+  const axes = { fingers: new THREE.Vector3(0, 1, 0).applyQuaternion(turn), thumb: new THREE.Vector3(1, 0, 0).applyQuaternion(turn) };
+  for (const [name, angle, about] of GRIP_CURL) {
+    const bone = rig.bone(name + 'R');
+    if (bone) reposeBone(bone, null, new THREE.Quaternion().setFromAxisAngle(axes[about], angle));
+  }
+  for (const bone of moved) bone.userData.repose.set = { position: bone.position.clone(), quaternion: bone.quaternion.clone() };
+  return eating ? eatingCues(duration) : null;
+}
+/** The bones eatingPose moves. */
+const eatingBones = rig => ['Shoulder', 'Elbow', 'Hand', ...GRIP_CURL.map(([name]) => name)].map(name => rig.bone(name + 'R')).filter(Boolean);
 
 export const FIDGETS = ['Idle2', 'Idle3'], GRASS_SITS = ['SitDown1', 'SitDown2', 'SitDown3'], LIE_DOWNS = ['LieDown1', 'LieDown2', 'LieDown3'];
 /** Seconds to blend from one clip into the next: FADE_QUICK between walk, idle and wave; FADE_POSE into or out of sitting or lying. */
@@ -64,7 +311,7 @@ const PERSON_BODY_SHAPES = {
 
 /** How far out the arms are moved at Weight 1 and at Shoulders 1, in the model's units. Those two keys widen the body but
  * leave the arms where they are, so without this a heavy or broad person's hands swing through their hips. */
-const PERSON_ARM_SPREAD = { Weight: 0.43, Shoulders: 0.5 };
+export const PERSON_ARM_SPREAD = { Weight: 0.43, Shoulders: 0.5 };
 
 /** Each person's head and eye shape keys, as [lowest, highest] — or one pair per sex where they differ. */
 const PERSON_FACE_SHAPES = { 'Key 1': { male: [0, 1], female: [-0.3, 0] }, 'Key 2': [-0.5, 0.3], Shape1: [-0.2, 1], Shape2: [0, 1], Shape3: [0, 1] };
@@ -117,7 +364,7 @@ const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
 // ('Skin' starts as the model's own, and is there so a person's can be tinted: see peopleBlood.js)
 // ('Blood' is how opaque the splotches drawn over them are — 0 for none — in its fourth number)
 // ('Eyes' is what the whites of their eyes are, so they can be tinted: see updatePeople's eye reddening)
-export const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat', 'Skin', 'Blood', 'Eyes'];
+export const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat', 'Skin', 'Blood', 'Eyes', 'Glasses'];
 const SKIN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Skin'), BLOOD_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Blood');
 const BLOOD_SCALE = 1.2; // how many splotches' worth of noise fit in a unit of the figure: bigger for smaller splotches
 export const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
@@ -141,6 +388,7 @@ const isHatMaterial = name => /^Hat(\.\d+)?$/i.test(name || '');
 
 const PANTS_COLORS = [0x26344f, 0x3e5a82, 0x5a7aa6, 0x232326, 0x4d5057, 0x8f8f93, 0xb09a72, 0x6b5038, 0x46503a];
 const SHOE_COLORS = [0x151517, 0x2b2b2f, 0xeeeeea, 0x8f9298, 0x6b4a2f, 0x3b2a1e, 0x22304a, 0xb5a383];
+const GLASSES_COLORS = [0x141416, 0x141416, 0x1f1f22, 0x3a2418, 0x5a3520, 0x6d6f74, 0xa4a7ad];
 const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 0xc49a5a, 0xdcc08a]; // black to platinum
 //Removed light tones: 0xb9b5a 0xe3ddd2
 export const BLINK_DURATION = 0.5; // seconds for the eyes to close and open again
@@ -199,6 +447,17 @@ const PERSON_VERTEX_PARS = `
     else pose = personBoneAt(bone, instanceAnim.x)*instanceAnim.z + personBoneAt(bone, instanceAnim.y)*(1.0 - instanceAnim.z);
     return pose;
   }
+  // How far the clip being played wants the arms moved out from a wide body (see PERSON_ARM_SPREAD and each clip's spread):
+  // the row's last texel, kept beside the bones and blended between rows and between clips just as a bone is.
+  float personClipSpreadAt(float row) {
+    vec2 texel = 1.0/personBonesSize;
+    return textureLod(personBones, vec2(1.0 - 0.5*texel.x, (row + 0.5)*texel.y), 0.0).x;
+  }
+  float personClipSpread() {
+    if (instanceAnim.z > 0.999) return personClipSpreadAt(instanceAnim.x);
+    if (instanceAnim.z < 0.001) return personClipSpreadAt(instanceAnim.y);
+    return personClipSpreadAt(instanceAnim.x)*instanceAnim.z + personClipSpreadAt(instanceAnim.y)*(1.0 - instanceAnim.z);
+  }
   mat4 personSkinMatrix() {
     mat4 m = personBone(personJoints.x)*personWeights.x;
     if (personWeights.y > 0.0) m += personBone(personJoints.y)*personWeights.y;
@@ -255,9 +514,10 @@ const PERSON_VERTEX_PARS = `
   //
   // Everything from the shoulder down (personVertex.x, negative) moves out along the way the chest faces, by how far the
   // Weight and Shoulders shape keys widen the body. Applied after posing, since the shape keys and bones leave the arms
-  // where a slight person's are.
+  // where a slight person's are. A pose that reaches for something in front of them holds the arms in (personClipSpread),
+  // so a wide person's hand lands where a slight one's does.
   vec3 personArms(vec3 posed, float restX) {
-    float spread = max(-personVertex.x, 0.0)*(personTrait(0).w*${PERSON_ARM_SPREAD.Weight.toFixed(3)} + personTrait(1).w*${PERSON_ARM_SPREAD.Shoulders.toFixed(3)});
+    float spread = max(-personVertex.x, 0.0)*personClipSpread()*(personTrait(0).w*${PERSON_ARM_SPREAD.Weight.toFixed(3)} + personTrait(1).w*${PERSON_ARM_SPREAD.Shoulders.toFixed(3)});
     if (spread <= 0.0) return posed;
     vec3 sideways = normalize(mat3(personBone(personChestBone))*vec3(1.0, 0.0, 0.0));
     return posed + sideways*(restX < 0.0 ? -spread : spread);
@@ -399,12 +659,14 @@ async function loadGLB(url) {
  * @returns {Promise<void>}
  */
 export async function loadPersonModel() {
-  const [body, hair, facialHair] = await Promise.allSettled([loadGLB(PERSON_MODEL_URL), loadGLB(HAIR_MODEL_URL), loadGLB(FACIAL_HAIR_MODEL_URL)]);
+  const [body, hair, facialHair, glasses] = await Promise.allSettled([loadGLB(PERSON_MODEL_URL), loadGLB(HAIR_MODEL_URL), loadGLB(FACIAL_HAIR_MODEL_URL), loadGLB(GLASSES_MODEL_URL)]);
   if (body.status === 'rejected') { console.warn('Blockout: the people model failed to load; people stay cuboids', body.reason); return; }
   if (hair.status === 'rejected') console.warn('Blockout: the hair model failed to load; people go without', hair.reason);
   if (facialHair.status === 'rejected') console.warn('Blockout: the facial hair model failed to load; people go without', facialHair.reason);
+  if (glasses.status === 'rejected') console.warn('Blockout: the glasses model failed to load; people go without', glasses.reason);
+  const loaded = result => result.status === 'fulfilled' ? result.value : null;
   try {
-    setPersonModel(buildPersonModel(body.value, hair.status === 'fulfilled' ? hair.value : null, facialHair.status === 'fulfilled' ? facialHair.value : null));
+    setPersonModel(buildPersonModel(body.value, loaded(hair), loaded(facialHair), loaded(glasses)));
     peopleMesh.visible = false;
   } catch (err) {
     console.warn('Blockout: the people model failed to load; people stay cuboids', err);
@@ -422,9 +684,10 @@ export async function loadPersonModel() {
  * @param {object} gltf - the loaded people model
  * @param {?object} hairGltf - the loaded hairstyles, or null
  * @param {?object} facialHairGltf - the loaded facial hair, or null
+ * @param {?object} glassesGltf - the loaded glasses, or null
  * @returns {PersonModel} the meshes and everything the shader and the update loop need
  */
-function buildPersonModel(gltf, hairGltf, facialHairGltf) {
+function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
   const root = gltf.scene;
   const rigged = [], attached = [];
   root.traverse(o => { if (o.isSkinnedMesh) rigged.push(o); else if (o.isMesh) attached.push(o); });
@@ -539,6 +802,31 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const morphTexture = new THREE.DataTexture(morphData, morphWidth, morphRows*PERSON_SHAPE_KEYS.length, THREE.RGBAFormat, THREE.FloatType);
   morphTexture.needsUpdate = true;
 
+  // ============== MOUTH AND HANDS ==============
+  // Where a fork goes, and where it goes when it gets there. The mouth is the middle of the lips, kept in the head bone's
+  // own terms so it follows the head round; the grips are the spot in each fist a held thing sits at, in the rest pose's
+  // model space (the bone poses in the texture are matrices from that pose, so a grip runs through them like a vertex
+  // does — see peopleHolding.js).
+  const lipsSlot = PERSON_SLOTS.indexOf('Lips');
+  const mouthRest = new THREE.Vector3();
+  let lipsCount = 0;
+  for (let i=0;i<vertexCount;i++) {
+    if (slots[i] !== lipsSlot) continue;
+    mouthRest.x += positions[i*3]; mouthRest.y += positions[i*3+1]; mouthRest.z += positions[i*3+2];
+    lipsCount++;
+  }
+  if (lipsCount) mouthRest.multiplyScalar(1/lipsCount); else mouthRest.copy(headPivot).add(HEAD_CENTER);
+  const mouthLocal = headBone != null ? bones[headBone].worldToLocal(mouthRest.clone()) : mouthRest.clone();
+  const hands = {};
+  ['L', 'R'].forEach(side => {
+    const hand = bones[boneByName.get('Hand' + side)], out = side === 'L' ? 1 : -1;
+    hands[side] = { bone: boneByName.get('Hand' + side) ?? 0,
+      grip: (hand ? hand.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3()).add(new THREE.Vector3(out*HAND_GRIP.x, HAND_GRIP.y, HAND_GRIP.z)) };
+  });
+  const gripRest = { L: hands.L.grip, R: hands.R.grip };
+  // the model's units to a metre: someone of height 1 at people size 1 stands 1.7m tall (modelScale in people.js)
+  const unitsPerMetre = (geometry.boundingBox.max.y - geometry.boundingBox.min.y)/1.7;
+
   // ============== BONE TEXTURE ============== 
   // Each clip's frames followed by its first frame again, so blending past the last frame loops
   // smoothly. A missing clip is the rest pose, one frame.
@@ -548,17 +836,26 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const mixer = new THREE.AnimationMixer(root);
   const pelvisBone = bones[boneByName.get('Pelvis') ?? 0], restPelvis = pelvisBone.getWorldPosition(new THREE.Vector3());
   const clips = PERSON_CLIPS.map(def => {
-    const source = def.from || def.name;
+    const source = def.from || def.over || def.name;
     const clip = gltf.animations.find(c => c.name.toLowerCase() === source.toLowerCase());
-    if (!clip && !def.from) console.warn(`Blockout: the people model has no ${def.name} animation`);
-    const sourceFrames = clip ? Math.max(1, Math.round(clip.duration*PERSON_BAKE_FPS)) : 1, frames = def.from ? 1 : sourceFrames;
+    if (!clip && !def.from && !def.over) console.warn(`Blockout: the people model has no ${def.name} animation`);
+    const sourceFrames = clip ? Math.max(1, Math.round(clip.duration*PERSON_BAKE_FPS)) : 1;
+    const frames = def.from ? 1 : sourceFrames*(def.times || 1);
     return { name: def.name, clip, missing: !clip, loop: !!def.loop && frames > 1, pose: !!def.pose, frames, duration: frames/PERSON_BAKE_FPS,
+      sourceFrames, repose: clip ? def.repose : null, taps: null, spread: def.spread ?? 1,
       holdAt: def.from ? (sourceFrames - 1)/PERSON_BAKE_FPS : null,
       start: 0, pelvis: new THREE.Vector3(), pelvisX: 0, pelvisZ: 0, top: 0, heightScale: 1, seatY: 0 };
   });
   let boneRows = 0;
   clips.forEach(c => { c.start = boneRows; boneRows += c.frames + 1; });
-  const boneWidth = bones.length*3, boneData = new Float32Array(boneWidth*boneRows*4), pose = new THREE.Matrix4();
+  const restMatrix = name => new THREE.Matrix4().copy(skeleton.boneInverses[boneByName.get(name) ?? 0]).invert();
+  const rig = { bone: name => bones[boneByName.get(name)], update: () => root.updateMatrixWorld(true),
+    mouth: () => headBone != null ? bones[headBone].localToWorld(mouthLocal.clone()) : mouthRest.clone(),
+    grip: side => gripRest[side].clone(), metre: unitsPerMetre,
+    restAt: name => new THREE.Vector3().setFromMatrixPosition(restMatrix(name)),
+    restTurn: name => new THREE.Quaternion().setFromRotationMatrix(restMatrix(name)) };
+  // three texels a bone for its pose, and one on the end of the row for the clip's arm spread (personClipSpread)
+  const boneWidth = bones.length*3 + 1, boneData = new Float32Array(boneWidth*boneRows*4), pose = new THREE.Matrix4();
   // how far a foot travels over the walk, for how far a cycle of it carries a person
   const footBone = bones[boneByName.get('FootL') ?? boneByName.get('FootR') ?? 0], footPosition = new THREE.Vector3();
   let footMinZ = Infinity, footMaxZ = -Infinity;
@@ -566,8 +863,9 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     mixer.stopAllAction();
     const action = c.clip ? mixer.clipAction(c.clip).play() : null;
     for (let f=0;f<=c.frames;f++) {
-      if (action) mixer.setTime(c.holdAt ?? (f % c.frames)/PERSON_BAKE_FPS); else skeleton.pose();
+      if (action) mixer.setTime(c.holdAt ?? (f % c.sourceFrames)/PERSON_BAKE_FPS); else skeleton.pose();
       root.updateMatrixWorld(true);
+      if (c.repose) { c.taps = c.repose(f % c.frames, c.frames, rig); root.updateMatrixWorld(true); }
       bones.forEach((bone, b) => {
         const e = pose.multiplyMatrices(bone.matrixWorld, skeleton.boneInverses[b]).elements;
         for (let r=0;r<3;r++) {
@@ -575,6 +873,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
           boneData[o] = e[r]; boneData[o+1] = e[4+r]; boneData[o+2] = e[8+r]; boneData[o+3] = e[12+r];
         }
       });
+      boneData[((c.start + f)*boneWidth + bones.length*3)*4] = c.spread;
       if (c.name === 'Walk' && action) { footBone.getWorldPosition(footPosition); footMinZ = Math.min(footMinZ, footPosition.z); footMaxZ = Math.max(footMaxZ, footPosition.z); }
       if (f === 0) pelvisBone.getWorldPosition(c.pelvis);
     }
@@ -657,12 +956,14 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     return styles;
   };
   // Each layer of what's worn on the head: its styles, and for each person which style they wear (-1 for none) and where
-  // they are among its wearers. Women always wear a hairstyle, men can be bald.
-  const headLayer = (styles, rng) => ({ styles, rng, of: new Int16Array(PEOPLE_MAX).fill(-1), slot: new Int32Array(PEOPLE_MAX),
+  // they are among its wearers. Women always wear a hairstyle, men can be bald; a layer with a `chance` is worn by that
+  // many of those who can, whoever they are. `hair` is whether it's colored as their hair.
+  const headLayer = (styles, rng, { chance = null, hair = true } = {}) => ({ styles, rng, chance, hair, of: new Int16Array(PEOPLE_MAX).fill(-1), slot: new Int32Array(PEOPLE_MAX),
     girls: styles.map((style, k) => style.girls ? k : -1).filter(k => k >= 0), boys: styles.map((style, k) => style.boys ? k : -1).filter(k => k >= 0) });
   const hairLayer = headLayer(headStylesFrom(hairGltf, hairstyleWearers), mulberry32(31337));
   const facialHairLayer = headLayer(headStylesFrom(facialHairGltf, () => ({ girls: false, boys: true })), mulberry32(4711));
-  const headLayers = [hairLayer, facialHairLayer];
+  const glassesLayer = headLayer(headStylesFrom(glassesGltf, () => ({ girls: true, boys: true })), mulberry32(2020), { chance: GLASSES_CHANCE, hair: false });
+  const headLayers = [hairLayer, facialHairLayer, glassesLayer];
 
   // ============== Body Traits ==============
   // Sex, and which hairstyle and facial hair (if any) someone wears, are fixed to the render slot itself, decided once
@@ -681,7 +982,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     headLayers.forEach(layer => {
       const styles = man ? layer.boys : layer.girls;
       if (!styles.length) return;
-      const pick = Math.floor(layer.rng()*(man ? styles.length + 1 : styles.length));
+      const pick = layer.chance != null ? (layer.rng() < layer.chance ? Math.floor(layer.rng()*styles.length) : styles.length)
+        : Math.floor(layer.rng()*(man ? styles.length + 1 : styles.length));
       if (pick >= styles.length) return;
       const members = layer.styles[styles[pick]].members;
       layer.of[i] = styles[pick];
@@ -718,7 +1020,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     const man = isMan[i] === 1, ranges = man ? PERSON_BODY_SHAPES.male : PERSON_BODY_SHAPES.female;
     const texel = row => (row*PEOPLE_MAX + i)*4;
     const traitRng = mulberry32(777 + id*7919), faceRng = mulberry32(2718 + id*7919);
-    const colorRng = mulberry32(4242 + id*7919), hatRng = mulberry32(8086 + id*7919), color = new THREE.Color();
+    const colorRng = mulberry32(4242 + id*7919), hatRng = mulberry32(8086 + id*7919), glassesRng = mulberry32(6060 + id*7919), color = new THREE.Color();
     const colorFor = {
       Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
       Pants: () => colorRng() < 0.8 ? color.set(PANTS_COLORS[Math.floor(colorRng()*PANTS_COLORS.length)]) : color.setHSL(colorRng(), 0.25 + colorRng()*0.3, 0.25 + colorRng()*0.25),
@@ -730,6 +1032,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
       Blood: () => color.setRGB(0, 0, 0), // (only its fourth number, the opacity, is read: see BLOOD_GLSL)
       // its own generator, so adding it didn't change anyone's other colors
       Hat: () => hatRng() < 0.25 ? color.setHSL(0, 0, [0.08, 0.3, 0.6, 0.9][Math.floor(hatRng()*4)]) : color.setHSL(hatRng(), 0.4 + hatRng()*0.5, 0.3 + hatRng()*0.35),
+      // mostly black or tortoiseshell brown, some wire-grey, a few loud
+      Glasses: () => { const r = glassesRng(); return r < 0.8 ? color.set(GLASSES_COLORS[Math.floor(glassesRng()*GLASSES_COLORS.length)]) : color.setHSL(glassesRng(), 0.6 + glassesRng()*0.3, 0.4 + glassesRng()*0.15); },
     };
     const shape = PERSON_SHAPE_KEYS.slice(0, PERSON_BODY_KEY_COUNT).map(key => { const [lo, hi] = ranges[key]; return lo + traitRng()*(hi - lo); });
     traits.set(shape.slice(0, 4), texel(0));
@@ -776,7 +1080,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   geometry.setAttribute('instanceEyes', eyes);
   const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
   const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair'), 1: traitRow('Hat') }, femaleOnly: [] };
-  headLayers.flatMap(layer => layer.styles).forEach(style => {
+  const glassesLook = { palette: hairPalette, traitColors: { 0: traitRow('Glasses') }, femaleOnly: [] };
+  headLayers.flatMap(layer => layer.styles.map(style => [style, layer.hair ? hairLook : glassesLook])).forEach(([style, look]) => {
     if (!style.members.length) { style.geometry.dispose(); return; }
     style.geometry.setAttribute('instancePerson', new THREE.InstancedBufferAttribute(Float32Array.from(style.members), 1));
     style.anim = dynamicInstanceAttribute(style.members.length, 4);
@@ -785,7 +1090,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
     style.geometry.setAttribute('instanceAnim', style.anim);
     style.geometry.setAttribute('instanceLook', style.look);
     style.geometry.setAttribute('instanceEyes', style.eyes);
-    style.mesh = makePersonMesh(style.geometry, uniforms, hairLook, style.members.length, true);
+    style.mesh = makePersonMesh(style.geometry, uniforms, look, style.members.length, true);
   });
   root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
 
@@ -793,7 +1098,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf) {
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
   return { mesh, hidden: uniforms.personHidden, anim, look, eyes, hair: headLayers.flatMap(layer => layer.styles).filter(style => style.mesh), headLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
-    headBone: headBone ?? 0, headPivot,
+    headBone: headBone ?? 0, headPivot, chestBone, hands, unitsPerMetre,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
 

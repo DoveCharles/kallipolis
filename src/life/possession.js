@@ -16,6 +16,9 @@ import { IS_TOUCH } from '../core/device.js';
 // - an aircraft or a bee (clicking its card's picture): the same view from behind, but the keys work a stick rather than a
 //   wheel — W/S put the nose down and up, and A/D bank it round, since a thing in the air turns by leaning rather than
 //   by steering (life/flight.js does the flying, and zones/airport.js and life/bees.js pose what's flown)
+// - a train carriage (clicking the train card's Enter): a seat inside it, going where it goes — no keys at all, and the
+//   pointer left free, since a passenger drives nothing and the seat itself is dialled in from two sliders that need a
+//   cursor to drag (trains/trains.js puts the view in the carriage). A drag across the view looks around.
 // On touch there's no pointer to lock and no keys to hold: a finger dragged across the view looks around instead, and the
 // thumbstick and buttons src/ui/mobile.js puts on screen are held down in place of WASD — one of them the click, since
 // a tap on the view is already the start of a look.
@@ -25,6 +28,9 @@ const hintExit = document.getElementById('ph-exit');
 export const possession = { index: -1, yaw: 0, pitch: 0 };
 export const driving = { active: false, lookedAt: -Infinity }; // (lookedAt: when the mouse last swung the camera round)
 export const flying = { active: false, lookedAt: -Infinity, release: null }; // the same, for anything flown (release: what lets go of it)
+// Sitting inside something that's carrying you along (a train carriage: see trains.js) — the view pinned to a spot that
+// moves with it, the mouse the only thing that does anything: a tripod rather than a set of controls.
+export const riding = { active: false, release: null }; // (release: what puts the view back outside)
 const held = new Set();
 const PITCH_MAX = 1.35, LOOK_SPEED = 0.0025, ORBIT_PHI_MIN = 0.3, ORBIT_PHI_MAX = 1.5; // (driving: the camera not quite overhead, nor lower than about level with the car)
 const KEY_NAMES = { arrowup: 'w', arrowleft: 'a', arrowdown: 's', arrowright: 'd', ' ': 'space' };
@@ -101,12 +107,39 @@ export function endFlying() {
   hint.hidden = true;
   unlockPointer();
 }
+/**
+ * Sit the view inside something being carried along: it looks where the mouse points and nothing else (no WASD — there
+ * are no controls aboard). `heading` is the way it faces to start with, and `release` is what puts it back outside.
+ * @param {number} heading
+ * @param {() => void} release
+ */
+export function startRiding(heading, release) {
+  if (S.interactionMode !== 'move') return false;
+  riding.active = true;
+  riding.release = release;
+  possession.yaw = heading;
+  possession.pitch = 0;
+  held.clear();
+  showHint(IS_TOUCH ? 'Aboard' : 'Press <kbd>Esc</kbd> to get off', 'Drag to look around');
+  // (the pointer isn't taken, unlike the other three: the seat is dialled in from sliders that need a cursor to drag)
+  return true;
+}
+export function endRiding() {
+  if (!riding.active) return;
+  riding.active = false;
+  riding.release = null;
+  held.clear();
+  lookPointer = null; pressedAt = null;
+  hint.hidden = true;
+  unlockPointer();
+}
 const isPossessing = () => possession.index >= 0;
-const inControl = () => isPossessing() || driving.active || flying.active;
+const inControl = () => isPossessing() || driving.active || flying.active || riding.active;
 // whichever hold on the world is the live one, let go of — only ever one at a time
 function releaseControl() {
   if (isPossessing()) App.unpossessPerson();
   else if (flying.active) flying.release?.();
+  else if (riding.active) riding.release?.();
   else App.stopDriving();
 }
 hintExit.addEventListener('click', releaseControl);
@@ -155,7 +188,7 @@ dom.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return; // (the right button is nothing in here)
   if (document.pointerLockElement === dom) { if (isPossessing()) App.punchFromPossession(); return; }
   pressedAt = { x: e.clientX, y: e.clientY };
-  lockPointer();
+  if (!riding.active) lockPointer();
 }, true);
 // Where the pointer wouldn't lock — a browser that won't, or one holding the request off for a moment after the last Esc
 // — the mouse looks around by dragging, so the punch can't be thrown on the press: it's a press that didn't drag, and
@@ -192,6 +225,6 @@ window.addEventListener('pointermove', (e) => {
 const endLook = (e) => { if (lookPointer && e.pointerId === lookPointer.id) lookPointer = null; };
 window.addEventListener('pointerup', endLook);
 window.addEventListener('pointercancel', endLook);
-dom.addEventListener('wheel', (e) => { if (isPossessing()) { e.preventDefault(); e.stopImmediatePropagation(); } }, { capture: true, passive: false });
+dom.addEventListener('wheel', (e) => { if (isPossessing() || riding.active) { e.preventDefault(); e.stopImmediatePropagation(); } }, { capture: true, passive: false });
 
-Object.assign(App, { isPossessing, isDriving: () => driving.active, isFlying: () => flying.active });
+Object.assign(App, { isPossessing, isDriving: () => driving.active, isFlying: () => flying.active, isRiding: () => riding.active });

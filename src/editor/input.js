@@ -562,7 +562,8 @@ function startBranchFrom(nodeId) {
     ? { id:'train-'+(S.roadLineSeq++), kind:'train', nodeIds:[nodeId], drawing:true, radius: source.radius, networkId }
     : { id:'road-'+(S.roadLineSeq++), nodeIds:[nodeId], drawing:true, width: source.width, color: source.color,
         sidewalkWidth: source.sidewalkWidth, sidewalkColor: source.sidewalkColor, roadType: source.roadType, walkwayColor: source.walkwayColor,
-        walkwayTexture: source.walkwayTexture, walkwayTextureScale: source.walkwayTextureScale, walkwayTextureRotation: source.walkwayTextureRotation, networkId };
+        walkwayTexture: source.walkwayTexture, walkwayTextureScale: source.walkwayTextureScale, walkwayTextureRotation: source.walkwayTextureRotation,
+        raisedHeight: source.raisedHeight, raisedTrees: source.raisedTrees, raisedBenches: source.raisedBenches, networkId };
   S.roadLines.push(line);
   S.activeRoadLine = line;
   S.lastGroundClick = null;
@@ -609,8 +610,10 @@ function handleLeftClick(x,y) {
       const roadType = S.newRoadType; // (from the Paths tab's Type menu)
       const walkwayColor = templateLine && templateLine.walkwayColor!=null ? templateLine.walkwayColor : WALKWAY_COLOR;
       const { walkwayTexture, walkwayTextureScale, walkwayTextureRotation } = templateLine || {};
+      // (a raised walkway takes the height and furniture of the last one selected, if that was one)
+      const { raisedHeight, raisedTrees, raisedBenches } = templateLine && templateLine.roadType === 'raised' ? templateLine : {};
       const line={ id:'road-'+(S.roadLineSeq++), nodeIds:[id], drawing:true, width, color, sidewalkWidth, sidewalkColor, roadType, walkwayColor,
-        walkwayTexture, walkwayTextureScale, walkwayTextureRotation, networkId:'net-'+(S.roadNetworkSeq++) };
+        walkwayTexture, walkwayTextureScale, walkwayTextureRotation, raisedHeight, raisedTrees, raisedBenches, networkId:'net-'+(S.roadNetworkSeq++) };
       S.roadLines.push(line); S.activeRoadLine=line;
     }
     rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderHierarchy();

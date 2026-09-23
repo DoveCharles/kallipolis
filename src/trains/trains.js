@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
-import { scene, camera, computeWindowGlowFactor, SKY_ENV_MAP, snapPointToGrid } from '../core/scene.js';
+import { scene, camera, computeWindowGlowFactor, SKY_ENV_MAP, snapPointToGrid, apparentDistance } from '../core/scene.js';
 import { mergeGeometryList } from '../buildings/windows.js';
 import { roadNodes } from '../core/state.js';
 import { disposeObject } from '../roads/roads.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
+import { possession, startRiding, endRiding } from '../life/possession.js';
 import { IS_TOUCH } from '../core/device.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
@@ -23,10 +24,12 @@ const trains = loadTypeText('assets/trains.txt', {
   // this stands in until trains.txt has loaded, or if it can't be
   placeholder: { default: { name: ['Train'], mood: ['🚆'], loves: ['Shoooom'], hates: ['Delays'] } },
 });
+const RIDE_ENTER = ['Enter', 'Ride inside the carriage'], RIDE_LEAVE = ['Exit', 'Back outside the carriage'];
 const trainCard = makeCard({
   id: 'train-card',
   title: 'Train',
   onClose: () => App.stopFollowingTrain(),
+  action: { text: RIDE_ENTER[0], title: RIDE_ENTER[1], onClick: () => toggleRide() },
   labels: { occupants: 'Passengers' },
 });
 const drawTrainThumbnail = makeThumbnailDrawer(trainCard.canvas);
@@ -35,6 +38,7 @@ const drawTrainThumbnail = makeThumbnailDrawer(trainCard.canvas);
 function showTrainCard(info) {
   const type = trains.of(null, info.number);
   trainCard.show({ ...type, name: type.name + ' #' + info.number });
+  trainCard.setAction(...RIDE_ENTER);
   setTrainCardPassengers([]);
   drawTrainThumbnail(info.view);
 }
@@ -543,6 +547,23 @@ function buildStationParts(position, tangent, radius, mats) {
   }
   return parts;
 }
+// A carriage's glass: the very material the model was made with (see loadCarriageModel) — the Blender file's own
+// tinted, see-through Window, which is what lets you look out of one you're riding in (see enterTrain) and into one
+// going past. It's copied per network, so selecting one network only highlights that one, and given the emissive glow
+// every lit window in the city shares, so a carriage lights up after dark (see updateWindowGlowForSun). Until the model
+// has loaded — and for the built-in capsule, which has no glass of its own — it's a plain dark pane.
+const SHUTTLE_WINDOW_GLOW = 1.1;
+function carriageWindowMaterial() {
+  const m = carriageModel && carriageModel.windowMaterial
+    ? carriageModel.windowMaterial.clone()
+    : new THREE.MeshStandardMaterial({ color:0x1d2a36, roughness:0.1, metalness:0.3, side:THREE.DoubleSide });
+  m.envMap = SKY_ENV_MAP;
+  m.depthWrite = false; // (transparent glass: so it doesn't hide the far side of the carriage behind it)
+  m.emissive = new THREE.Color(0x9fdcff);
+  m.emissiveIntensity = SHUTTLE_WINDOW_GLOW*computeWindowGlowFactor(S.sunElevation);
+  m.userData.baseEmissiveIntensity = SHUTTLE_WINDOW_GLOW;
+  return m;
+}
 export function rebuildTrainMeshes() {
   scene.remove(S.trainMeshGroup); disposeObject(S.trainMeshGroup);
   S.trainMeshGroup = new THREE.Group(); S.trainMeshGroup.name = 'Trains';
@@ -572,14 +593,13 @@ export function rebuildTrainMeshes() {
         m.userData.baseEmissiveIntensity = 1.6; // glows after dark, like building windows (see updateWindowGlowForSun)
         return m;
       })(),
-      shuttle: new THREE.MeshStandardMaterial({ color:0xf4f6f9, roughness:0.25, metalness:0.55, envMap:SKY_ENV_MAP, envMapIntensity:1.2 }),
-      shuttleTrim: new THREE.MeshStandardMaterial({ color:0x1b1f25, roughness:0.4, metalness:0.3, envMap:SKY_ENV_MAP, envMapIntensity:0.6 }),
-      shuttleWindows: (() => {
-        const m = new THREE.MeshStandardMaterial({ color:0x1d2a36, roughness:0.1, metalness:0.3, envMap:SKY_ENV_MAP,
-          emissive:0x9fdcff, emissiveIntensity:1.1*computeWindowGlowFactor(S.sunElevation) });
-        m.userData.baseEmissiveIntensity = 1.1; // so updateWindowGlowForSun lights them up after dark, like building windows
-        return m;
-      })(),
+      shuttle: new THREE.MeshStandardMaterial({ color:0xf4f6f9, roughness:0.25, metalness:0.55, envMap:SKY_ENV_MAP, envMapIntensity:1.2, side:THREE.DoubleSide }),
+      shuttleTrim: new THREE.MeshStandardMaterial({ color:0x1b1f25, roughness:0.4, metalness:0.3, envMap:SKY_ENV_MAP, envMapIntensity:0.6, side:THREE.DoubleSide }),
+      shuttleCushion: new THREE.MeshStandardMaterial({ color:0x2f6f8c, roughness:0.85, metalness:0, side:THREE.DoubleSide }),
+      // the strip lights along the ceiling, lit day and night (and a real light among them: see placeCarriageLights)
+      shuttleLights: new THREE.MeshStandardMaterial({ color:0x000000, roughness:0.4, metalness:0, side:THREE.DoubleSide,
+        emissive: carriageModel?.lightColor ?? CARRIAGE_LIGHT_COLOR, emissiveIntensity:CARRIAGE_LIGHTS_GLOW }),
+      shuttleWindows: carriageWindowMaterial(),
     });
     return materials.get(netId);
   };
@@ -672,8 +692,11 @@ function buildShuttleGeometry(r, length) {
 // template: each part's geometry baked
 // into one space and centered on the carriage, with its length along Z and up along Y, plus `crossRadius` — how far the
 // carriage reaches out from its lengthwise axis, which is what has to fit inside a tube. Each part is sorted by the
-// material the model gave it: 'Window…' takes the shuttle's window material, 'Black' its dark trim, anything else its
-// body. Until it's ready (or if it can't load), carriages are the built-in capsule.
+// material the model gave it: 'Window…' keeps the model's own glass (see carriageWindowMaterial), 'Black…' takes the
+// shuttle's dark trim, 'Cushion…' the seat fabric inside, 'Lights…' the glowing strips on the ceiling (in the model's own
+// emissive colour), anything else its body. Until it's ready (or if it can't load), carriages are the built-in capsule.
+// It also measures where people can stand (see carriageSpot): on the floor the seats stand on, in the aisle between the
+// two blocks of seats, and where the ceiling lights hang, for the light in the cabin.
 const TRAIN_CARRIAGE_FIT = 0.8; // the carriage's furthest reach from its axis, as a fraction of the tube's radius
 const CARRIAGE_MODEL_URL = 'assets/models/Carriage.glb';
 let carriageModel = null;
@@ -688,10 +711,17 @@ export async function loadCarriageModel() {
   new GLTFLoader().parse(buffer, '', (gltf) => {
     gltf.scene.updateMatrixWorld(true);
     const parts = [];
+    let windowMaterial = null; // the glass the carriage was modelled with — see carriageWindowMaterial
+    let lightColor = null;     // and the colour its ceiling lights glow
     gltf.scene.traverse(o => {
       if (!o.isMesh) return;
-      const name = ((o.material && o.material.name) || '').toLowerCase();
-      parts.push({ geometry: o.geometry.clone().applyMatrix4(o.matrixWorld), role: name.startsWith('window') ? 'window' : name==='black' ? 'trim' : 'body' });
+      // Blender numbers a material it has had to copy ('Black.002'), so the suffix is dropped before the name is read.
+      const name = ((o.material && o.material.name) || '').toLowerCase().replace(/\.\d+$/, '');
+      const role = name.startsWith('window') ? 'window' : name.startsWith('black') ? 'trim' : name.startsWith('cushion') ? 'cushion'
+        : name.startsWith('lights') ? 'lights' : 'body';
+      if (role==='window' && !windowMaterial && o.material) windowMaterial = o.material;
+      if (role==='lights' && !lightColor && o.material?.emissive) lightColor = o.material.emissive.clone();
+      parts.push({ geometry: o.geometry.clone().applyMatrix4(o.matrixWorld), role });
     });
     if (!parts.length) return;
     const box = new THREE.Box3();
@@ -699,14 +729,29 @@ export async function loadCarriageModel() {
     const center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
     // lay its longest side along Z (a model exported lengthwise along X gets turned a quarter; Y stays up)
     const turn = size.x > size.z ? new THREE.Matrix4().makeRotationY(Math.PI/2) : null;
-    let crossRadius = 0;
+    let crossRadius = 0, halfWidth = 0, floor = Infinity, seatsFrom = Infinity, lampY = Infinity;
     parts.forEach(p => {
       p.geometry.translate(-center.x, -center.y, -center.z);
       if (turn) p.geometry.applyMatrix4(turn);
       const pos = p.geometry.attributes.position;
-      for (let i=0;i<pos.count;i++) crossRadius = Math.max(crossRadius, Math.hypot(pos.getX(i), pos.getY(i)));
+      for (let i=0;i<pos.count;i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        crossRadius = Math.max(crossRadius, Math.hypot(x, y));
+        halfWidth = Math.max(halfWidth, Math.abs(x));
+        if (p.role==='cushion') { floor = Math.min(floor, y); seatsFrom = Math.min(seatsFrom, Math.abs(z)); }
+        if (p.role==='lights') lampY = Math.min(lampY, y);
+      }
     });
-    carriageModel = { parts, length: Math.max(size.x, size.z), crossRadius: crossRadius || 1 };
+    const length = Math.max(size.x, size.z);
+    // (a model with no seats or lights: the floor a third of the way up, standing room down the middle third, the light
+    // just under the roof)
+    const stand = {
+      floor: isFinite(floor) ? floor : -size.y/3,
+      across: halfWidth*0.6,
+      along: (isFinite(seatsFrom) ? seatsFrom : length/6)*0.85,
+      lampY: (isFinite(lampY) ? lampY : size.y/2) - 0.1,
+    };
+    carriageModel = { parts, length, crossRadius: crossRadius || 1, windowMaterial, lightColor, stand };
     rebuildTrainMeshes(); App.refreshHighlights();
   }, (err) => console.warn('Blockout: the carriage model failed to load; train carriages use the built-in capsule', err));
 }
@@ -726,12 +771,15 @@ function buildShuttle(radius, mats) {
   if (carriageModel) {
     const scale = radius*TRAIN_CARRIAGE_FIT/carriageModel.crossRadius;
     carriageModel.parts.forEach(part => {
-      const material = part.role==='window' ? mats.shuttleWindows : part.role==='trim' ? mats.shuttleTrim : mats.shuttle;
+      const material = part.role==='window' ? mats.shuttleWindows : part.role==='trim' ? mats.shuttleTrim : part.role==='cushion' ? mats.shuttleCushion
+        : part.role==='lights' ? mats.shuttleLights : mats.shuttle;
       const mesh = addPart(part.geometry, material);
       mesh.userData.sharedGeometry = true; // every carriage reuses the model's geometry — see disposeObject
       mesh.scale.setScalar(scale);
     });
     group.userData.length = carriageModel.length*scale;
+    const { floor, across, along, lampY } = carriageModel.stand;
+    group.userData.stand = { floor: floor*scale, across: across*scale, along: along*scale, lampY: lampY*scale };
   } else {
     const r = radius*0.62, length = Math.max(8, radius*4.5);
     const body = buildShuttleGeometry(r, length), windows = new THREE.CylinderGeometry(r*1.02, r*1.02, length*0.34, 24, 1, true);
@@ -739,6 +787,7 @@ function buildShuttle(radius, mats) {
     addPart(body, mats.shuttle);
     addPart(windows, mats.shuttleWindows);
     group.userData.length = length;
+    group.userData.stand = { floor: -r*0.6, across: r*0.4, along: length*0.3, lampY: r*0.6 };
   }
   group.visible = false; // shown once updateTrainShuttles has put it in place
   return group;
@@ -785,6 +834,40 @@ function orientAlongTrack(object, tangent) {
   const up = new THREE.Vector3().crossVectors(forward, right);
   object.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, forward));
 }
+// ---- the light in the cabin: the ceiling strips glow (mats.shuttleLights), and a soft blue point light hangs among them
+// so the seats, the floor and whoever's standing there are lit by them — and some of it spills out through the windows
+// onto the tube. Only the CARRIAGE_LIGHTS carriages nearest the camera have one: a fixed few lights, always in the scene
+// (unused ones at nothing), so the number of lights never changes and nothing has to recompile as carriages come and go.
+const CARRIAGE_LIGHT_COLOR = new THREE.Color(0x4cc8ff), CARRIAGE_LIGHTS_GLOW = 2.2;
+const CARRIAGE_LIGHTS = 2, CARRIAGE_LIGHT_INTENSITY = 5, CARRIAGE_LIGHT_FAR = 220;
+const carriageLights = Array.from({ length: CARRIAGE_LIGHTS }, () => {
+  const light = new THREE.PointLight(CARRIAGE_LIGHT_COLOR, 0, 1, 1.4);
+  light.name = 'CarriageLight';
+  scene.add(light);
+  return light;
+});
+function placeCarriageLights() {
+  const nearest = trainShuttles.filter(s => s.object.visible)
+    .map(s => ({ s, d: s.object.position.distanceTo(camera.position) }))
+    .filter(n => n.d < CARRIAGE_LIGHT_FAR).sort((a, b) => a.d - b.d);
+  carriageLights.forEach((light, k) => {
+    const n = nearest[k];
+    if (!n) { light.intensity = 0; return; }
+    const { stand, length } = n.s.object.userData;
+    if (carriageModel?.lightColor) light.color.copy(carriageModel.lightColor);
+    light.position.set(0, stand.lampY, 0).applyQuaternion(n.s.object.quaternion).add(n.s.object.position);
+    light.distance = length*0.9;
+    light.intensity = CARRIAGE_LIGHT_INTENSITY*(1 - THREE.MathUtils.smoothstep(n.d, CARRIAGE_LIGHT_FAR*0.7, CARRIAGE_LIGHT_FAR));
+  });
+}
+// Where someone riding a carriage stands (see "riding the trains" in people.js): `across` and `along` from -1 to 1 over its
+// standing room, on its floor, and `yaw`, which way the carriage faces, for them to turn from.
+export function carriageSpot(shuttle, across, along) {
+  const o = shuttle.object, { stand } = o.userData;
+  const at = new THREE.Vector3(across*stand.across, stand.floor, along*stand.along).applyQuaternion(o.quaternion).add(o.position);
+  const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(o.quaternion);
+  return { x: at.x, y: at.y, z: at.z, yaw: Math.atan2(forward.x, forward.z) };
+}
 let lastShuttleFrame = null;
 export function updateTrainShuttles(t) {
   const dt = lastShuttleFrame == null ? 0 : Math.max(0, t - lastShuttleFrame); // (uncapped: it only measures the carriages' speed)
@@ -809,11 +892,13 @@ export function updateTrainShuttles(t) {
     orientAlongTrack(s.object, tangent);
     s.object.visible = true;
   });
+  placeCarriageLights();
   updateShuttleSounds(trainShuttles, dt); // (the hum, the whir-up and the chime: see audio/maglev.js)
   if (followedTrain && S.interactionMode !== 'move') stopFollowingTrain();
   // the camera onto the carriage it's following
   const followed = followedTrain && trainShuttles.find(s => s.lineId === followedTrain);
   if (followed) controls.goalTarget.copy(followed.object.position);
+  placeRidingCamera();
 }
 
 // ---- following a carriage with the camera: just like a car (see "following a car" in traffic.js) — a click on one in
@@ -857,6 +942,7 @@ function followTrainAt(clientX, clientY) {
 function followTrainLine(lineId) {
   const i = trainShuttles.findIndex(s => s.lineId === lineId);
   if (i < 0) return false;
+  if (ridingTrain !== lineId) leaveTrain(); // (the camera moving to another carriage gets off the one it was in)
   followedTrain = lineId;
   const radius = Math.max(1.2, trainShuttles[i].object.userData.length*0.3);
   controls.minRadius = radius;
@@ -866,14 +952,89 @@ function followTrainLine(lineId) {
 }
 function stopFollowingTrain() {
   if (!followedTrain) return;
+  leaveTrain(); // (nobody goes on riding a carriage the camera has let go of)
   followedTrain = null;
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
   hideTrainCard();
 }
+
+// ---- riding inside a carriage: the card's Enter button puts the view in the middle of the carriage the camera's
+// following, where it sits for the rest of the journey — a tripod rather than an orbit. It can't be panned, zoomed or
+// swung round the carriage; the mouse only turns it on the spot (possession.js does the looking, as it does from
+// someone's eyes, and Esc gets off). It rides the carriage's own movement, so the city swings past outside the windows.
+// The carriage isn't hidden the way a building is when you go inside it — the whole point is to be sitting in it — which
+// is why its shell and glass are drawn from both faces (see materialsFor).
+const CARRIAGE_NEAR = 0.05; // near plane while inside: the walls are a couple of units away, so the usual one would clip them
+// Where the seat is and how wide the view from it is, both dialled in from the two sliders that come up with the ride
+// (#ride-tune in index.html): the height is above or below the middle of the carriage, in world units, and the field of
+// view is the vertical one in degrees. They're remembered between rides.
+const ride = { height: 0.7, fov: 106 };
+const rideTune = document.getElementById('ride-tune');
+function wireRideSlider(id, key, decimals, after) {
+  const input = document.getElementById('s-' + id), val = document.getElementById('v-' + id);
+  input.value = ride[key];
+  val.textContent = ride[key].toFixed(decimals);
+  input.addEventListener('input', () => {
+    ride[key] = parseFloat(input.value);
+    val.textContent = ride[key].toFixed(decimals);
+    after?.();
+  });
+}
+wireRideSlider('rideheight', 'height', 2, () => placeRidingCamera());
+wireRideSlider('ridefov', 'fov', 0);
+// what the view's fov should be while riding, for the easing in buildings/interior.js to leave alone (null when not)
+const ridingFov = () => ridingTrain ? ride.fov : null;
+let ridingTrain = null;     // the ridden carriage's line id, like followedTrain
+let rideBefore = null;      // the camera's goals as they were outside, to ease back to
+function toggleRide() {
+  if (ridingTrain) leaveTrain(); else enterTrain();
+}
+function enterTrain() {
+  const shuttle = followedTrain && trainShuttles.find(s => s.lineId === followedTrain);
+  if (!shuttle || ridingTrain) return;
+  // facing the way the carriage is going: its own forward is its local +Z (see orientAlongTrack), and a yaw of `a` looks
+  // along (sin a, 0, cos a) once possession.js has turned it into a camera angle
+  const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(shuttle.object.quaternion);
+  if (!startRiding(Math.atan2(forward.x, forward.z), leaveTrain)) return;
+  ridingTrain = followedTrain;
+  rideBefore = { radius: controls.goalRadius, theta: controls.goalTheta, phi: controls.goalPhi, near: camera.near };
+  controls.locked = true; // no orbiting, panning or zooming from a seat
+  camera.near = CARRIAGE_NEAR;
+  camera.updateProjectionMatrix();
+  rideTune.hidden = false;
+  placeRidingCamera();
+  trainCard.setAction(...RIDE_LEAVE);
+}
+function leaveTrain() {
+  if (!ridingTrain) return;
+  ridingTrain = null;
+  rideTune.hidden = true;
+  endRiding();
+  controls.locked = false;
+  controls.goalRadius = rideBefore.radius;
+  controls.goalTheta = rideBefore.theta;
+  controls.goalPhi = rideBefore.phi;
+  camera.near = rideBefore.near;
+  camera.updateProjectionMatrix();
+  rideBefore = null;
+  trainCard.setAction(...RIDE_ENTER);
+}
+// The view from the seat, after the carriages have been moved for this frame: the middle of the carriage (which is where
+// its object sits — the model is centred on it, see loadCarriageModel), turned wherever the mouse has left it. A carriage
+// that's gone out from under the view — its line deleted, say — puts it back outside.
+function placeRidingCamera() {
+  if (!ridingTrain) return;
+  const shuttle = trainShuttles.find(s => s.lineId === ridingTrain);
+  if (!shuttle) { leaveTrain(); return; }
+  camera.position.copy(shuttle.object.position);
+  camera.position.y += ride.height;
+  camera.rotation.set(possession.pitch, possession.yaw + Math.PI, 0, 'YXZ');
+  if (camera.isPerspectiveCamera && camera.fov !== ride.fov) { camera.fov = ride.fov; camera.updateProjectionMatrix(); }
+}
 const followedTrainLine = () => followedTrain;
 // (the carriage card is handed over too, for whoever else wants to put something on it or open one)
-Object.assign(App, { pickTrain, followTrainAt, followTrainLine, followedTrainLine, stopFollowingTrain, showTrainCard, hideTrainCard, setTrainCardPassengers });
+Object.assign(App, { pickTrain, followTrainAt, followTrainLine, followedTrainLine, stopFollowingTrain, showTrainCard, hideTrainCard, setTrainCardPassengers, leaveTrain, ridingFov });
 // where the cursor's ray crosses the level plane at height `y` (null if it doesn't)
 export function trainPlanePoint(sx, sy, y) {
   App.raycaster.setFromCamera(App.ndcOf(sx, sy), camera);
@@ -969,7 +1130,7 @@ export function asNodeUi(object) { object.renderOrder = 1000; if (object.isMesh)
 // is from the camera, at NODE_UI_DISTANCE away being the size it's made. A nearer distance means bigger markers, which
 // is what touch gets: a fingertip covers a good deal more of the screen than a cursor's point does.
 const NODE_UI_DISTANCE = IS_TOUCH ? 110 : 160;
-export function nodeUiScaleAt(camera, position) { return camera.position.distanceTo(position)/NODE_UI_DISTANCE; }
+export function nodeUiScaleAt(camera, position) { return apparentDistance(camera, position)/NODE_UI_DISTANCE; }
 export function scaleNodeUi(camera) {
   const scaleGroup = group => {
     if (!group || !group.visible) return;

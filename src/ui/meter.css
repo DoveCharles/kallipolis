@@ -117,7 +117,12 @@
 @keyframes meter-notice-in { from { opacity:0; transform:translateX(12px); } }
 /* in the Windows 3.0 look it's a window like the Splinetopia one, its title bar carrying the instance's own heading
    (see .win3-title in index.html), which opens and closes the details */
-html.win3 .meter { background:#fff; color:#000; border:4px solid var(--w3-face); border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000; top:17px; right:17px; padding:0 10px 10px; }
+html.win3 .meter {
+  color:#000; border:4px solid transparent; border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000;
+  top:17px; right:17px; padding:0 10px 10px;
+  /* the frame is painted rather than bordered, so the corner ridges cross it — see --w3-ridges in style.css */
+  background:var(--w3-ridges), linear-gradient(#fff, #fff) padding-box, linear-gradient(var(--w3-face), var(--w3-face)) border-box;
+}
 html.win3 .meter .win3-titlebar { margin:0 -10px 8px; }
 html.win3 .meter :is(.meter-title, .meter-toggle) { display:none; }
 html.win3 .meter .meter-head { display:none; }

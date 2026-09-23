@@ -8,13 +8,14 @@ import { tessellateClosedPath, tessellateOpenPath } from '../../core/splines.js'
 import { roadNodes } from '../../core/state.js';
 import { CLIPPER_SCALE, clipPolygons, roadLineWidths, unionRoadStrokes } from '../../roads/roads.js';
 import { isRiverLine, isWalkwayLine } from '../../roads/paths.js';
+import { isRaisedWalkwayLine } from '../../roads/raised.js';
 import { isTrainLine } from '../../trains/trains.js';
 import { Y_PLAZA } from '../../zones/plazas.js';
 import { getWaterRegion } from '../../water/water.js';
 import { createRegionTester, offsetPaths, pathsArea, toClipperPath, zoneCutoutsNear } from '../../zones/cutouts.js';
 import { FOOTBRIDGE_TOP } from '../../water/bridges.js';
 import { PEOPLE_NAV_SPACING, headingTo, isOpenGround, lastPeopleTime, people, peopleNav, peopleNavDebugMesh, peopleRng, pickWeighted, randomSpotIn } from './people.js';
-import { ENTER_CHANCE, RIDE_CHANCE, goIndoors, goRideTrain, mayGoIndoors, stationLinks } from './peopleActivities.js';
+import { RIDE_CHANCE, enterChance, goIndoors, goRideTrain, mayGoIndoors, stationLinks } from './peopleActivities.js';
 import { signalRedLeft } from '../../roads/markings.js';
 
 // Which way, and how far per unit of lateral offset, a walkway's point `vi` is set off square to it: the average of the
@@ -64,13 +65,16 @@ function navVertexMitre(pts, vi, loop) {
  */
 export function rebuildPeopleNavDebug() {
   const positions = [], colors = [], walk = [0.22, 0.77, 1], blocked = [1, 0.18, 0.33], zebra = [1, 0.82, 0.2], join = [1, 1, 1];
-  const seg = (a, b, c, y) => { positions.push(a.x, y, a.z, b.x, y, b.z); colors.push(...c, ...c); };
   if (peopleNav) peopleNav.lines.forEach((nav, li) => {
-    const y = nav.y + 0.15;
-    for (let vi = 0; vi < nav.pts.length - 1; vi++) seg(nav.pts[vi], nav.pts[vi+1], nav.blocked && (nav.blocked[vi] || nav.blocked[vi+1]) ? blocked : walk, y);
+    const y = vi => (nav.ys ? nav.ys[vi] : nav.y) + 0.15;
+    for (let vi = 0; vi < nav.pts.length - 1; vi++) {
+      const c = nav.blocked && (nav.blocked[vi] || nav.blocked[vi+1]) ? blocked : walk, a = nav.pts[vi], b = nav.pts[vi+1];
+      positions.push(a.x, y(vi), a.z, b.x, y(vi+1), b.z); colors.push(...c, ...c);
+    }
     nav.vertices.forEach((vertex, vi) => vertex.links.forEach(link => {
       if (link.li < li || (link.li === li && link.vi < vi)) return; // (each pair once)
-      seg(nav.pts[vi], peopleNav.lines[link.li].pts[link.vi], link.cross ? zebra : join, y);
+      const other = peopleNav.lines[link.li], a = nav.pts[vi], b = other.pts[link.vi], c = link.cross ? zebra : join;
+      positions.push(a.x, y(vi), a.z, b.x, (other.ys ? other.ys[link.vi] : other.y) + 0.15, b.z); colors.push(...c, ...c);
     }));
   });
   const geom = peopleNavDebugMesh.geometry;
@@ -217,9 +221,9 @@ export function buildPeopleNav() {
     return handle;
   };
   // paths
-  const pending = [];
+  const pending = [], raisedLinks = [];
   S.roadLines.forEach(line => {
-    if (!isWalkwayLine(line)) return;
+    if (!isWalkwayLine(line) || isRaisedWalkwayLine(line)) return; // (raised ones below)
     const nodes = tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean));
     if (nodes.length < 2) return;
     const { pts } = resampleLine(nodes), cum = cumulative(pts);
@@ -245,6 +249,34 @@ export function buildPeopleNav() {
       if (blocked[vi] || !(blocked[nextVertex(nav, vi, -1)] || blocked[nextVertex(nav, vi, 1)] || endsBySidewalk)) return;
       const handle = ringPoint(p, PEOPLE_NAV_SPACING + 12);
       if (handle) pending.push({ li, vi, handle });
+    });
+  });
+  // raised walkways: along each deck line up at its height, and down each ramp — which is all that joins them to anything
+  // on the ground: its foot onto the sidewalk or a path nearby, its top onto the deck. Nothing else up there links to the
+  // ground, to hangouts or to buildings (see byPlace and the grid below, which leave them out).
+  const rampFeet = [];
+  (S.raisedNav || []).forEach(net => {
+    const decks = [];
+    net.decks.forEach(tess => {
+      const { pts } = resampleLine(tess), cum = cumulative(pts);
+      if (cum[cum.length-1] < 1) return;
+      decks.push(lines.length);
+      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, y: net.H, lateral: net.lateral,
+        blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
+    });
+    net.ramps.forEach(ramp => {
+      const pts = ramp.pts, cum = cumulative(pts), li = lines.length;
+      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, ramp: true, y: net.H, ys: ramp.ys,
+        lateral: ramp.lateral, blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
+      let top = null;
+      decks.forEach(dl => lines[dl].pts.forEach((q, vi) => {
+        const d = Math.hypot(q.x - ramp.top.x, q.z - ramp.top.z);
+        if (!top || d < top.d) top = { li: dl, vi, d };
+      }));
+      if (top) raisedLinks.push([{ li, vi: 0 }, { li: top.li, vi: top.vi }]);
+      const foot = pts.length - 1, handle = ringPoint(ramp.foot, 10);
+      if (handle) pending.push({ li, vi: foot, handle });
+      rampFeet.push({ li, vi: foot });
     });
   });
   // the lanes between a suburb's hedges, walked like any other path: laid out with the plots, since they're the gaps
@@ -295,18 +327,29 @@ export function buildPeopleNav() {
     lines[b.li].vertices[b.vi].links.push({ li: a.li, vi: a.vi, cross });
   };
   pending.forEach(({ li, vi, handle }) => link({ li, vi }, handle));
+  raisedLinks.forEach(([a, b]) => link(a, b));
   zebras.forEach(({ a, b, cross }) => link(a, b, cross));
   // paths meeting at a node
   const byPlace = new Map();
-  lines.forEach((nav, li) => nav.path && nav.pts.forEach((p, vi) => {
+  lines.forEach((nav, li) => nav.path && !nav.ramp && nav.pts.forEach((p, vi) => {
     if (nav.blocked[vi] || (nav.loop && vi === nav.pts.length-1)) return;
-    const key = Math.round(p.x*2) + ',' + Math.round(p.z*2);
+    const key = (nav.raised ? 'up ' : '') + Math.round(p.x*2) + ',' + Math.round(p.z*2); // (a deck over a path doesn't meet it)
     if (!byPlace.has(key)) byPlace.set(key, []);
     byPlace.get(key).push({ li, vi });
   }));
   byPlace.forEach(list => list.forEach(a => list.forEach(b => {
     if (b.li !== a.li) lines[a.li].vertices[a.vi].links.push({ li: b.li, vi: b.vi });
   })));
+  // each ramp's foot onto the nearest point of a path on the ground, if there's one close by
+  rampFeet.forEach(foot => {
+    const at = lines[foot.li].pts[foot.vi];
+    let best = null;
+    lines.forEach((nav, li) => nav.path && !nav.raised && nav.pts.forEach((q, vi) => {
+      const d = Math.hypot(q.x - at.x, q.z - at.z);
+      if (!nav.blocked[vi] && d <= 6 && (!best || d < best.d)) best = { li, vi, d };
+    }));
+    if (best) link(foot, best);
+  });
   lines.forEach(nav => {
     nav.mitres = nav.pts.map((p, vi) => navVertexMitre(nav.pts, vi, nav.loop));
     if (!nav.ring) return;
@@ -323,6 +366,7 @@ export function buildPeopleNav() {
   const grid = new Map(), CELL = 16;
   lines.forEach((nav, li) => nav.pts.forEach((p, vi) => {
     if ((nav.loop && vi === nav.pts.length-1) || (nav.blocked && nav.blocked[vi])) return;
+    if (nav.raised && !(nav.ramp && vi === nav.pts.length-1)) return; // (up on the deck — but a ramp's foot is on the ground)
     const key = Math.floor(p.x/CELL) + ',' + Math.floor(p.z/CELL);
     if (!grid.has(key)) grid.set(key, []);
     grid.get(key).push({ li, vi });
@@ -517,7 +561,8 @@ export function walkwayPoint(p) {
   const t = Math.max(0, Math.min(1, (p.u - nav.cum[point])/segLen));
   // blending between the two points' own offsets, so the walkway bends round corners smoothly
   const ma = nav.mitres[point], mb = nav.mitres[point+1], k = p.lat;
-  const y = nav.overWater && nav.overWater[point] && nav.overWater[point+1] ? FOOTBRIDGE_TOP : nav.y;
+  const y = nav.ys ? nav.ys[point] + (nav.ys[point+1] - nav.ys[point])*t
+    : nav.overWater && nav.overWater[point] && nav.overWater[point+1] ? FOOTBRIDGE_TOP : nav.y;
   return { x: a.x + (b.x-a.x)*t + (ma.x + (mb.x-ma.x)*t)*k, y, z: a.z + (b.z-a.z)*t + (ma.z + (mb.z-ma.z)*t)*k };
 }
 
@@ -586,7 +631,7 @@ export function walkAlong(p, dist) {
     const vertex = nav.vertices[ahead];
     const station = p.trainCooldown <= 0 ? stationLinks().byVertex.get(p.li + ':' + ahead) : null;
     if (station != null && peopleRng() < RIDE_CHANCE) { p.u = at; goRideTrain(p, station, walkwayPoint(p)); return; }
-    if (vertex.building && mayGoIndoors(p) && peopleRng() < ENTER_CHANCE) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
+    if (vertex.building && mayGoIndoors(p) && peopleRng() < enterChance(p, vertex.building)) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
     const isEnd = (!nav.loop && (ahead === 0 || ahead === last)) || !!nav.blocked?.[nextVertex(nav, ahead, p.dir)];
     const entrance = vertex.entrances.length ? vertex.entrances[Math.floor(peopleRng()*vertex.entrances.length)] : null;
     const drawn = entrance ? (isOpenGround(peopleNav.areas[entrance.area]) ? p.traits.parks : p.traits.plazas) : 0;
