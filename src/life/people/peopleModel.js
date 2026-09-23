@@ -396,7 +396,7 @@ const SHOE_COLORS = [0x151517, 0x2b2b2f, 0xeeeeea, 0x8f9298, 0x6b4a2f, 0x3b2a1e,
 const GLASSES_COLORS = [0x141416, 0x141416, 0x1f1f22, 0x3a2418, 0x5a3520, 0x6d6f74, 0xa4a7ad];
 const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 0xc49a5a, 0xdcc08a]; // black to platinum
 //Removed light tones: 0xb9b5a 0xe3ddd2
-export const BLINK_DURATION = 0.5; // seconds for the eyes to close and open again
+export const BLINK_DURATION = 0.25; // seconds for the eyes to close and open again
 // how far a person turns their head when they glance around: side to side, and up and down
 export const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
 // the middle of a person's face, from where their head meets their neck, in the model's units
@@ -504,7 +504,6 @@ const PERSON_VERTEX_PARS = `
       vec4 body = personTrait(0), rest = personTrait(1);
       offset += personMorph(0)*body.x + personMorph(1)*body.y + personMorph(2)*body.z + personMorph(3)*body.w + personMorph(4)*rest.x + personMorph(5)*rest.w;
     }
-    if ((mask & 2) != 0) offset += personMorph(${shapeKey('Blink')})*instanceAnim.w;
     if ((mask & 4) != 0) offset += personMorph(${shapeKey('Talk')})*instanceLook.z + personMorph(${shapeKey('Emotion')})*instanceLook.w;
     if ((mask & 24) != 0) {
       vec4 face = personTrait(${PERSON_FACE_ROW});
@@ -513,6 +512,9 @@ const PERSON_VERTEX_PARS = `
     }
     // instanceEyes: how shocked, happy, angry and sad their eyes look
     if ((mask & 32) != 0) offset += personMorph(${shapeKey('Shock')})*instanceEyes.x + personMorph(${shapeKey('Happy')})*instanceEyes.y + personMorph(${shapeKey('Angry')})*instanceEyes.z + personMorph(${shapeKey('Sad')})*instanceEyes.w;
+    // the Blink key was made on the plain face, so on the eyelids every other key fades out as the eyes close — laid over a
+    // face or an expression it pushes the lids through each other
+    if ((mask & 2) != 0) offset = offset*(1.0 - instanceAnim.w) + personMorph(${shapeKey('Blink')})*instanceAnim.w;
     return offset;
   }
   // Moves the arms out from the sides of a heavy or broad person, so their hands don't swing through their hips.
