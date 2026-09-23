@@ -48,11 +48,13 @@ const glassMaterial = new THREE.MeshStandardMaterial({ color: 0xbcd6e6, roughnes
 
 // Under its own ceiling the room's all in the sun's shadow, and the scene's ambient light alone leaves it murky. Rather
 // than a lamp (one more light in every material in the scene, whether anyone's indoors or not), the room's own materials
-// glow a little in their own colour — the same by day or night, which after dark reads as the lights being on.
+// glow a little in their own colour — the same by day or night, which after dark reads as the lights being on. Nor do
+// the street's lamps reach in through its walls (see streetlights.js).
 const ROOM_GLOW = 0.3;
 function roomLit(material) {
   material.emissive.copy(material.color);
   material.emissiveIntensity = ROOM_GLOW;
+  material.defines = { ...material.defines, NO_LAMPLIGHT: '' };
   return material;
 }
 function box(w, h, d, material, x, y, z, parent = room) {

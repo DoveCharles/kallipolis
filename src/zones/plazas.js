@@ -251,7 +251,7 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
   const clearOfFountain = (x, z, gap) => !fountain || Math.hypot(x-fountain.x, z-fountain.z) > fountain.r + gap;
   // lamp posts every PLAZA_LAMP_SPACING around the edge, with a bench facing inward halfway between each pair — room for two
   // on each, who people can sit down in (see "people")
-  const furniture = createMeshBuilder(), lampHeads = createMeshBuilder();
+  const furniture = createMeshBuilder(), lampHeads = createMeshBuilder(), lampPosts = [];
   const lampGlobe = new THREE.IcosahedronGeometry(0.3, 1);
   const seatTop = Y_PLAZA + 0.42;
   zone.benchSeats = [];
@@ -276,6 +276,7 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
           furniture.addBox(x, z, dx, dz, 0.08, 0.08, Y_PLAZA, Y_PLAZA + 4.2);
           furniture.addBox(x, z, dx, dz, 0.2, 0.2, Y_PLAZA, Y_PLAZA + 0.35);
           lampHeads.addGeometry(lampGlobe, x, Y_PLAZA + 4.45, z);
+          lampPosts.push({ x, z });
         } else {
           const bx = x - dz*1.1*side, bz = z + dx*1.1*side, nx = -dz*side, nz = dx*side;
           if (blocked(bx, bz)) continue;
@@ -336,6 +337,7 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
     glow.userData.baseEmissiveIntensity = 1.6; // lit after dark (see updateWindowGlowForSun)
     const mesh = new THREE.Mesh(headGeo, glow);
     mesh.name = 'PlazaLamps';
+    mesh.userData.lampPosts = lampPosts; // where they stand, for the light they throw (see streetlights.js)
     zone.buildingsGroup.add(mesh);
   }
 }

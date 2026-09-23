@@ -161,6 +161,7 @@ export function computeWindowGlowFactor(elevation) {
 // added or taken out, and both lists are read straight from then on.
 export const blinkLights = [];   // meshes with userData.isBlinkLight — landmark antenna beacons (see surface-detail)
 export const glowMaterials = []; // materials with userData.baseEmissiveIntensity — lit windows, lamps, train interiors
+export const lampPostMeshes = []; // meshes with userData.lampPosts — a plaza's lamps, which light the ground around them
 S.sceneIndexDirty = true;
 // What marks the index stale is the graph changing shape, not the materials being made: a building's windows exist
 // well before its group is hung off the scene, and anything indexed in between would be missed. Every add and remove
@@ -174,10 +175,11 @@ S.sceneIndexDirty = true;
 export function refreshSceneIndex() {
   if (!S.sceneIndexDirty) return;
   S.sceneIndexDirty = false;
-  blinkLights.length = 0; glowMaterials.length = 0;
+  blinkLights.length = 0; glowMaterials.length = 0; lampPostMeshes.length = 0;
   const seen = new Set(); // one material is shared by many meshes, and rescaling its glow once is enough
   scene.traverse(o => {
     if (o.userData && o.userData.isBlinkLight && o.material) blinkLights.push(o);
+    if (o.userData && o.userData.lampPosts) lampPostMeshes.push(o);
     const mat = o.isMesh ? o.material : null;
     if (mat && mat.userData && mat.userData.baseEmissiveIntensity != null && !seen.has(mat)) { seen.add(mat); glowMaterials.push(mat); }
   });
