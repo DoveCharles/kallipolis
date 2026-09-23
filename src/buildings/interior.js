@@ -308,7 +308,7 @@ async function loadFurniture() {
 // Where anyone can sit on a furniture model's seats, and where its TV's screen (where the video goes: see "the TV",
 // below) and its lamps' bulbs are, in their pieces' own terms.
 function measureParts(pieces) {
-  for (const name of ['Sofa', 'Chair', 'Chair2', 'Chair3', 'Armchair', 'PianoBench', 'Beanbag']) if (pieces[name]) pieces[name].seats = measureSeats(pieces[name]);
+  for (const name of ['Sofa', 'Chair', 'Chair2', 'Chair3', 'Armchair', 'PianoBench', 'Beanbag', 'LoungeChair']) if (pieces[name]) pieces[name].seats = measureSeats(pieces[name]);
   const part = (piece, material) => {
     const box = new THREE.Box3();
     piece?.object.traverse(o => { if (o.isMesh && o.material.name === material) box.expandByObject(o); });
@@ -392,15 +392,18 @@ const POSH_PAINTED = {
   PaintFigure: [0x3a2a3a, 0x1a1a1a, 0x5a1a1a, 0x1e2a44],
 };
 const poshPainted = [];
-// the set a home's to be furnished from whatever its key says, for tools/interior.html: 'posh', 'student', 'plain', or null
+// the set a home's to be furnished from whatever its key says, for tools/interior.html: 'posh', 'student', 'retro', 'plain',
+// or null
 let forcedSet = null;
-// which set a home's furnished from: a quarter posh, a fifth student flats (see "a student flat", below), the rest plain
+// which set a home's furnished from: a quarter posh, a fifth student flats (see "a student flat", below), some
+// mid-century ("a mid-century home"), the rest plain
 function homeSet(key) {
   if (forcedSet) return forcedSet;
   const f = keyFraction(key, ':set');
-  return f < POSH_SHARE ? 'posh' : f < POSH_SHARE + STUDENT_SHARE ? 'student' : 'plain';
+  return f < POSH_SHARE ? 'posh' : f < POSH_SHARE + STUDENT_SHARE ? 'student'
+    : f < POSH_SHARE + STUDENT_SHARE + RETRO_SHARE ? 'retro' : 'plain';
 }
-/** Furnish every home from one set ('posh', 'student' or 'plain') whatever its key says, or (null) as its key says: for tools/interior.html. */
+/** Furnish every home from one set ('posh', 'student', 'retro' or 'plain') whatever its key says, or (null) as its key says: for tools/interior.html. */
 export function forceHomeSet(set) {
   forcedSet = set;
   if (inside && current === LAYOUTS.home) furnish(inside.key);
@@ -624,6 +627,71 @@ const boards = floorTexture(1024, 2.4, (g, rng) => {
   }
 });
 
+// ---------------------------------------------------------- a mid-century home
+// Now and then a home's mid-century (from its building's key, as a posh home is): furnished from a set of its own
+// (assets/models/MidCentury.glb, built by tools/midcentury-models.py) with the same pieces as the interior model — a long
+// low sofa on tapered legs, the TV on a teak credenza, a tulip table with shell chairs, a tripod lamp, a surfboard coffee
+// table, a geometric rug, teak shelving, a sputnik light, a highboy — laid out the same way, and then a lounge chair and
+// its ottoman by the coffee table, a radiogram along a far wall, and a sunburst clock or an abstract print on the walls
+// behind the camera. Its floor's teak parquet or terrazzo. Until its model's loaded, mid-century homes are furnished as
+// any other.
+const RETRO_MODEL_URL = 'assets/models/MidCentury.glb';
+const RETRO_SHARE = 0.15;
+let retro = null;
+const RETRO_WALLS = [0xf0e8d6, 0xece4cc, 0xb8c4a0, 0x9aa878, 0x8ab0a8, 0xe8d49a, 0xd8cfc0, 0xf2efe8];
+// the parquet's tinted by the floor's colour; the terrazzo's its own colours
+const RETRO_FLOORS = [0xb87a48, 0xa06a3a, 0xc8905a, 0x8a5a30];
+const RETRO_PAINTED = {
+  Teak: [0x9a5a2e, 0x8a4e26, 0xa8683a, 0x6a3a1e, 0xb07848],
+  Tweed: [0x6a7a5a, 0xc89030, 0x2a6a6a, 0xc8602a, 0x5a5a5c, 0xd8ccb0, 0x3a4a6a],
+  Accent: [0xd8a030, 0xc8602a, 0x2a7a7a, 0x3a5a8a, 0xa82a2a, 0x6a8a3a],
+  Shell: [0xe8a040, 0xf0ece0, 0xd86a3a, 0x3a8a8a, 0x2a2a2c, 0xc8c090],
+  Leather: [0x2a1a14, 0x4a2a1a, 0x1a1a1c, 0x7a4a2a],
+  Brass: [0xc8a050, 0xb89040],
+  Ceramic: [0x2a7a7a, 0xd8702a, 0xe0b030, 0x3a5a8a, 0x6a8a3a, 0xa82a2a],
+  Tulip: [0xf2f0ea, 0xf2f0ea, 0x1a1a1c],
+  LampShade: [0xf0e6d0, 0xe0b030, 0xd8702a, 0xf2f0ea, 0x2a6a6a],
+  RugField: [0xe8dcc0, 0xd8c8a0, 0x2a3a3a, 0xc89040],
+  RugA: [0xd8702a, 0xe0b030, 0xa82a2a, 0x2a6a6a],
+  RugB: [0x2a6a6a, 0x3a4a6a, 0x5a6a3a, 0x1a1a1c],
+  Print0: [0xf0e8d6, 0xe8dcc0, 0x1a1a1c],
+  Print1: [0xd8702a, 0xe0b030, 0xa82a2a],
+  Print2: [0x2a5a7a, 0x2a7a7a, 0x3a4a3a],
+  Print3: [0xe0b030, 0xd8702a, 0xece4cc],
+};
+const retroPainted = [];
+async function loadRetro() {
+  try {
+    retro = await loadPieces(RETRO_MODEL_URL, RETRO_PAINTED, retroPainted);
+  } catch (err) {
+    console.warn('Blockout: the mid-century interior model failed to load; mid-century homes are furnished as any other', err);
+    return;
+  }
+  measureParts(retro);
+  if (inside && current === LAYOUTS.home) furnish(inside.key);
+}
+loadRetro();
+// Terrazzo: chips of marble in a pale ground, which repeats every 1.2 m both ways (as a pour between brass strips would).
+const terrazzo = floorTexture(1024, 1.2, (g, rng) => {
+  g.fillStyle = '#ece6da';
+  g.fillRect(0, 0, 1024, 1024);
+  const chips = ['#d8ccb4', '#c8baa0', '#e0d0b0', '#b0a894', '#d0a080', '#f6f2ea', '#a89078', '#8a8680'];
+  for (let k = 0; k < 1600; k++) {
+    const x = rng()*1024, y = rng()*1024, r = 2 + rng()*rng()*14, a = rng()*Math.PI;
+    const corners = [0, 1, 2, 3, 4].map(j => [a + j*Math.PI*2/5, r*(0.6 + rng()*0.5)]);
+    g.fillStyle = chips[Math.floor(rng()*chips.length)];
+    // (and again a tile over, where it runs off an edge, so it repeats without a seam)
+    for (const dx of [-1024, 0, 1024]) for (const dy of [-1024, 0, 1024]) {
+      if (Math.abs(x + dx - 512) > 512 + r*1.1 || Math.abs(y + dy - 512) > 512 + r*1.1) continue;
+      g.beginPath();
+      for (const [t, rr] of corners) g.lineTo(x + dx + Math.cos(t)*rr, y + dy + Math.sin(t)*rr);
+      g.fill();
+    }
+  }
+  g.fillStyle = 'rgba(160,120,50,0.6)';                                        // (the brass strips)
+  g.fillRect(0, 0, 1024, 3); g.fillRect(0, 0, 3, 1024);
+});
+
 // Lays out the home for the building with this key (see buildingKey): `LAYOUTS.home`'s furniture, where nobody stands or
 // walks, and its seats, in the room as it's now placed.
 function furnish(key) {
@@ -640,9 +708,10 @@ function furnish(key) {
   home.floorMap = null;
   // (colours from a generator of their own, so the furniture's where it always was)
   const set = homeSet(key), fancy = !!(furniture && posh && set === 'posh'), scruffy = !!(furniture && student && set === 'student');
-  const tint = mulberry32(hashNameToNumber(key + (fancy ? ' posh colours' : scruffy ? ' student colours' : ' colours')));
+  const sixties = !!(furniture && retro && set === 'retro');
+  const tint = mulberry32(hashNameToNumber(key + (fancy ? ' posh colours' : scruffy ? ' student colours' : sixties ? ' retro colours' : ' colours')));
   const pick = list => list[Math.floor(tint()*list.length)];
-  home.wall.setHex(pick(fancy ? POSH_WALLS : scruffy ? STUDENT_WALLS : WALLS));
+  home.wall.setHex(pick(fancy ? POSH_WALLS : scruffy ? STUDENT_WALLS : sixties ? RETRO_WALLS : WALLS));
   trim.visible = fancy;
   if (fancy) {
     const marble = tint() < 0.3;
@@ -655,14 +724,20 @@ function furnish(key) {
     home.floorMap = boards;
     home.floor.setHex(pick(STUDENT_FLOORS));
   }
+  if (sixties) {
+    const stone = tint() < 0.3;
+    home.floorMap = stone ? terrazzo : parquet;
+    home.floor.setHex(stone ? 0xffffff : pick(RETRO_FLOORS));
+  }
   paintRoom();
-  for (const [materials, palettes] of fancy ? [[poshPainted, POSH_PAINTED]] : scruffy ? [[studentPainted, STUDENT_PAINTED]] : [[painted, PAINTED]]) for (const material of materials) {
+  for (const [materials, palettes] of fancy ? [[poshPainted, POSH_PAINTED]] : scruffy ? [[studentPainted, STUDENT_PAINTED]]
+    : sixties ? [[retroPainted, RETRO_PAINTED]] : [[painted, PAINTED]]) for (const material of materials) {
     material.color.setHex(pick(palettes[material.name]));
     roomLit(material);
   }
   if (!furniture) return;
-  // (the posh or student set's in place of the interior model's pieces it has, and has some of its own)
-  const F = fancy ? { ...furniture, ...posh } : scruffy ? { ...furniture, ...student } : furniture;
+  // (the posh, student or mid-century set's in place of the interior model's pieces it has, and has some of its own)
+  const F = fancy ? { ...furniture, ...posh } : scruffy ? { ...furniture, ...student } : sixties ? { ...furniture, ...retro } : furniture;
 
   // what's taken so far (and room kept clear), as rectangles in the room's x and z; `tall` ones could hide the TV
   const taken = [];
@@ -762,6 +837,25 @@ function furnish(key) {
       break;
     }
   }
+  // in a mid-century home, the lounge chair at one end of the coffee table or the other, turned to it, its ottoman in
+  // front of it
+  const lounge = F.LoungeChair, ottoman = F.Ottoman;
+  if (sixties && lounge && rng() < 0.85) {
+    const along = at(1, 0), zero = at(0, 0), ux = along.x - zero.x, uz = along.z - zero.z;
+    const first = rng() < 0.5 ? -1 : 1;
+    for (const side of [first, -first]) {
+      const out = Math.max(coffee.w/2 + 0.5, sofa.w/2 + 0.1) + lounge.d/2 + (ottoman ? ottoman.d + 0.05 : 0);
+      spot = at(sofaU + side*out, coffeeV);
+      const angle = Math.atan2(-side*ux, -side*uz), r = footprint(lounge, spot.x, spot.z, angle);
+      if (!fits(r, 0.05) || hidesScreen(r)) continue;
+      put('LoungeChair', spot.x, spot.z, angle, { tall: true });
+      if (ottoman) {
+        const foot = at(sofaU + side*(out - lounge.d/2 - ottoman.d/2 - 0.05), coffeeV), o = footprint(ottoman, foot.x, foot.z, angle);
+        if (fits(o, 0.02) && !hidesScreen(o)) put('Ottoman', foot.x, foot.z, angle);
+      }
+      break;
+    }
+  }
   // a lamp at one end of the sofa or the other
   const lamp = F.Lamp;
   if (lamp && rng() < 0.7) {
@@ -794,17 +888,20 @@ function furnish(key) {
   if (fancy && F.Fireplace) inPier('Fireplace');
   if (F.Bookcase && rng() < 0.7) inPier('Bookcase');
   // a chest of drawers somewhere along one of the far walls, facing into the room
-  const drawers = F.Drawers;
-  if (drawers && rng() < 0.6) {
+  const alongFar = name => {
+    const piece = F[name];
     for (let tries = 0; tries < 30; tries++) {
-      const onX = rng() < 0.5, u = (rng()*2 - 1)*((onX ? ROOM_D : ROOM_W)/2 - drawers.w/2 - 0.1);
-      const p = onX ? { x: ROOM_W/2 - drawers.d/2 - 0.03, z: u, angle: -Math.PI/2 } : { x: u, z: ROOM_D/2 - drawers.d/2 - 0.03, angle: Math.PI };
-      const r = footprint(drawers, p.x, p.z, p.angle);
+      const onX = rng() < 0.5, u = (rng()*2 - 1)*((onX ? ROOM_D : ROOM_W)/2 - piece.w/2 - 0.1);
+      const p = onX ? { x: ROOM_W/2 - piece.d/2 - 0.03, z: u, angle: -Math.PI/2 } : { x: u, z: ROOM_D/2 - piece.d/2 - 0.03, angle: Math.PI };
+      const r = footprint(piece, p.x, p.z, p.angle);
       if (!fits(r, 0.15) || hidesScreen(r)) continue;
-      put('Drawers', p.x, p.z, p.angle);
+      put(name, p.x, p.z, p.angle);
       break;
     }
-  }
+  };
+  if (F.Drawers && rng() < 0.6) alongFar('Drawers');
+  // (and in a mid-century home, a radiogram likewise)
+  if (sixties && F.Radiogram && rng() < 0.75) alongFar('Radiogram');
   // a dining table somewhere with room to walk round it, with a chair either side or all round — and not so near the
   // camera that it's cut off by the bottom of the view
   const underCamera = { x0: -ROOM_W/2, x1: -ROOM_W/2 + 2.8, z0: -ROOM_D/2, z1: -ROOM_D/2 + 2.8 };
@@ -940,12 +1037,14 @@ function furnish(key) {
   }
 
   // and in a posh home, a painting or three on the walls behind the camera, about eye height and clear of each other: along
-  // x from a little way past the camera, and along z (the door's wall) from past the door to short of the far corner
-  if (fancy && F.Painting) {
+  // x from a little way past the camera, and along z (the door's wall) from past the door to short of the far corner (and
+  // in a mid-century home, prints and a sunburst clock)
+  const gallery = fancy ? ['Painting', 'Portrait'] : sixties ? ['Print', 'Sunburst'] : null;
+  if (gallery && F[gallery[0]]) {
     const hung = [];
     let count = 1 + Math.floor(rng()*3);
     for (let tries = 0; tries < 20 && count > 0; tries++) {
-      const name = F.Portrait && rng() < 0.4 ? 'Portrait' : 'Painting', art = F[name], back = rng() < 0.5;
+      const name = F[gallery[1]] && rng() < 0.4 && !hung.some(h => h.name === gallery[1] && sixties) ? gallery[1] : gallery[0], art = F[name], back = rng() < 0.5;
       const [lo, hi] = back ? [-ROOM_W/2 + 1.6 + art.w/2, ROOM_W/2 - 0.5 - art.w/2] : [doorTo + 0.4 + art.w/2, ROOM_D/2 - 1 - art.w/2];
       const u = lo + rng()*(hi - lo);
       if (hi < lo || hung.some(h => h.back === back && Math.abs(h.u - u) < (h.w + art.w)/2 + 0.4)) continue;
@@ -953,7 +1052,7 @@ function furnish(key) {
       if (back) put(name, u, -ROOM_D/2 + out, 0, { underfoot: true });
       else put(name, -ROOM_W/2 + out, u, Math.PI/2, { underfoot: true });
       home.group.children.at(-1).position.y = 1.6 - art.h/2;
-      hung.push({ back, u, w: art.w });
+      hung.push({ back, u, w: art.w, name });
       count--;
     }
   }
