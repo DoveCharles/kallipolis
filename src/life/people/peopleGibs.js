@@ -40,7 +40,7 @@ function freeColumn() {
 }
 
 /**
- * Throw person `i`'s body parts, hair and whatever else they wore on their head apart.
+ * Throw person `i`'s body parts, hair and whatever else they wore apart.
  * @param {object} personModel - the loaded person model (see buildPersonModel)
  * @param {number} i - their slot in the crowd
  * @param {{x: number, y: number, z: number}} at - where their feet were
@@ -57,7 +57,7 @@ export function throwBodyParts(personModel, i, at, momentum = null) {
   const body = { column, born: t, pieces: [] };
   highestColumn = Math.max(highestColumn, column);
   const worn = [...model.gibs.parts];
-  model.headLayers.forEach(layer => { const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null; if (style?.gib) worn.push(style.gib); });
+  model.wornLayers.forEach(layer => { const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null; if (style?.gib) worn.push(style.gib); });
   const anim = model.anim.array.subarray(o, o + 4), look = model.look.array.subarray(o, o + 4), eyes = model.eyes.array.subarray(o, o + 4);
   const worldScale = personMatrix.getMaxScaleOnAxis();
   const groundAt = (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK), fromGround = groundAt(at.x, at.z);

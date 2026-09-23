@@ -162,8 +162,8 @@
  * @property {import('three').InstancedBufferAttribute} anim - per person, their animation (see instanceAnim in the shader)
  * @property {import('three').InstancedBufferAttribute} look
  * @property {import('three').InstancedBufferAttribute} eyes
- * @property {object[]} hair - the hairstyle and facial-hair meshes that have someone wearing them
- * @property {object[]} headLayers - the hairstyle, facial-hair and glasses layers
+ * @property {object[]} hair - the hairstyle, facial-hair, glasses and skirt meshes that have someone wearing them
+ * @property {object[]} wornLayers - the hairstyle, facial-hair, glasses and skirt layers
  * @property {Uint8Array} isMan - per person, whether they're a man
  * @property {Float32Array} boneData - the baked bone poses
  * @property {number} boneWidth
