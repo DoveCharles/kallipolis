@@ -260,6 +260,7 @@ function paintRoom() {
 // a plant or two by the walls. Until the model's loaded, homes are bare.
 const FURNITURE_MODEL_URL = 'assets/models/Interior.glb';
 const FURNITURE_SCALE = 0.2;
+const DINER_PLATE_IN = 0.22; // how far in from a dining table's edge a diner's plate sits, in metres
 // { [name]: { object, w, d, h, bounds, seats } } — each piece turned to face +z, centred on its footprint and standing on
 // y = 0, w across and d deep (bounds: { x0, x1, z0, z1 }, its footprint in its own terms), with where on it anyone can
 // sit (seats: { x, z, y }, in its own terms)
@@ -351,6 +352,20 @@ function furnitureLit(material) {
 // Where on a sofa or chair (facing +z) anyone can sit: feeling down onto it from above, front to back along its middle,
 // the seat's the first thing there and its back where it rises well above that; they sit a little in front of the back,
 // as far apart along it as there's room for (up to three on a sofa).
+/**
+ * How high a piece's surface is at a place on it, from above: a table's top, say.
+ * @param {object} piece - the piece (see `furniture`)
+ * @param {number} turn - how far it's turned, as `put` turns it
+ * @param {number} x - the place, across the room from the piece's middle
+ * @param {number} z - and along it
+ * @returns {number} the height there, or the piece's whole height if nothing's under that place
+ */
+function surfaceAt(piece, turn, x, z) {
+  const c = Math.cos(turn), s = Math.sin(turn);
+  surfaceRay.set(new THREE.Vector3(x*c - z*s, piece.h + 1, x*s + z*c), new THREE.Vector3(0, -1, 0));
+  return surfaceRay.intersectObject(piece.object, true)[0]?.point.y ?? piece.h;
+}
+const surfaceRay = new THREE.Raycaster();
 function measureSeats(piece) {
   const ray = new THREE.Raycaster(), down = new THREE.Vector3(0, -1, 0), from = new THREE.Vector3();
   const heightAt = (x, z) => {
@@ -1019,8 +1034,10 @@ function furnish(key) {
       const top = footprint(table, x, z, turn);
       const chairs = sides.map(k => {
         const dx = [0, 1, 0, -1][k], dz = [1, 0, -1, 0][k];
-        const reach = (dx ? (top.x1 - top.x0) : (top.z1 - top.z0))/2 + chair.d/2 - 0.08;
-        return { x: x + dx*reach, z: z + dz*reach, angle: Math.atan2(-dx, -dz) };
+        const half = (dx ? (top.x1 - top.x0) : (top.z1 - top.z0))/2, reach = half + chair.d/2 - 0.08;
+        // and how high the table top is where the plate goes, in from its edge in front of the chair (not the table's
+        // whole height, which a posh one's centrepiece stands well above)
+        return { x: x + dx*reach, z: z + dz*reach, angle: Math.atan2(-dx, -dz), plate: surfaceAt(table, turn, dx*(half - DINER_PLATE_IN), dz*(half - DINER_PLATE_IN)) };
       });
       const all = [top, ...chairs.map(c => footprint(chair, c.x, c.z, c.angle))];
       const whole = { x0: Math.min(...all.map(r => r.x0)), x1: Math.max(...all.map(r => r.x1)),
@@ -1031,7 +1048,7 @@ function furnish(key) {
       // (in a student flat, whatever chairs came to hand)
       const odd = ['Chair', 'Chair2', 'Chair3'].filter(name => F[name]), first = scruffy ? Math.floor(tint()*odd.length) : 0;
       // (each chair knows how high the table top is, for the plate of whoever sits at it: see serveMeal in peopleHolding.js)
-      chairs.forEach((c, k) => put(scruffy ? odd[(first + k) % odd.length] : 'Chair', c.x, c.z, c.angle, { diner: table.h }));
+      chairs.forEach((c, k) => put(scruffy ? odd[(first + k) % odd.length] : 'Chair', c.x, c.z, c.angle, { diner: c.plate }));
       break;
     }
   }
