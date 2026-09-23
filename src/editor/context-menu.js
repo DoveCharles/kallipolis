@@ -2,7 +2,7 @@ import { S, App } from '../core/shared.js';
 import { computeAutoHandlesRoad, computeAutoHandlesZone } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { rebuildRoadMeshes } from '../roads/paths.js';
-import { isTrainNode } from '../trains/trains.js';
+import { isTrainNode, snapStationHeight, trainNodeY } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone, subdivideZonesFrom } from '../zones/cutouts.js';
 import { renderHierarchy } from '../ui/panels.js';
@@ -74,6 +74,11 @@ function setNodeType(target, type) {
     if (!n) return;
     const isTrain = isTrainNode(target.nodeId);
     n.type = type;
+    if (isTrain && type==='station') {
+      // (a station too low for a lift settles onto the ground, handles and all: see snapStationHeight)
+      const y = trainNodeY(n), dy = snapStationHeight(target.nodeId, y) - y;
+      if (dy) { n.y = y + dy; ['handleIn','handleOut'].forEach(k => { if (n[k]) n[k].y = (n[k].y ?? y) + dy; }); }
+    }
     if (!isTrain && type==='spline' && !n.handleIn && !n.handleOut) {
       const h = computeAutoHandlesRoad(target.nodeId);
       n.handleIn = h.handleIn; n.handleOut = h.handleOut;
