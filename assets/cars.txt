@@ -340,10 +340,10 @@ loves = Portable solar panel [legendary, energy = 3.5, unstable = 0.05]
 loves = Modus metro [legendary, size = 0.85, weight = 0.8, boost = 1.2]
 hates = Bigger cars (small willy's)
 hates = beeeep beeeeeeep
-hates = Axel like a twig [terrible, control = 0.6]
+hates = Twig-like axel [terrible, control = 0.6]
 plate = KILLMENOW
 plate = PRACTICAL
-plate = LGBTQIA
+plate = LGBTQIA W
 plate = PINKYTOE
 plate = AMYGDALA
 plate = LOVEWORLD
@@ -351,6 +351,7 @@ plate = KNWTHYSLF
 plate = EUROPEAN
 plate= CIGARETTE
 plate = MARIJUANA
+plate = ALNATURAL
 
 [Van]
 name = Van

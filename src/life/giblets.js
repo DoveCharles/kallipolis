@@ -4,13 +4,23 @@ import { S } from '../core/shared.js';
 import { playSound } from '../audio/sfx.js';
 
 // ============================================================ giblets
-// What's left of someone after the person card's Smite button, or a car after the car card's: chunks of them in their own
-// colors (skin, top, pants, shoes, hair and a couple of eyes for a person; paint, glass and trim for a car), flecks of
-// blood or (a car) soot, and a splat on the ground (blood, or a scorch mark) — thrown out from where they stood, falling,
-// bouncing and tumbling to a stop, lying there a while, then sinking away. A car's explosion also gets a fireball and a
-// few puffs of smoke (explodeFx below), and a flash of light. The chunks are all one instanced mesh, the splats another,
-// and the fire and smoke a third.
-const GIBLETS_MAX = 1500, SPLATS_MAX = 48, FX_MAX = 320;
+// Two separate things share this file, each with its own setting group in S (see core/shared.js): gibs — what's left of
+// someone after the person card's Smite button, or a car after the car card's — and particles — every other fire, smoke,
+// spark or spray effect, none of which counts as a gib even though they used to share the gib settings.
+//
+// A gib is: chunks of them in their own colors (skin, top, pants, shoes, hair and a couple of eyes for a person; paint,
+// glass and trim for a car), flecks of blood or (a car) soot, and a splat on the ground (blood, or a scorch mark) — thrown
+// out from where they stood, falling, bouncing and tumbling to a stop, lying there a while, then sinking away. Gated by
+// S.showGibs and S.gibAmount (0 for either and nothing is thrown), drawn out to S.gibRange and lasting S.gibLifetime of
+// the base lifetime. The chunks are one instanced mesh, the splats (blood) and scorch marks two more.
+//
+// A particle is everything else: a car's explosion fireball and smoke (explodeFx), a car's splash going into water
+// (splashFx), tyre and engine smoke, a burning car's flames, sparks off metal, a legendary car's sparkle shimmer, and so
+// on. Gated by S.maxParticles (0 switches them off) and drawn out to S.particleRange. The bursty ones (fire, smoke,
+// sparks, spray, foam) are one instanced mesh; the soft camera-facing ones (glow, drifting smoke, sparkle) three more.
+const GIBLETS_MAX = 1500, SPLATS_MAX = 48;
+const FX_MESH_CAP = 1500; // the fx instanced mesh's own capacity — a ceiling maxParticles is clamped under, not a target
+const fxCap = () => Math.max(0, Math.min(FX_MESH_CAP, Math.round(S.maxParticles)));
 const GIBLET_LIFE = 40, SPLAT_LIFE = 60, SINK_TIME = 3; // seconds before they sink away, and how long that takes
 const GRAVITY = 9.8;
 const BLOOD_COLORS = [0x7a0a0a, 0x9c1010, 0x5c0606];
@@ -53,8 +63,8 @@ sootMesh.renderOrder = 1;
 sootMesh.setColorAt(0, new THREE.Color());
 const FX_OPACITY = 0.6; // fire, smoke and sparks are all semi-transparent, so what's inside a fireball can be seen
 const fxGeometry = new THREE.IcosahedronGeometry(1, 1), fxMaterial = new THREE.MeshBasicMaterial({ toneMapped: false, transparent: true, opacity: FX_OPACITY, depthWrite: false });
-const fxAlpha = addInstanceAlpha(fxGeometry, fxMaterial, FX_MAX); // (each puff's own share of FX_OPACITY)
-const fxMesh = instancedMesh(fxGeometry, fxMaterial, FX_MAX, 'ExplosionFx');
+const fxAlpha = addInstanceAlpha(fxGeometry, fxMaterial, FX_MESH_CAP); // (each puff's own share of FX_OPACITY)
+const fxMesh = instancedMesh(fxGeometry, fxMaterial, FX_MESH_CAP, 'ExplosionFx');
 fxMesh.setColorAt(0, new THREE.Color());
 // a brief flash of light where the fireball went off, reused explosion to explosion
 const flash = new THREE.PointLight(0xffb347, 0, 22, 2);
@@ -77,16 +87,39 @@ function groundBelow(x, fromY, z, fallback) {
   }
   return fallback;
 }
-// whether something is within S.gibRange of the camera: chunks and fireballs further than that are neither made, simulated nor
-// drawn (the marks left on the ground always are)
-const isNear = o => (o.x - camera.position.x)**2 + (o.y - camera.position.y)**2 + (o.z - camera.position.z)**2 <= S.gibRange*S.gibRange;
+// whether something is within S.gibRange (isNear, for gib chunks), S.particleRange (isNearFx, for most particle
+// effects) or CAR_SMOKE_RANGE_SHARE of that (isNearCarSmoke, for a car's own tyre, engine and terrible-trait smoke —
+// see below) of the camera: further than that, neither made, simulated nor drawn (the marks a gib leaves always are)
+const distSq = o => (o.x - camera.position.x)**2 + (o.y - camera.position.y)**2 + (o.z - camera.position.z)**2;
+const isNear = o => distSq(o) <= S.gibRange*S.gibRange;
+const isNearFx = o => distSq(o) <= S.particleRange*S.particleRange;
+const CAR_SMOKE_RANGE_SHARE = 0.5; // ordinary car smoke is drawn out to only half S.particleRange — it's the most frequent particle by far, so it's the first to go as the camera pulls back
+const isNearCarSmoke = o => distSq(o) <= (S.particleRange*CAR_SMOKE_RANGE_SHARE)**2;
+// A particle's priority (see pushFx) when nothing else says otherwise: 0. A car's own tyre, engine and terrible-trait
+// smoke — the most frequent particle in the game, since any car on the road can be spouting it at any time — is marked
+// down to CAR_SMOKE_PRIORITY instead, so it can only ever crowd out more of its own kind, never a splash, an
+// explosion, or anything else worth seeing.
+const CAR_SMOKE_PRIORITY = -1;
+// Add `particle` to fx, staying within fxCap(): once full, evicts the oldest particle no higher a priority than this
+// one (particle.priority, default 0 — see CAR_SMOKE_PRIORITY above and the splash's priority 1), so a flood of
+// ordinary smoke from nearby traffic can't crowd out something more important before it's had its moment. If every
+// existing particle already outranks this one, the new one is simply dropped rather than displacing something better.
+function pushFx(particle) {
+  if (fx.length >= fxCap()) {
+    const priority = particle.priority ?? 0;
+    const evict = fx.findIndex(p => (p.priority ?? 0) <= priority);
+    if (evict === -1) return; // (everything already alive outranks this one — drop it rather than displace something better)
+    fx.splice(evict, 1);
+  }
+  fx.push(particle);
+}
 // the chunks thrown out from `at` (where feet or wheels were), `height` tall, one call per material of them: [color, how
 // many, how big (as a fraction of height)] — `power` throws them further and faster and spreads them wider (a car's
 // explosion, much more violent than a person's, uses a bigger one; see explodeCar); `ground` is the height they land on
 // (default: where they start from), or a function of (x, z) that finds it, for chunks thrown from the air, which each land
 // on whatever is below where they come down
 function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null, amount = S.gibAmount) {
-  if (!S.showGibs || !isNear(at)) return;
+  if (!S.showGibs || amount <= 0 || !isNear(at)) return;
   const now = performance.now()/1000;
   const groundAtStart = typeof ground === 'function' ? ground(at.x, at.z) : ground;
   parts.forEach(([color, count, size]) => {
@@ -115,6 +148,7 @@ function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null
 // the splat left on the ground at `at`, `height` tall, in `color` (blood, or a car's scorch mark) — `sizeMul` for a bigger
 // mark than the default (a car's, again — see explodeCar)
 function spawnSplat(at, height, color, sizeMul = 1, soot = false) {
+  if (!S.showGibs || S.gibAmount <= 0) return; // (a gib mark, not a particle — the same settings as the chunks it's left with)
   if (splats.length >= SPLATS_MAX) splats.shift();
   splats.push({ x: at.x, y: soot ? SOOT_Y : at.y + 0.015, z: at.z, size: height*(0.45 + Math.random()*0.3)*sizeMul, angle: Math.random()*Math.PI*2, born: performance.now()/1000, color, soot });
 }
@@ -123,21 +157,19 @@ function spawnSplat(at, height, color, sizeMul = 1, soot = false) {
 const FIRE_COLORS = [0xffdd66, 0xff9a3c, 0xff5a1f, 0xd8280f];
 const PLUME_SIZE = 0.45; // how big a car explosion's fireball and smoke are, against the car's height
 function explodeFx(at, height) {
-  if (!isNear(at)) return;
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
   const now = performance.now()/1000;
   for (let k=0;k<30;k++) {
-    if (fx.length >= FX_MAX) fx.shift();
     const angle = Math.random()*Math.PI*2, outward = 3 + Math.random()*9;
-    fx.push({ kind: 'fire', x: at.x, y: at.y + height*0.2, z: at.z,
+    pushFx({ kind: 'fire', x: at.x, y: at.y + height*0.2, z: at.z,
       vx: Math.cos(angle)*outward, vy: 5 + Math.random()*9, vz: Math.sin(angle)*outward,
       size: height*PLUME_SIZE*(0.36 + Math.random()*0.36), life: 0.45 + Math.random()*0.4,
       color: new THREE.Color(FIRE_COLORS[Math.floor(Math.random()*FIRE_COLORS.length)]), born: now });
   }
   for (let k=0;k<20;k++) {
-    if (fx.length >= FX_MAX) fx.shift();
     const angle = Math.random()*Math.PI*2, outward = 0.7 + Math.random()*2.8;
     const grey = 0.12 + Math.random()*0.14;
-    fx.push({ kind: 'smoke', x: at.x, y: at.y + height*0.3, z: at.z,
+    pushFx({ kind: 'smoke', x: at.x, y: at.y + height*0.3, z: at.z,
       vx: Math.cos(angle)*outward, vy: 1.7 + Math.random()*2.4, vz: Math.sin(angle)*outward,
       size: height*PLUME_SIZE*(0.55 + Math.random()*0.55), life: 3.2 + Math.random()*2.4,
       color: new THREE.Color(grey, grey, grey), born: now + Math.random()*0.2 });
@@ -147,15 +179,55 @@ function explodeFx(at, height) {
   flashDuration = 0.5;
   flashBorn = now; flashUntil = now + flashDuration;
 }
+// a car going under water — no fireball, no flash: fine spray (its own 'spray' fx kind, a vivid-blue reworking of
+// explodeFx's fireball burst, but under extra-strong gravity so it snaps into a tight, obvious arc) thrown up and out
+// of where it went down; bigger chunks of foam (the 'foam' fx kind, below) rising and falling with it just as heavily,
+// dark blue through to near-white; and a puff of pale spray mist (the 'smoke' fx kind) following it up — all fading
+// away rather than drifting off like real smoke would
+const SPRAY_COLORS = [0x00e5ff, 0x00aaff, 0x2979ff, 0x40e0ff]; // vivid cyan through to a saturated blue
+const SPLASH_PLUME_SIZE = 0.55;
+const FOAM_DARK = new THREE.Color(0x1c4a63), FOAM_LIGHT = new THREE.Color(0xf4fcff); // (each foam chunk's own colour is a random point between these)
+const FOAM_SIZE = 1.1; // bigger than the fine droplets — clumps of foam, not spray
+const SPLASH_GRAVITY = GRAVITY*2.5; // much heavier than real gravity — droplets and foam snap back down hard and fast, rather than floating like embers
+// upward launch speed [least, most] for spray and foam — this is what controls how high the splash goes (peak height = vy0²/(2*SPLASH_GRAVITY))
+const SPRAY_LAUNCH_SPEED = [9.5, 16.5], FOAM_LAUNCH_SPEED = [6.5, 13.5];
+// how long a droplet launched at vy0 (under SPLASH_GRAVITY) takes to arc back down to the height it went up from — its
+// life is pinned to this (plus a short tail) so it visibly falls before fading, rather than fading mid-rise looking
+// like it flew off in a straight line
+const flightTime = vy0 => 2*vy0/SPLASH_GRAVITY;
+function splashFx(at, height) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  const now = performance.now()/1000;
+  for (let k=0;k<36;k++) { // (fine spray — a short, contained pop up and out, then snapping back down under the heavy gravity)
+    const angle = Math.random()*Math.PI*2, outward = 1 + Math.random()*3, vy0 = SPRAY_LAUNCH_SPEED[0] + Math.random()*(SPRAY_LAUNCH_SPEED[1] - SPRAY_LAUNCH_SPEED[0]);
+    pushFx({ kind: 'spray', priority: 1, x: at.x, y: at.y, z: at.z, // (priority 1: a nearby car's ambient smoke can't crowd this out)
+      vx: Math.cos(angle)*outward, vy: vy0, vz: Math.sin(angle)*outward,
+      size: height*SPLASH_PLUME_SIZE*(0.16 + Math.random()*0.22), life: flightTime(vy0) + 0.15 + Math.random()*0.15,
+      color: new THREE.Color(SPRAY_COLORS[Math.floor(Math.random()*SPRAY_COLORS.length)]), born: now });
+  }
+  for (let k=0;k<18;k++) { // (fat clumps of foam, thrown up with it and falling back just as hard)
+    const angle = Math.random()*Math.PI*2, outward = 0.6 + Math.random()*2, vy0 = FOAM_LAUNCH_SPEED[0] + Math.random()*(FOAM_LAUNCH_SPEED[1] - FOAM_LAUNCH_SPEED[0]);
+    pushFx({ kind: 'foam', priority: 1, x: at.x, y: at.y, z: at.z, // (priority 1, same as the spray)
+      vx: Math.cos(angle)*outward, vy: vy0, vz: Math.sin(angle)*outward,
+      size: height*FOAM_SIZE*(0.15 + Math.random()*0.24), life: flightTime(vy0) + 0.2 + Math.random()*0.2,
+      color: new THREE.Color().lerpColors(FOAM_DARK, FOAM_LIGHT, Math.random()), born: now });
+  }
+  for (let k=0;k<16;k++) { // (a low ring of white spray mist round the splash — ordinary priority, same as any other smoke)
+    const angle = Math.random()*Math.PI*2, outward = 0.6 + Math.random()*2.6;
+    pushFx({ kind: 'smoke', x: at.x, y: at.y + height*0.05, z: at.z,
+      vx: Math.cos(angle)*outward, vy: 1.4 + Math.random()*2, vz: Math.sin(angle)*outward,
+      size: height*SPLASH_PLUME_SIZE*(0.4 + Math.random()*0.4), life: 0.6 + Math.random()*0.4,
+      color: new THREE.Color(0xf3fbfd), born: now + Math.random()*0.08 });
+  }
+}
 
 // A few small puffs of light smoke round `at` (where feet were), `height` tall, floating up and thinning out in a second or two.
 export function puffSmoke(at, height, count = 6) {
-  if (!S.showGibs || !isNear(at)) return;
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
   const now = performance.now()/1000;
   for (let k=0;k<count;k++) {
-    if (fx.length >= FX_MAX) fx.shift();
     const angle = Math.random()*Math.PI*2, outward = 0.2 + Math.random()*0.8, grey = 0.55 + Math.random()*0.2;
-    fx.push({ kind: 'smoke', x: at.x + Math.cos(angle)*0.25*height, y: at.y + height*(0.1 + Math.random()*0.5), z: at.z + Math.sin(angle)*0.25*height,
+    pushFx({ kind: 'smoke', x: at.x + Math.cos(angle)*0.25*height, y: at.y + height*(0.1 + Math.random()*0.5), z: at.z + Math.sin(angle)*0.25*height,
       vx: Math.cos(angle)*outward, vy: 0.6 + Math.random()*0.8, vz: Math.sin(angle)*outward,
       size: height*(0.12 + Math.random()*0.1), life: 1 + Math.random()*0.8, color: new THREE.Color(grey, grey, grey), born: now });
   }
@@ -163,7 +235,8 @@ export function puffSmoke(at, height, count = 6) {
 
 // ---- soft particles: glow and smoke drawn as camera-facing discs fading out to their edges, each with its own opacity.
 // `glow` adds its light to what's behind it (a car's aura and flames); `smoke` covers it.
-const SOFT_MAX = 300;
+const SOFT_MESH_CAP = 750; // each soft mesh's own capacity — a ceiling maxParticles is clamped under, not a target
+const softCap = () => Math.max(0, Math.min(SOFT_MESH_CAP, Math.round(S.maxParticles)));
 /** Give an instanced mesh a per-instance opacity (multiplying the material's), as an attribute on `geometry` for `count` instances. */
 function addInstanceAlpha(geometry, material, count) {
   const alpha = new THREE.InstancedBufferAttribute(new Float32Array(count), 1);
@@ -187,8 +260,8 @@ const softTexture = (() => {
 })();
 function softMesh(blending, name, texture = softTexture) {
   const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false, blending });
-  const geometry = new THREE.PlaneGeometry(1, 1), alpha = addInstanceAlpha(geometry, material, SOFT_MAX);
-  const mesh = instancedMesh(geometry, material, SOFT_MAX, name);
+  const geometry = new THREE.PlaneGeometry(1, 1), alpha = addInstanceAlpha(geometry, material, SOFT_MESH_CAP);
+  const mesh = instancedMesh(geometry, material, SOFT_MESH_CAP, name);
   mesh.setColorAt(0, new THREE.Color());
   mesh.userData.alpha = alpha;
   return mesh;
@@ -213,8 +286,8 @@ const sparkleMesh = softMesh(THREE.AdditiveBlending, 'SparkleFx', sparkleTexture
 glowMesh.renderOrder = smokeMesh.renderOrder = sparkleMesh.renderOrder = 2;
 // A single sparkle glint at `at`, tinted `color`, for a legendary car's shimmer — a soft pop in and out, spinning slowly.
 export function sparkleFx(at, color, size = 0.35) {
-  if (!S.showGibs || !isNear(at)) return;
-  if (softParticles.length >= SOFT_MAX*2) softParticles.shift();
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  if (softParticles.length >= softCap()*2) softParticles.shift();
   softParticles.push({ kind: 'sparkle', born: performance.now()/1000, still: true, x: at.x, y: at.y, z: at.z,
     size, life: 0.5 + Math.random()*0.3, opacity: 1, color: new THREE.Color(color),
     roll: Math.random()*Math.PI*2, spin: (Math.random() < 0.5 ? -1 : 1)*1.5, growth: 0 });
@@ -226,9 +299,9 @@ const BURN_FLAME_COLORS = [0xffdd33, 0xff9a1a, 0xff4a14, 0xd8280f], BURN_AURA_CO
 const BURN_FLAMES_PER_SECOND = 30, BURN_SMOKE_PER_SECOND = 10;
 const BURN_AURA_SIZE = 2.2, BURN_AURA_OPACITY = 0.12; // (the aura's size is a multiple of the car's height)
 export function burnFx(at, height, dt) {
-  if (!S.showGibs || !isNear(at)) return;
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
   const now = performance.now()/1000, count = rate => Math.floor(rate*dt + Math.random());
-  const add = particle => { if (softParticles.length >= SOFT_MAX*2) softParticles.shift(); softParticles.push({ born: now, ...particle }); };
+  const add = particle => { if (softParticles.length >= softCap()*2) softParticles.shift(); softParticles.push({ born: now, ...particle }); };
   add({ kind: 'glow', still: true, x: at.x, y: at.y + height*0.45, z: at.z, vx: 0, vy: 0, vz: 0, size: height*BURN_AURA_SIZE*(0.9 + Math.random()*0.2), growth: 0, life: 0.3, opacity: BURN_AURA_OPACITY, color: BURN_AURA_COLOR });
   solidPuffs(at, height, count(BURN_FLAMES_PER_SECOND), puffColor(BURN_FLAME_COLORS),
     { size: [0.12, 0.22], life: [0.6, 1.1], rise: [1.5, 3], spread: 0.3, outward: [0.1, 0.5], lift: 0.5 });
@@ -242,29 +315,33 @@ export function burnFx(at, height, dt) {
 
 // Solid puffs, drawn as puffSmoke's are: `count` circles from around `at` (`height` tall), each `colorAt()`, rising and thinning out.
 // `alpha` is the share of the usual opacity they're drawn with. `size` and `life` (seconds) are [least, most] pairs, `rise` (units a second) too; `size` a share of `height`.
-function solidPuffs(at, height, count, colorAt, { size, life, rise, spread = 0.25, outward = [0.2, 0.8], lift = 0.3, alpha = 1 }) {
-  if (!S.showGibs || !isNear(at)) return;
+// `priority` and `near` (see pushFx and isNearFx/isNearCarSmoke) default to ordinary particle rules; a car's own tyre
+// and engine smoke (below) instead pass CAR_SMOKE_PRIORITY and isNearCarSmoke, being the most frequent particle around.
+function solidPuffs(at, height, count, colorAt, { size, life, rise, spread = 0.25, outward = [0.2, 0.8], lift = 0.3, alpha = 1, priority = 0, near = isNearFx }) {
+  if (S.maxParticles <= 0 || !near(at)) return;
   const now = performance.now()/1000, between = ([least, most]) => least + Math.random()*(most - least);
   for (let k=0;k<count;k++) {
-    if (fx.length >= FX_MAX) fx.shift();
     const angle = Math.random()*Math.PI*2, out = between(outward);
-    fx.push({ kind: 'smoke', x: at.x + Math.cos(angle)*spread*height, y: at.y + height*lift, z: at.z + Math.sin(angle)*spread*height,
+    pushFx({ kind: 'smoke', priority, x: at.x + Math.cos(angle)*spread*height, y: at.y + height*lift, z: at.z + Math.sin(angle)*spread*height,
       vx: Math.cos(angle)*out, vy: between(rise), vz: Math.sin(angle)*out, size: height*between(size), life: between(life), color: colorAt(), alpha, born: now });
   }
 }
 const puffColor = colors => () => new THREE.Color(colors[Math.floor(Math.random()*colors.length)]);
 // Small black puffs from a tyre at `at` over the `dt` seconds since it was last called, for a car that's boosting; `height` is the car's.
+// The most frequent particle in the game — any car on the road can be boosting at any time — so it's drawn out to only
+// half the usual particle range (isNearCarSmoke) and marked down to CAR_SMOKE_PRIORITY, so it never crowds out anything else.
 const TYRE_SMOKE_PER_SECOND = 25, TYRE_RED_SHARE = 0.25, TYRE_RED_ALPHA = 1/3; // (dark brown puffs alongside the black: how many as many, and how opaque as a share of the usual 0.6 — 20% overall)
 export function tyreSmoke(at, height, dt) {
   solidPuffs(at, height, Math.floor(TYRE_SMOKE_PER_SECOND*dt + Math.random()), () => { const grey = 0.04 + Math.random()*0.08; return new THREE.Color(grey, grey, grey); },
-    { size: [0.08, 0.14], life: [0.7, 1.2], rise: [0.3, 0.8], spread: 0.05, outward: [0.1, 0.4], lift: 0.08 });
+    { size: [0.08, 0.14], life: [0.7, 1.2], rise: [0.3, 0.8], spread: 0.05, outward: [0.1, 0.4], lift: 0.08, priority: CAR_SMOKE_PRIORITY, near: isNearCarSmoke });
   solidPuffs(at, height, Math.floor(TYRE_SMOKE_PER_SECOND*TYRE_RED_SHARE*dt + Math.random()), puffColor([0x110600]),
-    { size: [0.1, 0.18], life: [0.7, 1.2], rise: [0.3, 0.8], spread: 0.05, outward: [0.1, 0.4], lift: 0.08, alpha: TYRE_RED_ALPHA });
+    { size: [0.1, 0.18], life: [0.7, 1.2], rise: [0.3, 0.8], spread: 0.05, outward: [0.1, 0.4], lift: 0.08, alpha: TYRE_RED_ALPHA, priority: CAR_SMOKE_PRIORITY, near: isNearCarSmoke });
 }
-// Smoke from a stalled engine at `at`, `height` tall: plenty of grey puffs, climbing high.
+// Smoke from a stalled engine at `at`, `height` tall: plenty of grey puffs, climbing high. Same reduced range and low
+// priority as tyreSmoke, for the same reason.
 export function engineSmoke(at, height) {
   solidPuffs(at, height, 6, () => { const grey = 0.45 + Math.random()*0.2; return new THREE.Color(grey, grey, grey); },
-    { size: [0.15, 0.3], life: [1.5, 2.5], rise: [2.5, 5], spread: 0.15, outward: [0.1, 0.5], lift: 0.3 });
+    { size: [0.15, 0.3], life: [1.5, 2.5], rise: [2.5, 5], spread: 0.15, outward: [0.1, 0.5], lift: 0.3, priority: CAR_SMOKE_PRIORITY, near: isNearCarSmoke });
 }
 // Heavy black smoke from underneath a terrible car over the `dt` seconds since it was last called, at `at` (`height`
 // tall, `width` wide, `heading` which way it's facing, `speed` how fast along it — so the puffs can start out moving
@@ -272,18 +349,19 @@ export function engineSmoke(at, height) {
 // (`level`), pushed out to both sides as far as the car is wide before curving upward (see terribleSmoke's `accel`,
 // read by updateGiblets). Every puff is spawned as a mirrored pair, one to each side — spawning a single puff with a
 // side picked at random (or alternated by index) reliably favours one side, since most calls only spawn zero or one.
+// Any car with the terrible trait puts this out constantly, so — like tyreSmoke and engineSmoke — it's drawn out to
+// only half the usual particle range and marked down to CAR_SMOKE_PRIORITY.
 const TERRIBLE_SMOKE_PER_SECOND = 24, TERRIBLE_SMOKE_LIFT = 1.5; // per level of `terrible`; how hard the curve up kicks in
 export function terribleSmoke(at, height, width, dt, level, heading, speed) {
-  if (!S.showGibs || !isNear(at)) return;
+  if (S.maxParticles <= 0 || !isNearCarSmoke(at)) return;
   const now = performance.now()/1000, sideX = Math.cos(heading), sideZ = -Math.sin(heading);
   const alongX = Math.sin(heading)*speed, alongZ = Math.cos(heading)*speed; // (keeps pace with the car for a moment, so it reads as spreading to the sides rather than trailing behind)
   const count = Math.floor(TERRIBLE_SMOKE_PER_SECOND*level*dt + Math.random());
   for (let k=0;k<count;k++) {
     const out = width*(0.55 + Math.random()*0.35), grey = 0.03 + Math.random()*0.05;
     [1, -1].forEach(side => {
-      if (fx.length >= FX_MAX) fx.shift();
       const jitter = (Math.random() - 0.5)*0.3;
-      fx.push({ kind: 'smoke', x: at.x, y: at.y + height*0.08, z: at.z,
+      pushFx({ kind: 'smoke', priority: CAR_SMOKE_PRIORITY, x: at.x, y: at.y + height*0.08, z: at.z,
         vx: alongX + sideX*out*side + jitter, vz: alongZ + sideZ*out*side + jitter, vy: 0.15 + Math.random()*0.2, accel: TERRIBLE_SMOKE_LIFT,
         size: height*(0.1 + Math.random()*0.14), life: 1.8 + Math.random()*1.2, color: new THREE.Color(grey, grey, grey), born: now });
     });
@@ -297,12 +375,11 @@ export function igniteFx(at, height) {
 
 // A burst of `count` small bright sparks flying out from `at` and quickly dying, for metal hitting metal.
 export function sparks(at, count = 8) {
-  if (!S.showGibs || !isNear(at)) return;
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
   const now = performance.now()/1000;
   for (let k=0;k<count;k++) {
-    if (fx.length >= FX_MAX) fx.shift();
     const angle = Math.random()*Math.PI*2, outward = 2 + Math.random()*5;
-    fx.push({ kind: 'fire', x: at.x, y: at.y, z: at.z, vx: Math.cos(angle)*outward, vy: 1 + Math.random()*4, vz: Math.sin(angle)*outward,
+    pushFx({ kind: 'fire', x: at.x, y: at.y, z: at.z, vx: Math.cos(angle)*outward, vy: 1 + Math.random()*4, vz: Math.sin(angle)*outward,
       size: 0.05 + Math.random()*0.05, life: 0.25 + Math.random()*0.3, color: new THREE.Color(FIRE_COLORS[Math.random() < 0.6 ? 0 : 1]), born: now });
   }
 }
@@ -340,6 +417,12 @@ export function explodeCar(at, height, colors) {
   explodeFx(at, height);
   playSound('explosion', at);
 }
+// Takes a car under at the water's surface: `at` where it went down, `height` how tall it was — no wreckage and no
+// fireball, just its own splash (splashFx) thrown up and out of the water in its place.
+export function splashCar(at, height) {
+  splashFx(at, height);
+  playSound('splash', at);
+}
 
 const placed = new THREE.Object3D(), spinStep = new THREE.Quaternion(), dimmed = new THREE.Color();
 const sparkleAxis = new THREE.Vector3(0, 0, 1), sparkleRoll = new THREE.Quaternion(); // (a sparkle spins about the camera's view axis)
@@ -353,7 +436,8 @@ export function updateGiblets(t) {
   while (giblets.length && t - giblets[0].born > gibletLife + SINK_TIME) giblets.shift();
   while (splats.length && t - splats[0].born > SPLAT_LIFE + SINK_TIME) splats.shift();
   while (fx.length && t - fx[0].born > fx[0].life) fx.shift();
-  if (!S.showGibs) giblets.length = 0; // (turned off: what's already flying goes too)
+  if (!S.showGibs || S.gibAmount <= 0) { giblets.length = 0; splats.length = 0; } // (turned off: what's already flying, or lying there, goes too)
+  if (S.maxParticles <= 0) { fx.length = 0; softParticles.length = 0; } // (same, for particles)
   let drawn = 0;
   giblets.forEach(g => {
     if (!isNear(g)) return;
@@ -407,7 +491,7 @@ export function updateGiblets(t) {
   });
   let fxDrawn = 0;
   fx.forEach(p => {
-    if (!isNear(p)) return;
+    if (!isNearFx(p)) return;
     const age = t - p.born, life = Math.max(0, Math.min(1, age/p.life));
     let scale, dim;
     if (p.kind === 'fire') {
@@ -415,6 +499,16 @@ export function updateGiblets(t) {
       p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt;
       scale = p.size*(1 - life)*(1 - life); // quick burst, quicker fade
       dim = 1 - life*0.6;
+    } else if (p.kind === 'spray') {
+      p.vy -= SPLASH_GRAVITY*dt; // much heavier than real gravity: snaps into a tight, obvious arc rather than hanging like a fireball's embers
+      p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt;
+      scale = p.size*(1 - life*life); // holds its size through the arc, fading only near the end
+      dim = 1 - life*0.3;
+    } else if (p.kind === 'foam') {
+      p.vy -= SPLASH_GRAVITY*dt; // (falls hard, like a heavy droplet of water — not a fireball's puffed-up ember)
+      p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt;
+      scale = p.size*(1 - life*life*life); // holds its size through the rise and fall, only shrinking away right at the end
+      dim = 1 - life*0.3;
     } else {
       if (p.accel) p.vy += p.accel*dt; // (a steady lift kicking in over time, so it curves upward rather than rising from the start — see terribleSmoke)
       p.vx *= 1 - Math.min(1, dt*0.6); p.vz *= 1 - Math.min(1, dt*0.6); p.vy *= 1 - Math.min(1, dt*0.8);
@@ -437,7 +531,7 @@ export function updateGiblets(t) {
   const drawnSoft = { glow: 0, smoke: 0, sparkle: 0 }, meshes = { glow: glowMesh, smoke: smokeMesh, sparkle: sparkleMesh };
   softParticles.forEach(p => {
     const age = t - p.born, life = age/p.life, mesh = meshes[p.kind];
-    if (life > 1 || drawnSoft[p.kind] >= SOFT_MAX || !isNear(p)) return;
+    if (life > 1 || drawnSoft[p.kind] >= softCap() || !isNearFx(p)) return;
     if (!p.still) { p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt; }
     placed.position.set(p.x, p.y, p.z);
     placed.quaternion.copy(camera.quaternion);

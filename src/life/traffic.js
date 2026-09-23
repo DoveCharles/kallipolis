@@ -17,7 +17,7 @@ import { exclaim } from '../audio/voices.js';
 import { isFavoritePerson } from '../ui/favorites.js';
 import { strikeLightning } from './lightning.js';
 import { updateEngines } from '../audio/engine.js';
-import { explodeCar, puffSmoke, sparks, burnFx, tyreSmoke, igniteFx, engineSmoke, terribleSmoke, sparkleFx } from './giblets.js';
+import { explodeCar, splashCar, puffSmoke, sparks, burnFx, tyreSmoke, igniteFx, engineSmoke, terribleSmoke, sparkleFx } from './giblets.js';
 import { playSound } from '../audio/sfx.js';
 import { carTypeOf, vanityChanceOf, vanityPlatesOf } from './car-types.js';
 import { driving, controlInput, startDriving, endDriving } from './possession.js';
@@ -1186,7 +1186,7 @@ export function updateTraffic(t) {
   burntOut.forEach(car => forCarsNear(car.x, car.z, reach, other => { if (Math.hypot(other.x - car.x, other.z - car.z) <= reach) blasted.add(other); }));
   if (drivenCar && blasted.has(drivenCar)) { const driven = drivenCar; stopDriving(); blasted.add(driven); } // (the driver is thrown out of it, and it goes too)
   blasted.forEach(car => { const i = cars.indexOf(car); if (i >= 0) killCar(i); });
-  if (drivenCar?.sinking?.under) { const driven = drivenCar, at = { x: driven.x, z: driven.z }; stopDriving(); Object.assign(driven, at); killCar(cars.indexOf(driven), WATER_LEVEL); } // (gone under: it blows up at the surface)
+  if (drivenCar?.sinking?.under) { const driven = drivenCar, at = { x: driven.x, z: driven.z }; stopDriving(); Object.assign(driven, at); drownCar(cars.indexOf(driven)); } // (gone under: it sinks away quietly, with a splash, rather than blowing up)
   updateEngines(cars, drivenCar, engineOf, dt);
   carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
   if (S.showRoadsafetyDebug) { carHitboxDebugMesh.count = cars.length; carHitboxDebugMesh.instanceMatrix.needsUpdate = true; }
@@ -2379,10 +2379,9 @@ function chaseCamera(car) {
  * Explode a car where it stands, in its own paint, through explodeCar — and take it out of
  * cars, so a replacement spawns in elsewhere as usual.
  * @param {number} i - index in cars
- * @param {number} [y] - the height it blows up at: the road's, or the water's for a car that's gone under
  * @returns {void}
  */
-function killCar(i, y = Y_ROAD) {
+function killCar(i) {
   const car = cars[i];
   if (!car || car.li < 0) return;
   App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
@@ -2390,10 +2389,25 @@ function killCar(i, y = Y_ROAD) {
   const paint = new THREE.Color(...(carModelOf(car)?.bodyColor ?? car.paint));
   if (/bus/i.test(carModelOf(car)?.name ?? '')) { // (a bus goes up in two blasts, one at each end)
     const offset = carLength(car)*0.25;
-    [-1, 1].forEach(end => explodeCar({ x: car.x + Math.sin(car.heading)*offset*end, y, z: car.z + Math.cos(car.heading)*offset*end }, carHeight(car), { paint }));
-  } else explodeCar({ x: car.x, y, z: car.z }, carHeight(car), { paint });
+    [-1, 1].forEach(end => explodeCar({ x: car.x + Math.sin(car.heading)*offset*end, y: Y_ROAD, z: car.z + Math.cos(car.heading)*offset*end }, carHeight(car), { paint }));
+  } else explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint });
   cars.splice(i, 1);
   if (followedCar > i) followedCar--; // (a car ahead of it in the array, still being followed, keeps its place)
+}
+/**
+ * Take a car under the water out at the surface, quietly rather than blowing up: a burst of its own splash
+ * (splashCar) instead of a fireball. Otherwise just as killCar — out of cars, so a replacement spawns in elsewhere.
+ * @param {number} i - index in cars
+ * @returns {void}
+ */
+function drownCar(i) {
+  const car = cars[i];
+  if (!car || car.li < 0) return;
+  App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
+  if (followedCar === i) stopFollowingCar();
+  splashCar({ x: car.x, y: WATER_LEVEL, z: car.z }, carHeight(car));
+  cars.splice(i, 1);
+  if (followedCar > i) followedCar--;
 }
 
 /**

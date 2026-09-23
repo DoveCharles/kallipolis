@@ -29,6 +29,11 @@ const SOUNDS = {
   pop: [
     [.8, .2, 500, 0, .01, .07, 4, 2, 60, , , , , .5],
   ],
+  // a car going under water (see splashCar in life/giblets.js): a wet slap into a frothy hiss
+  splash: [
+    [.7, .2, 300, .01, .05, .2, 4, 1.8, -10, , , , , 1.4, , .3, , .5, .06],
+    [.4, .3, 1400, .02, .12, .3, 4, 1, , , , , , .8, , .6, , .3, .12],
+  ],
   // the driven car hitting a car or a wall (see bumpIntoCars and hitBuildings in life/traffic.js): a crunch, and a
   // clang of bent metal ringing under it
   crash: [

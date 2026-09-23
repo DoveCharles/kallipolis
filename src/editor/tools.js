@@ -240,6 +240,10 @@ function syncExtraSettings() {
   document.getElementById('dv-gibamount').textContent = Math.round(S.gibAmount*100) + '%';
   document.getElementById('s-giblifetime').value = S.gibLifetime*100;
   document.getElementById('dv-giblifetime').textContent = Math.round(S.gibLifetime*100) + '%';
+  document.getElementById('s-particlerange').value = S.particleRange;
+  document.getElementById('dv-particlerange').textContent = String(Math.round(S.particleRange));
+  document.getElementById('s-maxparticles').value = S.maxParticles;
+  document.getElementById('dv-maxparticles').textContent = String(Math.round(S.maxParticles));
 }
 document.getElementById('btn-settings-toggle').addEventListener('click', (e) => {
   const block = document.getElementById('extra-settings'), open = block.style.maxHeight === '0px';
@@ -251,6 +255,8 @@ document.getElementById('s-gibs').addEventListener('click', () => { S.showGibs =
 document.getElementById('s-gibrange').addEventListener('input', (e) => { S.gibRange = parseFloat(e.target.value); syncExtraSettings(); });
 document.getElementById('s-gibamount').addEventListener('input', (e) => { S.gibAmount = parseFloat(e.target.value)/100; syncExtraSettings(); });
 document.getElementById('s-giblifetime').addEventListener('input', (e) => { S.gibLifetime = parseFloat(e.target.value)/100; syncExtraSettings(); });
+document.getElementById('s-particlerange').addEventListener('input', (e) => { S.particleRange = parseFloat(e.target.value); syncExtraSettings(); });
+document.getElementById('s-maxparticles').addEventListener('input', (e) => { S.maxParticles = parseFloat(e.target.value); syncExtraSettings(); });
 document.getElementById('s-carspawn').addEventListener('input', (e) => { S.carSpawnDistance = parseFloat(e.target.value); syncExtraSettings(); });
 document.getElementById('s-hideownhead').addEventListener('click', () => { S.hideOwnHead = !S.hideOwnHead; syncExtraSettings(); });
 syncExtraSettings();

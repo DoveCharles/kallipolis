@@ -80,6 +80,7 @@ loves = Holding shit
 loves = Being full
 loves = Stuff
 loves = People just dropping shit off
+loves = Being gentrified into flats for art students
 hates = Being emptied
 hates = Stocktaking
 hates = Forklift certification
