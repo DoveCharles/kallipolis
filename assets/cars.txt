@@ -62,6 +62,7 @@ loves = Unexplained 30 minute stop
 loves = Driving off
 loves = Actually serviced, for once [legendary, speed = 1.4, braking = 1.4, control = 1.4]
 loves = Everyone, lean to the side, now! [legendary, control = 1.8]
+loves = Aquabus [legendary, aqua]
 loves = When people thank the driver
 loves = Going down a road you've never seen before in your life
 hates = Traffic
@@ -287,6 +288,7 @@ loves = Rolling up their windows
 loves = The sat-nav
 loves = Extra spacey [legendary, size = 1.07, weight = 1.2, speed = 0.9, boost = 0.9, health = 1.1]
 loves = Bubblewrap interiors [legendary, recovery = 1.6, health = 1.1]
+loves = Extra airbags [legendary, aqua]
 hates = Turning this thing around if I have to
 hates = The 'streets'
 hates = Hearing sirens nearby, omg are they after me? Did I do something?
