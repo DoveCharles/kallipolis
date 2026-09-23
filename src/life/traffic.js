@@ -181,13 +181,13 @@ export async function loadCarModels() {
  */
 function buildCarDesigns(gltf) {
   gltf.scene.updateMatrixWorld(true);
-  const box = new THREE.Box3(), size = new THREE.Vector3(), center = new THREE.Vector3(), v = new THREE.Vector3(), baseColor = new THREE.Color();
+  const box = new THREE.Box3(), size = new THREE.Vector3(), center = new THREE.Vector3(), v = new THREE.Vector3(), normalMatrix = new THREE.Matrix3(), baseColor = new THREE.Color();
   const designs = [];
   gltf.scene.children.forEach(node => {
     const parts = [];
     node.traverse(o => { if (o.isMesh) parts.push(o); });
     if (!parts.length) return;
-    const positions = [], slots = [], colors = [], indices = [], glassIndices = [], wheelIds = [], wheels = [];
+    const positions = [], normals = [], slots = [], colors = [], indices = [], glassIndices = [], wheelIds = [], wheels = [];
     let glass = null, hasPaint = false;
     const bodyColors = new Map(); // (each unpainted body color, by how much of the design it covers, for its explosion)
     parts.forEach(part => {
@@ -208,10 +208,13 @@ function buildCarDesigns(gltf) {
         bodyColors.set(key, (bodyColors.get(key) ?? 0) + pos.count);
       }
       if (isGlass && !glass) glass = { opacity: part.material.opacity, roughness: part.material.roughness, metalness: part.material.metalness };
-      const first = positions.length/3;
+      const first = positions.length/3, normal = geo.attributes.normal;
+      normalMatrix.getNormalMatrix(part.matrixWorld);
       for (let i=0;i<pos.count;i++) {
         v.fromBufferAttribute(pos, i).applyMatrix4(part.matrixWorld);
         positions.push(v.x, v.y, v.z);
+        v.fromBufferAttribute(normal, i).applyMatrix3(normalMatrix).normalize();
+        normals.push(v.x, v.y, v.z);
         slots.push(slot);
         colors.push(baseColor.r, baseColor.g, baseColor.b);
         wheelIds.push(wheelId);
@@ -221,6 +224,7 @@ function buildCarDesigns(gltf) {
     });
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3)); // the model's own, split where its edges are sharp
     geometry.setIndex(indices.concat(glassIndices)); // the glass last, as a group of its own
     geometry.addGroup(0, indices.length, 0);
     geometry.addGroup(indices.length, glassIndices.length, 1);
@@ -254,7 +258,6 @@ function buildCarDesigns(gltf) {
     const steering = hubInfo.filter(h => h.steers), rolling = hubInfo.filter(h => !h.steers);
     const wheelbase = steering.length && rolling.length ? meanZ(steering) - meanZ(rolling) : 0;
     const wheelRadius = hubInfo.length ? hubInfo.reduce((sum, h) => sum + h.r, 0)/hubInfo.length : 0;
-    geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
     const [mainColor] = [...bodyColors].sort((a, b) => b[1] - a[1])[0] ?? [];
     designs.push({ name: node.name, geometry, bodyColor: !hasPaint && mainColor ? mainColor.split(',').map(Number) : null, length: size.z/BOX_CAR_LENGTH, width: size.x, height: size.y, radius: geometry.boundingSphere.radius, wheelRadius, wheelbase,
@@ -576,8 +579,8 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
  */
 function makeCarMaterials(design, key, glowUniform, paintUniform, plateUniform) {
   const { opacity, roughness, metalness } = design.glass;
-  const body = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true });
-  const glass = new THREE.MeshStandardMaterial({ roughness, metalness, envMap: SKY_ENV_MAP, envMapIntensity: 0.8, flatShading: true,
+  const body = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.25, envMap: SKY_ENV_MAP, envMapIntensity: 0.8 });
+  const glass = new THREE.MeshStandardMaterial({ roughness, metalness, envMap: SKY_ENV_MAP, envMapIntensity: 0.8,
     transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
   [body, glass].forEach((material, k) => {
     material.onBeforeCompile = shader => injectCarShader(shader, glowUniform, paintUniform, plateUniform, k === 1, design.length*BOX_CAR_LENGTH/2);
