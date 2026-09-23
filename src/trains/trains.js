@@ -11,7 +11,7 @@ import { IS_TOUCH } from '../core/device.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
-import { updateShuttleSounds } from '../audio/maglev.js';
+import { updateShuttleSounds, doorSwish } from '../audio/maglev.js';
 
 // ---------------------------------------------------------- the carriage card
 // Which carriage the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the car's: its
@@ -773,7 +773,7 @@ export function rebuildTrainMeshes() {
     const { steps, cycle } = buildShuttleTimeline(sampler.total, stations, shuttle.userData.length);
     S.trainMeshGroup.add(shuttle);
     trainShuttles.push({ lineId: line.id, object: shuttle, sampler, steps, cycle, offset: (trainHash(line.id) % 997)/997*cycle,
-      stopNode: lastStopOf.get(line.id) ?? null, arrived: false, hold: 0, held: 0, doors: 0 });
+      stopNode: lastStopOf.get(line.id) ?? null, arrived: false, hold: 0, held: 0, doors: 0, doorsWant: 0 });
     if (beams.length) addMesh(mergeGeometryList(beams), mats.steel, 'TrainSupports', line, true);
   });
   const perNetwork = new Map();
@@ -829,9 +829,12 @@ function updateStationDoors(dt) {
   trainStations.forEach(st => {
     const d = st.doors;
     [1, -1].forEach(side => {
+      const opening = d.hold[side] > 0;
       d.hold[side] -= dt;
       const was = d.open[side];
       d.open[side] = THREE.MathUtils.clamp(was + (d.hold[side] > 0 ? 1 : -1)*DOOR_SPEED*dt, 0, 1);
+      // "ptshh", as they start to open, and as they start to shut
+      if (d.hold[side] > 0 ? was === 0 : opening && was > 0) doorSwish(st.spot(side*st.halfW, 0), 0.85);
       if (d.open[side] === was) return;
       const k = ease(d.open[side]);
       d.leaves.forEach(l => { if (l.side === side) l.mesh.position.copy(d.forward).multiplyScalar(l.dir*l.reach*k); });
@@ -1136,6 +1139,8 @@ export function updateTrainShuttles(t) {
     if (stopNode == null) s.held = 0;
     s.arrived = stopNode != null && stopNode !== s.stopNode;
     s.stopNode = stopNode;
+    if (doorsWant !== s.doorsWant && doorsWant !== s.doors) doorSwish(s.object.position); // ("ptshh", opening or shutting)
+    s.doorsWant = doorsWant;
     s.doors += Math.max(-dt, Math.min(dt, (doorsWant - s.doors)))/CARRIAGE_DOOR_STEP;
     s.doors = Math.max(0, Math.min(2, s.doors));
     setCarriageDoors(s, s.doors);

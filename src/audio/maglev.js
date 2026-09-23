@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, outdoors } from './sfx.js';
+import { listener, outdoors, isMuted } from './sfx.js';
 
 // ============================================================ the shuttles
 // The shuttles gliding through their solenoid tubes (see updateTrainShuttles in trains/trains.js), which ought to sound
@@ -55,13 +55,13 @@ function makeShuttle() {
 }
 
 // A one-off sound at `at`, through its own panner, over `seconds`: `build` wires its sources into the gain it's handed.
-function oneShot(at, seconds, build) {
+function oneShot(at, seconds, build, refDistance = REF_DISTANCE) {
   const context = listener.context;
   if (context.state !== 'running') return;
   const panner = context.createPanner(), gain = context.createGain();
   panner.panningModel = 'equalpower';
   panner.distanceModel = 'inverse';
-  panner.refDistance = REF_DISTANCE;
+  panner.refDistance = refDistance;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
   gain.connect(panner).connect(outdoors);
   const sources = build(gain, context.currentTime);
@@ -83,6 +83,47 @@ function chime(at) {
     oscillator.start(now);
     return oscillator;
   })));
+}
+
+// A sliding door, the sci-fi kind: "ptshh" — a soft, muffled puff as the seal lets go, into a breathy hiss of air
+// that swells, holds and dies away as the door runs: noise through a wide band that sags only a little, never a sharp
+// crack or a fast sweep (both of which make it a whip). `pitch` shifts the band (a station's big glass doors a touch
+// lower than a carriage's), `volume` scales it. Far off, it isn't played at all.
+const SWISH_TIME = 0.65, SWISH_VOLUME = 0.16, SWISH_REF = 6, SWISH_HEAR = 70;
+let noise = null; // (one second of white noise, shared by every swish)
+export function doorSwish(at, pitch = 1, volume = 1) {
+  if (isMuted() || camera.position.distanceTo(at) > SWISH_HEAR) return;
+  const context = listener.context;
+  if (!noise) {
+    noise = context.createBuffer(1, context.sampleRate, context.sampleRate);
+    const data = noise.getChannelData(0);
+    for (let i=0;i<data.length;i++) data[i] = Math.random()*2 - 1;
+  }
+  oneShot(at, SWISH_TIME, (gain, now) => {
+    const level = SWISH_VOLUME*volume*(0.9 + Math.random()*0.2), end = now + SWISH_TIME;
+    // the puff: a low, dull burst
+    const pt = context.createBufferSource(), ptTone = context.createBiquadFilter(), ptGain = context.createGain();
+    pt.buffer = noise;
+    ptTone.type = 'lowpass'; ptTone.frequency.value = 950*pitch;
+    ptGain.gain.setValueAtTime(0, now);
+    ptGain.gain.linearRampToValueAtTime(level*1.6, now + 0.008);
+    ptGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+    pt.connect(ptTone).connect(ptGain).connect(gain);
+    // the hiss: swelling in, holding, fading out, its band sagging gently, the harsh top taken off
+    const shh = context.createBufferSource(), band = context.createBiquadFilter(), soft = context.createBiquadFilter(), shhGain = context.createGain();
+    shh.buffer = noise; shh.loop = true;
+    band.type = 'bandpass'; band.Q.value = 0.6;
+    band.frequency.setValueAtTime(3400*pitch, now);
+    band.frequency.linearRampToValueAtTime(2400*pitch, end);
+    soft.type = 'lowpass'; soft.frequency.value = 7500*pitch;
+    shhGain.gain.setValueAtTime(0, now);
+    shhGain.gain.linearRampToValueAtTime(level, now + 0.06);
+    shhGain.gain.setValueAtTime(level, now + 0.22);
+    shhGain.gain.linearRampToValueAtTime(0, end);
+    shh.connect(band).connect(soft).connect(shhGain).connect(gain);
+    pt.start(now); shh.start(now, Math.random()*0.3);
+    return [pt, shh];
+  }, SWISH_REF);
 }
 
 // the whir of a carriage setting off, like an electric motor spinning up: a buzzy pair of tones a hair apart climbing
