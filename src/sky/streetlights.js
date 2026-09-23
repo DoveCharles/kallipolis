@@ -21,7 +21,10 @@ const TEXEL = 0.5;         // metres per texel in the map
 const MAX_TEXELS = 2048;   // along either side; a very spread-out town gets a coarser map rather than a bigger one
 const LAMP_HEIGHT = 5;     // about where the globe hangs — the light falls off above it
 const LAMP_COLOR = new THREE.Color(0xffc98a);
-const LAMP_STRENGTH = 5;   // irradiance at the foot of a post, at full dark (π lights a surface to its own color)
+const LAMP_STRENGTH = 5;
+// A lamp up on a raised walkway lights the deck, not the street under it: the map's alpha holds the height of the floor
+// the brightest lamp at each texel stands on, as a fraction of FLOOR_RANGE, and the light's banded to just above that.
+const FLOOR_RANGE = 128;   // irradiance at the foot of a post, at full dark (π lights a surface to its own color)
 // A building with its ground floor lit spills a strip of light out onto the pavement all round it, painted into the
 // same map — so shop fronts cost nothing more at draw time than the lamps already do.
 const LOBBY_SPILL = 7;     // how far out from the wall it reaches, in metres
@@ -116,8 +119,13 @@ THREE.ShaderChunk.lights_fragment_maps += /* glsl */`
 if ( lampLight.r > 0.0 || headlightLight.r > 0.0 ) {
   vec3 nightWorld = ( -vViewPosition ) * mat3( viewMatrix ) + cameraPosition;
   vec3 nightNormal = normalize( normal * mat3( viewMatrix ) ); // (both back into the world's terms)
-  if ( lampLight.r > 0.0 ) irradiance += lampLight * nightLightAt( lampMap, lampMapBounds, ${(REACH * 0.6).toFixed(2)}, nightWorld, nightNormal )
-    * smoothstep( ${(LAMP_HEIGHT + 3).toFixed(1)}, ${(LAMP_HEIGHT - 0.5).toFixed(1)}, nightWorld.y );
+  if ( lampLight.r > 0.0 ) {
+    float lampFloor = texture2D( lampMap, ( nightWorld.xz - lampMapBounds.xy ) * lampMapBounds.zw ).a * ${FLOOR_RANGE.toFixed(1)};
+    float aboveFloor = nightWorld.y - lampFloor;
+    irradiance += lampLight * nightLightAt( lampMap, lampMapBounds, ${(REACH * 0.6).toFixed(2)}, nightWorld, nightNormal )
+      * smoothstep( ${(LAMP_HEIGHT + 3).toFixed(1)}, ${(LAMP_HEIGHT - 0.5).toFixed(1)}, aboveFloor )
+      * ( lampFloor > 0.5 ? smoothstep( -1.5, -0.5, aboveFloor ) : 1.0 );
+  }
   if ( headlightLight.r > 0.0 ) {
     vec2 beams = nightLightsAt( headlightMap, headlightMapBounds, ${HEADLIGHT_TILT.toFixed(1)}, nightWorld, nightNormal );
     irradiance += ( headlightLight * beams.x + taillightLight * beams.y ) * smoothstep( ${HEADLIGHT_HEIGHT.toFixed(1)}, 0.8, nightWorld.y );
@@ -127,7 +135,7 @@ if ( lampLight.r > 0.0 || headlightLight.r > 0.0 ) {
 `;
 
 // ---------------------------------------------------------------- painting the map
-// The lamps are the ones put down by hand and the ones standing round the plazas, and the light's the lit lobbies'
+// The lamps are the ones put down by hand and the ones standing round the plazas and along raised walkways, and the light's the lit lobbies'
 // too. The map's redone only when one of them is put down, moved, resized or taken away: each frame just compares
 // where they all are. (A plaza's lamps and a building's lobby don't move without it being built again, so which of
 // them there are is enough to go on.)
@@ -139,7 +147,7 @@ function paintLampMap() {
     + '|' + lampPostMeshes.map(m => m.id).join(',') + '|' + litLobbies.map(m => m.id).join(',');
   if (key === paintedAs) return anyLamps;
   paintedAs = key;
-  const lamps = [...placed, ...lampPostMeshes.flatMap(m => m.userData.lampPosts.map(p => ({ x: p.x, z: p.z, scale: 1 })))];
+  const lamps = [...placed, ...lampPostMeshes.flatMap(m => m.userData.lampPosts.map(p => ({ x: p.x, z: p.z, scale: 1, y: p.y || 0 })))];
   anyLamps = lamps.length > 0 || litLobbies.length > 0;
   if (!anyLamps) return false;
   let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
@@ -156,7 +164,7 @@ function paintLampMap() {
   const texel = Math.max(TEXEL, (maxX - minX)/(MAX_TEXELS - 2), (maxZ - minZ)/(MAX_TEXELS - 2));
   minX -= texel; minZ -= texel;
   const w = Math.ceil((maxX - minX)/texel) + 2, h = Math.ceil((maxZ - minZ)/texel) + 2;
-  const light = new Float32Array(w*h*3);
+  const light = new Float32Array(w*h*3), floor = new Float32Array(w*h), brightest = new Float32Array(w*h);
   lamps.forEach(o => {
     const r = REACH*o.scale;
     const x0 = Math.max(0, Math.floor((o.x - r - minX)/texel)), x1 = Math.min(w - 1, Math.ceil((o.x + r - minX)/texel));
@@ -164,14 +172,17 @@ function paintLampMap() {
     for (let j = z0; j <= z1; j++) for (let i = x0; i <= x1; i++) {
       const dx = minX + (i + 0.5)*texel - o.x, dz = minZ + (j + 0.5)*texel - o.z;
       const d = Math.sqrt(dx*dx + dz*dz)/r;
-      if (d < 1) { const f = 1 - d; addLight(light, j*w + i, LAMP_COLOR, 0.6*f*f*(3 - 2*f)); } // a broad pool, softening to nothing at the edge
+      if (d >= 1) continue;
+      const f = 1 - d, amount = 0.6*f*f*(3 - 2*f), k = j*w + i; // a broad pool, softening to nothing at the edge
+      addLight(light, k, LAMP_COLOR, amount);
+      if (amount > brightest[k]) { brightest[k] = amount; floor[k] = o.y || 0; }
     }
   });
   litLobbies.forEach(m => paintSpill(light, w, h, minX, minZ, texel, m.userData.footprint, m.userData.lobbyColor || LAMP_COLOR, LOBBY_BRIGHTNESS*m.userData.lobbyLight));
   const data = new Uint8Array(w*h*4);
   for (let k = 0; k < w*h; k++) {
     for (let c = 0; c < 3; c++) data[k*4 + c] = Math.min(255, Math.round(light[k*3 + c]*255));
-    data[k*4 + 3] = 255;
+    data[k*4 + 3] = Math.min(255, Math.round(floor[k]/FLOOR_RANGE*255));
   }
   if (lampMap.image.width !== w || lampMap.image.height !== h) lampMap.dispose(); // a new size needs a new texture
   lampMap.image = { data, width: w, height: h };
