@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S } from '../core/shared.js';
-import { Y_PATH } from '../core/scene.js';
+import { Y_PATH, computeWindowGlowFactor } from '../core/scene.js';
 import { mulberry32 } from '../core/math.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
@@ -12,14 +12,15 @@ import { makeTreeMesh } from '../zones/surface-detail.js';
 // ---------------------------------------------------------- raised walkways
 // A walkway up on pillars: a concrete deck at the line's own height, a ledge along both sides, and a spiral ramp down to
 // the ground at each end of the network — and beside any node set to 'ramp' (from its right-click menu). Optionally,
-// trees in planters and benches along it. Nothing under it is cut or covered: it's a thing standing in the city, so
+// trees in planters, benches and lamp posts along it. Nothing under it is cut or covered: it's a thing standing in the city, so
 // only its pillars and ramps (and the deck's shadow on the map) keep lots and trees off (see pathFootprint).
-export const RAISED_HEIGHT = 6, MIN_RAISED_HEIGHT = 3, MAX_RAISED_HEIGHT = 20;
+export const RAISED_HEIGHT = 6, MIN_RAISED_HEIGHT = 3, MAX_RAISED_HEIGHT = 60;
 export const RAISED_STRUCTURE_COLOR = 0xb9b5ab;
 const DECK_THICKNESS = 0.45;
 const LEDGE_WIDTH = 0.6, LEDGE_HEIGHT = 1.0;
 const PILLAR_SPACING = 16, PILLAR_HALF = 0.4;
 const FURNITURE_SPACING = 10;
+const LAMP_SPACING = 18, LAMP_POST_HEIGHT = 3.4; // (standing on the ledge, so its globe ends up about as high over the deck as a street's)
 const RAMP_STEP = 0.7; // how far apart, along its middle, the ramp's slices are
 
 export function isRaisedWalkwayLine(line) { return line.roadType === 'raised'; }
@@ -210,21 +211,21 @@ export function buildRaisedWalkway(lines, networkId) {
   // and under each end of the deck, just short of where its ramp takes over
   ends.forEach(({ E, h }) => pillarOffsets.forEach(s => { const nr = perp(h); pillar(E.x - h.x*1.2 + nr.x*s, E.z - h.z*1.2 + nr.z*s, h); }));
 
-  // ---- trees and benches, along each line on alternate sides, clear of the ends, junctions and ramps
+  // ---- trees, benches and lamp posts, along each line on alternate sides, clear of the ends, junctions and ramps
   const trees = new THREE.Group();
   trees.name = 'RaisedTrees';
   const withTrees = !!line.raisedTrees, withBenches = !!line.raisedBenches, room = hw - LEDGE_WIDTH;
+  const nodesBy = [...degree.entries()].map(([id, deg]) => ({ node: roadNodes[id], deg }));
+  const clear = p => nodesBy.every(({ node, deg }) => {
+    const d = Math.hypot(p.x - node.x, p.z - node.z);
+    if (deg === 1) return d > 4;
+    if (node.ramp) return d > rw + 3;
+    if (deg >= 3) return d > hw + 3;
+    return true;
+  });
   let furnitureSpots = 0;
   if ((withTrees || withBenches) && room >= 1.2) {
     const rng = mulberry32(((parseInt(String(networkId).replace(/\D/g, ''), 10) || 0)*7919 + 17) >>> 0);
-    const nodesBy = [...degree.entries()].map(([id, deg]) => ({ node: roadNodes[id], deg }));
-    const clear = p => nodesBy.every(({ node, deg }) => {
-      const d = Math.hypot(p.x - node.x, p.z - node.z);
-      if (deg === 1) return d > 4;
-      if (node.ramp) return d > rw + 3;
-      if (deg >= 3) return d > hw + 3;
-      return true;
-    });
     const planterHalf = Math.min(0.9, room*0.35), seatTop = H + 0.45;
     polylines.forEach(({ tess }) => walk(tess, FURNITURE_SPACING, 0.5, (p, t, k) => {
       if (!clear(p)) return;
@@ -246,6 +247,20 @@ export function buildRaisedWalkway(lines, networkId) {
         [-0.8, 0.8].forEach(l => furniture.addBox(x + t.x*l, z + t.z*l, t.x, t.z, 0.05, 0.22, H, seatTop - 0.1)); // legs
       }
     }));
+  }
+
+  // lamp posts on the ledges, a side at a time, lighting the deck after dark as a street's do (see streetlights.js)
+  const lampHeads = createMeshBuilder(), lampPosts = [];
+  if (line.raisedLights) {
+    const globe = new THREE.IcosahedronGeometry(0.3, 1), o = hw - LEDGE_WIDTH/2, foot = H + LEDGE_HEIGHT;
+    polylines.forEach(({ tess }) => walk(tess, LAMP_SPACING, 0.25, (p, t, k) => {
+      if (!clear(p)) return;
+      const nr = perp(t), side = k % 2 ? -1 : 1, x = p.x + nr.x*o*side, z = p.z + nr.z*o*side;
+      furniture.addBox(x, z, t.x, t.z, 0.08, 0.08, foot, foot + LAMP_POST_HEIGHT);
+      lampHeads.addGeometry(globe, x, foot + LAMP_POST_HEIGHT + 0.25, z);
+      lampPosts.push({ x, z, y: H });
+    }));
+    globe.dispose();
   }
 
   // ---- meshes
@@ -278,6 +293,15 @@ export function buildRaisedWalkway(lines, networkId) {
     mesh.castShadow = true; mesh.receiveShadow = true;
     mesh.name = 'RaisedFurniture';
     mesh.userData = { networkId, baseColor: 0x4a4d52 };
+    objects.push(mesh);
+  }
+  const headGeo = lampHeads.build();
+  if (headGeo) {
+    const glow = new THREE.MeshStandardMaterial({ color: 0xfff1d6, roughness: 0.4, emissive: 0xffd08a, emissiveIntensity: 1.6*computeWindowGlowFactor(S.sunElevation) });
+    glow.userData.baseEmissiveIntensity = 1.6; // lit after dark (see updateWindowGlowForSun)
+    const mesh = new THREE.Mesh(headGeo, glow);
+    mesh.name = 'RaisedLamps';
+    mesh.userData = { networkId, baseColor: 0xfff1d6, lampPosts }; // where they stand, and how high, for the light they throw
     objects.push(mesh);
   }
   if (trees.children.length) objects.push(trees);

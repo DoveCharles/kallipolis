@@ -812,7 +812,8 @@ function renderDetails() {
       <div class="slider-row"><div class="row"><label>Height</label><span class="val" id="dv-raisedheight">${raisedHeightOf(lines[0])} m</span></div>
         <input type="range" id="ds-raisedheight" min="${MIN_RAISED_HEIGHT}" max="${MAX_RAISED_HEIGHT}" step="0.5" value="${raisedHeightOf(lines[0])}"></div>
       <div class="row"><label>Trees</label><button class="toggle-switch ${lines[0].raisedTrees?'on':''}" id="ds-raisedtrees"><span class="knob"></span></button></div>
-      <div class="row" style="margin-bottom:8px;"><label>Benches</label><button class="toggle-switch ${lines[0].raisedBenches?'on':''}" id="ds-raisedbenches"><span class="knob"></span></button></div>
+      <div class="row"><label>Benches</label><button class="toggle-switch ${lines[0].raisedBenches?'on':''}" id="ds-raisedbenches"><span class="knob"></span></button></div>
+      <div class="row" style="margin-bottom:8px;"><label>Streetlights</label><button class="toggle-switch ${lines[0].raisedLights?'on':''}" id="ds-raisedlights"><span class="knob"></span></button></div>
       <div class="empty" style="margin:0 0 10px;">A spiral ramp leads down at each end. Right-click a node along it to add one there too.</div>
       ` : ''}
       ${App.walkwayTextureCarouselHtml(curWalkwayTexture, curWalkwayColor)}
@@ -847,7 +848,7 @@ function renderDetails() {
         lines.forEach(l => { l.raisedHeight = parseFloat(height.value); });
         rebuildRoadMeshes();
       });
-      [['raisedtrees', 'raisedTrees'], ['raisedbenches', 'raisedBenches']].forEach(([id, key]) => document.getElementById('ds-'+id).addEventListener('click', () => {
+      [['raisedtrees', 'raisedTrees'], ['raisedbenches', 'raisedBenches'], ['raisedlights', 'raisedLights']].forEach(([id, key]) => document.getElementById('ds-'+id).addEventListener('click', () => {
         const on = !lines[0][key];
         lines.forEach(l => { l[key] = on; });
         rebuildRoadMeshes(); renderDetails();

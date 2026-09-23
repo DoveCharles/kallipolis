@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, sun, sunOffset, updateSun } from '../core/scene.js';
+import { scene, sun, sunOffset, updateSun, skyDome } from '../core/scene.js';
 import { controls } from '../core/camera-controls.js';
 import { mulberry32 } from '../core/math.js';
 import { syncSkyUI } from './day-night.js';
@@ -9,9 +9,9 @@ import { syncSkyUI } from './day-night.js';
 // Rain and snow fall through a box of air around wherever the camera's looking — sized to how far out it's zoomed, and
 // anchored to the world, so the drops don't slide along as the view moves (they wrap round the box instead). Each drop's
 // place comes straight from its random seed and the clock, so there's nothing to simulate. Rain is streaks slanting a little
-// in the wind; snow is soft flakes swaying as they drift down. Cloud shadows come from an invisible layer of cloud high over
-// the city: it takes part only in the sun's shadow map, where a tiling noise texture cuts it into cloud shapes (more of
-// them the higher the setting), drifting with the wind. Rain and snow also dim the light and grey the sky (see updateSun).
+// in the wind; snow is soft flakes swaying as they drift down. Cloud shadows come from a tiling noise texture, a layer of
+// cloud high over the city (more of it cloud the higher the setting), drifting with the wind (see cloudShade). Rain and
+// snow also dim the light and grey the sky (see updateSun).
 const RAIN_MAX = 6000, SNOW_MAX = 8000;
 const RAIN_SPEED = 55, SNOW_SPEED = 4;
 const rainSeeds = Float32Array.from({ length: RAIN_MAX*3 }, () => Math.random());
@@ -52,27 +52,42 @@ const cloudTexture = (() => {
   ctx.putImageData(image, 0, 0);
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(5, 5);
   return texture;
 })();
-const CLOUD_LAYER_SIZE = 4800, CLOUD_TILES = 10; // the pattern repeats every CLOUD_LAYER_SIZE/CLOUD_TILES units
-const cloudShadowMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, alphaMap: cloudTexture, alphaTest: 0.6 });
-// never seen, only its shadow — its own material carries the pattern too, since the shadow pass may take it from there
-cloudTexture.repeat.set(CLOUD_TILES, CLOUD_TILES);
-const cloudLayer = new THREE.Mesh(new THREE.PlaneGeometry(CLOUD_LAYER_SIZE, CLOUD_LAYER_SIZE).rotateX(-Math.PI/2),
-  new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide, alphaMap: cloudTexture, alphaTest: 0.6 }));
-cloudLayer.customDepthMaterial = cloudShadowMaterial;
-cloudLayer.position.y = 140;
-cloudLayer.castShadow = true;
-cloudLayer.frustumCulled = false;
-cloudLayer.visible = false;
-cloudLayer.name = 'CloudShadows';
-scene.add(cloudLayer);
+// Cloud shadows are worked out in every lit material, not in the shadow map: each point looks up the sun's direction to
+// where that ray meets a layer of cloud CLOUD_HEIGHT up, and the pattern there says how much of the sun gets through.
+// So they reach as far as the eye can see (the shadow map only covers a box round the view), with soft edges, for one
+// texture read a pixel. It goes in through three.js's shader chunks, like the streetlights (see streetlights.js).
+const CLOUD_TILE = 480, CLOUD_HEIGHT = 140; // metres the pattern takes to repeat, and how high the clouds are
+const CLOUD_SHADE = 0.8;                    // how much of the sun a thick cloud keeps off
+cloudTexture.clone = function () { return this; }; // (one texture shared by every material — see SharedTexture in streetlights.js)
+// the pattern's drift (x, z), 1/CLOUD_TILE, and where the pattern turns to cloud (0 for no clouds at all)
+class SharedVector4 extends THREE.Vector4 { clone() { return this; } }
+const cloudParams = new SharedVector4(0, 0, 1/CLOUD_TILE, 0);
+const cloudUniforms = { cloudMap: { value: cloudTexture }, cloudParams: { value: cloudParams } };
+['standard', 'physical', 'lambert', 'phong', 'toon'].forEach(id => Object.assign(THREE.ShaderLib[id].uniforms, cloudUniforms));
+THREE.ShaderChunk.lights_pars_begin += /* glsl */`
+#if NUM_DIR_LIGHTS > 0
+uniform sampler2D cloudMap;
+uniform vec4 cloudParams;
+// how much of the light coming from \`toLight\` (a direction in view space) gets through the clouds to this point
+float cloudShade( vec3 viewPosition, vec3 toLight ) {
+  if ( cloudParams.w <= 0.0 ) return 1.0;
+  vec3 world = viewPosition * mat3( viewMatrix ) + cameraPosition;
+  vec3 dir = toLight * mat3( viewMatrix );
+  vec2 above = world.xz + dir.xz * ( ${CLOUD_HEIGHT.toFixed(1)} - world.y ) / max( dir.y, 0.05 );
+  float density = texture2D( cloudMap, above * cloudParams.z + cloudParams.xy ).r;
+  return 1.0 - ${CLOUD_SHADE.toFixed(2)} * smoothstep( cloudParams.w - 0.07, cloudParams.w + 0.09, density );
+}
+#endif
+`;
+THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begin.replace(
+  'getDirectionalLightInfo( directionalLight, directLight );',
+  'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= cloudShade( geometryPosition, directLight.direction );');
 // Shadows come from a shadow map rendered from the sun, which only covers the box its shadow camera sees. Rather than a
 // fixed box around the middle of the map, the light and its shadow camera follow the view every frame — centered on what
 // the camera's looking at, and sized to how far out it's zoomed (so zoomed out, the same map covers more ground, a little
-// softer). The box moves in whole shadow-map texels, so shadows don't shimmer as the view pans. The cloud layer follows
-// along too, in whole tiles of its pattern, so the clouds themselves stay where they are.
+// softer). The box moves in whole shadow-map texels, so shadows don't shimmer as the view pans.
 export function placeSunLight() {
   const half = Math.round(THREE.MathUtils.clamp(controls.radius*1.6, 150, 1500)/10)*10, shadowCamera = sun.shadow.camera;
   if (shadowCamera.right !== half) {
@@ -84,20 +99,11 @@ export function placeSunLight() {
   sun.target.position.set(x, 0, z);
   sun.target.updateMatrixWorld();
   sun.position.set(x + sunOffset.x, sunOffset.y, z + sunOffset.z);
-  if (cloudLayer.visible) {
-    const tile = CLOUD_LAYER_SIZE/CLOUD_TILES;
-    cloudLayer.position.x = Math.round(controls.target.x/tile)*tile;
-    cloudLayer.position.z = Math.round(controls.target.z/tile)*tile;
-  }
 }
 function setWeather(kind, value) {
   if (kind === 'rain') S.weatherRain = value; else if (kind === 'snow') S.weatherSnow = value; else S.weatherClouds = value;
-  cloudLayer.visible = S.weatherClouds > 0;
   // more cover lets more of the pattern through as cloud
-  const threshold = +THREE.MathUtils.lerp(0.72, 0.36, S.weatherClouds).toFixed(2);
-  [cloudShadowMaterial, cloudLayer.material].forEach(material => {
-    if (material.alphaTest !== threshold) { material.alphaTest = threshold; material.needsUpdate = true; }
-  });
+  cloudParams.w = S.weatherClouds > 0 ? THREE.MathUtils.lerp(0.72, 0.36, S.weatherClouds) : 0;
   updateSun();
   syncSkyUI();
 }
@@ -129,7 +135,8 @@ export function updateWeather(t) {
     snowGeo.setDrawRange(0, count);
     snowGeo.attributes.position.needsUpdate = true;
   }
-  if (cloudLayer.visible) cloudTexture.offset.set(t*0.0035, t*0.0018);
+  cloudParams.x = t*0.0035; cloudParams.y = t*0.0018;
+  skyDome.material.uniforms.time.value = t;
 }
 
 Object.assign(App, { setWeather });

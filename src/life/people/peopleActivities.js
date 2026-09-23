@@ -6,7 +6,7 @@ import { placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint }
 import * as THREE from 'three';
 import { controls } from '../../core/camera-controls.js';
 import { profileOf, profilesVersion } from '../profiles.js';
-import { carriageSpot, getTrainShuttles, getTrainStations, trainStationsVersion } from '../../trains/trains.js';
+import { carriageSpot, getTrainShuttles, holdTrain, getTrainStations, trainStationsVersion } from '../../trains/trains.js';
 import { isBloodlusting, punchSpill } from './peopleBlood.js';
 import { puffSmoke } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
@@ -805,30 +805,111 @@ export function updateTrainRider(p, i, dt) {
     p.x = at.x; p.y = at.y; p.z = at.z; p.heading = at.yaw + ride.spot.turn;
     const stop = shuttle.arrived && getTrainStations().get(shuttle.stopNode);
     if (stop && stationLinks().ground.has(stop.nodeId) && (stop.networkStations <= 2 || peopleRng() < 1/stop.networkStations || ride.timer > TRAIN_RIDE_MAX)) {
-      // off here: back onto the platform, beside the track, to walk out the way they'd have come in
-      ride.node = stop.nodeId; ride.stage = 'exit'; ride.side = peopleRng() < 0.5 ? -1 : 1; ride.timer = 0;
-      const out = stop.spot(ride.side*(stop.radius + 0.8), (peopleRng()*2 - 1)*Math.min(2, stop.alongMax));
-      p.x = out.x; p.y = out.y; p.z = out.z;
-      p.heading = headingTo(p, stop.spot(ride.side*stop.landing, 0));
-      ride.target = stop.spot(ride.side*stop.landing, 0);
+      // off here: out through the carriage's door onto the platform, beside the track, to walk out the way they'd have
+      // come in
+      ride.node = stop.nodeId; ride.stage = 'alight'; ride.side = peopleRng() < 0.5 ? -1 : 1; ride.timer = 0;
+      const door = carriageDoor(shuttle, stop, ride.side);
+      ride.door = door.inside;
+      ride.route = [door.inside, door.outside, stop.spot(ride.side*(stop.radius + 1.6), (peopleRng()*2 - 1)*Math.min(2, stop.alongMax))];
+      ride.target = ride.route.shift();
       gotOff(p, i);
+      return ride.target;
     }
     return null;
   }
+  if (ride.stage === 'alight') {
+    // (the carriage waits until they're off: see holdTrain)
+    if (ride.route.length) holdTrain(ride.lineId);
+    if (!reached()) return underfoot(p, ride);
+    const shuttle = ride.route.length === 2 && getTrainShuttles().find(s => s.lineId === ride.lineId);
+    if (shuttle && shuttle.stopNode === ride.node && shuttle.doors < 2) return underfoot(p, ride); // (at the door, until it's open)
+    if (ride.route.length) { ride.target = ride.route.shift(); return underfoot(p, ride); }
+    const out = getTrainStations().get(ride.node);
+    if (!out) { dropToGround(p); return null; }
+    ride.stage = 'exit'; ride.route = null;
+    ride.target = out.spot(ride.side*out.landing, 0);
+    return underfoot(p, ride);
+  }
+  if (ride.stage === 'board') {
+    // in through the carriage's door to somewhere to stand — the carriage waiting for them (see holdTrain), unless it's
+    // waited as long as it will: then they're aboard if they'd got in, or back to waiting if not
+    const shuttle = getTrainShuttles().find(s => s.lineId === ride.lineId);
+    if (!shuttle || shuttle.stopNode !== ride.node) {
+      if (shuttle && ride.inside) return aboard(p, i, shuttle);
+      ride.stage = 'wait'; ride.timer = 0; ride.lineId = null;
+      return null;
+    }
+    holdTrain(ride.lineId);
+    if (!reached()) return underfoot(p, ride);
+    if (ride.route.length === 2 && shuttle.doors < 2) return underfoot(p, ride); // (at the door, until it's open)
+    if (!ride.route.length) return aboard(p, i, shuttle);
+    ride.inside = ride.route.length === 2; // (past the door, from here on)
+    ride.target = ride.route.shift();
+    return underfoot(p, ride);
+  }
   if (!st) { dropToGround(p); return null; } // (the station's gone from under them)
+  // anyone by one of its doorways, on the way in or out, has its doors slide open for them
+  [1, -1].forEach(side => { const d = st.spot(side*st.halfW, 0); if (Math.hypot(d.x - p.x, d.z - p.z) < 2.6 && Math.abs(d.y - p.y) < 1.5) st.openDoor(side); });
+  const lift = ride.lift && st.lifts.find(l => l.side === ride.side);
+  if (ride.lift && !lift) { landAtStation(p, ride.node); return null; } // (the station's come down to the ground under them)
   if (ride.stage === 'approach') {
     if (!reached()) return ride.target;
-    // up onto the landing outside whichever of its doors is nearer
+    // to whichever of its doors is nearer: up in its lift if it has them, walking straight up onto a landing that's
+    // on the ground, or up onto the landing in a step
     const plus = st.spot(st.landing, 0), minus = st.spot(-st.landing, 0);
     ride.side = Math.hypot(plus.x - p.x, plus.z - p.z) <= Math.hypot(minus.x - p.x, minus.z - p.z) ? 1 : -1;
     const landing = ride.side > 0 ? plus : minus;
+    const byLift = st.lifts.find(l => l.side === ride.side);
+    if (byLift) {
+      ride.lift = { from: 'bottom', to: 'top' };
+      ride.stage = 'liftWait';
+      ride.target = byLift.spot(LIFT_WAIT_OUT, (peopleRng()*2 - 1)*0.6, byLift.bottom);
+      return ride.target;
+    }
+    if (Math.abs(landing.y - p.y) < 0.8) { ride.stage = 'toLanding'; ride.target = landing; return ride.target; }
     p.x = landing.x; p.y = landing.y; p.z = landing.z;
-    ride.stage = 'enter';
-    ride.along = (peopleRng()*2 - 1)*st.alongMax;
-    ride.target = st.spot(ride.side*(st.radius + 0.8 + peopleRng()*1.2), ride.along);
-    return ride.target;
+    return onLanding(p, st);
   }
+  if (ride.stage === 'toLanding') return reached() ? onLanding(p, st) : ride.target;
+  if (ride.stage === 'liftWait') {
+    // at the lift's doorway, calling it, until it's there with its doorway open — then in
+    lift.call(ride.lift.from);
+    if (!reached()) return ride.target;
+    if (!lift.openAt(ride.lift.from)) { p.faceTo = headingTo(p, lift.spot(0, 0, 0)); return null; }
+    p.faceTo = null;
+    ride.stage = 'liftIn';
+    ride.target = lift.spot((peopleRng()*2 - 1)*0.45, (peopleRng()*2 - 1)*(lift.width - 0.6), ride.lift.from === 'top' ? lift.top : lift.bottom);
+  }
+  if (ride.stage === 'liftIn') {
+    lift.call(ride.lift.to);
+    if (!lift.openAt(ride.lift.from)) { ride.stage = 'liftRide'; return null; } // (it's gone: carried along from wherever they'd got to)
+    lift.wait();
+    if (!reached()) return ride.target;
+    ride.stage = 'liftRide';
+    // facing the doorway they'll step out of
+    p.faceTo = headingTo(p, ride.lift.to === 'top' ? st.spot(0, 0) : lift.spot(5, 0, 0));
+  }
+  if (ride.stage === 'liftRide') {
+    lift.call(ride.lift.to);
+    p.y = lift.y;
+    if (!lift.openAt(ride.lift.to)) return null;
+    p.faceTo = null;
+    ride.stage = 'liftOut';
+    ride.target = ride.lift.to === 'top' ? st.spot(ride.side*st.landing, 0) : lift.spot(LIFT_WAIT_OUT + 0.6, (peopleRng()*2 - 1)*0.8, lift.bottom);
+  }
+  if (ride.stage === 'liftOut') {
+    if (lift.openAt(ride.lift.to)) lift.wait();
+    if (!reached()) return ride.target;
+    const up = ride.lift.to === 'top';
+    ride.lift = null;
+    if (up) return onLanding(p, st);
+    return leaveOnFoot(p, st);
+  }
+  if (ride.stage === 'leave') return reached() ? (landAtStation(p, ride.node, true), null) : ride.target;
   if (ride.stage === 'enter') {
+    // (anyone on their way in to wait, while a carriage is stopped here, is waited for too)
+    const here = getTrainShuttles().find(s => s.stopNode === ride.node && st.lineIds.includes(s.lineId));
+    if (here) holdTrain(here.lineId);
     if (!reached()) return ride.target;
     ride.stage = 'wait'; ride.timer = 0;
     p.faceTo = headingTo(p, st.spot(0, ride.along)); // (towards the track)
@@ -837,11 +918,16 @@ export function updateTrainRider(p, i, dt) {
   if (ride.stage === 'wait') {
     const shuttle = getTrainShuttles().find(s => s.stopNode === ride.node && st.lineIds.includes(s.lineId));
     if (shuttle) {
-      // aboard
+      // over to its door, and in
       p.faceTo = null; p.oneShot = null;
-      ride.stage = 'ride'; ride.lineId = shuttle.lineId; ride.timer = 0;
+      ride.stage = 'board'; ride.lineId = shuttle.lineId; ride.timer = 0; ride.inside = false;
       ride.spot = placeAboard();
-      if (followed === i) { stopFollowingPerson(); App.followTrainLine?.(shuttle.lineId); setRiderFollowed(i); }
+      const door = carriageDoor(shuttle, st, ride.side);
+      ride.door = door.inside;
+      ride.route = [door.inside, carriageSpot(shuttle, ride.spot.across, ride.spot.along)];
+      ride.target = door.outside;
+      holdTrain(ride.lineId);
+      return ride.target;
     } else if (ride.timer > TRAIN_WAIT_MAX) {
       // fed up of waiting: back out
       p.faceTo = null;
@@ -849,10 +935,111 @@ export function updateTrainRider(p, i, dt) {
     }
     return null;
   }
-  // 'exit': out to the landing, then down to the station's foot
+  // 'exit': out to the landing, then down to the station's foot — in its lift if it has one this side, walking off
+  // a landing that's on the ground, or down off it in a step
   if (!reached()) return ride.target;
+  const down = st.lifts.find(l => l.side === ride.side);
+  if (down) {
+    ride.lift = { from: 'top', to: 'bottom' };
+    ride.stage = 'liftWait';
+    ride.target = st.spot(ride.side*(st.halfW + 1.2), (peopleRng()*2 - 1)*0.8);
+    return ride.target;
+  }
+  if (Math.abs(ride.target.y - (stationFoot(ride.node)?.y ?? ride.target.y)) < 0.8) return leaveOnFoot(p, st);
   landAtStation(p, ride.node);
   return null;
+}
+
+/** How far out from the middle of a lift's shaft people wait for it at the ground. */
+const LIFT_WAIT_OUT = 2;
+
+/**
+ * Someone just up onto a station's landing (ride.side's): on in through its doors, to somewhere along the platform.
+ * @param {Person} p - the person
+ * @param {*} st - the station
+ * @returns {{x: number, y: number, z: number}} where they should walk to
+ */
+function onLanding(p, st) {
+  const ride = p.train;
+  ride.stage = 'enter';
+  ride.along = (peopleRng()*2 - 1)*st.alongMax;
+  ride.target = st.spot(ride.side*(st.radius + 0.8 + peopleRng()*1.2), ride.along);
+  return ride.target;
+}
+
+/**
+ * Where on the ground a station leads to (see stationLinks): the walkway point by it, or the station's own spot in the
+ * hangout it stands in — or null if it leads nowhere.
+ * @param {*} node - the station's node id
+ * @returns {?{x: number, y: number, z: number}} the spot
+ */
+function stationFoot(node) {
+  const foot = stationLinks().ground.get(node), st = getTrainStations().get(node);
+  if (!foot || !st) return null;
+  if (foot.vertex) {
+    // (the walkway's points are only x/z: its height is the line's, or the ramp's at that point)
+    const line = peopleNav.lines[foot.vertex.li], q = line.pts[foot.vertex.vi];
+    return { x: q.x, y: line.ys ? line.ys[foot.vertex.vi] : line.y, z: q.z };
+  }
+  return { x: st.x, y: peopleNav.areas[foot.area].y, z: st.z };
+}
+
+/**
+ * Someone back on the ground by a station (out of its lift, or off a landing that's on the ground): walking over to the
+ * walkway it leads to — or, standing in a hangout, just carrying on about it from where they are.
+ * @param {Person} p - the person
+ * @param {*} st - the station
+ * @returns {?{x: number, y: number, z: number}} where they should walk to
+ */
+function leaveOnFoot(p, st) {
+  const foot = stationLinks().ground.get(st.nodeId);
+  if (!foot || !foot.vertex) { landAtStation(p, st.nodeId, true); return null; }
+  p.train.stage = 'leave';
+  p.train.target = stationFoot(st.nodeId);
+  return p.train.target;
+}
+
+/**
+ * Someone who's walked into a carriage (or was far enough in when it left): riding it from here, stood where they chose.
+ * @param {Person} p - the person
+ * @param {number} i - their index in people
+ * @param {*} shuttle - the carriage's shuttle
+ * @returns {null} (aboard, they're placed rather than walking)
+ */
+function aboard(p, i, shuttle) {
+  const ride = p.train;
+  ride.stage = 'ride'; ride.timer = 0; ride.route = null; ride.inside = false;
+  if (followed === i) { stopFollowingPerson(); App.followTrainLine?.(shuttle.lineId); setRiderFollowed(i); }
+  return null;
+}
+
+/**
+ * A carriage's door on one side, stopped at a station: just inside it, at the edge of its standing room halfway along,
+ * and just outside it on the platform — facing the station's entrance on `side`.
+ * @param {*} shuttle - the carriage's shuttle
+ * @param {*} st - the station
+ * @param {number} side - which side of the track (as the station's entrances go)
+ * @returns {{inside: {x: number, y: number, z: number}, outside: {x: number, y: number, z: number}}} the two spots
+ */
+/**
+ * Someone crossing between a platform and a carriage's door: stood on whatever's under them there (the deck, the
+ * boarding ramp, the carriage's floor: see floorAt in trains.js), heading on for their target.
+ * @param {Person} p - the person
+ * @param {*} ride - their ride (p.train)
+ * @returns {{x: number, y: number, z: number}} where they should walk to
+ */
+function underfoot(p, ride) {
+  const st = getTrainStations().get(ride.node);
+  if (!st || !ride.door) return ride.target;
+  p.y = st.floorAt(p.x, p.z, ride.door);
+  return { x: ride.target.x, y: p.y, z: ride.target.z };
+}
+
+function carriageDoor(shuttle, st, side) {
+  const outside = st.spot(side*(st.radius + 0.6), 0);
+  const a = carriageSpot(shuttle, 1, 0), b = carriageSpot(shuttle, -1, 0);
+  const inside = Math.hypot(a.x - outside.x, a.z - outside.z) < Math.hypot(b.x - outside.x, b.z - outside.z) ? a : b;
+  return { inside: { x: inside.x, y: inside.y, z: inside.z }, outside };
 }
 
 /**
@@ -881,12 +1068,13 @@ function gotOff(p, i) {
 
 /**
  * Bring someone down from a station's landing to its foot: onto the walkway there (heading either way), or into the
- * hangout it's in.
+ * hangout it's in — or, already down on the ground (`walked`), carrying on about the hangout from where they are.
  * @param {Person} p - the person
  * @param {*} node - the station's node id
+ * @param {boolean} [walked] - whether they're already on the ground there
  * @returns {void}
  */
-function landAtStation(p, node) {
+function landAtStation(p, node, walked = false) {
   const foot = stationLinks().ground.get(node), st = getTrainStations().get(node);
   p.train = null;
   p.faceTo = null;
@@ -898,7 +1086,8 @@ function landAtStation(p, node) {
   } else if (foot) {
     const area = peopleNav.areas[foot.area];
     wanderInto(p, foot.area, st);
-    p.x = p.tx; p.z = p.tz; p.y = area.y;
+    if (!walked) { p.x = p.tx; p.z = p.tz; }
+    p.y = area.y;
   } else {
     p.mode = 'line';
     dropToGround(p);

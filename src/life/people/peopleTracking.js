@@ -105,8 +105,10 @@ export function personDoing(p) {
   if (p.please) return p.please.stage === 'held' ? 'Delighted' : 'Watching, delighted';
   if (p.mode === 'train' && p.train) {
     const stage = p.train.stage;
-    return stage === 'approach' ? 'Off to the station' : stage === 'enter' ? 'Onto the platform' : stage === 'wait' ? 'Waiting for a train'
-      : stage === 'ride' ? 'On a train' : 'Leaving the station';
+    const going = !!p.train.lift && p.train.lift.to === 'top';
+    return stage === 'approach' || stage === 'toLanding' ? 'Off to the station' : stage === 'enter' ? 'Onto the platform' : stage === 'wait' ? 'Waiting for a train'
+      : stage === 'ride' ? 'On a train' : stage === 'board' ? 'Getting on the train' : stage === 'alight' ? 'Getting off the train' : stage === 'liftWait' ? 'Waiting for the lift'
+      : stage === 'liftIn' || stage === 'liftRide' || stage === 'liftOut' ? (going ? 'Going up in the lift' : 'Going down in the lift') : 'Leaving the station';
   }
   if (p.mode === 'indoors' && p.indoors) {
     const label = buildingLabel(p.indoors.building), stage = p.indoors.stage;

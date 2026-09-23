@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { renderer } from '../core/scene.js';
 import { mulberry32 } from '../core/math.js';
+import { S } from '../core/shared.js';
 
-// ============================================================ pixelation and the 16-colour palette
+// ============================================================ pixelation, the 16-colour palette and the colour grade
+// The colour grade (on unless it's turned off in World settings) is the cheapest of these: the view drawn into a render
+// target of its own, anti-aliased, and copied onto the screen through the same shader, graded for the time of day.
 // Filters on the 3D view, from World settings. Pixelation draws the view small — one pixel for every so many screen pixels
 // across; the 16-colour palette redraws it in sixteen colours or fewer (Windows 3.0's or another set, from the Palette menu),
 // dithering (in a pattern picked from the Dithering menu, or by Floyd–Steinberg error diffusion) to fake the shades in between. With either on, the view is drawn into a render target of its own,
@@ -11,7 +14,7 @@ import { mulberry32 } from '../core/math.js';
 // edges. So pixelating is cheaper to draw, not dearer, and the palette is one pass over the screen. Like the Windows 3.0
 // look, these are the browser's preferences, kept in localStorage, not the project's.
 const PIXELATION_KEY = 'splinetopia.pixelation', PALETTE_KEY = 'splinetopia.palette16', PALETTE_COLORS_KEY = 'splinetopia.paletteColors';
-const DITHER_KEY = 'splinetopia.dither';
+const DITHER_KEY = 'splinetopia.dither', GRADE_KEY = 'splinetopia.grade';
 const MAX_PIXEL_SIZE = 12;
 const SHARP_PIXEL_RATIO = Math.min(window.devicePixelRatio, 2); // (as scene.js sets it up)
 // the sets of colours, in the Palette menu's order — sixteen, or fewer (repeated round to fill the shader's sixteen)
@@ -67,7 +70,8 @@ const slider = document.getElementById('s-pixelation'), label = document.getElem
 const paletteToggle = document.getElementById('s-palette16');
 const paletteRow = document.getElementById('palette-row'), paletteMenu = document.getElementById('s-palette');
 const ditherRow = document.getElementById('dither-row'), ditherMenu = document.getElementById('s-dither');
-let pixelSize = 1, palette16 = false;
+const gradeToggle = document.getElementById('s-grade');
+let pixelSize = 1, palette16 = false, grade = true;
 
 // A tile of blue noise — every cell a different threshold, spread as evenly as can be, so a dither through it has no
 // clumps and no visible grid — by void-and-cluster: from a scattering of points evened out (the most crowded point moved to
@@ -117,6 +121,8 @@ function makeBlueNoise(size) {
 // to copy it onto the screen with
 const filteredView = new THREE.WebGLRenderTarget(1, 1, { samples: 0, depthBuffer: true, stencilBuffer: true,
   minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
+// and the view as it's drawn for the colour grade alone — full size, and anti-aliased itself, as the canvas would be
+const gradedView = new THREE.WebGLRenderTarget(1, 1, { samples: 4, depthBuffer: true, stencilBuffer: true, generateMipmaps: false });
 const placeholderNoise = new THREE.DataTexture(new Uint8Array([128]), 1, 1, THREE.RedFormat, THREE.UnsignedByteType);
 placeholderNoise.needsUpdate = true;
 const copyMaterial = new THREE.ShaderMaterial({
@@ -128,6 +134,10 @@ const copyMaterial = new THREE.ShaderMaterial({
     ditherMode: { value: DITHER_PATTERNS.findIndex(p => p.id === DEFAULT_DITHER) },
     blueNoise: { value: placeholderNoise },
     floydIndices: { value: placeholderNoise },
+    useGrade: { value: 0 },
+    shadowTint: { value: new THREE.Vector3(1, 1, 1) },
+    highlightTint: { value: new THREE.Vector3(1, 1, 1) },
+    saturation: { value: 1 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -144,7 +154,23 @@ const copyMaterial = new THREE.ShaderMaterial({
     uniform int ditherMode;
     uniform sampler2D blueNoise;
     uniform sampler2D floydIndices;
+    uniform float useGrade;
+    uniform vec3 shadowTint;
+    uniform vec3 highlightTint;
+    uniform float saturation;
     varying vec2 vUv;
+    // The colour grade: a gentle S-curve of contrast, a touch more (or less) saturation, the shadows and highlights each
+    // tinted their own way for the time of day (see gradeForSky), and the corners darkened a little.
+    vec3 colorGrade(vec3 color) {
+      color = clamp(color, 0.0, 1.0);
+      color = mix(color, color*color*(3.0 - 2.0*color), 0.18);
+      float luma = dot(color, vec3(0.299, 0.587, 0.114));
+      color = mix(vec3(luma), color, saturation);
+      color *= mix(shadowTint, highlightTint, smoothstep(0.0, 1.0, luma));
+      vec2 fromMiddle = vUv - 0.5;
+      color *= 1.0 - 0.15*smoothstep(0.4, 0.8, length(fromMiddle));
+      return color;
+    }
     // the Bayer matrix of 2^bits cells across, built up a bit at a time: each level's 2×2 [0 2; 3 1] set inside the next
     float bayer(ivec2 p, int bits) {
       int value = 0;
@@ -179,6 +205,11 @@ const copyMaterial = new THREE.ShaderMaterial({
     }
     void main() {
       vec3 color = texture2D(tView, vUv).rgb;
+      if (useGrade > 0.5) {
+        color = colorGrade(color);
+        // (a speck of noise to break up the banding in smooth gradients like the sky's — the palette dithers its own way)
+        if (usePalette < 0.5) color += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233)))*43758.5453) - 0.5)/255.0;
+      }
       if (usePalette > 0.5 && ditherMode == 8) {
         // (Floyd–Steinberg: already worked out, pixel by pixel — see floydSteinberg below)
         color = palette[int(texelFetch(floydIndices, ivec2(floor(vUv*viewSize)), 0).r*255.0 + 0.5)];
@@ -303,6 +334,37 @@ function setPaletteColors(id, save) {
   paletteMenu.value = palette.id;
   if (save) remember(PALETTE_COLORS_KEY, palette.id);
 }
+function setGrade(on, save) {
+  grade = on;
+  gradeToggle.classList.toggle('on', on);
+  copyMaterial.uniforms.useGrade.value = on ? 1 : 0;
+  if (save) remember(GRADE_KEY, on ? '1' : '0');
+}
+// The grade for the sky as it is: by day just a touch warm in the highlights and cool in the shadows (any more greys a
+// blue sky), warmer and more golden with the sun low, and at night everything but the brightest things (lamps, lit
+// windows) pushed towards blue. Grey weather takes some of the colour out.
+const ONE = new THREE.Vector3(1, 1, 1);
+const GRADE_KEYS = [
+  { e: -12, shadow: [0.9, 0.96, 1.12], highlight: [1.03, 1.0, 0.96], saturation: 0.92 },
+  { e: 0,   shadow: [0.95, 0.94, 1.06], highlight: [1.1, 1.0, 0.86], saturation: 1.12 },
+  { e: 12,  shadow: [0.96, 0.97, 1.05], highlight: [1.06, 1.01, 0.94], saturation: 1.14 },
+  { e: 35,  shadow: [0.97, 0.98, 1.03], highlight: [1.02, 1.0, 0.99], saturation: 1.15 },
+];
+function gradeForSky() {
+  const e = S.sunElevation, u = copyMaterial.uniforms;
+  let i = 0;
+  while (i < GRADE_KEYS.length - 1 && e > GRADE_KEYS[i + 1].e) i++;
+  const a = GRADE_KEYS[i], b = GRADE_KEYS[Math.min(GRADE_KEYS.length - 1, i + 1)];
+  const t = THREE.MathUtils.clamp((e - a.e)/((b.e - a.e) || 1), 0, 1);
+  const lerp3 = (v, x, y) => v.set(x[0] + (y[0] - x[0])*t, x[1] + (y[1] - x[1])*t, x[2] + (y[2] - x[2])*t);
+  lerp3(u.shadowTint.value, a.shadow, b.shadow);
+  lerp3(u.highlightTint.value, a.highlight, b.highlight);
+  const overcast = Math.min(1, S.weatherRain*0.9 + S.weatherSnow*0.6 + S.weatherClouds*0.25);
+  u.saturation.value = (a.saturation + (b.saturation - a.saturation)*t)*(1 - overcast*0.15);
+  // (and in grey weather the tints mostly wash out too)
+  u.shadowTint.value.lerp(ONE, overcast*0.6);
+  u.highlightTint.value.lerp(ONE, overcast*0.6);
+}
 function setDither(id, save) {
   const index = Math.max(0, DITHER_PATTERNS.findIndex(p => p.id === id));
   if (DITHER_PATTERNS[index].id === 'blue' && !blueNoiseTexture) {
@@ -319,10 +381,12 @@ setPixelation(Number(recall(PIXELATION_KEY)) || 1, false);
 setPalette(recall(PALETTE_KEY) === '1', false);
 setPaletteColors(recall(PALETTE_COLORS_KEY) || DEFAULT_PALETTE, false);
 setDither(recall(DITHER_KEY) || DEFAULT_DITHER, false);
+setGrade(recall(GRADE_KEY) !== '0', false);
 slider.addEventListener('input', () => setPixelation(Number(slider.value), true));
 paletteToggle.addEventListener('click', () => setPalette(!palette16, true));
 paletteMenu.addEventListener('change', () => setPaletteColors(paletteMenu.value, true));
 ditherMenu.addEventListener('change', () => setDither(ditherMenu.value, true));
+gradeToggle.addEventListener('click', () => setGrade(!grade, true));
 
 // Draws the view to the screen — straight there, or through the filters.
 // Holes cut through the view to the page behind it (where the TV in a home shows a YouTube video, as an iframe under the
@@ -344,7 +408,23 @@ function cutThrough(camera) {
   renderer.autoClear = autoClear;
 }
 export function renderView(scene, camera) {
-  if (pixelSize <= 1 && !palette16) { renderer.render(scene, camera); cutThrough(camera); return; }
+  if (pixelSize <= 1 && !palette16 && !grade) { renderer.render(scene, camera); cutThrough(camera); return; }
+  if (grade) gradeForSky();
+  if (pixelSize <= 1 && !palette16) {
+    // the grade alone: drawn full size, then copied through it
+    renderer.getDrawingBufferSize(screenSize);
+    if (gradedView.width !== screenSize.x || gradedView.height !== screenSize.y) gradedView.setSize(screenSize.x, screenSize.y);
+    copyMaterial.uniforms.tView.value = gradedView.texture;
+    copyQuad.scale.set(1, 1, 1);
+    copyQuad.position.set(0, 0, 0);
+    renderer.setRenderTarget(gradedView);
+    renderer.render(scene, camera);
+    cutThrough(camera);
+    renderer.setRenderTarget(null);
+    renderer.render(copyScene, copyCamera);
+    return;
+  }
+  copyMaterial.uniforms.tView.value = filteredView.texture;
   let width, height, coverX = 1, coverY = 1;
   const floyd = palette16 && copyMaterial.uniforms.ditherMode.value === FLOYD_STEINBERG;
   // (Floyd–Steinberg unpixelated is drawn a pixel per CSS pixel, not per device pixel — on a high-density screen that's a

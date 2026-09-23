@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { scene, camera, computeWindowGlowFactor, SKY_ENV_MAP, snapPointToGrid, apparentDistance } from '../core/scene.js';
 import { mergeGeometryList } from '../buildings/windows.js';
+import { createRegionTester } from '../zones/cutouts.js';
 import { roadNodes } from '../core/state.js';
 import { disposeObject } from '../roads/roads.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
@@ -11,7 +12,7 @@ import { IS_TOUCH } from '../core/device.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
-import { updateShuttleSounds } from '../audio/maglev.js';
+import { updateShuttleSounds, doorSwish } from '../audio/maglev.js';
 
 // ---------------------------------------------------------- the carriage card
 // Which carriage the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the car's: its
@@ -77,7 +78,24 @@ const TRAIN_STATION_NODE_COLOR = 0x5ab8ff;
 const TRAIN_SHUTTLE_SPEED = 45;      // world units per second, averaged over each run between stops
 const TRAIN_STATION_DWELL = 3.5;     // seconds a shuttle stops at each station
 const TRAIN_END_DWELL = 1.5;         // seconds it pauses at an end of the line (one without a station) before heading back
+// A station whose deck stands at least this high off the ground gets a glass lift at the end of each landing, for
+// people to ride up from the ground and back down (see stationLifts); lower ones, they just step up onto.
+const STATION_LIFT_MIN_HEIGHT = 3;
+const RAMP_REACH = 0.5;              // how far a boarding ramp comes out from the rails, as a fraction of the way to the doors
+const LIFT_DEPTH = 1.1;              // half a lift shaft's depth, out from the landing (it's as wide as the landing)
+const LIFT_CAB_HEIGHT = 2.6;         // floor to ceiling inside the cab, where the awning's high enough
+const DOOR_SPEED = 2.2;              // how quickly a station's doors slide open or shut: the whole way in 1/DOOR_SPEED seconds
+const LIFT_SPEED = 3;                // world units per second, flat out
+const LIFT_DWELL = 2.5;              // seconds a cab waits with its doorways open after arriving
 let trainShuttles = [];              // rebuilt with the train meshes; moved every frame by updateTrainShuttles
+// Each line's shuttle is late by however long it's been held at stations for people getting on and off (see
+// holdTrain): kept across rebuilds, like its place in the timetable, which it's subtracted from.
+const TRAIN_HOLD_MAX = 30;           // the longest a shuttle waits at one stop for people, past its usual dwell
+// A carriage's doors open in two moves, from the model's shape keys: out (Doors1), then apart (Doors2) — each taking
+// CARRIAGE_DOOR_STEP seconds — and back the other way to shut, finished before it pulls out.
+const CARRIAGE_DOOR_STEP = 0.6;
+const CARRIAGE_DOORS_SHUT_BY = 2*CARRIAGE_DOOR_STEP + 0.2; // (seconds before it leaves a station, the doors start to shut)
+const lateBy = new Map();            // line id -> seconds
 const lastStopOf = new Map();        // line id -> the station node its shuttle was last stopped at, kept across rebuilds
 // Every station, for people riding the trains (see "riding the trains" in people.js), rebuilt with the train meshes: node id ->
 // { nodeId, x, y, z, radius, halfW, landing, alongMax, lineIds, networkId, networkStations, spot(across, along) }, where
@@ -352,6 +370,62 @@ function stationPortal(radius) {
   return clearance < 1 ? { half: straightHalf + capLength*Math.sqrt(1 - clearance*clearance), ring: true }
                         : { half: halfL, ring: false };
 }
+// A station dragged (or made) low enough that it wouldn't be worth a lift sits right down on the ground instead, its
+// deck level with it, for people to walk straight in: the height its node should be at for that, or `y` itself if it's
+// high enough to stay up (or isn't a station). By the widest line through it, since that's the biggest station.
+export function snapStationHeight(nodeId, y) {
+  const n = roadNodes[nodeId];
+  if (!n || n.type!=='station') return y;
+  const radius = Math.max(0, ...S.roadLines.filter(l => isTrainLine(l) && l.nodeIds.includes(nodeId)).map(l => l.radius || S.TRAIN_DEFAULT_RADIUS));
+  if (!radius) return y;
+  return y + stationDeckTop(radius) < STATION_LIFT_MIN_HEIGHT ? -stationDeckTop(radius) : y;
+}
+// The measurements of a station's two entrances (see buildStationParts), in its own coordinates: how wide and tall
+// the doorway is, whether it has doors at all (too short a station doesn't), half the landing's width along the track,
+// how far out the landing reaches, and the height of the awning over it.
+function stationEntrance(radius) {
+  const { width, height } = trainStationSize(radius), halfW = width/2, halfL = TRAIN_STATION_LENGTH/2;
+  const straightHalf = halfL - Math.min(halfW, halfL), deckTop = stationDeckTop(radius), rise = height/2 - deckTop;
+  const doorWidth = Math.min(3.4, 2*straightHalf - 0.6), doorHeight = Math.min(3.4, rise*0.6);
+  return { doorWidth, doorHeight, hasDoors: doorWidth > 1.2, landingHalf: doorWidth/2 + 0.4, reach: halfW + 1.5,
+    awningY: deckTop + doorHeight + 0.55 };
+}
+// A station's lifts — none if its deck's too low to need them, or it has no entrances to lead to — one at the outer end
+// of each landing: `side` (+1 or -1 across the track, as the entrances go), `across` (how far out from the track its
+// middle is), `width` (half its width along the track — the landing's), `bottom` and `top` (the ground's and the deck's
+// heights, relative to the tube's centerline, as buildStationParts' own coordinates are), `roof` (level with the
+// awning) and `cab` (the cab's height inside). The ground doorway faces out, away from the station; the top one faces
+// in, onto the landing.
+function stationLifts(position, radius) {
+  const { hasDoors, landingHalf, reach, awningY } = stationEntrance(radius), deckTop = stationDeckTop(radius);
+  if (!hasDoors) return []; // (no entrances: see buildStationParts)
+  if (position.y + deckTop < STATION_LIFT_MIN_HEIGHT) return [];
+  const across = reach + 0.12 + LIFT_DEPTH; // just past the landing's edge light
+  const cab = Math.max(1.8, Math.min(LIFT_CAB_HEIGHT, awningY - deckTop - 0.45));
+  return [1, -1].map(side => ({ side, across, width: landingHalf, bottom: -position.y, top: deckTop, roof: awningY, cab }));
+}
+// A lift's cab, in its own coordinates: x across the track (pointing out, away from the station, on either side), y up
+// from its floor, z along the track — a floor and a ceiling on chrome corner posts, a glowing panel under the ceiling,
+// and glass down both sides (the doorway ends are left open).
+function buildLiftCab(mats, width, h) {
+  const d = LIFT_DEPTH - 0.12, w = width - 0.12;
+  const box = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
+  const group = new THREE.Group();
+  const part = (geo, material, opaque) => {
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.castShadow = opaque; mesh.receiveShadow = true;
+    group.add(mesh);
+  };
+  part(mergeGeometryList([box(2*d, 0.18, 2*w, 0, -0.09, 0), box(2*d, 0.16, 2*w, 0, h + 0.08, 0)]), mats.station, true);
+  const posts = [];
+  [-1, 1].forEach(sx => [-1, 1].forEach(sz => posts.push(new THREE.CylinderGeometry(0.06, 0.06, h, 8).translate(sx*(d - 0.06), h/2, sz*(w - 0.06)))));
+  posts.push(box(2*d, 0.06, 0.06, 0, 1.05, w - 0.06), box(2*d, 0.06, 0.06, 0, 1.05, -(w - 0.06))); // handrails
+  part(mergeGeometryList(posts), mats.chrome, true);
+  part(box(2*d - 0.5, 0.04, 2*w - 0.5, 0, h - 0.02, 0), mats.stationTrim, false);
+  const glass = [-1, 1].map(sz => new THREE.PlaneGeometry(2*d, h).translate(0, h/2, sz*(w - 0.02)));
+  part(mergeGeometryList(glass), mats.stationGlass, false);
+  return group;
+}
 // A station, built around the tube's centerline at `position`, always level and turned to the track's heading, in
 // roughly the footprint of a TRAIN_STATION_LENGTH-long, trainStationSize(radius) box:
 //  • a stadium-shaped platform deck just under the tube, ringed by a glowing trim line;
@@ -364,7 +438,9 @@ function stationPortal(radius) {
 //    a length of glass tube it's already enclosing;
 //  • an entrance in each long side: a pair of dark glass doors set into the vault's curve, framed in chrome under a
 //    glowing lintel, with a landing jutting out from the deck below and a small awning above;
-//  • a single flared pylon from the ground up to the deck.
+//  • a single flared pylon from the ground up to the deck;
+//  • if it stands high enough, a glass lift shaft off the end of each landing, down to the ground (see stationLifts) —
+//    the cab that rides up and down it is built separately (see buildLiftCab), since it moves.
 // Returns the parts, each with the material it uses.
 function buildStationParts(position, tangent, radius, mats) {
   const { width, height } = trainStationSize(radius);
@@ -379,7 +455,7 @@ function buildStationParts(position, tangent, radius, mats) {
   const up = new THREE.Vector3(0,1,0);
   const place = new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(up, forward), up, forward).setPosition(position);
   const parts = [];
-  const add = (geo, material, name, opaque) => parts.push({ geo: geo.applyMatrix4(place), material, name, opaque });
+  const add = (geo, material, name, opaque, slide) => parts.push({ geo: geo.applyMatrix4(place), material, name, opaque, slide });
 
   // deck: a stadium-shaped slab (straight sides, half-disc ends), with a thin glowing trim band around its edge
   const stadium = (hw, hl) => {
@@ -424,9 +500,8 @@ function buildStationParts(position, tangent, radius, mats) {
   add(vault, mats.stationGlass, 'TrainStationVault', false);
 
   // the entrances sit in the middle of each long side, as tall as fits comfortably under the vault's curve
-  const doorWidth = Math.min(3.4, 2*straightHalf - 0.6), doorHeight = Math.min(3.4, rise*0.6);
+  const { doorWidth, doorHeight, hasDoors, landingHalf, reach, awningY } = stationEntrance(radius);
   const doorTop = Math.asin(doorHeight/rise); // the arc angle, up from the deck, at the top of each door
-  const hasDoors = doorWidth > 1.2;
   // 2 bare rails between the portals, low under where the carriage's underside runs, carrying it the rest of the
   // way once the tube itself has stopped (see buildLineTube)
   const railGap = radius*0.55, railY = -radius*0.75, railR = Math.max(0.12, radius*0.07);
@@ -460,15 +535,21 @@ function buildStationParts(position, tangent, radius, mats) {
       geo.computeVertexNormals();
       return geo;
     };
-    const doors = [], entrance = [], glow = [];
-    const zL = -doorWidth/2, zR = doorWidth/2, landingHalf = doorWidth/2 + 0.4, reach = halfW + 1.5;
+    const entrance = [], glow = [];
+    const zL = -doorWidth/2, zR = doorWidth/2;
     [1, -1].forEach(side => {
       const arc = a => side > 0 ? a : Math.PI - a; // the same height up the vault, on this side
       const up = (a0, a1, z, n) => Array.from({ length: n+1 }, (_, i) => vaultPoint(arc(a0 + (a1-a0)*i/n), { z, s:1 }, 1.024));
-      doors.push(vaultPatch(arc(0), arc(doorTop), zL, zR, 1.014, 8, 2));
+      // two glass leaves, just outside the vault's chrome, that slide apart along the track to let people through
+      // (see updateStationDoors): each its own part, framed in chrome along its edges, so it can move
+      [[zL, 0, -1], [0, zR, 1]].forEach(([z0, z1, dir]) => {
+        const slide = { side, dir, reach: doorWidth/2 - 0.12 };
+        const edge = z => Array.from({ length: 9 }, (_, i) => vaultPoint(arc(doorTop*i/8), { z, s:1 }, 1.05));
+        add(vaultPatch(arc(0), arc(doorTop), z0, z1, 1.05, 8, 2), mats.stationDoor, 'TrainStationDoor', false, slide);
+        add(mergeGeometryList([tubeAlong(edge(z0 + 0.03), 0.04), tubeAlong(edge(z1 - 0.03), 0.04)]), mats.chrome, 'TrainStationDoorFrame', true, slide);
+      });
       glow.push(vaultPatch(arc(doorTop + 0.035), arc(doorTop + 0.085), zL, zR, 1.016, 2, 2)); // the lintel
       chrome.push(tubeAlong(up(0, doorTop, zL, 8), 0.12), tubeAlong(up(0, doorTop, zR, 8), 0.12)); // jambs
-      chrome.push(tubeAlong(up(0, doorTop, 0, 8), 0.05)); // where the two doors meet
       chrome.push(tubeAlong([zL, zL/2, 0, zR/2, zR].map(z => vaultPoint(arc(doorTop), { z, s:1 }, 1.024)), 0.12)); // header
       // the landing and awning: boxes running from x0 out to x1 (away from the track, on this side)
       const box = (x0, x1, y0, y1) => {
@@ -478,11 +559,9 @@ function buildStationParts(position, tangent, radius, mats) {
       };
       entrance.push(box(halfW - 0.05, reach, deckTop - deckDepth, deckTop));
       glow.push(box(reach, reach + 0.12, deckTop - deckDepth*0.65, deckTop - deckDepth*0.3)); // the landing's edge light
-      const awningY = deckTop + doorHeight + 0.55;
       const vaultX = halfW*Math.sqrt(Math.max(0, 1 - ((awningY - deckTop)/rise)**2)); // where the awning meets the glass
       entrance.push(box(vaultX - 0.1, reach, awningY, awningY + 0.16));
     });
-    add(mergeGeometryList(doors), mats.stationDoor, 'TrainStationDoors', true);
     add(mergeGeometryList(entrance), mats.station, 'TrainStationEntrance', true);
     add(mergeGeometryList(glow), mats.stationTrim, 'TrainStationEntranceGlow', true);
     // a little ramp at each door, stepping up from the deck to rail height right where people board — a plain "/|"
@@ -492,14 +571,16 @@ function buildStationParts(position, tangent, radius, mats) {
       const idxOut = [0,1,3, 0,3,2, 0,4,1, 1,4,5, 2,3,5, 2,5,4, 0,2,4, 1,5,3];
       const idxIn = idxOut.reduce((acc, v, i, arr) => { if (i % 3 === 0) acc.push(arr[i], arr[i+2], arr[i+1]); return acc; }, []);
       const ramps = [1, -1].map(side => {
-        // the high edge reaches past the rail's outer face, so the ramp actually touches it rather than stopping short
-        const outerX = side*halfW, innerX = side*(railGap + railR + 0.05);
+        // the high edge reaches past the rail's outer face, so the ramp actually touches it rather than stopping short;
+        // its foot comes only halfway out to the doors, clear of them
+        const { inner, outer } = stationRamp(radius), innerX = side*inner, outerX = side*outer;
         const A0=[outerX,deckTop,zL], B0=[outerX,deckTop,zR], A1=[innerX,deckTop,zL], B1=[innerX,deckTop,zR], A2=[innerX,railY,zL], B2=[innerX,railY,zR];
         const ramp = new THREE.BufferGeometry();
         ramp.setAttribute('position', new THREE.Float32BufferAttribute([A0,B0,A1,B1,A2,B2].flat(), 3));
         ramp.setIndex(side > 0 ? idxOut : idxIn);
-        ramp.computeVertexNormals();
-        return ramp;
+        const flat = ramp.toNonIndexed(); // (flat shaded: each face its own normal)
+        flat.computeVertexNormals();
+        return flat;
       });
       add(mergeGeometryList(ramps), mats.station, 'TrainStationRamp', true);
     }
@@ -535,6 +616,42 @@ function buildStationParts(position, tangent, radius, mats) {
   chrome.push(tip);
   add(mergeGeometryList(chrome), mats.chrome, 'TrainStationChrome', true);
 
+  // lift shafts: chrome corner posts from the ground to above the cab's roof at the top, glass all round but for a
+  // doorway at the ground on the outer face and one onto the landing on the inner face, a roof with a glowing band
+  // under it, and a plinth at the foot
+  const lifts = stationLifts(position, radius);
+  if (lifts.length) {
+    const shaftChrome = [], shaftGlass = [], shaftSolid = [], shaftGlow = [];
+    const L = LIFT_DEPTH;
+    lifts.forEach(({ side, across, width: W, bottom, top, roof, cab }) => {
+      const cx = side*across, h = roof - bottom, doorH = cab + 0.15;
+      [-1, 1].forEach(sx => [-1, 1].forEach(sz => {
+        const post = new THREE.BoxGeometry(0.16, h, 0.16);
+        post.translate(cx + sx*L, bottom + h/2, sz*W);
+        shaftChrome.push(post);
+      }));
+      // a pane across the face at x (the width of the shaft, along the track), from y0 up to y1
+      const faceX = (x, y0, y1) => { if (y1 - y0 > 0.05) shaftGlass.push(new THREE.PlaneGeometry(2*W, y1 - y0).rotateY(Math.PI/2).translate(x, (y0 + y1)/2, 0)); };
+      [-1, 1].forEach(sz => shaftGlass.push(new THREE.PlaneGeometry(2*L, h).translate(cx, bottom + h/2, sz*W)));
+      const outer = cx + side*L, inner = cx - side*L;
+      faceX(outer, bottom + doorH, roof);
+      faceX(inner, bottom, top - deckDepth);
+      faceX(inner, top + doorH, roof);
+      // the lintels over the two doorways, and a band round the shaft at the landing's level
+      [[outer, bottom + doorH], [inner, top + doorH]].forEach(([x, y]) => shaftChrome.push(new THREE.BoxGeometry(0.14, 0.14, 2*W).translate(x, y, 0)));
+      shaftChrome.push(new THREE.BoxGeometry(0.12, 0.12, 2*W).translate(outer, top - deckDepth/2, 0));
+      [-1, 1].forEach(sz => shaftChrome.push(new THREE.BoxGeometry(2*L, 0.12, 0.12).translate(cx, top - deckDepth/2, sz*W)));
+      // the roof: the awning over the landing carried on out over the shaft, just as thick and at just the same height
+      shaftSolid.push(new THREE.BoxGeometry(2*L + 0.12, 0.16, 2*W).translate(cx + side*0.06, roof + 0.08, 0));
+      shaftSolid.push(new THREE.BoxGeometry(2*L + 0.4, 0.12, 2*W + 0.4).translate(cx, bottom + 0.06, 0));
+      shaftGlow.push(new THREE.BoxGeometry(0.12, 0.1, 2*W).translate(cx + side*(L + 0.06), roof + 0.08, 0)); // along its outer edge
+    });
+    add(mergeGeometryList(shaftChrome), mats.chrome, 'TrainStationLiftFrame', true);
+    add(mergeGeometryList(shaftGlass), mats.stationGlass, 'TrainStationLiftGlass', false);
+    add(mergeGeometryList(shaftSolid), mats.station, 'TrainStationLiftRoof', true);
+    add(mergeGeometryList(shaftGlow), mats.stationTrim, 'TrainStationLiftGlow', true);
+  }
+
   // pylon: a column from the ground (world y 0) up to the deck's underside, pinched at the waist and flared at the top
   const pylonTop = deckTop - deckDepth, pylonBottom = -position.y, h = pylonTop - pylonBottom;
   if (h > 0.5) {
@@ -569,6 +686,7 @@ export function rebuildTrainMeshes() {
   S.trainMeshGroup = new THREE.Group(); S.trainMeshGroup.name = 'Trains';
   trainShuttles = [];
   trainStations = new Map();
+  stationLiftList = [];
   stationsVersion++;
   // each network gets its own materials, so selecting one only highlights that network
   const materials = new Map();
@@ -582,9 +700,9 @@ export function rebuildTrainMeshes() {
       station: new THREE.MeshStandardMaterial({ color:0xe8ecf1, roughness:0.35, metalness:0.25, envMap:SKY_ENV_MAP, envMapIntensity:0.8 }),
       stationGlass: new THREE.MeshStandardMaterial({ color:0xaee3ff, transparent:true, opacity:0.22, roughness:0.05, metalness:0.2, envMap:SKY_ENV_MAP, envMapIntensity:1.6, side:THREE.DoubleSide, depthWrite:false }),
       stationDoor: (() => {
-        const m = new THREE.MeshStandardMaterial({ color:0x1e3a50, roughness:0.15, metalness:0.6, envMap:SKY_ENV_MAP, envMapIntensity:1.2, side:THREE.DoubleSide,
-          emissive:0x6fb6e0, emissiveIntensity:0.5*computeWindowGlowFactor(S.sunElevation) });
-        m.userData.baseEmissiveIntensity = 0.5; // a soft glow through the doors after dark, as if lit inside
+        const m = new THREE.MeshStandardMaterial({ color:0x8fd4f2, transparent:true, opacity:0.38, roughness:0.05, metalness:0.3, envMap:SKY_ENV_MAP,
+          envMapIntensity:1.6, side:THREE.DoubleSide, depthWrite:false, emissive:0x6fb6e0, emissiveIntensity:0.25*computeWindowGlowFactor(S.sunElevation) });
+        m.userData.baseEmissiveIntensity = 0.25; // (glass doors, a little more tinted than the vault, faintly lit after dark)
         return m;
       })(),
       stationTrim: (() => {
@@ -609,7 +727,11 @@ export function rebuildTrainMeshes() {
     mesh.castShadow = opaque; mesh.receiveShadow = true;
     mesh.userData = { networkId: line.networkId, baseColor: material.color.getHex() };
     S.trainMeshGroup.add(mesh);
+    return mesh;
   };
+  // where support posts mustn't stand, as for raised walkways' pillars (see buildRaisedWalkway)
+  const overRoad = createRegionTester(S.roadFootprint || []), overRiver = createRegionTester(S.riverFootprint || []);
+  const blocked = (x, z) => overRoad(x, z) || overRiver(x, z);
   S.roadLines.filter(isTrainLine).forEach(line => {
     const path = trainCurve(line.nodeIds).points;
     if (path.length < 2) return;
@@ -634,24 +756,42 @@ export function rebuildTrainMeshes() {
     if (coil.outer) addMesh(coil.outer, mats.coilOuter, 'TrainCoil', line, true);
     if (coil.inner) addMesh(coil.inner, mats.coilInner, 'TrainCoilInner', line, true);
     // pairs of posts, each pair ringing the tube in a collar, holding it up at regular intervals — except inside
-    // stations, and wherever the tube is on (or in) the ground with nothing to hold up
-    const beams = [];
-    for (let d = TRAIN_SUPPORT_SPACING/2; d < sampler.total; d += TRAIN_SUPPORT_SPACING) {
-      if (inStation(d, 2)) continue;
+    // stations, and wherever the tube is on (or in) the ground with nothing to hold up. A pair that would stand in a
+    // road or river slides along the track to the nearest clear spot, or is left out if there isn't one near.
+    const beams = [], halfGap = radius*1.1 + beamW/2;
+    const postsClear = d => {
+      const { point, tangent } = sampler.at(d);
+      const sx = -tangent.z, sz = tangent.x, sl = Math.hypot(sx, sz) || 1;
+      return [-1, 1].every(sign => [-beamW/2, 0, beamW/2].every(e => {
+        const x = point.x + sx/sl*(halfGap + e)*sign, z = point.z + sz/sl*(halfGap + e)*sign;
+        return !blocked(x, z);
+      }));
+    };
+    for (let d0 = TRAIN_SUPPORT_SPACING/2; d0 < sampler.total; d0 += TRAIN_SUPPORT_SPACING) {
+      let d = null;
+      for (let k = 0; k <= TRAIN_SUPPORT_SPACING/3; k += 1.5) {
+        d = [d0 - k, d0 + k].find(c => c > 0 && c < sampler.total && !inStation(c, 2) && postsClear(c)) ?? null;
+        if (d!=null || inStation(d0, 2)) break;
+      }
+      if (d==null) continue;
       const { point, tangent } = sampler.at(d);
       if (point.y - radius < TRAIN_MIN_HEIGHT) continue;
-      addSupportBeams(beams, point, tangent, radius*1.1 + beamW/2, point.y, beamW);
+      addSupportBeams(beams, point, tangent, halfGap, point.y, beamW);
     }
     stations.forEach(s => {
-      buildStationParts(s.position, s.tangent, radius, mats).forEach(part => addMesh(part.geo, part.material, part.name, line, part.opaque));
-      registerStation(s, line, radius);
+      const leaves = [];
+      buildStationParts(s.position, s.tangent, radius, mats).forEach(part => {
+        const mesh = addMesh(part.geo, part.material, part.name, line, part.opaque);
+        if (part.slide) leaves.push({ mesh, ...part.slide });
+      });
+      registerStation(s, line, radius, mats, leaves);
     });
     // one shuttle per line, running back and forth along all of it and stopping at each station on the way
     const shuttle = buildShuttle(radius, mats);
     const { steps, cycle } = buildShuttleTimeline(sampler.total, stations, shuttle.userData.length);
     S.trainMeshGroup.add(shuttle);
     trainShuttles.push({ lineId: line.id, object: shuttle, sampler, steps, cycle, offset: (trainHash(line.id) % 997)/997*cycle,
-      stopNode: lastStopOf.get(line.id) ?? null, arrived: false });
+      stopNode: lastStopOf.get(line.id) ?? null, arrived: false, hold: 0, held: 0, doors: 0, doorsWant: 0 });
     if (beams.length) addMesh(mergeGeometryList(beams), mats.steel, 'TrainSupports', line, true);
   });
   const perNetwork = new Map();
@@ -666,9 +806,16 @@ export function rebuildTrainMeshes() {
 }
 // adds a line's station to trainStations (a station shared by several lines is listed once, with each of them), laid out as
 // buildStationParts lays it out
-function registerStation(s, line, radius) {
+// A station's boarding ramps, across from the track (see buildStationParts): from `outer`, on the deck, up to `inner`,
+// just past the rails, at `topY` (up from the track's centreline).
+function stationRamp(radius) {
+  const halfW = trainStationSize(radius).width/2, railGap = radius*0.55, railR = Math.max(0.12, radius*0.07);
+  const inner = railGap + railR + 0.05;
+  return { inner, outer: inner + (halfW - inner)*RAMP_REACH, topY: -radius*0.75 };
+}
+function registerStation(s, line, radius, mats, leaves) {
   const known = trainStations.get(s.node);
-  if (known) { known.lineIds.push(line.id); return; }
+  if (known) { known.lineIds.push(line.id); known.doors.leaves.push(...leaves); return; }
   const halfW = trainStationSize(radius).width/2, halfL = TRAIN_STATION_LENGTH/2;
   const forward = new THREE.Vector3(s.tangent.x, 0, s.tangent.z);
   if (forward.lengthSq() < 1e-6) forward.set(1,0,0); else forward.normalize();
@@ -678,7 +825,95 @@ function registerStation(s, line, radius) {
     landing: halfW + 0.9,                                   // across to the middle of an entrance's landing
     alongMax: Math.max(0.5, halfL - Math.min(halfW, halfL) - 1), // along the straight middle, clear of the rounded ends
     lineIds: [line.id], networkId: line.networkId, networkStations: 1,
-    spot: (across, along) => ({ x: x + right.x*across + forward.x*along, y: deckY, z: z + right.z*across + forward.z*along }) });
+    spot: (across, along) => ({ x: x + right.x*across + forward.x*along, y: deckY, z: z + right.z*across + forward.z*along }),
+    // the ground underfoot at (px, pz), crossing from the landing to a stopped carriage's door, `inside` (a spot on its
+    // floor just in from it): the deck, up its boarding ramp (see buildStationParts) to the rails, then a step up
+    floorAt(px, pz, inside) {
+      const acrossOf = (qx, qz) => Math.abs((qx - x)*right.x + (qz - z)*right.z);
+      const across = acrossOf(px, pz), ramp = stationRamp(radius), top = s.position.y + ramp.topY, into = acrossOf(inside.x, inside.z);
+      const lerp = (a, b, k) => a + (b - a)*Math.max(0, Math.min(1, k));
+      if (across >= ramp.inner) return lerp(top, deckY, (across - ramp.inner)/(ramp.outer - ramp.inner));
+      return lerp(inside.y, top, (across - into)/Math.max(1e-3, ramp.inner - into));
+    },
+    lifts: stationLifts(s.position, radius).map(l => makeLift(s, l, right, forward, line, mats)),
+    // its doors, each side's pair sliding open while anyone's by them (see openDoor and updateStationDoors)
+    doors: { forward, leaves, open: { 1: 0, [-1]: 0 }, hold: { 1: 0, [-1]: 0 } },
+    // someone's at (or just through) the doorway on `side`: its doors stay open for a moment yet
+    openDoor(side) { this.doors.hold[side] = 0.6; } });
+}
+// slides each station's doors open, or shut again once nobody's kept them open for a moment
+function updateStationDoors(dt) {
+  const ease = x => x*x*(3 - 2*x);
+  trainStations.forEach(st => {
+    const d = st.doors;
+    [1, -1].forEach(side => {
+      const opening = d.hold[side] > 0;
+      d.hold[side] -= dt;
+      const was = d.open[side];
+      d.open[side] = THREE.MathUtils.clamp(was + (d.hold[side] > 0 ? 1 : -1)*DOOR_SPEED*dt, 0, 1);
+      // "ptshh", as they start to open, and as they start to shut
+      if (d.hold[side] > 0 ? was === 0 : opening && was > 0) doorSwish(st.spot(side*st.halfW, 0), 0.85);
+      if (d.open[side] === was) return;
+      const k = ease(d.open[side]);
+      d.leaves.forEach(l => { if (l.side === side) l.mesh.position.copy(d.forward).multiplyScalar(l.dir*l.reach*k); });
+    });
+  });
+}
+// ---- the stations' lifts (see stationLifts): each cab waits where it is, doorways open, until someone calls it to
+// the other end — anyone waiting there, or anyone aboard (see "riding the trains" in people.js) — then, once it's
+// stood LIFT_DWELL there (and nobody's still stepping in), rides over, easing out and in. Their state (where each cab
+// is) survives the train meshes being rebuilt, as long as the station does.
+let stationLiftList = [];
+const liftStateOf = new Map(); // station node id + side -> { y, level }, kept across rebuilds
+function makeLift(s, { side, across, width, bottom, top, cab: cabHeight }, right, forward, line, mats) {
+  const base = s.position.y, cab = buildLiftCab(mats, width, cabHeight);
+  cab.name = 'TrainStationLiftCab';
+  cab.traverse(o => { if (o.isMesh) o.userData = { networkId: line.networkId, baseColor: o.material.color.getHex() }; });
+  // turned so the cab's +x points out, away from the track, on its side
+  const out = new THREE.Vector3(right.x*side, 0, right.z*side), up = new THREE.Vector3(0, 1, 0);
+  cab.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(out, up, new THREE.Vector3().crossVectors(out, up)));
+  const key = s.node + ':' + side, kept = liftStateOf.get(key);
+  const lift = { key, side, width, bottom: base + bottom, top: base + top, cab,
+    y: kept ? Math.min(base + top, Math.max(base + bottom, kept.y)) : base + bottom, level: kept ? kept.level : 'bottom',
+    from: null, dwell: 0, hold: 0, calls: new Set(),
+    // a spot in or by the lift: `out` metres outward from the shaft's middle (away from the station), `along` the track,
+    // at height y
+    spot: (outward, along, y) => ({ x: s.position.x + right.x*side*(across + outward) + forward.x*along, y,
+      z: s.position.z + right.z*side*(across + outward) + forward.z*along }),
+    // the other end of the shaft, to call the cab to, from 'bottom' or 'top'
+    other: level => level === 'bottom' ? 'top' : 'bottom',
+    // someone waiting at `level` (or aboard, bound for it) wants the cab there
+    call(level) { this.calls.add(level); },
+    // someone's still stepping in or out: the cab doesn't leave for a moment
+    wait() { this.hold = Math.max(this.hold, 0.5); },
+    // standing at `level` with its doorway open?
+    openAt(level) { return this.level === level; },
+  };
+  const at = lift.spot(0, 0, lift.y);
+  cab.position.set(at.x, lift.y, at.z);
+  S.trainMeshGroup.add(cab);
+  stationLiftList.push(lift);
+  return lift;
+}
+function updateStationLifts(dt) {
+  stationLiftList.forEach(lift => {
+    if (lift.level) {
+      lift.calls.delete(lift.level);
+      lift.dwell -= dt; lift.hold -= dt;
+      const next = lift.other(lift.level);
+      if (lift.calls.has(next) && lift.dwell <= 0 && lift.hold <= 0) { lift.from = lift.level; lift.level = null; lift.target = next; }
+    } else {
+      // up or down at LIFT_SPEED, easing in and out over the last couple of metres
+      const goal = lift.target === 'top' ? lift.top : lift.bottom, start = lift.from === 'top' ? lift.top : lift.bottom;
+      const left = Math.abs(goal - lift.y), gone = Math.abs(lift.y - start);
+      const speed = LIFT_SPEED*Math.max(0.15, Math.min(1, left/2, (gone + 0.2)/2));
+      if (left <= speed*dt) {
+        lift.y = goal; lift.level = lift.target; lift.dwell = LIFT_DWELL; lift.calls.delete(lift.level);
+      } else lift.y += Math.sign(goal - lift.y)*speed*dt;
+    }
+    lift.cab.position.y = lift.y;
+    liftStateOf.set(lift.key, { y: lift.y, level: lift.level ?? lift.target });
+  });
 }
 function trainHash(s) { let h = 7; for (let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0; return h; }
 // A shuttle carriage's body: a capsule — a cylinder with hemispherical ends — lathed around the Y axis.
@@ -717,22 +952,27 @@ export async function loadCarriageModel() {
       if (!o.isMesh) return;
       // Blender numbers a material it has had to copy ('Black.002'), so the suffix is dropped before the name is read.
       const name = ((o.material && o.material.name) || '').toLowerCase().replace(/\.\d+$/, '');
-      const role = name.startsWith('window') ? 'window' : name.startsWith('black') ? 'trim' : name.startsWith('cushion') ? 'cushion'
+      const role = name.startsWith('window') ? 'window' : name.startsWith('black') || name.startsWith('rubber') ? 'trim' : name.startsWith('cushion') ? 'cushion'
         : name.startsWith('lights') ? 'lights' : 'body';
       if (role==='window' && !windowMaterial && o.material) windowMaterial = o.material;
       if (role==='lights' && !lightColor && o.material?.emissive) lightColor = o.material.emissive.clone();
-      parts.push({ geometry: o.geometry.clone().applyMatrix4(o.matrixWorld), role });
+      const geometry = o.geometry.clone().applyMatrix4(o.matrixWorld);
+      // (applyMatrix4 leaves the shape keys alone: they're offsets, so they only need turning and scaling with it)
+      bakeMorphs(geometry, o.matrixWorld);
+      const doors = o.morphTargetDictionary ? [o.morphTargetDictionary.Doors1, o.morphTargetDictionary.Doors2] : null;
+      parts.push({ geometry, role, doors: doors && doors.every(k => k != null) ? doors : null });
     });
     if (!parts.length) return;
+    // (measured from the vertices where they rest: a bounding box would reach out to the open doors too)
     const box = new THREE.Box3();
-    parts.forEach(p => { p.geometry.computeBoundingBox(); box.union(p.geometry.boundingBox); });
+    parts.forEach(p => box.expandByObject(new THREE.Points(new THREE.BufferGeometry().setAttribute('position', p.geometry.attributes.position))));
     const center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
     // lay its longest side along Z (a model exported lengthwise along X gets turned a quarter; Y stays up)
     const turn = size.x > size.z ? new THREE.Matrix4().makeRotationY(Math.PI/2) : null;
     let crossRadius = 0, halfWidth = 0, floor = Infinity, seatsFrom = Infinity, lampY = Infinity;
     parts.forEach(p => {
       p.geometry.translate(-center.x, -center.y, -center.z);
-      if (turn) p.geometry.applyMatrix4(turn);
+      if (turn) { p.geometry.applyMatrix4(turn); bakeMorphs(p.geometry, turn); }
       const pos = p.geometry.attributes.position;
       for (let i=0;i<pos.count;i++) {
         const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
@@ -755,6 +995,20 @@ export async function loadCarriageModel() {
     rebuildTrainMeshes(); App.refreshHighlights();
   }, (err) => console.warn('Blockout: the carriage model failed to load; train carriages use the built-in capsule', err));
 }
+// Turns and scales a geometry's shape keys (offsets from where it rests) by `matrix`, as applyMatrix4 has the rest.
+function bakeMorphs(geometry, matrix) {
+  const linear = new THREE.Matrix3().setFromMatrix4(matrix), normal = new THREE.Matrix3().getNormalMatrix(matrix);
+  (geometry.morphAttributes.position || []).forEach(a => a.applyMatrix3(linear));
+  (geometry.morphAttributes.normal || []).forEach(a => { a.applyMatrix3(normal); a.normalizeNormals?.(); });
+}
+// A carriage's doors, `open` from 0 (shut) to 2 (wide): out over the first half, apart over the second.
+function setCarriageDoors(shuttle, open) {
+  const ease = x => { x = Math.max(0, Math.min(1, x)); return x*x*(3 - 2*x); };
+  shuttle.object.userData.doorMeshes?.forEach(({ mesh, doors }) => {
+    mesh.morphTargetInfluences[doors[0]] = ease(open);
+    mesh.morphTargetInfluences[doors[1]] = ease(open - 1);
+  });
+}
 // One shuttle carriage, built along its local Z axis with up along +Y (see orientAlongTrack) and sized to its tube: the
 // carriage model — scaled uniformly, keeping its proportions, so its widest cross-section fits inside the tube — or the
 // capsule with a band of windows until that has loaded.
@@ -774,6 +1028,7 @@ function buildShuttle(radius, mats) {
       const material = part.role==='window' ? mats.shuttleWindows : part.role==='trim' ? mats.shuttleTrim : part.role==='cushion' ? mats.shuttleCushion
         : part.role==='lights' ? mats.shuttleLights : mats.shuttle;
       const mesh = addPart(part.geometry, material);
+      if (part.doors) (group.userData.doorMeshes ??= []).push({ mesh, doors: part.doors });
       mesh.userData.sharedGeometry = true; // every carriage reuses the model's geometry — see disposeObject
       mesh.scale.setScalar(scale);
     });
@@ -860,6 +1115,12 @@ function placeCarriageLights() {
     light.intensity = CARRIAGE_LIGHT_INTENSITY*(1 - THREE.MathUtils.smoothstep(n.d, CARRIAGE_LIGHT_FAR*0.7, CARRIAGE_LIGHT_FAR));
   });
 }
+// Someone's getting on or off a line's carriage, stopped at a station: it doesn't leave for a moment yet (see
+// updateTrainShuttles).
+export function holdTrain(lineId) {
+  const s = trainShuttles.find(s => s.lineId === lineId);
+  if (s) s.hold = 0.3;
+}
 // Where someone riding a carriage stands (see "riding the trains" in people.js): `across` and `along` from -1 to 1 over its
 // standing room, on its floor, and `yaw`, which way the carriage faces, for them to turn from.
 export function carriageSpot(shuttle, across, along) {
@@ -874,24 +1135,41 @@ export function updateTrainShuttles(t) {
   lastShuttleFrame = t;
   const ease = x => x*x*(3 - 2*x);
   trainShuttles.forEach(s => {
-    let phase = (t + s.offset) % s.cycle, along = s.steps[0].at, stopNode = null;
+    const late = lateBy.get(s.lineId) || 0;
+    let phase = (((t + s.offset - late) % s.cycle) + s.cycle) % s.cycle, along = s.steps[0].at, stopNode = null, doorsWant = 0;
     for (const step of s.steps) {
       const span = step.dwell!=null ? step.dwell : step.duration;
       if (phase <= span) {
         along = step.dwell!=null ? step.at : step.from + (step.to - step.from)*ease(phase/span);
         if (step.dwell!=null) stopNode = step.node;
+        // someone still getting on or off, as its doors are about to shut: it waits (up to TRAIN_HOLD_MAX), running late
+        // — kept just short of shutting them, however far along they'd got
+        if (step.node != null && s.hold > 0 && span - phase < CARRIAGE_DOORS_SHUT_BY && s.held < TRAIN_HOLD_MAX) {
+          lateBy.set(s.lineId, late + CARRIAGE_DOORS_SHUT_BY - (span - phase) + dt); s.held += dt;
+        }
+        // open while it's stopped at a station, shut in time to leave
+        if (step.node != null) doorsWant = span - phase > CARRIAGE_DOORS_SHUT_BY || (s.hold > 0 && s.held < TRAIN_HOLD_MAX) ? 2 : 0;
         break;
       }
       phase -= span;
     }
+    s.hold -= dt;
+    if (stopNode == null) s.held = 0;
     s.arrived = stopNode != null && stopNode !== s.stopNode;
     s.stopNode = stopNode;
+    if (doorsWant !== s.doorsWant && doorsWant !== s.doors) doorSwish(s.object.position); // ("ptshh", opening or shutting)
+    s.doorsWant = doorsWant;
+    s.doors += Math.max(-dt, Math.min(dt, (doorsWant - s.doors)))/CARRIAGE_DOOR_STEP;
+    s.doors = Math.max(0, Math.min(2, s.doors));
+    setCarriageDoors(s, s.doors);
     lastStopOf.set(s.lineId, stopNode);
     const { point, tangent } = s.sampler.at(along);
     s.object.position.copy(point);
     orientAlongTrack(s.object, tangent);
     s.object.visible = true;
   });
+  updateStationLifts(dt);
+  updateStationDoors(dt);
   placeCarriageLights();
   updateShuttleSounds(trainShuttles, dt); // (the hum, the whir-up and the chime: see audio/maglev.js)
   if (followedTrain && S.interactionMode !== 'move') stopFollowingTrain();
@@ -1085,6 +1363,7 @@ export function dragTrainPoint(e) {
   if (isHandle) {
     n[S.draggedNode.which] = next;
   } else {
+    next.y = snapStationHeight(S.draggedNode.nodeId, next.y);
     const dx=next.x-cur.x, dy=next.y-cur.y, dz=next.z-cur.z;
     n.x=next.x; n.y=next.y; n.z=next.z;
     ['handleIn','handleOut'].forEach(key => {

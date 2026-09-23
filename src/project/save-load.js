@@ -75,7 +75,7 @@ export function serializeProject() {
         color: colorToHex(l.color, ROAD_COLOR), sidewalkWidth:l.sidewalkWidth,
         sidewalkColor: colorToHex(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId,
         ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}), ...(isWalkwayLine(l) ? { roadType: l.roadType, walkwayColor: colorToHex(l.walkwayColor, WALKWAY_COLOR), walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: walkwayTextureScaleOf(l), walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}),
-        ...(l.roadType==='raised' ? { raisedHeight: raisedHeightOf(l), raisedTrees: !!l.raisedTrees, raisedBenches: !!l.raisedBenches } : {}),
+        ...(l.roadType==='raised' ? { raisedHeight: raisedHeightOf(l), raisedTrees: !!l.raisedTrees, raisedBenches: !!l.raisedBenches, raisedLights: !!l.raisedLights } : {}),
         ...(isRiverLine(l) ? { roadType:'river' } : {}) }))
     },
     zoneSeq: S.zoneSeq,
@@ -249,7 +249,7 @@ export async function loadProjectFromData(data, options) {
     ...(l.roadType==='path' ? { roadType:'walkway', walkwayColor: hexToColor(l.pathColor, DIRT_COLOR), walkwayTexture:'dirt', walkwayTextureScale:1, walkwayTextureRotation:0 } : {}), // (older saves' dirt paths)
     ...(l.roadType==='walkway' || l.roadType==='raised' ? { roadType: l.roadType, walkwayColor: hexToColor(l.walkwayColor, WALKWAY_COLOR),
       walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: l.walkwayTextureScale ?? 1, walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}),
-    ...(l.roadType==='raised' ? { raisedHeight: l.raisedHeight ?? RAISED_HEIGHT, raisedTrees: !!l.raisedTrees, raisedBenches: !!l.raisedBenches } : {}),
+    ...(l.roadType==='raised' ? { raisedHeight: l.raisedHeight ?? RAISED_HEIGHT, raisedTrees: !!l.raisedTrees, raisedBenches: !!l.raisedBenches, raisedLights: !!l.raisedLights } : {}),
     ...(l.roadType==='river' ? { roadType:'river' } : {}) }));
   S.roadNodeSeq = rd.nodeSeq || 1; S.roadLineSeq = rd.lineSeq || 1; S.roadNetworkSeq = rd.networkSeq || 1;
   S.walkwayOrder = Array.isArray(rd.walkwayOrder) ? rd.walkwayOrder.slice() : [];
