@@ -33,8 +33,10 @@ const CONSONANTS = [
   { kind: 'glide', from: [250, 2300], time: 0.06 },               // y
   null, null,
 ];
-const HEAR_DISTANCE = 60;          // beyond this from the camera they aren't heard at all
-const REF_DISTANCE = 6;            // how near to be heard at full volume
+const HEAR_DISTANCE = 40;          // beyond this from the camera they aren't heard at all
+const REF_DISTANCE = 5;            // how near to be heard at full volume
+const ROLLOFF = 2.5;               // how fast they fade past that (1 is the inverse law: a tenth as loud at ten times as far)
+const MUFFLE = 1.4;                // how fast the top comes off past REF_DISTANCE: far off, talk's a murmur, not words
 const VOLUME = 0.22;
 const BLIPS_MAX = 12;              // syllables sounding at once, past which new ones are dropped
 const BEND = 0.1;                  // how far each syllable's pitch strays at random from where the phrase has it, either way
@@ -163,6 +165,21 @@ export function exclaim(at, voice) {
     length: cry.length*(0.85 + Math.random()*0.3), level: cry.volume, vowel: cry.vowel, consonant: cry.consonant });
 }
 
+/**
+ * A lowpass for a voice at `at`, the lower the further it is from the camera: the formants that make it sound like words go
+ * first, then the voice itself, so talk across a park is a murmur and not a crowd of conversations.
+ * @param {{x: number, y: number, z: number}} at
+ * @returns {BiquadFilterNode}
+ */
+export function muffler(at) {
+  const { x, y, z } = camera.position, distance = Math.hypot(at.x - x, at.y - y, at.z - z);
+  const muffle = listener.context.createBiquadFilter();
+  muffle.type = 'lowpass';
+  muffle.Q.value = 0.5;
+  muffle.frequency.value = Math.min(20000, 9000*Math.pow(REF_DISTANCE/Math.max(REF_DISTANCE, distance), MUFFLE));
+  return muffle;
+}
+
 // One sound of a voice: a sawtooth at `f`, rising by `rise` over the first third and then sliding to `slide` of where it
 // started by the end, through `vowel`'s formants (moved by the voice's own), after `consonant` (taking up to 40% of it).
 function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant }) {
@@ -206,8 +223,12 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   panner.panningModel = 'equalpower';
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
+  panner.rolloffFactor = ROLLOFF;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  gain.connect(panner).connect(heardFrom(at));
+  const muffle = muffler(at);
+  muffle.connect(panner);
+  gain.connect(muffle);
+  panner.connect(heardFrom(at));
   if (consonant?.noise) {
     // the click or hiss: a burst of noise through a band where that consonant sits, moved by the voice's formants too
     const source = context.createBufferSource(), band = context.createBiquadFilter(), hiss = context.createGain();
@@ -220,7 +241,7 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
     hiss.gain.setValueAtTime(0, now);
     hiss.gain.linearRampToValueAtTime(level*consonant.level*3, now + (consonant.kind === 'stop' ? Math.min(0.004, burst/3) : burst*0.4));
     hiss.gain.linearRampToValueAtTime(0, now + burst);
-    source.connect(band).connect(hiss).connect(panner);
+    source.connect(band).connect(hiss).connect(muffle);
     source.start(now, Math.random()*0.9);
     source.stop(now + burst + 0.01);
   }
