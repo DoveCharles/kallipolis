@@ -1,4 +1,4 @@
-# The building blocks tools/posh-models.py and tools/student-models.py make their furniture sets from: materials by name,
+# The building blocks tools/posh-models.py, tools/student-models.py and the rest make their furniture sets from: materials by name,
 # and pieces put together from simple solids, each made one mesh at five times life size (as Interior.glb's are).
 # Everything's given in metres, life size. Imported by those scripts (run by Blender), not run itself.
 import bpy, bmesh, math, os

@@ -209,6 +209,22 @@ layout('office', 0x6f7478, add => {
 });
 const officeGroup = new THREE.Group();
 LAYOUTS.office.group.add(officeGroup);
+LAYOUTS.office.furnished = officeGroup;
+// a warehouse and a factory: steel beams across the ceiling (high enough for the camera to pass under), a concrete floor,
+// and fitted out afresh for each building from the industrial model (see "a warehouse or a factory", below)
+const beamMaterial = lit(0x5a5e62, 0.5);
+for (const name of ['warehouse', 'factory']) {
+  layout(name, 0x9a9a96, add => {
+    for (const x of [-2, 0, 2]) {
+      add(0.03, 0.15, ROOM_D, beamMaterial, x, ROOM_H - 0.075, 0);
+      add(0.2, 0.02, ROOM_D, beamMaterial, x, ROOM_H - 0.14, 0);
+    }
+    return [];
+  });
+  const furnished = new THREE.Group();
+  LAYOUTS[name].group.add(furnished);
+  Object.assign(LAYOUTS[name], { furnished, industrial: true, kind: name });
+}
 let current = LAYOUTS.home;
 // where there's room to walk in it, as laid out (see walkGrid)
 let grid = null;
@@ -218,6 +234,7 @@ function useLayout(name) {
   current = LAYOUTS[name] ?? LAYOUTS.home;
   current.group.visible = true;
   trim.visible = false; // (till a posh home's furnished)
+  dado.visible = !!current.industrial;
   paintRoom();
 }
 function paintRoom() {
@@ -1240,27 +1257,12 @@ const turnedRect = (r, angle, ox, oz) => {
     z0: Math.min(...corners.map(p => p.z)), z1: Math.max(...corners.map(p => p.z)) };
 };
 
-// Lays out the office for the building with this key (see buildingKey), glass-walled or not (see enterBuilding):
-// `LAYOUTS.office`'s furniture, where nobody stands or walks, and its seats, in the room as it's now placed.
-function furnishOffice(key, glass) {
-  const office = LAYOUTS.office;
-  officeGroup.clear();
-  office.blocked = []; office.solid = []; office.seats = []; office.printer = null; office.desks = [];
-  grid = null;
-  const rng = mulberry32(hashNameToNumber(key + ' office'));
-  const tint = mulberry32(hashNameToNumber(key + ' office colours'));
-  const pick = list => list[Math.floor(tint()*list.length)];
-  office.floor.setHex(pick(OFFICE_FLOORS));
-  office.wall.setHex(pick(OFFICE_WALLS));
-  paintRoom();
-  for (const material of officePainted) {
-    material.color.setHex(pick(OFFICE_PAINTED[material.name]));
-    roomLit(material);
-  }
-  const F = officeFurniture;
-  if (!F?.Desk || !F.OfficeChair) return;
+// The helpers a layout's furnished with, from `F` (a model's pieces) into `group`, for `layout` (whose solid, blocked and
+// seats they fill): what's taken so far and whether something fits, putting a piece in place, and finding somewhere
+// along a wall for one — glass-walled or not (see enterBuilding), its random choices from `rng`, and sitting on any of the
+// pieces named in `deskSeats` as at a desk.
+function planRoom(layout, F, group, rng, glass, deskSeats) {
   const any = list => list[Math.floor(rng()*list.length)];
-
   // what's taken so far (and room kept clear), as rectangles in the room's x and z
   const taken = [];
   const overlaps = (a, b, gap = 0) => a.x0 < b.x1 + gap && b.x0 < a.x1 + gap && a.z0 < b.z1 + gap && b.z0 < a.z1 + gap;
@@ -1269,18 +1271,18 @@ function furnishOffice(key, glass) {
   const fits = (r, gap = 0, margin = 0.02) => inRoom(r, margin) && taken.every(o => !overlaps(r, o, gap));
   // `name` stood at (x, z) turned by `angle`, in `parent` (the room's furniture, or on a desk, in the desk's terms),
   // and unless it's something small nobody could walk into, solid (or `solid` of it, in its own terms)
-  const put = (name, x, z, angle, { parent = officeGroup, y = 0, small = false, solid = null } = {}) => {
+  const put = (name, x, z, angle, { parent = group, y = 0, small = false, solid = null } = {}) => {
     const piece = F[name], object = piece.object.clone();
     object.position.set(x, y, z);
     object.rotation.y = angle;
     parent.add(object);
     if (small) return object;
     const r = turnedRect(solid ?? piece.bounds, angle, x, z);
-    office.solid.push(r);
-    office.blocked.push(around(...(solid ? [x - 0.4, x + 0.4, z - 0.4, z + 0.4] : [r.x0, r.x1, r.z0, r.z1]), 0.35));
+    layout.solid.push(r);
+    layout.blocked.push(around(...(solid ? [x - 0.4, x + 0.4, z - 0.4, z + 0.4] : [r.x0, r.x1, r.z0, r.z1]), 0.35));
     for (const seat of piece.seats) {
       const at = turned(seat.x, seat.z, angle, x, z);
-      office.seats.push({ x: at.x, z: at.z, y: seat.y, nx: Math.sin(angle), nz: Math.cos(angle), sofa: false, desk: name === 'OfficeChair' });
+      layout.seats.push({ x: at.x, z: at.z, y: seat.y, nx: Math.sin(angle), nz: Math.cos(angle), sofa: false, desk: deskSeats.includes(name) });
     }
     return object;
   };
@@ -1324,6 +1326,39 @@ function furnishOffice(key, glass) {
     }
     return null;
   };
+
+  return { taken, overlaps, inRoom, fits, put, cameraCorner, underCamera, WALL_SIDES, overWindow, againstWall, any };
+}
+// `layout`'s seats, from the room's terms to the world's: where to sit, how high, and which way they face
+function seatsInWorld(layout) {
+  const c = Math.cos(room.rotation.y), s = Math.sin(room.rotation.y);
+  layout.seats = layout.seats.map(seat => {
+    const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z));
+    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: false, desk: seat.desk, by: null };
+  });
+}
+
+// Lays out the office for the building with this key (see buildingKey), glass-walled or not (see enterBuilding):
+// `LAYOUTS.office`'s furniture, where nobody stands or walks, and its seats, in the room as it's now placed.
+function furnishOffice(key, glass) {
+  const office = LAYOUTS.office;
+  officeGroup.clear();
+  office.blocked = []; office.solid = []; office.seats = []; office.printer = null; office.desks = [];
+  grid = null;
+  const rng = mulberry32(hashNameToNumber(key + ' office'));
+  const tint = mulberry32(hashNameToNumber(key + ' office colours'));
+  const pick = list => list[Math.floor(tint()*list.length)];
+  office.floor.setHex(pick(OFFICE_FLOORS));
+  office.wall.setHex(pick(OFFICE_WALLS));
+  paintRoom();
+  for (const material of officePainted) {
+    material.color.setHex(pick(OFFICE_PAINTED[material.name]));
+    roomLit(material);
+  }
+  const F = officeFurniture;
+  if (!F?.Desk || !F.OfficeChair) return;
+
+  const { taken, overlaps, fits, put, underCamera, againstWall, any } = planRoom(office, F, officeGroup, rng, glass, ['OfficeChair']);
 
   // The cubicles: banks of them, a row side by side or two rows back to back, out in the room or with their backs to a
   // wall. A bank's laid out in its own terms — u along it, v out from the line down its middle (its back, for a row) —
@@ -1483,15 +1518,234 @@ function furnishOffice(key, glass) {
     }
   }
 
-  // the seats, in the world: where to sit, how high, and which way they face
-  const c = Math.cos(room.rotation.y), s = Math.sin(room.rotation.y);
-  office.seats = office.seats.map(seat => {
-    const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z));
-    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: false, desk: seat.desk, by: null };
-  });
+  seatsInWorld(office);
   // and the desks, for the phones and computers on them to be heard from (see audio/office.js): in front of each desk chair
   office.desks = office.seats.filter(seat => seat.desk)
     .map(seat => ({ x: seat.x + seat.nx*0.55, y: room.position.y + 0.85, z: seat.z + seat.nz*0.55 }));
+}
+
+// ---------------------------------------------------------- a warehouse or a factory
+// A warehouse or a factory (see roomLayoutOf) has its room on the ground floor: bare concrete under steel beams, the
+// walls painted a darker colour up to the sills with a yellow line along the top, a walkway marked out on the floor from
+// the door, and lamps hung from the beams — and it's fitted out from a model of its own (assets/models/Industrial.glb,
+// built by tools/industrial-models.py, which lists its pieces), each building its own way (from its key). A warehouse:
+// runs of pallet racking, single with their backs to a wall or back to back out in the room, lined up to look down the
+// aisles between them if they'll go that way; a forklift, pallets of boxes, drums and crates about the floor, a pallet
+// jack, a rolling ladder, and a packing bench with a stool at it. A factory: machines (a CNC mill, a lathe, a pillar
+// drill, a hydraulic press), each in a yellow box painted on the floor, maybe a conveyor, workbenches with stools at them,
+// a tool chest, lockers, the electrical cabinet, and a drum or two. Until the model's loaded, they're bare.
+const INDUSTRIAL_MODEL_URL = 'assets/models/Industrial.glb';
+let industrial = null;
+// the concrete's tinted by the floor's colour (a factory's is sometimes painted)
+const WAREHOUSE_FLOORS = [0x9a9a96, 0x8a8c8a, 0xa8a49c, 0x7a7e80, 0xb0aca4];
+const FACTORY_FLOORS = [0x9a9a96, 0x8a8c8a, 0x6a8a7a, 0x8a9098, 0x7a8a6a, 0x9a8a78];
+const INDUSTRIAL_WALLS = [0xe8e6e0, 0xd8d8d4, 0xdcdfe2, 0xe6e0d4, 0xc8ccc8, 0xf0ece0, 0xd4dcd8];
+const DADOS = [0x3a5a7a, 0x5a6a5a, 0x7a7e80, 0x2a4a3a, 0x8a3a2a, 0x4a4e56, 0x6a5a4a];
+const INDUSTRIAL_PAINTED = {
+  Machine: [0x5a7a6a, 0x6a7a8a, 0xd8d4c8, 0x3a5a8a, 0x8a8e92, 0x4a6a5a],
+  Upright: [0x2a5aa8, 0x3a6a9a, 0x6a6e72, 0x2a7a5a],
+  Beam: [0xe07a2a, 0xe8a030, 0xd84a2a],
+  Forklift: [0xe8b020, 0xe07a2a, 0xc8352c, 0x3a6ab0],
+  Toolbox: [0xc8352c, 0x2a4a8a, 0x2a2c30, 0x3a3e44],
+  Locker: [0x6a7a8a, 0x9aa4ac, 0x3a5a7a, 0x6a8a6a, 0xc8c4b8],
+  Bench: [0x3a5a8a, 0x6a6e72, 0x4a6a4a, 0xd8a030],
+  Drum: [0x2a5aa8, 0xc8352c, 0x3a7a4a, 0x2a2c30, 0xd8a030],
+};
+const industrialPainted = [];
+async function loadIndustrial() {
+  try {
+    industrial = await loadPieces(INDUSTRIAL_MODEL_URL, INDUSTRIAL_PAINTED, industrialPainted);
+  } catch (err) {
+    console.warn('Blockout: the industrial model failed to load; warehouses and factories are left bare', err);
+    return;
+  }
+  // (a stool's seat is its top, in the middle: sat on facing whichever way it's turned)
+  if (industrial.Stool) industrial.Stool.seats = [{ x: 0, z: 0, y: industrial.Stool.h }];
+  if (inside && current.industrial) furnishIndustrial(inside.key, current.kind);
+}
+loadIndustrial();
+// Plain concrete: mottled, with a saw-cut joint every 4 m — which is how often it repeats.
+const concrete = floorTexture(1024, 4, (g, rng) => {
+  g.fillStyle = 'rgb(232,232,230)';
+  g.fillRect(0, 0, 1024, 1024);
+  const blot = (x, y, r, style) => {
+    for (const dx of [-1024, 0, 1024]) for (const dy of [-1024, 0, 1024]) {
+      g.fillStyle = style;
+      g.beginPath(); g.arc(x + dx, y + dy, r, 0, Math.PI*2); g.fill();
+    }
+  };
+  for (let i = 0; i < 5000; i++) {
+    const shade = rng() < 0.5 ? 'rgba(90,90,85,' : 'rgba(255,255,250,';
+    blot(rng()*1024, rng()*1024, 2 + rng()*rng()*16, shade + (0.01 + rng()*0.025) + ')');
+  }
+  for (let i = 0; i < 5; i++) blot(rng()*1024, rng()*1024, 30 + rng()*60, 'rgba(60,55,50,0.025)');  // (old stains)
+  g.fillStyle = 'rgba(40,40,40,0.55)';
+  g.fillRect(0, 0, 1024, 3); g.fillRect(0, 0, 3, 1024);
+});
+LAYOUTS.warehouse.floorMap = LAYOUTS.factory.floorMap = concrete;
+// The walls painted to the sills (round the door), and a yellow line along the top of it: shown in warehouses and
+// factories (see useLayout), and coloured for each.
+const dado = new THREE.Group();
+dado.visible = false;
+room.add(dado);
+const dadoMaterial = lit(DADOS[0], 0.9), lineMaterial = lit(0xe8b820, 0.6);
+const DADO_H = SILL - 0.1;
+for (const [w, d, x, z] of [[ROOM_W, 0.02, 0, ROOM_D/2 - 0.01], [ROOM_W, 0.02, 0, -ROOM_D/2 + 0.01], [0.02, ROOM_D, ROOM_W/2 - 0.01, 0],
+  [0.02, doorFrom + ROOM_D/2, -ROOM_W/2 + 0.01, (doorFrom - ROOM_D/2)/2], [0.02, ROOM_D/2 - doorTo, -ROOM_W/2 + 0.01, (doorTo + ROOM_D/2)/2]]) {
+  box(w, DADO_H, d, dadoMaterial, x, DADO_H/2, z, dado);
+  box(w + (w > d ? 0 : 0.004), 0.05, d + (w > d ? 0.004 : 0), lineMaterial, x, DADO_H + 0.025, z, dado);
+}
+// a line painted on the floor from (x0, z0) to (x1, z1), along x or z
+const floorLine = (group, x0, z0, x1, z1, w = 0.07) =>
+  box(Math.abs(x1 - x0) + w, 0.006, Math.abs(z1 - z0) + w, lineMaterial, (x0 + x1)/2, 0.003, (z0 + z1)/2, group);
+const outline = (group, r) => {
+  floorLine(group, r.x0, r.z0, r.x1, r.z0); floorLine(group, r.x0, r.z1, r.x1, r.z1);
+  floorLine(group, r.x0, r.z0, r.x0, r.z1); floorLine(group, r.x1, r.z0, r.x1, r.z1);
+};
+const grown = (r, by) => ({ x0: r.x0 - by, x1: r.x1 + by, z0: r.z0 - by, z1: r.z1 + by });
+
+// Fits out the warehouse or factory (`kind`) for the building with this key (see buildingKey): its layout's furniture,
+// where nobody stands or walks, and its seats, in the room as it's now placed.
+function furnishIndustrial(key, kind) {
+  const layout = LAYOUTS[kind], group = layout.furnished;
+  group.clear();
+  layout.blocked = []; layout.solid = []; layout.seats = [];
+  grid = null;
+  const rng = mulberry32(hashNameToNumber(key + ' ' + kind));
+  const tint = mulberry32(hashNameToNumber(key + ' ' + kind + ' colours'));
+  const pick = list => list[Math.floor(tint()*list.length)];
+  layout.floor.setHex(pick(kind === 'factory' ? FACTORY_FLOORS : WAREHOUSE_FLOORS));
+  layout.wall.setHex(pick(INDUSTRIAL_WALLS));
+  dadoMaterial.color.setHex(pick(DADOS));
+  roomLit(dadoMaterial);
+  paintRoom();
+  for (const material of industrialPainted) {
+    material.color.setHex(pick(INDUSTRIAL_PAINTED[material.name]));
+    roomLit(material);
+  }
+  // the walkway in from the door, between two lines, kept clear
+  const walkway = { x0: -ROOM_W/2, x1: -0.8, z0: DOOR_Z - 0.6, z1: DOOR_Z + 0.6 };
+  floorLine(group, walkway.x0 + 0.1, walkway.z0, walkway.x1, walkway.z0);
+  floorLine(group, walkway.x0 + 0.1, walkway.z1, walkway.x1, walkway.z1);
+  const F = industrial;
+  if (!F) return;
+  const { taken, overlaps, fits, put, underCamera, againstWall, any } = planRoom(layout, F, group, rng, false, ['Stool']);
+  taken.push(walkway);
+  const high = [];  // (what's too tall to hang a lamp over)
+  // `name` put at `spot` ({ x, z, angle, area }, as againstWall finds it) and its area kept
+  const place = (name, spot) => {
+    put(name, spot.x, spot.z, spot.angle);
+    taken.push(spot.area);
+    if (F[name].h > 2.3) high.push(spot.area);
+    return spot;
+  };
+  // somewhere along a wall for `name` (tall or not, and allowed in front of a window or not: see againstWall)
+  const onWall = (name, tall, under = false) => {
+    const spot = F[name] && againstWall(F[name].bounds, tall, { under });
+    return spot ? place(name, spot) : null;
+  };
+  // somewhere out in the room for `r` (a footprint, in its own terms), square to the walls or (`loose`) not quite,
+  // `gap` clear of everything else, and not right under the camera if it's `tall`
+  const inTheOpen = (r, { gap = 0.6, tall = true, loose = false, tries = 40 } = {}) => {
+    for (let k = 0; k < tries; k++) {
+      const angle = Math.floor(rng()*4)*Math.PI/2 + (loose ? (rng() - 0.5)*0.6 : 0);
+      const x = (rng()*2 - 1)*(ROOM_W/2 - 0.8), z = (rng()*2 - 1)*(ROOM_D/2 - 0.8);
+      const area = turnedRect(r, angle, x, z);
+      if (!fits(area, gap, 0.1) || (tall && overlaps(area, underCamera))) continue;
+      return { x, z, angle, area };
+    }
+    return null;
+  };
+  const openPut = (name, options = {}) => {
+    const spot = F[name] && inTheOpen(F[name].bounds, { tall: F[name].h > 1.2, ...options });
+    return spot ? place(name, spot) : null;
+  };
+  // a bench against a wall with a stool pulled up to its front, sat at as a desk is (see measureSeats' desk)
+  const benchWithStool = name => {
+    const bench = F[name];
+    if (!bench || !F.Stool) return null;
+    const r = { ...bench.bounds, z1: bench.bounds.z1 + 0.6 };
+    const spot = againstWall(r, false, { under: true });
+    if (!spot) return null;
+    place(name, spot);
+    const at = turned((rng() - 0.5)*0.5, bench.bounds.z1 + 0.28, spot.angle, spot.x, spot.z);
+    put('Stool', at.x, at.z, spot.angle + Math.PI + (rng() - 0.5)*0.3, { solid: { x0: -0.18, x1: 0.18, z0: -0.18, z1: 0.18 } });
+    return spot;
+  };
+  const LOADS = ['PalletBoxes', 'PalletBoxes', 'PalletWrapped', 'Drums', 'PalletStack', 'Crate'].filter(name => F[name]);
+  // a pallet or a crate, along a wall or out on the floor
+  const load = () => {
+    const name = any(LOADS);
+    return rng() < 0.5 ? onWall(name, false, true) ?? openPut(name, { gap: 0.5, loose: true }) : openPut(name, { gap: 0.5, loose: true });
+  };
+
+  if (kind === 'warehouse' && F.Racking) {
+    // The racking: runs of a bay or two, as many as will go (up to four) with aisles between them wide enough for the
+    // forklift. A run out in the room is two rows back to back (or one) and mostly turned end on to the camera, to look
+    // down the aisles; a single row may go with its back to a wall instead.
+    const RACKS = ['Racking', 'Racking2'].filter(name => F[name]);
+    const bay = F.Racking, SPACING = 2.8, D = bay.bounds.z1 - bay.bounds.z0;
+    for (let runs = 0, tries = 0; runs < 4 && tries < 200; tries++) {
+      const bays = rng() < 0.6 ? 2 : 1, double = rng() < 0.55;
+      const r = { x0: -bays*SPACING/2, x1: bays*SPACING/2, z0: double ? -D - 0.05 : bay.bounds.z0, z1: double ? D + 0.05 : bay.bounds.z1 };
+      let spot;
+      if (!double && rng() < 0.5) {
+        spot = againstWall(r, true, { tries: 1 });
+        if (!spot) continue;
+      } else {
+        const x = (rng()*2 - 1)*(ROOM_W/2 - 1), z = (rng()*2 - 1)*(ROOM_D/2 - 1);
+        const toX = -ROOM_W/2 - x, toZ = -ROOM_D/2 - z;
+        const endOn = a => Math.abs(Math.cos(a)*toX - Math.sin(a)*toZ);
+        const angles = [0, 1, 2, 3].map(i => i*Math.PI/2);
+        const angle = rng() < 0.25 ? any(angles) : angles.reduce((best, a) => endOn(a) > endOn(best) ? a : best);
+        const area = turnedRect(r, angle, x, z);
+        if (!fits(area, 1.3, 0.05) || overlaps(area, underCamera)) continue;
+        spot = { x, z, angle, area };
+      }
+      for (const row of double ? [0, 1] : [0]) for (let i = 0; i < bays; i++) {
+        const at = turned((i - (bays - 1)/2)*SPACING, double ? (row ? -1 : 1)*(D/2 + 0.05) : 0, spot.angle, spot.x, spot.z);
+        put(any(RACKS), at.x, at.z, spot.angle + (row ? Math.PI : 0));
+      }
+      taken.push(spot.area);
+      high.push(spot.area);
+      runs++;
+    }
+    if (F.Forklift) openPut('Forklift', { gap: 0.3, loose: true });
+    for (let n = 2 + Math.floor(rng()*5); n > 0; n--) load();
+    if (F.PalletJack && rng() < 0.7) openPut('PalletJack', { gap: 0.3, loose: true });
+    if (F.Ladder && rng() < 0.6) openPut('Ladder', { gap: 0.4 });
+    if (rng() < 0.75) benchWithStool('PackingBench');
+  } else if (kind === 'factory') {
+    // The machines, each in a yellow box on the floor a little way out round it: two to four of them, against a wall (not
+    // in front of a window, unless it's low) or out in the room.
+    const MACHINES = ['Mill', 'Lathe', 'DrillPress', 'Press'].filter(name => F[name]);
+    for (let n = 2 + Math.floor(rng()*3); n > 0 && MACHINES.length; n--) {
+      const name = any(MACHINES), piece = F[name];
+      const r = grown(piece.bounds, 0.35);
+      const spot = (rng() < 0.4 ? againstWall({ ...r, z0: piece.bounds.z0 }, true, { under: piece.h < 1.6 }) : null)
+        ?? inTheOpen(r, { gap: 0.8 });
+      if (!spot) continue;
+      put(name, spot.x, spot.z, spot.angle);
+      taken.push(spot.area);
+      if (piece.h > 2.3) high.push(spot.area);
+      outline(group, spot.area);
+    }
+    if (F.Conveyor && rng() < 0.5) openPut('Conveyor', { gap: 0.8 });
+    for (let n = 1 + Math.floor(rng()*2); n > 0; n--) benchWithStool('Workbench');
+    if (rng() < 0.8) onWall('ToolChest', false, true) ?? openPut('ToolChest', { gap: 0.4 });
+    if (rng() < 0.7) onWall('Lockers', true);
+    if (rng() < 0.8) onWall('ControlPanel', true);
+    for (let n = Math.floor(rng()*3); n > 0; n--) load();
+  }
+  // either: a fire extinguisher by a wall, a cone or two, and the lamps hung from the beams, over wherever's clear
+  onWall('Extinguisher', false, true);
+  for (let n = Math.floor(rng()*rng()*3); n > 0; n--) openPut('Cone', { gap: 0.3, loose: true });
+  if (F.HighBay) for (const x of [-2, 0, 2]) for (const z of [-1.6, 0.6, 2.2]) {
+    const r = { x0: x - 0.35, x1: x + 0.35, z0: z - 0.35, z1: z + 0.35 };
+    if (overlaps(r, underCamera) || high.some(h => overlaps(r, h))) continue;
+    put('HighBay', x, z, 0, { y: ROOM_H - 0.15 - F.HighBay.h, small: true });
+  }
+  seatsInWorld(layout);
 }
 
 // ---------------------------------------------------------------- the TV
@@ -1686,19 +1940,21 @@ function longestEdgeAngle(fp) {
   return angle;
 }
 
-// Goes into `group` (a building, as building-card.js follows it, with its key): the room onto its top floor, laid out as
-// `kind` of room (one of LAYOUTS: 'home' or 'office'), the building hidden, and the camera cut straight to the corner,
-// to go round the walls from there.
+// Goes into `group` (a building, as building-card.js follows it, with its key): the room onto its top floor (a warehouse
+// or factory's ground floor), laid out as `kind` of room (one of LAYOUTS: 'home', 'office', 'warehouse' or 'factory'),
+// the building hidden, and the camera cut straight to the corner, to go round the walls from there.
 export function enterBuilding(group, key, kind = 'home') {
   if (inside) leaveBuilding();
   useLayout(kind);
   const glass = current === LAYOUTS.office && keyFraction(key) >= OFFICE_PUNCHED;
+  // (a warehouse or a factory's room is on its ground floor: its roof's high over one big space, not storeys)
+  const workshop = !!current.industrial;
   curtain.visible = glass; punched.visible = !glass;
   const fp = group.userData.footprint;
   const bounds = new THREE.Box3().setFromObject(group);
   const base = bounds.min.y, height = group.userData.height ?? (bounds.max.y - base);
   const centre = fp && fp.length >= 3 ? footprintBounds(group).c : bounds.getCenter(new THREE.Vector3());
-  const storey = Math.max(0, Math.floor((height - PLINTH - ROOM_H - 0.3)/FLOOR_HEIGHT));
+  const storey = workshop ? 0 : Math.max(0, Math.floor((height - PLINTH - ROOM_H - 0.3)/FLOOR_HEIGHT));
   room.position.set(centre.x, base + PLINTH + storey*FLOOR_HEIGHT, centre.z);
   room.rotation.y = fp && fp.length >= 3 ? longestEdgeAngle(fp) : 0;
   room.visible = true;
@@ -1706,6 +1962,7 @@ export function enterBuilding(group, key, kind = 'home') {
   group.visible = false;
   if (current === LAYOUTS.home) furnish(key);
   else if (current === LAYOUTS.office) furnishOffice(key, glass);
+  else if (workshop) furnishIndustrial(key, current.kind);
 
   visits++;
   resetOfficeAmbience();
@@ -1766,7 +2023,7 @@ function fadeWhatsInTheWay() {
   sightline.origin.copy(camera.position);
   const reach = sightline.direction.copy(controls.target).sub(camera.position).length();
   sightline.direction.normalize();
-  const pieces = current === LAYOUTS.office ? officeGroup.children : current.group.children;
+  const pieces = (current.furnished ?? current.group).children;
   for (const piece of pieces) {
     if (!piece.isGroup || piece.userData.isTV) continue;
     const u = piece.userData;
