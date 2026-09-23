@@ -19,6 +19,8 @@
  * @property {boolean} [ramp] - a raised walkway's ramp, whose height at each point is in ys
  * @property {number[]} [ys] - a ramp's height at each point
  * @property {number} [walk] - on a raised walkway, how far either side of its line someone possessed can go before the ledge
+ * @property {boolean} [cutStart] - a raised walkway deck whose first point is an end of it, cut square where its ramp starts
+ * @property {boolean} [cutEnd] - likewise its last point
  * @property {Array<{x: number, z: number}>} [mitres] - how a point is set off square to the line there (see navVertexMitre);
  *   assigned once the line is built
  * @property {?boolean[]} blocked - per point, whether it's out over a road (null on a ring)

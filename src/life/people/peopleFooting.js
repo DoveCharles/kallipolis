@@ -33,24 +33,37 @@ const LIFT_CALL_REACH = 3;
 
 // ---- raised walkways
 /**
- * The nearest raised walkway surface to a point that's within a step of a height: where on its line, how high it is
- * there, and how far past its walkable edge the point is (negative: on it).
+ * The nearest raised walkway surface to a point that's within a step of a height: how high it is there, how far past
+ * its walkable edge the point is (negative: on it), and the nearest point on it.
  * @param {number} x
  * @param {number} z
  * @param {number} y - the height they're at
- * @returns {?{x: number, z: number, y: number, d: number, over: number, walk: number}} the surface, or null if none is within a step
+ * @returns {?{y: number, over: number, x: number, z: number}} the surface, or null if none is within a step
  */
 function raisedSurfaceAt(x, z, y) {
   let best = null;
   peopleNav?.lines.forEach(nav => {
     if (!nav.raised) return;
-    for (let i=0;i<nav.pts.length-1;i++) {
+    const last = nav.pts.length - 2;
+    for (let i=0;i<=last;i++) {
       const a = nav.pts[i], b = nav.pts[i+1], abx = b.x - a.x, abz = b.z - a.z, l2 = abx*abx + abz*abz;
-      const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - a.x)*abx + (z - a.z)*abz)/l2)) : 0;
+      const raw = l2 > 0 ? ((x - a.x)*abx + (z - a.z)*abz)/l2 : 0, t = Math.max(0, Math.min(1, raw));
       const qy = nav.ys ? nav.ys[i] + (nav.ys[i+1] - nav.ys[i])*t : nav.y;
       if (Math.abs(qy - y) > RAISED_STEP) continue;
-      const qx = a.x + abx*t, qz = a.z + abz*t, d = Math.hypot(x - qx, z - qz), over = d - nav.walk;
-      if (!best || over < best.over) best = { x: qx, z: qz, y: qy, d, over, walk: nav.walk };
+      const qx = a.x + abx*t, qz = a.z + abz*t;
+      let over, cx = x, cz = z;
+      if ((i === 0 && nav.cutStart && raw < 0) || (i === last && nav.cutEnd && raw > 1)) {
+        // past a deck's end, where it's cut square for its ramp: not round it, as a line's end elsewhere is (a junction's)
+        const l = Math.sqrt(l2), ux = abx/l, uz = abz/l, past = Math.abs(raw - t)*l;
+        const side = -(x - qx)*uz + (z - qz)*ux, off = Math.max(-nav.walk, Math.min(nav.walk, side));
+        over = Math.max(Math.abs(side) - nav.walk, past);
+        cx = qx - uz*off; cz = qz + ux*off;
+      } else {
+        const d = Math.hypot(x - qx, z - qz);
+        over = d - nav.walk;
+        if (over > 0) { cx = qx + (x - qx)/d*nav.walk; cz = qz + (z - qz)/d*nav.walk; }
+      }
+      if (!best || over < best.over) best = { y: qy, over, x: over > 0 ? cx : x, z: over > 0 ? cz : z };
     }
   });
   return best;
@@ -75,9 +88,8 @@ export function nearestRaisedVertex(x, z, y) {
 function onRaised(p, f, x, z) {
   const s = raisedSurfaceAt(x, z, f.y), atFoot = f.y <= Y_PATH + RAISED_STEP*0.5;
   if (!s || (s.over > 0 && atFoot)) { p.footing = null; return null; }
-  if (s.over > 0) { x = s.x + (x - s.x)/s.d*s.walk; z = s.z + (z - s.z)/s.d*s.walk; }
   f.y = s.y;
-  return { x, y: s.y, z };
+  return { x: s.x, y: s.y, z: s.z }; // (held at the ledge, if they'd walk past it)
 }
 
 // ---- stations, in their own coordinates: `a` across the track (+ to its right, as st.spot has it), `b` along it

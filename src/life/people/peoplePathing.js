@@ -274,6 +274,8 @@ export function buildPeopleNav() {
         if (!top || d < top.d) top = { li: dl, vi, d };
       }));
       if (top) raisedLinks.push([{ li, vi: 0 }, { li: top.li, vi: top.vi }]);
+      // the deck is cut square where an end ramp takes over from it (see squareEnd in peopleFooting.js)
+      if (top && ramp.end && top.d < 1e-3) { const deck = lines[top.li]; if (top.vi === 0) deck.cutStart = true; else if (top.vi === deck.pts.length-1) deck.cutEnd = true; }
       const foot = pts.length - 1, handle = ringPoint(ramp.foot, 10);
       if (handle) pending.push({ li, vi: foot, handle });
       rampFeet.push({ li, vi: foot });
