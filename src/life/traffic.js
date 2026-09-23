@@ -401,7 +401,7 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
   shader.uniforms.carRustColor = { value: TERRIBLE_RUST };
   shader.uniforms.carRearAxle = { value: new THREE.Vector2(...rearAxle) };
   if (paintUniform) shader.uniforms.instanceCarPaint = paintUniform;
-  if (paintUniform) shader.uniforms.instanceCarWheel = { value: new THREE.Vector4() };
+  if (paintUniform) shader.uniforms.instanceCarWheel = { value: new THREE.Vector4(0, 0, 0, 0) }; // (not Vector4()'s w = 1, which would roll the body a radian)
   if (paintUniform) shader.uniforms.instanceCarHolo = { value: new THREE.Vector4() }; // (a thumbnail never shows the holo sheen or rust spots)
   if (paintUniform) shader.uniforms.instanceCarRust = { value: new THREE.Vector2() };
   if (plateUniform) shader.uniforms.instanceCarPlate = plateUniform;
