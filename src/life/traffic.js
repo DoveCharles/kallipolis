@@ -1315,6 +1315,11 @@ function carModelOf(car) { return car.design != null ? carMeshes[car.design] : n
 // what the engine sounds need of a car (see audio/engine.js): where its engine is, how big it is against an ordinary car
 // (bigger, lower), whether it's running — not stalled, sinking or burning — and its design, for the kind of engine
 const engineOf = car => ({ y: Y_ROAD + carHeight(car)/2, size: carLength(car)/(BOX_CAR_LENGTH*S.peopleSize), running: !car.sinking && !(car.stall > 0) && car.fuse == null, design: carModelOf(car)?.name });
+// Each car on the road, for the light its headlights throw (see streetlights.js): where it is, which way it faces and how
+// long it is. (A car going under the water has its lights put out.)
+export function forEachHeadlight(fn) {
+  cars.forEach(car => { if ((car.li >= 0 || car === drivenCar) && !car.sinking) fn(car.x, car.z, car.heading, carLength(car)); });
+}
 function carLength(car) { const cm = carModelOf(car); return (cm ? cm.length : car.length)*BOX_CAR_LENGTH*carScale(car); }
 
 /**

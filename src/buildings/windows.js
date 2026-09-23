@@ -170,6 +170,7 @@ export function createWindowMaterial(color, texRng, lit, litIntensity, windowSca
     emissive: lit ? 0xffffff : 0x000000, emissiveIntensity: litIntensity*computeWindowGlowFactor(S.sunElevation) });
   // tracked so updateWindowGlowForSun can rescale the glow live as the sun elevation slider moves
   if (lit) mat.userData.baseEmissiveIntensity = litIntensity;
+  mat.userData.litColor = uniforms.uWinLit.value; // (what its lit lobby spills onto the pavement: see sky/streetlights.js)
   mat.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
