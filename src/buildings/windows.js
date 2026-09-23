@@ -75,7 +75,7 @@ const WINDOW_VERTEX_PARS = `
   varying vec4 vFacade;
   varying float vFacadeRun;
 `;
-const WINDOW_FRAGMENT_PARS = `
+const WINDOW_FRAGMENT_UNIFORMS = `
   uniform vec4 uWinBay;          // bay width, glass width (fraction of bay), glass height (fraction of floor), sill (fraction of floor)
   uniform vec4 uWinFloor;        // floor height, lobby height, parapet height, corner pier width
   uniform float uWinMullion;     // spacing of thin glazing bars across the glass (0 = none)
@@ -83,6 +83,8 @@ const WINDOW_FRAGMENT_PARS = `
   uniform vec2 uWinGlassSurface; // glass roughness, metalness
   uniform vec3 uWinLit;          // lit window color
   uniform vec4 uWinLitMix;       // seed, chance a cluster of windows is lit, window chance in a lit cluster, in a dark one
+`;
+const WINDOW_FRAGMENT_PARS = WINDOW_FRAGMENT_UNIFORMS + `
   varying vec4 vFacade;
   varying float vFacadeRun;
   float winHash(vec3 p) {
@@ -171,6 +173,7 @@ export function createWindowMaterial(color, texRng, lit, litIntensity, windowSca
   // tracked so updateWindowGlowForSun can rescale the glow live as the sun elevation slider moves
   if (lit) mat.userData.baseEmissiveIntensity = litIntensity;
   mat.userData.litColor = uniforms.uWinLit.value; // (what its lit lobby spills onto the pavement: see sky/streetlights.js)
+  mat.userData.windowUniforms = uniforms; // (what a zone's merged walls carry on their vertices instead: see building-batches.js)
   mat.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -183,6 +186,57 @@ export function createWindowMaterial(color, texRng, lit, litIntensity, windowSca
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, uWinGlassSurface.y, winGlass);')
       .replace('#include <emissivemap_fragment>', 'totalEmissiveRadiance *= winLitColor*winLit;');
   };
+  return mat;
+}
+// The same walls merged across many buildings (see building-batches.js): what createWindowMaterial keeps in uniforms,
+// one building's worth, rides on every vertex instead — flat, so it's the exact number, not one interpolated across a
+// triangle (the seed is hashed) — and the shader reads it back under the uniforms' own names. The glow is the lit
+// intensity on the vertex times the material's emissiveIntensity, which the sun scales like any other glow.
+const WINDOW_BATCH_VERTEX_PARS = WINDOW_VERTEX_PARS + `
+  attribute vec4 winBay;
+  attribute vec4 winFloor;
+  attribute vec4 winGlass;  // glass color, mullion spacing
+  attribute vec4 winLit;    // lit color, lit intensity (0: never lit)
+  attribute vec4 winLitMix;
+  flat varying vec4 vWinBay;
+  flat varying vec4 vWinFloor;
+  flat varying vec4 vWinGlass;
+  flat varying vec4 vWinLit;
+  flat varying vec4 vWinLitMix;
+`;
+const WINDOW_BATCH_FRAGMENT_PARS = WINDOW_FRAGMENT_PARS.replace(WINDOW_FRAGMENT_UNIFORMS, `
+  uniform vec2 uWinGlassSurface;
+  flat varying vec4 vWinBay;
+  flat varying vec4 vWinFloor;
+  flat varying vec4 vWinGlass;
+  flat varying vec4 vWinLit;
+  flat varying vec4 vWinLitMix;
+  #define uWinBay vWinBay
+  #define uWinFloor vWinFloor
+  #define uWinMullion vWinGlass.w
+  #define uWinGlass vWinGlass.rgb
+  #define uWinLit vWinLit.rgb
+  #define uWinLitMix vWinLitMix
+`);
+export function createBatchedWindowMaterial(specular, side) {
+  const glassSurface = { value: new THREE.Vector2(specular ? 0.08 : 0.3, specular ? 0.3 : 0.1) };
+  const mat = new THREE.MeshStandardMaterial({ color:0xffffff, vertexColors:true, roughness:0.85, metalness:0.05, flatShading:true, side,
+    envMap: specular ? SKY_ENV_MAP : null, envMapIntensity: 1.3,
+    emissive: 0xffffff, emissiveIntensity: computeWindowGlowFactor(S.sunElevation) });
+  mat.userData.baseEmissiveIntensity = 1;
+  mat.onBeforeCompile = shader => {
+    shader.uniforms.uWinGlassSurface = glassSurface;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\n' + WINDOW_BATCH_VERTEX_PARS)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFacade = facade; vFacadeRun = facadeRun; vWinBay = winBay; vWinFloor = winFloor; vWinGlass = winGlass; vWinLit = winLit; vWinLitMix = winLitMix;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\n' + WINDOW_BATCH_FRAGMENT_PARS)
+      .replace('#include <color_fragment>', '#include <color_fragment>\n' + WINDOW_FRAGMENT_LAYOUT)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, uWinGlassSurface.x, winGlass);')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, uWinGlassSurface.y, winGlass);')
+      .replace('#include <emissivemap_fragment>', 'totalEmissiveRadiance *= vWinLit.w*winLitColor*winLit;');
+  };
+  mat.customProgramCacheKey = () => 'batchedWindows';
   return mat;
 }
 export function mergeGeometries(geoA, geoB) {

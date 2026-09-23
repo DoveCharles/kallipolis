@@ -91,7 +91,7 @@ function exportGLB() {
   sources.forEach(([name, root]) => {
     const byMaterial = new Map();
     root.traverse(o => {
-      if (!o.isMesh || o.isInstancedMesh || !o.visible || o.userData.noExport || o.userData.isShuttle || Array.isArray(o.material)) return;
+      if (!o.isMesh || o.isInstancedMesh || (!o.visible && !o.userData.batched) || o.userData.noExport || o.userData.isShuttle || Array.isArray(o.material)) return;
       const made = exportMaterialFor(o.material);
       if (materials.has(made.key)) made.material.dispose(); else materials.set(made.key, made.material);
       const material = materials.get(made.key), key = made.key;

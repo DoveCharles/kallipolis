@@ -591,6 +591,7 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
   if (flatRoof) addRoofParapet(group, roofFootprint, roofZ, rng, mat, roofInnerPoly);
 
   group.rotation.x = -Math.PI/2;
+  group.userData.batchable = true; // (drawn merged with the rest of its zone: see buildings/building-batches.js)
   return group;
 }
 export function makeParkMesh(poly, tintColor, noiseStrength, cutouts, beachSegments, wetCount, depthBias) {
