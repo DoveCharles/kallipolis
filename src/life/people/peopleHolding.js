@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
-import { PEOPLE_MAX, inRoom, isGone, people, peopleRng, personModel } from './people.js';
+import { PEOPLE_MAX, inRoom, isDrawn, people, peopleRng, personModel } from './people.js';
 import { PERSON_ARM_SPREAD } from './peopleModel.js';
 import { eatingSound } from '../../audio/eating.js';
 
@@ -206,7 +206,7 @@ function armShift(out, p, i, hand) {
 export function updateHeld() {
   for (const key of Object.keys(meshes)) counts[key] = 0;
   if (personModel) people.forEach((p, i) => {
-    if (!p.holding?.length || (isGone(p) && !inRoom(p))) return;
+    if (!p.holding?.length || !isDrawn(p)) return;
     personModel.mesh.getMatrixAt(i, instance);
     const light = inRoom(p) ? 'lit' : 'plain';
     for (const held of p.holding) {

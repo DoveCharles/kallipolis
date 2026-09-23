@@ -6,7 +6,7 @@ import { placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint }
 import * as THREE from 'three';
 import { controls } from '../../core/camera-controls.js';
 import { profileOf, profilesVersion } from '../profiles.js';
-import { getTrainShuttles, getTrainStations, trainStationsVersion } from '../../trains/trains.js';
+import { carriageSpot, getTrainShuttles, getTrainStations, trainStationsVersion } from '../../trains/trains.js';
 import { isBloodlusting, punchSpill } from './peopleBlood.js';
 import { puffSmoke } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
@@ -799,15 +799,18 @@ export function updateTrainRider(p, i, dt) {
   if (ride.stage === 'ride') {
     const shuttle = getTrainShuttles().find(s => s.lineId === ride.lineId);
     if (!shuttle) { gotOff(p, i); dropToGround(p); return null; } // (their line's gone)
-    p.x = shuttle.object.position.x; p.y = shuttle.object.position.y; p.z = shuttle.object.position.z;
-    const at = shuttle.arrived && getTrainStations().get(shuttle.stopNode);
-    if (at && stationLinks().ground.has(at.nodeId) && (at.networkStations <= 2 || peopleRng() < 1/at.networkStations || ride.timer > TRAIN_RIDE_MAX)) {
+    // standing in the carriage where they got on, turned the way they chose, carried along with it
+    ride.spot ??= placeAboard();
+    const at = carriageSpot(shuttle, ride.spot.across, ride.spot.along);
+    p.x = at.x; p.y = at.y; p.z = at.z; p.heading = at.yaw + ride.spot.turn;
+    const stop = shuttle.arrived && getTrainStations().get(shuttle.stopNode);
+    if (stop && stationLinks().ground.has(stop.nodeId) && (stop.networkStations <= 2 || peopleRng() < 1/stop.networkStations || ride.timer > TRAIN_RIDE_MAX)) {
       // off here: back onto the platform, beside the track, to walk out the way they'd have come in
-      ride.node = at.nodeId; ride.stage = 'exit'; ride.side = peopleRng() < 0.5 ? -1 : 1; ride.timer = 0;
-      const out = at.spot(ride.side*(at.radius + 0.8), (peopleRng()*2 - 1)*Math.min(2, at.alongMax));
+      ride.node = stop.nodeId; ride.stage = 'exit'; ride.side = peopleRng() < 0.5 ? -1 : 1; ride.timer = 0;
+      const out = stop.spot(ride.side*(stop.radius + 0.8), (peopleRng()*2 - 1)*Math.min(2, stop.alongMax));
       p.x = out.x; p.y = out.y; p.z = out.z;
-      p.heading = headingTo(p, at.spot(ride.side*at.landing, 0));
-      ride.target = at.spot(ride.side*at.landing, 0);
+      p.heading = headingTo(p, stop.spot(ride.side*stop.landing, 0));
+      ride.target = stop.spot(ride.side*stop.landing, 0);
       gotOff(p, i);
     }
     return null;
@@ -837,6 +840,7 @@ export function updateTrainRider(p, i, dt) {
       // aboard
       p.faceTo = null; p.oneShot = null;
       ride.stage = 'ride'; ride.lineId = shuttle.lineId; ride.timer = 0;
+      ride.spot = placeAboard();
       if (followed === i) { stopFollowingPerson(); App.followTrainLine?.(shuttle.lineId); setRiderFollowed(i); }
     } else if (ride.timer > TRAIN_WAIT_MAX) {
       // fed up of waiting: back out
@@ -849,6 +853,16 @@ export function updateTrainRider(p, i, dt) {
   if (!reached()) return ride.target;
   landAtStation(p, ride.node);
   return null;
+}
+
+/**
+ * Somewhere to stand in a carriage (see carriageSpot in trains.js): in the standing room between the seats — kept off the
+ * very middle, where the camera rides — facing a window, or up or down the carriage.
+ * @returns {{across: number, along: number, turn: number}} where, from -1 to 1 each way, and which way from the carriage's heading
+ */
+function placeAboard() {
+  const turn = Math.floor(peopleRng()*4)*Math.PI/2 + (peopleRng() - 0.5)*0.6;
+  return { across: peopleRng()*2 - 1, along: (peopleRng() < 0.5 ? -1 : 1)*(0.4 + 0.6*peopleRng()), turn };
 }
 
 /**

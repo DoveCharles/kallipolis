@@ -240,8 +240,21 @@ export let riderFollowed = -1;
  * @param {Person} p - the person
  * @returns {boolean} whether they're gone
  */
-export const isGone = p => p.mode === 'none' || p.mode === 'dead' || (p.mode === 'train' && p.train.stage === 'ride')
+export const isGone = p => p.mode === 'none' || p.mode === 'dead' || aboard(p)
   || (p.mode === 'indoors' && p.indoors.stage === 'inside');
+/**
+ * Whether this person is riding in a train carriage — standing in it, and drawn there (see updateTrainRider), though they
+ * count as gone for everything else.
+ * @param {Person} p - the person
+ * @returns {boolean} whether they're aboard
+ */
+export const aboard = p => p.mode === 'train' && p.train.stage === 'ride';
+/**
+ * Whether this person is drawn: not gone, or gone only into the room the camera's in or onto a train.
+ * @param {Person} p - the person
+ * @returns {boolean} whether they're drawn
+ */
+export const isDrawn = p => !isGone(p) || inRoom(p) || aboard(p);
 /**
  * Whether this person is inside the building the camera's gone into, and so drawn in its room (see buildings/interior.js)
  * though they count as gone for everything else.
@@ -972,7 +985,7 @@ export function updatePeople(t) {
     // standing still for something (talking, sitting down), they turn to face the way it wants
     if (!p.moving && p.faceTo != null) p.heading += wrapAngle(p.faceTo - p.heading)*Math.min(1, dt*5);
     if (personModel) {
-      const clipSet = personModel.clips, s = isGone(p) && !inRoom(p) ? 0 : modelScale(p);
+      const clipSet = personModel.clips, s = isDrawn(p) ? modelScale(p) : 0;
       // a cycle of the walk for every stride's worth of ground covered, as big as they are (played in reverse, backwards)
       if (s > 0) {
         const was = p.walkCycle;
@@ -1045,7 +1058,7 @@ export function updatePeople(t) {
       const delighted = pleased && !scaredByBlood; // (blood wins over any other face: whatever they're doing, they look scared — unless they like it)
       // talking, their mouth moves; listening, their expression changes every now and then
       const group = p.group, talking = !!group && group.speaker === p, listening = !!group && !!group.speaker && !talking && p.lookAt === group.speaker;
-      if (!talking || (p.saying && isGone(p) && !inRoom(p))) {
+      if (!talking || (p.saying && !isDrawn(p))) {
         p.talkTo = 0;
         p.phrase = null;
         stopLine(p.saying);
@@ -1056,7 +1069,7 @@ export function updatePeople(t) {
         if (mouth < 0) { p.saying = null; p.talkTo = 0; p.talkIn = 0.3 + peopleRng()*0.3; }
         else p.talkTo = mouth;
       } else if ((p.talkIn -= dt) <= 0) {
-        const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, heard = !isGone(p) || inRoom(p);
+        const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, heard = isDrawn(p);
         // at the start of a phrase, now and then something real instead
         if (heard && (!p.phrase || p.phrase.said >= p.phrase.length) && (p.saying = sayLine(head, voiceOf(p, i), i, p.traits.mood))) p.phrase = null;
         else {
@@ -1106,7 +1119,7 @@ export function updatePeople(t) {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
       const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;
       rotation.setFromAxisAngle(up, p.heading);
-      if (isGone(p) && !inRoom(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
+      if (!isDrawn(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
       matrix.compose(position.set(p.x, p.y + bob, p.z), rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);
     }

@@ -383,7 +383,7 @@ export function cancelSwing() { swing = null; }
 //  ============== Riding the trains  ============== 
 // At TRAIN_RATE, someone near station pops to landing. At each stop after, they exit with probability  1/stationCount or guaranteed if two stations.
 // Someone followed by the camera takes it with them (see followCarriage in trains.js).
-// p.train: { node: Station, stage: 'approach'|'enter'|'wait'|'ride'|'exit', target: Vec3, side: number, along: number, lineId: string, timer: number }
+// p.train: { node: Station, stage: 'approach'|'enter'|'wait'|'ride'|'exit', target: Vec3, side: number, along: number, lineId: string, timer: number, spot: ?{across, along, turn} (where they stand aboard) }
 
 /** The chance, at each walkway point near a station, of deciding to ride the trains. */
 
