@@ -412,7 +412,12 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
 
   // `noWindow`: a segment deliberately kept solid (the podium) — a solid-clad base reads as a
   // distinct plinth instead of the same glazed mass continuing straight down to the ground.
+  // A lit lobby at street level spills light onto the pavement round it at night (see sky/streetlights.js) — unless a
+  // solid podium stands in front of it.
+  let lobbyBlocked = false;
   function addSegment(footprint, segHeight, zOffset, noWindow) {
+    if (zOffset < 0.01 && noWindow) { lobbyBlocked = true; delete group.userData.lobbyLight; }
+    if (zOffset < 0.01 && wantsLitWindows && windowMat && !noWindow && segHeight > 0.5 && !lobbyBlocked) { group.userData.lobbyLight = litIntensity; group.userData.lobbyColor = windowMat.userData.litColor; }
     if (windowMat && !noWindow && segHeight > 0.5) {
       // Walls take the window shader, fed this wall's real size and its height above the ground
       // (zOffset), so floors line up across every tier. The roof/floor caps are a separate mesh
