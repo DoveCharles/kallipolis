@@ -215,7 +215,7 @@ export function updateArrivingBlood(dt) {
   for (let k = arriving.length - 1; k >= 0; k--) {
     const a = arriving[k];
     if ((a.delay -= dt) > 0) continue;
-    splatter(a.p, a.i, a.from, a.points);
+    if (people[a.i] === a.p) splatter(a.p, a.i, a.from, a.points); // (not if their slot has since gone to someone else)
     arriving[k] = arriving[arriving.length - 1];
     arriving.pop();
   }

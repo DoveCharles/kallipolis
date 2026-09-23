@@ -1198,6 +1198,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     traits.set([shape[4], man ? 1 : 0, face[4], shape[5]], texel(1));
     traits.set(face.slice(0, 4), texel(PERSON_FACE_ROW));
     PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
+    traits[texel(BLOOD_ROW) + 3] = 0; // (no splotches: whoever had this slot before may have died covered in blood)
     // an outfit's colors over their own (from a generator of its own, so no one else's change)
     const outfit = outfitOf(id, i), outfitRng = mulberry32(5151 + id*7919);
     traits[texel(OUTFIT_RED_ROW) + 3] = outfit;
