@@ -195,6 +195,11 @@ const SPRAY_LAUNCH_SPEED = [9.5, 16.5], FOAM_LAUNCH_SPEED = [6.5, 13.5];
 // life is pinned to this (plus a short tail) so it visibly falls before fading, rather than fading mid-rise looking
 // like it flew off in a straight line
 const flightTime = vy0 => 2*vy0/SPLASH_GRAVITY;
+// an aqua car's continuous wake while it sits on water (see aquaWake, below): a gentler, steady trickle of the same
+// spray and foam as the one-off death splash, at WAKE_LAUNCH_SHARE of its launch speed so it barely leaves the
+// surface rather than erupting every frame. Thrown from WAKE_SPOTS points round the car (its middle and both sides),
+// each an equal share of the totals below, so the water visibly disturbs all along its length, not just at its centre.
+const WAKE_LAUNCH_SHARE = 0.35, WAKE_SPRAY_PER_SECOND = 30, WAKE_FOAM_PER_SECOND = 14, WAKE_SPOTS = 3;
 function splashFx(at, height) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   const now = performance.now()/1000;
@@ -418,10 +423,73 @@ export function explodeCar(at, height, colors) {
   playSound('explosion', at);
 }
 // Takes a car under at the water's surface: `at` where it went down, `height` how tall it was — no wreckage and no
-// fireball, just its own splash (splashFx) thrown up and out of the water in its place.
+// fireball, just its own splash (splashFx) thrown up and out of the water in its place. Call it once per point that
+// should splash (see waterAxleSpots in life/traffic.js, called once per set of wheels for a long vehicle like a bus)
+// rather than passing a size multiplier — that way a bus's splash reads as disturbed water spread along it, not one
+// oversized splash in the middle.
 export function splashCar(at, height) {
   splashFx(at, height);
   playSound('splash', at);
+}
+// An aqua car's wake while it's actually settled on water (see updateFloating in life/traffic.js), called every frame
+// it's there: a steady trickle of spray and foam over the `dt` seconds since last called, round `at` (its position,
+// `height` tall, `width` wide, `heading` which way it's facing) — the same particles as splashCar's one-off death
+// splash, just far lighter and slower (WAKE_LAUNCH_SHARE), so the water reads as disturbed the whole time it's
+// floating rather than just at the moment it went in or came out. Split evenly across WAKE_SPOTS points along its
+// width (its middle, and both sides out to half its width), so the disturbance reads as coming from all round the
+// car sitting in the water rather than a single point under its centre. As with splashCar, call it once per point
+// along a long vehicle's length that should have its own wake (waterAxleSpots, life/traffic.js) rather than scaling
+// it up in place.
+export function aquaWake(at, height, width, heading, dt) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  const now = performance.now()/1000, sideX = Math.cos(heading), sideZ = -Math.sin(heading);
+  const spots = [{ x: at.x, z: at.z }, { x: at.x + sideX*width*0.5, z: at.z + sideZ*width*0.5 }, { x: at.x - sideX*width*0.5, z: at.z - sideZ*width*0.5 }];
+  spots.forEach(spot => {
+    for (let k=0;k<Math.floor(WAKE_SPRAY_PER_SECOND/WAKE_SPOTS*dt + Math.random());k++) {
+      const angle = Math.random()*Math.PI*2, outward = 0.5 + Math.random()*1.5,
+        vy0 = (SPRAY_LAUNCH_SPEED[0] + Math.random()*(SPRAY_LAUNCH_SPEED[1] - SPRAY_LAUNCH_SPEED[0]))*WAKE_LAUNCH_SHARE;
+      pushFx({ kind: 'spray', priority: 1, x: spot.x, y: at.y, z: spot.z,
+        vx: Math.cos(angle)*outward, vy: vy0, vz: Math.sin(angle)*outward,
+        size: height*SPLASH_PLUME_SIZE*(0.1 + Math.random()*0.14), life: flightTime(vy0) + 0.1 + Math.random()*0.1,
+        color: new THREE.Color(SPRAY_COLORS[Math.floor(Math.random()*SPRAY_COLORS.length)]), born: now });
+    }
+    for (let k=0;k<Math.floor(WAKE_FOAM_PER_SECOND/WAKE_SPOTS*dt + Math.random());k++) {
+      const angle = Math.random()*Math.PI*2, outward = 0.3 + Math.random()*1,
+        vy0 = (FOAM_LAUNCH_SPEED[0] + Math.random()*(FOAM_LAUNCH_SPEED[1] - FOAM_LAUNCH_SPEED[0]))*WAKE_LAUNCH_SHARE;
+      pushFx({ kind: 'foam', priority: 1, x: spot.x, y: at.y, z: spot.z,
+        vx: Math.cos(angle)*outward, vy: vy0, vz: Math.sin(angle)*outward,
+        size: height*FOAM_SIZE*(0.1 + Math.random()*0.15), life: flightTime(vy0) + 0.15 + Math.random()*0.15,
+        color: new THREE.Color().lerpColors(FOAM_DARK, FOAM_LIGHT, Math.random()), born: now });
+    }
+  });
+}
+// A boosting aqua car's rooster-tail wake off its back while it's on water, in place of its (disabled) tyre smoke —
+// see boostSmoke in life/traffic.js. `at` is a single point at its very rear (even for a long vehicle like a bus,
+// which keeps this to the one trail off the back, unlike its splash and idling wake — see waterAxleSpots, life/traffic.js),
+// `height` how tall it is, `heading` which way it's facing (thrown out backward from that, in a BOOST_WAKE_ARC-wide
+// fan, rather than aquaWake's calmer, all-round trickle) over the `dt` seconds since last called. Bigger and faster
+// than the ordinary wake (BOOST_WAKE_SIZE_SHARE, and its own share of the launch speed) — a boat gunning it throws up
+// a lot more water than one just sitting there.
+const BOOST_WAKE_ARC = Math.PI*0.7, BOOST_WAKE_SPRAY_PER_SECOND = 40, BOOST_WAKE_FOAM_PER_SECOND = 22, BOOST_WAKE_SIZE_SHARE = 1.8, BOOST_WAKE_LAUNCH_SHARE = WAKE_LAUNCH_SHARE*1.5;
+export function boostWake(at, height, heading, dt) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  const now = performance.now()/1000, back = heading + Math.PI;
+  for (let k=0;k<Math.floor(BOOST_WAKE_SPRAY_PER_SECOND*dt + Math.random());k++) {
+    const angle = back + (Math.random() - 0.5)*BOOST_WAKE_ARC, outward = 2 + Math.random()*4,
+      vy0 = (SPRAY_LAUNCH_SPEED[0] + Math.random()*(SPRAY_LAUNCH_SPEED[1] - SPRAY_LAUNCH_SPEED[0]))*BOOST_WAKE_LAUNCH_SHARE;
+    pushFx({ kind: 'spray', priority: 1, x: at.x, y: at.y, z: at.z,
+      vx: Math.sin(angle)*outward, vy: vy0, vz: Math.cos(angle)*outward,
+      size: height*SPLASH_PLUME_SIZE*BOOST_WAKE_SIZE_SHARE*(0.16 + Math.random()*0.22), life: flightTime(vy0) + 0.15 + Math.random()*0.15,
+      color: new THREE.Color(SPRAY_COLORS[Math.floor(Math.random()*SPRAY_COLORS.length)]), born: now });
+  }
+  for (let k=0;k<Math.floor(BOOST_WAKE_FOAM_PER_SECOND*dt + Math.random());k++) {
+    const angle = back + (Math.random() - 0.5)*BOOST_WAKE_ARC, outward = 1.5 + Math.random()*3,
+      vy0 = (FOAM_LAUNCH_SPEED[0] + Math.random()*(FOAM_LAUNCH_SPEED[1] - FOAM_LAUNCH_SPEED[0]))*BOOST_WAKE_LAUNCH_SHARE;
+    pushFx({ kind: 'foam', priority: 1, x: at.x, y: at.y, z: at.z,
+      vx: Math.sin(angle)*outward, vy: vy0, vz: Math.cos(angle)*outward,
+      size: height*FOAM_SIZE*BOOST_WAKE_SIZE_SHARE*(0.15 + Math.random()*0.24), life: flightTime(vy0) + 0.2 + Math.random()*0.2,
+      color: new THREE.Color().lerpColors(FOAM_DARK, FOAM_LIGHT, Math.random()), born: now });
+  }
 }
 
 const placed = new THREE.Object3D(), spinStep = new THREE.Quaternion(), dimmed = new THREE.Color();

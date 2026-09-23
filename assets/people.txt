@@ -353,6 +353,7 @@ Ultra
 Chip
 Legendary
 Epic
+Saint
 
 ################################################################################################################################
 
@@ -586,6 +587,7 @@ Mistress
 Super
 Legendary
 Epic
+Saint
 
 ################################################################################################################################
 
@@ -924,6 +926,10 @@ T.V.
 Flake
 Sonic
 Tails
+Sauce
+Word
+Honey
+Wrinkle
 
 ################################################################################################################################
 
@@ -1624,6 +1630,10 @@ Schadenfreude [evil = 0.1]
 100 beers
 Parallel play
 Christian rock
+A sugarcube
+Ball-smell, lowkey
+A clean tushie
+Their therapist, but only sexually
 
 ################################################################################################################################
 
@@ -1636,6 +1646,8 @@ Christian rock
 [Hates]
 Wet stuff
 How caramelising onions makes them sooo smalllll... :(
+Pooping without showering immediately after
+Panic attacks
 When people say good morning but it's like, 12:30..?
 Nightshift... Never again [limit = 2a]
 Foreigners [mood = -0.4, evil = 0.25, aggression = 5]

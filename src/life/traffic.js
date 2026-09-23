@@ -17,7 +17,7 @@ import { exclaim } from '../audio/voices.js';
 import { isFavoritePerson } from '../ui/favorites.js';
 import { strikeLightning } from './lightning.js';
 import { updateEngines } from '../audio/engine.js';
-import { explodeCar, splashCar, puffSmoke, sparks, burnFx, tyreSmoke, igniteFx, engineSmoke, terribleSmoke, sparkleFx } from './giblets.js';
+import { explodeCar, splashCar, aquaWake, boostWake, puffSmoke, sparks, burnFx, tyreSmoke, igniteFx, engineSmoke, terribleSmoke, sparkleFx } from './giblets.js';
 import { playSound } from '../audio/sfx.js';
 import { carTypeOf, vanityChanceOf, vanityPlatesOf } from './car-types.js';
 import { driving, controlInput, startDriving, endDriving } from './possession.js';
@@ -1848,6 +1848,9 @@ function driveCar(i) {
 /**
  * Put the driven car back in traffic: its speed floored at 0, and set to drive back to the nearest point of any line (see
  * seatKickedCar), in whichever direction along that line its heading most nearly matches — or spawned afresh if the roads are empty.
+ * Also snaps it back dry (car.floatPhase etc, see updateFloating) if it was floating: nothing eases that back out for
+ * an unpossessed car — updateFloating only ever runs for the one actually being driven — so left alone it would stay
+ * sunk (and mid-bob) forever once AI control takes it back over dry land.
  * @returns {void}
  */
 function stopDriving() {
@@ -1856,6 +1859,7 @@ function stopDriving() {
   drivenCar = null;
   endDriving();
   car.speed = Math.max(0, car.speed);
+  car.floatPhase = 0; car.floatDrop = 0; car.floatBobPhase = 0; car.floatWasWet = false;
   // it drives back to the nearest lane, as a knocked car does
   car.kick = { x: 0, z: 0, vx: 0, vz: 0, heading: car.heading, goal: null, seated: false, blocked: false, speed: 0, driving: 0 };
   if (!seatKickedCar(car, car.x, car.z)) { car.kick = null; spawnCar(car); }
@@ -1938,25 +1942,56 @@ function overOpenWater(x, z) {
   return openWater.inWater(x, z) && !openWater.onRoad(x, z);
 }
 
+// Where a car's water particles (splashCar, aquaWake) should come from: one point at its centre for an ordinary car,
+// short enough that a single spot reads fine — but a bus is long enough that one point there just looks like an
+// oversized gusher in the middle, so it gets one spot at each set of wheels instead (front axle and rear axle), each
+// splashing and trickling at the ordinary rate, so the water disturbs evenly along its length rather than piling up
+// in one place. (Its boost wake stays a single trail off the very back regardless — see boostSmoke, below.)
+function waterAxleSpots(car) {
+  const cm = carModelOf(car);
+  if (!cm?.wheelbase || !/bus/i.test(cm.name ?? '')) return [{ x: car.x, z: car.z }];
+  const half = cm.wheelbase*carScale(car)/2, sin = Math.sin(car.heading), cos = Math.cos(car.heading);
+  return [{ x: car.x + sin*half, z: car.z + cos*half }, { x: car.x - sin*half, z: car.z - cos*half }];
+}
 // ---- an aqua car floating on open water: unlike an ordinary car sinking (above), it settles in a little rather than
-// going under, and hops back out just as gently once it's back over land or a bridge.
-const FLOAT_DEPTH_SHARE = 0.18, FLOAT_SETTLE_TIME = 0.8; // (how much of its own height it sinks into the water it's floating on, as a share; how many seconds it takes to settle in, or to hop back out)
+// going under, and hops back out — quicker than it settled in — once it's back over land or a bridge, landing with its
+// own puff of dry dust, like any other landing (no water in it) — with its own splash the moment it first touches
+// down, bobbing the whole time it's settled, and its own wake (aquaWake) trickling out from under it.
+const FLOAT_DEPTH_SHARE = 0.5, FLOAT_SETTLE_TIME = 0.8, FLOAT_RISE_TIME = 0.35; // (how much of its own height it sinks into the water it's floating on, as a share; how many seconds it takes to settle in; how many quicker it takes to hop back out)
+const FLOAT_BOB_AMPLITUDE = 0.05, FLOAT_BOB_PERIOD = 0.9; // (how much of its height it rises and falls on top of that settled depth; how many seconds one full up-and-down cycle takes)
+const FLOAT_LAND_SMOKE_PUFFS = 6; // dust puffs (puffSmoke, life/giblets.js) the moment it's fully back on dry ground — plain smoke, not the splash's spray and foam
 /**
  * Ease an aqua car (see the trait, core/traits.js) into or out of floating this frame: car.floatPhase (0 dry, 1 settled)
- * moves toward 1 while it's over open water (overOpenWater) and toward 0 once it's back over land or a bridge, at a
- * steady rate that crosses the whole way in FLOAT_SETTLE_TIME seconds either direction. car.floatDrop — read by
- * placeCar, alongside a sinking car's own drop — is that phase run through a cubic ease (smoothstep, the same curve
- * shaders here use) so it sinks in and hops out along a soft S-curve rather than snapping or drifting at a constant
- * speed, times FLOAT_DEPTH_SHARE of its height.
+ * moves toward 1 while it's over open water (overOpenWater) and toward 0 once it's back over land or a bridge, the
+ * first crossing the whole way in FLOAT_SETTLE_TIME seconds and the second in the shorter FLOAT_RISE_TIME — it drops
+ * in gently but hops back out smartly. car.floatDrop — read by placeCar, alongside a sinking car's own drop — is that
+ * phase run through a cubic ease (smoothstep, the same curve shaders here use) so it sinks in and hops out along a
+ * soft S-curve rather than snapping or drifting at a constant speed, times FLOAT_DEPTH_SHARE of its height, plus a
+ * gentle sinusoidal bob (car.floatBobPhase, its own running clock, started at a random point so a fleet of aqua cars
+ * doesn't bob in unison) once it's actually settled in — both scaled by the same eased phase, so floatDrop (and so the
+ * car's height) correctly eases all the way back to 0, full height, as it leaves rather than leaving it sunk or
+ * mid-bob. The moment it first goes from dry to over water (car.floatWasWet flipping false to true) it throws one
+ * splashCar burst at each of waterAxleSpots' points, like a car going under, and resets ready to do it again next time
+ * it's dry (car.floatWasWet back to false) in between; the moment phase finishes easing back to exactly 0 after
+ * having been above it, it throws a plain dust puff (puffSmoke, FLOAT_LAND_SMOKE_PUFFS) instead, landing on the
+ * ground rather than splashing into it. While it's on the water at all, it throws its own continuous wake too
+ * (aquaWake, life/giblets.js), again once per spot.
  * @param {object} car
  * @param {number} dt - seconds this frame
  * @returns {void}
  */
 function updateFloating(car, dt) {
-  const goal = overOpenWater(car.x, car.z) ? 1 : 0, rate = 1/FLOAT_SETTLE_TIME;
-  const phase = car.floatPhase = Math.max(0, Math.min(1, (car.floatPhase ?? 0) + Math.max(-rate*dt, Math.min(rate*dt, goal - (car.floatPhase ?? 0)))));
+  const goal = overOpenWater(car.x, car.z) ? 1 : 0, height = carHeight(car), spots = waterAxleSpots(car);
+  if (goal === 1 && !car.floatWasWet) { spots.forEach(spot => splashCar({ x: spot.x, y: WATER_LEVEL, z: spot.z }, height)); car.floatWasWet = true; }
+  else if (goal === 0) car.floatWasWet = false;
+  const rate = 1/(goal === 1 ? FLOAT_SETTLE_TIME : FLOAT_RISE_TIME), was = car.floatPhase ?? 0;
+  const phase = car.floatPhase = Math.max(0, Math.min(1, was + Math.max(-rate*dt, Math.min(rate*dt, goal - was))));
+  if (was > 0 && phase === 0) puffSmoke({ x: car.x, y: Y_ROAD, z: car.z }, height, FLOAT_LAND_SMOKE_PUFFS); // back on dry ground: a plain dust puff, no water in it
   const eased = phase*phase*(3 - 2*phase); // smoothstep
-  car.floatDrop = eased*FLOAT_DEPTH_SHARE*carHeight(car);
+  car.floatBobPhase = (car.floatBobPhase ?? Math.random()*Math.PI*2) + dt*(Math.PI*2/FLOAT_BOB_PERIOD);
+  const bob = eased*FLOAT_BOB_AMPLITUDE*height*Math.sin(car.floatBobPhase);
+  car.floatDrop = eased*FLOAT_DEPTH_SHARE*height + bob;
+  if (eased > 0) spots.forEach(spot => aquaWake({ x: spot.x, y: WATER_LEVEL, z: spot.z }, height, carWidth(car), car.heading, dt));
 }
 /**
  * One frame of a driven car going down in the water: the keys do nothing now; it runs on along its heading as the water
@@ -2095,9 +2130,15 @@ function impactSound(name, at, speed) {
   if (speed < 0.5) return;
   playSound(name, { x: at.x, y: Y_ROAD + 0.8*S.peopleSize, z: at.z }, Math.min(1, 0.25 + speed/IMPACT_FULL_SPEED));
 }
-/** Small black smoke from a boosting car's rear tyres. */
+/** Small black smoke from a boosting car's rear tyres — or, sitting on water (car.floatDrop > 0), a big wake thrown up off its back instead (boostWake, life/giblets.js), tyre smoke making no sense there. */
 function boostSmoke(car, dt) {
-  const sin = Math.sin(car.heading), cos = Math.cos(car.heading), back = carLength(car)*0.3, side = carWidth(car)*0.4;
+  const sin = Math.sin(car.heading), cos = Math.cos(car.heading);
+  if (car.floatDrop > 0) {
+    const back = carLength(car)*0.45;
+    boostWake({ x: car.x - sin*back, y: WATER_LEVEL, z: car.z - cos*back }, carHeight(car), car.heading, dt);
+    return;
+  }
+  const back = carLength(car)*0.3, side = carWidth(car)*0.4;
   [-1, 1].forEach(end => tyreSmoke({ x: car.x - sin*back + cos*side*end, y: Y_ROAD, z: car.z - cos*back - sin*side*end }, carHeight(car), dt));
 }
 
