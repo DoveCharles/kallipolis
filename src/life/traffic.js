@@ -1400,7 +1400,7 @@ function runOverPeople(car, motion = null) {
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
     // (anyone hearted is knocked down instead, below: they can't be killed. See ui/favorites.js)
-    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength && !isFavoritePerson(i)) { impactSound('thump', p, speed); if (speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p)); App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }); slowedBy(car, 'person', p.traits?.weight); }
+    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength && !isFavoritePerson(i)) { impactSound('thump', p, speed); if (speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p)); App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }, CAR_GIB_THROW); slowedBy(car, 'person', p.traits?.weight); }
     else if (p.mode === 'possessed') return;
     else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { impactSound('thump', p, speed); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed); p.shotRate = CAR_FALL_SPEEDUP; slowedBy(car, 'person', p.traits?.weight); } }
     else if (Math.abs(right) < stun.halfWidth && Math.abs(forward) < stun.halfLength) {
@@ -1426,6 +1426,7 @@ function runOverPeople(car, motion = null) {
  *   Its middle, its heading, half its length and wingspan, how far its body reaches below and above `y`, its speed, and its velocity (which anyone it kills keeps as chunks).
  * @returns {number} the share of its speed the aircraft loses to what it has newly struck (0 to 1)
  */
+const CAR_GIB_THROW = 1.5; // how much further than the car's own speed alone the people it hits are thrown in pieces
 function strikeWithAircraft({ x, y, z, heading, halfLength, halfWidth, below, above, speed = 0, velocity = null }) {
   const cos = Math.cos(heading), sin = Math.sin(heading), reach = Math.hypot(halfLength, halfWidth);
   const inFootprint = (px, pz) => {

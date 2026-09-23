@@ -26,10 +26,13 @@ const STAINED_PARTS = ['Skin', 'Top', 'Pants', 'Shoes', 'Hat', 'Hair'];
 const BLOOD_STRUCK_SPHERE_SHARE = 0.5, BLOOD_STRUCK_SPHERE_STRENGTH = 0.5; // the sphere round someone struck by something (a car, a plane), as a share of a blast's size and of its strength
 const BLOOD_BLAST_RADIUS = 27;                      // how far a blast splashes
 const BLOOD_CONE_COS = Math.cos(Math.PI*26/180);    // how near dead ahead of what struck them someone has to be: within 26 degrees
+// (the cone as it was, to roll back to: range 52.5 + 6.3 a unit of speed, strength 0.48, falling off with the square of the
+// distance and the cube of the aim — see BLOOD_CONE_DISTANCE_POWER and BLOOD_CONE_AIM_POWER)
 const BLOOD_CONE_RANGE = 35, BLOOD_CONE_RANGE_PER_SPEED = 4.2; // how far the cone reaches, and how much further for each unit of speed
-const BLOOD_CONE_STRENGTH = 0.48, BLOOD_BLAST_STRENGTH = 3.2; // what a cone and a blast give at their middle, as a share of BLOOD_BURST_POINTS
+const BLOOD_CONE_STRENGTH = 0.7, BLOOD_BLAST_STRENGTH = 2.8; // what a cone and a blast give at their middle, as a share of BLOOD_BURST_POINTS
+const BLOOD_CONE_DISTANCE_POWER = 2.5, BLOOD_CONE_AIM_POWER = 2.5; // how steeply the cone falls off towards its far end, and towards its sides
 const BLOOD_BURST_POINTS = 7.2, BLOOD_BURST_VARIANCE = 0.5;    // what someone at the middle takes, and how far either way each is off it, as a share
-const BLOOD_BLAST_SPEED = 60; // how fast a blast's chunks get to people, for when it lands on them
+const BLOOD_BLAST_SPEED = 160; // how fast a blast's chunks get to people, for when it lands on them
 const PUNCH_SPILL_CHANCE = 0.1, PUNCH_SPILL_SCALE = 0.2, PUNCH_SPILL_CHUNKS_MIN = 2, PUNCH_SPILL_CHUNKS_MAX = 3, PUNCH_SPILL_THROW = 3; // a landed punch spills blood this often, over this share of a blast's reach, in this many chunks thrown this fast
 const MOVING_SPEED = 1; // slower than this, what struck them is taken to have stopped and it's a blast
 const stained = new THREE.Color();
@@ -174,17 +177,17 @@ export function bloodBurst(victim, momentum, { scale = 1, includeVictim = false 
     const dx = p.x - at.x, dy = p.y + 0.85*p.height*size - at.y, dz = p.z - at.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out nearly everyone)
     const d = Math.hypot(dx, dy, dz);
-    // the share of BLOOD_BURST_POINTS they take: each falls off with the square of the distance, and the cone's with the cube
-    // of how far off-centre they are too, so it's concentrated in the middle
+    // the share of BLOOD_BURST_POINTS they take: the sphere's falls off with the square of the distance, the cone's by
+    // BLOOD_CONE_DISTANCE_POWER, and with how far off-centre they are too (BLOOD_CONE_AIM_POWER), so it's concentrated in the middle
     let share = 0;
     if (d < sphereRange) share += BLOOD_BLAST_STRENGTH*(cone ? BLOOD_STRUCK_SPHERE_STRENGTH : 1)*(1 - d/sphereRange)**2;
     if (cone && d < coneRange) {
       const cos = d > 1e-3 ? (dx*momentum.x + dy*momentum.y + dz*momentum.z)/(d*speed) : 1;
-      if (cos >= BLOOD_CONE_COS) share += BLOOD_CONE_STRENGTH*(1 - d/coneRange)**2*((cos - BLOOD_CONE_COS)/(1 - BLOOD_CONE_COS))**3; // (aim: 1 dead ahead, 0 at the cone's edge)
+      if (cos >= BLOOD_CONE_COS) share += BLOOD_CONE_STRENGTH*(1 - d/coneRange)**BLOOD_CONE_DISTANCE_POWER*((cos - BLOOD_CONE_COS)/(1 - BLOOD_CONE_COS))**BLOOD_CONE_AIM_POWER; // (aim: 1 dead ahead, 0 at the cone's edge)
     }
     const points = Math.round(BLOOD_BURST_POINTS*share*(1 + (Math.random()*2 - 1)*BLOOD_BURST_VARIANCE));
     // it lands when the chunks would get to them: at the speed of what struck them, or a blast's
-    if (points > 0) arriving.push({ p, i, from, points, delay: d/(cone ? speed : BLOOD_BLAST_SPEED) });
+    if (points > 0) arriving.push({ p, i, from, points, delay: d/(cone ? speed : Math.max(BLOOD_BLAST_SPEED/2, BLOOD_BLAST_SPEED*speed)) });
   });
 }
 

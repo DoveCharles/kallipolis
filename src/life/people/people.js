@@ -638,9 +638,10 @@ export function fleeWithin(p, area) {
  * @param {number} i - their index in people
  * @param {'player'|'car'} [by] - who did it, for the morality meter: the Smite button, or a car that ran them over
  * @param {?{x: number, y: number, z: number}} [momentum] - the velocity of whatever hit them, which their giblets keep
+ * @param {number} [throwScale] - how much further than `momentum` alone their giblets are thrown (the blood splashed on others goes by `momentum`)
  * @returns {void}
  */
-function killPerson(i, by = 'player', momentum = null) {
+function killPerson(i, by = 'player', momentum = null, throwScale = 1) {
   const p = people[i];
   if (!p || isGone(p) || isFavoritePerson(p.id)) return; // (the hearted can't be killed: see ui/favorites.js)
   // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
@@ -651,7 +652,8 @@ function killPerson(i, by = 'player', momentum = null) {
   p.crossStage = null; // don't leave a car yielding forever for someone who can no longer finish crossing
   p.jc = null;
   // their own body parts, where the model's loaded and they're near enough to see it, else chunks in all their colors
-  const at = { x: p.x, y: p.y, z: p.z }, parts = throwBodyParts(personModel, i, at, momentum);
+  const thrown = momentum && throwScale !== 1 ? { x: momentum.x*throwScale, y: momentum.y*throwScale, z: momentum.z*throwScale } : momentum;
+  const at = { x: p.x, y: p.y, z: p.z }, parts = throwBodyParts(personModel, i, at, thrown);
   const colors = { skin: new THREE.Color(0xf2d33c), top: new THREE.Color(), pants: new THREE.Color(), shoes: new THREE.Color(0x222226), hair: null, eyes: !parts };
   const colorFrom = (part, color) => {
     const o = ((2 + PERSON_TRAIT_COLORS.indexOf(part))*PEOPLE_MAX + i)*4, data = personModel.traitData;
@@ -667,7 +669,7 @@ function killPerson(i, by = 'player', momentum = null) {
     colors.pants.copy(colors.top);
   }
   Object.values(colors).forEach(color => color?.isColor && color.lerp(new THREE.Color(0x550000), 0.4)); //make gibs darker, less saturated
-  explode(at, 1.7*p.height*S.peopleSize, colors, momentum);
+  explode(at, 1.7*p.height*S.peopleSize, colors, thrown);
   bystandersReactToDeath(p);
   p.mode = 'dead';
   p.train = null;
