@@ -120,7 +120,7 @@ punchBtn.addEventListener('pointerdown', (e) => {
 // that isn't touch (see core/device.js) they never show, and the handlers above ignore them.
 const possessHint = document.getElementById('possess-hint');
 function syncDrive() {
-  const on = IS_TOUCH && !possessHint.hidden;
+  const on = IS_TOUCH && !possessHint.hidden && !App.isRiding?.(); // (riding a train there's nothing to hold down: see possession.js)
   if (!on && !drive.hidden) releaseStick();
   drive.hidden = !on;
   brakeBtn.hidden = !App.isDriving?.() && !App.isFlying?.(); // (it slows an aircraft down as it brakes a car)

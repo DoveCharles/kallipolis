@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { camera, scene, renderer } from '../core/scene.js';
-import { S } from '../core/shared.js';
+import { S, App } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { footprintBounds } from './footprints.js';
@@ -1100,7 +1100,7 @@ export function updateInteriorCamera() {
   if (inside && current === LAYOUTS.office && performance.now() - occupiedAt < 1000) {
     officeAmbience({ printer: current.printer, desks: current.desks, centre: room.localToWorld(new THREE.Vector3(0, 1, 0)), people: occupants });
   }
-  const goal = inside ? viewFov() : BASE_FOV;
+  const goal = inside ? viewFov() : (App.ridingFov?.() ?? BASE_FOV); // (riding a train carriage sets its own: see trains.js)
   if (camera.fov === goal) return;
   camera.fov = Math.abs(goal - camera.fov) < 0.05 ? goal : camera.fov + (goal - camera.fov)*FOV_EASE;
   camera.updateProjectionMatrix();

@@ -388,6 +388,12 @@ button.pc-pick:hover { text-decoration:underline; }
   border-radius:4px; background:var(--bg-input); color:var(--accent);
 }
 .ph-sub { font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+/* the two sliders for dialling in the seat inside a train carriage (src/trains/trains.js) */
+#ride-tune {
+  position:fixed; top:16px; right:16px; z-index:30; width:180px; padding:10px 12px;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+}
+#ride-tune[hidden] { display:none; }
 .pc-kill { width:62px; margin:0; padding:3px 0; font-size:11px; }
 .pc-kill[hidden] { display:none; }
 .pc-thumb {
