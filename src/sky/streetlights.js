@@ -41,7 +41,7 @@ const HEADLIGHT_STRENGTH = 1;
 const TAILLIGHT_REACH = 5;
 const TAILLIGHT_SPREAD = 0.2;
 const TAILLIGHT_COLOR = new THREE.Color(0xff2a1a);
-const TAILLIGHT_STRENGTH = 3;
+const TAILLIGHT_STRENGTH = 5;
 const HEADLIGHT_TEXELS = 256;   // along either side of their map…
 const HEADLIGHT_SPAN = [160, 640]; // …which covers this far across (metres), nearer or further out as the camera is
 
