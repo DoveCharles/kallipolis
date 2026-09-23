@@ -19,7 +19,8 @@ import { HEADSHOT_LAYER, PEOPLE_MAX, people, peopleMesh, setPersonModel } from '
 // Per-person appearance is in the traits texture (a texel per person); per-frame state is in the instance attributes.
 // Their skin is always the model's yellow. 
 // Hairstyles (assets/models/Hair.glb, each its own mesh, placed on the model's head) ride on the head bone. A style's name
-// says who can wear it: ending in _G, girls; _B, boys; _GB, either (as does no suffix).
+// says who can wear it: ending in _G, girls; _B, boys; _GB, either (as does no suffix). A style with a Hat part is a hat,
+// and only HAT_CHANCE of people wear one.
 // Facial hair (assets/models/FacialHair.glb) works the same way, but only boys wear it. So do glasses and sunglasses
 // (assets/models/Glasses.glb, built by tools/glasses-model.py), worn by anyone, but only by GLASSES_CHANCE of them.
 const PERSON_MODEL_URL = 'assets/models/Person.glb';
@@ -27,6 +28,7 @@ const HAIR_MODEL_URL = 'assets/models/Hair.glb';
 const FACIAL_HAIR_MODEL_URL = 'assets/models/FacialHair.glb';
 const GLASSES_MODEL_URL = 'assets/models/Glasses.glb';
 const GLASSES_CHANCE = 0.2;
+const HAT_CHANCE = 0.1;
 /** Frames per second the source clips are baked at, into the bone-pose texture. */
 export const PERSON_BAKE_FPS = 24;
 /** Distances the model's foot travels per walk-animation cycle. The walk plays slower for the same speed the higher this is. */
@@ -954,17 +956,21 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
       for (let i=0;i<count;i++) styleVertices.set([1, styleSlots[i], 0, i], i*4);
       styleGeometry.setAttribute('personVertex', new THREE.BufferAttribute(styleVertices, 4));
       styleGeometry.computeVertexNormals();
-      styles.push({ name: style.name, ...wearers(style.name), geometry: styleGeometry, mesh: null, anim: null, look: null, members: [] });
+      styles.push({ name: style.name, ...wearers(style.name), hat: parts.some(part => isHatMaterial(part.material.name)), geometry: styleGeometry, mesh: null, anim: null, look: null, members: [] });
     });
     styleGltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
     return styles;
   };
   // Each layer of what's worn on the head: its styles, and for each person which style they wear (-1 for none) and where
   // they are among its wearers. Women always wear a hairstyle, men can be bald; a layer with a `chance` is worn by that
-  // many of those who can, whoever they are. `hair` is whether it's colored as their hair.
-  const headLayer = (styles, rng, { chance = null, hair = true } = {}) => ({ styles, rng, chance, hair, of: new Int16Array(PEOPLE_MAX).fill(-1), slot: new Int32Array(PEOPLE_MAX),
-    girls: styles.map((style, k) => style.girls ? k : -1).filter(k => k >= 0), boys: styles.map((style, k) => style.boys ? k : -1).filter(k => k >= 0) });
-  const hairLayer = headLayer(headStylesFrom(hairGltf, hairstyleWearers), mulberry32(31337));
+  // many of those who can, whoever they are. `hair` is whether it's colored as their hair. A layer with a `hatChance`
+  // gives that many of its wearers one of its hats, and the rest one of its other styles.
+  const headLayer = (styles, rng, { chance = null, hair = true, hatChance = null } = {}) => {
+    const who = (sex, hat) => styles.map((style, k) => style[sex] && (hatChance == null || style.hat === hat) ? k : -1).filter(k => k >= 0);
+    return { styles, rng, chance, hair, hatChance, of: new Int16Array(PEOPLE_MAX).fill(-1), slot: new Int32Array(PEOPLE_MAX),
+      girls: who('girls', false), boys: who('boys', false), girlsHats: who('girls', true), boysHats: who('boys', true) };
+  };
+  const hairLayer = headLayer(headStylesFrom(hairGltf, hairstyleWearers), mulberry32(31337), { hatChance: HAT_CHANCE });
   const facialHairLayer = headLayer(headStylesFrom(facialHairGltf, () => ({ girls: false, boys: true })), mulberry32(4711));
   const glassesLayer = headLayer(headStylesFrom(glassesGltf, () => ({ girls: true, boys: true })), mulberry32(2020), { chance: GLASSES_CHANCE, hair: false });
   const headLayers = [hairLayer, facialHairLayer, glassesLayer];
@@ -984,7 +990,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf) {
     const man = sexRng() < 0.5;
     isMan[i] = man ? 1 : 0;
     headLayers.forEach(layer => {
-      const styles = man ? layer.boys : layer.girls;
+      const hats = layer.hatChance != null ? (man ? layer.boysHats : layer.girlsHats) : [];
+      const styles = hats.length && layer.rng() < layer.hatChance ? hats : man ? layer.boys : layer.girls;
       if (!styles.length) return;
       const pick = layer.chance != null ? (layer.rng() < layer.chance ? Math.floor(layer.rng()*styles.length) : styles.length)
         : Math.floor(layer.rng()*(man ? styles.length + 1 : styles.length));

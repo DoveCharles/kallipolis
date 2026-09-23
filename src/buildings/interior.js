@@ -144,10 +144,11 @@ curtainWall(ROOM_D + WALL, ROOM_W/2 + WALL/2, 0, Math.PI/2, -ROOM_D/2 + COLUMN/2
 curtain.visible = false;
 /** The chance an office has windows punched through its walls, as a home does, rather than glass floor to ceiling. */
 const OFFICE_PUNCHED = 0.1;
-// a number from 0 up to 1 for a building's key, the same every time (and unlike its number, which picks home or office)
-function keyFraction(key) {
+// a number from 0 up to 1 for a building's key, the same every time (and unlike its number, which picks home or office),
+// and different for each `salt`
+function keyFraction(key, salt = ':walls') {
   let h = 2166136261;
-  for (const ch of String(key) + ':walls') h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  for (const ch of String(key) + salt) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
   return (h >>> 0)/2**32;
 }
 wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK);  // behind the camera
@@ -216,12 +217,19 @@ function useLayout(name) {
   grid = null;
   current = LAYOUTS[name] ?? LAYOUTS.home;
   current.group.visible = true;
+  trim.visible = false; // (till a posh home's furnished)
   paintRoom();
 }
 function paintRoom() {
   floorMaterial.color.copy(current.floor);
   wallMaterial.color.copy(current.wall);
   roomLit(floorMaterial); roomLit(wallMaterial);
+  // (and a posh home's parquet or marble)
+  const map = current.floorMap ?? null;
+  if (floorMaterial.map !== map) {
+    floorMaterial.map = floorMaterial.emissiveMap = map;
+    floorMaterial.needsUpdate = true;
+  }
 }
 
 // ---------------------------------------------------------- a home's furniture
@@ -289,19 +297,7 @@ async function loadFurniture() {
     console.warn('Blockout: the interior model failed to load; homes are left bare', err);
     return;
   }
-  for (const name of ['Sofa', 'Chair']) if (pieces[name]) pieces[name].seats = measureSeats(pieces[name]);
-  // the TV's screen (where the video goes: see "the TV", below) and the lamp's bulb, in their pieces' own terms
-  const part = (piece, material) => {
-    let mesh = null;
-    piece?.object.traverse(o => { if (o.isMesh && o.material.name === material) mesh = o; });
-    return mesh && new THREE.Box3().setFromObject(mesh);
-  };
-  const screen = part(pieces.TV, 'Screen'), bulb = part(pieces.Lamp, 'Light');
-  if (screen) pieces.TV.screen = { centre: screen.getCenter(new THREE.Vector3()).setZ(screen.max.z + 0.004),
-    w: screen.max.x - screen.min.x, h: screen.max.y - screen.min.y };
-  if (bulb) pieces.Lamp.bulb = bulb.getCenter(new THREE.Vector3());
-  const hanging = part(pieces.Pendant, 'Light');
-  if (hanging) pieces.Pendant.bulb = hanging.getCenter(new THREE.Vector3());
+  measureParts(pieces);
   if (!['TV', 'Sofa', 'Coffee_Table'].every(name => pieces[name])) {
     console.warn('Blockout: the interior model is missing its TV, sofa or coffee table; homes are left bare');
     return;
@@ -309,13 +305,29 @@ async function loadFurniture() {
   furniture = pieces;
   if (inside && current === LAYOUTS.home) furnish(inside.key);
 }
+// Where anyone can sit on a furniture model's seats, and where its TV's screen (where the video goes: see "the TV",
+// below) and its lamps' bulbs are, in their pieces' own terms.
+function measureParts(pieces) {
+  for (const name of ['Sofa', 'Chair', 'Chair2', 'Chair3', 'Armchair', 'PianoBench', 'Beanbag']) if (pieces[name]) pieces[name].seats = measureSeats(pieces[name]);
+  const part = (piece, material) => {
+    const box = new THREE.Box3();
+    piece?.object.traverse(o => { if (o.isMesh && o.material.name === material) box.expandByObject(o); });
+    return box.isEmpty() ? null : box;
+  };
+  const screen = part(pieces.TV, 'Screen'), bulb = part(pieces.Lamp, 'Light');
+  if (screen) pieces.TV.screen = { centre: screen.getCenter(new THREE.Vector3()).setZ(screen.max.z + 0.004),
+    w: screen.max.x - screen.min.x, h: screen.max.y - screen.min.y };
+  if (bulb) pieces.Lamp.bulb = bulb.getCenter(new THREE.Vector3());
+  const hanging = part(pieces.Pendant, 'Light');
+  if (hanging) pieces.Pendant.bulb = hanging.getCenter(new THREE.Vector3());
+}
 // lit like the rest of the room (see roomLit), but for the lamp's bulb, which glows anyway, the glass, and the TV's screen
 function furnitureLit(material) {
   if (material.name === 'Screen') {
     material.color.setHex(SCREEN_COLOR);
     material.emissive.setHex(SCREEN_GLOW);
     material.emissiveIntensity = 1;
-  } else if (material.name !== 'Light' && !material.transparent) {
+  } else if (material.name !== 'Light' && material.name !== 'Fire' && !material.transparent) {
     roomLit(material);
   }
 }
@@ -346,6 +358,272 @@ function measureSeats(piece) {
 }
 loadFurniture();
 
+// ---------------------------------------------------------- a posh home
+// Now and then a home's posh (from its building's key): furnished from a set of its own (assets/models/Posh.glb, built by
+// tools/posh-models.py) with the same pieces as the interior model — a chesterfield for the sofa, a sideboard under the
+// TV, a Persian rug, a library bookcase, a chandelier, a commode — laid out the same way, and then an armchair or two by
+// the coffee table, a fireplace, a grand piano with its bench, and paintings on the walls behind the camera. Its room's
+// dressed up to match: panelled below a dado rail, skirting and a crown moulding, curtains at the windows, and a parquet
+// or marble floor. Until its model's loaded, posh homes are furnished as any other.
+const POSH_MODEL_URL = 'assets/models/Posh.glb';
+const POSH_SHARE = 0.25;
+let posh = null;
+const POSH_WALLS = [0x2e4a3a, 0x283a58, 0x6a2a2a, 0x9aa88e, 0xe0c0b4, 0xece2c8, 0x5a646a, 0xc8a050];
+const POSH_TRIM = [0xf2eee4, 0xe8e0cc, 0xf4f2ee, 0x4a3020, 0xd8d2c4];
+const DRAPES = [0x7a1e24, 0x2a4a34, 0xc8a050, 0x283458, 0xe6dcc6, 0x5a2a4a, 0x8a9a8a];
+// the parquet's tinted by the floor's colour (its planks are shades of grey); the marble's black and white
+const POSH_FLOORS = [0xc89a6a, 0xa87a50, 0xd8b488, 0x8a6040, 0xb88c5c];
+const POSH_PAINTED = {
+  Leather: [0x5a1a1a, 0x1e3a2a, 0x8a4a22, 0x1e2a44, 0x1a1a1a, 0xa87a4a],
+  Velvet: [0x1f6a4a, 0x22386a, 0xc89a2a, 0xc88a8a, 0x5a2a5a, 0x1e5a5e],
+  Walnut: [0x4a2c1a, 0x3a2012, 0x5e3a22, 0x2a1a12, 0x161416],
+  Gilt: [0xd4a84a, 0xc09040, 0xc8c8cc, 0xa8743a],
+  Marble: [0xece8e2, 0x2a2a2c, 0x3e6a52, 0xe8dcc4, 0xd8b4ac],
+  Lacquer: [0x141416, 0x141416, 0x141416, 0xf0eee8, 0x3a2416],
+  LampShade: [0xece2cc, 0x1a1a1a, 0x7a1e24, 0x2a4a34, 0xd8c090],
+  Urn: [0x7aa89a, 0xece8e2, 0x283a58, 0xc8a050, 0x8a3a2a],
+  RugField: [0x8a2a2a, 0x243a5a, 0x6a3a2a, 0x2e4a3a, 0xc8a878],
+  RugBorder: [0x243a5a, 0x8a2a2a, 0x1a1a22, 0xc8a050],
+  RugMotif: [0xd8c090, 0xece2cc, 0xc88a5a, 0x8aa0b8],
+  PaintSky: [0x9ab8c8, 0xe0b8a0, 0xd8c890, 0xa8b0b4],
+  PaintLand: [0x6a8a4a, 0xa89a4a, 0x5a7a5a, 0x8a7a4a],
+  PaintHill: [0x4a6a5a, 0x3a5a3a, 0x5a5a6a, 0x6a5a3a],
+  PaintDark: [0x2a2420, 0x1a2a22, 0x1e1e2a],
+  PaintFigure: [0x3a2a3a, 0x1a1a1a, 0x5a1a1a, 0x1e2a44],
+};
+const poshPainted = [];
+// the set a home's to be furnished from whatever its key says, for tools/interior.html: 'posh', 'student', 'plain', or null
+let forcedSet = null;
+// which set a home's furnished from: a quarter posh, a fifth student flats (see "a student flat", below), the rest plain
+function homeSet(key) {
+  if (forcedSet) return forcedSet;
+  const f = keyFraction(key, ':set');
+  return f < POSH_SHARE ? 'posh' : f < POSH_SHARE + STUDENT_SHARE ? 'student' : 'plain';
+}
+/** Furnish every home from one set ('posh', 'student' or 'plain') whatever its key says, or (null) as its key says: for tools/interior.html. */
+export function forceHomeSet(set) {
+  forcedSet = set;
+  if (inside && current === LAYOUTS.home) furnish(inside.key);
+}
+async function loadPosh() {
+  try {
+    posh = await loadPieces(POSH_MODEL_URL, POSH_PAINTED, poshPainted);
+  } catch (err) {
+    console.warn('Blockout: the posh interior model failed to load; posh homes are furnished as any other', err);
+    return;
+  }
+  measureParts(posh);
+  if (inside && current === LAYOUTS.home) furnish(inside.key);
+}
+loadPosh();
+
+// The posh room's woodwork, built once and shown for posh homes: skirting, raised panels up to a dado rail, and a stepped
+// crown moulding, round all four walls (but for the doorway, which gets a casing), each a strip `depth` out from the wall.
+const trim = new THREE.Group();
+trim.visible = false;
+room.add(trim);
+const trimMaterial = lit(POSH_TRIM[0], 0.6), drapeMaterial = lit(DRAPES[0], 1);
+// the walls' inner faces: along x or z, where, and which way the room is from them
+const WALL_FACES = [{ alongX: true, at: ROOM_D/2, n: -1 }, { alongX: false, at: ROOM_W/2, n: -1 },
+  { alongX: true, at: -ROOM_D/2, n: 1 }, { alongX: false, at: -ROOM_W/2, n: 1 }];
+function strip(face, a, b, y, h, depth, material = trimMaterial) {
+  const out = face.at + face.n*depth/2, mid = (a + b)/2;
+  const mesh = face.alongX ? box(b - a, h, depth, material, mid, y, out, trim) : box(depth, h, b - a, material, out, y, mid, trim);
+  mesh.castShadow = false;
+  return mesh;
+}
+for (const face of WALL_FACES) {
+  const half = face.alongX ? ROOM_W/2 : ROOM_D/2;
+  const runs = face.alongX || face.n < 0 ? [[-half, half]] : [[-half, doorFrom - 0.08], [doorTo + 0.08, half]];
+  for (const [a, b] of runs) {
+    strip(face, a, b, 0.08, 0.16, 0.025);                     // skirting
+    strip(face, a, b, 0.165, 0.02, 0.035);
+    strip(face, a, b, 0.85, 0.05, 0.035);                     // the dado rail
+    const panels = Math.max(1, Math.round((b - a)/0.75)), each = (b - a)/panels;
+    for (let i = 0; i < panels; i++) strip(face, a + i*each + 0.1, a + (i + 1)*each - 0.1, 0.5, 0.5, 0.015);
+  }
+  strip(face, -half, half, ROOM_H - 0.06, 0.12, 0.03);       // the crown moulding, stepping out to the ceiling
+  strip(face, -half, half, ROOM_H - 0.025, 0.05, 0.07);
+  strip(face, -half, half, ROOM_H - 0.13, 0.02, 0.045);
+}
+{ // the doorway's casing
+  const face = WALL_FACES[3];
+  strip(face, doorFrom - 0.08, doorFrom, (DOOR_H + 0.08)/2, DOOR_H + 0.08, 0.03);
+  strip(face, doorTo, doorTo + 0.08, (DOOR_H + 0.08)/2, DOOR_H + 0.08, 0.03);
+  strip(face, doorFrom - 0.08, doorTo + 0.08, DOOR_H + 0.04, 0.08, 0.035);
+}
+// Curtains either side of each of the far walls' windows, hung from a pole over it and tied back to the wall either side,
+// so each is gathered in at the tie and spreads out above and below it (which reads as curtains from its outline alone,
+// with the room lit as flatly as it is): each a group, with the rectangle it stands on (shown in each posh home unless
+// the TV's in front of it: see furnish).
+const drapes = [];
+{
+  const poleMaterial = lit(0xc09040, 0.4);
+  const pleat = new THREE.CylinderGeometry(0.035, 0.035, 1, 8), pole = new THREE.CylinderGeometry(0.018, 0.018, 1, 8);
+  const finial = new THREE.SphereGeometry(0.04, 10, 8);
+  const UP = new THREE.Vector3(0, 1, 0), POLE = HEAD + 0.2, TIE = 1.0, PLEATS = 6;
+  // (the room's x, y and z for u along the wall, y up and v out from it)
+  const place = (face, u, y, v) => face.alongX ? new THREE.Vector3(u, y, face.at + face.n*v) : new THREE.Vector3(face.at + face.n*v, y, u);
+  const rod = (geometry, material, a, b, parent) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(a).add(b).multiplyScalar(0.5);
+    mesh.scale.y = a.distanceTo(b);
+    mesh.quaternion.setFromUnitVectors(UP, b.clone().sub(a).normalize());
+    mesh.castShadow = mesh.receiveShadow = true;
+    parent.add(mesh);
+  };
+  for (const [length, windows, face] of [[...FAR_X, WALL_FACES[0]], [...FAR_Z, WALL_FACES[1]]]) {
+    const { width, gap, centres } = piers(length, windows);
+    for (let i = 0; i < windows; i++) {
+      // (along the wall as the room has it: the wall along z is turned, so its own x runs down the room's z)
+      const mid = (centres[i] + width/2 + gap/2)*(face.alongX ? 1 : -1);
+      for (const side of [-1, 1]) {
+        // (u from the window's edge, e, in towards its middle: its span at the top, at the tie and at the floor)
+        const group = new THREE.Group(), edge = mid + side*gap/2, e = t => edge - side*t;
+        for (let k = 0; k < PLEATS; k++) {
+          const f = k/(PLEATS - 1), wave = 0.06 + (k % 2)*0.035;
+          const top = place(face, e(-0.02 + f*0.42), POLE - 0.02, wave), tie = place(face, e(0.02 + f*0.1), TIE, 0.09);
+          const foot = place(face, e(-0.01 + f*0.3), 0, wave);
+          rod(pleat, drapeMaterial, top, tie, group);
+          rod(pleat, drapeMaterial, tie, foot, group);
+        }
+        rod(pleat, poleMaterial, place(face, e(-0.02), TIE, 0.1), place(face, e(0.14), TIE, 0.1), group);   // the tie
+        // (what's kept clear for it stops a little short of the pier, so a bookcase or fireplace still fits between)
+        const [a, b] = [Math.min(e(0.06), e(0.32)), Math.max(e(0.06), e(0.32))], d = [face.at, face.at + face.n*0.15];
+        group.userData.area = face.alongX ? { x0: a, x1: b, z0: Math.min(...d), z1: Math.max(...d) }
+          : { x0: Math.min(...d), x1: Math.max(...d), z0: a, z1: b };
+        trim.add(group);
+        drapes.push(group);
+      }
+      // the pole, with a finial at either end
+      const ends = [-1, 1].map(s => place(face, mid + s*(gap/2 + 0.12), POLE, 0.1));
+      rod(pole, poleMaterial, ...ends, trim);
+      for (const end of ends) { const ball = new THREE.Mesh(finial, poleMaterial); ball.position.copy(end); trim.add(ball); }
+    }
+  }
+}
+
+// The posh floors, as textures (plank-grey parquet for the floor's colour to tint, or a marble chequer), laid across the
+// floor's slab (see the box at the top) at their real size: the slab is 12 by 10 metres.
+const SLAB_W = ROOM_W + (WALL + OVERHANG)*2, SLAB_D = ROOM_D + (WALL + OVERHANG)*2;
+function floorTexture(size, metres, draw) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  draw(canvas.getContext('2d'), mulberry32(7));
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(SLAB_W/metres, SLAB_D/metres);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
+// Herringbone: planks L widths long, alternately along and across, in a staircase — which repeats every (1, 1) plank
+// widths and (L, -L), so every 2L both ways.
+const PLANK = 4;
+const parquet = floorTexture(512, 0.09*PLANK*2, (g, rng) => {
+  const w = 512/(PLANK*2), plank = (x, y, pw, ph) => {
+    const shade = 205 + rng()*50;
+    g.fillStyle = `rgb(${shade},${shade},${shade})`;
+    g.fillRect(x*w, y*w, pw*w, ph*w);
+    g.strokeStyle = 'rgba(60,40,25,0.35)';
+    g.lineWidth = 2;
+    g.strokeRect(x*w + 1, y*w + 1, pw*w - 2, ph*w - 2);
+  };
+  for (let a = -PLANK*3; a <= PLANK*3; a++) for (let b = -3; b <= 3; b++) {
+    const x = a + PLANK*b, y = a - PLANK*b;
+    plank(x, y, PLANK, 1);
+    plank(x, y + 1, 1, PLANK);
+  }
+});
+const chequer = floorTexture(512, 0.8, (g, rng) => {
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+    const white = (i + j) % 2 === 0;
+    g.fillStyle = white ? '#eeece6' : '#1c1c1e';
+    g.fillRect(i*256, j*256, 256, 256);
+    // (a few veins through each)
+    g.strokeStyle = white ? 'rgba(120,120,125,0.18)' : 'rgba(200,200,205,0.1)';
+    for (let k = 0; k < 4; k++) {
+      g.lineWidth = 0.5 + rng()*1.5;
+      g.beginPath();
+      let x = i*256 + rng()*256, y = j*256;
+      g.moveTo(x, y);
+      while (y < (j + 1)*256) { x += (rng() - 0.5)*24; y += 14 + rng()*24; g.lineTo(x, y); }
+      g.stroke();
+    }
+  }
+  g.fillStyle = 'rgba(0,0,0,0.5)';
+  for (let k = 0; k <= 2; k++) { g.fillRect(k*256 - 1, 0, 2, 512); g.fillRect(0, k*256 - 1, 512, 2); }
+});
+
+// ---------------------------------------------------------- a student flat
+// Now and then a home's a student flat (from its building's key, as a posh home is): furnished from a set of its own
+// (assets/models/Student.glb, built by tools/student-models.py) with the same pieces as the interior model — a futon for
+// the sofa, a TV on milk crates with a games console, a pallet for the coffee table with a pizza box and cans on it, a
+// folding table, crates for a bookcase, a paper lantern, a bare bulb — laid out the same way, and then chairs that don't
+// match round the table, a beanbag by the coffee table, a clothes horse full of washing, posters stuck up on the walls,
+// and fairy lights strung along the top of one of the far walls. Its floor's bare boards. Until its model's loaded,
+// student flats are furnished as any other home.
+const STUDENT_MODEL_URL = 'assets/models/Student.glb';
+const STUDENT_SHARE = 0.2;
+let student = null;
+const STUDENT_WALLS = [0xece2c4, 0xf0ead8, 0xe6e2d8, 0xd8d4c8, 0xe8dcc0, 0xdcd8cc];
+// the boards are tinted by the floor's colour (they're shades of grey)
+const STUDENT_FLOORS = [0xe0b078, 0xd09a60, 0xecc890, 0xc08858, 0xb07a48];
+const STUDENT_PAINTED = {
+  Futon: [0x2a3a5a, 0x3a3a3c, 0xc8962e, 0x6a2a2e, 0x5a6a3a, 0x2f6a6a, 0x8a8c8e],
+  Pine: [0xd8b47a, 0xe8cc98, 0xc8a068, 0x3a3430],
+  Crate: [0xc83a2a, 0x2a5ab0, 0xe0b020, 0x3a8a4a, 0x2a2a2c, 0x8a9098],
+  Crate2: [0x2a5ab0, 0xc83a2a, 0x3a8a4a, 0xe0b020, 0x8a9098],
+  Beanbag: [0xd86a2a, 0x6a3a8a, 0x2a2a2c, 0xc82a3a, 0x2a8a8a, 0x8ab02a, 0x3a4a8a],
+  Formica: [0xe8e4da, 0xd8d0c0, 0xf2f0ea, 0xa8b0b0],
+  Painted: [0x5a8a7a, 0xd8c040, 0xc85a4a, 0x4a6a9a, 0xece8e0, 0x2a2a2c],
+  Plastic: [0xf2f0ea, 0x2a6a4a, 0x3a3a3c, 0xd8d4c8],
+  Bucket: [0xe8e4d8, 0x3a8ac8, 0xd84a3a, 0xe0b020],
+  RugA: [0x2a6a7a, 0xc83a2a, 0x3a3a4a, 0xd8a030, 0x6a3a6a],
+  RugB: [0xe8d8b0, 0xf0ece0, 0x8a8a8a, 0x2a2a2c],
+  Poster0: [0x1a1a22, 0xf0ece0, 0x2a2a4a],
+  Poster1: [0xe84a3a, 0xe87aa8, 0x3ab08a, 0xf08a2a],
+  Poster2: [0xf0d040, 0xf0f0e8, 0x8ad0e8],
+  Poster3: [0x3a8ac8, 0x2a4a6a, 0x5a3a8a],
+};
+const studentPainted = [];
+async function loadStudent() {
+  try {
+    student = await loadPieces(STUDENT_MODEL_URL, STUDENT_PAINTED, studentPainted);
+  } catch (err) {
+    console.warn('Blockout: the student interior model failed to load; student flats are furnished as any other home', err);
+    return;
+  }
+  measureParts(student);
+  if (inside && current === LAYOUTS.home) furnish(inside.key);
+}
+loadStudent();
+// Bare floorboards: planks 2.4 m long and 15 cm wide, in rows, their ends staggered and nailed down — which repeats
+// every 2.4 m both ways.
+const boards = floorTexture(1024, 2.4, (g, rng) => {
+  const ROWS = 16, row = 1024/ROWS;
+  for (let r = 0; r < ROWS; r++) {
+    const end = Math.floor(rng()*16)*64;
+    for (const x of [end - 1024, end]) {
+      const shade = 212 + rng()*38;
+      g.fillStyle = `rgb(${shade},${shade},${shade})`;
+      g.fillRect(x, r*row, 1024, row);
+      g.strokeStyle = 'rgba(70,50,30,0.06)';                                 // (a little grain along it)
+      g.lineWidth = 2;
+      for (let j = 0; j < 3; j++) {
+        const y = r*row + 10 + rng()*(row - 20), w = (rng() - 0.5)*10;
+        g.beginPath(); g.moveTo(x, y); g.bezierCurveTo(x + 340, y + w, x + 680, y - w, x + 1024, y); g.stroke();
+      }
+      g.fillStyle = 'rgba(40,30,20,0.3)';                                     // nails, at its ends
+      for (const nx of [x + 8, x + 1016]) for (const ny of [r*row + row*0.3, r*row + row*0.7]) g.fillRect(nx - 2, ny - 2, 4, 4);
+      g.fillStyle = 'rgba(40,25,15,0.4)';
+      g.fillRect(x - 1, r*row, 3, row);
+    }
+    g.fillStyle = 'rgba(40,25,15,0.35)';
+    g.fillRect(0, r*row - 1, 1024, 2);
+  }
+});
+
 // Lays out the home for the building with this key (see buildingKey): `LAYOUTS.home`'s furniture, where nobody stands or
 // walks, and its seats, in the room as it's now placed.
 function furnish(key) {
@@ -359,16 +637,32 @@ function furnish(key) {
   lampLight.userData.there = false;
   const rng = mulberry32(hashNameToNumber(String(key)));
   home.floor.setHex(FLOORS[Math.floor(rng()*FLOORS.length)]);
+  home.floorMap = null;
   // (colours from a generator of their own, so the furniture's where it always was)
-  const tint = mulberry32(hashNameToNumber(key + ' colours'));
+  const set = homeSet(key), fancy = !!(furniture && posh && set === 'posh'), scruffy = !!(furniture && student && set === 'student');
+  const tint = mulberry32(hashNameToNumber(key + (fancy ? ' posh colours' : scruffy ? ' student colours' : ' colours')));
   const pick = list => list[Math.floor(tint()*list.length)];
-  home.wall.setHex(pick(WALLS));
+  home.wall.setHex(pick(fancy ? POSH_WALLS : scruffy ? STUDENT_WALLS : WALLS));
+  trim.visible = fancy;
+  if (fancy) {
+    const marble = tint() < 0.3;
+    home.floorMap = marble ? chequer : parquet;
+    home.floor.setHex(marble ? 0xffffff : pick(POSH_FLOORS));
+    trimMaterial.color.setHex(pick(POSH_TRIM)); roomLit(trimMaterial);
+    drapeMaterial.color.setHex(pick(DRAPES)); roomLit(drapeMaterial);
+  }
+  if (scruffy) {
+    home.floorMap = boards;
+    home.floor.setHex(pick(STUDENT_FLOORS));
+  }
   paintRoom();
-  for (const material of painted) {
-    material.color.setHex(pick(PAINTED[material.name]));
+  for (const [materials, palettes] of fancy ? [[poshPainted, POSH_PAINTED]] : scruffy ? [[studentPainted, STUDENT_PAINTED]] : [[painted, PAINTED]]) for (const material of materials) {
+    material.color.setHex(pick(palettes[material.name]));
     roomLit(material);
   }
   if (!furniture) return;
+  // (the posh or student set's in place of the interior model's pieces it has, and has some of its own)
+  const F = fancy ? { ...furniture, ...posh } : scruffy ? { ...furniture, ...student } : furniture;
 
   // what's taken so far (and room kept clear), as rectangles in the room's x and z; `tall` ones could hide the TV
   const taken = [];
@@ -381,7 +675,7 @@ function furnish(key) {
     && r.z0 >= -ROOM_D/2 + margin && r.z1 <= ROOM_D/2 - margin;
   const fits = (r, gap = 0, margin = 0.02) => inRoom(r, margin) && taken.every(o => !overlaps(r, o, gap));
   const put = (name, x, z, angle, { scale = 1, tall = false, underfoot = false, diner = false } = {}) => {
-    const piece = furniture[name], object = piece.object.clone();
+    const piece = F[name], object = piece.object.clone();
     object.position.set(x, 0, z);
     object.rotation.y = angle;
     object.scale.setScalar(scale);
@@ -409,12 +703,19 @@ function furnish(key) {
     const a = at(u0, v0), b = at(u1, v1);
     return { x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x), z0: Math.min(a.z, b.z), z1: Math.max(a.z, b.z) };
   };
-  const { TV: tv, Sofa: sofa, 'Coffee_Table': coffee } = furniture;
+  const { TV: tv, Sofa: sofa, 'Coffee_Table': coffee } = F;
   // (towards the wall's far end, rather than the camera's, where it'd be seen side on and the sofa'd be under the camera)
   const tvRange = wallLength/2 - tv.w/2 - 0.8, tvU = tvRange*(rng()*1.3 - 0.3), tvV = tv.d/2 + 0.03;
   let spot = at(tvU, tvV);
   put('TV', spot.x, spot.z, fromWall);
   const screen = { ...spot }, tvObject = home.group.children.at(-1);
+  // (a posh home's curtains, but for any the TV's in front of)
+  const tvArea = taken[0];
+  for (const drape of drapes) {
+    const area = drape.userData.area;
+    drape.visible = !overlaps(area, tvArea, 0.05);
+    if (fancy && drape.visible) { taken.push(area); home.solid.push(area); home.blocked.push(around(area.x0, area.x1, area.z0, area.z1, 0.2)); }
+  }
   // the sofa, facing it a comfortable way off, with its back to the room behind
   const sofaV = Math.min(tv.d + 2.3 + rng()*0.7 + sofa.d/2, depth - sofa.d/2 - 0.05);
   const sofaU = THREE.MathUtils.clamp(tvU + (rng() - 0.5)*0.6, -wallLength/2 + sofa.w/2 + 0.1, wallLength/2 - sofa.w/2 - 0.1);
@@ -424,7 +725,7 @@ function furnish(key) {
   const coffeeV = sofaV - sofa.d/2 - 0.55 - coffee.d/2;
   spot = at(sofaU, coffeeV);
   put('Coffee_Table', spot.x, spot.z, toWall);
-  if (furniture.Rug) { spot = at(sofaU, coffeeV + 0.15); put('Rug', spot.x, spot.z, toWall, { scale: 1.35, underfoot: true }); }
+  if (F.Rug) { spot = at(sofaU, coffeeV + 0.15); put('Rug', spot.x, spot.z, toWall, { scale: 1.35, underfoot: true }); }
   // and nothing else between them
   taken.push(areaUV(sofaU - sofa.w/2, sofaU + sofa.w/2, tv.d, sofaV - sofa.d/2));
   taken.push(cameraCorner);
@@ -437,8 +738,32 @@ function furnish(key) {
     return false;
   };
 
+  // in a posh home, an armchair or two at the coffee table's ends, turned to it
+  const armchair = F.Armchair;
+  if (fancy && armchair) {
+    const along = at(1, 0), zero = at(0, 0), ux = along.x - zero.x, uz = along.z - zero.z;
+    const first = rng() < 0.5 ? -1 : 1;
+    for (const side of rng() < 0.6 ? [first, -first] : [first]) {
+      spot = at(sofaU + side*(Math.max(coffee.w/2 + 0.45, sofa.w/2 + 0.05) + armchair.d/2), coffeeV);
+      const angle = Math.atan2(-side*ux, -side*uz), r = footprint(armchair, spot.x, spot.z, angle);
+      if (!fits(r, 0.05) || hidesScreen(r)) continue;
+      put('Armchair', spot.x, spot.z, angle, { tall: true });
+    }
+  }
+  // in a student flat, a beanbag at one end of the coffee table or the other, turned to the TV
+  const beanbag = F.Beanbag;
+  if (scruffy && beanbag) {
+    const first = rng() < 0.5 ? -1 : 1;
+    for (const side of [first, -first]) {
+      spot = at(sofaU + side*(Math.max(coffee.w/2 + 0.35, sofa.w/2 - 0.1) + beanbag.w/2), coffeeV - 0.2);
+      const angle = Math.atan2(screen.x - spot.x, screen.z - spot.z), r = footprint(beanbag, spot.x, spot.z, angle);
+      if (!fits(r, 0.05)) continue;
+      put('Beanbag', spot.x, spot.z, angle);
+      break;
+    }
+  }
   // a lamp at one end of the sofa or the other
-  const lamp = furniture.Lamp;
+  const lamp = F.Lamp;
   if (lamp && rng() < 0.7) {
     const first = rng() < 0.5 ? -1 : 1;
     for (const side of [first, -first]) {
@@ -450,24 +775,26 @@ function furnish(key) {
       break;
     }
   }
-  // a bookcase against one of the far walls, between two of its windows, facing into the room
-  const bookcase = furniture.Bookcase;
-  if (bookcase && rng() < 0.7) {
-    // (only piers wide enough for it, so it's not over the window either side: the ones at the walls' ends are mostly
-    // behind the side walls, and fits turns those down)
-    const spots = [[FAR_X, u => ({ x: u, z: ROOM_D/2 - bookcase.d/2 - 0.03, angle: Math.PI })],
-      [FAR_Z, u => ({ x: ROOM_W/2 - bookcase.d/2 - 0.03, z: -u, angle: -Math.PI/2 })]]
-      .flatMap(([w, spot]) => { const p = piers(...w); return p.width > bookcase.w + 0.04 ? p.centres.map(spot) : []; });
+  // Something tall against one of the far walls, between two of its windows, facing into the room: a bookcase, or in a
+  // posh home a fireplace first. (Only piers wide enough for it, so it's not over the window either side: the ones at
+  // the walls' ends are mostly behind the side walls, and fits turns those down.)
+  const inPier = name => {
+    const piece = F[name];
+    const spots = [[FAR_X, u => ({ x: u, z: ROOM_D/2 - piece.d/2 - 0.03, angle: Math.PI })],
+      [FAR_Z, u => ({ x: ROOM_W/2 - piece.d/2 - 0.03, z: -u, angle: -Math.PI/2 })]]
+      .flatMap(([w, spot]) => { const p = piers(...w); return p.width > piece.w + 0.04 ? p.centres.map(spot) : []; });
     while (spots.length) {
       const [p] = spots.splice(Math.floor(rng()*spots.length), 1);
-      const r = footprint(bookcase, p.x, p.z, p.angle);
+      const r = footprint(piece, p.x, p.z, p.angle);
       if (!fits(r, 0.1) || hidesScreen(r)) continue;
-      put('Bookcase', p.x, p.z, p.angle, { tall: true });
-      break;
+      put(name, p.x, p.z, p.angle, { tall: true });
+      return;
     }
-  }
+  };
+  if (fancy && F.Fireplace) inPier('Fireplace');
+  if (F.Bookcase && rng() < 0.7) inPier('Bookcase');
   // a chest of drawers somewhere along one of the far walls, facing into the room
-  const drawers = furniture.Drawers;
+  const drawers = F.Drawers;
   if (drawers && rng() < 0.6) {
     for (let tries = 0; tries < 30; tries++) {
       const onX = rng() < 0.5, u = (rng()*2 - 1)*((onX ? ROOM_D : ROOM_W)/2 - drawers.w/2 - 0.1);
@@ -481,7 +808,22 @@ function furnish(key) {
   // a dining table somewhere with room to walk round it, with a chair either side or all round — and not so near the
   // camera that it's cut off by the bottom of the view
   const underCamera = { x0: -ROOM_W/2, x1: -ROOM_W/2 + 2.8, z0: -ROOM_D/2, z1: -ROOM_D/2 + 2.8 };
-  const table = furniture.Table, chair = furniture.Chair;
+  // (but in a posh home, first a grand piano somewhere with room round it, and its bench pulled up to the keyboard, at its +z)
+  const piano = F.Piano, bench = F.PianoBench;
+  if (fancy && piano && bench && rng() < 0.8) {
+    for (let tries = 0; tries < 60; tries++) {
+      const x = (rng()*2 - 1)*(ROOM_W/2 - 1), z = (rng()*2 - 1)*(ROOM_D/2 - 1), angle = Math.floor(rng()*4)*Math.PI/2;
+      const b = turned(0, piano.d/2 + 0.2 + bench.d/2, angle, x, z);
+      const all = [footprint(piano, x, z, angle), footprint(bench, b.x, b.z, angle)];
+      const whole = { x0: Math.min(...all.map(r => r.x0)), x1: Math.max(...all.map(r => r.x1)),
+        z0: Math.min(...all.map(r => r.z0)), z1: Math.max(...all.map(r => r.z1)) };
+      if (!fits(whole, 0.35, 0.05) || overlaps(whole, underCamera) || hidesScreen(whole)) continue;
+      put('Piano', x, z, angle, { tall: true });
+      put('PianoBench', b.x, b.z, angle + Math.PI);
+      break;
+    }
+  }
+  const table = F.Table, chair = F.Chair;
   let dining = null;
   if (table && chair && rng() < 0.8) {
     for (let tries = 0; tries < 60; tries++) {
@@ -499,13 +841,15 @@ function furnish(key) {
       if (!fits(whole, 0.7, 0.35) || overlaps(whole, underCamera)) continue;
       put('Table', x, z, turn);
       dining = { x, z };
-      chairs.forEach(c => put('Chair', c.x, c.z, c.angle, { diner: true }));
+      // (in a student flat, whatever chairs came to hand)
+      const odd = ['Chair', 'Chair2', 'Chair3'].filter(name => F[name]), first = scruffy ? Math.floor(tint()*odd.length) : 0;
+      chairs.forEach((c, k) => put(scruffy ? odd[(first + k) % odd.length] : 'Chair', c.x, c.z, c.angle, { diner: true }));
       break;
     }
   }
   // a light hanging from the ceiling over the dining table, or else the coffee table — the room's light after dark when
   // there is one, rather than the lamp's
-  const pendant = furniture.Pendant;
+  const pendant = F.Pendant;
   if (pendant && rng() < 0.75) {
     spot = dining ?? at(sofaU, coffeeV);
     put('Pendant', spot.x, spot.z, 0, { underfoot: true });
@@ -516,7 +860,7 @@ function furnish(key) {
     }
   }
   // a plant or two, in the corners (not the camera's) or either side of the TV
-  const plant = furniture.Plant;
+  const plant = F.Plant;
   if (plant) {
     let plants = 1 + Math.floor(rng()*2.5);
     const inset = Math.max(plant.w, plant.d)/2 + 0.1;
@@ -531,6 +875,86 @@ function furnish(key) {
       if (!fits(r, 0.1) || hidesScreen(r)) continue;
       put('Plant', p.x, p.z, rng()*Math.PI*2, { scale, tall: true });
       plants--;
+    }
+  }
+  // in a student flat, the washing out on a clothes horse somewhere with room round it, but not in the way of the TV
+  const horse = F.ClothesHorse;
+  if (scruffy && horse && rng() < 0.85) {
+    for (let tries = 0; tries < 40; tries++) {
+      const x = (rng()*2 - 1)*(ROOM_W/2 - 0.8), z = (rng()*2 - 1)*(ROOM_D/2 - 0.6), angle = rng()*Math.PI;
+      const r = footprint(horse, x, z, angle);
+      if (!fits(r, 0.3, 0.1) || overlaps(r, cameraCorner) || hidesScreen(r)) continue;
+      put('ClothesHorse', x, z, angle, { tall: true });
+      break;
+    }
+  }
+  // and posters stuck up round the walls, a little askew: between the far walls' windows, and on the walls behind the
+  // camera as a posh home has paintings (below)
+  const posters = ['PosterBand', 'PosterFilm', 'PosterMap'].filter(name => F[name]);
+  if (scruffy && posters.length) {
+    const hang = (name, x, z, angle, y) => {
+      put(name, x, z, angle, { underfoot: true });
+      const object = home.group.children.at(-1);
+      object.position.y = y - F[name].h/2;
+      object.rotateZ((rng() - 0.5)*0.08);
+    };
+    for (const [[length, windows], wallAt] of [[FAR_X, u => ({ x: u, z: ROOM_D/2 - 0.012, angle: Math.PI })],
+      [FAR_Z, u => ({ x: ROOM_W/2 - 0.012, z: -u, angle: -Math.PI/2 })]]) {
+      const inside = (length === FAR_X[0] ? ROOM_W : ROOM_D)/2, p = piers(length, windows);
+      for (const u of p.centres) {
+        const name = posters[Math.floor(rng()*posters.length)], w = F[name].w;
+        if (rng() < 0.35 || w > p.width - 0.15 || Math.abs(u) + w/2 > inside - 0.15) continue;
+        // (not over anything tall, such as the crates)
+        const spot = wallAt(u), front = footprint({ w, d: 1 }, spot.x, spot.z, spot.angle);
+        if (taken.some(o => o.tall && overlaps(o, front))) continue;
+        hang(name, spot.x, spot.z, spot.angle, 1.65 + rng()*0.15);
+      }
+    }
+    const hung = [];
+    for (let tries = 0, count = 1 + Math.floor(rng()*3); tries < 20 && count > 0; tries++) {
+      const name = posters[Math.floor(rng()*posters.length)], w = F[name].w, back = rng() < 0.5;
+      const [lo, hi] = back ? [-ROOM_W/2 + 1.6 + w/2, ROOM_W/2 - 0.5 - w/2] : [doorTo + 0.4 + w/2, ROOM_D/2 - 1 - w/2];
+      const u = lo + rng()*(hi - lo);
+      if (hi < lo || hung.some(h => h.back === back && Math.abs(h.u - u) < (h.w + w)/2 + 0.3)) continue;
+      if (back) hang(name, u, -ROOM_D/2 + 0.012, 0, 1.55 + rng()*0.2);
+      else hang(name, -ROOM_W/2 + 0.012, u, Math.PI/2, 1.55 + rng()*0.2);
+      hung.push({ back, u, w });
+      count--;
+    }
+  }
+  // and fairy lights strung in swags along the top of one far wall or the other, above its windows, or both
+  const lights = F.FairyLights;
+  if (scruffy && lights && rng() < 0.8) {
+    const both = rng() < 0.3, first = rng() < 0.5;
+    for (const alongX of both ? [true, false] : [first]) {
+      const length = (alongX ? ROOM_W : ROOM_D) - 0.3, swags = Math.round(length/lights.w), span = length/swags;
+      for (let k = 0; k < swags; k++) {
+        const u = -length/2 + span*(k + 0.5);
+        if (alongX) put('FairyLights', u, ROOM_D/2 - 0.05, Math.PI, { underfoot: true });
+        else put('FairyLights', ROOM_W/2 - 0.05, -u, -Math.PI/2, { underfoot: true });
+        const object = home.group.children.at(-1);
+        object.scale.x = span/lights.w;
+        object.position.y = 3.02 - lights.h;
+      }
+    }
+  }
+
+  // and in a posh home, a painting or three on the walls behind the camera, about eye height and clear of each other: along
+  // x from a little way past the camera, and along z (the door's wall) from past the door to short of the far corner
+  if (fancy && F.Painting) {
+    const hung = [];
+    let count = 1 + Math.floor(rng()*3);
+    for (let tries = 0; tries < 20 && count > 0; tries++) {
+      const name = F.Portrait && rng() < 0.4 ? 'Portrait' : 'Painting', art = F[name], back = rng() < 0.5;
+      const [lo, hi] = back ? [-ROOM_W/2 + 1.6 + art.w/2, ROOM_W/2 - 0.5 - art.w/2] : [doorTo + 0.4 + art.w/2, ROOM_D/2 - 1 - art.w/2];
+      const u = lo + rng()*(hi - lo);
+      if (hi < lo || hung.some(h => h.back === back && Math.abs(h.u - u) < (h.w + art.w)/2 + 0.4)) continue;
+      const out = art.d/2 + 0.03;
+      if (back) put(name, u, -ROOM_D/2 + out, 0, { underfoot: true });
+      else put(name, -ROOM_W/2 + out, u, Math.PI/2, { underfoot: true });
+      home.group.children.at(-1).position.y = 1.6 - art.h/2;
+      hung.push({ back, u, w: art.w });
+      count--;
     }
   }
 
