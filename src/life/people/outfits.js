@@ -18,8 +18,9 @@ import * as THREE from 'three';
 
 /** Where on the rest-pose figure the chest texture goes: the model's x and y (a window a little wider than the torso). */
 export const OUTFIT_CHEST = { minX: -0.75, maxX: 0.75, minY: 5.2, maxY: 7.0 };
-/** Where on the rest-pose figure the arm texture goes: along the arm (the model's x, either side) and across it (z). */
-export const OUTFIT_ARM = { minX: 0.35, maxX: 3.25, minZ: -0.3, maxZ: 0.2 };
+/** Where on the rest-pose figure the arm texture goes: along the arm (the model's x, either side) and across it (z) —
+ * starting a little inside the shoulder, so the end of the arm there (its top, once it hangs down) is in it. */
+export const OUTFIT_ARM = { minX: 0.3, maxX: 3.25, minZ: -0.3, maxZ: 0.2 };
 /** Where on the rest-pose figure the leg texture goes: across the leg (the model's z) and up it (y). */
 export const OUTFIT_LEG = { minZ: -0.7, maxZ: 0.6, minY: 0.3, maxY: 5.3 };
 export const OUTFIT_TILES = ['front', 'back', 'arm', 'leg', 'sleeve'];
@@ -319,7 +320,7 @@ function paintFootballShirt(ctx, width, height, front, variant) {
   const { text } = pens(ctx, width, height);
   const NUMBER = GREEN;
   if (front) text(String(variant + 1), 0, 6.45, 0.3, NUMBER);
-  else text(String(variant + 1), 0, 6.2, 0.62, NUMBER, true);
+  else text(String(variant + 1), 0, 6.25, 0.46, NUMBER, true);
 }
 
 /**
