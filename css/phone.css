@@ -1,0 +1,41 @@
+/* ============================================================ the phone layout */
+@media (max-width: 760px) {
+  html.win3 #btn-panel-toggle, #btn-panel-toggle { display:flex; }
+  html.win3 #canvas-tools, #canvas-tools {
+    top:calc(8px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left)); gap:6px;
+  }
+
+  /* the panel as a sheet along the bottom: ☰ slides it down out of the way, and it comes back where it was */
+  html.win3 #panel, #panel {
+    top:auto; left:0; right:0; bottom:0; width:auto; z-index:15;
+    max-height:min(52vh, 520px); max-height:min(52dvh, 520px);
+    border-radius:12px 12px 0 0; border-bottom:none;
+    padding-bottom:calc(16px + env(safe-area-inset-bottom));
+    transition:transform 0.22s ease;
+  }
+  html.win3 #panel { border-radius:0; padding:0; } /* the win3 window keeps its square corners, and its body does the scrolling */
+  html.win3 #panel-body { padding-bottom:calc(10px + env(safe-area-inset-bottom)); }
+  html.win3 body:not(.panel-open) #panel, body:not(.panel-open) #panel { transform:translateY(102%); }
+
+  /* the meter's own phone-layout override lives in src/ui/meter.css, in the same 760px breakpoint */
+
+  /* the hint runs to a couple of hundred characters — across the bottom, and under the sheet when that's up */
+  #hint {
+    left:8px; right:8px; transform:none; width:auto; max-width:none; z-index:1;
+    bottom:calc(8px + env(safe-area-inset-bottom)); max-height:4.8em; overflow:hidden;
+  }
+
+  /* whoever's being followed: the card spans the screen, and opening one folds the sheet away (src/ui/mobile.js) */
+  html.win3 .entity-card,
+  .entity-card {
+    left:calc(8px + env(safe-area-inset-left)); right:calc(8px + env(safe-area-inset-right)); width:auto;
+    bottom:calc(8px + env(safe-area-inset-bottom)); max-height:56vh; max-height:56dvh; overflow-y:auto;
+  }
+  /* no room beside a card that now spans the screen */
+  #car-boost-meter { display:none; }
+
+  #possess-hint {
+    left:8px; right:8px; transform:none; white-space:normal; text-align:center;
+    top:calc(8px + env(safe-area-inset-top));
+  }
+}

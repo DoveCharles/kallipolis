@@ -8,7 +8,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Blockout — procedural city generator</title>
 <script>/* the Windows 3.0 look (src/ui/win3.js) is on unless it's been switched off */ try { if (localStorage.getItem('splinetopia.win3') !== '0') document.documentElement.classList.add('win3'); } catch (err) { document.documentElement.classList.add('win3'); }</script>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/win3.css">
+<link rel="stylesheet" href="css/touch.css">
+<link rel="stylesheet" href="css/phone.css">
+<link rel="stylesheet" href="css/ped.css">
 <link rel="stylesheet" href="src/ui/meter.css">
 <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
 <script type="importmap">
@@ -194,7 +198,7 @@
   	C286.351,4.505,281.846,0,276.289,0z M30.773,20.124h43.77v43.77h-43.77V20.124z M266.226,159.149
   	c0.001,64.914-52.811,117.727-117.726,117.727S30.773,224.064,30.773,159.149v-75.13h43.77v74.079
   	c0,40.685,32.612,74.329,72.696,74.998c20.002,0.333,38.865-7.2,53.115-21.214c14.253-14.017,22.102-32.744,22.102-52.733v-75.13
-  	h43.77V159.149z M266.227,63.894h-43.77v-43.770h43.77V63.894z"/><!-- the poles: the straight ends of the horseshoe, painted over the red body when snapping is on (see style.css) --><rect class="magnet-tip" x="10.649" y="0" width="84.019" height="84.019" rx="10"/><rect class="magnet-tip" x="202.332" y="0" width="84.019" height="84.019" rx="10"/></svg>
+  	h43.77V159.149z M266.227,63.894h-43.77v-43.770h43.77V63.894z"/><!-- the poles: the straight ends of the horseshoe, painted over the red body when snapping is on (see css/base.css) --><rect class="magnet-tip" x="10.649" y="0" width="84.019" height="84.019" rx="10"/><rect class="magnet-tip" x="202.332" y="0" width="84.019" height="84.019" rx="10"/></svg>
   </div>
   <div id="history-tools">
     <button class="canvas-tool" id="btn-undo" title="Undo (Ctrl+Z)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>

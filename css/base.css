@@ -1,0 +1,407 @@
+:root{
+  --bg-viewport: #12141a;
+  --bg-panel: #1a1c22;
+  --bg-input: #101216;
+  --border: #2b2e36;
+  --text: #e7e8ea;
+  --text-dim: #9296a0;
+  /* the meter component's colours (src/ui/meter.css), shared by every meter (the morality one today) rather than
+     redeclared per instance: --meter-pos/--meter-neg are what a positive or negative value renders as — the bar fill,
+     the score figures, the notices' left edge — and the --meter-notice-* ones are the notices' own text, the dimmer
+     tally, the names under them, and the stripes those sit on. The stripes mirror between the themes — near-black
+     stripes in the dark look, the light greys in the Windows 3.0 one — and the names are the lower-contrast grey of
+     each: charcoal on the light, a light grey on the dark. */
+  --meter-pos: #3ddc97;
+  --meter-neg: #e5484d;
+  --meter-notice-text: #dcdde0;
+  --meter-notice-dim: #9296a0;
+  --meter-notice-name: #b0b4bc;
+  --meter-notice-stripe-a: #101010;
+  --meter-notice-stripe-b: #202020;
+  /* Entity card Loves (green) and Hates (red) stripes: -a for odd lines, -b for even, -label for the row label, -bar for
+     the bar down their left-hand side (the same shape as a meter notice's border-left). The bar is its colour taken
+     half-way to white; the stripes are the same idea taken 20% of the way, because these rows carry the label and the body
+     text and a paler stripe leaves both of them too little contrast to read (see the note by the win3 values for the
+     measurements). The win3 look below lightens its own the same two ways, towards black instead. */
+  --trait-loves-a: #334d33; --trait-loves-b: #334633; --trait-loves-label: #8fc4a5; --trait-loves-bar: #77e7b6;
+  --trait-hates-a: #4d3333; --trait-hates-b: #463333; --trait-hates-label: #d09a9c; --trait-hates-bar: #ed7f82;
+  /* A legendary or terrible love/hate entry (core/traits.js) overrides its row's colour with one of these instead, gold or
+     dark reddish-brown, regardless of whether it's a love or a hate — see .pc-tier-legendary/.pc-tier-terrible below. */
+  --trait-legendary-a: #4a3c18; --trait-legendary-label: #FFC30B; --trait-legendary-bar: #FFC30B;
+  --trait-terrible-a: #3a2018; --trait-terrible-label: #000000; --trait-terrible-bar: #000000;
+  --accent: #3ddc97;
+  --accent-dim: #2a8f65;
+  --warn: #ffd23d;
+  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html { color-scheme: dark; } /* forces native form UI (the color picker popup included) to render dark regardless of the OS theme */
+html, body { margin:0; height:100%; overflow:hidden; background:var(--bg-viewport); font-family:var(--sans); }
+/* on a phone: no rubber-banding past the edges, and no grey flash where a finger lands */
+html, body { overscroll-behavior:none; -webkit-tap-highlight-color:transparent; }
+#canvas-wrap { position:fixed; inset:0; }
+canvas { display:block; touch-action:none; }
+canvas.pixelated { image-rendering:pixelated; } /* the Pixelation slider (src/ui/pixelation.js): drawn small, scaled up with hard edges */
+
+#panel {
+  position:fixed; top:16px; left:16px; width:266px;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:8px;
+  padding:16px; color:var(--text); user-select:none;
+  max-height:calc(100vh - 32px); overflow-y:auto;
+}
+#panel h1 { font-size:16px; font-weight:600; margin:0; letter-spacing:0.01em; }
+#panel .subtitle { font-size:11px; color:var(--text-dim); margin:2px 0 14px 0; font-family:var(--mono); }
+
+.toolbar { display:flex; gap:4px; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; padding:3px; margin-bottom:8px; }
+.tool-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:7px 0; border:none; background:transparent; color:var(--text-dim); font-size:12px; font-weight:600; border-radius:4px; cursor:pointer; font-family:var(--sans); }
+.tool-btn.active { background:var(--accent); color:#0b1a12; }
+.tool-btn:not(.active):hover { color:var(--text); }
+
+#tool-hint { font-size:11px; color:var(--text-dim); line-height:1.5; margin-bottom:14px; font-family:var(--mono); }
+
+.section { margin-bottom:14px; }
+.section-label { font-size:11px; color:var(--text-dim); margin-bottom:6px; font-weight:600; display:flex; justify-content:space-between; }
+
+.hier-list { max-height:130px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; margin-bottom:4px; }
+.hier-list:empty::after { content:'none yet'; display:block; padding:8px 10px; font-size:11px; color:var(--text-dim); font-family:var(--mono); }
+.hier-row { display:flex; align-items:center; justify-content:space-between; padding:7px 10px; font-size:12px; cursor:pointer; border-bottom:1px solid var(--border); }
+.hier-row:last-child { border-bottom:none; }
+.hier-row:hover { background:rgba(255,255,255,0.03); }
+.hier-row.active { background:rgba(61,220,151,0.12); color:var(--accent); }
+.hier-row.dragging { opacity:0.4; }
+.hier-row.drop-before { box-shadow:inset 0 2px 0 var(--accent); }
+.hier-row.drop-after { box-shadow:inset 0 -2px 0 var(--accent); }
+.hier-del { background:none; border:none; color:var(--text-dim); font-size:14px; cursor:pointer; line-height:1; padding:0 2px; }
+.hier-del:hover { color:#e0665c; }
+.hier-eye { background:none; border:none; color:var(--text-dim); cursor:pointer; line-height:1; padding:0 4px; display:flex; align-items:center; flex-shrink:0; }
+.hier-eye:hover { color:var(--accent); }
+.hier-eye.off { color:var(--border); }
+
+.row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:8px; }
+.row label { font-size:12px; color:var(--text); flex:1; }
+.row .val { font-family:var(--mono); font-size:11px; color:var(--accent); min-width:34px; text-align:right; }
+input[type=range] {
+  -webkit-appearance:none; width:100%; height:3px; border-radius:2px;
+  background:var(--border); outline:none; margin:0;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:12px; height:12px; border-radius:50%;
+  background:var(--accent); cursor:pointer; border:none;
+}
+input[type=range]::-moz-range-thumb {
+  width:12px; height:12px; border-radius:50%; background:var(--accent); border:none; cursor:pointer;
+}
+.slider-row { margin-bottom:11px; }
+.slider-row .row { margin-bottom:4px; }
+
+/* dual-handle range slider: two overlapping <input type=range>, each transparent everywhere
+   except its own thumb (pointer-events:none on the input, :auto on the thumb pseudo-element)
+   so clicks always reach whichever handle is actually under the cursor. */
+.range-slider { position:relative; height:16px; }
+.range-slider .range-track {
+  position:absolute; top:50%; left:0; right:0; height:3px; margin-top:-1.5px;
+  background:var(--border); border-radius:2px;
+}
+.range-slider .range-fill {
+  position:absolute; top:50%; height:3px; margin-top:-1.5px;
+  background:var(--accent); border-radius:2px;
+}
+.range-slider input[type=range] {
+  position:absolute; top:0; left:0; width:100%; height:16px; margin:0;
+  background:transparent; pointer-events:none;
+}
+.range-slider input[type=range]::-webkit-slider-runnable-track { background:transparent; }
+.range-slider input[type=range]::-webkit-slider-thumb { pointer-events:auto; }
+.range-slider input[type=range]::-moz-range-track { background:transparent; border:none; }
+.range-slider input[type=range]::-moz-range-thumb { pointer-events:auto; }
+
+.seed-row { display:flex; gap:6px; margin-bottom:4px; }
+.seed-row input[type=number] {
+  flex:1; background:var(--bg-input); border:1px solid var(--border); color:var(--text);
+  font-family:var(--mono); font-size:12px; padding:6px 8px; border-radius:5px; outline:none; width:0;
+}
+.icon-btn {
+  background:var(--bg-input); border:1px solid var(--border); color:var(--text-dim);
+  width:30px; border-radius:5px; cursor:pointer; font-size:14px;
+}
+.icon-btn:hover { color:var(--accent); border-color:var(--accent-dim); }
+
+.btn {
+  width:100%; padding:9px; border-radius:5px; border:1px solid var(--border);
+  background:var(--bg-input); color:var(--text); font-size:12px; font-weight:600;
+  cursor:pointer; margin-top:6px; font-family:var(--sans);
+}
+.btn:hover { border-color:var(--accent-dim); }
+.btn.danger:hover { border-color:#e0665c; color:#e0665c; }
+
+#details-panel { border-top:1px solid var(--border); padding-top:12px; margin-top:2px; }
+#details-panel .empty { font-size:11px; color:var(--text-dim); font-family:var(--mono); }
+#details-panel .title-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+#details-panel .title-row .name { font-size:12px; font-weight:600; }
+#details-panel .close-x { background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:13px; }
+
+#hint {
+  position:fixed; bottom:14px; left:50%; transform:translateX(-50%);
+  font-family:var(--mono); font-size:11px; color:var(--text-dim);
+  background:rgba(26,28,34,0.7); padding:6px 12px; border-radius:5px;
+  border:1px solid var(--border); pointer-events:none; text-align:center;
+  /* The tool hints run to 340 characters. Held to one nowrap line they were cut off mid-word with no ellipsis on
+     anything narrower than about 1100px — and what went missing was the tail, where the shift+click and Esc parts
+     live: the interactions least likely to be guessed. They wrap now, held to a readable measure rather than
+     stretching the full width of a wide screen. */
+  /* width:max-content because `left:50%` alone leaves a fixed element only the far half of the viewport to size
+     itself in — the box came out exactly 50vw wide and the max-width never applied. */
+  white-space:normal; width:max-content; max-width:min(90vw, 760px); line-height:1.6;
+}
+
+#rw-context { color:var(--text-dim); }
+
+.select-input {
+  width:100%; background:var(--bg-input); border:1px solid var(--border); color:var(--text);
+  font-family:var(--sans); font-size:12px; padding:7px 8px; border-radius:5px; outline:none; margin-bottom:2px;
+}
+.swatch-row { display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+.swatch-wrap { position:relative; width:26px; height:26px; flex-shrink:0; }
+.swatch {
+  width:26px; height:26px; border-radius:5px; border:2px solid var(--border); cursor:pointer; padding:0;
+}
+.swatch.active { border-color:var(--accent); }
+.swatch:hover { border-color:var(--accent-dim); }
+.swatch-delete {
+  display:none; position:absolute; top:-6px; right:-6px; width:15px; height:15px; border-radius:50%;
+  background:#e0665c; color:#fff; border:2px solid var(--bg-panel); cursor:pointer; padding:0;
+  font-size:10px; line-height:1; font-family:var(--sans); align-items:center; justify-content:center;
+}
+.swatch-wrap:hover .swatch-delete { display:flex; }
+.swatch-delete:hover { background:#ff7a6e; }
+.swatch-add {
+  background:var(--bg-input); display:flex; align-items:center; justify-content:center;
+  color:var(--text-dim); font-size:15px; font-weight:600; line-height:1; border-style:dashed;
+}
+.swatch-add:hover { color:var(--accent); border-color:var(--accent-dim); }
+.add-color-row { display:flex; align-items:center; gap:6px; }
+.add-color-confirm {
+  background:var(--accent); color:#0b1a12; border:none; border-radius:5px; cursor:pointer;
+  font-size:12px; font-weight:600; font-family:var(--sans); padding:0 12px; height:26px;
+}
+.add-color-confirm:hover { background:#33c488; }
+.add-color-cancel {
+  background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:15px;
+  line-height:1; padding:0 4px; height:26px;
+}
+.add-color-cancel:hover { color:#e0665c; }
+/* a block that slides open and shut under a button (see #btn-settings-toggle in src/editor/tools.js): tools.js sets its max-height to
+   its content's height to open it and 0 to shut it, and it starts shut in index.html */
+.slide-open { transition:max-height .25s ease; }
+.toggle-switch { width:38px; height:20px; border-radius:10px; background:var(--bg-input); border:1px solid var(--border); position:relative; cursor:pointer; padding:0; flex-shrink:0; }
+.toggle-switch .knob { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:var(--text-dim); transition:left 0.15s, background 0.15s; }
+.toggle-switch.on { background:rgba(61,220,151,0.25); border-color:var(--accent); }
+.toggle-switch.on .knob { left:20px; background:var(--accent); }
+input[type=color].color-input {
+  -webkit-appearance:none; appearance:none; width:30px; height:26px; padding:0;
+  border:2px solid var(--border); border-radius:5px; background:none; cursor:pointer; flex-shrink:0;
+}
+input[type=color].color-input:hover { border-color:var(--accent-dim); }
+input[type=color].color-input::-webkit-color-swatch-wrapper { padding:2px; }
+input[type=color].color-input::-webkit-color-swatch { border:none; border-radius:3px; }
+input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3px; }
+
+#node-context-menu {
+  position:fixed; display:none; z-index:50;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:6px;
+  padding:4px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+}
+#node-context-menu button {
+  display:block; width:100%; text-align:left; padding:6px 16px 6px 12px; background:none; border:none;
+  color:var(--text); font-size:12px; font-family:var(--sans); cursor:pointer; border-radius:4px; white-space:nowrap;
+}
+#node-context-menu button:hover { background:rgba(255,255,255,0.06); }
+#node-context-menu button.active { color:var(--accent); font-weight:600; }
+
+/* the row of buttons over the view, to the right of the panel — on a narrow screen it moves to the top-left corner (below) */
+#canvas-tools { position:fixed; top:16px; left:292px; display:flex; align-items:flex-start; gap:8px; }
+#grid-toggle {
+  width:34px; height:34px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:8px;
+  color:var(--text-dim); cursor:pointer; user-select:none;
+}
+#grid-toggle:hover { color:var(--text); border-color:var(--accent-dim); }
+#grid-toggle.active { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
+#history-tools { display:flex; gap:6px; }
+/* the favorites (src/ui/favorites.js): a little window hanging under its ♥ button */
+#favorites-tools { position:relative; }
+#favorites-panel {
+  position:absolute; top:40px; left:0; width:240px; max-height:min(60vh, 420px); overflow-y:auto; z-index:25;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:6px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+}
+#favorites-panel[hidden] { display:none; }
+.fav-head { font-family:var(--mono); font-size:11px; color:var(--text-dim); padding:2px 4px 6px; }
+.fav-list { display:flex; flex-direction:column; gap:2px; }
+.fav-empty { font-size:12px; color:var(--text-dim); padding:4px 4px 6px; }
+.fav-row {
+  display:flex; align-items:center; gap:8px; width:100%; padding:4px; text-align:left;
+  background:none; border:1px solid transparent; border-radius:6px; color:var(--text); cursor:pointer;
+}
+.fav-row:hover { border-color:var(--accent-dim); background:rgba(255,255,255,0.04); }
+.fav-thumb { flex:0 0 40px; width:40px; height:40px; border-radius:5px; background:rgba(255,255,255,0.05); object-fit:contain; }
+.fav-text { display:flex; flex-direction:column; min-width:0; }
+.fav-name { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fav-kind { font-family:var(--mono); font-size:10px; color:var(--text-dim); }
+.fav-gone { opacity:0.45; }
+/* the heart on a card, beside its × */
+.card-heart {
+  position:absolute; top:6px; right:30px; padding:2px 4px; background:none; border:none; line-height:0;
+  color:var(--text-dim); cursor:pointer;
+}
+.card-heart:hover { color:var(--text); }
+.card-heart.on { color:#e5484d; }
+.card-heart[hidden] { display:none; }
+/* the two the touch layout adds (src/ui/mobile.js): ☰ only where the panel is a sheet, ✛ only under a finger */
+#btn-panel-toggle, #btn-touch-add { display:none; }
+html.touch #btn-touch-add { display:flex; }
+.canvas-tool.on { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
+/* the projection button shows one grid or the other — whichever way the view is drawn now (see btn-projection) */
+#btn-projection .proj-ortho, #btn-projection.on .proj-perspective { display:none; }
+#btn-projection.on .proj-ortho { display:block; }
+/* The icons over the view are line drawings until whatever they turn on is on, and then they fill in: the ped head
+   (src/ui/ped-view.js) in the yellow it paints the crowd, the magnet in red with white tips, the heart while the
+   favorites window is open. */
+#btn-ped-view.on .ped-head { fill:#f5d43c; }
+#grid-toggle.active svg { color:#d42b32; }
+.magnet-tip { fill:none; }
+#grid-toggle.active .magnet-tip { fill:#fff; }
+#btn-favorites.on .fav-heart { fill:#e0364a; }
+.canvas-tool {
+  width:34px; height:34px; padding:0; display:flex; align-items:center; justify-content:center;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; color:var(--text-dim); cursor:pointer;
+}
+.canvas-tool:hover:not(:disabled) { color:var(--text); border-color:var(--accent-dim); }
+.canvas-tool:disabled { opacity:0.35; cursor:default; }
+.type-carousel { display:flex; align-items:center; gap:2px; margin-top:6px; }
+/* the Objects tab's palette: the same cards as a type carousel, but wrapped rather than scrolled — you pick one thing to put down, not one of a list */
+.object-palette { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 8px; }
+.carousel-track { display:flex; gap:6px; flex:1; overflow-x:auto; scroll-snap-type:x mandatory; padding:2px 1px 4px; scrollbar-width:none; }
+.carousel-track::-webkit-scrollbar { display:none; }
+.type-card {
+  flex:0 0 70px; scroll-snap-align:start; display:flex; flex-direction:column; align-items:center; gap:4px; padding:4px 4px 5px;
+  background:var(--bg-input); border:1px solid var(--border); border-radius:8px; color:var(--text-dim); font:11px var(--sans); cursor:pointer;
+}
+.type-card .thumb { width:60px; height:60px; border-radius:5px; background-size:cover; background-position:center; }
+.type-card:hover { color:var(--text); border-color:var(--accent-dim); }
+.type-card.active { border-color:var(--accent); color:var(--text); box-shadow:inset 0 0 0 1px var(--accent); }
+.carousel-arrow { flex:0 0 20px; height:60px; padding:0; background:none; border:none; color:var(--text-dim); font-size:20px; line-height:1; cursor:pointer; }
+.carousel-arrow:hover { color:var(--text); }
+
+.entity-card {
+  position:fixed; right:16px; bottom:52px; width:300px; z-index:20; /* (clear of the hint along the bottom) */
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:8px;
+  padding:12px 14px; color:var(--text); font-size:12px; user-select:none; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+}
+.entity-card .pc-row { white-space: pre-line; }
+.entity-card[hidden] { display:none; }
+/* the boost meter (src/life/car-card.js, .meter.meter-vertical from src/ui/meter.css): grouped with the car card by
+   sitting right against its left edge, its bottom lined up with the card's own — top:auto cancels .meter's own
+   top-right default so bottom is the only thing placing it. There's no room for both on a phone, so it's dropped
+   there (see the phone layout below) rather than fighting the card for space. */
+#car-boost-meter { position:fixed; top:auto; right:calc(16px + 300px + 12px); bottom:52px; z-index:20; }
+/* the fill itself (src/life/car-card.js sets only its height, from the car's boostEnergyMax): plain --meter-pos green,
+   since boost only ever has the one, positive, side — unlike the morality meter's fill colour, this one never changes. */
+#car-boost-meter .meter-fill { background:var(--meter-pos); }
+/* holding shift in the Paths tab: a click adds a node, or a branch (src/editor/input.js) */
+canvas.adding { cursor:copy; }
+.card-close {
+  position:absolute; top:6px; right:8px; padding:2px 4px; background:none; border:none;
+  color:var(--text-dim); font-size:16px; line-height:1; cursor:pointer;
+}
+.card-close:hover { color:var(--text); }
+.pc-row { display:grid; grid-template-columns:90px 1fr; gap:8px; align-items:baseline; }
+.pc-rows, .pc-body { display:flex; flex-direction:column; gap:6px; }
+.pc-row.pc-gap { margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
+.pc-label { font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+.pc-value { line-height:1.4; }
+.pc-name { font-weight:600; color:var(--accent); padding-right:16px; }
+/* a name in a list row (see setList in src/ui/entity-card.js) — a button, when the camera can leave with whoever it is,
+   shorn of everything that makes a button look like one so it reads as the line of text it was before */
+.pc-line { display:block; }
+button.pc-line {
+  padding:0; margin:0; border:none; border-radius:0; background:none; text-align:left;
+  font:inherit; color:inherit; line-height:inherit;
+}
+button.pc-pick { cursor:pointer; }
+button.pc-pick:hover { text-decoration:underline; }
+/* whoever the camera's leaving with */
+.pc-tracked, button.pc-tracked { background:#1f5fd6; color:#fff; padding:0 3px; margin:0 -3px; }
+.pc-mood { font-size:18px; line-height:1; }
+/* Loves/Hates bands on every entity card: full-width, touching, alternating shade per line (see .meter-notice-names), and a
+   green bar down the left of a love, a red one down a hate — the same shape a meter notice leads with. A row given
+   several values is a line per value, carrying the row's own class, so both the band and the bar rules reach them all.
+   --card-pad-x is the card's horizontal padding; --card-edge is the width of an inner border line the bands must not cover
+   (1px in the Windows 3.0 look); --band-x is what is left of that padding to pull back or add on; --trait-bar is the bar's
+   own width. The band is pulled back by the padding, and then by --trait-frame more: that is the width of the card's own
+   frame, so the row starts with the frame's full width to itself and the bar sits against its inner edge rather than on top
+   of it. The default look has no such line, so it is 0 there. */
+.entity-card { --card-pad-x:14px; --card-edge:0px; --trait-bar:3px; --trait-frame:0px; --band-x:calc(var(--card-pad-x) - var(--card-edge)); }
+.entity-card .pc-body { gap:0; }
+.entity-card .pc-body > :is(.pc-row-loves, .pc-row-hates) { margin-left:calc(-1*var(--card-pad-x) + var(--trait-frame)); margin-right:calc(-1*var(--band-x)); padding:5px var(--band-x); }
+.entity-card .pc-body > .pc-row-loves { background:var(--trait-loves-a); }
+.entity-card .pc-body > .pc-row-hates { background:var(--trait-hates-a); }
+.entity-card .pc-body > .pc-row-loves.pc-alt { background:var(--trait-loves-b); }
+.entity-card .pc-body > .pc-row-hates.pc-alt { background:var(--trait-hates-b); }
+/* pc-alt (every other visible line, across both colours) and pc-lead (first visible line, given the top rule when Loves is
+   hidden) are set by restripe in src/ui/entity-card.js. */
+.entity-card .pc-body > .pc-lead:not(.pc-gap) { margin-top:10px; border-top:1px solid var(--border); }
+.entity-card .pc-row-loves .pc-label { color:var(--trait-loves-label); }
+.entity-card .pc-row-hates .pc-label { color:var(--trait-hates-label); }
+/* the bars themselves: on the row and on every line below it (the extras, which carry the row's class too) */
+.entity-card .pc-row-loves { border-left:var(--trait-bar) solid var(--trait-loves-bar); }
+.entity-card .pc-row-hates { border-left:var(--trait-bar) solid var(--trait-hates-bar); }
+.entity-card .pc-extra:is(.pc-row-loves, .pc-row-hates) { padding-left:var(--band-x); margin-left:calc(-1*var(--card-pad-x) + var(--trait-frame)); margin-right:calc(-1*var(--band-x)); }
+/* A legendary or terrible love/hate entry (core/traits.js) leaves the row's own love/hate colour alone and just marks
+   the entry itself, right-aligned in its own love/hate colour (the same one its "Loves"/"Hates" heading uses) and
+   bold: ++ for a legendary entry, -- for a terrible one. Applies to the row it's the first of (which carries the
+   label, "Loves" or "Hates") if it's first, or just the little row below (a .pc-extra) if it isn't. Set by setTier in
+   src/ui/entity-card.js, from `<attribute>Tier` (core/type-text.js) or profileOf's lovesTier/hatesTier. */
+.entity-card :is(.pc-row-loves, .pc-row-hates):is(.pc-tier-legendary, .pc-tier-terrible) .pc-value { display:flex; justify-content:space-between; align-items:baseline; }
+.entity-card :is(.pc-row-loves, .pc-row-hates).pc-tier-legendary .pc-value::after { content:'++'; font-weight:700; }
+.entity-card :is(.pc-row-loves, .pc-row-hates).pc-tier-terrible .pc-value::after { content:'--'; font-weight:700; }
+.entity-card .pc-row-loves .pc-value::after { color:var(--trait-loves-label); }
+.entity-card .pc-row-hates .pc-value::after { color:var(--trait-hates-label); }
+/* name, age and mood, with the headshot beside them (clear of the close button above it) */
+.pc-top { display:flex; gap:10px; align-items:flex-start; }
+.pc-rows { flex:1; min-width:0; }
+.pc-shot { flex:0 0 auto; display:flex; flex-direction:column; gap:6px; margin-top:18px; }
+/* a picture you can click through — into their head, or behind the wheel (see makeCard) */
+.pc-thumb-click { cursor:pointer; border-radius:5px; }
+.pc-thumb-click:hover { box-shadow:0 0 0 1px var(--accent); }
+/* possessing someone, or driving a car (src/life/possession.js) */
+#possess-hint {
+  position:fixed; top:16px; left:50%; transform:translateX(-50%); z-index:30; pointer-events:none;
+  display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 16px;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+  color:var(--text); font-size:13px; white-space:nowrap;
+}
+#possess-hint[hidden] { display:none; }
+#possess-hint kbd {
+  font-family:var(--mono); font-size:12px; padding:1px 5px; border:1px solid var(--border); border-bottom-width:2px;
+  border-radius:4px; background:var(--bg-input); color:var(--accent);
+}
+.ph-sub { font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+/* the two sliders for dialling in the seat inside a train carriage (src/trains/trains.js) */
+#ride-tune {
+  position:fixed; top:16px; right:16px; z-index:30; width:180px; padding:10px 12px;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+}
+#ride-tune[hidden] { display:none; }
+.pc-kill { width:62px; margin:0; padding:3px 0; font-size:11px; }
+.pc-kill[hidden] { display:none; }
+.pc-thumb {
+  width:60px; height:60px;
+  background:linear-gradient(#8fb8d6, #dde8ef); border:1px solid var(--border); border-radius:6px;
+}
+.pc-thumb[hidden] { display:none; }
+.pc-row[hidden] { display:none; }
+.pc-status { color:var(--accent); }
+/* (their headshot, faded while they're out of sight indoors) */
+.pc-thumb.pc-away { opacity:0.35; }

@@ -1,5 +1,5 @@
 // ============================================================ Windows 3.0 look
-// A checkbox in World settings dresses the UI up as Windows 3.0 — the styles are all in style.css, under html.win3. It's the
+// A checkbox in World settings dresses the UI up as Windows 3.0 — the styles are all in css/win3.css, under html.win3. It's the
 // browser's preference rather than part of the project, so it's remembered in localStorage (and put on the page by a small
 // script in index.html's head, before anything's drawn) rather than saved with the project or undone.
 const STORAGE_KEY = 'splinetopia.win3';

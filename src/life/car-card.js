@@ -45,7 +45,7 @@ function drawCarThumbnail(i) { drawThumbnail(carThumbnailScene(i)); } // (no thu
 
 // ---------------------------------------------------------- boost meter
 // A vertical gauge (.meter.meter-vertical, src/ui/meter.css) grouped with the card by sitting right against its left
-// edge (see #car-boost-meter in style.css), shown and hidden alongside it above. No .meter-center: unlike the morality
+// edge (see #car-boost-meter in css/base.css), shown and hidden alongside it above. No .meter-center: unlike the morality
 // meter it has nothing to call "neutral" to mark, just 0 upward.
 // Driven by the car's own energy trait, in seconds of boost it has to spend (see boostEnergyMax in traffic.js):
 // setCarBoost below is called from there — once when the card opens (showing whatever level the car already has) and

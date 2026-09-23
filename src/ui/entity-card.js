@@ -158,7 +158,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   // null, '' and an empty list hide the row; empty entries are skipped. `tierValue`, alongside (see `<attribute>Tier` in
   // core/type-text.js), is 'legendary' or 'terrible' or null per entry, kept lined up with `value` as both are filtered —
   // that entry's row (its own if it's the first, else the little row below) is coloured gold or dark reddish-brown for it
-  // (see the --trait-legendary-*/--trait-terrible-* rules in style.css).
+  // (see the --trait-legendary-*/--trait-terrible-* rules in css/base.css).
   function set(key, value, tierValue = null) {
     const row = rows[key];
     if (!row) return;

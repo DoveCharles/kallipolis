@@ -1,0 +1,44 @@
+/* ============================================================ touch, and small screens
+   Two different things, kept apart. `pointer: coarse` is about the size of a fingertip: the controls this theme draws at
+   mouse size grow, and the ones that only ever appear under a cursor (a swatch's delete badge) appear anyway. The
+   `max-width: 760px` block below is about the width of a phone: the panel leaves the left-hand side and becomes a sheet
+   along the bottom that ☰ slides up and down. A tablet gets the first of those and not the second.
+   Where a rule has to beat the Windows 3.0 look, html.win3 is named alongside it — otherwise that sheet, being more
+   specific, would go on putting the window back in the corner. */
+
+@media (pointer: coarse) {
+  /* no waiting to see whether a tap was the first of a double, and no double-tap zoom over the controls */
+  button, .swatch, .toggle-switch, .hier-row, #grid-toggle, .type-card { touch-action:manipulation; }
+  .tool-btn { padding:11px 0; font-size:13px; }
+  .btn { padding:12px; font-size:13px; }
+  .icon-btn { min-height:34px; }
+  .select-input { padding:10px 8px; font-size:13px; }
+  .hier-row { padding:12px 10px; font-size:13px; }
+  .hier-del { font-size:18px; padding:4px 8px; }
+  .carousel-arrow { flex-basis:30px; }
+  #node-context-menu button { padding:11px 20px 11px 14px; font-size:13px; }
+  .toggle-switch { width:46px; height:26px; border-radius:13px; }
+  .toggle-switch .knob { top:3px; left:3px; width:18px; height:18px; }
+  .toggle-switch.on .knob { left:23px; }
+  input[type=range] { height:5px; }
+  input[type=range]::-webkit-slider-thumb { width:22px; height:22px; }
+  input[type=range]::-moz-range-thumb { width:22px; height:22px; }
+  .range-slider { height:22px; }
+  .range-slider input[type=range] { height:22px; }
+  /* a swatch's delete badge waits for a hover that never comes, so on touch it's simply always there */
+  .swatch-wrap .swatch-delete { display:flex; width:18px; height:18px; font-size:11px; }
+  /* moving a zone up and down its list, in place of dragging it (src/ui/panels.js) */
+  .hier-move {
+    background:none; border:none; color:var(--text-dim); font-size:11px; line-height:1;
+    padding:6px 5px; cursor:pointer; font-family:var(--sans);
+  }
+  .hier-move:hover { color:var(--accent); }
+  /* nothing is hovered under a finger, so the highlight a hover leaves behind is more confusing than useful */
+  .hier-row:hover { background:none; }
+}
+
+/* Move / Rotate / Scale under the Images list, in place of G / R / S */
+#map-touch-tools { display:flex; gap:6px; margin-top:8px; }
+#map-touch-tools[hidden] { display:none; }
+#map-touch-tools .btn { margin-top:0; }
+#map-touch-tools .btn.on { background:var(--accent); color:#0b1a12; border-color:var(--accent); }

@@ -129,7 +129,7 @@ function syncDrive() {
 new MutationObserver(syncDrive).observe(possessHint, { attributes: true, attributeFilter: ['hidden'] });
 
 // ============================================================ getting going
-// Which of these show themselves is left to style.css: the ✛ to html.touch, the ☰ to a narrow window (so a desktop one
+// Which of these show themselves is left to css/base.css: the ✛ to html.touch, the ☰ to a narrow window (so a desktop one
 // dragged narrow gets the sheet too). Only the panel's state has to be set here.
 if (mapTools) mapTools.hidden = !IS_TOUCH;
 setPanelOpen(panelOpen);

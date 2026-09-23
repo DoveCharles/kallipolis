@@ -10,11 +10,11 @@
    shape), build it from the same .meter-head / .meter-readout / .meter-details / .meter-notices pieces as an existing
    one (a vertical gauge only needs .meter-head and .meter-readout — see the boost meter), and drive it with a script
    that looks up its own children with meterEl.querySelector('.meter-fill') etc. rather than by id, the way
-   src/ui/morality.js and src/life/car-card.js both do. Position each instance by its own id in style.css: the base
+   src/ui/morality.js and src/life/car-card.js both do. Position each instance by its own id in css/base.css: the base
    .meter position here is just a fallback for whichever one doesn't bother to set its own.
 
    Colour is the one thing an instance is expected to override: --meter-pos and --meter-neg (set on :root and
-   html.win3 in style.css, alongside the rest of the palette) are what "positive" and "negative" render as — swap
+   html.win3 in css/win3.css, alongside the rest of the palette) are what "positive" and "negative" render as — swap
    them per instance with a modifier class if a future meter shouldn't be green/red. */
 
 .meter {
@@ -120,7 +120,7 @@
 html.win3 .meter {
   color:#000; border:4px solid transparent; border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000;
   top:17px; right:17px; padding:0 10px 10px;
-  /* the frame is painted rather than bordered, so the corner ridges cross it — see --w3-ridges in style.css */
+  /* the frame is painted rather than bordered, so the corner ridges cross it — see --w3-ridges in css/win3.css */
   background:var(--w3-ridges), linear-gradient(#fff, #fff) padding-box, linear-gradient(var(--w3-face), var(--w3-face)) border-box;
 }
 html.win3 .meter .win3-titlebar { margin:0 -10px 8px; }
@@ -138,7 +138,7 @@ html.win3 .meter-notice { background:#fff; border:1px solid #000; border-radius:
 html.win3 .meter-notice.pos { border-left:4px solid var(--meter-pos); }
 html.win3 .meter-notice.neg { border-left:4px solid var(--meter-neg); }
 
-/* the phone layout — must match style.css's own phone breakpoint (@media (max-width: 760px)) */
+/* the phone layout — must match css/phone.css's own breakpoint (@media (max-width: 760px)) */
 @media (max-width: 760px) {
   /* the meter goes under the buttons rather than beside them, where it would crowd them off a 375px screen */
   html.win3 .meter, .meter {

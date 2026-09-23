@@ -1,0 +1,200 @@
+/* ============================================================ Windows 3.0 look
+   Turned on from World settings (src/ui/win3.js), which puts the win3 class on <html>. Most of it is the palette above swapped
+   for Windows 3.0's (white windows, black lines, navy highlights, the chunky bold system font); the rest is its furniture:
+   title bars, grey bevelled buttons, crossed checkboxes, scroll-bar sliders, list boxes and menus. */
+@font-face {
+  /* "MS Sans Serif Bold" by lou (fontstruct.com/fontstructions/show/1384862), CC BY-SA 3.0, as packaged by 98.css */
+  font-family:'Win3 System';
+  src:url('https://cdn.jsdelivr.net/npm/98.css@0.1.21/dist/ms_sans_serif_bold.woff2') format('woff2'),
+      url('https://cdn.jsdelivr.net/npm/98.css@0.1.21/dist/ms_sans_serif_bold.woff') format('woff');
+}
+.win3-titlebar { display:none; }
+html.win3 {
+  --bg-panel:#ffffff; --bg-input:#ffffff; --border:#000000; --text:#000000; --text-dim:#000000;
+  --meter-pos:#008000; --meter-neg:#c00000;
+  --meter-notice-text:#000000; --meter-notice-dim:#808080; --meter-notice-name:#2f3c45;
+  --meter-notice-stripe-a:#f0f0f0; --meter-notice-stripe-b:#e0e0e0;
+  --trait-loves-a:#f3f9f3; --trait-loves-b:#ebf3eb; --trait-loves-label:#1f4a1f; --trait-loves-bar:#3f8a43;
+  --trait-hates-a:#fbf1f1; --trait-hates-b:#f6eaea; --trait-hates-label:#5a1a1a; --trait-hates-bar:#bb3a33;
+  --trait-legendary-a:#fbf6e3; --trait-legendary-label:#FFC30B; --trait-legendary-bar:#FFC30B;
+  --trait-terrible-a:#f7ece5; --trait-terrible-label:#000000; --trait-terrible-bar:#000000;
+  /* Legendary's -a is half-way to black: its label reads 8.4:1 against it, and the card's body text 12.4:1; its bar is
+     1.6:1 against the stripe it sits on, so it still reads as a bar rather than a smear. Half-way to white on the dark
+     look's stripes instead would have left the label at 1.7:1 against its own row — invisible. Terrible is plain black,
+     which reads fine on its own light stripe here; see the dark look's --trait-terrible-a above for the tradeoff there. */
+  --accent:#000080; --accent-dim:#000080;
+  --sans:'Win3 System', 'MS Sans Serif', 'Microsoft Sans Serif', Arial, sans-serif;
+  --mono:'Win3 System', 'MS Sans Serif', 'Microsoft Sans Serif', Arial, sans-serif;
+  --w3-face:#c0c0c0; --w3-shadow:#808080; --w3-navy:#000080;
+  --w3-raised:inset 1px 1px 0 #fff, inset 2px 2px 0 #fff, inset -1px -1px 0 #808080, inset -2px -2px 0 #808080;
+  --w3-pressed:inset 1px 1px 0 #808080, inset 2px 2px 0 #808080;
+  --w3-box:inset 0 0 0 1px #000, inset 2px 2px 0 #fff, inset -2px -2px 0 #808080;
+  --w3-dither:repeating-conic-gradient(#c0c0c0 0% 25%, #ffffff 0% 50%) 0 0 / 2px 2px;
+  /* the ridges Windows 3.0 scored across a window's frame a little way in from each corner, marking off the corners you
+     could grab to resize it: eight black lines, one crossing the 4px frame on either side of every corner. They stand
+     the frame's 4px plus a title-bar button's 20px from each corner (and, down the sides, the bar's top line), so each one falls exactly on the outline of the
+     button nearest it: the right-hand edge of the control-menu box, and — the two buttons at the other end being the
+     same 40px across — the line between them. The ones along the top and bottom come back a pixel, that edge being the
+     button's own last pixel; the ones down the sides don't, the line under the title bar lying just past it. */
+  --w3-ridge-x:23px; --w3-ridge-y:25px;
+  --w3-ridges:
+    linear-gradient(#000, #000) left var(--w3-ridge-x) top 0 / 1px 4px no-repeat border-box,
+    linear-gradient(#000, #000) right var(--w3-ridge-x) top 0 / 1px 4px no-repeat border-box,
+    linear-gradient(#000, #000) left var(--w3-ridge-x) bottom 0 / 1px 4px no-repeat border-box,
+    linear-gradient(#000, #000) right var(--w3-ridge-x) bottom 0 / 1px 4px no-repeat border-box,
+    linear-gradient(#000, #000) left 0 top var(--w3-ridge-y) / 4px 1px no-repeat border-box,
+    linear-gradient(#000, #000) right 0 top var(--w3-ridge-y) / 4px 1px no-repeat border-box,
+    linear-gradient(#000, #000) left 0 bottom var(--w3-ridge-y) / 4px 1px no-repeat border-box,
+    linear-gradient(#000, #000) right 0 bottom var(--w3-ridge-y) / 4px 1px no-repeat border-box;
+}
+html.win3 :is(#panel, .entity-card, .meter, #hint, #node-context-menu),
+html.win3 :is(#panel, .entity-card, .meter, #hint, #node-context-menu) * { font-size:11px; letter-spacing:0; -webkit-font-smoothing:none; }
+html.win3 body, html.win3 body * {
+  cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='19'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3C/svg%3E") 0 0, default;
+}
+html.win3 input[type=number] { cursor:text; }
+html.win3 canvas.adding {
+  cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' shape-rendering='crispEdges'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3Crect x='11.5' y='11.5' width='8' height='8' fill='%23fff' stroke='%23000'/%3E%3Cpath d='M15.5 13.5v5M13.5 15.5h5' stroke='%23000'/%3E%3C/svg%3E") 0 0, copy;
+}
+html.win3 button:focus-visible { outline:1px dotted #000; outline-offset:-4px; }
+
+/* windows: a grey frame between black lines, with a navy title bar — a control-menu box at its left, minimize and maximize at its right */
+html.win3 :is(#panel, .entity-card) {
+  border:4px solid transparent; border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000;
+  /* the frame is painted rather than bordered, so the corner ridges can be drawn across it: the ridges, then the window's
+     own white inside the padding box, then the grey face filling the frame out to the black line. */
+  background:
+    var(--w3-ridges),
+    linear-gradient(var(--bg-panel), var(--bg-panel)) padding-box,
+    linear-gradient(var(--w3-face), var(--w3-face)) border-box;
+}
+html.win3 #panel { top:17px; left:17px; padding:0; display:flex; flex-direction:column; overflow:hidden; }
+html.win3 #panel-body { min-height:0; overflow-y:auto; padding:10px; } /* (only the window's inside scrolls, under its title bar) */
+/* the bar is lined above and below: the top line is the window's own inner line carried across it (the buttons inside
+   leave their top and bottom edges to the two of them rather than drawing over them) */
+html.win3 .win3-titlebar { display:flex; flex:0 0 auto; height:22px; background:var(--w3-navy); border-top:1px solid #000; border-bottom:1px solid #000; }
+html.win3 .entity-card .win3-titlebar { margin:0 -10px 8px; }
+html.win3 .win3-titlebar .win3-title { flex:1; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; white-space:nowrap; overflow:hidden; }
+html.win3 .win3-titlebar button { flex:0 0 auto; width:20px; height:20px; padding:0; margin:0; border:none; border-radius:0; background-repeat:no-repeat; }
+html.win3 .win3-titlebar .win3-sysbox {
+  /* the control-menu box: a grey square outlined in black (its right-hand edge is the line off the title bar), with an
+     outlined white bar across the middle — the minus, drawn as a box rather than a stroke, as Windows 3.0 drew it. Its
+     own top and bottom edges are left off, the lines above and below the title bar serving as them. */
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' shape-rendering='crispEdges'%3E%3Crect width='20' height='20' fill='%23c0c0c0'/%3E%3Cpath d='M.5 0v20M19.5 0v20' stroke='%23000'/%3E%3Crect x='4.5' y='8.5' width='11' height='3' fill='%23fff' stroke='%23000'/%3E%3C/svg%3E") 0 0 / 20px 20px no-repeat, var(--w3-face);
+}
+/* (their top and bottom edges are left to the lines above and below the title bar, and the line between the pair to the
+   second of them, so none is drawn twice — a doubled line would also sit off the ridge in the frame beside it) */
+html.win3 .win3-titlebar :is(.win3-min, .win3-max) { border:1px solid #000; border-top:none; border-bottom:none; background-color:var(--w3-face); background-position:center; box-shadow:var(--w3-raised); }
+html.win3 .win3-titlebar .win3-min { border-right:none; }
+/* (swapped from Windows 3.0, where minimize was ▼ and maximize ▲: here ▲ folds a window up and ▼ opens it out) */
+html.win3 .win3-titlebar .win3-min { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5'%3E%3Cpath d='M0 5h9L4.5 0z'/%3E%3C/svg%3E"); }
+html.win3 .win3-titlebar .win3-max { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5'%3E%3Cpath d='M0 0h9L4.5 5z'/%3E%3C/svg%3E"); }
+html.win3 .win3-titlebar :is(.win3-min, .win3-max):active { box-shadow:var(--w3-pressed); background-position:calc(50% + 1px) calc(50% + 1px); }
+html.win3 #panel.win3-minimized { padding-bottom:0; overflow:hidden; }
+html.win3 #panel.win3-minimized .win3-titlebar { margin-bottom:0; }
+html.win3 #panel.win3-minimized > :not(.win3-titlebar) { display:none !important; }
+
+/* push buttons: grey, bevelled, black-edged; pressed ones sink in */
+html.win3 .toolbar { background:transparent; border:none; border-radius:0; padding:0; gap:6px; }
+html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool, #grid-toggle, .carousel-arrow, .add-color-confirm, .type-card) {
+  background:var(--w3-face); color:#000; border:1px solid #000; border-radius:3px; box-shadow:var(--w3-raised);
+}
+html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool:not(:disabled), #grid-toggle, .carousel-arrow, .add-color-confirm, .type-card):active,
+html.win3 :is(.tool-btn.active, #grid-toggle.active, .canvas-tool.on, .type-card.active) { background:var(--w3-face); color:#000; box-shadow:var(--w3-pressed); }
+html.win3 :is(.tool-btn:not(.active):hover, .btn:hover, .btn.danger:hover, .icon-btn:hover, .canvas-tool:not(.on):hover:not(:disabled), #grid-toggle:hover, .carousel-arrow:hover, .add-color-confirm:hover, .type-card:hover) { color:#000; border-color:#000; background:var(--w3-face); }
+html.win3 .tool-btn.active { text-decoration:underline; }
+html.win3 .canvas-tool:disabled { opacity:1; color:var(--w3-shadow); }
+html.win3 .carousel-arrow { flex-basis:18px; font-size:13px; }
+html.win3 .type-card .thumb { border:1px solid #000; border-radius:0; }
+html.win3 .add-color-cancel:hover { color:#000; }
+
+/* checkboxes: a white square, crossed when on */
+html.win3 .toggle-switch { width:13px; height:13px; border:1px solid #000; border-radius:0; background:#fff; }
+html.win3 .toggle-switch .knob { display:none; }
+html.win3 .toggle-switch.on {
+  border-color:#000;
+  background:linear-gradient(to top right, transparent calc(50% - 0.8px), #000 calc(50% - 0.8px) calc(50% + 0.8px), transparent calc(50% + 0.8px)),
+             linear-gradient(to bottom right, transparent calc(50% - 0.8px), #000 calc(50% - 0.8px) calc(50% + 0.8px), transparent calc(50% + 0.8px)), #fff;
+}
+
+/* sliders as scroll bars: a dithered grey track and a square thumb */
+html.win3 input[type=range] { height:16px; border:1px solid #000; border-radius:0; background:var(--w3-dither); }
+html.win3 input[type=range]::-webkit-slider-thumb { width:16px; height:14px; border:none; border-radius:0; background:var(--w3-face); box-shadow:var(--w3-box); }
+html.win3 input[type=range]::-moz-range-track { background:transparent; border:none; }
+html.win3 input[type=range]::-moz-range-thumb { width:16px; height:14px; border:none; border-radius:0; background:var(--w3-face); box-shadow:var(--w3-box); }
+html.win3 .range-slider .range-track { top:0; height:16px; margin-top:0; border:1px solid #000; border-radius:0; background:var(--w3-dither); }
+html.win3 .range-slider .range-fill { top:5px; height:6px; margin-top:0; border-radius:0; background:var(--w3-navy); }
+html.win3 .range-slider input[type=range] { top:1px; height:14px; border:none; background:transparent; }
+
+/* scroll bars: dithered track, bevelled thumb, arrow buttons at the ends */
+html.win3 ::-webkit-scrollbar { width:16px; height:16px; background:var(--w3-dither); }
+html.win3 ::-webkit-scrollbar-track { background:var(--w3-dither); }
+html.win3 ::-webkit-scrollbar-thumb { background:var(--w3-face); box-shadow:var(--w3-box); }
+html.win3 ::-webkit-scrollbar-corner { background:var(--w3-face); }
+html.win3 ::-webkit-scrollbar-button:single-button { display:block; width:16px; height:16px; background-color:var(--w3-face); background-repeat:no-repeat; background-position:center; box-shadow:var(--w3-box); }
+html.win3 ::-webkit-scrollbar-button:single-button:vertical:decrement { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 4h7L3.5 0z'/%3E%3C/svg%3E"); }
+html.win3 ::-webkit-scrollbar-button:single-button:vertical:increment { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 0h7L3.5 4z'/%3E%3C/svg%3E"); }
+html.win3 ::-webkit-scrollbar-button:single-button:horizontal:decrement { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='7'%3E%3Cpath d='M4 0v7L0 3.5z'/%3E%3C/svg%3E"); }
+html.win3 ::-webkit-scrollbar-button:single-button:horizontal:increment { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='7'%3E%3Cpath d='M0 0v7L4 3.5z'/%3E%3C/svg%3E"); }
+html.win3 .carousel-track::-webkit-scrollbar { display:none; }
+@supports not selector(::-webkit-scrollbar) { html.win3 * { scrollbar-color:#c0c0c0 #e6e6e6; } }
+
+/* list boxes, text boxes, combo boxes and color wells: white with black lines; a selected row goes navy */
+html.win3 .hier-list { border:1px solid #000; border-radius:0; background:#fff; }
+html.win3 .hier-row { padding:3px 6px; border-bottom:none; }
+html.win3 .hier-row:hover { background:transparent; }
+html.win3 .hier-row.active { background:var(--w3-navy); color:#fff; }
+html.win3 .hier-row.active :is(.hier-del, .hier-eye) { color:#fff; }
+html.win3 :is(.hier-del, .hier-eye):hover { color:inherit; }
+html.win3 .hier-eye.off { color:var(--w3-shadow); }
+html.win3 .hier-row.drop-before { box-shadow:inset 0 2px 0 #000; }
+html.win3 .hier-row.drop-after { box-shadow:inset 0 -2px 0 #000; }
+html.win3 :is(.hier-list:empty::after, #details-panel .empty, #tool-hint) { color:var(--w3-shadow); }
+html.win3 :is(.select-input, .seed-row input[type=number]) { background-color:#fff; color:#000; border:1px solid #000; border-radius:0; }
+html.win3 .select-input {
+  appearance:none; -webkit-appearance:none; padding-right:24px;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 0h7L3.5 4z'/%3E%3C/svg%3E") calc(100% - 5px) center no-repeat,
+             linear-gradient(#000, #000) calc(100% - 17px) 0 / 1px 100% no-repeat,
+             linear-gradient(var(--w3-face), var(--w3-face)) right / 17px 100% no-repeat, #fff;
+}
+html.win3 :is(.swatch, .swatch:hover) { border:1px solid #000; border-radius:0; }
+html.win3 .swatch.active { outline:2px solid #000; outline-offset:1px; }
+html.win3 .swatch-add { background:#fff; color:#000; }
+html.win3 input[type=color].color-input, html.win3 input[type=color].color-input:hover { border:1px solid #000; border-radius:0; }
+html.win3 input[type=color].color-input::-webkit-color-swatch { border-radius:0; }
+html.win3 #details-panel { border-top:1px solid #000; }
+
+/* menus, and the little boxes about the screen */
+html.win3 #node-context-menu { background:#fff; border:1px solid #000; border-radius:0; padding:2px 0; box-shadow:2px 2px 0 #000; }
+html.win3 #node-context-menu button { position:relative; padding:3px 18px 3px 16px; border-radius:0; color:#000; }
+html.win3 #node-context-menu button:hover { background:var(--w3-navy); color:#fff; }
+html.win3 #node-context-menu button.active { font-weight:700; }
+html.win3 #node-context-menu button.active::before { content:'\2713'; position:absolute; left:4px; }
+html.win3 #hint { background:#fff; color:#000; border:1px solid #000; border-radius:0; }
+
+/* the cards for whoever's being followed: each a little window of its own, closed from its control-menu box */
+html.win3 .entity-card { --card-pad-x:10px; --card-edge:1px; --trait-frame:1px; padding:0 10px 10px; right:21px; bottom:56px; }
+/* the card's own right/bottom shift slightly under this look (immediately above), so the boost meter follows it */
+html.win3 #car-boost-meter { right:calc(21px + 300px + 12px); bottom:56px; }
+html.win3 .card-close { display:none; }
+html.win3 .card-heart { top:0; right:0; width:24px; height:22px; padding:0; display:flex; align-items:center; justify-content:center; color:#fff; } /* (in the title bar) */
+html.win3 .card-heart[hidden] { display:none; }
+html.win3 .card-heart.on { color:#ff6b6b; }
+html.win3 #favorites-panel { border:4px solid var(--w3-face); border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000; background:#fff; }
+html.win3 .fav-row { border-radius:0; color:#000; }
+html.win3 .fav-row:hover { background:var(--w3-navy); color:#fff; border-color:transparent; }
+html.win3 .fav-row:hover .fav-kind { color:#ddd; }
+html.win3 :is(.pc-row.pc-gap, .entity-card .pc-body > .pc-lead) { border-top:1px solid #000; }
+html.win3 .pc-name { padding-right:0; }
+html.win3 .pc-tracked { background:#000080; color:#fff; }
+html.win3 button.pc-line { color:#000; }
+html.win3 button.pc-tracked { color:#fff; }
+html.win3 .entity-card .pc-mood { font-size:18px; }
+html.win3 .pc-shot { margin-top:0; }
+html.win3 .pc-thumb {
+  border-radius:0; background:#008080;
+  border:1px solid; border-color:#808080 #fff #fff #808080; box-shadow:inset 1px 1px 0 #000;
+}
+
+/* the morality meter (#morality-meter), and any other meter built from the same component, is styled in
+   src/ui/meter.css */
