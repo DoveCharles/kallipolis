@@ -76,6 +76,10 @@ sun.shadow.bias = -0.0005;
 scene.add(sun);
 
 // ---- procedural sky dome, driven by sun elevation/azimuth ----
+// On top of the gradient and the sun: a glow along the horizon on the sun's side, the moon (opposite the sun, where
+// the moonlight comes from — see updateSun), and a thin drifting layer of cirrus, thicker with cloud cover, that the
+// stars and moon are behind. The cirrus is value noise worked out per pixel on the dome, which is only ever the sky's
+// pixels, so a few octaves of it cost little.
 const skyDomeMat = new THREE.ShaderMaterial({
   uniforms: {
     sunDirection: { value: new THREE.Vector3(0,1,0) },
@@ -83,6 +87,10 @@ const skyDomeMat = new THREE.ShaderMaterial({
     horizonColor: { value: new THREE.Color(0xdfefff) },
     sunColor: { value: new THREE.Color(0xffffff) },
     starAmount: { value: 0 },
+    moonAmount: { value: 0 },
+    cloudCover: { value: 0 },
+    cloudColor: { value: new THREE.Color(0xffffff) },
+    time: { value: 0 },
   },
   vertexShader: `
     varying vec3 vDir;
@@ -98,8 +106,19 @@ const skyDomeMat = new THREE.ShaderMaterial({
     uniform vec3 horizonColor;
     uniform vec3 sunColor;
     uniform float starAmount;
+    uniform float moonAmount;
+    uniform float cloudCover;
+    uniform vec3 cloudColor;
+    uniform float time;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float noise(vec2 p) {
+      vec2 i = floor(p), f = fract(p);
+      f = f*f*(3.0 - 2.0*f);
+      return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+    }
     void main() {
       vec3 dir = normalize(vDir);
+      vec3 sunDir = normalize(sunDirection);
       float h = clamp(dir.y, -1.0, 1.0);
       vec3 col;
       if (h > 0.0) {
@@ -107,14 +126,36 @@ const skyDomeMat = new THREE.ShaderMaterial({
       } else {
         col = mix(horizonColor, horizonColor*0.35, pow(-h, 0.4));
       }
-      float sunAmount = max(dot(dir, normalize(sunDirection)), 0.0);
+      float sunAmount = max(dot(dir, sunDir), 0.0);
       col += sunColor * pow(sunAmount, 380.0) * 2.0;
       col += sunColor * pow(sunAmount, 24.0) * 0.25;
+      // the horizon glowing on the sun's side of the sky — most of all as it's rising or setting
+      float towardSun = max(dot(normalize(dir.xz + 1e-5), normalize(sunDir.xz + 1e-5)), 0.0);
+      float lowSun = 1.0 - smoothstep(0.05, 0.6, abs(sunDir.y));
+      col += sunColor * pow(towardSun, 3.0) * exp(-abs(h)*7.0) * (0.12 + 0.3*lowSun);
       // stars, once it's dark enough: a sparse scatter of directions, fading out towards the horizon
       if (starAmount > 0.0 && h > 0.0) {
         vec3 cell = floor(dir * 240.0);
         float r = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
         col += vec3(step(0.9972, r) * starAmount * smoothstep(0.0, 0.3, h) * (0.6 + 0.4*fract(r*97.0)));
+      }
+      // the moon: a small mottled disc and a faint halo round it
+      if (moonAmount > 0.0) {
+        float m = dot(dir, -sunDir);
+        float disc = smoothstep(0.99955, 0.99972, m);
+        vec3 fromMiddle = dir + sunDir*m; // (across the disc, which is about 0.024 across)
+        float mottle = 0.8 + 0.2*noise(fromMiddle.xz*160.0 + fromMiddle.y*110.0 + 4.0);
+        col = mix(col, vec3(0.87, 0.9, 0.96)*mottle, disc*moonAmount);
+        col += vec3(0.55, 0.62, 0.78) * pow(max(m, 0.0), 900.0) * 0.25 * moonAmount;
+      }
+      // cirrus: noise on a flat layer overhead, stretched along the wind, fading into the haze at the horizon
+      if (h > 0.0) {
+        vec2 p = dir.xz / (h + 0.12) * 1.6 + vec2(time*0.004, time*0.0015);
+        p *= vec2(1.0, 2.5);
+        float n = noise(p)*0.5 + noise(p*2.03 + 7.1)*0.25 + noise(p*4.01 + 3.7)*0.15 + noise(p*8.1 + 1.3)*0.1;
+        float amount = smoothstep(0.62 - cloudCover*0.35, 0.95 - cloudCover*0.2, n) * smoothstep(0.0, 0.25, h) * (0.5 + 0.5*cloudCover);
+        vec3 lit = cloudColor + sunColor * pow(sunAmount, 6.0) * 0.35;
+        col = mix(col, lit, amount);
       }
       gl_FragColor = vec4(col, 1.0);
     }
@@ -270,6 +311,10 @@ export function updateSun(quick) {
   skyDomeMat.uniforms.horizonColor.value.copy(sky.horizon);
   skyDomeMat.uniforms.sunColor.value.copy(sky.sun);
   skyDomeMat.uniforms.starAmount.value = (1 - ease(-12, -2, S.sunElevation))*(1 - overcast);
+  skyDomeMat.uniforms.moonAmount.value = (1 - ease(-6, 2, S.sunElevation))*(1 - overcast);
+  skyDomeMat.uniforms.cloudCover.value = Math.min(1, S.weatherClouds + overcast);
+  // the cirrus takes its color from the sky it's in: pale by day, glowing with the sun low, dark grey at night
+  skyDomeMat.uniforms.cloudColor.value.copy(sky.horizon).lerp(sky.sun, 0.35).multiplyScalar(0.25 + 0.85*ease(-10, 8, S.sunElevation));
   scene.fog.color.copy(sky.horizon);
   scene.fog.near = THREE.MathUtils.lerp(600, 90, overcast);
   scene.fog.far = THREE.MathUtils.lerp(2800, 900, overcast);
