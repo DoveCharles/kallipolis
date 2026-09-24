@@ -186,6 +186,7 @@ html.win3 .fav-row:hover { background:var(--w3-navy); color:#fff; border-color:t
 html.win3 .fav-row:hover .fav-kind { color:#ddd; }
 html.win3 :is(.pc-row.pc-gap, .entity-card .pc-body > .pc-lead) { border-top:1px solid #000; }
 html.win3 .pc-name { padding-right:0; }
+html.win3 .entity-card .pc-mods { background:rgba(0,0,0,0.08); color:#000; }
 html.win3 .pc-tracked { background:#000080; color:#fff; }
 html.win3 button.pc-line { color:#000; }
 html.win3 button.pc-tracked { color:#fff; }

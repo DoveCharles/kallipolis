@@ -1,5 +1,5 @@
 import { mulberry32 } from './math.js';
-import { DEFAULT_COUNTS, parseSections, entryOf, plainEntry, weighted, combineTraits, pickCounts, addEntries, clash, tierOf } from './entries.js';
+import { DEFAULT_COUNTS, parseSections, entryOf, plainEntry, weighted, combineTraits, pickCounts, addEntries, clash, tierOf, modifiersOf } from './entries.js';
 
 // ============================================================ what a kind of thing is like
 // The reader for the files saying what each kind of thing is like on its card (see ui/entity-card.js): assets/cars.txt by
@@ -75,10 +75,12 @@ export function loadTypeText(url, { attributes, settings = [], fallbacks = {}, p
         });
         counted.forEach((attribute, i) => { if (entriesFor(attribute)) addEntries(chosen[i], entriesFor(attribute), counts[i], rng, chosen); });
         // `<attribute>Tier` runs alongside it: which of its entries are legendary or terrible (see tierOf), for the card to
-        // colour that row (ui/entity-card.js) — null for an entry that's neither.
+        // colour that row (ui/entity-card.js) — null for an entry that's neither. `<attribute>Mods` likewise: each entry's
+        // modifier lines (see modifiersOf), for the drop-down under its row.
         counted.forEach((attribute, i) => {
           said[attribute] = chosen[i].map(entry => entry.text);
           said[attribute + 'Tier'] = chosen[i].map(tierOf);
+          said[attribute + 'Mods'] = chosen[i].map(modifiersOf);
           picked.push(...chosen[i]);
         });
       }

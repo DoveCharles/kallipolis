@@ -64,7 +64,7 @@ Format: `file` (size) purpose — key exports.
 - `shared.js` (2K) What the modules share. — exports: S, App, SAND_TINT, setSandTint
 - `splines.js` (9K) ---------------------------------------------------------- spline / tessellation — exports: tessellateOpenPath, tessellateClosedPath, nearestPointOnEdgeTessellated, computeAutoHandlesRoad, computeAutoHandlesZone, BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE …
 - `state.js` (3K) Editor data: road nodes, map images, zone defaults — exports: roadNodes, mapImages, DEFAULT_ZONE_SETTINGS, MAX_TARGET_LOTS, MIN_ZONE_TREES, mapGroup
-- `traits.js` (6K) Every trait an entry in any .txt file can carry, as [trait = value] (see core/entries.js). — exports: TRAITS, TRAIT_MACROS, traitLines
+- `traits.js` (6K) Every trait an entry in any .txt file can carry, as [trait = value] (see core/entries.js). — exports: TRAITS, TRAIT_MACROS, modifierLines, traitLines
 - `type-text.js` (7K) The reader for the files saying what each kind of thing is like on its card (see ui/entity-card.js): — exports: loadTypeText
 
 ### src/editor/
@@ -147,7 +147,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `trains.js` (91K, **big**)  — exports: getTrainStations, trainStationsVersion, getTrainShuttles, isTrainLine, isTrainNode, networkKindOf, trainNodeY, snapStationHeight …
 
 ### src/ui/
-- `entity-card.js` (12K) The card at the bottom right saying what the camera's following: — exports: ROWS, TEXT_ROWS, cards, makeCard
+- `entity-card.js` (17K) The card at the bottom right saying what the camera's following; love/hate modifier drop-downs (addDrop, layoutDrops): — exports: ROWS, TEXT_ROWS, cards, makeCard
 - `favorites.js` (6K) Whatever the player has hearted on its card (see the heart in ui/entity-card.js) — a person, a car, a bee, a building, anything with a card — listed i… — exports: isFavorite, personKey, isFavoritePerson, favoritePeople, toggleFavorite, onFavoritesChanged, reviveFavoritesAs, savedFavorites …
 - `garble.js` (1K) Anything with the scramble trait has the words on its card jumbled, and anything with keysmash has them typed with fat fingers (see scramble and keySm… — exports: garbles, garbled
 - `meter.css` (11K) A reusable meter.

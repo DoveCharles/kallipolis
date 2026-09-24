@@ -15,12 +15,13 @@ export const ROWS = [
   { key: 'age',       label: 'Age',                            top: true },
   { key: 'mood',      label: 'Current mood', cls: 'pc-mood',   top: true },
   { key: 'status',    label: 'Status',       cls: 'pc-status', top: true },
-  { key: 'loves',     label: 'Loves',     gap: true },
-  { key: 'hates',     label: 'Hates' },
+  { key: 'loves',     label: 'Loves',     gap: true, marked: true },
+  { key: 'hates',     label: 'Hates',                marked: true },
   { key: 'occupants', label: 'Inhabitants', gap: true, list: true },
 ];
 // `top`: up beside the picture, rather than below it. `gap`: a rule above it. `list`: several names, one a line (see
-// setList) rather than one value.
+// setList) rather than one value. `marked`: each entry carries a mark at its right (+ legendary, - terrible, * has
+// modifiers: see markOf) and the card keeps room below for modifier drop-downs (see modSpace).
 // Any row accepts either one string or a list of strings (see `set`); each extra entry gets its own row below, classed
 // with the row's key (pc-row-loves). A counted row (Loves, Hates) can also carry a tier per entry — see `set`'s tierValue.
 
@@ -135,18 +136,82 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     value.className = 'pc-value' + (row.cls ? ' ' + row.cls : '');
     rowEl.append(label, value);
     (row.top ? top : body).append(rowEl);
-    rows[row.key] = { el: rowEl, value, row, extras: [] };
+    rows[row.key] = { el: rowEl, value, row, extras: [], drops: [] };
   });
+  // Room kept below the rows for modifier drop-downs, MOD_SPACE_LINES lines tall, so opening them doesn't resize the card:
+  // the open drop-downs share those lines (one line each with three open, scrolling for the rest) and the space shrinks by
+  // what they take. There whenever a `marked` row is showing, modifiers or not.
+  const modSpace = document.createElement('div');
+  modSpace.className = 'pc-mod-space';
+  modSpace.hidden = true;
+  body.append(modSpace);
   const topSection = document.createElement('div');
   topSection.className = 'pc-top';
   topSection.append(top, shot);
   el.append(titlebar, heart, close, topSection, body);
   document.body.append(el);
 
+  // ---- modifier drop-downs: an entry with modifiers (`<key>Mods`, see set) opens a list of them beneath it while hovered,
+  // and stays open once clicked (clicked again to close) — so several can be open at once, and touch screens can open them.
+  const MOD_SPACE_LINES = 3;
+  const dropByEl = new Map(); // entry row or its drop-down → { entryEl, drop, count, pinned }
+  let hovered = null;
+  const dropAt = target => { const found = target?.closest?.('.pc-has-mods, .pc-mods'); return found ? dropByEl.get(found) : null; };
+  body.addEventListener('mouseover', e => { const drop = dropAt(e.target) ?? null; if (drop !== hovered) { hovered = drop; layoutDrops(); } });
+  body.addEventListener('mouseleave', () => { if (hovered) { hovered = null; layoutDrops(); } });
+  body.addEventListener('click', e => { const drop = dropAt(e.target); if (drop) { drop.pinned = !drop.pinned; layoutDrops(); } });
+  // Gives `entryEl` (one of `row`'s entries, already in place) a drop-down of `lines`, placed right under it.
+  function addDrop(row, entryEl, lines) {
+    if (!lines || !lines.length) return;
+    const drop = document.createElement('div');
+    drop.className = 'pc-mods pc-mods-' + row.row.key;
+    drop.hidden = true;
+    lines.forEach(text => {
+      const line = document.createElement('div');
+      line.className = 'pc-mod';
+      line.textContent = text;
+      drop.append(line);
+    });
+    entryEl.classList.add('pc-has-mods');
+    entryEl.after(drop);
+    const state = { entryEl, drop, count: lines.length, pinned: false };
+    dropByEl.set(entryEl, state).set(drop, state);
+    row.drops.push(state);
+  }
+  function clearDrops(row) {
+    row.drops.forEach(state => {
+      state.drop.remove();
+      state.entryEl.classList.remove('pc-has-mods', 'pc-mods-open');
+      dropByEl.delete(state.entryEl);
+      dropByEl.delete(state.drop);
+      if (hovered === state) hovered = null;
+    });
+    row.drops = [];
+  }
+  // Shows the open drop-downs, each given an equal share of MOD_SPACE_LINES (or fewer, if it has fewer lines), and shrinks
+  // the kept space by what they use, so the card's height stays the same.
+  function layoutDrops() {
+    const all = Object.values(rows).flatMap(row => row.drops);
+    modSpace.hidden = !Object.values(rows).some(row => row.row.marked && !row.el.hidden);
+    const open = all.filter(state => state.pinned || state === hovered);
+    const share = MOD_SPACE_LINES/Math.max(1, open.length);
+    let used = 0;
+    all.forEach(state => {
+      const isOpen = open.includes(state);
+      state.drop.hidden = !isOpen;
+      state.entryEl.classList.toggle('pc-mods-open', isOpen);
+      if (!isOpen) return;
+      const lines = Math.min(state.count, share);
+      state.drop.style.setProperty('--mod-lines', lines);
+      used += lines;
+    });
+    modSpace.style.setProperty('--mod-lines', Math.max(0, MOD_SPACE_LINES - used));
+  }
+
   // Marks the visible rows below the picture: `pc-alt` on every other one, `pc-lead` on the first. Done here rather than with
   // :nth-child because hidden rows still count as children in CSS. Call after any change to which rows are shown.
   function restripe() {
-    [...body.children].filter(rowEl => !rowEl.hidden).forEach((rowEl, i) => {
+    [...body.children].filter(rowEl => !rowEl.hidden && rowEl.classList.contains('pc-row')).forEach((rowEl, i) => {
       rowEl.classList.toggle('pc-alt', i % 2 === 1);
       rowEl.classList.toggle('pc-lead', i === 0);
     });
@@ -154,20 +219,28 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   // A row's tier classes (see setTier below): none of them, so a freshly-shown or hidden row never keeps an old one.
   const TIERS = ['legendary', 'terrible'];
   function setTier(el, tier) { TIERS.forEach(t => el.classList.toggle('pc-tier-' + t, t === tier)); }
+  // An entry's mark (see `marked` in ROWS): + legendary, - terrible, * any other entry with modifiers to show, else none.
+  const markOf = (tier, mods) => tier === 'legendary' ? '+' : tier === 'terrible' ? '-' : mods && mods.length ? '*' : '';
   // Sets a row to a string or a list of strings. The first entry goes in the row, the rest in unlabelled rows beneath it.
   // null, '' and an empty list hide the row; empty entries are skipped. `tierValue`, alongside (see `<attribute>Tier` in
   // core/type-text.js), is 'legendary' or 'terrible' or null per entry, kept lined up with `value` as both are filtered —
   // that entry's row (its own if it's the first, else the little row below) is coloured gold or dark reddish-brown for it
-  // (see the --trait-legendary-*/--trait-terrible-* rules in css/base.css).
-  function set(key, value, tierValue = null) {
+  // (see the --trait-legendary-*/--trait-terrible-* rules in css/base.css). `modsValue`, likewise lined up (see
+  // `<attribute>Mods` in core/type-text.js), is a list of modifier lines per entry, for its drop-down (see addDrop).
+  function set(key, value, tierValue = null, modsValue = null) {
     const row = rows[key];
     if (!row) return;
     const values = Array.isArray(value) ? value : [value], tierValues = Array.isArray(tierValue) ? tierValue : [];
-    const said = [], tiers = [];
-    values.forEach((item, i) => { if (item != null && item !== '') { said.push(String(item)); tiers.push(tierValues[i] ?? null); } });
+    const modValues = Array.isArray(modsValue) ? modsValue : [];
+    const said = [], tiers = [], mods = [];
+    values.forEach((item, i) => {
+      if (item == null || item === '') return;
+      said.push(String(item)); tiers.push(tierValues[i] ?? null); mods.push(modValues[i] ?? null);
+    });
     row.value.textContent = said[0] || '';
     row.el.hidden = !said.length;
     setTier(row.el, tiers[0]);
+    clearDrops(row);
     row.extras.forEach(extra => extra.remove());
     row.extras = [];
     said.slice(1).forEach((text, i) => {
@@ -181,7 +254,13 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
       (row.extras.length ? row.extras[row.extras.length - 1] : row.el).after(extra);
       row.extras.push(extra);
     });
+    // (drop-downs go in once every entry is placed, so each sits right under its own)
+    if (said.length) [row.el, ...row.extras].forEach((entryEl, i) => {
+      if (row.row.marked) entryEl.querySelector('.pc-value').dataset.mark = markOf(tiers[i], mods[i]);
+      addDrop(row, entryEl, mods[i]);
+    });
     restripe();
+    layoutDrops();
   }
   // A list row (see ROWS): the names, one a line, the one at `tracked` (whoever the camera's leaving with, if anyone)
   // highlighted — 'None' when there's nobody, so the row still says so rather than vanishing.
@@ -209,7 +288,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   // out until something sets them (a person going indoors, say, or who's aboard a train). A card is handed whatever a
   // kind's reader returns, traits included; the card has no row for those, so it ignores them.
   function show(values) {
-    Object.keys(rows).forEach(key => set(key, values[key], values[key + 'Tier']));
+    Object.keys(rows).forEach(key => set(key, values[key], values[key + 'Tier'], values[key + 'Mods']));
     setFavorite(null);
     el.hidden = false;
   }

@@ -358,16 +358,33 @@ button.pc-pick:hover { text-decoration:underline; }
 .entity-card .pc-row-loves { border-left:var(--trait-bar) solid var(--trait-loves-bar); }
 .entity-card .pc-row-hates { border-left:var(--trait-bar) solid var(--trait-hates-bar); }
 .entity-card .pc-extra:is(.pc-row-loves, .pc-row-hates) { padding-left:var(--band-x); margin-left:calc(-1*var(--card-pad-x) + var(--trait-frame)); margin-right:calc(-1*var(--band-x)); }
-/* A legendary or terrible love/hate entry (core/traits.js) leaves the row's own love/hate colour alone and just marks
-   the entry itself, right-aligned in its own love/hate colour (the same one its "Loves"/"Hates" heading uses) and
-   bold: ++ for a legendary entry, -- for a terrible one. Applies to the row it's the first of (which carries the
-   label, "Loves" or "Hates") if it's first, or just the little row below (a .pc-extra) if it isn't. Set by setTier in
-   src/ui/entity-card.js, from `<attribute>Tier` (core/type-text.js) or profileOf's lovesTier/hatesTier. */
-.entity-card :is(.pc-row-loves, .pc-row-hates):is(.pc-tier-legendary, .pc-tier-terrible) .pc-value { display:flex; justify-content:space-between; align-items:baseline; }
-.entity-card :is(.pc-row-loves, .pc-row-hates).pc-tier-legendary .pc-value::after { content:'++'; font-weight:700; }
-.entity-card :is(.pc-row-loves, .pc-row-hates).pc-tier-terrible .pc-value::after { content:'--'; font-weight:700; }
-.entity-card .pc-row-loves .pc-value::after { color:var(--trait-loves-label); }
-.entity-card .pc-row-hates .pc-value::after { color:var(--trait-hates-label); }
+/* Every love/hate entry has a mark at its right, in a column of fixed width so entries line up whether marked or not:
+   + (Loves green) legendary, - (Hates red) terrible, * (dim) any other entry with modifiers to show in its drop-down.
+   Applies to the row it's the first of (which carries the label) or the little row below (a .pc-extra). Set as
+   data-mark by `set` in src/ui/entity-card.js (see markOf), from `<attribute>Tier`/`<attribute>Mods`. */
+.entity-card :is(.pc-row-loves, .pc-row-hates) .pc-value { display:flex; justify-content:space-between; align-items:baseline; gap:6px; }
+.entity-card :is(.pc-row-loves, .pc-row-hates) .pc-value::after {
+  content:attr(data-mark); flex:0 0 12px; text-align:center; font-size:16px; font-weight:700; line-height:1; color:var(--text-dim);
+}
+.entity-card .pc-value[data-mark="+"]::after { color:var(--trait-loves-label); }
+.entity-card .pc-value[data-mark="-"]::after { color:var(--trait-hates-label); }
+/* Modifier drop-downs under a love/hate entry, and the space kept for them (see layoutDrops in src/ui/entity-card.js).
+   Heights are whole --mod-line steps with no vertical padding or border, so the drop-downs and the space always add up
+   to the same height and the card never resizes. --mod-lines is set per element by layoutDrops. */
+.entity-card { --mod-line:16px; }
+.entity-card .pc-has-mods { cursor:pointer; }
+.entity-card .pc-has-mods:is(:hover, .pc-mods-open) .pc-value[data-mark="*"]::after { color:var(--text); }
+.entity-card .pc-mods {
+  height:calc(var(--mod-lines, 0)*var(--mod-line)); overflow-y:auto; overscroll-behavior:contain;
+  margin-left:calc(-1*var(--card-pad-x) + var(--trait-frame)); margin-right:calc(-1*var(--band-x));
+  padding:0 var(--band-x) 0 calc(var(--band-x) + 98px); /* (98px: the label column and gap, so modifiers line up with the entry) */
+  background:rgba(0,0,0,0.3); font-family:var(--mono); font-size:11px; color:var(--text-dim);
+}
+.entity-card .pc-mods-loves { border-left:var(--trait-bar) solid var(--trait-loves-bar); }
+.entity-card .pc-mods-hates { border-left:var(--trait-bar) solid var(--trait-hates-bar); }
+.entity-card .pc-mod { line-height:var(--mod-line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.entity-card .pc-mod-space { height:calc(var(--mod-lines, 3)*var(--mod-line)); flex:0 0 auto; }
+.entity-card :is(.pc-mods, .pc-mod-space)[hidden] { display:none; }
 /* name, age and mood, with the headshot beside them (clear of the close button above it) */
 .pc-top { display:flex; gap:10px; align-items:flex-start; }
 .pc-rows { flex:1; min-width:0; }

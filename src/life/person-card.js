@@ -41,7 +41,7 @@ function showPersonCard(index, isMan) {
   // the person does, not what the card says about them.
   card.show({ name: profile.name, age: profile.age, mood: profile.mood,
     loves: garbled(profile.loves, traits, profile.age), hates: garbled(profile.hates, traits, profile.age),
-    lovesTier: profile.lovesTier, hatesTier: profile.hatesTier });
+    lovesTier: profile.lovesTier, hatesTier: profile.hatesTier, lovesMods: profile.lovesMods, hatesMods: profile.hatesMods });
   // (no headshot of a cuboid person, before the people model has loaded)
   headshotContext.clearRect(0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE);
   headshotCanvas.hidden = isMan == null;

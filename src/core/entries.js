@@ -2,7 +2,7 @@
 // The shared reader for lines in the .txt files that describe things (people.txt, cars.txt, ...). A line is an entry: its
 // text, then optional [brackets] holding traits (`speed = 2`, `solo`), rules (`limit = 1a`) and `choiceweight = n`.
 // Every kind shares the trait table in core/traits.js.
-import { TRAITS, TRAIT_MACROS } from './traits.js';
+import { TRAITS, TRAIT_MACROS, modifierLines } from './traits.js';
 
 const warned = new Set();
 function warnOnce(message) {
@@ -165,6 +165,8 @@ export const isSolo = entry => entry.traits.some(([key, value]) => key === 'solo
 // (ui/entity-card.js): 'legendary', 'terrible', or null for anything else. Legendary wins if an entry somehow carries both.
 const hasTrait = (entry, key) => entry.traits.some(([k, value]) => k === key && value > 0);
 export const tierOf = entry => hasTrait(entry, 'legendary') ? 'legendary' : hasTrait(entry, 'terrible') ? 'terrible' : null;
+// An entry's modifiers as card lines (see modifierLines in core/traits.js), for the drop-down under it (ui/entity-card.js).
+export const modifiersOf = entry => modifierLines(entry.traits);
 
 // `table` is rows of [count, count, ..., weight]: one count per attribute, then how likely the row is relative to the
 // others. Returns the counts of the row that `roll` (0 to 1) lands on.

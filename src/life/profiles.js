@@ -1,5 +1,5 @@
 import { mulberry32 } from '../core/math.js';
-import { DEFAULT_COUNTS, startingTraits, plainEntry, parseSections, combineTraits, pickCounts, addEntries, clash, tierOf } from '../core/entries.js';
+import { DEFAULT_COUNTS, startingTraits, plainEntry, parseSections, combineTraits, pickCounts, addEntries, clash, tierOf, modifiersOf } from '../core/entries.js';
 import { TRAITS } from '../core/traits.js';
 
 const LETTERS = ['A.','B.','C.','D.','E.','F.','G.','H.','I.','J.','K.','L.','M.','N.','O.','P.','Q.','R.','S.','T.','U.','V.','W.','X.','Y.','Z.','Ñ.']
@@ -88,18 +88,20 @@ export function profileOf(id, isMan) {
   // (UNKNOWN), with no tier (nothing to colour gold or dark reddish-brown while it's a mystery).
   let loveTexts = loves.map(entry => entry.text), hateTexts = hated.map(entry => entry.text);
   let loveTiers = loves.map(tierOf), hateTiers = hated.map(tierOf);
+  let loveMods = loves.map(modifiersOf), hateMods = hated.map(modifiersOf);
   if (name.text === '(UNKNOWN)') {
     fullname = '(UNKNOWN)';
     const hidden = texts => texts.length ? texts.map(() => '(UNKNOWN)') : ['(UNKNOWN)'];
     const lovesHidden = rng() > 0.5;
     const hatesHidden = !lovesHidden || rng() > 0.5;
-    if (lovesHidden) { loveTexts = hidden(loveTexts); loveTiers = loveTexts.map(() => null); }
-    if (hatesHidden) { hateTexts = hidden(hateTexts); hateTiers = hateTexts.map(() => null); }
+    if (lovesHidden) { loveTexts = hidden(loveTexts); loveTiers = loveTexts.map(() => null); loveMods = loveTexts.map(() => []); }
+    if (hatesHidden) { hateTexts = hidden(hateTexts); hateTiers = hateTexts.map(() => null); hateMods = hateTexts.map(() => []); }
   }
 
   age = Math.round(Math.max(18, age*traits.agemult)) //no minors!
 
   // `loves` and `hates` are lists of text; at most one is ever empty. `lovesTier`/`hatesTier` run alongside, entry for
   // entry (see tierOf): 'legendary' or 'terrible' or null, for the card to colour that entry's row (ui/entity-card.js).
-  return { name: fullname, age, mood: mood.text, loves: loveTexts, hates: hateTexts, lovesTier: loveTiers, hatesTier: hateTiers, traits: traits};
+  // `lovesMods`/`hatesMods` likewise: each entry's modifier lines (see modifiersOf) — none for a hidden (UNKNOWN) one.
+  return { name: fullname, age, mood: mood.text, loves: loveTexts, hates: hateTexts, lovesTier: loveTiers, hatesTier: hateTiers, lovesMods: loveMods, hatesMods: hateMods, traits: traits};
 }
