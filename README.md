@@ -21,6 +21,7 @@ A little procedural city blockout tool that runs in the browser, built on three.
   - **Water** — an animated surface sunk below the ground, with sandy beaches where it meets a park
   - **Plaza** — tiled or herringbone paving, a fountain, lamp posts, benches and trees
   - **Farmland** — crop fields, hedgerows and farmsteads
+  - **Town** — a British town: terraces of brick, stucco and painted houses built wall to wall under slate roofs with chimney pots, sash windows and painted front doors, and shops with fascias and awnings among them
   - **Industrial** — fenced lots with warehouses, factories, storage tanks and container yards
   - **Suburbs** — plots of houses, each painted a colour of its own and turned to face the nearest road, with lawns, hedges and a path to the door
   - **Plain** — flat ground

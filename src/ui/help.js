@@ -67,6 +67,7 @@ const TOPICS = [
       <li><b>Farmland</b> — fields, hedgerows and farmsteads.</li>
       <li><b>Industrial</b> — fenced yards of warehouses, tanks and containers.</li>
       <li><b>Suburbs</b> — houses facing the nearest road, with lawns and hedges.</li>
+      <li><b>Town</b> — a British town: brick and stucco terraces and shops wall to wall, with slate roofs and chimney pots.</li>
       <li><b>Airport</b> — runways and aircraft coming and going.</li>
     </ul>
     <p>Roads cut through zones, and a zone higher in the list cuts into the ones below it — drag the list to reorder.</p>

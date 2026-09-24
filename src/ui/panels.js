@@ -534,6 +534,22 @@ function renderDetails() {
       ${colorSwatchRowHtml(BUILDING_GROUND_COLORS, s.groundColor!=null?s.groundColor:BUILDING_GROUND_COLORS[0], 'groundcolor')}
       <div class="empty" style="margin:6px 0 10px;">Every house faces the nearest road &mdash; or, with none within reach, the nearest walkway, and failing those the zone's own edge.</div>
       ${seedHtml}
+    ` : zoneType==='town' ? `
+      <div class="slider-row"><div class="row"><label>Lot count</label><span class="val" id="dv-townlots">${s.townLots!=null?s.townLots:40}</span></div>
+        <input type="range" id="ds-townlots" min="1" max="${MAX_TARGET_LOTS}" step="1" value="${s.townLots!=null?s.townLots:40}"></div>
+      <div class="slider-row"><div class="row"><label>Density</label><span class="val" id="dv-towndensity">${(s.townDensity!=null?s.townDensity:0.92).toFixed(2)}</span></div>
+        <input type="range" id="ds-towndensity" min="0.1" max="1" step="0.02" value="${s.townDensity!=null?s.townDensity:0.92}"></div>
+      ${rangeSliderHtml('townstoreys', 'Storeys', 1, 5, 1, s.townStoreysMin!=null?s.townStoreysMin:2, s.townStoreysMax!=null?s.townStoreysMax:3)}
+      <div class="slider-row"><div class="row"><label>Shops</label><span class="val" id="dv-townshops">${(s.townShops!=null?s.townShops:0.4).toFixed(2)}</span></div>
+        <input type="range" id="ds-townshops" min="0" max="1" step="0.05" value="${s.townShops!=null?s.townShops:0.4}"></div>
+      <div class="slider-row"><div class="row"><label>Paint</label><span class="val" id="dv-townpaint">${(s.townPaint!=null?s.townPaint:0.3).toFixed(2)}</span></div>
+        <input type="range" id="ds-townpaint" min="0" max="1" step="0.05" value="${s.townPaint!=null?s.townPaint:0.3}"></div>
+      <div class="slider-row"><div class="row"><label>Lot setback</label><span class="val" id="dv-townsetback">${s.townSetback!=null?s.townSetback:0}</span></div>
+        <input type="range" id="ds-townsetback" min="0" max="4" step="0.25" value="${s.townSetback!=null?s.townSetback:0}"></div>
+      <div class="section-label">Ground color</div>
+      ${colorSwatchRowHtml(BUILDING_GROUND_COLORS, s.groundColor!=null?s.groundColor:BUILDING_GROUND_COLORS[0], 'groundcolor')}
+      <div class="empty" style="margin:6px 0 10px;">Terraces and shops built wall to wall, each roof's ridge along the street nearest it. Lots left empty are back gardens.</div>
+      ${seedHtml}
     ` : zoneType==='airport' ? `
       ${zone.airportInfo ? `<div class="row" style="margin-bottom:9px;"><label>Airfield</label><span class="val">${zone.airportInfo.label}</span></div>
       <div class="row" style="margin-bottom:9px;"><label>Runway</label><span class="val">${zone.airportInfo.numbers ? zone.airportInfo.numbers + ' &middot; ' + zone.airportInfo.length + 'm' : '&mdash;'}</span></div>` : ''}
@@ -647,6 +663,14 @@ function renderDetails() {
       wireNumber('ds-suburbplots', 'dv-suburbplots', 'suburbPlots');
       wireNumber('ds-suburbdensity', 'dv-suburbdensity', 'suburbDensity', 2);
       wireToggle('ds-suburbhedges', 'suburbHedges');
+      wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);
+    } else if (zoneType==='town') {
+      wireNumber('ds-townlots', 'dv-townlots', 'townLots');
+      wireNumber('ds-towndensity', 'dv-towndensity', 'townDensity', 2);
+      wireRangeSlider('townstoreys', 1, 5, null, (lo, hi) => { s.townStoreysMin = lo; s.townStoreysMax = hi; subdivideZone(zone); });
+      wireNumber('ds-townshops', 'dv-townshops', 'townShops', 2);
+      wireNumber('ds-townpaint', 'dv-townpaint', 'townPaint', 2);
+      wireNumber('ds-townsetback', 'dv-townsetback', 'townSetback');
       wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);
     } else if (zoneType==='airport') {
       wireToggle('ds-airportterminal', 'airportTerminal');

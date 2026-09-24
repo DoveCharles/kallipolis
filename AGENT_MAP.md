@@ -195,6 +195,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `industrial.js` (14K) ---------------------------------------------------------- industrial An industrial zone is split into big lots, each paved as a yard behind a chain-l…
 - `plazas.js` (19K) ---------------------------------------------------------- plazas A plaza is a paved square: — exports: PLAZA_COLORS, Y_PLAZA, DEFAULT_MORTAR, applyPavingShader, loadFountainModel, generatePlazaContent
 - `suburbs.js` (36K) ---------------------------------------------------------- suburbs — exports: loadHouseModels, streetSegmentsNear, streetFor, generateSuburbsContent
+- `town.js` (18K) ------------------------------------------------------------- town (British terraces and shops, pitched roofs, chimneys) — exports: generateTownContent
 - `surface-detail.js` (58K, **big**) ---------------------------------------------------------- surface detail (Y2K greebles/bands/rings) A slim torus ring around the building at zHeight,… — exports: makeBuildingMesh, makeParkMesh, applySandShader, generateBeachContent, applyGrassNoiseShader, makeFlatZoneMesh, TREE_CANOPY, makeTreeMesh …
 - `zone-visuals.js` (4K) ---------------------------------------------------------- zone rendering + generation — exports: rebuildZoneVisual, scalePolygonAroundCentroid, makeExtrudeRaw, extrudeFootprintGeo
 

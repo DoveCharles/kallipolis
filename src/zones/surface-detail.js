@@ -425,7 +425,7 @@ function addEntranceCanopy(group, poly, rng, canopyColor) {
 // in a deep frame with a step up to it — in the middle bay of one wall (the entrance canopy's, if there is one, so the
 // canopy shelters it, and no awning runs into the canopy), and canvas awnings over the shop windows along some of the rest. Everything here draws from
 // `drng`, the building's window sub-generator, so none of it moves anything else in the city.
-function addStreetFront(group, poly, win, drng, frameHex, glassHex, canopy) {
+export function addStreetFront(group, poly, win, drng, frameHex, glassHex, canopy) {
   const runs = computeFacadeRuns(poly), n = poly.length, c = centroid(poly);
   const lobbyH = win.uWinFloor.value.y, storeTop = 0.78*lobbyH, storeW = Math.max(win.uWinBay.value.y, 0.82);
   const edges = [];

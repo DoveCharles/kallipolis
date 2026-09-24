@@ -19,6 +19,7 @@
 #   industrial   warehouse, factory, tankfarm, containeryard
 #   farmland     farmstead
 #   suburbs      house
+#   town         terrace, shop
 #   airport      terminal, hangar, controltower
 #
 
@@ -154,6 +155,32 @@ name = House
 mood = 🏡
 loves = The street out front
 hates = Through traffic
+
+[town]
+name = Town
+mood = 🫖
+loves = The high street
+loves = A proper cup of tea
+hates = Out-of-town retail parks
+
+[terrace]
+enterable = yes
+name = Terraced House
+mood = 🫖
+loves = The neighbours (through the wall)
+loves = A chimney that draws
+loves = The kettle
+hates = Damp
+hates = The neighbours (through the wall)
+
+[shop]
+enterable = yes
+name = Shop
+mood = 🛍️
+loves = Regulars
+loves = Half-day closing
+hates = Parking restrictions
+hates = The new supermarket
 
 [house]
 enterable = yes

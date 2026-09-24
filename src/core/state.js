@@ -38,6 +38,7 @@ export const DEFAULT_ZONE_SETTINGS = { density:0.8, heightMin:4, heightMax:40, l
   fieldCount:14, hedgerows:true, farmsteads:true,                                   // farmland
   industrialLots:10, industrialDensity:0.85, industrialHeightMin:5, industrialHeightMax:14, lotFences:true, // industrial
   suburbPlots:40, suburbDensity:0.9, suburbHedges:true,                              // suburbs
+  townLots:40, townDensity:0.92, townStoreysMin:2, townStoreysMax:3, townShops:0.4, townPaint:0.3, townSetback:0, // town
   airportTerminal:true, airportTower:true, airportAircraft:true, airportFence:true }; // airport
 export const MAX_TARGET_LOTS = 150; // slider max = this many lots; slider min (1) = "whole zone"
 export const MIN_ZONE_TREES = 1, MAX_ZONE_TREES = 100; // tree count is a flat target regardless of zone size, not an area-scaled density

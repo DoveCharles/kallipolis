@@ -20,6 +20,7 @@ plaza = 1
 farmland = 2
 industrial = -4
 suburbs = -1
+town = 1
 airport = -2
 
 # ------------------------------------------------------------------------------------------------------------------------
@@ -36,11 +37,13 @@ train lines = 1
 # industrial: in an Industrial zone
 # farmhouses: in a Farmland zone
 # houses: in a Suburbs zone
+# townhouses: in a Town zone (shops too)
 [buildings]
 commercial = -0.1
 industrial = -0.5
 farmhouses = 0.2
 houses = -0.1
+townhouses = 0.1
 terminals = 0.1
 
 # ------------------------------------------------------------------------------------------------------------------------

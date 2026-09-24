@@ -86,7 +86,7 @@ const GROUPS = [
     { key: 'buildings', label: 'Buildings' }, { key: 'plain', label: 'Plain' }, { key: 'park', label: 'Parks' },
     { key: 'beach', label: 'Beaches' }, { key: 'water', label: 'Water' }, { key: 'plaza', label: 'Plazas' },
     { key: 'farmland', label: 'Farmland' }, { key: 'industrial', label: 'Industrial' },
-    { key: 'suburbs', label: 'Suburbs' }, { key: 'airport', label: 'Airports' },
+    { key: 'suburbs', label: 'Suburbs' }, { key: 'town', label: 'Towns' }, { key: 'airport', label: 'Airports' },
   ] },
   { id: 'paths', label: 'Paths', items: [
     { key: 'roads', label: 'Roads' }, { key: 'walkways', label: 'Walkways' },
@@ -94,7 +94,7 @@ const GROUPS = [
   ] },
   { id: 'buildings', label: 'Buildings', items: [
     { key: 'commercial', label: 'Commercial' }, { key: 'industrial', label: 'Industrial' }, { key: 'farmhouses', label: 'Farmhouses' },
-    { key: 'houses', label: 'Houses' }, { key: 'terminals', label: 'Terminals' },
+    { key: 'houses', label: 'Houses' }, { key: 'townhouses', label: 'Townhouses' }, { key: 'terminals', label: 'Terminals' },
   ] },
 ];
 const EVENTS = [
@@ -106,7 +106,7 @@ const EVENTS = [
   { key: 'villainous peds killed by cars', label: 'Villains killed by cars' },
   { key: 'cars destroyed by player', label: 'Cars destroyed by player' },
 ];
-const BUILDING_KIND_OF_ZONE = { buildings: 'commercial', industrial: 'industrial', farmland: 'farmhouses', suburbs: 'houses', airport: 'terminals' };
+const BUILDING_KIND_OF_ZONE = { buildings: 'commercial', industrial: 'industrial', farmland: 'farmhouses', suburbs: 'houses', town: 'townhouses', airport: 'terminals' };
 
 // scores from morality.txt, by [heading] then line — all 0 until it's loaded (or if it can't be)
 let scores = {};

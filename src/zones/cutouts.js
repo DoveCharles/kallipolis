@@ -174,6 +174,8 @@ export function subdivideZone(zone) {
       generateFarmlandContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='suburbs') {
       generateSuburbsContent(zone, poly, cutouts, blockers);
+    } else if (zone.zoneType==='town') {
+      App.generateTownContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='industrial') {
       App.generateIndustrialContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='airport') {

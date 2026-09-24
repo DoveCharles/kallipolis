@@ -182,14 +182,18 @@ export function addBaseShade(shader) {
 }
 // The wall material for one building with windows. All of its randomness comes from texRng, the building's
 // isolated window sub-generator, so window settings never shift any other part of the city's layout.
-export function createWindowMaterial(color, texRng, lit, litIntensity, windowScale, specular) {
+// `look` (optional) swaps in another kind of building's windows: { styles, glassTints, floor, lobby, parapet, pier },
+// any of them left out keeping the city block's (a lobby of 0 is no storefront: windows start on the ground floor).
+export function createWindowMaterial(color, texRng, lit, litIntensity, windowScale, specular, look = {}) {
   const scale = windowScale!=null ? windowScale : 1;
-  const style = WINDOW_STYLES[Math.floor(texRng()*WINDOW_STYLES.length)];
-  const glass = new THREE.Color(WINDOW_GLASS_TINTS[Math.floor(texRng()*WINDOW_GLASS_TINTS.length)]).lerp(color, 0.2);
+  const styles = look.styles || WINDOW_STYLES, tints = look.glassTints || WINDOW_GLASS_TINTS;
+  const style = styles[Math.floor(texRng()*styles.length)];
+  const glass = new THREE.Color(tints[Math.floor(texRng()*tints.length)]).lerp(color, 0.2);
   const warm = texRng() < 0.7; // mostly warm (lamp-lit) interiors, occasionally cool (screen-lit)
   const uniforms = {
     uWinBay: { value: new THREE.Vector4(style.bay*scale*(0.9 + texRng()*0.25), style.glassW, style.glassH, style.sill) },
-    uWinFloor: { value: new THREE.Vector4(WINDOW_FLOOR_HEIGHT*scale, WINDOW_LOBBY_HEIGHT*scale, WINDOW_PARAPET_HEIGHT*scale, WINDOW_CORNER_PIER*scale) },
+    uWinFloor: { value: new THREE.Vector4((look.floor ?? WINDOW_FLOOR_HEIGHT)*scale, (look.lobby ?? WINDOW_LOBBY_HEIGHT)*scale,
+      (look.parapet ?? WINDOW_PARAPET_HEIGHT)*scale, (look.pier ?? WINDOW_CORNER_PIER)*scale) },
     uWinMullion: { value: style.mullion*scale },
     uWinGlass: { value: glass },
     uWinGlassSurface: { value: new THREE.Vector2(specular ? 0.08 : 0.3, specular ? 0.3 : 0.1) },
