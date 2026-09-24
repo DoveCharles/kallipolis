@@ -9,6 +9,7 @@ import { MIN_ZONE_TREES, MAX_ZONE_TREES } from '../core/state.js';
 import { clipPolygons, createMeshBuilder } from '../roads/roads.js';
 import { scalePolygonAroundCentroid, makeExtrudeRaw, extrudeFootprintGeo } from './zone-visuals.js';
 import { plantParkLife } from '../life/bees.js';
+import { plantPigeons } from '../life/pigeons.js';
 import { WATER_TIME } from '../water/water.js';
 
 // ---------------------------------------------------------- surface detail (Y2K greebles/bands/rings)
@@ -1419,6 +1420,18 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
     return null; // nowhere left in this park that a flower would fit
   };
   plantParkLife(zone, { rng, foliage: s.treeDensity, ground: Y_PARK, spot: flowerSpot, clear: clearForFlower, trees, tint: resolveTreeTint(zone) });
+  // and pigeons (see life/pigeons.js), on the same ground a flower could take, but off the tree trunks
+  const clearForPigeon = (x, z) => clearForFlower(x, z) && !zone.treeSpots.some(t => Math.hypot(t.x - x, t.z - z) < t.r + 0.25);
+  const pigeonSpot = () => {
+    for (let i=0;i<40;i++) {
+      const x = minX+Math.random()*(maxX-minX), z = minZ+Math.random()*(maxZ-minZ);
+      if (clearForPigeon(x, z)) return { x, z };
+    }
+    return null;
+  };
+  let parkArea = 0;
+  poly.forEach((a, i) => { const b = poly[(i+1)%poly.length]; parkArea += a.x*b.z - b.x*a.z; });
+  plantPigeons(zone, { area: Math.abs(parkArea)/2, park: true, ground: Y_PARK, spot: pigeonSpot, clear: clearForPigeon });
   // a fence around the park's edge, open wherever a road, river or path runs into it, and not along the water
   if (s.fence !== false) {
     const fence = App.buildRailingMesh(App.zoneFenceLines(zone, poly, 0.5), Y_PARK, App.PARK_FENCE_STYLE, 'Fence');

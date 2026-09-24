@@ -1,0 +1,44 @@
+# What each pigeon is like: what its card says when you click one in World mode. Edit freely, then reload the page.
+# The same format as assets/bees.txt, assets/cars.txt and the rest (they're all read by src/core/type-text.js). Under
+# [pigeon], `attribute = value` lines:
+#
+#   name    what it's called on its card (followed by its own number, like "Pigeon #431")
+#   mood    its current mood, usually an emoji
+#   loves   what it loves
+#   hates   what it hates
+#
+# Give an attribute several lines to have each pigeon pick one of them — always the same one for the same pigeon.
+
+
+[distribution]
+1, 1 @ 0.6
+2, 0 @ 0.1
+0, 2 @ 0.1
+2, 1 @ 0.1
+1, 2 @ 0.1
+
+[pigeon]
+name = Pigeon
+mood = 🐦
+mood = 😤
+mood = 🥱
+mood = 🧐
+mood = 🍞
+loves = Bread
+loves = Chips, dropped
+loves = Statues
+loves = Old men on benches
+loves = The one crumb nobody else has seen
+loves = Standing exactly where you're about to walk
+loves = Pizza crusts
+loves = Nodding along
+loves = Window ledges
+loves = Puffing up at the others
+hates = Toddlers
+hates = Hawks
+hates = Spikes on ledges
+hates = Seagulls
+hates = Being called a rat with wings
+hates = Bicycles
+hates = Sudden movements
+hates = Other pigeons' crumbs being bigger

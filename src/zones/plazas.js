@@ -5,9 +5,10 @@ import { computeWindowGlowFactor } from '../core/scene.js';
 import { mulberry32 } from '../core/math.js';
 import { distPointSegment } from '../buildings/footprints.js';
 import { resolveTreeTint } from '../core/splines.js';
-import { clipPolygons, createMeshBuilder } from '../roads/roads.js';
+import { clipPolygons, createMeshBuilder, CLIPPER_SCALE } from '../roads/roads.js';
 import { makeFlatZoneMesh, makeTreeMesh } from './surface-detail.js';
 import { WATER_TIME } from '../water/water.js';
+import { plantPigeons } from '../life/pigeons.js';
 
 // ---------------------------------------------------------- plazas
 // A plaza is a paved square: tiles or herringbone brick drawn by a shader in world space (so the pattern runs on unbroken
@@ -340,4 +341,18 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
     mesh.userData.lampPosts = lampPosts; // where they stand, for the light they throw (see streetlights.js)
     zone.buildingsGroup.add(mesh);
   }
+  // pigeons (see life/pigeons.js), anywhere on the paving clear of the fountain, the planters and the lamp posts
+  const planters = planted.slice(0, targetTrees);
+  const clearForPigeon = (x, z) => inArea(x, z) && !blocked(x, z) && clearOfFountain(x, z, 0.5)
+    && !planters.some(p => Math.abs(p.x - x) < 0.9 && Math.abs(p.z - z) < 0.9)
+    && !lampPosts.some(p => Math.hypot(p.x - x, p.z - z) < 0.4);
+  const pigeonSpot = () => {
+    for (let i=0;i<40;i++) {
+      const x = minX + Math.random()*(maxX - minX), z = minZ + Math.random()*(maxZ - minZ);
+      if (clearForPigeon(x, z)) return { x, z };
+    }
+    return null;
+  };
+  const pavedArea = Math.abs(area.reduce((sum, path) => sum + ClipperLib.Clipper.Area(path), 0))/(CLIPPER_SCALE*CLIPPER_SCALE);
+  plantPigeons(zone, { area: pavedArea, ground: Y_PLAZA, spot: pigeonSpot, clear: clearForPigeon });
 }
