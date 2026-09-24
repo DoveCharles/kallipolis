@@ -28,6 +28,8 @@ const NAV_MITER_LIMIT = 2;
 // unit, so this keeps them off the leaves), and how far a lane's mouth may be from a sidewalk to come out onto it — the
 // block stops at the sidewalk's outer edge, so a lane that reaches the pavement is half a sidewalk short of the ring.
 const LANE_LATERAL = 0.45, LANE_TO_SIDEWALK = 8;
+/** How much further than a path's half-width a lane's mouth may be from one of its points to come out onto it (a nav spacing: the furthest its nearest point can be along from square to the mouth). */
+const LANE_TO_PATH = 4;
 
 /**
  * Work out which way, and how far per unit of lateral offset, a walkway's point `vi` is set off square to the line there.
@@ -221,7 +223,7 @@ export function buildPeopleNav() {
     return handle;
   };
   // paths
-  const pending = [], raisedLinks = [];
+  const pending = [], raisedLinks = [], groundPaths = []; // (the drawn ones on the ground, with their half-widths: see the lanes below)
   S.roadLines.forEach(line => {
     if (!isWalkwayLine(line) || isRaisedWalkwayLine(line)) return; // (raised ones below)
     const nodes = tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean));
@@ -241,6 +243,7 @@ export function buildPeopleNav() {
       blocked, overWater: pts.map(p => inWater(p.x, p.z)), vertices: pts.map(() => ({ links: [], entrances: [] })) };
     if (loop) nav.vertices[pts.length-1] = nav.vertices[0];
     lines.push(nav);
+    groundPaths.push({ li, hw });
     // where it comes off a road, or ends at a sidewalk (just touching it, short of where people walk along it): onto the
     // sidewalk there
     pts.forEach((p, vi) => {
@@ -286,7 +289,22 @@ export function buildPeopleNav() {
   // off the sidewalk, the only house anyone could walk into is one fronting the road (see buildingDoors).
   S.zones.forEach(zone => {
     if (zone.drawing || zone.zoneType !== 'suburbs') return;
+    // (how many lanes end at each point, since only a lane's loose end can have been stopped by a path)
+    const placeOf = q => Math.round(q.x*2) + ',' + Math.round(q.z*2), endsAt = new Map();
+    (zone.walkGaps || []).forEach(lane => [lane[0], lane[lane.length-1]].forEach(q => endsAt.set(placeOf(q), (endsAt.get(placeOf(q)) || 0) + 1)));
     (zone.walkGaps || []).forEach(lane => {
+      // a path through the suburb is cut out of its blocks, so a lane running into one stops at its edge: carried on to
+      // the path's nearest point, it shares that point with the path (which byPlace joins) instead of being a dead end
+      const onPathAt = q => {
+        if (endsAt.get(placeOf(q)) > 1) return [];
+        let best = null;
+        groundPaths.forEach(({ li, hw }) => lines[li].pts.forEach((v, vi) => {
+          const d = Math.hypot(v.x - q.x, v.z - q.z);
+          if (!lines[li].blocked[vi] && d <= hw + LANE_TO_PATH && (!best || d < best.d)) best = { v, d };
+        }));
+        return best && best.d > 1e-3 ? [best.v] : [];
+      };
+      lane = [...onPathAt(lane[0]), ...lane, ...onPathAt(lane[lane.length-1])];
       const { pts } = resampleLine(lane), cum = cumulative(pts);
       if (cum[cum.length-1] < 1) return;
       const blocked = pts.map(p => inMid(p.x, p.z));
