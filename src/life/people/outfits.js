@@ -29,7 +29,9 @@ const TILE_WIDTH = 256, TILE_HEIGHT = Math.round(TILE_WIDTH*(OUTFIT_CHEST.maxY -
 /**
  * The outfits (id 1 onwards, 0 being none). Each is worn either by `chance` of people or, with `hat`, by everyone
  * wearing that hat (a hairstyle's name in Hair.glb) and no one else; with `trousers`, never by anyone in a skirt or baggy jeans;
- * with `women`, never by a man.
+ * with `women`, never by a man; with `skirted`, only by women in a skirt. With `fishnets`, the legs a skirt leaves bare wear
+ * fishnet tights, and with `boots` black boots up them to
+ * that height (the model's y) — both drawn in the shader: see OUTFIT_CHEST_GLSL in peopleModel.js.
  *
  * `colors` gives the color each part of them takes, in order (see PERSON_TRAIT_COLORS): a list to pick one from, or the
  * name of a part picked before it, to match. `bare` names the bands of clothes (see PERSON_CLOTHING) that stop where
@@ -94,11 +96,11 @@ export const OUTFITS = [
     paint: paintFootballShirt, paintSleeve: paintFootballSleeve,
   },
   {
-    // goth: all in black, a corset laced over a long-sleeved top, a silver cross on a chain, and dyed-black hair
-    name: 'Goth', chance: 0.07, bare: [], women: true,
+    // goth: all in black, a corset laced over a long-sleeved top, a skirt over fishnet tights, high boots, a silver cross on a chain,
+    // and dyed-black hair
+    name: 'Goth', chance: 0.15, bare: [], women: true, skirted: true, fishnets: true, boots: 2.3,
     colors: {
       Top: [0x0c0c0f, 0x0c0c0f, 0x141217],
-      Pants: [0x0c0c0f, 0x141217],
       Skirt: [0x0c0c0f, 0x0c0c0f, 0x2a0d18, 0x1e0f2a],                          // black, some oxblood or plum
       Shoes: [0x0b0b0d],                                                        // boots
       Hair: [0x0a0a0c, 0x0a0a0c, 0x0a0a0c, 0x0a0a0c, 0x3a1450, 0x5a0f1c, 0xe4e4e6], // mostly black; a few purple, red or bleached
@@ -117,17 +119,19 @@ export const OUTFIT_COLUMN_COUNT = OUTFITS.reduce((sum, o) => sum + (o.variants 
  * Pick which outfit someone wears.
  * @param {function(): number} rng - their outfit rng
  * @param {?string} hat - the name of the hairstyle (or hat) they wear, or null
- * @param {boolean} skirt - whether they wear a skirt or baggy jeans, over where an outfit's trousers would be
+ * @param {boolean} skirt - whether they wear a skirt
+ * @param {boolean} jeans - whether they wear baggy jeans (which, like a skirt, go over where an outfit's trousers would be)
  * @param {boolean} man - whether they're a man
  * @returns {number} the outfit's id (its place in OUTFITS, from 1), or 0 for none
  */
-export function pickOutfit(rng, hat, skirt, man) {
+export function pickOutfit(rng, hat, skirt, jeans, man) {
   const worn = OUTFITS.findIndex(outfit => outfit.hat && outfit.hat === hat);
   if (worn >= 0) return worn + 1;
   let roll = rng();
   for (let k=0;k<OUTFITS.length;k++) {
     if (OUTFITS[k].hat) continue;
-    if (roll < OUTFITS[k].chance) return (OUTFITS[k].trousers && skirt) || (OUTFITS[k].women && man) ? 0 : k + 1;
+    const { trousers, women, skirted } = OUTFITS[k];
+    if (roll < OUTFITS[k].chance) return (trousers && (skirt || jeans)) || (women && man) || (skirted && !skirt) ? 0 : k + 1;
     roll -= OUTFITS[k].chance;
   }
   return 0;
