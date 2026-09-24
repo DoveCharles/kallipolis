@@ -79,7 +79,7 @@ import { updateTraffic, loadCarModels } from './life/traffic/traffic.js';
 import { updateGiblets } from './life/giblets.js';
 import { updateBodyParts } from './life/people/peopleGibs.js';
 import { updateCarWrecks } from './life/car-wrecks.js';
-import { updateLightning } from './life/lightning.js';
+import { shakeCamera, updateLightning } from './life/lightning.js';
 import { updateAmbience } from './audio/ambience.js';
 import { loadBeeModel, updateBees } from './life/bees.js';
 import { updateAirports, loadPlaneModel } from './zones/airport.js';
@@ -174,7 +174,9 @@ function animate() {
   updateBuildingBatches();
   blinkLights.forEach(o => { o.material.emissiveIntensity = 0.5 + Math.sin(t*3 + o.userData.blinkPhase)*0.5; });
   if (S.interactionMode === 'node') scaleNodeUi(camera);
+  const unshake = shakeCamera(camera, t);
   renderView(scene, camera);
+  unshake();
 }
 animate();
 

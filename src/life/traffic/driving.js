@@ -44,6 +44,7 @@ export function driveCar(i) {
   const car = cars[i];
   if (i !== followedCar || !car || car.li < 0 || car.fuse != null || drivenCar === car || !startDriving()) return;
   drivenCar = car;
+  App.setCarBoostShown(true);
   car.yieldFor = null;
   car.throttle = 0;
   controls.goalRadius = Math.max(controls.minRadius, carLength(car)*2.2);
@@ -60,6 +61,7 @@ export function stopDriving() {
   if (!drivenCar) return;
   const car = drivenCar;
   drivenCar = null;
+  App.setCarBoostShown(false);
   endDriving();
   car.speed = Math.max(0, car.speed);
   car.floatPhase = 0; car.floatDrop = 0; car.floatBobPhase = 0; car.floatWasWet = false;

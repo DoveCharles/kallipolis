@@ -32,12 +32,12 @@ function showCarCard(i, info, car) {
   card.show({ ...info, loves: garbled(info.loves, traits, seed), hates: garbled(info.hates, traits, seed) });
   drawCarThumbnail(i);
   card.setFavorite({ key: car, kind: 'Car', follow: () => App.followCar(car) });
-  boostMeter.hidden = false;
+  showBoost();
 }
 function hideCarCard() {
   shown = -1;
   card.hide();
-  boostMeter.hidden = true;
+  showBoost();
 }
 
 // the thumbnail: an isometric-angled view of the car's own design (see carThumbnailScene), drawn once when the card opens
@@ -46,7 +46,8 @@ function drawCarThumbnail(i) { drawThumbnail(carThumbnailScene(i)); } // (no thu
 
 // ---------------------------------------------------------- boost meter
 // A vertical gauge (.meter.meter-vertical, src/ui/meter.css) grouped with the card by sitting right against its left
-// edge (see #car-boost-meter in css/base.css), shown and hidden alongside it above. No .meter-center: unlike the morality
+// edge (see #car-boost-meter in css/base.css) and as tall as it, shown with it only while the car's being driven
+// (setCarBoostShown, from traffic/driving.js). No .meter-center: unlike the morality
 // meter it has nothing to call "neutral" to mark, just 0 upward.
 // Driven by the car's own maxboost trait, in seconds of boost it has to spend (see boostMax in traffic/driving.js):
 // setCarBoost below is called from there — once when the card opens (showing whatever level the car already has) and
@@ -66,6 +67,17 @@ document.body.append(boostMeter);
 const boostFill = boostMeter.querySelector('.meter-fill');
 const boostValue = boostMeter.querySelector('.meter-value');
 const boostReserve = boostMeter.querySelector('.boost-reserve'); // (the band below BOOST_UNLOCK of the gauge, shaded: run dry, it must refill past it)
+let driving = false;
+// as tall as the card: matched on showing and whenever the card changes size
+const matchCard = () => { if (card.el.offsetHeight) boostMeter.style.height = card.el.offsetHeight + 'px'; };
+const showBoost = () => { boostMeter.hidden = !(driving && shown >= 0); if (!boostMeter.hidden) matchCard(); };
+/**
+ * Show the boost meter beside the car card, or not: on while a car's being driven, off once it's let go.
+ * @param {boolean} on
+ * @returns {void}
+ */
+function setCarBoostShown(on) { driving = on; showBoost(); }
+new ResizeObserver(matchCard).observe(card.el);
 /**
  * Show how much boost a car has left: `left` of `max` seconds (see boostMax, traffic/driving.js), as a fraction filling
  * the gauge bottom-to-top and the seconds themselves, to one decimal place, below it. The band under BOOST_UNLOCK is
@@ -84,4 +96,4 @@ function setCarBoost(left, max, locked = false, refused = false) {
   boostMeter.classList.toggle('boost-refused', !!refused);
 }
 
-Object.assign(App, { showCarCard, hideCarCard, setCarBoost });
+Object.assign(App, { showCarCard, hideCarCard, setCarBoost, setCarBoostShown });

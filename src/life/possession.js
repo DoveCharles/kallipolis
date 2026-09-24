@@ -5,7 +5,7 @@ import { IS_TOUCH } from '../core/device.js';
 
 // ============================================================ taking control
 // Taking over whoever or whatever the camera's following, from its card — the keys held, the mouse, and the note across
-// the top of the view saying how to stop; people.js and traffic/ do the walking, the driving and the camera from what's
+// the bottom of the view saying how to stop; people.js and traffic/ do the walking, the driving and the camera from what's
 // here. Esc lets go, leaving the camera following as before; anything that stops the camera following lets go too.
 // Either way the mouse looks around — the pointer locked to the view while it does, or dragged, where the browser won't
 // lock it (Esc also frees a locked pointer, which is taken as Esc).
@@ -23,7 +23,7 @@ import { IS_TOUCH } from '../core/device.js';
 // thumbstick and buttons src/ui/mobile.js puts on screen are held down in place of WASD — one of them the click, since
 // a tap on the view is already the start of a look.
 const dom = renderer.domElement;
-const hint = document.getElementById('possess-hint'), hintTitle = document.getElementById('ph-title'), hintSub = document.getElementById('ph-sub');
+const hint = document.getElementById('possess-hint');
 const hintExit = document.getElementById('ph-exit');
 export const possession = { index: -1, yaw: 0, pitch: 0 };
 export const driving = { active: false, lookedAt: -Infinity }; // (lookedAt: when the mouse last swung the camera round)
@@ -36,11 +36,18 @@ const PITCH_MAX = 1.35, LOOK_SPEED = 0.0025, ORBIT_PHI_MIN = 0.3, ORBIT_PHI_MAX 
 const KEY_NAMES = { arrowup: 'w', arrowleft: 'a', arrowdown: 's', arrowright: 'd', ' ': 'space' };
 const CONTROL_KEYS = ['w', 'a', 's', 'd', 'shift', 'space'];
 
+// The how-to goes in the bottom hint (see updateHint in editor/tools.js), with the rest of the tool tips; #possess-hint
+// along the top stays only as the touch Exit button, and as the flag mobile.js watches for when to put the stick up.
 function showHint(title, sub) {
-  hintTitle.innerHTML = title;
-  hintSub.textContent = sub;
+  App.possessionHint = `${title} · ${sub}`;
+  App.updateHint();
   hint.hidden = false;
   hintExit.hidden = !IS_TOUCH; // no Esc to press: the way out is a button
+}
+function hideHint() {
+  App.possessionHint = null;
+  App.updateHint();
+  hint.hidden = true;
 }
 // (whether it could: only in World mode)
 export function startPossession(i, heading) {
@@ -62,7 +69,7 @@ export function endPossession() {
   possession.index = -1;
   held.clear();
   lookPointer = null; pressedAt = null;
-  hint.hidden = true;
+  hideHint();
   unlockPointer();
 }
 export function startDriving() {
@@ -81,7 +88,7 @@ export function endDriving() {
   driving.active = false;
   held.clear();
   lookPointer = null; pressedAt = null;
-  hint.hidden = true;
+  hideHint();
   unlockPointer();
 }
 /** @param {() => void} release - called to let go of whatever is being flown, when Esc or the exit button asks */
@@ -104,7 +111,7 @@ export function endFlying() {
   flying.active = false;
   held.clear();
   lookPointer = null; pressedAt = null;
-  hint.hidden = true;
+  hideHint();
   unlockPointer();
 }
 /**
@@ -130,7 +137,7 @@ export function endRiding() {
   riding.release = null;
   held.clear();
   lookPointer = null; pressedAt = null;
-  hint.hidden = true;
+  hideHint();
   unlockPointer();
 }
 const isPossessing = () => possession.index >= 0;

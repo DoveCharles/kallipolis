@@ -81,9 +81,9 @@ Format: `file` (size) purpose — key exports.
 - `car-wrecks.js` (25K) What's left of a vehicle that blows up: — exports: CAR_GRID, buildCarWreck, buildCraftWreck, throwWreck, throwCarWreck, updateCarWrecks
 - `flight.js` (13K) The flying model shared by everything the player can take the controls of in the air (an aircraft in zones/airport.js, a bee in life/bees.js): — exports: stepFlight, touchdownBounce, makeHand, cruiseSpeed, chaseBehind, autopilot
 - `giblets.js` (50K, **big**) Two separate things share this file, each with its own setting group in S (see core/shared.js): — exports: NO_GROUND_FALLBACK, isNear, landingGround, puffSmoke, sparkleFx, burnFx, tyreSmoke, engineSmoke …
-- `lightning.js` (4K) The Smite button's bolt (see the person and car cards): — exports: strikeLightning, updateLightning
+- `lightning.js` (4K) The Smite button's bolt (see the person and car cards): — exports: strikeLightning, updateLightning, shakeCamera
 - `person-card.js` (7K) Who someone is, in a card at the bottom right while the camera follows them (see "following someone" in people.js):
-- `possession.js` (12K) Taking over whoever or whatever the camera's following, from its card — the keys held, the mouse, and the note across the top of the view saying how t… — exports: possession, driving, flying, riding, startPossession, endPossession, startDriving, endDriving …
+- `possession.js` (12K) Taking over whoever or whatever the camera's following, from its card — the keys held, the mouse, and the how-to in the bottom #hint (App.possessionHint, read by editor/tools.js updateHint); #possess-hint is just the touch Exit button — exports: possession, driving, flying, riding, startPossession, endPossession, startDriving, endDriving …
 - `profiles.js` (7K) Everyone in the crowd has a name, an age, a mood, and loves and hates, picked from assets/people.txt. — exports: DEFAULT_TRAITS, profilesVersion, onProfilesLoaded, profileOf
 - `thumbnail.js` (3K) Still pictures for the car and train cards. — exports: makeThumbnailDrawer
 - `traffic.js` (<1K) Stub re-exporting `traffic/traffic.js`; nothing imports it. Safe to delete.
@@ -163,7 +163,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `pixelation.js` (26K) The colour grade (on unless it's turned off in World settings) is the cheapest of these: — exports: setCutout, renderView
 - `flat-shading.js` (2K) Display > Flat shading: forces flatShading on every lit material in the scene (swept every 0.5s while on; originals restored when off), kept in localStorage. — exports: none
 - `ui-scale.js` (2K) Display > UI scale (100–200%, localStorage): CSS zoom on the page, undone on #canvas-wrap so the 3D view stays 1:1; UI placed by mouse/getBoundingClientRect px goes through `toUi`, and CSS vh/vw divide by `--ui-scale`. — exports: uiScale, toUi
-- `view-prefs.js` (2K) Browser prefs: View > Edit Hints / General Hints (body classes `no-edit-hints`/`no-general-hints` hide `#hint` by its `data-kind`, set in editor/tools.js, and `#possess-hint`), and Options > Game > Start in Edit mode (off: presses World on load). — exports: editHints, generalHints
+- `view-prefs.js` (2K) Browser prefs: View > Edit Hints / General Hints (body classes `no-edit-hints`/`no-general-hints` hide `#hint` by its `data-kind`, set in editor/tools.js — the possession controls included), and Options > Game > Start in Edit mode (off: presses World on load). — exports: editHints, generalHints
 - `sound.js` (1K) The speaker button over the view, by undo and redo, mutes every sound (see audio/sfx.js).
 - `settings-windows.js` (1K) Under the Windows 3.0 window, the World panel's set-once settings (index.html's data-settings groups) open in windows of their own — Display, Effects, Game from the Options menu, and World (time, peds, weather) from the toolbar — moved in while open and put back after. — exports: openSettings
 - `sound-levels.js` (2K) Options > Sound levels: a window of sliders (Master, Peds, Traffic, Ambience) setting the levels in audio/sfx.js (setLevel, LEVEL_KINDS), remembered in localStorage. — exports: openSoundLevels
