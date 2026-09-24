@@ -186,7 +186,7 @@ const RED = '#f00', GREEN = '#0f0', SHADE = b => `rgb(0,0,${Math.round(b*255)})`
 
 /**
  * Pens for drawing on a tile in the model's units.
- * @returns {{polygon: function, line: function, dot: function, text: function}}
+ * @returns {{polygon: function, line: function, dot: function}}
  */
 function pens(ctx, width, height) {
   const { x, y, s } = modelToTile(width, height);
@@ -195,12 +195,6 @@ function pens(ctx, width, height) {
     polygon: (points, fill) => { ctx.fillStyle = fill; path(points); ctx.closePath(); ctx.fill(); },
     line: (points, stroke, w) => { ctx.strokeStyle = stroke; ctx.lineWidth = s(w); ctx.lineCap = ctx.lineJoin = 'round'; path(points); ctx.stroke(); },
     dot: (px, py, r, fill) => { ctx.fillStyle = fill; ctx.beginPath(); ctx.arc(x(px), y(py), s(r), 0, Math.PI*2); ctx.fill(); },
-    // (mirrored, for the back: the tile is seen through the figure from behind)
-    text: (string, px, py, size, fill, mirrored = false) => {
-      ctx.save(); ctx.translate(x(px), y(py)); if (mirrored) ctx.scale(-1, 1);
-      ctx.fillStyle = fill; ctx.font = `bold ${s(size)}px "Arial Black", Impact, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(string, 0, 0); ctx.restore();
-    },
   };
 }
 
@@ -390,10 +384,49 @@ function paintTracksuitLeg(ctx, width, height) {
  * @param {number} variant - which of its numbers
  */
 function paintFootballShirt(ctx, width, height, front, variant) {
-  const { text } = pens(ctx, width, height);
-  const NUMBER = GREEN;
-  if (front) text(String(variant + 1), 0, 6.45, 0.3, NUMBER);
-  else text(String(variant + 1), 0, 6.25, 0.46, NUMBER, true);
+  const { polygon } = pens(ctx, width, height);
+  if (front) blockNumber(polygon, variant + 1, 0, 6.45, 0.21, false);
+  else blockNumber(polygon, variant + 1, 0, 6.25, 0.36, true);
+}
+
+// Block numerals, as on a real kit: square strokes, the outer corners cut off at 45°. Each is drawn on a grid 6 wide
+// and 10 high (y down), its strokes 2 thick: `bars` the rectangles it's built from ([x0, y0, x1, y1]), `slants` any
+// polygons besides, and `cuts` the corners taken off ([x, y, dx, dy]: the corner, and which way is into the numeral).
+const BLOCK_DIGITS = [
+  { bars: [[0, 0, 6, 2], [0, 8, 6, 10], [0, 0, 2, 10], [4, 0, 6, 10]], cuts: [[0, 0, 1, 1], [6, 0, -1, 1], [0, 10, 1, -1], [6, 10, -1, -1]] },
+  { bars: [[2.5, 0, 4.5, 10]], slants: [[[0.6, 1.8], [2.5, 0], [2.5, 2.6], [0.6, 3.8]]], cuts: [[4.5, 0, -1, 1]] },
+  { bars: [[0, 0, 6, 2], [4, 0, 6, 6], [0, 4, 6, 6], [0, 4, 2, 10], [0, 8, 6, 10]], cuts: [[0, 0, 1, 1], [6, 0, -1, 1], [6, 6, -1, -1], [0, 4, 1, 1]] },
+  { bars: [[0, 0, 6, 2], [1.5, 4, 6, 6], [0, 8, 6, 10], [4, 0, 6, 10]], cuts: [[6, 0, -1, 1], [6, 10, -1, -1]] },
+  { bars: [[0, 0, 2, 7], [0, 5, 6, 7], [3.5, 0, 5.5, 10]], cuts: [[0, 0, 1, 1], [5.5, 0, -1, 1]] },
+  { bars: [[0, 0, 6, 2], [0, 0, 2, 6], [0, 4, 6, 6], [4, 4, 6, 10], [0, 8, 6, 10]], cuts: [[0, 0, 1, 1], [6, 4, -1, 1], [6, 10, -1, -1]] },
+  { bars: [[0, 0, 6, 2], [0, 0, 2, 10], [0, 4, 6, 6], [4, 4, 6, 10], [0, 8, 6, 10]], cuts: [[0, 0, 1, 1], [6, 4, -1, 1], [0, 10, 1, -1], [6, 10, -1, -1]] },
+  { bars: [[0, 0, 6, 2]], slants: [[[4, 2], [6, 2], [3.6, 10], [1.6, 10]], [[4, 0], [6, 0], [6, 2], [4, 2]]], cuts: [[0, 0, 1, 1]] },
+  { bars: [[0, 0, 6, 2], [0, 4, 6, 6], [0, 8, 6, 10], [0, 0, 2, 10], [4, 0, 6, 10]], cuts: [[0, 0, 1, 1], [6, 0, -1, 1], [0, 10, 1, -1], [6, 10, -1, -1]] },
+  { bars: [[0, 0, 6, 2], [0, 0, 2, 6], [0, 4, 6, 6], [4, 0, 6, 10], [0, 8, 6, 10]], cuts: [[0, 0, 1, 1], [6, 0, -1, 1], [0, 6, 1, -1], [6, 10, -1, -1]] },
+];
+const BLOCK_CUT = 1.2, BLOCK_GAP = 1.2;
+
+/**
+ * A number in block numerals, centered on (x, y), `height` high — mirrored for the back, the tile being seen through
+ * the figure from behind.
+ * @param {function} polygon - a pen (see pens)
+ * @param {number} number
+ * @param {number} x
+ * @param {number} y
+ * @param {number} height
+ * @param {boolean} mirrored
+ */
+function blockNumber(polygon, number, x, y, height, mirrored) {
+  const digits = String(number).split('').map(Number), unit = height/10, total = digits.length*6 + (digits.length - 1)*BLOCK_GAP;
+  digits.forEach((digit, k) => {
+    const left = k*(6 + BLOCK_GAP) - total/2;
+    const at = ([gx, gy]) => [x + (mirrored ? -1 : 1)*(left + gx)*unit, y + (5 - gy)*unit];
+    const { bars, slants = [], cuts } = BLOCK_DIGITS[digit];
+    bars.forEach(([x0, y0, x1, y1]) => polygon([[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(at), GREEN));
+    slants.forEach(points => polygon(points.map(at), GREEN));
+    // (the corners cut back to the shirt)
+    cuts.forEach(([cx, cy, dx, dy]) => polygon([[cx, cy], [cx + dx*BLOCK_CUT, cy], [cx, cy + dy*BLOCK_CUT]].map(at), '#000'));
+  });
 }
 
 /**
