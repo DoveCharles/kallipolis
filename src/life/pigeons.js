@@ -68,6 +68,15 @@ const HEAD_POSES = [[-55, 0], [-30, 0], [30, 0], [55, 0], [-35, 22], [35, -22], 
 const HEAD_SNAP = 0.045;          // seconds a flick of the head takes
 const HEAD_HOLD_STAND = [0.25, 1.6], HEAD_HOLD_WALK = [0.15, 0.7]; // seconds it holds each look
 const HEAD_AHEAD = 0.35;          // how often the next look is straight ahead again
+// Roosting, its head sinks down and back into its body, as a share of its length each way, tipped beak-down by this
+// many degrees: a pose of its own too, eased into over TUCK_TIME seconds (slowly: it's settling down, not looking).
+const TUCK = { down: 0.1, back: 0.07, pitch: 25 }, TUCK_TIME = 0.8;
+// Tucked in, it shuts its eyes: each eye squashed to a slit this share of its height, just above its middle (the lower
+// lid comes up), as a pose of its own for each side. The eyes are the file's black balls either side of the head (+x is
+// its left): found by material and where they sit in the bind pose.
+const EYE_MATERIAL = 'Material.002', EYE_BOX = { x: [0.06, 0.2], y: [1.72, 1.88], z: [0.86, 0.99] };
+const EYE_SLIT = 0.15;
+const WATCH_EDGE = 0.6; // a roosting bird this far out from the middle of its flock (of the furthest one's distance) keeps its outer eye open
 
 let model = null; // { geometry, clips: { name: { start, frames, duration, loop } }, heads: first head pose, targets } once loaded
 const flocks = []; // { group, mesh, birds, flocks, spot, clear, ground }
@@ -119,7 +128,7 @@ export async function loadPigeonModel() {
   const meshes = [];
   gltf.scene.traverse(o => { if (o.isSkinnedMesh) meshes.push(o); });
   if (!meshes.length) return;
-  const index = [], colors = [], weld = [], places = new Map(), V = new THREE.Vector3();
+  const index = [], colors = [], weld = [], eyes = [], places = new Map(), V = new THREE.Vector3();
   let first = 0;
   gltf.scene.updateMatrixWorld(true);
   meshes.forEach(mesh => {
@@ -132,6 +141,9 @@ export async function loadPigeonModel() {
       const key = `${Math.round(V.x*1e4)},${Math.round(V.y*1e4)},${Math.round(V.z*1e4)}`;
       if (!places.has(key)) places.set(key, places.size);
       weld.push(places.get(key));
+      const inEye = mesh.material.name === EYE_MATERIAL && Math.abs(V.x) >= EYE_BOX.x[0] && Math.abs(V.x) <= EYE_BOX.x[1]
+        && V.y >= EYE_BOX.y[0] && V.y <= EYE_BOX.y[1] && V.z >= EYE_BOX.z[0] && V.z <= EYE_BOX.z[1];
+      eyes.push(inEye ? (V.x > 0 ? 1 : 2) : 0); // (1: its left eye, 2: its right)
     }
     if (geo.index) for (let i=0;i<geo.index.count;i++) index.push(first + geo.index.getX(i));
     else for (let i=0;i<count;i++) index.push(first + i);
@@ -139,7 +151,8 @@ export async function loadPigeonModel() {
   });
   const mixer = new THREE.AnimationMixer(gltf.scene);
   const head = gltf.scene.getObjectByName('Head');
-  const poseAt = (clip, time, look) => {
+  let length = 0; // (the bird's length in the file's own units, once the rest pose is baked: for the tuck)
+  const poseAt = (clip, time, look, tuck) => {
     mixer.stopAllAction();
     const action = mixer.clipAction(clip);
     action.play();
@@ -150,6 +163,16 @@ export async function loadPigeonModel() {
       const turn = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, THREE.MathUtils.degToRad(look[0]), THREE.MathUtils.degToRad(look[1]), 'YXZ'));
       const own = head.getWorldQuaternion(new THREE.Quaternion());
       head.quaternion.multiply(own.clone().invert().multiply(turn).multiply(own));
+      gltf.scene.updateMatrixWorld(true);
+    }
+    if (tuck && head) {
+      // down and back (it faces +z) in the world, turned into the head's parent's space to move the bone by
+      const parent = head.parent, at = head.getWorldPosition(new THREE.Vector3());
+      at.add(new THREE.Vector3(0, -tuck.down*length, -tuck.back*length));
+      head.position.copy(parent.worldToLocal(at));
+      const own = head.getWorldQuaternion(new THREE.Quaternion());
+      const tip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(tuck.pitch));
+      head.quaternion.multiply(own.clone().invert().multiply(tip).multiply(own));
       gltf.scene.updateMatrixWorld(true);
     }
     return bakePose(meshes, index, weld);
@@ -168,6 +191,29 @@ export async function loadPigeonModel() {
   HEAD_POSES.forEach(look => frames.push(poseAt(restClip, REST[1], look)));
   const rest = frames[clips[REST[0]].start + REST[1]];
   rest.computeBoundingBox();
+  length = rest.boundingBox.max.z - rest.boundingBox.min.z;
+  const tucked = frames.length;
+  const tuckFrame = poseAt(restClip, REST[1], null, TUCK);
+  frames.push(tuckFrame);
+  // and each eye shut, as how far its vertices move from the tucked pose, laid over the rest pose: added on top of the tuck
+  const up = new THREE.Vector3(0, 1, 0).applyAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(TUCK.pitch));
+  [1, 2].forEach(side => {
+    const shut = rest.clone(), from = tuckFrame.attributes.position, to = shut.attributes.position;
+    const centre = new THREE.Vector3(), P = new THREE.Vector3();
+    let n = 0, lo = Infinity, hi = -Infinity;
+    eyes.forEach((e, i) => { if (e !== side) return; P.fromBufferAttribute(from, i); centre.add(P); n++; lo = Math.min(lo, P.dot(up)); hi = Math.max(hi, P.dot(up)); });
+    if (n) {
+      centre.divideScalar(n);
+      const lid = centre.dot(up) + (hi - lo)*0.15; // (just above its middle)
+      eyes.forEach((e, i) => {
+        if (e !== side) return;
+        P.fromBufferAttribute(from, i);
+        const along = P.dot(up) - lid, moved = -along*(1 - EYE_SLIT);
+        to.setXYZ(i, to.getX(i) + up.x*moved, to.getY(i) + up.y*moved, to.getZ(i) + up.z*moved);
+      });
+    }
+    frames.push(shut);
+  });
   const box = rest.boundingBox, scale = PIGEON_LENGTH/(box.max.z - box.min.z);
   const move = new THREE.Matrix4().makeScale(scale, scale, scale)
     .multiply(new THREE.Matrix4().makeTranslation(-(box.min.x + box.max.x)/2, -box.min.y, -(box.min.z + box.max.z)/2));
@@ -187,7 +233,7 @@ export async function loadPigeonModel() {
   geometry.morphAttributes.normal = frames.map(f => delta(f, 'normal'));
   geometry.morphTargetsRelative = true;
   geometry.computeBoundingBox();
-  model = { geometry, clips, heads, targets: frames.length };
+  model = { geometry, clips, heads, tucked, targets: frames.length };
   frames.forEach(f => f.dispose());
 }
 
@@ -226,7 +272,7 @@ export function plantPigeons(zone, { area, park = false, ground, spot, clear }) 
         state: 'ground', doing: 'stand', until: between(0, 2), tx: at.x, tz: at.z, hurry: false,
         clip: REST[0], time: 0, from: null, fade: 1, spookAt: null, threat: null, land: null, aloft: 0, cruise: 0,
         cooAt: between(3, COO_EVERY*2), tint: pickTint(), turn: 0,
-        look: -1, lookFrom: -1, lookK: 1, lookAt: between(0, 1), lookOn: 1 };
+        look: -1, lookFrom: -1, lookK: 1, lookAt: between(0, 1), lookOn: 1, tuck: 0, watch: 0 };
       flock.birds.push(bird);
       birds.push(bird);
     }
@@ -288,6 +334,13 @@ function setPose(mesh, k, bird) {
   const on = bird.lookOn;
   if (bird.look >= 0) w[model.heads + bird.look] += bird.lookK*on;
   if (bird.lookFrom >= 0 && bird.lookK < 1) w[model.heads + bird.lookFrom] += (1 - bird.lookK)*on;
+  // and tucked in, roosting, its eyes shutting once its head's mostly down (but for the one keeping watch, if it is)
+  if (bird.tuck > 0) {
+    w[model.tucked] += bird.tuck*bird.tuck*(3 - 2*bird.tuck); // (eased in and out)
+    const shut = Math.max(0, (bird.tuck - 0.6)/0.4);
+    if (bird.watch !== 1) w[model.tucked + 1] += shut;
+    if (bird.watch !== 2) w[model.tucked + 2] += shut;
+  }
   mesh.setMorphAt(k, posed);
 }
 function play(bird, clip, time = 0) {
@@ -299,8 +352,12 @@ function play(bird, clip, time = 0) {
 
 // ---------------------------------------------------------- behaviour
 // The head: held still, then flicked somewhere else. Only standing about or walking; pecking and flying it looks ahead.
-function stepHead(bird, t, dt) {
-  const free = bird.state === 'ground' && (bird.doing === 'stand' || bird.doing === 'walk') && bird.spookAt == null;
+// Roosting, it's tucked in instead, and still.
+function stepHead(bird, t, dt, roosting) {
+  const tucked = roosting && bird.state === 'ground' && bird.doing === 'stand' && bird.spookAt == null;
+  if (tucked && bird.tuck === 0) bird.watch = watchingEye(bird);
+  bird.tuck = tucked ? Math.min(1, bird.tuck + dt/TUCK_TIME) : Math.max(0, bird.tuck - dt/(TUCK_TIME*0.3)); // (and out quick, if startled)
+  const free = !tucked && bird.state === 'ground' && (bird.doing === 'stand' || bird.doing === 'walk') && bird.spookAt == null;
   bird.lookK = Math.min(1, bird.lookK + dt/HEAD_SNAP);
   bird.lookOn = free ? Math.min(1, bird.lookOn + dt/HEAD_SNAP) : Math.max(0, bird.lookOn - dt/HEAD_SNAP);
   if (!free || t < bird.lookAt) return;
@@ -311,6 +368,20 @@ function stepHead(bird, t, dt) {
     do next = Math.floor(Math.random()*HEAD_POSES.length); while (next === bird.look);
   }
   bird.lookFrom = bird.look; bird.look = next; bird.lookK = 0;
+}
+// Which eye a bird settling down to roost keeps open: none (0), unless it's out on the edge of its flock, when it's the
+// one on the outside, watching (1 its left, 2 its right). Like real ones, which sleep half a brain at a time.
+function watchingEye(bird) {
+  const birds = bird.flock.birds.filter(b => b.state === 'ground');
+  if (birds.length < 3) return 0;
+  let cx = 0, cz = 0;
+  birds.forEach(b => { cx += b.x; cz += b.z; });
+  cx /= birds.length; cz /= birds.length;
+  const far = Math.max(...birds.map(b => Math.hypot(b.x - cx, b.z - cz)));
+  const ox = bird.x - cx, oz = bird.z - cz;
+  if (far < 0.1 || Math.hypot(ox, oz) < far*WATCH_EDGE) return 0;
+  // (its left, in the world: +x turned by its yaw)
+  return ox*Math.cos(bird.yaw) - oz*Math.sin(bird.yaw) > 0 ? 1 : 2;
 }
 const angleTo = (from, to) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
 const turnToward = (bird, yaw, rate, dt) => {
@@ -385,6 +456,10 @@ function stepGround(colony, bird, t, dt, roosting) {
     if (colony.clear(x, z) && (bird.doing !== 'walk' || !bird.hurry)) {
       bird.doing = 'walk'; bird.hurry = true; bird.tx = x; bird.tz = z;
     }
+  }
+  // roosting, it stops where it is (unless it's hurrying out of someone's way) and stands
+  if (roosting && (bird.doing === 'peck' || (bird.doing === 'walk' && !bird.hurry))) {
+    bird.doing = 'stand'; bird.until = t + between(4, 12); play(bird, REST[0], 0);
   }
   if (bird.doing === 'walk') {
     const dx = bird.tx - bird.x, dz = bird.tz - bird.z, d = Math.hypot(dx, dz);
@@ -518,7 +593,7 @@ export function updatePigeons(t) {
         stepGround(colony, bird, t, dt, roosting);
         if (!roosting && t >= bird.cooAt) { bird.cooAt = t + between(COO_EVERY*0.4, COO_EVERY*1.6); coo(bird); }
       } else stepAir(colony, bird, t, dt);
-      stepHead(bird, t, dt);
+      stepHead(bird, t, dt, roosting);
       if (bird.from) { bird.fade = Math.min(1, bird.fade + dt/FADE); bird.from.time += dt; if (bird.fade >= 1) bird.from = null; }
       held.position.set(bird.x, bird.y, bird.z);
       held.rotation.set(-bird.pitch, bird.yaw, bird.bank, 'YXZ');
