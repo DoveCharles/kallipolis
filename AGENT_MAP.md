@@ -81,7 +81,7 @@ Format: `file` (size) purpose — key exports.
 - `car-wrecks.js` (25K) What's left of a vehicle that blows up: — exports: CAR_GRID, buildCarWreck, buildCraftWreck, throwWreck, throwCarWreck, updateCarWrecks
 - `flight.js` (13K) The flying model shared by everything the player can take the controls of in the air (an aircraft in zones/airport.js, a bee in life/bees.js): — exports: stepFlight, touchdownBounce, makeHand, cruiseSpeed, chaseBehind, autopilot
 - `giblets.js` (50K, **big**) Two separate things share this file, each with its own setting group in S (see core/shared.js): — exports: NO_GROUND_FALLBACK, isNear, landingGround, puffSmoke, sparkleFx, burnFx, tyreSmoke, engineSmoke …
-- `lightning.js` (4K) The Smite button's bolt (see the person and car cards): — exports: strikeLightning, updateLightning
+- `lightning.js` (4K) The Smite button's bolt (see the person and car cards): — exports: strikeLightning, updateLightning, shakeCamera
 - `person-card.js` (7K) Who someone is, in a card at the bottom right while the camera follows them (see "following someone" in people.js):
 - `possession.js` (12K) Taking over whoever or whatever the camera's following, from its card — the keys held, the mouse, and the how-to in the bottom #hint (App.possessionHint, read by editor/tools.js updateHint); #possess-hint is just the touch Exit button — exports: possession, driving, flying, riding, startPossession, endPossession, startDriving, endDriving …
 - `profiles.js` (7K) Everyone in the crowd has a name, an age, a mood, and loves and hates, picked from assets/people.txt. — exports: DEFAULT_TRAITS, profilesVersion, onProfilesLoaded, profileOf

@@ -29,6 +29,8 @@ const flash = new THREE.PointLight(0xcfe0ff, 0, 90, 1.5);
 scene.add(flash);
 
 const bolts = []; // { at, born, drawn, segments: [[from, to, width]] }
+const SHAKE_LIFE = 0.7, SHAKE_ANGLE = 0.03, SHAKE_NEAR = 60, SHAKE_FAR = 500; // (seconds it lasts; how far the view jerks, in radians, at its worst; within what distance of the strike it's at full strength, and past what it's gone)
+const shakes = []; // { at, born }
 
 // a crooked line from `from` to `to` in `steps` kinks, each kink strayed sideways by up to `jag` of a step — with forks off it
 // (themselves unforked) while `forks` allows
@@ -63,6 +65,7 @@ export function strikeLightning(at) {
   const bolt = { at: { ...at }, born: performance.now()/1000, drawn: 0 };
   drawBolt(bolt);
   bolts.push(bolt);
+  shakes.push({ at: bolt.at, born: bolt.born });
   playSound('thunder', at);
 }
 
@@ -93,4 +96,32 @@ export function updateLightning(t) {
   coreMesh.instanceMatrix.needsUpdate = glowMesh.instanceMatrix.needsUpdate = true;
   flash.intensity = brightest*60;
   if (lit) flash.position.set(lit.at.x, lit.at.y + 6, lit.at.z);
+}
+
+/**
+ * The Smite's thump: jolt `camera` round a little for a moment after a strike, less the further off it landed. Call it just
+ * before rendering, and the function it hands back just after, which puts the camera straight again (so the controls
+ * never see the shake).
+ * @param {THREE.Camera} camera
+ * @param {number} t seconds, as updateLightning's
+ * @returns {() => void}
+ */
+const shakeTurn = new THREE.Euler(), shakeQuaternion = new THREE.Quaternion(), savedQuaternion = new THREE.Quaternion();
+export function shakeCamera(camera, t) {
+  while (shakes.length && t - shakes[0].born > SHAKE_LIFE) shakes.shift();
+  let amount = 0;
+  for (const shake of shakes) {
+    const distance = Math.hypot(camera.position.x - shake.at.x, camera.position.y - shake.at.y, camera.position.z - shake.at.z);
+    const near = 1 - THREE.MathUtils.clamp((distance - SHAKE_NEAR)/(SHAKE_FAR - SHAKE_NEAR), 0, 1);
+    const fade = 1 - (t - shake.born)/SHAKE_LIFE;
+    amount = Math.max(amount, near*fade*fade);
+  }
+  if (amount <= 0) return () => {};
+  // a few sines at odd rates rather than noise, so it rattles rather than smears
+  const a = SHAKE_ANGLE*amount;
+  shakeTurn.set(a*Math.sin(t*67)*Math.sin(t*23 + 1), a*Math.sin(t*59 + 2)*Math.sin(t*31), a*0.5*Math.sin(t*71 + 4));
+  savedQuaternion.copy(camera.quaternion);
+  camera.quaternion.multiply(shakeQuaternion.setFromEuler(shakeTurn));
+  camera.updateMatrixWorld();
+  return () => { camera.quaternion.copy(savedQuaternion); camera.updateMatrixWorld(); };
 }
