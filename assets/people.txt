@@ -1647,8 +1647,9 @@ Using the em dash — which is very normal to use — by copy and pasting it fro
 Choosing not to care
 Oral fixation
 Live grenades [explosive]
-Having webbed feet [aqua, choiceweight = 500]
+Having webbed feet [aqua]
 The mutation [aqua]
+Wriggling across ground like a slug
 
 ################################################################################################################################
 
