@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene } from '../../core/scene.js';
 import { PEOPLE_MAX, inRoom, isDrawn, people, peopleRng, personModel } from './people.js';
 import { PERSON_ARM_SPREAD } from './peopleModel.js';
@@ -13,13 +15,14 @@ import { S } from '../../core/shared.js';
 // are, and goes when they go (nothing is drawn for someone whose building isn't being shown, whose matrix is empty).
 //
 // Every item is built out of boxes, spheres and cylinders — one instanced mesh a shape, so a room of diners costs three
-// draw calls. Sizes are in metres, for someone of height 1 at people size 1.
+// draw calls — or is a model from assets/models/Holdables.glb (see MODELS), drawn the same way once it loads. Sizes are
+// in metres, for someone of height 1 at people size 1.
 //
 // A thing in a hand is placed in the model's rest pose, where the arms are out and the palms face forward: the handle of
 // whatever is held lies along Y, out of the top of the fist past the thumb, and Z comes out of the palm (see HAND_GRIP
 // in peopleModel.js). X is the way the right hand's fingers point, so an item that isn't symmetric reads mirrored in the
 // left hand.
-const ITEMS = {
+export const ITEMS = {
   fork: { parts: [
     { shape: 'box', size: [0.014, 0.17, 0.007], at: [0, 0.035, 0], color: 0xc8ccd3 },
     { shape: 'box', size: [0.034, 0.038, 0.005], at: [0, 0.135, 0], color: 0xc8ccd3 },
@@ -30,17 +33,12 @@ const ITEMS = {
     { shape: 'box', size: [0.012, 0.045, 0.012], at: [0.048, 0.035, 0], color: 0xf2f0ea },
     { shape: 'cylinder', size: [0.06, 0.004, 0.06], at: [0, 0.07, 0], tint: true },
   ] },
-  // (the parts that are `eaten` get shorter from the top as it goes: see A SNACK)
+  // (the parts that are `eaten` get shorter from the top as it goes: see A SNACK; a model's is cut away rather than squashed)
   hotdog: { parts: [
-    { shape: 'box', size: [0.02, 0.15, 0.034], at: [0.014, 0.045, 0], color: 0xd9a25e, eaten: true },
-    { shape: 'box', size: [0.02, 0.15, 0.034], at: [-0.014, 0.045, 0], color: 0xd9a25e, eaten: true },
-    { shape: 'cylinder', size: [0.026, 0.175, 0.026], at: [0, 0.05, 0], color: 0xa8402c, eaten: true },
-    { shape: 'box', size: [0.008, 0.15, 0.03], at: [0, 0.05, 0], color: 0xe0b020, eaten: true },
+    { shape: 'hotdog', size: [0.175, 0.175, 0.175], at: [0.046, 0.039, 0.013], turn: [-0.022, 0.968, 0], eaten: true },
   ] },
   coffee: { parts: [
-    { shape: 'cylinder', size: [0.072, 0.11, 0.072], at: [0, 0.035, 0.01], color: 0xf2ede2 },
-    { shape: 'cylinder', size: [0.076, 0.045, 0.076], at: [0, 0.03, 0.01], color: 0xb5895a },
-    { shape: 'cylinder', size: [0.078, 0.012, 0.078], at: [0, 0.094, 0.01], color: 0xfaf8f2 },
+    { shape: 'coffee', size: [0.167, 0.167, 0.167], at: [0.059, 0.028, 0.036], turn: [-0.072, 2.588, 0.028] },
   ] },
   plate: { parts: [
     { shape: 'cylinder', size: [0.23, 0.010, 0.23], at: [0, 0.005, 0], color: 0xf4f2ee },
@@ -61,6 +59,14 @@ const SHAPES = {
   sphere: new THREE.IcosahedronGeometry(0.5, 1),
   cylinder: new THREE.CylinderGeometry(0.5, 0.5, 1, 12),
 };
+// The shapes that are models: a node of Holdables.glb each, turned so that it's held the way the items above are (the hot
+// dog lies along Z in Blender, its bun open to +Y: stood on end here, open away from the palm), centred, and scaled so
+// its longest side is 1. Their materials' colours are baked into the vertices.
+const HOLDABLES_MODEL_URL = 'assets/models/Holdables.glb';
+const MODELS = {
+  hotdog: { node: 'Hotdog', turn: [Math.PI/2, 0, 0] },
+  coffee: { node: 'CoffeeCup' },
+};
 const HELD_MAX = 512;
 // Held things are lit like the room around them when they are in one (see roomLit in buildings/interior.js: a room under
 // its own ceiling is in shadow, and its things glow a little to make up for it), and plainly out in the daylight.
@@ -78,6 +84,67 @@ const meshes = Object.fromEntries(Object.entries(SHAPES).flatMap(([shape, geomet
   scene.add(mesh);
   return [`${shape}:${light}`, mesh];
 })));
+
+loadHoldables().catch(error => console.warn('Kallipolis: no held models (' + HOLDABLES_MODEL_URL + '):', error));
+
+/**
+ * Load the models in Holdables.glb and add an instanced mesh for each (lit and plain), as SHAPES has for its own. Each
+ * carries a `cut` per instance, a height on the model above which nothing is drawn (what's been bitten off).
+ * @returns {Promise<void>}
+ */
+async function loadHoldables() {
+  const buffer = await fetch(HOLDABLES_MODEL_URL).then(response => { if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.arrayBuffer(); });
+  const gltf = await new GLTFLoader().parseAsync(buffer, '');
+  gltf.scene.updateMatrixWorld(true);
+  for (const [shape, { node, turn = [0, 0, 0] }] of Object.entries(MODELS)) {
+    const object = gltf.scene.getObjectByName(node);
+    if (!object) { console.warn('Kallipolis: Holdables.glb has no ' + node); continue; }
+    const pieces = [];
+    object.traverse(child => {
+      if (!child.isMesh) return;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', child.geometry.attributes.position.clone());
+      geometry.setAttribute('normal', child.geometry.attributes.normal.clone());
+      geometry.setIndex(child.geometry.index.clone());
+      geometry.applyMatrix4(child.matrixWorld);
+      const { r, g, b } = child.material.color, colors = new Float32Array(geometry.attributes.position.count*3);
+      for (let i = 0; i < colors.length; i += 3) colors.set([r, g, b], i);
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      pieces.push(geometry);
+    });
+    const geometry = mergeGeometries(pieces);
+    geometry.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...turn)));
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox, middle = box.getCenter(new THREE.Vector3()), extent = box.getSize(new THREE.Vector3());
+    geometry.translate(-middle.x, -middle.y, -middle.z).scale(...Array(3).fill(1/Math.max(extent.x, extent.y, extent.z)));
+    geometry.computeBoundingBox();
+    const bottom = geometry.boundingBox.min.y, height = geometry.boundingBox.max.y - bottom;
+    for (const light of ['lit', 'plain']) {
+      const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, vertexColors: true, side: THREE.DoubleSide });
+      if (light === 'lit') { material.emissive.setScalar(1); material.emissiveIntensity = HELD_GLOW; }
+      material.onBeforeCompile = shader => {
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nattribute float cut;\nvarying float vUncut;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvUncut = cut - position.y;');
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying float vUncut;')
+          .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (vUncut < 0.0) discard;');
+      };
+      const cut = new THREE.InstancedBufferAttribute(new Float32Array(HELD_MAX).fill(1), 1);
+      cut.setUsage(THREE.DynamicDrawUsage);
+      const mesh = new THREE.InstancedMesh(geometry.clone().setAttribute('cut', cut), material, HELD_MAX);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.name = `Held ${shape}`;
+      mesh.setColorAt(0, new THREE.Color());
+      mesh.userData.cut = { bottom, height };
+      scene.add(mesh);
+      meshes[`${shape}:${light}`] = mesh;
+    }
+  }
+}
 
 /**
  * Give someone something to hold, or to set down in front of them.
@@ -284,10 +351,10 @@ function armShift(out, p, i, hand) {
  * have been placed.
  * @returns {void}
  */
-export function updateHeld() {
+export function updateHeld(only = -1) {
   for (const key of Object.keys(meshes)) counts[key] = 0;
   if (personModel) people.forEach((p, i) => {
-    if (!p.holding?.length || !isDrawn(p)) return;
+    if (!p.holding?.length || !isDrawn(p) || (only >= 0 && i !== only)) return;
     personModel.mesh.getMatrixAt(i, instance);
     const light = inRoom(p) ? 'lit' : 'plain';
     for (const held of p.holding) {
@@ -311,10 +378,11 @@ export function updateHeld() {
         euler.set(...(piece.turn ?? [0, 0, 0]));
         place.set(...piece.at);
         size.set(...piece.size);
-        if (piece.eaten && held.left < 1) { place.y -= size.y*(1 - held.left)/2; size.y *= held.left; } // (bitten down from the top)
-        if (size.y <= 0) continue;
+        const left = piece.eaten ? held.left : 1, model = !SHAPES[piece.shape];
+        if (left < 1 && !model) { place.y -= size.y*(1 - left)/2; size.y *= left; } // (bitten down from the top)
+        if (size.y <= 0 || left <= 0) continue;
         part.compose(place, turn.setFromEuler(euler), size);
-        draw(piece.shape, light, part.premultiply(world), piece.tint ? color.setHex(held.loaded ?? held.color.getHex()) : color.setHex(piece.color));
+        draw(piece.shape, light, part.premultiply(world), piece.tint ? color.setHex(held.loaded ?? held.color.getHex()) : color.setHex(piece.color ?? 0xffffff), left);
       }
       // and what's left on the plate
       if (held.food) for (const food of held.food) {
@@ -327,12 +395,14 @@ export function updateHeld() {
     mesh.count = counts[key];
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    if (mesh.geometry.attributes.cut) mesh.geometry.attributes.cut.needsUpdate = true;
   }
 }
-function draw(shape, light, matrix, tint) {
-  const key = `${shape}:${light}`, mesh = meshes[key], at = counts[key];
-  if (at >= HELD_MAX) return;
+function draw(shape, light, matrix, tint, left = 1) {
+  const key = `${shape}:${light}`, mesh = meshes[key], at = counts[key] ?? 0;
+  if (!mesh || at >= HELD_MAX) return;
   mesh.setMatrixAt(at, matrix);
   mesh.setColorAt(at, tint);
+  if (mesh.userData.cut) mesh.geometry.attributes.cut.setX(at, left < 1 ? mesh.userData.cut.bottom + mesh.userData.cut.height*left : 1e6);
   counts[key] = at + 1;
 }

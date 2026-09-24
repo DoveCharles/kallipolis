@@ -327,13 +327,13 @@ const eatingBones = rig => ['Shoulder', 'Elbow', 'Hand', ...GRIP_CURL.map(([name
 // at the mouth, where the end of the thing goes from the middle of the lips (`at`), and how far that end is from the fist
 // (`reach`). `dir` is the way the thing points out of the top of the fist, and `palm` roughly the way the palm faces.
 // The elbow bends down by their side (SNACK_BEND), not out as it does over a plate.
-const SNACK_HOLD = {
+export const SNACK_HOLD = {
   Hotdog: {
-    carry: { at: [0.12, -0.3, 0.28], dir: [0.1, 0.75, 0.65], palm: [1, 0, 0] },
+    carry: { at: [-0.08, -0.285, 0.175], dir: [0.16, 0.24, 1], palm: [1, 1, 0.1] },
     bite: { at: [0, -0.005, 0.02], reach: 0.12, dir: [0.25, 0.2, -0.95], palm: [1, 0, 0] },
   },
   Coffee: {
-    carry: { at: [0.1, -0.33, 0.27], dir: [0, 1, 0], palm: [1, 0, -0.3] },
+    carry: { at: [-0.1, -0.265, 0.32], dir: [0, 1, 0], palm: [0.9, -0.06, -0.09] },
     bite: { at: [0, -0.005, 0.05], reach: 0.095, dir: [0.1, 0.75, -0.65], palm: [1, 0, 0] },
   },
 };
@@ -1140,7 +1140,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   // how far a foot travels over the walk, for how far a cycle of it carries a person
   const footBone = bones[boneByName.get('FootL') ?? boneByName.get('FootR') ?? 0], footPosition = new THREE.Vector3();
   let footMinZ = Infinity, footMaxZ = -Infinity;
-  clips.forEach(c => {
+  // (a clip's frames into boneData — rebakeClips, further down, runs it again for any whose reposing changes)
+  const bakeClip = (c, mixer) => {
     mixer.stopAllAction();
     const action = c.clip ? mixer.clipAction(c.clip).play() : null;
     for (let f=0;f<=c.frames;f++) {
@@ -1158,7 +1159,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
       if (c.name === 'Walk' && action) { footBone.getWorldPosition(footPosition); footMinZ = Math.min(footMinZ, footPosition.z); footMaxZ = Math.max(footMaxZ, footPosition.z); }
       if (f === 0) pelvisBone.getWorldPosition(c.pelvis);
     }
-  });
+  };
+  clips.forEach(c => bakeClip(c, mixer));
   mixer.stopAllAction();
   mixer.uncacheRoot(root);
   // the body at each animation's first frame, posed as the shader poses it (less the shape keys)
@@ -1190,6 +1192,17 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const boneTexture = new THREE.DataTexture(Uint16Array.from(boneData, x => THREE.DataUtils.toHalfFloat(x)), boneWidth, boneRows, THREE.RGBAFormat, THREE.HalfFloatType);
   boneTexture.magFilter = boneTexture.minFilter = THREE.LinearFilter;
   boneTexture.needsUpdate = true;
+  // Bake some clips again, into boneData and the texture both (for the held-items debug window: see ui/held-debug.js).
+  const rebakeClips = test => {
+    const again = new THREE.AnimationMixer(root), halves = boneTexture.image.data;
+    clips.filter(test).forEach(c => {
+      bakeClip(c, again);
+      for (let i = c.start*boneWidth*4, end = (c.start + c.frames + 1)*boneWidth*4; i < end; i++) halves[i] = THREE.DataUtils.toHalfFloat(boneData[i]);
+    });
+    again.stopAllAction();
+    again.uncacheRoot(root);
+    boneTexture.needsUpdate = true;
+  };
 
   //============== Hairstyles and facial hair ============== 
   //
@@ -1464,7 +1477,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
     headBone: headBone ?? 0, headPivot, chestBone, hands, unitsPerMetre, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

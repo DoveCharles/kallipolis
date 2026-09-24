@@ -44,7 +44,7 @@ export const PEOPLE_MAX = 2000;
 export const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
 /** How often, at least, the walkways are resampled to a point — for entrances and for re-seating people. */
 export const PEOPLE_NAV_SPACING = 4;
-S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false, S.showPeopleNavDebug = false;
+S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false, S.showPeopleNavDebug = false, S.peopleFrozen = null;
 // Everyone's permanent identity — who they are, not where they're standing. Their place in the crowd (their index in
 // `people`) is just whichever render slot they're currently using, and gets reused once they're gone; their id (see
 // peopleIdSeq, same convention as roadNodeSeq and the other counters in core/state.js) is what their name, age, traits
@@ -883,6 +883,8 @@ export function updatePeople(t) {
   if (personModel) [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; });
   peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
   if (!S.peopleEnabled) { showPassengers(); showInhabitants(); updateFlies(0); return; }
+  // (everyone held still where they are while the held-items debug window poses someone: see ui/held-debug.js)
+  if (S.peopleFrozen) { S.peopleFrozen(); return; }
   if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.peopleNavDirty = false;
     setPeopleNavBuiltAt(t);
