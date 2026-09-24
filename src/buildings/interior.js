@@ -1943,12 +1943,16 @@ const lampLight = Object.assign(new THREE.Object3D(), { intensity: 0 });
 const lampUniforms = {
   roomLampPosition: { value: new SharedVector3() }, // world
   roomLampLight: { value: new SharedVector3() },    // colour × intensity, zero when off
+  roomGlowLight: { value: new SharedVector3() },    // the people's share of the room's glow (ROOM_GLOW), zero outdoors
 };
 ['standard', 'physical', 'lambert', 'phong', 'toon'].forEach(id => Object.assign(THREE.ShaderLib[id].uniforms, lampUniforms));
 THREE.ShaderChunk.lights_pars_begin += /* glsl */`
 #ifdef ROOM_LAMP
 uniform vec3 roomLampPosition;
 uniform vec3 roomLampLight;
+#endif
+#ifdef ROOM_GLOW
+uniform vec3 roomGlowLight;
 #endif
 `;
 // (three.js's point light falloff, and no specular)
@@ -1964,6 +1968,10 @@ if ( roomLampLight.r > 0.0 ) {
   irradiance += roomLampLight * lampFalloff * saturate( dot( roomNormal, toLamp / max( lampDistance, 0.01 ) ) );
 }
 #endif
+// (the people: lit to match the room's own glow while the view's in one — the same all round, a little more from above)
+#if defined( RE_IndirectDiffuse ) && defined( ROOM_GLOW )
+if ( roomGlowLight.r > 0.0 ) irradiance += roomGlowLight * ( 0.8 + 0.2 * normalize( normal * mat3( viewMatrix ) ).y );
+#endif
 `;
 const lampColor = new THREE.Color(LAMP_COLOR);
 let occupiedAt = -Infinity;
@@ -1978,6 +1986,8 @@ function updateLamp() {
   const shining = room.visible && lampLight.parent ? lampLight.intensity : 0;
   lampUniforms.roomLampLight.value.set(lampColor.r, lampColor.g, lampColor.b).multiplyScalar(shining);
   if (shining) lampLight.getWorldPosition(lampUniforms.roomLampPosition.value);
+  // (irradiance lighting a surface to ROOM_GLOW of its colour, as the room's materials glow)
+  lampUniforms.roomGlowLight.value.setScalar(inside ? ROOM_GLOW*Math.PI : 0);
 }
 
 // ---------------------------------------------------------------- warming up
