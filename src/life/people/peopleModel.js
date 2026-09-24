@@ -11,7 +11,7 @@ import { HEADSHOT_LAYER, PEOPLE_MAX, people, peopleMesh, setPersonModel } from '
 
 // =========================================== PEOPLE MODEL ===========================================
 // assets/models/Person.glb replaces the cuboids once it loads — one rigged figure, drawn for everyone
-// at once as one instanced mesh, flat-shaded.
+// at once as one instanced mesh, flat- and toon-shaded.
 //
 // The clips (walk, idle fidgets, wave, sit, lie, punch, fall) are baked, as three.js can't instance a rigged mesh: at
 // load each is played a frame at a time and every bone's pose per frame written into a texture (a row per frame, three
@@ -716,6 +716,31 @@ function injectPersonShader(shader, uniforms, look) {
     .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vPersonColor;' + (outfitted ? OUTFIT_CHEST_GLSL : '') + (splotched ? BLOOD_SPLOTCHES : ''));
 }
 
+// People are toon-shaded in three bands of sunlight: shade, lit, and a thin highlight on the faces turned nearly
+// straight at the sun (ambient light still adds on top of all three). The ramp is read at dot(normal, sun)*0.5 + 0.5,
+// so of its 16 texels the first 8 are the side facing away, and the highlight starts at PERSON_TOON_HIGHLIGHT.
+// Turned off (Display > Toon people, see ui/toon-shading.js), the same ramp just holds the plain falloff, max(dot, 0),
+// smoothly filtered, so switching never recompiles a shader.
+const PERSON_TOON_SHADE = 0.35, PERSON_TOON_LIT = 0.75, PERSON_TOON_HIGHLIGHT = 0.75;
+const PERSON_TOON_RAMP = new THREE.DataTexture(new Uint8Array(16*4), 16, 1);
+PERSON_TOON_RAMP.generateMipmaps = false;
+
+/**
+ * Draw people toon-shaded or smoothly lit.
+ * @param {boolean} on - whether in bands
+ */
+export function setPeopleToon(on) {
+  const data = PERSON_TOON_RAMP.image.data;
+  for (let i = 0; i < 16; i++) {
+    const dotNL = (i + 0.5)/8 - 1;
+    data.fill(Math.round(255*(!on ? Math.max(0, dotNL) : dotNL < 0 ? PERSON_TOON_SHADE : dotNL < PERSON_TOON_HIGHLIGHT ? PERSON_TOON_LIT : 1)), i*4, i*4 + 3);
+    data[i*4 + 3] = 255;
+  }
+  PERSON_TOON_RAMP.minFilter = PERSON_TOON_RAMP.magFilter = on ? THREE.NearestFilter : THREE.LinearFilter;
+  PERSON_TOON_RAMP.needsUpdate = true;
+}
+setPeopleToon(true);
+
 /**
  * Make an instanced mesh of `geometry` drawn with `look` (see injectPersonShader), with shadows that take the pose too.
  * @param {THREE.BufferGeometry} geometry - the posed-figure geometry
@@ -727,7 +752,7 @@ function injectPersonShader(shader, uniforms, look) {
  * @returns {THREE.InstancedMesh} the mesh, added to the scene
  */
 function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name = 'People', headshot = true } = {}) {
-  const material = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.DoubleSide, flatShading: true });
+  const material = new THREE.MeshToonMaterial({ gradientMap: PERSON_TOON_RAMP, side: THREE.DoubleSide, flatShading: true });
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   if (byAttribute) { material.defines = { PERSON_INDEX_ATTRIBUTE: '' }; depth.defines = { PERSON_INDEX_ATTRIBUTE: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
