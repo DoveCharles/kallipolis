@@ -1148,8 +1148,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   };
 
   /** Which outfit someone wears (see outfits.js), 0 for none: from their id, by a generator of its own, unless their
-   * hat (the slot's) says; and never trousers under a skirt or jeans (the slot's). */
-  const outfitOf = (id, i) => pickOutfit(mulberry32(5150 + id*7919), hairLayer.of[i] >= 0 ? hairLayer.styles[hairLayer.of[i]].name : null, skirtLayer.of[i] >= 0 || jeansLayer.of[i] >= 0);
+   * hat (the slot's) says; and never trousers under a skirt or jeans, nor a woman's outfit on a man (the slot's). */
+  const outfitOf = (id, i) => pickOutfit(mulberry32(5150 + id*7919), hairLayer.of[i] >= 0 ? hairLayer.styles[hairLayer.of[i]].name : null, skirtLayer.of[i] >= 0 || jeansLayer.of[i] >= 0, isMan[i] === 1);
 
   const traitTexture = new THREE.DataTexture(traits, PEOPLE_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
   const traitRow = part => 2 + PERSON_TRAIT_COLORS.indexOf(part);

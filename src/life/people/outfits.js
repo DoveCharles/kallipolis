@@ -28,7 +28,8 @@ const TILE_WIDTH = 256, TILE_HEIGHT = Math.round(TILE_WIDTH*(OUTFIT_CHEST.maxY -
 
 /**
  * The outfits (id 1 onwards, 0 being none). Each is worn either by `chance` of people or, with `hat`, by everyone
- * wearing that hat (a hairstyle's name in Hair.glb) and no one else; with `trousers`, never by anyone in a skirt or baggy jeans.
+ * wearing that hat (a hairstyle's name in Hair.glb) and no one else; with `trousers`, never by anyone in a skirt or baggy jeans;
+ * with `women`, never by a man.
  *
  * `colors` gives the color each part of them takes, in order (see PERSON_TRAIT_COLORS): a list to pick one from, or the
  * name of a part picked before it, to match. `bare` names the bands of clothes (see PERSON_CLOTHING) that stop where
@@ -92,6 +93,20 @@ export const OUTFITS = [
     },
     paint: paintFootballShirt, paintSleeve: paintFootballSleeve,
   },
+  {
+    // goth: all in black, a corset laced over a long-sleeved top, a silver cross on a chain, and dyed-black hair
+    name: 'Goth', chance: 0.07, bare: [], women: true,
+    colors: {
+      Top: [0x0c0c0f, 0x0c0c0f, 0x141217],
+      Pants: [0x0c0c0f, 0x141217],
+      Skirt: [0x0c0c0f, 0x0c0c0f, 0x2a0d18, 0x1e0f2a],                          // black, some oxblood or plum
+      Shoes: [0x0b0b0d],                                                        // boots
+      Hair: [0x0a0a0c, 0x0a0a0c, 0x0a0a0c, 0x0a0a0c, 0x3a1450, 0x5a0f1c, 0xe4e4e6], // mostly black; a few purple, red or bleached
+      OutfitRed: [0x1a1a1e, 0x4a0e1c, 0x5c0a14, 0x2e1240],                      // the corset: black, oxblood, blood red, plum
+      OutfitGreen: [0xc8c8cc],                                                  // the cross and its chain
+    },
+    paint: paintGoth,
+  },
 ];
 
 /** Where each outfit's columns of the texture start (see buildOutfitTexture); and how many there are. */
@@ -103,15 +118,16 @@ export const OUTFIT_COLUMN_COUNT = OUTFITS.reduce((sum, o) => sum + (o.variants 
  * @param {function(): number} rng - their outfit rng
  * @param {?string} hat - the name of the hairstyle (or hat) they wear, or null
  * @param {boolean} skirt - whether they wear a skirt or baggy jeans, over where an outfit's trousers would be
+ * @param {boolean} man - whether they're a man
  * @returns {number} the outfit's id (its place in OUTFITS, from 1), or 0 for none
  */
-export function pickOutfit(rng, hat, skirt) {
+export function pickOutfit(rng, hat, skirt, man) {
   const worn = OUTFITS.findIndex(outfit => outfit.hat && outfit.hat === hat);
   if (worn >= 0) return worn + 1;
   let roll = rng();
   for (let k=0;k<OUTFITS.length;k++) {
     if (OUTFITS[k].hat) continue;
-    if (roll < OUTFITS[k].chance) return OUTFITS[k].trousers && skirt ? 0 : k + 1;
+    if (roll < OUTFITS[k].chance) return (OUTFITS[k].trousers && skirt) || (OUTFITS[k].women && man) ? 0 : k + 1;
     roll -= OUTFITS[k].chance;
   }
   return 0;
@@ -375,4 +391,37 @@ function paintFootballShirt(ctx, width, height, front, variant) {
  */
 function paintFootballSleeve(ctx, width, height) {
   ctx.fillStyle = GREEN; ctx.fillRect(0, 0, width, height);
+}
+
+/**
+ * Goth: a corset from under the bust to a point below the waist, its top a sweetheart curve, laced criss-cross up the
+ * middle and boned either side; above it the black top, and a silver cross hanging on a chain from the neck. Behind,
+ * the corset again, laced up the back.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width
+ * @param {number} height
+ * @param {boolean} front - the front, or the back
+ */
+function paintGoth(ctx, width, height, front) {
+  const { polygon, line } = pens(ctx, width, height);
+  const CORSET = RED, SILVER = GREEN;
+  const bottom = [[1, 5.75], [0.3, 5.7], [0, 5.52], [-0.3, 5.7], [-1, 5.75]];
+  if (front) polygon([[-1, 6.42], [-0.4, 6.44], [-0.22, 6.58], [-0.07, 6.52], [0, 6.43], [0.07, 6.52], [0.22, 6.58], [0.4, 6.44], [1, 6.42], ...bottom], CORSET);
+  else polygon([[-1, 6.5], [1, 6.5], ...bottom], CORSET);
+  const top = front ? 6.43 : 6.5, low = front ? 5.58 : 5.6;
+  // the lacing: two rows of eyelets, the lace criss-crossing between them
+  [-1, 1].forEach(side => line([[side*0.05, top - 0.03], [side*0.05, low + 0.04]], 'rgb(255,0,150)', 0.012));
+  const rungs = 7;
+  for (let k=0;k<rungs;k++) {
+    const y0 = low + 0.06 + (top - low - 0.12)*k/rungs, y1 = low + 0.06 + (top - low - 0.12)*(k + 1)/rungs;
+    line([[-0.045, y0], [0.045, y1]], 'rgb(255,0,90)', 0.01);
+    line([[0.045, y0], [-0.045, y1]], 'rgb(255,0,90)', 0.01);
+  }
+  // the boning, curving in to the waist
+  [0.17, 0.32].forEach(px => [-1, 1].forEach(side => line([[side*px, top - 0.08], [side*(px - 0.03), 6.0], [side*px, 5.72]], 'rgb(255,0,110)', 0.009)));
+  if (!front) return;
+  // the cross, on a chain from the neck
+  line([[-0.12, 6.97], [0, 6.78], [0.12, 6.97]], SILVER, 0.008);
+  polygon([[-0.014, 6.79], [0.014, 6.79], [0.014, 6.6], [-0.014, 6.6]], SILVER);
+  polygon([[-0.05, 6.745], [0.05, 6.745], [0.05, 6.72], [-0.05, 6.72]], SILVER);
 }
