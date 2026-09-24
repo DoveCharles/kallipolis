@@ -47,7 +47,7 @@ export const TRAITS = {
   keysmash: {base: 0, min: 0, max: 1, combine: 'on'}, //keysmashes text in card
   legendary: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as legendary
   terrible: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as terrible
-  smells: { base: 0, min: 0, max: 1, combine: 'on' }, //makes other people - or cars - stay clear
+  smells: { base: 0, min: 0, max: 1, combine: 'on' }, //people keep clear and leave circles it sits in (life/people/peopleSmell.js); cars pull over to let it by (life/traffic/pullover.js)
   respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time: the body stays whole (a car still explodes), shakes, then lightning revives it (see life/revive.js)
   drunk: {base: 0, min: 0, max: 1, combine: 'on'} ,//cars: control ×0.5 and steering swapped for 1-3s every 3-10s (see drunkSteer in life/traffic/driving.js); AI cars veer off their lane now and then (drunkVeer in life/traffic/collisions.js); people weave and fall over (life/people/peopleDrunk.js)
   unstable: {base: 0, min: 0, max: 1, combine: 'add'}, //chance to be hurt X5 more than usual

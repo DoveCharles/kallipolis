@@ -104,7 +104,9 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `driving.js` (20K) The driven car: keys, boost, random drift pulls scaled by control (driftTurn, controlOf), drunk: halved control and swapped steering spells (drunkSteer), and water (sinking, climbing back out, aqua floating — knocked cars use the same, see knockedIntoWater in traffic.js). — exports: drivenCar, driveCar, stopDriving, driveByHand, overOpenWater, startSinking, sinkCar, riseCar, goingUnder, updateFloating, boostMax, rechargeBoost, boostSmoke …
 - `collisions.js` (34K) What a car hits: people, aircraft, buildings, other cars; fuses and kicks. — exports: carHitbox, buildingHit, swayCrash, runOverPeople, strikeWithAircraft, hitBuildings, bumpIntoCars, burnFuse, stepKick, seatKickedCar, wreckedCars …
 - `special.js` (6K) Legendary sheen/sparkles and terrible rust/hops. — exports: updateSpecialTraits, TERRIBLE_RUST, DEFAULT_HOLO
-- `drunk.js` (2K) Drunk AI cars weaving about their lane: sideways offset = width × (mean of 3 sines of distance driven)³ — mostly small, rare full-width lurches; put on after placing on the route, taken off before the next step; hits people anywhere (runOverPeople with motion) and cars/walls (swayCrash in collisions.js). — exports: sway, unsway
+- `drunk.js` (2K) Drunk AI cars' weave: sideways offset = width × (mean of 3 sines of distance driven)³ — mostly small, rare lurches; hits people anywhere (runOverPeople with motion) and cars/walls (swayCrash in collisions.js). — exports: weave
+- `pullover.js` (3K) Cars giving way to smelly ones (smells trait, e.g. ambulance): in its path within 30 → slow to a stop turned 45° half onto the pavement (car.pull), back out after it passes; smelly cars ignore pulled-over ones. — exports: smellyCars, updatePull, pullOf
+- `offroute.js` (1K) Draws an AI car off its route each frame (weave + pull-over) as car.sway; put on after placing, taken off before the next step. — exports: sway, unsway
 - `follow.js` (9K) The followed car (camera, card, thumbnail) and taking a car out (kill, drown, smite). — exports: followedCar, pickCar, followCar, stopFollowingCar, chaseCamera, killCar, drownCar, smiteCar, carThumbnailScene …
 
 ### src/life/people/
@@ -115,6 +117,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `peopleActivities.js` (78K, **big**)  — exports: endActivity, goChat, meetOnWalkways, updateGroups, goSit, goLieDown, updateActivity, PUNCH_CHASE_SPEED …
 - `peopleBlood.js` (13K) Blood: — exports: BLOOD_MAX, bloodSpeed, bloodFear, bloodlustSpeed, isBloodlusting, updateBlood, bloodBurst, punchSpill …
 - `peopleDrunk.js` (2K) The drunk trait on people: weaving in a sine wave as they walk (drawn only: sway, called where the model/cuboid matrix is built) and now and then falling over (knockOver). — exports: updateDrunk, sway
+- `peopleSmell.js` (5K) The smells trait on people: others within 5 turn back on walkways or re-target away in hangouts (avoidSmells); circles empty when a smeller sits (updateGroups), nobody joins or chats with them; flies buzzing round them (updateFlies, own instanced mesh, outside the particle cap). — exports: avoidSmells, updateFlies
 - `peopleFooting.js` (17K) Walked about by hand (see walkPossessed in peopleTracking.js), someone is on the ground — a hangout's, the road's or the pavement's — unless they've g… — exports: nearestRaisedVertex, carryPossessed, stepFooting, footingAt
 - `peopleGibs.js` (6K) A dead person's own body parts, thrown apart: — exports: throwBodyParts, updateBodyParts
 - `peopleHolding.js` (12K) Anything a person carries: — exports: hold, letGo, holding, serveMeal, clearMeal, mealFinished, mealCue, updateHeld

@@ -136,6 +136,7 @@ export function goChat(p, area) {
   for (let k=0;k<10;k++) {
     const q = people[Math.floor(peopleRng()*people.length)], d = Math.hypot(q.x - p.x, q.z - p.z);
     if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.fright && !q.oneShot && !q.moving && !q.attack && !q.punched && q.traits.chatty > 0 && d < best
+      && !p.traits.smells && !q.traits.smells
       && walkableUpTo(area, p, q.x, q.z).clear) { friend = q; best = d; }
   }
   if (!friend) return false;
@@ -170,7 +171,7 @@ export function meetOnWalkways(dt) {
     p.chatCheckIn = 0.4 + peopleRng()*0.8;
     const cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
     for (let ox=-1;ox<=1;ox++) for (let oz=-1;oz<=1;oz++) for (const q of cells.get((cx+ox) + ',' + (cz+oz)) || []) {
-      if (q === p || q.act || q.fright || q.crossStage || q.attack || q.punched || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir) continue;
+      if (q === p || q.act || q.fright || q.crossStage || q.attack || q.punched || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || p.traits.smells || q.traits.smells) continue;
       // still coming towards each other, and close
       if ((q.u - p.u)*p.dir < 0 || Math.hypot(q.x - p.x, q.z - p.z) > reach) continue;
       if (peopleRng() < 0.35*p.traits.chatty*q.traits.chatty) startChat(p, q, false); else p.chatCooldown = q.chatCooldown = 10;
@@ -211,6 +212,7 @@ export function updateGroups(dt) {
     if (g.kind === 'room') { roomChat(g, dt); continue; }
     if (g.kind === 'circle') {
       const seated = g.members.filter(m => m.stage === 'sit');
+      if (seated.some(m => m.traits.smells)) { g.members.filter(m => !m.traits.smells).forEach(finishActivity); continue; } // (someone who smells sat down: everyone else gets up and goes)
       if (seated.length >= 2) takeTurns(g, seated, dt); else g.speaker = null;
       continue;
     }
@@ -288,7 +290,8 @@ export function goSit(p, area) {
   const sits = GRASS_SITS.filter(hasClip);
   if (!isOpenGround(area) || !sits.length) return false;
   const radius = CIRCLE_RADIUS*S.peopleSize;
-  const circle = groups.find(g => g.kind === 'circle' && g.area === area && g.members.length < CIRCLE_MAX && Math.hypot(g.cx - p.x, g.cz - p.z) < 30);
+  const circle = groups.find(g => g.kind === 'circle' && g.area === area && g.members.length < CIRCLE_MAX && Math.hypot(g.cx - p.x, g.cz - p.z) < 30
+    && (p.traits.smells || !g.members.some(m => m.traits.smells))); // (nobody joins a circle with someone who smells in it)
   let spot = null;
   if (circle && peopleRng() < 0.85) {
     // the place round the circle furthest from anyone already there

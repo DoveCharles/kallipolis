@@ -17,7 +17,8 @@ import { buildCarGrid, CAR_BRAKE, CAR_STOP_GAP, forCarsNear, gapAhead, GIVE_UP_A
 import { updateSpecialTraits } from './special.js';
 import { CAR_SPEED, TRAFFIC_MAX, TURN_SAFE_ANGLE, blasts, cars, trafficRng } from './state.js';
 import { waitToTurn } from './turns.js';
-import { sway, unsway } from './drunk.js';
+import { sway, unsway } from './offroute.js';
+import { smellyCars, updatePull } from './pullover.js';
 export { loadCarModels } from './models.js';
 export { forEachHeadlight } from './placing.js';
 export { carThumbnailScene } from './follow.js';
@@ -107,6 +108,7 @@ export function updateTraffic(t) {
   const lying = App.people.filter(isLying); // (anyone on the ground, for cars to stop for: see lyingAhead)
   const { matrix } = placing;
   const designCounts = carMeshes.map(() => 0);
+  const smelly = smellyCars(); // (everyone gives way to these: see pullover.js)
   cars.forEach((car, i) => {
     if (car.li < 0) { matrix.makeScale(0, 0, 0); carParts.body.setMatrixAt(i, matrix); if (S.showRoadsafetyDebug) carHitboxDebugMesh.setMatrixAt(i, matrix); return; }
     if (car.design == null && carMeshes.length) {
@@ -117,7 +119,7 @@ export function updateTraffic(t) {
     }
     if (car.design != null) refreshCarTraits(car);
     if (car.reviving) { updateCarRevive(car, dt); placeCar(car, i, designCounts); return; } // (blown up with a respawn left: see startCarRevive)
-    if (car === drivenCar) { car.sway = null; if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
+    if (car === drivenCar) { car.sway = null; car.pull = 0; if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
     rechargeBoost(car, dt); // (driven or not: see driving.js)
     if (i === followedCar && car.boostLeft != null) App.setCarBoost(car.boostLeft, boostMax(car), car.boostLocked); // (the card's meter keeps filling after it's let go)
     if (car.fuse != null) { burnFuse(car, dt); placeCar(car, i, designCounts); return; } // (about to blow: it neither drives nor turns)
@@ -125,7 +127,8 @@ export function updateTraffic(t) {
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
     let target = cruise;
-    if (car.ahead) {
+    if (!car.traits?.smells) { updatePull(car, smelly, dt); target *= 1 - (car.pull ?? 0); } // (giving way to a smelly car: see pullover.js)
+    if (car.ahead && !(car.traits?.smells && car.ahead.pull > 0.3)) {
       // (along each car's own lane rather than the road, since a lane runs quicker round the inside of a bend)
       const nav = S.trafficNav.lines[car.li], along = (laneLength(nav, car.dir, car.ahead.u) - laneLength(nav, car.dir, car.u))*car.dir;
       const gap = (along < 0 ? along + laneLength(nav, car.dir, nav.total) : along) - (carLength(car) + carLength(car.ahead))/2; // (round a loop)
@@ -175,7 +178,7 @@ export function updateTraffic(t) {
     driveAlong(car, travel);
     // its front axle is put on its route (see routePoint) and its back axle, CAR_REAR_AXLE of its length behind, follows
     // it round, so the back end cuts in on a bend
-    unsway(car); // (drunk: last frame's weave off, see drunk.js)
+    unsway(car); // (last frame's weave or pull-over off, see offroute.js)
     let knocked = null; // (how a knocked car is moving)
     if (car.kick) { car.x -= car.kick.x; car.z -= car.kick.z; knocked = stepKick(car, dt); } // (knocked off its route by a bump: the offset is taken off while it's put back on it, so it can't turn it round)
     const front = routePoint(car, back);
@@ -190,12 +193,12 @@ export function updateTraffic(t) {
       car.z = front.z - back*Math.cos(car.heading);
     }
     sway(car, dt);
-    if (car.sway && car.speed > 0.3) swayCrash(car); // (weaved into a car or a wall)
+    if (car.sway?.drunk && car.speed > 0.3) swayCrash(car); // (weaved into a car or a wall)
     if (car.kick || car.floatDrop > 0) knockedIntoWater(car, knocked, dt);
     if (car.sinking?.rising) riseCar(car, dt);
     const lane = lanePoint(car), swayed = car.heading - (car.sway?.turn ?? 0), offLane = Math.abs(Math.atan2(Math.sin(lane.heading - swayed), Math.cos(lane.heading - swayed)));
     if (knocked && Math.hypot(knocked.x, knocked.z) > 0.3) runOverPeople(car, knocked);
-    else if (car.sway && car.speed > 0.3) runOverPeople(car, { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }); // (weaving drunk: anyone it reaches, on the pavement too)
+    else if (car.sway?.drunk && car.speed > 0.3) runOverPeople(car, { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }); // (weaving drunk: anyone it reaches, on the pavement too)
     else if (car.speed > 0.3 && offLane < TURN_SAFE_ANGLE) runOverPeople(car);
     turnWheels(car, dt);
     updateSpecialTraits(car, t, dt);

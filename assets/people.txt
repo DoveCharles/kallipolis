@@ -1580,7 +1580,8 @@ Practicing how to pronounce 'Barcelona'
 Not inhaling
 Sucking exhaust
 Getting away with it [speed = 1.1]
-Eating poop
+Eating poop [smells]
+Living in squalor [smells]
 Picnics
 Looking after themself [roadsafety = 4, aggression = 0.2]
 An excess of caution [roadsafety = 4, aggression = 0.2]
@@ -1604,7 +1605,7 @@ Typing sooooo quick [keysmash]
 Headbutting shit [ scramble, aggression = 5]
 Smashing mirrors with their face [roadsafety = 0.3, scramble, aggression = 5]
 Streamers
-Late-night gamings on discord :rolling_on_the_floor_laughing: [limit = 2b, agemult = 0.9]
+Late-night gamings on discord :rolling_on_the_floor_laughing: [limit = 2b, agemult = 0.7]
 Dreaming of a better world
 Fantasising about the death of celebrities [evil = 0.05]
 Rice Cookers
@@ -1832,7 +1833,7 @@ Frostbite
 Saṃsāra
 Clowns
 Being obliterated by unsucessful journey through Da'at [mood = -1, blinks = 0.2, speed = 0.7]
-The Curse [mood = -1, blinks = 0.2, speed = 0.7, agemult = 1.3]
+The Curse [mood = -1, blinks = 0.2, speed = 0.7, agemult = 1.3, smells]
 Generational trauma [mood = -0.5]
 Déjà vu
 Gangstalking [ aggression = 10]
@@ -1979,3 +1980,4 @@ Getting put in the labyrinth
 Globus sensation
 1 day blinding stew
 Having a bomb strapped to their chest [explosive, mood = -1, terrified, speed = 1.4]
+Showering [smells]

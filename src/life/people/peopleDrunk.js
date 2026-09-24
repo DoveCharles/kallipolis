@@ -24,7 +24,7 @@ export function updateDrunk(p, dt, wasX, wasZ) {
   const on = walking(p);
   p.swayAmp = (p.swayAmp ?? 0) + ((on ? 1 : 0) - (p.swayAmp ?? 0))*Math.min(1, SWAY_EASE*dt);
   p.swayDist = (p.swayDist ?? 0) + Math.hypot(p.x - wasX, p.z - wasZ);
-  if (on && Math.random() < FALL_CHANCE*dt && knockOver(p, { x: p.x + Math.sin(p.heading), z: p.z + Math.cos(p.heading) })) p.punched.stupor = true; // (for their card: see personDoing)
+  if (on && Math.random() < FALL_CHANCE*dt && knockOver(p, { x: p.x + Math.sin(p.heading), z: p.z + Math.cos(p.heading) }) && p.punched) p.punched.stupor = true; // (for their card: see personDoing — unless the fall's damage killed them)
 }
 
 const yaw = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);

@@ -28,6 +28,7 @@ import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown,
 import { holdDrowned, inWater, turnInWater, updateWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
 import { sway, updateDrunk } from './peopleDrunk.js';
+import { avoidSmells, updateFlies } from './peopleSmell.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { followPersonAt, followPerson, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
@@ -807,7 +808,7 @@ export function updatePeople(t) {
   peopleMesh.visible = S.peopleEnabled && !personModel;
   if (personModel) [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; });
   peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
-  if (!S.peopleEnabled) { showPassengers(); showInhabitants(); return; }
+  if (!S.peopleEnabled) { showPassengers(); showInhabitants(); updateFlies(0); return; }
   if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.peopleNavDirty = false;
     setPeopleNavBuiltAt(t);
@@ -856,6 +857,8 @@ export function updatePeople(t) {
     meetOnWalkways(dt);
     pickFights(dt);
   }
+  avoidSmells(dt); // (everyone keeps clear of anyone who smells: see peopleSmell.js)
+  updateFlies(dt);
   // whoever's been knocked down and is still on the ground (or getting up): nobody walks into them
   updateArrivingBlood(dt);
   const lyingDown = people.filter(q => q.punched && q.punched.stage !== 'marked' && q.punched.stage !== 'brace');
