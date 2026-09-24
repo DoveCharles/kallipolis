@@ -199,3 +199,123 @@ html.win3 .pc-thumb {
 
 /* the morality meter (#morality-meter), and any other meter built from the same component, is styled in
    src/ui/meter.css */
+
+/* ============================================================ the application window (src/ui/win3-menu.js)
+   Wider than a phone, the whole tab is the Splinetopia window: its frame round the edge, its title bar and menu bar across
+   the top, and the side panel docked down the left of the inside (like Paintbrush's toolbox) with the view beside it.
+   The canvas still fills the tab underneath — the frame and the panel sit over its edges, as the panel always did. */
+#app-frame, .w3-dropdown, .w3-modal { display:none; }
+@media (min-width: 761px) {
+  html.win3 { --w3-top:47px; --w3-panel-w:267px; } /* (the frame's 4px, the title bar's 22 and the menu bar's 21) */
+  html.win3 #app-frame {
+    display:flex; flex-direction:column; position:fixed; inset:0; z-index:15; pointer-events:none;
+    border:4px solid transparent; outline:1px solid #000; outline-offset:-1px; box-shadow:inset 0 0 0 1px #000;
+    background:var(--w3-ridges),
+      linear-gradient(var(--w3-face), var(--w3-face)) top / 100% 4px no-repeat border-box,
+      linear-gradient(var(--w3-face), var(--w3-face)) bottom / 100% 4px no-repeat border-box,
+      linear-gradient(var(--w3-face), var(--w3-face)) left / 4px 100% no-repeat border-box,
+      linear-gradient(var(--w3-face), var(--w3-face)) right / 4px 100% no-repeat border-box;
+  }
+  html.win3 #app-frame > * { pointer-events:auto; }
+  html.win3 #app-frame, html.win3 #app-frame *, html.win3 :is(.w3-dropdown, .w3-modal) * { font-size:11px; letter-spacing:0; -webkit-font-smoothing:none; font-family:var(--sans); }
+  html.win3 #app-frame .win3-titlebar { user-select:none; }
+  /* the menu bar: white, lined underneath; a menu's name goes navy while it's down */
+  html.win3 #w3-menubar { display:flex; height:21px; padding:0 2px; background:#fff; border-bottom:1px solid #000; user-select:none; }
+  html.win3 .w3-menu-title { padding:0 7px; margin:0; border:none; border-radius:0; background:none; color:#000; font-weight:700; }
+  html.win3 .w3-menu-title.open { background:var(--w3-navy); color:#fff; }
+  html.win3 #app-frame .win3-sysbox.open { filter:invert(1); }
+  /* a menu: a white box, lined, with a drop shadow; the row under the pointer goes navy; greyed rows can't be picked */
+  html.win3 .w3-dropdown {
+    display:flex; flex-direction:column; position:fixed; z-index:70; min-width:150px; padding:2px 0; margin-top:-1px;
+    background:#fff; border:1px solid #000; box-shadow:2px 2px 0 #000; user-select:none;
+  }
+  html.win3 .w3-item {
+    display:flex; align-items:center; gap:24px; padding:3px 14px 3px 20px; margin:0; border:none; border-radius:0;
+    background:none; color:#000; font-weight:700; text-align:left; white-space:nowrap; position:relative;
+  }
+  html.win3 .w3-item .w3-label { flex:1; }
+  html.win3 .w3-item.hot:not(:disabled) { background:var(--w3-navy); color:#fff; }
+  html.win3 .w3-item:disabled { color:var(--w3-shadow); }
+  html.win3 .w3-item.checked::before { content:'\2713'; position:absolute; left:6px; }
+  html.win3 .w3-item.radio::before { content:''; position:absolute; left:8px; top:50%; width:5px; height:5px; margin-top:-2.5px; border-radius:50%; background:currentColor; }
+  html.win3 .w3-sep { height:1px; margin:3px 0; background:#000; }
+  /* a message box, in the middle of everything, the rest blocked until it's answered */
+  html.win3 .w3-modal { display:flex; align-items:center; justify-content:center; position:fixed; inset:0; z-index:80; }
+  html.win3 .w3-dialog {
+    min-width:260px; max-width:420px; color:#000; border:4px solid transparent; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000;
+    background:var(--w3-ridges), linear-gradient(#fff, #fff) padding-box, linear-gradient(var(--w3-face), var(--w3-face)) border-box;
+  }
+  html.win3 .w3-dialog-body { padding:12px 16px 4px; line-height:1.45; }
+  html.win3 .w3-dialog-body p { margin:0 0 10px; }
+  html.win3 .w3-dialog-buttons { display:flex; justify-content:center; gap:12px; padding:4px 16px 14px; }
+  html.win3 .w3-dialog-buttons .btn { width:auto; flex:0 0 auto; min-width:72px; padding:5px 12px; margin:0; }
+  html.win3 .w3-dialog-buttons .w3-default { outline:1px solid #000; outline-offset:0; }
+  html.win3 .w3-about { display:flex; gap:14px; }
+  html.win3 .w3-about-icon { flex:0 0 32px; height:32px; background:var(--w3-navy); box-shadow:inset 0 0 0 1px #000, inset 0 0 0 4px #fff, inset 0 0 0 5px #000; }
+  html.win3 .w3-keys { border-collapse:collapse; }
+  html.win3 .w3-keys td { padding:2px 16px 2px 0; vertical-align:top; }
+  html.win3 .w3-keys td:first-child { white-space:nowrap; }
+
+  /* the toolbar: a grey strip right across the window under the menu bar, its buttons at the left and the morality
+     meter at the right; hiding it (View > Toolbar) takes the meter with it, and everything below moves up */
+  html.win3 { --w3-tools-h:37px; --w3-below:calc(var(--w3-top) + var(--w3-tools-h)); }
+  html.win3 body.w3-no-tools { --w3-below:var(--w3-top); }
+  html.win3 #canvas-tools {
+    top:var(--w3-top); left:4px; right:4px; height:var(--w3-tools-h); padding:0 8px; gap:6px; align-items:center;
+    background:var(--w3-face); border-bottom:1px solid #000;
+  }
+  html.win3 #canvas-tools :is(.canvas-tool, #grid-toggle) { width:28px; height:28px; }
+  html.win3 #history-tools { gap:4px; }
+  /* World / Edit / Maps, moved here from the side panel (see win3-menu.js), labels and all, set off from the rest */
+  html.win3 #canvas-tools #mode-toolbar { flex:0 0 auto; margin:0 10px 0 0 !important; gap:4px; }
+  html.win3 #canvas-tools #mode-toolbar .tool-btn { flex:0 0 auto; height:28px; padding:0 10px; }
+  html.win3 #favorites-panel { top:calc(100% + 5px); }
+  html.win3 body.w3-no-tools :is(#canvas-tools, #morality-meter) { display:none; }
+  /* the meter, laid in the strip: just the bar and the total, unlabelled; clicking it drops the breakdown down under it
+     like a menu (see morality.js), and the notices stack below it (or beside the breakdown) */
+  html.win3 .meter#morality-meter {
+    top:var(--w3-top); right:12px; height:calc(var(--w3-tools-h) - 1px); width:300px; padding:0;
+    display:flex; align-items:center; gap:8px; border:none; outline:none; box-shadow:none; background:none;
+  }
+  html.win3 #morality-meter > .win3-titlebar { display:none; }
+  html.win3 #morality-meter .meter-readout { flex:1; margin:0; cursor:pointer; }
+  html.win3 #morality-meter .meter-value { order:-1; } /* (the total before the bar, so the bar runs to the window's edge) */
+  html.win3 #morality-meter .meter-bar { background:#fff; }
+  html.win3 #morality-meter .meter-details {
+    position:absolute; top:calc(100% + 1px); right:-8px; left:-8px; margin:0; padding:6px 10px; z-index:26;
+    max-height:calc(100vh - var(--w3-below) - 20px); background:#fff; border:1px solid #000; box-shadow:2px 2px 0 #000;
+  }
+  html.win3 #morality-meter .meter-notices { top:calc(100% + 6px); right:0; }
+  html.win3 #morality-meter:not(.win3-minimized) .meter-notices { right:calc(100% + 14px); }
+
+  /* the side panel, docked under the toolbar: no title bar of its own (the window's says Splinetopia), just a line
+     between it and the view */
+  html.win3 #panel {
+    top:var(--w3-below); left:4px; bottom:4px; width:var(--w3-panel-w); max-height:none;
+    border:none; border-right:1px solid #000; outline:none; box-shadow:none; background:#fff;
+  }
+  html.win3 #panel > .win3-titlebar { display:none; }
+  html.win3 body.w3-no-panel #panel { display:none; }
+  /* what shows over the view while walking someone about or riding a train, below all that */
+  html.win3 :is(#possess-hint, #ride-tune) { top:calc(var(--w3-below) + 8px); }
+  html.win3 #ride-tune { right:12px; }
+}
+/* the active window (see src/ui/win3-menu.js): a window you're not working in keeps a white title bar, lettered black */
+html.win3 :is(#app-frame, .entity-card, .w3-window).w3-inactive > .win3-titlebar { background:#fff; }
+html.win3 :is(#app-frame, .entity-card, .w3-window).w3-inactive > .win3-titlebar .win3-title { color:#000; }
+/* a window that stays open over the view, like Sound levels (src/ui/sound-levels.js): a message box's look, but the rest
+   still works while it's up; it starts in the middle and is dragged about by its title bar */
+.w3-window { display:none; }
+html.win3 .w3-window { display:block; position:fixed; left:50%; top:50%; transform:translate(-50%, -50%); z-index:60; width:280px; }
+html.win3 .w3-window[hidden] { display:none; }
+html.win3 .w3-window * { font-size:11px; letter-spacing:0; -webkit-font-smoothing:none; font-family:var(--sans); }
+html.win3 .w3-window .win3-titlebar { user-select:none; cursor:default; }
+html.win3 .w3-window .slider-row { margin-bottom:10px; }
+/* the World panel under the Windows 3.0 window: what's set once and left moves out to the Options menu's windows
+   (src/ui/settings-windows.js), the debug switches to the View menu, and the save/export buttons to the File menu */
+@media (min-width: 761px) {
+  html.win3 #panel :is([data-settings], .w3-debug, .w3-file-buttons, #btn-settings-toggle, #extra-settings) { display:none; }
+}
+html.win3 .w3-window [data-settings] > .section-label { margin-top:0 !important; padding-top:0 !important; border-top:none !important; }
+html.win3 .w3-window [data-settings] + [data-settings] { margin-top:14px; padding-top:14px; border-top:1px solid #000; }
+html.win3 .w3-window .w3-dialog-body { max-height:calc(100vh - 120px); overflow-y:auto; }

@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener, outdoors } from './sfx.js';
+import { listener, outdoorsOf } from './sfx.js';
 import { makeEngineVoice, setEngineKind, setEngineVoice, kindOfDesign } from './engine-voice.js';
 
 // ============================================================ engines
@@ -35,7 +35,7 @@ function makeEngine() {
   panner.panningModel = 'equalpower';
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
-  panner.connect(outdoors);
+  panner.connect(outdoorsOf('traffic'));
   return { voice: makeEngineVoice(listener.context, panner), panner, car: null, revs: 0, lastSpeed: 0, gear: 0, shift: 0 };
 }
 

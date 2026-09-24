@@ -62,6 +62,8 @@ const SOUNDS = {
   ],
 };
 // how near something has to be for each sound to be heard at full volume, falling away past it (REF_DISTANCE if not here)
+// which sound level each is heard at (see LEVEL_KINDS): the rest go by the master level alone
+const KIND_OF = { punch: 'peds', whoosh: 'peds', crash: 'traffic', thump: 'traffic', thunder: 'ambience' };
 const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5 };
 // for the little sounds of people that'd otherwise be heard from right across town (a fight in every park): how far off
 // they're heard at all, how fast they fade past their REACH, and how fast they're muffled (see muffler)
@@ -109,7 +111,37 @@ export function setIndoors(contains) {
  * @param {{x: number, y: number, z: number}} at
  * @returns {AudioNode}
  */
-export const heardFrom = at => inRoom?.(at.x, at.y, at.z) ? listener.getInput() : outdoors;
+export const heardFrom = (at, kind) => inRoom?.(at.x, at.y, at.z) ? inside(kind) : outdoorsOf(kind);
+
+// Sound levels (Options > Sound levels: see ui/sound-levels.js): each kind of sound — people, traffic, the city's
+// ambience — goes by way of its own level, one for the room you're in and one through the walls; anything of no kind
+// (a blast, a door) only has the master level over everything. Like mute, they're the browser's preference, remembered
+// by ui/sound-levels.js rather than saved with the project.
+export const LEVEL_KINDS = ['peds', 'traffic', 'ambience'];
+const buses = Object.fromEntries(LEVEL_KINDS.map(kind => {
+  const bus = { in: context.createGain(), out: context.createGain() };
+  bus.in.connect(listener.getInput());
+  bus.out.connect(walls);
+  return [kind, bus];
+}));
+/** Where a sound of `kind` in the room with you goes (the ear itself, for a sound of no kind). */
+export const inside = kind => buses[kind]?.in ?? listener.getInput();
+/** Where a sound of `kind` outside goes, muffled while you're indoors (`outdoors`, for a sound of no kind). */
+export const outdoorsOf = kind => buses[kind]?.out ?? walls;
+let master = 1;
+const levels = Object.fromEntries(LEVEL_KINDS.map(kind => [kind, 1]));
+/**
+ * Set how loud a kind of sound is, or 'master' for everything.
+ * @param {'master'|'peds'|'traffic'|'ambience'} kind
+ * @param {number} level - 0 to 1
+ * @returns {void}
+ */
+export function setLevel(kind, level) {
+  if (kind === 'master') { master = level; listener.setMasterVolume(muted ? 0 : master); return; }
+  levels[kind] = level;
+  buses[kind].in.gain.value = buses[kind].out.gain.value = level;
+}
+export const levelOf = kind => kind === 'master' ? master : levels[kind];
 
 // Browsers keep audio suspended until the page has been interacted with: wake it on the first press.
 function unlock() {
@@ -136,7 +168,7 @@ let muted = false;
  */
 export function setMuted(on) {
   muted = on;
-  listener.setMasterVolume(on ? 0 : 1);
+  listener.setMasterVolume(on ? 0 : master);
 }
 export const isMuted = () => muted;
 
@@ -159,9 +191,10 @@ function variantsOf(name) {
  *   off slowly and forever
  * @param {number} [rate=1] - how fast it's played: above 1, higher and shorter; below, lower and longer
  * @param {AudioNode[]} [through=[]] - filters to pass it through on the way, in order
+ * @param {string} [kind] - which sound level it goes by (see LEVEL_KINDS), if any
  * @returns {?AudioBufferSourceNode} what's playing it, to stop it early; or null, if it isn't played
  */
-export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate = 1, through = []) {
+export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate = 1, through = [], kind) {
   if (muted || context.state !== 'running' || voices >= VOICES_MAX) return null;
   const source = context.createBufferSource(), gain = context.createGain(), panner = context.createPanner();
   source.buffer = buffer;
@@ -172,7 +205,7 @@ export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate 
   panner.refDistance = refDistance;
   if (maxDistance) panner.maxDistance = maxDistance;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  [...through, gain].reduce((from, to) => from.connect(to), source).connect(panner).connect(heardFrom(at));
+  [...through, gain].reduce((from, to) => from.connect(to), source).connect(panner).connect(heardFrom(at, kind));
   voices++;
   source.onended = () => { voices--; panner.disconnect(); };
   source.start();
@@ -243,7 +276,7 @@ export function playSound(name, at, volume = 1, after = 0) {
     scene.add(sound);
     sound.updateMatrixWorld();
     sound.gain.disconnect();
-    sound.gain.connect(heardFrom(at));
+    sound.gain.connect(heardFrom(at, KIND_OF[name]));
     sound.onEnded = () => { voices--; sound.isPlaying = false; scene.remove(sound); sound.disconnect(); };
     voices++;
     sound.play(delay + after);

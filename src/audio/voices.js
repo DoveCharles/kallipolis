@@ -213,7 +213,7 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   const muffle = muffler(at, REF_DISTANCE, MUFFLE);
   muffle.connect(panner);
   gain.connect(muffle);
-  panner.connect(heardFrom(at));
+  panner.connect(heardFrom(at, 'peds'));
   if (consonant?.noise) {
     // the click or hiss: a burst of noise through a band where that consonant sits, moved by the voice's formants too
     const source = context.createBufferSource(), band = context.createBiquadFilter(), hiss = context.createGain();

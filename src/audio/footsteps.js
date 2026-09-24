@@ -40,5 +40,5 @@ export function footstep(at, weight = 1) {
   const set = buffers[surface];
   // (and a heavier tread a little lower)
   const rate = (1 + (Math.random()*2 - 1)*PITCH_SPREAD)/Math.sqrt(Math.max(0.6, Math.min(1.6, weight)));
-  playBufferAt(set[Math.floor(Math.random()*set.length)], at, STEP_VOLUME*Math.min(1.4, 0.6 + 0.4*weight), REF_DISTANCE, HEAR_DISTANCE, rate);
+  playBufferAt(set[Math.floor(Math.random()*set.length)], at, STEP_VOLUME*Math.min(1.4, 0.6 + 0.4*weight), REF_DISTANCE, HEAR_DISTANCE, rate, [], 'peds');
 }

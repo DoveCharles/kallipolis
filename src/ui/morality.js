@@ -235,6 +235,10 @@ toggleEl.addEventListener('click', () => setDetailsOpen(detailsEl.hidden));
 meterWindow.querySelector('.win3-min').addEventListener('click', () => setDetailsOpen(false));
 meterWindow.querySelector('.win3-max').addEventListener('click', () => setDetailsOpen(true));
 meterWindow.querySelector('.win3-sysbox').addEventListener('click', () => setDetailsOpen(detailsEl.hidden));
+// (and from the bar itself, which is all that shows of it in the Windows 3.0 window's toolbar — see css/win3.css)
+const readoutEl = meterWindow.querySelector('.meter-readout');
+readoutEl.title = 'Morality: click for the breakdown';
+readoutEl.addEventListener('click', () => setDetailsOpen(detailsEl.hidden));
 meterWindow.classList.add('win3-minimized');
 
 // ---------------------------------------------------------- notices

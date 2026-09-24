@@ -44,5 +44,5 @@ export function eatingSound(at, name) {
     [key, Array.from({ length: VARIANTS }, () => layers.map(zzfxBuffer))]));
   const set = buffers[name], layers = set[Math.floor(Math.random()*set.length)];
   const rate = 1 + (Math.random()*2 - 1)*PITCH_SPREAD;
-  for (const buffer of layers) playBufferAt(buffer, at, VOLUME[name], REF_DISTANCE, HEAR_DISTANCE, rate);
+  for (const buffer of layers) playBufferAt(buffer, at, VOLUME[name], REF_DISTANCE, HEAR_DISTANCE, rate, [], 'peds');
 }

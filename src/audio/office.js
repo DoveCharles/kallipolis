@@ -117,7 +117,7 @@ export function officeAmbience(office) {
     if (!at) continue;
     takes[name] ??= MAKERS[name]();
     const list = takes[name];
-    playBufferAt(list[Math.floor(Math.random()*list.length)], at, volume, REF_DISTANCE, HEAR_DISTANCE);
+    playBufferAt(list[Math.floor(Math.random()*list.length)], at, volume, REF_DISTANCE, HEAR_DISTANCE, 1, [], 'ambience');
   }
 }
 /** Put every sound's next time off again (on going into an office): none of them the moment the room's entered. */
