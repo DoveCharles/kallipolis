@@ -70,7 +70,7 @@ function roomLit(material) {
 // emissive k reads as irradiance kπ on a Lambert surface) wherever it's inside the room's box. Out of it, or with no
 // room up, nothing — or at night they're left in the dimmed sky's light alone, far darker than the room around them.
 class SharedMatrix4 extends THREE.Matrix4 { clone() { return this; } }
-class SharedVector3 extends THREE.Vector3 { clone() { return this; } }
+class SharedVector3 extends THREE.Vector3 { clone() { return this; } } // (every material sees the one value)
 const roomGlowUniforms = { roomGlow: { value: new SharedVector3() }, roomFromWorld: { value: new SharedMatrix4() } };
 Object.assign(THREE.ShaderLib.toon.uniforms, roomGlowUniforms);
 THREE.ShaderChunk.lights_pars_begin += /* glsl */`
@@ -1940,7 +1940,6 @@ function updateTV() {
 // shared uniforms, the way streetlights.js lights the streets. `lampLight` is just where the bulb is, and how bright.
 const LAMP_COLOR = 0xffc68a, LAMP_INTENSITY = 6, LAMP_REACH = 9, LAMP_DECAY = 1.2, LAMP_EASE = 0.05;
 const lampLight = Object.assign(new THREE.Object3D(), { intensity: 0 });
-class SharedVector3 extends THREE.Vector3 { clone() { return this; } } // (every material sees the one value)
 const lampUniforms = {
   roomLampPosition: { value: new SharedVector3() }, // world
   roomLampLight: { value: new SharedVector3() },    // colour × intensity, zero when off
