@@ -1,3 +1,5 @@
+import { toUi } from './ui-scale.js';
+
 // ============================================================ little windows
 // A window over the view in the Windows 3.0 look, for the Options menu's Sound levels (ui/sound-levels.js) and settings
 // (ui/settings-windows.js): a title bar with a control-menu box, whatever's put in it, and OK. It doesn't block anything
@@ -59,8 +61,8 @@ function dragByTitle(el) {
     e.preventDefault();
     const box = el.getBoundingClientRect(), dx = e.clientX - box.left, dy = e.clientY - box.top;
     const move = m => {
-      el.style.left = Math.min(innerWidth - box.width, Math.max(0, m.clientX - dx)) + 'px';
-      el.style.top = Math.min(innerHeight - box.height, Math.max(0, m.clientY - dy)) + 'px';
+      el.style.left = toUi(Math.min(innerWidth - box.width, Math.max(0, m.clientX - dx))) + 'px';
+      el.style.top = toUi(Math.min(innerHeight - box.height, Math.max(0, m.clientY - dy))) + 'px';
       el.style.transform = 'none';
     };
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
@@ -96,7 +98,7 @@ function sizeByBorder(el) {
       if (s.r) right = Math.min(innerWidth, Math.max(left + MIN_W, m.clientX));
       if (s.t) top = Math.max(0, Math.min(bottom - MIN_H, m.clientY));
       if (s.b) bottom = Math.min(innerHeight, Math.max(top + MIN_H, m.clientY));
-      Object.assign(el.style, { left: left + 'px', top: top + 'px', width: right - left + 'px', height: bottom - top + 'px', transform: 'none' });
+      Object.assign(el.style, { left: toUi(left) + 'px', top: toUi(top) + 'px', width: toUi(right - left) + 'px', height: toUi(bottom - top) + 'px', transform: 'none' });
     };
     move({ clientX: s.l ? box.left : box.right, clientY: s.t ? box.top : box.bottom });
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };

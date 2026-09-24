@@ -7,6 +7,7 @@ import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone, subdivideZonesFrom } from '../zones/cutouts.js';
 import { renderHierarchy } from '../ui/panels.js';
 import { isRaisedWalkwayLine } from '../roads/raised.js';
+import { toUi } from '../ui/ui-scale.js';
 
 // ============================================================ node type context menu
 // How a raised walkway's node sits in its network — 'end' (a ramp down there anyway), 'middle', or null if it isn't
@@ -41,13 +42,13 @@ function showNodeContextMenu(x,y,target) {
     if (role === 'middle') menu.innerHTML += `<button data-ramp="toggle" class="${n.ramp?'active':''}">Ramp</button>`;
     if (role === 'end' || n.ramp) menu.innerHTML += `<button data-ramp="flip">Flip ramp</button>`;
   }
-  menu.style.left = x+'px';
-  menu.style.top = y+'px';
+  menu.style.left = toUi(x)+'px';
+  menu.style.top = toUi(y)+'px';
   menu.style.display = 'block';
   // there's little room to spare on a phone, and a long press near an edge would put half the menu past it
   const r = menu.getBoundingClientRect();
-  menu.style.left = Math.max(6, Math.min(x, window.innerWidth - r.width - 6))+'px';
-  menu.style.top = Math.max(6, Math.min(y, window.innerHeight - r.height - 6))+'px';
+  menu.style.left = toUi(Math.max(6, Math.min(x, window.innerWidth - r.width - 6)))+'px';
+  menu.style.top = toUi(Math.max(6, Math.min(y, window.innerHeight - r.height - 6)))+'px';
   menu.querySelectorAll('button').forEach(b => {
     b.addEventListener('click', (ev) => {
       ev.stopPropagation();
