@@ -1415,7 +1415,7 @@ export function asNodeUi(object) { object.renderOrder = 1000; if (object.isMesh)
 // Node UI stays the same size on screen however near or far the camera is: each marker and handle is scaled by how far it
 // is from the camera, at NODE_UI_DISTANCE away being the size it's made. A nearer distance means bigger markers, which
 // is what touch gets: a fingertip covers a good deal more of the screen than a cursor's point does.
-const NODE_UI_DISTANCE = IS_TOUCH ? 110 : 160;
+const NODE_UI_DISTANCE = IS_TOUCH ? 136 : 198;
 export function nodeUiScaleAt(camera, position) { return apparentDistance(camera, position)/NODE_UI_DISTANCE; }
 export function scaleNodeUi(camera) {
   const scaleGroup = group => {

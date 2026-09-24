@@ -157,6 +157,12 @@ function setEntityTab(tab) {
   setHover(null);
   insertPreviewMarker.visible = false;
   S.currentTool = tab;
+  // what was selected in the tab left behind goes with it, or its settings stay in the details under the new one
+  if (S.selection.type && S.selection.type!==tab) {
+    S.selection = { type:null, id:null };
+    refreshHighlights();
+    S.zones.forEach(rebuildZoneVisual);
+  }
   rebuildRoadMarkers(); rebuildRoadHandles(); // each tab only shows its own kind of node
   applyModeVisibility();
   renderHierarchy();

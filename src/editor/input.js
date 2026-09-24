@@ -74,6 +74,7 @@ function beginGesture() {
   cancelLongPress();
   if (S.draggedNode) commitNodeDrag(S.draggedNode); // a second finger down mid-drag leaves the node where it got to
   pointerDown = null; S.draggedNode = null; isCameraDragging = false; rightClickTarget = null;
+  showGrabCursor();
   S.lastGroundClick = null; S.lastNodeClick = null;
   gesture = { ...twoFingers(), travelled: 0 };
   ignoreUntilRelease = true;
@@ -98,6 +99,7 @@ function startLongPress(e) {
     if (S.currentTool === 'objects' && pickObjectAt(x, y)) return; // a prop held under the finger is being dragged, not held
     longPress.fired = true;
     pointerDown = null; S.draggedNode = null; isCameraDragging = false;
+    showGrabCursor();
     const picked = pickNodeOrHandle(x, y);
     if (picked && (picked.kind === 'road' || picked.kind === 'zone')) App.showNodeContextMenu(x, y, picked);
     else cancelActiveDrawing();
@@ -105,6 +107,10 @@ function startLongPress(e) {
   }, LONG_PRESS_MS) };
 }
 function cancelLongPress() { if (longPress) { clearTimeout(longPress.timer); longPress = null; } }
+// a closed hand while a node or handle's held (an open one over it: see setHover). A prop dragged about in the Objects tab
+// keeps the cursor that tab gives it.
+const NODE_KINDS = new Set(['road', 'roadHandle', 'zone', 'zoneHandle']);
+function showGrabCursor() { dom.classList.toggle('dragging-node', !!S.draggedNode && NODE_KINDS.has(S.draggedNode.kind)); }
 // a node let go of after being moved: rebuild what it's part of, and reselect it
 function commitNodeDrag(dn) {
   if (dn.kind === 'road' || dn.kind === 'roadHandle') {
@@ -230,6 +236,7 @@ dom.addEventListener('pointerdown', (e) => {
     const picked = pickNodeOrHandle(e.clientX, e.clientY);
     if (picked && (picked.kind==='road' || picked.kind==='zone')) rightClickTarget = picked;
   }
+  showGrabCursor();
   dom.setPointerCapture(e.pointerId);
 });
 
@@ -423,6 +430,7 @@ function pickNearestFollowable(clientX, clientY) {
 dom.addEventListener('pointercancel', (e) => {
   releasePointer(e); cancelLongPress();
   pointerDown = null; isCameraDragging = false; S.draggedNode = null;
+  showGrabCursor();
 });
 dom.addEventListener('pointerup', (e) => {
   const spent = !!gesture || ignoreUntilRelease || (longPress && longPress.fired); // a gesture or a held press: no click in it
@@ -431,6 +439,7 @@ dom.addEventListener('pointerup', (e) => {
   const was = pointerDown; pointerDown=null;
   const camDrag = isCameraDragging; isCameraDragging=false;
   const dn = S.draggedNode; S.draggedNode=null;
+  showGrabCursor();
   if (spent || !was || inControl()) return;
   if (S.interactionMode==='maps') {
     // on touch a map transform is dragged out rather than confirmed with a second click (see pointerdown)

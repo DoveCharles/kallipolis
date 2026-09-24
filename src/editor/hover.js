@@ -1,21 +1,35 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, camera, snapPointToGrid } from '../core/scene.js';
+import { scene, camera, renderer, snapPointToGrid } from '../core/scene.js';
 import { nearestPointOnEdgeTessellated } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { setLinePoints } from '../roads/roads.js';
 import { rebuildRoadMeshes } from '../roads/paths.js';
 import { nodeUiMaterial, asNodeUi, nodeUiScaleAt } from '../trains/trains.js';
+import { setNodeHighlight } from './node-highlight.js';
 
 // ---------------------------------------------------------- hover + insert-on-edge
 let hoveredMesh = null;
+// a green rim round the hovered node: a sphere a little bigger than it, drawn just behind it, inside out
+const hoverOutline = asNodeUi(new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), nodeUiMaterial(THREE.MeshBasicMaterial, { color:0x3ddc97, side:THREE.BackSide })));
+hoverOutline.renderOrder = 999;
+hoverOutline.userData = { noExport: true, sharedGeometry: true, sharedMaterial: true }; // (screenSized off: it grows with its node)
+hoverOutline.raycast = () => {};
 export function setHover(mesh) {
   if (hoveredMesh === mesh) return;
+  hoverOutline.removeFromParent();
+  if (mesh) {
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    hoverOutline.scale.setScalar(mesh.geometry.boundingSphere.radius * 1.4);
+    mesh.add(hoverOutline);
+  }
   if (hoveredMesh && hoveredMesh.material) {
     hoveredMesh.material.color.set(hoveredMesh.userData.baseColor !== undefined ? hoveredMesh.userData.baseColor : 0x3ddc97);
   }
   hoveredMesh = mesh;
   if (hoveredMesh && hoveredMesh.material) hoveredMesh.material.color.set(0xffffff);
+  renderer.domElement.classList.toggle('over-node', !!hoveredMesh); // an open hand: it can be taken hold of (see win3.css)
+  setNodeHighlight(hoveredMesh); // (a zone's or path's node lights up all it's built)
 }
 
 const insertPreviewGeo = new THREE.BufferGeometry();

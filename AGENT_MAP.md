@@ -47,7 +47,7 @@ Format: `file` (size) purpose — key exports.
 - `voices.js` (14K) People talking babble, Animal Crossing style: — exports: nextSyllable, babble, loudnessOf, exclaim
 
 ### src/buildings/
-- `building-batches.js` (10K) A city block's buildings are each a handful of meshes with materials of their own (every building has its own color, window style and glow), so a few … — exports: updateBuildingBatches
+- `building-batches.js` (10K) A city block's buildings are each a handful of meshes with materials of their own (every building has its own color, window style and glow), so a few … — exports: updateBuildingBatches, zoneBatchMeshes
 - `building-card.js` (6K) As for a car or a carriage: — exports: updateBuildingFollow
 - `building-types.js` (3K) Each kind of building's name, mood, and what it loves and hates, for its card (building-card.js) — from assets/buildings.txt, to be edited freely: — exports: buildingKindOf, buildingEnterable, buildingTypeOf, buildingName
 - `footprints.js` (5K) ---------------------------------------------------------- footprint archetypes (Y2K variety) — exports: applyFootprintArchetype, distPointSegment, closestPointOnSegment, distToPolygonBoundary, footprintBounds, buildingKey, buildingNumber, roomLayoutOf
@@ -73,6 +73,7 @@ Format: `file` (size) purpose — key exports.
 ### src/editor/
 - `context-menu.js` (5K) How a raised walkway's node sits in its network — 'end' (a ramp down there anyway), 'middle', or null if it isn't on a raised walkway at all
 - `hover.js` (4K) ---------------------------------------------------------- hover + insert-on-edge — exports: setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge
+- `node-highlight.js` (9K) While a node is hovered, everything its zone or path network has built is washed green by see-through twins of its meshes (a river, a green ribbon), and its other nodes turn a lighter green — exports: setNodeHighlight, updateNodeHighlight
 - `input.js` (38K) Mouse/keyboard/touch input for editing: node placement, dragging, selection, shortcuts.
 - `tools.js` (18K)  — exports: cancelActiveDrawing, closeActiveZone, finishActiveDrawing, applyModeVisibility
 

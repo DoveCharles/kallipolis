@@ -175,6 +175,9 @@ function showOriginals(entry, on) {
   entry.originals.forEach(o => { o.visible = on; });
 }
 
+// a zone's merged meshes, the same array until it's merged again (see node-highlight.js)
+export const zoneBatchMeshes = zone => zoneBatches.get(zone)?.meshes ?? null;
+
 // each frame, just before drawing: merge any zone whose buildings have been (re)built, let go of any that's gone, and
 // hand the buildings back for a zone that needs them drawn one by one
 export function updateBuildingBatches() {
