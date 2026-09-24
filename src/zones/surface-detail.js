@@ -4,15 +4,27 @@ import { Y_PARK } from '../core/scene.js';
 import { mulberry32, lerp, pointInPolygon, centroid, insetPolygon } from '../core/math.js';
 import { distPointSegment, distToPolygonBoundary } from '../buildings/footprints.js';
 import { PARK_TINT_COLORS, resolveParkTint, resolveTreeTint, resolveGrassNoiseStrength, pickBuildingColor, accentColorFrom } from '../core/splines.js';
-import { WINDOW_TILE_WORLD_SIZE, createWindowMaterial, mergeGeometries, mergeGeometryList, extractCapGeometry, buildWallGeometry, buildWedgeCapGeometry } from '../buildings/windows.js';
+import { WINDOW_TILE_WORLD_SIZE, computeFacadeRuns, createWindowMaterial, mergeGeometries, mergeGeometryList, extractCapGeometry, buildWallGeometry, buildWedgeCapGeometry } from '../buildings/windows.js';
 import { MIN_ZONE_TREES, MAX_ZONE_TREES } from '../core/state.js';
 import { clipPolygons, createMeshBuilder } from '../roads/roads.js';
 import { scalePolygonAroundCentroid, makeExtrudeRaw, extrudeFootprintGeo } from './zone-visuals.js';
 import { plantParkLife } from '../life/bees.js';
 
 // ---------------------------------------------------------- surface detail (Y2K greebles/bands/rings)
+// With `win` (the wall's window uniforms): the middle of the solid wall between the two window rows nearest z — above
+// the storefront glass, or between one floor's window heads and the next floor's sills — and how tall that strip is, so
+// a band or ring laid across the facade sits in the gap instead of cutting through a row of windows
+function windowRowGap(z, win) {
+  const [floorH, lobbyH] = [win.uWinFloor.value.x, win.uWinFloor.value.y];
+  const sill = win.uWinBay.value.w*floorH, head = sill + win.uWinBay.value.z*floorH;
+  const lobbyGap = { mid: (0.78*lobbyH + lobbyH + sill)/2, h: lobbyH + sill - 0.78*lobbyH };
+  const k = Math.max(0, Math.round((z - lobbyH - (head + floorH + sill)/2)/floorH));
+  const upper = { mid: lobbyH + k*floorH + (head + floorH + sill)/2, h: floorH - head + sill };
+  return Math.abs(lobbyGap.mid - z) < Math.abs(upper.mid - z) ? lobbyGap : upper;
+}
 // A slim torus ring around the building at zHeight, proud of the wall between its inner radius and tube.
-function addRingAccent(group, c, ringRadius, tube, zHeight, colorHex) {
+function addRingAccent(group, c, ringRadius, tube, zHeight, colorHex, win) {
+  if (win) { const gap = windowRowGap(zHeight, win); zHeight = gap.mid; tube = Math.min(tube, Math.max(0.06, gap.h*0.4)); }
   const ringGeo = new THREE.TorusGeometry(Math.max(0.6,ringRadius), Math.max(0.06,tube), 8, 28);
   const ringMat = new THREE.MeshStandardMaterial({ color:colorHex, roughness:0.3, metalness:0.6, emissive:colorHex, emissiveIntensity:0.3 });
   const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -23,8 +35,9 @@ function addRingAccent(group, c, ringRadius, tube, zHeight, colorHex) {
 }
 // A capped slab 0.35-0.85 tall around the footprint, its outline pushed out 0.12-0.22 past `poly` so the ledge stands
 // proud of the wall rather than lying coplanar with it. Positioned with its bottom at bandBottom
-function addAccentBand(group, poly, bandBottom, bandColor, rng) {
-  const bandH = 0.35 + rng()*0.5;
+function addAccentBand(group, poly, bandBottom, bandColor, rng, win) {
+  let bandH = 0.35 + rng()*0.5;
+  if (win) { const gap = windowRowGap(bandBottom + bandH/2, win); bandH = Math.min(bandH, Math.max(0.15, gap.h*0.8)); bandBottom = gap.mid - bandH/2; }
   const bandPoly = insetPolygon(poly, -(0.12 + rng()*0.1));
   const bandGeo = extrudeFootprintGeo(bandPoly, bandH);
   const bandMat = new THREE.MeshStandardMaterial({ color:bandColor, roughness:0.3, metalness:0.6, emissive:bandColor, emissiveIntensity:0.25 });
@@ -36,7 +49,7 @@ function addAccentBand(group, poly, bandBottom, bandColor, rng) {
 // 2-6 rooftop props scattered over the footprint: a point at random in its bounding box, kept if it's inside the poly
 // and 0.8 clear of its edge, up to count*12 tries. `kind` picks one of: under 0.18 an AC unit, under 0.33 a vent pipe,
 // under 0.46 a dish antenna on a mast, under 0.62 a squat water tank with a conical lid, under 0.77 clustered vent
-// pipes, under 0.87 a helipad marking, else a row of tilted solar panels. All sit on top of height
+// pipes, under 0.87 nothing (it was a helipad marking), else a row of tilted solar panels. All sit on top of height
 function addRooftopGreebles(group, poly, height, rng) {
   const count = 2 + Math.floor(rng()*5);
   let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
@@ -100,16 +113,9 @@ function addRooftopGreebles(group, poly, height, rng) {
       obj.rotation.x = Math.PI/2;
       obj.position.set(pt.x, -pt.z, height);
     } else if (kind < 0.87) {
-      // helipad marking
-      const padR = 1.1+rng()*0.6, padH = 0.06;
-      obj = new THREE.Group();
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(padR,padR,padH,20), new THREE.MeshStandardMaterial({ color:0x2b2e33, roughness:0.7, metalness:0.1 }));
-      base.position.y = padH/2;
-      const marking = new THREE.Mesh(new THREE.CylinderGeometry(padR*0.62,padR*0.62,padH*1.6,20), new THREE.MeshStandardMaterial({ color:0xc7cad0, roughness:0.6, metalness:0.1, emissive:0xc7cad0, emissiveIntensity:0.25 }));
-      marking.position.y = padH*1.6/2 + 0.001;
-      obj.add(base, marking);
-      obj.rotation.x = Math.PI/2;
-      obj.position.set(pt.x, -pt.z, height);
+      // (once a helipad marking, dropped for looks: nothing goes here, but its one draw stays so the rest of the building
+      // rolls the same)
+      rng(); placed++; continue;
     } else {
       // row of angled solar panels
       obj = new THREE.Group();
@@ -140,23 +146,66 @@ function addRooftopGreebles(group, poly, height, rng) {
   }
 }
 
+// With `win` (the wall's window uniforms): the vertical lines on one edge of a facade where the window shader leaves
+// solid wall or a glazing bar — between bays, or on the bars of a ribbon window's continuous glass — laid out along the
+// edge's facade run (from computeFacadeRuns) exactly as the shader does. Returns { step, lines: [{ t, k }] }: t is the
+// distance along this edge, k the line's index along the run; none on a run too short for a whole bay.
+function windowGridLines(win, run, len) {
+  const { u0, runLen } = run, closed = runLen < 0;
+  const pier = closed ? 0 : win.uWinFloor.value.w, usable = Math.abs(runLen) - 2*pier;
+  const bays = Math.floor(usable/win.uWinBay.value.x + 0.5), lines = [];
+  if (bays < 1) return { step: 0, lines };
+  const mullion = win.uWinMullion.value, ribbon = win.uWinBay.value.y > 0.999 && mullion > 0;
+  const step = ribbon ? mullion : usable/bays, count = Math.floor(usable/step + 1e-3);
+  for (let k=0; k<=(closed ? count-1 : count); k++) { const t = pier + k*step - u0; if (t > -1e-3 && t < len + 1e-3) lines.push({ t, k }); }
+  return { step, lines };
+}
 /**  Facade and structure detail added around the massing makeBuildingMesh has already built, so each is called
   independently on its own roll. Repeated small pieces (ribs, balcony ledges) are merged into one mesh per building
   through mergeGeometryList.
   Vertical fins or curtain-wall seams down each edge of the footprint, `spacing` apart, up to 40 of them and skipped
-  entirely on edges shorter than 1.3*spacing. Each is ribWidth*ribDepth in section, ribSpanH = 0.86-0.96 of zHeight tall
-  and centered in it, standing off the wall by half its depth less 0.03 */
-function addVerticalRibs(group, poly, zBottom, zHeight, rng, ribColor) {
+  entirely on edges shorter than 1.3*spacing. Each is ribWidth*ribDepth in section, the full zHeight tall, standing off the wall by half its depth less 0.03.
+  With `win` (the wall's window uniforms) they stand on the window grid instead (windowGridLines), on every line or
+  every few for chunky fins, and no wider than the wall between two windows */
+function addVerticalRibs(group, poly, zBottom, zHeight, rng, ribColor, win) {
   const chunky = rng() < 0.5; // chunky structural fins vs frequent thin curtain-wall seams
-  const ribWidth = chunky ? 0.28+rng()*0.14 : 0.09+rng()*0.06;
+  let ribWidth = chunky ? 0.28+rng()*0.14 : 0.09+rng()*0.06;
   const ribDepth = chunky ? 0.16+rng()*0.1  : 0.05+rng()*0.03;
   const spacing  = chunky ? 2.4+rng()*1.0   : 1.0+rng()*0.5;
-  const ribSpanH = zHeight * (0.86+rng()*0.1);
+  rng(); // (once how tall a rib stood short of the wall; still drawn so the rest of the building rolls the same)
+  const ribSpanH = zHeight; // ground to the top of the wall, like a real fin or seam
   const zCenter = zBottom + zHeight/2;
   const c = centroid(poly), clx=c.x, cly=-c.z;
   const n = poly.length;
   const geos = [];
-  for (let i=0;i<n && geos.length<40;i++) {
+  const addRib = (ax, ay, ux, uy, nx, ny, t) => {
+    const px = ax+ux*t + nx*(ribDepth/2-0.03);
+    const py = ay+uy*t + ny*(ribDepth/2-0.03);
+    // box authored as (along the edge, out from it, height), turned to the edge's angle — a rotateZ is enough since
+    // the height axis never moves
+    const g = new THREE.BoxGeometry(ribWidth, ribDepth, ribSpanH);
+    g.rotateZ(Math.atan2(uy,ux));
+    g.translate(px, py, zCenter);
+    geos.push(g);
+  };
+  const runs = win ? computeFacadeRuns(poly) : null;
+  if (runs) {
+    const glassW = win.uWinBay.value.y;
+    for (let i=0;i<n && geos.length<40;i++) {
+      const pa=poly[i], pb=poly[(i+1)%n];
+      const ax=pa.x, ay=-pa.z, dx=pb.x-pa.x, dy=-pb.z-ay, len=Math.hypot(dx,dy);
+      if (len < 1e-6) continue;
+      const ux=dx/len, uy=dy/len;
+      let nx=uy, ny=-ux;
+      if (((ax+dx/2-clx)*nx+(ay+dy/2-cly)*ny) < 0) { nx=-nx; ny=-ny; }
+      const { step, lines } = windowGridLines(win, runs[i], len);
+      if (!lines.length) continue;
+      const stride = Math.max(1, Math.round(spacing/step));
+      if (glassW < 0.999) ribWidth = Math.min(ribWidth, Math.max(0.06, (1-glassW)*step*0.9));
+      for (const { t, k } of lines) if (k % stride === 0 && t < len && geos.length < 40) addRib(ax, ay, ux, uy, nx, ny, t);
+    }
+  }
+  for (let i=0;i<n && !runs && geos.length<40;i++) {
     const pa=poly[i], pb=poly[(i+1)%n];
     const ax=pa.x, ay=-pa.z, bx=pb.x, by=-pb.z;
     const dx=bx-ax, dy=by-ay, len=Math.hypot(dx,dy)||1;
@@ -168,18 +217,7 @@ function addVerticalRibs(group, poly, zBottom, zHeight, rng, ribColor) {
     const count = Math.max(1, Math.floor(len/spacing));
     const used = count*spacing;
     const start = (len-used)/2 + spacing/2;
-    const edgeAngle = Math.atan2(uy,ux);
-    for (let k=0;k<count && geos.length<40;k++) {
-      const t = start + k*spacing;
-      const px = ax+ux*t + nx*(ribDepth/2-0.03);
-      const py = ay+uy*t + ny*(ribDepth/2-0.03);
-      // box authored as (along the edge, out from it, height), turned to the edge's angle — a rotateZ is enough since
-      // the height axis never moves
-      const g = new THREE.BoxGeometry(ribWidth, ribDepth, ribSpanH);
-      g.rotateZ(edgeAngle);
-      g.translate(px, py, zCenter);
-      geos.push(g);
-    }
+    for (let k=0;k<count && geos.length<40;k++) addRib(ax, ay, ux, uy, nx, ny, start + k*spacing);
   }
   if (!geos.length) return;
   const mesh = new THREE.Mesh(mergeGeometryList(geos), new THREE.MeshStandardMaterial({ color:ribColor, roughness:0.6, metalness:0.3, flatShading:true }));
@@ -188,14 +226,18 @@ function addVerticalRibs(group, poly, zBottom, zHeight, rng, ribColor) {
 }
 /** Balconies on 1-2 edges of the footprint (each at least 3 long), one per floor from floorH = 3-4.5 up to 1 below the
 *   top: a ledge slab spanning the middle 70% of the edge and projecting 0.7-1.2 out, with a rail 0.85-1.0 tall and 0.06
- thick along its outer edge, in a see-through dark material*/
-function addBalconies(group, poly, zBottom, zHeight, rng, balColor) {
+ thick along its outer edge, in a see-through dark material.
+ With `win` (the wall's window uniforms) they follow the windows instead: a ledge at the foot of each upper floor that
+ fits, and the span's ends moved onto the nearest lines of the window grid (windowGridLines), so a balcony never stops halfway across a window */
+function addBalconies(group, poly, zBottom, zHeight, rng, balColor, win) {
   const n = poly.length;
   if (n < 3 || zHeight < 6) return;
   const c = centroid(poly), clx=c.x, cly=-c.z;
-  const floorH = 3 + rng()*1.5;
-  const floors = Math.floor(zHeight/floorH) - 1;
+  let floorH = 3 + rng()*1.5, firstZ = floorH;
+  if (win) { floorH = win.uWinFloor.value.x; firstZ = win.uWinFloor.value.y; }
+  const floors = win ? Math.floor((zHeight - firstZ)/floorH) : Math.floor(zHeight/floorH) - 1; // (with win: whole floors only)
   if (floors < 1) return;
+  const runs = win ? computeFacadeRuns(poly) : null;
   const edgeCount = Math.min(n, 1+Math.floor(rng()*2));
   const chosen = new Set();
   while (chosen.size < edgeCount) chosen.add(Math.floor(rng()*n));
@@ -210,18 +252,25 @@ function addBalconies(group, poly, zBottom, zHeight, rng, balColor) {
     let nx=dy/len, ny=-dx/len;
     const midx=(ax+bx)/2, midy=(ay+by)/2;
     if (((midx-clx)*nx+(midy-cly)*ny) < 0) { nx=-nx; ny=-ny; }
-    const span = len*0.7;
+    let t0 = len*0.15, t1 = len*0.85;
+    if (runs) {
+      const lines = windowGridLines(win, runs[i], len).lines.map(l => l.t);
+      const nearest = t => lines.reduce((b, l) => Math.abs(l-t) < Math.abs(b-t) ? l : b, lines[0]);
+      if (lines.length >= 2) { t0 = nearest(t0); t1 = nearest(t1); }
+      if (t1 - t0 < 1.5) return;
+    }
+    const span = t1 - t0, cx = ax+ux*(t0+t1)/2, cy = ay+uy*(t0+t1)/2;
     const edgeAngle = Math.atan2(uy,ux);
     for (let f=1; f<=floors; f++) {
-      const floorZ = zBottom + f*floorH;
+      const floorZ = zBottom + (runs ? firstZ + (f-1)*floorH : f*floorH);
       if (floorZ > zBottom+zHeight-1) break;
       const lg = new THREE.BoxGeometry(span, ledgeDepth, ledgeH);
       lg.rotateZ(edgeAngle);
-      lg.translate(midx+nx*(ledgeDepth/2-0.05), midy+ny*(ledgeDepth/2-0.05), floorZ);
+      lg.translate(cx+nx*(ledgeDepth/2-0.05), cy+ny*(ledgeDepth/2-0.05), floorZ);
       ledgeGeos.push(lg);
       const rg = new THREE.BoxGeometry(span, railThick, railH);
       rg.rotateZ(edgeAngle);
-      rg.translate(midx+nx*(ledgeDepth-0.03), midy+ny*(ledgeDepth-0.03), floorZ+ledgeH/2+railH/2);
+      rg.translate(cx+nx*(ledgeDepth-0.03), cy+ny*(ledgeDepth-0.03), floorZ+ledgeH/2+railH/2);
       railGeos.push(rg);
     }
   });
@@ -267,12 +316,14 @@ function addEntranceCanopy(group, poly, rng, canopyColor) {
     group.add(strut);
   });
 }
-function addExoskeletonAccent(group, corners, zBottom, zHeight, rng, accentColor) {
-  // corner pilasters proud of each vertex, bisecting the two adjacent edges' outward
-  // normals — reads as an exposed structural frame at the building's corners.
-  const n = corners.length;
+function addExoskeletonAccent(group, poly, zBottom, zHeight, rng, accentColor) {
+  // corner pilasters proud of each sharp corner of the footprint (both ends of a chamfer, not the square corner it
+  // cut off), bisecting the two adjacent edges' outward normals — reads as an exposed structural frame at the
+  // building's corners, standing in the solid pier the windows leave either side of a corner.
+  const n = poly.length;
   if (n < 3) return;
-  const c = centroid(corners), clx=c.x, cly=-c.z;
+  const runs = computeFacadeRuns(poly);
+  const c = centroid(poly), clx=c.x, cly=-c.z;
   function edgeNormal(pA, pB) {
     const ax=pA.x, ay=-pA.z, bx=pB.x, by=-pB.z;
     const dx=bx-ax, dy=by-ay, len=Math.hypot(dx,dy)||1;
@@ -282,11 +333,13 @@ function addExoskeletonAccent(group, corners, zBottom, zHeight, rng, accentColor
     return { nx, ny };
   }
   const pilasterW = 0.3+rng()*0.15;
-  const spanH = zHeight*(0.9+rng()*0.08);
+  rng(); // (once how far a pilaster stood short of the wall's ends; still drawn so the rest of the building rolls the same)
+  const spanH = zHeight; // ground to the top of the wall
   const zCenter = zBottom + zHeight/2;
   const geos = [];
   for (let i=0;i<n;i++) {
-    const prev=corners[(i-1+n)%n], cur=corners[i], next=corners[(i+1)%n];
+    if (runs[i].u0 !== 0 || runs[i].runLen < 0) continue; // (edge i doesn't start a run: vertex i isn't a sharp corner)
+    const prev=poly[(i-1+n)%n], cur=poly[i], next=poly[(i+1)%n];
     const n1 = edgeNormal(prev, cur), n2 = edgeNormal(cur, next);
     let bx = n1.nx+n2.nx, by = n1.ny+n2.ny;
     const blen = Math.hypot(bx,by)||1; bx/=blen; by/=blen;
@@ -295,6 +348,7 @@ function addExoskeletonAccent(group, corners, zBottom, zHeight, rng, accentColor
     g.translate(ax+bx*(pilasterW/2-0.02), ay+by*(pilasterW/2-0.02), zCenter);
     geos.push(g);
   }
+  if (!geos.length) return;
   const mesh = new THREE.Mesh(mergeGeometryList(geos), new THREE.MeshStandardMaterial({ color:accentColor, roughness:0.45, metalness:0.55, flatShading:true }));
   mesh.castShadow = true; mesh.name = 'Building';
   group.add(mesh);
@@ -381,6 +435,7 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
   const mat = new THREE.MeshStandardMaterial({ color, vertexColors:true, roughness:0.85, metalness:0.05, flatShading:true, side:THREE.DoubleSide });
   // one window material shared by every wall that gets windows (see addSegment, and the wedge top's walls)
   const windowMat = windowsEnabled ? createWindowMaterial(color, texRng, wantsLitWindows, litIntensity, windowScale, specularWindows) : null;
+  const win = windowMat && windowMat.userData.windowUniforms; // (what facade details line up with)
   // subtle bottom->top wall tint: mostly a soft (colorless) anodized-metal shading gradient,
   // occasionally a more saturated iridescent one for a Y2K "chromatic panel" look — only once
   // colorVariation has moved past the flat-gray range, so low variation stays truly monochrome.
@@ -496,10 +551,10 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
       group.add(light);
     }
     const wantsRing = rng() < 0.85;
-    if (isRound && wantsRing) addRingAccent(group, c, avgR*(1.1+rng()*0.15), avgR*0.05, bodyH*(0.62+rng()*0.2), accentColorFrom(color, buildingHue, rng));
+    if (isRound && wantsRing) addRingAccent(group, c, avgR*(1.1+rng()*0.15), avgR*0.05, bodyH*(0.62+rng()*0.2), accentColorFrom(color, buildingHue, rng), win);
     if (rng() < 0.6) {
-      addAccentBand(group, poly, bodyH*(0.18+rng()*0.12), accentColorFrom(color, buildingHue, rng), rng);
-      if (rng() < 0.5) addAccentBand(group, poly, bodyH*(0.5+rng()*0.15), accentColorFrom(color, buildingHue, rng), rng);
+      addAccentBand(group, poly, bodyH*(0.18+rng()*0.12), accentColorFrom(color, buildingHue, rng), rng, win);
+      if (rng() < 0.5) addAccentBand(group, poly, bodyH*(0.5+rng()*0.15), accentColorFrom(color, buildingHue, rng), rng, win);
     }
   } else {
     const roll = rng();
@@ -558,21 +613,20 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
     }
     if (flatRoof && avgR>2.2 && rng()<0.4) addRooftopGreebles(group, roofFootprint, h, rng);
     const wantsRing2 = rng() < 0.65;
-    if (isRound && wantsRing2) addRingAccent(group, c, avgR*(1.08+rng()*0.12), avgR*0.045, baseWallHeight*(0.5+rng()*0.3), accentColorFrom(color, buildingHue, rng));
+    if (isRound && wantsRing2) addRingAccent(group, c, avgR*(1.08+rng()*0.12), avgR*0.045, baseWallHeight*(0.5+rng()*0.3), accentColorFrom(color, buildingHue, rng), win);
     if (rng() < 0.6) {
       // scaled against baseWallHeight (not h) so both bands stay below wherever THIS massing
       // branch's own base-footprint wall actually ends — same reasoning as detailZHeight above
-      addAccentBand(group, poly, baseWallHeight*(0.18+rng()*0.12), accentColorFrom(color, buildingHue, rng), rng);
-      if (rng() < 0.5) addAccentBand(group, poly, baseWallHeight*(0.42+rng()*0.1), accentColorFrom(color, buildingHue, rng), rng);
+      addAccentBand(group, poly, baseWallHeight*(0.18+rng()*0.12), accentColorFrom(color, buildingHue, rng), rng, win);
+      if (rng() < 0.5) addAccentBand(group, poly, baseWallHeight*(0.42+rng()*0.1), accentColorFrom(color, buildingHue, rng), rng, win);
     }
   }
 
   // -------- post-hoc facade/structure detail — adds to, never modifies, the massing above --------
-  // Capped at baseWallHeight (how tall the base footprint's OWN wall actually stands for
-  // whichever massing branch ran above) rather than a flat 0.82h guess — ribs/balconies/
-  // exoskeleton are all built against the base footprint, so anything taller than that pokes
-  // out past a narrower, angled, or absent upper section (most visible on landmarks, whose
-  // body is a fixed 0.76h regardless of topper).
+  // Ribs/balconies/exoskeleton are all built against the base footprint, so none may stand taller than baseWallHeight
+  // (how tall the base footprint's OWN wall actually stands for whichever massing branch ran above), or it pokes out
+  // past a narrower, angled, or absent upper section (most visible on landmarks, whose body is a fixed 0.76h regardless
+  // of topper). Ribs and corner pilasters run all the way up it; balconies stop a little short, at detailZHeight.
   const detailZHeight = Math.min(h * 0.82, baseWallHeight);
   if (rng() < 0.35 && h > 6) {
     // a wider, shorter podium collar around the base — additive, so it doesn't touch the
@@ -581,11 +635,11 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
     const podiumFootprint = insetPolygon(poly, -(0.6+rng()*0.9));
     addSegment(podiumFootprint, podiumH, 0, true);
   }
-  if (rng() < 0.32) addVerticalRibs(group, poly, 0, detailZHeight, rng, accentColorFrom(color, buildingHue, rng));
-  if (!isLandmark && avgR > 2.5 && rng() < 0.22) addBalconies(group, poly, 0, detailZHeight, rng, color.clone().multiplyScalar(0.92).getHex());
+  if (rng() < 0.32) addVerticalRibs(group, poly, 0, baseWallHeight, rng, accentColorFrom(color, buildingHue, rng), win);
+  if (!isLandmark && avgR > 2.5 && rng() < 0.22) addBalconies(group, poly, 0, detailZHeight, rng, color.clone().multiplyScalar(0.92).getHex(), win);
   if (rng() < 0.3) addEntranceCanopy(group, poly, rng, accentColorFrom(color, buildingHue, rng));
   if ((archetype==='rect' || archetype==='chamfer') && corners && rng() < (isLandmark ? 0.5 : 0.22)) {
-    addExoskeletonAccent(group, corners, 0, detailZHeight, rng, accentColorFrom(color, buildingHue, rng));
+    addExoskeletonAccent(group, poly, 0, baseWallHeight, rng, accentColorFrom(color, buildingHue, rng));
   }
   // A flat roof always gets a parapet ledge — real flat roofs don't just end in a bare edge.
   if (flatRoof) addRoofParapet(group, roofFootprint, roofZ, rng, mat, roofInnerPoly);
