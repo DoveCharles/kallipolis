@@ -109,6 +109,15 @@ export const OUTFITS = [
     },
     paint: paintGoth,
   },
+  {
+    // a t-shirt in a color of their own over a black-and-white striped long-sleeved one, over whatever they wear below
+    name: 'Layered tee', chance: 0.06, bare: ['Leg'],
+    colors: {
+      OutfitRed: [0x151517],                                                    // the long sleeves' stripes: black
+      OutfitGreen: [0xf2f2ee],                                                  // and white
+    },
+    paint: paintLayeredTee, paintSleeve: paintLayeredTeeSleeve,
+  },
 ];
 
 /** Where each outfit's columns of the texture start (see buildOutfitTexture); and how many there are. */
@@ -428,4 +437,35 @@ function paintGoth(ctx, width, height, front) {
   line([[-0.12, 6.97], [0, 6.78], [0.12, 6.97]], SILVER, 0.008);
   polygon([[-0.014, 6.79], [0.014, 6.79], [0.014, 6.6], [-0.014, 6.6]], SILVER);
   polygon([[-0.05, 6.745], [0.05, 6.745], [0.05, 6.72], [-0.05, 6.72]], SILVER);
+}
+
+/** How far along the arm (the model's x) the t-shirt's sleeves reach, over the long-sleeved shirt's: halfway to the elbow. */
+const TEE_SLEEVE_END = 1.35;
+
+/**
+ * The layered tee: the t-shirt is the torso's own color, so this only draws the hem of its crew neck.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width
+ * @param {number} height
+ * @param {boolean} front - the front, or the back
+ */
+function paintLayeredTee(ctx, width, height, front) {
+  const { line } = pens(ctx, width, height);
+  if (front) line([[-0.2, 6.99], [-0.12, 6.9], [0, 6.87], [0.12, 6.9], [0.2, 6.99]], SHADE(0.3), 0.014);
+  else line([[-0.2, 6.99], [0, 6.96], [0.2, 6.99]], SHADE(0.3), 0.014);
+}
+
+/**
+ * The layered tee's sleeves: the t-shirt's, hemmed, as far as TEE_SLEEVE_END; beyond it, the long-sleeved shirt under
+ * it, striped black and white all the way down to the wrist.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width
+ * @param {number} height
+ */
+function paintLayeredTeeSleeve(ctx, width, height) {
+  const { polygon } = armPens(ctx, width, height);
+  const STRIPE = 0.24, across = [OUTFIT_ARM.minZ - 1, OUTFIT_ARM.maxZ + 1];
+  const band = (x0, x1, fill) => polygon([[x0, across[0]], [x1, across[0]], [x1, across[1]], [x0, across[1]]], fill);
+  for (let x=TEE_SLEEVE_END, k=0; x<OUTFIT_ARM.maxX + 1; x+=STRIPE, k++) band(x, x + STRIPE, k % 2 ? GREEN : RED);
+  band(TEE_SLEEVE_END - 0.05, TEE_SLEEVE_END, SHADE(0.35)); // (the t-shirt sleeve's hem)
 }
