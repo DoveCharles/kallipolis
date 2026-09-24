@@ -510,7 +510,7 @@ const EVIL_GUILTY_ABOVE = 0.05, EVIL_VILLAINOUS_ABOVE = 0.35;
  * @param {Person} p - the person
  * @returns {'innocent'|'guilty'|'villainous'} what they count as
  */
-function standingOf(p) {
+export function standingOf(p) {
   // the traits they're actually going about with, which are picked for their own sex (see refreshTraits); an evil
   // score they somehow never got counts as innocent
   const evil = p.traits.evil ?? 0;
