@@ -383,6 +383,7 @@ const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
 // ('Cuff' is a jeans' cuff, a lighter shade of their trousers)
 // ('OutfitRed' and 'OutfitGreen' are only for an outfit's texture — see outfits.js — OutfitRed's fourth number being
 // which outfit they wear, 0 for none, and OutfitGreen's which column of the outfits' texture)
+// ('Top''s fourth number is 1 for a villain, 0 for anyone else — only ped view reads it: see ui/ped-view.js)
 export const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat', 'Skin', 'Blood', 'Eyes', 'Glasses', 'Skirt', 'Cuff', 'OutfitRed', 'OutfitGreen'];
 const SKIN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Skin'), BLOOD_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Blood');
 const OUTFIT_RED_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitRed'), OUTFIT_GREEN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitGreen');
