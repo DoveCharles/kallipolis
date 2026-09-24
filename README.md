@@ -1,59 +1,59 @@
 # Kallipolis
-A little procedural city blockout tool that runs in the browser, built on three.js.
 
-<img width="1488" height="808" alt="Screenshot 2026-09-15 at 07 03 26" src="https://github.com/user-attachments/assets/6d05f003-07e9-4b07-ad12-6a3e25bc99fb" />
-<img width="1507" height="796" alt="Screenshot 2026-09-15 at 07 04 56" src="https://github.com/user-attachments/assets/4110beb5-9924-46c2-bb2b-1f418b1b16e1" />
+A city-building toy that runs in your browser. Draw roads and zones, and a city grows on them: towers, terraces, parks, farms, airports, bees, traffic and little people living their lives. Then follow them around, take control of them, or strike them down with lightning.
 
-**Live:** https://splinetopia.netlify.app/ · **Repo:** https://github.com/DoveCharles/splinetopia
+*Kallipolis* is Greek for "beautiful city", the ideal city Plato builds in the *Republic*. Yours needn't be ideal.
 
-## Features
+**Play:** https://kallipolis.netlify.app/ · **Repo:** https://github.com/DoveCharles/kallipolis
 
-- **Paths** - draw networks with poly or spline nodes, as one of four types:
-  - **Sidewalk** — roads whose junctions merge into one clean outline with curbs and raised sidewalks
-  - **Path** — a sandy track with a soft, speckled edge
-  - **River** — water, joining any water zone it runs into
-  - **Train** — glass solenoid tubes on smooth 3D paths, with stations and a shuttle running the line
+<img width="1488" height="808" alt="A city in Kallipolis" src="https://github.com/user-attachments/assets/6d05f003-07e9-4b07-ad12-6a3e25bc99fb" />
+<img width="1507" height="796" alt="A city in Kallipolis" src="https://github.com/user-attachments/assets/4110beb5-9924-46c2-bb2b-1f418b1b16e1" />
 
-  Roads get lane markings, and junctions get zebra crossings and working traffic lights. Roads and paths crossing water become bridges.
-- **Zones** — draw areas and pick a type:
-  - **City** — lots and procedurally generated towers, with shader-drawn windows that light up at night
-  - **Park** — grass, trees and a perimeter fence
-  - **Water** — an animated surface sunk below the ground, with sandy beaches where it meets a park
-  - **Plaza** — tiled or herringbone paving, a fountain, lamp posts, benches and trees
-  - **Farmland** — crop fields, hedgerows and farmsteads
-  - **Town** — a British town: terraces of brick, stucco and painted houses built wall to wall under slate roofs with chimney pots, sash windows and painted front doors, and shops with fascias and awnings among them
-  - **Industrial** — fenced lots with warehouses, factories, storage tanks and container yards
-  - **Suburbs** — plots of houses, each painted a colour of its own and turned to face the nearest road, with lawns, hedges and a path to the door
-  - **Plain** — flat ground
+## What you can do
 
-  Roads cut through zones, and zones higher in the list cut into the ones below (drag to reorder).
-- **Objects** — street furniture placed by hand: benches, lamp posts (lit after dark), a statue, a postbox, a phone box, a notice board, a market stall, a hot dog stand, a coffee stall, a water tower, litter bins and bollards. Pick one off the palette and every click puts another down, so a row of them takes a row of clicks. Anything with a front turns to face what's nearest — a road, else a walkway, else a zone's edge — and each lands a little off true in turn and size, so a run of benches looks placed rather than stamped out. Drag one to move it and drag the ring it stands in to turn it — hold shift for 15° steps, or let go and it pulls square to the street it's beside. Alt+drag copies one, double-click deletes it, G, R and S move, turn and size it from the keyboard, and the panel below has its turn and size as sliders.
-- **People & traffic** — lil people walking the sidewalks and paths and gathering in plazas and parks, and cars driving the roads (toggle and tune them in World). People stop to wave and chat when they meet (taking turns to talk), sit down on plaza benches, sit around in circles on the grass talking, or lie down in a quiet corner of a park, and now and then have a scratch or a think while they stand about. Click someone in World mode and the camera follows them, with a card (and a live headshot, and a Kill button that blows them up — bystanders don't take it well) saying who they are — their names, moods, likes and dislikes come from `assets/people.txt`, so edit away. Entries there can carry traits that change how whoever gets them behaves, like `Energy drinks [speed = 2.5]` or `Moonwalking [backwards]` (the full list is at the top of the file).
-- **World** — sun position or a day/night cycle (with a realistic sun path, moonlight and stars), weather (rain, snow, cloud shadows), ground and grid colours, save/load projects as JSON, and GLB (with materials) or OBJ export. Your project (and where the camera is) autosaves in the browser, so refreshing the page picks up where you left off — Clear starts afresh.
-- **Undo/redo** — Ctrl+Z and Ctrl+Shift+Z (or Ctrl+Y), or the arrows at the top.
-- **glTF/OBJ export** - Export your city as a glTF or OBJ from the World menu (I recommend glTF as it preserves materials).
-- **Windows 3.0 look** — the whole UI dresses up as Windows 3.0 (untick it in World for the modern look), and under it a Pixelation slider turns the 3D view to chunky pixels and a 16-colour palette checkbox redraws it in sixteen colours or fewer (Windows 3.0's, PICO-8's, CGA, Commodore 64, ZX Spectrum, Apple II, Mac OS, Sweetie 16, DawnBringer 16, Endesga 16, Game Boy or 1-bit), dithered in a pattern of your choice (ordered, blue noise, halftone and more). (Its pixel font is [“MS Sans Serif Bold” by lou](https://fontstruct.com/fontstructions/show/1384862), CC BY-SA 3.0, loaded from [98.css](https://github.com/jdan/98.css).)
+**Build.** Edit mode has three tabs:
+- **Paths**: roads with curbs and pavements, where junctions merge cleanly and get zebra crossings and working traffic lights. Also walkways, raised walkways on pillars, rivers, and glass train tubes with stations and shuttles. Any path can be sharp corners or smooth splines, and paths over water become bridges.
+- **Zones**: city towers whose windows light up at night, plus parks, beaches, water, plazas, farmland, industrial yards, suburbs, British high streets and airports. Roads cut through zones, and zones higher in the list cut into the ones below.
+- **Objects**: benches, lamp posts, statues, postboxes, phone boxes, market stalls, bins, bollards and more. Each one turns to face the street it's placed by.
 
-<img width="1506" height="762" alt="Screenshot 2026-09-15 at 16 29 31" src="https://github.com/user-attachments/assets/840b062d-51ed-4a64-ad02-edf0852cc581" />
+You can also put a map image on the ground and trace over it.
 
+**Watch.** People walk, chat, sit on benches and the grass, go to work, go home and watch TV. Cars drive the roads and mostly give way. Planes take off and land, bees tend their hives, and pigeons gather in plazas. Click anything to follow it: a card shows its name, mood, and what it loves and hates. You can step inside buildings and train carriages to see who's in there.
 
-## Running it
+**Meddle.** Click a card's picture to take control. You can walk around as a person in first person (and punch people), drive a car, or fly a plane or a bee. You can also smite things with lightning. The city notices: a morality meter tracks how good or evil the place is, and every zone, building and death counts.
 
-Use the live site, or serve the repo folder locally and open it in a browser — for example:
+**Make it yours.** The people, cars, buildings, bees, trains and planes come from plain text files in `assets/`, so you can edit them. Entries can carry traits that change behaviour, like `Energy drinks [speed = 2.5]` or `Moonwalking [backwards]`. The full list is at the top of `assets/people.txt`, and what everything is worth morally is in `assets/morality.txt`.
+
+**Set the scene.** There's a day/night cycle with a real sun path, moonlight and stars, plus rain, snow and cloud shadows, and sound for everything. The whole thing dresses as Windows 3.0. You can also pixelate the view and redraw it in a 16-colour palette (Windows 3.0, PICO-8, CGA, C64, ZX Spectrum, Game Boy and more) with dithering.
+
+**Keep it.** Your city autosaves in the browser. You can save projects as files, and export the city as GLB (with materials) or OBJ for Blender, Unity and similar tools. Press F1 in the app for the full help.
+
+<img width="1506" height="762" alt="Kallipolis at night" src="https://github.com/user-attachments/assets/840b062d-51ed-4a64-ad02-edf0852cc581" />
+
+## Running it locally
+
+No build step. The code is plain ES modules served from the repo root:
 
 ```
-python -m http.server 8000
+python3 serve.py 8000
 ```
 
-then visit http://localhost:8000. (The app is made of JavaScript modules, which browsers won't load from a file opened straight from disk.) three.js and Clipper come from CDNs, so it needs an internet connection. Pushing to `main` redeploys the site on Netlify.
+Then open http://localhost:8000. `serve.py` turns off caching, so edits show up on reload. three.js and Clipper load from CDNs, so you need an internet connection. Pushing to `main` redeploys the site on Netlify.
 
 ## How it's laid out
 
-- `index.html`, `style.css` — the page and its styles
-- `src/main.js` — startup and the render loop; it loads every other module in order
-- `src/core/` — the scene, camera controls, math and spline helpers, and `shared.js` (state shared between modules)
-- `src/roads/`, `src/trains/`, `src/water/`, `src/zones/`, `src/buildings/`, `src/objects/` — what gets built
-- `src/editor/`, `src/ui/` — input, tools and the side panel
-- `src/sky/`, `src/life/` — day/night and weather; people and traffic
-- `src/project/` — save/load, undo/redo, GLB and OBJ export
-- `assets/models/` — the Blender models (train carriage, person, hairstyles)
+- `index.html` is the page. `css/` holds the styles (base, win3, touch, phone, ped).
+- `src/main.js` handles startup and the render loop.
+- `src/core/` has the scene, camera, maths and spline helpers, and shared state.
+- `src/roads/`, `src/trains/`, `src/water/`, `src/zones/`, `src/buildings/`, `src/objects/` and `src/maps/` build the city.
+- `src/life/` has people, traffic, bees and pigeons. `src/sky/` has day/night and weather. `src/audio/` has the sound.
+- `src/editor/` and `src/ui/` handle input, tools, windows and menus.
+- `src/project/` has save/load, autosave, undo/redo and export.
+- `assets/` holds the editable text files, the UI icons, and the Blender models in `models/`.
+- `tools/` has the Blender scripts that build the models, plus a few test pages.
+
+[`AGENT_MAP.md`](AGENT_MAP.md) describes every file.
+
+## Credits
+
+The pixel font is ["MS Sans Serif Bold" by lou](https://fontstruct.com/fontstructions/show/1384862), CC BY-SA 3.0, loaded from [98.css](https://github.com/jdan/98.css).
