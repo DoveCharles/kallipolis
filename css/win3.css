@@ -53,7 +53,7 @@ html.win3 body, html.win3 body * {
   cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='19'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3C/svg%3E") 0 0, default;
 }
 html.win3 input[type=number] { cursor:text; }
-/* over a node an open hand, a closed one while it's dragged (before .adding, so shift's plus still wins) */
+/* over a node an open hand, a closed one while it's dragged (before .adding, so cmd's plus still wins) */
 html.win3 canvas.over-node { cursor:grab; }
 html.win3 canvas.dragging-node { cursor:grabbing; }
 html.win3 canvas.adding {

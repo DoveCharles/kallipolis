@@ -1382,7 +1382,7 @@ export function dragTrainPoint(e) {
   rebuildTrainMeshes(); rebuildRoadMarkers(); rebuildRoadHandles(); App.refreshHighlights();
 }
 // The train edge nearest the cursor, matched on screen (train lines float above the ground, so the ground point
-// under the cursor isn't a useful guide) — for shift+click node insertion.
+// under the cursor isn't a useful guide) — for cmd+click node insertion.
 export function findNearestTrainEdge(sx, sy) {
   let best = null;
   const v = new THREE.Vector3();

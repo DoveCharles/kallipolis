@@ -318,7 +318,7 @@ html.touch #btn-touch-add { display:flex; }
 #car-boost-meter.boost-locked .boost-reserve { background:rgba(0,0,0,.35); }
 #car-boost-meter.boost-refused .boost-reserve { animation:boost-refused .25s steps(2, jump-none) infinite; }
 @keyframes boost-refused { from { background:rgba(0,0,0,.35); } to { background:rgba(220,40,40,.85); } }
-/* holding shift in the Paths tab: a click adds a node, or a branch (src/editor/input.js) */
+/* holding cmd in Paths or Zones: a click adds a node to an edge, or a branch (src/editor/input.js) */
 canvas.adding { cursor:copy; }
 .card-close {
   position:absolute; top:6px; right:8px; padding:2px 4px; background:none; border:none;

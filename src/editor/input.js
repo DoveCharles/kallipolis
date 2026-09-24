@@ -35,7 +35,7 @@ let isCameraDragging = false;
 let dragMode = 'orbit';
 S.draggedNode = null; // {kind:'road'|'roadHandle'|'zone'|'zoneHandle'|'object'|'objectTurn', ...}
 let objectCursor = ''; // what the cursor was last set to over the Objects tab: a prop to pick up, a ring to take hold of, or nothing
-S.pendingInsert = null; // edge insertion candidate while shift is held
+S.pendingInsert = null; // edge insertion candidate while cmd is held
 S.lastGroundClick = null; // {x,y,time} for double-click-to-finish detection
 S.lastNodeClick = null; // {kind,nodeId|zoneId+index,time} for double-click-to-delete detection
 let rightClickTarget = null; // node/vertex hit under a right-click, for the context menu
@@ -47,7 +47,7 @@ const dom = renderer.domElement;
 // Touch has no buttons and no modifier keys, so the same jobs are done by how many fingers are down and for how long:
 // one finger is the left button (drag empty ground to orbit, drag a node to move it, tap to place or pick), two fingers
 // pan and pinch to zoom, and a finger held still is the right button (a node's menu, or cancelling what's being drawn).
-// Shift — inserting a node into a path, or branching off one — is the ✛ button along the top (src/ui/mobile.js), which
+// Cmd — inserting a node into a path, or branching off one — is the ✛ button along the top (src/ui/mobile.js), which
 // sets S.touchAdd.
 // Drag distances are measured from where the pointer was last rather than read off movementX/movementY, which Safari
 // leaves at zero for touch.
@@ -60,8 +60,12 @@ let longPress = null;             // { x, y, timer, fired }
 const CLICK_SLOP = IS_TOUCH ? 12 : 6;    // how far a press may wander and still count as a click
 const DOUBLE_SLOP = IS_TOUCH ? 26 : 10;  // ...and how far apart two of them may be and still count as a double
 const LONG_PRESS_MS = 450;
-// the ✛ button stands in for holding shift
+// the ✛ button stands in for holding shift, and for cmd (branch off a node, or insert one into an edge; ctrl off a Mac,
+// where ctrl+click is the right button)
+const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 const shiftHeld = (e) => e.shiftKey || S.touchAdd === true;
+const cmdKey = (e) => IS_MAC ? e.metaKey : e.ctrlKey;
+const addHeld = (e) => cmdKey(e) || S.touchAdd === true;
 const inControl = () => App.isPossessing?.() || App.isDriving?.();
 
 function pointerDelta(e) {
@@ -176,18 +180,19 @@ dom.addEventListener('pointerdown', (e) => {
     dom.setPointerCapture(e.pointerId);
     return;
   }
-  // shift+click a path's node (when not already drawing): a new branch, drawn out from it
-  if (S.interactionMode==='node' && e.button===0 && shiftHeld(e) && (S.currentTool==='road' || S.currentTool==='train') && !S.activeRoadLine) {
+  // cmd+click a path's node (when not already drawing): a new branch, drawn out from it
+  if (S.interactionMode==='node' && e.button===0 && addHeld(e) && (S.currentTool==='road' || S.currentTool==='train') && !S.activeRoadLine) {
     const picked = pickNodeOrHandle(e.clientX, e.clientY);
     if (picked && picked.kind==='road') { startBranchFrom(picked.nodeId); dom.setPointerCapture(e.pointerId); return; }
   }
-  if (S.interactionMode==='node' && e.button===0 && shiftHeld(e) && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
+  // cmd+click a path's or zone's edge: a new node there
+  if (S.interactionMode==='node' && e.button===0 && addHeld(e) && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
     let found = null;
     if (S.currentTool==='train') found = findNearestTrainEdge(e.clientX, e.clientY);
     else { const gp = raycastGround(e.clientX, e.clientY); if (gp) found = findNearestEdge(gp, 6); }
     if (found) { insertNodeOnEdge(found); dom.setPointerCapture(e.pointerId); return; }
   }
-  if (S.interactionMode==='node' && e.button===0 && !shiftHeld(e) && S.lastGroundClick
+  if (S.interactionMode==='node' && e.button===0 && !addHeld(e) && S.lastGroundClick
       && (performance.now()-S.lastGroundClick.time)<350
       && Math.hypot(e.clientX-S.lastGroundClick.x, e.clientY-S.lastGroundClick.y)<DOUBLE_SLOP
       && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
@@ -248,7 +253,7 @@ dom.addEventListener('pointermove', (e) => {
   if (e.pointerType!=='mouse' && dragPointerId!==null && e.pointerId!==dragPointerId) return;
   if (longPress && Math.hypot(e.clientX-longPress.x, e.clientY-longPress.y) > CLICK_SLOP) cancelLongPress();
   S.lastMouseX = e.clientX; S.lastMouseY = e.clientY;
-  showAddCursor(e.shiftKey);
+  showAddCursor(e);
   if (hoveringClickable && S.interactionMode!=='move' && S.currentTool!=='objects') { hoveringClickable = false; objectCursor = ''; dom.style.cursor = ''; }
   if (S.objectTransform) { applyObjectTransform(raycastGround(e.clientX, e.clientY), shiftHeld(e)); return; }
   if (S.interactionMode==='maps') {
@@ -342,7 +347,7 @@ dom.addEventListener('pointermove', (e) => {
     return;
   }
 
-  if (shiftHeld(e) && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
+  if (addHeld(e) && (S.currentTool==='road' || S.currentTool==='zone' || S.currentTool==='train')) {
     previewLine.visible = false;
     // over a path's node (when not drawing), a click would branch from it, so it's the node that lights up
     if (S.currentTool!=='zone' && !S.activeRoadLine) {
@@ -573,13 +578,16 @@ window.addEventListener('keydown', (e) => {
   else if (e.key==='3') controls.snapRight();
 });
 
-// Holding shift in the Paths tab — where a click adds a node to a path, or a branch — shows a cursor with a plus.
-function showAddCursor(shift) {
-  dom.classList.toggle('adding', shift && S.interactionMode==='node' && (S.currentTool==='road' || S.currentTool==='train'));
+// Holding cmd in Paths or Zones — where a click adds a node to an edge, or branches off a path's node — shows a cursor
+// with a plus.
+function showAddCursor(e) {
+  dom.classList.toggle('adding', !!e && cmdKey(e) && S.interactionMode==='node'
+    && (S.currentTool==='road' || S.currentTool==='train' || S.currentTool==='zone'));
 }
-window.addEventListener('keydown', (e) => { if (e.key==='Shift') showAddCursor(true); });
-window.addEventListener('keyup', (e) => { if (e.key==='Shift') showAddCursor(false); });
-window.addEventListener('blur', () => showAddCursor(false));
+const ADD_KEYS = ['Meta', 'Control'];
+window.addEventListener('keydown', (e) => { if (ADD_KEYS.includes(e.key)) showAddCursor(e); });
+window.addEventListener('keyup', (e) => { if (ADD_KEYS.includes(e.key)) showAddCursor(e); });
+window.addEventListener('blur', () => showAddCursor(null));
 
 // Starts drawing a new line out from an existing node, as a branch of that node's network, just like it: the same type,
 // width and colors (or, for a train line, tube radius). It's finished, joined onto another node, or cancelled as any line

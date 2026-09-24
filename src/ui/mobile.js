@@ -6,7 +6,7 @@ import { cards } from './entity-card.js';
 // ============================================================ the controls a finger needs
 // Everything here is for phones and tablets, and none of it appears on a machine with a mouse. It stands in for the parts
 // of the app a keyboard and a right button do on the desktop:
-// - ✛ along the top holds shift down (inserting a node into a path, or branching off one) — src/editor/input.js reads it
+// - ✛ along the top holds cmd down (inserting a node into a path, or branching off one) — src/editor/input.js reads it
 //   as S.touchAdd; a long press on the view is the right button, and two fingers pan and pinch (also input.js)
 // - Move / Rotate / Scale under the Maps list stand in for G / R / S, setting S.touchMapMode so the image is dragged about
 //   rather than clicked twice

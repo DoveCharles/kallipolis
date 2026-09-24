@@ -50,7 +50,7 @@ const TOPICS = [
     ${keys([
       ['Click ground', 'Place a node'], ['Click a node', 'Select its path'], ['Drag a node', 'Move it'],
       ['Double-click a node', 'Delete it'], ['Double-click ground / Enter', 'Finish the path'], ['Esc', 'Stop drawing'],
-      ['Shift+click a path', 'Insert a node'], ['Shift+click a node', 'Branch off from it'],
+      ['Cmd+click a path', 'Insert a node'], ['Cmd+click a node', 'Branch off from it'],
       ['Right-click a node', 'Poly or Spline corner; a ramp on a raised walkway; a station on a train line'],
       ['Alt+drag (train)', 'Change only a node\'s height'],
     ])}` },
@@ -74,7 +74,7 @@ const TOPICS = [
     ${keys([
       ['Click ground', 'Place a boundary point'], ['Click a point', 'Select its zone'], ['Drag a point', 'Move it'],
       ['Double-click a point', 'Delete it'], ['Click the first point / Enter', 'Close the zone'],
-      ['Shift+click an edge', 'Insert a point'], ['Esc', 'Stop drawing'],
+      ['Cmd+click an edge', 'Insert a point'], ['Esc', 'Stop drawing'],
     ])}` },
 
   { id: 'objects', title: 'Objects', html: () => `
@@ -162,7 +162,7 @@ const TOPICS = [
       ['F1', 'Help'], ['Alt+letter', 'Open a menu'], ['Ctrl+Z', 'Undo'], ['Ctrl+Y / Ctrl+Shift+Z', 'Redo'],
       ['Ctrl+S / Ctrl+O', 'Save / open a project'], ['7 / 1 / 3', 'View from the top / front / right'],
       ['Enter', 'Finish the path or zone being drawn'], ['Esc', 'Stop drawing; let go of what you control; leave a building'],
-      ['Shift+click', 'Insert a node, or branch off a path'], ['G / R / S', 'Move, turn or size the selected object or map image'],
+      ['Cmd+click', 'Insert a node into a path or zone edge, or branch off a path\'s node'], ['G / R / S', 'Move, turn or size the selected object or map image'],
       ['Delete', 'Remove the selected object'],
     ])}
     <p>See also ${link('camera', 'Moving the camera')} and ${link('control', 'Taking control')}.</p>` },
