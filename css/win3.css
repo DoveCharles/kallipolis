@@ -394,3 +394,8 @@ html.win3 .w3-window.w3-sized .w3-dialog-body { flex:1; min-height:0; max-height
   html.win3 :is(body:not(.w3-no-panel), body.ui-loading.start-edit) #canvas-tools #mode-toolbar [data-mode=node].active .node-open { display:block; }  /*  outlined, while it's down) */
   html.win3 .w3-window .w3-debug { display:none; }
 }
+
+/* View > FPS (debug) (src/ui/fps.js) */
+#fps-counter { position:fixed; right:8px; bottom:8px; z-index:1000; pointer-events:none; padding:1px 4px;
+  background:#000; color:#0f0; font:12px/1.2 monospace; }
+#fps-counter[hidden] { display:none; }

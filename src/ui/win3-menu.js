@@ -13,6 +13,7 @@ import { openSettings } from './settings-windows.js';
 import { openHelp } from './help.js';
 import { closeWindows } from './w3-window.js';
 import { editHints, generalHints } from './view-prefs.js';
+import { fpsCounter } from './fps.js';
 import { people } from '../life/people/people.js';
 import { cars } from '../life/traffic/state.js';
 import { toUi } from './ui-scale.js';
@@ -121,6 +122,7 @@ const MENUS = [
     '-',
     { label:'Roadsafety Radius (debug)', key:'r', check:has('s-roadsafety-debug', 'on'), enabled:has('s-people', 'on'), run:press('s-roadsafety-debug') },
     { label:'Ped Navmesh (debug)', key:'n', check:has('s-peoplenav-debug', 'on'), enabled:has('s-people', 'on'), run:press('s-peoplenav-debug') },
+    { label:'FPS (debug)', key:'b', check:fpsCounter.shown, run:fpsCounter.toggle },
   ]},
   { name:'Options', key:'o', items:[
     { label:'Snap to Grid', key:'g', check:has('grid-toggle', 'active'), run:press('grid-toggle') },
