@@ -81,6 +81,14 @@ function shortcuts() {
   messageBox('Keyboard Shortcuts', `<table class="w3-keys">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`);
 }
 
+// Help > Show Tooltips: the bottom hints, Edit and General together (View has them one by one)
+const anyHints = () => editHints.shown() || generalHints.shown();
+function toggleAllHints() {
+  const on = !anyHints();
+  if (editHints.shown() !== on) editHints.toggle();
+  if (generalHints.shown() !== on) generalHints.toggle();
+}
+
 // ---- the menus. key is the underlined letter (Alt+it opens a menu; in an open one, it picks the item); an item may be
 // checked (check), one of a set (radio), greyed out (enabled), and show a shortcut at the right.
 const MENUS = [
@@ -134,6 +142,7 @@ const MENUS = [
   ]},
   { name:'Help', key:'h', items:[
     { label:'Keyboard Shortcuts', key:'k', run:shortcuts },
+    { label:'Show Tooltips', key:'t', check:anyHints, run:toggleAllHints },
     '-',
     { label:'About Splinetopia...', key:'a', run:about },
   ]},
