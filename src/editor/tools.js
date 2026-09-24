@@ -94,7 +94,9 @@ function updateHint() {
     };
     msg = hints[S.currentTool];
   }
-  document.getElementById('hint').textContent = msg;
+  const hint = document.getElementById('hint');
+  hint.textContent = msg;
+  hint.dataset.kind = S.interactionMode==='move' ? 'general' : 'edit'; // (which View menu toggle hides it: ui/view-prefs.js)
 }
 // Edit mode's tabs: Paths (roads, paths and rivers — the 'road' tool — and train lines, the 'train' tool, which the Type menu
 // switches between, as each shows only its own kind of node), Zones, and Objects (street furniture, see objects/objects.js)

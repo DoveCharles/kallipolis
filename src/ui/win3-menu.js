@@ -11,6 +11,7 @@ import { isMuted } from '../audio/sfx.js';
 import { openSoundLevels } from './sound-levels.js';
 import { openSettings } from './settings-windows.js';
 import { closeWindows } from './w3-window.js';
+import { editHints, generalHints } from './view-prefs.js';
 import { people } from '../life/people/people.js';
 import { cars } from '../life/traffic/state.js';
 
@@ -114,6 +115,9 @@ const MENUS = [
     { label:'Orthographic', key:'h', check:has('btn-projection', 'on'), run:press('btn-projection') },
     { label:'Ped View', key:'d', check:has('btn-ped-view', 'on'), run:press('btn-ped-view') },
     { label:'Full Screen', key:'u', check:() => !!document.fullscreenElement, run:toggleFullScreen },
+    '-',
+    { label:'Edit Hints', key:'i', check:editHints.shown, run:editHints.toggle },
+    { label:'General Hints', key:'g', check:generalHints.shown, run:generalHints.toggle },
     '-',
     { label:'Roadsafety Radius (debug)', key:'r', check:has('s-roadsafety-debug', 'on'), enabled:has('s-people', 'on'), run:press('s-roadsafety-debug') },
     { label:'Ped Navmesh (debug)', key:'n', check:has('s-peoplenav-debug', 'on'), enabled:has('s-people', 'on'), run:press('s-peoplenav-debug') },

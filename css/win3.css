@@ -309,7 +309,10 @@ html.win3 .pc-thumb {
     border:none; border-right:1px solid #000; outline:none; box-shadow:none; background:#fff;
   }
   html.win3 #panel > .win3-titlebar { display:none; }
-  html.win3 body.w3-no-panel #panel { display:none; }
+  /* hidden (View > Side Panel, World mode) it slides out left; visibility waits for the slide so it's gone from tab order after */
+  html.win3 #panel { transition:transform 0.2s ease, visibility 0s; }
+  html.win3 body.w3-no-panel #panel { transform:translateX(calc(-100% - 8px)); visibility:hidden; transition:transform 0.2s ease, visibility 0s 0.2s; }
+  @media (prefers-reduced-motion:reduce) { html.win3 #panel, html.win3 body.w3-no-panel #panel { transition:none; } }
   /* what shows over the view while walking someone about or riding a train, below all that */
   html.win3 :is(#possess-hint, #ride-tune) { top:calc(var(--w3-below) + 8px); }
   html.win3 #ride-tune { right:12px; }

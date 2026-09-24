@@ -49,6 +49,8 @@ import './ui/sound.js';
 import './ui/pixel-icons.js';
 import './ui/mobile.js';
 import './ui/pixelation.js';
+import './ui/flat-shading.js';
+import './ui/view-prefs.js';
 import './ui/ped-view.js';
 import './project/export-obj.js';
 import * as THREE from 'three';
