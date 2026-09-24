@@ -16,7 +16,7 @@ const database = new Promise((resolve, reject) => {
   request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME);
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(request.error);
-}).catch(err => { console.warn('Blockout: the browser won\'t keep an autosave (IndexedDB unavailable)', err); return null; });
+}).catch(err => { console.warn('Splinetopia: the browser won\'t keep an autosave (IndexedDB unavailable)', err); return null; });
 // runs `action` on the store, resolving with its request's result once the transaction's done
 async function inStore(mode, action) {
   const db = await database;
@@ -40,7 +40,7 @@ async function save() {
   try {
     await inStore('readwrite', store => store.put(record, RECORD_KEY));
   } catch (err) {
-    if (!warned) { warned = true; console.warn('Blockout: autosave failed', err); }
+    if (!warned) { warned = true; console.warn('Splinetopia: autosave failed', err); }
   }
 }
 function scheduleSave(delay) {
@@ -75,7 +75,7 @@ window.addEventListener('pagehide', save);
   } catch (err) {
     // A failed restore leaves the scene half-loaded: autosaving now would destroy the very
     // record that failed to load, so stay off for this session and say so.
-    console.warn('Blockout: couldn\'t restore the autosave — autosave is off for this session so the saved project is not overwritten. Reload to try again.', err);
+    console.warn('Splinetopia: couldn\'t restore the autosave — autosave is off for this session so the saved project is not overwritten. Reload to try again.', err);
   } finally {
     restoring = false;
     ready = restoredCleanly;

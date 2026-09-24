@@ -38,12 +38,12 @@ export function entryOf(line, { traits: table = TRAITS, file }) {
       const key = rawKey.trim().toLowerCase(), value = rawValue == null ? 1 : parseFloat(rawValue);
       if (key === 'choiceweight') {
         if (Number.isInteger(value) && value >= 0) { weight = value; return; }
-        warnOnce(`Blockout: in ${file}, "${part.trim()}" (after "${text}") needs a whole number of 0 or more`);
+        warnOnce(`Splinetopia: in ${file}, "${part.trim()}" (after "${text}") needs a whole number of 0 or more`);
         return;
       }
       if (RULES.includes(key)) { foundRules.push([key, rawValue == null ? '' : rawValue.trim()]); return; }
       if (table[key] && Number.isFinite(value)) { found.push([key, value]); return; }
-      warnOnce(`Blockout: in ${file}, "${part.trim()}" (after "${text}") isn't a known trait — see core/traits.js`);
+      warnOnce(`Splinetopia: in ${file}, "${part.trim()}" (after "${text}") isn't a known trait — see core/traits.js`);
     });
     traits.unshift(...found);
     rules.unshift(...foundRules);
@@ -110,7 +110,7 @@ export function parseSections(text, { traits: table = TRAITS, file, attributes =
     if (current === DISTRIBUTION) {
       const counts = parseCounts(line);
       if (counts) distribution.push(counts);
-      else warnOnce(`Blockout: in ${file}, "${line}" under [${DISTRIBUTION}] isn't counts and a weight (see core/entries.js)`);
+      else warnOnce(`Splinetopia: in ${file}, "${line}" under [${DISTRIBUTION}] isn't counts and a weight (see core/entries.js)`);
       return;
     }
     const pair = pairOf(line), pairKey = pair && pair.key;
@@ -119,7 +119,7 @@ export function parseSections(text, { traits: table = TRAITS, file, attributes =
     const entry = entryOf(pair ? pair.value : line, { traits: table, file });
     if (!entry.text) return;
     if (pair && attributes && !attributes.includes(pairKey) && !settings.includes(pairKey)) {
-      warnOnce(`Blockout: in ${file}, "${line}" isn't an "attribute = value" line (${attributes.concat(settings).join(', ')}) under a [section]`);
+      warnOnce(`Splinetopia: in ${file}, "${line}" isn't an "attribute = value" line (${attributes.concat(settings).join(', ')}) under a [section]`);
       return;
     }
     // `group` is the attribute the line belongs to: its own name where that's one of the reader's, else the heading (which

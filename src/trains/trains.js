@@ -945,7 +945,7 @@ export async function loadCarriageModel() {
   try {
     buffer = await fetch(CARRIAGE_MODEL_URL).then(response => { if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.arrayBuffer(); });
   } catch (err) {
-    console.warn('Blockout: the carriage model failed to load; train carriages use the built-in capsule', err);
+    console.warn('Splinetopia: the carriage model failed to load; train carriages use the built-in capsule', err);
     return;
   }
   new GLTFLoader().parse(buffer, '', (gltf) => {
@@ -998,7 +998,7 @@ export async function loadCarriageModel() {
     };
     carriageModel = { parts, length, crossRadius: crossRadius || 1, windowMaterial, lightColor, stand };
     rebuildTrainMeshes(); App.refreshHighlights();
-  }, (err) => console.warn('Blockout: the carriage model failed to load; train carriages use the built-in capsule', err));
+  }, (err) => console.warn('Splinetopia: the carriage model failed to load; train carriages use the built-in capsule', err));
 }
 // Turns and scales a geometry's shape keys (offsets from where it rests) by `matrix`, as applyMatrix4 has the rest.
 function bakeMorphs(geometry, matrix) {

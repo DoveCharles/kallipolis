@@ -63,14 +63,17 @@ export function zoneCutoutsNear(zone, poly) {
   const reach = offsetPaths([toClipperPath(poly)], ZONE_CUTOUT_REACH, ClipperLib.JoinType.jtRound);
   return clipPolygons(ctIntersection, clipPolygons(ctUnion, linear, zonesAbove), reach);
 }
-// The union of the outlines of every zone above `zone` in the list (not counting one still being drawn). The outlines are
-// unioned on their own, so each one counts as filled whichever way round it was drawn, before being combined with
-// anything that has holes of its own (like the road footprint).
+// The union of the outlines of every zone above `zone` in the list (not counting one still being drawn). Each outline is
+// turned the same way round first — under the non-zero fill, one drawn clockwise overlapping one drawn anticlockwise
+// cancels out, leaving the overlap uncut — and they're unioned on their own before being combined with anything that has
+// holes of its own (like the road footprint).
 function zoneOutlinesAbove(zone) {
   const above = [];
   for (const other of S.zones) {
     if (other === zone) break;
-    if (!other.drawing && other.points.length >= 3) above.push(toClipperPath(tessellateClosedPath(other.points)));
+    if (other.drawing || other.points.length < 3) continue;
+    const path = toClipperPath(tessellateClosedPath(other.points));
+    above.push(ClipperLib.Clipper.Orientation(path) ? path : path.reverse());
   }
   return above.length ? clipPolygons(ClipperLib.ClipType.ctUnion, above, []) : [];
 }
