@@ -8,11 +8,11 @@ import { makeThumbnailDrawer } from './thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
 import { mulberry32 } from '../core/math.js';
-import { startFlying, endFlying } from './possession.js';
+import { startFlying, endFlying, controlInput } from './possession.js';
 import { blastFx, explodeBee } from './giblets.js';
 import { blasts, PERSON_BLAST_SCALE } from './traffic/state.js';
 import { updateBuzzes } from '../audio/buzz.js';
-import { stepFlight, makeHand, cruiseSpeed, chaseBehind } from './flight.js';
+import { chaseBehind } from './flight.js';
 
 // ============================================================ flowers, hives and bees
 // Three things a park grows, all cut from one model (assets/models/Bee.glb, made in Blender): patches of flowers, a hive
@@ -668,16 +668,35 @@ function flyToward(bee, t, dt, speedScale = 1) {
   if (bee.v.lengthSq() > 0.04) bee.yaw = Math.atan2(bee.v.x, bee.v.z);
 }
 
-// ---- flying a bee by hand (the flight model is in flight.js)
+// ---- flying a bee by hand
+// A bee hovers rather than flies like an aeroplane: W and S push it forward and back along the way it faces, A and D
+// turn it on the spot, space lifts it and shift lets it sink. It takes a moment to get going and to stop (the lag),
+// and leans into whatever it is doing — nose down going forward, over into a turn — so it still looks like it flies.
 let flownBee = null; // the bee under the player's hands, if any; its state is bee.hand
-// its speeds are the model's, scaled to the bee's own cruising speed
-const flightOf = bee => ({ scale: BEE_SPEED*bee.traits.speed/cruiseSpeed(1), size: BEE_LENGTH*bee.traits.size, floor: Y_PARK + 0.05, ceiling: Y_PARK + BEE_CEILING });
+const HAND_FORWARD = 1.6, HAND_BACK = 0.6, HAND_CLIMB = 0.8; // of its cruising speed: flat out forward, backing off, and up or down
+const HAND_TURN = 2.4, HAND_LAG = 0.3;                        // radians a second it turns, and seconds it takes to answer the keys
+const HAND_LEAN = 0.3, HAND_BANK = 0.45;                      // radians it tips its nose at full speed, and leans over at the full turn
+const handSpeed = bee => BEE_SPEED*bee.traits.speed;
 function flyByHand(bee, t, dt) {
-  const hand = bee.hand;
-  stepFlight(hand, dt, flightOf(bee));
-  bee.at.set(hand.x, hand.y + hand.hop, hand.z);
+  const hand = bee.hand, { forward, right, run, brake } = controlInput();
+  const ease = (v, goal) => v + (goal - v)*(1 - Math.exp(-dt/HAND_LAG));
+  const speed = handSpeed(bee);
+  hand.turn = ease(hand.turn, -right*HAND_TURN);
+  hand.heading += hand.turn*dt;
+  hand.along = ease(hand.along, forward*(forward > 0 ? HAND_FORWARD : HAND_BACK)*speed);
+  hand.vy = ease(hand.vy, ((brake ? 1 : 0) - (run ? 1 : 0))*HAND_CLIMB*speed);
+  hand.vx = Math.sin(hand.heading)*hand.along;
+  hand.vz = Math.cos(hand.heading)*hand.along;
+  hand.x += hand.vx*dt;
+  hand.z += hand.vz*dt;
+  const floor = Y_PARK + 0.05, ceiling = Y_PARK + BEE_CEILING;
+  hand.y = Math.max(floor, Math.min(ceiling, hand.y + hand.vy*dt));
+  if ((hand.y === floor && hand.vy < 0) || (hand.y === ceiling && hand.vy > 0)) hand.vy = 0;
+  bee.at.set(hand.x, hand.y, hand.z);
   bee.v.set(hand.vx, hand.vy, hand.vz);
-  bee.yaw = hand.heading; bee.pitch = hand.pitch - hand.dip; bee.bank = hand.bank - hand.rock;
+  bee.yaw = hand.heading;
+  bee.pitch = -HAND_LEAN*hand.along/(HAND_FORWARD*speed);
+  bee.bank = HAND_BANK*hand.turn/HAND_TURN;
   knockOverWhoIsHit(bee);
   beatWings(bee, t);
   lookAt(bee, 0, dt);
@@ -795,9 +814,13 @@ function strikeBees({ x, z, heading, halfLength, halfWidth, height }) {
 function flyBee() {
   if (!followedBee) return;
   const bee = followedBee.colony.bees[followedBee.index];
-  if (isHome(bee) || bee === flownBee || !startFlying(stopFlyingBee)) return;
+  if (isHome(bee) || bee === flownBee || !startFlying(stopFlyingBee, {
+    keys: 'W/S forward and back · A/D to turn · Space to rise · Shift to sink',
+    touch: 'Stick to fly it · Brake to rise · Run to sink' })) return;
   flownBee = bee;
-  bee.hand = makeHand({ x: bee.at.x, y: bee.at.y, z: bee.at.z, heading: bee.yaw, speed: cruiseSpeed(flightOf(bee).scale) });
+  // (already going the way it was, so the handover is invisible)
+  const along = Math.hypot(bee.v.x, bee.v.z);
+  bee.hand = { x: bee.at.x, y: bee.at.y, z: bee.at.z, heading: bee.yaw, along, turn: 0, vx: bee.v.x, vy: bee.v.y, vz: bee.v.z };
   controls.goalRadius = Math.max(controls.minRadius, BEE_FOLLOW_RADIUS*0.5);
 }
 /**

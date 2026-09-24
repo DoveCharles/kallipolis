@@ -91,8 +91,13 @@ export function endDriving() {
   hideHint();
   unlockPointer();
 }
-/** @param {() => void} release - called to let go of whatever is being flown, when Esc or the exit button asks */
-export function startFlying(release) {
+const FLYING_KEYS = 'W/S to dive and climb · A/D to bank · Shift for power · Space to slow';
+const FLYING_TOUCH = 'Stick to fly it · Run for power · Brake to slow';
+/**
+ * @param {() => void} release - called to let go of whatever is being flown, when Esc or the exit button asks
+ * @param {{keys?: string, touch?: string}} [hint] - how it is flown, if not like an aeroplane (the start of the hint's line)
+ */
+export function startFlying(release, { keys = FLYING_KEYS, touch = FLYING_TOUCH } = {}) {
   // (no people check, unlike the two above: an aircraft flies its schedule whether or not the town has anyone in it,
   // so its card is there to be clicked either way, and "Fly it" shouldn't be a button that does nothing)
   if (S.interactionMode !== 'move') return false;
@@ -101,8 +106,7 @@ export function startFlying(release) {
   flying.lookedAt = -Infinity;
   held.clear();
   showHint(IS_TOUCH ? 'Flying' : 'Press <kbd>Esc</kbd> to stop flying',
-    IS_TOUCH ? 'Stick to fly it · Run for power · Brake to slow · drag to look around'
-             : 'W/S to dive and climb · A/D to bank · Shift for power · Space to slow · mouse to look around · scroll to zoom');
+    IS_TOUCH ? touch + ' · drag to look around' : keys + ' · mouse to look around · scroll to zoom');
   lockPointer();
   return true;
 }

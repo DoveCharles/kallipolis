@@ -79,7 +79,7 @@ Format: `file` (size) purpose — key exports.
 - `car-card.js` (4K) Who's behind the wheel, in a card at the bottom right while the camera follows a vehicle (see "following a car" in traffic/follow.js):
 - `car-types.js` (1K) Each type of vehicle's name, mood, and what it loves and hates, for its card (car-card.js) — from assets/cars.txt, to be edited freely: — exports: carTypeOf, vanityPlatesOf, vanityChanceOf
 - `car-wrecks.js` (25K) What's left of a vehicle that blows up: — exports: CAR_GRID, buildCarWreck, buildCraftWreck, throwWreck, throwCarWreck, updateCarWrecks
-- `flight.js` (13K) The flying model shared by everything the player can take the controls of in the air (an aircraft in zones/airport.js, a bee in life/bees.js): — exports: stepFlight, touchdownBounce, makeHand, cruiseSpeed, chaseBehind, autopilot
+- `flight.js` (13K) The flying model shared by everything the player can take the controls of in the air (an aircraft in zones/airport.js; a bee hovers instead, in life/bees.js): — exports: stepFlight, touchdownBounce, makeHand, cruiseSpeed, chaseBehind, autopilot
 - `giblets.js` (50K, **big**) Two separate things share this file, each with its own setting group in S (see core/shared.js): — exports: NO_GROUND_FALLBACK, isNear, landingGround, puffSmoke, sparkleFx, burnFx, tyreSmoke, engineSmoke …
 - `lightning.js` (4K) The Smite button's bolt (see the person and car cards): — exports: strikeLightning, updateLightning, shakeCamera
 - `person-card.js` (7K) Who someone is, in a card at the bottom right while the camera follows them (see "following someone" in people.js):

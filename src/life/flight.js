@@ -2,8 +2,8 @@ import { controls } from '../core/camera-controls.js';
 import { controlInput, flying } from './possession.js';
 
 // ============================================================ hand flying
-// The flying model shared by everything the player can take the controls of in the air (an aircraft in zones/airport.js,
-// a bee in life/bees.js): stepFlight moves its `hand` state on a frame from the keys held, and the caller poses whatever
+// The flying model shared by everything the player can take the controls of in the air (an aircraft in zones/airport.js;
+// a bee hovers instead, in life/bees.js): stepFlight moves its `hand` state on a frame from the keys held, and the caller poses whatever
 // it is from that state. To make something else flyable, give it a hand (makeHand), a craft description and a pose.
 // The tuning below is for an international jet at scale 1.
 const FLY_SPEED = 46, FLY_SPEED_MIN = 22, FLY_SPEED_MAX = 105;   // units a second, at the size an international jet is
@@ -15,7 +15,7 @@ const FLY_CONTROL_LAG = 0.25, FLY_MOMENTUM = 0.35;                // seconds: th
 const FLY_RIGHTING = 0.75, FLY_TRIM = 0.8, FLY_BITE_MIN = 0.4;    // let go, how keenly it rolls level and trims out; and how heavy the stick goes when slow
 const FLY_ROLLING = 0.6, FLY_GROUND_TURN = 0.9;                   // on the ground: the share of its speed the wheels lose a second, and the fastest it steers round (radians a second)
 /**
- * One frame of a hand-flown craft — an aircraft or a bee — from the keys held (controlInput). W and S put the nose down and up, A and D drop a
+ * One frame of a hand-flown aircraft from the keys held (controlInput). W and S put the nose down and up, A and D drop a
  * wing — and it is the dropped wing that turns it, the way a real one turns, so a bank held over comes round a circle
  * rather than sliding sideways. Shift is power and space is the airbrake. Climbing bleeds speed off and diving puts it
  * back on, and too slow a climb drops the nose by itself. On the ground it steers like a car instead: A and D turn it as
@@ -36,7 +36,7 @@ const FLY_ROLLING = 0.6, FLY_GROUND_TURN = 0.9;                   // on the grou
  * @param {object} hand Its state, from makeHand; moved on in place.
  * @param {number} dt Seconds this frame.
  * @param {object} craft What it is flying: `scale` multiplies the speeds and forces, which are written for an international
- *   jet (a light one, or a bee, flies smaller and slower); `size` sets how wide a circle it steers on the ground; `floor`
+ *   jet (a light one flies smaller and slower); `size` sets how wide a circle it steers on the ground; `floor`
  *   is the height of the ground under it; `ceiling` where the air runs out; `crashAngle` how steeply (radians) it can meet
  *   the ground before it is wrecked (never, if left out).
  * @param {{forward: number, right: number, run: boolean, brake: boolean}} [input] What is being asked of it: the keys held
