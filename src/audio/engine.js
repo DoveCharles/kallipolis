@@ -14,11 +14,13 @@ const GEAR_SPEED = 8, GEARS = 4;       // units a second each gear covers; in to
 const SHIFT_REVS = 0.35;               // where the revs drop back to on changing up, 0 (idle) to 1 (redline)
 const SHIFT_TIME = 0.15;               // seconds the throttle's lifted for a change up
 const REVS_RATE = 3;                   // how fast the revs follow, per second
+const BOOST_REVS = 0.95, BOOST_PITCH = 1.3, BOOST_RATE = 4; // boosting (car.boostingNow) holds the revs near the redline and
+                                       // lifts the whole engine this much higher, eased in and out at this rate a second
 const VOLUME = 0.09, TRAFFIC_VOLUME = 0.5; // the driven car's, and everyone else's against it
 const REF_DISTANCE = 10, HEAR_DISTANCE = 90;
 const ENGINES_MAX = 6;
 
-const engines = []; // { voice, panner, car, revs, lastSpeed, gear, shift }
+const engines = []; // { voice, panner, car, revs, lastSpeed, gear, shift, boost }
 const voiceOf = new WeakMap(); // car -> its engine's pitch against an ordinary car's
 const HUM_REACH = 60; // (how far off a car counts for half as much toward trafficNearby)
 let traffic = 0;
@@ -36,7 +38,7 @@ function makeEngine() {
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
   panner.connect(outdoorsOf('traffic'));
-  return { voice: makeEngineVoice(listener.context, panner), panner, car: null, revs: 0, lastSpeed: 0, gear: 0, shift: 0 };
+  return { voice: makeEngineVoice(listener.context, panner), panner, car: null, revs: 0, lastSpeed: 0, gear: 0, shift: 0, boost: 0 };
 }
 
 /**
@@ -69,6 +71,7 @@ export function updateEngines(cars, driven, about, dt) {
     free.lastSpeed = Math.abs(car.speed);
     free.gear = 0;
     free.shift = 0;
+    free.boost = 0;
     setEngineKind(free.voice, kindOfDesign(about(car).design));
   });
   for (const e of engines) {
@@ -85,11 +88,12 @@ export function updateEngines(cars, driven, about, dt) {
     const through = Math.min(1, (s - gear*GEAR_SPEED)/(GEAR_SPEED*(top ? 2.5 : 1))); // (how far through this gear)
     const floor = gear ? SHIFT_REVS : 0;
     // (revving at a standstill, or with the wheels held back, still lifts the revs a little)
-    const goal = running ? Math.max(floor + (1 - floor)*through, throttle*0.3) : 0;
+    e.boost += ((car.boostingNow && running ? 1 : 0) - e.boost)*Math.min(1, BOOST_RATE*dt);
+    const goal = running ? Math.max(floor + (1 - floor)*through, throttle*0.3, BOOST_REVS*e.boost) : 0;
     e.revs += (goal - e.revs)*Math.min(1, REVS_RATE*dt*(goal < e.revs - 0.2 ? 4 : 1)); // (a change up drops the revs quickly)
     if (!voiceOf.has(car)) voiceOf.set(car, 0.9 + Math.random()*0.2);
     const volume = (car === driven ? VOLUME : VOLUME*TRAFFIC_VOLUME)*(0.6 + 0.4*throttle);
-    setEngineVoice(e.voice, { revs: e.revs, throttle, volume: running ? volume : 0, pitch: voiceOf.get(car), size, dt });
+    setEngineVoice(e.voice, { revs: e.revs, throttle, volume: running ? volume : 0, pitch: voiceOf.get(car)*(1 + (BOOST_PITCH - 1)*e.boost), size, dt });
     e.panner.positionX.value = car.x; e.panner.positionY.value = y; e.panner.positionZ.value = car.z;
   }
 }
