@@ -122,7 +122,9 @@ const standardWith = (applyShader, params) => () => {
   standardWith(mat => applyCropShader(mat, 1, 0, 1, 0.2)),
   standardWith(mat => applyPavingShader(mat, 0)),
   standardWith(mat => applyPathShader(mat, [], 1, 1), { transparent: true, depthWrite: false, ...SKIP_OVER_WATER_AND_ROADS }),
-  standardWith(mat => applyWalkwayShader(mat, 'plain', 1, 0), SKIP_OVER_WATER_AND_ROADS), // walkway paving
+  standardWith(mat => applyWalkwayShader(mat, 'plain', 1, 0), SKIP_OVER_WATER_AND_ROADS), // raised walkway paving
+  standardWith(mat => applyWalkwayShader(mat, 'plain', 1, 0, { segments: [], halfWidth: 1, fringe: 1 }),
+    { transparent: true, depthWrite: false, ...SKIP_OVER_WATER_AND_ROADS }),              // ground walkway paving
   standardWith(null, { side: THREE.DoubleSide }),                                         // road surfaces, fountain stone
   standardWith(null, { vertexColors: true, flatShading: true, side: THREE.DoubleSide }),  // building bodies
   standardWith(null, { flatShading: true }),                                              // building details (greebles, ribs, canopies…)
