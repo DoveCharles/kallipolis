@@ -30,6 +30,8 @@ const NAV_MITER_LIMIT = 2;
 const LANE_LATERAL = 0.45, LANE_TO_SIDEWALK = 8;
 /** How much further than a path's half-width a lane's mouth may be from one of its points to come out onto it (a nav spacing: the furthest its nearest point can be along from square to the mouth). */
 const LANE_TO_PATH = 4;
+/** And how much further than the two half-widths a path's end may be from another's point to come out onto it (half a nav spacing, likewise). */
+const PATH_TO_PATH = 2;
 
 /**
  * Work out which way, and how far per unit of lateral offset, a walkway's point `vi` is set off square to the line there.
@@ -224,10 +226,29 @@ export function buildPeopleNav() {
   };
   // paths
   const pending = [], raisedLinks = [], groundPaths = []; // (the drawn ones on the ground, with their half-widths: see the lanes below)
-  S.roadLines.forEach(line => {
-    if (!isWalkwayLine(line) || isRaisedWalkwayLine(line)) return; // (raised ones below)
+  const drawn = S.roadLines.filter(line => isWalkwayLine(line) && !isRaisedWalkwayLine(line)).map(line => { // (raised ones below)
     const nodes = tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean));
-    if (nodes.length < 2) return;
+    return { line, nodes, pts: nodes.length >= 2 ? resampleLine(nodes).pts : [], hw: roadLineWidths(line).hw };
+  });
+  // A path that ends on another without sharing a node with it (drawn up to it, or into it) is carried on to the other's
+  // nearest point, which byPlace then joins them at — otherwise it's a dead end in the middle of the other path, where
+  // everyone walking it turns back. Only ever onto a point the other keeps whatever it's carried on to itself.
+  const placeKey = q => Math.round(q.x*2) + ',' + Math.round(q.z*2);
+  const drawnAt = new Map();
+  drawn.forEach((w, wi) => w.pts.forEach(q => drawnAt.set(placeKey(q), (drawnAt.get(placeKey(q)) || new Set()).add(wi))));
+  const ontoPath = (wi, q) => {
+    if ([...(drawnAt.get(placeKey(q)) || [])].some(o => o !== wi) || inMid(q.x, q.z)) return [];
+    let best = null;
+    drawn.forEach((o, oi) => oi !== wi && o.pts.forEach(v => {
+      const d = Math.hypot(v.x - q.x, v.z - q.z);
+      if (d <= o.hw + drawn[wi].hw + PATH_TO_PATH && !inMid(v.x, v.z) && (!best || d < best.d)) best = { v, d };
+    }));
+    return best && best.d > 1e-3 ? [best.v] : [];
+  };
+  drawn.forEach(({ line, nodes: drawnNodes }, wi) => {
+    if (drawnNodes.length < 2) return;
+    const nodes = line.nodeIds.length > 3 && line.nodeIds[0] === line.nodeIds[line.nodeIds.length-1] ? drawnNodes
+      : [...ontoPath(wi, drawnNodes[0]), ...drawnNodes, ...ontoPath(wi, drawnNodes[drawnNodes.length-1])];
     const { pts } = resampleLine(nodes), cum = cumulative(pts);
     if (cum[cum.length-1] < 1) return;
     const blocked = pts.map(p => inMid(p.x, p.z));
