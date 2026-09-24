@@ -332,6 +332,9 @@ html.win3 .w3-window [data-settings] + [data-settings] { margin-top:14px; paddin
 html.win3 .w3-window .w3-dialog-body { max-height:calc(100vh - 120px); overflow-y:auto; }
 /* the World window, kept short, scrolling for the rest */
 html.win3 #settings-world .w3-dialog-body { max-height:min(300px, calc(100vh - 120px)); }
+/* one that's been sized by its border (see sizeByBorder in src/ui/w3-window.js): its content fills it, scrolling */
+html.win3 .w3-window.w3-sized:not([hidden]) { display:flex; flex-direction:column; box-sizing:border-box; max-width:none; }
+html.win3 .w3-window.w3-sized .w3-dialog-body { flex:1; min-height:0; max-height:none !important; }
 /* with the side panel hidden, World, Edit and Maps are all let up (see src/ui/win3-menu.js) */
 @media (min-width: 761px) {
   html.win3 body.w3-no-panel #mode-toolbar .tool-btn.active { box-shadow:var(--w3-raised); text-decoration:none; }
