@@ -367,21 +367,33 @@ button.pc-pick:hover { text-decoration:underline; }
 .entity-card .pc-row-loves { border-left:var(--trait-bar) solid var(--trait-loves-bar); }
 .entity-card .pc-row-hates { border-left:var(--trait-bar) solid var(--trait-hates-bar); }
 .entity-card .pc-extra:is(.pc-row-loves, .pc-row-hates) { padding-left:var(--band-x); margin-left:calc(-1*var(--card-pad-x) + var(--trait-frame)); margin-right:calc(-1*var(--band-x)); }
-/* Every love/hate entry has a mark at its right, in a column of fixed width so entries line up whether marked or not:
-   + (Loves green) legendary, - (Hates red) terrible, * (dim) any other entry with modifiers to show in its drop-down.
-   Applies to the row it's the first of (which carries the label) or the little row below (a .pc-extra). Set as
-   data-mark by `set` in src/ui/entity-card.js (see markOf), from `<attribute>Tier`/`<attribute>Mods`. */
-.entity-card :is(.pc-row-loves, .pc-row-hates) .pc-value { display:flex; justify-content:space-between; align-items:baseline; gap:6px; }
+/* Love/hate mark column (fixed width, set as data-mark by markOf in src/ui/entity-card.js): legendary = positive + car
+   icons in Loves green, terrible = negative + car in Hates red, * = identify icon (dim) for other entries with modifiers.
+   Icons are used as masks, so they take the background colour. */
+.entity-card :is(.pc-row-loves, .pc-row-hates) .pc-value { display:flex; justify-content:space-between; align-items:center; gap:6px; }
 .entity-card :is(.pc-row-loves, .pc-row-hates) .pc-value::after {
-  content:attr(data-mark); flex:0 0 12px; text-align:center; font-size:16px; font-weight:700; line-height:1; color:var(--text-dim);
+  content:attr(data-mark); flex:0 0 32px; height:15px; text-align:right; font-size:16px; font-weight:700; line-height:15px; color:var(--text-dim);
 }
-.entity-card .pc-value[data-mark="+"]::after { color:var(--trait-loves-label); }
-.entity-card .pc-value[data-mark="-"]::after { color:var(--trait-hates-label); }
+.entity-card .pc-value:is([data-mark="+"], [data-mark="-"], [data-mark="*"])::after {
+  content:''; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:left, right; mask-position:left, right;
+}
+.entity-card .pc-value[data-mark="*"]::after {
+  background:var(--text-dim); -webkit-mask-image:url(../assets/icons/identify.png); mask-image:url(../assets/icons/identify.png);
+  -webkit-mask-position:right; mask-position:right;
+}
+.entity-card .pc-value[data-mark="+"]::after {
+  background:var(--trait-loves-label);
+  -webkit-mask-image:url(../assets/icons/positive.png), url(../assets/icons/car.png); mask-image:url(../assets/icons/positive.png), url(../assets/icons/car.png);
+}
+.entity-card .pc-value[data-mark="-"]::after {
+  background:var(--trait-hates-label);
+  -webkit-mask-image:url(../assets/icons/negative.png), url(../assets/icons/car.png); mask-image:url(../assets/icons/negative.png), url(../assets/icons/car.png);
+}
 /* Modifier drop-downs under a love/hate entry, floating over the rows below it (see layoutDrops in
    src/ui/entity-card.js, which sets its top and --mod-lines), so the card never resizes. */
 .entity-card { --mod-line:16px; }
 .entity-card .pc-has-mods { cursor:pointer; }
-.entity-card .pc-has-mods:is(:hover, .pc-mods-open) .pc-value[data-mark="*"]::after { color:var(--text); }
+.entity-card .pc-has-mods:is(:hover, .pc-mods-open) .pc-value[data-mark="*"]::after { background:var(--text); }
 .entity-card .pc-body { position:relative; }
 .entity-card .pc-mods {
   position:absolute; z-index:2; box-sizing:border-box;
