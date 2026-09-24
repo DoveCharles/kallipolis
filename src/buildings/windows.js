@@ -35,7 +35,7 @@ export const WINDOW_TILE_WORLD_SIZE = 7; // world units per UV repeat on buildin
 // continuous band of windows; an outline with no sharp corner at all is a single closed loop. Returns, for each
 // edge i (poly[i] → poly[i+1]): u0, the distance along its run where the edge starts; runLen, the run's length
 // (negative for a closed loop); and run, the run's index.
-function computeFacadeRuns(poly) {
+export function computeFacadeRuns(poly) {
   const n = poly.length;
   const lens = [], dirs = [];
   for (let i=0;i<n;i++) {
