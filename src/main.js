@@ -54,6 +54,7 @@ import './ui/pixelation.js';
 import './ui/flat-shading.js';
 import './ui/toon-shading.js';
 import './ui/view-prefs.js';
+import './ui/color-schemes.js';
 import './ui/ped-view.js';
 import './project/export-obj.js';
 import * as THREE from 'three';

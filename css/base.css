@@ -453,7 +453,7 @@ body.no-general-hints #possess-hint > span { display:none; }
 }
 body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none; }
 #loading-screen .ls-bar { width:200px; height:12px; padding:2px; box-sizing:border-box; border:1px solid #000; box-shadow:inset 1px 1px 0 #808080; }
-#loading-screen .ls-fill { width:0; height:100%; background:#000080; }
+#loading-screen .ls-fill { width:0; height:100%; background:var(--w3-title, #000080); }
 /* the two sliders for dialling in the seat inside a train carriage (src/trains/trains.js) */
 #ride-tune {
   position:fixed; top:16px; right:16px; z-index:30; width:180px; padding:10px 12px;

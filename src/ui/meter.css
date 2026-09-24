@@ -118,21 +118,21 @@
 /* in the Windows 3.0 look it's a window like the Splinetopia one, its title bar carrying the instance's own heading
    (see .win3-title in index.html), which opens and closes the details */
 html.win3 .meter {
-  color:#000; border:4px solid transparent; border-radius:0; outline:1px solid #000; box-shadow:inset 0 0 0 1px #000;
+  color:var(--w3-text); border:4px solid transparent; border-radius:0; outline:1px solid var(--w3-frame); box-shadow:inset 0 0 0 1px var(--w3-frame);
   top:17px; right:17px; padding:0 10px 10px;
   /* the frame is painted rather than bordered, so the corner ridges cross it — see --w3-ridges in css/win3.css */
-  background:var(--w3-ridges), linear-gradient(#fff, #fff) padding-box, linear-gradient(var(--w3-face), var(--w3-face)) border-box;
+  background:var(--w3-ridges), linear-gradient(var(--w3-window), var(--w3-window)) padding-box, linear-gradient(var(--w3-edge), var(--w3-edge)) border-box;
 }
 html.win3 .meter .win3-titlebar { margin:0 -10px 8px; }
 html.win3 .meter :is(.meter-title, .meter-toggle) { display:none; }
 html.win3 .meter .meter-head { display:none; }
 html.win3 .meter .meter-readout { margin:0; }
-html.win3 :is(.meter-bar, .meter-details) { border-color:#000; border-radius:0; }
-html.win3 .meter-bar { background:#fff; }
+html.win3 :is(.meter-bar, .meter-details) { border-color:var(--w3-frame); border-radius:0; }
+html.win3 .meter-bar { background:var(--w3-window); }
 html.win3 .meter-center { background:#000; border-radius:0; }
-html.win3 :is(.meter .meter-title, .meter-row:not(.sub)) { color:#000; }
+html.win3 :is(.meter .meter-title, .meter-row:not(.sub)) { color:var(--w3-text); }
 html.win3 .meter-row.sub { color:#404040; }
-html.win3 .meter-notice { background:#fff; border:1px solid #000; border-radius:0; box-shadow:2px 2px 0 #000; font-size:11px; }
+html.win3 .meter-notice { background:var(--w3-window); border:1px solid var(--w3-frame); border-radius:0; box-shadow:2px 2px 0 var(--w3-frame); font-size:11px; }
 /* the black border above is a shorthand, so it also sets border-left-color; these win, being more specific, and also
    thicken that one side to 4px the way the win3 look thickens other borders */
 html.win3 .meter-notice.pos { border-left:4px solid var(--meter-pos); }
