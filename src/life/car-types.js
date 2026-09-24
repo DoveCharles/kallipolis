@@ -18,10 +18,10 @@ const cars = loadTypeText('assets/cars.txt', {
 });
 
 // A vehicle's card details: `design` is its model's name in Cars.glb (null for the plain box car) and `number` its own
-// number among others like it (see designNumbers in traffic.js).
+// number among others like it (see designNumbers in traffic/models.js).
 export const carTypeOf = (design, number = 1) => cars.of(design, number);
 
-// The vanity registrations a vehicle can wear (see carPlate in traffic.js): its type's own `plate` lines, else [default]'s.
+// The vanity registrations a vehicle can wear (see carPlate in traffic/materials.js): its type's own `plate` lines, else [default]'s.
 export const vanityPlatesOf = design => cars.listOf(design, 'plate');
 // How likely it is to wear one: its type's `vanitychance` line, else [default]'s, else never.
 export const vanityChanceOf = design => cars.numberOf(design, 'vanitychance', 0);

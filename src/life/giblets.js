@@ -444,21 +444,21 @@ export function explodeCar(at, height, colors) {
 }
 // Takes a car under at the water's surface: `at` where it went down, `height` how tall it was — no wreckage and no
 // fireball, just its own splash (splashFx) thrown up and out of the water in its place. Call it once per point that
-// should splash (see waterAxleSpots in life/traffic.js, called once per set of wheels for a long vehicle like a bus)
+// should splash (see waterAxleSpots in life/traffic/driving.js, called once per set of wheels for a long vehicle like a bus)
 // rather than passing a size multiplier — that way a bus's splash reads as disturbed water spread along it, not one
 // oversized splash in the middle.
 export function splashCar(at, height) {
   splashFx(at, height);
   playSound('splash', at);
 }
-// An aqua car's wake while it's actually settled on water (see updateFloating in life/traffic.js), called every frame
+// An aqua car's wake while it's actually settled on water (see updateFloating in life/traffic/driving.js), called every frame
 // it's there: a steady trickle of spray and foam over the `dt` seconds since last called, round `at` (its position,
 // `height` tall, `width` wide, `heading` which way it's facing) — the same particles as splashCar's one-off death
 // splash, just far lighter and slower (WAKE_LAUNCH_SHARE), so the water reads as disturbed the whole time it's
 // floating rather than just at the moment it went in or came out. Split evenly across WAKE_SPOTS points along its
 // width (its middle, and both sides out to half its width), so the disturbance reads as coming from all round the
 // car sitting in the water rather than a single point under its centre. As with splashCar, call it once per point
-// along a long vehicle's length that should have its own wake (waterAxleSpots, life/traffic.js) rather than scaling
+// along a long vehicle's length that should have its own wake (waterAxleSpots, life/traffic/driving.js) rather than scaling
 // it up in place.
 export function aquaWake(at, height, width, heading, dt) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
@@ -484,8 +484,8 @@ export function aquaWake(at, height, width, heading, dt) {
   });
 }
 // A boosting aqua car's rooster-tail wake off its back while it's on water, in place of its (disabled) tyre smoke —
-// see boostSmoke in life/traffic.js. `at` is a single point at its very rear (even for a long vehicle like a bus,
-// which keeps this to the one trail off the back, unlike its splash and idling wake — see waterAxleSpots, life/traffic.js),
+// see boostSmoke in life/traffic/driving.js. `at` is a single point at its very rear (even for a long vehicle like a bus,
+// which keeps this to the one trail off the back, unlike its splash and idling wake — see waterAxleSpots, life/traffic/driving.js),
 // `height` how tall it is, `heading` which way it's facing (thrown out backward from that, in a BOOST_WAKE_ARC-wide
 // fan, rather than aquaWake's calmer, all-round trickle) over the `dt` seconds since last called. Bigger and faster
 // than the ordinary wake (BOOST_WAKE_SIZE_SHARE, and its own share of the launch speed) — a boat gunning it throws up

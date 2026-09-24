@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { S } from '../core/shared.js';
 import { computeWindowGlowFactor, lampPostMeshes, litLobbies, refreshSceneIndex } from '../core/scene.js';
 import { controls } from '../core/camera-controls.js';
-import { forEachHeadlight } from '../life/traffic.js';
+import { forEachHeadlight } from '../life/traffic/traffic.js';
 
 // ============================================================ lamp posts and headlights lighting the street
 // A real light per lamp post is one more light in every lit material in the scene, and a street's worth of them would

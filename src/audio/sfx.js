@@ -34,13 +34,13 @@ const SOUNDS = {
     [.7, .2, 300, .01, .05, .2, 4, 1.8, -10, , , , , 1.4, , .3, , .5, .06],
     [.4, .3, 1400, .02, .12, .3, 4, 1, , , , , , .8, , .6, , .3, .12],
   ],
-  // the driven car hitting a car or a wall (see bumpIntoCars and hitBuildings in life/traffic.js): a crunch, and a
+  // the driven car hitting a car or a wall (see bumpIntoCars and hitBuildings in life/traffic/collisions.js): a crunch, and a
   // clang of bent metal ringing under it
   crash: [
     [.6, .1, 80, 0, .04, .3, 4, 1.5, -10, , , , , 1.8, , .35, , .6, .06, , -2500],
     [.45, .1, 700, 0, .02, .4, 1, 2.5, , , , , , .4, 9, , , .3, .15, .3],
   ],
-  // a car hitting someone (see runOverPeople in life/traffic.js): a dull thump
+  // a car hitting someone (see runOverPeople in life/traffic/collisions.js): a dull thump
   thump: [
     [.6, .1, 70, 0, .02, .16, 4, 1, -12, , , , , 1, , , , .5, .05, , -800],
     [.5, .05, 60, 0, .02, .15, 0, 1, -15],

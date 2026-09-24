@@ -1655,7 +1655,7 @@ function lookAtPerson(p) {
 
 /**
  * Whether this person is walking over a road (see updateCrossing) — treated like someone standing in the middle of it
- * ('mid') by checkYield in traffic.js: out on the live lanes, not on a sidewalk.
+ * ('mid') by checkYield in life/traffic/lanes.js: out on the live lanes, not on a sidewalk.
  * @param {Person} p - the person
  * @returns {boolean} whether they're in the road
  */

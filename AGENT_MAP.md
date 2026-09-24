@@ -35,7 +35,7 @@ Format: `file` (size) purpose — key exports.
 - `dictionary.js` (5K) Now and then someone talking near the camera says something real in among their babble (see audio/voices.js): — exports: sayLine, lineMouth, stopLine
 - `eating.js` (2K) What a meal sounds like (see the Eating clip in life/people/peopleModel.js, whose cues people.js plays as they come round): — exports: eatingSound
 - `engine-voice.js` (9K) The sound of one engine, apart from which car it's in or where (engine.js hands these out to the cars near the camera, and tools/engine.html plays the… — exports: KINDS, kindOfDesign, makeEngineVoice, setEngineKind, setEngineVoice
-- `engine.js` (5K) The engines of the cars near the camera (see updateTraffic in life/traffic.js), each an engine voice (engine-voice.js) of the kind its design has: — exports: trafficNearby, updateEngines
+- `engine.js` (5K) The engines of the cars near the camera (see updateTraffic in life/traffic/traffic.js), each an engine voice (engine-voice.js) of the kind its design has: — exports: trafficNearby, updateEngines
 - `footsteps.js` (2K) A scuff for each footfall of anyone walking near the camera (see the walk cycle in life/people/people.js): — exports: footstep
 - `maglev.js` (11K) The shuttles gliding through their solenoid tubes (see updateTrainShuttles in trains/trains.js), which ought to sound like nothing on the roads: — exports: doorSwish, updateShuttleSounds
 - `melodies.js` (1K) The tune someone talks in, the same every time they open their mouth, babble or real words alike (see audio/voices.js and audio/speech.js) — as Tomoda… — exports: MELODIES, melodyOf
@@ -75,7 +75,7 @@ Format: `file` (size) purpose — key exports.
 
 ### src/life/
 - `bees.js` (54K, **big**)  — exports: beeName, hiveName, loadBeeModel, beeThumbnailScene, hiveThumbnailScene, plantParkLife, updateBees
-- `car-card.js` (4K) Who's behind the wheel, in a card at the bottom right while the camera follows a vehicle (see "following a car" in traffic.js):
+- `car-card.js` (4K) Who's behind the wheel, in a card at the bottom right while the camera follows a vehicle (see "following a car" in traffic/follow.js):
 - `car-types.js` (1K) Each type of vehicle's name, mood, and what it loves and hates, for its card (car-card.js) — from assets/cars.txt, to be edited freely: — exports: carTypeOf, vanityPlatesOf, vanityChanceOf
 - `car-wrecks.js` (25K) What's left of a vehicle that blows up: — exports: CAR_GRID, buildCarWreck, buildCraftWreck, throwWreck, throwCarWreck, updateCarWrecks
 - `flight.js` (13K) The flying model shared by everything the player can take the controls of in the air (an aircraft in zones/airport.js, a bee in life/bees.js): — exports: stepFlight, touchdownBounce, makeHand, cruiseSpeed, chaseBehind, autopilot
@@ -85,7 +85,22 @@ Format: `file` (size) purpose — key exports.
 - `possession.js` (12K) Taking over whoever or whatever the camera's following, from its card — the keys held, the mouse, and the note across the top of the view saying how t… — exports: possession, driving, flying, riding, startPossession, endPossession, startDriving, endDriving …
 - `profiles.js` (7K) Everyone in the crowd has a name, an age, a mood, and loves and hates, picked from assets/people.txt. — exports: DEFAULT_TRAITS, profilesVersion, onProfilesLoaded, profileOf
 - `thumbnail.js` (3K) Still pictures for the car and train cards. — exports: makeThumbnailDrawer
-- `traffic.js` (156K, **big**)  — exports: loadCarModels, updateTraffic, forEachHeadlight, carThumbnailScene
+- `traffic.js` (<1K) Stub re-exporting `traffic/traffic.js`; nothing imports it. Safe to delete.
+
+### src/life/traffic/
+Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, life/car-card.js); siblings import each other. `state.js` imports no siblings, so anything read while modules load lives there.
+- `traffic.js` (15K) Overview of how cars work; the per-frame update and the App hooks. — exports: updateTraffic, carHitboxDebugMesh; re-exports loadCarModels, forEachHeadlight, carThumbnailScene
+- `state.js` (2K) Shared settings and state: limits, speeds, paint palette, `cars`, `trafficRng`. — exports: TRAFFIC_MAX, CAR_SPEED, TRAFFIC_LANE_PER_CAR, PED_YIELD_RADIUS, TURN_SAFE_ANGLE, CAR_PAINTS, cars, trafficRng
+- `models.js` (15K) The box car and the Cars.glb designs, and a car's paint. — exports: loadCarModels, carParts, carMeshes, designNumbers, pickCarPaint, BOX_CAR_LENGTH …
+- `materials.js` (27K) Number plates and the car shader (plates, legendary sheen, rust); each design's instanced mesh. — exports: carPlate, carHoloTimeUniform, makeCarMesh
+- `lanes.js` (22K) Lanes from road lines (buildTrafficNav), routes and junction curves, spawning, driving along, yielding. — exports: buildTrafficNav, newCar, spawnCar, reseatCar, routePoint, lanePoint, driveAlong, junctionAhead, checkYield, carsNearby, carsWhere …
+- `turns.js` (5K) Dead ends: how many cars a stretch takes, and picking or waiting for a turn. — exports: pickTurn, waitToTurn, planFor, stretchCounts, stretchOf
+- `spacing.js` (10K) Keeping clear of other cars: the car grid, gap ahead, who goes first. — exports: buildCarGrid, forCarsNear, gapAhead, waitOrGiveUp, uTurnBlocked, spotTaken, carsOverlap …
+- `placing.js` (10K) Drawing a car: wheels, sway, its instance (placeCar); its size, engine and headlights. — exports: placeCar, turnWheels, carScale, carLength, carWidth, carHeight, carModelOf, engineOf, forEachHeadlight, turnCar …
+- `driving.js` (17K) The driven car: keys, boost, and water (sinking, climbing back out, aqua floating). — exports: drivenCar, driveCar, stopDriving, driveByHand, sinkCar, riseCar, goingUnder, boostEnergyMax, boostSmoke …
+- `collisions.js` (29K) What a car hits: people, aircraft, buildings, other cars; fuses and kicks. — exports: carHitbox, runOverPeople, strikeWithAircraft, hitBuildings, bumpIntoCars, burnFuse, stepKick, seatKickedCar, wreckedCars …
+- `special.js` (6K) Legendary sheen/sparkles and terrible rust/hops. — exports: updateSpecialTraits, TERRIBLE_RUST, DEFAULT_HOLO
+- `follow.js` (9K) The followed car (camera, card, thumbnail) and taking a car out (kill, drown, smite). — exports: followedCar, pickCar, followCar, stopFollowingCar, chaseCamera, killCar, drownCar, smiteCar, carThumbnailScene …
 
 ### src/life/people/
 - `bodySplit.js` (9K) Splits the person model's one body mesh into the parts it comes apart into when they die (see peopleGibs.js). — exports: BODY_PARTS, splitBody

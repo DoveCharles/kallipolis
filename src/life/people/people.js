@@ -330,7 +330,7 @@ scene.add(peopleMesh);
 
 // Debug wireframes (World → Peds → Roadsafety radius (debug)): a sphere around each person showing how far they check for
 // traffic before crossing (see ROADSAFETY_RADIUS below), and a box around them showing the hitbox a car's run-over check
-// uses (see runOverPeople in traffic.js) — off by default, and only kept up to date while the toggle's on.
+// uses (see runOverPeople in life/traffic/collisions.js) — off by default, and only kept up to date while the toggle's on.
 export const roadsafetyDebugMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0x3ddc97, wireframe: true, transparent: true, opacity: 0.35 }), PEOPLE_MAX);
 roadsafetyDebugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 roadsafetyDebugMesh.count = 0;
@@ -519,7 +519,7 @@ function standingOf(p) {
 /**
  * How the people around someone take their death: an innocent's leaves them horrified, a bad sort's stops them in
  * their tracks, and a villain's delights them. Called for every death, whoever caused it — the Smite button, or a car
- * running them over (see runOverPeople in traffic.js) — so any way an NPC dies is reacted to the same.
+ * running them over (see runOverPeople in life/traffic/collisions.js) — so any way an NPC dies is reacted to the same.
  * @param {Person} victim - whoever was killed
  * @returns {void}
  */
@@ -699,7 +699,7 @@ function benchPerson(i) {
 }
 /**
  * Whether this person is walking over a road (see updateCrossing) — treated like someone standing in the middle of it
- * ('mid') by checkYield in traffic.js: out on the live lanes, not on a sidewalk.
+ * ('mid') by checkYield in life/traffic/lanes.js: out on the live lanes, not on a sidewalk.
  * @param {Person} p - the person
  * @returns {boolean} whether they're in the road
  */

@@ -292,7 +292,7 @@ function buildWreck(name, body, grid, wheel = null, hubs = []) {
 
 /**
  * Cut a car design's wreck out of its geometry.
- * @param {THREE.BufferGeometry} source - the design's geometry (see buildCarDesigns in traffic.js): carSlot, carColor
+ * @param {THREE.BufferGeometry} source - the design's geometry (see buildCarDesigns in traffic/models.js): carSlot, carColor
  *   and carWheel per vertex, its opaque triangles as draw group 0
  * @param {number} paintSlot - the carSlot value of the paint
  * @param {string} name - the design's name

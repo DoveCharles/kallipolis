@@ -1,5 +1,5 @@
 import { App } from '../core/shared.js';
-import { carThumbnailScene } from './traffic.js';
+import { carThumbnailScene } from './traffic/traffic.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
 import { garbles, garbled } from '../ui/garble.js';
@@ -7,7 +7,7 @@ import { hashNameToNumber } from '../core/math.js';
 
 // ============================================================ car card
 // Who's behind the wheel, in a card at the bottom right while the camera follows a vehicle (see "following a car" in
-// traffic.js): its name (its type's and a number of its own, among others like it — see designNumbers in traffic.js), its
+// traffic/follow.js): its name (its type's and a number of its own, among others like it — see designNumbers in traffic/models.js), its
 // mood, and what it loves and hates — all from assets/cars.txt, by its type (see car-types.js). The card itself is the
 // shared one in ui/entity-card.js.
 let shown = -1; // whoever the card is showing, for its thumbnail and its Smite button
@@ -15,9 +15,9 @@ const card = makeCard({
   id: 'car-card',
   title: 'Vehicle',
   onClose: () => App.stopFollowingCar(),
-  // the thumbnail itself: behind the wheel (see "driving a car" in traffic.js)
+  // the thumbnail itself: behind the wheel (see "driving a car" in traffic/driving.js)
   thumb: { title: 'Drive it', onClick: () => { if (shown >= 0) App.driveCar(shown); } },
-  // the Smite button, under the thumbnail: lightning strikes it and it blows up on the spot (see smiteCar in traffic.js), and the card goes
+  // the Smite button, under the thumbnail: lightning strikes it and it blows up on the spot (see smiteCar in traffic/follow.js), and the card goes
   kill: { title: 'Strike it down', onClick: () => { if (shown >= 0) App.smiteCar(shown); } },
 });
 
@@ -47,7 +47,7 @@ function drawCarThumbnail(i) { drawThumbnail(carThumbnailScene(i)); } // (no thu
 // A vertical gauge (.meter.meter-vertical, src/ui/meter.css) grouped with the card by sitting right against its left
 // edge (see #car-boost-meter in css/base.css), shown and hidden alongside it above. No .meter-center: unlike the morality
 // meter it has nothing to call "neutral" to mark, just 0 upward.
-// Driven by the car's own energy trait, in seconds of boost it has to spend (see boostEnergyMax in traffic.js):
+// Driven by the car's own energy trait, in seconds of boost it has to spend (see boostEnergyMax in traffic/driving.js):
 // setCarBoost below is called from there — once when the card opens (showing whatever level the car already has) and
 // then every frame it's actually driven, as it's spent holding run.
 const boostMeter = document.createElement('div');
@@ -65,7 +65,7 @@ document.body.append(boostMeter);
 const boostFill = boostMeter.querySelector('.meter-fill');
 const boostValue = boostMeter.querySelector('.meter-value');
 /**
- * Show how much boost a car has left: `energy` of `max` seconds (see boostEnergyMax, traffic.js), as a fraction filling
+ * Show how much boost a car has left: `energy` of `max` seconds (see boostEnergyMax, traffic/driving.js), as a fraction filling
  * the gauge bottom-to-top and the seconds themselves, to one decimal place, below it.
  * @param {number} energy - seconds of boost left
  * @param {number} max - seconds of boost it started with

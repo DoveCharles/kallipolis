@@ -673,7 +673,7 @@ export function walkAlong(p, dist) {
 //   enough left to get over and nothing still moving across it, then 'jcross' over
 // - anywhere else: 'jwalk' to the curb, 'curb' checking for traffic (giving up after a while), 'half1' to the middle,
 //   'mid' checking again, 'half2' the rest of the way — straight out once a car has stopped to let them over, and with no
-//   car able to hit them until they are off the road (jc.waved, checkYield in traffic.js)
+//   car able to hit them until they are off the road (jc.waved, checkYield in life/traffic/lanes.js)
 /** How far someone checks for traffic before crossing, how long they'll wait at a curb, and the chance and pace of a crossing. */
 export const ROADSAFETY_RADIUS = 14, CROSS_CURB_TIMEOUT = 10, CROSS_DECIDE_CHANCE = 0.15, CROSS_SPEED_MULT = 1.6;
 

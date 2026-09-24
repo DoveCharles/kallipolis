@@ -5,7 +5,7 @@ import { IS_TOUCH } from '../core/device.js';
 
 // ============================================================ taking control
 // Taking over whoever or whatever the camera's following, from its card — the keys held, the mouse, and the note across
-// the top of the view saying how to stop; people.js and traffic.js do the walking, the driving and the camera from what's
+// the top of the view saying how to stop; people.js and traffic/ do the walking, the driving and the camera from what's
 // here. Esc lets go, leaving the camera following as before; anything that stops the camera following lets go too.
 // Either way the mouse looks around — the pointer locked to the view while it does, or dragged, where the browser won't
 // lock it (Esc also frees a locked pointer, which is taken as Esc).

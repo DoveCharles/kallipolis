@@ -1184,7 +1184,7 @@ export function updateTrainShuttles(t) {
   placeRidingCamera();
 }
 
-// ---- following a carriage with the camera: just like a car (see "following a car" in traffic.js) — a click on one in
+// ---- following a carriage with the camera: just like a car (see "following a car" in life/traffic/follow.js) — a click on one in
 // World mode keeps the view on it, with a card (built above) naming it — Train #n, by its line's place among them —
 // until a click elsewhere, leaving World mode, or its line being deleted lets it go. Unlike a car, it can't be killed.
 let followedTrain = null; // the followed carriage's line id, which survives the train meshes being rebuilt
@@ -1206,7 +1206,7 @@ function showFollowedTrainCard() {
   trainCard.setFavorite({ key: 'train:' + lineId, kind: 'Train', follow: () => followTrainLine(lineId) });
 }
 // The card's thumbnail: a copy of the carriage (sharing its geometry and materials), sitting level at the origin, and an
-// isometric camera framing it — as for a car (see makeCarThumbnail in traffic.js).
+// isometric camera framing it — as for a car (see makeCarThumbnail in life/traffic/materials.js).
 function trainThumbnailOf(shuttle) {
   const mesh = shuttle.clone();
   mesh.position.set(0, 0, 0); mesh.quaternion.identity(); mesh.visible = true;

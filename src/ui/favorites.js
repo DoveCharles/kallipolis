@@ -15,7 +15,7 @@ import { App, S } from '../core/shared.js';
 // An entry that `spares` its thing takes the Smite button off its card while it's hearted (see ui/entity-card.js).
 //
 // A hearted person is kept: never let go of when the crowd thins (see updatePeople in life/people/people.js), and never
-// killed, by a car or anything else (killPerson, and runOverPeople in life/traffic.js, which knocks them down instead).
+// killed, by a car or anything else (killPerson, and runOverPeople in life/traffic/collisions.js, which knocks them down instead).
 const favorites = new Map();
 const listeners = [];
 

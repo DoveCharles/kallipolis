@@ -3,7 +3,7 @@ import { listener, outdoors } from './sfx.js';
 import { makeEngineVoice, setEngineKind, setEngineVoice, kindOfDesign } from './engine-voice.js';
 
 // ============================================================ engines
-// The engines of the cars near the camera (see updateTraffic in life/traffic.js), each an engine voice (engine-voice.js)
+// The engines of the cars near the camera (see updateTraffic in life/traffic/traffic.js), each an engine voice (engine-voice.js)
 // of the kind its design has: a four-pot for an ordinary car, a V8 for a pickup, a diesel for a bus. The revs rise
 // through each gear's GEAR_SPEED and drop back at the change up, when the throttle lifts for a moment (SHIFT_TIME), so it
 // goes through the gears as it speeds up. A bigger car's engine is lower, and every car's a little different.
