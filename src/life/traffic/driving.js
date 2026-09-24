@@ -1,7 +1,7 @@
 import { S, App } from '../../core/shared.js';
 import { Y_ROAD } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
-import { getVisibleWaterRegion, WATER_LEVEL } from '../../water/water.js';
+import { isOpenWater, WATER_LEVEL } from '../../water/water.js';
 import { splashCar, aquaWake, boostWake, puffSmoke, tyreSmoke, engineSmoke } from '../giblets.js';
 import { controlInput, startDriving, endDriving } from '../possession.js';
 import { STALL_SMOKE_EVERY, bumpIntoCars, hitBuildings, runOverPeople, seatKickedCar } from './collisions.js';
@@ -110,27 +110,24 @@ export function driveByHand(car, dt) {
   hitBuildings(car, was, dt);
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
   if (car.traits?.aqua) updateFloating(car, dt);
-  else if (overOpenWater(car.x, car.z)) car.sinking = { drop: car.sinking?.drop ?? 0, fall: 0, pitch: car.sinking?.pitch ?? 0, under: false }; // (carries on from a part-risen car's own drop and pitch)
+  else if (overOpenWater(car.x, car.z)) startSinking(car);
 }
 // ---- the driven car in the water: driven off the land (or off the side of a bridge) and over water — a water zone or a
 // river — it drops through the surface, nose first, carried on a little by its speed, and blows up once it's under
 const SINK_GRAVITY = 20, SINK_DRAG = 1.5, SINK_PITCH = 0.7, SINK_PITCH_RATE = 2.5; // (units a second squared; the share of its speed the water takes each second; how far its nose goes down, in radians, and how fast)
-let openWater = { region: null, roads: null, inWater: null, onRoad: null };
 /**
- * Whether a point is over water with no road across it to hold a car up: in the visible water (water zones and rivers,
- * less beach slope above the waterline — getVisibleWaterRegion), and not on the road footprint (a bridge's deck,
- * sidewalks and all). Only the car's centre is tested, so it goes in once that's past the edge. The two region
- * testers are rebuilt whenever either region is.
+ * Whether a point is over open water for a car: in the visible water with no road across it (a bridge's deck, sidewalks
+ * and all) to hold it up. Only a car's centre is tested, so it goes in once that's past the edge.
  * @param {number} x
  * @param {number} z
  * @returns {boolean}
  */
-function overOpenWater(x, z) {
-  const region = getVisibleWaterRegion(), roads = S.roadFootprint;
-  if (!region.length) return false;
-  if (openWater.region !== region || openWater.roads !== roads)
-    openWater = { region, roads, inWater: App.createRegionTester(region), onRoad: App.createRegionTester(roads) };
-  return openWater.inWater(x, z) && !openWater.onRoad(x, z);
+export function overOpenWater(x, z) {
+  return isOpenWater(x, z, [S.roadFootprint]);
+}
+/** Start a car going down (see sinkCar), carrying on from a part-risen one's own drop and pitch. */
+export function startSinking(car) {
+  car.sinking = { drop: car.sinking?.drop ?? 0, fall: 0, pitch: car.sinking?.pitch ?? 0, under: false };
 }
 // Where a car's water particles (splashCar, aquaWake) should come from: one point at its centre for an ordinary car,
 // short enough that a single spot reads fine — but a bus is long enough that one point there just looks like an
@@ -170,7 +167,7 @@ const FLOAT_LAND_SMOKE_PUFFS = 6; // dust puffs (puffSmoke, life/giblets.js) the
  * @param {number} dt - seconds this frame
  * @returns {void}
  */
-function updateFloating(car, dt) {
+export function updateFloating(car, dt) {
   const goal = overOpenWater(car.x, car.z) ? 1 : 0, height = carHeight(car), spots = waterAxleSpots(car);
   if (goal === 1 && !car.floatWasWet) { spots.forEach(spot => splashCar({ x: spot.x, y: WATER_LEVEL, z: spot.z }, height)); car.floatWasWet = true; }
   else if (goal === 0) car.floatWasWet = false;

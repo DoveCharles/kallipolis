@@ -7,7 +7,7 @@ import { placeKey, signalState } from '../../roads/markings.js';
 import { updateEngines } from '../../audio/engine.js';
 import { carTypeOf } from '../car-types.js';
 import { BLAST_THROW, DETONATION_REACH, burnFuse, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
-import { driveByHand, driveCar, drivenCar, goingUnder, riseCar, sinkCar, stopDriving } from './driving.js';
+import { driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
 import { chaseCamera, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
 import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
 import { carHoloTimeUniform, carPlate } from './materials.js';
@@ -116,6 +116,7 @@ export function updateTraffic(t) {
     if (car.design != null) refreshCarTraits(car);
     if (car === drivenCar) { if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
     if (car.fuse != null) { burnFuse(car, dt); placeCar(car, i, designCounts); return; } // (about to blow: it neither drives nor turns)
+    if (goingUnder(car)) { sinkKnockedCar(car, dt); turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
     let target = cruise;
@@ -180,6 +181,8 @@ export function updateTraffic(t) {
       car.x = front.x - back*Math.sin(car.heading);
       car.z = front.z - back*Math.cos(car.heading);
     }
+    if (car.kick || car.floatDrop > 0) knockedIntoWater(car, knocked, dt);
+    if (car.sinking?.rising) riseCar(car, dt);
     const lane = lanePoint(car), offLane = Math.abs(Math.atan2(Math.sin(lane.heading - car.heading), Math.cos(lane.heading - car.heading)));
     if (knocked && Math.hypot(knocked.x, knocked.z) > 0.3) runOverPeople(car, knocked);
     else if (car.speed > 0.3 && offLane < TURN_SAFE_ANGLE) runOverPeople(car);
@@ -197,6 +200,7 @@ export function updateTraffic(t) {
   burntOut.forEach(car => forCarsNear(car.x, car.z, reach, other => { if (Math.hypot(other.x - car.x, other.z - car.z) <= reach) blasted.add(other); }));
   if (drivenCar && blasted.has(drivenCar)) { const driven = drivenCar; stopDriving(); blasted.add(driven); } // (the driver is thrown out of it, and it goes too)
   blasted.forEach(car => { const i = cars.indexOf(car); if (i >= 0) killCar(i); });
+  for (let i = cars.length - 1; i >= 0; i--) if (cars[i] !== drivenCar && cars[i].sinking?.under) drownCar(i); // (knocked in and gone under)
   if (drivenCar?.sinking?.under) { const driven = drivenCar, at = { x: driven.x, z: driven.z }; stopDriving(); Object.assign(driven, at); drownCar(cars.indexOf(driven)); } // (gone under: it sinks away quietly, with a splash, rather than blowing up)
   updateEngines(cars, drivenCar, engineOf, dt);
   carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
@@ -217,4 +221,33 @@ export function updateTraffic(t) {
   if (followedCar >= 0) { const car = cars[followedCar]; controls.goalTarget.set(car.x, Y_ROAD + carHeight(car)*(drivenCar ? 1.1 : 0.6), car.z); }
   if (drivenCar) chaseCamera(drivenCar);
 }
+/**
+ * A car knocked off its lane (car.kick), each frame: floated if it has the aqua trait (updateFloating, which also lets
+ * a floated car settle back once it's on the road again), else sent down (startSinking) once its centre is over open
+ * water — carried on along its heading at the speed the knock left it going that way.
+ * @param {object} car
+ * @param {?{x: number, z: number}} knocked - how the knock is moving it, from stepKick
+ * @param {number} dt
+ * @returns {void}
+ */
+function knockedIntoWater(car, knocked, dt) {
+  if (car.traits?.aqua) { updateFloating(car, dt); return; }
+  if (!car.kick || goingUnder(car) || !overOpenWater(car.x, car.z)) return;
+  startSinking(car);
+  car.speed = knocked ? knocked.x*Math.sin(car.heading) + knocked.z*Math.cos(car.heading) : 0;
+  Object.assign(car.kick, { vx: 0, vz: 0, speed: 0, driving: 0 });
+}
+/**
+ * One frame of a knocked car going down (sinkCar), its knock's offset from its route moved with it, so that if it's
+ * carried back over land (sinking.rising) it carries on from there, climbing out and driving back to its lane.
+ * @param {object} car
+ * @param {number} dt
+ * @returns {void}
+ */
+function sinkKnockedCar(car, dt) {
+  const x = car.x, z = car.z;
+  sinkCar(car, dt);
+  if (car.kick) { car.kick.x += car.x - x; car.kick.z += car.z - z; car.kick.heading = car.heading; }
+}
+
 Object.assign(App, { pickCar, followCarAt, followCar, stopFollowingCar, driveCar, stopDriving, killCar, smiteCar, strikeWithAircraft, carsNearby, carsWhere });

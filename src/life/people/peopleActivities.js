@@ -659,8 +659,8 @@ function bystandersReactToPunch(victim, puncher) {
   });
 }
 
-/** The modes whose people can't be knocked over: anyone dead, not yet placed, out of sight or on a train. */
-const UNREACHABLE_MODES = ['dead', 'none', 'indoors', 'train'];
+/** The modes whose people can't be knocked over: anyone dead, not yet placed, out of sight, on a train or drowned. */
+const UNREACHABLE_MODES = ['dead', 'none', 'indoors', 'train', 'drowning'];
 /**
  * Whether someone can be knocked over by a blow they didn't see coming: anyone in view, the one being controlled included,
  * whatever they're in the middle of or feeling (walking, leaving a plaza, sitting, chatting, lying down, crossing a road, frightened, stunned,
@@ -668,7 +668,7 @@ const UNREACHABLE_MODES = ['dead', 'none', 'indoors', 'train'];
  * @param {Person} q - the person
  * @returns {boolean} whether a blow would land
  */
-export const canBeKnockedOver = q => !UNREACHABLE_MODES.includes(q.mode) && (!q.punched || q.punched.stage === 'marked' || q.punched.stage === 'brace');
+export const canBeKnockedOver = q => !UNREACHABLE_MODES.includes(q.mode) && !q.water && (!q.punched || q.punched.stage === 'marked' || q.punched.stage === 'brace');
 
 /**
  * Knock someone over as if they'd been punched, by whatever is at `from` ({ x, z }): flat on their back, facing it, out

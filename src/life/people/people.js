@@ -22,6 +22,7 @@ import { MELODIES } from '../../audio/melodies.js';
 import { favoritePeople, isFavoritePerson } from '../../ui/favorites.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
+import { holdDrowned, inWater, turnInWater, updateWater } from './peopleWater.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { followPersonAt, followPerson, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
@@ -678,6 +679,24 @@ function killPerson(i, by = 'player', momentum = null, throwScale = 1) {
   bloodBurst(p, momentum); // (whoever's near, or in the way of what killed them, is splashed)
 }
 /**
+ * Count someone who's drowned (see peopleWater.js) once their body has sunk away: the morality notice, the people around
+ * taking it as they would any death, and gone from the crowd — as killPerson, without the blood or giblets.
+ * @param {number} i - their index in people
+ * @returns {void}
+ */
+export function drownedPerson(i) {
+  const p = people[i];
+  App.recordMoralityEvent?.(`${standingOf(p)} peds killed by player`, p.name);
+  if (followed === i) stopFollowingPerson();
+  if (awaited === i) setAwaited(-1);
+  bystandersReactToDeath(p);
+  p.water = null;
+  p.mode = 'dead';
+  p.train = null;
+  p.indoors = null;
+  p.moving = false;
+}
+/**
  * Take someone out of the crowd without killing them, for a crowd thinned past them that has to reach further on for
  * someone hearted: out of sight, as the dead are (so everything that passes over the dead passes over them), until the
  * crowd grows back over them and they're spawned again (see updatePeople).
@@ -806,6 +825,7 @@ export function updatePeople(t) {
   const lyingDown = people.filter(q => q.punched && q.punched.stage !== 'marked' && q.punched.stage !== 'brace');
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   people.forEach((p, i) => {
+    const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
     if (p.blood) updateBlood(p, dt, i);
@@ -823,7 +843,8 @@ export function updatePeople(t) {
     const frozen = (!!p.fright && p.fright.stage === 'look')
                 || (!!p.stun && p.stun.stage === 'held')
                 || (!!p.please && p.please.stage === 'held')
-                || (!!p.punched && p.punched.stage !== 'marked'); // (braced for a punch, knocked down, or getting up)
+                || (!!p.punched && p.punched.stage !== 'marked') // (braced for a punch, knocked down, or getting up)
+                || inWater(p); // (going into the water, or drowned: see peopleWater.js)
     const fleeing = !!p.fright && p.fright.stage === 'flee';
     // pleased: looking at it and then held still, beaming. The same 'look' and 'held' stages as stun — the ones
     // updatePeople freezes them on — read as delight rather than shock, below.
@@ -957,6 +978,7 @@ export function updatePeople(t) {
         goal = { x: f.x + dx/len*(clearance + 0.3), y: goal.y, z: f.z + dz/len*(clearance + 0.3) };
       }
     }
+    if (inWater(p)) goal = null; // (the water has them: see peopleWater.js)
     // walk towards where they should be — faster if they've fallen behind (cutting across at a junction, say)
     p.moving = false;
     p.stepped = 0;
@@ -983,6 +1005,7 @@ export function updatePeople(t) {
       }
       p.y += (goal.y - p.y)*Math.min(1, dt*6);
     }
+    updateWater(p, i, dt, wasX, wasZ); // (over open water, they go in: see peopleWater.js)
     // possessed, they face the way they're looking — the walk played backwards, stepping backwards
     if (possessed && !frozen) {
       p.heading = possession.yaw;
@@ -1035,7 +1058,8 @@ export function updatePeople(t) {
       const offX = blend('pelvisX')*s, offZ = blend('pelvisZ')*s, sin = Math.sin(p.heading), cos = Math.cos(p.heading);
       p.heightScale = blend('heightScale');
       rotation.setFromAxisAngle(up, p.heading);
-      position.set(p.x - offX*cos - offZ*sin, p.y + p.seatLift*sitWeight(p) - personModel.minY*s, p.z + offX*sin - offZ*cos);
+      const faceDown = turnInWater(p, rotation); // (tipped, rocked or face down in the water: see peopleWater.js)
+      position.set(p.x - offX*cos - offZ*sin, faceDown ? p.y : p.y + p.seatLift*sitWeight(p) - personModel.minY*s, p.z + offX*sin - offZ*cos);
       matrix.compose(position, rotation, scale.set(s, s, s));
       personModel.mesh.setMatrixAt(i, matrix);
       // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION
@@ -1111,6 +1135,7 @@ export function updatePeople(t) {
       animArray[o+2] = p.fade;
       animArray[o+3] = p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0;
       lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
+      if (p.water?.drowned) holdDrowned(o, animArray, lookArray); // (still, face down: see peopleWater.js)
       const eyesArray = personModel.eyes.array;
       for (let k=0;k<4;k++) eyesArray[o + k] = p.eyes[k];
       // the copies everything they wear (hair, glasses, a skirt) keeps of where they are, how they're posed and which way they're looking
@@ -1125,6 +1150,7 @@ export function updatePeople(t) {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
       const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;
       rotation.setFromAxisAngle(up, p.heading);
+      turnInWater(p, rotation);
       if (!isDrawn(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
       matrix.compose(position.set(p.x, p.y + bob, p.z), rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);

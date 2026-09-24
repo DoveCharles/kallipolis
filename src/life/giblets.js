@@ -207,7 +207,7 @@ const flightTime = vy0 => 2*vy0/SPLASH_GRAVITY;
 // surface rather than erupting every frame. Thrown from WAKE_SPOTS points round the car (its middle and both sides),
 // each an equal share of the totals below, so the water visibly disturbs all along its length, not just at its centre.
 const WAKE_LAUNCH_SHARE = 0.35, WAKE_SPRAY_PER_SECOND = 30, WAKE_FOAM_PER_SECOND = 14, WAKE_SPOTS = 3;
-function splashFx(at, height) {
+function splashFx(at, height, mist = true) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   const now = performance.now()/1000;
   for (let k=0;k<36;k++) { // (fine spray — a short, contained pop up and out, then snapping back down under the heavy gravity)
@@ -224,6 +224,7 @@ function splashFx(at, height) {
       size: height*FOAM_SIZE*(0.15 + Math.random()*0.24), life: flightTime(vy0) + 0.2 + Math.random()*0.2,
       color: new THREE.Color().lerpColors(FOAM_DARK, FOAM_LIGHT, Math.random()), born: now });
   }
+  if (!mist) return;
   for (let k=0;k<16;k++) { // (a low ring of white spray mist round the splash — ordinary priority, same as any other smoke)
     const angle = Math.random()*Math.PI*2, outward = 0.6 + Math.random()*2.6;
     pushFx({ kind: 'smoke', x: at.x, y: at.y + height*0.05, z: at.z,
@@ -450,6 +451,11 @@ export function explodeCar(at, height, colors) {
 export function splashCar(at, height) {
   splashFx(at, height);
   playSound('splash', at);
+}
+// Water thrown up by something coming up out of it (see surfacing and climbOut in life/people/peopleWater.js): the spray
+// and foam of splashCar, without its mist or its sound.
+export function splashUp(at, height) {
+  splashFx(at, height, false);
 }
 // An aqua car's wake while it's actually settled on water (see updateFloating in life/traffic/driving.js), called every frame
 // it's there: a steady trickle of spray and foam over the `dt` seconds since last called, round `at` (its position,
