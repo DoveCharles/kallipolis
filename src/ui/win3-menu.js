@@ -32,7 +32,7 @@ function toggleFullScreen() {
 }
 // the mode tabs along the top of the panel (World, Edit, Maps), and the Paths/Zones/Objects row under Edit
 // (the second row only shows in Edit, so its items are greyed out elsewhere)
-const tab = (sel, enabled = () => true) => ({ enabled, radio: () => document.querySelector(sel).classList.contains('active'),
+const tab = (sel, enabled = () => true) => ({ enabled, radio: () => panelShown() && document.querySelector(sel).classList.contains('active'),
   run: () => { setShown('w3-no-panel', true); document.querySelector(sel).click(); } });
 const inEdit = () => $('entity-toolbar').style.display !== 'none';
 
@@ -108,7 +108,7 @@ const MENUS = [
     { label:'Zones', key:'z', ...tab('#entity-toolbar [data-entity=zone]', inEdit) },
     { label:'Objects', key:'o', ...tab('#entity-toolbar [data-entity=objects]', inEdit) },
     '-',
-    { label:'Side Panel', key:'s', check:panelShown, run:() => setShown('w3-no-panel', !panelShown()) },
+    { label:'Side Panel', key:'s', check:panelShown, run:togglePanel },
     { label:'Toolbar', key:'t', check:toolsShown, run:() => setShown('w3-no-tools', !toolsShown()) },
     { label:'Favorites', key:'f', check:() => !$('favorites-panel').hidden, run:() => { setShown('w3-no-tools', true); $('btn-favorites').click(); } },
     '-',
@@ -139,7 +139,7 @@ const MENUS = [
 // the control-menu box at the left of the title bar
 const CONTROL = { items:[
   { label:'Restore', key:'r', enabled:() => !!document.fullscreenElement, run:toggleFullScreen },
-  { label:'Minimize', key:'n', enabled:panelShown, run:() => setShown('w3-no-panel', false) },
+  { label:'Minimize', key:'n', enabled:panelShown, run:hidePanel },
   { label:'Maximize', key:'x', enabled:() => !document.fullscreenElement, run:toggleFullScreen },
   '-',
   { label:'Close', key:'c', run:press('s-win3') },
@@ -151,7 +151,7 @@ const labelHTML = (label, key) => { const i = label.toLowerCase().indexOf(key); 
 // ---- the window itself
 const frame = document.createElement('div');
 frame.id = 'app-frame';
-frame.innerHTML = `<div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Splinetopia</div><button class="win3-min" title="Hide the side panel"></button><button class="win3-max" title="Full screen"></button></div><div id="w3-menubar" role="menubar"></div>`;
+frame.innerHTML = `<div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Splinetopia</div><button class="win3-min" title="Hide or show the side panel"></button><button class="win3-max" title="Full screen"></button></div><div id="w3-menubar" role="menubar"></div>`;
 body.prepend(frame);
 const bar = frame.querySelector('#w3-menubar');
 const titles = MENUS.map(menu => {
@@ -161,7 +161,7 @@ const titles = MENUS.map(menu => {
   bar.append(b);
   return b;
 });
-frame.querySelector('.win3-min').addEventListener('click', () => setShown('w3-no-panel', !panelShown()));
+frame.querySelector('.win3-min').addEventListener('click', togglePanel);
 frame.querySelector('.win3-max').addEventListener('click', toggleFullScreen);
 frame.querySelector('.win3-title').addEventListener('dblclick', toggleFullScreen);
 const sysbox = frame.querySelector('.win3-sysbox');
@@ -236,6 +236,21 @@ function placeModeButtons() {
   }
 }
 placeModeButtons();
+
+// In the toolbar, World, Edit and Maps are radio buttons that can all be let up: pressing the one that's down lets it up
+// and hides the side panel, leaving the view to work as it does in World; pressing any of them then opens the panel on it.
+// (Hiding the panel any other way — the View menu, ▲ — does the same, so there's never an editing mode without its panel.)
+function hidePanel() {
+  if (S.interactionMode !== 'move') modeButtons.querySelector('[data-mode=move]').click();
+  setShown('w3-no-panel', false);
+}
+function togglePanel() { if (panelShown()) hidePanel(); else setShown('w3-no-panel', true); }
+modeButtons.addEventListener('click', e => {
+  const button = e.target.closest('.tool-btn');
+  if (!button || !isWin3() || !wide.matches) return;
+  if (panelShown() && button.classList.contains('active')) { e.stopPropagation(); hidePanel(); }
+  else setShown('w3-no-panel', true);
+}, true);
 
 // The active window: like Windows 3.0, only the window you're working in has a navy title bar; the rest go white. A card
 // (for a building, a person, a car…) takes it when it's opened on something — even if it was open already — or clicked,
