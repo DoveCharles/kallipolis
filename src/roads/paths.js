@@ -287,19 +287,24 @@ export function makeWalkwayMaterial({ texture, color, scale, rotation, segments,
 // `claim` — whatever higher-priority walkway networks have already staked out (see rebuildRoadMeshes and
 // S.walkwayOrder), so two walkways crossing don't z-fight over the same ground: the higher one wins the overlap
 // and the lower one is simply cut off at its edge. Returns the network's own (unclaimed) outline alongside the
-// mesh, so the caller can add it to what the next, lower-priority network has to give way to.
+// mesh, so the caller can add it to what the next, lower-priority network has to give way to. Paving's dusty
+// fringe isn't part of either: it's returned as `fringeBand`, for rebuildRoadMeshes to trim and attachWalkwayFringes
+// to lay only where the walkway crosses grass or sand.
 function buildWalkwayMesh(lines, networkId, claim) {
   const line = lines[0]; // colors and textures are set per network in the details panel
   const halfWidth = (line.width || S.DEFAULT_ROAD_WIDTH)/2;
   const texture = line.walkwayTexture || WALKWAY_TEXTURE;
-  const fade = texture === 'dirt' ? pathFadeWidth(halfWidth) : pavingFringeWidth(halfWidth);
+  const dirt = texture === 'dirt';
+  const fade = dirt ? pathFadeWidth(halfWidth) : pavingFringeWidth(halfWidth);
   const color = line.walkwayColor!=null ? line.walkwayColor : WALKWAY_COLOR;
-  const outline = unionRoadStrokes(lines.map(l => ({
+  const strokesAt = radius => unionRoadStrokes(lines.map(l => ({
     path: App.toClipperPath(tessellateOpenPath(l.nodeIds.map(id => roadNodes[id]).filter(Boolean))),
-    radius: halfWidth + fade,
+    radius,
   })));
+  const { ctDifference } = ClipperLib.ClipType;
+  const outline = strokesAt(dirt ? halfWidth + fade : halfWidth);
   const builder = createMeshBuilder();
-  builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, outline, claim || [], true), Y_PATH);
+  builder.addTops(clipPolygons(ctDifference, outline, claim || [], true), Y_PATH);
   const geo = builder.build();
   let mesh = null;
   if (geo) {
@@ -310,7 +315,31 @@ function buildWalkwayMesh(lines, networkId, claim) {
     mesh.name = 'Walkway';
     mesh.userData = { networkId, baseColor: color };
   }
-  return { mesh, outline };
+  return { mesh, outline, fringeBand: dirt ? null : clipPolygons(ctDifference, strokesAt(halfWidth + fade), outline) };
+}
+// Lays each paved walkway's dusty fringe (its userData.fringeBand) where it crosses grass or sand — park and beach
+// zones — and nowhere else: past a walkway's edge on a plaza, a lot or bare ground the paving just stops. The fringe
+// is a child mesh sharing the walkway's material. Redone only when the grass and sand change (rebuildWater calls this
+// once a frame when anything might have) or the walkways were just rebuilt (`force`).
+let fringeArea = null;
+export function attachWalkwayFringes(force) {
+  const area = App.getGrassAndSandArea();
+  if (area === fringeArea && !force) return;
+  fringeArea = area;
+  S.roadMeshGroup.children.forEach(mesh => {
+    if (!mesh.userData.fringeBand) return;
+    mesh.children.slice().forEach(child => { mesh.remove(child); child.geometry.dispose(); });
+    if (!area.length || !mesh.userData.fringeBand.length) return;
+    const builder = createMeshBuilder();
+    builder.addTops(clipPolygons(ClipperLib.ClipType.ctIntersection, mesh.userData.fringeBand, area, true), Y_PATH);
+    const geo = builder.build();
+    if (!geo) return;
+    const fringe = new THREE.Mesh(geo, mesh.material);
+    fringe.receiveShadow = true;
+    fringe.name = 'WalkwayFringe';
+    fringe.raycast = () => {}; // picking a walkway means its paving, not the dust beside it
+    mesh.add(fringe);
+  });
 }
 // Moves a walkway network to just before (or after) another in S.walkwayOrder: like moveZone, the order is
 // priority, so overlapping walkways need re-laying out (rebuildRoadMeshes re-syncs the order too, but that's a
@@ -441,10 +470,11 @@ export function rebuildRoadMeshes() {
   S.walkwayOrder = S.walkwayOrder.filter(id => walkwayIds.has(id));
   walkwayIds.forEach(id => { if (!S.walkwayOrder.includes(id)) S.walkwayOrder.push(id); });
   let claimedWalkway = [];
+  const fringed = [];
   S.walkwayOrder.forEach(netId => {
     const lines = walkwayNetworks.get(netId);
-    const { mesh, outline } = buildWalkwayMesh(lines, netId, claimedWalkway);
-    if (mesh) S.roadMeshGroup.add(mesh);
+    const { mesh, outline, fringeBand } = buildWalkwayMesh(lines, netId, claimedWalkway);
+    if (mesh) { S.roadMeshGroup.add(mesh); if (fringeBand) fringed.push([mesh, fringeBand]); }
     claimedWalkway = claimedWalkway.length ? clipPolygons(ctUnion, claimedWalkway, outline) : outline;
     const strokes = lines.map(line => ({
       path: App.toClipperPath(tessellateOpenPath(line.nodeIds.map(id=>roadNodes[id]).filter(Boolean))),
@@ -453,6 +483,9 @@ export function rebuildRoadMeshes() {
     pathStrokes.push(...strokes);
     S.pathBridgeSources.push({ networkId: netId, strokes });
   });
+  // no network's dust on another's paving
+  fringed.forEach(([mesh, band]) => { mesh.userData.fringeBand = clipPolygons(ctDifference, band, claimedWalkway); });
+  attachWalkwayFringes(true);
   // raised walkways: built whole, each on its own (they stand over everything else, so nothing's claimed between them)
   const raisedNetworks = new Map();
   S.roadLines.forEach(line => {
@@ -504,3 +537,4 @@ export function rebuildRoadMeshes() {
   App.refreshHighlights();
   App.updateStats();
 }
+Object.assign(App, { attachWalkwayFringes });
