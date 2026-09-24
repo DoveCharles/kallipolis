@@ -77,9 +77,9 @@ scene.add(sun);
 
 // ---- procedural sky dome, driven by sun elevation/azimuth ----
 // On top of the gradient and the sun: a glow along the horizon on the sun's side, the moon (opposite the sun, where
-// the moonlight comes from — see updateSun), and a thin drifting layer of cirrus, thicker with cloud cover, that the
-// stars and moon are behind. The cirrus is value noise worked out per pixel on the dome, which is only ever the sky's
-// pixels, so a few octaves of it cost little.
+// the moonlight comes from — see updateSun), and a drifting layer of flat-shaded puffy clouds, more of them with cloud
+// cover, that the stars and moon are behind. The clouds are value and Worley noise worked out per pixel on the dome,
+// which is only ever the sky's pixels, so a few octaves of it cost little.
 const skyDomeMat = new THREE.ShaderMaterial({
   uniforms: {
     sunDirection: { value: new THREE.Vector3(0,1,0) },
@@ -116,6 +116,24 @@ const skyDomeMat = new THREE.ShaderMaterial({
       f = f*f*(3.0 - 2.0*f);
       return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
     }
+    vec2 hash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
+    // Worley (cellular) noise: how far p is from the nearest of one scattered point per cell, so 1 minus it is a field
+    // of round bumps — the lobes that give a cumulus its scalloped outline
+    float worley(vec2 p) {
+      vec2 i = floor(p), f = fract(p);
+      float d = 1.0;
+      for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+        vec2 o = vec2(float(x), float(y));
+        d = min(d, length(o + hash2(i + o) - f));
+      }
+      return d;
+    }
+    // cloud density on the layer: broad value noise says where the cloud banks are, inverted Worley at two sizes
+    // bunches them into puffs, and a finer octave (\`rough\`) roughs up the outline
+    float clouds(vec2 p, float rough) {
+      float n = noise(p*0.8)*0.5 + (1.0 - worley(p*1.7 + 3.1))*0.32 + (1.0 - worley(p*3.9 + 8.3))*0.16;
+      return n + (noise(p*8.1 + 1.3) - 0.5)*0.08 + (noise(p*16.3 + 5.9) - 0.5)*0.05*rough;
+    }
     void main() {
       vec3 dir = normalize(vDir);
       vec3 sunDir = normalize(sunDirection);
@@ -148,14 +166,22 @@ const skyDomeMat = new THREE.ShaderMaterial({
         col = mix(col, vec3(0.87, 0.9, 0.96)*mottle, disc*moonAmount);
         col += vec3(0.55, 0.62, 0.78) * pow(max(m, 0.0), 900.0) * 0.25 * moonAmount;
       }
-      // cirrus: noise on a flat layer overhead, stretched along the wind, fading into the haze at the horizon
+      // clouds: flat-shaded cumulus puffs on a layer overhead, drifting with the wind and fading into the haze at the
+      // horizon — a crisp outline where the density crosses the cover threshold, and a band along each puff's sun-facing
+      // side fading to grey, found by sampling the density a little way towards the sun on the layer
       if (h > 0.0) {
-        vec2 p = dir.xz / (h + 0.12) * 1.6 + vec2(time*0.004, time*0.0015);
-        p *= vec2(1.0, 2.5);
-        float n = noise(p)*0.5 + noise(p*2.03 + 7.1)*0.25 + noise(p*4.01 + 3.7)*0.15 + noise(p*8.1 + 1.3)*0.1;
-        float amount = smoothstep(0.62 - cloudCover*0.35, 0.95 - cloudCover*0.2, n) * smoothstep(0.0, 0.25, h) * (0.5 + 0.5*cloudCover);
-        vec3 lit = cloudColor + sunColor * pow(sunAmount, 6.0) * 0.35;
-        col = mix(col, lit, amount);
+        vec2 p = dir.xz / (h + 0.12) * 1.1 + vec2(time*0.004, time*0.0015);
+        p *= vec2(1.0, 1.2);
+        float n = clouds(p, 1.0);
+        float edge = 0.66 - cloudCover*0.17;
+        float aa = fwidth(n) + 0.002;
+        float body = smoothstep(edge - 0.02 - aa, edge + 0.02 + aa, n); // a slightly soft rim, for fluff
+        float nb = clouds(p + normalize(sunDir.xz + 1e-5) * vec2(1.0, 1.2) * 0.14, 0.0);
+        float under = 1.0 - smoothstep(edge - 0.08, edge + 0.02, nb); // white where the band starts, greying out to the edge
+        vec3 lit = cloudColor*1.08 + sunColor * pow(sunAmount, 6.0) * 0.3;
+        vec3 shade = mix(cloudColor*0.8, topColor, 0.15);
+        float amount = body * smoothstep(0.0, 0.2, h) * (0.85 + 0.15*cloudCover);
+        col = mix(col, mix(lit, shade, under), amount);
       }
       gl_FragColor = vec4(col, 1.0);
     }
