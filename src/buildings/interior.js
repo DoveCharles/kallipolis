@@ -342,12 +342,12 @@ async function loadFurniture() {
   try {
     pieces = await loadPieces(FURNITURE_MODEL_URL, PAINTED, painted);
   } catch (err) {
-    console.warn('Splinetopia: the interior model failed to load; homes are left bare', err);
+    console.warn('Kallipolis: the interior model failed to load; homes are left bare', err);
     return;
   }
   measureParts(pieces);
   if (!['TV', 'Sofa', 'Coffee_Table'].every(name => pieces[name])) {
-    console.warn('Splinetopia: the interior model is missing its TV, sofa or coffee table; homes are left bare');
+    console.warn('Kallipolis: the interior model is missing its TV, sofa or coffee table; homes are left bare');
     return;
   }
   furniture = pieces;
@@ -475,7 +475,7 @@ async function loadPosh() {
   try {
     posh = await loadPieces(POSH_MODEL_URL, POSH_PAINTED, poshPainted);
   } catch (err) {
-    console.warn('Splinetopia: the posh interior model failed to load; posh homes are furnished as any other', err);
+    console.warn('Kallipolis: the posh interior model failed to load; posh homes are furnished as any other', err);
     return;
   }
   measureParts(posh);
@@ -657,7 +657,7 @@ async function loadStudent() {
   try {
     student = await loadPieces(STUDENT_MODEL_URL, STUDENT_PAINTED, studentPainted);
   } catch (err) {
-    console.warn('Splinetopia: the student interior model failed to load; student flats are furnished as any other home', err);
+    console.warn('Kallipolis: the student interior model failed to load; student flats are furnished as any other home', err);
     return;
   }
   measureParts(student);
@@ -727,7 +727,7 @@ async function loadRetro() {
   try {
     retro = await loadPieces(RETRO_MODEL_URL, RETRO_PAINTED, retroPainted);
   } catch (err) {
-    console.warn('Splinetopia: the mid-century interior model failed to load; mid-century homes are furnished as any other', err);
+    console.warn('Kallipolis: the mid-century interior model failed to load; mid-century homes are furnished as any other', err);
     return;
   }
   measureParts(retro);
@@ -793,7 +793,7 @@ async function loadBoho() {
   try {
     boho = await loadPieces(BOHO_MODEL_URL, BOHO_PAINTED, bohoPainted);
   } catch (err) {
-    console.warn('Splinetopia: the bohemian interior model failed to load; bohemian homes are furnished as any other', err);
+    console.warn('Kallipolis: the bohemian interior model failed to load; bohemian homes are furnished as any other', err);
     return;
   }
   measureParts(boho);
@@ -1282,7 +1282,7 @@ async function loadOfficeFurniture() {
   try {
     officeFurniture = await loadPieces(OFFICE_MODEL_URL, OFFICE_PAINTED, officePainted, false);
   } catch (err) {
-    console.warn('Splinetopia: the office model failed to load; offices are left bare', err);
+    console.warn('Kallipolis: the office model failed to load; offices are left bare', err);
     return;
   }
   for (const [name, colours] of [['Sticky', STICKIES], ['Mug', MUGS]]) {
@@ -1606,7 +1606,7 @@ async function loadIndustrial() {
   try {
     industrial = await loadPieces(INDUSTRIAL_MODEL_URL, INDUSTRIAL_PAINTED, industrialPainted);
   } catch (err) {
-    console.warn('Splinetopia: the industrial model failed to load; warehouses and factories are left bare', err);
+    console.warn('Kallipolis: the industrial model failed to load; warehouses and factories are left bare', err);
     return;
   }
   // (a stool's seat is its top, in the middle: sat on facing whichever way it's turned)
@@ -2026,7 +2026,7 @@ async function warmUp() {
     for (const [o, visible] of shown) o.visible = visible;
   }
 }
-loadingTask('Preparing interiors...', warmUp().catch(err => console.warn('Splinetopia: interior warm-up failed', err)), 5);
+loadingTask('Preparing interiors...', warmUp().catch(err => console.warn('Kallipolis: interior warm-up failed', err)), 5);
 
 // where the camera starts in the room, in the room's own terms: the corner looking across at the far walls
 const CAMERA_AT = new THREE.Vector3(-ROOM_W/2 + CAMERA_INSET, CAMERA_HEIGHT, -ROOM_D/2 + CAMERA_INSET);

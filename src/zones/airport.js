@@ -323,18 +323,18 @@ export async function loadPlaneModel() {
     const buffer = await fetch(PLANE_MODEL_URL).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
     gltf = await new GLTFLoader().parseAsync(buffer, '');
   } catch (err) {
-    console.warn('Splinetopia: the aeroplane model failed to load; aircraft use the built-in box airliner', err);
+    console.warn('Kallipolis: the aeroplane model failed to load; aircraft use the built-in box airliner', err);
     return;
   }
   gltf.scene.updateMatrixWorld(true);
   const paint = new Map();
   gltf.scene.traverse(o => { if (o.isMesh && o.material && PLANE_PAINT.includes(o.material.name)) paint.set(o.material.name, o.material); });
   const box = restingBox(gltf.scene), size = box.getSize(new THREE.Vector3());
-  if (!(size.x > 0)) { console.warn('Splinetopia: the aeroplane model is empty; aircraft use the built-in box airliner'); return; }
+  if (!(size.x > 0)) { console.warn('Kallipolis: the aeroplane model is empty; aircraft use the built-in box airliner'); return; }
   planeModel = { root: gltf.scene, span: size.x, middle: box.getCenter(new THREE.Vector3()), floor: box.min.y, paint, wreck: null };
   // (what it comes apart into when it crashes: see crashAircraft)
   try { planeModel.wreck = buildCraftWreck(gltf.scene, PLANE_PAINT, 'Plane'); }
-  catch (err) { console.warn('Splinetopia: the aeroplane wreck failed to build', err); }
+  catch (err) { console.warn('Kallipolis: the aeroplane wreck failed to build', err); }
   S.zones.forEach(zone => { if (zone.zoneType === 'airport') App.subdivideZone(zone); });
 }
 // How big the aeroplane is with its shape keys wound off — which is not what Box3.setFromObject would say, because a

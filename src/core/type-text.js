@@ -34,11 +34,11 @@ export function loadTypeText(url, { attributes, settings = [], fallbacks = {}, p
       distribution = parsed.distribution;
       // a distribution with the wrong number of columns is no use: say so and fall back to the shared one
       if (distribution && counted.length && distribution.some(row => row.length !== counted.length + 1)) {
-        console.warn(`Splinetopia: in ${file}, [distribution] rows need ${counted.length} counts and a weight; using the default spread instead`);
+        console.warn(`Kallipolis: in ${file}, [distribution] rows need ${counted.length} counts and a weight; using the default spread instead`);
         distribution = null;
       }
     })
-    .catch(err => console.warn(`Splinetopia: ${url} failed to load; those get placeholder cards`, err));
+    .catch(err => console.warn(`Kallipolis: ${url} failed to load; those get placeholder cards`, err));
 
   // what a kind falls back to, nearest first
   function chainFor(kind) {

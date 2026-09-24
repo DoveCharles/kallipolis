@@ -190,5 +190,5 @@ animate();
 // A handle on the app's insides, for poking at it from the browser console.
 import * as SceneModule from './core/scene.js';
 import * as Shared from './core/shared.js';
-window.splinetopia = { scene: SceneModule.scene, renderer: SceneModule.renderer, camera: SceneModule.camera, S: Shared.S, App: Shared.App };
+window.kallipolis = { scene: SceneModule.scene, renderer: SceneModule.renderer, camera: SceneModule.camera, S: Shared.S, App: Shared.App };
 

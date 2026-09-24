@@ -1,4 +1,4 @@
-# Splinetopia — agent instructions
+# Kallipolis — agent instructions
 
 - Read `AGENT_MAP.md` first; it describes every file. Open only what the task needs.
 - Never list or search `.git/` or `assets/models/`.

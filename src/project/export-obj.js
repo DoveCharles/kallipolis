@@ -11,7 +11,7 @@ function exportOBJ() {
   S.zones.forEach(z => { if (z.buildingsGroup) z.buildingsGroup.traverse(o => { if (o.isMesh) meshes.push(o); }); });
   [S.waterGroup, S.bridgeGroup, objectGroup].forEach(group => group.traverse(o => { if (o.isMesh && !o.userData.noExport) meshes.push(o); }));
   if (!meshes.length) { alert('Nothing to export yet — draw some roads or zones first.'); return; }
-  let out = '# Splinetopia export\n';
+  let out = '# Kallipolis export\n';
   let offset = 1, n = 0;
   meshes.forEach(obj => {
     obj.updateMatrixWorld(true);
@@ -28,7 +28,7 @@ function exportOBJ() {
     offset += pos.count;
   });
   const blob = new Blob([out], { type:'text/plain' });
-  downloadFile('splinetopia_city.obj', blob);
+  downloadFile('kallipolis_city.obj', blob);
 }
 
 Object.assign(App, { exportOBJ });

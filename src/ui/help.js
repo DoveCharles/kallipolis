@@ -2,7 +2,7 @@ import { openWindow } from './w3-window.js';
 
 // ============================================================ help
 // Help > Contents (or F1) opens the help the way Windows 3.0's did: a window of topics, each a page of what that part of
-// Splinetopia is and how it works, jumped between by the green underlined links (a link is <a data-topic="id">), with
+// Kallipolis is and how it works, jumped between by the green underlined links (a link is <a data-topic="id">), with
 // Contents and Back along the top. Like the other little windows (ui/w3-window.js) it doesn't block anything, so the
 // city can be tried as it's read about. The styles are in css/win3.css (.w3-help).
 //
@@ -13,8 +13,9 @@ const keys = rows => `<table class="w3-keys">${rows.map(([k, v]) => `<tr><td>${k
 
 const TOPICS = [
   { id: 'contents', title: 'Contents', html: () => `
-    <p>Splinetopia is a city blockout and life sim toy. Draw paths and zones, and a city grows on them — buildings, parks,
-    water, traffic and people with lives of their own. Pick a topic:</p>
+    <p>Kallipolis is a city blockout and life sim toy. Draw paths and zones, and a city grows on them — buildings, parks,
+    water, traffic and people with lives of their own. (Kallipolis, Greek for “beautiful city”, is the ideal city
+    Plato builds in the <i>Republic</i>; yours needn't be ideal.) Pick a topic:</p>
     <ul class="w3-help-list">${TOPICS.slice(1).map(t => `<li>${link(t.id, t.title)}</li>`).join('')}</ul>` },
 
   { id: 'modes', title: 'The three modes', html: () => `
@@ -175,7 +176,7 @@ let turnTo = null; // while the help's open, turns it to a topic (so openHelp tu
 /** Open the help at a topic (Contents if none), or turn the open help to it. */
 export function openHelp(id = 'contents') {
   if (turnTo) { turnTo(id); return openWindow({ id: 'help' }); } // (brings it to the front)
-  return openWindow({ id: 'help', title: 'Splinetopia Help', width: 460, resizable: true, onClose: () => { turnTo = null; }, fill: body => {
+  return openWindow({ id: 'help', title: 'Kallipolis Help', width: 460, resizable: true, onClose: () => { turnTo = null; }, fill: body => {
     body.classList.add('w3-help');
     body.innerHTML = `<div class="w3-help-buttons"><button class="btn" data-go="contents"><u>C</u>ontents</button><button class="btn" data-go="back"><u>B</u>ack</button></div><div class="w3-help-page"></div>`;
     const page = body.querySelector('.w3-help-page');

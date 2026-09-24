@@ -85,7 +85,7 @@ function exportGLB() {
   const sources = [['Ground', ground], ['Roads', S.roadMeshGroup], ['Trains', S.trainMeshGroup], ['Water', S.waterGroup], ['Bridges', S.bridgeGroup], ['Objects', objectGroup],
     ...S.zones.filter(z => z.buildingsGroup).map(z => [z.name + ' (' + (z.zoneType || 'buildings') + ')', z.buildingsGroup])];
   const exportScene = new THREE.Scene();
-  exportScene.name = 'Splinetopia';
+  exportScene.name = 'Kallipolis';
   const materials = new Map(); // shared across the whole file: one material per distinct look, however many nodes use it
   let cityMeshes = 0;
   sources.forEach(([name, root]) => {
@@ -114,7 +114,7 @@ function exportGLB() {
   const cleanUp = () => exportScene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
   if (!cityMeshes) { cleanUp(); alert('Nothing to export yet — draw some roads or zones first.'); return; }
   new GLTFExporter().parse(exportScene, (result) => {
-    downloadFile('splinetopia_city.glb', new Blob([result], { type: 'model/gltf-binary' }));
+    downloadFile('kallipolis_city.glb', new Blob([result], { type: 'model/gltf-binary' }));
     cleanUp();
   }, (err) => {
     cleanUp();

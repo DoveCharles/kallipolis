@@ -45,7 +45,7 @@ let interior, footprints, peopleMod, activities, win, here = null, guests = [], 
 
 function buildings() {
   const found = [];
-  win.splinetopia.S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
+  win.kallipolis.S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
     if (group.name === 'Building') found.push({ zone, group, index });
   }));
   return found;
@@ -81,7 +81,7 @@ function settle(p) {
 function addPerson() {
   if (!here) return;
   const { people } = peopleMod;
-  if (!win.splinetopia.S.peopleEnabled || !people.length) { $('status').textContent = 'No people: switch people on in the app first.'; return; }
+  if (!win.kallipolis.S.peopleEnabled || !people.length) { $('status').textContent = 'No people: switch people on in the app first.'; return; }
   // (someone out walking, or failing that someone not out yet — as in a city with no walkways — put back after)
   const p = people.find(q => (q.mode === 'line' || q.mode === 'wander') && !q.act && !guests.includes(q))
     ?? people.find(q => q.mode === 'none' && !guests.includes(q));
@@ -107,7 +107,7 @@ function sendOut() {
 
 frame.addEventListener('load', async () => {
   win = frame.contentWindow;
-  while (!win.splinetopia) await new Promise(r => setTimeout(r, 200));
+  while (!win.kallipolis) await new Promise(r => setTimeout(r, 200));
   [interior, footprints, peopleMod, activities] = await Promise.all(['../src/buildings/interior.js', '../src/buildings/footprints.js',
     '../src/life/people/people.js', '../src/life/people/peopleActivities.js'].map(inApp));
   // (the city's buildings are put up a moment after it loads)

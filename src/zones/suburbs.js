@@ -212,7 +212,7 @@ export async function loadHouseModels() {
     const buffer = await fetch(HOUSE_MODEL_URL).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
     gltf = await new GLTFLoader().parseAsync(buffer, '');
   } catch (err) {
-    console.warn('Splinetopia: the house model failed to load; suburbs go without houses', err);
+    console.warn('Kallipolis: the house model failed to load; suburbs go without houses', err);
     return;
   }
   try {
@@ -252,7 +252,7 @@ export async function loadHouseModels() {
       };
     });
   } catch (err) {
-    console.warn('Splinetopia: the house model failed to build; suburbs go without houses', err);
+    console.warn('Kallipolis: the house model failed to build; suburbs go without houses', err);
     designs = null;
     return;
   }

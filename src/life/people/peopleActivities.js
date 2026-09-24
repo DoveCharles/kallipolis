@@ -1459,7 +1459,7 @@ const ROOM_SIT_CHANCE = 0.45, ROOM_SIT_ALREADY = 0.4;
 function sendToSofa(p) {
   const sofa = roomSeats().filter(seat => seat.sofa);
   const why = !sofa.length ? 'this room has no sofa seats' : !personModel || !hasClip('Sit1') ? 'no sitting animation loaded' : null;
-  if (why) { noSofaFor = roomVisit(); console.info(`Splinetopia: Encourage To Watch TV — ${why}`); return; }
+  if (why) { noSofaFor = roomVisit(); console.info(`Kallipolis: Encourage To Watch TV — ${why}`); return; }
   const now = performance.now();
   if (sofa.some(seat => seat.by !== p && seatHeld(seat))) { sofaFilled = { visit: roomVisit(), emptyAt: null }; return; }
   if (sofaFilled?.visit === roomVisit()) {

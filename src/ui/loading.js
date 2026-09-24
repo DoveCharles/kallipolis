@@ -143,7 +143,7 @@ const COMPILE_EVERY = 250; // ms between passes, to pick up what's been added si
 let compileScene = null, compiling = null, compiledAt = -Infinity;
 export const stillLoading = () => !loaded;
 export function compileWhileLoading(renderer, scene, camera) {
-  compileScene ??= () => renderer.compileAsync(scene, camera).catch(err => console.warn('Splinetopia: compile failed', err));
+  compileScene ??= () => renderer.compileAsync(scene, camera).catch(err => console.warn('Kallipolis: compile failed', err));
   if (compiling || performance.now() - compiledAt < COMPILE_EVERY) return;
   compiling = timedCompile().finally(() => { compiling = null; compiledAt = performance.now(); });
 }
@@ -186,7 +186,7 @@ requestAnimationFrame(countFrame);
 function report() {
   measuring = false;
   const lines = [...frozenBy].sort((a, b) => b[1] - a[1]).map(([step, ms]) => `  ${String(Math.round(ms)).padStart(6)} ms  ${step}`);
-  console.info([`Splinetopia: loaded in ${Math.round(performance.now())} ms (scripts arrived at ${Math.round(scriptsIn)} ms); frozen time by step:`,
+  console.info([`Kallipolis: loaded in ${Math.round(performance.now())} ms (scripts arrived at ${Math.round(scriptsIn)} ms); frozen time by step:`,
     ...lines].join('\n'));
 }
 

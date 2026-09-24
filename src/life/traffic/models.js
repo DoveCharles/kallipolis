@@ -103,21 +103,21 @@ export async function loadCarModels() {
   try {
     gltf = await loadGLB(CARS_MODEL_URL);
   } catch (err) {
-    console.warn('Splinetopia: the car models failed to load; traffic uses the built-in box car', err);
+    console.warn('Kallipolis: the car models failed to load; traffic uses the built-in box car', err);
     return;
   }
   try {
     const designs = buildCarDesigns(gltf);
     if (designs.length) { carMeshes = designs.map(makeCarMesh); designNumbers = designs.map(() => 0); }
   } catch (err) {
-    console.warn('Splinetopia: the car models failed to build; traffic uses the built-in box car', err);
+    console.warn('Kallipolis: the car models failed to build; traffic uses the built-in box car', err);
     return;
   }
   // (a design whose wreck fails to build just blows up into chunks, as the box car does)
   const paintSlot = CAR_SLOT_NAMES.indexOf(CAR_PAINT_MATERIAL) + 1;
   carMeshes.forEach(cm => {
     try { cm.wreck = buildCarWreck(cm.mesh.geometry, paintSlot, cm.name); }
-    catch (err) { console.warn(`Splinetopia: the ${cm.name} wreck failed to build`, err); }
+    catch (err) { console.warn(`Kallipolis: the ${cm.name} wreck failed to build`, err); }
   });
 }
 /**

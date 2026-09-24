@@ -122,7 +122,7 @@ export async function loadPigeonModel() {
     const buffer = await fetch(PIGEON_MODEL_URL).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
     gltf = await new GLTFLoader().parseAsync(buffer, '');
   } catch (err) {
-    console.warn('Splinetopia: the pigeon model failed to load; plazas and parks go without pigeons', err);
+    console.warn('Kallipolis: the pigeon model failed to load; plazas and parks go without pigeons', err);
     return;
   }
   const meshes = [];
@@ -180,7 +180,7 @@ export async function loadPigeonModel() {
   const clips = {}, frames = [];
   Object.entries(CLIPS).forEach(([name, { loop }]) => {
     const clip = gltf.animations.find(a => a.name === name);
-    if (!clip) { console.warn('Splinetopia: Pigeon.glb has no ' + name + ' clip'); return; }
+    if (!clip) { console.warn('Kallipolis: Pigeon.glb has no ' + name + ' clip'); return; }
     const d = clip.duration, n = loop ? Math.max(2, Math.round(d*BAKE_FPS)) : Math.max(2, Math.round(d*BAKE_FPS) + 1);
     clips[name] = { start: frames.length, frames: n, duration: d, loop };
     for (let i=0;i<n;i++) frames.push(poseAt(clip, loop ? i*d/n : i*d/(n - 1)));

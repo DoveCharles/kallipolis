@@ -83,12 +83,12 @@ export async function loadFountainModel() {
     const buffer = await fetch(FOUNTAIN_MODEL_URL).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
     gltf = await new GLTFLoader().parseAsync(buffer, '');
   } catch (err) {
-    console.warn('Splinetopia: the fountain model failed to load; plazas use the built-in stone fountain', err);
+    console.warn('Kallipolis: the fountain model failed to load; plazas use the built-in stone fountain', err);
     return;
   }
   gltf.scene.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(gltf.scene), size = box.getSize(new THREE.Vector3());
-  if (!(size.x > 0)) { console.warn('Splinetopia: the fountain model is empty; plazas use the built-in stone fountain'); return; }
+  if (!(size.x > 0)) { console.warn('Kallipolis: the fountain model is empty; plazas use the built-in stone fountain'); return; }
   const middle = box.getCenter(new THREE.Vector3());
   let poolRadius = 0, poolY = box.min.y, spoutY = box.max.y;
   gltf.scene.traverse(o => {

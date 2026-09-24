@@ -1,6 +1,6 @@
-// ============================================================ the Splinetopia window
+// ============================================================ the Kallipolis window
 // On a screen wider than a phone, the whole tab is one application window: a frame
-// round the edge, a title bar saying Splinetopia, and a menu bar under it — File, Edit, View, Options, Help — with the
+// round the edge, a title bar saying Kallipolis, and a menu bar under it — File, Edit, View, Options, Help — with the
 // side panel docked down its left like Paintbrush's toolbox, and the canvas tools still over the view. The styles are in
 // css/win3.css ("the application window"); on a phone none of it shows, the panel keeping its own title bar instead.
 //
@@ -63,13 +63,13 @@ function messageBox(title, html, buttons = ['OK']) {
 }
 
 async function newProject() {
-  const answer = await messageBox('Splinetopia', '<p>Clear the whole city — every path, zone, object and map image — and start again?</p>', ['OK', 'Cancel']);
+  const answer = await messageBox('Kallipolis', '<p>Clear the whole city — every path, zone, object and map image — and start again?</p>', ['OK', 'Cancel']);
   if (answer === 'OK') $('btn-clear').click();
 }
 function about() {
   const n = (count, word) => `${count.toLocaleString()} ${word}${count === 1 ? '' : 's'}`;
-  messageBox('About Splinetopia', `<div class="w3-about"><div class="w3-about-icon"></div><div>
-    <p><b>Splinetopia</b><br>A city-blockout tool</p>
+  messageBox('About Kallipolis', `<div class="w3-about"><div class="w3-about-icon"></div><div>
+    <p><b>Kallipolis</b><br>A city-blockout tool</p>
     <p>${n(S.roadLines.length, 'path')}, ${n(S.zones.length, 'zone')}<br>${n(people.length, 'person').replace('persons', 'people')}, ${n(cars.length, 'car')} about</p>
     <p>Free memory: 640 KB<br>(ought to be enough for anybody)</p></div></div>`);
 }
@@ -138,7 +138,7 @@ const MENUS = [
     { label:'Keyboard Shortcuts', key:'k', run:() => openHelp('keys') },
     { label:'Show Tooltips', key:'t', check:anyHints, run:toggleAllHints },
     '-',
-    { label:'About Splinetopia...', key:'a', run:about },
+    { label:'About Kallipolis...', key:'a', run:about },
   ]},
 ];
 // the control-menu box at the left of the title bar
@@ -154,7 +154,7 @@ const labelHTML = (label, key) => { const i = label.toLowerCase().indexOf(key); 
 // ---- the window itself
 const frame = document.createElement('div');
 frame.id = 'app-frame';
-frame.innerHTML = `<div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Splinetopia</div><button class="win3-min" title="Hide or show the side panel"></button><button class="win3-max" title="Full screen"></button></div><div id="w3-menubar" role="menubar"></div>`;
+frame.innerHTML = `<div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Kallipolis</div><button class="win3-min" title="Hide or show the side panel"></button><button class="win3-max" title="Full screen"></button></div><div id="w3-menubar" role="menubar"></div>`;
 body.prepend(frame);
 const bar = frame.querySelector('#w3-menubar');
 const titles = MENUS.map(menu => {
@@ -278,7 +278,7 @@ worldModeHidesPanel();
 // (for a building, a person, a car…) takes it when it's opened on something — even if it was open already — or clicked,
 // and keeps it while it's open, however the view's clicked about to look round or to pick someone else (they're what's
 // being followed, so the card is what you're working in). A window like Sound levels takes it while it's clicked in,
-// and the card gets it back when anything else is; only with no card open does the Splinetopia window take it back.
+// and the card gets it back when anything else is; only with no card open does the Kallipolis window take it back.
 const WINDOWS = '.entity-card, .w3-window'; // (the cards, and windows like Sound levels: ui/sound-levels.js)
 let activeCard = null;
 let lastCard = null; // the entity card last opened or clicked

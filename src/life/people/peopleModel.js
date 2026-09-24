@@ -862,17 +862,17 @@ async function loadGLB(url) {
  */
 export async function loadPersonModel() {
   const [body, hair, facialHair, glasses, skirts] = await Promise.allSettled([loadGLB(PERSON_MODEL_URL), loadGLB(HAIR_MODEL_URL), loadGLB(FACIAL_HAIR_MODEL_URL), loadGLB(GLASSES_MODEL_URL), loadGLB(SKIRT_MODEL_URL)]);
-  if (body.status === 'rejected') { console.warn('Splinetopia: the people model failed to load; people stay cuboids', body.reason); return; }
-  if (hair.status === 'rejected') console.warn('Splinetopia: the hair model failed to load; people go without', hair.reason);
-  if (facialHair.status === 'rejected') console.warn('Splinetopia: the facial hair model failed to load; people go without', facialHair.reason);
-  if (glasses.status === 'rejected') console.warn('Splinetopia: the glasses model failed to load; people go without', glasses.reason);
-  if (skirts.status === 'rejected') console.warn('Splinetopia: the skirt model failed to load; people go without', skirts.reason);
+  if (body.status === 'rejected') { console.warn('Kallipolis: the people model failed to load; people stay cuboids', body.reason); return; }
+  if (hair.status === 'rejected') console.warn('Kallipolis: the hair model failed to load; people go without', hair.reason);
+  if (facialHair.status === 'rejected') console.warn('Kallipolis: the facial hair model failed to load; people go without', facialHair.reason);
+  if (glasses.status === 'rejected') console.warn('Kallipolis: the glasses model failed to load; people go without', glasses.reason);
+  if (skirts.status === 'rejected') console.warn('Kallipolis: the skirt model failed to load; people go without', skirts.reason);
   const loaded = result => result.status === 'fulfilled' ? result.value : null;
   try {
     setPersonModel(buildPersonModel(body.value, loaded(hair), loaded(facialHair), loaded(glasses), loaded(skirts)));
     peopleMesh.visible = false;
   } catch (err) {
-    console.warn('Splinetopia: the people model failed to load; people stay cuboids', err);
+    console.warn('Kallipolis: the people model failed to load; people stay cuboids', err);
   }
 }
 
@@ -1118,7 +1118,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const clips = PERSON_CLIPS.map(def => {
     const source = def.from || def.over || def.name;
     const clip = gltf.animations.find(c => c.name.toLowerCase() === source.toLowerCase());
-    if (!clip && !def.from && !def.over) console.warn(`Splinetopia: the people model has no ${def.name} animation`);
+    if (!clip && !def.from && !def.over) console.warn(`Kallipolis: the people model has no ${def.name} animation`);
     const sourceFrames = clip ? Math.max(1, Math.round(clip.duration*PERSON_BAKE_FPS)) : 1;
     const frames = def.from ? 1 : sourceFrames*(def.times || 1);
     return { name: def.name, clip, missing: !clip, loop: !!def.loop && frames > 1, pose: !!def.pose, frames, duration: frames/PERSON_BAKE_FPS,

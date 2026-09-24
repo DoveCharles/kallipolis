@@ -1,4 +1,4 @@
-# Splinetopia
+# Kallipolis
 A little procedural city blockout tool that runs in the browser, built on three.js.
 
 <img width="1488" height="808" alt="Screenshot 2026-09-15 at 07 03 26" src="https://github.com/user-attachments/assets/6d05f003-07e9-4b07-ad12-6a3e25bc99fb" />

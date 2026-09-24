@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "splinetopia",
+      "name": "kallipolis",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "serve.py",
@@ -11,7 +11,7 @@
       "port": 8743
     },
     {
-      "name": "splinetopia-alt",
+      "name": "kallipolis-alt",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "serve.py",
@@ -20,7 +20,7 @@
       "port": 8744
     },
     {
-      "name": "splinetopia-3",
+      "name": "kallipolis-3",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "serve.py",
@@ -29,7 +29,7 @@
       "port": 8745
     },
     {
-      "name": "splinetopia-4",
+      "name": "kallipolis-4",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "serve.py",
@@ -38,7 +38,7 @@
       "port": 8746
     },
     {
-      "name": "splinetopia-5",
+      "name": "kallipolis-5",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "serve.py",
@@ -47,7 +47,7 @@
       "port": 8748
     },
     {
-      "name": "splinetopia-6",
+      "name": "kallipolis-6",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "serve.py",
@@ -56,7 +56,7 @@
       "port": 8749
     },
     {
-      "name": "splinetopia-7",
+      "name": "kallipolis-7",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "serve.py",
@@ -65,7 +65,7 @@
       "port": 8750
     },
     {
-      "name": "splinetopia-8",
+      "name": "kallipolis-8",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "serve.py",
@@ -74,7 +74,7 @@
       "port": 8751
     },
     {
-      "name": "splinetopia-9",
+      "name": "kallipolis-9",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "serve.py",
@@ -83,7 +83,7 @@
       "port": 8752
     },
     {
-      "name": "splinetopia-10",
+      "name": "kallipolis-10",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "serve.py",

@@ -123,7 +123,7 @@ function parseMoralityText(text) {
     if (heading) { current = heading[1].trim().toLowerCase(); parsed[current] = parsed[current] || {}; return; }
     const pair = line.match(/^(.+?)\s*=\s*(\S+)$/);
     const value = pair ? parseFloat(pair[2]) : NaN;
-    if (!current || !Number.isFinite(value)) { console.warn(`Splinetopia: in morality.txt, "${line}" isn't a "thing = score" line under a [heading]`); return; }
+    if (!current || !Number.isFinite(value)) { console.warn(`Kallipolis: in morality.txt, "${line}" isn't a "thing = score" line under a [heading]`); return; }
     parsed[current][pair[1].trim().toLowerCase()] = value;
   });
   return parsed;
@@ -225,7 +225,7 @@ function renderMeter(t) {
     EVENTS.map(e => { const l = t.lines['events/' + e.key]; return row(e.label, l.count, l.score, false); }).join('');
 }
 // the details open and close from the show/hide button — or, in the Windows 3.0 look, from the window's title bar, just like
-// the Splinetopia window (see win3.js): minimize folds them away, maximize (or the control-menu box, to toggle) opens them
+// the Kallipolis window (see win3.js): minimize folds them away, maximize (or the control-menu box, to toggle) opens them
 function setDetailsOpen(open) {
   detailsEl.hidden = !open;
   toggleEl.textContent = open ? 'hide' : 'show';
@@ -403,7 +403,7 @@ fetch(MORALITY_TEXT_URL, { cache: 'no-cache' })
     announced = previous = now;
     renderMeter(now);
   })
-  .catch(err => console.warn('Splinetopia: assets/morality.txt failed to load; everything is worth 0 morality', err));
+  .catch(err => console.warn('Kallipolis: assets/morality.txt failed to load; everything is worth 0 morality', err));
 
 tick();
 Object.assign(App, { recordMoralityEvent, hushMorality, refreshMorality: tick });
