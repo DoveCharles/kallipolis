@@ -1774,7 +1774,7 @@ Their nemesis [ aggression = 2]
 Practicing restraint [patience = 0.4, evil = 0.05, aggression = 2]
 Spending money
 High Treason [ agemult = 1.2]
-Looking in the mirror [ agemult = 4.5, evil = 0.5, ageless, aggression = 50, limit = 1a]
+Looking in the mirror [ vampire ]
 Looking in the mirror
 When something is, "titular"
 When something is, "seminal"
@@ -1852,7 +1852,7 @@ Hyperhydrosis
 When the sleeves are too short
 Dropping things in the toilet
 Cancel culture [ evil = 0.1, aggression = 4]
-Being too woke for anyone in real life [ agemult = 0.8, aggression = 4]
+Being too woke for anyone in real life [ agemult = 0.8, aggression = 4, mood = -0.2]
 Lumpy mattress
 Being ahead of the curve
 Fungal infections
@@ -1873,7 +1873,7 @@ Considerable burden
 When the microwave goes off
 The grind
 It really depends
-Praxis [ evil = 0.05, aggression = 0.3]
+Praxis [ evil = 0.01, aggression = 0.3]
 When dogs seem depressed [ evil = -0.05]
 Enduring torture
 Starving to death
@@ -1929,7 +1929,7 @@ Being run over by an ambulance
 Optimising their shit
 The meat grinder
 Polyps
-Reflecting
+Reflecting on it later
 Being right too early
 Trying something new
 Pinky toes
@@ -1951,7 +1951,7 @@ The dishes
 Hair
 Drawing a blank
 Bankers
-The Sin
+Sin
 When you want dinner but you gotta make it
 All the time wasted to work, commuting, sleeping, cleaning up, looking after yourself, eating, hanging out, having sex, hobbies, relaxing, breathing in and out and in again
 The dentist
@@ -1967,7 +1967,7 @@ Typos [keysmash]
 Shingles
 When their alcoholic friend turns catholic like ummm, bro, don't you know what Jesus is made from?
 Stinking at this
-Adulting!! xD
+Adulting
 Asking out the prettiest girl in school
 Landmines
 Kids these days [agemult = 1.2]

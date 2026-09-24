@@ -91,6 +91,7 @@ const HANGOUTS = { park: ['in', 'the park'], plaza: ['in', 'the plaza'], beach: 
  */
 export function personDoing(p) {
   if (p.mode === 'dead') return 'Dead';
+  if (p.water) return p.mode === 'drowning' ? 'Drowned' : p.water.stage === 'rising' ? 'Climbing out of the water' : 'Falling into the water';
   if (p.mode === 'possessed') return 'Possessed';
   const k = p.punched;
   if (k && k.stage === 'brace') return 'Bracing for a punch';
