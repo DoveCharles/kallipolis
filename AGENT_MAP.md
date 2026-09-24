@@ -159,6 +159,8 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `panels.js` (56K, **big**)  — exports: selectItem, deleteRoadNode, deleteZoneVertex, renderHierarchy, renderWorldTintPanel, updateStats
 - `ped-view.js` (6K) The smiling head button over the view, beside the heart, drains the color out of the whole city: — exports: pedViewOn, updatePedView
 - `pixelation.js` (26K) The colour grade (on unless it's turned off in World settings) is the cheapest of these: — exports: setCutout, renderView
+- `flat-shading.js` (2K) Display > Flat shading: forces flatShading on every lit material in the scene (swept every 0.5s while on; originals restored when off), kept in localStorage. — exports: none
+- `view-prefs.js` (2K) Browser prefs: View > Edit Hints / General Hints (body classes `no-edit-hints`/`no-general-hints` hide `#hint` by its `data-kind`, set in editor/tools.js, and `#possess-hint`), and Options > Game > Start in Edit mode (off: presses World on load). — exports: editHints, generalHints
 - `sound.js` (1K) The speaker button over the view, by undo and redo, mutes every sound (see audio/sfx.js).
 - `settings-windows.js` (1K) Under the Windows 3.0 window, the World panel's set-once settings (index.html's data-settings groups) open in windows of their own — Display, Effects, Game from the Options menu, and World (time, peds, weather) from the toolbar — moved in while open and put back after. — exports: openSettings
 - `sound-levels.js` (2K) Options > Sound levels: a window of sliders (Master, Peds, Traffic, Ambience) setting the levels in audio/sfx.js (setLevel, LEVEL_KINDS), remembered in localStorage. — exports: openSoundLevels
