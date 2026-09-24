@@ -74,7 +74,9 @@ function setPersonCardDoing(doing, away = false) {
 
 // ---- the headshot: a live close-up of their face, beside their name — drawn a few times a second (people.js hands over
 // where their head is and which way it faces) from a camera just in front of it that sees only the people, on a clear
-// background, into a little render target of its own, whose pixels are copied onto the card's canvas
+// background, into a little render target of its own, whose pixels are copied onto the card's canvas once the GPU has
+// them (read back asynchronously: a plain readPixels waits for the whole frame to finish drawing, which halved the frame
+// rate while anyone was followed)
 const HEADSHOT_SIZE = 120; // pixels across (shown half that, sharp on high-density screens)
 const HEADSHOT_INTERVAL = 1/15;
 const headshotTarget = new THREE.WebGLRenderTarget(HEADSHOT_SIZE, HEADSHOT_SIZE);
@@ -83,11 +85,11 @@ headshotCamera.layers.set(HEADSHOT_LAYER);
 const headshotCanvas = card.canvas;
 const headshotContext = headshotCanvas.getContext('2d'), headshotImage = headshotContext.createImageData(HEADSHOT_SIZE, HEADSHOT_SIZE);
 const headshotPixels = new Uint8Array(HEADSHOT_SIZE*HEADSHOT_SIZE*4), clearColor = new THREE.Color();
-let headshotDrawnAt = -Infinity, lightsOnLayer = false;
+let headshotDrawnAt = -Infinity, lightsOnLayer = false, headshotReading = false;
 // `view`: { head, forward, up, distance } in the world
 function drawPersonHeadshot(view) {
   const now = performance.now()/1000;
-  if (!shown || headshotCanvas.hidden || now - headshotDrawnAt < HEADSHOT_INTERVAL) return;
+  if (!shown || headshotCanvas.hidden || headshotReading || now - headshotDrawnAt < HEADSHOT_INTERVAL) return;
   headshotDrawnAt = now;
   // the lights light them there too (put on the layer each time the card opens, to catch any added since)
   if (!lightsOnLayer) { scene.traverse(o => { if (o.isLight) o.layers.enable(HEADSHOT_LAYER); }); lightsOnLayer = true; }
@@ -103,10 +105,15 @@ function drawPersonHeadshot(view) {
   renderer.setClearColor(0x000000, 0);
   renderer.setRenderTarget(headshotTarget);
   renderer.render(scene, headshotCamera);
-  renderer.readRenderTargetPixels(headshotTarget, 0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE, headshotPixels);
   renderer.setRenderTarget(target);
   renderer.setClearColor(clearColor, clearAlpha);
   renderer.shadowMap.autoUpdate = shadows;
+  headshotReading = true;
+  renderer.readRenderTargetPixelsAsync(headshotTarget, 0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE, headshotPixels)
+    .then(copyHeadshot, () => {}).finally(() => { headshotReading = false; });
+}
+function copyHeadshot() {
+  if (!shown) return;
   // (the render target's rows run bottom to top)
   const rowBytes = HEADSHOT_SIZE*4;
   for (let y=0;y<HEADSHOT_SIZE;y++) headshotImage.data.set(headshotPixels.subarray((HEADSHOT_SIZE - 1 - y)*rowBytes, (HEADSHOT_SIZE - y)*rowBytes), y*rowBytes);

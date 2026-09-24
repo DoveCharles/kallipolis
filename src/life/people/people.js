@@ -1319,7 +1319,12 @@ export function updatePeople(t) {
   else if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
   // and the card's headshot of them (kept as it was while they can't be seen), which draws them whole
   if (personModel?.hidden) personModel.hidden.value = -1;
-  if (followed >= 0 && personModel && !isGone(people[followed])) App.drawPersonHeadshot(headshotOf(followed));
+  // (them alone: everyone else is folded away while it draws)
+  if (followed >= 0 && personModel && !isGone(people[followed])) {
+    personModel.only.value = followed;
+    App.drawPersonHeadshot(headshotOf(followed));
+    personModel.only.value = -1;
+  }
   // while controlling someone, their own head and hair are hidden (if S.hideOwnHead)
   if (personModel?.hidden && S.hideOwnHead && possession.index >= 0) personModel.hidden.value = possession.index;
   // or, possessing them, the view from their eyes

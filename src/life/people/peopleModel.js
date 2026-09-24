@@ -511,6 +511,7 @@ const PERSON_VERTEX_PARS = `
   uniform vec2 personThighRadius; // how thick the thigh is at its top and at the knee
   uniform vec3 personThighGrow, personKneeGrow; // how much thicker each is for all of the Hips, Weight and Butt keys
   uniform int personHidden; // the person whose head is hidden (-1 for nobody)
+  uniform int personOnly; // the only person drawn (-1 for everyone): the person card's headshot sees just them
   attribute vec4 personJoints;
   attribute vec4 personWeights;
   // What the shader needs to know about the vertex itself, packed into one attribute (a machine guarantees only 16, and
@@ -782,6 +783,7 @@ function injectPersonShader(shader, uniforms, look) {
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
       ${hideHead}
+      if (personOnly >= 0 && personIndex() != personOnly) transformed = vec3(0.0);
       ${color}
       ${splotched ? `vPersonBlood = vec2(${bloodOver}, float(personIndex()));` : ''}
       ${outfitted ? `vPersonOutfitRed = vec4(personTrait(${OUTFIT_RED_ROW}).rgb, personTrait(${OUTFIT_GREEN_ROW}).w);
@@ -1414,7 +1416,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const uniforms = {
     personBones: { value: boneTexture }, personBonesSize: { value: new THREE.Vector2(boneWidth, boneRows) },
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
-    personTraits: { value: traitTexture }, personHidden: { value: -1 }, personBloodColor: { value: new THREE.Color(0.55, 0.05, 0.05) },
+    personTraits: { value: traitTexture }, personHidden: { value: -1 }, personOnly: { value: -1 }, personBloodColor: { value: new THREE.Color(0.55, 0.05, 0.05) },
     personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personChestBone: { value: chestBone }, personChestPivot: { value: chestPivot },
     personThighBones: { value: thighs ? new THREE.Vector4(thighBone, kneeBone, mirrorBone[thighBone], mirrorBone[kneeBone]) : new THREE.Vector4() },
     personHipRest: { value: thighs ? thighs.hip : new THREE.Vector3() }, personKneeRest: { value: thighs ? thighs.knee : new THREE.Vector3() },
@@ -1462,7 +1464,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, hidden: uniforms.personHidden, anim, look, eyes, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
+  return { mesh, hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
     headBone: headBone ?? 0, headPivot, chestBone, hands, unitsPerMetre, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
@@ -1576,7 +1578,7 @@ function buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm
   const gibTraits = new Float32Array(GIB_BODIES_MAX*traitRows*4);
   const gibTraitTexture = new THREE.DataTexture(gibTraits, GIB_BODIES_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
   gibTraitTexture.needsUpdate = true;
-  const gibUniforms = { ...uniforms, personTraits: { value: gibTraitTexture }, personHidden: { value: -1 } };
+  const gibUniforms = { ...uniforms, personTraits: { value: gibTraitTexture }, personHidden: { value: -1 }, personOnly: { value: -1 } };
   const gibOf = (source, index, look, name, samples) => {
     const geo = new THREE.BufferGeometry();
     SHARED_VERTEX_ATTRIBUTES.forEach(n => { if (source.attributes[n]) geo.setAttribute(n, source.attributes[n]); });

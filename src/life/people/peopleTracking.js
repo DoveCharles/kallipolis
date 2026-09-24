@@ -157,44 +157,71 @@ export function showFollowedDoing() {
   App.setPersonCardDoing(doing, isGone(p) && !!p.indoors);
 }
 
-// Where someone's head is and which way their face points, in the world, for the person card's headshot: from their pose
-// this frame, worked out as the shader works it out — the head bone's pose (blended between rows and between the two clips),
-// their head turned and tilted, and where they are.
+// Where someone's head is, in the world, from their pose this frame, worked out as the shader works it out — the head bone's
+// pose (blended between rows and between the two clips), their head turned and tilted, and where they are — and the person
+// card's headshot, from a camera that rides on their chest: in front of where their face is at rest, so their shoulders
+// hold still in the picture and their head turns and nods within it.
 const headshot = { head: new THREE.Vector3(), forward: new THREE.Vector3(), up: new THREE.Vector3(), distance: 0 };
-const headPoseA = new Float32Array(12), headPoseB = new Float32Array(12);
+const headAt = new THREE.Vector3();
+const poseA = new Float32Array(12), poseB = new Float32Array(12);
 const headMatrix = new THREE.Matrix4(), headTurn = new THREE.Matrix3(), lookTurn = new THREE.Matrix4(), lookTilt = new THREE.Matrix4();
+const chestMatrix = new THREE.Matrix4(), chestTurn = new THREE.Matrix3();
 const headshotInstance = new THREE.Matrix4(), headOffset = new THREE.Vector3();
 /**
- * Read the head bone's pose (its matrix's top three rows) at a row of the bone texture, blending between rows.
+ * Read a bone's pose (its matrix's top three rows) at a row of the bone texture, blending between rows.
  * @param {Float32Array} out - the twelve numbers to write the pose into
+ * @param {number} bone - which bone
  * @param {number} row - the row of the bone texture, part-way between rows being part-way between frames
  * @returns {void}
  */
-function headPoseAt(out, row) {
-  const { boneData, boneWidth, headBone } = personModel, r = Math.floor(row), t = row - r;
-  const a = (r*boneWidth + headBone*3)*4, b = ((r + 1)*boneWidth + headBone*3)*4;
+function poseAt(out, bone, row) {
+  const { boneData, boneWidth } = personModel, r = Math.floor(row), t = row - r;
+  const a = (r*boneWidth + bone*3)*4, b = ((r + 1)*boneWidth + bone*3)*4;
   for (let k=0;k<12;k++) out[k] = boneData[a + k] + (boneData[b + k] - boneData[a + k])*t;
+}
+/**
+ * A bone's pose this frame, blended between the two clips someone's between.
+ * @param {THREE.Matrix4} out - where to put it
+ * @param {number} bone - which bone
+ * @param {number} i - their index in people
+ * @returns {THREE.Matrix4} out
+ */
+function boneAt(out, bone, i) {
+  const anim = personModel.anim.array, o = i*4, fade = anim[o+2];
+  poseAt(poseA, bone, anim[o]);
+  poseAt(poseB, bone, anim[o+1]);
+  const e = poseA.map((value, k) => value*fade + poseB[k]*(1 - fade));
+  return out.set(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9], e[10], e[11], 0, 0, 0, 1);
 }
 
 /**
- * Work out where someone's head is and which way their face points, in the world, for the person card's headshot.
+ * Where someone's head is, in the world (the middle of it, where their eyes are looked from when possessed).
  * @param {number} i - their index in people
- * @returns {{head: THREE.Vector3, forward: THREE.Vector3, up: THREE.Vector3, distance: number}} where to put the headshot
- * camera, which way it looks, which way is up, and how far off it draws
+ * @returns {THREE.Vector3} reused: copy it to keep it
  */
-export function headshotOf(i) {
-  const anim = personModel.anim.array, look = personModel.look.array, o = i*4, fade = anim[o+2];
-  headPoseAt(headPoseA, anim[o]);
-  headPoseAt(headPoseB, anim[o+1]);
-  const e = headPoseA.map((value, k) => value*fade + headPoseB[k]*(1 - fade));
-  headMatrix.set(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9], e[10], e[11], 0, 0, 0, 1);
+function headOf(i) {
+  const look = personModel.look.array, o = i*4;
+  boneAt(headMatrix, personModel.headBone, i);
   headTurn.setFromMatrix4(headMatrix);
   lookTurn.makeRotationY(look[o]).multiply(lookTilt.makeRotationX(look[o+1]));
   personModel.mesh.getMatrixAt(i, headshotInstance);
   headOffset.copy(HEAD_CENTER).applyMatrix4(lookTurn).applyMatrix3(headTurn);
-  headshot.head.copy(personModel.headPivot).applyMatrix4(headMatrix).add(headOffset).applyMatrix4(headshotInstance);
-  headshot.forward.set(0, 0, 1).applyMatrix4(lookTurn).applyMatrix3(headTurn).transformDirection(headshotInstance);
-  headshot.up.set(0, 1, 0).applyMatrix4(lookTurn).applyMatrix3(headTurn).transformDirection(headshotInstance);
+  return headAt.copy(personModel.headPivot).applyMatrix4(headMatrix).add(headOffset).applyMatrix4(headshotInstance);
+}
+
+/**
+ * Where to put the person card's headshot camera: carried by their chest bone, looking at where their face is at rest.
+ * @param {number} i - their index in people
+ * @returns {{head: THREE.Vector3, forward: THREE.Vector3, up: THREE.Vector3, distance: number}} what the camera looks
+ * at, which way from there it stands, which way is up, and how far off it draws
+ */
+export function headshotOf(i) {
+  boneAt(chestMatrix, personModel.chestBone, i);
+  chestTurn.setFromMatrix4(chestMatrix);
+  personModel.mesh.getMatrixAt(i, headshotInstance);
+  headshot.head.copy(personModel.headPivot).add(HEAD_CENTER).applyMatrix4(chestMatrix).applyMatrix4(headshotInstance);
+  headshot.forward.set(0, 0, 1).applyMatrix3(chestTurn).transformDirection(headshotInstance);
+  headshot.up.set(0, 1, 0).applyMatrix3(chestTurn).transformDirection(headshotInstance);
   headshot.distance = 4.6*modelScale(people[i]);
   return headshot;
 }
@@ -348,7 +375,7 @@ export function walkPossessed(p, dt) {
  */
 export function placePossessedCamera(i) {
   const p = people[i];
-  if (personModel) camera.position.copy(headshotOf(i).head);
+  if (personModel) camera.position.copy(headOf(i));
   else camera.position.set(p.x, p.y + personHeight(p)*0.92, p.z);
   camera.rotation.set(possession.pitch, possession.yaw + Math.PI, 0, 'YXZ');
 }
