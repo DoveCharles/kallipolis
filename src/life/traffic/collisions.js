@@ -6,7 +6,7 @@ import { isPedInDanger, voiceOfPerson } from '../people/people.js';
 import { exclaim } from '../../audio/voices.js';
 import { puffSmoke, sparks, burnFx, igniteFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
-import { DRIVE_ACCEL, DRIVE_TOP_SPEED, boostMultiplier, boostSmoke, drivenCar } from './driving.js';
+import { BOOST_UNLOCK, DRIVE_ACCEL, DRIVE_TOP_SPEED, boostMax, boostMultiplier, boostSmoke, drivenCar } from './driving.js';
 import { killCar } from './follow.js';
 import { carJoinLane, lanePoint, routePoint } from './lanes.js';
 import { CAR_REAR_AXLE, carHeight, carLength, carWidth } from './placing.js';
@@ -102,8 +102,10 @@ export function runOverPeople(car, motion = null) {
       }
       if (knocked && p.mode !== 'dead') { App.knockedByCar?.(p); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed, SIDE_THROW); p.shotRate = CAR_FALL_SPEEDUP; }
       if (hit === 'kill' && speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p));
+      const alive = p.mode !== 'dead';
       damage(p, carHitDamage(car, speed)*(hit === 'kill' ? 1 : KNOCK_BOX_DAMAGE_SHARE), {
         by: driven || motion?.by === 'player' ? 'player' : 'car', momentum: { x: velocity.x, y: 0, z: velocity.z }, throwScale: CAR_GIB_THROW, from: car });
+      if (alive && p.mode === 'dead' && car.traits?.bloodlust) bloodlustBoost(car);
     }
     else if (p.mode === 'possessed') return;
     else if (Math.abs(right) < stun.halfWidth && Math.abs(forward) < stun.halfLength) {
@@ -118,6 +120,13 @@ export function runOverPeople(car, motion = null) {
   car.struck = struck;   // (and hurt once per box, as they come into it)
   // and any bee it hits (see life/bees.js)
   App.strikeBees?.({ x: car.x, z: car.z, heading: car.heading, halfLength, halfWidth, height: carHeight(car) });
+}
+const BLOODLUST_BOOST = 0.1; // (the share of its boost meter a bloodlust car gets back for each person it kills)
+/** A kill feeds a bloodlust car's boost: BLOODLUST_BOOST of its boostMax back, unlocking it if that's enough (see driving.js). */
+function bloodlustBoost(car) {
+  const max = boostMax(car);
+  car.boostLeft = Math.min(max, (car.boostLeft ?? max) + BLOODLUST_BOOST*max);
+  if (car.boostLeft >= BOOST_UNLOCK*max) car.boostLocked = false;
 }
 /**
  * Strike whoever an aircraft is touching — whatever lies within its footprint (a box turned to `heading`) and whose height

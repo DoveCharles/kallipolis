@@ -578,6 +578,11 @@ export function updateFright(p, dt) {
 
 /** How long, in seconds, someone runs off from whatever frightened them. */
 const FLEE_TIME = 10;
+// Someone in a hangout who's fled FLEE_REPEAT_COUNT times within FLEE_REPEAT_WINDOW seconds, or for FLEE_AREA_TIME seconds
+// in all while in it, makes for its exit furthest from the danger instead of running about inside it (see wantsOut).
+const FLEE_REPEAT_COUNT = 3, FLEE_REPEAT_WINDOW = 60, FLEE_AREA_TIME = 15;
+/** Whether someone fleeing in a hangout has had enough of it and should leave. */
+const wantsOut = p => (p.fleeStarts?.length ?? 0) >= FLEE_REPEAT_COUNT || (p.fleeInArea ?? 0) >= FLEE_AREA_TIME;
 /**
  * Set someone running off, more than twice as fast as they walk, away from `from` ({ x, z }) for FLEE_TIME seconds.
  * @param {Person} p - the person
@@ -586,14 +591,46 @@ const FLEE_TIME = 10;
  */
 export function beginFleeing(p, from) {
   p.fright = { stage: 'flee', timer: FLEE_TIME, from };
+  const now = lastPeopleTime ?? 0;
+  p.fleeStarts = (p.fleeStarts ?? []).filter(t => now - t < FLEE_REPEAT_WINDOW);
+  p.fleeStarts.push(now);
   p.faceTo = null; p.lookAt = null;
   // away from whatever frightened them: turn round, if they're on a walkway
   if (p.mode === 'line') {
     const nav = peopleNav.lines[p.li], k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), a = nav.pts[k], b = nav.pts[k + 1];
     if (((b.x - a.x)*(from.x - p.x) + (b.z - a.z)*(from.z - p.z))*p.dir > 0) p.dir = -p.dir;
   } else if (p.mode === 'wander') {
-    fleeWithin(p, peopleNav.areas[p.area]);
+    const area = peopleNav.areas[p.area];
+    if (!(wantsOut(p) && leaveArea(p, area, from))) fleeWithin(p, area);
   }
+}
+/**
+ * Send someone in a hangout out of it: onto the walkway at one of its entrances — the nearest of a few, or, running from
+ * `from`, whichever takes them furthest from it — as mode 'leaving'. Entrances reached over dry ground come first.
+ * @param {Person} p - the person
+ * @param {Hangout} area - the hangout they're in
+ * @param {?{x: number, z: number}} [from] - what they're running from, if anything
+ * @returns {boolean} whether it has an entrance to leave by
+ */
+function leaveArea(p, area, from = null) {
+  if (!area.exits.length) return false;
+  const candidates = from ? area.exits : Array.from({ length: 6 }, () => area.exits[Math.floor(peopleRng()*area.exits.length)]);
+  let exit = null;
+  for (const e of candidates) {
+    const d = Math.hypot(e.x - p.x, e.z - p.z);
+    // (fleeing: far from the danger, less how far off it is; otherwise just near)
+    const score = from ? Math.hypot(e.x - from.x, e.z - from.z) - d : -d;
+    // Uses the entrance's own position, not the walkway point: a walkway lies outside the hangout, so a walk to
+    // that point never reads as clear ground.
+    const dry = walkableUpTo(area, p, e.x, e.z).clear;
+    if (!exit || (dry !== exit.dry ? dry : score > exit.score)) exit = { ...e, score, dry };
+  }
+  // Joins the walkway at the point where it passes the entrance.
+  joinWalkway(p, exit.li, peopleNav.lines[exit.li].cum[exit.vi], peopleRng() < 0.5 ? -1 : 1);
+  p.exit = walkwayPoint(p);
+  p.mode = 'leaving'; p.wait = 0;
+  p.fleeInArea = 0;
+  return true;
 }
 
 /**
@@ -937,7 +974,12 @@ export function updatePeople(t) {
       } else if (p.fright || p.stun || p.please || p.attack || frozen) {
         // Frightened, stunned or pleased. Fright runs off further each time they reach where they were running to;
         // stun and please hold position through the `frozen` guard below, with no movement of their own.
-        if (fleeing && Math.hypot(p.tx - p.x, p.tz - p.z) < 0.5) fleeWithin(p, area);
+        if (fleeing) {
+          p.fleeInArea = (p.fleeArea === p.area ? p.fleeInArea ?? 0 : 0) + dt;
+          p.fleeArea = p.area;
+          if (wantsOut(p) && leaveArea(p, area, p.fright.from)) { /* heading out */ }
+          else if (Math.hypot(p.tx - p.x, p.tz - p.z) < 0.5) fleeWithin(p, area);
+        }
       } else if (p.wait > 0 || p.oneShot) {
         p.wait -= dt;
       } else if (Math.hypot(p.tx - p.x, p.tz - p.z) < 0.3) {
@@ -951,20 +993,8 @@ export function updatePeople(t) {
           // over to a train station standing in here
           const node = stations[Math.floor(peopleRng()*stations.length)], st = getTrainStations().get(node);
           goRideTrain(p, node, { x: st.x, y: area.y, z: st.z });
-        } else if (next === 'leave' && area.exits.length) {
-          // head for the nearest of a few of the hangout's entrances
-          let exit = null;
-          for (let k=0;k<6;k++) {
-            const e = area.exits[Math.floor(peopleRng()*area.exits.length)], q = peopleNav.lines[e.li].pts[e.vi], d = Math.hypot(q.x-p.x, q.z-p.z);
-            // Uses the entrance's own position, not the walkway point: a walkway lies outside the hangout, so a walk to
-            // that point never reads as clear ground.
-            const dry = walkableUpTo(area, p, e.x, e.z).clear;
-            if (!exit || (dry !== exit.dry ? dry : d < exit.d)) exit = { ...e, d, dry };
-          }
-          // Joins the walkway at the point where it passes the entrance.
-          joinWalkway(p, exit.li, peopleNav.lines[exit.li].cum[exit.vi], peopleRng() < 0.5 ? -1 : 1);
-          p.exit = walkwayPoint(p);
-          p.mode = 'leaving'; p.wait = 0;
+        } else if (next === 'leave' && leaveArea(p, area)) {
+          // off to the nearest of a few of the hangout's entrances
         } else if (next === 'sit' && goSit(p, area)) {
           // off to a bench, or to sit on the grass
         } else if (next === 'lie' && goLieDown(p, area)) {

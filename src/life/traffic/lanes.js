@@ -393,7 +393,7 @@ export function checkYield(car, dt) {
     if (forward < 0.5 || forward > PED_YIELD_RADIUS) continue; // (only ahead of it, not behind)
     car.yieldChecked = i;
     // (someone on a junction's zebra crossing always gets let across)
-    if (p.crossStage === 'jcross' || trafficRng() < PED_YIELD_CHANCE) car.yieldFor = i;
+    if (p.crossStage === 'jcross' || trafficRng() < PED_YIELD_CHANCE/Math.max(0.01, car.traits?.aggression ?? 1)) car.yieldFor = i; // (the more aggressive, the less often)
     return car.yieldFor === i;
   }
   return false;

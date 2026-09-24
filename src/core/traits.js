@@ -34,7 +34,7 @@ export const TRAITS = {
   backwards: { base: 0, min: 0, max: 1, combine: 'on' },
   evil:      { base: 0, min: -1, max: 1, combine: 'add', hidden: true },
   aggression:{ base: 1, min: 0, max: 100 },
-  bloodlust: { base: 0, min: 0, max: 1, combine: 'on' }, // covered in blood, twice as fast and out to punch everyone (see life/people/peopleBlood.js)
+  bloodlust: { base: 0, min: 0, max: 1, combine: 'on' }, // covered in blood, twice as fast and out to punch everyone (see life/people/peopleBlood.js); a car gets 10% of its boost back per person it kills (bloodlustBoost in life/traffic/collisions.js)
   agemult:   { base: 1, min: 0.1, max: 1000, hidden: true }, // no upper limit in practice, for vampiric / immortal types
   dodge:     { base: 0, min: 0, max: 1, combine: 'add' }, // the chance of leaping clear of a punch, then going after whoever threw it (see dodgePunch in life/people/peopleActivities.js)
   blazed:    { base: 0, min: 0, max: 1, combine: 'on' }, // the whites of their eyes a little red (see BLAZED_EYE_RED in life/people/people.js)
