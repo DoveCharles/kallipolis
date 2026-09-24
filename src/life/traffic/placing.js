@@ -6,6 +6,7 @@ import { drivenCar, goingUnder } from './driving.js';
 import { BOX_CAR_LENGTH, BOX_CAR_WIDTH, carMeshes, carParts } from './models.js';
 import { DEFAULT_HOLO, DEFAULT_RUST } from './special.js';
 import { cars } from './state.js';
+import { CAR_SHAKE, shake } from '../revive.js';
 import { carHitboxDebugMesh } from './traffic.js';
 
 // Drawing a car where it is: wheels, body sway and its instance (placeCar); its size (carScale, carLength, carWidth,
@@ -81,7 +82,9 @@ export function placeCar(car, i, designCounts) {
   if (car.sinking) rotation.multiply(tilting.setFromAxisAngle(sideways, car.sinking.pitch)); // (nose down, into the water)
   if (car.sinking?.roll) rotation.multiply(rolling.setFromAxisAngle(forward, car.sinking.roll)); // (shaking as it climbs back out — see riseCar)
   if (car.bumpShake) rotation.multiply(rolling.setFromAxisAngle(forward, car.bumpShake)); // (rocking side to side while it hops, like a plane landing — see updateSpecialTraits)
-  position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0), car.z); // (floatDrop: an aqua car settled into water — see updateFloating; bumpY: a terrible car hopping — see updateSpecialTraits)
+  // (floatDrop: an aqua car settled into water — see updateFloating; bumpY: a terrible car hopping — see updateSpecialTraits)
+  position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0), car.z);
+  if (car.reviving) shake(position, rotation, CAR_SHAKE*carScale(car)); // (blown up, before the bolt: see startCarRevive in follow.js)
   if (car.design != null && carMeshes[car.design]) {
     const cm = carMeshes[car.design], idx = designCounts[car.design]++;
     const holo = car.holo ?? DEFAULT_HOLO; // (a legendary car's foil/polychrome sheen, drawn by the shader itself — see carHoloOf)

@@ -15,6 +15,8 @@ import { PUNCH_MIN_PUSH, followPerson, personHeight, stopFollowingPerson } from 
 import { openRoomDoor, roomBeyondDoor, roomDoorway, roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
 import { clearMeal, mealFinished, serveMeal } from './peopleHolding.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
+import { REVIVE_SHAKE_TIME } from '../revive.js';
+import { strikeLightning } from '../lightning.js';
 
 // ---- what people get up to besides walking about.
 //
@@ -701,10 +703,23 @@ export function landFall(p) {
   p.x += offX*cos + offZ*sin; p.z += offZ*cos - offX*sin;
   p.clipA = p.clipB = fallen; p.fade = 1;
   p.punched.stage = 'down';
-  p.punched.timer = (3 + peopleRng()*4)*DOWN_TIME_SCALE;
+  p.punched.timer = p.punched.revive ? REVIVE_SHAKE_TIME : (3 + peopleRng()*4)*DOWN_TIME_SCALE;
   if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; }
 }
 
+/**
+ * Put someone already on the ground (lying, crawling, or getting up) back flat on their back in the Fallen pose, for
+ * REVIVE_SHAKE_TIME (see reviveInstead in people.js).
+ * @param {Person} p - the person
+ * @returns {void}
+ */
+export function holdDown(p) {
+  p.clipA = p.clipB = clipNamed('Fallen'); p.fade = 1;
+  p.oneShot = null;
+  p.pose = 'Fallen';
+  p.punched.stage = 'down';
+  p.punched.timer = REVIVE_SHAKE_TIME;
+}
 /**
  * Move someone who's been punched on, each frame: lying there a while, then getting up.
  * @param {Person} p - the person
@@ -713,6 +728,11 @@ export function landFall(p) {
  */
 export function updatePunched(p, dt) {
   const k = p.punched;
+  if (k.revive) { // (dead, shaking, until the bolt brings them back: see reviveInstead in people.js)
+    if (k.stage === 'down' && (k.timer -= dt) <= 0) { strikeLightning({ x: p.x, y: p.y, z: p.z }); k.stage = 'rise'; p.pose = 'Idle'; }
+    else if (k.stage === 'rise' && weightOf(p, clipNamed('Idle')) >= 1) { p.punched = null; p.wait = 0.5; }
+    return;
+  }
   if (k.stage === 'down' && (k.timer -= dt) <= 0) { if (!crawlOffRoad(p)) { k.stage = 'rise'; p.pose = 'Idle'; } } // (out on the road, they crawl off it first: see peopleRoad.js)
   else if (k.stage === 'crawl') updateCrawl(p, dt);
   else if (k.stage === 'rise' && weightOf(p, clipNamed('Idle')) >= 1) { p.punched = null; p.wait = 0.5 + peopleRng(); reactToPunch(p, k.by); }

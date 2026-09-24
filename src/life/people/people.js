@@ -7,6 +7,7 @@ import { scene } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
 import { blastFx, explode } from '../giblets.js';
 import { blasts, PERSON_BLAST_SCALE } from '../traffic/state.js';
+import { canRespawn, PERSON_SHAKE, shake } from '../revive.js';
 import { throwBodyParts } from './peopleGibs.js';
 import { babble, nextSyllable } from '../../audio/voices.js';
 import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
@@ -22,7 +23,7 @@ import { closestPointOnSegment } from '../../buildings/footprints.js';
 import { MELODIES } from '../../audio/melodies.js';
 import { favoritePeople, isFavoritePerson } from '../../ui/favorites.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
-import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
+import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
@@ -639,7 +640,7 @@ export function fleeWithin(p, area) {
  * they were talking to carrying on without them. Whoever isn't hearted stays dead only until the crowd next wants
  * their spot: then someone new, with their own name and face, takes it (see updatePeople) - they don't come back.
  * The people around them take it according to how evil they were (see bystandersReactToDeath), the same however they
- * died. The explosive go up too, killing whoever's near.
+ * died. The explosive go up too, killing whoever's near. Someone with a respawn left lies shaking instead (reviveInstead).
  * @param {number} i - their index in people
  * @param {'player'|'car'} [by] - who did it, for the morality meter: the Smite button, or a car that ran them over
  * @param {?{x: number, y: number, z: number}} [momentum] - the velocity of whatever hit them, which their giblets keep
@@ -649,7 +650,8 @@ export function fleeWithin(p, area) {
  */
 function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = null) {
   const p = people[i];
-  if (!p || isGone(p) || isFavoritePerson(p.id)) return; // (the hearted can't be killed: see ui/favorites.js)
+  if (!p || isGone(p) || isFavoritePerson(p.id) || p.punched?.revive) return; // (the hearted can't be killed: see ui/favorites.js; nor can the shaking, see below)
+  if (canRespawn(p) && reviveInstead(p, source ?? (momentum ? { x: p.x - momentum.x, z: p.z - momentum.z } : null))) return;
   // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
   App.recordMoralityEvent?.(`${standingOf(p)} peds killed by ${by === 'car' ? 'cars' : 'player'}`, p.name);
   if (followed === i) stopFollowingPerson();
@@ -686,6 +688,23 @@ function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = 
   p.indoors = null;
   p.moving = false;
   bloodBurst(p, momentum); // (whoever's near, or in the way of what killed them, is splashed)
+}
+/**
+ * Someone with a respawn left, killed: knocked flat instead (or held there, if they're already down), marked `revive`,
+ * so they lie shaking for REVIVE_SHAKE_TIME until lightning strikes them and they get up unharmed (see updatePunched).
+ * @param {Person} p - the person
+ * @param {?{x: number, z: number}} from - what killed them, to fall away from
+ * @returns {boolean} false where they can't be laid down (no model yet, indoors, on a train): they die after all
+ */
+function reviveInstead(p, from) {
+  if (!hasClip('Fall')) return false;
+  const k = p.punched;
+  if (k && k.stage !== 'marked' && k.stage !== 'brace') { // (already down: fallen, lying, crawling or getting up)
+    if (k.stage !== 'fall') holdDown(p);
+  } else if (!knockOver(p, from ?? { x: p.x + Math.sin(p.heading), z: p.z + Math.cos(p.heading) })) return false;
+  p.revived = true;
+  p.punched.revive = true;
+  return true;
 }
 /**
  * Count someone who's drowned (see peopleWater.js) once their body has sunk away: the morality notice, the people around
@@ -1071,6 +1090,7 @@ export function updatePeople(t) {
       rotation.setFromAxisAngle(up, p.heading);
       const faceDown = turnInWater(p, rotation), crawlLift = turnCrawling(p, rotation); // (tipped, rocked or face down in the water: see peopleWater.js; face down crawling: see peopleRoad.js)
       position.set(p.x - offX*cos - offZ*sin, faceDown ? p.y : crawlLift != null ? p.y + crawlLift : p.y + p.seatLift*sitWeight(p) - personModel.minY*s, p.z + offX*sin - offZ*cos);
+      if (p.punched?.revive && p.punched.stage === 'down') shake(position, rotation, PERSON_SHAKE*S.peopleSize); // (dead, before the bolt: see reviveInstead)
       matrix.compose(position, rotation, scale.set(s, s, s));
       personModel.mesh.setMatrixAt(i, matrix);
       // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION
@@ -1163,7 +1183,9 @@ export function updatePeople(t) {
       rotation.setFromAxisAngle(up, p.heading);
       turnInWater(p, rotation); turnCrawling(p, rotation);
       if (!isDrawn(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
-      matrix.compose(position.set(p.x, p.y + bob, p.z), rotation, scale);
+      position.set(p.x, p.y + bob, p.z);
+      if (p.punched?.revive && p.punched.stage === 'down') shake(position, rotation, PERSON_SHAKE*S.peopleSize);
+      matrix.compose(position, rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);
     }
     if (S.showRoadsafetyDebug) {

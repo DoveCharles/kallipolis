@@ -150,7 +150,7 @@ const WALL_HEAD_ON = 0.8, WALL_DRAG = 3, WALL_LET_GO = 0.25, WALL_SCRAPE_SPEED =
  * @param {object} car - anything with x, z and heading that carLength and carWidth can measure
  * @returns {?Array<{x: number, z: number}>}
  */
-function buildingHit(car) {
+export function buildingHit(car) {
   const halfLength = carLength(car)/2, halfWidth = carWidth(car)/2, reach = Math.hypot(halfLength, halfWidth);
   const sin = Math.sin(car.heading), cos = Math.cos(car.heading);
   const corners = [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, b]) =>
@@ -432,7 +432,7 @@ export function bumpIntoCars(car, was) {
     if (other === car || wreckedCars.includes(other) || !carsOverlap(car, other)) return;
     const d = Math.hypot(other.x - car.x, other.z - car.z), dWas = Math.hypot(other.x - was.x, other.z - was.z);
     if (carsOverlap(before, other) && d >= dWas) return; // (moving off it)
-    if (other.fuse == null && Math.abs(car.speed) >= WRECK_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight)) { lightFuse(other); impactSound('crash', other, hitSpeed); sparks({ x: (car.x + other.x)/2, y: Y_ROAD + carHeight(car)*0.4, z: (car.z + other.z)/2 }, BUMP_SPARKS); slowedBy(car, 'car', other.traits?.weight); return; }
+    if (other.fuse == null && !other.reviving && Math.abs(car.speed) >= WRECK_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight)) { lightFuse(other); impactSound('crash', other, hitSpeed); sparks({ x: (car.x + other.x)/2, y: Y_ROAD + carHeight(car)*0.4, z: (car.z + other.z)/2 }, BUMP_SPARKS); slowedBy(car, 'car', other.traits?.weight); return; }
     const joltSpeed = JOLT_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight), jolted = Math.abs(car.speed) >= joltSpeed;
     kickCar(other, other.x - car.x, other.z - car.z, jolted ? Math.abs(car.speed)*BUMP_JOLT_SHOVE : Math.min(1, Math.abs(car.speed)*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1)));
     other.speed = 0;
