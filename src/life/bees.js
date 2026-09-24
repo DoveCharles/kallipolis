@@ -8,6 +8,7 @@ import { makeThumbnailDrawer } from './thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
 import { mulberry32 } from '../core/math.js';
+import { TOON_RAMP } from '../core/toon.js';
 import { startFlying, endFlying, controlInput } from './possession.js';
 import { blastFx, explodeBee } from './giblets.js';
 import { blasts, PERSON_BLAST_SCALE } from './traffic/state.js';
@@ -308,6 +309,9 @@ function smoothShade(geometry) {
 // need nothing of their own: three.js reads the morph targets off the geometry and compiles its own program for them.
 const solidMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, side: THREE.DoubleSide });
 const clearMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.2, side: THREE.DoubleSide, transparent: true, depthWrite: false });
+// the bees themselves are toon-shaded, like people (see core/toon.js); the flowers and hives aren't
+const beeSolidMaterial = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: TOON_RAMP, side: THREE.DoubleSide });
+const beeClearMaterial = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: TOON_RAMP, side: THREE.DoubleSide, transparent: true, depthWrite: false });
 
 export async function loadBeeModel() {
   let gltf;
@@ -542,7 +546,7 @@ export function plantParkLife(zone, { rng, foliage, ground, spot, clear, trees, 
         phase: Math.random()*Math.PI*2, plan: [], perch: null, angle: 0, circling: 1, flap: 0, legs: 0, look: 0, land: 1 });
     }
   });
-  const beeMesh = instanced(model.bee, bees.length, [solidMaterial, clearMaterial], 'Bees');
+  const beeMesh = instanced(model.bee, bees.length, [beeSolidMaterial, beeClearMaterial], 'Bees');
   beeMesh.userData.sharedGeometry = true;
   beeMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   beeMesh.count = bees.length; // before the shape keys below, which size their own texture by it

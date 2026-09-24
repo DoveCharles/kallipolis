@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mulberry32, lerp } from '../../core/math.js';
 import { scene } from '../../core/scene.js';
+import { TOON_RAMP } from '../../core/toon.js';
 import { onProfilesLoaded, profileOf } from '../profiles.js';
 import { splitBody } from './bodySplit.js';
 import { fitSkirt } from './skirtFit.js';
@@ -11,7 +12,7 @@ import { HEADSHOT_LAYER, PEOPLE_MAX, people, peopleMesh, setPersonModel } from '
 
 // =========================================== PEOPLE MODEL ===========================================
 // assets/models/Person.glb replaces the cuboids once it loads — one rigged figure, drawn for everyone
-// at once as one instanced mesh, flat-shaded.
+// at once as one instanced mesh, flat- and toon-shaded.
 //
 // The clips (walk, idle fidgets, wave, sit, lie, punch, fall) are baked, as three.js can't instance a rigged mesh: at
 // load each is played a frame at a time and every bone's pose per frame written into a texture (a row per frame, three
@@ -37,6 +38,9 @@ const GLASSES_MODEL_URL = 'assets/models/Glasses.glb';
 const SKIRT_MODEL_URL = 'assets/models/Skirt.glb';
 const GLASSES_CHANCE = 0.2;
 const SKIRT_CHANCE = 0.3;
+// how far back a skirt's back hangs out at the hem, in the model's units, beyond where it was made: room for the thighs
+// swinging back under it (nothing at the waist, all of it at the hem)
+const SKIRT_BACK_ROOM = 0.4;
 const JEANS_CHANCE = 0.25;
 const CUFF_LIGHTEN_TO = new THREE.Color(0xffffff), CUFF_LIGHTEN = 0.3; // how much lighter than the jeans their cuff is
 const HAT_CHANCE = 0.1;
@@ -429,6 +433,10 @@ const PERSON_VERTEX_PARS = `
   uniform vec3 personHeadPivot;
   uniform float personChestBone;
   uniform vec3 personChestPivot;
+  uniform vec4 personThighBones; // the left thigh and knee bones, then the right's
+  uniform vec3 personHipRest, personKneeRest; // where the left thigh's top ring and knee are at rest (the right's mirrored)
+  uniform vec2 personThighRadius; // how thick the thigh is at its top and at the knee
+  uniform vec3 personThighGrow, personKneeGrow; // how much thicker each is for all of the Hips, Weight and Butt keys
   uniform int personHidden; // the person whose head is hidden (-1 for nobody)
   attribute vec4 personJoints;
   attribute vec4 personWeights;
@@ -545,6 +553,35 @@ const PERSON_VERTEX_PARS = `
     vec3 sideways = normalize(mat3(personBone(personChestBone))*vec3(1.0, 0.0, 0.0));
     return posed + sideways*(restX < 0.0 ? -spread : spread);
   }
+  // How far a point is inside a tapered cylinder (negative outside), and which way is out. Above the top it's outside
+  // (that's the hips, the skirt's own); below the bottom it's a round end.
+  float personCapsuleDepth(vec3 p, vec3 top, vec3 bottom, vec2 radius, out vec3 away) {
+    vec3 axis = bottom - top;
+    float t = dot(p - top, axis)/dot(axis, axis);
+    if (t < 0.0) return -1.0;
+    t = min(t, 1.0);
+    away = p - (top + axis*t);
+    float d = length(away);
+    away = d > 1e-5 ? away/d : vec3(0.0, 0.0, -1.0);
+    return mix(radius.x, radius.y, t) - d;
+  }
+  // Keeps a skirt out of the thighs. A skirt's vertex rides a blend of the bones near it (see skirtFit.js), so between the
+  // legs it moves half as far as a leg swinging back or up, and the thigh comes through it. Each thigh is a cylinder from
+  // its top ring to the knee, posed by the bones those rings ride, grown by the body's shape keys; whatever of the skirt
+  // is inside it is pushed out.
+  vec3 personClearThighs(vec3 posed) {
+    vec4 body = personTrait(0);
+    vec3 keys = vec3(body.z, body.w, personTrait(1).x);
+    vec2 radius = personThighRadius + vec2(dot(personThighGrow, keys), dot(personKneeGrow, keys));
+    vec3 away;
+    for (int side = 0; side < 2; side++) {
+      vec3 mirror = side == 0 ? vec3(1.0) : vec3(-1.0, 1.0, 1.0), hip = personHipRest*mirror, knee = personKneeRest*mirror;
+      float thigh = side == 0 ? personThighBones.x : personThighBones.z, kneeBone = side == 0 ? personThighBones.y : personThighBones.w;
+      float depth = personCapsuleDepth(posed, (personBone(thigh)*vec4(hip, 1.0)).xyz, (personBone(kneeBone)*vec4(knee, 1.0)).xyz, radius, away);
+      posed += away*max(depth, 0.0);
+    }
+    return posed;
+  }
 `;
 
 // the fragment shader's blood: where the splotches fall, and the layer over the color — personBloodColor at the
@@ -660,7 +697,8 @@ function injectPersonShader(shader, uniforms, look) {
       + (outfitted ? '\nvarying vec4 vPersonOutfit;\nvarying vec4 vPersonOutfitRed;' : ''))
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       ${rested ? 'vPersonRest = transformed;' : ''}
-      transformed = personArms(personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz), transformed.x);
+      ${look.clearThighs ? 'transformed = personClearThighs((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz);'
+        : 'transformed = personArms(personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz), transformed.x);'}
       int personSlotIndex = int(personVertex.y + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
@@ -690,14 +728,14 @@ function injectPersonShader(shader, uniforms, look) {
  * @returns {THREE.InstancedMesh} the mesh, added to the scene
  */
 function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name = 'People', headshot = true } = {}) {
-  const material = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.DoubleSide, flatShading: true });
+  const material = new THREE.MeshToonMaterial({ gradientMap: TOON_RAMP, side: THREE.DoubleSide, flatShading: true });
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   if (byAttribute) { material.defines = { PERSON_INDEX_ATTRIBUTE: '' }; depth.defines = { PERSON_INDEX_ATTRIBUTE: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
-  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), look.femaleOnly.join(',')].join('|');
+  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, look.femaleOnly.join(',')].join('|');
   material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, look);
   material.customProgramCacheKey = () => key;
-  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly });
+  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly, clearThighs: look.clearThighs });
   depth.customProgramCacheKey = () => key + '|depth';
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -886,12 +924,50 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
       });
       const fit = fitSkirt(skirtPositions, { positions, indices, joints, weights, offsets: bodyOffsets, mirrorBone,
         usable: i => headWeights[i] === 0 && armWeights[i] === 0 });
+      // (its back moved back, more the lower down it is, once it's fitted where it was made)
+      let top = -Infinity, hem = Infinity;
+      for (let i=1;i<skirtPositions.length;i+=3) { top = Math.max(top, skirtPositions[i]); hem = Math.min(hem, skirtPositions[i]); }
+      for (let i=0;i<skirtPositions.length;i+=3) if (skirtPositions[i+2] < 0) {
+        const down = (top - skirtPositions[i+1])/Math.max(top - hem, 1e-6);
+        skirtPositions[i+2] -= SKIRT_BACK_ROOM*down*down*Math.min(1, -skirtPositions[i+2]/0.3);
+      }
       const first = offsets[0].length/3;
       offsets.forEach((keyOffsets, k) => { for (let i=0;i<skirtPositions.length;i++) keyOffsets.push(k < PERSON_BODY_KEY_COUNT ? fit.offsets[k][i] : 0); });
       skirtFits.push({ name: style.name, positions: skirtPositions, indices: skirtIndices, fit, first });
     });
     skirtGltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
   }
+  // ---- the thighs, as tapered capsules from hip to knee, that a skirt is kept out of (see personClearThighs): how thick
+  // the thigh is near either end, of the vertices mostly on the thigh and knee bones, and how much each body shape key thickens it
+  const thighBone = boneByName.get('ThighL'), kneeBone = boneByName.get('KneeL');
+  const thighs = thighBone != null && kneeBone != null ? (() => {
+    const at = b => new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().copy(skeleton.boneInverses[b]).invert());
+    const hip = at(thighBone), knee = at(kneeBone), axis = knee.clone().sub(hip), length = axis.length();
+    axis.divideScalar(length);
+    const onThigh = [];
+    for (let i=0;i<positions.length/3;i++) {
+      let w = 0;
+      for (let j=0;j<4;j++) if (joints[i*4 + j] === thighBone || joints[i*4 + j] === kneeBone) w += weights[i*4 + j];
+      if (w > 0.5 && positions[i*3] > 0) onThigh.push(i);
+    }
+    // (the radius at each end, the thigh's top ring and the knee's: its widest vertex, since the ring's flat sides between
+    // vertices sit inside that anyway)
+    const radii = key => [[0.05, 0.4], [0.8, 1.05]].map(([from, to]) => {
+      const found = [];
+      onThigh.forEach(i => {
+        const p = new THREE.Vector3(positions[i*3], positions[i*3+1], positions[i*3+2]);
+        if (key != null) p.add(new THREE.Vector3(offsets[key][i*3], offsets[key][i*3+1], offsets[key][i*3+2]));
+        const t = p.clone().sub(hip).dot(axis)/length;
+        if (t >= from && t <= to) found.push(p.sub(hip).addScaledVector(axis, -t*length).length());
+      });
+      found.sort((a, b) => a - b);
+      return found.length ? found[found.length - 1] : 0;
+    });
+    const rest = radii(null), grow = ['Hips', 'Weight', 'Butt'].map(name => radii(PERSON_SHAPE_KEYS.indexOf(name)).map((r, e) => Math.max(0, r - rest[e])));
+    // (the cylinder starts at the top ring rather than the hip joint, so the hips above it, where the skirt sits, are left be)
+    const top = onThigh.reduce((y, i) => Math.max(y, hip.y - positions[i*3+1] > 0.05*length ? positions[i*3+1] : -Infinity), -Infinity);
+    return { hip: hip.clone().addScaledVector(axis, (hip.y - top)/-axis.y), knee, rest, grow };
+  })() : null;
 
   // ---- baggy jeans: the body's legs pushed out (see jeansFit.js), their shape-key offsets going in after the skirts'
   const legSlots = ['Pants', ...PERSON_SLOTS.filter(slot => /^Leg\d/.test(slot))].map(slot => PERSON_SLOTS.indexOf(slot));
@@ -1253,6 +1329,11 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
     personTraits: { value: traitTexture }, personHidden: { value: -1 }, personBloodColor: { value: new THREE.Color(0.55, 0.05, 0.05) },
     personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personChestBone: { value: chestBone }, personChestPivot: { value: chestPivot },
+    personThighBones: { value: thighs ? new THREE.Vector4(thighBone, kneeBone, mirrorBone[thighBone], mirrorBone[kneeBone]) : new THREE.Vector4() },
+    personHipRest: { value: thighs ? thighs.hip : new THREE.Vector3() }, personKneeRest: { value: thighs ? thighs.knee : new THREE.Vector3() },
+    personThighRadius: { value: new THREE.Vector2(...(thighs ? thighs.rest : [0, 0])) },
+    personThighGrow: { value: new THREE.Vector3(...(thighs ? thighs.grow.map(g => g[0]) : [0, 0, 0])) },
+    personKneeGrow: { value: new THREE.Vector3(...(thighs ? thighs.grow.map(g => g[1]) : [0, 0, 0])) },
   };
   const bodyLook = {
     palette,
@@ -1275,7 +1356,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
   const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair'), 1: traitRow('Hat') }, femaleOnly: [] };
   const glassesLook = { palette: hairPalette, traitColors: { 0: traitRow('Glasses') }, femaleOnly: [] };
-  const looks = { hair: hairLook, glasses: glassesLook, skirt: { palette: [new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Skirt') }, femaleOnly: [] },
+  const looks = { hair: hairLook, glasses: glassesLook, skirt: { palette: [new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Skirt') }, femaleOnly: [], clearThighs: !!thighs },
     jeans: { palette: [new THREE.Color(0xffffff), new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Pants'), 1: traitRow('Cuff') }, femaleOnly: [] } };
   wornLayers.flatMap(layer => layer.styles.map(style => [style, looks[layer.look]])).forEach(([style, look]) => {
     if (!style.members.length) { style.geometry.dispose(); return; }
@@ -1419,7 +1500,8 @@ function buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm
     geo.setAttribute('instanceLook', gib.look);
     geo.setAttribute('instanceEyes', gib.eyes);
     geo.setAttribute('instancePerson', gib.person);
-    gib.mesh = makePersonMesh(geo, gibUniforms, look, GIB_BODIES_MAX, true, { name: 'BodyGibs', headshot: false });
+    // (a gib's pieces fly apart, the thighs from the skirt, so it isn't kept out of them)
+    gib.mesh = makePersonMesh(geo, gibUniforms, { ...look, clearThighs: false }, GIB_BODIES_MAX, true, { name: 'BodyGibs', headshot: false });
     return gib;
   };
   const body = gibBodyGeometry({ geometry, joints, weights, slots, bones, inHead, inArm });

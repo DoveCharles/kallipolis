@@ -65,6 +65,7 @@ Format: `file` (size) purpose — key exports.
 - `shared.js` (2K) What the modules share. — exports: S, App, SAND_TINT, setSandTint
 - `splines.js` (9K) ---------------------------------------------------------- spline / tessellation — exports: tessellateOpenPath, tessellateClosedPath, nearestPointOnEdgeTessellated, computeAutoHandlesRoad, computeAutoHandlesZone, BUILDING_GROUND_COLORS, ROAD_COLOR, ROAD_COLOR_PALETTE …
 - `state.js` (3K) Editor data: road nodes, map images, zone defaults — exports: roadNodes, mapImages, DEFAULT_ZONE_SETTINGS, MAX_TARGET_LOTS, MIN_ZONE_TREES, mapGroup
+- `toon.js` (2K) The light ramp (gradientMap) every toon-shaded material reads — people and bees: shade (tinted with the sky by scene.js updateSun), lit, a thin highlight; or a smooth falloff when toggled off. — exports: TOON_RAMP, setToon, setToonSky
 - `traits.js` (6K) Every trait an entry in any .txt file can carry, as [trait = value] (see core/entries.js). — exports: TRAITS, TRAIT_MACROS, modifierLines, traitLines
 - `type-text.js` (7K) The reader for the files saying what each kind of thing is like on its card (see ui/entity-card.js): — exports: loadTypeText
 
@@ -162,6 +163,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `pixel-icons.js` (5K) Replaces every SVG icon (in index.html or swapped in by JS) with its hand-drawn bitmap from assets/icons/, picked by icon and state (`which`/`nameOf`); black pixels as a currentColor mask over a bitmap of the rest, redrawn as its button changes state. No exports.
 - `pixelation.js` (26K) The colour grade (on unless it's turned off in World settings) is the cheapest of these: — exports: setCutout, renderView
 - `flat-shading.js` (2K) Display > Flat shading: forces flatShading on every lit material in the scene (swept every 0.5s while on; originals restored when off), kept in localStorage. — exports: none
+- `toon-shading.js` (<1K) Display > Toon characters: people and bees in toon bands or smooth light, via setToon in core/toon.js; kept in localStorage, on by default. — exports: none
 - `ui-scale.js` (2K) Display > UI scale (100–200%, localStorage): CSS zoom on the page, undone on #canvas-wrap so the 3D view stays 1:1; UI placed by mouse/getBoundingClientRect px goes through `toUi`, and CSS vh/vw divide by `--ui-scale`. — exports: uiScale, toUi
 - `view-prefs.js` (2K) Browser prefs: View > Edit Hints / General Hints (body classes `no-edit-hints`/`no-general-hints` hide `#hint` by its `data-kind`, set in editor/tools.js — the possession controls included), and Options > Game > Start in Edit mode (off: presses World on load). — exports: editHints, generalHints
 - `sound.js` (1K) The speaker button over the view, by undo and redo, mutes every sound (see audio/sfx.js).
