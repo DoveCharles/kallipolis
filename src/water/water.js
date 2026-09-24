@@ -230,6 +230,8 @@ export function isOpenWater(x, z, decks) {
   return region.length > 0 && testerOf(region)(x, z) && !decks.some(deck => deck.length && testerOf(deck)(x, z));
 }
 export function getBeachZoneArea() { refreshWaterCache(); return waterCache.beachZoneArea; }
+// Every park and beach zone (minus the zones above them): all the grass and sand. The same array until it changes.
+export function getGrassAndSandArea() { refreshWaterCache(); return waterCache.parkArea; }
 
 S.waterGroup = new THREE.Group(); S.waterGroup.name = 'Water'; scene.add(S.waterGroup);
 let builtWaterKey = null, builtBridgeKey = null, builtGroundKey = null;
@@ -238,6 +240,7 @@ let builtWaterKey = null, builtBridgeKey = null, builtGroundKey = null;
 export function rebuildWater() {
   S.waterDirty = false;
   refreshWaterCache();
+  App.attachWalkwayFringes(); // paved walkways' dust follows the grass and sand
   if (builtWaterKey !== waterCache.key) {
     builtWaterKey = waterCache.key;
     buildWaterBody(waterCache.region, waterCache.parkArea);
@@ -399,4 +402,4 @@ function buildWaterBody(region, parkArea) {
   scene.add(S.waterGroup);
 }
 
-Object.assign(App, { WATER_COLOR, PARK_BEACH_WIDTH, segmentUniformArray, edgeSegmentsOf, sharedEdgeSegmentsWith, applyWaterShader, getWaterRegion, getBeachZoneArea });
+Object.assign(App, { WATER_COLOR, PARK_BEACH_WIDTH, segmentUniformArray, edgeSegmentsOf, sharedEdgeSegmentsWith, applyWaterShader, getWaterRegion, getBeachZoneArea, getGrassAndSandArea });

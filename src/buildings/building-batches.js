@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { S } from '../core/shared.js';
 import { scene, computeWindowGlowFactor } from '../core/scene.js';
-import { createBatchedWindowMaterial } from './windows.js';
+import { createBatchedWindowMaterial, addBaseShade } from './windows.js';
 import { pedViewOn } from '../ui/ped-view.js';
 
 // ============================================================ merged buildings
@@ -26,8 +26,9 @@ scene.add(batchesGroup);
 const zoneBatches = new Map(); // zone -> { source, count, meshes, originals }
 const materials = new Map();   // class key -> the shared material its merged mesh draws with
 
-// the flat-varying plain material: a building part's roughness, metalness and glow, per vertex
-function plainMaterial(flat, side) {
+// the flat-varying plain material: a building part's roughness, metalness and glow, per vertex — and, for a building's
+// own walls and caps, the shade toward the ground its material draws (see addBaseShade)
+function plainMaterial(flat, side, baseShade) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 1, metalness: 1, flatShading: flat, side,
     emissive: 0xffffff, emissiveIntensity: 1 });
   mat.onBeforeCompile = shader => {
@@ -39,12 +40,13 @@ function plainMaterial(flat, side) {
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vBatchPbr.x;')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vBatchPbr.y;')
       .replace('#include <emissivemap_fragment>', 'totalEmissiveRadiance = vBatchEmissive;');
+    if (baseShade) addBaseShade(shader);
   };
-  mat.customProgramCacheKey = () => 'batchedPlain';
+  mat.customProgramCacheKey = () => 'batchedPlain' + !!baseShade;
   return mat;
 }
 function materialFor(key, kind) {
-  if (!materials.has(key)) materials.set(key, kind.window ? createBatchedWindowMaterial(kind.specular, kind.side) : plainMaterial(kind.flat, kind.side));
+  if (!materials.has(key)) materials.set(key, kind.window ? createBatchedWindowMaterial(kind.specular, kind.side) : plainMaterial(kind.flat, kind.side, kind.baseShade));
   const mat = materials.get(key);
   if (kind.window) mat.emissiveIntensity = computeWindowGlowFactor(S.sunElevation); // (in case it's been a while since this class was last used)
   return mat;
@@ -63,8 +65,10 @@ function kindOf(mesh) {
     const specular = !!m.envMap;
     return { window: true, specular, side: m.side, key: ['win', specular, m.side, mesh.castShadow, mesh.receiveShadow].join() };
   }
-  if (m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile || MAPS.some(k => m[k])) return null;
-  return { window: false, flat: !!m.flatShading, side: m.side, key: ['plain', !!m.flatShading, m.side, mesh.castShadow, mesh.receiveShadow].join() };
+  const baseShade = !!m.userData.baseShade;
+  if ((!baseShade && m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) || MAPS.some(k => m[k])) return null;
+  return { window: false, flat: !!m.flatShading, side: m.side, baseShade,
+    key: ['plain', !!m.flatShading, m.side, baseShade, mesh.castShadow, mesh.receiveShadow].join() };
 }
 
 const tmpV = new THREE.Vector3(), normalMatrix = new THREE.Matrix3(), color = new THREE.Color();

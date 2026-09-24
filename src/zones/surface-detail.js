@@ -4,11 +4,12 @@ import { Y_PARK } from '../core/scene.js';
 import { mulberry32, lerp, pointInPolygon, centroid, insetPolygon } from '../core/math.js';
 import { distPointSegment, distToPolygonBoundary } from '../buildings/footprints.js';
 import { PARK_TINT_COLORS, resolveParkTint, resolveTreeTint, resolveGrassNoiseStrength, pickBuildingColor, accentColorFrom } from '../core/splines.js';
-import { WINDOW_TILE_WORLD_SIZE, computeFacadeRuns, createWindowMaterial, mergeGeometries, mergeGeometryList, extractCapGeometry, buildWallGeometry, buildWedgeCapGeometry } from '../buildings/windows.js';
+import { WINDOW_TILE_WORLD_SIZE, computeFacadeRuns, createWindowMaterial, addBaseShade, mergeGeometries, mergeGeometryList, extractCapGeometry, buildWallGeometry, buildWedgeCapGeometry } from '../buildings/windows.js';
 import { MIN_ZONE_TREES, MAX_ZONE_TREES } from '../core/state.js';
 import { clipPolygons, createMeshBuilder } from '../roads/roads.js';
 import { scalePolygonAroundCentroid, makeExtrudeRaw, extrudeFootprintGeo } from './zone-visuals.js';
 import { plantParkLife } from '../life/bees.js';
+import { WATER_TIME } from '../water/water.js';
 
 // ---------------------------------------------------------- surface detail (Y2K greebles/bands/rings)
 // With `win` (the wall's window uniforms): the middle of the solid wall between the two window rows nearest z — above
@@ -50,7 +51,7 @@ function addAccentBand(group, poly, bandBottom, bandColor, rng, win) {
 // and 0.8 clear of its edge, up to count*12 tries. `kind` picks one of: under 0.18 an AC unit, under 0.33 a vent pipe,
 // under 0.46 a dish antenna on a mast, under 0.62 a squat water tank with a conical lid, under 0.77 clustered vent
 // pipes, under 0.87 nothing (it was a helipad marking), else a row of tilted solar panels. All sit on top of height
-function addRooftopGreebles(group, poly, height, rng) {
+function addRooftopGreebles(group, poly, height, rng, spots) {
   const count = 2 + Math.floor(rng()*5);
   let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
   poly.forEach(p => { if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z; });
@@ -142,7 +143,110 @@ function addRooftopGreebles(group, poly, height, rng) {
     }
     obj.traverse(o => { if (o.isMesh) { o.name='Building'; o.castShadow=true; } });
     group.add(obj);
+    spots.push({ x:pt.x, y:-pt.z, r:1.0 });
     placed++;
+  }
+}
+
+// The plant a real flat roof carries, at full size: a lift and stair housing, a timber water tank up on legs (on the
+// shorter buildings), rows of air-conditioning units with fans on top, and on a tall tower an antenna mast — its tip,
+// or on the tallest a corner of the roof, lit by a blinking red aircraft warning light. Everything turns square to the
+// roof's longest side, and keeps clear of the parapet and of everything else (`taken`: the small kit already up there,
+// from addRooftopGreebles, as circles { x, y, r } — added to). `prng` is the building's own generator
+// for this, so none of it moves anything else in the city.
+function addRooftopPlant(group, roof, roofZ, h, prng, bodyColor, taken) {
+  const c = centroid(roof);
+  let avgR = 0; roof.forEach(p => avgR += Math.hypot(p.x-c.x, p.z-c.z)); avgR /= roof.length;
+  if (avgR < 3) return;
+  let minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity, angle = 0, longest = 0;
+  roof.forEach((p, i) => {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+    const q = roof[(i+1)%roof.length], l = Math.hypot(q.x-p.x, q.z-p.z);
+    if (l > longest) { longest = l; angle = Math.atan2(-(q.z-p.z), q.x-p.x); }
+  });
+  const ux = Math.cos(angle), uy = Math.sin(angle); // (along the longest side, in the group's x, y)
+  const fits = (x, y, r) => pointInPolygon({ x, z:-y }, roof) && distToPolygonBoundary({ x, z:-y }, roof) >= r + 1.0
+    && taken.every(t => Math.hypot(t.x-x, t.y-y) >= t.r + r + 0.6);
+  // a free spot for something r across, the middle of the roof first when asked
+  const spot = (r, middle) => {
+    if (middle && fits(c.x, -c.z, r)) { taken.push({ x:c.x, y:-c.z, r }); return { x:c.x, y:-c.z }; }
+    for (let k=0;k<30;k++) {
+      const x = minX + prng()*(maxX-minX), y = -(minZ + prng()*(maxZ-minZ));
+      if (fits(x, y, r)) { taken.push({ x, y, r }); return { x, y }; }
+    }
+    return null;
+  };
+  const byColor = new Map(); // hex -> geometries, merged into one mesh each at the end
+  const put = (hex, geo, x, y, z, turn) => {
+    if (turn) geo.rotateZ(angle);
+    geo.translate(x, y, roofZ + z);
+    if (!byColor.has(hex)) byColor.set(hex, []);
+    byColor.get(hex).push(geo);
+  };
+  const box = (w, d, ht) => new THREE.BoxGeometry(w, d, ht);
+  const cyl = (r0, r1, ht, seg) => new THREE.CylinderGeometry(r0, r1, ht, seg).rotateX(Math.PI/2);
+  const housingHex = bodyColor.clone().multiplyScalar(0.82).getHex(), trimHex = bodyColor.clone().multiplyScalar(0.62).getHex();
+  let housing = null;
+  if (avgR > 4.5 && prng() < 0.75) {
+    const w = 3 + prng()*1.8, d = 2.4 + prng()*1.2, ht = 2.8 + prng()*0.8;
+    const at = spot(Math.hypot(w, d)/2, true);
+    if (at) {
+      put(housingHex, box(w, d, ht), at.x, at.y, ht/2, true);
+      put(trimHex, box(w + 0.3, d + 0.3, 0.2), at.x, at.y, ht + 0.1, true);
+      // the door out onto the roof, on one long side
+      put(trimHex, box(1.0, 0.08, 2.1), at.x - uy*(d/2 + 0.02), at.y + ux*(d/2 + 0.02), 1.05, true);
+      housing = { ...at, top: ht + 0.2 };
+    }
+  }
+  if (h < 50 && avgR > 4 && prng() < 0.45) {
+    const r = 1.1 + prng()*0.5, tankH = 2.2 + prng()*0.8, legH = 1.4 + prng()*0.6;
+    const at = spot(r + 0.2);
+    if (at) {
+      put(0x6e5037, cyl(r, r, tankH, 14), at.x, at.y, legH + tankH/2);
+      put(0x3d3a36, new THREE.ConeGeometry(r*1.06, r*0.7, 14).rotateX(Math.PI/2), at.x, at.y, legH + tankH + r*0.35);
+      for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) put(0x3a3d42, box(0.18, 0.18, legH), at.x + a*r*0.62, at.y + b*r*0.62, legH/2);
+      put(0x3a3d42, box(r*1.5, r*1.5, 0.15), at.x, at.y, legH, true);
+    }
+  }
+  const rows = avgR > 5 ? 1 + Math.floor(prng()*3) : prng() < 0.6 ? 1 : 0;
+  for (let k=0;k<rows;k++) {
+    const n = 2 + Math.floor(prng()*3), uw = 1.4, ud = 1.1, uh = 0.9 + prng()*0.3, gap = 0.25, len = n*uw + (n-1)*gap;
+    const at = spot(Math.hypot(len, ud)/2);
+    if (!at) continue;
+    for (let i=0;i<n;i++) {
+      const off = -len/2 + uw/2 + i*(uw + gap), x = at.x + ux*off, y = at.y + uy*off;
+      put(0x9a9ea3, box(uw, ud, uh), x, y, uh/2, true);
+      put(0x2a2c30, cyl(0.4, 0.4, 0.06, 12), x, y, uh + 0.03);
+    }
+  }
+  let beacon = null;
+  if (h > 35 && prng() < 0.6) {
+    const mastH = Math.min(12, 4 + h*0.08);
+    const at = housing || spot(0.8), base = housing ? housing.top : 0;
+    if (at) {
+      put(0x888c92, cyl(0.1, 0.16, mastH, 6), at.x, at.y, base + mastH/2);
+      for (const f of [0.45, 0.7]) put(0x888c92, box(1.2 - f, 0.06, 0.06), at.x, at.y, base + mastH*f, true);
+      beacon = { x: at.x, y: at.y, z: base + mastH + 0.15 };
+    }
+  }
+  if (!beacon && h > 60) {
+    // no mast: the light stands on the roof's corner furthest from the middle, up on the parapet
+    const far = roof.reduce((a, b) => Math.hypot(b.x-c.x, b.z-c.z) > Math.hypot(a.x-c.x, a.z-c.z) ? b : a);
+    const d = Math.hypot(far.x-c.x, far.z-c.z) || 1, pull = Math.min(0.5, d*0.1);
+    beacon = { x: far.x - (far.x-c.x)/d*pull, y: -far.z + (far.z-c.z)/d*pull, z: 1.0 };
+    put(0x3a3d42, box(0.08, 0.08, 0.9), beacon.x, beacon.y, 0.45);
+  }
+  byColor.forEach((geos, hex) => {
+    const mesh = new THREE.Mesh(mergeGeometryList(geos), new THREE.MeshStandardMaterial({ color:hex, roughness:0.75, metalness:0.2, flatShading:true }));
+    mesh.castShadow = true; mesh.receiveShadow = true; mesh.name = 'Building';
+    group.add(mesh);
+  });
+  if (beacon) {
+    const light = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8), new THREE.MeshStandardMaterial({ color:0xff3b3b, emissive:0xff2222, emissiveIntensity:1 }));
+    light.position.set(beacon.x, beacon.y, roofZ + beacon.z);
+    light.name = 'Building';
+    light.userData = { isBlinkLight:true, blinkPhase: prng()*Math.PI*2 };
+    group.add(light);
   }
 }
 
@@ -150,13 +254,13 @@ function addRooftopGreebles(group, poly, height, rng) {
 // solid wall or a glazing bar — between bays, or on the bars of a ribbon window's continuous glass — laid out along the
 // edge's facade run (from computeFacadeRuns) exactly as the shader does. Returns { step, lines: [{ t, k }] }: t is the
 // distance along this edge, k the line's index along the run; none on a run too short for a whole bay.
-function windowGridLines(win, run, len) {
+function windowGridLines(win, run, len, baysOnly) {
   const { u0, runLen } = run, closed = runLen < 0;
   const pier = closed ? 0 : win.uWinFloor.value.w, usable = Math.abs(runLen) - 2*pier;
   const bays = Math.floor(usable/win.uWinBay.value.x + 0.5), lines = [];
   if (bays < 1) return { step: 0, lines };
   const mullion = win.uWinMullion.value, ribbon = win.uWinBay.value.y > 0.999 && mullion > 0;
-  const step = ribbon ? mullion : usable/bays, count = Math.floor(usable/step + 1e-3);
+  const step = ribbon && !baysOnly ? mullion : usable/bays, count = Math.floor(usable/step + 1e-3);
   for (let k=0; k<=(closed ? count-1 : count); k++) { const t = pier + k*step - u0; if (t > -1e-3 && t < len + 1e-3) lines.push({ t, k }); }
   return { step, lines };
 }
@@ -290,7 +394,7 @@ function addEntranceCanopy(group, poly, rng, canopyColor) {
   const pa=poly[i], pb=poly[(i+1)%n];
   const ax=pa.x, ay=-pa.z, bx=pb.x, by=-pb.z;
   const dx=bx-ax, dy=by-ay, len=Math.hypot(dx,dy)||1;
-  if (len < 2.5) return;
+  if (len < 2.5) return null;
   const ux=dx/len, uy=dy/len;
   let nx=dy/len, ny=-dx/len;
   const midx=(ax+bx)/2, midy=(ay+by)/2;
@@ -315,6 +419,70 @@ function addEntranceCanopy(group, poly, rng, canopyColor) {
     strut.castShadow = true; strut.name = 'Building';
     group.add(strut);
   });
+  return { i, t: len/2, halfW: canopyW/2, zBottom: zCenter - canopyH/2 }; // (where it stands along edge i)
+}
+// Street level, lined up with the storefront glass (see windows.js): a recessed-looking entrance — a door of dark glass
+// in a deep frame with a step up to it — in the middle bay of one wall (the entrance canopy's, if there is one, so the
+// canopy shelters it, and no awning runs into the canopy), and canvas awnings over the shop windows along some of the rest. Everything here draws from
+// `drng`, the building's window sub-generator, so none of it moves anything else in the city.
+function addStreetFront(group, poly, win, drng, frameHex, glassHex, canopy) {
+  const runs = computeFacadeRuns(poly), n = poly.length, c = centroid(poly);
+  const lobbyH = win.uWinFloor.value.y, storeTop = 0.78*lobbyH, storeW = Math.max(win.uWinBay.value.y, 0.82);
+  const edges = [];
+  for (let i=0;i<n;i++) {
+    const pa=poly[i], pb=poly[(i+1)%n], ax=pa.x, ay=-pa.z, dx=pb.x-pa.x, dy=-(pb.z-pa.z), len=Math.hypot(dx,dy);
+    if (len < 1e-3) continue;
+    const ux=dx/len, uy=dy/len;
+    let nx=uy, ny=-ux;
+    if (((ax+dx/2-c.x)*nx + (ay+dy/2+c.z)*ny) < 0) { nx=-nx; ny=-ny; }
+    const { step, lines } = windowGridLines(win, runs[i], len, true);
+    const bays = [];
+    for (let k=0;k+1<lines.length;k++) if (lines[k+1].k === lines[k].k + 1) bays.push((lines[k].t + lines[k+1].t)/2);
+    if (bays.length) edges.push({ i, ax, ay, ux, uy, nx, ny, step, bays });
+  }
+  if (!edges.length) return;
+  // (a box whose local x runs along the wall and y out of it, turned into place at t along the edge)
+  const place = (geo, e, t, out, z) => {
+    geo.rotateZ(Math.atan2(e.ny, e.nx) - Math.PI/2);
+    geo.translate(e.ax + e.ux*t + e.nx*out, e.ay + e.uy*t + e.ny*out, z);
+    return geo;
+  };
+  const canopyEdge = canopy && edges.find(e => e.i === canopy.i);
+  const doorEdge = canopyEdge || edges.reduce((a, b) => b.bays.length > a.bays.length ? b : a);
+  const mid = canopyEdge ? canopy.t : doorEdge.bays[Math.floor(doorEdge.bays.length/2)];
+  const doorAt = doorEdge.bays.reduce((a, b) => Math.abs(b - mid) < Math.abs(a - mid) ? b : a);
+  if (canopyEdge || drng() < 0.75) {
+    const w = Math.min(doorEdge.step*storeW, 3.2), jamb = 0.3, depth = 0.35, frames = [];
+    const doorH = canopyEdge ? Math.min(storeTop, canopy.zBottom - jamb) : storeTop; // (under the canopy, if there is one)
+    for (const side of [-1, 1]) frames.push(place(new THREE.BoxGeometry(jamb, depth, doorH + jamb), doorEdge, doorAt + side*(w + jamb)/2, depth/2, (doorH + jamb)/2));
+    frames.push(place(new THREE.BoxGeometry(w + 2*jamb, depth, jamb), doorEdge, doorAt, depth/2, doorH + jamb/2));
+    frames.push(place(new THREE.BoxGeometry(w + 2*jamb + 0.4, 0.6, 0.12), doorEdge, doorAt, 0.3, 0.06));
+    const frame = new THREE.Mesh(mergeGeometryList(frames), new THREE.MeshStandardMaterial({ color:frameHex, roughness:0.6, metalness:0.2, flatShading:true }));
+    const door = new THREE.Mesh(place(new THREE.BoxGeometry(w, 0.04, doorH), doorEdge, doorAt, 0.03, doorH/2),
+      new THREE.MeshStandardMaterial({ color:new THREE.Color(glassHex).multiplyScalar(0.45), roughness:0.2, metalness:0.3, flatShading:true }));
+    [frame, door].forEach(m => { m.castShadow = true; m.receiveShadow = true; m.name = 'Building'; group.add(m); });
+  }
+  if (drng() < 0.5) return;
+  const AWNING_COLORS = [0xb8322c, 0x2f6b45, 0x23395d, 0xd9822b, 0x7a2e4d, 0x2c7f86, 0xe0d6c2];
+  const awningHex = AWNING_COLORS[Math.floor(drng()*AWNING_COLORS.length)];
+  const alternate = drng() < 0.35, depth = 0.9 + drng()*0.5, drop = 0.35 + drng()*0.2, slope = Math.atan2(drop, depth);
+  const geos = [];
+  for (const e of edges) {
+    if (drng() < 0.35) continue;
+    e.bays.forEach((t, b) => {
+      const w = e.step*storeW*0.96, zTop = storeTop + 0.35;
+      if ((alternate && b % 2) || (e === doorEdge && Math.abs(t - doorAt) < 1e-3) || geos.length > 120) return;
+      if (e === canopyEdge && Math.abs(t - canopy.t) < canopy.halfW + w/2 + 0.2) return;
+      const sheet = new THREE.BoxGeometry(w, Math.hypot(depth, drop), 0.06);
+      sheet.rotateX(-slope);
+      geos.push(place(sheet, e, t, depth/2 + 0.02, zTop - drop/2));
+      geos.push(place(new THREE.BoxGeometry(w, 0.04, 0.28), e, t, depth + 0.02, zTop - drop - 0.14));
+    });
+  }
+  if (!geos.length) return;
+  const awnings = new THREE.Mesh(mergeGeometryList(geos), new THREE.MeshStandardMaterial({ color:awningHex, roughness:0.9, metalness:0, flatShading:true }));
+  awnings.castShadow = true; awnings.receiveShadow = true; awnings.name = 'Building';
+  group.add(awnings);
 }
 function addExoskeletonAccent(group, poly, zBottom, zHeight, rng, accentColor) {
   // corner pilasters proud of each sharp corner of the footprint (both ends of a chamfer, not the square corner it
@@ -433,6 +601,7 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
   const wantsLitWindows = windowsEnabled && texRng() < (litWindowChance!=null ? litWindowChance : 0.8);
   const litIntensity = wantsLitWindows ? (0.9+texRng()*0.6) : 0;
   const mat = new THREE.MeshStandardMaterial({ color, vertexColors:true, roughness:0.85, metalness:0.05, flatShading:true, side:THREE.DoubleSide });
+  mat.onBeforeCompile = addBaseShade; mat.customProgramCacheKey = () => 'baseShade'; mat.userData.baseShade = true; // (darker toward the ground)
   // one window material shared by every wall that gets windows (see addSegment, and the wedge top's walls)
   const windowMat = windowsEnabled ? createWindowMaterial(color, texRng, wantsLitWindows, litIntensity, windowScale, specularWindows) : null;
   const win = windowMat && windowMat.userData.windowUniforms; // (what facade details line up with)
@@ -464,6 +633,7 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
   // (added later, in the post-hoc section) agree on exactly the same opening instead of each
   // independently guessing an inset and risking the pyramid clipping through the parapet wall.
   let roofInnerPoly = null;
+  const roofSpots = []; // (what's already up on the roof: see addRooftopPlant)
 
   // `noWindow`: a segment deliberately kept solid (the podium) — a solid-clad base reads as a
   // distinct plinth instead of the same glazed mass continuing straight down to the ground.
@@ -611,7 +781,7 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
       wedgeMesh.castShadow = true; wedgeMesh.receiveShadow = true; wedgeMesh.name = 'Building';
       group.add(wedgeMesh);
     }
-    if (flatRoof && avgR>2.2 && rng()<0.4) addRooftopGreebles(group, roofFootprint, h, rng);
+    if (flatRoof && avgR>2.2 && rng()<0.4) addRooftopGreebles(group, roofFootprint, h, rng, roofSpots);
     const wantsRing2 = rng() < 0.65;
     if (isRound && wantsRing2) addRingAccent(group, c, avgR*(1.08+rng()*0.12), avgR*0.045, baseWallHeight*(0.5+rng()*0.3), accentColorFrom(color, buildingHue, rng), win);
     if (rng() < 0.6) {
@@ -637,7 +807,9 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
   }
   if (rng() < 0.32) addVerticalRibs(group, poly, 0, baseWallHeight, rng, accentColorFrom(color, buildingHue, rng), win);
   if (!isLandmark && avgR > 2.5 && rng() < 0.22) addBalconies(group, poly, 0, detailZHeight, rng, color.clone().multiplyScalar(0.92).getHex(), win);
-  if (rng() < 0.3) addEntranceCanopy(group, poly, rng, accentColorFrom(color, buildingHue, rng));
+  const canopy = rng() < 0.3 ? addEntranceCanopy(group, poly, rng, accentColorFrom(color, buildingHue, rng)) : null;
+  if (win && !lobbyBlocked) addStreetFront(group, poly, win, texRng, color.clone().multiplyScalar(0.7).getHex(), win.uWinGlass.value.getHex(), canopy);
+  if (flatRoof && !isLandmark) addRooftopPlant(group, roofFootprint, roofZ, h, mulberry32(Math.floor(texRng()*0xffffffff)>>>0), color, roofSpots);
   if ((archetype==='rect' || archetype==='chamfer') && corners && rng() < (isLandmark ? 0.5 : 0.22)) {
     addExoskeletonAccent(group, poly, 0, baseWallHeight, rng, accentColorFrom(color, buildingHue, rng));
   }
@@ -659,6 +831,7 @@ export function makeParkMesh(poly, tintColor, noiseStrength, cutouts, beachSegme
 // how far it is from the water's edge (darker, still wet, within 1.5 units of it). Needs grassNoise.
 const SAND_GLSL = `
   uniform vec3 uSandTint;
+  float sandRoughness = 0.65; // set by sandColor: a little sheen on dry sand, more on wet (see roughnessmap_fragment)
   // Four octaves, like the grass — one octave of value noise on its own is a single lattice of
   // smooth blobs about a third of a unit across, which is what made the sand look like a
   // low-resolution texture stretched over the beach however close you got to it.
@@ -667,18 +840,52 @@ const SAND_GLSL = `
     for (int i=0;i<4;i++) { v += amp*grassNoise(p); p = p*2.07 + 17.3; amp *= 0.5; }
     return v;
   }
+  // Stylized rather than photographic: the mottling is cut into three flat tones with crisp edges (toonStep), a
+  // stipple of grain and a scatter of shells and dark pebbles sit on top, and the wet sand steps down in two clean bands toward the water.
   vec3 sandColor(vec2 p, float wetDistance) {
-    // The World "Sand tint" swatch is the mid tone: broad patches drift between crests bleached
-    // toward white and dips a shade deeper, rather than sitting on one flat khaki.
-    vec3 sand = mix(mix(uSandTint, vec3(1.0), 0.16), uSandTint*0.86, smoothstep(0.25, 0.8, sandFbm(p*0.6)));
-    sand *= 0.95 + 0.10*sandFbm(p*2.2);
-    // A fine grain on top, at a scale far below the mottling. It has no mipmaps to fall back on,
-    // so it's faded out once a pixel covers enough ground to alias against it (fwidth = how much
-    // world one pixel spans here) — the beach keeps its grain up close and stays smooth from high up.
-    float grain = grassNoise(p*13.0 + 31.7) - 0.5;
-    sand *= 1.0 + 0.13*grain*(1.0 - smoothstep(0.03, 0.12, fwidth(p.x) + fwidth(p.y)));
-    // wet sand darkens and loses some of its warmth rather than just dimming
-    return sand*mix(vec3(0.63, 0.61, 0.60), vec3(1.0), smoothstep(0.0, 1.5, wetDistance));
+    float px = fwidth(p.x) + fwidth(p.y);
+    // Wind-shaped tones: long wavy bands lying along the ripples (crests run across (0.93, 0.36), as in
+    // applySandShader), built from a bent sine for the rhythm and fBm stretched along the crests to break it up
+    vec2 wa = vec2(0.93, 0.36);
+    vec2 tp = p*4.0; // (the scale of the whole pattern)
+    float across = dot(tp, wa), along = dot(tp, vec2(-wa.y, wa.x));
+    float bendN = grassNoise(tp*0.18 + 4.1)*5.0 + grassNoise(tp*0.6 + 1.3)*0.8;
+    float wave = 0.5 + 0.5*sin((across + bendN)*1.5);
+    float m = mix(sandFbm(vec2(across*1.1, along*0.22) + bendN*0.3), wave, 0.45);
+    float band = toonStep(0.44, m) + toonStep(0.6, m);
+    // only a little apart, so they read as the light catching the sand rather than patches of different ground
+    vec3 sand = uSandTint*(0.97 + 0.03*clamp(band, 0.0, 1.0));
+    sand = mix(sand, mix(uSandTint, vec3(1.0), 0.06), clamp(band - 1.0, 0.0, 1.0));
+    // grain: a stipple of tiny dark grains and white specks on two rotated lattices, so it doesn't line up
+    float gfade = grassDetailFade(px, 45.0);
+    if (gfade > 0.0) {
+      for (int L=0; L<2; L++) {
+        vec2 q = (L == 0 ? p : mat2(0.766, 0.643, -0.643, 0.766)*p + 13.7)/0.06;
+        vec2 cell = floor(q), f = fract(q);
+        float h = grassHash(cell + float(L)*41.3);
+        if (h < 0.55) continue;
+        vec2 c = 0.2 + 0.6*vec2(grassHash(cell + 3.3), grassHash(cell + 9.1));
+        float r = (h < 0.85 ? 0.1 : 0.05) + 0.04*grassHash(cell + 7.7), aa = px/0.06;
+        float dotT = 1.0 - smoothstep(r - aa, r + aa, length(f - c));
+        sand = h < 0.85 ? sand*(1.0 - 0.07*dotT*gfade) : mix(sand, vec3(1.0), 0.7*dotT*gfade); // dark grains, tiny white specks
+      }
+    }
+    // speckles: at most one per cell 0.8 units across, dropped once they'd be smaller than a pixel
+    float fade = grassDetailFade(px, 25.0);
+    if (fade > 0.0) {
+      vec2 cell = floor(p/0.8), f = fract(p/0.8);
+      float h = grassHash(cell + 5.3);
+      if (h < 0.4) {
+        vec2 c = 0.25 + 0.5*vec2(grassHash(cell + 11.1), grassHash(cell + 23.7));
+        float r = (0.015 + 0.02*grassHash(cell + 2.9))/0.8;
+        float dotT = 1.0 - smoothstep(r - px/0.8, r + px/0.8, length(f - c));
+        sand = mix(sand, h < 0.25 ? uSandTint*0.8 : mix(uSandTint, vec3(1.0), 0.55), dotT*fade);
+      }
+    }
+    // wet sand darkens and loses some of its warmth, in two steps rather than a gradient
+    float dry = 0.5*(toonStep(0.7, wetDistance) + toonStep(1.7, wetDistance + (grassNoise(p*0.8) - 0.5)*0.5));
+    sandRoughness = mix(0.4, 0.65, dry);
+    return sand*mix(vec3(0.63, 0.61, 0.60), vec3(1.0), dry);
   }
 `;
 const GRASS_NOISE_GLSL = `
@@ -699,6 +906,11 @@ const GRASS_NOISE_GLSL = `
     vec2 pa = p-a, ba = b-a;
     float h = clamp(dot(pa,ba)/max(dot(ba,ba), 1e-6), 0.0, 1.0);
     return length(pa - ba*h);
+  }
+  // 0 below edge, 1 above it, softened over one pixel's worth of x: flat bands with crisp but unaliased edges
+  float toonStep(float edge, float x) {
+    float w = max(fwidth(x), 1e-4);
+    return smoothstep(edge - w, edge + w, x);
   }
   // 1 while detail of this frequency is comfortably wider than a pixel, 0 once it isn't. None of
   // these noise layers has mipmaps to fall back on, so anything finer than the pixel grid can only
@@ -742,12 +954,18 @@ export function applySandShader(mat, wetSegments, allWet) {
             wetDistance = min(wetDistance, grassDistToSegment(p, uWetSegments[i].xy, uWetSegments[i].zw));
           }
           vec3 sand = sandColor(p, wetDistance);
-          // soft ripples, bent by broad noise so they don't read as stripes — fading out toward the (flat, wet) waterline
-          float ripple = sin(p.x*0.9 + p.y*0.35 + grassNoise(p*0.15)*6.0);
-          sand *= 1.0 + 0.035*ripple*smoothstep(1.0, 4.0, wetDistance);
+          // wind ripples drawn as lines: a pale crest with a thin shadow just behind it, bent by broad noise so they
+          // don't read as stripes, broken up so they come and go, and gone toward the (flat, wet) waterline
+          float phase = (p.x*0.9 + p.y*0.35 + grassNoise(p*0.15)*6.0)/6.2832;
+          float s = fract(phase), lw = fwidth(phase);
+          float crest = 1.0 - smoothstep(0.035 - lw, 0.035 + lw, abs(s - 0.5));
+          float shade = 1.0 - smoothstep(0.03 - lw, 0.03 + lw, abs(s - 0.58));
+          float keep = toonStep(0.45, grassNoise(p*0.22 + 7.0)) * smoothstep(1.5, 3.5, wetDistance) * (1.0 - smoothstep(0.04, 0.12, lw));
+          sand *= 1.0 + (0.1*crest - 0.09*shade)*keep;
           diffuseColor.rgb = sand;
         }
-      `);
+      `)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = sandRoughness;');
   };
 }
 export function generateBeachContent(zone, poly, cutouts) {
@@ -767,7 +985,12 @@ const GRASS_MAX_EDGE_POINTS = 48; // fixed GLSL array size; zone outlines beyond
 const GRASS_MAX_BEACH_SEGMENTS = 64; // fixed GLSL array size for the stretches of a park's edge that meet water
 // `beachSegments` (optional): stretches of the park's edge where its grass turns to sand — the first `wetCount` meet water
 // (the sand there is wet), the rest meet beach zones
-export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, wetCount) {
+// `shellT` (optional): make this one of a park's grass shells instead (see addGrassShells) — the layer's height up the
+// blades, 0 to 1. A shell keeps only the bits of blade that reach it and throws the rest away.
+export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, wetCount, shellT) {
+  const shell = shellT != null;
+  // (the ground and the shells share this onBeforeCompile's source, so three.js would otherwise hand them one program)
+  if (shell) mat.customProgramCacheKey = () => 'grass-shell';
   const beach = App.segmentUniformArray(beachSegments || [], GRASS_MAX_BEACH_SEGMENTS);
   const beachCount = Math.min((beachSegments || []).length, GRASS_MAX_BEACH_SEGMENTS);
   // Pad/truncate the zone's own world-space outline to a fixed-length array so it can be
@@ -791,6 +1014,8 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
     shader.uniforms.uBeachCount = { value: beachCount };
     shader.uniforms.uBeachWetCount = { value: wetCount!=null ? wetCount : beachCount };
     shader.uniforms.uBeachWidth = { value: App.PARK_BEACH_WIDTH };
+    shader.uniforms.uShellGround = { value: mat.userData.grassShells ? 1 : 0 };
+    if (shell) { shader.uniforms.uShellT = { value: shellT }; shader.uniforms.uTime = WATER_TIME; }
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `
         #include <common>
@@ -803,6 +1028,7 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `
         #include <common>
+        ${shell ? '#define GRASS_SHELL\n        uniform float uShellT;\n        uniform float uTime;' : ''}
         #define GRASS_MAX_EDGE_POINTS ${GRASS_MAX_EDGE_POINTS}
         #define GRASS_MAX_BEACH ${GRASS_MAX_BEACH_SEGMENTS}
         varying vec3 vGrassWorldPos;
@@ -811,11 +1037,13 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
         uniform float uZoneEdgeFalloff;
         uniform float uZoneEdgeDarken;
         uniform float uGrassNoiseStrength;
+        uniform float uShellGround;
         uniform vec4 uBeachSegments[GRASS_MAX_BEACH];
         uniform int uBeachCount;
         uniform int uBeachWetCount;
         uniform float uBeachWidth;
         ${GRASS_NOISE_GLSL}
+        float grassSandT = 0.0; // how far this fragment has turned to sand, for its roughness
         ${SAND_GLSL}
         // Six octaves, not four, and each one turned 37° against the last: value noise sits on a
         // square lattice, so octaves stacked at the same angle line their cells up into a grid you
@@ -874,58 +1102,166 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
         {
           vec2 wp = vGrassWorldPos.xz;
           float px = fwidth(wp.x) + fwidth(wp.y); // how much world one pixel spans here
-          vec2 gp = wp * 0.35;
+          #ifdef GRASS_SHELL
+          // Out of here as early as possible, before the beach search below: past a few metres the blades have sunk
+          // back into the ground, and nothing reaches this layer if even the tallest clump (1.15) wouldn't.
+          float bladeFade = grassDetailFade(px, 12.0);
+          if (uShellT > 1.15*bladeFade) discard;
+          #endif
+          float sandT = 0.0, wetDistance = 1e9;
+          if (uBeachCount > 0) {
+            // sand where the park meets water or a beach zone: strongest at that edge (and darker, still wet, at the
+            // water's), fading back into grass over about uBeachWidth units, with a ragged inland edge rather than a
+            // ruler-straight one
+            float beachDistance = 1e9;
+            for (int i=0; i<GRASS_MAX_BEACH; i++) {
+              if (i >= uBeachCount) break;
+              float d = grassDistToSegment(wp, uBeachSegments[i].xy, uBeachSegments[i].zw);
+              beachDistance = min(beachDistance, d);
+              if (i < uBeachWetCount) wetDistance = min(wetDistance, d);
+            }
+            float reach = uBeachWidth*(0.75 + 0.5*grassNoise(wp*0.12));
+            sandT = 1.0 - smoothstep(reach*0.45, reach, beachDistance);
+          }
+          #ifdef GRASS_SHELL
+          // One blade per cell GRASS_CELL across, tapering to a point at its own height (0 to 1 of the shell
+          // stack), bent over with the wind more the higher up it is. Worked out before anything else, since most of a
+          // shell's pixels are thrown away. The blades shrink back into the ground with distance — once a cell is
+          // only a few pixels across they would just sparkle — and in clumps, and onto the sand.
+          #define GRASS_CELL 0.1
+          float sway = sin(uTime*1.3 + wp.x*0.21 + wp.y*0.13) + 0.5*sin(uTime*2.9 + wp.x*0.7);
+          vec2 bend = vec2(0.35, 1.0)*(0.25 + 0.12*sway)*uShellT*uShellT;
+          float clump = 0.8 + 0.35*grassNoise(wp*1.1 + 9.3);
+          float reach = clump*bladeFade*(1.0 - sandT)*step(0.001, uGrassNoiseStrength);
+          if (uShellT > reach) discard;
+          // Two lattices of blades laid over each other, turned 40° apart and at different spacings, with each blade
+          // free to sit anywhere in its cell (so the cells around are checked too, for blades leaning over from them)
+          // and a share of cells left bare: one square lattice on its own lines its blades up in rows you can see.
+          // A flat blade, not a round stalk: its slice at this height is a thin sliver, facing its own way, that
+          // narrows to nothing at the tip — so from the side each blade is a triangle.
+          vec2 wq = wp - bend*0.3;
+          float s = 2.0; vec2 bcell = vec2(0.0);
+          for (int L=0; L<2; L++) {
+            float cellSize = L == 0 ? GRASS_CELL : GRASS_CELL*1.37;
+            vec2 q = (L == 0 ? wq : mat2(0.766, 0.643, -0.643, 0.766)*wq + 31.7)/cellSize;
+            vec2 base = floor(q);
+            for (int j=-1; j<=1; j++) for (int i=-1; i<=1; i++) {
+              vec2 id = base + vec2(float(i), float(j)) + float(L)*97.1;
+              if (grassHash(id + 44.4) < 0.3) continue;
+              float height = (0.7 + 0.3*grassHash(id + 0.7))*reach;
+              if (uShellT > height) continue;
+              float bs = uShellT/height;
+              float ang = grassHash(id + 17.3)*3.1416;
+              vec2 d = q - (base + vec2(float(i), float(j)) + vec2(grassHash(id + 5.1), grassHash(id + 13.9)));
+              vec2 along = vec2(cos(ang), sin(ang));
+              if (abs(dot(d, along)) < 0.45*(1.0 - bs*0.8) && abs(dot(d, vec2(-along.y, along.x))) < 0.1 && bs < s) { s = bs; bcell = id; }
+            }
+          }
+          if (s > 1.0) discard;
+          #endif
+          vec2 gp = wp * 0.75;
           // The coarse patches are warped by a slower noise before they're read, so they clump and
           // wander instead of sitting in the evenly spaced round blobs a plain fBM makes.
           vec2 warp = vec2(grassNoise(gp*0.47 + 3.1), grassNoise(gp*0.47 + 17.9)) - 0.5;
-          float n = grassFbm(gp + warp*0.9, px*0.35);
-          float fine = grassNoise(gp*6.3);
-          // Grayscale, not green — the grass tint is what actually colors this (diffuseColor
-          // already carries it going into this block), so keeping the base neutral means the
-          // tint you pick is close to the final rendered color instead of being muddied by
-          // multiplying against an inherent green baked in here.
-          // uGrassNoiseStrength scales the contrast around a fixed mid-grey: 0 collapses both
-          // the coarse patches and the fine grain to perfectly flat, 1 matches the original
-          // fixed contrast, and above 1 exaggerates it into a rougher, more mottled look.
-          float grassMid = 0.59;
-          float coarseHalf = 0.19 * uGrassNoiseStrength;
-          float fineHalf = 0.08 * uGrassNoiseStrength;
-          vec3 grassColor = vec3(grassMid + (n - 0.5) * 2.0 * coarseHalf) * (1.0 + (fine - 0.5) * 2.0 * fineHalf);
-          // The blade-scale tufts follow the same slider — 0 is still perfectly flat — but along a
-          // curve that rises fast and then levels off, so the turf keeps a tooth to it at the low
-          // settings the broad mottling is meant to be barely visible at, and doesn't turn to
-          // static at the high ones.
-          float detail = uGrassNoiseStrength / (uGrassNoiseStrength + 0.45) * 1.45;
-          grassColor *= 1.0 + grassTufts(wp, px) * 0.26 * detail;
-          // A little hue along with the tone: bleached, yellower crests and cooler, deeper hollows.
-          // Turf is never one hue, and a purely tonal noise still reads as one flat color with the
-          // brightness turned up and down.
-          grassColor *= mix(vec3(1.0), mix(vec3(1.045, 1.0, 0.93), vec3(0.955, 1.0, 1.06), smoothstep(0.3, 0.7, n)),
+          // most of the octaves kept, so the bands cut from it have rough, ragged edges
+          float nb = grassFbm(gp + warp*1.3, max(px*0.75, 0.02));
+          // extra fine noise pushed into the band edges so they break up into jagged, torn outlines
+          nb += (grassNoise(gp*4.3 + 5.7) - 0.5)*0.22*grassDetailFade(px*0.75, 4.3)
+              + (grassNoise(gp*9.7 + 2.3) - 0.5)*0.14*grassDetailFade(px*0.75, 9.7);
+          // Grayscale, not green — the grass tint is what actually colors this (diffuseColor already carries it going
+          // into this block), so the tint you pick is close to the final rendered color.
+          // Stylized: the patches are cut into three flat tones (hollow, turf, sunlit crest) with crisp edges, instead
+          // of a continuous photographic mottle. uGrassNoiseStrength scales how far apart the tones are: 0 is flat.
+          float band = toonStep(0.4, nb) + toonStep(0.6, nb);
+          float k = 0.11 * uGrassNoiseStrength;
+          vec3 grassColor = vec3(0.59 + (band - 1.0)*k);
+          // cooler hollows, warmer yellower crests
+          grassColor *= mix(vec3(1.0), band < 1.0 ? mix(vec3(0.94, 1.0, 1.07), vec3(1.0), band)
+                                                  : mix(vec3(1.0), vec3(1.06, 1.02, 0.9), band - 1.0),
                             clamp(uGrassNoiseStrength, 0.0, 1.0));
+          #ifdef GRASS_SHELL
+          // dark down among the roots, catching the light at the tips — and each blade a touch lighter or darker
+          grassColor *= mix(0.93, 1.07, s) * (0.97 + 0.06*grassHash(bcell + 21.1));
+          #else
+          // a faint grain so the flat tones aren't plastic up close
+          grassColor *= 1.0 + grassTufts(wp, px)*0.08*uGrassNoiseStrength;
+          // the ground down among the shell grass's roots is as dark as they are (see GRASS_SHELL above)
+          grassColor *= 1.0 - 0.07*grassDetailFade(px, 12.0)*uShellGround;
+          // Drawn tufts: little fans of three blades, at most one per cell, all leaning with the same wind. Two sizes,
+          // so there's something drawn on the ground from both up close and further off; each drops out once its
+          // blades would be thinner than a pixel. Tufts in a hollow are darker, the rest catch the light.
+          vec2 lean = normalize(vec2(0.35, 1.0));
+          vec2 side = vec2(lean.y, -lean.x);
+          float tuftLight = 0.0, tuftDark = 0.0;
+          for (int L=0; L<2; L++) {
+            float size = L == 0 ? 0.45 : 1.2, bw = L == 0 ? 0.012 : 0.026;
+            float fade = grassDetailFade(px, 0.35/bw);
+            if (fade <= 0.0) continue;
+            vec2 q = wp/size + float(L)*41.7;
+            vec2 cell = floor(q), f = fract(q);
+            float h = grassHash(cell + 3.7);
+            if (h > 0.55) continue;
+            vec2 base = (0.3 + 0.4*vec2(grassHash(cell + 9.1), grassHash(cell + 27.3)) - 0.2*lean)*size;
+            vec2 at = f*size;
+            float len = (0.3 + 0.12*grassHash(cell + 1.3))*size;
+            float d = 1e9;
+            for (int b=-1; b<=1; b++) {
+              vec2 dir = normalize(lean + side*float(b)*0.6);
+              d = min(d, grassDistToSegment(at, base, base + dir*len*(b == 0 ? 1.0 : 0.75)));
+            }
+            float blade = (1.0 - smoothstep(bw - px*0.5, bw + px*0.5, d))*fade;
+            if (h < 0.18) tuftDark = max(tuftDark, blade); else tuftLight = max(tuftLight, blade);
+          }
+          grassColor *= 1.0 + (0.22*tuftLight - 0.2*tuftDark)*uGrassNoiseStrength;
+          #endif
           // subtle darkening as grass nears the zone boundary, fading in smoothly over
           // uZoneEdgeFalloff world units so it reads as a soft vignette, not a hard band
           float edgeDist = grassDistToZoneEdge(vGrassWorldPos.xz);
           float edgeT = smoothstep(0.0, uZoneEdgeFalloff, edgeDist);
           grassColor *= mix(uZoneEdgeDarken, 1.0, edgeT);
           diffuseColor.rgb *= grassColor;
-          // sand where the park meets water or a beach zone: strongest at that edge (and darker, still wet, at the
-          // water's), fading back into grass over about uBeachWidth units, with a ragged inland edge rather than a
-          // ruler-straight one
-          if (uBeachCount > 0) {
-            float beachDistance = 1e9, wetDistance = 1e9;
-            for (int i=0; i<GRASS_MAX_BEACH; i++) {
-              if (i >= uBeachCount) break;
-              float d = grassDistToSegment(vGrassWorldPos.xz, uBeachSegments[i].xy, uBeachSegments[i].zw);
-              beachDistance = min(beachDistance, d);
-              if (i < uBeachWetCount) wetDistance = min(wetDistance, d);
+          // the odd flower, white or yellow, anywhere but the hollows
+          #ifndef GRASS_SHELL
+          {
+            float fade = grassDetailFade(px, 16.0) * clamp(uGrassNoiseStrength, 0.0, 1.0);
+            vec2 cell = floor(wp/1.8), f = fract(wp/1.8);
+            float h = grassHash(cell + 71.9);
+            if (fade > 0.0 && h < 0.3 && band > 0.5) {
+              vec2 c = 0.2 + 0.6*vec2(grassHash(cell + 4.4), grassHash(cell + 8.8));
+              float r = 0.04/1.8, e = px/1.8;
+              float petal = 1.0 - smoothstep(r - e, r + e, length(f - c));
+              diffuseColor.rgb = mix(diffuseColor.rgb, h < 0.15 ? vec3(0.95, 0.93, 0.85) : vec3(0.98, 0.82, 0.25), petal*fade);
             }
-            float reach = uBeachWidth*(0.75 + 0.5*grassNoise(vGrassWorldPos.xz*0.12));
-            float sandT = 1.0 - smoothstep(reach*0.45, reach, beachDistance);
-            diffuseColor.rgb = mix(diffuseColor.rgb, sandColor(vGrassWorldPos.xz, wetDistance), sandT);
           }
+          #endif
+          if (sandT > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, sandColor(wp, wetDistance), sandT);
+          grassSandT = sandT;
         }
-      `);
+      `)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, sandRoughness, grassSandT);');
   };
+}
+// Shell-textured grass: GRASS_SHELLS copies of a park floor's surface stacked up to GRASS_SHELL_HEIGHT above it, each
+// keeping only the slice of every blade that reaches its height (see GRASS_SHELL in applyGrassNoiseShader), so up
+// close the lawn has real depth — blades that stand up, catch the light at the tips and hide the ground behind them.
+// Further off they sink back into the flat ground's pattern. They share the floor's geometry, never cast shadows and
+// are invisible to raycasts, so nothing that picks, lands on or walks the ground knows they're there.
+const GRASS_SHELLS = 3, GRASS_SHELL_HEIGHT = 0.03;
+function addGrassShells(floor, poly, noiseStrength, beachSegments, wetCount) {
+  floor.material.userData.grassShells = true; floor.material.needsUpdate = true;
+  const flat = floor.rotation.x !== 0; // (a ShapeGeometry laid down flat: its "up" is local z)
+  for (let i=1; i<=GRASS_SHELLS; i++) {
+    const t = (i - 0.5)/GRASS_SHELLS; // (each layer at the middle of its slice, so the top one isn't above every tip)
+    const mat = new THREE.MeshStandardMaterial({ color: floor.material.color, roughness:1, polygonOffset:true,
+      polygonOffsetFactor: floor.material.polygonOffsetFactor, polygonOffsetUnits: floor.material.polygonOffsetUnits });
+    applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, wetCount, t);
+    const layer = new THREE.Mesh(floor.geometry, mat);
+    if (flat) layer.position.z = t*GRASS_SHELL_HEIGHT; else layer.position.y = t*GRASS_SHELL_HEIGHT;
+    layer.receiveShadow = true;
+    layer.name = 'GrassShell';
+    layer.raycast = () => {};
+    floor.add(layer);
+  }
 }
 // `cutouts` (optional Clipper paths): areas to leave out of the surface — roads, and zones higher up the zone list (see
 // "zone cut-outs"). Returns null if nothing is left.
@@ -1023,7 +1359,11 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
   const wet = App.sharedEdgeSegmentsWith(ownArea, App.getWaterRegion(), GRASS_MAX_BEACH_SEGMENTS);
   const beach = wet.concat(App.sharedEdgeSegmentsWith(ownArea, App.getBeachZoneArea(), GRASS_MAX_BEACH_SEGMENTS - wet.length));
   const floor = makeParkMesh(poly, resolveParkTint(zone), resolveGrassNoiseStrength(zone), cutouts, beach, wet.length);
-  if (floor) { floor.name = 'ParkFloor'; zone.buildingsGroup.add(floor); }
+  if (floor) {
+    floor.name = 'ParkFloor';
+    addGrassShells(floor, poly, resolveGrassNoiseStrength(zone), beach, wet.length);
+    zone.buildingsGroup.add(floor);
+  }
 
   const s = zone.settings;
   // trees stand clear of roads, paths and zones above by the canopy radius of the biggest tree this park can grow

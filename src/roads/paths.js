@@ -137,8 +137,16 @@ const WALKWAY_FRAGMENT_PARS = `
     vec2 u = f*f*(3.0-2.0*f);
     return mix(a,b,u.x) + (c-a)*u.y*(1.0-u.x) + (d-b)*u.x*u.y;
   }
+  #ifdef WALK_EDGE
+  #define WALK_MAX_SEGMENTS ${PATH_MAX_SEGMENTS}
+  uniform vec4 uWalkSegments[WALK_MAX_SEGMENTS];
+  uniform int uWalkSegmentCount;
+  uniform float uWalkHalfWidth;
+  uniform float uWalkFringe;
+  #endif
 `;
 const WALKWAY_COLOR_FRAGMENT = `
+  vec3 walkBase = diffuseColor.rgb;
   if (uWalkPattern != 0) {
     vec2 w = vWalkWorldPos.xz;
     vec2 p = vec2(uWalkRotation.x*w.x + uWalkRotation.y*w.y, uWalkRotation.x*w.y - uWalkRotation.y*w.x)/uWalkScale;
@@ -186,11 +194,57 @@ const WALKWAY_COLOR_FRAGMENT = `
     }
     diffuseColor.rgb *= mix(gapShade, tint, smoothstep(gapLo, gapHi, edgeDist));
   }
+  #ifdef WALK_EDGE
+  {
+    // A ground walkway doesn't just stop where the paving does. Its last stretch is an edging course: a band of
+    // darker stones laid flush with the paving, not raised, following the line with a grout joint on its inside and
+    // cross joints that divide each centerline segment evenly (so on a curve they fan out at every bend). Grime off
+    // the ground darkens the outer part of the walkway, and past the edge, dust the paving has shed thins out grain
+    // by grain over the fringe, so it fades into the ground instead of stopping at a line.
+    vec2 w = vWalkWorldPos.xz;
+    float d = 1e9, along = 0.0, pieceLen = 1.0, seg = 0.0;
+    for (int i=0; i<WALK_MAX_SEGMENTS; i++) {
+      if (i >= uWalkSegmentCount) break;
+      vec4 s = uWalkSegments[i];
+      vec2 pa = w - s.xy, ba = s.zw - s.xy;
+      float len = max(length(ba), 1e-4);
+      float h = clamp(dot(pa, ba)/(len*len), 0.0, 1.0);
+      float di = length(pa - ba*h);
+      if (di < d) { d = di; along = h*len; pieceLen = len/max(1.0, floor(len/0.8 + 0.5)); seg = float(i); }
+    }
+    float border = min(0.3, uWalkHalfWidth*0.15), inner = uWalkHalfWidth - border;
+    float n = walkNoise(w*1.3), fine = walkNoise(w*7.0);
+    float piece = floor(along/pieceLen), f = fract(along/pieceLen);
+    float joint = min(min(f, 1.0 - f)*pieceLen, abs(d - inner));
+    vec3 edging = walkBase*(0.74 + 0.12*walkHash(vec2(seg, piece) + 3.1))*(0.94 + 0.08*fine);
+    diffuseColor.rgb = mix(diffuseColor.rgb, edging, smoothstep(inner - 0.01, inner + 0.01, d));
+    diffuseColor.rgb *= mix(0.55, 1.0, smoothstep(0.012, 0.03, d > inner - 0.03 ? joint : 1.0));
+    float grime = smoothstep(inner - 1.2*n - 0.3, uWalkHalfWidth + 0.05, d);
+    diffuseColor.rgb *= 1.0 - 0.18*grime*(0.6 + 0.4*fine);
+    if (d > uWalkHalfWidth) {
+      float t = (d - uWalkHalfWidth)/uWalkFringe*1.2 - 0.1;
+      float speck = 0.65*fine + 0.35*walkNoise(w*19.0);
+      diffuseColor.rgb = walkBase*(0.7 + 0.1*n);
+      diffuseColor.a *= 0.75*(1.0 - smoothstep(speck - 0.15, speck + 0.15, t + 0.25*(n - 0.5)));
+    }
+  }
+  #endif
 `;
-export function applyWalkwayShader(mat, texture, scale, rotationDegrees) {
+// `edge` ({ segments, halfWidth, fringe }), for a walkway on the ground, gives it an edging course and a dusty fringe
+// fading out `fringe` beyond `halfWidth` from its centerline `segments` (the material must then be transparent)
+export function applyWalkwayShader(mat, texture, scale, rotationDegrees, edge) {
   // kept on the material so setWalkwayLook can change them live, without a rebuild
   const uniforms = mat.userData.walkUniforms = { uWalkPattern: { value: 0 }, uWalkScale: { value: 1 }, uWalkRotation: { value: new THREE.Vector2(1, 0) } };
   setWalkwayLook(mat, texture, scale, rotationDegrees);
+  if (edge) {
+    mat.defines = { ...(mat.defines || {}), WALK_EDGE: '' };
+    Object.assign(uniforms, {
+      uWalkSegments: { value: App.segmentUniformArray(edge.segments, PATH_MAX_SEGMENTS) },
+      uWalkSegmentCount: { value: Math.min(edge.segments.length, PATH_MAX_SEGMENTS) },
+      uWalkHalfWidth: { value: edge.halfWidth },
+      uWalkFringe: { value: Math.max(edge.fringe, 1e-3) },
+    });
+  }
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -214,45 +268,78 @@ function setWalkwayLook(mat, texture, scale, rotationDegrees) {
 }
 // Whether switching a walkway from one texture to another needs its mesh rebuilt (dirt has a fade and a material of its own)
 export function walkwayTextureChangeNeedsRebuild(from, to) { return (from === 'dirt') !== (to === 'dirt'); }
-// A walkway's material: paving (or plain) with a hard edge, or dirt fading out across `fade` beyond `halfWidth` from `segments`
+// how far past its nominal edge paving's dust fades out
+export function pavingFringeWidth(halfWidth) { return Math.min(0.6, halfWidth*0.2); }
+// A walkway's material, fading out across `fade` beyond `halfWidth` from `segments`: dirt, or paving (or plain) with an
+// edging course (see applyWalkwayShader) — or, with no fade, paving that just stops at its edge
 export function makeWalkwayMaterial({ texture, color, scale, rotation, segments, halfWidth, fade }) {
   if (texture === 'dirt') {
     const mat = new THREE.MeshStandardMaterial({ color, roughness: 1, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, ...SKIP_OVER_WATER_AND_ROADS });
     applyPathShader(mat, segments, halfWidth, fade, scale);
     return mat;
   }
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, ...SKIP_OVER_WATER_AND_ROADS });
-  applyWalkwayShader(mat, texture, scale, rotation);
+  const edged = fade > 0 && segments.length > 0;
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9, transparent: edged, depthWrite: !edged, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, ...SKIP_OVER_WATER_AND_ROADS });
+  applyWalkwayShader(mat, texture, scale, rotation, edged ? { segments, halfWidth, fringe: fade } : null);
   return mat;
 }
 // One walkway network's mesh: the union of its lines stroked out to their width (plus the fade, for dirt), minus
 // `claim` — whatever higher-priority walkway networks have already staked out (see rebuildRoadMeshes and
 // S.walkwayOrder), so two walkways crossing don't z-fight over the same ground: the higher one wins the overlap
 // and the lower one is simply cut off at its edge. Returns the network's own (unclaimed) outline alongside the
-// mesh, so the caller can add it to what the next, lower-priority network has to give way to.
+// mesh, so the caller can add it to what the next, lower-priority network has to give way to. Paving's dusty
+// fringe isn't part of either: it's returned as `fringeBand`, for rebuildRoadMeshes to trim and attachWalkwayFringes
+// to lay only where the walkway crosses grass or sand.
 function buildWalkwayMesh(lines, networkId, claim) {
   const line = lines[0]; // colors and textures are set per network in the details panel
   const halfWidth = (line.width || S.DEFAULT_ROAD_WIDTH)/2;
   const texture = line.walkwayTexture || WALKWAY_TEXTURE;
-  const fade = texture === 'dirt' ? pathFadeWidth(halfWidth) : 0;
+  const dirt = texture === 'dirt';
+  const fade = dirt ? pathFadeWidth(halfWidth) : pavingFringeWidth(halfWidth);
   const color = line.walkwayColor!=null ? line.walkwayColor : WALKWAY_COLOR;
-  const outline = unionRoadStrokes(lines.map(l => ({
+  const strokesAt = radius => unionRoadStrokes(lines.map(l => ({
     path: App.toClipperPath(tessellateOpenPath(l.nodeIds.map(id => roadNodes[id]).filter(Boolean))),
-    radius: halfWidth + fade,
+    radius,
   })));
+  const { ctDifference } = ClipperLib.ClipType;
+  const outline = strokesAt(dirt ? halfWidth + fade : halfWidth);
   const builder = createMeshBuilder();
-  builder.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, outline, claim || [], true), Y_PATH);
+  builder.addTops(clipPolygons(ctDifference, outline, claim || [], true), Y_PATH);
   const geo = builder.build();
   let mesh = null;
   if (geo) {
     const mat = makeWalkwayMaterial({ texture, color, scale: walkwayTextureScaleOf(line), rotation: line.walkwayTextureRotation,
-      segments: texture === 'dirt' ? pathSegmentsOf(lines) : [], halfWidth, fade });
+      segments: pathSegmentsOf(lines), halfWidth, fade });
     mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     mesh.name = 'Walkway';
     mesh.userData = { networkId, baseColor: color };
   }
-  return { mesh, outline };
+  return { mesh, outline, fringeBand: dirt ? null : clipPolygons(ctDifference, strokesAt(halfWidth + fade), outline) };
+}
+// Lays each paved walkway's dusty fringe (its userData.fringeBand) where it crosses grass or sand — park and beach
+// zones — and nowhere else: past a walkway's edge on a plaza, a lot or bare ground the paving just stops. The fringe
+// is a child mesh sharing the walkway's material. Redone only when the grass and sand change (rebuildWater calls this
+// once a frame when anything might have) or the walkways were just rebuilt (`force`).
+let fringeArea = null;
+export function attachWalkwayFringes(force) {
+  const area = App.getGrassAndSandArea();
+  if (area === fringeArea && !force) return;
+  fringeArea = area;
+  S.roadMeshGroup.children.forEach(mesh => {
+    if (!mesh.userData.fringeBand) return;
+    mesh.children.slice().forEach(child => { mesh.remove(child); child.geometry.dispose(); });
+    if (!area.length || !mesh.userData.fringeBand.length) return;
+    const builder = createMeshBuilder();
+    builder.addTops(clipPolygons(ClipperLib.ClipType.ctIntersection, mesh.userData.fringeBand, area, true), Y_PATH);
+    const geo = builder.build();
+    if (!geo) return;
+    const fringe = new THREE.Mesh(geo, mesh.material);
+    fringe.receiveShadow = true;
+    fringe.name = 'WalkwayFringe';
+    fringe.raycast = () => {}; // picking a walkway means its paving, not the dust beside it
+    mesh.add(fringe);
+  });
 }
 // Moves a walkway network to just before (or after) another in S.walkwayOrder: like moveZone, the order is
 // priority, so overlapping walkways need re-laying out (rebuildRoadMeshes re-syncs the order too, but that's a
@@ -383,10 +470,11 @@ export function rebuildRoadMeshes() {
   S.walkwayOrder = S.walkwayOrder.filter(id => walkwayIds.has(id));
   walkwayIds.forEach(id => { if (!S.walkwayOrder.includes(id)) S.walkwayOrder.push(id); });
   let claimedWalkway = [];
+  const fringed = [];
   S.walkwayOrder.forEach(netId => {
     const lines = walkwayNetworks.get(netId);
-    const { mesh, outline } = buildWalkwayMesh(lines, netId, claimedWalkway);
-    if (mesh) S.roadMeshGroup.add(mesh);
+    const { mesh, outline, fringeBand } = buildWalkwayMesh(lines, netId, claimedWalkway);
+    if (mesh) { S.roadMeshGroup.add(mesh); if (fringeBand) fringed.push([mesh, fringeBand]); }
     claimedWalkway = claimedWalkway.length ? clipPolygons(ctUnion, claimedWalkway, outline) : outline;
     const strokes = lines.map(line => ({
       path: App.toClipperPath(tessellateOpenPath(line.nodeIds.map(id=>roadNodes[id]).filter(Boolean))),
@@ -395,6 +483,9 @@ export function rebuildRoadMeshes() {
     pathStrokes.push(...strokes);
     S.pathBridgeSources.push({ networkId: netId, strokes });
   });
+  // no network's dust on another's paving
+  fringed.forEach(([mesh, band]) => { mesh.userData.fringeBand = clipPolygons(ctDifference, band, claimedWalkway); });
+  attachWalkwayFringes(true);
   // raised walkways: built whole, each on its own (they stand over everything else, so nothing's claimed between them)
   const raisedNetworks = new Map();
   S.roadLines.forEach(line => {
@@ -446,3 +537,4 @@ export function rebuildRoadMeshes() {
   App.refreshHighlights();
   App.updateStats();
 }
+Object.assign(App, { attachWalkwayFringes });
