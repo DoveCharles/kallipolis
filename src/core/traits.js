@@ -48,7 +48,7 @@ export const TRAITS = {
   legendary: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as legendary
   terrible: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as terrible
   smells: { base: 0, min: 0, max: 1, combine: 'on' }, //makes other people - or cars - stay clear
-  respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time - instationary, then struck by lightning
+  respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time: the body stays whole (a car still explodes), shakes, then lightning revives it (see life/revive.js)
   drunk: {base: 0, min: 0, max: 1, combine: 'on'} ,//steering randomly switches direction for up to 2 seconds, people randomly fall over or throw up
   unstable: {base: 0, min: 0, max: 1, combine: 'add'}, //chance to be hurt X5 more than usual
   terrified: {base: 0, min: 0, max: 1, combine: 'on'}, //flees forever (see updatePeople in life/people/people.js)
@@ -61,7 +61,7 @@ export const TRAITS = {
 // the same way. Written as the text that goes inside [brackets]; edit the string to change what a shorthand brings. The
 // shorthand's own trait stays on the thing, so code can tell what it is. Shorthands are not expanded inside each other.
 export const TRAIT_MACROS = {
-  vampire: 'agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, bloodlust, dodge = 0.5, limit = 1a',
+  vampire: 'agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, bloodlust, dodge = 0.5, limit = 1a, respawn',
 };
 
 // Traits that only mark how an entry is listed or picked, with no effect of their own — left out of modifierLines.

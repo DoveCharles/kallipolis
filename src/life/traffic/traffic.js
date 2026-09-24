@@ -8,7 +8,7 @@ import { updateEngines } from '../../audio/engine.js';
 import { carTypeOf } from '../car-types.js';
 import { BLAST_THROW, burnFuse, DETONATION_REACH, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
 import { boostMax, driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, rechargeBoost, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
-import { chaseCamera, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
+import { chaseCamera, updateCarRevive, respawnFromWater, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
 import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
 import { carHoloTimeUniform, carPlate } from './materials.js';
 import { carMeshes, carParts, designNumbers } from './models.js';
@@ -115,6 +115,7 @@ export function updateTraffic(t) {
       car.plate =  carPlate(car);
     }
     if (car.design != null) refreshCarTraits(car);
+    if (car.reviving) { updateCarRevive(car, dt); placeCar(car, i, designCounts); return; } // (blown up with a respawn left: see startCarRevive)
     if (car === drivenCar) { if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
     rechargeBoost(car, dt); // (driven or not: see driving.js)
     if (i === followedCar && car.boostLeft != null) App.setCarBoost(car.boostLeft, boostMax(car), car.boostLocked); // (the card's meter keeps filling after it's let go)
@@ -210,8 +211,8 @@ export function updateTraffic(t) {
   });
   if (drivenCar && blasted.has(drivenCar)) { const driven = drivenCar; stopDriving(); blasted.add(driven); } // (the driver is thrown out of it, and it goes too)
   blasted.forEach(car => { const i = cars.indexOf(car); if (i >= 0) killCar(i); });
-  for (let i = cars.length - 1; i >= 0; i--) if (cars[i] !== drivenCar && cars[i].sinking?.under) drownCar(i); // (knocked in and gone under)
-  if (drivenCar?.sinking?.under) { const driven = drivenCar, at = { x: driven.x, z: driven.z }; stopDriving(); Object.assign(driven, at); drownCar(cars.indexOf(driven)); } // (gone under: it sinks away quietly, with a splash, rather than blowing up)
+  for (let i = cars.length - 1; i >= 0; i--) if (cars[i] !== drivenCar && cars[i].sinking?.under && !respawnFromWater(cars[i])) drownCar(i); // (knocked in and gone under; a respawn puts it back on land)
+  if (drivenCar?.sinking?.under && !respawnFromWater(drivenCar)) { const driven = drivenCar, at = { x: driven.x, z: driven.z }; stopDriving(); Object.assign(driven, at); drownCar(cars.indexOf(driven)); } // (gone under: it sinks away quietly, with a splash, rather than blowing up)
   updateEngines(cars, drivenCar, engineOf, dt);
   carHitboxDebugMesh.visible = S.showRoadsafetyDebug;
   if (S.showRoadsafetyDebug) { carHitboxDebugMesh.count = cars.length; carHitboxDebugMesh.instanceMatrix.needsUpdate = true; }

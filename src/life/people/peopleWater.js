@@ -8,6 +8,8 @@ import { possession } from '../possession.js';
 import { clipNamed, drownedPerson, voiceOfPerson } from './people.js';
 import { endActivity } from './peopleActivities.js';
 import { unpossessPerson } from './peopleTracking.js';
+import { canRespawn } from '../revive.js';
+import { strikeLightning } from '../lightning.js';
 
 const FALL_GRAVITY = 20, FALL_DRAG = 1.5, FALL_SPEED_MAX = 8; // (units a second squared; the share of their speed the water takes each second; the fastest they go in)
 const TIP = 0.9, TIP_RATE = 3; // (how far forward they tip going in, in radians, and how fast)
@@ -89,12 +91,14 @@ function rising(p, i, dt) {
 }
 
 /**
- * Gone under: the hearted come up again on the nearest bank; anyone else has drowned — out of whatever they were doing
+ * Gone under: the hearted come up again on the nearest bank; anyone with a respawn left is struck back onto it
+ * (respawnOnBank); anyone else has drowned — out of whatever they were doing
  * and out of the player's hands (though the camera stays on them), lying face down to float back up.
  */
 function goUnder(p, i) {
   const w = p.water;
   if (isFavoritePerson(p.id)) { climbOut(p); return; }
+  if (canRespawn(p) && respawnOnBank(p)) return;
   if (possession.index === i) { p.mode = 'drowning'; unpossessPerson(); } // (let go without being put back on a walkway: see unpossessPerson)
   endActivity(p);
   p.mode = 'drowning';
@@ -140,6 +144,23 @@ function climbOut(p) {
   p.water = { stage: 'rising', drop, fall: 0, pitch: 0, roll: 0, baseY: p.water.baseY, from: drop, shakeTime: 0 };
   p.y = p.water.baseY - drop;
   splashUp({ x: p.x, y: WATER_LEVEL, z: p.z }, heightOf(p));
+}
+
+/**
+ * The respawn trait, going under: gone from the water in a splash and stood straight up on the nearest bank as a bolt
+ * of lightning strikes there (see life/revive.js). False where there's no bank in reach: they drown after all.
+ */
+function respawnOnBank(p) {
+  const bank = nearestBank(p.x, p.z);
+  if (!bank) return false;
+  splashUp({ x: p.x, y: WATER_LEVEL, z: p.z }, heightOf(p));
+  p.x = bank.x; p.z = bank.z;
+  if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; p.wait = 1; }
+  p.y = p.water.baseY;
+  p.water = null;
+  p.revived = true;
+  strikeLightning({ x: p.x, y: p.y, z: p.z });
+  return true;
 }
 
 /** The nearest point not over open water, a little way onto the land, or null if there's none in reach. */

@@ -8,10 +8,12 @@ import { explodeCar, splashCar } from '../giblets.js';
 import { throwCarWreck } from '../car-wrecks.js';
 import { carTypeOf } from '../car-types.js';
 import { driving, controlInput } from '../possession.js';
-import { boostMax, stopDriving } from './driving.js';
+import { boostMax, drivenCar, overOpenWater, stopDriving } from './driving.js';
+import { canRespawn, REVIVE_SHAKE_TIME } from '../revive.js';
 import { carMeshes } from './models.js';
 import { carHeight, carLength, carModelOf, carScale, placing } from './placing.js';
 import { blasts, cars, EXPLOSIVE_SCALE } from './state.js';
+import { buildingHit } from './collisions.js';
 
 // The followed car (camera, card, thumbnail) and taking a car out (killCar, drownCar, smiteCar).
 
@@ -115,29 +117,89 @@ export function chaseCamera(car) {
 }
 /**
  * Explode a car where it stands, in its own paint, through explodeCar (bigger, and a blast killing what's around it, if
- * explosive) — and take it out of cars, so a replacement spawns in elsewhere as usual.
+ * explosive) — and take it out of cars (unless it has a respawn left: startCarRevive), so a replacement spawns in elsewhere as usual.
  * @param {number} i - index in cars
  * @returns {void}
  */
 export function killCar(i) {
   const car = cars[i];
-  if (!car || car.li < 0) return;
-  App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
-  if (followedCar === i) stopFollowingCar();
+  if (!car || car.li < 0 || car.reviving) return;
+  const survives = canRespawn(car); // (it still blows up, but stays whole: see startCarRevive)
+  if (!survives) {
+    App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
+    if (followedCar === i) stopFollowingCar();
+  }
   const paint = new THREE.Color(...(carModelOf(car)?.bodyColor ?? car.paint));
   // its body in blocks and its wheels, where it has a design (see car-wrecks.js); explodeCar adds its glass and flecks
   const { matrix, rotation, scale, position, up } = placing;
   position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0), car.z);
   matrix.compose(position, rotation.setFromAxisAngle(up, car.heading), scale.setScalar(carScale(car)));
-  throwCarWreck(carModelOf(car)?.wreck, matrix, car.paint);
-  const wrecked = true, blastScale = car.traits?.explosive ? EXPLOSIVE_SCALE : 1;
+  if (!survives) throwCarWreck(carModelOf(car)?.wreck, matrix, car.paint);
+  const wrecked = !survives, blastScale = car.traits?.explosive ? EXPLOSIVE_SCALE : 1;
   if (blastScale > 1) blasts.push({ x: car.x, y: Y_ROAD, z: car.z, scale: blastScale }); // (explosive: kills what's around it too, next update)
   if (/bus/i.test(carModelOf(car)?.name ?? '')) { // (a bus goes up in two blasts, one at each end)
     const offset = carLength(car)*0.25;
     [-1, 1].forEach(end => explodeCar({ x: car.x + Math.sin(car.heading)*offset*end, y: Y_ROAD, z: car.z + Math.cos(car.heading)*offset*end }, carHeight(car), { paint, wrecked }, blastScale));
   } else explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint, wrecked }, blastScale);
+  if (survives) { startCarRevive(car); return; }
   cars.splice(i, 1);
   if (followedCar > i) followedCar--; // (a car ahead of it in the array, still being followed, keeps its place)
+}
+/**
+ * A car with a respawn left, just blown up: whole, stopped where it is (its driver thrown out), shaking (see placeCar)
+ * for REVIVE_SHAKE_TIME until updateCarRevive's bolt brings it back.
+ * @param {object} car
+ * @returns {void}
+ */
+function startCarRevive(car) {
+  if (car === drivenCar) stopDriving();
+  car.revived = true;
+  car.reviving = { timer: REVIVE_SHAKE_TIME };
+  car.fuse = null; car.speed = 0; car.stall = 0;
+}
+/**
+ * A reviving car, each frame: once it's shaken long enough, lightning strikes it and it drives on as it was.
+ * @param {object} car
+ * @param {number} dt
+ * @returns {void}
+ */
+export function updateCarRevive(car, dt) {
+  if ((car.reviving.timer -= dt) > 0) return;
+  car.reviving = null;
+  strikeLightning({ x: car.x, y: Y_ROAD + carHeight(car), z: car.z });
+}
+const LAND_REACH = 60, LAND_STEP = 1; // (how far a car gone under looks for land to respawn on, in what steps)
+/**
+ * The respawn trait, gone under: out of the water in a splash and onto the nearest land (clear of the water by most of
+ * its length), where lightning strikes it — a knocked car then drives back to its lane, a driven one carries on driven.
+ * @param {object} car
+ * @returns {boolean} false without a respawn left or land in reach: it drowns after all (drownCar)
+ */
+export function respawnFromWater(car) {
+  if (!canRespawn(car)) return false;
+  const land = nearestLand(car, carLength(car)*0.6);
+  if (!land) return false;
+  splashCar({ x: car.x, y: WATER_LEVEL, z: car.z }, carHeight(car));
+  if (car.kick) { car.kick.x += land.x - car.x; car.kick.z += land.z - car.z; } // (a knocked car's place is its kick off its lane: see sinkKnockedCar)
+  car.x = land.x; car.z = land.z;
+  car.sinking = null; car.speed = 0;
+  car.revived = true;
+  strikeLightning({ x: car.x, y: Y_ROAD + carHeight(car), z: car.z });
+  return true;
+}
+/** The nearest point off open water, `inset` further onto the land, where `car` fits without touching a building (buildingHit); null if there's none in reach. */
+function nearestLand(car, inset) {
+  const { x, z } = car;
+  for (let r = LAND_STEP; r <= LAND_REACH; r += LAND_STEP) {
+    const steps = Math.max(8, Math.ceil(2*Math.PI*r/LAND_STEP));
+    for (let k = 0; k < steps; k++) {
+      const a = k/steps*Math.PI*2, dx = Math.sin(a), dz = Math.cos(a);
+      if (overOpenWater(x + dx*r, z + dz*r)) continue;
+      const spot = { x: x + dx*(r + inset), z: z + dz*(r + inset) };
+      if (!overOpenWater(spot.x, spot.z) && !buildingHit({ ...car, ...spot })) return spot;
+    }
+  }
+  return null;
 }
 /**
  * Take a car under the water out at the surface, quietly rather than blowing up: a burst of its own splash

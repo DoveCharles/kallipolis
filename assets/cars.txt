@@ -259,7 +259,7 @@ hates = Getting it in the ear from their missus
 hates = My dad passed at this age, you know?
 hates = Hubris
 hates = Too much weight... Take it all off [legendary, weight = 0.4, speed = 1.2, boost =1.2, maxboost = 0.6, recharge = 1.2, braking = 1.2, unstable = 0.1, health = 0.4]
-plate = RESPAWN
+plate = RESPAWN [respawn]
 plate = MAOZEDONG
 plate = IPOD NANO
 plate = ROADHEAD
