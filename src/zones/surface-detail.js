@@ -4,7 +4,7 @@ import { Y_PARK } from '../core/scene.js';
 import { mulberry32, lerp, pointInPolygon, centroid, insetPolygon } from '../core/math.js';
 import { distPointSegment, distToPolygonBoundary } from '../buildings/footprints.js';
 import { PARK_TINT_COLORS, resolveParkTint, resolveTreeTint, resolveGrassNoiseStrength, pickBuildingColor, accentColorFrom } from '../core/splines.js';
-import { WINDOW_TILE_WORLD_SIZE, computeFacadeRuns, createWindowMaterial, mergeGeometries, mergeGeometryList, extractCapGeometry, buildWallGeometry, buildWedgeCapGeometry } from '../buildings/windows.js';
+import { WINDOW_TILE_WORLD_SIZE, computeFacadeRuns, createWindowMaterial, addBaseShade, mergeGeometries, mergeGeometryList, extractCapGeometry, buildWallGeometry, buildWedgeCapGeometry } from '../buildings/windows.js';
 import { MIN_ZONE_TREES, MAX_ZONE_TREES } from '../core/state.js';
 import { clipPolygons, createMeshBuilder } from '../roads/roads.js';
 import { scalePolygonAroundCentroid, makeExtrudeRaw, extrudeFootprintGeo } from './zone-visuals.js';
@@ -150,13 +150,13 @@ function addRooftopGreebles(group, poly, height, rng) {
 // solid wall or a glazing bar — between bays, or on the bars of a ribbon window's continuous glass — laid out along the
 // edge's facade run (from computeFacadeRuns) exactly as the shader does. Returns { step, lines: [{ t, k }] }: t is the
 // distance along this edge, k the line's index along the run; none on a run too short for a whole bay.
-function windowGridLines(win, run, len) {
+function windowGridLines(win, run, len, baysOnly) {
   const { u0, runLen } = run, closed = runLen < 0;
   const pier = closed ? 0 : win.uWinFloor.value.w, usable = Math.abs(runLen) - 2*pier;
   const bays = Math.floor(usable/win.uWinBay.value.x + 0.5), lines = [];
   if (bays < 1) return { step: 0, lines };
   const mullion = win.uWinMullion.value, ribbon = win.uWinBay.value.y > 0.999 && mullion > 0;
-  const step = ribbon ? mullion : usable/bays, count = Math.floor(usable/step + 1e-3);
+  const step = ribbon && !baysOnly ? mullion : usable/bays, count = Math.floor(usable/step + 1e-3);
   for (let k=0; k<=(closed ? count-1 : count); k++) { const t = pier + k*step - u0; if (t > -1e-3 && t < len + 1e-3) lines.push({ t, k }); }
   return { step, lines };
 }
@@ -290,7 +290,7 @@ function addEntranceCanopy(group, poly, rng, canopyColor) {
   const pa=poly[i], pb=poly[(i+1)%n];
   const ax=pa.x, ay=-pa.z, bx=pb.x, by=-pb.z;
   const dx=bx-ax, dy=by-ay, len=Math.hypot(dx,dy)||1;
-  if (len < 2.5) return;
+  if (len < 2.5) return null;
   const ux=dx/len, uy=dy/len;
   let nx=dy/len, ny=-dx/len;
   const midx=(ax+bx)/2, midy=(ay+by)/2;
@@ -315,6 +315,70 @@ function addEntranceCanopy(group, poly, rng, canopyColor) {
     strut.castShadow = true; strut.name = 'Building';
     group.add(strut);
   });
+  return { i, t: len/2, halfW: canopyW/2, zBottom: zCenter - canopyH/2 }; // (where it stands along edge i)
+}
+// Street level, lined up with the storefront glass (see windows.js): a recessed-looking entrance — a door of dark glass
+// in a deep frame with a step up to it — in the middle bay of one wall (the entrance canopy's, if there is one, so the
+// canopy shelters it, and no awning runs into the canopy), and canvas awnings over the shop windows along some of the rest. Everything here draws from
+// `drng`, the building's window sub-generator, so none of it moves anything else in the city.
+function addStreetFront(group, poly, win, drng, frameHex, glassHex, canopy) {
+  const runs = computeFacadeRuns(poly), n = poly.length, c = centroid(poly);
+  const lobbyH = win.uWinFloor.value.y, storeTop = 0.78*lobbyH, storeW = Math.max(win.uWinBay.value.y, 0.82);
+  const edges = [];
+  for (let i=0;i<n;i++) {
+    const pa=poly[i], pb=poly[(i+1)%n], ax=pa.x, ay=-pa.z, dx=pb.x-pa.x, dy=-(pb.z-pa.z), len=Math.hypot(dx,dy);
+    if (len < 1e-3) continue;
+    const ux=dx/len, uy=dy/len;
+    let nx=uy, ny=-ux;
+    if (((ax+dx/2-c.x)*nx + (ay+dy/2+c.z)*ny) < 0) { nx=-nx; ny=-ny; }
+    const { step, lines } = windowGridLines(win, runs[i], len, true);
+    const bays = [];
+    for (let k=0;k+1<lines.length;k++) if (lines[k+1].k === lines[k].k + 1) bays.push((lines[k].t + lines[k+1].t)/2);
+    if (bays.length) edges.push({ i, ax, ay, ux, uy, nx, ny, step, bays });
+  }
+  if (!edges.length) return;
+  // (a box whose local x runs along the wall and y out of it, turned into place at t along the edge)
+  const place = (geo, e, t, out, z) => {
+    geo.rotateZ(Math.atan2(e.ny, e.nx) - Math.PI/2);
+    geo.translate(e.ax + e.ux*t + e.nx*out, e.ay + e.uy*t + e.ny*out, z);
+    return geo;
+  };
+  const canopyEdge = canopy && edges.find(e => e.i === canopy.i);
+  const doorEdge = canopyEdge || edges.reduce((a, b) => b.bays.length > a.bays.length ? b : a);
+  const mid = canopyEdge ? canopy.t : doorEdge.bays[Math.floor(doorEdge.bays.length/2)];
+  const doorAt = doorEdge.bays.reduce((a, b) => Math.abs(b - mid) < Math.abs(a - mid) ? b : a);
+  if (canopyEdge || drng() < 0.75) {
+    const w = Math.min(doorEdge.step*storeW, 3.2), jamb = 0.3, depth = 0.35, frames = [];
+    const doorH = canopyEdge ? Math.min(storeTop, canopy.zBottom - jamb) : storeTop; // (under the canopy, if there is one)
+    for (const side of [-1, 1]) frames.push(place(new THREE.BoxGeometry(jamb, depth, doorH + jamb), doorEdge, doorAt + side*(w + jamb)/2, depth/2, (doorH + jamb)/2));
+    frames.push(place(new THREE.BoxGeometry(w + 2*jamb, depth, jamb), doorEdge, doorAt, depth/2, doorH + jamb/2));
+    frames.push(place(new THREE.BoxGeometry(w + 2*jamb + 0.4, 0.6, 0.12), doorEdge, doorAt, 0.3, 0.06));
+    const frame = new THREE.Mesh(mergeGeometryList(frames), new THREE.MeshStandardMaterial({ color:frameHex, roughness:0.6, metalness:0.2, flatShading:true }));
+    const door = new THREE.Mesh(place(new THREE.BoxGeometry(w, 0.04, doorH), doorEdge, doorAt, 0.03, doorH/2),
+      new THREE.MeshStandardMaterial({ color:new THREE.Color(glassHex).multiplyScalar(0.45), roughness:0.2, metalness:0.3, flatShading:true }));
+    [frame, door].forEach(m => { m.castShadow = true; m.receiveShadow = true; m.name = 'Building'; group.add(m); });
+  }
+  if (drng() < 0.5) return;
+  const AWNING_COLORS = [0xb8322c, 0x2f6b45, 0x23395d, 0xd9822b, 0x7a2e4d, 0x2c7f86, 0xe0d6c2];
+  const awningHex = AWNING_COLORS[Math.floor(drng()*AWNING_COLORS.length)];
+  const alternate = drng() < 0.35, depth = 0.9 + drng()*0.5, drop = 0.35 + drng()*0.2, slope = Math.atan2(drop, depth);
+  const geos = [];
+  for (const e of edges) {
+    if (drng() < 0.35) continue;
+    e.bays.forEach((t, b) => {
+      const w = e.step*storeW*0.96, zTop = storeTop + 0.35;
+      if ((alternate && b % 2) || (e === doorEdge && Math.abs(t - doorAt) < 1e-3) || geos.length > 120) return;
+      if (e === canopyEdge && Math.abs(t - canopy.t) < canopy.halfW + w/2 + 0.2) return;
+      const sheet = new THREE.BoxGeometry(w, Math.hypot(depth, drop), 0.06);
+      sheet.rotateX(-slope);
+      geos.push(place(sheet, e, t, depth/2 + 0.02, zTop - drop/2));
+      geos.push(place(new THREE.BoxGeometry(w, 0.04, 0.28), e, t, depth + 0.02, zTop - drop - 0.14));
+    });
+  }
+  if (!geos.length) return;
+  const awnings = new THREE.Mesh(mergeGeometryList(geos), new THREE.MeshStandardMaterial({ color:awningHex, roughness:0.9, metalness:0, flatShading:true }));
+  awnings.castShadow = true; awnings.receiveShadow = true; awnings.name = 'Building';
+  group.add(awnings);
 }
 function addExoskeletonAccent(group, poly, zBottom, zHeight, rng, accentColor) {
   // corner pilasters proud of each sharp corner of the footprint (both ends of a chamfer, not the square corner it
@@ -433,6 +497,7 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
   const wantsLitWindows = windowsEnabled && texRng() < (litWindowChance!=null ? litWindowChance : 0.8);
   const litIntensity = wantsLitWindows ? (0.9+texRng()*0.6) : 0;
   const mat = new THREE.MeshStandardMaterial({ color, vertexColors:true, roughness:0.85, metalness:0.05, flatShading:true, side:THREE.DoubleSide });
+  mat.onBeforeCompile = addBaseShade; mat.customProgramCacheKey = () => 'baseShade'; mat.userData.baseShade = true; // (darker toward the ground)
   // one window material shared by every wall that gets windows (see addSegment, and the wedge top's walls)
   const windowMat = windowsEnabled ? createWindowMaterial(color, texRng, wantsLitWindows, litIntensity, windowScale, specularWindows) : null;
   const win = windowMat && windowMat.userData.windowUniforms; // (what facade details line up with)
@@ -637,7 +702,8 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
   }
   if (rng() < 0.32) addVerticalRibs(group, poly, 0, baseWallHeight, rng, accentColorFrom(color, buildingHue, rng), win);
   if (!isLandmark && avgR > 2.5 && rng() < 0.22) addBalconies(group, poly, 0, detailZHeight, rng, color.clone().multiplyScalar(0.92).getHex(), win);
-  if (rng() < 0.3) addEntranceCanopy(group, poly, rng, accentColorFrom(color, buildingHue, rng));
+  const canopy = rng() < 0.3 ? addEntranceCanopy(group, poly, rng, accentColorFrom(color, buildingHue, rng)) : null;
+  if (win && !lobbyBlocked) addStreetFront(group, poly, win, texRng, color.clone().multiplyScalar(0.7).getHex(), win.uWinGlass.value.getHex(), canopy);
   if ((archetype==='rect' || archetype==='chamfer') && corners && rng() < (isLandmark ? 0.5 : 0.22)) {
     addExoskeletonAccent(group, poly, 0, baseWallHeight, rng, accentColorFrom(color, buildingHue, rng));
   }

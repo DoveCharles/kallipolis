@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S } from '../core/shared.js';
-import { computeWindowGlowFactor, SKY_ENV_MAP } from '../core/scene.js';
+import { computeWindowGlowFactor, SKY_ENV_MAP, SKY_UNIFORMS } from '../core/scene.js';
 import { lerp, centroid } from '../core/math.js';
 
 // ---------------------------------------------------------- building windows
@@ -85,6 +85,8 @@ const WINDOW_FRAGMENT_UNIFORMS = `
   uniform vec4 uWinLitMix;       // seed, chance a cluster of windows is lit, window chance in a lit cluster, in a dark one
 `;
 const WINDOW_FRAGMENT_PARS = WINDOW_FRAGMENT_UNIFORMS + `
+  uniform vec3 uSkyTop;
+  uniform vec3 uSkyHorizon;
   varying vec4 vFacade;
   varying float vFacadeRun;
   float winHash(vec3 p) {
@@ -96,7 +98,7 @@ const WINDOW_FRAGMENT_PARS = WINDOW_FRAGMENT_UNIFORMS + `
   float winBand(float t, float a, float b, float w) { return clamp(min(t - a, b - t)/w + 0.5, 0.0, 1.0); }
 `;
 const WINDOW_FRAGMENT_LAYOUT = `
-  float winGlass = 0.0, winLit = 0.0;
+  float winGlass = 0.0, winLit = 0.0, winShade = 0.0, winSill = 0.0;
   vec3 winLitColor = vec3(0.0);
   {
     float runLen = abs(vFacade.z);
@@ -132,6 +134,14 @@ const WINDOW_FRAGMENT_LAYOUT = `
       float lod = smoothstep(0.12, 0.35, max(wx/bay, wz/floorH));
       float coverage = inRun*step(z, top)*uWinBay.y*uWinBay.z;
       winGlass = mix(exact, coverage, lod);
+      // depth: the glass sits back in the wall, so the lintel shades a strip across the top of each pane (and the jamb one
+      // side of it), and a sill catches the light just below — faded out along with the panes themselves
+      float reveal = min(0.3, 0.1*floorH);
+      float leftEdge = 0.5*bay - halfW;
+      float sideShade = uWinBay.y > 0.999 ? 0.0 : 0.6*winBand(xb, leftEdge, leftEdge + 0.6*reveal, wx);
+      float storeTop = min(0.78*lobbyH, top);
+      winShade = inRun*bars*max(upper*max(winBand(zf, head - reveal, head, wz), sideShade), store*winBand(z, storeTop - reveal, storeTop, wz))*(1.0 - lod);
+      winSill = inRun*cols*upperRow*winBand(zf, sill - 0.12, sill, wz)*(1.0 - lod);
       // after dark: windows light in clusters of bays along each floor, and some blinds are half down
       float cluster = floor(bayIdx/4.0);
       float clusterLit = step(winHash(vec3(uWinLitMix.x, vFacadeRun*7.0 + cluster, floorIdx)), uWinLitMix.y);
@@ -141,12 +151,35 @@ const WINDOW_FRAGMENT_LAYOUT = `
       float upperLit = on*cols*upperRow*winBand(zf, sill, sill + (head - sill)*blind, wz);
       float storeLit = store*step(winHash(vec3(bayIdx + vFacadeRun*131.0, 91.0, uWinLitMix.x)), 0.85);
       float litAverage = coverage*mix(uWinLitMix.w, uWinLitMix.z, uWinLitMix.y);
-      winLit = mix(inRun*bars*max(upperLit, storeLit), litAverage, lod);
+      winLit = mix(inRun*bars*max(upperLit, storeLit), litAverage, lod)*(1.0 - 0.5*winShade);
       winLitColor = uWinLit*(0.7 + 0.6*winHash(vec3(floorIdx, cluster + vFacadeRun*17.0, uWinLitMix.x + 5.0)));
     }
   }
-  diffuseColor.rgb = mix(diffuseColor.rgb, uWinGlass, winGlass);
+  diffuseColor.rgb = mix(diffuseColor.rgb, uWinGlass, winGlass)*(1.0 - 0.45*winShade + 0.18*winSill);
 `;
+// Unlit glass mirrors the sky: the sky's colour above the horizon, a darker ground below it, far more strongly seen at a
+// glancing angle than head on (Fresnel). Added as light of its own after the glow, so it neither needs the sun nor lights
+// anything; at night the sky it takes is dark anyway. (Specular windows reflect the real sky map instead.)
+const WINDOW_SKY_REFLECTION = `
+  {
+    vec3 viewDir = normalize(vViewPosition);
+    vec3 r = inverseTransformDirection(reflect(-viewDir, normal), viewMatrix);
+    vec3 skyRefl = r.y > 0.0 ? mix(uSkyHorizon, uSkyTop, smoothstep(0.0, 0.6, r.y)) : uSkyHorizon*0.3;
+    float fres = 0.12 + 0.88*pow(1.0 - clamp(dot(normal, viewDir), 0.0, 1.0), 4.0);
+    totalEmissiveRadiance += skyRefl*fres*0.55*winGlass*(1.0 - winLit);
+  }
+`;
+// Walls darken toward the ground, where the street, its neighbours and the building itself block most of the sky — an
+// ambient-occlusion band a few metres tall that sets the building on the ground. (The ground is y = 0.) Shared by the
+// wall materials here and a building's plain material (see makeBuildingMesh), so podiums and plain walls get it too.
+export const BASE_SHADE_VERTEX = ['#include <worldpos_vertex>', `#include <worldpos_vertex>
+  vBaseY = (modelMatrix*vec4(transformed, 1.0)).y;`];
+export const BASE_SHADE_FRAGMENT = ['#include <color_fragment>', `#include <color_fragment>
+  diffuseColor.rgb *= 1.0 - 0.32*exp(-max(vBaseY, 0.0)/1.6);`];
+export function addBaseShade(shader) {
+  shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying float vBaseY;').replace(...BASE_SHADE_VERTEX);
+  shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vBaseY;').replace(...BASE_SHADE_FRAGMENT);
+}
 // The wall material for one building with windows. All of its randomness comes from texRng, the building's
 // isolated window sub-generator, so window settings never shift any other part of the city's layout.
 export function createWindowMaterial(color, texRng, lit, litIntensity, windowScale, specular) {
@@ -175,7 +208,8 @@ export function createWindowMaterial(color, texRng, lit, litIntensity, windowSca
   mat.userData.litColor = uniforms.uWinLit.value; // (what its lit lobby spills onto the pavement: see sky/streetlights.js)
   mat.userData.windowUniforms = uniforms; // (what a zone's merged walls carry on their vertices instead: see building-batches.js)
   mat.onBeforeCompile = shader => {
-    Object.assign(shader.uniforms, uniforms);
+    Object.assign(shader.uniforms, uniforms, SKY_UNIFORMS);
+    addBaseShade(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\n' + WINDOW_VERTEX_PARS)
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFacade = facade; vFacadeRun = facadeRun;');
@@ -184,8 +218,9 @@ export function createWindowMaterial(color, texRng, lit, litIntensity, windowSca
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + WINDOW_FRAGMENT_LAYOUT)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, uWinGlassSurface.x, winGlass);')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, uWinGlassSurface.y, winGlass);')
-      .replace('#include <emissivemap_fragment>', 'totalEmissiveRadiance *= winLitColor*winLit;');
+      .replace('#include <emissivemap_fragment>', 'totalEmissiveRadiance *= winLitColor*winLit;' + (specular ? '' : WINDOW_SKY_REFLECTION));
   };
+  mat.customProgramCacheKey = () => 'windows' + !!specular;
   return mat;
 }
 // The same walls merged across many buildings (see building-batches.js): what createWindowMaterial keeps in uniforms,
@@ -225,7 +260,8 @@ export function createBatchedWindowMaterial(specular, side) {
     emissive: 0xffffff, emissiveIntensity: computeWindowGlowFactor(S.sunElevation) });
   mat.userData.baseEmissiveIntensity = 1;
   mat.onBeforeCompile = shader => {
-    shader.uniforms.uWinGlassSurface = glassSurface;
+    Object.assign(shader.uniforms, { uWinGlassSurface: glassSurface }, SKY_UNIFORMS);
+    addBaseShade(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\n' + WINDOW_BATCH_VERTEX_PARS)
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFacade = facade; vFacadeRun = facadeRun; vWinBay = winBay; vWinFloor = winFloor; vWinGlass = winGlass; vWinLit = winLit; vWinLitMix = winLitMix;');
@@ -234,9 +270,9 @@ export function createBatchedWindowMaterial(specular, side) {
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + WINDOW_FRAGMENT_LAYOUT)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, uWinGlassSurface.x, winGlass);')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, uWinGlassSurface.y, winGlass);')
-      .replace('#include <emissivemap_fragment>', 'totalEmissiveRadiance *= vWinLit.w*winLitColor*winLit;');
+      .replace('#include <emissivemap_fragment>', 'totalEmissiveRadiance *= vWinLit.w*winLitColor*winLit;' + (specular ? '' : WINDOW_SKY_REFLECTION));
   };
-  mat.customProgramCacheKey = () => 'batchedWindows';
+  mat.customProgramCacheKey = () => 'batchedWindows' + !!specular;
   return mat;
 }
 export function mergeGeometries(geoA, geoB) {

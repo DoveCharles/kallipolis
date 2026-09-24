@@ -280,6 +280,9 @@ function makeSkyEnvFace() { const c = document.createElement('canvas'); c.width=
 const skyEnvFaces = { px:makeSkyEnvFace(), nx:makeSkyEnvFace(), py:makeSkyEnvFace(), ny:makeSkyEnvFace(), pz:makeSkyEnvFace(), nz:makeSkyEnvFace() };
 export const SKY_ENV_MAP = new THREE.CubeTexture([skyEnvFaces.px, skyEnvFaces.nx, skyEnvFaces.py, skyEnvFaces.ny, skyEnvFaces.pz, skyEnvFaces.nz]);
 SKY_ENV_MAP.mapping = THREE.CubeReflectionMapping;
+// The same sky colors as uniforms, for shaders that fake the reflection themselves (the plain windows: see
+// buildings/windows.js); kept current by updateSun, quick or not, since that's only two colors.
+export const SKY_UNIFORMS = { uSkyTop: { value: new THREE.Color() }, uSkyHorizon: { value: new THREE.Color() } };
 function updateSkyEnvMap(sky) {
   const topHex = '#'+sky.top.getHexString(), horizonHex = '#'+sky.horizon.getHexString();
   [skyEnvFaces.px, skyEnvFaces.nx, skyEnvFaces.pz, skyEnvFaces.nz].forEach(canvas => {
@@ -345,6 +348,7 @@ export function updateSun(quick) {
   // the cirrus takes its color from the sky it's in: pale by day, glowing with the sun low, dark grey at night
   skyDomeMat.uniforms.cloudColor.value.copy(sky.horizon).lerp(sky.sun, 0.35).multiplyScalar(0.25 + 0.85*ease(-10, 8, S.sunElevation));
   scene.fog.color.copy(sky.horizon);
+  SKY_UNIFORMS.uSkyTop.value.copy(sky.top); SKY_UNIFORMS.uSkyHorizon.value.copy(sky.horizon);
   scene.fog.near = THREE.MathUtils.lerp(600, 90, overcast);
   scene.fog.far = THREE.MathUtils.lerp(2800, 900, overcast);
   hemi.color.copy(sky.top).lerp(new THREE.Color(0xffffff), 0.35);
