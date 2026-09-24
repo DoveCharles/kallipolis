@@ -74,17 +74,10 @@ try { if (localStorage.getItem('splinetopia.startInEdit') !== '0') document.body
   </div>
 
   <div class="section" id="section-paths">
-    <div class="section-label">Paths <span id="paths-count">0</span></div>
+    <!-- the type carousel is filled in by src/ui/zone-carousel.js; the list shows only that type's networks -->
+    <div id="path-type-carousel"></div>
+    <div class="section-label" style="margin-top:8px;"><span id="paths-title">Roads</span> <span id="paths-count">0</span></div>
     <div class="hier-list" id="paths-list"></div>
-    <div class="row" style="margin-top:8px;"><label>Type <span style="font-weight:400;">· new paths</span></label>
-      <select class="select-input" id="s-pathtype" style="width:130px; margin-bottom:0;">
-        <option value="sidewalk">Sidewalk</option>
-        <option value="walkway">Walkway</option>
-        <option value="raised">Raised walkway</option>
-        <option value="river">River</option>
-        <option value="train">Train</option>
-      </select>
-    </div>
     <div id="path-road-settings">
       <div class="slider-row" style="margin-top:8px;">
         <div class="row"><label>Width <span id="rw-context" style="font-weight:400;"></span></label><span class="val" id="v-roadwidth">8</span></div>

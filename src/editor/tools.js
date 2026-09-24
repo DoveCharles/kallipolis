@@ -4,7 +4,7 @@ import { roadNodes, mapImages } from '../core/state.js';
 import { importMapImageFile, setSelectedMap, removeMapImage, previewLine } from '../maps/map-images.js';
 import { disposeObject } from '../roads/roads.js';
 import { rebuildRoadMeshes } from '../roads/paths.js';
-import { networkKindOf, rebuildTrainMeshes, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
+import { networkKindOf, pathTypeOf, currentPathType, rebuildTrainMeshes, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { setHover, insertPreviewMarker } from './hover.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone, subdivideZonesFrom } from '../zones/cutouts.js';
@@ -105,8 +105,8 @@ function updateHint() {
   hint.textContent = msg;
   hint.dataset.kind = S.interactionMode==='move' ? 'general' : 'edit'; // (which View menu toggle hides it: ui/view-prefs.js)
 }
-// Edit mode's tabs: Paths (roads, paths and rivers — the 'road' tool — and train lines, the 'train' tool, which the Type menu
-// switches between, as each shows only its own kind of node), Zones, and Objects (street furniture, see objects/objects.js)
+// Edit mode's tabs: Paths (roads, paths and rivers — the 'road' tool — and train lines, the 'train' tool, which its type
+// carousel switches between; each type lists only its own networks and shows only its own nodes), Zones, and Objects (street furniture, see objects/objects.js)
 export function applyModeVisibility() {
   App.hideContextMenu();
   const inNode = S.interactionMode==='node', inPaths = S.currentTool==='road' || S.currentTool==='train', inObjects = S.currentTool==='objects';
@@ -121,7 +121,7 @@ export function applyModeVisibility() {
   document.getElementById('section-paths').style.display = (inNode && inPaths) ? 'block' : 'none';
   document.getElementById('path-road-settings').style.display = S.currentTool==='road' ? 'block' : 'none';
   document.getElementById('path-train-settings').style.display = S.currentTool==='train' ? 'block' : 'none';
-  document.getElementById('s-pathtype').value = S.currentTool==='train' ? 'train' : S.newRoadType;
+  if (inNode && inPaths) syncPathTypeCarousel();
   document.getElementById('section-zone').style.display = (inNode && S.currentTool==='zone') ? 'block' : 'none';
   document.getElementById('section-objects').style.display = (inNode && inObjects) ? 'block' : 'none';
   document.getElementById('entity-toolbar').style.display = inNode ? 'flex' : 'none';
@@ -169,13 +169,34 @@ function setEntityTab(tab) {
 }
 document.querySelectorAll('#mode-toolbar .tool-btn').forEach(b => b.addEventListener('click', ()=> setMode(b.dataset.mode)));
 document.querySelectorAll('#entity-toolbar .tool-btn').forEach(b => b.addEventListener('click', ()=> setEntityTab(b.dataset.entity==='paths' ? S.lastPathTool : b.dataset.entity)));
-// the type new paths get: sidewalk, path or river draw with the road tool, a train line with the train tool
-document.getElementById('s-pathtype').addEventListener('change', (e) => {
-  const type = e.target.value;
+// The Paths tab's type: what new paths are drawn as (sidewalk, walkway, raised walkway or river with the road tool, a train
+// line with the train tool), and the only networks it lists and nodes it shows. The carousel is made the first time the
+// tab is shown, and after that only has its card moved.
+let pathTypeCarousel = null;
+function syncPathTypeCarousel() {
+  const type = currentPathType();
+  if (!pathTypeCarousel) {
+    pathTypeCarousel = document.getElementById('path-type-carousel');
+    pathTypeCarousel.innerHTML = App.pathTypeCarouselHtml(type);
+    App.wirePathTypeCarousel(pathTypeCarousel, pickPathType);
+  } else App.syncPathTypeCarousel(pathTypeCarousel, type);
+}
+function pickPathType(type) {
+  if (type===currentPathType()) return;
   if (type!=='train') S.newRoadType = type;
+  // a selected network of another type goes, as it's no longer in the list
+  const selected = (S.selection.type==='road' || S.selection.type==='train') && S.roadLines.find(l => l.networkId===S.selection.id);
+  if (selected && pathTypeOf(selected)!==type) {
+    S.selection = { type:null, id:null };
+    refreshHighlights();
+  }
   const tool = type==='train' ? 'train' : 'road';
-  if (tool!==S.currentTool) setEntityTab(tool); else applyModeVisibility();
-});
+  if (tool!==S.currentTool) { setEntityTab(tool); return; }
+  cancelActiveDrawing();
+  rebuildRoadMarkers(); rebuildRoadHandles(); // only the new type's nodes
+  applyModeVisibility();
+  renderHierarchy();
+}
 
 document.getElementById('s-roadwidth').addEventListener('input', (e)=>{
   const v = parseFloat(e.target.value);

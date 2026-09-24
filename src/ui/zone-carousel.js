@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, renderer, updateSun, sun, sunOffset, Y_ZONE_GROUND, Y_PATH } from '../core/scene.js';
-import { BUILDING_GROUND_COLORS } from '../core/splines.js';
-import { DEFAULT_ZONE_SETTINGS } from '../core/state.js';
-import { createMeshBuilder, disposeObject } from '../roads/roads.js';
+import { scene, renderer, updateSun, sun, sunOffset, ground, Y_ZONE_GROUND, Y_PATH } from '../core/scene.js';
+import { BUILDING_GROUND_COLORS, ROAD_COLOR } from '../core/splines.js';
+import { DEFAULT_ZONE_SETTINGS, roadNodes } from '../core/state.js';
+import { createMeshBuilder, disposeObject, clipPolygons, CLIPPER_SCALE, SIDEWALK_COLOR } from '../roads/roads.js';
 import { makeFlatZoneMesh } from '../zones/surface-detail.js';
 import { WATER_COLOR, WATER_LEVEL, WATER_BANK_TOP, WATER_BANK_BOTTOM, WATER_BANK_COLOR, applyWaterShader } from '../water/water.js';
-import { WALKWAY_TEXTURES, makeWalkwayMaterial, pathFadeWidth, defaultWalkwayTextureScale } from '../roads/paths.js';
+import { WALKWAY_TEXTURES, WALKWAY_COLOR, makeWalkwayMaterial, pathFadeWidth, defaultWalkwayTextureScale, rebuildRoadMeshes } from '../roads/paths.js';
+import { PATH_TYPES } from '../trains/trains.js';
+import { RAISED_HEIGHT } from '../roads/raised.js';
+import { stillLoading } from './loading.js';
 import { toClipperPath, subdivideZone } from '../zones/cutouts.js';
 import { updateStats } from './panels.js';
 
@@ -213,4 +216,120 @@ function renderWalkwayThumbnails(color) {
   });
 }
 
-Object.assign(App, { withThumbnailStudio, zoneTypeCarouselHtml, wireZoneTypeCarousel, walkwayTextureCarouselHtml, wireWalkwayTextureCarousel });
+// ============================================================ path type carousel
+// The Paths tab's type (see editor/tools.js) is picked from the same kind of carousel. Each thumbnail is a stretch of the
+// real thing: a sample line of each type is added far off the map and the paths rebuilt around it, shot, and taken away
+// again, the paths rebuilt as they were (a river, drawn with the rest of the water a frame later, is cut into the ground
+// by hand instead, like the water zone's pond). Only once models are in, so the raised walkway has its trees.
+let pathThumbnails = null, pathThumbnailsScheduled = false;
+function pathTypeCarouselHtml(type) {
+  return typeCarouselHtml('ds-pathtype', 'Path type', PATH_TYPES, type, pathThumbnails);
+}
+function wirePathTypeCarousel(panel, onPick) {
+  if (!wireTypeCarousel(panel, 'ds-pathtype', onPick) || pathThumbnails || pathThumbnailsScheduled) return;
+  pathThumbnailsScheduled = true;
+  const render = () => {
+    if (stillLoading()) { setTimeout(render, 500); return; }
+    pathThumbnails = renderPathThumbnails();
+    setCarouselThumbnails('ds-pathtype', pathThumbnails);
+  };
+  setTimeout(render, 30);
+}
+// moves the carousel in `panel` on to `type`, without making it again
+function syncPathTypeCarousel(panel, type) {
+  const track = panel.querySelector('#ds-pathtype');
+  if (!track) return;
+  track.querySelectorAll('.type-card').forEach(card => card.classList.toggle('active', card.dataset.type===type));
+  panel.querySelector('.val').textContent = PATH_TYPES.find(t => t.id===type).label;
+  const active = track.querySelector('.type-card.active');
+  if (active && (active.offsetLeft < track.scrollLeft || active.offsetLeft + active.offsetWidth > track.scrollLeft + track.clientWidth))
+    track.scrollTo({ left: active.offsetLeft - track.offsetLeft - (track.clientWidth - active.offsetWidth)/2, behavior: 'smooth' });
+}
+function renderPathThumbnails() {
+  const saved = { waterDirty: S.waterDirty, peopleNavDirty: S.peopleNavDirty, trafficNavDirty: S.trafficNavDirty, walkwayOrder: S.walkwayOrder.slice() };
+  const x0 = 42000, z0 = 42000, SPACING = 400, REACH = 120; // each sample runs straight along z (bottom left to top right in its
+  // shot), well past the shot's edges
+  const sample = i => ({ cx: x0 + i*SPACING, cz: z0 });
+  const tempNodes = [], tempLines = [];
+  PATH_TYPES.forEach((type, i) => {
+    if (type.id === 'river') return;
+    const { cx, cz } = sample(i), isTrain = type.id === 'train';
+    const ids = [-REACH, REACH].map((dx, k) => {
+      const id = `__thumbnail-${type.id}-${k}`;
+      roadNodes[id] = { x: cx, z: cz + dx, type: 'poly', handleIn: null, handleOut: null, ...(isTrain && { y: S.TRAIN_DEFAULT_HEIGHT }) };
+      tempNodes.push(id);
+      return id;
+    });
+    const networkId = '__thumbnail-' + type.id;
+    tempLines.push(isTrain ? { id: networkId, kind: 'train', nodeIds: ids, radius: S.TRAIN_DEFAULT_RADIUS, networkId }
+      : { id: networkId, nodeIds: ids, width: S.DEFAULT_ROAD_WIDTH, color: ROAD_COLOR, sidewalkWidth: S.DEFAULT_SIDEWALK_WIDTH, sidewalkColor: SIDEWALK_COLOR,
+        roadType: type.id, walkwayColor: WALKWAY_COLOR, networkId, ...(type.id === 'walkway' && { walkwayTexture: 'brick', walkwayColor: 0xb4623f }), // (terracotta brick)
+        ...(type.id === 'raised' && { raisedTrees: true, raisedBenches: true, raisedLights: true }) });
+  });
+  const restore = () => {
+    tempNodes.forEach(id => { delete roadNodes[id]; });
+    S.roadLines = S.roadLines.filter(l => !tempLines.includes(l));
+    rebuildRoadMeshes();
+    Object.assign(S, saved);
+  };
+  S.roadLines.push(...tempLines);
+  let thumbnails;
+  try {
+    rebuildRoadMeshes();
+    S.roadMarkerGroup.visible = S.roadHandleGroup.visible = false; // (drawn over everything, even out here)
+    thumbnails = withThumbnailStudio(snap => {
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 1000);
+      const shots = {};
+      // the ground, with the sunk road surfaces (and the river) cut out of it as the real ground has
+      const C = CLIPPER_SCALE, rect = (l, t, r, b) => [{ X: l*C, Y: t*C }, { X: r*C, Y: t*C }, { X: r*C, Y: b*C }, { X: l*C, Y: b*C }];
+      const riverAt = sample(PATH_TYPES.findIndex(t => t.id === 'river')), riverHalf = S.DEFAULT_ROAD_WIDTH;
+      const groundTops = createMeshBuilder();
+      groundTops.addTops(clipPolygons(ClipperLib.ClipType.ctDifference, [rect(x0 - SPACING, z0 - SPACING, x0 + PATH_TYPES.length*SPACING, z0 + SPACING)],
+        S.roadSurfaceOutline.concat([rect(riverAt.cx - riverHalf, riverAt.cz - REACH, riverAt.cx + riverHalf, riverAt.cz + REACH)]), true), 0);
+      const studio = new THREE.Group();
+      studio.add(new THREE.Mesh(groundTops.build(), ground.material));
+      scene.add(studio);
+      PATH_TYPES.forEach((type, i) => {
+        const { cx, cz } = sample(i);
+        let river = null;
+        if (type.id === 'river') {
+          // a straight river cut into ground, its banks either side
+          river = new THREE.Group();
+          const hw = riverHalf, a = cz - REACH, b = cz + REACH;
+          const shore = [[cx - hw, b, cx - hw, a], [cx + hw, a, cx + hw, b]];
+          const waterMat = new THREE.MeshStandardMaterial({ color: WATER_COLOR, roughness: 1 });
+          applyWaterShader(waterMat, shore, [], 0);
+          const surface = new THREE.Mesh(new THREE.PlaneGeometry(hw*2, REACH*2).rotateX(-Math.PI/2), waterMat);
+          surface.position.set(cx, WATER_LEVEL, cz);
+          const banks = createMeshBuilder();
+          shore.forEach(([ax, az, bx, bz]) => {
+            const nx = -(bz - az)/(REACH*2), nz = (bx - ax)/(REACH*2); // pointing into the river
+            banks.addQuad({ x: ax, y: WATER_BANK_TOP, z: az }, { x: bx, y: WATER_BANK_TOP, z: bz }, { x: bx, y: WATER_BANK_BOTTOM, z: bz }, { x: ax, y: WATER_BANK_BOTTOM, z: az }, { x: nx, y: 0, z: nz });
+          });
+          river.add(surface, new THREE.Mesh(banks.build(), new THREE.MeshStandardMaterial({ color: WATER_BANK_COLOR, roughness: 0.95 })));
+          scene.add(river);
+        }
+        // how much it takes in (half the shot's width), close enough that the path fills most of it, and the height it's centered
+        // on: the deck of a raised walkway, a train line's tube
+        const VIEWS = { sidewalk: 9, walkway: 7.5, raised: 8, river: 11, train: 9 };
+        const isTrain = type.id === 'train', view = VIEWS[type.id], fy = isTrain ? S.TRAIN_DEFAULT_HEIGHT : type.id === 'raised' ? RAISED_HEIGHT : 0;
+        camera.left = camera.bottom = -view; camera.right = camera.top = view;
+        camera.updateProjectionMatrix();
+        camera.position.set(cx + 120, fy + 140, cz + 160); // from the south-east, like the zones' — the path running across it
+        camera.lookAt(cx, fy, cz);
+        sun.target.position.set(cx, 0, cz);
+        sun.target.updateMatrixWorld();
+        sun.position.set(cx + sunOffset.x, sunOffset.y, cz + sunOffset.z);
+        shots[type.id] = snap(camera);
+        if (river) { scene.remove(river); disposeObject(river); }
+      });
+      scene.remove(studio);
+      studio.children[0].geometry.dispose(); // (the material is the real ground's)
+      return shots;
+    });
+  } finally { restore(); }
+  return thumbnails;
+}
+
+Object.assign(App, { withThumbnailStudio, zoneTypeCarouselHtml, wireZoneTypeCarousel, walkwayTextureCarouselHtml, wireWalkwayTextureCarousel,
+  pathTypeCarouselHtml, wirePathTypeCarousel, syncPathTypeCarousel });

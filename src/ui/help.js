@@ -37,9 +37,10 @@ const TOPICS = [
     <p>View &gt; Full Screen (or double-click the title bar) fills the screen.</p>` },
 
   { id: 'paths', title: 'Paths', html: () => `
-    <p>Edit &gt; Paths draws networks of nodes. The <b>Type</b> menu picks what a network is:</p>
+    <p>Edit &gt; Paths draws networks of nodes. The carousel of cards at the top picks the type you draw, and the list
+    and the nodes on show are that type's alone:</p>
     <ul class="w3-help-list">
-      <li><b>Sidewalk</b> — a road, curbs and pavements; junctions merge cleanly and get zebra crossings and traffic
+      <li><b>Road</b> — tarmac, curbs and pavements; junctions merge cleanly and get zebra crossings and traffic
       lights. Cars drive these.</li>
       <li><b>Walkway</b> — a footpath for people only.</li>
       <li><b>Raised walkway</b> — a walkway up on pillars, with ramps down at its ends.</li>

@@ -157,7 +157,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `weather.js` (9K) Rain and snow fall through a box of air around wherever the camera's looking — sized to how far out it's zoomed, and anchored to the world, so the dro… — exports: placeSunLight, updateWeather
 
 ### src/trains/
-- `trains.js` (91K, **big**)  — exports: getTrainStations, trainStationsVersion, getTrainShuttles, isTrainLine, isTrainNode, networkKindOf, trainNodeY, snapStationHeight …
+- `trains.js` (91K, **big**)  — exports: getTrainStations, trainStationsVersion, getTrainShuttles, isTrainLine, isTrainNode, networkKindOf, PATH_TYPES, pathTypeOf, currentPathType, trainNodeY, snapStationHeight …
 
 ### src/ui/
 - `entity-card.js` (17K) The card at the bottom right saying what the camera's following; love/hate modifier drop-downs (addDrop, layoutDrops); optional health bar (`health: true`, card.setHealth): — exports: ROWS, TEXT_ROWS, cards, makeCard
@@ -183,7 +183,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `win3.js` (1K) The Windows 3.0 look (the only one: html.win3 is set in index.html; styles in css/win3.css) — the side panel's title-bar buttons.
 - `win3-menu.js` (11K) Under the Windows 3.0 look, wider than a phone: the whole tab as the Splinetopia window — frame, title bar, File/Edit/View/Options/Help menu bar (items press the existing buttons), Alt+letter menus, Ctrl+S/Ctrl+O, message boxes (About, Clear All; Help items open ui/help.js); the side panel docks down its left, and its World/Edit/Maps buttons move into the toolbar (back to the panel on phones) — Edit first, World and Maps as icons either end of the tools —: World opens a window of the World controls without changing mode, and pressing Edit or Maps while it's down lets it up and hides the panel, leaving World's controls; tracks the active window, so a card opened on something (even one already open) takes the navy title bar and keeps it while it's open (clicks on the view or another ped don't take it back), the frame's going white. Styles in css/win3.css ("the application window").
 - `w3-window.js` (5K) The little non-blocking Windows 3.0 windows (Sound levels, the settings windows): title bar, content, OK; dragged by the title bar, and sized by the border if opened resizable (World is). — exports: openWindow, closeWindows
-- `zone-carousel.js` (11K) A zone's type is picked from a carousel of cards rather than a dropdown, each card showing what that type looks like.
+- `zone-carousel.js` (17K) A zone's type is picked from a carousel of cards rather than a dropdown, each card showing what that type looks like; the same for a walkway's texture and the Paths tab's type (pathTypeCarouselHtml, wirePathTypeCarousel, syncPathTypeCarousel — thumbnails of sample paths built far off the map, then taken away).
 
 ### src/water/
 - `bridges.js` (8K) ---------------------------------------------------------- bridges Where a road crosses water it carries on as a bridge: — exports: FOOTBRIDGE_TOP, refreshHighlights, styleZoneVisual

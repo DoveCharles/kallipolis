@@ -5,7 +5,7 @@ import { roadNodes, MAX_TARGET_LOTS } from '../core/state.js';
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
 import { isRaisedWalkwayLine, raisedHeightOf, MIN_RAISED_HEIGHT, MAX_RAISED_HEIGHT } from '../roads/raised.js';
 import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isGroundWalkwayLine, isRiverLine, rebuildRoadMeshes, refreshRoadAppearance, walkwayTextureChangeNeedsRebuild, defaultWalkwayTextureScale, walkwayTextureScaleOf, moveWalkwayNetwork } from '../roads/paths.js';
-import { networkKindOf, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
+import { networkKindOf, pathTypeOf, currentPathType, PATH_TYPES, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
 import { subdivideZone, subdivideZonesFrom, subdivideZonesFromIndex, moveZone } from '../zones/cutouts.js';
@@ -84,13 +84,14 @@ export function deleteZoneVertex(zone, idx) {
 }
 
 export function renderHierarchy() {
-  // road and train networks both live in roadLines, and are listed together in the Paths tab
+  // road and train networks both live in roadLines; the Paths tab lists those of the type its carousel is on
   const pathsList = document.getElementById('paths-list');
   pathsList.innerHTML='';
   const networks = [];
   const seenNetworks = new Set();
+  const pathType = currentPathType();
   S.roadLines.forEach(line => {
-    if (seenNetworks.has(line.networkId)) return;
+    if (seenNetworks.has(line.networkId) || pathTypeOf(line)!==pathType) return;
     seenNetworks.add(line.networkId);
     networks.push({ netId: line.networkId, kind: networkKindOf(line), lines: S.roadLines.filter(l=>l.networkId===line.networkId) });
   });
@@ -154,6 +155,7 @@ export function renderHierarchy() {
     pathsList.appendChild(row);
   });
   document.getElementById('paths-count').textContent = networks.length;
+  document.getElementById('paths-title').textContent = PATH_TYPES.find(t => t.id===pathType).plural;
 
   const zonesList = document.getElementById('zones-list');
   zonesList.innerHTML='';
@@ -823,7 +825,7 @@ function renderDetails() {
       <div class="empty" style="margin-bottom:10px;">${subtitle}</div>
       <div class="slider-row"><div class="row"><label>Path type</label></div>
         <select id="ds-roadtype" class="select-input">
-          <option value="sidewalk" ${!isWalkway&&!isRiver?'selected':''}>Sidewalk</option>
+          <option value="sidewalk" ${!isWalkway&&!isRiver?'selected':''}>Road</option>
           <option value="walkway" ${isWalkway&&!isRaised?'selected':''}>Walkway</option>
           <option value="raised" ${isRaised?'selected':''}>Raised walkway</option>
           <option value="river" ${isRiver?'selected':''}>River</option>
@@ -861,9 +863,9 @@ function renderDetails() {
     `;
     document.getElementById('ds-roadtype').addEventListener('change', (e) => {
       lines.forEach(l => { l.roadType = e.target.value; });
-      S.newRoadType = e.target.value;
+      S.newRoadType = e.target.value; // (and the Paths tab follows it to its new type)
       App.applyModeVisibility();
-      rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderDetails();
+      rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderDetails(); renderHierarchy();
     });
     if (isRaised) {
       const height = document.getElementById('ds-raisedheight');

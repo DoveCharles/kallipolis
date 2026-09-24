@@ -5,7 +5,7 @@ import { nearestPointOnEdgeTessellated } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { setLinePoints } from '../roads/roads.js';
 import { rebuildRoadMeshes } from '../roads/paths.js';
-import { nodeUiMaterial, asNodeUi, nodeUiScaleAt } from '../trains/trains.js';
+import { nodeUiMaterial, asNodeUi, nodeUiScaleAt, pathTypeOf, currentPathType } from '../trains/trains.js';
 import { setNodeHighlight } from './node-highlight.js';
 
 // ---------------------------------------------------------- hover + insert-on-edge
@@ -52,7 +52,9 @@ export function updateInsertPreviewGeometry(point, angle) {
 export function findNearestEdge(gp, zoneThreshold) {
   let best = null;
   if (S.currentTool==='road') {
+    const type = currentPathType();
     S.roadLines.forEach(line => {
+      if (pathTypeOf(line)!==type) return; // (only the Paths tab's own type can be added to)
       const th = Math.max((line.width||S.DEFAULT_ROAD_WIDTH)/2+3, 6);
       const pts = line.nodeIds.map(id=>roadNodes[id]).filter(Boolean);
       for (let i=0;i<pts.length-1;i++) {

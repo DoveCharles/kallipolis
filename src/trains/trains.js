@@ -108,14 +108,23 @@ export const trainStationsVersion = () => stationsVersion;
 export const getTrainShuttles = () => trainShuttles;
 
 export function isTrainLine(line) { return line.kind==='train'; }
-function trainNodeIdSet() {
-  const ids = new Set();
-  S.roadLines.forEach(line => { if (isTrainLine(line)) line.nodeIds.forEach(id => ids.add(id)); });
-  return ids;
-}
 export function isTrainNode(nodeId) { return S.roadLines.some(line => isTrainLine(line) && line.nodeIds.includes(nodeId)); }
 // the selection type / entity tab a line's network belongs to
 export function networkKindOf(line) { return isTrainLine(line) ? 'train' : 'road'; }
+// The Paths tab's types, in its carousel's order: each lists only its own networks and shows only its own nodes
+export const PATH_TYPES = [
+  { id: 'sidewalk', label: 'Road', plural: 'Roads', color: '#5c616b' }, { id: 'walkway', label: 'Walkway', plural: 'Walkways', color: '#b9a888' },
+  { id: 'raised', label: 'Raised', plural: 'Raised walkways', color: '#8d8a84' }, { id: 'river', label: 'River', plural: 'Rivers', color: '#1d6f7d' },
+  { id: 'train', label: 'Train', plural: 'Train lines', color: '#7d8a99' },
+];
+export function pathTypeOf(line) { return isTrainLine(line) ? 'train' : line.roadType || 'sidewalk'; }
+// the type the Paths tab is on: what new paths are drawn as, and whose nodes and networks it shows
+export function currentPathType() { return S.currentTool==='train' ? 'train' : S.newRoadType; }
+function shownPathNodeIds() {
+  const ids = new Set(), type = currentPathType();
+  S.roadLines.forEach(line => { if (pathTypeOf(line)===type) line.nodeIds.forEach(id => ids.add(id)); });
+  return ids;
+}
 export function trainNodeY(n) { return n.y!=null ? n.y : S.TRAIN_DEFAULT_HEIGHT; }
 function trainStationSize(radius) { return { width: radius*2 + 5, height: radius*2 + 2.5 }; }
 // how far below the tube's centerline a station's platform deck is
@@ -1431,14 +1440,12 @@ export function rebuildRoadMarkers() {
   scene.remove(S.roadMarkerGroup); disposeObject(S.roadMarkerGroup);
   S.roadMarkerGroup = new THREE.Group();
   S.roadMarkerGroup.visible = S.interactionMode==='node' && (S.currentTool==='road' || S.currentTool==='train'); // (the Paths tab's alone)
-  // Road and train nodes share roadNodes, but the road and train tools (the Paths tab's Type) each only show (and so only
-  // let you pick) their own kind — so a train line can't be joined onto a road, or the other way round.
-  const trainIds = trainNodeIdSet();
-  const showTrains = S.currentTool==='train';
+  // Every path's nodes are in roadNodes, but the Paths tab only shows (and so only lets you pick) the nodes of the type
+  // it's on — so a train line can't be joined onto a road, nor a river onto a walkway.
+  const shown = shownPathNodeIds(), isTrain = S.currentTool==='train';
   Object.keys(roadNodes).forEach(id => {
     const n = roadNodes[id];
-    const isTrain = trainIds.has(id);
-    if (isTrain !== showTrains) return;
+    if (!shown.has(id)) return;
     const color = isTrain && n.type==='station' ? TRAIN_STATION_NODE_COLOR : 0x3ddc97;
     const m = new THREE.Mesh(new THREE.SphereGeometry(1.6,12,12), nodeUiMaterial(THREE.MeshBasicMaterial, { color }));
     m.position.set(n.x, isTrain ? trainNodeY(n) : 1.6, n.z);
@@ -1451,12 +1458,10 @@ export function rebuildRoadHandles() {
   scene.remove(S.roadHandleGroup); disposeObject(S.roadHandleGroup);
   S.roadHandleGroup = new THREE.Group();
   S.roadHandleGroup.visible = S.interactionMode==='node' && (S.currentTool==='road' || S.currentTool==='train');
-  const trainIds = trainNodeIdSet();
-  const showTrains = S.currentTool==='train';
+  const shown = shownPathNodeIds(), isTrain = S.currentTool==='train';
   Object.keys(roadNodes).forEach(id => {
     const n = roadNodes[id];
-    const isTrain = trainIds.has(id);
-    if (isTrain !== showTrains) return;
+    if (!shown.has(id)) return;
     if (isTrain) {
       // train lines are always smooth, so their nodes have no handles — just a faint drop line under each one, so
       // its height reads at a glance
