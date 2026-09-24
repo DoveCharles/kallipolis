@@ -103,6 +103,9 @@ html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool:not(:disabled), #grid-tog
 html.win3 :is(.tool-btn.active, #grid-toggle.active, .canvas-tool.on, .type-card.active) { background:var(--w3-face); color:#000; box-shadow:var(--w3-pressed); }
 html.win3 :is(.tool-btn:not(.active):hover, .btn:hover, .btn.danger:hover, .icon-btn:hover, .canvas-tool:not(.on):hover:not(:disabled), #grid-toggle:hover, .carousel-arrow:hover, .add-color-confirm:hover, .type-card:hover) { color:#000; border-color:#000; background:var(--w3-face); }
 html.win3 .tool-btn.active { text-decoration:underline; }
+/* every icon on a button the size a toolbar button's picture was, from Word 2 and Excel 4 on: 16x15 (drawn onto those
+   pixels by src/ui/pixel-icons.js) */
+html.win3 :is(button, #grid-toggle) svg { width:16px; height:15px; flex:none; }
 html.win3 .canvas-tool:disabled { opacity:1; color:var(--w3-shadow); }
 html.win3 .carousel-arrow { flex-basis:18px; font-size:13px; }
 html.win3 .type-card .thumb { border:1px solid #000; border-radius:0; }
@@ -259,7 +262,7 @@ html.win3 .pc-thumb {
   /* the toolbar: a grey strip right across the window under the menu bar — Edit at the left, the morality meter at the
      right, each ruled off by an etched line, and the tools centred between them; hiding it (View > Toolbar) takes the
      meter with it, and everything below moves up */
-  html.win3 { --w3-tools-h:37px; --w3-below:calc(var(--w3-top) + var(--w3-tools-h)); --w3-meter-w:225px; --w3-meter-right:12px; }
+  html.win3 { --w3-tools-h:31px; --w3-below:calc(var(--w3-top) + var(--w3-tools-h)); --w3-meter-w:225px; --w3-meter-right:12px; }
   html.win3 body.w3-no-tools { --w3-below:var(--w3-top); }
   html.win3 #canvas-tools {
     top:var(--w3-top); left:4px; right:4px; height:var(--w3-tools-h); gap:6px; align-items:center;
@@ -271,12 +274,12 @@ html.win3 .pc-thumb {
   }
   html.win3 #canvas-tools::before { order:-2; margin-right:auto; } /* (after Edit; the auto margins either side of the */
   html.win3 #canvas-tools::after { order:2; }                       /*  tools split what's left, centring them) */
-  html.win3 #canvas-tools :is(.canvas-tool, #grid-toggle) { width:28px; height:28px; }
+  html.win3 #canvas-tools :is(.canvas-tool, #grid-toggle) { width:24px; height:22px; } /* (Word 2's and Excel 4's buttons) */
   html.win3 #history-tools { gap:4px; }
   /* World / Edit / Maps, moved here from the side panel (see win3-menu.js): their group melts into the strip, so Edit
      leads it, set off from the rest, World starts the icons and Maps ends them (tools.js still finds them in the group) */
   html.win3 #canvas-tools #mode-toolbar { display:contents; }
-  html.win3 #canvas-tools #mode-toolbar .tool-btn { flex:0 0 auto; height:28px; padding:0 10px; }
+  html.win3 #canvas-tools #mode-toolbar .tool-btn { flex:0 0 auto; height:22px; padding:0 8px; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=node] { order:-3; margin-right:4px; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=move] { order:-1; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=maps] { order:1; margin-right:auto; }
@@ -347,10 +350,9 @@ html.win3 .w3-window.w3-sized .w3-dialog-body { flex:1; min-height:0; max-height
 /* World and Maps are icons in the toolbar (Edit keeps its label); World opens the World window rather than a mode, so it's
    pressed while that's open, not in World mode (src/ui/win3-menu.js) */
 @media (min-width:761px) {
-  html.win3 #canvas-tools #mode-toolbar :is([data-mode=move], [data-mode=maps]) { font-size:0; gap:0; padding:0; width:28px; justify-content:center; }
+  html.win3 #canvas-tools #mode-toolbar :is([data-mode=move], [data-mode=maps]) { font-size:0; gap:0; padding:0; width:24px; justify-content:center; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=move].active:not(.w3-open) { box-shadow:var(--w3-raised); text-decoration:none; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=move].w3-open { box-shadow:var(--w3-pressed); text-decoration:none; }
-  html.win3 #canvas-tools #mode-toolbar .world-shut { width:17px; height:17px; } /* (the size of the globe in colour) */
   html.win3 #canvas-tools #mode-toolbar [data-mode=move].w3-open .world-shut { display:none; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=move].w3-open .world-open { display:block; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=maps].active .maps-shut { display:none; }

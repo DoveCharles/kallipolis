@@ -46,6 +46,7 @@ import './buildings/see-through.js';
 import './ui/win3.js';
 import './ui/win3-menu.js';
 import './ui/sound.js';
+import './ui/pixel-icons.js';
 import './ui/mobile.js';
 import './ui/pixelation.js';
 import './ui/flat-shading.js';
