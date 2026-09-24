@@ -14,15 +14,26 @@ import { cars } from './state.js';
 // (possession.js): the followed car is taken off its line and steered by hand anywhere, with the camera
 // swung round behind it. Other cars hold back for it as for any car, and it runs over anyone it touches (runOverPeople).
 // Letting go puts it back on the nearest lane, facing whichever way along it its heading most nearly matches.
-export const DRIVE_TOP_SPEED = 20, DRIVE_BOOST = 1.6, DRIVE_REVERSE_SPEED = 7;
+export const DRIVE_TOP_SPEED = 20, DRIVE_REVERSE_SPEED = 7;
+const BOOST_EXTRA = 0.6; // (the share of its top speed and acceleration boosting adds, times the car's boost trait)
+/** How many times its top speed and acceleration a car has while boosting: 1 + BOOST_EXTRA × its boost trait, so any boost helps. */
+export const boostMultiplier = car => 1 + BOOST_EXTRA*(car.traits?.boost ?? 1);
+const BOOST_FOV = 0.5; // (the share of the boost's extra speed the view widens by while the driven car boosts: see boostFovScale)
 export const DRIVE_ACCEL = 10, DRIVE_BRAKE = 28, DRIVE_COAST = 4, DRIVE_TURN = 2.2; // per second (the turn in radians)
 // how fast steerHeld goes over to full lock and back, per second — and the speed above walking pace at which the car
 // turns half as sharply as at a crawl, a third as sharply at twice that speed, and so on
 const DRIVE_STEER_RATE = 5, DRIVE_TURN_FADE = 12;
-const BOOST_ENERGY_BASE = 6; // (seconds of boost a car can draw on before it runs out, at the energy trait's base value of 1 — see the trait, core/traits.js)
-const BOOST_RECHARGE_RATE = 0.5; // (seconds of boost regained per second while not boosting — slower than it's spent, so it recharges gradually)
-/** How many seconds of boost a car has to spend in total: BOOST_ENERGY_BASE times its own energy trait. */
-export const boostEnergyMax = car => BOOST_ENERGY_BASE*(car.traits?.energy ?? 1);
+const BOOST_MAX_BASE = 6; // (seconds of boost a car can draw on before it runs out, at the maxboost trait's base value of 1 — see core/traits.js)
+const BOOST_RECHARGE_RATE = 0.5; // (seconds of boost regained per second while not boosting, at the recharge trait's base value of 1 — slower than it's spent)
+/** How many seconds of boost a car has to spend in total: BOOST_MAX_BASE times its own maxboost trait. */
+export const boostMax = car => BOOST_MAX_BASE*(car.traits?.maxboost ?? 1);
+export const BOOST_UNLOCK = 1/3; // (the share of its boostMax a car that's run dry must refill before it can boost again)
+/** Refill a car's boost (car.boostLeft) for `dt` seconds, by its recharge trait, up to boostMax — driven or not; unlocked (car.boostLocked) again once past BOOST_UNLOCK of it. */
+export function rechargeBoost(car, dt) {
+  if (car.boostLeft == null) return;
+  car.boostLeft = Math.min(boostMax(car), car.boostLeft + BOOST_RECHARGE_RATE*(car.traits?.recharge ?? 1)*dt);
+  if (car.boostLeft >= BOOST_UNLOCK*boostMax(car)) car.boostLocked = false;
+}
 export let drivenCar = null;
 /**
  * Take the followed car for driving, if startDriving allows it and it is on a line; drops anyone it was yielding to.
@@ -58,7 +69,7 @@ export function stopDriving() {
 }
 /**
  * One frame of the driven car, from the keys held (controlInput): brake, forward at top speed (boosted by run, so long as
- * its energy trait's own budget — boostEnergyMax — isn't spent), reverse, or coast down to a standstill; steerHeld eased
+ * its boost — boostMax — isn't spent), reverse, or coast down to a standstill; steerHeld eased
  * toward `right`; the turn scaled by speed up to a walking pace and fading above it, and reversed when going backwards;
  * then moved along its heading and bumped into any car it has run into (which may stop it, or wreck them). Driven out
  * over open water it starts sinking (overOpenWater, sinkCar) — unless it has the aqua trait, which instead floats it
@@ -79,17 +90,19 @@ export function driveByHand(car, dt) {
       engineSmoke({ x: car.x + Math.sin(car.heading)*nose, y: Y_ROAD, z: car.z + Math.cos(car.heading)*nose }, carHeight(car));
     }
   }
-  // boosting (run held, driving forward) draws down its energy trait's own budget (boostEnergyMax); not boosting, it
-  // slowly recharges instead (BOOST_RECHARGE_RATE), either way no further than its own full and empty. The card's boost
-  // meter (App.setCarBoost) is kept in step with it here, every frame it's actually driven.
-  const energyMax = boostEnergyMax(car);
-  car.energy ??= energyMax;
-  const boosting = run && forward > 0 && car.energy > 0;
-  car.energy = boosting ? Math.max(0, car.energy - dt) : Math.min(energyMax, car.energy + BOOST_RECHARGE_RATE*dt);
+  // boosting (run held, driving forward) draws down its boost (boostMax); not boosting, it recharges (rechargeBoost, as
+  // every car does undriven). Run dry, it's locked out until back past BOOST_UNLOCK of its max — trying meanwhile flashes the
+  // meter. The card's boost meter (App.setCarBoost) is kept in step with it here.
+  const max = boostMax(car);
+  car.boostLeft ??= max;
+  const wants = run && forward > 0, boosting = wants && car.boostLeft > 0 && !car.boostLocked;
+  if (boosting) { car.boostLeft = Math.max(0, car.boostLeft - dt); if (car.boostLeft <= 0) car.boostLocked = true; }
+  else rechargeBoost(car, dt);
   if (boosting && car.speed > 1) boostSmoke(car, dt);
-  App.setCarBoost(car.energy, energyMax);
+  App.setCarBoost(car.boostLeft, max, car.boostLocked, wants && !boosting);
   // its speed and boost traits scale the top speed and the boost (see cars.txt)
-  const boost = boosting ? DRIVE_BOOST*(car.traits?.boost ?? 1) : 1;
+  const boost = boosting ? boostMultiplier(car) : 1;
+  car.boostingNow = boosting; // (for the view: see boostFovScale)
   const top = DRIVE_TOP_SPEED*(car.traits?.speed ?? 1)*boost;
   const braking = DRIVE_BRAKE*(car.traits?.braking ?? 1);
   car.throttle = brake ? 0 : Math.abs(forward); // (for the engine's sound)
@@ -115,6 +128,10 @@ export function driveByHand(car, dt) {
 // ---- the driven car in the water: driven off the land (or off the side of a bridge) and over water — a water zone or a
 // river — it drops through the surface, nose first, carried on a little by its speed, and blows up once it's under
 const SINK_GRAVITY = 20, SINK_DRAG = 1.5, SINK_PITCH = 0.7, SINK_PITCH_RATE = 2.5; // (units a second squared; the share of its speed the water takes each second; how far its nose goes down, in radians, and how fast)
+/** How many times its usual angle the view is while the driven car boosts (eased to by updateInteriorCamera in buildings/interior.js). */
+const boostFovScale = () => drivenCar?.boostingNow ? 1 + BOOST_FOV*(boostMultiplier(drivenCar) - 1) : 1;
+Object.assign(App, { boostFovScale });
+
 /**
  * Whether a point is over open water for a car: in the visible water with no road across it (a bridge's deck, sidewalks
  * and all) to hold it up. Only a car's centre is tested, so it goes in once that's past the edge.
@@ -191,6 +208,7 @@ export function updateFloating(car, dt) {
  */
 export function sinkCar(car, dt) {
   const sink = car.sinking;
+  car.boostingNow = false;
   car.speed *= 1 - Math.min(1, SINK_DRAG*dt);
   car.x += Math.sin(car.heading)*car.speed*dt;
   car.z += Math.cos(car.heading)*car.speed*dt;

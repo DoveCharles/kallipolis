@@ -7,13 +7,14 @@
 export const TRAITS = {
   // people (see life/people/)
   speed: { base: 1, min: 0.1, max: 6 },
-  boost:     { base: 1, min: 0.1, max: 6 }, // multiplies the boost of running (people) or of driving with shift held (cars)
+  boost:     { base: 1, min: 0.1, max: 6 }, // multiplies the boost of running (people); for cars, scales what boosting adds (see boostMultiplier in life/traffic/driving.js)
   braking:   { base: 1, min: 0.1, max: 6 }, // multiplies how hard a car brakes
   control:   { base: 1, min: 0.1, max: 6 }, // multiplies how sharply a driven car steers
   weight:    { base: 1, min: 0.1, max: 10 }, // how much a car crashing into it slows down: see slowedBy in life/traffic/collisions.js
   recovery:   { base: 1, min: 0.1, max: 10}, //how fast a car recovers from a burnt out engine, how likely they are to burn out
   health:    { base: 1, min: 0.01, max: 10}, //health multiplier
-  energy:      { base: 1, min: 0.01, max: 10}, //how many seconds of boost are available: multiplies BOOST_ENERGY_BASE, see boostEnergyMax in life/traffic/driving.js
+  maxboost:  { base: 1, min: 0.01, max: 10 }, // how many seconds of boost a car holds: multiplies BOOST_MAX_BASE (see boostMax in life/traffic/driving.js)
+  recharge:  { base: 1, min: 0, max: 10 }, // how fast a car's boost refills: multiplies BOOST_RECHARGE_RATE (see rechargeBoost in life/traffic/driving.js)
   size:      { base: 1, min: 0.3, max: 3 }, // scales how big something's drawn: a person's height (see people.js) or a car's whole body, engine note and wheels (see carScale in life/traffic/placing.js)
   chatty:    { base: 1, min: 0, max: 10 },
   talkative: { base: 1, min: 0.05, max: 20 },

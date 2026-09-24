@@ -2078,7 +2078,7 @@ export function updateInteriorCamera() {
   if (inside && current === LAYOUTS.office && performance.now() - occupiedAt < 1000) {
     officeAmbience({ printer: current.printer, desks: current.desks, centre: room.localToWorld(new THREE.Vector3(0, 1, 0)), people: occupants });
   }
-  const goal = inside ? viewFov() : (App.ridingFov?.() ?? BASE_FOV); // (riding a train carriage sets its own: see trains.js)
+  const goal = inside ? viewFov() : (App.ridingFov?.() ?? BASE_FOV*(App.boostFovScale?.() ?? 1)); // (riding a train carriage sets its own: see trains.js; boosting widens it: see life/traffic/driving.js)
   if (camera.fov === goal) return;
   camera.fov = Math.abs(goal - camera.fov) < 0.05 ? goal : camera.fov + (goal - camera.fov)*FOV_EASE;
   camera.updateProjectionMatrix();
