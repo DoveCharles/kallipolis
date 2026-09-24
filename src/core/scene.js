@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { setToonSky } from './toon.js';
 import { S, App } from './shared.js';
 import { IS_TOUCH } from './device.js';
 
@@ -347,6 +348,7 @@ export function updateSun(quick) {
   scene.fog.near = THREE.MathUtils.lerp(600, 90, overcast);
   scene.fog.far = THREE.MathUtils.lerp(2800, 900, overcast);
   hemi.color.copy(sky.top).lerp(new THREE.Color(0xffffff), 0.35);
+  setToonSky(hemi.color);
   hemi.intensity = LIGHT_INTENSITY_SCALE*0.9*THREE.MathUtils.lerp(0.3, 1, ease(-14, 6, S.sunElevation))*(1 - overcast*0.25);
   if (!quick) {
     updateSkyEnvMap(sky);
