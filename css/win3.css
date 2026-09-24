@@ -344,6 +344,7 @@ html.win3 .w3-window.w3-sized .w3-dialog-body { flex:1; min-height:0; max-height
 /* with the side panel hidden, World, Edit and Maps are all let up (see src/ui/win3-menu.js) */
 @media (min-width: 761px) {
   html.win3 body.w3-no-panel #mode-toolbar .tool-btn.active { box-shadow:var(--w3-raised); text-decoration:none; }
+  html.win3 body.ui-loading.start-edit #mode-toolbar .tool-btn.active { box-shadow:var(--w3-pressed); text-decoration:underline; }
 }
 
 #mode-toolbar :is(.world-open, .maps-open, .node-open) { display:none; } /* (the icons in colour: only while pressed, below) */
@@ -357,7 +358,7 @@ html.win3 .w3-window.w3-sized .w3-dialog-body { flex:1; min-height:0; max-height
   html.win3 #canvas-tools #mode-toolbar [data-mode=move].w3-open .world-open { display:block; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=maps].active .maps-shut { display:none; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=maps].active .maps-open { display:block; }
-  html.win3 #canvas-tools #mode-toolbar [data-mode=node].active .node-shut { display:none; } /* (Edit's nodes go the green they're drawn in, trains.js, */
-  html.win3 #canvas-tools #mode-toolbar [data-mode=node].active .node-open { display:block; }  /*  outlined, while it's down) */
+  html.win3 :is(body:not(.w3-no-panel), body.ui-loading.start-edit) #canvas-tools #mode-toolbar [data-mode=node].active .node-shut { display:none; } /* (Edit's nodes go the green they're drawn in, trains.js, */
+  html.win3 :is(body:not(.w3-no-panel), body.ui-loading.start-edit) #canvas-tools #mode-toolbar [data-mode=node].active .node-open { display:block; }  /*  outlined, while it's down) */
   html.win3 .w3-window .w3-debug { display:none; }
 }

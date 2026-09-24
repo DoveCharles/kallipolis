@@ -20,8 +20,12 @@
 <script type="module" src="src/main.js"></script>
 </head>
 <body>
-<!-- the side panel starts hidden; src/ui/view-prefs.js slides it in once the page has loaded (unless starting in World) -->
-<script>document.body.classList.add('w3-no-panel');</script>
+<!-- the side panel and hints start hidden (ui-loading); src/ui/view-prefs.js slides them in once the page has loaded.
+     start-edit keeps the Edit button pressed meanwhile when Options > Game > Start in Edit mode is on. -->
+<script>
+document.body.classList.add('w3-no-panel', 'ui-loading');
+try { if (localStorage.getItem('splinetopia.startInEdit') !== '0') document.body.classList.add('start-edit'); } catch (err) { document.body.classList.add('start-edit'); }
+</script>
 
 <div id="canvas-wrap"></div>
 

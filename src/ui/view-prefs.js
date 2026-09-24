@@ -36,6 +36,7 @@ function whenReady(run) {
   if (document.readyState === 'complete') afterFrame(); else window.addEventListener('load', afterFrame, { once: true });
 }
 whenReady(() => {
+  body.classList.remove('ui-loading', 'start-edit'); // (hints slide in: css/base.css)
   if (startInEdit) body.classList.remove('w3-no-panel');
   else document.querySelector('#mode-toolbar [data-mode=move]').click();
 });
