@@ -16,14 +16,13 @@ import { updateStats } from './panels.js';
 // far off the map with the real generator (water, which is built with all the other water, gets a pond cut into a patch
 // of ground instead), lit by a fixed daytime sun with no weather, and rendered from above at an angle into an image. It
 // all happens between two frames, so the view never flickers, and the images are kept for the rest of the session.
-const ZONE_TYPES = [
-  { id: 'buildings', label: 'City', color: '#6d717c' }, { id: 'plain', label: 'Plain', color: '#5d6068' },
-  { id: 'park', label: 'Park', color: '#8fb85a' }, { id: 'beach', label: 'Beach', color: '#d9c48f' },
-  { id: 'water', label: 'Water', color: '#1d6f7d' },
-  { id: 'plaza', label: 'Plaza', color: '#b7b0a4' }, { id: 'farmland', label: 'Farmland', color: '#c9b75c' },
-  { id: 'industrial', label: 'Industrial', color: '#7d8187' }, { id: 'suburbs', label: 'Suburbs', color: '#8a9a6d' },
-  { id: 'town', label: 'Town', color: '#8e4a36' },
-  { id: 'airport', label: 'Airport', color: '#6f7a80' },
+const ZONE_TYPES = [ // `thumb` seeds each one's thumbnail (the order they used to come in, which picked the ones they have)
+  { id: 'plain', label: 'Plain', color: '#5d6068', thumb: 1 }, { id: 'park', label: 'Park', color: '#8fb85a', thumb: 2 },
+  { id: 'water', label: 'Water', color: '#1d6f7d', thumb: 4 }, { id: 'beach', label: 'Beach', color: '#d9c48f', thumb: 3 },
+  { id: 'farmland', label: 'Farmland', color: '#c9b75c', thumb: 6 }, { id: 'suburbs', label: 'Suburbs', color: '#8a9a6d', thumb: 8 },
+  { id: 'town', label: 'Town', color: '#8e4a36', thumb: 9 }, { id: 'plaza', label: 'Plaza', color: '#b7b0a4', thumb: 5 },
+  { id: 'buildings', label: 'City', color: '#6d717c', thumb: 0 }, { id: 'industrial', label: 'Industrial', color: '#7d8187', thumb: 7 },
+  { id: 'airport', label: 'Airport', color: '#6f7a80', thumb: 10 },
 ];
 const THUMBNAIL_SIZE = 128;
 let zoneThumbnails = null, zoneThumbnailsScheduled = false;
@@ -137,7 +136,7 @@ function renderZoneThumbnails() {
         // an airport gets a long field, so its runway runs straight along it with room for a terminal beside it
         const points = type.id === 'airport' ? [{ x: cx-380, z: cz-140 }, { x: cx+380, z: cz-140 }, { x: cx+380, z: cz+140 }, { x: cx-380, z: cz+140 }].map(p => ({ ...p, type: 'poly' })) : square(half);
         const zone = { id: '__thumbnail-' + type.id, name: type.label, zoneType: type.id, closed: true, drawing: false, points,
-          settings: { ...DEFAULT_ZONE_SETTINGS, seed: 4242 + i, lotCount: 14, fieldCount: 9, industrialLots: 7, suburbPlots: 9, treeDensity: 0.5, plazaTrees: 0.6, ...(type.id === 'town' && { seed: 1, townPaint: 0.7, townLots: 40, townStoreysMin: 1, townStoreysMax: 5 }) } };
+          settings: { ...DEFAULT_ZONE_SETTINGS, seed: 4242 + type.thumb, lotCount: 14, fieldCount: 9, industrialLots: 7, suburbPlots: 9, treeDensity: 0.5, plazaTrees: 0.6, ...(type.id === 'town' && { seed: 1, townPaint: 0.7, townLots: 40, townStoreysMin: 1, townStoreysMax: 5 }) } };
         subdivideZone(zone);
         group = zone.buildingsGroup;
       }
