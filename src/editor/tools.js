@@ -62,6 +62,13 @@ export function finishActiveDrawing() {
 // instead: two fingers to pan and pinch, a long press for the right button, and ✛ along the top for shift (src/ui/mobile.js).
 function updateHint() {
   let msg;
+  if (S.interactionMode==='move' && App.possessionHint) {
+    // taking control of someone or something (life/possession.js): how to let go, and the controls — with <kbd> in it
+    const hint = document.getElementById('hint');
+    hint.innerHTML = App.possessionHint;
+    hint.dataset.kind = 'general';
+    return;
+  }
   if (S.interactionMode==='move') {
     msg = IS_TOUCH
       ? 'Drag to orbit · two fingers to pan · pinch to zoom · tap a person to follow them'

@@ -302,10 +302,14 @@ html.touch #btn-touch-add { display:flex; }
 .entity-card .pc-row { white-space: pre-line; }
 .entity-card[hidden] { display:none; }
 /* the boost meter (src/life/car-card.js, .meter.meter-vertical from src/ui/meter.css): grouped with the car card by
-   sitting right against its left edge, its bottom lined up with the card's own — top:auto cancels .meter's own
+   sitting right against its left edge, its bottom lined up with the card's own and as tall (its height set by
+   car-card.js, the gauge stretching to fill it) — top:auto cancels .meter's own
    top-right default so bottom is the only thing placing it. There's no room for both on a phone, so it's dropped
    there (see the phone layout below) rather than fighting the card for space. */
-#car-boost-meter { position:fixed; top:auto; right:calc(16px + 300px + 12px); bottom:52px; z-index:20; }
+#car-boost-meter { position:fixed; top:auto; right:calc(16px + 300px + 12px); bottom:52px; z-index:20;
+  display:flex; flex-direction:column; box-sizing:border-box; }
+#car-boost-meter[hidden] { display:none; }
+#car-boost-meter .meter-readout { flex:1; height:auto; min-height:0; }
 /* the fill itself (src/life/car-card.js sets only its height, from the car's boostMax): plain --meter-pos green,
    since boost only ever has the one, positive, side — unlike the morality meter's fill colour, this one never changes. */
 #car-boost-meter .meter-fill { background:var(--meter-pos); }
@@ -373,23 +377,23 @@ button.pc-pick:hover { text-decoration:underline; }
 }
 .entity-card .pc-value[data-mark="+"]::after { color:var(--trait-loves-label); }
 .entity-card .pc-value[data-mark="-"]::after { color:var(--trait-hates-label); }
-/* Modifier drop-downs under a love/hate entry, and the space kept for them (see layoutDrops in src/ui/entity-card.js).
-   Heights are whole --mod-line steps with no vertical padding or border, so the drop-downs and the space always add up
-   to the same height and the card never resizes. --mod-lines is set per element by layoutDrops. */
+/* Modifier drop-downs under a love/hate entry, floating over the rows below it (see layoutDrops in
+   src/ui/entity-card.js, which sets its top and --mod-lines), so the card never resizes. */
 .entity-card { --mod-line:16px; }
 .entity-card .pc-has-mods { cursor:pointer; }
 .entity-card .pc-has-mods:is(:hover, .pc-mods-open) .pc-value[data-mark="*"]::after { color:var(--text); }
+.entity-card .pc-body { position:relative; }
 .entity-card .pc-mods {
+  position:absolute; z-index:2; box-sizing:border-box;
   height:calc(var(--mod-lines, 0)*var(--mod-line)); overflow-y:auto; overscroll-behavior:contain;
-  margin-left:calc(-1*var(--card-pad-x) + var(--trait-frame)); margin-right:calc(-1*var(--band-x));
+  left:calc(-1*var(--card-pad-x) + var(--trait-frame)); right:calc(-1*var(--band-x));
   padding:0 var(--band-x) 0 calc(var(--band-x) + 98px); /* (98px: the label column and gap, so modifiers line up with the entry) */
-  background:rgba(0,0,0,0.3); font-family:var(--mono); font-size:11px; color:var(--text-dim);
+  background:var(--bg-panel); font-family:var(--mono); font-size:11px; color:var(--text-dim);
 }
 .entity-card .pc-mods-loves { border-left:var(--trait-bar) solid var(--trait-loves-bar); }
 .entity-card .pc-mods-hates { border-left:var(--trait-bar) solid var(--trait-hates-bar); }
 .entity-card .pc-mod { line-height:var(--mod-line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.entity-card .pc-mod-space { height:calc(var(--mod-lines, 3)*var(--mod-line)); flex:0 0 auto; }
-.entity-card :is(.pc-mods, .pc-mod-space)[hidden] { display:none; }
+.entity-card .pc-mods[hidden] { display:none; }
 /* name, age and mood, with the headshot beside them (clear of the close button above it) */
 .pc-top { display:flex; gap:10px; align-items:flex-start; }
 .pc-rows { flex:1; min-width:0; }
@@ -397,22 +401,19 @@ button.pc-pick:hover { text-decoration:underline; }
 /* a picture you can click through — into their head, or behind the wheel (see makeCard) */
 .pc-thumb-click { cursor:pointer; border-radius:5px; }
 .pc-thumb-click:hover { box-shadow:0 0 0 1px var(--accent); }
-/* possessing someone, or driving a car (src/life/possession.js) */
+/* possessing someone, or driving a car (src/life/possession.js): its how-to is in #hint; this is only the touch Exit
+   button, so it's never shown without one */
 #possess-hint {
   position:fixed; top:16px; left:50%; transform:translateX(-50%); z-index:30; pointer-events:none;
-  display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 16px;
+  display:flex; flex-direction:column; align-items:center; padding:8px 16px;
   background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
-  color:var(--text); font-size:13px; white-space:nowrap;
 }
-#possess-hint[hidden] { display:none; }
-#possess-hint kbd {
-  font-family:var(--mono); font-size:12px; padding:1px 5px; border:1px solid var(--border); border-bottom-width:2px;
-  border-radius:4px; background:var(--bg-input); color:var(--accent);
+#possess-hint[hidden], #possess-hint:has(#ph-exit[hidden]) { display:none; }
+#hint kbd {
+  font-family:var(--mono); font-size:inherit; padding:0 4px; border:1px solid currentColor; border-bottom-width:2px;
 }
-.ph-sub { font-family:var(--mono); font-size:11px; color:var(--text-dim); }
-/* View > Edit Hints / General Hints off (src/ui/view-prefs.js); a touch Exit button stays, with its box */
-body.no-edit-hints #hint[data-kind=edit], body.no-general-hints #hint[data-kind=general],
-body.no-general-hints #possess-hint:has(#ph-exit[hidden]), body.no-general-hints #possess-hint > span { display:none; }
+/* View > Edit Hints / General Hints off (src/ui/view-prefs.js); a touch Exit button stays */
+body.no-edit-hints #hint[data-kind=edit], body.no-general-hints #hint[data-kind=general] { display:none; }
 /* the two sliders for dialling in the seat inside a train carriage (src/trains/trains.js) */
 #ride-tune {
   position:fixed; top:16px; right:16px; z-index:30; width:180px; padding:10px 12px;

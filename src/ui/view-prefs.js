@@ -1,6 +1,6 @@
 // Browser preferences (localStorage, not the project's) for what shows on start and over the view:
 // - hints: View > Edit Hints (the bottom #hint in Edit and Maps) and View > General Hints (the bottom #hint in World,
-//   and #possess-hint's text along the top while possessing or driving). Hidden by body classes; see css/base.css.
+//   including the controls while possessing or driving). Hidden by body classes; see css/base.css.
 // - Options > Game > Start in Edit mode: on, the side panel slides in once loaded; off, the app opens in World instead.
 const EDIT_HINTS_KEY = 'splinetopia.editHints', GENERAL_HINTS_KEY = 'splinetopia.generalHints';
 const START_EDIT_KEY = 'splinetopia.startInEdit';

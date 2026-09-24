@@ -21,7 +21,7 @@ export const ROWS = [
 ];
 // `top`: up beside the picture, rather than below it. `gap`: a rule above it. `list`: several names, one a line (see
 // setList) rather than one value. `marked`: each entry carries a mark at its right (+ legendary, - terrible, * has
-// modifiers: see markOf) and the card keeps room below for modifier drop-downs (see modSpace).
+// modifiers: see markOf), those with modifiers opening a drop-down of them (see addDrop).
 // Any row accepts either one string or a list of strings (see `set`); each extra entry gets its own row below, classed
 // with the row's key (pc-row-loves). A counted row (Loves, Hates) can also carry a tier per entry — see `set`'s tierValue.
 
@@ -138,13 +138,6 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     (row.top ? top : body).append(rowEl);
     rows[row.key] = { el: rowEl, value, row, extras: [], drops: [] };
   });
-  // Room kept below the rows for modifier drop-downs, MOD_SPACE_LINES lines tall, so opening them doesn't resize the card:
-  // the open drop-downs share those lines (one line each with three open, scrolling for the rest) and the space shrinks by
-  // what they take. There whenever a `marked` row is showing, modifiers or not.
-  const modSpace = document.createElement('div');
-  modSpace.className = 'pc-mod-space';
-  modSpace.hidden = true;
-  body.append(modSpace);
   const topSection = document.createElement('div');
   topSection.className = 'pc-top';
   topSection.append(top, shot);
@@ -153,7 +146,9 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
 
   // ---- modifier drop-downs: an entry with modifiers (`<key>Mods`, see set) opens a list of them beneath it while hovered,
   // and stays open once clicked (clicked again to close) — so several can be open at once, and touch screens can open them.
-  const MOD_SPACE_LINES = 3;
+  // Each floats over the rows below it, as a menu drops down, so opening one never resizes the card: MOD_LINES lines at
+  // most, scrolling for the rest.
+  const MOD_LINES = 4;
   const dropByEl = new Map(); // entry row or its drop-down → { entryEl, drop, count, pinned }
   let hovered = null;
   const dropAt = target => { const found = target?.closest?.('.pc-has-mods, .pc-mods'); return found ? dropByEl.get(found) : null; };
@@ -188,24 +183,16 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     });
     row.drops = [];
   }
-  // Shows the open drop-downs, each given an equal share of MOD_SPACE_LINES (or fewer, if it has fewer lines), and shrinks
-  // the kept space by what they use, so the card's height stays the same.
+  // Shows the open drop-downs, each hung from the bottom of its entry.
   function layoutDrops() {
-    const all = Object.values(rows).flatMap(row => row.drops);
-    modSpace.hidden = !Object.values(rows).some(row => row.row.marked && !row.el.hidden);
-    const open = all.filter(state => state.pinned || state === hovered);
-    const share = MOD_SPACE_LINES/Math.max(1, open.length);
-    let used = 0;
-    all.forEach(state => {
-      const isOpen = open.includes(state);
+    Object.values(rows).flatMap(row => row.drops).forEach(state => {
+      const isOpen = state.pinned || state === hovered;
       state.drop.hidden = !isOpen;
       state.entryEl.classList.toggle('pc-mods-open', isOpen);
       if (!isOpen) return;
-      const lines = Math.min(state.count, share);
-      state.drop.style.setProperty('--mod-lines', lines);
-      used += lines;
+      state.drop.style.setProperty('--mod-lines', Math.min(state.count, MOD_LINES));
+      state.drop.style.top = state.entryEl.offsetTop + state.entryEl.offsetHeight + 'px';
     });
-    modSpace.style.setProperty('--mod-lines', Math.max(0, MOD_SPACE_LINES - used));
   }
 
   // Marks the visible rows below the picture: `pc-alt` on every other one, `pc-lead` on the first. Done here rather than with
