@@ -65,6 +65,34 @@ function roomLit(material) {
   material.defines = { ...material.defines, NO_LAMPLIGHT: '', ROOM_LAMP: '' };
   return material;
 }
+// Whoever's in the room is lit by the same glow — people, their hair and clothes (and any bee that's got in): every
+// toon-shaded material, chunk-patched as streetlights.js does it, gets ambient light enough to match ROOM_GLOW (an
+// emissive k reads as irradiance kπ on a Lambert surface) wherever it's inside the room's box. Out of it, or with no
+// room up, nothing — or at night they're left in the dimmed sky's light alone, far darker than the room around them.
+class SharedMatrix4 extends THREE.Matrix4 { clone() { return this; } }
+class SharedVector3 extends THREE.Vector3 { clone() { return this; } } // (every material sees the one value)
+const roomGlowUniforms = { roomGlow: { value: new SharedVector3() }, roomFromWorld: { value: new SharedMatrix4() } };
+Object.assign(THREE.ShaderLib.toon.uniforms, roomGlowUniforms);
+THREE.ShaderChunk.lights_pars_begin += /* glsl */`
+#ifdef TOON
+uniform vec3 roomGlow;
+uniform mat4 roomFromWorld;
+#endif
+`;
+THREE.ShaderChunk.lights_fragment_maps += /* glsl */`
+#if defined( RE_IndirectDiffuse ) && defined( TOON )
+if ( roomGlow.r > 0.0 ) {
+  vec3 inRoom = ( roomFromWorld * vec4( ( -vViewPosition ) * mat3( viewMatrix ) + cameraPosition, 1.0 ) ).xyz;
+  if ( all( lessThan( abs( inRoom.xz ), vec2( ${(ROOM_W/2 + 0.5).toFixed(2)}, ${(ROOM_D/2 + 0.5).toFixed(2)} ) ) )
+       && inRoom.y > -0.5 && inRoom.y < ${(ROOM_H + 0.5).toFixed(2)} ) irradiance += roomGlow;
+}
+#endif
+`;
+// (set as the room goes up and comes down: see enterBuilding and leaveBuilding)
+function setRoomGlow(on) {
+  roomGlowUniforms.roomGlow.value.setScalar(on ? ROOM_GLOW*Math.PI : 0);
+  if (on) roomGlowUniforms.roomFromWorld.value.copy(room.matrixWorld).invert();
+}
 function box(w, h, d, material, x, y, z, parent = room) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
   mesh.position.set(x, y, z);
@@ -1912,7 +1940,6 @@ function updateTV() {
 // shared uniforms, the way streetlights.js lights the streets. `lampLight` is just where the bulb is, and how bright.
 const LAMP_COLOR = 0xffc68a, LAMP_INTENSITY = 6, LAMP_REACH = 9, LAMP_DECAY = 1.2, LAMP_EASE = 0.05;
 const lampLight = Object.assign(new THREE.Object3D(), { intensity: 0 });
-class SharedVector3 extends THREE.Vector3 { clone() { return this; } } // (every material sees the one value)
 const lampUniforms = {
   roomLampPosition: { value: new SharedVector3() }, // world
   roomLampLight: { value: new SharedVector3() },    // colour × intensity, zero when off
@@ -2079,6 +2106,7 @@ export function enterBuilding(group, key, kind = 'home') {
   room.rotation.y = fp && fp.length >= 3 ? longestEdgeAngle(fp) : 0;
   room.visible = true;
   room.updateMatrixWorld(true);
+  setRoomGlow(true);
   group.visible = false;
   if (current === LAYOUTS.home) furnish(key);
   else if (current === LAYOUTS.office) furnishOffice(key, glass);
@@ -2115,6 +2143,7 @@ export function leaveBuilding() {
   stopTV();
   group.visible = true;
   room.visible = false;
+  setRoomGlow(false);
   controls.locked = false;
   controls.hug = null;
   controls.goalTarget.copy(before.target);
