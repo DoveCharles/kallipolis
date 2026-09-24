@@ -191,7 +191,13 @@ export function applyWaterShader(mat, shoreSegments, beachSegments, beachWaterli
 // gets a sloping beach rather than a wall (every park and beach zone minus the zones above it), plus the beach zones on
 // their own (for parks to fade into sand beside them). Cached, and only worked out again when a zone or river changes.
 const waterCache = { key: null, region: [], parkArea: [], beachZoneArea: [] };
+// (the key's a stringify of every zone's points, and everyone walking is checked against the water each frame: so it's
+// worked out once a task — a frame — unless something's marked the water dirty since)
+let keyChecked = false;
 function refreshWaterCache() {
+  if (keyChecked && !S.waterDirty) return;
+  keyChecked = true;
+  queueMicrotask(() => { keyChecked = false; });
   const key = S.riverSeq + '|' + JSON.stringify(S.zones.map(z => (z.drawing || z.points.length < 3) ? null : [z.zoneType, z.points]));
   if (key === waterCache.key) return;
   waterCache.key = key;
