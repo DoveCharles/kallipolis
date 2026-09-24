@@ -7,7 +7,7 @@ import { openWindow } from './w3-window.js';
 // window moves them into it, and closing it puts them back where they were, so everything that drives them (by id) is
 // none the wiser, and anywhere without the menu bar — a phone — keeps them in the panel as ever.
 const WINDOWS = {
-  world: { title: 'World', width: 280 }, // (opened from World in the toolbar rather than the Options menu)
+  world: { title: 'World', width: 280, resizable: true }, // (opened from World in the toolbar rather than the Options menu)
   display: { title: 'Display', width: 280 },
   effects: { title: 'Effects', width: 300 },
   game: { title: 'Game', width: 300 },
