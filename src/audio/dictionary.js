@@ -72,7 +72,7 @@ export function sayLine(at, voice, who, mood = 0) {
   const rms = Math.sqrt(loudest.reduce((a, b) => a + b, 0)/(loudest.length || 1));
   const buffer = context.createBuffer(1, samples.length, SAMPLE_RATE);
   buffer.getChannelData(0).set(samples);
-  const source = playBufferAt(buffer, at, rms ? MATCH*loudnessOf(voice)/rms : 0, REF_DISTANCE, HEAR_DISTANCE, 1, [muffler(at, REF_DISTANCE, MUFFLE)]);
+  const source = playBufferAt(buffer, at, rms ? MATCH*loudnessOf(voice)/rms : 0, REF_DISTANCE, HEAR_DISTANCE, 1, [muffler(at, REF_DISTANCE, MUFFLE)], 'peds');
   if (!source) return null;
   current = { source, start: now, length: buffer.duration, mouth };
   return current;

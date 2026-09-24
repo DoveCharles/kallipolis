@@ -44,6 +44,7 @@ import './life/car-card.js';
 import './buildings/building-card.js';
 import './buildings/see-through.js';
 import './ui/win3.js';
+import './ui/win3-menu.js';
 import './ui/sound.js';
 import './ui/mobile.js';
 import './ui/pixelation.js';

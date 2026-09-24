@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { camera } from '../core/scene.js';
-import { listener, outdoors } from './sfx.js';
+import { listener, outdoorsOf, inside } from './sfx.js';
 
 // ============================================================ aircraft
 // The aircraft about the airfields (see updateAirports in zones/airport.js): loops synthesized live like the engines (see
@@ -94,7 +94,7 @@ function makeVoice() {
   [air, air2].forEach(f => { f.type = 'lowpass'; f.Q.value = 0.5; f.frequency.value = 20000; });
   const echo = context.createDelay(0.1), echoGain = context.createGain();
   echoGain.gain.value = 0;
-  chop.connect(out).connect(roll).connect(bass).connect(air).connect(air2).connect(panner).connect(outdoors);
+  chop.connect(out).connect(roll).connect(bass).connect(air).connect(air2).connect(panner).connect(outdoorsOf('traffic'));
   air2.connect(echo).connect(echoGain).connect(panner);
   const source = context.createBufferSource(), roarFilter = context.createBiquadFilter(), roar = context.createGain();
   source.buffer = noiseBuffer(context);
@@ -190,7 +190,7 @@ export function cabinChime() {
   speaker.type = 'lowpass';
   speaker.frequency.value = 3000;
   gain.gain.value = CHIME_VOLUME;
-  speaker.connect(gain).connect(listener.getInput()); // (on board: never through the walls)
+  speaker.connect(gain).connect(inside('traffic')); // (on board: never through the walls)
   const oscillators = CHIME.flatMap((hz, k) => [[1, 0, 1], [1, 2.5, 0.8], [2.76, 0, 0.08]].map(([ratio, off, level]) => {
     const oscillator = context.createOscillator(), note = context.createGain(), start = now + k*CHIME_GAP;
     oscillator.frequency.value = hz*ratio + off;
@@ -225,7 +225,7 @@ export function tyreChirp(at, size) {
   panner.distanceModel = 'inverse';
   panner.refDistance = CHIRP_NEAR;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  panner.connect(outdoors);
+  panner.connect(outdoorsOf('traffic'));
   const sources = CHIRPS.flatMap(([after, level]) => {
     const start = now + after, end = start + CHIRP_TIME*(0.8 + Math.random()*0.4);
     const gain = context.createGain();

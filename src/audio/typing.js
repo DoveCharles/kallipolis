@@ -44,5 +44,5 @@ export function keyClick(at, space = false) {
   };
   const set = buffers[space ? 'space' : 'key'], layers = set[Math.floor(Math.random()*set.length)];
   const rate = 1 + (Math.random()*2 - 1)*PITCH_SPREAD;
-  for (const buffer of layers) playBufferAt(buffer, at, space ? SPACE_VOLUME : KEY_VOLUME, REF_DISTANCE, HEAR_DISTANCE, rate);
+  for (const buffer of layers) playBufferAt(buffer, at, space ? SPACE_VOLUME : KEY_VOLUME, REF_DISTANCE, HEAR_DISTANCE, rate, [], 'peds');
 }

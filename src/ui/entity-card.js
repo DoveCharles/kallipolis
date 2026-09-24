@@ -291,6 +291,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     Object.keys(rows).forEach(key => set(key, values[key], values[key + 'Tier'], values[key + 'Mods']));
     setFavorite(null);
     el.hidden = false;
+    el.dispatchEvent(new Event('card-show', { bubbles:true })); // (for the Windows 3.0 look's active window: ui/win3-menu.js)
   }
   // What the card's showing, for its heart: { key, kind, follow } as a favorite takes them (see ui/favorites.js) — or null
   // for no heart. show() takes the heart away, so this comes after it.

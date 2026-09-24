@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="win3"><!-- the Windows 3.0 look (css/win3.css, src/ui/win3.js) is the only one -->
 <head>
 <meta charset="UTF-8">
 <!-- the view is a 3D canvas driven by gesture, so the page itself never zooms or scrolls; viewport-fit lets it fill a notched screen -->
@@ -7,7 +7,6 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Blockout — procedural city generator</title>
-<script>/* the Windows 3.0 look (src/ui/win3.js) is on unless it's been switched off */ try { if (localStorage.getItem('splinetopia.win3') !== '0') document.documentElement.classList.add('win3'); } catch (err) { document.documentElement.classList.add('win3'); }</script>
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/win3.css">
 <link rel="stylesheet" href="css/touch.css">
@@ -28,9 +27,36 @@
   <div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Splinetopia</div><button class="win3-min" title="Minimize"></button><button class="win3-max" title="Maximize"></button></div>
   <div id="panel-body">
   <div class="toolbar" id="mode-toolbar" style="margin-top:0;">
-    <button class="tool-btn" data-mode="move"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><circle cx="8" cy="8" r="6.3"/><ellipse cx="8" cy="8" rx="2.6" ry="6.3"/><path d="M1.8 5.7 L14.2 5.7 M1.8 10.3 L14.2 10.3"/></svg>World</button>
-    <button class="tool-btn active" data-mode="node"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 12.5 L8 2.5 L13 12.5 Z"/><circle cx="3" cy="12.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="8" cy="2.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="13" cy="12.5" r="1.6" fill="currentColor" stroke="none"/></svg>Edit</button>
-    <button class="tool-btn" data-mode="maps"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/><circle cx="5.2" cy="6" r="1.2" fill="currentColor" stroke="none"/><path d="M2 12.2 L6.3 8 L8.8 10.3 L11.3 7.3 L14 10.5"/></svg>Maps</button>
+    <button class="tool-btn" data-mode="move"><svg class="world-open" width="17" height="17" viewBox="0 0 16 16"><!-- (the globe in colour, while the World window's open: css/win3.css) -->
+      <clipPath id="world-open-clip"><circle cx="8" cy="8" r="6.3"/></clipPath>
+      <circle cx="8" cy="8" r="6.3" fill="#1f6fe0"/>
+      <g clip-path="url(#world-open-clip)" fill="#35a83a">
+        <path d="M3.2 4.6 C4.5 3.6 6 3.8 6.4 5 C6.8 6.2 5.6 6.8 5.8 8 C6 9.2 7 9.6 6.6 11 C6.3 12.2 5.4 13 4.8 12.6 C4.6 11.4 4.2 10.2 3.4 9.4 C2.4 8.4 2 6 3.2 4.6 Z"/>
+        <path d="M9.2 3 C10.6 2.6 12.4 3.4 13 4.6 C12 5 11 4.8 10.6 5.8 C11.8 6.2 13.4 6.6 13.8 8.2 C13.6 9.8 12.4 10.8 11.6 12.2 C10.8 12.6 10.4 11.6 10.4 10.6 C10.4 9.6 9.4 9.2 9.2 8.2 C9 7.2 9.8 6.6 9.2 5.8 C8.6 5 8.4 3.6 9.2 3 Z"/>
+      </g>
+      <path d="M4.6 4.2 A5 5 0 0 1 7.4 2.9" fill="none" stroke="#fff" stroke-width="1" stroke-linecap="round" opacity=".7"/>
+      <circle cx="8" cy="8" r="6.3" fill="none" stroke="#000" stroke-width="1.1"/>
+    </svg><svg class="world-shut" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><circle cx="8" cy="8" r="6.3"/><ellipse cx="8" cy="8" rx="2.6" ry="6.3"/><path d="M1.8 5.7 L14.2 5.7 M1.8 10.3 L14.2 10.3"/></svg>World</button>
+    <button class="tool-btn active" data-mode="node"><svg class="node-open" width="13" height="13" viewBox="0 0 16 16"><!-- (the nodes in their own green, outlined, while Edit's down: css/win3.css) -->
+      <g fill="#000"><!-- (all the black first, then all the green over it, so the outline goes round the whole shape as one) -->
+        <path d="M3 12.5 L8 2.5 L13 12.5 Z" fill="none" stroke="#000" stroke-width="2.7" stroke-linejoin="round"/><!-- (0.7 either side of the green, -->
+        <circle cx="3" cy="12.5" r="2.6"/><circle cx="8" cy="2.5" r="2.6"/><circle cx="13" cy="12.5" r="2.6"/><!-- as round the dots) -->
+      </g>
+      <g fill="#3ddc97">
+        <path d="M3 12.5 L8 2.5 L13 12.5 Z" fill="none" stroke="#3ddc97" stroke-width="1.3" stroke-linejoin="round"/>
+        <circle cx="3" cy="12.5" r="1.9"/><circle cx="8" cy="2.5" r="1.9"/><circle cx="13" cy="12.5" r="1.9"/>
+      </g>
+    </svg><svg class="node-shut" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 12.5 L8 2.5 L13 12.5 Z"/><circle cx="3" cy="12.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="8" cy="2.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="13" cy="12.5" r="1.6" fill="currentColor" stroke="none"/></svg>Edit</button>
+    <button class="tool-btn" data-mode="maps"><svg class="maps-open" width="18" height="18" viewBox="0 0 16 16"><!-- (the picture in colour, while Maps is down: css/win3.css) -->
+      <clipPath id="maps-open-clip"><rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/></clipPath>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.2" fill="#7cc4ff"/>
+      <g clip-path="url(#maps-open-clip)">
+        <circle cx="5.2" cy="6" r="1.5" fill="#ffd21f"/>
+        <path d="M1 14 L1 12.4 L6.3 7.6 L8.8 9.9 L11.3 6.9 L15 10.9 L15 14 Z" fill="#35a83a"/>
+        <path d="M1 14 L1 13 L8.8 9.9 L15 12 L15 14 Z" fill="#2a8a2f"/>
+      </g>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.2" fill="none" stroke="#000" stroke-width="1.1"/>
+    </svg><svg class="maps-shut" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/><circle cx="5.2" cy="6" r="1.2" fill="currentColor" stroke="none"/><path d="M2 12.2 L6.3 8 L8.8 10.3 L11.3 7.3 L14 10.5"/></svg>Maps</button>
   </div>
   <div class="toolbar" id="entity-toolbar" style="margin-top:6px;">
     <button class="tool-btn active" data-entity="paths">Paths</button>
@@ -105,6 +131,7 @@
   <div id="details-panel"><div class="empty">Select a road or zone from the list to see its settings.</div></div>
 
   <div class="section" id="section-move" style="display:none;">
+    <div data-settings="world"><!-- under the Windows 3.0 window, these open in a window from World in the toolbar -->
     <div class="section-label">Time</div>
     <div class="slider-row"><div class="row"><label>Sun elevation</label><span class="val" id="dv-sunelev">45</span></div>
       <input type="range" id="s-sunelev" min="-20" max="90" step="1" value="45"></div>
@@ -129,8 +156,10 @@
         <input type="range" id="s-peoplespeed" min="0.1" max="4" step="0.1" value="1"></div>
       <div class="slider-row"><div class="row"><label>Size</label><span class="val" id="dv-peoplesize">1.0</span></div>
         <input type="range" id="s-peoplesize" min="0.3" max="4" step="0.1" value="1"></div>
-      <div class="row" style="margin-top:11px;"><label>Roadsafety radius (debug)</label><button class="toggle-switch" id="s-roadsafety-debug"><span class="knob"></span></button></div>
-      <div class="row"><label>Ped navmesh (debug)</label><button class="toggle-switch" id="s-peoplenav-debug"><span class="knob"></span></button></div>
+      <div class="w3-debug"><!-- under the Windows 3.0 window, these are in the View menu instead (src/ui/win3-menu.js) -->
+        <div class="row" style="margin-top:11px;"><label>Roadsafety radius (debug)</label><button class="toggle-switch" id="s-roadsafety-debug"><span class="knob"></span></button></div>
+        <div class="row"><label>Ped navmesh (debug)</label><button class="toggle-switch" id="s-peoplenav-debug"><span class="knob"></span></button></div>
+      </div>
     </div>
 
     <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Weather</div>
@@ -140,26 +169,35 @@
       <input type="range" id="s-snow" min="0" max="1" step="0.05" value="0"></div>
     <div class="slider-row"><div class="row"><label>Cloud shadows</label><span class="val" id="dv-clouds">0.00</span></div>
       <input type="range" id="s-clouds" min="0" max="1" step="0.05" value="0"></div>
+    </div>
 
+    <!-- the groups marked data-settings live in the panel, except under the Windows 3.0 window, where each opens in a window
+         of its own from the Options menu (src/ui/settings-windows.js) -->
+    <div data-settings="display">
     <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Colours</div>
     <div class="row"><label>Ground color</label><input type="color" class="color-input" id="s-groundcolor" value="#1b1e24"></div>
     <div class="row"><label>Grid color</label><input type="color" class="color-input" id="s-gridcolor" value="#33373f"></div>
     <div id="world-tint-panel"></div>
     <div class="slider-row"><div class="row"><label>Grass noise strength</label><span class="val" id="dv-grassnoise">0.20</span></div>
       <input type="range" id="s-grassnoise" min="0" max="2.5" step="0.05" value="0.2"></div>
+    </div>
 
+    <div data-settings="effects">
     <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Gameplay</div>
     <div class="row"><label>Blood soaking</label><button class="toggle-switch" id="s-bloodsoak"><span class="knob"></span></button></div>
+    </div>
 
+    <div data-settings="display">
     <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">FX</div>
     <div class="row"><label>Colour grade</label><button class="toggle-switch" id="s-grade"><span class="knob"></span></button></div>
-    <div class="row"><label>Windows 3.0 look</label><button class="toggle-switch" id="s-win3"><span class="knob"></span></button></div>
     <div class="slider-row"><div class="row"><label>Pixelation</label><span class="val" id="dv-pixelation">off</span></div>
       <input type="range" id="s-pixelation" min="1" max="12" step="1" value="1"></div>
     <div class="row"><label>16-colour palette</label><button class="toggle-switch" id="s-palette16"><span class="knob"></span></button></div>
     <div class="row" id="palette-row" style="display:none;"><label>Palette</label><select class="select-input" id="s-palette" style="width:130px; margin-bottom:0;"></select></div>
     <div class="row" id="dither-row" style="display:none;"><label>Dithering</label><select class="select-input" id="s-dither" style="width:130px; margin-bottom:0;"></select></div>
+    </div>
 
+    <div class="w3-file-buttons"><!-- under the Windows 3.0 window, these are in the File and Edit menus instead -->
     <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);"></div>
     <button class="btn" id="btn-save-project">Save project</button>
     <button class="btn" id="btn-load-project">Load project</button>
@@ -167,8 +205,10 @@
     <button class="btn" id="btn-export-glb">Export GLB (with materials)</button>
     <button class="btn" id="btn-export">Export OBJ</button>
     <button class="btn danger" id="btn-clear">Clear all</button>
+    </div>
     <button class="btn" id="btn-settings-toggle">Show settings ▾</button>
     <div class="slide-open" id="extra-settings" style="max-height:0; overflow:hidden;"><div class="slide-open-inner">
+      <div data-settings="effects">
       <div class="row" style="margin-top:6px;"><label>Show gibs</label><button class="toggle-switch" id="s-gibs"><span class="knob"></span></button></div>
       <div class="slider-row"><div class="row"><label>Gib render distance</label><span class="val" id="dv-gibrange">2000</span></div>
         <input type="range" id="s-gibrange" min="50" max="3000" step="50" value="2000"></div>
@@ -180,9 +220,12 @@
         <input type="range" id="s-particlerange" min="50" max="3000" step="50" value="2000"></div>
       <div class="slider-row"><div class="row"><label>Max particles</label><span class="val" id="dv-maxparticles">320</span></div>
         <input type="range" id="s-maxparticles" min="0" max="1500" step="20" value="320"></div>
+      </div>
+      <div data-settings="game">
       <div class="slider-row"><div class="row"><label>Car spawn distance from camera</label><span class="val" id="dv-carspawn">2000</span></div>
         <input type="range" id="s-carspawn" min="0" max="3000" step="50" value="2000"></div>
       <div class="row"><label>Hide own head in first person</label><button class="toggle-switch" id="s-hideownhead"><span class="knob"></span></button></div>
+      </div>
     </div></div>
   </div>
   </div>

@@ -1,9 +1,8 @@
 import { setMuted, isMuted } from '../audio/sfx.js';
 
 // ============================================================ sound toggle
-// The speaker button over the view, by undo and redo, mutes every sound (see audio/sfx.js). Like the Windows 3.0 look,
-// it's the browser's preference rather than part of the project, so it's remembered in localStorage rather than saved
-// with the project.
+// The speaker button over the view, by undo and redo, mutes every sound (see audio/sfx.js). It's the browser's
+// preference rather than part of the project, so it's remembered in localStorage rather than saved with the project.
 const STORAGE_KEY = 'splinetopia.muted';
 const SPEAKER = '<path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/>';
 const ICONS = {
