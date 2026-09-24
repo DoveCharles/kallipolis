@@ -116,9 +116,10 @@ export function driveByHand(car, dt) {
   // steering turns it at up to DRIVE_TURN radians a second, less the slower it's going below 4 units a second, and less
   // the faster above that (1/(1 + speed/DRIVE_TURN_FADE)); steerHeld is eased toward the key rather than jumping
   const was = { x: car.x, z: car.z, heading: car.heading };
-  car.steerHeld = toward(car.steerHeld, right, DRIVE_STEER_RATE);
-  const pace = Math.max(-1, Math.min(1, car.speed/4))/(1 + Math.abs(car.speed)/DRIVE_TURN_FADE);
-  turnCar(car, -car.steerHeld*DRIVE_TURN*(car.traits?.control ?? 1)*dt*pace);
+  car.steerHeld = toward(car.steerHeld, right*drunkSteer(car, dt), DRIVE_STEER_RATE);
+  const rolling = Math.max(-1, Math.min(1, car.speed/4))/(1 + Math.abs(car.speed)/DRIVE_TURN_FADE);
+  const pace = car.speed < 0 && forward >= 0 ? Math.abs(rolling) : rolling; // (steering flips going backwards only when reversing on purpose — not when thrown back off a car, which read as the controls swapping)
+  turnCar(car, (-car.steerHeld*DRIVE_TURN*controlOf(car) + driftTurn(car, dt))*dt*pace);
   car.x += Math.sin(car.heading)*car.speed*dt;
   car.z += Math.cos(car.heading)*car.speed*dt;
   bumpIntoCars(car, was);
@@ -126,6 +127,43 @@ export function driveByHand(car, dt) {
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
   if (car.traits?.aqua) updateFloating(car, dt);
   else if (overOpenWater(car.x, car.z)) startSinking(car);
+}
+// ---- drift: now and then the driven car pulls to one side on its own, eased in and out over DRIFT_TIME. How hard and
+// how often grow with the inverse cube of its control (controlOf): at 1 a pull of a degree or two, at 0.5 an obvious swerve,
+// at 0.3 stronger than its (equally weakened) steering can fight. The biggest pull is DRIFT_TURN × DRIFT_SIZE[1] / control³: 0.075 rad/s at
+// control 1, 0.009 at 2, 0.6 at 0.5, 2.8 at 0.3.
+const DRIFT_TURN = 0.05, DRIFT_CHANCE = 0.25, DRIFT_TIME = [0.4, 1.2], DRIFT_SIZE = [0.5, 1.5]; // (radians a second at control 1; pulls a second at control 1; seconds a pull lasts; each pull's size, times DRIFT_TURN)
+// drunk: control halved on top of the control trait, and every DRUNK_EVERY seconds the steering swaps sides for DRUNK_FOR
+const DRUNK_CONTROL = 0.5, DRUNK_EVERY = [3, 10], DRUNK_FOR = [1, 3];
+const between = ([least, most]) => least + Math.random()*(most - least);
+/** A car's control, as its steering and drift read it: the control trait, halved if drunk. */
+const controlOf = car => (car.traits?.control ?? 1)*(car.traits?.drunk ? DRUNK_CONTROL : 1);
+/**
+ * Count down a drunk car's swapped steering, each frame.
+ * @param {object} car
+ * @param {number} dt
+ * @returns {number} -1 while its steering is swapped, else 1
+ */
+function drunkSteer(car, dt) {
+  if (!car.traits?.drunk) return 1;
+  const d = car.drunk ??= { swapped: false, timer: between(DRUNK_EVERY) };
+  if ((d.timer -= dt) <= 0) { d.swapped = !d.swapped; d.timer = between(d.swapped ? DRUNK_FOR : DRUNK_EVERY); }
+  return d.swapped ? -1 : 1;
+}
+/**
+ * The driven car's drift this frame, starting a new pull at random when there isn't one.
+ * @param {object} car
+ * @param {number} dt
+ * @returns {number} radians a second to turn it by, on top of the steering
+ */
+function driftTurn(car, dt) {
+  const severity = 1/Math.max(0.1, controlOf(car))**3, pull = car.drift;
+  if (!pull) {
+    if (Math.random() < DRIFT_CHANCE*Math.sqrt(severity)*dt) car.drift = { t: 0, time: DRIFT_TIME[0] + Math.random()*(DRIFT_TIME[1] - DRIFT_TIME[0]), size: (Math.random() < 0.5 ? -1 : 1)*(DRIFT_SIZE[0] + Math.random()*(DRIFT_SIZE[1] - DRIFT_SIZE[0])) };
+    return 0;
+  }
+  if ((pull.t += dt) >= pull.time) { car.drift = null; return 0; }
+  return pull.size*DRIFT_TURN*severity*Math.sin(Math.PI*pull.t/pull.time);
 }
 // ---- the driven car in the water: driven off the land (or off the side of a bridge) and over water — a water zone or a
 // river — it drops through the surface, nose first, carried on a little by its speed, and blows up once it's under

@@ -12,7 +12,7 @@ import { reseatPerson } from './peoplePathing.js';
 // road for a while after (roadWaryUntil): they want a wider berth before crossing (see crossingClear in peoplePathing.js).
 // None of it goes by roadsafety.
 
-const CRAWL_SPEED = 0.3; // (units a second, at people size 1)
+const CRAWL_SPEED = 0.5; // (units a second, at people size 1)
 const CRAWL_REACH = 20, CRAWL_STEP = 0.5, CRAWL_IN = 0.5; // (how far off the road is looked for, in what steps, and how far onto the ground they crawl)
 const CRAWL_LIFT = 0.28; // (how far above the ground someone crawling face down is drawn from, at people size and height 1)
 const CRAWL_WOBBLE = 0.08, CRAWL_WOBBLES_PER_SECOND = 1.2; // (how far they swing side to side as they drag themselves, in radians, and how often)

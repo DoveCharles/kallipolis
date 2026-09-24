@@ -1220,7 +1220,7 @@ Shitting [patience = 0.3]
 Darts
 Killing [blinks = 0, mood = 0.6, evil = 0.5, aggression = 100, bloodlust]
 Just magnets [solo]
-Pub [speed = 0.8, chatty = 3, talkative = 2, aggression = 2]
+Pub [speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk]
 Sneezing [fidgety = 4]
 Crosswords [patience = 3, lounging = 2]
 Parallel parking
@@ -1543,7 +1543,7 @@ Leaving their boxers unbuttoned
 Remaining loyle to their capo
 Whatever remains
 Saying, "truth nuke" [ agemult = 0.6]
-Being an alcoholic
+Being an alcoholic [speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk]
 Dichotomies
 Spellcheck
 The Godfather Part III
@@ -1628,7 +1628,7 @@ Boom boom boom gotta get that Boom boom boom
 Captain Beefheart tribute bands
 Elvis! Elvis Presley! The King of Rock!
 Schadenfreude [evil = 0.1]
-100 beers
+100 beers [speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk]
 Parallel play
 Christian rock
 A sugarcube
@@ -1639,7 +1639,7 @@ Sensual pleasures
 Dark romance
 Kissing on the lips
 Researching about people with two penises
-Watching a romcom to experience catharsis in seeing two ill-suited lovers actually make it work
+Watching a romcom to experience vicarious joy at seeing two ill-suited lovers actually make it work
 Smiling more
 Getting worse
 Having a plan
@@ -1903,7 +1903,7 @@ The coming moon
 Lead poisoning [ agemult = 1.2, aggression = 5]
 Hemlock water-dropwort
 Scopolamine poisoning
-Being an alcoholic
+Being an alcoholic [speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk]
 Lederhosen
 Malappropriate-isms
 Centipedes [parks = 0.5]

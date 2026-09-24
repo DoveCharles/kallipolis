@@ -26,6 +26,7 @@ import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybe
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
+import { sway, updateDrunk } from './peopleDrunk.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { followPersonAt, followPerson, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
@@ -1036,6 +1037,7 @@ export function updatePeople(t) {
       p.y += (goal.y - p.y)*Math.min(1, dt*6);
     }
     updateWater(p, i, dt, wasX, wasZ); // (over open water, they go in: see peopleWater.js)
+    updateDrunk(p, dt, wasX, wasZ); // (weaving, and now and then falling over: see peopleDrunk.js)
     // possessed, they face the way they're looking — the walk played backwards, stepping backwards
     if (possessed && !frozen) {
       p.heading = possession.yaw;
@@ -1091,6 +1093,7 @@ export function updatePeople(t) {
       const faceDown = turnInWater(p, rotation), crawlLift = turnCrawling(p, rotation); // (tipped, rocked or face down in the water: see peopleWater.js; face down crawling: see peopleRoad.js)
       position.set(p.x - offX*cos - offZ*sin, faceDown ? p.y : crawlLift != null ? p.y + crawlLift : p.y + p.seatLift*sitWeight(p) - personModel.minY*s, p.z + offX*sin - offZ*cos);
       if (p.punched?.revive && p.punched.stage === 'down') shake(position, rotation, PERSON_SHAKE*S.peopleSize); // (dead, before the bolt: see reviveInstead)
+      sway(p, position, rotation);
       matrix.compose(position, rotation, scale.set(s, s, s));
       personModel.mesh.setMatrixAt(i, matrix);
       // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION
@@ -1185,6 +1188,7 @@ export function updatePeople(t) {
       if (!isDrawn(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
       position.set(p.x, p.y + bob, p.z);
       if (p.punched?.revive && p.punched.stage === 'down') shake(position, rotation, PERSON_SHAKE*S.peopleSize);
+      sway(p, position, rotation);
       matrix.compose(position, rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);
     }

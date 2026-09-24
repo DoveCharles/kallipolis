@@ -414,6 +414,31 @@ export function stepKick(car, dt) {
   }
   return motion;
 }
+const SWAY_BOUNCE = 1; // (how far a weaving drunk car is thrown back off what it hits)
+/**
+ * A drunk AI car weaved off its route (car.sway: see traffic/drunk.js) into another car or a building: a crash — the
+ * other car shoved away and stopped, and this one knocked back off it (its weave turned into a kick, so it drives back to
+ * its lane as any knocked car does). Cars it already overlapped on its route (queued close) don't count.
+ * @param {object} car
+ * @returns {boolean} whether it hit anything
+ */
+export function swayCrash(car) {
+  const w = car.sway, onRoute = { ...car, x: car.x - w.x, z: car.z - w.z, heading: car.heading - w.turn };
+  let other = null;
+  forCarsNear(car.x, car.z, carLength(car)*1.5 + 4*S.peopleSize, q => { if (!other && q !== car && !wreckedCars.includes(q) && carsOverlap(car, q) && !carsOverlap(onRoute, q)) other = q; });
+  if (!other && !buildingHit(car)) return false;
+  const speed = Math.abs(car.speed), contact = other ? { x: (car.x + other.x)/2, y: Y_ROAD, z: (car.z + other.z)/2 } : { x: car.x, y: Y_ROAD, z: car.z };
+  impactSound('crash', contact, speed);
+  puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS);
+  sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS);
+  if (other === drivenCar) slowedBy(other, 'car', car.traits?.weight); // (the player's car keeps its own handling, just jolted)
+  else if (other) { kickCar(other, other.x - car.x, other.z - car.z, Math.min(1, speed*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1))); other.speed = 0; }
+  car.sway = null;
+  kickCar(car, other ? car.x - other.x : -w.x, other ? car.z - other.z : -w.z, SWAY_BOUNCE*S.peopleSize);
+  car.kick.x += w.x; car.kick.z += w.z; car.kick.heading = car.heading;
+  car.speed = 0;
+  return true;
+}
 /**
  * Settle what the driven car has run into. Unless it's going WRECK_SPEED_PER_SLOWDOWN times faster than the slow-down hitting a car
  * costs it (slowdownShare), a car it overlaps is shoved away from it (BUMP_SHOVE of its speed plus BUMP_PUSH_POWER for each unit of
