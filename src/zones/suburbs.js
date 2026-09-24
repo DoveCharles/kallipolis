@@ -14,7 +14,7 @@ import { builderMesh } from './farmland.js';
 
 // ---------------------------------------------------------- suburbs
 // Streets of houses, cut from one model (assets/models/Houses.glb, made in Blender: five designs). The zone is split into
-// plots the way a Buildings zone is split into lots, only much coarser — a plot has to hold a house and the garden round
+// plots the way a City zone is split into lots, only much coarser — a plot has to hold a house and the garden round
 // it — and each plot gets a lawn, a hedge round it and, usually, a house.
 //
 // A house always faces the nearest road. Every road centerline near the zone is tessellated once, the plot's middle finds
@@ -27,7 +27,7 @@ import { builderMesh } from './farmland.js';
 // Each house is painted a color of its own — the model's `HouseCol` material, the siding — baked into the vertices of a
 // copy of the design's geometry, which is why a house is a mesh of its own rather than one instance of many: the GLB
 // export skips instanced meshes, and see-through, the cards and people going indoors all want a group a house
-// (see cutouts.js for how a Buildings zone does the same).
+// (see cutouts.js for how a City zone does the same).
 //
 // The model carries no colors at all — every material in it is Blender's default grey, and the window frames come
 // through on a nameless one — so every color here is this file's, and HOUSE_PALETTE below is the whole of it.
@@ -446,7 +446,7 @@ export function generateSuburbsContent(zone, poly, cutouts, blockers) {
       // What's left over at the awkward corners of a block is left as bare zone ground, which reads as the verge it is.
       if (!App.insetPolygonExact(plot, PLOT_MIN_ROOM).length) return;
       // Each plot draws from its own stream, keyed to the ground it stands on rather than to how far down the list it
-      // is, so a plot going from built to empty can't reshuffle the ones after it — the same reasoning as a Buildings
+      // is, so a plot going from built to empty can't reshuffle the ones after it — the same reasoning as a City
       // zone's lots — and a plot keeps the house it had across an edit to the road beside it.
       const key = centroid(plot);
       const rng = mulberry32(((s.seed>>>0) ^ Math.imul(Math.round(key.x*4), 0x9E3779B1) ^ Math.imul(Math.round(key.z*4), 0x85EBCA6B)) >>> 0);

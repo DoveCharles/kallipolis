@@ -33,7 +33,7 @@ train lines = 1
 
 # ------------------------------------------------------------------------------------------------------------------------
 # BUILDINGS: per building, by the zone it's in
-# commercial: in a Buildings zone (skyscrapers and the like)
+# commercial: in a City zone (skyscrapers and the like)
 # industrial: in an Industrial zone
 # farmhouses: in a Farmland zone
 # houses: in a Suburbs zone

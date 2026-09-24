@@ -12,7 +12,7 @@ import { cutLotByCutouts, insetPolygonExact } from './cutouts.js';
 import { streetSegmentsNear, streetFor } from './suburbs.js';
 
 // ---------------------------------------------------------- town
-// A British town: the zone is cut into lots like a Buildings zone, but each lot is a two-to-four storey terrace house
+// A British town: the zone is cut into lots like a City zone, but each lot is a two-to-four storey terrace house
 // or shop built right up to the edge of it (so neighbours stand wall to wall down a street), in red or yellow brick,
 // white stucco or a painted pastel, under a pitched slate roof with its ridge along the street — a double-pile "M" roof
 // where the lot's too deep for one span — and chimney stacks with pots on the gable ends. Houses have tall sash windows
@@ -256,7 +256,7 @@ export function generateTownContent(zone, poly, cutouts, blockers) {
   lots.forEach((lot, li) => cutLotByCutouts(lot, blockers).pieces.forEach((piece, pi) => {
     const area = Math.abs(polygonArea(piece));
     if (area < Math.max(avgLotArea*0.12, 12)) return;
-    // each lot on its own stream, as in a Buildings zone, so one slider never reshuffles the rest
+    // each lot on its own stream, as in a City zone, so one slider never reshuffles the rest
     const rng = mulberry32(((s.seed>>>0) ^ Math.imul(li+1, 0x9E3779B1) ^ Math.imul(pi+1, 0x85EBCA6B)) >>> 0);
     const plot = setback > 0 ? insetPolygonExact(piece, setback)[0] : piece;
     if (!plot || plot.length < 3) return;

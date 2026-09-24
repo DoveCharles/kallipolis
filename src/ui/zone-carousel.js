@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, renderer, updateSun, Y_ZONE_GROUND, Y_PATH } from '../core/scene.js';
+import { scene, renderer, updateSun, sun, sunOffset, Y_ZONE_GROUND, Y_PATH } from '../core/scene.js';
 import { BUILDING_GROUND_COLORS } from '../core/splines.js';
 import { DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { createMeshBuilder, disposeObject } from '../roads/roads.js';
@@ -17,7 +17,7 @@ import { updateStats } from './panels.js';
 // of ground instead), lit by a fixed daytime sun with no weather, and rendered from above at an angle into an image. It
 // all happens between two frames, so the view never flickers, and the images are kept for the rest of the session.
 const ZONE_TYPES = [
-  { id: 'buildings', label: 'Buildings', color: '#6d717c' }, { id: 'plain', label: 'Plain', color: '#5d6068' },
+  { id: 'buildings', label: 'City', color: '#6d717c' }, { id: 'plain', label: 'Plain', color: '#5d6068' },
   { id: 'park', label: 'Park', color: '#8fb85a' }, { id: 'beach', label: 'Beach', color: '#d9c48f' },
   { id: 'water', label: 'Water', color: '#1d6f7d' },
   { id: 'plaza', label: 'Plaza', color: '#b7b0a4' }, { id: 'farmland', label: 'Farmland', color: '#c9b75c' },
@@ -110,7 +110,8 @@ function withThumbnailStudio(render) {
 }
 function renderZoneThumbnails() {
   const thumbnails = withThumbnailStudio(snap => {
-    const camera = new THREE.PerspectiveCamera(30, 1, 1, 2000);
+    const VIEW = 40; // half the width it takes in, small enough that the patch below fills it from corner to corner
+    const camera = new THREE.OrthographicCamera(-VIEW, VIEW, VIEW, -VIEW, 1, 1000);
     const thumbnails = {};
     ZONE_TYPES.forEach((type, i) => {
       const cx = 40000 + i*500, cz = 40000, half = 75; // big enough that the camera below never sees past its edges
@@ -133,13 +134,31 @@ function renderZoneThumbnails() {
         group.add(surface, new THREE.Mesh(banks.build(), new THREE.MeshStandardMaterial({ color: WATER_BANK_COLOR, roughness: 0.95 })));
         scene.add(group);
       } else {
-        const zone = { id: '__thumbnail-' + type.id, name: type.label, zoneType: type.id, closed: true, drawing: false, points: square(half),
-          settings: { ...DEFAULT_ZONE_SETTINGS, seed: 4242 + i, lotCount: 14, fieldCount: 9, industrialLots: 7, suburbPlots: 9, townLots: 12, treeDensity: 0.5, plazaTrees: 0.6 } };
+        // an airport gets a long field, so its runway runs straight along it with room for a terminal beside it
+        const points = type.id === 'airport' ? [{ x: cx-380, z: cz-140 }, { x: cx+380, z: cz-140 }, { x: cx+380, z: cz+140 }, { x: cx-380, z: cz+140 }].map(p => ({ ...p, type: 'poly' })) : square(half);
+        const zone = { id: '__thumbnail-' + type.id, name: type.label, zoneType: type.id, closed: true, drawing: false, points,
+          settings: { ...DEFAULT_ZONE_SETTINGS, seed: 4242 + i, lotCount: 14, fieldCount: 9, industrialLots: 7, suburbPlots: 9, treeDensity: 0.5, plazaTrees: 0.6, ...(type.id === 'town' && { seed: 1, townPaint: 0.7, townLots: 40, townStoreysMin: 1, townStoreysMax: 5 }) } };
         subdivideZone(zone);
         group = zone.buildingsGroup;
       }
-      camera.position.set(cx + 40, 135, cz + 40); // looking down steeply enough that the view stays inside the patch
-      camera.lookAt(cx, 2, cz);
+      // what it looks at: the middle of the patch, but closer in on a plaza's fountain, and at an airport the terminal
+      // and the edge of the runway in front of it
+      let fx = cx, fz = cz, view = VIEW;
+      if (type.id === 'town') { view = 26; fx += 15; fz += 15; } // in among the street fronts, filling the frame
+      if (type.id === 'plaza') { view = 16; fx -= 1.8; fz -= 1.8; } // nudged so the fountain sits mid-frame
+      if (type.id === 'airport') {
+        const terminal = group.children.find(c => c.userData.buildingKind === 'terminal');
+        if (terminal) { const at = new THREE.Box3().setFromObject(terminal).getCenter(new THREE.Vector3()); fx = at.x; fz = THREE.MathUtils.lerp(at.z, cz, 0.35); }
+        view = 85;
+      }
+      camera.left = camera.bottom = -view; camera.right = camera.top = view;
+      camera.updateProjectionMatrix();
+      camera.position.set(fx + 200, type.id === 'town' ? 120 : 230, fz + 200); // an isometric-ish view from the south-east
+      camera.lookAt(fx, 2, fz);
+      // the sun's shadows only follow the main view (placeSunLight), so bring them here for the shot
+      sun.target.position.set(fx, 0, fz);
+      sun.target.updateMatrixWorld();
+      sun.position.set(fx + sunOffset.x, sunOffset.y, fz + sunOffset.z);
       thumbnails[type.id] = snap(camera);
       scene.remove(group);
       disposeObject(group);

@@ -83,7 +83,7 @@ function joltCount(chip, count) {
 // what's counted, grouped as the details list shows it: `key` is the line in morality.txt under the group's [heading]
 const GROUPS = [
   { id: 'zones', label: 'Zones', items: [
-    { key: 'buildings', label: 'Buildings' }, { key: 'plain', label: 'Plain' }, { key: 'park', label: 'Parks' },
+    { key: 'buildings', label: 'Cities' }, { key: 'plain', label: 'Plain' }, { key: 'park', label: 'Parks' },
     { key: 'beach', label: 'Beaches' }, { key: 'water', label: 'Water' }, { key: 'plaza', label: 'Plazas' },
     { key: 'farmland', label: 'Farmland' }, { key: 'industrial', label: 'Industrial' },
     { key: 'suburbs', label: 'Suburbs' }, { key: 'town', label: 'Towns' }, { key: 'airport', label: 'Airports' },

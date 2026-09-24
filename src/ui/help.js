@@ -58,7 +58,7 @@ const TOPICS = [
   { id: 'zones', title: 'Zones', html: () => `
     <p>Edit &gt; Zones draws areas. Pick a zone's type from the carousel of cards:</p>
     <ul class="w3-help-list">
-      <li><b>Buildings</b> — lots and towers, their windows lit at night.</li>
+      <li><b>City</b> — lots and towers, their windows lit at night.</li>
       <li><b>Plain</b> — flat ground.</li>
       <li><b>Park</b> — grass, trees and a fence; bees keep hives in them.</li>
       <li><b>Beach</b> — sand.</li>

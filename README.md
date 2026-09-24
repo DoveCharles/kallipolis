@@ -16,7 +16,7 @@ A little procedural city blockout tool that runs in the browser, built on three.
 
   Roads get lane markings, and junctions get zebra crossings and working traffic lights. Roads and paths crossing water become bridges.
 - **Zones** — draw areas and pick a type:
-  - **Buildings** — lots and procedurally generated towers, with shader-drawn windows that light up at night
+  - **City** — lots and procedurally generated towers, with shader-drawn windows that light up at night
   - **Park** — grass, trees and a perimeter fence
   - **Water** — an animated surface sunk below the ground, with sandy beaches where it meets a park
   - **Plaza** — tiled or herringbone paving, a fountain, lamp posts, benches and trees
