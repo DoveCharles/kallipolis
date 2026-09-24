@@ -19,7 +19,7 @@ ORIGIN = (0, 7.548481, 0.037602)        # where the other styles have theirs
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=os.path.abspath(OUT))
-for o in [o for o in bpy.data.objects if o.parent is None]:
+for o in [o for o in bpy.data.objects if o.parent is None and not o.name.startswith('ReferenceHead')]:    # see reference-head.py
     number = ''.join(c for c in o.name.split('_')[0] if c.isdigit()) or ''.join(c for c in o.name.split('_')[1] if c.isdigit())
     if int(number) >= FIRST:
         for child in [o] + list(o.children_recursive): bpy.data.objects.remove(child, do_unlink=True)

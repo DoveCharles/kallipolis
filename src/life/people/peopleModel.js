@@ -394,6 +394,9 @@ const OUTFIT_RED_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitRed'), OUTFIT_GREE
 const BLOOD_SCALE = 1.2; // how many splotches' worth of noise fit in a unit of the figure: bigger for smaller splotches
 export const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
 
+// A mesh named with a _U suffix is unused: kept in the model file, never drawn.
+const isUnused = name => /_U$/i.test(name);
+
 /**
  * Work out who can wear a hairstyle, from the end of its name: 'Hair3_GB' girls and boys, 'Hair6_G' only girls.
  * @param {string} name - the style's name
@@ -813,7 +816,7 @@ export async function loadPersonModel() {
 function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf) {
   const root = gltf.scene;
   const rigged = [], attached = [];
-  root.traverse(o => { if (o.isSkinnedMesh) rigged.push(o); else if (o.isMesh) attached.push(o); });
+  root.traverse(o => { if (isUnused(o.name)) return; if (o.isSkinnedMesh) rigged.push(o); else if (o.isMesh) attached.push(o); });
   if (!rigged.length) throw new Error('the model has no rigged mesh');
   const skeleton = rigged[0].skeleton, bones = skeleton.bones;
   const boneIndex = new Map(bones.map((bone, i) => [bone, i])), boneByName = new Map(bones.map((bone, i) => [bone.name, i]));
@@ -1120,6 +1123,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     if (!styleGltf || headBone == null) return styles;
     styleGltf.scene.updateMatrixWorld(true);
     styleGltf.scene.children.forEach(style => {
+      if (style.name.startsWith('ReferenceHead')) return;    // only there to model against (see tools/reference-head.py)
+      if (isUnused(style.name)) return;
       const parts = [];
       style.traverse(o => { if (o.isMesh) parts.push(o); });
       if (!parts.length) return;

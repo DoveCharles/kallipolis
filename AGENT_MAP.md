@@ -207,6 +207,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `midcentury-models.py` (18K) Builds assets/models/MidCentury.glb:
 - `office-models.py` (17K) Builds assets/models/Office.glb:
 - `posh-models.py` (28K) Builds assets/models/Posh.glb:
+- `reference-head.py` (2K) Puts a whole head (ReferenceHead) into assets/models/Hair.glb where the hairstyles sit, to model against in Blender; the game skips it.
 - `set_pieces.py` (6K) The building blocks tools/posh-models.py, tools/student-models.py and the rest make their furniture sets from:
 - `skirt-models.py` (3K) Builds assets/models/Skirt.glb:
 - `speech.html` (6K) Standalone "Speech bench" test page for synthesized speech.
