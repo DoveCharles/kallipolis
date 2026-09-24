@@ -466,6 +466,7 @@ Myrtle [agemult = 1.15]
 Karla
 Sophie
 Kitty
+Innocent
 Little
 Lady
 San
@@ -841,6 +842,7 @@ Khalifa
 Aziz
 Gonçalves
 Gumby
+Gum
 Navarro
 Wang
 Chen

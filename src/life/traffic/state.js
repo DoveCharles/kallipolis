@@ -18,4 +18,8 @@ export const cars = [];
 export const blasts = [];
 export const EXPLOSIVE_SCALE = 3; // how much bigger an explosive car's blast is, reach and fireball
 export const PERSON_BLAST_SCALE = 0.5; // an explosive person's (or bee's) blast, against a car's
+// What a blast does to whatever's `d` from its middle: BLAST_DAMAGE × its scale at the middle, falling off in a straight
+// line to nothing at its reach (see updateTraffic).
+export const BLAST_DAMAGE = 250;
+export const blastDamageAt = (scale, d, reach) => BLAST_DAMAGE*scale*Math.max(0, 1 - d/reach);
 export const trafficRng = mulberry32(31337);

@@ -29,10 +29,20 @@ export function healthOf(entity, kind) {
   return entity.health;
 }
 
+// The unstable trait: its value is the chance a hit does UNSTABLE_MULTIPLIER times the damage, and at least
+// UNSTABLE_MIN_SHARE of the entity's max health.
+const UNSTABLE_MULTIPLIER = 5, UNSTABLE_MIN_SHARE = 0.2;
+function unstableHit(entity, amount) {
+  const chance = entity.traits?.unstable ?? 0;
+  if (amount <= 0 || chance <= 0 || Math.random() >= chance) return amount;
+  return Math.max(amount*UNSTABLE_MULTIPLIER, UNSTABLE_MIN_SHARE*entity.health.max);
+}
+
 /** Take `amount` hit points (negative heals). At 0 the kind's `die` runs. */
 export function damage(entity, amount, source = null) {
   const h = entity?.health;
   if (!h || h.hp <= 0) return;
+  amount = unstableHit(entity, amount);
   h.hp = Math.max(0, Math.min(h.max, h.hp - amount));
   notify(entity);
   if (h.hp > 0) return;

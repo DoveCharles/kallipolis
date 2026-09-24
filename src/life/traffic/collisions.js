@@ -241,7 +241,7 @@ export function hitBuildings(car, was, dt) {
   if (fresh) {
     impactSound('crash', contact, Math.abs(car.speed)*into);
     if (into > WALL_HEAD_ON && Math.abs(car.speed) >= BOUNCE_MIN_SPEED) {
-      car.speed = -travel*Math.abs(car.speed)*BUMP_BOUNCE; car.stall = stallTime(car);
+      const hitSpeed = car.speed; car.speed = -travel*Math.abs(car.speed)*BUMP_BOUNCE; stallEngine(car, WALL_WEIGHT, hitSpeed);
       puffSmoke({ x: q.x, y: Y_ROAD, z: q.z }, carHeight(car), BUMP_SMOKE_PUFFS);
     } else car.speed *= 1 - into;
     sparks(contact, BUMP_SPARKS);
@@ -255,6 +255,16 @@ const BUMP_SHOVE = 0.15, BUMP_BOUNCE = 0.3, BOUNCE_BELOW_SPEED = 0.2, BUMP_SMOKE
 export const STALL_TIME = 1, STALL_SMOKE_EVERY = 0.2; // (seconds the engine stays dead after a car is thrown back; how often it smokes meanwhile)
 /** How long a stalled/burnt-out car's engine stays dead: STALL_TIME eased by its own recovery trait — the higher, the sooner it's running again. */
 const stallTime = car => STALL_TIME/(car.traits?.recovery ?? 1);
+// A crash that cuts the engine also hurts the car: STALL_DAMAGE × the weight of what it hit (a wall: WALL_WEIGHT) × its
+// speed, over its recovery trait. Only when the engine was running, so one crash hurts once.
+const STALL_DAMAGE = 1, STALL_MIN_DAMAGE = 10, WALL_WEIGHT = 5;
+// A car knocked by another takes KNOCK_DAMAGE × the hitter's weight × its speed ÷ its own weight.
+const KNOCK_DAMAGE = 6;
+const knockDamage = (hitter, other, speed) => KNOCK_DAMAGE*(hitter.traits?.weight ?? 1)*Math.abs(speed)/(other.traits?.weight ?? 1);
+function stallEngine(car, weight, speed) {
+  if (!(car.stall > 0)) damage(car, Math.max(STALL_MIN_DAMAGE, STALL_DAMAGE*weight*Math.abs(speed)/(car.traits?.recovery ?? 1)));
+  car.stall = stallTime(car);
+}
 const WRECK_SPEED_PER_SLOWDOWN = 30, JOLT_SPEED_PER_SLOWDOWN = 15, BUMP_JOLT_SHOVE = 0.2; // (a car wrecks one it hits if it's going this many times faster than the slow-down hitting it costs, as a share of speed; at half that it jolts it back, by this share of its speed)
 const BUMP_PUSH_POWER = 0.03, BOUNCE_MIN_SPEED = 2; // (per unit of weight, how far a car shoves the one it's against each frame, even from a standstill; the least speed a car is thrown back from)
 // The share of its speed a car of weight 1 loses hitting something of weight 1 (see the `weight` trait): 50% for a car; for a person
@@ -273,7 +283,7 @@ const CAR_SLOWDOWN = 0.5, CAR_MIN_SLOWDOWN = 0.1, CAR_MAX_SLOWDOWN = 0.95, PERSO
 function slowedBy(car, kind, weight = 1) {
   const ratio = weight/(car.traits?.weight ?? 1);
   const loss = kind === 'person' ? Math.min(PERSON_MAX_SLOWDOWN, PERSON_SLOWDOWN*ratio) : Math.min(CAR_MAX_SLOWDOWN, slowdownShare(car, weight));
-  if (kind === 'car' && Math.abs(car.speed) >= BOUNCE_MIN_SPEED && Math.abs(car.speed)*(1 - loss) < BOUNCE_BELOW_SPEED) { car.speed = -Math.sign(car.speed || 1)*Math.abs(car.speed)*Math.min(1, BUMP_BOUNCE*ratio); car.stall = stallTime(car); } // (the knock back too grows with the ratio, up to its whole speed)
+  if (kind === 'car' && Math.abs(car.speed) >= BOUNCE_MIN_SPEED && Math.abs(car.speed)*(1 - loss) < BOUNCE_BELOW_SPEED) { const hitSpeed = car.speed; car.speed = -Math.sign(car.speed || 1)*Math.abs(car.speed)*Math.min(1, BUMP_BOUNCE*ratio); stallEngine(car, weight, hitSpeed); } // (the knock back too grows with the ratio, up to its whole speed)
   else car.speed *= 1 - loss;
 }
 /** The share of its speed a car would lose hitting a car of weight `weight`, before it's kept to a range: more the heavier that car is against its own weight. */
@@ -291,7 +301,7 @@ const STALL_WEIGHT_RATIO = 1.6; // (how many times its own weight the car it hit
 export const DETONATION_REACH = 8; // (how far from a car burning out cars and people are blown up, before scaling by size)
 const FUSE_TIME = 3, FUSE_SPARK_EVERY = 0.05, FUSE_SPARKS = 5; // (seconds a wrecked car burns before it blows; seconds between its sparks; sparks each time)
 /** Set a car burning: after FUSE_TIME it explodes, meanwhile it stays put, sparking and burning (burnFx). */
-function lightFuse(car) {
+export function lightFuse(car) {
   if (car.fuse != null) return;
   igniteFx({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car));
   car.fuse = FUSE_TIME; car.fuseSparks = 0; car.speed = 0;
@@ -459,7 +469,7 @@ export function swayCrash(car) {
   puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS);
   sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS);
   if (other && other === drivenCar) slowedBy(other, 'car', car.traits?.weight); // (both null when it hit a building with no car driven) // (the player's car keeps its own handling, just jolted)
-  else if (other) { kickCar(other, other.x - car.x, other.z - car.z, Math.min(1, speed*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1))); other.speed = 0; }
+  else if (other) { kickCar(other, other.x - car.x, other.z - car.z, Math.min(1, speed*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1))); other.speed = 0; damage(other, knockDamage(car, other, speed)); }
   car.sway = null;
   kickCar(car, other ? car.x - other.x : -w.x, other ? car.z - other.z : -w.z, SWAY_BOUNCE*S.peopleSize);
   car.kick.x += w.x; car.kick.z += w.z; car.kick.heading = car.heading;
@@ -467,34 +477,34 @@ export function swayCrash(car) {
   return true;
 }
 /**
- * Settle what the driven car has run into. Unless it's going WRECK_SPEED_PER_SLOWDOWN times faster than the slow-down hitting a car
- * costs it (slowdownShare), a car it overlaps is shoved away from it (BUMP_SHOVE of its speed plus BUMP_PUSH_POWER for each unit of
+ * Settle what the driven car has run into. A car it overlaps is hurt as they meet (knockDamage), and shoved away from it (BUMP_SHOVE of its speed plus BUMP_PUSH_POWER for each unit of
  * its weight, scaled by the distance, so a heavy car pushes one from standing — or, from JOLT_SPEED_PER_SLOWDOWN times, jolted back BUMP_JOLT_SHOVE of
  * its speed at once) and stopped dead, and the driven car goes back to where it was this frame, slowed
- * by that car's weight (slowedBy), with a little smoke where they met. Otherwise it instead sets each car
- * it meets burning (lightFuse), slowed by each one's weight, and carries on through them — but not through one already burning, which is bumped like any other.
+ * by that car's weight (slowedBy), with a little smoke where they met.
  * @param {object} car - the driven car
  * @param {object} was - its position, heading and speed before this frame
  * @returns {void}
  */
 export function bumpIntoCars(car, was) {
   const reach = carLength(car)*1.5 + 4*S.peopleSize, before = { ...car, ...was }, hitSpeed = Math.abs(car.speed);
-  let contact = null, cutsEngine = false;
+  let contact = null, cutsEngine = null; // (cutsEngine: the weight of the car that cut it)
+  const hurt = []; // (dealt after the loop: a car dying mid-loop changes the cars array)
   forCarsNear(car.x, car.z, reach, other => {
     if (other === car || wreckedCars.includes(other) || !carsOverlap(car, other)) return;
     const d = Math.hypot(other.x - car.x, other.z - car.z), dWas = Math.hypot(other.x - was.x, other.z - was.z);
     if (carsOverlap(before, other) && d >= dWas) return; // (moving off it)
-    if (other.fuse == null && !other.reviving && Math.abs(car.speed) >= WRECK_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight)) { lightFuse(other); impactSound('crash', other, hitSpeed); sparks({ x: (car.x + other.x)/2, y: Y_ROAD + carHeight(car)*0.4, z: (car.z + other.z)/2 }, BUMP_SPARKS); slowedBy(car, 'car', other.traits?.weight); return; }
     const joltSpeed = JOLT_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight), jolted = Math.abs(car.speed) >= joltSpeed;
     kickCar(other, other.x - car.x, other.z - car.z, jolted ? Math.abs(car.speed)*BUMP_JOLT_SHOVE : Math.min(1, Math.abs(car.speed)*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1)));
     other.speed = 0;
-    if (!jolted && Math.abs(car.speed) >= STALL_SPEED_SHARE*joltSpeed && (other.traits?.weight ?? 1) > STALL_WEIGHT_RATIO*(car.traits?.recovery ?? 1)*(car.traits?.weight ?? 1)) cutsEngine = true; // (hit hard enough to hurt the engine, but not to jolt the car, and it's much heavier — the less likely, the more recovery it has)
+    if (!car.bumping) hurt.push(other); // (hurt once, as they meet)
+    if (!jolted && Math.abs(car.speed) >= STALL_SPEED_SHARE*joltSpeed && (other.traits?.weight ?? 1) > STALL_WEIGHT_RATIO*(car.traits?.recovery ?? 1)*(car.traits?.weight ?? 1)) cutsEngine = other.traits?.weight ?? 1; // (hit hard enough to hurt the engine, but not to jolt the car, and it's much heavier — the less likely, the more recovery it has)
     slowedBy(car, 'car', other.traits?.weight);
     contact = { x: (car.x + other.x)/2, y: Y_ROAD, z: (car.z + other.z)/2 };
   });
   if (!contact) { car.bumping = false; return; }
   Object.assign(car, was);
   if (!car.bumping) { impactSound('crash', contact, hitSpeed); puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS); sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS); } // (once, as they meet)
-  if (cutsEngine && !car.bumping) car.stall = stallTime(car);
+  if (cutsEngine != null && !car.bumping) stallEngine(car, cutsEngine, hitSpeed);
   car.bumping = true;
+  hurt.forEach(other => damage(other, knockDamage(car, other, hitSpeed)));
 }

@@ -11,10 +11,10 @@ import { mulberry32 } from '../core/math.js';
 import { TOON_RAMP } from '../core/toon.js';
 import { startFlying, endFlying, controlInput } from './possession.js';
 import { blastFx, explodeBee } from './giblets.js';
-import { blasts, PERSON_BLAST_SCALE } from './traffic/state.js';
+import { blasts, blastDamageAt, PERSON_BLAST_SCALE } from './traffic/state.js';
 import { updateBuzzes } from '../audio/buzz.js';
 import { chaseBehind } from './flight.js';
-import { registerHealthKind } from '../core/health.js';
+import { registerHealthKind, healthOf, damage } from '../core/health.js';
 
 // ============================================================ flowers, hives and bees
 // Three things a park grows, all cut from one model (assets/models/Bee.glb, made in Blender): patches of flowers, a hive
@@ -789,14 +789,15 @@ function killBee(bee) {
   bee.until = (lastBeeTime || 0) + between(Math.random, BEE_RESPAWN_MIN, BEE_RESPAWN_MAX);
 }
 /**
- * Kill every bee out flying within `reach` of `at` (a blast: see updateTraffic).
- * @param {{x: number, y: number, z: number}} at
+ * Hurt every bee out flying within `reach` of `at` (a blast: see updateTraffic), by blastDamageAt.
+ * @param {{x: number, y: number, z: number, scale?: number}} at
  * @param {number} reach
  * @returns {void}
  */
 function blastBees(at, reach) {
   colonies.forEach(colony => colony.bees.forEach(bee => {
-    if (!isHome(bee) && Math.hypot(bee.at.x - at.x, bee.at.y - at.y, bee.at.z - at.z) <= reach) killBee(bee);
+    const d = Math.hypot(bee.at.x - at.x, bee.at.y - at.y, bee.at.z - at.z);
+    if (!isHome(bee) && d <= reach) { healthOf(bee, 'bee'); damage(bee, blastDamageAt(at.scale ?? 1, d, reach)); }
   }));
 }
 /**
