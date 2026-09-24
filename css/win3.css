@@ -260,7 +260,7 @@ html.win3 .pc-thumb {
   html.win3 .w3-keys td:first-child { white-space:nowrap; }
 
   /* the toolbar: a grey strip right across the window under the menu bar — Edit at the left, the morality meter at the
-     right, each ruled off by an etched line, and the tools centred between them; hiding it (View > Toolbar) takes the
+     right, each ruled off by an etched line, and the tools packed after Edit; hiding it (View > Toolbar) takes the
      meter with it, and everything below moves up */
   html.win3 { --w3-tools-h:31px; --w3-below:calc(var(--w3-top) + var(--w3-tools-h)); --w3-meter-w:225px; --w3-meter-right:12px; }
   html.win3 body.w3-no-tools { --w3-below:var(--w3-top); }
@@ -272,8 +272,8 @@ html.win3 .pc-thumb {
   html.win3 #canvas-tools::before, html.win3 #canvas-tools::after {
     content:''; align-self:stretch; width:0; border-left:1px solid var(--w3-shadow); border-right:1px solid #fff;
   }
-  html.win3 #canvas-tools::before { order:-2; margin-right:auto; } /* (after Edit; the auto margins either side of the */
-  html.win3 #canvas-tools::after { order:2; }                       /*  tools split what's left, centring them) */
+  html.win3 #canvas-tools::before { order:-2; } /* (after Edit; the tools packed from the left, as Word 2's and Excel 4's */
+  html.win3 #canvas-tools::after { order:2; }   /*  were, with Maps' auto margin leaving the rest before the meter) */
   html.win3 #canvas-tools :is(.canvas-tool, #grid-toggle) { width:24px; height:22px; } /* (Word 2's and Excel 4's buttons) */
   html.win3 #history-tools { gap:4px; }
   /* World / Edit / Maps, moved here from the side panel (see win3-menu.js): their group melts into the strip, so Edit
