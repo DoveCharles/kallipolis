@@ -10,6 +10,7 @@ import { S } from '../core/shared.js';
 import { isMuted } from '../audio/sfx.js';
 import { openSoundLevels } from './sound-levels.js';
 import { openSettings } from './settings-windows.js';
+import { openHelp } from './help.js';
 import { closeWindows } from './w3-window.js';
 import { editHints, generalHints } from './view-prefs.js';
 import { people } from '../life/people/people.js';
@@ -71,16 +72,6 @@ function about() {
     <p>${n(S.roadLines.length, 'path')}, ${n(S.zones.length, 'zone')}<br>${n(people.length, 'person').replace('persons', 'people')}, ${n(cars.length, 'car')} about</p>
     <p>Free memory: 640 KB<br>(ought to be enough for anybody)</p></div></div>`);
 }
-function shortcuts() {
-  const rows = [
-    ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'], ['Ctrl+S', 'Save project'], ['Ctrl+O', 'Open project'],
-    ['Alt+letter', 'Open a menu'], ['Enter', 'Finish the path or zone being drawn'], ['Esc', 'Stop drawing; leave a building'],
-    ['Shift+click', 'Insert a node, or branch off a path'], ['Delete', 'Remove the selected object'],
-    ['7 / 1 / 3', 'View from the top / front / right'],
-  ];
-  messageBox('Keyboard Shortcuts', `<table class="w3-keys">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`);
-}
-
 // Help > Show Tooltips: the bottom hints, Edit and General together (View has them one by one)
 const anyHints = () => editHints.shown() || generalHints.shown();
 function toggleAllHints() {
@@ -141,7 +132,8 @@ const MENUS = [
     { label:'Game...', key:'a', run:() => openSettings('game') },
   ]},
   { name:'Help', key:'h', items:[
-    { label:'Keyboard Shortcuts', key:'k', run:shortcuts },
+    { label:'Contents', key:'c', shortcut:'F1', run:() => openHelp() },
+    { label:'Keyboard Shortcuts', key:'k', run:() => openHelp('keys') },
     { label:'Show Tooltips', key:'t', check:anyHints, run:toggleAllHints },
     '-',
     { label:'About Splinetopia...', key:'a', run:about },
