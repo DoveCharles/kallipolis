@@ -883,8 +883,11 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
         headWeights.push(Math.min(1, headWeight));
         armWeights.push(Math.min(1, armWeight));
         slots.push(slot);
+        // a vertex on the mirror plane stays on it through every shape key (as Blender's mirror clipping keeps it), or a key
+        // that nudges it sideways pulls the two halves apart there — Key 1 opens a crack down the chin
+        const onMirror = sides.length > 1 && Math.abs(pos.getX(i)) < 1e-4;
         keyTargets.forEach((target, key) => {
-          if (target) v.set(target.getX(i)*side, target.getY(i), target.getZ(i)).applyMatrix3(toModelLinear); else v.set(0, 0, 0);
+          if (target) v.set(onMirror ? 0 : target.getX(i)*side, target.getY(i), target.getZ(i)).applyMatrix3(toModelLinear); else v.set(0, 0, 0);
           offsets[key].push(v.x, v.y, v.z);
         });
       }
