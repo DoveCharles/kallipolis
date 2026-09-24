@@ -779,7 +779,8 @@ function furnish(key) {
   const home = LAYOUTS.home;
   home.group.clear(); // (clones, sharing the model's geometry and materials)
   home.blocked = []; home.solid = []; home.seats = [];
-  home.screen = null;
+  home.screen = null; home.tvObject = null;
+  tvClickedOn = false;
   grid = null;
   stopTV();
   home.group.add(lampLight);
@@ -870,7 +871,7 @@ function furnish(key) {
   const tvRange = wallLength/2 - tv.w/2 - 0.8, tvU = tvRange*(rng()*1.3 - 0.3), tvV = tv.d/2 + 0.03;
   let spot = at(tvU, tvV);
   put('TV', spot.x, spot.z, fromWall);
-  const screen = { ...spot }, tvObject = home.group.children.at(-1);
+  const screen = { ...spot }, tvObject = home.tvObject = home.group.children.at(-1);
   // (a posh home's curtains, but for any the TV's in front of)
   const tvArea = taken[0];
   for (const drape of drapes) {
@@ -1861,10 +1862,28 @@ export function watchingTV() {
   if (!tv || tv.endedAt !== null) return null;
   return !tv.heard && watchedAt - tv.startedAt > TV_SILENT_AFTER ? -1 : tv.video;
 }
+// Clicking the TV (a click, not the end of a drag round the room) switches it on, watched or not, till it's clicked
+// again or the room's left.
+let tvClickedOn = false;
+const TV_CLICK_SLOP = 5; // px the pointer can move between press and release and still count as a click
+const tvRay = new THREE.Raycaster(), tvPointer = new THREE.Vector2();
+let pressedAt = null;
+renderer.domElement.addEventListener('pointerdown', e => { pressedAt = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener('pointerup', e => {
+  const tvObject = LAYOUTS.home.tvObject;
+  if (!pressedAt || !inside || current !== LAYOUTS.home || !tvObject) return;
+  if (Math.hypot(e.clientX - pressedAt.x, e.clientY - pressedAt.y) > TV_CLICK_SLOP) return;
+  const box = renderer.domElement.getBoundingClientRect();
+  tvPointer.set((e.clientX - box.left)/box.width*2 - 1, -(e.clientY - box.top)/box.height*2 + 1);
+  tvRay.setFromCamera(tvPointer, camera);
+  if (!tvRay.intersectObject(tvObject, true).length) return;
+  tvClickedOn = !(tvClickedOn || tv);
+  if (!tvClickedOn) stopTV();
+});
 // Each frame: the TV switched on or off as anyone's sat watching it or not, and while it's on, the player laid out where
 // the screen now is on the screen, and its sound on or off.
 function updateTV() {
-  const watched = inside && current === LAYOUTS.home && performance.now() - watchedAt < 500;
+  const watched = inside && current === LAYOUTS.home && (tvClickedOn || performance.now() - watchedAt < 500);
   if (watched && !tv) startTV();
   else if (!watched && tv) stopTV();
   // (whoever sat through it has got up; anyone still watching, sat down since, gets something new)
@@ -2082,6 +2101,7 @@ export function leaveBuilding() {
   const { group, before } = inside;
   inside = null;
   setIndoors(null);
+  tvClickedOn = false;
   stopTV();
   group.visible = true;
   room.visible = false;

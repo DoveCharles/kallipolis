@@ -15,7 +15,9 @@ import { getWaterRegion } from '../../water/water.js';
 import { createRegionTester, offsetPaths, pathsArea, toClipperPath, zoneCutoutsNear } from '../../zones/cutouts.js';
 import { FOOTBRIDGE_TOP } from '../../water/bridges.js';
 import { PEOPLE_NAV_SPACING, headingTo, isOpenGround, lastPeopleTime, people, peopleNav, peopleNavDebugMesh, peopleRng, pickWeighted, randomSpotIn } from './people.js';
-import { RIDE_CHANCE, enterChance, goIndoors, goRideTrain, mayGoIndoors, stationLinks } from './peopleActivities.js';
+import { RIDE_CHANCE, enterChance, goIndoors, goRideTrain, hidingFromSun, mayGoIndoors, stationLinks } from './peopleActivities.js';
+// (whether a walkway has a door on it: a vampire hiding from the sun on one without takes every turning off it)
+const hasDoor = nav => (nav.hasDoor ??= nav.vertices.some(vertex => vertex.building));
 import { signalRedLeft } from '../../roads/markings.js';
 import { roadWariness } from './peopleRoad.js';
 import { resetHealth } from '../../core/health.js';
@@ -675,7 +677,7 @@ export function walkAlong(p, dist) {
     const vertex = nav.vertices[ahead];
     const station = p.trainCooldown <= 0 ? stationLinks().byVertex.get(p.li + ':' + ahead) : null;
     if (station != null && peopleRng() < RIDE_CHANCE) { p.u = at; goRideTrain(p, station, walkwayPoint(p)); return; }
-    if (vertex.building && mayGoIndoors(p) && peopleRng() < enterChance(p, vertex.building)) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
+    if (vertex.building && (hidingFromSun(p) || (mayGoIndoors(p) && peopleRng() < enterChance(p, vertex.building)))) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
     const isEnd = (!nav.loop && (ahead === 0 || ahead === last)) || !!nav.blocked?.[nextVertex(nav, ahead, p.dir)];
     const entrance = vertex.entrances.length ? vertex.entrances[Math.floor(peopleRng()*vertex.entrances.length)] : null;
     const drawn = entrance ? (isOpenGround(peopleNav.areas[entrance.area]) ? p.traits.parks : p.traits.plazas) : 0;
@@ -689,7 +691,7 @@ export function walkAlong(p, dist) {
         startZebraCrossing(p, nav, ahead, crossings[Math.floor(peopleRng()*crossings.length)]);
         return;
       }
-      if (turns.length && peopleRng() < (isEnd ? 0.85 : 0.3)) {
+      if (turns.length && (peopleRng() < (isEnd ? 0.85 : 0.3) || (hidingFromSun(p) && !hasDoor(nav)))) {
         const remaining = Math.abs(u - at);
         nav = takeLink(p, turns[Math.floor(peopleRng()*turns.length)]);
         u = p.u + p.dir*remaining;

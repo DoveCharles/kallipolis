@@ -1652,6 +1652,10 @@ Oral fixation
 Having webbed feet [aqua]
 The mutation [aqua]
 Wriggling across ground like a slug
+Glowsticks
+Lapping up water like a dog
+Saying, "touché"
+Squirty cheese
 
 ################################################################################################################################
 
@@ -1984,3 +1988,5 @@ Globus sensation
 Having a bomb inside them [explosive, mood = -1, terrified, speed = 1.4]
 Showering [smells]
 The smell of earwax
+Being tarred and feathered
+Things that other people like [chatty = 0.5, talkative = 0.5]

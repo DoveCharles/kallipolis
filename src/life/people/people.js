@@ -24,6 +24,7 @@ import { MELODIES } from '../../audio/melodies.js';
 import { favoritePeople, isFavoritePerson } from '../../ui/favorites.js';
 import { registerHealthKind } from '../../core/health.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
+import { hidingFromSun, outOfTime, vanishIndoors } from './peopleActivities.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
@@ -605,6 +606,40 @@ export function beginFleeing(p, from) {
   }
 }
 /**
+ * A vampire out while the sun's up (see hidingFromSun): running scared, SUN_RUN_BOOST faster still, for the nearest door
+ * along their walkway — out of a hangout first, and onto other walkways at every turning if theirs has no door
+ * (walkAlong) — and in at the first door they reach. Still out at 6:30, they vanish into the nearest building
+ * (vanishIndoors). Once inside, calm.
+ * @param {Person} p - the vampire
+ * @returns {void}
+ */
+function hideFromSun(p) {
+  if (p.mode === 'indoors') {
+    if (p.indoors.stage === 'inside' && p.sunRun) { p.sunRun = false; p.fright = null; }
+    return;
+  }
+  if (p.punched || inWater(p) || !(p.mode === 'line' || p.mode === 'wander' || p.mode === 'leaving')) return;
+  if (outOfTime(p) && vanishIndoors(p)) return;
+  p.sunRun = true;
+  if (p.mode === 'wander') { leaveArea(p, peopleNav.areas[p.area]); return; }
+  if (p.fright?.stage === 'flee') return;
+  // (on a walkway: towards its nearest door, if it has one, running from just behind them)
+  if (p.mode === 'line') {
+    const nav = peopleNav.lines[p.li];
+    let nearest = null;
+    nav.vertices.forEach((vertex, vi) => {
+      if (vertex.building && (!nearest || Math.abs(nav.cum[vi] - p.u) < Math.abs(nearest - p.u))) nearest = nav.cum[vi];
+    });
+    if (nearest != null && Math.abs(nearest - p.u) > 0.01) p.dir = Math.sign(nearest - p.u);
+    const k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), a = nav.pts[k], b = nav.pts[k + 1], len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    beginFleeing(p, { x: p.x - (b.x - a.x)/len*p.dir, z: p.z - (b.z - a.z)/len*p.dir });
+  } else {
+    beginFleeing(p, { x: p.x - Math.sin(p.heading), z: p.z - Math.cos(p.heading) });
+  }
+}
+/** How much faster than fleeing a vampire runs for cover from the sun. */
+const SUN_RUN_BOOST = 1.5;
+/**
  * Send someone in a hangout out of it: onto the walkway at one of its entrances — the nearest of a few, or, running from
  * `from`, whichever takes them furthest from it — as mode 'leaving'. Entrances reached over dry ground come first.
  * @param {Person} p - the person
@@ -913,6 +948,8 @@ export function updatePeople(t) {
     if (p.fright) updateFright(p, dt);
     // terrified: never stop fleeing — each flee ended starts another, from just behind them, so they carry on the way they were going
     if (p.traits.terrified && (p.mode === 'line' || p.mode === 'wander') && !p.fright && !p.punched && !inWater(p)) beginFleeing(p, { x: p.x - Math.sin(p.heading), z: p.z - Math.cos(p.heading) });
+    if (!possessed && hidingFromSun(p)) hideFromSun(p);
+    else if (p.sunRun) p.sunRun = false;
     //attempting to give additional reactions to npc death depending on how evil they are
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
     if (p.please) updatePlease(p, dt); // (the same hold as stun, read as delight: see pleased below)
@@ -927,7 +964,8 @@ export function updatePeople(t) {
     // pleased: looking at it and then held still, beaming. The same 'look' and 'held' stages as stun — the ones
     // updatePeople freezes them on — read as delight rather than shock, below.
     const pleased = !!p.please && (p.please.stage === 'look' || p.please.stage === 'held');
-    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*(p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(fleeing ? FLEE_SPEED*p.traits.boost : 1);
+    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*(p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(fleeing ? FLEE_SPEED*p.traits.boost : 1)
+      *(fleeing && p.sunRun ? SUN_RUN_BOOST : 1);
     let goal = null;
     //Updating hair colour depending on age
     //set default hair colour once
