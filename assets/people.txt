@@ -1325,7 +1325,7 @@ Running reconnaissance [chatty = 3, talkative = 0.3, aggression = 0.5]
 Grapefruit
 Fonts & typefaces
 Being scared [speed = 1.2]
-Getting so high they get scared [blinks = 0.6, speed = 1.2]
+Getting so high they get scared [blinks = 0.6, speed = 1.2, blazed]
 Having a psychosexual fixation on their nemesis [ aggression = 2]
 Horse racing [ evil = 0.05]
 Calling people "libtard" [ evil = 0.1, agemult = 0.95, aggression = 5]
@@ -1981,5 +1981,6 @@ Kids these days [agemult = 1.2]
 Getting put in the labyrinth
 Globus sensation
 1 day blinding stew
-Having a bomb strapped to their chest [explosive, mood = -1, terrified, speed = 1.4]
+Having a bomb inside them [explosive, mood = -1, terrified, speed = 1.4]
 Showering [smells]
+The smell of earwax

@@ -433,7 +433,6 @@ button.pc-pick:hover { text-decoration:underline; }
 #hint kbd {
   font-family:var(--mono); font-size:inherit; padding:0 4px; border:1px solid currentColor; border-bottom-width:2px;
 }
-<<<<<<< HEAD
 .ph-sub { font-family:var(--mono); font-size:11px; color:var(--text-dim); }
 /* Hints hidden while loading and by View > Edit Hints / General Hints (src/ui/view-prefs.js) slide off the nearest edge.
    (`translate`, not `transform`, which already centres them.) A touch Exit button stays, with its box. */
@@ -446,10 +445,15 @@ body.ui-loading #possess-hint, body.no-general-hints #possess-hint:has(#ph-exit[
 }
 body.no-general-hints #possess-hint > span { display:none; }
 @media (prefers-reduced-motion:reduce) { #hint, #possess-hint { transition:none !important; } }
-=======
-/* View > Edit Hints / General Hints off (src/ui/view-prefs.js); a touch Exit button stays */
-body.no-edit-hints #hint[data-kind=edit], body.no-general-hints #hint[data-kind=general] { display:none; }
->>>>>>> 415dfeb5a189a46a45cc9578999f286a75c11f42
+/* White cover over the view while loading (index.html); fades once body loses ui-loading */
+#loading-screen {
+  position:fixed; inset:0; display:flex; flex-direction:column; gap:8px; align-items:center; justify-content:center;
+  background:#fff; color:#000; font-family:var(--sans); font-size:11px;
+  opacity:0; visibility:hidden; pointer-events:none; transition:opacity 0.3s ease, visibility 0s 0.3s;
+}
+body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none; }
+#loading-screen .ls-bar { width:200px; height:12px; padding:2px; box-sizing:border-box; border:1px solid #000; box-shadow:inset 1px 1px 0 #808080; }
+#loading-screen .ls-fill { width:0; height:100%; background:#000080; }
 /* the two sliders for dialling in the seat inside a train carriage (src/trains/trains.js) */
 #ride-tune {
   position:fixed; top:16px; right:16px; z-index:30; width:180px; padding:10px 12px;

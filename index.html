@@ -29,6 +29,8 @@ try { if (localStorage.getItem('splinetopia.startInEdit') !== '0') document.body
 </script>
 
 <div id="canvas-wrap"></div>
+<!-- covers the view until src/ui/view-prefs.js takes ui-loading off; text and bar set by src/ui/loading.js -->
+<div id="loading-screen"><div class="ls-text">Loading scripts...</div><div class="ls-bar"><div class="ls-fill"></div></div></div>
 
 <div id="panel">
   <div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Splinetopia</div><button class="win3-min" title="Minimize"></button><button class="win3-max" title="Maximize"></button></div>

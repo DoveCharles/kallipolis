@@ -51,7 +51,7 @@ Format: `file` (size) purpose — key exports.
 - `building-card.js` (6K) As for a car or a carriage: — exports: updateBuildingFollow
 - `building-types.js` (3K) Each kind of building's name, mood, and what it loves and hates, for its card (building-card.js) — from assets/buildings.txt, to be edited freely: — exports: buildingKindOf, buildingEnterable, buildingTypeOf, buildingName
 - `footprints.js` (5K) ---------------------------------------------------------- footprint archetypes (Y2K variety) — exports: applyFootprintArchetype, distPointSegment, closestPointOnSegment, distToPolygonBoundary, footprintBounds, buildingKey, buildingNumber, roomLayoutOf
-- `interior.js` (123K, **big**) Every building has the same inside: — exports: openRoomDoor, forceHomeSet, watchingTV, someoneHome, tuneInteriorView, enterBuilding, leaveBuilding, updateInteriorCamera …
+- `interior.js` (126K, **big**) Every building has the same inside (warm-up compiles all its shaders under the loading screen, `warmUp`): — exports: openRoomDoor, forceHomeSet, watchingTV, someoneHome, tuneInteriorView, enterBuilding, leaveBuilding, updateInteriorCamera …
 - `see-through.js` (2K) Zoom in far enough — or follow someone through a door (see "going indoors" in people.js) — and the camera ends up inside a building, where all you see… — exports: hideBuildingsAroundCamera, showHiddenBuildings
 - `windows.js` (25K) ---------------------------------------------------------- building windows Windows are drawn by a shader on each building's wall material rather than… — exports: WINDOW_TILE_WORLD_SIZE, createWindowMaterial, createBatchedWindowMaterial, mergeGeometries, mergeGeometryList, extractCapGeometry, buildWallGeometry, buildWedgeCapGeometry
 
@@ -137,7 +137,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `objects.js` (30K) The Objects tab: — exports: objectGroup, Y_OBJECT, MIN_OBJECT_SCALE, invalidateObjectFacing, streetFacingAt, objectById, addObject, removeObject …
 
 ### src/project/
-- `autosave.js` (4K) The project (everything a saved project file holds, map images and all) and where the camera is are kept in the browser — in IndexedDB, which has room…
+- `autosave.js` (4K) The project (everything a saved project file holds, map images and all) and where the camera is are kept in the browser — in IndexedDB, which has room… Restores only after ui/loading.js's `modelsLoaded`.
 - `export-glb.js` (7K) The city as a GLB with real materials, for Blender, Unity, Unreal and the like:
 - `export-obj.js` (1K) OBJ export of the scene.
 - `history.js` (4K) History is a stack of project snapshots — the same JSON a saved project holds, less the map images (they're big, and importing, moving or removing map… — exports: commitHistory, resetHistory
@@ -160,6 +160,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 ### src/ui/
 - `entity-card.js` (17K) The card at the bottom right saying what the camera's following; love/hate modifier drop-downs (addDrop, layoutDrops); optional health bar (`health: true`, card.setHealth): — exports: ROWS, TEXT_ROWS, cards, makeCard
 - `favorites.js` (6K) Whatever the player has hearted on its card (see the heart in ui/entity-card.js) — a person, a car, a bee, a building, anything with a card — listed i… — exports: isFavorite, personKey, isFavoritePerson, favoritePeople, toggleFavorite, onFavoritesChanged, reviveFavoritesAs, savedFavorites …
+- `loading.js` (9K) The loading screen (#loading-screen): names pending models (not data files), flicks through model names, creeps the bar; hands models over to be unpacked one a frame; while loading main.js calls `compileWhileLoading` instead of drawing (background shader compiles); `loadingTask`/`loadingSay` for other work (interior.js's warm-up); logs frozen time per step when done. Imported first by main.js. `waitForModels`/`modelsLoaded`: autosave.js builds the city only once main.js's models are in. — exports: loadingTask, loadingSay, modelsLoaded, waitForModels, stillLoading, compileWhileLoading, whenLoaded
 - `garble.js` (1K) Anything with the scramble trait has the words on its card jumbled, and anything with keysmash has them typed with fat fingers (see scramble and keySm… — exports: garbles, garbled
 - `meter.css` (11K) A reusable meter.
 - `mobile.js` (7K) Everything here is for phones and tablets, and none of it appears on a machine with a mouse.
@@ -172,7 +173,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `flat-shading.js` (2K) Display > Flat shading: forces flatShading on every lit material in the scene (swept every 0.5s while on; originals restored when off), kept in localStorage. — exports: none
 - `toon-shading.js` (<1K) Display > Toon characters: people and bees in toon bands or smooth light, via setToon in core/toon.js; kept in localStorage, on by default. — exports: none
 - `ui-scale.js` (2K) Display > UI scale (100–200%, localStorage): CSS zoom on the page, undone on #canvas-wrap so the 3D view stays 1:1; UI placed by mouse/getBoundingClientRect px goes through `toUi`, and CSS vh/vw divide by `--ui-scale`. — exports: uiScale, toUi
-- `view-prefs.js` (2K) Browser prefs: View > Edit Hints / General Hints (body classes `no-edit-hints`/`no-general-hints` hide `#hint` by its `data-kind`, set in editor/tools.js — the possession controls included), and Options > Game > Start in Edit mode (off: presses World on load). — exports: editHints, generalHints
+- `view-prefs.js` (2K) Browser prefs: View > Edit Hints / General Hints (body classes `no-edit-hints`/`no-general-hints` hide `#hint` by its `data-kind`, set in editor/tools.js — the possession controls included), and Options > Game > Start in Edit mode (off: presses World on load); removes `ui-loading` via loading.js's `whenLoaded`. — exports: editHints, generalHints
 - `sound.js` (1K) The speaker button over the view, by undo and redo, mutes every sound (see audio/sfx.js).
 - `settings-windows.js` (1K) Under the Windows 3.0 window, the World panel's set-once settings (index.html's data-settings groups) open in windows of their own — Display, Effects, Game from the Options menu, and World (time, peds, weather) from the toolbar — moved in while open and put back after. — exports: openSettings
 - `sound-levels.js` (2K) Options > Sound levels: a window of sliders (Master, Peds, Traffic, Ambience) setting the levels in audio/sfx.js (setLevel, LEVEL_KINDS), remembered in localStorage. — exports: openSoundLevels

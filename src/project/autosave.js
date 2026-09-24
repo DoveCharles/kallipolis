@@ -1,6 +1,7 @@
 import { S, App } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
 import { serializeProject, loadProjectFromData } from './save-load.js';
+import { modelsLoaded, loadingTask } from '../ui/loading.js';
 
 // ============================================================ autosave
 // The project (everything a saved project file holds, map images and all) and where the camera is are kept in the
@@ -54,13 +55,15 @@ window.addEventListener('wheel', () => scheduleSave(1500), { capture: true, pass
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
 window.addEventListener('pagehide', save);
 
-// on opening: the last autosave, if there is one (nothing's saved over it until it's back)
-(async () => {
+// on opening: the last autosave, if there is one (nothing's saved over it until it's back) — once the models are in, so
+// it's built with them the first time (see ui/loading.js)
+loadingTask('Building the city...', (async () => {
   let restoredCleanly = false;
   try {
     const record = await inStore('readonly', store => store.get(RECORD_KEY));
     if (record && record.project && record.project.roads && record.project.zones) {
       restoring = true;
+      await modelsLoaded;
       await loadProjectFromData(record.project);
       const camera = record.camera;
       if (camera && Array.isArray(camera.target)) {
@@ -80,6 +83,6 @@ window.addEventListener('pagehide', save);
     restoring = false;
     ready = restoredCleanly;
   }
-})();
+})(), 5);
 
 Object.assign(App, { saveNow: save });

@@ -1,3 +1,4 @@
+import './ui/loading.js'; // (first, so it sees every fetch)
 import './core/scene.js';
 import './core/camera-controls.js';
 import './core/math.js';
@@ -91,20 +92,15 @@ import { hideBuildingsAroundCamera } from './buildings/see-through.js';
 import { updateBuildingBatches } from './buildings/building-batches.js';
 import { renderView } from './ui/pixelation.js';
 import { loadStatueModel } from './objects/object-types.js';
+import { stillLoading, compileWhileLoading, waitForModels } from './ui/loading.js';
 
 // ============================================================ init
 applyModeVisibility();
 renderHierarchy();
 renderMapsList();
 renderWorldTintPanel();
-loadCarriageModel();
-loadPersonModel();
-loadCarModels();
-loadBeeModel();
-loadHouseModels();
-loadPlaneModel();
-loadFountainModel();
-loadStatueModel();
+waitForModels([loadCarriageModel(), loadPersonModel(), loadCarModels(), loadBeeModel(), loadHouseModels(), loadPlaneModel(),
+  loadFountainModel(), loadStatueModel()]);
 // Roads, zones and water are thrown away and rebuilt wholesale on every edit, and three.js deletes a shader program as soon
 // as the last material using it is disposed — so a rebuild that replaces every material of one kind (every water tile,
 // every road surface…) would compile that shader again from scratch: a hitch of up to a third of a second. One
@@ -178,7 +174,9 @@ function animate() {
   blinkLights.forEach(o => { o.material.emissiveIntensity = 0.5 + Math.sin(t*3 + o.userData.blinkPhase)*0.5; });
   if (S.interactionMode === 'node') scaleNodeUi(camera);
   const unshake = shakeCamera(camera, t);
-  renderView(scene, camera);
+  // (under the loading screen, shaders are compiled in the background rather than drawn: see ui/loading.js)
+  if (stillLoading()) compileWhileLoading(renderer, scene, camera);
+  else renderView(scene, camera);
   unshake();
 }
 animate();

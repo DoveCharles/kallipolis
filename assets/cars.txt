@@ -278,6 +278,9 @@ plate = DRAGONAIR
 plate = DRAGONITE
 plate = BABYMAMAS
 plate = ISTHISIT?
+plate = IGETITNOW
+plate = BANK ROLL
+plate = TOUGHSHIT
 
 [FamilyCar]
 name = Family car
