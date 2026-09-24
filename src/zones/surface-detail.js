@@ -50,7 +50,7 @@ function addAccentBand(group, poly, bandBottom, bandColor, rng, win) {
 // and 0.8 clear of its edge, up to count*12 tries. `kind` picks one of: under 0.18 an AC unit, under 0.33 a vent pipe,
 // under 0.46 a dish antenna on a mast, under 0.62 a squat water tank with a conical lid, under 0.77 clustered vent
 // pipes, under 0.87 nothing (it was a helipad marking), else a row of tilted solar panels. All sit on top of height
-function addRooftopGreebles(group, poly, height, rng) {
+function addRooftopGreebles(group, poly, height, rng, spots) {
   const count = 2 + Math.floor(rng()*5);
   let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
   poly.forEach(p => { if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z; });
@@ -142,7 +142,110 @@ function addRooftopGreebles(group, poly, height, rng) {
     }
     obj.traverse(o => { if (o.isMesh) { o.name='Building'; o.castShadow=true; } });
     group.add(obj);
+    spots.push({ x:pt.x, y:-pt.z, r:1.0 });
     placed++;
+  }
+}
+
+// The plant a real flat roof carries, at full size: a lift and stair housing, a timber water tank up on legs (on the
+// shorter buildings), rows of air-conditioning units with fans on top, and on a tall tower an antenna mast — its tip,
+// or on the tallest a corner of the roof, lit by a blinking red aircraft warning light. Everything turns square to the
+// roof's longest side, and keeps clear of the parapet and of everything else (`taken`: the small kit already up there,
+// from addRooftopGreebles, as circles { x, y, r } — added to). `prng` is the building's own generator
+// for this, so none of it moves anything else in the city.
+function addRooftopPlant(group, roof, roofZ, h, prng, bodyColor, taken) {
+  const c = centroid(roof);
+  let avgR = 0; roof.forEach(p => avgR += Math.hypot(p.x-c.x, p.z-c.z)); avgR /= roof.length;
+  if (avgR < 3) return;
+  let minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity, angle = 0, longest = 0;
+  roof.forEach((p, i) => {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+    const q = roof[(i+1)%roof.length], l = Math.hypot(q.x-p.x, q.z-p.z);
+    if (l > longest) { longest = l; angle = Math.atan2(-(q.z-p.z), q.x-p.x); }
+  });
+  const ux = Math.cos(angle), uy = Math.sin(angle); // (along the longest side, in the group's x, y)
+  const fits = (x, y, r) => pointInPolygon({ x, z:-y }, roof) && distToPolygonBoundary({ x, z:-y }, roof) >= r + 1.0
+    && taken.every(t => Math.hypot(t.x-x, t.y-y) >= t.r + r + 0.6);
+  // a free spot for something r across, the middle of the roof first when asked
+  const spot = (r, middle) => {
+    if (middle && fits(c.x, -c.z, r)) { taken.push({ x:c.x, y:-c.z, r }); return { x:c.x, y:-c.z }; }
+    for (let k=0;k<30;k++) {
+      const x = minX + prng()*(maxX-minX), y = -(minZ + prng()*(maxZ-minZ));
+      if (fits(x, y, r)) { taken.push({ x, y, r }); return { x, y }; }
+    }
+    return null;
+  };
+  const byColor = new Map(); // hex -> geometries, merged into one mesh each at the end
+  const put = (hex, geo, x, y, z, turn) => {
+    if (turn) geo.rotateZ(angle);
+    geo.translate(x, y, roofZ + z);
+    if (!byColor.has(hex)) byColor.set(hex, []);
+    byColor.get(hex).push(geo);
+  };
+  const box = (w, d, ht) => new THREE.BoxGeometry(w, d, ht);
+  const cyl = (r0, r1, ht, seg) => new THREE.CylinderGeometry(r0, r1, ht, seg).rotateX(Math.PI/2);
+  const housingHex = bodyColor.clone().multiplyScalar(0.82).getHex(), trimHex = bodyColor.clone().multiplyScalar(0.62).getHex();
+  let housing = null;
+  if (avgR > 4.5 && prng() < 0.75) {
+    const w = 3 + prng()*1.8, d = 2.4 + prng()*1.2, ht = 2.8 + prng()*0.8;
+    const at = spot(Math.hypot(w, d)/2, true);
+    if (at) {
+      put(housingHex, box(w, d, ht), at.x, at.y, ht/2, true);
+      put(trimHex, box(w + 0.3, d + 0.3, 0.2), at.x, at.y, ht + 0.1, true);
+      // the door out onto the roof, on one long side
+      put(trimHex, box(1.0, 0.08, 2.1), at.x - uy*(d/2 + 0.02), at.y + ux*(d/2 + 0.02), 1.05, true);
+      housing = { ...at, top: ht + 0.2 };
+    }
+  }
+  if (h < 50 && avgR > 4 && prng() < 0.45) {
+    const r = 1.1 + prng()*0.5, tankH = 2.2 + prng()*0.8, legH = 1.4 + prng()*0.6;
+    const at = spot(r + 0.2);
+    if (at) {
+      put(0x6e5037, cyl(r, r, tankH, 14), at.x, at.y, legH + tankH/2);
+      put(0x3d3a36, new THREE.ConeGeometry(r*1.06, r*0.7, 14).rotateX(Math.PI/2), at.x, at.y, legH + tankH + r*0.35);
+      for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) put(0x3a3d42, box(0.18, 0.18, legH), at.x + a*r*0.62, at.y + b*r*0.62, legH/2);
+      put(0x3a3d42, box(r*1.5, r*1.5, 0.15), at.x, at.y, legH, true);
+    }
+  }
+  const rows = avgR > 5 ? 1 + Math.floor(prng()*3) : prng() < 0.6 ? 1 : 0;
+  for (let k=0;k<rows;k++) {
+    const n = 2 + Math.floor(prng()*3), uw = 1.4, ud = 1.1, uh = 0.9 + prng()*0.3, gap = 0.25, len = n*uw + (n-1)*gap;
+    const at = spot(Math.hypot(len, ud)/2);
+    if (!at) continue;
+    for (let i=0;i<n;i++) {
+      const off = -len/2 + uw/2 + i*(uw + gap), x = at.x + ux*off, y = at.y + uy*off;
+      put(0x9a9ea3, box(uw, ud, uh), x, y, uh/2, true);
+      put(0x2a2c30, cyl(0.4, 0.4, 0.06, 12), x, y, uh + 0.03);
+    }
+  }
+  let beacon = null;
+  if (h > 35 && prng() < 0.6) {
+    const mastH = Math.min(12, 4 + h*0.08);
+    const at = housing || spot(0.8), base = housing ? housing.top : 0;
+    if (at) {
+      put(0x888c92, cyl(0.1, 0.16, mastH, 6), at.x, at.y, base + mastH/2);
+      for (const f of [0.45, 0.7]) put(0x888c92, box(1.2 - f, 0.06, 0.06), at.x, at.y, base + mastH*f, true);
+      beacon = { x: at.x, y: at.y, z: base + mastH + 0.15 };
+    }
+  }
+  if (!beacon && h > 60) {
+    // no mast: the light stands on the roof's corner furthest from the middle, up on the parapet
+    const far = roof.reduce((a, b) => Math.hypot(b.x-c.x, b.z-c.z) > Math.hypot(a.x-c.x, a.z-c.z) ? b : a);
+    const d = Math.hypot(far.x-c.x, far.z-c.z) || 1, pull = Math.min(0.5, d*0.1);
+    beacon = { x: far.x - (far.x-c.x)/d*pull, y: -far.z + (far.z-c.z)/d*pull, z: 1.0 };
+    put(0x3a3d42, box(0.08, 0.08, 0.9), beacon.x, beacon.y, 0.45);
+  }
+  byColor.forEach((geos, hex) => {
+    const mesh = new THREE.Mesh(mergeGeometryList(geos), new THREE.MeshStandardMaterial({ color:hex, roughness:0.75, metalness:0.2, flatShading:true }));
+    mesh.castShadow = true; mesh.receiveShadow = true; mesh.name = 'Building';
+    group.add(mesh);
+  });
+  if (beacon) {
+    const light = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8), new THREE.MeshStandardMaterial({ color:0xff3b3b, emissive:0xff2222, emissiveIntensity:1 }));
+    light.position.set(beacon.x, beacon.y, roofZ + beacon.z);
+    light.name = 'Building';
+    light.userData = { isBlinkLight:true, blinkPhase: prng()*Math.PI*2 };
+    group.add(light);
   }
 }
 
@@ -529,6 +632,7 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
   // (added later, in the post-hoc section) agree on exactly the same opening instead of each
   // independently guessing an inset and risking the pyramid clipping through the parapet wall.
   let roofInnerPoly = null;
+  const roofSpots = []; // (what's already up on the roof: see addRooftopPlant)
 
   // `noWindow`: a segment deliberately kept solid (the podium) — a solid-clad base reads as a
   // distinct plinth instead of the same glazed mass continuing straight down to the ground.
@@ -676,7 +780,7 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
       wedgeMesh.castShadow = true; wedgeMesh.receiveShadow = true; wedgeMesh.name = 'Building';
       group.add(wedgeMesh);
     }
-    if (flatRoof && avgR>2.2 && rng()<0.4) addRooftopGreebles(group, roofFootprint, h, rng);
+    if (flatRoof && avgR>2.2 && rng()<0.4) addRooftopGreebles(group, roofFootprint, h, rng, roofSpots);
     const wantsRing2 = rng() < 0.65;
     if (isRound && wantsRing2) addRingAccent(group, c, avgR*(1.08+rng()*0.12), avgR*0.045, baseWallHeight*(0.5+rng()*0.3), accentColorFrom(color, buildingHue, rng), win);
     if (rng() < 0.6) {
@@ -704,6 +808,7 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
   if (!isLandmark && avgR > 2.5 && rng() < 0.22) addBalconies(group, poly, 0, detailZHeight, rng, color.clone().multiplyScalar(0.92).getHex(), win);
   const canopy = rng() < 0.3 ? addEntranceCanopy(group, poly, rng, accentColorFrom(color, buildingHue, rng)) : null;
   if (win && !lobbyBlocked) addStreetFront(group, poly, win, texRng, color.clone().multiplyScalar(0.7).getHex(), win.uWinGlass.value.getHex(), canopy);
+  if (flatRoof && !isLandmark) addRooftopPlant(group, roofFootprint, roofZ, h, mulberry32(Math.floor(texRng()*0xffffffff)>>>0), color, roofSpots);
   if ((archetype==='rect' || archetype==='chamfer') && corners && rng() < (isLandmark ? 0.5 : 0.22)) {
     addExoskeletonAccent(group, poly, 0, baseWallHeight, rng, accentColorFrom(color, buildingHue, rng));
   }
