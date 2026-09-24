@@ -16,8 +16,9 @@ import * as THREE from 'three';
 // anyone's colors: red and green are where the outfit's two colors of its own show (OutfitRed and OutfitGreen: a
 // suit's shirt and tie), blue how much darker it is (seams, lapels, buttons). Anywhere else is the top's own color.
 
-/** Where on the rest-pose figure the chest texture goes: the model's x and y (a window a little wider than the torso). */
-export const OUTFIT_CHEST = { minX: -0.75, maxX: 0.75, minY: 5.2, maxY: 7.0 };
+/** Where on the rest-pose figure the chest texture goes: the model's x and y (a window a little wider than the torso);
+ * and midZ, between its front and back. */
+export const OUTFIT_CHEST = { minX: -0.75, maxX: 0.75, minY: 5.2, maxY: 7.0, midZ: -0.05 };
 /** Where on the rest-pose figure the arm texture goes: along the arm (the model's x, either side) and across it (z) —
  * starting a little inside the shoulder, so the end of the arm there (its top, once it hangs down) is in it. */
 export const OUTFIT_ARM = { minX: 0.3, maxX: 3.25, minZ: -0.3, maxZ: 0.2 };
@@ -96,18 +97,18 @@ export const OUTFITS = [
     paint: paintFootballShirt, paintSleeve: paintFootballSleeve,
   },
   {
-    // goth: all in black, a corset laced over a long-sleeved top, a skirt over fishnet tights, high boots, a silver cross on a chain,
-    // and dyed-black hair
+    // goth: a strapless black corset over black sleeves, a black skirt over fishnet tights, high boots, a black cross on a chain, and
+    // dyed-black hair
     name: 'Goth', chance: 0.15, bare: [], women: true, skirted: true, fishnets: true, boots: 2.3,
     colors: {
-      Top: [0x0c0c0f, 0x0c0c0f, 0x141217],
-      Skirt: [0x0c0c0f, 0x0c0c0f, 0x2a0d18, 0x1e0f2a],                          // black, some oxblood or plum
+      Top: 'Skin',                                                              // (bare above the corset)
+      Skirt: [0x0c0c0f],
       Shoes: [0x0b0b0d],                                                        // boots
       Hair: [0x0a0a0c, 0x0a0a0c, 0x0a0a0c, 0x0a0a0c, 0x3a1450, 0x5a0f1c, 0xe4e4e6], // mostly black; a few purple, red or bleached
-      OutfitRed: [0x1a1a1e, 0x4a0e1c, 0x5c0a14, 0x2e1240],                      // the corset: black, oxblood, blood red, plum
-      OutfitGreen: [0xc8c8cc],                                                  // the cross and its chain
+      OutfitRed: [0x0c0c0f],                                                    // the corset and sleeves
+      OutfitGreen: [0x0c0c0f],                                                  // the cross and its chain
     },
-    paint: paintGoth,
+    paint: paintGoth, paintSleeve: paintGothSleeve,
   },
   {
     // a t-shirt in a color of their own over a black-and-white striped long-sleeved one, over whatever they wear below
@@ -440,9 +441,8 @@ function paintFootballSleeve(ctx, width, height) {
 }
 
 /**
- * Goth: a corset from under the bust to a point below the waist, its top a sweetheart curve, laced criss-cross up the
- * middle and boned either side; above it the black top, and a silver cross hanging on a chain from the neck. Behind,
- * the corset again, laced up the back.
+ * Goth: a corset from under the bust down into the skirt, its top a sweetheart curve; above it bare skin, and a
+ * black cross hanging on a chain from the neck. Behind, the corset again.
  * @param {CanvasRenderingContext2D} ctx
  * @param {number} width
  * @param {number} height
@@ -450,26 +450,25 @@ function paintFootballSleeve(ctx, width, height) {
  */
 function paintGoth(ctx, width, height, front) {
   const { polygon, line } = pens(ctx, width, height);
-  const CORSET = RED, SILVER = GREEN;
-  const bottom = [[1, 5.75], [0.3, 5.7], [0, 5.52], [-0.3, 5.7], [-1, 5.75]];
+  const CORSET = RED, CROSS = GREEN;
+  const bottom = [[1, 4.8], [-1, 4.8]]; // (down into the skirt, so no midriff shows)
   if (front) polygon([[-1, 6.42], [-0.4, 6.44], [-0.22, 6.58], [-0.07, 6.52], [0, 6.43], [0.07, 6.52], [0.22, 6.58], [0.4, 6.44], [1, 6.42], ...bottom], CORSET);
   else polygon([[-1, 6.5], [1, 6.5], ...bottom], CORSET);
-  const top = front ? 6.43 : 6.5, low = front ? 5.58 : 5.6;
-  // the lacing: two rows of eyelets, the lace criss-crossing between them
-  [-1, 1].forEach(side => line([[side*0.05, top - 0.03], [side*0.05, low + 0.04]], 'rgb(255,0,150)', 0.012));
-  const rungs = 7;
-  for (let k=0;k<rungs;k++) {
-    const y0 = low + 0.06 + (top - low - 0.12)*k/rungs, y1 = low + 0.06 + (top - low - 0.12)*(k + 1)/rungs;
-    line([[-0.045, y0], [0.045, y1]], 'rgb(255,0,90)', 0.01);
-    line([[0.045, y0], [-0.045, y1]], 'rgb(255,0,90)', 0.01);
-  }
-  // the boning, curving in to the waist
-  [0.17, 0.32].forEach(px => [-1, 1].forEach(side => line([[side*px, top - 0.08], [side*(px - 0.03), 6.0], [side*px, 5.72]], 'rgb(255,0,110)', 0.009)));
   if (!front) return;
   // the cross, on a chain from the neck
-  line([[-0.12, 6.97], [0, 6.78], [0.12, 6.97]], SILVER, 0.008);
-  polygon([[-0.014, 6.79], [0.014, 6.79], [0.014, 6.6], [-0.014, 6.6]], SILVER);
-  polygon([[-0.05, 6.745], [0.05, 6.745], [0.05, 6.72], [-0.05, 6.72]], SILVER);
+  line([[-0.12, 6.97], [0, 6.78], [0.12, 6.97]], CROSS, 0.008);
+  polygon([[-0.014, 6.79], [0.014, 6.79], [0.014, 6.6], [-0.014, 6.6]], CROSS);
+  polygon([[-0.05, 6.745], [0.05, 6.745], [0.05, 6.72], [-0.05, 6.72]], CROSS);
+}
+
+/**
+ * Goth's sleeves: black, the corset's color (the top under them being skin).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width
+ * @param {number} height
+ */
+function paintGothSleeve(ctx, width, height) {
+  ctx.fillStyle = RED; ctx.fillRect(0, 0, width, height);
 }
 
 /** How far along the arm (the model's x) the t-shirt's sleeves reach, over the long-sleeved shirt's: halfway to the elbow. */

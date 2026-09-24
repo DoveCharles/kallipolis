@@ -630,13 +630,19 @@ const OUTFIT_CHEST_GLSL = `
     vec2 outfitUv = outfitPart > 1.5 ? ${outfitWindow('vPersonRest.zy', [OUTFIT_LEG.minZ, OUTFIT_LEG.minY], [OUTFIT_LEG.maxZ, OUTFIT_LEG.maxY])}
       : outfitPart > 0.5 ? ${outfitWindow('vec2(abs(vPersonRest.x), vPersonRest.z)', [OUTFIT_ARM.minX, OUTFIT_ARM.minZ], [OUTFIT_ARM.maxX, OUTFIT_ARM.maxZ])}
       : ${outfitWindow('vPersonRest.xy', [OUTFIT_CHEST.minX, OUTFIT_CHEST.minY], [OUTFIT_CHEST.maxX, OUTFIT_CHEST.maxY])};
+    // (a face of the torso looking sideways, its normal's z all noise, takes the front's tile or the back's by which half it's in)
+    bool outfitFront = abs(outfitNormal.z) > 0.3 ? outfitNormal.z > 0.0 : vPersonRest.z > ${OUTFIT_CHEST.midZ.toFixed(3)};
     // which tile (see OUTFIT_TILES), counting up from the texture's foot; and whether this face is one the tile's drawn on:
     // anywhere on the torso, the top of an arm, the outside of a leg — the sleeve's tile being all round the arm, under the arm's
-    float outfitRow = ${(OUTFIT_TILES.length - 1).toFixed(1)} - (outfitPart > 1.5 ? ${OUTFIT_TILES.indexOf('leg').toFixed(1)} : outfitPart > 0.5 ? ${OUTFIT_TILES.indexOf('arm').toFixed(1)} : outfitNormal.z > 0.0 ? ${OUTFIT_TILES.indexOf('front').toFixed(1)} : ${OUTFIT_TILES.indexOf('back').toFixed(1)});
+    float outfitRow = ${(OUTFIT_TILES.length - 1).toFixed(1)} - (outfitPart > 1.5 ? ${OUTFIT_TILES.indexOf('leg').toFixed(1)} : outfitPart > 0.5 ? ${OUTFIT_TILES.indexOf('arm').toFixed(1)} : outfitFront ? ${OUTFIT_TILES.indexOf('front').toFixed(1)} : ${OUTFIT_TILES.indexOf('back').toFixed(1)});
     bool outfitFacing = outfitPart > 1.5 ? outfitNormal.x*sign(vPersonRest.x) > 0.5 : outfitPart > 0.5 ? outfitNormal.y > 0.2 : true;
     vec2 outfitAt = vec2((vPersonOutfitRed.w + clamp(outfitUv.x, 0.0, 1.0))/${OUTFIT_COLUMN_COUNT.toFixed(1)}, clamp(outfitUv.y, 0.0, 1.0));
-    vec4 outfitMask = outfitFacing ? texture2D(personOutfitMap, vec2(outfitAt.x, (outfitAt.y + outfitRow)/${OUTFIT_TILES.length.toFixed(1)})) : vec4(0.0);
-    if (outfitPart > 0.5 && outfitPart < 1.5) outfitMask = max(outfitMask, texture2D(personOutfitMap, vec2(outfitAt.x, (outfitAt.y + ${(OUTFIT_TILES.length - 1 - OUTFIT_TILES.indexOf('sleeve')).toFixed(1)})/${OUTFIT_TILES.length.toFixed(1)})));
+    // (its mip level from where on the tile, not which tile: where the front's gives way to the back's the jump would pick the
+    // blurriest, and a seam of the tiles' black borders would show)
+    vec2 outfitScale = vec2(${(1/OUTFIT_COLUMN_COUNT).toFixed(6)}, ${(1/OUTFIT_TILES.length).toFixed(6)});
+    vec2 outfitDx = dFdx(outfitUv)*outfitScale, outfitDy = dFdy(outfitUv)*outfitScale;
+    vec4 outfitMask = outfitFacing ? textureGrad(personOutfitMap, vec2(outfitAt.x, (outfitAt.y + outfitRow)/${OUTFIT_TILES.length.toFixed(1)}), outfitDx, outfitDy) : vec4(0.0);
+    if (outfitPart > 0.5 && outfitPart < 1.5) outfitMask = max(outfitMask, textureGrad(personOutfitMap, vec2(outfitAt.x, (outfitAt.y + ${(OUTFIT_TILES.length - 1 - OUTFIT_TILES.indexOf('sleeve')).toFixed(1)})/${OUTFIT_TILES.length.toFixed(1)}), outfitDx, outfitDy));
     if (outfitId > 0.5 && outfitPart > -0.5 && outfitPart < 2.5 && outfitUv.x > 0.0 && outfitUv.x < 1.0 && outfitUv.y > 0.0 && outfitUv.y < 1.0) {
       diffuseColor.rgb = mix(diffuseColor.rgb, vPersonOutfitRed.rgb, outfitMask.r);
       diffuseColor.rgb = mix(diffuseColor.rgb, vPersonOutfit.rgb, outfitMask.g);
