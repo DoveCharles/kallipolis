@@ -123,7 +123,7 @@ function parseMoralityText(text) {
     if (heading) { current = heading[1].trim().toLowerCase(); parsed[current] = parsed[current] || {}; return; }
     const pair = line.match(/^(.+?)\s*=\s*(\S+)$/);
     const value = pair ? parseFloat(pair[2]) : NaN;
-    if (!current || !Number.isFinite(value)) { console.warn(`Blockout: in morality.txt, "${line}" isn't a "thing = score" line under a [heading]`); return; }
+    if (!current || !Number.isFinite(value)) { console.warn(`Splinetopia: in morality.txt, "${line}" isn't a "thing = score" line under a [heading]`); return; }
     parsed[current][pair[1].trim().toLowerCase()] = value;
   });
   return parsed;
@@ -403,7 +403,7 @@ fetch(MORALITY_TEXT_URL, { cache: 'no-cache' })
     announced = previous = now;
     renderMeter(now);
   })
-  .catch(err => console.warn('Blockout: assets/morality.txt failed to load; everything is worth 0 morality', err));
+  .catch(err => console.warn('Splinetopia: assets/morality.txt failed to load; everything is worth 0 morality', err));
 
 tick();
 Object.assign(App, { recordMoralityEvent, hushMorality, refreshMorality: tick });

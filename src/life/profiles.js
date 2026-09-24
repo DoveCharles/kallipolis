@@ -38,7 +38,7 @@ fetch(PEOPLE_TEXT_URL)
     version++;
     listeners.forEach(listener => listener());
   })
-  .catch(err => console.warn('Blockout: assets/people.txt failed to load; people get placeholder names', err));
+  .catch(err => console.warn('Splinetopia: assets/people.txt failed to load; people get placeholder names', err));
 
 export const profilesVersion = () => version;
 // `listener` is called whenever people.txt has loaded

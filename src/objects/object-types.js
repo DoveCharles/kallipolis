@@ -53,12 +53,12 @@ export async function loadStatueModel() {
     const buffer = await fetch(STATUE_MODEL_URL).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
     gltf = await new GLTFLoader().parseAsync(buffer, '');
   } catch (err) {
-    console.warn('Blockout: the statue model failed to load; statues use the built-in stone one', err);
+    console.warn('Splinetopia: the statue model failed to load; statues use the built-in stone one', err);
     return;
   }
   gltf.scene.updateMatrixWorld(true);
   const rawSize = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3());
-  if (!(rawSize.y > 0)) { console.warn('Blockout: the statue model is empty; statues use the built-in stone one'); return; }
+  if (!(rawSize.y > 0)) { console.warn('Splinetopia: the statue model is empty; statues use the built-in stone one'); return; }
   gltf.scene.scale.setScalar(STATUE_HEIGHT/rawSize.y);
   gltf.scene.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(gltf.scene), middle = box.getCenter(new THREE.Vector3());

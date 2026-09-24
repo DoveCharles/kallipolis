@@ -120,7 +120,7 @@ export async function downloadFile(filename, blob) {
 async function saveProject() {
   const data = serializeProject();
   const blob = new Blob([JSON.stringify(data)], { type:'application/json' });
-  await downloadFile('blockout_project.json', blob);
+  await downloadFile('splinetopia_project.json', blob);
 }
 async function restoreMapImages(list) {
   for (const im of (list||[])) {
@@ -133,7 +133,7 @@ async function restoreMapImages(list) {
           scale: im.scale, visible: im.visible, skipSelect: true, onDone: resolve
         });
       });
-    } catch (err) { console.error('Blockout: failed to restore map image', im && im.name, err); }
+    } catch (err) { console.error('Splinetopia: failed to restore map image', im && im.name, err); }
   }
 }
 // `options.keepMaps`: leave the map images as they are (used by undo and redo, whose snapshots don't include them)
@@ -288,9 +288,9 @@ function loadProject(file) {
   reader.onload = (ev) => {
     let data;
     try { data = JSON.parse(ev.target.result); }
-    catch (err) { alert('That file isn\'t valid Blockout project JSON.'); return; }
+    catch (err) { alert('That file isn\'t valid Splinetopia project JSON.'); return; }
     if (!data || typeof data !== 'object' || !data.roads || !data.zones) {
-      alert('That file doesn\'t look like a Blockout project.'); return;
+      alert('That file doesn\'t look like a Splinetopia project.'); return;
     }
     loadProjectFromData(data);
   };

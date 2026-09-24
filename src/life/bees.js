@@ -313,7 +313,7 @@ export async function loadBeeModel() {
     const buffer = await fetch(BEE_MODEL_URL).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
     gltf = await new GLTFLoader().parseAsync(buffer, '');
   } catch (err) {
-    console.warn('Blockout: the bee model failed to load; parks go without flowers, hives and bees', err);
+    console.warn('Splinetopia: the bee model failed to load; parks go without flowers, hives and bees', err);
     return;
   }
   try {
@@ -368,7 +368,7 @@ export async function loadBeeModel() {
     const shape = { flap: shapes.indexOf('flap'), legs: shapes.indexOf('legs'), look: shapes.indexOf('look'), land: shapes.indexOf('land') };
     model = { flowers: flowers.map(geometry => ({ geometry, perch: perchOf(geometry) })), hive, bee, shape, shapeCount: shapes.length };
   } catch (err) {
-    console.warn('Blockout: the bee model failed to build; parks go without flowers, hives and bees', err);
+    console.warn('Splinetopia: the bee model failed to build; parks go without flowers, hives and bees', err);
     return;
   }
   // parks built before it arrived have no flowers in them yet
