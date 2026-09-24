@@ -8,7 +8,7 @@ import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { setSelectedMap, setMapHover, startMapTransform, applyMapTransform, confirmMapTransform, cancelMapTransform, previewLine } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, setLinePoints } from '../roads/roads.js';
 import { WALKWAY_COLOR, rebuildRoadMeshes } from '../roads/paths.js';
-import { isTrainLine, isTrainNode, networkKindOf, trainNodeY, trainPlanePoint, dragTrainPoint, findNearestTrainEdge } from '../trains/trains.js';
+import { isTrainLine, isTrainNode, networkKindOf, pathTypeOf, currentPathType, trainNodeY, trainPlanePoint, dragTrainPoint, findNearestTrainEdge } from '../trains/trains.js';
 import { setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge } from './hover.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone, subdivideZonesFrom } from '../zones/cutouts.js';
@@ -481,10 +481,10 @@ dom.addEventListener('pointerup', (e) => {
           if (dn.nodeId !== ids[ids.length-1]) {
             ids.push(dn.nodeId);
             S.activeRoadLine.drawing = false;
-            const kind = networkKindOf(S.activeRoadLine);
+            const line = S.activeRoadLine, kind = networkKindOf(line);
             const merged = mergeActiveRoadLineInto(dn.nodeId);
             S.activeRoadLine = null;
-            if (merged) selectItem(kind, merged.networkId, true);
+            selectItem(kind, (merged || line).networkId, true);
           }
           rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderHierarchy();
         } else if (S.lastNodeClick && S.lastNodeClick.kind==='road' && S.lastNodeClick.nodeId===dn.nodeId && (performance.now()-S.lastNodeClick.time)<350) {
@@ -492,7 +492,8 @@ dom.addEventListener('pointerup', (e) => {
           deleteRoadNode(dn.nodeId);
         } else {
           S.lastNodeClick = { kind:'road', nodeId: dn.nodeId, time: performance.now() };
-          const line = S.roadLines.find(l => l.nodeIds.includes(dn.nodeId));
+          const lines = S.roadLines.filter(l => l.nodeIds.includes(dn.nodeId));
+          const line = lines.find(l => pathTypeOf(l)===currentPathType()) || lines[0];
           if (line) selectItem(networkKindOf(line), line.networkId);
         }
       } else if (dn.kind==='zone') {
@@ -593,7 +594,9 @@ window.addEventListener('blur', () => showAddCursor(null));
 // width and colors (or, for a train line, tube radius). It's finished, joined onto another node, or cancelled as any line
 // being drawn is.
 function startBranchFrom(nodeId) {
-  const source = S.roadLines.find(l => !l.drawing && l.nodeIds.includes(nodeId));
+  // (a node a walkway shares with a road branches as whichever the Paths tab is on)
+  const lines = S.roadLines.filter(l => !l.drawing && l.nodeIds.includes(nodeId));
+  const source = lines.find(l => pathTypeOf(l)===currentPathType()) || lines[0];
   if (!source) return;
   const { networkId } = source;
   const line = isTrainLine(source)
@@ -611,8 +614,11 @@ function startBranchFrom(nodeId) {
   rebuildRoadMeshes();
 }
 
+// Only a line of the same type is joined: a walkway finished on a road's node shares that node but stays a network of
+// its own, or it could no longer be picked as a walkway.
 function mergeActiveRoadLineInto(sharedNodeId) {
-  const targetLine = S.roadLines.find(l => l.id !== S.activeRoadLine.id && l.nodeIds.includes(sharedNodeId));
+  const type = pathTypeOf(S.activeRoadLine);
+  const targetLine = S.roadLines.find(l => l.id !== S.activeRoadLine.id && l.nodeIds.includes(sharedNodeId) && pathTypeOf(l)===type);
   if (!targetLine) return null;
   const tIdx = targetLine.nodeIds.indexOf(sharedNodeId);
   const isEndpoint = (tIdx === 0 || tIdx === targetLine.nodeIds.length-1);

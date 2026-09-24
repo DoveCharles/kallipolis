@@ -6,7 +6,7 @@ import { importMapImageFile, renderMapsList, removeMapImage } from '../maps/map-
 import { SIDEWALK_COLOR, SIDEWALK_COLOR_PALETTE, disposeObject } from '../roads/roads.js';
 import { RAISED_HEIGHT, raisedHeightOf } from '../roads/raised.js';
 import { DIRT_COLOR, WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, isRiverLine, rebuildRoadMeshes, walkwayTextureScaleOf } from '../roads/paths.js';
-import { isTrainLine } from '../trains/trains.js';
+import { isTrainLine, pathTypeOf } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone } from '../zones/cutouts.js';
 import { renderHierarchy, renderWorldTintPanel } from '../ui/panels.js';
@@ -136,6 +136,20 @@ async function restoreMapImages(list) {
     } catch (err) { console.error('Splinetopia: failed to restore map image', im && im.name, err); }
   }
 }
+// A network holds lines of one type. Older saves could have a walkway finished on a road's node sitting in the road's
+// network (see mergeActiveRoadLineInto), where picking it brought up the road; such lines move to a network of their
+// own, one per type, and the network keeps the type of its first line.
+function splitMixedNetworks() {
+  const typeOf = new Map(), splitIds = new Map();
+  S.roadLines.forEach(line => {
+    const type = pathTypeOf(line);
+    if (!typeOf.has(line.networkId)) typeOf.set(line.networkId, type);
+    if (typeOf.get(line.networkId)===type) return;
+    const key = line.networkId+' '+type;
+    if (!splitIds.has(key)) splitIds.set(key, (type==='train' ? 'rail-' : 'net-')+(S.roadNetworkSeq++));
+    line.networkId = splitIds.get(key);
+  });
+}
 // `options.keepMaps`: leave the map images as they are (used by undo and redo, whose snapshots don't include them)
 export async function loadProjectFromData(data, options) {
   const keepMaps = !!(options && options.keepMaps);
@@ -253,6 +267,7 @@ export async function loadProjectFromData(data, options) {
     ...(l.roadType==='river' ? { roadType:'river' } : {}) }));
   S.roadNodeSeq = rd.nodeSeq || 1; S.roadLineSeq = rd.lineSeq || 1; S.roadNetworkSeq = rd.networkSeq || 1;
   S.walkwayOrder = Array.isArray(rd.walkwayOrder) ? rd.walkwayOrder.slice() : [];
+  splitMixedNetworks();
   rebuildRoadMeshes();
 
   (data.zones||[]).forEach(zd => {
