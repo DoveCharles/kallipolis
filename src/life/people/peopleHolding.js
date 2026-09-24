@@ -3,6 +3,7 @@ import { scene } from '../../core/scene.js';
 import { PEOPLE_MAX, inRoom, isDrawn, people, peopleRng, personModel } from './people.js';
 import { PERSON_ARM_SPREAD } from './peopleModel.js';
 import { eatingSound } from '../../audio/eating.js';
+import { S } from '../../core/shared.js';
 
 // ============================================================ holding things
 // Anything a person carries: a fork and a plate of dinner for now, a mug or a hotdog when something wants one. A thing
@@ -29,9 +30,17 @@ const ITEMS = {
     { shape: 'box', size: [0.012, 0.045, 0.012], at: [0.048, 0.035, 0], color: 0xf2f0ea },
     { shape: 'cylinder', size: [0.06, 0.004, 0.06], at: [0, 0.07, 0], tint: true },
   ] },
+  // (the parts that are `eaten` get shorter from the top as it goes: see A SNACK)
   hotdog: { parts: [
-    { shape: 'box', size: [0.048, 0.034, 0.15], at: [0, 0.02, 0], color: 0xd9a25e },
-    { shape: 'cylinder', size: [0.026, 0.17, 0.026], at: [0, 0.035, 0], turn: [Math.PI/2, 0, 0], color: 0xa8402c },
+    { shape: 'box', size: [0.02, 0.15, 0.034], at: [0.014, 0.045, 0], color: 0xd9a25e, eaten: true },
+    { shape: 'box', size: [0.02, 0.15, 0.034], at: [-0.014, 0.045, 0], color: 0xd9a25e, eaten: true },
+    { shape: 'cylinder', size: [0.026, 0.175, 0.026], at: [0, 0.05, 0], color: 0xa8402c, eaten: true },
+    { shape: 'box', size: [0.008, 0.15, 0.03], at: [0, 0.05, 0], color: 0xe0b020, eaten: true },
+  ] },
+  coffee: { parts: [
+    { shape: 'cylinder', size: [0.072, 0.11, 0.072], at: [0, 0.035, 0.01], color: 0xf2ede2 },
+    { shape: 'cylinder', size: [0.076, 0.045, 0.076], at: [0, 0.03, 0.01], color: 0xb5895a },
+    { shape: 'cylinder', size: [0.078, 0.012, 0.078], at: [0, 0.094, 0.01], color: 0xfaf8f2 },
   ] },
   plate: { parts: [
     { shape: 'cylinder', size: [0.23, 0.010, 0.23], at: [0, 0.005, 0], color: 0xf4f2ee },
@@ -83,7 +92,7 @@ export function hold(p, item, options = {}) {
   if (!ITEMS[item]) return null;
   const { hand = options.at ? null : 'R', at = null, onY = null, color = 0xffffff } = options;
   letGo(p, item);
-  const held = { item, hand, at: at ? at.clone() : null, onY, color: new THREE.Color(color), loaded: null, food: null };
+  const held = { item, hand, at: at ? at.clone() : null, onY, color: new THREE.Color(color), loaded: null, food: null, left: 1 };
   (p.holding ??= []).push(held);
   return held;
 }
@@ -118,6 +127,7 @@ export function holding(p, item) {
  * @returns {void}
  */
 export function serveMeal(p, tableTop = null) {
+  dropSnack(p); // (the right hand is wanted for the fork)
   const plate = hold(p, 'plate', { at: PLATE_AT, onY: tableTop });
   if (!plate) return;
   const count = MEAL_FOOD[0] + Math.floor(peopleRng()*(MEAL_FOOD[1] + 1 - MEAL_FOOD[0]));
@@ -165,6 +175,73 @@ export function mealCue(p, cue) {
   }
   if (cue === 'bite' && fork) fork.loaded = null;
   eatingSound(at, cue);
+}
+
+// ============== A SNACK ==============
+// A hot dog or a coffee bought from a stall (see peopleStalls.js), in the right hand wherever they go, and eaten or drunk
+// a mouthful at a time: every few seconds up it goes to the mouth and down again (the snack versions of Walk, Idle and
+// Sit1 — see snackClips in peopleModel.js), a bite off the hot dog each time, until there's none left. Doing anything
+// else (lying down, sitting on the grass) it waits in their hand.
+const SNACKS = {
+  hotdog: { clip: 'Hotdog', mouthfuls: 5, up: 1.1, gap: [2.5, 6], sound: 'bite' },
+  coffee: { clip: 'Coffee', mouthfuls: 7, up: 1.5, gap: [3, 8], sound: 'sip' },
+};
+const SNACK_TAKEN = 0.5; // seconds after it starts up to the mouth that the mouthful's taken
+const snackGap = kind => kind.gap[0] + peopleRng()*(kind.gap[1] - kind.gap[0]);
+
+/**
+ * Put a hot dog or a coffee in someone's right hand, to eat or drink as they go.
+ * @param {object} p - the person
+ * @param {string} item - 'hotdog' or 'coffee'
+ * @returns {void}
+ */
+export function giveSnack(p, item) {
+  const kind = SNACKS[item];
+  if (!kind) return;
+  dropSnack(p);
+  const held = hold(p, item, { hand: 'R' });
+  p.snack = { item, held, mouthfuls: kind.mouthfuls, next: snackGap(kind)*0.5, up: 0 };
+}
+/**
+ * Take someone's snack off them, finished or not.
+ * @param {object} p - the person
+ * @returns {void}
+ */
+export function dropSnack(p) {
+  if (!p.snack) return;
+  letGo(p, p.snack.item);
+  p.snack = null;
+}
+/**
+ * The clip someone with a snack plays for `clip` (a version of it with the snack in hand, or up at the mouth), counting down
+ * to their next mouthful and taking it. Called each frame by updatePeople.
+ * @param {object} p - the person
+ * @param {object} clip - the clip they'd play without it
+ * @param {number} dt - seconds since the last frame
+ * @returns {object} the clip to play
+ */
+export function snackClip(p, clip, dt) {
+  const snack = p.snack;
+  if (!snack) return clip;
+  // knocked down, dead or gone indoors: it's gone
+  if (p.punched || p.mode === 'dead' || p.mode === 'indoors' || !p.holding?.includes(snack.held)) { dropSnack(p); return clip; }
+  const kind = SNACKS[snack.item], clips = personModel.clips;
+  const carried = clips[clip.name + kind.clip], raised = clips[clip.name + kind.clip + 'Bite'];
+  if (!carried || carried.missing || !raised) return clip; // (lying down or on the grass, it waits)
+  if (snack.up > 0) {
+    const was = snack.up;
+    snack.up -= dt;
+    if (was > kind.up - SNACK_TAKEN && snack.up <= kind.up - SNACK_TAKEN) {
+      snack.mouthfuls--;
+      if (snack.item === 'hotdog') snack.held.left = snack.mouthfuls/kind.mouthfuls;
+      eatingSound({ x: p.x, y: p.y + (clip.pose ? 1.05 : 1.5)*p.height*S.peopleSize, z: p.z }, kind.sound);
+    }
+    if (snack.up <= 0) {
+      if (snack.mouthfuls <= 0) { dropSnack(p); return clip; }
+      snack.next = snackGap(kind);
+    }
+  } else if ((snack.next -= dt) <= 0) snack.up = kind.up;
+  return snack.up > 0 ? raised : carried;
 }
 
 // ============== DRAWING ==============
@@ -232,7 +309,11 @@ export function updateHeld() {
       for (const piece of item.parts) {
         if (piece.loaded && held.loaded == null) continue;
         euler.set(...(piece.turn ?? [0, 0, 0]));
-        part.compose(place.set(...piece.at), turn.setFromEuler(euler), size.set(...piece.size));
+        place.set(...piece.at);
+        size.set(...piece.size);
+        if (piece.eaten && held.left < 1) { place.y -= size.y*(1 - held.left)/2; size.y *= held.left; } // (bitten down from the top)
+        if (size.y <= 0) continue;
+        part.compose(place, turn.setFromEuler(euler), size);
         draw(piece.shape, light, part.premultiply(world), piece.tint ? color.setHex(held.loaded ?? held.color.getHex()) : color.setHex(piece.color));
       }
       // and what's left on the plate

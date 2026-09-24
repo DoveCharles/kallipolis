@@ -34,7 +34,7 @@ Format: `file` (size) purpose — key exports.
 - `ambience.js` (14K) The city's background: — exports: updateAmbience
 - `buzz.js` (4K) The buzz of the bees flying near the camera (see updateBees in life/bees.js), a loop synthesized live like the engines (see engine.js): — exports: updateBuzzes
 - `dictionary.js` (5K) Now and then someone talking near the camera says something real in among their babble (see audio/voices.js): — exports: sayLine, lineMouth, stopLine
-- `eating.js` (2K) What a meal sounds like (see the Eating clip in life/people/peopleModel.js, whose cues people.js plays as they come round): — exports: eatingSound
+- `eating.js` (3K) What a meal (or a hot dog's bite, a coffee's sip) sounds like (see the Eating clip in life/people/peopleModel.js, whose cues people.js plays as they come round): — exports: eatingSound
 - `engine-voice.js` (9K) The sound of one engine, apart from which car it's in or where (engine.js hands these out to the cars near the camera, and tools/engine.html plays the… — exports: KINDS, kindOfDesign, makeEngineVoice, setEngineKind, setEngineVoice
 - `engine.js` (5K) The engines of the cars near the camera (see updateTraffic in life/traffic/traffic.js), each an engine voice (engine-voice.js) of the kind its design has: — exports: trafficNearby, updateEngines
 - `footsteps.js` (2K) A scuff for each footfall of anyone walking near the camera (see the walk cycle in life/people/people.js): — exports: footstep
@@ -120,8 +120,9 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `peopleSmell.js` (5K) The smells trait on people: others within 5 turn back on walkways or re-target away in hangouts (avoidSmells); circles empty when a smeller sits (updateGroups), nobody joins or chats with them; flies buzzing round them (updateFlies, own instanced mesh, outside the particle cap). — exports: avoidSmells, updateFlies
 - `peopleFooting.js` (17K) Walked about by hand (see walkPossessed in peopleTracking.js), someone is on the ground — a hangout's, the road's or the pavement's — unless they've g… — exports: nearestRaisedVertex, carryPossessed, stepFooting, footingAt
 - `peopleGibs.js` (6K) A dead person's own body parts, thrown apart: — exports: throwBodyParts, updateBodyParts
-- `peopleHolding.js` (12K) Anything a person carries: — exports: hold, letGo, holding, serveMeal, clearMeal, mealFinished, mealCue, updateHeld
-- `peopleModel.js` (97K, **big**) assets/models/Person.glb replaces the cuboids once it loads — one rigged figure, drawn for everyone at once as one instanced mesh, flat-shaded. — exports: PERSON_BAKE_FPS, FIDGETS, FADE_QUICK, CHAT_GAP, CIRCLE_RADIUS, CIRCLE_MAX, PERSON_ARM_SPREAD, PERSON_TRAIT_COLORS …
+- `peopleHolding.js` (16K) Anything a person carries, and a hot dog or coffee bought from a stall eaten/drunk mouthful by mouthful while walking, standing or sitting (snackClip picks the Walk/Idle/Sit1 variant holding it): — exports: hold, letGo, holding, serveMeal, clearMeal, mealFinished, mealCue, updateHeld, giveSnack, dropSnack, snackClip
+- `peopleStalls.js` (7K) Buying from a hot dog stand or coffee stall (objects/object-types.js): passers-by step off walkways (never across a road) and hangout people go over; act 'buy' walks up, waits, gets a snack, and heads back. — exports: goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying
+- `peopleModel.js` (97K, **big**) assets/models/Person.glb replaces the cuboids once it loads — one rigged figure, drawn for everyone at once as one instanced mesh, flat-shaded. Snack clips (WalkHotdog, IdleCoffeeBite…) are reposed variants of Walk/Idle/Sit1 marked by `base`. — exports: PERSON_BAKE_FPS, FIDGETS, FADE_QUICK, CHAT_GAP, CIRCLE_RADIUS, CIRCLE_MAX, PERSON_ARM_SPREAD, PERSON_TRAIT_COLORS …
 - `peoplePathing.js` (44K, **big**)  — exports: rebuildPeopleNavDebug, buildPeopleNav, joinWalkway, wanderInto, spawnPerson, reseatPerson, walkwayPoint, placeAtVertex …
 - `peopleTracking.js` (22K) In World mode, clicking a person keeps the view centered on them as they move — — exports: personHeight, pickPerson, followPersonAt, followPerson, personDoing, showFollowedDoing, headshotOf, stopFollowingPerson …
 - `peopleWater.js` (9K) People over open water (no road/path across it) fall in; carried back to land in time they climb out; else they drown — float up face down, sink, then counted (drownedPerson in people.js). Hearted climb out on the nearest bank; aqua walks on water. — exports: updateWater, inWater, turnInWater
@@ -133,7 +134,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `map-images.js` (9K) ---------------------------------------------------------- map images (reference tracing) — exports: importMapImageFile, renderMapsList, setSelectedMap, setMapHover, removeMapImage, startMapTransform, applyMapTransform, confirmMapTransform …
 
 ### src/objects/
-- `object-types.js` (14K) The catalogue the Objects tab places from: — exports: loadStatueModel, OBJECT_TYPES, objectTypeOf
+- `object-types.js` (19K) The catalogue the Objects tab places from: — exports: loadStatueModel, OBJECT_TYPES, objectTypeOf
 - `objects.js` (30K) The Objects tab: — exports: objectGroup, Y_OBJECT, MIN_OBJECT_SCALE, invalidateObjectFacing, streetFacingAt, objectById, addObject, removeObject …
 
 ### src/project/

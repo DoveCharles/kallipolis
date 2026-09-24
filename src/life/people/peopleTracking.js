@@ -119,6 +119,10 @@ export function personDoing(p) {
     const label = buildingLabel(p.indoors.building), stage = p.indoors.stage;
     return (stage === 'approach' ? 'Going into ' : stage === 'inside' ? 'Inside ' : 'Coming out of ') + label;
   }
+  if (p.act === 'buy') {
+    const what = p.buy?.item === 'coffee' ? 'a coffee' : 'a hot dog';
+    return p.stage === 'go' ? 'Off to buy ' + what : p.stage === 'back' ? (p.snack ? 'Back on their way' : 'Giving up on ' + what) : 'Buying ' + what;
+  }
   if (p.act === 'chat') { const other = p.group?.members.find(m => m !== p); return other ? 'Chatting with ' + nameOf(other) : 'Chatting'; }
   if (p.act) {
     if (p.stage === 'greet') return 'Waving hello';
@@ -137,6 +141,7 @@ export function personDoing(p) {
   const hangout = p.area >= 0 ? HANGOUTS[peopleNav.areas[p.area]?.kind] : null;
   if (p.mode === 'leaving') return hangout ? 'Leaving ' + hangout[1] : 'Leaving';
   if (p.mode === 'wander') return hangout ? 'Hanging out ' + hangout.join(' ') : 'Hanging about';
+  if (p.snack && (p.mode === 'line' || p.mode === 'wander')) return p.snack.item === 'coffee' ? 'Drinking a coffee' : 'Eating a hot dog';
   if (p.mode === 'line') return 'Out for a walk';
   return null;
 }

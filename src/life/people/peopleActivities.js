@@ -2,6 +2,7 @@ import { App, S } from '../../core/shared.js';
 import { voiceOfPerson, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { roomLayoutOf } from '../../buildings/footprints.js';
+import { updateBuying } from './peopleStalls.js';
 import { placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint } from './peoplePathing.js';
 import * as THREE from 'three';
 import { controls } from '../../core/camera-controls.js';
@@ -352,6 +353,7 @@ export function goLieDown(p, area) {
  * @returns {?{x: number, y: number, z: number}} where to head (null to stay put)
  */
 export function updateActivity(p, area, dt) {
+  if (p.act === 'buy') return updateBuying(p, dt, area.y);
   if (p.act === 'chat') return p.group.stage === 'gather' && p === p.group.members[1] ? { x: p.tx, y: area.y, z: p.tz } : null;
   // where they sit or lie, and facing which way: in front of a bench seat, facing out into the plaza (sitting shifts them
   // back onto it); a place in a circle, facing its middle; or a patch of grass

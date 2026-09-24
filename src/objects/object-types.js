@@ -32,6 +32,11 @@ const MAT = {
   cream: standard(0xe6e0d0),
   paper: standard(0xf0ece2, { roughness:1, metalness:0 }),
   dark:  standard(0x2a2c30, { roughness:0.5 }),
+  green: standard(0x3f5f4a, { roughness:0.85, metalness:0.05 }),
+  mustard: standard(0xd9a82b, { roughness:0.8, metalness:0 }),
+  coffee:  standard(0x5a3a26, { roughness:0.9, metalness:0 }),
+  bun:     standard(0xd9a066, { roughness:1, metalness:0 }),
+  sausage: standard(0x9a3b24, { roughness:0.6, metalness:0 }),
   glass: standard(0xbcd6e0, { roughness:0.15, metalness:0.1, transparent:true, opacity:0.35 }),
   // a lamp's globe, which comes on after dark along with the windows — that's all baseEmissiveIntensity takes (see
   // refreshSceneIndex in scene.js)
@@ -80,6 +85,7 @@ const shapes = new Map();
 const shapeOf = (key, make) => { let geo = shapes.get(key); if (!geo) shapes.set(key, geo = make()); return geo; };
 const cylinderShape = (r, h, sides) => shapeOf(`cyl:${r}:${h}:${sides}`, () => new THREE.CylinderGeometry(r, r, h, sides));
 const coneShape = (r, h, sides) => shapeOf(`cone:${r}:${h}:${sides}`, () => new THREE.ConeGeometry(r, h, sides));
+const wheelShape = (r, w, sides) => shapeOf(`wheel:${r}:${w}:${sides}`, () => new THREE.CylinderGeometry(r, r, w, sides).rotateX(Math.PI/2));
 const ballShape = (r) => shapeOf(`ball:${r}`, () => new THREE.IcosahedronGeometry(r, 1));
 
 // The kit a kind is described with. Everything is in the prop's own space: x across it, z out through its front, y up
@@ -94,6 +100,7 @@ function propKit() {
     post(mat, x, y, z, r, h, sides = 10) { partFor(mat).addGeometry(cylinderShape(r, h, sides), x, y + h/2, z); },
     cap(mat, x, y, z, r, h, sides = 10) { partFor(mat).addGeometry(coneShape(r, h, sides), x, y + h/2, z); },
     ball(mat, x, y, z, r) { partFor(mat).addGeometry(ballShape(r), x, y, z); }, // y is its middle, not its underside
+    wheel(mat, x, y, z, r, w, sides = 12) { partFor(mat).addGeometry(wheelShape(r, w, sides), x, y, z); }, // axle across z; y is its hub
     build() {
       const group = new THREE.Group();
       parts.forEach((builder, material) => {
@@ -206,6 +213,65 @@ export const OBJECT_TYPES = [
       kit.box(MAT.red, 0, roof-0.28, 0.62, 2.4, 0.3, 0.06);             // and the valance hanging over its front
       const crates = 1 + Math.floor(rng()*3);                           // with the stock shoved under the counter
       for (let i=0; i<crates; i++) kit.turned(MAT.wood, -0.6 + i*0.6, 0, -0.1, 0.5, 0.35, 0.4, (rng()-0.5)*0.6);
+      return kit.build();
+    },
+  },
+  {
+    id:'hotdog', label:'Hot dog stand', color:'#d9a82b', facing:'street', radius:1.2, turnJitter:6, sizeJitter:0.04,
+    build(rng) {
+      const kit = propKit(), top = 0.92;
+      kit.box(MAT.steel, 0, 0.3, 0, 1.5, top-0.3, 0.75);                   // the cart
+      kit.box(MAT.steel, 0, top, 0, 1.6, 0.05, 0.85);                      // its hotplate top
+      kit.box(MAT.mustard, 0, 0.4, 0.38, 1.3, 0.44, 0.02);                 // the painted front the queue looks at
+      kit.box(MAT.bun, 0, 0.53, 0.395, 0.6, 0.2, 0.02);                    // with a hot dog on it
+      kit.box(MAT.sausage, 0, 0.6, 0.405, 0.72, 0.07, 0.02);
+      [-0.42, 0.42].forEach(z => kit.wheel(MAT.dark, -0.5, 0.3, z, 0.3, 0.07));
+      [-0.25, 0.25].forEach(z => kit.box(MAT.metal, 0.6, 0, z, 0.06, 0.3, 0.06)); // the legs at the other end
+      [-0.3, 0.3].forEach(z => kit.box(MAT.metal, 0.87, 0.86, z, 0.2, 0.04, 0.04)); // and the handle it's pushed by
+      kit.box(MAT.dark, 0.97, 0.85, 0, 0.06, 0.06, 0.66);
+      kit.box(MAT.glass, -0.3, top+0.05, -0.12, 0.7, 0.3, 0.45);          // the warmer, and what's in it
+      for (let i=0; i<3; i++) kit.box(MAT.sausage, -0.3, top+0.07, -0.26 + i*0.14, 0.5, 0.05, 0.05);
+      kit.post(MAT.red, 0.35, top+0.05, 0.22, 0.035, 0.18, 6);             // ketchup
+      kit.post(MAT.mustard, 0.45, top+0.05, 0.22, 0.035, 0.18, 6);         // and mustard
+      const pole = 1.35, shade = [MAT.red, MAT.blue, MAT.mustard, MAT.cream][Math.floor(rng()*4)];
+      kit.post(MAT.metal, 0.3, top+0.05, -0.25, 0.025, pole, 6);           // the umbrella, whichever one they had
+      kit.cap(shade, 0.3, top+pole-0.2, -0.25, 1.1, 0.4, 8);
+      kit.ball(MAT.metal, 0.3, top+pole+0.22, -0.25, 0.05);
+      return kit.build();
+    },
+  },
+  {
+    id:'coffee', label:'Coffee stall', color:'#5a3a26', facing:'street', radius:1.5, turnJitter:4, sizeJitter:0.04,
+    build(rng) {
+      const kit = propKit(), counter = 1.0, eaves = 2.4;
+      kit.box(MAT.green, 0, 0, 0, 1.8, counter, 1.3);                      // the kiosk up to counter height
+      kit.box(MAT.green, 0, counter, -0.6, 1.8, eaves-counter, 0.1);       // its back wall
+      [-1, 1].forEach(sx => kit.box(MAT.green, sx*0.85, counter, 0, 0.1, eaves-counter, 1.3));
+      kit.box(MAT.green, 0, 2.0, 0.6, 1.8, eaves-2.0, 0.1);                // over the hatch it serves through
+      kit.box(MAT.dark, 0, eaves, 0, 2.0, 0.1, 1.5);                       // the roof
+      kit.box(MAT.wood, 0, counter, 0.7, 1.8, 0.06, 0.3);                  // the ledge you're handed your cup over
+      kit.box(MAT.cream, 0, 2.08, 0.66, 1.1, 0.24, 0.02);                  // the sign
+      kit.box(MAT.steel, -0.3, counter, -0.33, 0.6, 0.42, 0.4);            // the espresso machine inside
+      kit.box(MAT.dark, -0.3, counter+0.14, -0.12, 0.42, 0.06, 0.06);      // its group heads
+      kit.post(MAT.dark, 0.3, counter, -0.4, 0.08, 0.34, 8);               // and the grinder beside it
+      kit.post(MAT.glass, 0.3, counter+0.34, -0.4, 0.11, 0.16, 8);
+      for (let i=0; i<6; i++) {                                            // the striped awning over the queue
+        const mat = i%2 ? MAT.coffee : MAT.cream, x = -0.75 + i*0.3;
+        kit.box(mat, x, 1.96, 0.9, 0.3, 0.04, 0.5);
+        kit.box(mat, x, 1.8, 1.14, 0.3, 0.18, 0.03);
+      }
+      const cups = Math.floor(rng()*4);                                    // whatever's waiting to be picked up
+      for (let i=0; i<cups; i++) {
+        const x = -0.6 + i*0.35 + rng()*0.1;
+        kit.post(MAT.paper, x, counter+0.06, 0.74, 0.045, 0.11, 8);
+        kit.post(MAT.coffee, x, counter+0.17, 0.74, 0.048, 0.02, 8);
+      }
+      kit.post(MAT.cream, 0, eaves+0.1, 0, 0.26, 0.42, 12);                // a big cup on the roof, for anyone who missed the sign
+      kit.post(MAT.coffee, 0, eaves+0.52, 0, 0.29, 0.07, 12);
+      kit.box(MAT.cream, 0.29, eaves+0.2, 0, 0.12, 0.22, 0.06);
+      const side = rng() < 0.5 ? -1 : 1;                                   // and the chalkboard out front, one side or the other
+      kit.turned(MAT.wood, side*0.75, 0, 1.4, 0.55, 0.85, 0.06, (rng()-0.5)*0.5);
+      kit.turned(MAT.dark, side*0.75, 0.12, 1.4, 0.45, 0.63, 0.08, 0);
       return kit.build();
     },
   },

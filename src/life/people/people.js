@@ -13,10 +13,10 @@ import { babble, nextSyllable } from '../../audio/voices.js';
 import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
 import { footstep } from '../../audio/footsteps.js';
 import { keyClick } from '../../audio/typing.js';
-import { mealCue, updateHeld } from './peopleHolding.js';
+import { mealCue, snackClip, updateHeld } from './peopleHolding.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
-import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FIDGETS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_TRAIT_COLORS } from './peopleModel.js';
+import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_TRAIT_COLORS } from './peopleModel.js';
 import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
@@ -28,6 +28,7 @@ import { hidingFromSun, outOfTime, vanishIndoors } from './peopleActivities.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
+import { goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './peopleStalls.js';
 import { sway, updateDrunk } from './peopleDrunk.js';
 import { avoidSmells, updateFlies } from './peopleSmell.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
@@ -186,12 +187,13 @@ export const headingTo = (p, q) => Math.atan2(q.x - p.x, q.z - p.z);
 export const modelScale = p => 1.7*p.height*S.peopleSize/personModel.height;
 
 /**
- * How much of a person's pose is `clip`, part-way through blending from one animation into the next.
+ * How much of a person's pose is `clip`, part-way through blending from one animation into the next — counting any version
+ * of it (Idle with a coffee in hand is still Idle: see snackClips in peopleModel.js).
  * @param {Person} p - the person
  * @param {object} clip - the animation to weigh
  * @returns {number} from 0 to 1
  */
-export const weightOf = (p, clip) => (p.clipA === clip ? p.fade : 0) + (p.clipB === clip ? 1 - p.fade : 0);
+export const weightOf = (p, clip) => (p.clipA === clip || p.clipA?.base === clip ? p.fade : 0) + (p.clipB === clip || p.clipB?.base === clip ? 1 - p.fade : 0);
 /**
  * How far into sitting on a seat someone is: sat back (Sit1), at a keyboard (Typing, TypingPaused) or at their dinner
  * (Eating, EatingPaused), all sat the same way, from 0 to 1.
@@ -208,7 +210,7 @@ export const sitWeight = p => personModel ? ['Sit1', 'Typing', 'TypingPaused', '
  * @returns {number} the row
  */
 export function clipRow(p, clip) {
-  if (clip.name === 'Walk') return clip.start + p.walkCycle*clip.frames;
+  if ((clip.base ?? clip).name === 'Walk') return clip.start + p.walkCycle*clip.frames;
   if (clip.loop) return clip.start + (p.idleTime*PERSON_BAKE_FPS) % clip.frames;
   return clip.start + Math.min(clip.frames - 1, p.shotTime*PERSON_BAKE_FPS);
 }
@@ -223,7 +225,7 @@ export function setClip(p, clip) {
   if (p.clipA === clip) return;
   p.rowB = clipRow(p, p.clipA);
   p.fade = p.clipB === clip ? 1 - p.fade : 0;
-  p.fadeTime = clip.pose || p.clipA.pose ? FADE_POSE : FADE_QUICK;
+  p.fadeTime = clip.pose || p.clipA.pose ? FADE_POSE : clip.base || p.clipA.base ? FADE_SNACK : FADE_QUICK;
   p.clipB = p.clipA;
   p.clipA = clip;
 }
@@ -431,7 +433,7 @@ export function newPerson(id = S.peopleIdSeq++) {
     crossStage: null, jc: null, crossCheckIn: peopleRng()*5, linkCooldown: 0,
     // riding the trains (see "riding the trains"): where they are in it (null if they aren't), and how long until they
     // consider riding again
-    train: null, trainCooldown: 20 + peopleRng()*40,
+    train: null, trainCooldown: 20 + peopleRng()*40, snack: null, buy: null, snackCooldown: peopleRng()*30,
     // going into a building (see "going indoors"): where they are in it (null if they aren't), and how long until they
     // consider going into one again
     indoors: null, inRoom: null, indoorsCooldown: 10 + peopleRng()*30,
@@ -941,6 +943,7 @@ export function updatePeople(t) {
     refreshTraits(p, i);
     if (p.blood) updateBlood(p, dt, i);
     p.trainCooldown -= dt;
+    p.snackCooldown -= dt;
     p.indoorsCooldown -= dt;
     const possessed = p.mode === 'possessed';
     if (p.push) stepPush(p, dt);
@@ -996,8 +999,11 @@ export function updatePeople(t) {
     }
     // (stopped to talk, or frozen in shock, someone on a walkway stays put)
     if (p.mode === 'line' && p.act !== 'chat' && !frozen && !p.attack) {
-      if (!p.jc) maybeCrossRoad(p, peopleNav.lines[p.li], dt);
-      if (p.jc) {
+      if (!p.jc && !p.act) maybeBuyOnWalkway(p, dt); // (stepping off to a hot dog or coffee stall: see peopleStalls.js)
+      if (!p.jc && !p.act) maybeCrossRoad(p, peopleNav.lines[p.li], dt);
+      if (p.act === 'buy') {
+        goal = updateBuying(p, dt, walkwayPoint(p).y);
+      } else if (p.jc) {
         goal = updateCrossing(p, dt, speed); // (null while waiting for a gap in traffic)
         if (isPedInDanger(p)) speed *= CROSS_SPEED_MULT; // an increased pace, crossing
       } else {
@@ -1023,11 +1029,14 @@ export function updatePeople(t) {
       } else if (Math.hypot(p.tx - p.x, p.tz - p.z) < 0.3) {
         p.wait = (1 + peopleRng()*9)*p.traits.patience;
         // What next, weighted by their traits: leaving, sitting down, lying down, going over to talk to someone, going
-        // over to someone else, or somewhere else in the same hangout.
+        // over to someone else, somewhere else in the same hangout, a train, or something from a stall.
         const { lounging, chatty } = p.traits;
         const stations = p.trainCooldown <= 0 ? stationLinks().byArea.get(p.area) : null;
-        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train'][pickWeighted([area.exits.length ? 0.2 : 0, 0.16*lounging, 0.08*lounging, 0.18*chatty, 0.13, 0.25, stations ? 0.12 : 0], w => w)];
-        if (next === 'train' && stations) {
+        const stalls = !p.snack && p.snackCooldown <= 0 && hasStallIn(area);
+        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train', 'buy'][pickWeighted([area.exits.length ? 0.2 : 0, 0.16*lounging, 0.08*lounging, 0.18*chatty, 0.13, 0.25, stations ? 0.12 : 0, stalls ? 0.15 : 0], w => w)];
+        if (next === 'buy' && goBuy(p, area)) {
+          // over to a hot dog or coffee stall (see peopleStalls.js)
+        } else if (next === 'train' && stations) {
           // over to a train station standing in here
           const node = stations[Math.floor(peopleRng()*stations.length)], st = getTrainStations().get(node);
           goRideTrain(p, node, { x: st.x, y: area.y, z: st.z });
@@ -1093,7 +1102,7 @@ export function updatePeople(t) {
     p.stepped = 0;
     if (goal) {
       const dx = goal.x - p.x, dz = goal.z - p.z, d = Math.hypot(dx, dz);
-      const step = possessed ? d : speed*dt*(p.mode === 'line' && !p.crossStage && !p.attack ? 1 + Math.min(2, d*0.5) : 1);
+      const step = possessed ? d : speed*dt*(p.mode === 'line' && !p.crossStage && !p.attack && !p.act ? 1 + Math.min(2, d*0.5) : 1);
       const k = d > 1e-4 ? Math.min(1, step/d) : 0, mx = dx*k, mz = dz*k;
       // (anyone just walking waits where they are until whoever it is is up: a step that would take them nearer, inside LYING_CLEARANCE, isn't taken — but not someone going after someone, or running from them)
       const blocked = !possessed && !p.attack && !fleeing && lyingDown.some(q => {
@@ -1150,7 +1159,8 @@ export function updatePeople(t) {
         }
       }
       if (!p.clipA) { p.clipA = p.clipB = clipSet.Idle; p.fade = 1; }
-      setClip(p, p.oneShot || (p.moving ? clipSet.Walk : clipSet[p.pose] || clipSet.Idle));
+      // (and with a hot dog or a coffee in hand, a version of it holding that: see peopleHolding.js)
+      setClip(p, p.oneShot || snackClip(p, p.moving ? clipSet.Walk : clipSet[p.pose] || clipSet.Idle, dt));
       p.fade = Math.min(1, p.fade + dt/p.fadeTime);
       // whatever the clip has happening as it comes round: a key struck (see audio/typing.js), or a moment of a meal
       // (see peopleHolding.js)
