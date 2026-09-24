@@ -306,9 +306,14 @@ html.touch #btn-touch-add { display:flex; }
    top-right default so bottom is the only thing placing it. There's no room for both on a phone, so it's dropped
    there (see the phone layout below) rather than fighting the card for space. */
 #car-boost-meter { position:fixed; top:auto; right:calc(16px + 300px + 12px); bottom:52px; z-index:20; }
-/* the fill itself (src/life/car-card.js sets only its height, from the car's boostEnergyMax): plain --meter-pos green,
+/* the fill itself (src/life/car-card.js sets only its height, from the car's boostMax): plain --meter-pos green,
    since boost only ever has the one, positive, side — unlike the morality meter's fill colour, this one never changes. */
 #car-boost-meter .meter-fill { background:var(--meter-pos); }
+/* the band below BOOST_UNLOCK of the gauge (height set by car-card.js): shaded; darker while locked out, flashing red while boost is held */
+#car-boost-meter .boost-reserve { position:absolute; left:0; right:0; bottom:0; background:rgba(0,0,0,.18); pointer-events:none; }
+#car-boost-meter.boost-locked .boost-reserve { background:rgba(0,0,0,.35); }
+#car-boost-meter.boost-refused .boost-reserve { animation:boost-refused .25s steps(2, jump-none) infinite; }
+@keyframes boost-refused { from { background:rgba(0,0,0,.35); } to { background:rgba(220,40,40,.85); } }
 /* holding shift in the Paths tab: a click adds a node, or a branch (src/editor/input.js) */
 canvas.adding { cursor:copy; }
 .card-close {

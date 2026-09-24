@@ -7,7 +7,7 @@ import { placeKey, signalState } from '../../roads/markings.js';
 import { updateEngines } from '../../audio/engine.js';
 import { carTypeOf } from '../car-types.js';
 import { BLAST_THROW, burnFuse, DETONATION_REACH, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
-import { driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
+import { boostMax, driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, rechargeBoost, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
 import { chaseCamera, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
 import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
 import { carHoloTimeUniform, carPlate } from './materials.js';
@@ -116,6 +116,8 @@ export function updateTraffic(t) {
     }
     if (car.design != null) refreshCarTraits(car);
     if (car === drivenCar) { if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
+    rechargeBoost(car, dt); // (driven or not: see driving.js)
+    if (i === followedCar && car.boostLeft != null) App.setCarBoost(car.boostLeft, boostMax(car), car.boostLocked); // (the card's meter keeps filling after it's let go)
     if (car.fuse != null) { burnFuse(car, dt); placeCar(car, i, designCounts); return; } // (about to blow: it neither drives nor turns)
     if (goingUnder(car)) { sinkKnockedCar(car, dt); turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
     // cruise, but ease off for the car in front and slow down into junctions

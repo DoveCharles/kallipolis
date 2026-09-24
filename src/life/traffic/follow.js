@@ -8,7 +8,7 @@ import { explodeCar, splashCar } from '../giblets.js';
 import { throwCarWreck } from '../car-wrecks.js';
 import { carTypeOf } from '../car-types.js';
 import { driving, controlInput } from '../possession.js';
-import { boostEnergyMax, stopDriving } from './driving.js';
+import { boostMax, stopDriving } from './driving.js';
 import { carMeshes } from './models.js';
 import { carHeight, carLength, carModelOf, carScale, placing } from './placing.js';
 import { cars } from './state.js';
@@ -84,8 +84,8 @@ export function followCar(car) {
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9));
   const type = carTypeOf(car.design != null ? carMeshes[car.design].name : null, car.number);
   App.showCarCard(i, { ...type, name: carLabel(car) }, car);
-  const energyMax = boostEnergyMax(car);
-  App.setCarBoost(car.energy ??= energyMax, energyMax); // (its level as it already stands — full, unless it's spent some since last driven)
+  const max = boostMax(car);
+  App.setCarBoost(car.boostLeft ??= max, max, car.boostLocked); // (its level as it already stands — full, unless it's spent some since last driven)
   return true;
 }
 /**

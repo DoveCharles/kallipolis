@@ -7,7 +7,7 @@ import { exclaim } from '../../audio/voices.js';
 import { isFavoritePerson } from '../../ui/favorites.js';
 import { puffSmoke, sparks, burnFx, igniteFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
-import { DRIVE_ACCEL, DRIVE_BOOST, DRIVE_TOP_SPEED, boostSmoke, drivenCar } from './driving.js';
+import { DRIVE_ACCEL, DRIVE_TOP_SPEED, boostMultiplier, boostSmoke, drivenCar } from './driving.js';
 import { killCar } from './follow.js';
 import { carJoinLane, lanePoint, routePoint } from './lanes.js';
 import { CAR_REAR_AXLE, carHeight, carLength, carWidth } from './placing.js';
@@ -401,7 +401,7 @@ export function stepKick(car, dt) {
       const off = turnBetween(k.goal - k.heading);
       k.heading += off*turnRate;
       if (Math.abs(off) < KICK_FACING_TOLERANCE) {
-        const boosting = (k.driving += dt) >= KICK_BOOST_AFTER, boost = boosting ? DRIVE_BOOST*(car.traits?.boost ?? 1) : 1;
+        const boosting = (k.driving += dt) >= KICK_BOOST_AFTER, boost = boosting ? boostMultiplier(car) : 1;
         k.speed = Math.min(DRIVE_TOP_SPEED*(car.traits?.speed ?? 1)*boost, k.speed + DRIVE_ACCEL*boost*dt);
         const step = Math.min(away, k.speed*dt), sx = -k.x/away*step, sz = -k.z/away*step;
         if (canStepBack(car, sx, sz)) { k.x += sx; k.z += sz; motion.x += sx/dt; motion.z += sz/dt; if (boosting) boostSmoke(car, dt); } else { k.blocked = true; k.speed = 0; k.driving = 0; }
