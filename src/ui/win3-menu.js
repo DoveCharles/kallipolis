@@ -268,11 +268,19 @@ worldModeHidesPanel();
 
 // The active window: like Windows 3.0, only the window you're working in has a navy title bar; the rest go white. A card
 // (for a building, a person, a car…) takes it when it's opened on something — even if it was open already — or clicked,
-// and the Splinetopia window takes it back when anything else is clicked or the card closes.
+// and keeps it while it's open, however the view's clicked about to look round or to pick someone else (they're what's
+// being followed, so the card is what you're working in). A window like Sound levels takes it while it's clicked in,
+// and the card gets it back when anything else is; only with no card open does the Splinetopia window take it back.
 const WINDOWS = '.entity-card, .w3-window'; // (the cards, and windows like Sound levels: ui/sound-levels.js)
 let activeCard = null;
+let lastCard = null; // the entity card last opened or clicked
+function trackedCard() {
+  if (lastCard && !lastCard.hidden) return lastCard;
+  return [...document.querySelectorAll('.entity-card')].find(c => !c.hidden) ?? null;
+}
 function setActive(card) {
-  activeCard = card && !card.hidden ? card : null;
+  if (card?.matches('.entity-card')) lastCard = card;
+  activeCard = card && !card.hidden ? card : trackedCard();
   document.querySelectorAll(WINDOWS).forEach(c => c.classList.toggle('w3-inactive', c !== activeCard));
   frame.classList.toggle('w3-inactive', !!activeCard);
 }
