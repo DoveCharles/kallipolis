@@ -9,6 +9,7 @@ import { MIN_ZONE_TREES, MAX_ZONE_TREES } from '../core/state.js';
 import { clipPolygons, createMeshBuilder } from '../roads/roads.js';
 import { scalePolygonAroundCentroid, makeExtrudeRaw, extrudeFootprintGeo } from './zone-visuals.js';
 import { plantParkLife } from '../life/bees.js';
+import { WATER_TIME } from '../water/water.js';
 
 // ---------------------------------------------------------- surface detail (Y2K greebles/bands/rings)
 // With `win` (the wall's window uniforms): the middle of the solid wall between the two window rows nearest z — above
@@ -830,6 +831,7 @@ export function makeParkMesh(poly, tintColor, noiseStrength, cutouts, beachSegme
 // how far it is from the water's edge (darker, still wet, within 1.5 units of it). Needs grassNoise.
 const SAND_GLSL = `
   uniform vec3 uSandTint;
+  float sandRoughness = 0.65; // set by sandColor: a little sheen on dry sand, more on wet (see roughnessmap_fragment)
   // Four octaves, like the grass — one octave of value noise on its own is a single lattice of
   // smooth blobs about a third of a unit across, which is what made the sand look like a
   // low-resolution texture stretched over the beach however close you got to it.
@@ -838,18 +840,52 @@ const SAND_GLSL = `
     for (int i=0;i<4;i++) { v += amp*grassNoise(p); p = p*2.07 + 17.3; amp *= 0.5; }
     return v;
   }
+  // Stylized rather than photographic: the mottling is cut into three flat tones with crisp edges (toonStep), a
+  // stipple of grain and a scatter of shells and dark pebbles sit on top, and the wet sand steps down in two clean bands toward the water.
   vec3 sandColor(vec2 p, float wetDistance) {
-    // The World "Sand tint" swatch is the mid tone: broad patches drift between crests bleached
-    // toward white and dips a shade deeper, rather than sitting on one flat khaki.
-    vec3 sand = mix(mix(uSandTint, vec3(1.0), 0.16), uSandTint*0.86, smoothstep(0.25, 0.8, sandFbm(p*0.6)));
-    sand *= 0.95 + 0.10*sandFbm(p*2.2);
-    // A fine grain on top, at a scale far below the mottling. It has no mipmaps to fall back on,
-    // so it's faded out once a pixel covers enough ground to alias against it (fwidth = how much
-    // world one pixel spans here) — the beach keeps its grain up close and stays smooth from high up.
-    float grain = grassNoise(p*13.0 + 31.7) - 0.5;
-    sand *= 1.0 + 0.13*grain*(1.0 - smoothstep(0.03, 0.12, fwidth(p.x) + fwidth(p.y)));
-    // wet sand darkens and loses some of its warmth rather than just dimming
-    return sand*mix(vec3(0.63, 0.61, 0.60), vec3(1.0), smoothstep(0.0, 1.5, wetDistance));
+    float px = fwidth(p.x) + fwidth(p.y);
+    // Wind-shaped tones: long wavy bands lying along the ripples (crests run across (0.93, 0.36), as in
+    // applySandShader), built from a bent sine for the rhythm and fBm stretched along the crests to break it up
+    vec2 wa = vec2(0.93, 0.36);
+    vec2 tp = p*4.0; // (the scale of the whole pattern)
+    float across = dot(tp, wa), along = dot(tp, vec2(-wa.y, wa.x));
+    float bendN = grassNoise(tp*0.18 + 4.1)*5.0 + grassNoise(tp*0.6 + 1.3)*0.8;
+    float wave = 0.5 + 0.5*sin((across + bendN)*1.5);
+    float m = mix(sandFbm(vec2(across*1.1, along*0.22) + bendN*0.3), wave, 0.45);
+    float band = toonStep(0.44, m) + toonStep(0.6, m);
+    // only a little apart, so they read as the light catching the sand rather than patches of different ground
+    vec3 sand = uSandTint*(0.97 + 0.03*clamp(band, 0.0, 1.0));
+    sand = mix(sand, mix(uSandTint, vec3(1.0), 0.06), clamp(band - 1.0, 0.0, 1.0));
+    // grain: a stipple of tiny dark grains and white specks on two rotated lattices, so it doesn't line up
+    float gfade = grassDetailFade(px, 45.0);
+    if (gfade > 0.0) {
+      for (int L=0; L<2; L++) {
+        vec2 q = (L == 0 ? p : mat2(0.766, 0.643, -0.643, 0.766)*p + 13.7)/0.06;
+        vec2 cell = floor(q), f = fract(q);
+        float h = grassHash(cell + float(L)*41.3);
+        if (h < 0.55) continue;
+        vec2 c = 0.2 + 0.6*vec2(grassHash(cell + 3.3), grassHash(cell + 9.1));
+        float r = (h < 0.85 ? 0.1 : 0.05) + 0.04*grassHash(cell + 7.7), aa = px/0.06;
+        float dotT = 1.0 - smoothstep(r - aa, r + aa, length(f - c));
+        sand = h < 0.85 ? sand*(1.0 - 0.07*dotT*gfade) : mix(sand, vec3(1.0), 0.7*dotT*gfade); // dark grains, tiny white specks
+      }
+    }
+    // speckles: at most one per cell 0.8 units across, dropped once they'd be smaller than a pixel
+    float fade = grassDetailFade(px, 25.0);
+    if (fade > 0.0) {
+      vec2 cell = floor(p/0.8), f = fract(p/0.8);
+      float h = grassHash(cell + 5.3);
+      if (h < 0.4) {
+        vec2 c = 0.25 + 0.5*vec2(grassHash(cell + 11.1), grassHash(cell + 23.7));
+        float r = (0.015 + 0.02*grassHash(cell + 2.9))/0.8;
+        float dotT = 1.0 - smoothstep(r - px/0.8, r + px/0.8, length(f - c));
+        sand = mix(sand, h < 0.25 ? uSandTint*0.8 : mix(uSandTint, vec3(1.0), 0.55), dotT*fade);
+      }
+    }
+    // wet sand darkens and loses some of its warmth, in two steps rather than a gradient
+    float dry = 0.5*(toonStep(0.7, wetDistance) + toonStep(1.7, wetDistance + (grassNoise(p*0.8) - 0.5)*0.5));
+    sandRoughness = mix(0.4, 0.65, dry);
+    return sand*mix(vec3(0.63, 0.61, 0.60), vec3(1.0), dry);
   }
 `;
 const GRASS_NOISE_GLSL = `
@@ -870,6 +906,11 @@ const GRASS_NOISE_GLSL = `
     vec2 pa = p-a, ba = b-a;
     float h = clamp(dot(pa,ba)/max(dot(ba,ba), 1e-6), 0.0, 1.0);
     return length(pa - ba*h);
+  }
+  // 0 below edge, 1 above it, softened over one pixel's worth of x: flat bands with crisp but unaliased edges
+  float toonStep(float edge, float x) {
+    float w = max(fwidth(x), 1e-4);
+    return smoothstep(edge - w, edge + w, x);
   }
   // 1 while detail of this frequency is comfortably wider than a pixel, 0 once it isn't. None of
   // these noise layers has mipmaps to fall back on, so anything finer than the pixel grid can only
@@ -913,12 +954,18 @@ export function applySandShader(mat, wetSegments, allWet) {
             wetDistance = min(wetDistance, grassDistToSegment(p, uWetSegments[i].xy, uWetSegments[i].zw));
           }
           vec3 sand = sandColor(p, wetDistance);
-          // soft ripples, bent by broad noise so they don't read as stripes — fading out toward the (flat, wet) waterline
-          float ripple = sin(p.x*0.9 + p.y*0.35 + grassNoise(p*0.15)*6.0);
-          sand *= 1.0 + 0.035*ripple*smoothstep(1.0, 4.0, wetDistance);
+          // wind ripples drawn as lines: a pale crest with a thin shadow just behind it, bent by broad noise so they
+          // don't read as stripes, broken up so they come and go, and gone toward the (flat, wet) waterline
+          float phase = (p.x*0.9 + p.y*0.35 + grassNoise(p*0.15)*6.0)/6.2832;
+          float s = fract(phase), lw = fwidth(phase);
+          float crest = 1.0 - smoothstep(0.035 - lw, 0.035 + lw, abs(s - 0.5));
+          float shade = 1.0 - smoothstep(0.03 - lw, 0.03 + lw, abs(s - 0.58));
+          float keep = toonStep(0.45, grassNoise(p*0.22 + 7.0)) * smoothstep(1.5, 3.5, wetDistance) * (1.0 - smoothstep(0.04, 0.12, lw));
+          sand *= 1.0 + (0.1*crest - 0.09*shade)*keep;
           diffuseColor.rgb = sand;
         }
-      `);
+      `)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = sandRoughness;');
   };
 }
 export function generateBeachContent(zone, poly, cutouts) {
@@ -938,7 +985,12 @@ const GRASS_MAX_EDGE_POINTS = 48; // fixed GLSL array size; zone outlines beyond
 const GRASS_MAX_BEACH_SEGMENTS = 64; // fixed GLSL array size for the stretches of a park's edge that meet water
 // `beachSegments` (optional): stretches of the park's edge where its grass turns to sand — the first `wetCount` meet water
 // (the sand there is wet), the rest meet beach zones
-export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, wetCount) {
+// `shellT` (optional): make this one of a park's grass shells instead (see addGrassShells) — the layer's height up the
+// blades, 0 to 1. A shell keeps only the bits of blade that reach it and throws the rest away.
+export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, wetCount, shellT) {
+  const shell = shellT != null;
+  // (the ground and the shells share this onBeforeCompile's source, so three.js would otherwise hand them one program)
+  if (shell) mat.customProgramCacheKey = () => 'grass-shell';
   const beach = App.segmentUniformArray(beachSegments || [], GRASS_MAX_BEACH_SEGMENTS);
   const beachCount = Math.min((beachSegments || []).length, GRASS_MAX_BEACH_SEGMENTS);
   // Pad/truncate the zone's own world-space outline to a fixed-length array so it can be
@@ -962,6 +1014,8 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
     shader.uniforms.uBeachCount = { value: beachCount };
     shader.uniforms.uBeachWetCount = { value: wetCount!=null ? wetCount : beachCount };
     shader.uniforms.uBeachWidth = { value: App.PARK_BEACH_WIDTH };
+    shader.uniforms.uShellGround = { value: mat.userData.grassShells ? 1 : 0 };
+    if (shell) { shader.uniforms.uShellT = { value: shellT }; shader.uniforms.uTime = WATER_TIME; }
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `
         #include <common>
@@ -974,6 +1028,7 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `
         #include <common>
+        ${shell ? '#define GRASS_SHELL\n        uniform float uShellT;\n        uniform float uTime;' : ''}
         #define GRASS_MAX_EDGE_POINTS ${GRASS_MAX_EDGE_POINTS}
         #define GRASS_MAX_BEACH ${GRASS_MAX_BEACH_SEGMENTS}
         varying vec3 vGrassWorldPos;
@@ -982,11 +1037,13 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
         uniform float uZoneEdgeFalloff;
         uniform float uZoneEdgeDarken;
         uniform float uGrassNoiseStrength;
+        uniform float uShellGround;
         uniform vec4 uBeachSegments[GRASS_MAX_BEACH];
         uniform int uBeachCount;
         uniform int uBeachWetCount;
         uniform float uBeachWidth;
         ${GRASS_NOISE_GLSL}
+        float grassSandT = 0.0; // how far this fragment has turned to sand, for its roughness
         ${SAND_GLSL}
         // Six octaves, not four, and each one turned 37° against the last: value noise sits on a
         // square lattice, so octaves stacked at the same angle line their cells up into a grid you
@@ -1045,58 +1102,166 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
         {
           vec2 wp = vGrassWorldPos.xz;
           float px = fwidth(wp.x) + fwidth(wp.y); // how much world one pixel spans here
-          vec2 gp = wp * 0.35;
+          #ifdef GRASS_SHELL
+          // Out of here as early as possible, before the beach search below: past a few metres the blades have sunk
+          // back into the ground, and nothing reaches this layer if even the tallest clump (1.15) wouldn't.
+          float bladeFade = grassDetailFade(px, 12.0);
+          if (uShellT > 1.15*bladeFade) discard;
+          #endif
+          float sandT = 0.0, wetDistance = 1e9;
+          if (uBeachCount > 0) {
+            // sand where the park meets water or a beach zone: strongest at that edge (and darker, still wet, at the
+            // water's), fading back into grass over about uBeachWidth units, with a ragged inland edge rather than a
+            // ruler-straight one
+            float beachDistance = 1e9;
+            for (int i=0; i<GRASS_MAX_BEACH; i++) {
+              if (i >= uBeachCount) break;
+              float d = grassDistToSegment(wp, uBeachSegments[i].xy, uBeachSegments[i].zw);
+              beachDistance = min(beachDistance, d);
+              if (i < uBeachWetCount) wetDistance = min(wetDistance, d);
+            }
+            float reach = uBeachWidth*(0.75 + 0.5*grassNoise(wp*0.12));
+            sandT = 1.0 - smoothstep(reach*0.45, reach, beachDistance);
+          }
+          #ifdef GRASS_SHELL
+          // One blade per cell GRASS_CELL across, tapering to a point at its own height (0 to 1 of the shell
+          // stack), bent over with the wind more the higher up it is. Worked out before anything else, since most of a
+          // shell's pixels are thrown away. The blades shrink back into the ground with distance — once a cell is
+          // only a few pixels across they would just sparkle — and in clumps, and onto the sand.
+          #define GRASS_CELL 0.1
+          float sway = sin(uTime*1.3 + wp.x*0.21 + wp.y*0.13) + 0.5*sin(uTime*2.9 + wp.x*0.7);
+          vec2 bend = vec2(0.35, 1.0)*(0.25 + 0.12*sway)*uShellT*uShellT;
+          float clump = 0.8 + 0.35*grassNoise(wp*1.1 + 9.3);
+          float reach = clump*bladeFade*(1.0 - sandT)*step(0.001, uGrassNoiseStrength);
+          if (uShellT > reach) discard;
+          // Two lattices of blades laid over each other, turned 40° apart and at different spacings, with each blade
+          // free to sit anywhere in its cell (so the cells around are checked too, for blades leaning over from them)
+          // and a share of cells left bare: one square lattice on its own lines its blades up in rows you can see.
+          // A flat blade, not a round stalk: its slice at this height is a thin sliver, facing its own way, that
+          // narrows to nothing at the tip — so from the side each blade is a triangle.
+          vec2 wq = wp - bend*0.3;
+          float s = 2.0; vec2 bcell = vec2(0.0);
+          for (int L=0; L<2; L++) {
+            float cellSize = L == 0 ? GRASS_CELL : GRASS_CELL*1.37;
+            vec2 q = (L == 0 ? wq : mat2(0.766, 0.643, -0.643, 0.766)*wq + 31.7)/cellSize;
+            vec2 base = floor(q);
+            for (int j=-1; j<=1; j++) for (int i=-1; i<=1; i++) {
+              vec2 id = base + vec2(float(i), float(j)) + float(L)*97.1;
+              if (grassHash(id + 44.4) < 0.3) continue;
+              float height = (0.7 + 0.3*grassHash(id + 0.7))*reach;
+              if (uShellT > height) continue;
+              float bs = uShellT/height;
+              float ang = grassHash(id + 17.3)*3.1416;
+              vec2 d = q - (base + vec2(float(i), float(j)) + vec2(grassHash(id + 5.1), grassHash(id + 13.9)));
+              vec2 along = vec2(cos(ang), sin(ang));
+              if (abs(dot(d, along)) < 0.45*(1.0 - bs*0.8) && abs(dot(d, vec2(-along.y, along.x))) < 0.1 && bs < s) { s = bs; bcell = id; }
+            }
+          }
+          if (s > 1.0) discard;
+          #endif
+          vec2 gp = wp * 0.75;
           // The coarse patches are warped by a slower noise before they're read, so they clump and
           // wander instead of sitting in the evenly spaced round blobs a plain fBM makes.
           vec2 warp = vec2(grassNoise(gp*0.47 + 3.1), grassNoise(gp*0.47 + 17.9)) - 0.5;
-          float n = grassFbm(gp + warp*0.9, px*0.35);
-          float fine = grassNoise(gp*6.3);
-          // Grayscale, not green — the grass tint is what actually colors this (diffuseColor
-          // already carries it going into this block), so keeping the base neutral means the
-          // tint you pick is close to the final rendered color instead of being muddied by
-          // multiplying against an inherent green baked in here.
-          // uGrassNoiseStrength scales the contrast around a fixed mid-grey: 0 collapses both
-          // the coarse patches and the fine grain to perfectly flat, 1 matches the original
-          // fixed contrast, and above 1 exaggerates it into a rougher, more mottled look.
-          float grassMid = 0.59;
-          float coarseHalf = 0.19 * uGrassNoiseStrength;
-          float fineHalf = 0.08 * uGrassNoiseStrength;
-          vec3 grassColor = vec3(grassMid + (n - 0.5) * 2.0 * coarseHalf) * (1.0 + (fine - 0.5) * 2.0 * fineHalf);
-          // The blade-scale tufts follow the same slider — 0 is still perfectly flat — but along a
-          // curve that rises fast and then levels off, so the turf keeps a tooth to it at the low
-          // settings the broad mottling is meant to be barely visible at, and doesn't turn to
-          // static at the high ones.
-          float detail = uGrassNoiseStrength / (uGrassNoiseStrength + 0.45) * 1.45;
-          grassColor *= 1.0 + grassTufts(wp, px) * 0.26 * detail;
-          // A little hue along with the tone: bleached, yellower crests and cooler, deeper hollows.
-          // Turf is never one hue, and a purely tonal noise still reads as one flat color with the
-          // brightness turned up and down.
-          grassColor *= mix(vec3(1.0), mix(vec3(1.045, 1.0, 0.93), vec3(0.955, 1.0, 1.06), smoothstep(0.3, 0.7, n)),
+          // most of the octaves kept, so the bands cut from it have rough, ragged edges
+          float nb = grassFbm(gp + warp*1.3, max(px*0.75, 0.02));
+          // extra fine noise pushed into the band edges so they break up into jagged, torn outlines
+          nb += (grassNoise(gp*4.3 + 5.7) - 0.5)*0.22*grassDetailFade(px*0.75, 4.3)
+              + (grassNoise(gp*9.7 + 2.3) - 0.5)*0.14*grassDetailFade(px*0.75, 9.7);
+          // Grayscale, not green — the grass tint is what actually colors this (diffuseColor already carries it going
+          // into this block), so the tint you pick is close to the final rendered color.
+          // Stylized: the patches are cut into three flat tones (hollow, turf, sunlit crest) with crisp edges, instead
+          // of a continuous photographic mottle. uGrassNoiseStrength scales how far apart the tones are: 0 is flat.
+          float band = toonStep(0.4, nb) + toonStep(0.6, nb);
+          float k = 0.11 * uGrassNoiseStrength;
+          vec3 grassColor = vec3(0.59 + (band - 1.0)*k);
+          // cooler hollows, warmer yellower crests
+          grassColor *= mix(vec3(1.0), band < 1.0 ? mix(vec3(0.94, 1.0, 1.07), vec3(1.0), band)
+                                                  : mix(vec3(1.0), vec3(1.06, 1.02, 0.9), band - 1.0),
                             clamp(uGrassNoiseStrength, 0.0, 1.0));
+          #ifdef GRASS_SHELL
+          // dark down among the roots, catching the light at the tips — and each blade a touch lighter or darker
+          grassColor *= mix(0.93, 1.07, s) * (0.97 + 0.06*grassHash(bcell + 21.1));
+          #else
+          // a faint grain so the flat tones aren't plastic up close
+          grassColor *= 1.0 + grassTufts(wp, px)*0.08*uGrassNoiseStrength;
+          // the ground down among the shell grass's roots is as dark as they are (see GRASS_SHELL above)
+          grassColor *= 1.0 - 0.07*grassDetailFade(px, 12.0)*uShellGround;
+          // Drawn tufts: little fans of three blades, at most one per cell, all leaning with the same wind. Two sizes,
+          // so there's something drawn on the ground from both up close and further off; each drops out once its
+          // blades would be thinner than a pixel. Tufts in a hollow are darker, the rest catch the light.
+          vec2 lean = normalize(vec2(0.35, 1.0));
+          vec2 side = vec2(lean.y, -lean.x);
+          float tuftLight = 0.0, tuftDark = 0.0;
+          for (int L=0; L<2; L++) {
+            float size = L == 0 ? 0.45 : 1.2, bw = L == 0 ? 0.012 : 0.026;
+            float fade = grassDetailFade(px, 0.35/bw);
+            if (fade <= 0.0) continue;
+            vec2 q = wp/size + float(L)*41.7;
+            vec2 cell = floor(q), f = fract(q);
+            float h = grassHash(cell + 3.7);
+            if (h > 0.55) continue;
+            vec2 base = (0.3 + 0.4*vec2(grassHash(cell + 9.1), grassHash(cell + 27.3)) - 0.2*lean)*size;
+            vec2 at = f*size;
+            float len = (0.3 + 0.12*grassHash(cell + 1.3))*size;
+            float d = 1e9;
+            for (int b=-1; b<=1; b++) {
+              vec2 dir = normalize(lean + side*float(b)*0.6);
+              d = min(d, grassDistToSegment(at, base, base + dir*len*(b == 0 ? 1.0 : 0.75)));
+            }
+            float blade = (1.0 - smoothstep(bw - px*0.5, bw + px*0.5, d))*fade;
+            if (h < 0.18) tuftDark = max(tuftDark, blade); else tuftLight = max(tuftLight, blade);
+          }
+          grassColor *= 1.0 + (0.22*tuftLight - 0.2*tuftDark)*uGrassNoiseStrength;
+          #endif
           // subtle darkening as grass nears the zone boundary, fading in smoothly over
           // uZoneEdgeFalloff world units so it reads as a soft vignette, not a hard band
           float edgeDist = grassDistToZoneEdge(vGrassWorldPos.xz);
           float edgeT = smoothstep(0.0, uZoneEdgeFalloff, edgeDist);
           grassColor *= mix(uZoneEdgeDarken, 1.0, edgeT);
           diffuseColor.rgb *= grassColor;
-          // sand where the park meets water or a beach zone: strongest at that edge (and darker, still wet, at the
-          // water's), fading back into grass over about uBeachWidth units, with a ragged inland edge rather than a
-          // ruler-straight one
-          if (uBeachCount > 0) {
-            float beachDistance = 1e9, wetDistance = 1e9;
-            for (int i=0; i<GRASS_MAX_BEACH; i++) {
-              if (i >= uBeachCount) break;
-              float d = grassDistToSegment(vGrassWorldPos.xz, uBeachSegments[i].xy, uBeachSegments[i].zw);
-              beachDistance = min(beachDistance, d);
-              if (i < uBeachWetCount) wetDistance = min(wetDistance, d);
+          // the odd flower, white or yellow, anywhere but the hollows
+          #ifndef GRASS_SHELL
+          {
+            float fade = grassDetailFade(px, 16.0) * clamp(uGrassNoiseStrength, 0.0, 1.0);
+            vec2 cell = floor(wp/1.8), f = fract(wp/1.8);
+            float h = grassHash(cell + 71.9);
+            if (fade > 0.0 && h < 0.3 && band > 0.5) {
+              vec2 c = 0.2 + 0.6*vec2(grassHash(cell + 4.4), grassHash(cell + 8.8));
+              float r = 0.04/1.8, e = px/1.8;
+              float petal = 1.0 - smoothstep(r - e, r + e, length(f - c));
+              diffuseColor.rgb = mix(diffuseColor.rgb, h < 0.15 ? vec3(0.95, 0.93, 0.85) : vec3(0.98, 0.82, 0.25), petal*fade);
             }
-            float reach = uBeachWidth*(0.75 + 0.5*grassNoise(vGrassWorldPos.xz*0.12));
-            float sandT = 1.0 - smoothstep(reach*0.45, reach, beachDistance);
-            diffuseColor.rgb = mix(diffuseColor.rgb, sandColor(vGrassWorldPos.xz, wetDistance), sandT);
           }
+          #endif
+          if (sandT > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, sandColor(wp, wetDistance), sandT);
+          grassSandT = sandT;
         }
-      `);
+      `)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, sandRoughness, grassSandT);');
   };
+}
+// Shell-textured grass: GRASS_SHELLS copies of a park floor's surface stacked up to GRASS_SHELL_HEIGHT above it, each
+// keeping only the slice of every blade that reaches its height (see GRASS_SHELL in applyGrassNoiseShader), so up
+// close the lawn has real depth — blades that stand up, catch the light at the tips and hide the ground behind them.
+// Further off they sink back into the flat ground's pattern. They share the floor's geometry, never cast shadows and
+// are invisible to raycasts, so nothing that picks, lands on or walks the ground knows they're there.
+const GRASS_SHELLS = 3, GRASS_SHELL_HEIGHT = 0.03;
+function addGrassShells(floor, poly, noiseStrength, beachSegments, wetCount) {
+  floor.material.userData.grassShells = true; floor.material.needsUpdate = true;
+  const flat = floor.rotation.x !== 0; // (a ShapeGeometry laid down flat: its "up" is local z)
+  for (let i=1; i<=GRASS_SHELLS; i++) {
+    const t = (i - 0.5)/GRASS_SHELLS; // (each layer at the middle of its slice, so the top one isn't above every tip)
+    const mat = new THREE.MeshStandardMaterial({ color: floor.material.color, roughness:1, polygonOffset:true,
+      polygonOffsetFactor: floor.material.polygonOffsetFactor, polygonOffsetUnits: floor.material.polygonOffsetUnits });
+    applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, wetCount, t);
+    const layer = new THREE.Mesh(floor.geometry, mat);
+    if (flat) layer.position.z = t*GRASS_SHELL_HEIGHT; else layer.position.y = t*GRASS_SHELL_HEIGHT;
+    layer.receiveShadow = true;
+    layer.name = 'GrassShell';
+    layer.raycast = () => {};
+    floor.add(layer);
+  }
 }
 // `cutouts` (optional Clipper paths): areas to leave out of the surface — roads, and zones higher up the zone list (see
 // "zone cut-outs"). Returns null if nothing is left.
@@ -1194,7 +1359,11 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
   const wet = App.sharedEdgeSegmentsWith(ownArea, App.getWaterRegion(), GRASS_MAX_BEACH_SEGMENTS);
   const beach = wet.concat(App.sharedEdgeSegmentsWith(ownArea, App.getBeachZoneArea(), GRASS_MAX_BEACH_SEGMENTS - wet.length));
   const floor = makeParkMesh(poly, resolveParkTint(zone), resolveGrassNoiseStrength(zone), cutouts, beach, wet.length);
-  if (floor) { floor.name = 'ParkFloor'; zone.buildingsGroup.add(floor); }
+  if (floor) {
+    floor.name = 'ParkFloor';
+    addGrassShells(floor, poly, resolveGrassNoiseStrength(zone), beach, wet.length);
+    zone.buildingsGroup.add(floor);
+  }
 
   const s = zone.settings;
   // trees stand clear of roads, paths and zones above by the canopy radius of the biggest tree this park can grow
