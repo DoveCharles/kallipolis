@@ -14,6 +14,7 @@ import { closeWindows } from './w3-window.js';
 import { editHints, generalHints } from './view-prefs.js';
 import { people } from '../life/people/people.js';
 import { cars } from '../life/traffic/state.js';
+import { toUi } from './ui-scale.js';
 
 const $ = id => document.getElementById(id);
 const press = id => () => $(id).click();
@@ -193,8 +194,8 @@ function openMenu(menu, anchor, highlightFirst = false) {
     dropdown.append(row);
   });
   const r = anchor.getBoundingClientRect();
-  dropdown.style.left = r.left + 'px';
-  dropdown.style.top = r.bottom + 'px';
+  dropdown.style.left = toUi(r.left) + 'px';
+  dropdown.style.top = toUi(r.bottom) + 'px';
   body.append(dropdown);
   anchor.classList.add('open');
   open = { menu, dropdown, anchor, rows, index:-1 };

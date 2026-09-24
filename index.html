@@ -176,6 +176,12 @@
     <!-- the groups marked data-settings live in the panel, except under the Windows 3.0 window, where each opens in a window
          of its own from the Options menu (src/ui/settings-windows.js) -->
     <div data-settings="display">
+    <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Interface</div>
+    <div class="slider-row"><div class="row"><label>UI scale</label><span class="val" id="dv-uiscale">100%</span></div>
+      <input type="range" id="s-uiscale" min="100" max="200" step="25" value="100"></div>
+    </div>
+
+    <div data-settings="display">
     <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Colours</div>
     <div class="row"><label>Ground color</label><input type="color" class="color-input" id="s-groundcolor" value="#1b1e24"></div>
     <div class="row"><label>Grid color</label><input type="color" class="color-input" id="s-gridcolor" value="#33373f"></div>

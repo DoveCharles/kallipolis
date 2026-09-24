@@ -297,7 +297,7 @@ html.win3 .pc-thumb {
   html.win3 #morality-meter .meter-bar { background:#fff; }
   html.win3 #morality-meter .meter-details {
     position:absolute; top:calc(100% + 1px); right:-8px; left:-8px; margin:0; padding:6px 10px; z-index:26;
-    max-height:calc(100vh - var(--w3-below) - 20px); background:#fff; border:1px solid #000; box-shadow:2px 2px 0 #000;
+    max-height:calc(100vh / var(--ui-scale, 1) - var(--w3-below) - 20px); background:#fff; border:1px solid #000; box-shadow:2px 2px 0 #000;
   }
   html.win3 #morality-meter .meter-notices { top:calc(100% + 6px); right:0; }
   html.win3 #morality-meter:not(.win3-minimized) .meter-notices { right:calc(100% + 14px); }
@@ -335,9 +335,9 @@ html.win3 .w3-window .slider-row { margin-bottom:10px; }
 }
 html.win3 .w3-window [data-settings] > .section-label:first-child { margin-top:0 !important; padding-top:0 !important; border-top:none !important; }
 html.win3 .w3-window [data-settings] + [data-settings] { margin-top:14px; padding-top:14px; border-top:1px solid #000; }
-html.win3 .w3-window .w3-dialog-body { max-height:calc(100vh - 120px); overflow-y:auto; }
+html.win3 .w3-window .w3-dialog-body { max-height:calc(100vh / var(--ui-scale, 1) - 120px); overflow-y:auto; }
 /* the World window, kept short, scrolling for the rest */
-html.win3 #settings-world .w3-dialog-body { max-height:min(300px, calc(100vh - 120px)); }
+html.win3 #settings-world .w3-dialog-body { max-height:min(300px, calc(100vh / var(--ui-scale, 1) - 120px)); }
 /* one that's been sized by its border (see sizeByBorder in src/ui/w3-window.js): its content fills it, scrolling */
 html.win3 .w3-window.w3-sized:not([hidden]) { display:flex; flex-direction:column; box-sizing:border-box; max-width:none; }
 html.win3 .w3-window.w3-sized .w3-dialog-body { flex:1; min-height:0; max-height:none !important; }

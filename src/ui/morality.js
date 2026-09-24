@@ -1,4 +1,5 @@
 import { S, App } from '../core/shared.js';
+import { toUi } from './ui-scale.js';
 
 // ============================================================ morality meter
 // How good or evil the city is, in a meter at the top right: a bar growing from the middle, left (and redder) the more evil,
@@ -284,11 +285,11 @@ function dropNotice(id) {
   liveNotices.delete(id);
   clearTimeout(live.timer);
   const box = live.el.getBoundingClientRect();
-  live.el.style.left = box.left + 'px';
-  live.el.style.top = box.top + 'px';
-  live.el.style.width = box.width + 'px';
+  live.el.style.left = toUi(box.left) + 'px';
+  live.el.style.top = toUi(box.top) + 'px';
+  live.el.style.width = toUi(box.width) + 'px';
   live.el.style.setProperty('--notice-exit-x', (Math.random()*NOTICE_EXIT_SPREAD*2 - NOTICE_EXIT_SPREAD).toFixed(1) + 'px');
-  live.el.style.setProperty('--notice-rise', Math.round(box.bottom + 20) + 'px'); // clear of the top of the screen
+  live.el.style.setProperty('--notice-rise', Math.round(toUi(box.bottom) + 20) + 'px'); // clear of the top of the screen
   live.el.style.zIndex = -100; // behind the ones still sitting there
   live.el.classList.add('meter-notice-leaving'); // (it stays inside the meter: that's a stacking context of its own, and out on the body it would draw over everything in it)
   setTimeout(() => live.el.remove(), NOTICE_EXIT_MS);

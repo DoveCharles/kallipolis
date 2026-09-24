@@ -48,7 +48,7 @@ canvas.pixelated { image-rendering:pixelated; } /* the Pixelation slider (src/ui
   position:fixed; top:16px; left:16px; width:266px;
   background:var(--bg-panel); border:1px solid var(--border); border-radius:8px;
   padding:16px; color:var(--text); user-select:none;
-  max-height:calc(100vh - 32px); overflow-y:auto;
+  max-height:calc(100vh / var(--ui-scale, 1) - 32px); overflow-y:auto;
 }
 #panel h1 { font-size:16px; font-weight:600; margin:0; letter-spacing:0.01em; }
 #panel .subtitle { font-size:11px; color:var(--text-dim); margin:2px 0 14px 0; font-family:var(--mono); }
@@ -152,7 +152,7 @@ input[type=range]::-moz-range-thumb {
      stretching the full width of a wide screen. */
   /* width:max-content because `left:50%` alone leaves a fixed element only the far half of the viewport to size
      itself in — the box came out exactly 50vw wide and the max-width never applied. */
-  white-space:normal; width:max-content; max-width:min(90vw, 760px); line-height:1.6;
+  white-space:normal; width:max-content; max-width:min(90vw / var(--ui-scale, 1), 760px); line-height:1.6;
 }
 
 #rw-context { color:var(--text-dim); }
@@ -233,7 +233,7 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
 /* the favorites (src/ui/favorites.js): a little window hanging under its ♥ button */
 #favorites-tools { position:relative; }
 #favorites-panel {
-  position:absolute; top:40px; left:0; width:240px; max-height:min(60vh, 420px); overflow-y:auto; z-index:25;
+  position:absolute; top:40px; left:0; width:240px; max-height:min(60vh / var(--ui-scale, 1), 420px); overflow-y:auto; z-index:25;
   background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:6px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
 }
 #favorites-panel[hidden] { display:none; }
