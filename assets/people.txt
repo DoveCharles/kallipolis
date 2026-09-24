@@ -346,13 +346,14 @@ Chud
 Mace
 Morpheus
 Sly
-Adibou
 Bizbi
 Ultra
 Chip
 Legendary
 Epic
 Saint
+Atlas
+Darth
 
 ################################################################################################################################
 

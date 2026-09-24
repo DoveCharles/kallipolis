@@ -95,6 +95,7 @@ export function personDoing(p) {
   if (p.mode === 'possessed') return 'Possessed';
   const k = p.punched;
   if (k && k.stage === 'brace') return 'Bracing for a punch';
+  if (k && k.stage === 'crawl') return 'Crawling off the road';
   if (k && (k.stage === 'fall' || k.stage === 'down')) return 'Knocked flat by ' + nameOf(k.by);
   if (k && k.stage === 'rise') return 'Getting back up';
   const a = p.attack;

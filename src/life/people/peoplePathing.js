@@ -17,6 +17,7 @@ import { FOOTBRIDGE_TOP } from '../../water/bridges.js';
 import { PEOPLE_NAV_SPACING, headingTo, isOpenGround, lastPeopleTime, people, peopleNav, peopleNavDebugMesh, peopleRng, pickWeighted, randomSpotIn } from './people.js';
 import { RIDE_CHANCE, enterChance, goIndoors, goRideTrain, mayGoIndoors, stationLinks } from './peopleActivities.js';
 import { signalRedLeft } from '../../roads/markings.js';
+import { roadWariness } from './peopleRoad.js';
 
 // Which way, and how far per unit of lateral offset, a walkway's point `vi` is set off square to it: the average of the
 // nearest non-zero-length segments either side, stretched so a bend keeps its full width, wrapping round for a ring.
@@ -753,7 +754,7 @@ export function maybeCrossRoad(p, nav, dt) {
  * @returns {boolean} whether they can go
  */
 function crossingClear(p, jc, speed) {
-  const from = jc.route[jc.i-1], to = jc.route[jc.i], radius = ROADSAFETY_RADIUS*p.traits.roadsafety;
+  const from = jc.route[jc.i-1], to = jc.route[jc.i], radius = ROADSAFETY_RADIUS*p.traits.roadsafety*roadWariness(p); // (wider for a while after a car's knocked them down)
   if (!jc.junction && p.crossStage === 'mid') {
     // halfway, only the far lane's still to cross, so they only check the half in front of them
     const len = Math.hypot(to.x - from.x, to.z - from.z) || 1, cx = (to.x - from.x)/len, cz = (to.z - from.z)/len;

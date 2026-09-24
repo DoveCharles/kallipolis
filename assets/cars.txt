@@ -40,7 +40,7 @@ plate = LICENSE
 [Ambulance]
 name = Ambulance
 vanitychance = 0
-mood = 🚑 [speed = 0.8, boost = 1.0, braking = 1.3, control = 1.3, weight = 2.8, health = 4, energy = 3]
+mood = 🚑 [speed = 0.8, boost = 1.0, braking = 1.3, control = 1.3, weight = 2.8, health = 4, energy = 3, perception = 0.8]
 loves = WOOOOOOOOOooooo....oooooOOOOOWWWW
 loves = Clearing the roads
 loves = Discounts
@@ -55,7 +55,7 @@ hates = Barethread tires, all night long [terrible, control = 0.8, braking = 0.8
 [Bus]
 name = Bus
 vanitychance = 0
-mood = 🚌 [speed = 0.8, boost = 1, braking = 0.9, control = 0.5, weight = 4.5, recovery = 0.5, health = 4, energy = 2]
+mood = 🚌 [speed = 0.8, boost = 1, braking = 0.9, control = 0.5, weight = 4.5, recovery = 0.5, health = 4, energy = 2, perception = 0.8]
 loves = Picking up my lovely peoples
 loves = Breaking down
 loves = Unexplained 30 minute stop
@@ -79,7 +79,7 @@ hates = Just give her a minute [terrible, recovery = 0.3, unstable = 0.2]
 
 [Canyonero]
 name = SUV
-mood = 🚙 [speed = 1, boost = 0.8, braking = 0.8, control = 0.8, weight = 1.8, health = 2.1, energy = 3, recovery = 0.8]
+mood = 🚙 [speed = 1, boost = 0.8, braking = 0.8, control = 0.8, weight = 1.8, health = 2.1, energy = 3, recovery = 0.8, perception = 0.7]
 loves = Flipping over
 loves = GET OUT OF MY WAY
 loves = Being so so big and huge
@@ -115,7 +115,7 @@ mood = 🚕 [speed = 1, boost = 1, braking = 1.4, control = 1]
 loves = Rolling up the meter
 loves = Cutting people off
 loves = Not indicating
-loves = Knowing a short-cut
+loves = Knowing a, "short-cut"
 loves = Connections
 loves = Driving to an ATM
 loves = Previously undiscovered radio stations
@@ -167,7 +167,7 @@ loves = Having two biiig cup holders
 loves = Heated seats
 loves = Project management frameworks
 loves = Being possessed by a demonic car spirit [legendary, bloodlust]
-loves = Just emailing the client real quick [keysmash]
+loves = Just emailing the client real quick [keysmash, perception = 0.7]
 loves = Tinted windows
 loves = Shock absorbers [legendary, recovery = 2]
 loves = Some engine in this thing [legendary, speed = 1.4, boost = 1.4]
@@ -198,13 +198,13 @@ plate= SALESTAX
 [PickupTruck]
 vanitychance = 0.3
 name = Pickup truck
-mood = 🛻 [speed = 0.9, boost = 1, braking = 1.0, control = 0.6, weight = 1.4, health = 1.8]
+mood = 🛻 [speed = 0.9, boost = 1, braking = 1.0, control = 0.6, weight = 1.4, health = 1.8, perception = 0.7]
 loves = Taking up the whooole road omg
 loves = Running over wildlife
 loves = Running over literally anything
 loves = Vaping
 loves = Fucking their fat wife
-loves = Only using the phone because it's a red light, fuck you [keysmash]
+loves = Only using the phone because it's a red light, fuck you [keysmash, perception = 0.7]
 loves = Six-pack of beer in the passenger seat
 loves = Beer in my bellay [terrible, drunk]
 loves = Using the cargo bay for absolutely nothing
@@ -245,7 +245,7 @@ loves = VROOOOOOOOM
 loves = EEEEEEEEEE *gear change* WREEEEEEEEEE
 loves = RRRRUM RUM RUM RUM RUM RUM
 loves = Being a moderator on r/smalldickproblems
-loves = Texting with one hand [keysmash]
+loves = Texting with one hand [keysmash, perception = 0.7]
 loves = Roll cage [legendary, health = 2, recovery = 1.2]
 loves = Shock absorbers [legendary, recovery = 3]
 loves = Turbo-boosted [ legendary, boost = 2]
@@ -286,9 +286,8 @@ loves = Road trip!!!
 loves = Sliding doors
 loves = Rolling up their windows
 loves = The sat-nav
-loves = Extra spacey [legendary, size = 1.07, weight = 1.2, speed = 0.9, boost = 0.9, health = 1.1]
-loves = Bubblewrap interiors [legendary, recovery = 1.6, health = 1.1]
-loves = Extra airbags [legendary, aqua]
+loves = Extra spacey [legendary, size = 1.09, weight = 1.2, speed = 0.9, boost = 0.9, health = 1.1]
+loves = Airbags & bubblewrap [legendary, aqua, recovery = 1.1, health = 1.1]
 hates = Turning this thing around if I have to
 hates = The 'streets'
 hates = Hearing sirens nearby, omg are they after me? Did I do something?
@@ -313,7 +312,7 @@ plate = LOVEMYKID
 [Truck]
 name = Truck
 vanitychance = 0.2
-mood = 🚚 [size = 1.17, speed = 0.8, boost = 0.7, braking = 0.6, control = 0.6, , weight = 3, recovery = 0.3, health =2.6]
+mood = 🚚 [size = 1.17, speed = 0.8, boost = 0.7, braking = 0.6, control = 0.6, , weight = 3, recovery = 0.3, health =2.6, perception = 0.7]
 loves = HOONK HOOOOOOOOONK
 loves = Blocking the motorway
 loves = Going sooo so slow
@@ -335,7 +334,7 @@ plate = BEER2NITE
 
 [Twingo]
 name = Twingo
-mood = 🚗 [speed = 0.9, boost = 1.1, braking = 1.2, control = 1.1, weight = 0.6]
+mood = 🚗 [speed = 0.9, boost = 1.1, braking = 1.2, control = 1.1, weight = 0.6, perception = 1.1]
 loves = Being oh so cutey
 loves = France
 loves = Portable solar panel [legendary, energy = 3.5, unstable = 0.05]
@@ -358,20 +357,20 @@ plate = ALNATURAL
 [Van]
 name = Van
 vanitychance = 0.1
-mood = 🚐 [speed = 0.9, boost = 1, braking = 0.6, control = 0.6, , weight = 2]
+mood = 🚐 [speed = 0.9, boost = 1, braking = 0.6, control = 0.6, , weight = 2, perception = 0.7]
 loves = Uhh. Just on my way to work, mate.
 loves = Parking on the curb in a busy street. It's alright, got me hazards on mate.
 loves = Calling in sick
 loves = Parking near schools
-loves = Being a pedo
-loves = Moving a lotttt of shit [legendary, size = 1.1, weight = 1.2, speed = 0.9, boost = 0.9, health = 1.1]
+loves = XL Delivery [legendary, size = 1.15, weight = 1.2, speed = 0.9, boost = 0.9, health = 1.1]
 loves = Not giving a fuccckkkkk [terrible, drunk]
-loves = Drink before work [terrible, drunk]
-loves = Grow-on-the-go [terrible, drunk]
+loves = A drink before work [terrible, drunk]
 hates = All other cars
 hates = Women
 hates = Bellends
 hates = Work
+hates = Being called a nonce
+hates = Working class solidarity
 plate = BOOB HONK
 plate = NICE DICK
 plate = YAY CRIME

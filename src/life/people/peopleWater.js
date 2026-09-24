@@ -9,19 +9,6 @@ import { clipNamed, drownedPerson, voiceOfPerson } from './people.js';
 import { endActivity } from './peopleActivities.js';
 import { unpossessPerson } from './peopleTracking.js';
 
-// ============================================================ people in the water
-// Someone whose middle goes over open water — no road, path or footbridge across it (isOpenWater) — drops in, as a car
-// does (see sinkCar in life/traffic/driving.js): carried on by how they were moving, falling faster and tipping forward,
-// with a splash as they reach the surface. Carried back over land before their feet reach it, they climb back out,
-// shaking (as riseCar). Once they're under they drown — no blood or giblets: they float back up face down, lying as if
-// knocked flat, then slowly sink, and only then is it counted (drownedPerson: the morality notice) and they're gone. The
-// hearted can't drown: they come up again on the nearest bank. Anyone with the aqua trait walks on water.
-//
-// p.water, while any of it is happening: { stage, drop, fall, pitch, roll, vx, vz, baseY, ... }. stage is 'falling' or
-// 'rising' while they're still themselves, then 'under', 'surfacing', 'floating' and 'settling' once drowned (mode
-// 'drowning'). drop is how far below baseY (the ground they went in from) they are; pitch tips them forward, roll
-// rocks them, and flip turns their fallen pose face down (see turnInWater).
-
 const FALL_GRAVITY = 20, FALL_DRAG = 1.5, FALL_SPEED_MAX = 8; // (units a second squared; the share of their speed the water takes each second; the fastest they go in)
 const TIP = 0.9, TIP_RATE = 3; // (how far forward they tip going in, in radians, and how fast)
 const RISE_RATE = 12, RISE_ROLL = 0.08, RISE_SHAKES_PER_SECOND = 9, RISE_DONE = 0.005; // (as the car's, in driving.js)

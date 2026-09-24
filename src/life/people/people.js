@@ -23,6 +23,7 @@ import { favoritePeople, isFavoritePerson } from '../../ui/favorites.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater } from './peopleWater.js';
+import { turnCrawling } from './peopleRoad.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { followPersonAt, followPerson, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
@@ -466,11 +467,11 @@ const LYING_CLEARANCE = 1; // how near (at people size 1) anyone walks to someon
  * @param {Person} victim - whoever it is
  * @returns {void}
  */
-function frightenBystanders(victim) {
-  const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
+function frightenBystanders(victim, source = null) {
+  const reach = FRIGHT_RADIUS*S.peopleSize, from = source ?? { x: victim.x, z: victim.z };
   people.forEach(p => {
     if (p === victim || isGone(p)) return;
-    const d = Math.hypot(p.x - from.x, p.z - from.z);
+    const d = Math.hypot(p.x - victim.x, p.z - victim.z);
     if (d <= reach) p.fright = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
   });
 }
@@ -480,11 +481,11 @@ function frightenBystanders(victim) {
  * @param {Person} victim - whoever it is
  * @returns {void}
  */
-function stunBystanders(victim) {
-  const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
+function stunBystanders(victim, source = null) {
+  const reach = FRIGHT_RADIUS*S.peopleSize, from = source ?? { x: victim.x, z: victim.z };
   people.forEach(p => {
     if (p === victim || isGone(p)) return;
-    const d = Math.hypot(p.x - from.x, p.z - from.z);
+    const d = Math.hypot(p.x - victim.x, p.z - victim.z);
     if (d <= reach) p.stun = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
   });
 }
@@ -494,11 +495,11 @@ function stunBystanders(victim) {
  * @param {Person} victim - whoever it is
  * @returns {void}
  */
-function pleaseBystanders(victim) {
-  const reach = FRIGHT_RADIUS*S.peopleSize, from = { x: victim.x, z: victim.z };
+function pleaseBystanders(victim, source = null) {
+  const reach = FRIGHT_RADIUS*S.peopleSize, from = source ?? { x: victim.x, z: victim.z };
   people.forEach(p => {
     if (p === victim || isGone(p)) return;
-    const d = Math.hypot(p.x - from.x, p.z - from.z);
+    const d = Math.hypot(p.x - victim.x, p.z - victim.z);
     if (d <= reach) p.please = { stage: 'notice', timer: 0.15 + d/reach*0.6 + peopleRng()*0.3, from };
   });
 }
@@ -522,13 +523,15 @@ export function standingOf(p) {
  * their tracks, and a villain's delights them. Called for every death, whoever caused it — the Smite button, or a car
  * running them over (see runOverPeople in life/traffic/collisions.js) — so any way an NPC dies is reacted to the same.
  * @param {Person} victim - whoever was killed
+ * @param {?{x: number, z: number}} [source] - what killed them, which they look at and run from (a car), else the victim
  * @returns {void}
  */
-function bystandersReactToDeath(victim) {
-  const standing = standingOf(victim);
-  if (standing === 'villainous') pleaseBystanders(victim);
-  else if (standing === 'guilty') stunBystanders(victim);
-  else frightenBystanders(victim);
+function bystandersReactToDeath(victim, source = null) {
+  // (measured from the victim; looked at and run from the source)
+  const standing = standingOf(victim), from = source ? { x: source.x, z: source.z } : null;
+  if (standing === 'villainous') pleaseBystanders(victim, from);
+  else if (standing === 'guilty') stunBystanders(victim, from);
+  else frightenBystanders(victim, from);
 }
 
 /**
@@ -640,9 +643,10 @@ export function fleeWithin(p, area) {
  * @param {'player'|'car'} [by] - who did it, for the morality meter: the Smite button, or a car that ran them over
  * @param {?{x: number, y: number, z: number}} [momentum] - the velocity of whatever hit them, which their giblets keep
  * @param {number} [throwScale] - how much further than `momentum` alone their giblets are thrown (the blood splashed on others goes by `momentum`)
+ * @param {?{x: number, z: number}} [source] - what killed them (a car), for the people around to run from
  * @returns {void}
  */
-function killPerson(i, by = 'player', momentum = null, throwScale = 1) {
+function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = null) {
   const p = people[i];
   if (!p || isGone(p) || isFavoritePerson(p.id)) return; // (the hearted can't be killed: see ui/favorites.js)
   // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
@@ -671,7 +675,7 @@ function killPerson(i, by = 'player', momentum = null, throwScale = 1) {
   }
   Object.values(colors).forEach(color => color?.isColor && color.lerp(new THREE.Color(0x550000), 0.4)); //make gibs darker, less saturated
   explode(at, 1.7*p.height*S.peopleSize, colors, thrown);
-  bystandersReactToDeath(p);
+  bystandersReactToDeath(p, source);
   p.mode = 'dead';
   p.train = null;
   p.indoors = null;
@@ -1058,8 +1062,8 @@ export function updatePeople(t) {
       const offX = blend('pelvisX')*s, offZ = blend('pelvisZ')*s, sin = Math.sin(p.heading), cos = Math.cos(p.heading);
       p.heightScale = blend('heightScale');
       rotation.setFromAxisAngle(up, p.heading);
-      const faceDown = turnInWater(p, rotation); // (tipped, rocked or face down in the water: see peopleWater.js)
-      position.set(p.x - offX*cos - offZ*sin, faceDown ? p.y : p.y + p.seatLift*sitWeight(p) - personModel.minY*s, p.z + offX*sin - offZ*cos);
+      const faceDown = turnInWater(p, rotation), crawlLift = turnCrawling(p, rotation); // (tipped, rocked or face down in the water: see peopleWater.js; face down crawling: see peopleRoad.js)
+      position.set(p.x - offX*cos - offZ*sin, faceDown ? p.y : crawlLift != null ? p.y + crawlLift : p.y + p.seatLift*sitWeight(p) - personModel.minY*s, p.z + offX*sin - offZ*cos);
       matrix.compose(position, rotation, scale.set(s, s, s));
       personModel.mesh.setMatrixAt(i, matrix);
       // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION
@@ -1150,7 +1154,7 @@ export function updatePeople(t) {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
       const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;
       rotation.setFromAxisAngle(up, p.heading);
-      turnInWater(p, rotation);
+      turnInWater(p, rotation); turnCrawling(p, rotation);
       if (!isDrawn(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
       matrix.compose(position.set(p.x, p.y + bob, p.z), rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);

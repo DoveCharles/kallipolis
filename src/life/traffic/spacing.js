@@ -2,7 +2,7 @@ import { S } from '../../core/shared.js';
 import { drivenCar } from './driving.js';
 import { TURN_CURVE, lanePoint } from './lanes.js';
 import { carLength, carWidth } from './placing.js';
-import { cars } from './state.js';
+import { cars, trafficRng } from './state.js';
 import { stretchCounts, stretchOf } from './turns.js';
 
 // ---- keeping clear of other cars: gapAhead finds the nearest car whose footprint lies in the strip senseRange long and
@@ -189,4 +189,38 @@ export function carsOverlap(a, b) {
   };
   return axes.every(axis => Math.abs(dx*axis[0] + dz*axis[1])
     < extent(aLen, aWid, a.heading, axis) + extent(bLen, bWid, b.heading, axis));
+}
+
+// ---- someone lying in the road: a car that notices them (noticeChance, rolled once per person it comes up on) stops short
+// of them, and waits as long as they're there — crawling off it, say (see life/people/peopleRoad.js). One that doesn't
+// drives on over them.
+const LYING_SIGHT = 16, LYING_SIDE = 1, LYING_STOP_GAP = 2.5; // (how far ahead a car sees; how far past its own side, for a body lying across the lane; how far short of their middle it stops — all at people size 1)
+const NOTICE_AT_ONE = 0.95, NOTICE_CURVE = 1.3; // (the chance at perception 1, and how steeply it falls away below: about 39% at 0.5)
+/**
+ * The chance a car notices someone lying in the road ahead, by its perception trait.
+ * @param {object} car
+ * @returns {number}
+ */
+export const noticeChance = car => Math.min(0.99, NOTICE_AT_ONE*Math.pow(car.traits?.perception ?? 1, NOTICE_CURVE));
+/**
+ * How far a car can go before it must stop for someone it has noticed lying ahead of it, in its path, or null if there's
+ * no one. Whether it notices each one is rolled the first time they're in its sight, and kept while they're lying there.
+ * @param {object} car
+ * @param {object[]} lying - everyone on the ground just now (see isLying in collisions.js)
+ * @returns {?number}
+ */
+export function lyingAhead(car, lying) {
+  const seen = car.lyingSeen;
+  if (seen) for (const p of seen.keys()) if (!lying.includes(p)) seen.delete(p); // (up, or gone)
+  if (!lying.length) return null;
+  const sight = LYING_SIGHT*S.peopleSize, side = carWidth(car)*0.5 + LYING_SIDE*S.peopleSize, sin = Math.sin(car.heading), cos = Math.cos(car.heading);
+  let nearest = null;
+  for (const p of lying) {
+    const dx = p.x - car.x, dz = p.z - car.z, forward = dx*sin + dz*cos;
+    if (forward < 0 || forward > sight || Math.abs(dx*cos - dz*sin) > side) continue;
+    const noticed = car.lyingSeen ??= new Map();
+    if (!noticed.has(p)) noticed.set(p, trafficRng() < noticeChance(car));
+    if (noticed.get(p) && (nearest == null || forward < nearest)) nearest = forward;
+  }
+  return nearest == null ? null : nearest - carLength(car)*0.5 - LYING_STOP_GAP*S.peopleSize;
 }

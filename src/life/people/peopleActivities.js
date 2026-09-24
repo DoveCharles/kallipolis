@@ -14,6 +14,7 @@ import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, personHeight, stopFollowingPerson } from './peopleTracking.js';
 import { openRoomDoor, roomBeyondDoor, roomDoorway, roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
 import { clearMeal, mealFinished, serveMeal } from './peopleHolding.js';
+import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
 
 // ---- what people get up to besides walking about.
 //
@@ -712,7 +713,8 @@ export function landFall(p) {
  */
 export function updatePunched(p, dt) {
   const k = p.punched;
-  if (k.stage === 'down' && (k.timer -= dt) <= 0) { k.stage = 'rise'; p.pose = 'Idle'; }
+  if (k.stage === 'down' && (k.timer -= dt) <= 0) { if (!crawlOffRoad(p)) { k.stage = 'rise'; p.pose = 'Idle'; } } // (out on the road, they crawl off it first: see peopleRoad.js)
+  else if (k.stage === 'crawl') updateCrawl(p, dt);
   else if (k.stage === 'rise' && weightOf(p, clipNamed('Idle')) >= 1) { p.punched = null; p.wait = 0.5 + peopleRng(); reactToPunch(p, k.by); }
 }
 

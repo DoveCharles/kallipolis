@@ -32,21 +32,43 @@ export function carHitbox(car, scale = CAR_HITBOX_SCALE*CAR_KILL_SCALE) {
   const length = carLength(car), width = carWidth(car);
   return { halfLength: (length*0.5 + 0.25)*scale, halfWidth: (width*0.5 + 0.25)*scale };
 }
+const LYING_HEAD = 0.8, LYING_LEGS = 0.5; // (how far from someone lying down's middle their head and legs are, at people size and height 1)
+/** Whether someone is on the ground: falling, knocked flat, or getting up (see knockDown in people/peopleActivities.js). */
+export const isLying = p => !!p.punched && p.punched.stage !== 'marked' && p.punched.stage !== 'brace';
+/**
+ * Whether a car is over any of someone lying down — their middle, their head or their legs — within `box` (the same kill
+ * box someone standing is hit by), so a car running over any of them kills them.
+ * @param {object} p - the person, lying facing whoever knocked them down, their head behind them
+ * @param {object} car
+ * @param {{halfLength: number, halfWidth: number}} box
+ * @returns {boolean}
+ */
+function lyingUnder(p, car, box) {
+  const size = p.height*S.peopleSize, fx = Math.sin(p.heading), fz = Math.cos(p.heading), cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+  return [-LYING_HEAD, 0, LYING_LEGS].some(along => {
+    const dx = p.x + fx*along*size - car.x, dz = p.z + fz*along*size - car.z;
+    return Math.abs(dx*cos - dz*sin) < box.halfWidth && Math.abs(dx*sin + dz*cos) < box.halfLength;
+  });
+}
+const SIDE_THROW = 3; // (how many times further someone knocked over square from the side is thrown than someone hit head on; the nudge zone's shove isn't scaled)
 /**
  * Throw someone away from a car, `factor` times CAR_PUSH_PER_SPEED of its speed.
  * @param {object} p - the person
  * @param {object} car
  * @param {number} factor
+ * @param {number} [speed]
+ * @param {number} [sideThrow] - how many times further a square side-on hit throws them (SIDE_THROW for a knock-over; 1, unscaled, for a nudge)
  * @returns {void}
  */
-function throwBack(p, car, factor, speed = car.speed) {
-  const away = { x: p.x - car.x, z: p.z - car.z };
-  if (Math.hypot(away.x, away.z) < 1e-3) { away.x = Math.sin(car.heading); away.z = Math.cos(car.heading); }
-  App.pushPerson?.(p, away.x, away.z, Math.abs(speed)*CAR_PUSH_PER_SPEED*factor);
+function throwBack(p, car, factor, speed = car.speed, sideThrow = 1) {
+  const away = { x: p.x - car.x, z: p.z - car.z }, len = Math.hypot(away.x, away.z);
+  if (len < 1e-3) { away.x = Math.sin(car.heading); away.z = Math.cos(car.heading); }
+  const sideways = len < 1e-3 ? 0 : Math.abs(away.x*Math.cos(car.heading) - away.z*Math.sin(car.heading))/len; // (0 head on, 1 square from the side)
+  App.pushPerson?.(p, away.x, away.z, Math.abs(speed)*CAR_PUSH_PER_SPEED*factor*(1 + (sideThrow - 1)*sideways));
 }
 /**
  * Kill every pedestrian whose position falls inside carHitbox, turned to the car's heading (killPerson in people.js,
- * crediting the driver — including anyone falling or lying knocked down), and knock over anyone else inside the larger clipping box (knockOverPerson). A normal car reaches only someone out on the road, over it or halfway, and never anyone it has
+ * crediting the driver — including anyone falling or lying knocked down, hit anywhere under the kill box: see lyingUnder), and knock over anyone else inside the larger clipping box (knockOverPerson). A normal car reaches only someone out on the road, over it or halfway, and never anyone it has
  * waved over; the car being driven, or one knocked and moving (`motion`, its velocity { x, z }), reaches anyone within carHeight of Y_ROAD.
  * @param {object} car
  * @param {?{x: number, z: number, thrown?: boolean, by?: string}} motion - a knocked car's velocity, or null to go by its speed and heading; `thrown` if the knock is still carrying it, `by` 'player' to credit the player with the kills
@@ -54,7 +76,7 @@ function throwBack(p, car, factor, speed = car.speed) {
  */
 export function runOverPeople(car, motion = null) {
   const { halfLength, halfWidth } = carHitbox(car, motion?.thrown ? 1 : undefined), clip = carHitbox(car, CAR_HITBOX_SCALE*CAR_CLIP_SCALE), stun = carHitbox(car, CAR_HITBOX_SCALE*CAR_STUN_SCALE);
-  const reach = Math.hypot(stun.halfLength, stun.halfWidth), cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+  const reach = Math.hypot(stun.halfLength, stun.halfWidth) + 1.5*LYING_HEAD*S.peopleSize, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   const driven = car === drivenCar, reachesAll = driven || !!motion, shocked = new Set();
   const velocity = motion ?? { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }, speed = Math.hypot(velocity.x, velocity.z);
   App.people.forEach((p, i) => {
@@ -63,9 +85,10 @@ export function runOverPeople(car, motion = null) {
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
     // (anyone hearted is knocked down instead, below: they can't be killed. See ui/favorites.js)
-    if (Math.abs(right) < halfWidth && Math.abs(forward) < halfLength && !isFavoritePerson(i)) { impactSound('thump', p, speed); if (speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p)); App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }, CAR_GIB_THROW); slowedBy(car, 'person', p.traits?.weight); }
+    const under = isLying(p) ? lyingUnder(p, car, { halfLength, halfWidth }) : Math.abs(right) < halfWidth && Math.abs(forward) < halfLength;
+    if (under && !isFavoritePerson(i)) { impactSound('thump', p, speed); if (speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p)); App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }, CAR_GIB_THROW, car); slowedBy(car, 'person', p.traits?.weight); }
     else if (p.mode === 'possessed') return;
-    else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { impactSound('thump', p, speed); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed); p.shotRate = CAR_FALL_SPEEDUP; slowedBy(car, 'person', p.traits?.weight); } }
+    else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { App.knockedByCar?.(p); impactSound('thump', p, speed); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed, SIDE_THROW); p.shotRate = CAR_FALL_SPEEDUP; slowedBy(car, 'person', p.traits?.weight); } }
     else if (Math.abs(right) < stun.halfWidth && Math.abs(forward) < stun.halfLength) {
       shocked.add(p);
       if (!car.shocked?.has(p) && !p.stun && !p.fright && !p.please && !p.punched && !p.attack) {

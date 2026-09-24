@@ -6,14 +6,14 @@ import { navRebuildOnHold } from '../../roads/roads.js';
 import { placeKey, signalState } from '../../roads/markings.js';
 import { updateEngines } from '../../audio/engine.js';
 import { carTypeOf } from '../car-types.js';
-import { BLAST_THROW, DETONATION_REACH, burnFuse, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
+import { BLAST_THROW, burnFuse, DETONATION_REACH, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
 import { driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
 import { chaseCamera, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
 import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
 import { carHoloTimeUniform, carPlate } from './materials.js';
 import { carMeshes, carParts, designNumbers } from './models.js';
 import { CAR_REAR_AXLE, carHeight, carLength, engineOf, placeCar, placing, turnWheels } from './placing.js';
-import { CAR_BRAKE, CAR_STOP_GAP, GIVE_UP_AFTER, buildCarGrid, forCarsNear, gapAhead, uTurnBlocked, waitOrGiveUp } from './spacing.js';
+import { buildCarGrid, CAR_BRAKE, CAR_STOP_GAP, forCarsNear, gapAhead, GIVE_UP_AFTER, lyingAhead, uTurnBlocked, waitOrGiveUp } from './spacing.js';
 import { updateSpecialTraits } from './special.js';
 import { CAR_SPEED, TRAFFIC_MAX, TURN_SAFE_ANGLE, cars, trafficRng } from './state.js';
 import { waitToTurn } from './turns.js';
@@ -103,6 +103,7 @@ export function updateTraffic(t) {
     if (list.length > 1 && S.trafficNav.lines[list[0].li].loop) list[list.length-1].ahead = list[0]; // (round the loop)
   });
   buildCarGrid();
+  const lying = App.people.filter(isLying); // (anyone on the ground, for cars to stop for: see lyingAhead)
   const { matrix } = placing;
   const designCounts = carMeshes.map(() => 0);
   cars.forEach((car, i) => {
@@ -130,6 +131,8 @@ export function updateTraffic(t) {
     const block = gapAhead(car);
     if (block.gap < Infinity) target = Math.min(target, Math.max(0, (block.gap - CAR_STOP_GAP*S.peopleSize)*1.2*S.peopleSpeed));
     waitOrGiveUp(car, block.by, dt);
+    const lyingGap = lyingAhead(car, lying); // (and for anyone lying in the road it's noticed, however long they're there)
+    if (lyingGap != null) target = Math.min(target, Math.max(0, lyingGap*1.5*S.peopleSpeed));
     const ahead = junctionAhead(car, 8);
     // (and, coming up to a dead end within 12 sizes of it, stays short of the end while another car sits where it would
     // come round into — but only for 2*GIVE_UP_AFTER seconds, since that car may be queued behind this car's own lane)
