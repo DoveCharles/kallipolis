@@ -5,7 +5,8 @@ import { roomHolds, roomVisit } from '../../buildings/interior.js';
 import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
-import { explode } from '../giblets.js';
+import { blastFx, explode } from '../giblets.js';
+import { blasts, PERSON_BLAST_SCALE } from '../traffic/state.js';
 import { throwBodyParts } from './peopleGibs.js';
 import { babble, nextSyllable } from '../../audio/voices.js';
 import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
@@ -638,7 +639,7 @@ export function fleeWithin(p, area) {
  * they were talking to carrying on without them. Whoever isn't hearted stays dead only until the crowd next wants
  * their spot: then someone new, with their own name and face, takes it (see updatePeople) - they don't come back.
  * The people around them take it according to how evil they were (see bystandersReactToDeath), the same however they
- * died.
+ * died. The explosive go up too, killing whoever's near.
  * @param {number} i - their index in people
  * @param {'player'|'car'} [by] - who did it, for the morality meter: the Smite button, or a car that ran them over
  * @param {?{x: number, y: number, z: number}} [momentum] - the velocity of whatever hit them, which their giblets keep
@@ -677,6 +678,10 @@ function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = 
   explode(at, 1.7*p.height*S.peopleSize, colors, thrown);
   bystandersReactToDeath(p, source);
   p.mode = 'dead';
+  if (p.traits.explosive) { // (a blast killing whoever's around, on the next traffic update: see blasts in life/traffic/state.js)
+    blastFx(at, 1.7*p.height*S.peopleSize, 1.5);
+    blasts.push({ ...at, scale: PERSON_BLAST_SCALE });
+  }
   p.train = null;
   p.indoors = null;
   p.moving = false;
@@ -839,6 +844,8 @@ export function updatePeople(t) {
     if (p.push) stepPush(p, dt);
     if (possessed) p.fright = p.stun = p.please = null;
     if (p.fright) updateFright(p, dt);
+    // terrified: never stop fleeing — each flee ended starts another, from just behind them, so they carry on the way they were going
+    if (p.traits.terrified && (p.mode === 'line' || p.mode === 'wander') && !p.fright && !p.punched && !inWater(p)) beginFleeing(p, { x: p.x - Math.sin(p.heading), z: p.z - Math.cos(p.heading) });
     //attempting to give additional reactions to npc death depending on how evil they are
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
     if (p.please) updatePlease(p, dt); // (the same hold as stun, read as delight: see pleased below)

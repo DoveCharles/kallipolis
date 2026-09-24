@@ -15,7 +15,7 @@ import { carMeshes, carParts, designNumbers } from './models.js';
 import { CAR_REAR_AXLE, carHeight, carLength, engineOf, placeCar, placing, turnWheels } from './placing.js';
 import { buildCarGrid, CAR_BRAKE, CAR_STOP_GAP, forCarsNear, gapAhead, GIVE_UP_AFTER, lyingAhead, uTurnBlocked, waitOrGiveUp } from './spacing.js';
 import { updateSpecialTraits } from './special.js';
-import { CAR_SPEED, TRAFFIC_MAX, TURN_SAFE_ANGLE, cars, trafficRng } from './state.js';
+import { CAR_SPEED, TRAFFIC_MAX, TURN_SAFE_ANGLE, blasts, cars, trafficRng } from './state.js';
 import { waitToTurn } from './turns.js';
 export { loadCarModels } from './models.js';
 export { forEachHeadlight } from './placing.js';
@@ -195,14 +195,19 @@ export function updateTraffic(t) {
     updateSpecialTraits(car, t, dt);
     placeCar(car, i, designCounts);
   });
-  // (each car that has burnt out blows up, and any car near it too — as an ordinary explosion, so they set nothing else off)
+  // (each car that has burnt out blows up, and any car near it too — as an ordinary explosion, setting nothing else off
+  // unless explosive; so do the blasts explosive cars, people and bees left as they died, since the last update)
   const burntOut = wreckedCars.splice(0), blasted = new Set(burntOut);
-  const reach = DETONATION_REACH*S.peopleSize;
-  burntOut.forEach(car => App.people.forEach((p, i) => { // (people in the blast die, thrown clear of it)
-    const dx = p.x - car.x, dz = p.z - car.z, d = Math.hypot(dx, dz);
-    if (!p.indoors && d <= reach && Math.abs(p.y - Y_ROAD) <= reach) App.killPerson(i, 'player', { x: dx/(d || 1)*BLAST_THROW, y: 0, z: dz/(d || 1)*BLAST_THROW });
-  }));
-  burntOut.forEach(car => forCarsNear(car.x, car.z, reach, other => { if (Math.hypot(other.x - car.x, other.z - car.z) <= reach) blasted.add(other); }));
+  const going = [...blasts.splice(0), ...burntOut.map(car => ({ x: car.x, y: Y_ROAD, z: car.z, scale: 1 }))];
+  going.forEach(blast => {
+    const reach = DETONATION_REACH*S.peopleSize*blast.scale;
+    App.people.forEach((p, i) => { // (people in the blast die, thrown clear of it)
+      const dx = p.x - blast.x, dz = p.z - blast.z, d = Math.hypot(dx, dz);
+      if (!p.indoors && d <= reach && Math.abs(p.y - blast.y) <= reach) App.killPerson(i, 'player', { x: dx/(d || 1)*BLAST_THROW, y: 0, z: dz/(d || 1)*BLAST_THROW });
+    });
+    App.blastBees?.(blast, reach);
+    forCarsNear(blast.x, blast.z, reach, other => { if (Math.hypot(other.x - blast.x, other.z - blast.z) <= reach) blasted.add(other); });
+  });
   if (drivenCar && blasted.has(drivenCar)) { const driven = drivenCar; stopDriving(); blasted.add(driven); } // (the driver is thrown out of it, and it goes too)
   blasted.forEach(car => { const i = cars.indexOf(car); if (i >= 0) killCar(i); });
   for (let i = cars.length - 1; i >= 0; i--) if (cars[i] !== drivenCar && cars[i].sinking?.under) drownCar(i); // (knocked in and gone under)

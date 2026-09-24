@@ -13,4 +13,9 @@ export const CAR_PAINTS = [ // [color, how common]: the PICO-8 palette
   [0xff004d, 1], [0xffa300, 1], [0xffec27, 1], [0x00e436, 1], [0x29adff, 1], [0x83769c, 1], [0xff77a8, 1], [0xffccaa, 1]];
 S.trafficAmount = 150, S.trafficNav = null, S.trafficNavBuiltAt = -Infinity, S.lastTrafficTime = null; // cars asked for; the lanes, grid and capacity (see buildTrafficNav); when they were built; the last update's time
 export const cars = [];
+// Blasts waiting to go off on the next traffic update, as { x, y, z, scale } — scale × DETONATION_REACH is how far they kill
+// (see updateTraffic). Explosive cars and people add to it as they die, so chains of them go off a frame apart.
+export const blasts = [];
+export const EXPLOSIVE_SCALE = 3; // how much bigger an explosive car's blast is, reach and fireball
+export const PERSON_BLAST_SCALE = 0.5; // an explosive person's (or bee's) blast, against a car's
 export const trafficRng = mulberry32(31337);

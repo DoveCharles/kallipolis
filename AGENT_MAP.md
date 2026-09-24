@@ -91,7 +91,7 @@ Format: `file` (size) purpose — key exports.
 ### src/life/traffic/
 Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, life/car-card.js); siblings import each other. `state.js` imports no siblings, so anything read while modules load lives there.
 - `traffic.js` (15K) Overview of how cars work; the per-frame update and the App hooks. — exports: updateTraffic, carHitboxDebugMesh; re-exports loadCarModels, forEachHeadlight, carThumbnailScene
-- `state.js` (2K) Shared settings and state: limits, speeds, paint palette, `cars`, `trafficRng`. — exports: TRAFFIC_MAX, CAR_SPEED, TRAFFIC_LANE_PER_CAR, PED_YIELD_RADIUS, TURN_SAFE_ANGLE, CAR_PAINTS, cars, trafficRng
+- `state.js` (2K) Shared settings and state: limits, speeds, paint palette, `cars`, `trafficRng`, the `blasts` queue (explosive trait; also imported by people/people.js and bees.js). — exports: TRAFFIC_MAX, CAR_SPEED, TRAFFIC_LANE_PER_CAR, PED_YIELD_RADIUS, TURN_SAFE_ANGLE, CAR_PAINTS, cars, trafficRng, blasts, EXPLOSIVE_SCALE, PERSON_BLAST_SCALE
 - `models.js` (15K) The box car and the Cars.glb designs, and a car's paint. — exports: loadCarModels, carParts, carMeshes, designNumbers, pickCarPaint, BOX_CAR_LENGTH …
 - `materials.js` (27K) Number plates and the car shader (plates, legendary sheen, rust); each design's instanced mesh. — exports: carPlate, carHoloTimeUniform, makeCarMesh
 - `lanes.js` (22K) Lanes from road lines (buildTrafficNav), routes and junction curves, spawning, driving along, yielding. — exports: buildTrafficNav, newCar, spawnCar, reseatCar, routePoint, lanePoint, driveAlong, junctionAhead, checkYield, carsNearby, carsWhere …

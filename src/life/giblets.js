@@ -163,18 +163,20 @@ function spawnSplat(at, height, color, sizeMul = 1, soot = false) {
 // and slowly spreading as they thin out; and the light flash, retriggered (so overlapping explosions just relight it)
 const FIRE_COLORS = [0xffdd66, 0xff9a3c, 0xff5a1f, 0xd8280f];
 const PLUME_SIZE = 0.45; // how big a car explosion's fireball and smoke are, against the car's height
-function explodeFx(at, height) {
+function explodeFx(at, height, scale = 1) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  height *= scale;
+  const spread = Math.sqrt(scale); // (a bigger blast throws its fire and smoke further out, not just bigger)
   const now = performance.now()/1000;
   for (let k=0;k<30;k++) {
-    const angle = Math.random()*Math.PI*2, outward = 3 + Math.random()*9;
+    const angle = Math.random()*Math.PI*2, outward = (3 + Math.random()*9)*spread;
     pushFx({ kind: 'fire', x: at.x, y: at.y + height*0.2, z: at.z,
-      vx: Math.cos(angle)*outward, vy: 5 + Math.random()*9, vz: Math.sin(angle)*outward,
+      vx: Math.cos(angle)*outward, vy: (5 + Math.random()*9)*spread, vz: Math.sin(angle)*outward,
       size: height*PLUME_SIZE*(0.36 + Math.random()*0.36), life: 0.45 + Math.random()*0.4,
       color: new THREE.Color(FIRE_COLORS[Math.floor(Math.random()*FIRE_COLORS.length)]), born: now });
   }
   for (let k=0;k<20;k++) {
-    const angle = Math.random()*Math.PI*2, outward = 0.7 + Math.random()*2.8;
+    const angle = Math.random()*Math.PI*2, outward = (0.7 + Math.random()*2.8)*spread;
     const grey = 0.12 + Math.random()*0.14;
     pushFx({ kind: 'smoke', x: at.x, y: at.y + height*0.3, z: at.z,
       vx: Math.cos(angle)*outward, vy: 1.7 + Math.random()*2.4, vz: Math.sin(angle)*outward,
@@ -429,18 +431,25 @@ export function explodeBee(at, size, fallbackGround) {
   spawnParts(at, size, parts, 0.25, (x, z) => groundBelow(x, at.y, z, fallbackGround));
   playSound('pop', at);
 }
+// A fireball, smoke and scorch mark with nothing thrown: an explosive person going up (see killPerson in people/people.js).
+export function blastFx(at, height, scale = 1) {
+  spawnSplat(at, height*scale, SCORCH_SPLAT_COLOR, SOOT_SIZE, true);
+  explodeFx(at, height, scale);
+  playSound('explosion', at);
+}
 // Blows a car up: `at` where its wheels were, `height` how tall it was, `colors.paint` its own color — chunks of it, bigger
 // and thrown much further than a person's (see spawnParts' `power`), in its paint and (standing in for glass, trim and
-// tires) CAR_TRIM_COLORS, sooty flecks, a big scorch mark rather than blood, and a fireball with smoke (see explodeFx).
-export function explodeCar(at, height, colors) {
+// tires) CAR_TRIM_COLORS, sooty flecks, a big scorch mark rather than blood, and a fireball with smoke (see explodeFx) — `scale`
+// times as big for an explosive car.
+export function explodeCar(at, height, colors, scale = 1) {
   // (a wreck — a car or an aircraft, whose own body comes apart in blocks: see car-wrecks.js — needs only its glass and
   // a few scorched flecks)
   const parts = colors.wrecked ? [[new THREE.Color(CAR_GLASS_COLOR), WRECK_GLASS_CHUNKS, 0.06]]
     : [[colors.paint, 32, 0.17], [new THREE.Color(CAR_TRIM_COLORS[0]), 16, 0.13], [new THREE.Color(CAR_TRIM_COLORS[1]), 10, 0.11]];
   SCORCH_COLORS.forEach(hex => parts.push([new THREE.Color(hex), colors.wrecked ? WRECK_SCORCH_CHUNKS : 14, 0.055]));
   spawnParts(at, height, parts, 2.2, (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK)); // (its own ground per chunk, same reasoning as explode, above — wreckage can fly a lot further than a person's gibs, easily far enough to clear a bank into water)
-  spawnSplat(at, height, SCORCH_SPLAT_COLOR, SOOT_SIZE, true);
-  explodeFx(at, height);
+  spawnSplat(at, height*scale, SCORCH_SPLAT_COLOR, SOOT_SIZE, true);
+  explodeFx(at, height, scale);
   playSound('explosion', at);
 }
 // Takes a car under at the water's surface: `at` where it went down, `height` how tall it was — no wreckage and no

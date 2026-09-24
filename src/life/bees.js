@@ -9,7 +9,8 @@ import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
 import { mulberry32 } from '../core/math.js';
 import { startFlying, endFlying } from './possession.js';
-import { explodeBee } from './giblets.js';
+import { blastFx, explodeBee } from './giblets.js';
+import { blasts, PERSON_BLAST_SCALE } from './traffic/state.js';
 import { updateBuzzes } from '../audio/buzz.js';
 import { stepFlight, makeHand, cruiseSpeed, chaseBehind } from './flight.js';
 
@@ -120,6 +121,7 @@ function hideHiveCard() { hiveCard.hide(); }
 const FLOWER_HEIGHT = 0.42;   // how tall the tallest of the three flowers stands, in world units; the others keep their proportion to it
 const HIVE_HEIGHT = 0.6;
 const BEE_LENGTH = 0.26;      // nose to tail
+const BEE_BLAST_FX = 2;       // an explosive bee's fireball size (a car's is its height)
 // The bee's body in the people's own yellow rather than the model's, which is a shade off it: the Person model's
 // Skin material, as it's drawn (people.js reads that material and converts it the same way — see its palette).
 const BEE_BODY_MATERIAL = /^bee\s*1$/i, BEE_BODY_COLOR = 0xffeb2b;
@@ -737,14 +739,19 @@ function punchBee(bee, puncher) {
 }
 /**
  * Kill a bee that's out flying — wherever it was, in a burst of its colours — and put a new one in its hive to come out
- * after a few seconds. The camera on it stays where it died, following nothing.
+ * after a few seconds. The camera on it stays where it died, following nothing. An explosive one goes up in a blast.
  * @param {object} bee
  * @returns {void}
  */
 function killBee(bee) {
   if (isHome(bee)) return;
   if (flownBee === bee || (followedBee && followedBee.colony.bees[followedBee.index] === bee)) stopFollowingBee();
-  explodeBee({ x: bee.at.x, y: bee.at.y, z: bee.at.z }, BEE_LENGTH*bee.traits.size, Y_PARK);
+  const at = { x: bee.at.x, y: bee.at.y, z: bee.at.z };
+  explodeBee(at, BEE_LENGTH*bee.traits.size, Y_PARK);
+  if (bee.traits.explosive) { // (its pop becomes a person-sized blast: see blasts in traffic/state.js)
+    blastFx(at, BEE_BLAST_FX, 1);
+    blasts.push({ ...at, scale: PERSON_BLAST_SCALE });
+  }
   bee.generation = (bee.generation || 0) + 1;
   bee.number = numberFor(bee.key + ':' + bee.generation);
   bee.traits = null; // (a new bee: its own traits, from its own number)
@@ -754,6 +761,17 @@ function killBee(bee) {
   bee.plan.length = 0;
   bee.perch = null;
   bee.until = (lastBeeTime || 0) + between(Math.random, BEE_RESPAWN_MIN, BEE_RESPAWN_MAX);
+}
+/**
+ * Kill every bee out flying within `reach` of `at` (a blast: see updateTraffic).
+ * @param {{x: number, y: number, z: number}} at
+ * @param {number} reach
+ * @returns {void}
+ */
+function blastBees(at, reach) {
+  colonies.forEach(colony => colony.bees.forEach(bee => {
+    if (!isHome(bee) && Math.hypot(bee.at.x - at.x, bee.at.y - at.y, bee.at.z - at.z) <= reach) killBee(bee);
+  }));
 }
 /**
  * Kill any bee inside a box on the ground — a car's — that is low enough to be hit.
@@ -980,4 +998,4 @@ export function updateBees(t) {
 }
 
 // (the bee and hive cards are handed over too, for whoever else wants to put something on them or open one)
-Object.assign(App, { strikeBees, beeInPunch, punchBee, pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive, flyBee, showBeeCard, setBeeCardDoing, hideBeeCard, showHiveCard, setHiveCardBees, hideHiveCard });
+Object.assign(App, { blastBees, strikeBees, beeInPunch, punchBee, pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive, flyBee, showBeeCard, setBeeCardDoing, hideBeeCard, showHiveCard, setHiveCardBees, hideHiveCard });

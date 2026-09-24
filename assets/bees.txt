@@ -36,6 +36,7 @@ loves = Papier-mâché
 loves = Flower nap
 loves = Beyoncé
 loves = Protecting the hive [size = 2]
+loves = Explosive putty [explosive]
 hates = Rain
 hates = Jerry Seinfeld
 hates = Wasps

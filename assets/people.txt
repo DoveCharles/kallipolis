@@ -1646,6 +1646,9 @@ Having a plan
 Using the em dash — which is very normal to use — by copy and pasting it from its wikipedia page
 Choosing not to care
 Oral fixation
+Live grenades [explosive]
+Having webbed feet [aqua, choiceweight = 500]
+The mutation [aqua]
 
 ################################################################################################################################
 
@@ -1975,3 +1978,4 @@ Kids these days [agemult = 1.2]
 Getting put in the labyrinth
 Globus sensation
 1 day blinding stew
+Having a bomb strapped to their chest [explosive, mood = -1, terrified, walkspeed = 1.4]

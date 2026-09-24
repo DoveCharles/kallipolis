@@ -11,7 +11,7 @@ import { driving, controlInput } from '../possession.js';
 import { boostMax, stopDriving } from './driving.js';
 import { carMeshes } from './models.js';
 import { carHeight, carLength, carModelOf, carScale, placing } from './placing.js';
-import { cars } from './state.js';
+import { blasts, cars, EXPLOSIVE_SCALE } from './state.js';
 
 // The followed car (camera, card, thumbnail) and taking a car out (killCar, drownCar, smiteCar).
 
@@ -114,8 +114,8 @@ export function chaseCamera(car) {
   controls.goalPhi = controls.phi + CHASE_EASE*(CHASE_PHI - controls.phi);
 }
 /**
- * Explode a car where it stands, in its own paint, through explodeCar — and take it out of
- * cars, so a replacement spawns in elsewhere as usual.
+ * Explode a car where it stands, in its own paint, through explodeCar (bigger, and a blast killing what's around it, if
+ * explosive) — and take it out of cars, so a replacement spawns in elsewhere as usual.
  * @param {number} i - index in cars
  * @returns {void}
  */
@@ -130,11 +130,12 @@ export function killCar(i) {
   position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0), car.z);
   matrix.compose(position, rotation.setFromAxisAngle(up, car.heading), scale.setScalar(carScale(car)));
   throwCarWreck(carModelOf(car)?.wreck, matrix, car.paint);
-  const wrecked = true;
+  const wrecked = true, blastScale = car.traits?.explosive ? EXPLOSIVE_SCALE : 1;
+  if (blastScale > 1) blasts.push({ x: car.x, y: Y_ROAD, z: car.z, scale: blastScale }); // (explosive: kills what's around it too, next update)
   if (/bus/i.test(carModelOf(car)?.name ?? '')) { // (a bus goes up in two blasts, one at each end)
     const offset = carLength(car)*0.25;
-    [-1, 1].forEach(end => explodeCar({ x: car.x + Math.sin(car.heading)*offset*end, y: Y_ROAD, z: car.z + Math.cos(car.heading)*offset*end }, carHeight(car), { paint, wrecked }));
-  } else explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint, wrecked });
+    [-1, 1].forEach(end => explodeCar({ x: car.x + Math.sin(car.heading)*offset*end, y: Y_ROAD, z: car.z + Math.cos(car.heading)*offset*end }, carHeight(car), { paint, wrecked }, blastScale));
+  } else explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint, wrecked }, blastScale);
   cars.splice(i, 1);
   if (followedCar > i) followedCar--; // (a car ahead of it in the array, still being followed, keeps its place)
 }

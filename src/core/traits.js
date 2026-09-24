@@ -51,7 +51,8 @@ export const TRAITS = {
   respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time - instationary, then struck by lightning
   drunk: {base: 0, min: 0, max: 1, combine: 'on'} ,//steering randomly switches direction for up to 2 seconds, people randomly fall over or throw up
   unstable: {base: 0, min: 0, max: 1, combine: 'add'}, //chance to be hurt X5 more than usual
-  explosive: {base: 0, min: 0, max: 1, combine: 'on'}, //blow up on death, killing bystanders; if already blowing up, explosion becomes much bigger
+  terrified: {base: 0, min: 0, max: 1, combine: 'on'}, //flees forever (see updatePeople in life/people/people.js)
+  explosive: {base: 0, min: 0, max: 1, combine: 'on'}, //blow up on death, killing bystanders; if already blowing up, explosion becomes much bigger (see blasts in life/traffic/state.js)
   perception: { base: 1, min: 0, max: 5 }, // how likely a car is to notice someone lying in the road ahead and stop for them: 95% at 1, under half at 0.5 (see noticeChance in life/traffic/spacing.js)
   aqua: {base: 0, min: 0, max: 1, combine: 'on'}, //walks on water, or at least doesn't drown; a car with it drives straight over open water instead of sinking (see driveByHand in life/traffic/driving.js)
 };
