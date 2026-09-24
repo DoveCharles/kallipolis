@@ -366,6 +366,7 @@ button.pc-pick:hover { text-decoration:underline; }
 /* the bars themselves: on the row and on every line below it (the extras, which carry the row's class too) */
 .entity-card .pc-row-loves { border-left:var(--trait-bar) solid var(--trait-loves-bar); }
 .entity-card .pc-row-hates { border-left:var(--trait-bar) solid var(--trait-hates-bar); }
+.entity-card :is(.pc-row-loves, .pc-row-hates) { grid-template-columns:67px 1fr; } /* (text closer to its Loves/Hates label) */
 .entity-card .pc-extra:is(.pc-row-loves, .pc-row-hates) { padding-left:var(--band-x); margin-left:calc(-1*var(--card-pad-x) + var(--trait-frame)); margin-right:calc(-1*var(--band-x)); }
 /* Love/hate mark column (fixed width, set as data-mark by markOf in src/ui/entity-card.js): legendary = positive + car
    icons in Loves green, terrible = negative + car in Hates red, * = identify icon (dim) for other entries with modifiers.
@@ -378,28 +379,36 @@ button.pc-pick:hover { text-decoration:underline; }
   content:''; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:left, right; mask-position:left, right;
 }
 .entity-card .pc-value[data-mark="*"]::after {
-  background:var(--text-dim); -webkit-mask-image:url(../assets/icons/identify.png); mask-image:url(../assets/icons/identify.png);
+  -webkit-mask-image:url(../assets/icons/identify.png); mask-image:url(../assets/icons/identify.png);
   -webkit-mask-position:right; mask-position:right;
 }
 .entity-card .pc-value[data-mark="+"]::after {
-  background:var(--trait-loves-label);
   -webkit-mask-image:url(../assets/icons/positive.png), url(../assets/icons/car.png); mask-image:url(../assets/icons/positive.png), url(../assets/icons/car.png);
 }
 .entity-card .pc-value[data-mark="-"]::after {
-  background:var(--trait-hates-label);
   -webkit-mask-image:url(../assets/icons/negative.png), url(../assets/icons/car.png); mask-image:url(../assets/icons/negative.png), url(../assets/icons/car.png);
 }
 /* Modifier drop-downs under a love/hate entry, floating over the rows below it (see layoutDrops in
    src/ui/entity-card.js, which sets its top and --mod-lines), so the card never resizes. */
 .entity-card { --mod-line:16px; }
 .entity-card .pc-has-mods { cursor:pointer; }
-.entity-card .pc-has-mods:is(:hover, .pc-mods-open) .pc-value[data-mark="*"]::after { background:var(--text); }
+.entity-card { --mark-blue:#5aa2ff; }
+/* mark colours: dull at rest, text and mark take the hover colour, and a brighter one while its drop-down is held */
+.entity-card .pc-value[data-mark="*"] { --mark-dull:var(--text-dim); --mark-hover:var(--mark-blue); }
+.entity-card .pc-value[data-mark] { --mark-held:color-mix(in srgb, var(--mark-hover) 55%, #fff); }
+/* legendary/terrible: Loves/Hates colour at rest, brighter and more saturated on hover, lighter again when held */
+.entity-card .pc-value[data-mark="+"] { --mark-dull:var(--trait-loves-label); --mark-hover:color-mix(in srgb, var(--trait-loves-label) 50%, #4dffa6); --mark-held:color-mix(in srgb, var(--mark-hover) 80%, #fff); }
+.entity-card .pc-value[data-mark="-"] { --mark-dull:var(--trait-hates-label); --mark-hover:color-mix(in srgb, var(--trait-hates-label) 50%, #ff5c64); --mark-held:color-mix(in srgb, var(--mark-hover) 80%, #fff); }
+.entity-card .pc-value[data-mark]:not([data-mark=""])::after { background:var(--mark-dull); }
+.entity-card .pc-row:hover > .pc-value[data-mark]:not([data-mark=""]) { color:var(--mark-hover); }
+.entity-card .pc-row:hover > .pc-value[data-mark]:not([data-mark=""])::after { background:var(--mark-hover); }
+.entity-card .pc-row.pc-mods-open > .pc-value[data-mark]:not([data-mark=""]) { color:var(--mark-held); }
+.entity-card .pc-row.pc-mods-open > .pc-value[data-mark]:not([data-mark=""])::after { background:var(--mark-held); }
 .entity-card .pc-body { position:relative; }
 .entity-card .pc-mods {
   position:absolute; z-index:2; box-sizing:border-box;
   height:calc(var(--mod-lines, 0)*var(--mod-line)); overflow-y:auto; overscroll-behavior:contain;
-  left:calc(-1*var(--card-pad-x) + var(--trait-frame)); right:calc(-1*var(--band-x));
-  padding:0 var(--band-x) 0 calc(var(--band-x) + 98px); /* (98px: the label column and gap, so modifiers line up with the entry) */
+  padding:0 4px; /* (left/width set by layoutDrops to the entry's text and mark) */
   background:var(--bg-panel); font-family:var(--mono); font-size:11px; color:var(--text-dim);
 }
 .entity-card .pc-mods-loves { border-left:var(--trait-bar) solid var(--trait-loves-bar); }

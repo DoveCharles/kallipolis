@@ -88,7 +88,7 @@ loves = All the theoretical camping gear in the back
 loves = Imagine Dragons
 loves = FUCK YOU BUDDY! YEAH FUCK YOU! FUCKING CUT ME OFF, SHIT
 loves = Volume up, windows down
-loves = Extra storage [legendary, size = 1.1, health = 1.2, weight = 1.2, speed = 0.9]
+loves = Extra storage [legendary, size = 1.15, health = 1.2, weight = 1.2, speed = 0.9]
 loves = Offroad tyres [legendary, control = 1.4, braking = 1.2]
 loves = Reinforced chassis [legendary, health = 1.6, weight = 1.1]
 loves = Roll cage [legendary, health = 2, recovery = 1.2]
@@ -179,7 +179,7 @@ hates = Traffic, guh! I'm gonna be so late for work!!!
 hates = Hippies
 hates = One tiny little scratch
 hates = No time to get that fixed right now [terrible, unstable = 0.2, control = 0.8]
-hates = Is that break fluid? I dunno [terrible, braking = 0.14]
+hates = Is that break fluid? I dunno [terrible, braking = 0.24]
 plate = STEVE JOB
 plate = UCNTRSTME
 plate = SELLMYCAR
@@ -208,7 +208,7 @@ loves = Only using the phone because it's a red light, fuck you [keysmash, perce
 loves = Six-pack of beer in the passenger seat
 loves = Beer in my bellay [terrible, drunk]
 loves = Using the cargo bay for absolutely nothing
-loves = Extra storage [legendary, size = 1.1, health = 1.2, weight = 1.2, speed = 0.9]
+loves = Extra storage [legendary, size = 1.15, health = 1.2, weight = 1.2, speed = 0.9]
 loves = Lifted suspension (won't see children) [legendary, size = 1.2, recovery = 1.2, health = 1.2]
 loves = Long distance truckin' truck [legendary, health = 1.4, speed = 1.8, boost = 0.8, maxboost = 2, recharge = 0.5 ]
 loves = Diesel engine [legendary, maxboost = 3]
@@ -286,7 +286,7 @@ loves = Road trip!!!
 loves = Sliding doors
 loves = Rolling up their windows
 loves = The sat-nav
-loves = Extra spacey [legendary, size = 1.09, weight = 1.2, speed = 0.9, boost = 0.9, health = 1.1]
+loves = Extra spacey [legendary, size = 1.15, weight = 1.2, speed = 0.9, boost = 0.9, health = 1.1]
 loves = Airbags & bubblewrap [legendary, aqua, recovery = 1.1, health = 1.1]
 hates = Turning this thing around if I have to
 hates = The 'streets'
@@ -338,7 +338,7 @@ mood = 🚗 [speed = 0.9, boost = 1.1, braking = 1.2, control = 1.1, weight = 0.
 loves = Being oh so cutey
 loves = France
 loves = Portable solar panel [legendary, recharge = 2.5, unstable = 0.05]
-loves = Modus metro [legendary, size = 0.85, weight = 0.8, boost = 1.2]
+loves = Modus metro [legendary, size = 0.65, weight = 0.7, boost = 1.4, maxboost = 0.8, health = 0.8]
 hates = Bigger cars (small willy's)
 hates = beeeep beeeeeeep
 hates = Twig-like axel [terrible, control = 0.6]
@@ -362,7 +362,7 @@ loves = Uhh. Just on my way to work, mate.
 loves = Parking on the curb in a busy street. It's alright, got me hazards on mate.
 loves = Calling in sick
 loves = Parking near schools
-loves = XL Delivery [legendary, size = 1.15, weight = 1.2, speed = 0.9, boost = 0.9, health = 1.1]
+loves = XXL Big Boy Shit [legendary, size = 1.15, weight = 1.2, speed = 0.9, boost = 0.9, health = 1.1]
 loves = Not giving a fuccckkkkk [terrible, drunk]
 loves = A drink before work [terrible, drunk]
 hates = All other cars

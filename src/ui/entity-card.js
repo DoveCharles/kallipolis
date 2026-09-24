@@ -144,17 +144,16 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   el.append(titlebar, heart, close, topSection, body);
   document.body.append(el);
 
-  // ---- modifier drop-downs: an entry with modifiers (`<key>Mods`, see set) opens a list of them beneath it while hovered,
-  // and stays open once clicked (clicked again to close) — so several can be open at once, and touch screens can open them.
+  // ---- modifier drop-downs: an entry with modifiers (`<key>Mods`, see set) opens a list of them beneath it when clicked,
+  // until clicked again — so several can be open at once.
   // Each floats over the rows below it, as a menu drops down, so opening one never resizes the card: MOD_LINES lines at
   // most, scrolling for the rest.
   const MOD_LINES = 4;
+  const SCREEN_MARGIN = 8; // px kept clear below a drop-down
   const dropByEl = new Map(); // entry row or its drop-down → { entryEl, drop, count, pinned }
-  let hovered = null;
   const dropAt = target => { const found = target?.closest?.('.pc-has-mods, .pc-mods'); return found ? dropByEl.get(found) : null; };
-  body.addEventListener('mouseover', e => { const drop = dropAt(e.target) ?? null; if (drop !== hovered) { hovered = drop; layoutDrops(); } });
-  body.addEventListener('mouseleave', () => { if (hovered) { hovered = null; layoutDrops(); } });
   body.addEventListener('click', e => { const drop = dropAt(e.target); if (drop) { drop.pinned = !drop.pinned; layoutDrops(); } });
+  window.addEventListener('resize', () => { if (!el.hidden) layoutDrops(); });
   // Gives `entryEl` (one of `row`'s entries, already in place) a drop-down of `lines`, placed right under it.
   function addDrop(row, entryEl, lines) {
     if (!lines || !lines.length) return;
@@ -179,19 +178,26 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
       state.entryEl.classList.remove('pc-has-mods', 'pc-mods-open');
       dropByEl.delete(state.entryEl);
       dropByEl.delete(state.drop);
-      if (hovered === state) hovered = null;
     });
     row.drops = [];
   }
-  // Shows the open drop-downs, each hung from the bottom of its entry.
+  // Shows the open drop-downs, each hung from the bottom of its entry and as wide as its text and mark.
   function layoutDrops() {
     Object.values(rows).flatMap(row => row.drops).forEach(state => {
-      const isOpen = state.pinned || state === hovered;
+      const isOpen = state.pinned;
       state.drop.hidden = !isOpen;
       state.entryEl.classList.toggle('pc-mods-open', isOpen);
       if (!isOpen) return;
-      state.drop.style.setProperty('--mod-lines', Math.min(state.count, MOD_LINES));
       state.drop.style.top = state.entryEl.offsetTop + state.entryEl.offsetHeight + 'px';
+      const value = state.entryEl.querySelector('.pc-value');
+      state.drop.style.left = value.offsetLeft + 'px';
+      state.drop.style.width = value.offsetWidth + 'px';
+      // a row shorter (scrolling) for each that would come within SCREEN_MARGIN of the bottom of the screen
+      let lines = Math.min(state.count, MOD_LINES);
+      state.drop.style.setProperty('--mod-lines', lines);
+      while (lines > 1 && state.drop.getBoundingClientRect().bottom > window.innerHeight - SCREEN_MARGIN) {
+        state.drop.style.setProperty('--mod-lines', --lines);
+      }
     });
   }
 
