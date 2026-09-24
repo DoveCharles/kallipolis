@@ -78,13 +78,16 @@ function throwBack(p, car, factor, speed = car.speed, sideThrow = 1) {
 // knock-over box; once per box as they come into it (see car.struck), not every frame they're under it.
 const CAR_HIT_DAMAGE = 8, KNOCK_BOX_DAMAGE_SHARE = 1/5;
 const carHitDamage = (car, speed) => CAR_HIT_DAMAGE*(car.traits?.weight ?? 1)*speed;
-export function runOverPeople(car, motion = null) {
+// Whether a normal car can reach someone at all: out on the road, over it or halfway (and not waved over), or knocked down.
+export const inCarsWay = p => (isPedInDanger(p) || p.crossStage === 'mid' || !!p.punched) && !p.jc?.waved;
+// (`inWay`: App.people filtered by inCarsWay, if the caller has it already — updateTraffic does, once a frame for every car)
+export function runOverPeople(car, motion = null, inWay = null) {
   const { halfLength, halfWidth } = carHitbox(car, motion?.thrown ? 1 : undefined), clip = carHitbox(car, CAR_HITBOX_SCALE*CAR_CLIP_SCALE), stun = carHitbox(car, CAR_HITBOX_SCALE*CAR_STUN_SCALE);
   const reach = Math.hypot(stun.halfLength, stun.halfWidth) + 1.5*LYING_HEAD*S.peopleSize, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   const driven = car === drivenCar, reachesAll = driven || !!motion, shocked = new Set(), struck = new Map();
   const velocity = motion ?? { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }, speed = Math.hypot(velocity.x, velocity.z);
-  App.people.forEach((p, i) => {
-    if (reachesAll ? Math.abs(p.y - Y_ROAD) > carHeight(car) : (!isPedInDanger(p) && p.crossStage !== 'mid' && !p.punched) || p.jc?.waved) return; // only while out on the road, over it or halfway (and not waved over), or knocked down
+  (reachesAll ? App.people : inWay ?? App.people.filter(inCarsWay)).forEach(p => {
+    if (reachesAll ? Math.abs(p.y - Y_ROAD) > carHeight(car) : !inCarsWay(p)) return; // (checked again: someone knocked down by an earlier car this frame may have got up)
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
@@ -186,14 +189,33 @@ export function buildingHit(car) {
     const dx = q.x - car.x, dz = q.z - car.z;
     return Math.abs(dx*sin + dz*cos) < halfLength && Math.abs(dx*cos - dz*sin) < halfWidth;
   };
-  for (const zone of S.zones) for (const group of zone.buildingsGroup?.children || []) {
+  for (const zone of S.zones) {
+    const zoneReach = zoneBounds(zone);
+    if (!zoneReach || Math.hypot(car.x - zoneReach.c.x, car.z - zoneReach.c.z) > zoneReach.r + reach) continue;
+    for (const group of zone.buildingsGroup.children) {
     const fp = group.userData.footprint;
     if (!fp || fp.length < 3) continue;
     const { c, r } = footprintBounds(group);
     if (Math.hypot(car.x - c.x, car.z - c.z) > r + reach) continue;
     if (corners.some(q => pointInPolygon(q, fp)) || fp.some(inCar)) return fp;
+    }
   }
   return null;
+}
+// A circle round all of a zone's buildings (see footprintBounds), so buildingHit can pass over whole zones out of reach:
+// kept on its buildingsGroup, which is replaced whenever the zone is rebuilt, and worked out again if buildings are added.
+function zoneBounds(zone) {
+  const group = zone.buildingsGroup;
+  if (!group?.children.length) return null;
+  let bounds = group.userData.hitBounds;
+  if (!bounds || bounds.count !== group.children.length) {
+    const circles = group.children.filter(b => b.userData.footprint?.length >= 3).map(footprintBounds);
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    circles.forEach(({ c, r }) => { minX = Math.min(minX, c.x - r); maxX = Math.max(maxX, c.x + r); minZ = Math.min(minZ, c.z - r); maxZ = Math.max(maxZ, c.z + r); });
+    const c = { x: (minX + maxX)/2, z: (minZ + maxZ)/2 };
+    bounds = group.userData.hitBounds = { count: group.children.length, c, r: circles.length ? Math.hypot(maxX - minX, maxZ - minZ)/2 : -Infinity };
+  }
+  return bounds;
 }
 /**
  * The wall of a footprint nearest a point, as the point on it nearest and the way out of the building, square to it.

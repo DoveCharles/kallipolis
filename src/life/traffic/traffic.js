@@ -6,7 +6,7 @@ import { navRebuildOnHold } from '../../roads/roads.js';
 import { placeKey, signalState } from '../../roads/markings.js';
 import { updateEngines } from '../../audio/engine.js';
 import { carTypeOf } from '../car-types.js';
-import { BLAST_THROW, burnFuse, DETONATION_REACH, swayCrash, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
+import { BLAST_THROW, burnFuse, DETONATION_REACH, swayCrash, inCarsWay, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
 import { boostMax, driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, rechargeBoost, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
 import { chaseCamera, updateCarRevive, respawnFromWater, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
 import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
@@ -107,6 +107,7 @@ export function updateTraffic(t) {
   });
   buildCarGrid();
   const lying = App.people.filter(isLying); // (anyone on the ground, for cars to stop for: see lyingAhead)
+  const inWay = App.people.filter(inCarsWay); // (the few any car could run over: see runOverPeople)
   const { matrix } = placing;
   const designCounts = carMeshes.map(() => 0);
   const smelly = smellyCars(); // (everyone gives way to these: see pullover.js)
@@ -200,7 +201,7 @@ export function updateTraffic(t) {
     const lane = lanePoint(car), swayed = car.heading - (car.sway?.turn ?? 0), offLane = Math.abs(Math.atan2(Math.sin(lane.heading - swayed), Math.cos(lane.heading - swayed)));
     if (knocked && Math.hypot(knocked.x, knocked.z) > 0.3) runOverPeople(car, knocked);
     else if (car.sway?.drunk && car.speed > 0.3) runOverPeople(car, { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }); // (weaving drunk: anyone it reaches, on the pavement too)
-    else if (car.speed > 0.3 && offLane < TURN_SAFE_ANGLE) runOverPeople(car);
+    else if (car.speed > 0.3 && offLane < TURN_SAFE_ANGLE) runOverPeople(car, null, inWay);
     turnWheels(car, dt);
     updateSpecialTraits(car, t, dt);
     placeCar(car, i, designCounts);
