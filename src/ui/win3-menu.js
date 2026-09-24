@@ -1,5 +1,5 @@
 // ============================================================ the Splinetopia window
-// Under the Windows 3.0 look (win3.js), on a screen wider than a phone, the whole tab is one application window: a frame
+// On a screen wider than a phone, the whole tab is one application window: a frame
 // round the edge, a title bar saying Splinetopia, and a menu bar under it — File, Edit, View, Options, Help — with the
 // side panel docked down its left like Paintbrush's toolbox, and the canvas tools still over the view. The styles are in
 // css/win3.css ("the application window"); on a phone none of it shows, the panel keeping its own title bar instead.
@@ -18,7 +18,6 @@ const $ = id => document.getElementById(id);
 const press = id => () => $(id).click();
 const has = (id, cls) => () => $(id).classList.contains(cls);
 const body = document.body;
-const isWin3 = () => document.documentElement.classList.contains('win3');
 const typingIn = el => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 
 // ---- the panel and the tools, hidden from the View menu
@@ -33,7 +32,7 @@ function toggleFullScreen() {
 // the mode tabs along the top of the panel (World, Edit, Maps), and the Paths/Zones/Objects row under Edit
 // (the second row only shows in Edit, so its items are greyed out elsewhere)
 const tab = (sel, enabled = () => true) => ({ enabled, radio: () => panelShown() && document.querySelector(sel).classList.contains('active'),
-  run: () => { setShown('w3-no-panel', true); document.querySelector(sel).click(); } });
+  run: () => { if (!(panelShown() && document.querySelector(sel).classList.contains('active'))) { setShown('w3-no-panel', true); document.querySelector(sel).click(); } } });
 const inEdit = () => $('entity-toolbar').style.display !== 'none';
 
 // ---- message boxes: a little window in the middle of the view, a line or two of text and a row of buttons
@@ -100,7 +99,7 @@ const MENUS = [
     { label:'Clear All...', key:'a', run:newProject },
   ]},
   { name:'View', key:'v', items:[
-    { label:'World', key:'w', ...tab('#mode-toolbar [data-mode=move]') },
+    { label:'World...', key:'w', check:worldOpen, run:toggleWorld },
     { label:'Edit', key:'e', ...tab('#mode-toolbar [data-mode=node]') },
     { label:'Maps', key:'m', ...tab('#mode-toolbar [data-mode=maps]') },
     '-',
@@ -127,8 +126,6 @@ const MENUS = [
     { label:'Display...', key:'d', run:() => openSettings('display') },
     { label:'Effects...', key:'e', run:() => openSettings('effects') },
     { label:'Game...', key:'a', run:() => openSettings('game') },
-    '-',
-    { label:'Windows 3.0 Look', key:'w', check:isWin3, run:press('s-win3') },
   ]},
   { name:'Help', key:'h', items:[
     { label:'Keyboard Shortcuts', key:'k', run:shortcuts },
@@ -141,8 +138,6 @@ const CONTROL = { items:[
   { label:'Restore', key:'r', enabled:() => !!document.fullscreenElement, run:toggleFullScreen },
   { label:'Minimize', key:'n', enabled:panelShown, run:hidePanel },
   { label:'Maximize', key:'x', enabled:() => !document.fullscreenElement, run:toggleFullScreen },
-  '-',
-  { label:'Close', key:'c', run:press('s-win3') },
 ]};
 
 // the label with its letter underlined
@@ -218,18 +213,17 @@ titles.forEach((t, i) => {
   t.addEventListener('mouseenter', () => { if (open && open.anchor !== t) openMenu(MENUS[i], t); }); // sliding along the bar with one down
 });
 sysbox.addEventListener('mousedown', e => { e.preventDefault(); if (open?.anchor === sysbox) closeMenus(); else openMenu(CONTROL, sysbox); });
-sysbox.addEventListener('dblclick', press('s-win3'));
 window.addEventListener('mousedown', e => { if (open && !open.dropdown.contains(e.target) && !open.anchor.contains(e.target)) closeMenus(); }, true);
 window.addEventListener('blur', closeMenus);
 
 // ---- World / Edit / Maps: in the window, they sit at the left of the toolbar rather than the top of the side panel, and go
-// back to the panel whenever the window isn't showing (a phone, or the Windows 3.0 look turned off). They're found by id
+// back to the panel whenever the window isn't showing (on a phone). They're found by id
 // everywhere else (tools.js, favorites.js), so it doesn't matter to anything else which of the two they're in.
 const modeButtons = $('mode-toolbar');
 const panelHome = modeButtons.parentElement, panelNext = modeButtons.nextElementSibling;
 const wide = window.matchMedia('(min-width: 761px)');
 function placeModeButtons() {
-  if (isWin3() && wide.matches) { if (modeButtons.parentElement !== $('canvas-tools')) $('canvas-tools').prepend(modeButtons); }
+  if (wide.matches) { if (modeButtons.parentElement !== $('canvas-tools')) $('canvas-tools').prepend(modeButtons); }
   else {
     if (modeButtons.parentElement !== panelHome) panelHome.insertBefore(modeButtons, panelNext);
     closeWindows(); // (and any settings in a window go back to the panel: see ui/settings-windows.js)
@@ -237,20 +231,40 @@ function placeModeButtons() {
 }
 placeModeButtons();
 
-// In the toolbar, World, Edit and Maps are radio buttons that can all be let up: pressing the one that's down lets it up
-// and hides the side panel, leaving the view to work as it does in World; pressing any of them then opens the panel on it.
-// (Hiding the panel any other way — the View menu, ▲ — does the same, so there's never an editing mode without its panel.)
+// In the toolbar, Edit and Maps are radio buttons that can both be let up: pressing the one that's down lets it up and
+// hides the side panel, leaving the view to work as it does in World; pressing either then opens the panel on it. World
+// (an icon, like Maps) isn't one of them: it opens and closes a window of the World controls — the time, the peds, the
+// weather (ui/settings-windows.js) — and leaves the mode alone, so it can be open while editing. (Hiding the panel any
+// other way — the View menu, ▲ — lets Edit and Maps up the same, so there's never an editing mode without its panel.)
+const worldButton = modeButtons.querySelector('[data-mode=move]');
+worldButton.title = 'World';
+modeButtons.querySelector('[data-mode=maps]').title = 'Maps';
+function worldOpen() { return !!$('settings-world'); }
+function toggleWorld() {
+  if (worldOpen()) $('settings-world').close(); else openSettings('world');
+  worldButton.classList.toggle('w3-open', worldOpen());
+}
 function hidePanel() {
-  if (S.interactionMode !== 'move') modeButtons.querySelector('[data-mode=move]').click();
+  if (S.interactionMode !== 'move') worldButton.click();
   setShown('w3-no-panel', false);
 }
-function togglePanel() { if (panelShown()) hidePanel(); else setShown('w3-no-panel', true); }
+function togglePanel() {
+  if (panelShown()) hidePanel();
+  else if (S.interactionMode === 'move') modeButtons.querySelector('[data-mode=node]').click(); // (which opens it)
+  else setShown('w3-no-panel', true);
+}
 modeButtons.addEventListener('click', e => {
   const button = e.target.closest('.tool-btn');
-  if (!button || !isWin3() || !wide.matches) return;
-  if (panelShown() && button.classList.contains('active')) { e.stopPropagation(); hidePanel(); }
+  if (!button || !wide.matches) return;
+  // (World pressed by the code rather than a person — here, or favorites.js going back to World to go to a place — is
+  // for tools.js, to go back to its mode, so the panel goes; only a real press opens the window)
+  if (button === worldButton && !e.isTrusted) setShown('w3-no-panel', false);
+  else if (button === worldButton) { e.stopPropagation(); toggleWorld(); }
+  else if (panelShown() && button.classList.contains('active')) { e.stopPropagation(); hidePanel(); }
   else setShown('w3-no-panel', true);
 }, true);
+function worldModeHidesPanel() { if (wide.matches && S.interactionMode === 'move') setShown('w3-no-panel', false); }
+worldModeHidesPanel();
 
 // The active window: like Windows 3.0, only the window you're working in has a navy title bar; the rest go white. A card
 // (for a building, a person, a car…) takes it when it's opened on something — even if it was open already — or clicked,
@@ -266,6 +280,7 @@ new MutationObserver(records => {
   for (const { target } of records) {
     if (!target.matches(WINDOWS)) continue;
     if (target.hidden && target === activeCard) setActive(null);
+    if (target.hidden && target.id === 'settings-world') worldButton.classList.remove('w3-open');
   }
 }).observe(document.body, { subtree:true, attributes:true, attributeFilter:['hidden'] });
 document.addEventListener('card-show', e => setActive(e.target));
@@ -273,12 +288,12 @@ document.addEventListener('pointerdown', e => {
   if (e.target.closest('.w3-dropdown, .w3-modal')) return;
   setActive(e.target.closest(WINDOWS));
 }, true);
-wide.addEventListener('change', placeModeButtons);
-new MutationObserver(placeModeButtons).observe(document.documentElement, { attributes:true, attributeFilter:['class'] });
+const placed = () => { placeModeButtons(); worldModeHidesPanel(); };
+wide.addEventListener('change', placed);
 
 // ---- the keyboard: Alt+letter opens a menu; arrows, Enter, Esc and the underlined letters work it; Ctrl+S and Ctrl+O
 window.addEventListener('keydown', e => {
-  if (!isWin3() || document.querySelector('.w3-modal')) return;
+  if (document.querySelector('.w3-modal')) return;
   const letter = /^Key([A-Z])$/.exec(e.code)?.[1].toLowerCase();
   if (open) {
     const titleIndex = titles.indexOf(open.anchor);

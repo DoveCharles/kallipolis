@@ -256,25 +256,36 @@ html.win3 .pc-thumb {
   html.win3 .w3-keys td { padding:2px 16px 2px 0; vertical-align:top; }
   html.win3 .w3-keys td:first-child { white-space:nowrap; }
 
-  /* the toolbar: a grey strip right across the window under the menu bar, its buttons at the left and the morality
-     meter at the right; hiding it (View > Toolbar) takes the meter with it, and everything below moves up */
-  html.win3 { --w3-tools-h:37px; --w3-below:calc(var(--w3-top) + var(--w3-tools-h)); }
+  /* the toolbar: a grey strip right across the window under the menu bar — Edit at the left, the morality meter at the
+     right, each ruled off by an etched line, and the tools centred between them; hiding it (View > Toolbar) takes the
+     meter with it, and everything below moves up */
+  html.win3 { --w3-tools-h:37px; --w3-below:calc(var(--w3-top) + var(--w3-tools-h)); --w3-meter-w:225px; --w3-meter-right:12px; }
   html.win3 body.w3-no-tools { --w3-below:var(--w3-top); }
   html.win3 #canvas-tools {
-    top:var(--w3-top); left:4px; right:4px; height:var(--w3-tools-h); padding:0 8px; gap:6px; align-items:center;
+    top:var(--w3-top); left:4px; right:4px; height:var(--w3-tools-h); gap:6px; align-items:center;
+    padding:0 calc(var(--w3-meter-w) + var(--w3-meter-right) + 4px) 0 8px; /* (the meter sits over the right end: see below) */
     background:var(--w3-face); border-bottom:1px solid #000;
   }
+  html.win3 #canvas-tools::before, html.win3 #canvas-tools::after {
+    content:''; align-self:stretch; width:0; border-left:1px solid var(--w3-shadow); border-right:1px solid #fff;
+  }
+  html.win3 #canvas-tools::before { order:-2; margin-right:auto; } /* (after Edit; the auto margins either side of the */
+  html.win3 #canvas-tools::after { order:2; }                       /*  tools split what's left, centring them) */
   html.win3 #canvas-tools :is(.canvas-tool, #grid-toggle) { width:28px; height:28px; }
   html.win3 #history-tools { gap:4px; }
-  /* World / Edit / Maps, moved here from the side panel (see win3-menu.js), labels and all, set off from the rest */
-  html.win3 #canvas-tools #mode-toolbar { flex:0 0 auto; margin:0 10px 0 0 !important; gap:4px; }
+  /* World / Edit / Maps, moved here from the side panel (see win3-menu.js): their group melts into the strip, so Edit
+     leads it, set off from the rest, World starts the icons and Maps ends them (tools.js still finds them in the group) */
+  html.win3 #canvas-tools #mode-toolbar { display:contents; }
   html.win3 #canvas-tools #mode-toolbar .tool-btn { flex:0 0 auto; height:28px; padding:0 10px; }
+  html.win3 #canvas-tools #mode-toolbar [data-mode=node] { order:-3; margin-right:4px; }
+  html.win3 #canvas-tools #mode-toolbar [data-mode=move] { order:-1; }
+  html.win3 #canvas-tools #mode-toolbar [data-mode=maps] { order:1; margin-right:auto; }
   html.win3 #favorites-panel { top:calc(100% + 5px); }
   html.win3 body.w3-no-tools :is(#canvas-tools, #morality-meter) { display:none; }
   /* the meter, laid in the strip: just the bar and the total, unlabelled; clicking it drops the breakdown down under it
      like a menu (see morality.js), and the notices stack below it (or beside the breakdown) */
   html.win3 .meter#morality-meter {
-    top:var(--w3-top); right:12px; height:calc(var(--w3-tools-h) - 1px); width:300px; padding:0;
+    top:var(--w3-top); right:var(--w3-meter-right); height:calc(var(--w3-tools-h) - 1px); width:var(--w3-meter-w); padding:0;
     display:flex; align-items:center; gap:8px; border:none; outline:none; box-shadow:none; background:none;
   }
   html.win3 #morality-meter > .win3-titlebar { display:none; }
@@ -316,10 +327,27 @@ html.win3 .w3-window .slider-row { margin-bottom:10px; }
 @media (min-width: 761px) {
   html.win3 #panel :is([data-settings], .w3-debug, .w3-file-buttons, #btn-settings-toggle, #extra-settings) { display:none; }
 }
-html.win3 .w3-window [data-settings] > .section-label { margin-top:0 !important; padding-top:0 !important; border-top:none !important; }
+html.win3 .w3-window [data-settings] > .section-label:first-child { margin-top:0 !important; padding-top:0 !important; border-top:none !important; }
 html.win3 .w3-window [data-settings] + [data-settings] { margin-top:14px; padding-top:14px; border-top:1px solid #000; }
 html.win3 .w3-window .w3-dialog-body { max-height:calc(100vh - 120px); overflow-y:auto; }
 /* with the side panel hidden, World, Edit and Maps are all let up (see src/ui/win3-menu.js) */
 @media (min-width: 761px) {
   html.win3 body.w3-no-panel #mode-toolbar .tool-btn.active { box-shadow:var(--w3-raised); text-decoration:none; }
+}
+
+#mode-toolbar :is(.world-open, .maps-open, .node-open) { display:none; } /* (the icons in colour: only while pressed, below) */
+/* World and Maps are icons in the toolbar (Edit keeps its label); World opens the World window rather than a mode, so it's
+   pressed while that's open, not in World mode (src/ui/win3-menu.js) */
+@media (min-width:761px) {
+  html.win3 #canvas-tools #mode-toolbar :is([data-mode=move], [data-mode=maps]) { font-size:0; gap:0; padding:0; width:28px; justify-content:center; }
+  html.win3 #canvas-tools #mode-toolbar [data-mode=move].active:not(.w3-open) { box-shadow:var(--w3-raised); text-decoration:none; }
+  html.win3 #canvas-tools #mode-toolbar [data-mode=move].w3-open { box-shadow:var(--w3-pressed); text-decoration:none; }
+  html.win3 #canvas-tools #mode-toolbar .world-shut { width:17px; height:17px; } /* (the size of the globe in colour) */
+  html.win3 #canvas-tools #mode-toolbar [data-mode=move].w3-open .world-shut { display:none; }
+  html.win3 #canvas-tools #mode-toolbar [data-mode=move].w3-open .world-open { display:block; }
+  html.win3 #canvas-tools #mode-toolbar [data-mode=maps].active .maps-shut { display:none; }
+  html.win3 #canvas-tools #mode-toolbar [data-mode=maps].active .maps-open { display:block; }
+  html.win3 #canvas-tools #mode-toolbar [data-mode=node].active .node-shut { display:none; } /* (Edit's nodes go the green they're drawn in, trains.js, */
+  html.win3 #canvas-tools #mode-toolbar [data-mode=node].active .node-open { display:block; }  /*  outlined, while it's down) */
+  html.win3 .w3-window .w3-debug { display:none; }
 }

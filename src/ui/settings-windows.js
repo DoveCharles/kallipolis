@@ -5,8 +5,9 @@ import { openWindow } from './w3-window.js';
 // the peds, the weather — and the settings that are set once and left open from the Options menu, each in a window of its
 // own (ui/w3-window.js). The controls are the panel's own, marked in index.html with data-settings="<window>": opening a
 // window moves them into it, and closing it puts them back where they were, so everything that drives them (by id) is
-// none the wiser, and anywhere without the menu bar — a phone, the look turned off — keeps them in the panel as ever.
+// none the wiser, and anywhere without the menu bar — a phone — keeps them in the panel as ever.
 const WINDOWS = {
+  world: { title: 'World', width: 280 }, // (opened from World in the toolbar rather than the Options menu)
   display: { title: 'Display', width: 280 },
   effects: { title: 'Effects', width: 300 },
   game: { title: 'Game', width: 300 },

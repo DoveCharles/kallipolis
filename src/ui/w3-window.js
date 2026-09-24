@@ -41,7 +41,7 @@ export function openWindow({ id, title, fill, onClose, width }) {
   activate(win);
   return win;
 }
-/** Close every window that's open (as the Windows 3.0 look goes off, say). */
+/** Close every window that's open (as the view narrows to a phone, say). */
 export function closeWindows() { Object.values(open).forEach(win => win.close()); }
 
 function activate(win) {
