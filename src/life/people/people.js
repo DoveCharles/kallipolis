@@ -22,6 +22,7 @@ import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
 import { MELODIES } from '../../audio/melodies.js';
 import { favoritePeople, isFavoritePerson } from '../../ui/favorites.js';
+import { registerHealthKind } from '../../core/health.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater } from './peopleWater.js';
@@ -649,6 +650,12 @@ export function fleeWithin(p, area) {
  * @param {?{x: number, z: number}} [source] - what killed them (a car), for the people around to run from
  * @returns {void}
  */
+// `source` for damage (core/health.js) may carry killPerson's own: { by, momentum, throwScale, from }
+registerHealthKind('person', {
+  max: 100,
+  die: (p, source) => killPerson(people.indexOf(p), source?.by ?? 'player', source?.momentum ?? null, source?.throwScale ?? 1, source?.from ?? null),
+  alive: p => p.mode !== 'dead' && p.mode !== 'none' && p.mode !== 'drowning', // (hearted, revived, or aboard a train)
+});
 function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = null) {
   const p = people[i];
   if (!p || isGone(p) || isFavoritePerson(p.id) || p.punched?.revive) return; // (the hearted can't be killed: see ui/favorites.js; nor can the shaking, see below)

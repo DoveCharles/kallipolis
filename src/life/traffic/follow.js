@@ -14,6 +14,7 @@ import { carMeshes } from './models.js';
 import { carHeight, carLength, carModelOf, carScale, placing } from './placing.js';
 import { blasts, cars, EXPLOSIVE_SCALE } from './state.js';
 import { buildingHit } from './collisions.js';
+import { registerHealthKind } from '../../core/health.js';
 
 // The followed car (camera, card, thumbnail) and taking a car out (killCar, drownCar, smiteCar).
 
@@ -121,6 +122,7 @@ export function chaseCamera(car) {
  * @param {number} i - index in cars
  * @returns {void}
  */
+registerHealthKind('car', { max: 500, die: car => killCar(cars.indexOf(car)), alive: car => !!car.reviving });
 export function killCar(i) {
   const car = cars[i];
   if (!car || car.li < 0 || car.reviving) return;

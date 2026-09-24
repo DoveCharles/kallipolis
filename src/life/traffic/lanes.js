@@ -10,6 +10,7 @@ import { pickCarPaint } from './models.js';
 import { spotTaken } from './spacing.js';
 import { PED_YIELD_CHANCE, PED_YIELD_RADIUS, TRAFFIC_LANE_PER_CAR, cars, trafficRng } from './state.js';
 import { pickTurn, planFor } from './turns.js';
+import { resetHealth } from '../../core/health.js';
 
 // The lanes cars drive: built from the road lines (buildTrafficNav), sampled and smoothed, routes along them and round
 // junctions (routePoint), spawning and reseating cars, driving on (driveAlong) and yielding at junctions and to people.
@@ -249,6 +250,7 @@ export function routePoint(car, ahead) {
  * @returns {void}
  */
 export function spawnCar(car) {
+  resetHealth(car, 'car');
   const { lines } = S.trafficNav;
   car.li = -1;
   if (!lines.length) return;

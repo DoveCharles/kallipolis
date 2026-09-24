@@ -4,7 +4,6 @@ import { pointInPolygon } from '../../core/math.js';
 import { footprintBounds } from '../../buildings/footprints.js';
 import { isPedInDanger, voiceOfPerson } from '../people/people.js';
 import { exclaim } from '../../audio/voices.js';
-import { isFavoritePerson } from '../../ui/favorites.js';
 import { puffSmoke, sparks, burnFx, igniteFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { DRIVE_ACCEL, DRIVE_TOP_SPEED, boostMultiplier, boostSmoke, drivenCar } from './driving.js';
@@ -13,6 +12,7 @@ import { carJoinLane, lanePoint, routePoint } from './lanes.js';
 import { CAR_REAR_AXLE, carHeight, carLength, carWidth } from './placing.js';
 import { carsOverlap, forCarsNear } from './spacing.js';
 import { cars } from './state.js';
+import { damage } from '../../core/health.js';
 
 // What a car hits: people (runOverPeople), aircraft (strikeWithAircraft), buildings (hitBuildings) and other cars
 // (bumpIntoCars) — with the fuse that sets a car burning (lightFuse) and the kick that knocks one off its lane (kickCar).
@@ -74,21 +74,38 @@ function throwBack(p, car, factor, speed = car.speed, sideThrow = 1) {
  * @param {?{x: number, z: number, thrown?: boolean, by?: string}} motion - a knocked car's velocity, or null to go by its speed and heading; `thrown` if the knock is still carrying it, `by` 'player' to credit the player with the kills
  * @returns {void}
  */
+// Hitting someone: CAR_HIT_DAMAGE per unit of weight × speed under the kill box, KNOCK_BOX_DAMAGE_SHARE of that in the
+// knock-over box; once per box as they come into it (see car.struck), not every frame they're under it.
+const CAR_HIT_DAMAGE = 8, KNOCK_BOX_DAMAGE_SHARE = 1/5;
+const carHitDamage = (car, speed) => CAR_HIT_DAMAGE*(car.traits?.weight ?? 1)*speed;
 export function runOverPeople(car, motion = null) {
   const { halfLength, halfWidth } = carHitbox(car, motion?.thrown ? 1 : undefined), clip = carHitbox(car, CAR_HITBOX_SCALE*CAR_CLIP_SCALE), stun = carHitbox(car, CAR_HITBOX_SCALE*CAR_STUN_SCALE);
   const reach = Math.hypot(stun.halfLength, stun.halfWidth) + 1.5*LYING_HEAD*S.peopleSize, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
-  const driven = car === drivenCar, reachesAll = driven || !!motion, shocked = new Set();
+  const driven = car === drivenCar, reachesAll = driven || !!motion, shocked = new Set(), struck = new Map();
   const velocity = motion ?? { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }, speed = Math.hypot(velocity.x, velocity.z);
   App.people.forEach((p, i) => {
     if (reachesAll ? Math.abs(p.y - Y_ROAD) > carHeight(car) : (!isPedInDanger(p) && p.crossStage !== 'mid' && !p.punched) || p.jc?.waved) return; // only while out on the road, over it or halfway (and not waved over), or knocked down
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
-    // (anyone hearted is knocked down instead, below: they can't be killed. See ui/favorites.js)
     const under = isLying(p) ? lyingUnder(p, car, { halfLength, halfWidth }) : Math.abs(right) < halfWidth && Math.abs(forward) < halfLength;
-    if (under && !isFavoritePerson(i)) { impactSound('thump', p, speed); if (speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p)); App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }, CAR_GIB_THROW, car); slowedBy(car, 'person', p.traits?.weight); }
+    const hit = under ? 'kill' : p.mode !== 'possessed' && Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength ? 'knock' : null;
+    if (hit) {
+      // struck by it and knocked over (the hearted can't die of it: see ui/favorites.js), then hurt by its weight and speed
+      const before = car.struck?.get(p);
+      struck.set(p, before === 'kill' ? 'kill' : hit);
+      if (before === hit || before === 'kill') return;
+      const knocked = p.mode !== 'possessed' && !isLying(p) && App.knockOverPerson(p, car);
+      if (knocked || hit === 'kill') {
+        impactSound('thump', p, speed);
+        slowedBy(car, 'person', p.traits?.weight);
+      }
+      if (knocked && p.mode !== 'dead') { App.knockedByCar?.(p); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed, SIDE_THROW); p.shotRate = CAR_FALL_SPEEDUP; }
+      if (hit === 'kill' && speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p));
+      damage(p, carHitDamage(car, speed)*(hit === 'kill' ? 1 : KNOCK_BOX_DAMAGE_SHARE), {
+        by: driven || motion?.by === 'player' ? 'player' : 'car', momentum: { x: velocity.x, y: 0, z: velocity.z }, throwScale: CAR_GIB_THROW, from: car });
+    }
     else if (p.mode === 'possessed') return;
-    else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { App.knockedByCar?.(p); impactSound('thump', p, speed); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed, SIDE_THROW); p.shotRate = CAR_FALL_SPEEDUP; slowedBy(car, 'person', p.traits?.weight); } }
     else if (Math.abs(right) < stun.halfWidth && Math.abs(forward) < stun.halfLength) {
       shocked.add(p);
       if (!car.shocked?.has(p) && !p.stun && !p.fright && !p.please && !p.punched && !p.attack) {
@@ -98,6 +115,7 @@ export function runOverPeople(car, motion = null) {
     }
   });
   car.shocked = shocked; // (each is shocked once, as the car comes within reach)
+  car.struck = struck;   // (and hurt once per box, as they come into it)
   // and any bee it hits (see life/bees.js)
   App.strikeBees?.({ x: car.x, z: car.z, heading: car.heading, halfLength, halfWidth, height: carHeight(car) });
 }
@@ -431,7 +449,7 @@ export function swayCrash(car) {
   impactSound('crash', contact, speed);
   puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS);
   sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS);
-  if (other === drivenCar) slowedBy(other, 'car', car.traits?.weight); // (the player's car keeps its own handling, just jolted)
+  if (other && other === drivenCar) slowedBy(other, 'car', car.traits?.weight); // (both null when it hit a building with no car driven) // (the player's car keeps its own handling, just jolted)
   else if (other) { kickCar(other, other.x - car.x, other.z - car.z, Math.min(1, speed*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1))); other.speed = 0; }
   car.sway = null;
   kickCar(car, other ? car.x - other.x : -w.x, other ? car.z - other.z : -w.z, SWAY_BOUNCE*S.peopleSize);

@@ -463,6 +463,11 @@ body.no-edit-hints #hint[data-kind=edit], body.no-general-hints #hint[data-kind=
   background:linear-gradient(#8fb8d6, #dde8ef); border:1px solid var(--border); border-radius:6px;
 }
 .pc-thumb[hidden] { display:none; }
+/* health bar flush under the picture, sharing its frame (setHealth in src/ui/entity-card.js) */
+.pc-portrait { display:flex; flex-direction:column; }
+.pc-has-health .pc-thumb { border-bottom-left-radius:0; border-bottom-right-radius:0; }
+.pc-health { width:60px; height:4px; border:1px solid var(--border); border-top:0; border-radius:0 0 4px 4px; background:var(--bg-panel); overflow:hidden; }
+.pc-health-fill { height:100%; width:100%; }
 .pc-row[hidden] { display:none; }
 .pc-status { color:var(--accent); }
 /* (their headshot, faded while they're out of sight indoors) */

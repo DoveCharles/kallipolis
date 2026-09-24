@@ -60,6 +60,7 @@ Format: `file` (size) purpose — key exports.
 - `device.js` (0K) Phones and tablets drive the app by touch: — exports: IS_TOUCH, NARROW_QUERY, isNarrow
 - `entries.js` (11K) The shared reader for lines in the .txt files that describe things (people.txt, cars.txt, ...). — exports: startingTraits, entryOf, plainEntry, weighted, parseSections, combineTraits, DEFAULT_COUNTS, clash …
 - `ground-probe.js` (4K) Finds the solid ground straight below a point, for anything that falls and lands (gibs, body parts, a bee's flecks). — exports: groundBelow
+- `health.js` (2K) Hit points for anything hurtable: kinds register max + die (people 100, cars 500, planes 1000, bees 3); spawns reset; cards bindHealth. — exports: registerHealthKind, resetHealth, healthOf, damage, heal, healthFraction, onHealthChanged
 - `math.js` (17K) Seeded PRNG and the 2D geometry helpers the whole app builds cities out of: — exports: mulberry32, lerp, hashNameToString, hashNameToNumber, hashLicensePlate, replaceChar, scramble, keySmash …
 - `scene.js` (23K) Every color in the app was tuned by eye as a raw value, the way three.js used to treat them, so color management stays off (and the renderer's output … — exports: scene, camera, isOrthographic, setProjection, frustumHalfHeightAt, apparentDistance, renderer, sun …
 - `shared.js` (2K) What the modules share. — exports: S, App, SAND_TINT, setSandTint
@@ -154,7 +155,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `trains.js` (91K, **big**)  — exports: getTrainStations, trainStationsVersion, getTrainShuttles, isTrainLine, isTrainNode, networkKindOf, trainNodeY, snapStationHeight …
 
 ### src/ui/
-- `entity-card.js` (17K) The card at the bottom right saying what the camera's following; love/hate modifier drop-downs (addDrop, layoutDrops): — exports: ROWS, TEXT_ROWS, cards, makeCard
+- `entity-card.js` (17K) The card at the bottom right saying what the camera's following; love/hate modifier drop-downs (addDrop, layoutDrops); optional health bar (`health: true`, card.setHealth): — exports: ROWS, TEXT_ROWS, cards, makeCard
 - `favorites.js` (6K) Whatever the player has hearted on its card (see the heart in ui/entity-card.js) — a person, a car, a bee, a building, anything with a card — listed i… — exports: isFavorite, personKey, isFavoritePerson, favoritePeople, toggleFavorite, onFavoritesChanged, reviveFavoritesAs, savedFavorites …
 - `garble.js` (1K) Anything with the scramble trait has the words on its card jumbled, and anything with keysmash has them typed with fat fingers (see scramble and keySm… — exports: garbles, garbled
 - `meter.css` (11K) A reusable meter.

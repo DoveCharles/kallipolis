@@ -17,6 +17,7 @@ import { clearMeal, mealFinished, serveMeal } from './peopleHolding.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
 import { REVIVE_SHAKE_TIME } from '../revive.js';
 import { strikeLightning } from '../lightning.js';
+import { damage } from '../../core/health.js';
 
 // ---- what people get up to besides walking about.
 //
@@ -607,8 +608,9 @@ export function swingSound(p) {
  * @param {Person} p - the one hitting them
  * @returns {void}
  */
+const FALL_DAMAGE = 5, CRITICAL_PUNCH_DAMAGE = 10; // (a critical punch is one that draws blood: see punchSpill)
 export function knockDown(t, p) {
-  if (p.traits) punchSpill(t, p);
+  const critical = !!p.traits && punchSpill(t, p) && people.includes(p); // (a car's knock can spill blood too, but isn't a punch)
   const head = { x: t.x, y: t.y + personHeight(t)*0.9, z: t.z };
   if (people.includes(p)) playSound('punch', { ...head, y: t.y + personHeight(t)*0.75 });
   exclaim(head, voiceOfPerson(t));
@@ -618,6 +620,7 @@ export function knockDown(t, p) {
   playOnce(t, 'Fall');
   t.pose = 'Fallen';
   bystandersReactToPunch(t, p);
+  damage(t, FALL_DAMAGE + (critical ? CRITICAL_PUNCH_DAMAGE : 0), { from: p });
 }
 
 /**

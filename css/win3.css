@@ -204,6 +204,8 @@ html.win3 .pc-thumb {
   border-radius:0; background:#008080;
   border:1px solid; border-color:#808080 #fff #fff #808080; box-shadow:inset 1px 1px 0 #000;
 }
+html.win3 .pc-has-health .pc-thumb { border-bottom:0; }
+html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; border-left-color:#808080; background:#000; }
 
 /* the morality meter (#morality-meter), and any other meter built from the same component, is styled in
    src/ui/meter.css */

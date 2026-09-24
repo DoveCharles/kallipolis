@@ -254,6 +254,7 @@ loves = Atomic Engine [legendary, speed = 2, boost = 2, recharge = 3, explosive,
 loves = Fine-tuned [legendary, control = 2, maxboost = 1.4]
 loves = Racing wheels [legendary, speed = 1.1, braking = 1.7]
 loves = Aquatic model [legendary, aqua]
+loves = Remote controlled [legendary, size = 0.25, weight = 0.2, braking = 2, control = 1.4, health = 0.1, recharge = 4, speed = 0.8, boost = 1.2, recovery = 5]
 hates = Their wife
 hates = Getting it in the ear from their missus
 hates = My dad passed at this age, you know?

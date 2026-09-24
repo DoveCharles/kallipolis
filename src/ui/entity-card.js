@@ -1,4 +1,5 @@
 import { isFavorite, toggleFavorite, onFavoritesChanged } from './favorites.js';
+import { healthOf, healthFraction, onHealthChanged } from '../core/health.js';
 
 // ============================================================ the card for whatever's being followed
 // The card at the bottom right saying what the camera's following: a person (life/person-card.js), a car
@@ -36,8 +37,9 @@ export const cards = [];
 // does. `thumb` is { title, onClick } for the picture — leave out onClick and it's just a picture. `kill`, if given, is
 // { title, onClick } for a Smite button under it. `action`, if given, is { text, title, onClick } for a plain button in the
 // same place (a building's Enter: see buildings/interior.js), its wording changed later with setAction and hidden with
-// showAction. `labels` renames rows for this card ({ occupants: 'Passengers' }).
-export function makeCard({ id, title, onClose, thumb = {}, kill = null, action = null, labels = {} }) {
+// showAction. `labels` renames rows for this card ({ occupants: 'Passengers' }). `health` adds a thin bar under the
+// picture: bindHealth(entity, kind) makes it follow that entity's health (core/health.js); setHealth sets it by hand.
+export function makeCard({ id, title, onClose, thumb = {}, kill = null, action = null, labels = {}, health = false }) {
   const el = document.createElement('div');
   el.id = id;
   el.className = 'entity-card';
@@ -95,7 +97,21 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   }
   const shot = document.createElement('div');
   shot.className = 'pc-shot';
-  shot.append(canvas);
+  // the picture and its health bar, joined as one frame
+  const portrait = document.createElement('div');
+  portrait.className = 'pc-portrait';
+  portrait.append(canvas);
+  shot.append(portrait);
+  let healthFill = null;
+  if (health) {
+    portrait.classList.add('pc-has-health');
+    const bar = document.createElement('div');
+    bar.className = 'pc-health';
+    healthFill = document.createElement('div');
+    healthFill.className = 'pc-health-fill';
+    bar.append(healthFill);
+    portrait.append(bar);
+  }
   let killButton = null;
   if (kill) {
     const button = killButton = document.createElement('button');
@@ -294,6 +310,21 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     drawHeart();
   }
   function hide() { el.hidden = true; }
+  // the health bar's fill, 0 to 1, green to red (no-op on a card without one)
+  function setHealth(fraction) {
+    if (!healthFill) return;
+    const clamped = Math.max(0, Math.min(1, fraction));
+    healthFill.style.width = clamped*100 + '%';
+    healthFill.style.background = `hsl(${Math.round(120*clamped)}, 70%, 45%)`;
+  }
+  // follows `entity`'s health until bound to another (null for none)
+  let healthEntity = null;
+  function bindHealth(entity, kind) {
+    healthEntity = entity;
+    if (entity) healthOf(entity, kind);
+    setHealth(healthFraction(entity));
+  }
+  if (health) onHealthChanged(entity => { if (entity === healthEntity) setHealth(healthFraction(entity)); });
   // Rewrites the card's own wording (title, Smite button, row headings such as "Loves") through `transform`, which is given
   // each as written. null puts it all back.
   let relabelling = null;
@@ -314,7 +345,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     if (actionText) actionText[0].style.display = shown ? '' : 'none';
   }
 
-  const card = { el, canvas, show, hide, set, setList, relabel, setFavorite, setAction, showAction };
+  const card = { el, canvas, show, hide, set, setList, relabel, setFavorite, setAction, showAction, setHealth, bindHealth };
   cards.push(card);
   return card;
 }

@@ -18,6 +18,7 @@ import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
 import { updateAircraftSounds, cabinChime, tyreChirp } from '../audio/aircraft.js';
+import { registerHealthKind, resetHealth } from '../core/health.js';
 
 // ---------------------------------------------------------- the aircraft card
 // Which aircraft the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the train's: its
@@ -33,6 +34,7 @@ const planes = loadTypeText('assets/planes.txt', {
 const planeCard = makeCard({
   id: 'plane-card',
   title: 'Aircraft',
+  health: true,
   onClose: () => App.stopFollowingPlane(),
   // the picture itself: at the controls (see "the flying itself" below)
   thumb: { title: 'Fly it', onClick: () => App.flyPlane() },
@@ -45,6 +47,7 @@ function showPlaneCard(info) {
   const type = planes.of(null, info.number);
   planeCard.show({ ...type, name: type.name + ' #' + info.number });
   drawPlaneThumbnail(info.view);
+  planeCard.bindHealth(info.flight ?? null, 'plane');
 }
 function hidePlaneCard() {
   planeCard.hide();
@@ -1222,6 +1225,7 @@ function makeTrackedFlight(zone, plane, fly, tier, index) {
     if (flight.wreckedUntil) {
       if (t < flight.wreckedUntil) { plane.visible = false; return; }
       flight.wreckedUntil = null;
+      resetHealth(flight, 'plane');
       fly.descendFrom?.(t); // a new one, coming in from the top of its descent
     }
     if (flight.hand) { flyByHand(flight, dt); return; }
@@ -1263,6 +1267,7 @@ const CRAFT_WRECK_POWER = 1.5; // how much harder an aircraft's blocks are throw
  * @param {object} flight
  * @returns {void}
  */
+registerHealthKind('plane', { max: 1000, die: flight => crashAircraft(flight) });
 function crashAircraft(flight) {
   const plane = flight.plane, along = { x: Math.sin(plane.rotation.y)*flight.size*0.3, z: Math.cos(plane.rotation.y)*flight.size*0.3 };
   const at = plane.position, radius = flight.size*BLAST_RADIUS*BLAST_KILL_REACH;
@@ -1415,7 +1420,7 @@ function stopFollowingPlane() {
 // what the card says about one: its number across the whole world, so two fields don't both have a Flight #1
 function planeCardInfo(flight) {
   const number = everyFlight().indexOf(flight) + 1;
-  return { number, view: planeThumbnailOf(flight.plane) };
+  return { number, view: planeThumbnailOf(flight.plane), flight };
 }
 // The card's picture: a copy of the aircraft (sharing its geometry and materials), sitting level at the origin, and an
 // isometric camera framing it — as for a carriage (see trainThumbnailOf in trains.js).

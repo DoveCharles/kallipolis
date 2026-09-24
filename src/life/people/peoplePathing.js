@@ -18,6 +18,7 @@ import { PEOPLE_NAV_SPACING, headingTo, isOpenGround, lastPeopleTime, people, pe
 import { RIDE_CHANCE, enterChance, goIndoors, goRideTrain, mayGoIndoors, stationLinks } from './peopleActivities.js';
 import { signalRedLeft } from '../../roads/markings.js';
 import { roadWariness } from './peopleRoad.js';
+import { resetHealth } from '../../core/health.js';
 
 // Which way, and how far per unit of lateral offset, a walkway's point `vi` is set off square to it: the average of the
 // nearest non-zero-length segments either side, stretched so a bend keeps its full width, wrapping round for a ring.
@@ -539,6 +540,7 @@ export function wanderInto(p, areaIndex, near) {
  * @returns {void}
  */
 export function spawnPerson(p) {
+  resetHealth(p, 'person');
   const { areas, lines } = peopleNav;
   if (areas.length && (!lines.length || peopleRng() < 0.45)) {
     const ai = pickWeighted(areas, a => a.size), spot = randomSpotIn(areas[ai]);

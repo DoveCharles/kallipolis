@@ -15,6 +15,7 @@ let shown = -1; // whoever the card is showing, for its thumbnail and its Smite 
 const card = makeCard({
   id: 'car-card',
   title: 'Vehicle',
+  health: true,
   onClose: () => App.stopFollowingCar(),
   // the thumbnail itself: behind the wheel (see "driving a car" in traffic/driving.js)
   thumb: { title: 'Drive it', onClick: () => { if (shown >= 0) App.driveCar(shown); } },
@@ -32,6 +33,7 @@ function showCarCard(i, info, car) {
   card.show({ ...info, loves: garbled(info.loves, traits, seed), hates: garbled(info.hates, traits, seed) });
   drawCarThumbnail(i);
   card.setFavorite({ key: car, kind: 'Car', follow: () => App.followCar(car) });
+  card.bindHealth(car, 'car');
   showBoost();
 }
 function hideCarCard() {

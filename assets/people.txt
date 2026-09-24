@@ -80,7 +80,7 @@ which add up. Everyone starts at the value in
 
 #
 # ------------------------------------------------------------------------------------------------------------------------
-#
+#Live grenades [explosive] Removed because no indicator
 # [ vampire ] brings agemult 4.5, evil 0.5, ageless, aggression 50, speed 1.2, bloodlust, dodge 0.5 and limit 1a. Edit TRAIT_MACROS in core/traits.js to change it.
 
 [distribution]
@@ -1646,7 +1646,6 @@ Having a plan
 Using the em dash — which is very normal to use — by copy and pasting it from its wikipedia page
 Choosing not to care
 Oral fixation
-Live grenades [explosive]
 Having webbed feet [aqua]
 The mutation [aqua]
 Wriggling across ground like a slug
@@ -1979,4 +1978,4 @@ Kids these days [agemult = 1.2]
 Getting put in the labyrinth
 Globus sensation
 1 day blinding stew
-Having a bomb strapped to their chest [explosive, mood = -1, terrified, walkspeed = 1.4]
+Having a bomb strapped to their chest [explosive, mood = -1, terrified, speed = 1.4]
