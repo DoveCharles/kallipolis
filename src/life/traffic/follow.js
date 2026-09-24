@@ -11,9 +11,10 @@ import { driving, controlInput } from '../possession.js';
 import { boostMax, drivenCar, overOpenWater, stopDriving } from './driving.js';
 import { canRespawn, REVIVE_SHAKE_TIME } from '../revive.js';
 import { carMeshes } from './models.js';
-import { carHeight, carLength, carModelOf, carScale, placing } from './placing.js';
+import { carHeight, carLength, carWidth, carModelOf, carScale, placing } from './placing.js';
 import { blasts, cars, EXPLOSIVE_SCALE } from './state.js';
-import { buildingHit } from './collisions.js';
+import { buildingHit, lightFuse } from './collisions.js';
+import { registerHealthKind, resetHealth } from '../../core/health.js';
 
 // The followed car (camera, card, thumbnail) and taking a car out (killCar, drownCar, smiteCar).
 
@@ -34,8 +35,7 @@ function carLabel(car) {
   return cm ? `${car.plate.text} (${type.name} #${car.number})` : type.name;
 }
 /**
- * The car whose screen-space line from its wheels to its roof lies nearest (clientX, clientY) — within 35% of that line's
- * length or 10 pixels, whichever is greater — and of those the one nearest the camera, or -1 if there is none.
+ * The nearest car whose box (see rayHitsCar) the ray through (clientX, clientY) passes through, or -1 if there is none.
  * @param {number} clientX
  * @param {number} clientY
  * @param {{distance: number}} [out] - given the picked car's distance from the camera, for comparing across kinds
@@ -43,21 +43,44 @@ function carLabel(car) {
  */
 export function pickCar(clientX, clientY, out) {
   if (!S.peopleEnabled) return -1;
-  const width = window.innerWidth, height = window.innerHeight, foot = new THREE.Vector3(), roof = new THREE.Vector3();
-  let best = -1, bestDepth = Infinity;
+  pickRay.setFromCamera(pickPoint.set(clientX/window.innerWidth*2 - 1, 1 - clientY/window.innerHeight*2), camera);
+  const { origin, direction } = pickRay.ray;
+  let best = -1, bestT = Infinity;
   cars.forEach((car, i) => {
     if (car.li < 0) return;
-    foot.set(car.x, Y_ROAD, car.z).project(camera);
-    roof.set(car.x, Y_ROAD + carHeight(car), car.z).project(camera);
-    if (Math.abs(foot.z) > 1 || Math.abs(roof.z) > 1) return;
-    const ax = (foot.x + 1)/2*width, ay = (1 - foot.y)/2*height, bx = (roof.x + 1)/2*width, by = (1 - roof.y)/2*height;
-    const lengthSq = (bx - ax)**2 + (by - ay)**2;
-    const k = lengthSq > 0 ? Math.max(0, Math.min(1, ((clientX - ax)*(bx - ax) + (clientY - ay)*(by - ay))/lengthSq)) : 0;
-    const off = Math.hypot(clientX - (ax + (bx - ax)*k), clientY - (ay + (by - ay)*k));
-    if (off <= Math.max(10, Math.sqrt(lengthSq)*0.35) && foot.z < bestDepth) { best = i; bestDepth = foot.z; }
+    const t = rayHitsCar(car, origin, direction);
+    if (t < bestT) { best = i; bestT = t; }
   });
-  if (out && best >= 0) out.distance = camera.position.distanceTo(foot.set(cars[best].x, Y_ROAD, cars[best].z));
+  if (out && best >= 0) out.distance = bestT;
   return best;
+}
+const pickRay = new THREE.Raycaster(), pickPoint = new THREE.Vector2();
+const PICK_PAD = 0.012; // (padding round a car's box, per unit of distance from the camera — keeps far cars clickable)
+/**
+ * Where a ray first meets a car's box (its length, width and height, turned to its heading, sat where placeCar draws it).
+ * @param {object} car
+ * @param {THREE.Vector3} origin
+ * @param {THREE.Vector3} direction - normalised
+ * @returns {number} distance along the ray, or Infinity if it misses
+ */
+function rayHitsCar(car, origin, direction) {
+  const baseY = Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0);
+  const h = carHeight(car);
+  const pad = Math.hypot(car.x - origin.x, baseY + h*0.5 - origin.y, car.z - origin.z)*PICK_PAD;
+  const c = Math.cos(car.heading), s = Math.sin(car.heading);
+  const ox = origin.x - car.x, oz = origin.z - car.z;
+  const o = [ox*c - oz*s, origin.y - baseY, ox*s + oz*c], d = [direction.x*c - direction.z*s, direction.y, direction.x*s + direction.z*c];
+  const halfWidth = carWidth(car)/2 + pad, halfLength = carLength(car)/2 + pad;
+  const lo = [-halfWidth, -pad, -halfLength], hi = [halfWidth, h + pad, halfLength];
+  let near = 0, far = Infinity;
+  for (let a = 0; a < 3; a++) {
+    if (Math.abs(d[a]) < 1e-9) { if (o[a] < lo[a] || o[a] > hi[a]) return Infinity; continue; }
+    let t1 = (lo[a] - o[a])/d[a], t2 = (hi[a] - o[a])/d[a];
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    near = Math.max(near, t1); far = Math.min(far, t2);
+    if (near > far) return Infinity;
+  }
+  return near > 0 ? near : Infinity; // (the camera inside a car's box isn't a click on it)
 }
 /**
  * Follow the car pickCar finds at a point on the screen: the camera's radius limits are set from the car's height, and its
@@ -115,6 +138,17 @@ export function chaseCamera(car) {
   controls.goalTheta = controls.theta + CHASE_EASE*Math.atan2(Math.sin(behind - controls.theta), Math.cos(behind - controls.theta));
   controls.goalPhi = controls.phi + CHASE_EASE*(CHASE_PHI - controls.phi);
 }
+// A car whose health runs out is set burning (lightFuse): it blows up when the fuse is out (see burnFuse and updateTraffic),
+// or, with a respawn left, shakes and comes back (killCar → startCarRevive, which puts its health back to full).
+registerHealthKind('car', { max: 500, die: car => {
+  if (car.fuse != null || car.reviving) return;
+  if (car === drivenCar) { // (the driver is thrown out, and it burns where it is — not where stopDriving respawns it, when it can't be seated back on a lane)
+    const at = { x: car.x, z: car.z, heading: car.heading };
+    stopDriving();
+    if (!car.kick) Object.assign(car, at);
+  }
+  lightFuse(car);
+} });
 /**
  * Explode a car where it stands, in its own paint, through explodeCar (bigger, and a blast killing what's around it, if
  * explosive) — and take it out of cars (unless it has a respawn left: startCarRevive), so a replacement spawns in elsewhere as usual.
@@ -156,6 +190,7 @@ function startCarRevive(car) {
   car.revived = true;
   car.reviving = { timer: REVIVE_SHAKE_TIME };
   car.fuse = null; car.speed = 0; car.stall = 0;
+  resetHealth(car, 'car');
 }
 /**
  * A reviving car, each frame: once it's shaken long enough, lightning strikes it and it drives on as it was.
@@ -225,6 +260,8 @@ export function smiteCar(i) {
   const car = cars[i];
   if (!car || car.li < 0) return;
   strikeLightning({ x: car.x, y: Y_ROAD + carHeight(car), z: car.z });
+  // (and the cars around it go as they would round a burnt-out wreck; an explosive car's own bigger blast covers that)
+  if (!car.traits?.explosive) blasts.push({ x: car.x, y: Y_ROAD, z: car.z, scale: 1 });
   killCar(i);
 }
 /**

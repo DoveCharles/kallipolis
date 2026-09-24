@@ -17,6 +17,7 @@ import { clearMeal, mealFinished, serveMeal } from './peopleHolding.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
 import { REVIVE_SHAKE_TIME } from '../revive.js';
 import { strikeLightning } from '../lightning.js';
+import { damage, heal } from '../../core/health.js';
 
 // ---- what people get up to besides walking about.
 //
@@ -135,6 +136,7 @@ export function goChat(p, area) {
   for (let k=0;k<10;k++) {
     const q = people[Math.floor(peopleRng()*people.length)], d = Math.hypot(q.x - p.x, q.z - p.z);
     if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.fright && !q.oneShot && !q.moving && !q.attack && !q.punched && q.traits.chatty > 0 && d < best
+      && !p.traits.smells && !q.traits.smells
       && walkableUpTo(area, p, q.x, q.z).clear) { friend = q; best = d; }
   }
   if (!friend) return false;
@@ -169,7 +171,7 @@ export function meetOnWalkways(dt) {
     p.chatCheckIn = 0.4 + peopleRng()*0.8;
     const cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
     for (let ox=-1;ox<=1;ox++) for (let oz=-1;oz<=1;oz++) for (const q of cells.get((cx+ox) + ',' + (cz+oz)) || []) {
-      if (q === p || q.act || q.fright || q.crossStage || q.attack || q.punched || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir) continue;
+      if (q === p || q.act || q.fright || q.crossStage || q.attack || q.punched || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || p.traits.smells || q.traits.smells) continue;
       // still coming towards each other, and close
       if ((q.u - p.u)*p.dir < 0 || Math.hypot(q.x - p.x, q.z - p.z) > reach) continue;
       if (peopleRng() < 0.35*p.traits.chatty*q.traits.chatty) startChat(p, q, false); else p.chatCooldown = q.chatCooldown = 10;
@@ -210,6 +212,7 @@ export function updateGroups(dt) {
     if (g.kind === 'room') { roomChat(g, dt); continue; }
     if (g.kind === 'circle') {
       const seated = g.members.filter(m => m.stage === 'sit');
+      if (seated.some(m => m.traits.smells)) { g.members.filter(m => !m.traits.smells).forEach(finishActivity); continue; } // (someone who smells sat down: everyone else gets up and goes)
       if (seated.length >= 2) takeTurns(g, seated, dt); else g.speaker = null;
       continue;
     }
@@ -287,7 +290,8 @@ export function goSit(p, area) {
   const sits = GRASS_SITS.filter(hasClip);
   if (!isOpenGround(area) || !sits.length) return false;
   const radius = CIRCLE_RADIUS*S.peopleSize;
-  const circle = groups.find(g => g.kind === 'circle' && g.area === area && g.members.length < CIRCLE_MAX && Math.hypot(g.cx - p.x, g.cz - p.z) < 30);
+  const circle = groups.find(g => g.kind === 'circle' && g.area === area && g.members.length < CIRCLE_MAX && Math.hypot(g.cx - p.x, g.cz - p.z) < 30
+    && (p.traits.smells || !g.members.some(m => m.traits.smells))); // (nobody joins a circle with someone who smells in it)
   let spot = null;
   if (circle && peopleRng() < 0.85) {
     // the place round the circle furthest from anyone already there
@@ -607,8 +611,9 @@ export function swingSound(p) {
  * @param {Person} p - the one hitting them
  * @returns {void}
  */
+const FALL_DAMAGE = 5, CRITICAL_PUNCH_DAMAGE = 10, VAMPIRE_CRITICAL_HEAL = 5; // (a critical punch is one that draws blood: see punchSpill)
 export function knockDown(t, p) {
-  if (p.traits) punchSpill(t, p);
+  const critical = !!p.traits && punchSpill(t, p) && people.includes(p); // (a car's knock can spill blood too, but isn't a punch)
   const head = { x: t.x, y: t.y + personHeight(t)*0.9, z: t.z };
   if (people.includes(p)) playSound('punch', { ...head, y: t.y + personHeight(t)*0.75 });
   exclaim(head, voiceOfPerson(t));
@@ -618,6 +623,8 @@ export function knockDown(t, p) {
   playOnce(t, 'Fall');
   t.pose = 'Fallen';
   bystandersReactToPunch(t, p);
+  if (critical && p.traits.vampire) heal(p, VAMPIRE_CRITICAL_HEAL);
+  damage(t, FALL_DAMAGE + (critical ? CRITICAL_PUNCH_DAMAGE : 0), { from: p });
 }
 
 /**
@@ -1198,6 +1205,40 @@ const ENTER_CHANCE = 0.1, ENTER_CHANCE_NIGHT = 0.7;
 /** The share of the crowd who are night owls: out and about after dark like any other time. */
 const NIGHT_OWLS = 0.15;
 const isNight = () => S.sunElevation < 0;
+/** Vampires' hours indoors, on the day's clock: in by VAMPIRE_IN_AT, not out again till VAMPIRE_OUT_AT. */
+const VAMPIRE_IN_AT = 5.5, VAMPIRE_OUT_AT = 18.5;
+/**
+ * Whether a vampire must be indoors now: they head in at the first door they come to (see walkAlong, and
+ * hideFromSun in people.js) and don't come out till VAMPIRE_OUT_AT.
+ * @param {Person} p - the person
+ * @returns {boolean} whether they must be in
+ */
+export const hidingFromSun = p => !!p.traits.vampire && S.timeOfDay >= VAMPIRE_IN_AT && S.timeOfDay < VAMPIRE_OUT_AT;
+/** When a vampire still out gives up looking for a door and vanishes into the nearest building (vanishIndoors). */
+const VAMPIRE_POOF_AT = 6.5;
+export const outOfTime = p => hidingFromSun(p) && S.timeOfDay >= VAMPIRE_POOF_AT;
+/**
+ * A vampire caught out: gone in a puff of smoke, and in at the nearest building's door in another.
+ * @param {Person} p - the vampire
+ * @returns {boolean} whether there was a building to go to
+ */
+export function vanishIndoors(p) {
+  let best = null;
+  for (const nav of peopleNav.lines) nav.vertices.forEach((vertex, vi) => {
+    const building = vertex.building;
+    if (!building) return;
+    const d = Math.hypot(building.door.x - p.x, building.door.z - p.z);
+    if (!best || d < best.d) best = { d, building, at: nav.pts[vi] };
+  });
+  if (!best) return false;
+  const { building, at } = best, puff = 1.7*p.height*S.peopleSize;
+  puffSmoke({ x: p.x, y: p.y, z: p.z }, puff, DODGE_SMOKE_PUFFS);
+  p.fright = null; p.sunRun = false;
+  goIndoors(p, building, { x: at.x, y: at.y ?? building.y, z: at.z });
+  p.x = building.door.x; p.z = building.door.z; p.y = building.y;
+  puffSmoke({ x: p.x, y: p.y, z: p.z }, puff, DODGE_SMOKE_PUFFS);
+  return true;
+}
 /** Whether this person's a night owl — always the same ones, by their id. */
 const nightOwl = p => ((Math.imul(p.id, 2654435761) >>> 0)/2**32) < NIGHT_OWLS;
 /** The chance of going in at an office's door: by day, and after dark. */
@@ -1279,7 +1320,7 @@ export function updateIndoors(p, i, dt) {
     // (time's up, but not partway through a video: they sit it out, get up, and only then go)
     const arriving = visit.justIn;
     visit.justIn = false;
-    if (visit.hoursLeft > 0 || p.inRoom?.watched != null) return aboutTheRoom(p, visit, dt, arriving);
+    if (visit.hoursLeft > 0 || p.inRoom?.watched != null || hidingFromSun(p)) return aboutTheRoom(p, visit, dt, arriving);
     // (with the camera in there too, off out of the room first, and the door heard shutting behind them)
     if (roomHolds(visit.building.key) && p.inRoom?.visit === roomVisit() && !p.inRoom.gone) return leaveRoom(p, dt);
     // back out, at the door, facing the walkway
@@ -1377,6 +1418,7 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
       p.inRoom.stage = 'turn';
     }
   }
+  if (S.encourageTV && noSofaFor !== roomVisit() && p.mode !== 'possessed') sendToSofa(p);
   const here = p.inRoom;
   if (here.seat) return sitting(p, here, dt);
   if (p.group?.kind === 'room') return here.route ? walkRoute(p, here) : null;
@@ -1404,13 +1446,54 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
 /** The chance, each time someone in a room moves on, that it's to sit down, and that they're sat down already when it's first shown. */
 const ROOM_SIT_CHANCE = 0.45, ROOM_SIT_ALREADY = 0.4;
 /**
+ * Encourage To Watch TV (Options > Game, S.encourageTV): whenever nobody's on the sofa — straight away on coming in,
+ * then SOFA_REFILL_AFTER seconds after the last watcher got up — whoever's handled next drops what they're doing and is
+ * sat straight down on it, so the TV comes on (again). Not whoever got up off it in the last SOFA_REST seconds. Whatever
+ * their size (freeSeat's size limit is skipped). A sofa seat marked as someone's isn't counted taken unless they're
+ * really on it or on their way (`seatHeld`). A room it can't work in is logged once and left alone that visit.
+ * @param {Person} p - the person
+ * @returns {void}
+ */
+function sendToSofa(p) {
+  const sofa = roomSeats().filter(seat => seat.sofa);
+  const why = !sofa.length ? 'this room has no sofa seats' : !personModel || !hasClip('Sit1') ? 'no sitting animation loaded' : null;
+  if (why) { noSofaFor = roomVisit(); console.info(`Splinetopia: Encourage To Watch TV — ${why}`); return; }
+  const now = performance.now();
+  if (sofa.some(seat => seat.by !== p && seatHeld(seat))) { sofaFilled = { visit: roomVisit(), emptyAt: null }; return; }
+  if (sofaFilled?.visit === roomVisit()) {
+    sofaFilled.emptyAt ??= now;
+    if (now - sofaFilled.emptyAt < SOFA_REFILL_AFTER*1000) return;
+  }
+  if (now - (p.inRoom.leftSofaAt ?? -Infinity) < SOFA_REST*1000) return;
+  const seat = sofa[0];
+  sofaFilled = { visit: roomVisit(), emptyAt: null };
+  standUp(p);
+  leaveGroup(p);
+  p.oneShot = null;
+  if (seat.by && seat.by !== p) seat.by = null;
+  takeSeat(p, seat);
+  const stand = standingSpot(p, seat);
+  p.x = stand.x; p.z = stand.z;
+  p.heading = Math.atan2(seat.nx, seat.nz);
+  Object.assign(p.inRoom, { stage: 'turn', route: null });
+}
+/** The sizes (People size slider included) that sit on the furniture by choice; the sofa's filled whatever the size. */
+const SEAT_SIZE_MIN = 0.5, SEAT_SIZE_MAX = 2.4;
+/** Seconds the sofa stays empty before someone else is sat on it, and before whoever got up off it can be again. */
+const SOFA_REFILL_AFTER = 4, SOFA_REST = 30;
+// whether a seat's really someone's: they're still in the room with it as theirs (not gone, or moved on without saying)
+const seatHeld = seat => !!seat.by && seat.by.inRoom?.seat === seat && seat.by.inRoom.visit === roomVisit();
+// the visit the sofa was last filled in, and since when it's been empty; the visit sendToSofa can't work in
+let sofaFilled = null, noSofaFor = null;
+/**
  * A seat in the room nobody's on or heading for, if there is one — and if they're about the size the furniture's made for.
  * @param {Person} p - the person
  * @returns {?object} the seat (see roomSeats)
  */
 function freeSeat(p) {
-  if (!personModel || !hasClip('Sit1') || Math.abs(S.peopleSize*p.traits.size - 1) > 0.3) return null;
-  const free = roomSeats().filter(seat => !seat.by);
+  const size = S.peopleSize*p.traits.size;
+  if (!personModel || !hasClip('Sit1') || size < SEAT_SIZE_MIN || size > SEAT_SIZE_MAX) return null;
+  const free = roomSeats().filter(seat => !seatHeld(seat));
   return free.length ? free[Math.floor(peopleRng()*free.length)] : null;
 }
 function takeSeat(p, seat) {
@@ -1438,7 +1521,10 @@ function standUp(p) {
   if (p.group?.kind === 'room') leaveGroup(p);
   if (seat && seat.by === p) seat.by = null;
   clearMeal(p);
-  if (p.inRoom) { p.inRoom.seat = null; p.inRoom.watched = null; }
+  if (p.inRoom) {
+    if (seat?.sofa) p.inRoom.leftSofaAt = performance.now();
+    p.inRoom.seat = null; p.inRoom.watched = null;
+  }
   p.pose = 'Idle'; p.seatLift = 0; p.faceTo = null;
 }
 /**

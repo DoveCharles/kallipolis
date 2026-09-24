@@ -17,6 +17,7 @@ let shown = null; // { index, isMan, traits, seed } of whoever the card is showi
 const card = makeCard({
   id: 'person-card',
   title: 'Ped',
+  health: true,
   onClose: () => App.stopFollowingPerson(),
   // the headshot itself: into their head (see possession.js)
   thumb: { title: 'Possess them', onClick: () => { if (shown) App.possessPerson(shown.index); } },
@@ -49,6 +50,7 @@ function showPersonCard(index, isMan) {
   lightsOnLayer = false;
   if (again) setPersonCardDoing(doingNow, awayNow); else setPersonCardDoing(null);
   if (App.people[index]) card.setFavorite(personFavorite(App.people[index].id));
+  card.bindHealth(App.people[index] ?? null, 'person');
 }
 // a person as a favorite: kept in the project by their id, not their place in the crowd (see peopleIdSeq in
 // life/people/people.js) — they're never killed while hearted (see ui/favorites.js), so wherever they're currently

@@ -9,6 +9,7 @@ import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer
 import { setCutout } from '../ui/pixelation.js';
 import { isMuted, playSound, setIndoors } from '../audio/sfx.js';
 import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
+import { loadingTask, loadingSay } from '../ui/loading.js';
 
 // ============================================================ going inside a building
 // Every building has the same inside: one room (furnished one of a few ways), built once and moved to whichever building's
@@ -40,6 +41,7 @@ const CAMERA_LOWEST = 0.5, CAMERA_HIGHEST = 3.0, CAMERA_RISE = 0.008, RISE_EASE 
 // and how narrow and wide zooming takes its field of view (vertical degrees)
 const FOV_NARROWEST = 30, FOV_WIDEST = 100;
 
+const modelsLoading = []; // (each furniture set's load, waited on by the warm-up below)
 const room = new THREE.Group();
 room.name = 'Interior';
 room.visible = false;
@@ -60,7 +62,7 @@ const ROOM_GLOW = 0.3;
 function roomLit(material) {
   material.emissive.copy(material.color);
   material.emissiveIntensity = ROOM_GLOW;
-  material.defines = { ...material.defines, NO_LAMPLIGHT: '' };
+  material.defines = { ...material.defines, NO_LAMPLIGHT: '', ROOM_LAMP: '' };
   return material;
 }
 // Whoever's in the room is lit by the same glow — people, their hair and clothes (and any bee that's got in): every
@@ -416,7 +418,7 @@ function measureSeats(piece) {
   const count = Math.max(1, Math.min(3, Math.floor(half*2/0.55)));
   return Array.from({ length: count }, (_, i) => ({ x: -half + (i + 0.5)*half*2/count, z, y }));
 }
-loadFurniture();
+modelsLoading.push(loadFurniture());
 
 // ---------------------------------------------------------- a posh home
 // Now and then a home's posh (from its building's key): furnished from a set of its own (assets/models/Posh.glb, built by
@@ -479,7 +481,7 @@ async function loadPosh() {
   measureParts(posh);
   if (inside && current === LAYOUTS.home) furnish(inside.key);
 }
-loadPosh();
+modelsLoading.push(loadPosh());
 
 // The posh room's woodwork, built once and shown for posh homes: skirting, raised panels up to a dado rail, and a stepped
 // crown moulding, round all four walls (but for the doorway, which gets a casing), each a strip `depth` out from the wall.
@@ -661,7 +663,7 @@ async function loadStudent() {
   measureParts(student);
   if (inside && current === LAYOUTS.home) furnish(inside.key);
 }
-loadStudent();
+modelsLoading.push(loadStudent());
 // Bare floorboards: planks 2.4 m long and 15 cm wide, in rows, their ends staggered and nailed down — which repeats
 // every 2.4 m both ways.
 const boards = floorTexture(1024, 2.4, (g, rng) => {
@@ -731,7 +733,7 @@ async function loadRetro() {
   measureParts(retro);
   if (inside && current === LAYOUTS.home) furnish(inside.key);
 }
-loadRetro();
+modelsLoading.push(loadRetro());
 // Terrazzo: chips of marble in a pale ground, which repeats every 1.2 m both ways (as a pour between brass strips would).
 const terrazzo = floorTexture(1024, 1.2, (g, rng) => {
   g.fillStyle = '#ece6da';
@@ -797,7 +799,7 @@ async function loadBoho() {
   measureParts(boho);
   if (inside && current === LAYOUTS.home) furnish(inside.key);
 }
-loadBoho();
+modelsLoading.push(loadBoho());
 
 // Lays out the home for the building with this key (see buildingKey): `LAYOUTS.home`'s furniture, where nobody stands or
 // walks, and its seats, in the room as it's now placed.
@@ -805,7 +807,8 @@ function furnish(key) {
   const home = LAYOUTS.home;
   home.group.clear(); // (clones, sharing the model's geometry and materials)
   home.blocked = []; home.solid = []; home.seats = [];
-  home.screen = null;
+  home.screen = null; home.tvObject = null;
+  tvClickedOn = false;
   grid = null;
   stopTV();
   home.group.add(lampLight);
@@ -896,7 +899,7 @@ function furnish(key) {
   const tvRange = wallLength/2 - tv.w/2 - 0.8, tvU = tvRange*(rng()*1.3 - 0.3), tvV = tv.d/2 + 0.03;
   let spot = at(tvU, tvV);
   put('TV', spot.x, spot.z, fromWall);
-  const screen = { ...spot }, tvObject = home.group.children.at(-1);
+  const screen = { ...spot }, tvObject = home.tvObject = home.group.children.at(-1);
   // (a posh home's curtains, but for any the TV's in front of)
   const tvArea = taken[0];
   for (const drape of drapes) {
@@ -1290,7 +1293,7 @@ async function loadOfficeFurniture() {
   if (officeFurniture.OfficeChair) officeFurniture.OfficeChair.seats = measureSeats(officeFurniture.OfficeChair);
   if (inside && current === LAYOUTS.office) furnishOffice(inside.key, curtain.visible);
 }
-loadOfficeFurniture();
+modelsLoading.push(loadOfficeFurniture());
 
 // (x, z) turned by `angle` about y (as three.js turns an object: +z towards (sin, cos)) and moved to (ox, oz)
 const turned = (x, z, angle, ox = 0, oz = 0) => {
@@ -1610,7 +1613,7 @@ async function loadIndustrial() {
   if (industrial.Stool) industrial.Stool.seats = [{ x: 0, z: 0, y: industrial.Stool.h }];
   if (inside && current.industrial) furnishIndustrial(inside.key, current.kind);
 }
-loadIndustrial();
+modelsLoading.push(loadIndustrial());
 // Plain concrete: mottled, with a saw-cut joint every 4 m — which is how often it repeats.
 const concrete = floorTexture(1024, 4, (g, rng) => {
   g.fillStyle = 'rgb(232,232,230)';
@@ -1887,10 +1890,28 @@ export function watchingTV() {
   if (!tv || tv.endedAt !== null) return null;
   return !tv.heard && watchedAt - tv.startedAt > TV_SILENT_AFTER ? -1 : tv.video;
 }
+// Clicking the TV (a click, not the end of a drag round the room) switches it on, watched or not, till it's clicked
+// again or the room's left.
+let tvClickedOn = false;
+const TV_CLICK_SLOP = 5; // px the pointer can move between press and release and still count as a click
+const tvRay = new THREE.Raycaster(), tvPointer = new THREE.Vector2();
+let pressedAt = null;
+renderer.domElement.addEventListener('pointerdown', e => { pressedAt = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener('pointerup', e => {
+  const tvObject = LAYOUTS.home.tvObject;
+  if (!pressedAt || !inside || current !== LAYOUTS.home || !tvObject) return;
+  if (Math.hypot(e.clientX - pressedAt.x, e.clientY - pressedAt.y) > TV_CLICK_SLOP) return;
+  const box = renderer.domElement.getBoundingClientRect();
+  tvPointer.set((e.clientX - box.left)/box.width*2 - 1, -(e.clientY - box.top)/box.height*2 + 1);
+  tvRay.setFromCamera(tvPointer, camera);
+  if (!tvRay.intersectObject(tvObject, true).length) return;
+  tvClickedOn = !(tvClickedOn || tv);
+  if (!tvClickedOn) stopTV();
+});
 // Each frame: the TV switched on or off as anyone's sat watching it or not, and while it's on, the player laid out where
 // the screen now is on the screen, and its sound on or off.
 function updateTV() {
-  const watched = inside && current === LAYOUTS.home && performance.now() - watchedAt < 500;
+  const watched = inside && current === LAYOUTS.home && (tvClickedOn || performance.now() - watchedAt < 500);
   if (watched && !tv) startTV();
   else if (!watched && tv) stopTV();
   // (whoever sat through it has got up; anyone still watching, sat down since, gets something new)
@@ -1913,10 +1934,39 @@ function updateTV() {
 }
 
 // ---------------------------------------------------------------- the lamp
-// A home's lamp (when it has one) comes on after dark, while anyone's in (see someoneHome) — a real light, only in the
-// scene while the room is, so it costs the rest of the city nothing.
-const LAMP_COLOR = 0xffc68a, LAMP_INTENSITY = 6, LAMP_REACH = 9, LAMP_EASE = 0.05;
-const lampLight = new THREE.PointLight(LAMP_COLOR, 0, LAMP_REACH, 1.2);
+// A home's lamp (when it has one) comes on after dark, while anyone's in (see someoneHome). Not a three.js light: one
+// of those joining or leaving the scene changes the light count, recompiling every lit material in the city (a stall of
+// seconds). Instead the room's own materials (ROOM_LAMP, see roomLit) add a point light's diffuse share themselves, from
+// shared uniforms, the way streetlights.js lights the streets. `lampLight` is just where the bulb is, and how bright.
+const LAMP_COLOR = 0xffc68a, LAMP_INTENSITY = 6, LAMP_REACH = 9, LAMP_DECAY = 1.2, LAMP_EASE = 0.05;
+const lampLight = Object.assign(new THREE.Object3D(), { intensity: 0 });
+class SharedVector3 extends THREE.Vector3 { clone() { return this; } } // (every material sees the one value)
+const lampUniforms = {
+  roomLampPosition: { value: new SharedVector3() }, // world
+  roomLampLight: { value: new SharedVector3() },    // colour × intensity, zero when off
+};
+['standard', 'physical', 'lambert', 'phong', 'toon'].forEach(id => Object.assign(THREE.ShaderLib[id].uniforms, lampUniforms));
+THREE.ShaderChunk.lights_pars_begin += /* glsl */`
+#ifdef ROOM_LAMP
+uniform vec3 roomLampPosition;
+uniform vec3 roomLampLight;
+#endif
+`;
+// (three.js's point light falloff, and no specular)
+THREE.ShaderChunk.lights_fragment_maps += /* glsl */`
+#if defined( RE_IndirectDiffuse ) && defined( ROOM_LAMP )
+if ( roomLampLight.r > 0.0 ) {
+  vec3 roomWorld = ( -vViewPosition ) * mat3( viewMatrix ) + cameraPosition;
+  vec3 roomNormal = normalize( normal * mat3( viewMatrix ) );
+  vec3 toLamp = roomLampPosition - roomWorld;
+  float lampDistance = length( toLamp );
+  float lampFalloff = pow( max( lampDistance, 0.01 ), -${LAMP_DECAY.toFixed(2)} )
+    * pow2( saturate( 1.0 - pow4( lampDistance / ${LAMP_REACH.toFixed(1)} ) ) );
+  irradiance += roomLampLight * lampFalloff * saturate( dot( roomNormal, toLamp / max( lampDistance, 0.01 ) ) );
+}
+#endif
+`;
+const lampColor = new THREE.Color(LAMP_COLOR);
 let occupiedAt = -Infinity;
 // (said each frame by whoever's in the room: see peopleActivities.js)
 export const someoneHome = () => { occupiedAt = performance.now(); counting++; };
@@ -1926,7 +1976,48 @@ function updateLamp() {
   const on = lampLight.userData.there && current === LAYOUTS.home && performance.now() - occupiedAt < 1000;
   const goal = on ? LAMP_INTENSITY*dark : 0;
   lampLight.intensity = Math.abs(goal - lampLight.intensity) < 0.01 ? goal : lampLight.intensity + (goal - lampLight.intensity)*LAMP_EASE;
+  const shining = room.visible && lampLight.parent ? lampLight.intensity : 0;
+  lampUniforms.roomLampLight.value.set(lampColor.r, lampColor.g, lampColor.b).multiplyScalar(shining);
+  if (shining) lampLight.getWorldPosition(lampUniforms.roomLampPosition.value);
 }
+
+// ---------------------------------------------------------------- warming up
+// A room's materials compile the first time it's drawn: a stall on first entering. Done under the loading screen
+// instead — every furniture set, wall and floor shown at once, compiled with and without a posh floor's pattern, then
+// everything put back.
+async function warmUp() {
+  await Promise.allSettled(modelsLoading);
+  const shown = [];
+  room.traverse(o => { shown.push([o, o.visible]); o.visible = true; });
+  const sets = new THREE.Group();
+  room.add(sets);
+  const floorMap = floorMaterial.map;
+  const compile = async text => {
+    loadingSay(text);
+    room.updateMatrixWorld(true);
+    await renderer.compileAsync(scene, camera); // (what's compiled already is passed over)
+  };
+  try {
+    await compile('Preparing rooms...');
+    floorMaterial.map = floorMaterial.emissiveMap = parquet;
+    floorMaterial.needsUpdate = true;
+    await compile('Preparing floors...');
+    // one set at a time, so the label follows along
+    const named = { Interior: furniture, Posh: posh, Student: student, MidCentury: retro, Boho: boho, Office: officeFurniture,
+      Industrial: industrial };
+    for (const [name, set] of Object.entries(named)) {
+      if (!set) continue;
+      for (const piece of Object.values(set)) sets.add(piece.object.clone());
+      await compile(`Preparing ${name} furniture...`);
+    }
+  } finally {
+    floorMaterial.map = floorMaterial.emissiveMap = floorMap;
+    floorMaterial.needsUpdate = true;
+    room.remove(sets);
+    for (const [o, visible] of shown) o.visible = visible;
+  }
+}
+loadingTask('Preparing interiors...', warmUp().catch(err => console.warn('Splinetopia: interior warm-up failed', err)), 5);
 
 // where the camera starts in the room, in the room's own terms: the corner looking across at the far walls
 const CAMERA_AT = new THREE.Vector3(-ROOM_W/2 + CAMERA_INSET, CAMERA_HEIGHT, -ROOM_D/2 + CAMERA_INSET);
@@ -2039,6 +2130,7 @@ export function leaveBuilding() {
   const { group, before } = inside;
   inside = null;
   setIndoors(null);
+  tvClickedOn = false;
   stopTV();
   group.visible = true;
   room.visible = false;

@@ -29,6 +29,8 @@ try { if (localStorage.getItem('splinetopia.startInEdit') !== '0') document.body
 </script>
 
 <div id="canvas-wrap"></div>
+<!-- covers the view until src/ui/view-prefs.js takes ui-loading off; text and bar set by src/ui/loading.js -->
+<div id="loading-screen"><div class="ls-text">Loading scripts...</div><div class="ls-bar"><div class="ls-fill"></div></div></div>
 
 <div id="panel">
   <div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Splinetopia</div><button class="win3-min" title="Minimize"></button><button class="win3-max" title="Maximize"></button></div>
@@ -195,11 +197,6 @@ try { if (localStorage.getItem('splinetopia.startInEdit') !== '0') document.body
       <input type="range" id="s-grassnoise" min="0" max="2.5" step="0.05" value="0.2"></div>
     </div>
 
-    <div data-settings="effects">
-    <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">Gameplay</div>
-    <div class="row"><label>Blood soaking</label><button class="toggle-switch" id="s-bloodsoak"><span class="knob"></span></button></div>
-    </div>
-
     <div data-settings="display">
     <div class="section-label" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">FX</div>
     <div class="row"><label>Colour grade</label><button class="toggle-switch" id="s-grade"><span class="knob"></span></button></div>
@@ -241,6 +238,8 @@ try { if (localStorage.getItem('splinetopia.startInEdit') !== '0') document.body
         <input type="range" id="s-carspawn" min="0" max="3000" step="50" value="2000"></div>
       <div class="row"><label>Hide own head in first person</label><button class="toggle-switch" id="s-hideownhead"><span class="knob"></span></button></div>
       <div class="row"><label>Start in Edit mode</label><button class="toggle-switch" id="s-starteditmode"><span class="knob"></span></button></div>
+      <div class="row"><label>Blood soaking</label><button class="toggle-switch" id="s-bloodsoak"><span class="knob"></span></button></div>
+      <div class="row"><label>Encourage To Watch TV</label><button class="toggle-switch" id="s-encouragetv"><span class="knob"></span></button></div>
       </div>
     </div></div>
   </div>

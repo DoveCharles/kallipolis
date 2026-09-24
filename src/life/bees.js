@@ -11,9 +11,10 @@ import { mulberry32 } from '../core/math.js';
 import { TOON_RAMP } from '../core/toon.js';
 import { startFlying, endFlying, controlInput } from './possession.js';
 import { blastFx, explodeBee } from './giblets.js';
-import { blasts, PERSON_BLAST_SCALE } from './traffic/state.js';
+import { blasts, blastDamageAt, PERSON_BLAST_SCALE } from './traffic/state.js';
 import { updateBuzzes } from '../audio/buzz.js';
 import { chaseBehind } from './flight.js';
+import { registerHealthKind, healthOf, damage } from '../core/health.js';
 
 // ============================================================ flowers, hives and bees
 // Three things a park grows, all cut from one model (assets/models/Bee.glb, made in Blender): patches of flowers, a hive
@@ -59,7 +60,7 @@ const text = loadTypeText('assets/bees.txt', {
   placeholder: { bee: { name: ['Bee'], mood: ['🐝'], loves: ['Flowers'], hates: ['Rain'] }, default: { name: ['Hive'], mood: ['🍯'], loves: ['Flowers'], hates: ['Bears'] } },
 });
 
-const beeCard = makeCard({ id: 'bee-card', title: 'Bee', onClose: () => App.stopFollowingBee(),
+const beeCard = makeCard({ id: 'bee-card', title: 'Bee', health: true, onClose: () => App.stopFollowingBee(),
   thumb: { title: 'Fly it', onClick: () => App.flyBee() } }); // the picture takes the controls (see flyBee)
 const hiveCard = makeCard({ id: 'hive-card', title: 'Hive', onClose: () => App.stopFollowingHive(), labels: { occupants: 'Bees' } });
 const drawBeeThumbnail = makeThumbnailDrawer(beeCard.canvas);
@@ -766,6 +767,8 @@ function punchBee(bee, puncher) {
  * @param {object} bee
  * @returns {void}
  */
+// (killBee turns the same object into a new bee, so it's always back at full)
+registerHealthKind('bee', { max: 3, die: bee => killBee(bee), alive: () => true });
 function killBee(bee) {
   if (isHome(bee)) return;
   if (flownBee === bee || (followedBee && followedBee.colony.bees[followedBee.index] === bee)) stopFollowingBee();
@@ -786,14 +789,15 @@ function killBee(bee) {
   bee.until = (lastBeeTime || 0) + between(Math.random, BEE_RESPAWN_MIN, BEE_RESPAWN_MAX);
 }
 /**
- * Kill every bee out flying within `reach` of `at` (a blast: see updateTraffic).
- * @param {{x: number, y: number, z: number}} at
+ * Hurt every bee out flying within `reach` of `at` (a blast: see updateTraffic), by blastDamageAt.
+ * @param {{x: number, y: number, z: number, scale?: number}} at
  * @param {number} reach
  * @returns {void}
  */
 function blastBees(at, reach) {
   colonies.forEach(colony => colony.bees.forEach(bee => {
-    if (!isHome(bee) && Math.hypot(bee.at.x - at.x, bee.at.y - at.y, bee.at.z - at.z) <= reach) killBee(bee);
+    const d = Math.hypot(bee.at.x - at.x, bee.at.y - at.y, bee.at.z - at.z);
+    if (!isHome(bee) && d <= reach) { healthOf(bee, 'bee'); damage(bee, blastDamageAt(at.scale ?? 1, d, reach)); }
   }));
 }
 /**
@@ -888,6 +892,7 @@ function followBee(colony, index) {
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, BEE_FOLLOW_RADIUS)); // swooping in, if the camera's far off
   const number = colony.bees[index].number;
   showBeeCard(number);
+  beeCard.bindHealth(colony.bees[index], 'bee');
   beeCard.setFavorite({ key: 'bee:' + number, kind: 'Bee', follow: () => {
     for (const c of colonies) { const i = c.bees.findIndex(b => b.number === number); if (i >= 0) { followBee(c, i); return true; } }
     return false;

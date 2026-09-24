@@ -9,7 +9,7 @@ export const TRAITS = {
   speed: { base: 1, min: 0.1, max: 6 },
   boost:     { base: 1, min: 0.1, max: 6 }, // multiplies the boost of running (people); for cars, scales what boosting adds (see boostMultiplier in life/traffic/driving.js)
   braking:   { base: 1, min: 0.1, max: 6 }, // multiplies how hard a car brakes
-  control:   { base: 1, min: 0.1, max: 6 }, // multiplies how sharply a driven car steers
+  control:   { base: 1, min: 0.1, max: 6 }, // multiplies how sharply a driven car steers; the lower, the harder it pulls to one side on its own (see driftTurn in life/traffic/driving.js)
   weight:    { base: 1, min: 0.1, max: 10 }, // how much a car crashing into it slows down: see slowedBy in life/traffic/collisions.js
   recovery:   { base: 1, min: 0.1, max: 10}, //how fast a car recovers from a burnt out engine, how likely they are to burn out
   health:    { base: 1, min: 0.01, max: 10}, //health multiplier
@@ -34,7 +34,7 @@ export const TRAITS = {
   backwards: { base: 0, min: 0, max: 1, combine: 'on' },
   evil:      { base: 0, min: -1, max: 1, combine: 'add', hidden: true },
   aggression:{ base: 1, min: 0, max: 100 },
-  bloodlust: { base: 0, min: 0, max: 1, combine: 'on' }, // covered in blood, twice as fast and out to punch everyone (see life/people/peopleBlood.js)
+  bloodlust: { base: 0, min: 0, max: 1, combine: 'on' }, // covered in blood, twice as fast and out to punch everyone (see life/people/peopleBlood.js); a car gets 10% of its boost back per person it kills (bloodlustBoost in life/traffic/collisions.js)
   agemult:   { base: 1, min: 0.1, max: 1000, hidden: true }, // no upper limit in practice, for vampiric / immortal types
   dodge:     { base: 0, min: 0, max: 1, combine: 'add' }, // the chance of leaping clear of a punch, then going after whoever threw it (see dodgePunch in life/people/peopleActivities.js)
   blazed:    { base: 0, min: 0, max: 1, combine: 'on' }, // the whites of their eyes a little red (see BLAZED_EYE_RED in life/people/people.js)
@@ -47,9 +47,9 @@ export const TRAITS = {
   keysmash: {base: 0, min: 0, max: 1, combine: 'on'}, //keysmashes text in card
   legendary: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as legendary
   terrible: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as terrible
-  smells: { base: 0, min: 0, max: 1, combine: 'on' }, //makes other people - or cars - stay clear
+  smells: { base: 0, min: 0, max: 1, combine: 'on' }, //people keep clear and leave circles it sits in (life/people/peopleSmell.js); cars pull over to let it by (life/traffic/pullover.js)
   respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time: the body stays whole (a car still explodes), shakes, then lightning revives it (see life/revive.js)
-  drunk: {base: 0, min: 0, max: 1, combine: 'on'} ,//steering randomly switches direction for up to 2 seconds, people randomly fall over or throw up
+  drunk: {base: 0, min: 0, max: 1, combine: 'on'} ,//cars: control ×0.5 and steering swapped for 1-3s every 3-10s (see drunkSteer in life/traffic/driving.js); AI cars veer off their lane now and then (drunkVeer in life/traffic/collisions.js); people weave and fall over (life/people/peopleDrunk.js)
   unstable: {base: 0, min: 0, max: 1, combine: 'add'}, //chance to be hurt X5 more than usual
   terrified: {base: 0, min: 0, max: 1, combine: 'on'}, //flees forever (see updatePeople in life/people/people.js)
   explosive: {base: 0, min: 0, max: 1, combine: 'on'}, //blow up on death, killing bystanders; if already blowing up, explosion becomes much bigger (see blasts in life/traffic/state.js)

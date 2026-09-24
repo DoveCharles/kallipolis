@@ -2,8 +2,13 @@
 // - hints: View > Edit Hints (the bottom #hint in Edit and Maps) and View > General Hints (the bottom #hint in World,
 //   including the controls while possessing or driving). Hidden by body classes; see css/base.css.
 // - Options > Game > Start in Edit mode: on, the side panel slides in once loaded; off, the app opens in World instead.
+// - Options > Game > Encourage To Watch TV (S.encourageTV, off by default): on, a home shown with people in it has one of them already sat on
+//   the sofa, so the TV's on straight away (see aboutTheRoom in life/people/peopleActivities.js).
+import { S } from '../core/shared.js';
+import { whenLoaded } from './loading.js';
+
 const EDIT_HINTS_KEY = 'splinetopia.editHints', GENERAL_HINTS_KEY = 'splinetopia.generalHints';
-const START_EDIT_KEY = 'splinetopia.startInEdit';
+const START_EDIT_KEY = 'splinetopia.startInEdit', ENCOURAGE_TV_KEY = 'splinetopia.encourageTV';
 const body = document.body;
 const startEditToggle = document.getElementById('s-starteditmode');
 
@@ -29,13 +34,18 @@ startEditToggle.addEventListener('click', () => {
   startEditToggle.classList.toggle('on', startInEdit);
   remember(START_EDIT_KEY, startInEdit);
 });
-// The page starts in Edit (core/state.js) with the panel hidden (index.html). Once loaded and a frame has been drawn, Edit
-// slides the panel in; World is pressed instead when not starting in Edit.
-function whenReady(run) {
-  const afterFrame = () => requestAnimationFrame(() => requestAnimationFrame(run));
-  if (document.readyState === 'complete') afterFrame(); else window.addEventListener('load', afterFrame, { once: true });
-}
-whenReady(() => {
+S.encourageTV = recall(ENCOURAGE_TV_KEY, false);
+const encourageTVToggle = document.getElementById('s-encouragetv');
+encourageTVToggle.classList.toggle('on', S.encourageTV);
+encourageTVToggle.addEventListener('click', () => {
+  S.encourageTV = !S.encourageTV;
+  encourageTVToggle.classList.toggle('on', S.encourageTV);
+  remember(ENCOURAGE_TV_KEY, S.encourageTV);
+});
+
+// The page starts in Edit (core/state.js) with the panel hidden (index.html). Once everything's loaded (see loading.js),
+// Edit slides the panel in; World is pressed instead when not starting in Edit.
+whenLoaded(() => {
   body.classList.remove('ui-loading', 'start-edit'); // (hints slide in: css/base.css)
   if (startInEdit) body.classList.remove('w3-no-panel');
   else document.querySelector('#mode-toolbar [data-mode=move]').click();

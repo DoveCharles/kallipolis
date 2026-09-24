@@ -96,7 +96,7 @@ export function personDoing(p) {
   const k = p.punched;
   if (k && k.stage === 'brace') return 'Bracing for a punch';
   if (k && k.stage === 'crawl') return 'Crawling off the road';
-  if (k && (k.stage === 'fall' || k.stage === 'down')) return 'Knocked flat by ' + nameOf(k.by);
+  if (k && (k.stage === 'fall' || k.stage === 'down')) return k.stupor ? 'Fell over in a stupor' : 'Knocked flat by ' + nameOf(k.by);
   if (k && k.stage === 'rise') return 'Getting back up';
   const a = p.attack;
   if (a) {

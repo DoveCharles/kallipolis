@@ -6,7 +6,7 @@ import { navRebuildOnHold } from '../../roads/roads.js';
 import { placeKey, signalState } from '../../roads/markings.js';
 import { updateEngines } from '../../audio/engine.js';
 import { carTypeOf } from '../car-types.js';
-import { BLAST_THROW, burnFuse, DETONATION_REACH, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
+import { BLAST_THROW, burnFuse, DETONATION_REACH, swayCrash, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
 import { boostMax, driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, rechargeBoost, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
 import { chaseCamera, updateCarRevive, respawnFromWater, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
 import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
@@ -15,8 +15,11 @@ import { carMeshes, carParts, designNumbers } from './models.js';
 import { CAR_REAR_AXLE, carHeight, carLength, engineOf, placeCar, placing, turnWheels } from './placing.js';
 import { buildCarGrid, CAR_BRAKE, CAR_STOP_GAP, forCarsNear, gapAhead, GIVE_UP_AFTER, lyingAhead, uTurnBlocked, waitOrGiveUp } from './spacing.js';
 import { updateSpecialTraits } from './special.js';
-import { CAR_SPEED, TRAFFIC_MAX, TURN_SAFE_ANGLE, blasts, cars, trafficRng } from './state.js';
+import { CAR_SPEED, TRAFFIC_MAX, TURN_SAFE_ANGLE, blasts, blastDamageAt, cars, trafficRng } from './state.js';
+import { damage } from '../../core/health.js';
 import { waitToTurn } from './turns.js';
+import { sway, unsway } from './offroute.js';
+import { smellyCars, updatePull } from './pullover.js';
 export { loadCarModels } from './models.js';
 export { forEachHeadlight } from './placing.js';
 export { carThumbnailScene } from './follow.js';
@@ -106,6 +109,7 @@ export function updateTraffic(t) {
   const lying = App.people.filter(isLying); // (anyone on the ground, for cars to stop for: see lyingAhead)
   const { matrix } = placing;
   const designCounts = carMeshes.map(() => 0);
+  const smelly = smellyCars(); // (everyone gives way to these: see pullover.js)
   cars.forEach((car, i) => {
     if (car.li < 0) { matrix.makeScale(0, 0, 0); carParts.body.setMatrixAt(i, matrix); if (S.showRoadsafetyDebug) carHitboxDebugMesh.setMatrixAt(i, matrix); return; }
     if (car.design == null && carMeshes.length) {
@@ -116,7 +120,7 @@ export function updateTraffic(t) {
     }
     if (car.design != null) refreshCarTraits(car);
     if (car.reviving) { updateCarRevive(car, dt); placeCar(car, i, designCounts); return; } // (blown up with a respawn left: see startCarRevive)
-    if (car === drivenCar) { if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
+    if (car === drivenCar) { car.sway = null; car.pull = 0; if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
     rechargeBoost(car, dt); // (driven or not: see driving.js)
     if (i === followedCar && car.boostLeft != null) App.setCarBoost(car.boostLeft, boostMax(car), car.boostLocked); // (the card's meter keeps filling after it's let go)
     if (car.fuse != null) { burnFuse(car, dt); placeCar(car, i, designCounts); return; } // (about to blow: it neither drives nor turns)
@@ -124,7 +128,8 @@ export function updateTraffic(t) {
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
     let target = cruise;
-    if (car.ahead) {
+    if (!car.traits?.smells) { updatePull(car, smelly, dt); target *= 1 - (car.pull ?? 0); } // (giving way to a smelly car: see pullover.js)
+    if (car.ahead && !(car.traits?.smells && car.ahead.pull > 0.3)) {
       // (along each car's own lane rather than the road, since a lane runs quicker round the inside of a bend)
       const nav = S.trafficNav.lines[car.li], along = (laneLength(nav, car.dir, car.ahead.u) - laneLength(nav, car.dir, car.u))*car.dir;
       const gap = (along < 0 ? along + laneLength(nav, car.dir, nav.total) : along) - (carLength(car) + carLength(car.ahead))/2; // (round a loop)
@@ -174,6 +179,7 @@ export function updateTraffic(t) {
     driveAlong(car, travel);
     // its front axle is put on its route (see routePoint) and its back axle, CAR_REAR_AXLE of its length behind, follows
     // it round, so the back end cuts in on a bend
+    unsway(car); // (last frame's weave or pull-over off, see offroute.js)
     let knocked = null; // (how a knocked car is moving)
     if (car.kick) { car.x -= car.kick.x; car.z -= car.kick.z; knocked = stepKick(car, dt); } // (knocked off its route by a bump: the offset is taken off while it's put back on it, so it can't turn it round)
     const front = routePoint(car, back);
@@ -187,30 +193,38 @@ export function updateTraffic(t) {
       car.x = front.x - back*Math.sin(car.heading);
       car.z = front.z - back*Math.cos(car.heading);
     }
+    sway(car, dt);
+    if (car.sway?.drunk && car.speed > 0.3) swayCrash(car); // (weaved into a car or a wall)
     if (car.kick || car.floatDrop > 0) knockedIntoWater(car, knocked, dt);
     if (car.sinking?.rising) riseCar(car, dt);
-    const lane = lanePoint(car), offLane = Math.abs(Math.atan2(Math.sin(lane.heading - car.heading), Math.cos(lane.heading - car.heading)));
+    const lane = lanePoint(car), swayed = car.heading - (car.sway?.turn ?? 0), offLane = Math.abs(Math.atan2(Math.sin(lane.heading - swayed), Math.cos(lane.heading - swayed)));
     if (knocked && Math.hypot(knocked.x, knocked.z) > 0.3) runOverPeople(car, knocked);
+    else if (car.sway?.drunk && car.speed > 0.3) runOverPeople(car, { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }); // (weaving drunk: anyone it reaches, on the pavement too)
     else if (car.speed > 0.3 && offLane < TURN_SAFE_ANGLE) runOverPeople(car);
     turnWheels(car, dt);
     updateSpecialTraits(car, t, dt);
     placeCar(car, i, designCounts);
   });
-  // (each car that has burnt out blows up, and any car near it too — as an ordinary explosion, setting nothing else off
-  // unless explosive; so do the blasts explosive cars, people and bees left as they died, since the last update)
-  const burntOut = wreckedCars.splice(0), blasted = new Set(burntOut);
+  // (each car that has burnt out blows up, hurting whatever's near it — blastDamageAt, less further out — as does each
+  // blast explosive cars, people and bees left as they died, and smitten cars, since the last update. Hits are gathered
+  // first and dealt after, since a car or person dying mid-loop changes the arrays being walked.)
+  const burntOut = wreckedCars.splice(0);
   const going = [...blasts.splice(0), ...burntOut.map(car => ({ x: car.x, y: Y_ROAD, z: car.z, scale: 1 }))];
+  const hits = []; // [entity, damage, source]
   going.forEach(blast => {
     const reach = DETONATION_REACH*S.peopleSize*blast.scale;
-    App.people.forEach((p, i) => { // (people in the blast die, thrown clear of it)
+    App.people.forEach(p => { // (thrown clear of it, if it kills them)
       const dx = p.x - blast.x, dz = p.z - blast.z, d = Math.hypot(dx, dz);
-      if (!p.indoors && d <= reach && Math.abs(p.y - blast.y) <= reach) App.killPerson(i, 'player', { x: dx/(d || 1)*BLAST_THROW, y: 0, z: dz/(d || 1)*BLAST_THROW });
+      if (!p.indoors && d <= reach && Math.abs(p.y - blast.y) <= reach) hits.push([p, blastDamageAt(blast.scale, d, reach), { by: 'player', momentum: { x: dx/(d || 1)*BLAST_THROW, y: 0, z: dz/(d || 1)*BLAST_THROW } }]);
     });
     App.blastBees?.(blast, reach);
-    forCarsNear(blast.x, blast.z, reach, other => { if (Math.hypot(other.x - blast.x, other.z - blast.z) <= reach) blasted.add(other); });
+    forCarsNear(blast.x, blast.z, reach, other => {
+      const d = Math.hypot(other.x - blast.x, other.z - blast.z);
+      if (d <= reach && !burntOut.includes(other)) hits.push([other, blastDamageAt(blast.scale, d, reach), null]);
+    });
   });
-  if (drivenCar && blasted.has(drivenCar)) { const driven = drivenCar; stopDriving(); blasted.add(driven); } // (the driver is thrown out of it, and it goes too)
-  blasted.forEach(car => { const i = cars.indexOf(car); if (i >= 0) killCar(i); });
+  burntOut.forEach(car => { const i = cars.indexOf(car); if (i >= 0) killCar(i); });
+  hits.forEach(([entity, amount, source]) => damage(entity, amount, source)); // (a car it finishes off is set burning: see the car's die in follow.js)
   for (let i = cars.length - 1; i >= 0; i--) if (cars[i] !== drivenCar && cars[i].sinking?.under && !respawnFromWater(cars[i])) drownCar(i); // (knocked in and gone under; a respawn puts it back on land)
   if (drivenCar?.sinking?.under && !respawnFromWater(drivenCar)) { const driven = drivenCar, at = { x: driven.x, z: driven.z }; stopDriving(); Object.assign(driven, at); drownCar(cars.indexOf(driven)); } // (gone under: it sinks away quietly, with a splash, rather than blowing up)
   updateEngines(cars, drivenCar, engineOf, dt);

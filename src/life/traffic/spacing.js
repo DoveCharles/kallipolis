@@ -105,6 +105,7 @@ export function gapAhead(car) {
   let best = Infinity, by = null;
   forCarsNear(car.x, car.z, range, other => {
     if (other === car || other.ahead === car) return; // (the car behind it in its own lane never is)
+    if (car.traits?.smells && other.pull > 0.3) return; // (pulled over to let it by: see pullover.js)
     if (car.pushing > 0 && other !== drivenCar && other !== car.ahead && Math.abs(other.speed) < 0.3) return; // (pushing past, see waitOrGiveUp)
     const gap = gapTo(car, other, range);
     if (gap >= best) return;

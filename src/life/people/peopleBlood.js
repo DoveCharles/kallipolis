@@ -199,11 +199,12 @@ export function bloodBurst(victim, momentum, { scale = 1, includeVictim = false 
  * @returns {void}
  */
 export function punchSpill(victim, puncher) {
-  if (peopleRng() >= PUNCH_SPILL_CHANCE) return;
+  if (peopleRng() >= PUNCH_SPILL_CHANCE) return false;
   const size = S.peopleSize, dx = victim.x - puncher.x, dz = victim.z - puncher.z, d = Math.hypot(dx, dz) || 1;
   const chunks = PUNCH_SPILL_CHUNKS_MIN + Math.floor(peopleRng()*(PUNCH_SPILL_CHUNKS_MAX - PUNCH_SPILL_CHUNKS_MIN + 1));
   spillBlood({ x: victim.x, y: victim.y, z: victim.z }, 1.7*victim.height*size, chunks, { x: dx/d*PUNCH_SPILL_THROW, y: 0, z: dz/d*PUNCH_SPILL_THROW });
   bloodBurst(victim, null, { scale: PUNCH_SPILL_SCALE, includeVictim: true });
+  return true; // (a critical hit: see knockDown in peopleActivities.js)
 }
 
 /**

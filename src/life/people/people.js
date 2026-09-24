@@ -22,10 +22,14 @@ import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
 import { MELODIES } from '../../audio/melodies.js';
 import { favoritePeople, isFavoritePerson } from '../../ui/favorites.js';
+import { registerHealthKind } from '../../core/health.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
+import { hidingFromSun, outOfTime, vanishIndoors } from './peopleActivities.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
+import { sway, updateDrunk } from './peopleDrunk.js';
+import { avoidSmells, updateFlies } from './peopleSmell.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { followPersonAt, followPerson, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
@@ -575,6 +579,11 @@ export function updateFright(p, dt) {
 
 /** How long, in seconds, someone runs off from whatever frightened them. */
 const FLEE_TIME = 10;
+// Someone in a hangout who's fled FLEE_REPEAT_COUNT times within FLEE_REPEAT_WINDOW seconds, or for FLEE_AREA_TIME seconds
+// in all while in it, makes for its exit furthest from the danger instead of running about inside it (see wantsOut).
+const FLEE_REPEAT_COUNT = 3, FLEE_REPEAT_WINDOW = 60, FLEE_AREA_TIME = 15;
+/** Whether someone fleeing in a hangout has had enough of it and should leave. */
+const wantsOut = p => (p.fleeStarts?.length ?? 0) >= FLEE_REPEAT_COUNT || (p.fleeInArea ?? 0) >= FLEE_AREA_TIME;
 /**
  * Set someone running off, more than twice as fast as they walk, away from `from` ({ x, z }) for FLEE_TIME seconds.
  * @param {Person} p - the person
@@ -583,14 +592,80 @@ const FLEE_TIME = 10;
  */
 export function beginFleeing(p, from) {
   p.fright = { stage: 'flee', timer: FLEE_TIME, from };
+  const now = lastPeopleTime ?? 0;
+  p.fleeStarts = (p.fleeStarts ?? []).filter(t => now - t < FLEE_REPEAT_WINDOW);
+  p.fleeStarts.push(now);
   p.faceTo = null; p.lookAt = null;
   // away from whatever frightened them: turn round, if they're on a walkway
   if (p.mode === 'line') {
     const nav = peopleNav.lines[p.li], k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), a = nav.pts[k], b = nav.pts[k + 1];
     if (((b.x - a.x)*(from.x - p.x) + (b.z - a.z)*(from.z - p.z))*p.dir > 0) p.dir = -p.dir;
   } else if (p.mode === 'wander') {
-    fleeWithin(p, peopleNav.areas[p.area]);
+    const area = peopleNav.areas[p.area];
+    if (!(wantsOut(p) && leaveArea(p, area, from))) fleeWithin(p, area);
   }
+}
+/**
+ * A vampire out while the sun's up (see hidingFromSun): running scared, SUN_RUN_BOOST faster still, for the nearest door
+ * along their walkway — out of a hangout first, and onto other walkways at every turning if theirs has no door
+ * (walkAlong) — and in at the first door they reach. Still out at 6:30, they vanish into the nearest building
+ * (vanishIndoors). Once inside, calm.
+ * @param {Person} p - the vampire
+ * @returns {void}
+ */
+function hideFromSun(p) {
+  if (p.mode === 'indoors') {
+    if (p.indoors.stage === 'inside' && p.sunRun) { p.sunRun = false; p.fright = null; }
+    return;
+  }
+  if (p.punched || inWater(p) || !(p.mode === 'line' || p.mode === 'wander' || p.mode === 'leaving')) return;
+  if (outOfTime(p) && vanishIndoors(p)) return;
+  p.sunRun = true;
+  if (p.mode === 'wander') { leaveArea(p, peopleNav.areas[p.area]); return; }
+  if (p.fright?.stage === 'flee') return;
+  // (on a walkway: towards its nearest door, if it has one, running from just behind them)
+  if (p.mode === 'line') {
+    const nav = peopleNav.lines[p.li];
+    let nearest = null;
+    nav.vertices.forEach((vertex, vi) => {
+      if (vertex.building && (!nearest || Math.abs(nav.cum[vi] - p.u) < Math.abs(nearest - p.u))) nearest = nav.cum[vi];
+    });
+    if (nearest != null && Math.abs(nearest - p.u) > 0.01) p.dir = Math.sign(nearest - p.u);
+    const k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), a = nav.pts[k], b = nav.pts[k + 1], len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    beginFleeing(p, { x: p.x - (b.x - a.x)/len*p.dir, z: p.z - (b.z - a.z)/len*p.dir });
+  } else {
+    beginFleeing(p, { x: p.x - Math.sin(p.heading), z: p.z - Math.cos(p.heading) });
+  }
+}
+/** How much faster than fleeing a vampire runs for cover from the sun. */
+const SUN_RUN_BOOST = 1.5;
+/**
+ * Send someone in a hangout out of it: onto the walkway at one of its entrances — the nearest of a few, or, running from
+ * `from`, whichever takes them furthest from it — as mode 'leaving'. Entrances reached over dry ground come first.
+ * @param {Person} p - the person
+ * @param {Hangout} area - the hangout they're in
+ * @param {?{x: number, z: number}} [from] - what they're running from, if anything
+ * @returns {boolean} whether it has an entrance to leave by
+ */
+function leaveArea(p, area, from = null) {
+  if (!area.exits.length) return false;
+  const candidates = from ? area.exits : Array.from({ length: 6 }, () => area.exits[Math.floor(peopleRng()*area.exits.length)]);
+  let exit = null;
+  for (const e of candidates) {
+    const d = Math.hypot(e.x - p.x, e.z - p.z);
+    // (fleeing: far from the danger, less how far off it is; otherwise just near)
+    const score = from ? Math.hypot(e.x - from.x, e.z - from.z) - d : -d;
+    // Uses the entrance's own position, not the walkway point: a walkway lies outside the hangout, so a walk to
+    // that point never reads as clear ground.
+    const dry = walkableUpTo(area, p, e.x, e.z).clear;
+    if (!exit || (dry !== exit.dry ? dry : score > exit.score)) exit = { ...e, score, dry };
+  }
+  // Joins the walkway at the point where it passes the entrance.
+  joinWalkway(p, exit.li, peopleNav.lines[exit.li].cum[exit.vi], peopleRng() < 0.5 ? -1 : 1);
+  p.exit = walkwayPoint(p);
+  p.mode = 'leaving'; p.wait = 0;
+  p.fleeInArea = 0;
+  return true;
 }
 
 /**
@@ -648,6 +723,12 @@ export function fleeWithin(p, area) {
  * @param {?{x: number, z: number}} [source] - what killed them (a car), for the people around to run from
  * @returns {void}
  */
+// `source` for damage (core/health.js) may carry killPerson's own: { by, momentum, throwScale, from }
+registerHealthKind('person', {
+  max: 100,
+  die: (p, source) => killPerson(people.indexOf(p), source?.by ?? 'player', source?.momentum ?? null, source?.throwScale ?? 1, source?.from ?? null),
+  alive: p => p.mode !== 'dead' && p.mode !== 'none' && p.mode !== 'drowning', // (hearted, revived, or aboard a train)
+});
 function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = null) {
   const p = people[i];
   if (!p || isGone(p) || isFavoritePerson(p.id) || p.punched?.revive) return; // (the hearted can't be killed: see ui/favorites.js; nor can the shaking, see below)
@@ -799,7 +880,7 @@ export function updatePeople(t) {
   peopleMesh.visible = S.peopleEnabled && !personModel;
   if (personModel) [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; });
   peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
-  if (!S.peopleEnabled) { showPassengers(); showInhabitants(); return; }
+  if (!S.peopleEnabled) { showPassengers(); showInhabitants(); updateFlies(0); return; }
   if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.peopleNavDirty = false;
     setPeopleNavBuiltAt(t);
@@ -848,6 +929,8 @@ export function updatePeople(t) {
     meetOnWalkways(dt);
     pickFights(dt);
   }
+  avoidSmells(dt); // (everyone keeps clear of anyone who smells: see peopleSmell.js)
+  updateFlies(dt);
   // whoever's been knocked down and is still on the ground (or getting up): nobody walks into them
   updateArrivingBlood(dt);
   const lyingDown = people.filter(q => q.punched && q.punched.stage !== 'marked' && q.punched.stage !== 'brace');
@@ -865,6 +948,8 @@ export function updatePeople(t) {
     if (p.fright) updateFright(p, dt);
     // terrified: never stop fleeing — each flee ended starts another, from just behind them, so they carry on the way they were going
     if (p.traits.terrified && (p.mode === 'line' || p.mode === 'wander') && !p.fright && !p.punched && !inWater(p)) beginFleeing(p, { x: p.x - Math.sin(p.heading), z: p.z - Math.cos(p.heading) });
+    if (!possessed && hidingFromSun(p)) hideFromSun(p);
+    else if (p.sunRun) p.sunRun = false;
     //attempting to give additional reactions to npc death depending on how evil they are
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
     if (p.please) updatePlease(p, dt); // (the same hold as stun, read as delight: see pleased below)
@@ -879,7 +964,8 @@ export function updatePeople(t) {
     // pleased: looking at it and then held still, beaming. The same 'look' and 'held' stages as stun — the ones
     // updatePeople freezes them on — read as delight rather than shock, below.
     const pleased = !!p.please && (p.please.stage === 'look' || p.please.stage === 'held');
-    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*(p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(fleeing ? FLEE_SPEED*p.traits.boost : 1);
+    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*(p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(fleeing ? FLEE_SPEED*p.traits.boost : 1)
+      *(fleeing && p.sunRun ? SUN_RUN_BOOST : 1);
     let goal = null;
     //Updating hair colour depending on age
     //set default hair colour once
@@ -926,7 +1012,12 @@ export function updatePeople(t) {
       } else if (p.fright || p.stun || p.please || p.attack || frozen) {
         // Frightened, stunned or pleased. Fright runs off further each time they reach where they were running to;
         // stun and please hold position through the `frozen` guard below, with no movement of their own.
-        if (fleeing && Math.hypot(p.tx - p.x, p.tz - p.z) < 0.5) fleeWithin(p, area);
+        if (fleeing) {
+          p.fleeInArea = (p.fleeArea === p.area ? p.fleeInArea ?? 0 : 0) + dt;
+          p.fleeArea = p.area;
+          if (wantsOut(p) && leaveArea(p, area, p.fright.from)) { /* heading out */ }
+          else if (Math.hypot(p.tx - p.x, p.tz - p.z) < 0.5) fleeWithin(p, area);
+        }
       } else if (p.wait > 0 || p.oneShot) {
         p.wait -= dt;
       } else if (Math.hypot(p.tx - p.x, p.tz - p.z) < 0.3) {
@@ -940,20 +1031,8 @@ export function updatePeople(t) {
           // over to a train station standing in here
           const node = stations[Math.floor(peopleRng()*stations.length)], st = getTrainStations().get(node);
           goRideTrain(p, node, { x: st.x, y: area.y, z: st.z });
-        } else if (next === 'leave' && area.exits.length) {
-          // head for the nearest of a few of the hangout's entrances
-          let exit = null;
-          for (let k=0;k<6;k++) {
-            const e = area.exits[Math.floor(peopleRng()*area.exits.length)], q = peopleNav.lines[e.li].pts[e.vi], d = Math.hypot(q.x-p.x, q.z-p.z);
-            // Uses the entrance's own position, not the walkway point: a walkway lies outside the hangout, so a walk to
-            // that point never reads as clear ground.
-            const dry = walkableUpTo(area, p, e.x, e.z).clear;
-            if (!exit || (dry !== exit.dry ? dry : d < exit.d)) exit = { ...e, d, dry };
-          }
-          // Joins the walkway at the point where it passes the entrance.
-          joinWalkway(p, exit.li, peopleNav.lines[exit.li].cum[exit.vi], peopleRng() < 0.5 ? -1 : 1);
-          p.exit = walkwayPoint(p);
-          p.mode = 'leaving'; p.wait = 0;
+        } else if (next === 'leave' && leaveArea(p, area)) {
+          // off to the nearest of a few of the hangout's entrances
         } else if (next === 'sit' && goSit(p, area)) {
           // off to a bench, or to sit on the grass
         } else if (next === 'lie' && goLieDown(p, area)) {
@@ -1036,6 +1115,7 @@ export function updatePeople(t) {
       p.y += (goal.y - p.y)*Math.min(1, dt*6);
     }
     updateWater(p, i, dt, wasX, wasZ); // (over open water, they go in: see peopleWater.js)
+    updateDrunk(p, dt, wasX, wasZ); // (weaving, and now and then falling over: see peopleDrunk.js)
     // possessed, they face the way they're looking — the walk played backwards, stepping backwards
     if (possessed && !frozen) {
       p.heading = possession.yaw;
@@ -1091,6 +1171,7 @@ export function updatePeople(t) {
       const faceDown = turnInWater(p, rotation), crawlLift = turnCrawling(p, rotation); // (tipped, rocked or face down in the water: see peopleWater.js; face down crawling: see peopleRoad.js)
       position.set(p.x - offX*cos - offZ*sin, faceDown ? p.y : crawlLift != null ? p.y + crawlLift : p.y + p.seatLift*sitWeight(p) - personModel.minY*s, p.z + offX*sin - offZ*cos);
       if (p.punched?.revive && p.punched.stage === 'down') shake(position, rotation, PERSON_SHAKE*S.peopleSize); // (dead, before the bolt: see reviveInstead)
+      sway(p, position, rotation);
       matrix.compose(position, rotation, scale.set(s, s, s));
       personModel.mesh.setMatrixAt(i, matrix);
       // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION
@@ -1185,6 +1266,7 @@ export function updatePeople(t) {
       if (!isDrawn(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);
       position.set(p.x, p.y + bob, p.z);
       if (p.punched?.revive && p.punched.stage === 'down') shake(position, rotation, PERSON_SHAKE*S.peopleSize);
+      sway(p, position, rotation);
       matrix.compose(position, rotation, scale);
       peopleMesh.setMatrixAt(i, matrix);
     }

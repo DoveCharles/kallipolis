@@ -4,15 +4,15 @@ import { pointInPolygon } from '../../core/math.js';
 import { footprintBounds } from '../../buildings/footprints.js';
 import { isPedInDanger, voiceOfPerson } from '../people/people.js';
 import { exclaim } from '../../audio/voices.js';
-import { isFavoritePerson } from '../../ui/favorites.js';
 import { puffSmoke, sparks, burnFx, igniteFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
-import { DRIVE_ACCEL, DRIVE_TOP_SPEED, boostMultiplier, boostSmoke, drivenCar } from './driving.js';
+import { BOOST_UNLOCK, DRIVE_ACCEL, DRIVE_TOP_SPEED, boostMax, boostMultiplier, boostSmoke, drivenCar } from './driving.js';
 import { killCar } from './follow.js';
 import { carJoinLane, lanePoint, routePoint } from './lanes.js';
 import { CAR_REAR_AXLE, carHeight, carLength, carWidth } from './placing.js';
 import { carsOverlap, forCarsNear } from './spacing.js';
 import { cars } from './state.js';
+import { damage } from '../../core/health.js';
 
 // What a car hits: people (runOverPeople), aircraft (strikeWithAircraft), buildings (hitBuildings) and other cars
 // (bumpIntoCars) — with the fuse that sets a car burning (lightFuse) and the kick that knocks one off its lane (kickCar).
@@ -74,21 +74,40 @@ function throwBack(p, car, factor, speed = car.speed, sideThrow = 1) {
  * @param {?{x: number, z: number, thrown?: boolean, by?: string}} motion - a knocked car's velocity, or null to go by its speed and heading; `thrown` if the knock is still carrying it, `by` 'player' to credit the player with the kills
  * @returns {void}
  */
+// Hitting someone: CAR_HIT_DAMAGE per unit of weight × speed under the kill box, KNOCK_BOX_DAMAGE_SHARE of that in the
+// knock-over box; once per box as they come into it (see car.struck), not every frame they're under it.
+const CAR_HIT_DAMAGE = 8, KNOCK_BOX_DAMAGE_SHARE = 1/5;
+const carHitDamage = (car, speed) => CAR_HIT_DAMAGE*(car.traits?.weight ?? 1)*speed;
 export function runOverPeople(car, motion = null) {
   const { halfLength, halfWidth } = carHitbox(car, motion?.thrown ? 1 : undefined), clip = carHitbox(car, CAR_HITBOX_SCALE*CAR_CLIP_SCALE), stun = carHitbox(car, CAR_HITBOX_SCALE*CAR_STUN_SCALE);
   const reach = Math.hypot(stun.halfLength, stun.halfWidth) + 1.5*LYING_HEAD*S.peopleSize, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
-  const driven = car === drivenCar, reachesAll = driven || !!motion, shocked = new Set();
+  const driven = car === drivenCar, reachesAll = driven || !!motion, shocked = new Set(), struck = new Map();
   const velocity = motion ?? { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }, speed = Math.hypot(velocity.x, velocity.z);
   App.people.forEach((p, i) => {
     if (reachesAll ? Math.abs(p.y - Y_ROAD) > carHeight(car) : (!isPedInDanger(p) && p.crossStage !== 'mid' && !p.punched) || p.jc?.waved) return; // only while out on the road, over it or halfway (and not waved over), or knocked down
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
-    // (anyone hearted is knocked down instead, below: they can't be killed. See ui/favorites.js)
     const under = isLying(p) ? lyingUnder(p, car, { halfLength, halfWidth }) : Math.abs(right) < halfWidth && Math.abs(forward) < halfLength;
-    if (under && !isFavoritePerson(i)) { impactSound('thump', p, speed); if (speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p)); App.killPerson(i, driven || motion?.by === 'player' ? 'player' : 'car', { x: velocity.x, y: 0, z: velocity.z }, CAR_GIB_THROW, car); slowedBy(car, 'person', p.traits?.weight); }
+    const hit = under ? 'kill' : p.mode !== 'possessed' && Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength ? 'knock' : null;
+    if (hit) {
+      // struck by it and knocked over (the hearted can't die of it: see ui/favorites.js), then hurt by its weight and speed
+      const before = car.struck?.get(p);
+      struck.set(p, before === 'kill' ? 'kill' : hit);
+      if (before === hit || before === 'kill') return;
+      const knocked = p.mode !== 'possessed' && !isLying(p) && App.knockOverPerson(p, car);
+      if (knocked || hit === 'kill') {
+        impactSound('thump', p, speed);
+        slowedBy(car, 'person', p.traits?.weight);
+      }
+      if (knocked && p.mode !== 'dead') { App.knockedByCar?.(p); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed, SIDE_THROW); p.shotRate = CAR_FALL_SPEEDUP; }
+      if (hit === 'kill' && speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p));
+      const alive = p.mode !== 'dead';
+      damage(p, carHitDamage(car, speed)*(hit === 'kill' ? 1 : KNOCK_BOX_DAMAGE_SHARE), {
+        by: driven || motion?.by === 'player' ? 'player' : 'car', momentum: { x: velocity.x, y: 0, z: velocity.z }, throwScale: CAR_GIB_THROW, from: car });
+      if (alive && p.mode === 'dead' && car.traits?.bloodlust) bloodlustBoost(car);
+    }
     else if (p.mode === 'possessed') return;
-    else if (Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength) { if (App.knockOverPerson(p, car)) { App.knockedByCar?.(p); impactSound('thump', p, speed); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed, SIDE_THROW); p.shotRate = CAR_FALL_SPEEDUP; slowedBy(car, 'person', p.traits?.weight); } }
     else if (Math.abs(right) < stun.halfWidth && Math.abs(forward) < stun.halfLength) {
       shocked.add(p);
       if (!car.shocked?.has(p) && !p.stun && !p.fright && !p.please && !p.punched && !p.attack) {
@@ -98,8 +117,16 @@ export function runOverPeople(car, motion = null) {
     }
   });
   car.shocked = shocked; // (each is shocked once, as the car comes within reach)
+  car.struck = struck;   // (and hurt once per box, as they come into it)
   // and any bee it hits (see life/bees.js)
   App.strikeBees?.({ x: car.x, z: car.z, heading: car.heading, halfLength, halfWidth, height: carHeight(car) });
+}
+const BLOODLUST_BOOST = 0.1; // (the share of its boost meter a bloodlust car gets back for each person it kills)
+/** A kill feeds a bloodlust car's boost: BLOODLUST_BOOST of its boostMax back, unlocking it if that's enough (see driving.js). */
+function bloodlustBoost(car) {
+  const max = boostMax(car);
+  car.boostLeft = Math.min(max, (car.boostLeft ?? max) + BLOODLUST_BOOST*max);
+  if (car.boostLeft >= BOOST_UNLOCK*max) car.boostLocked = false;
 }
 /**
  * Strike whoever an aircraft is touching — whatever lies within its footprint (a box turned to `heading`) and whose height
@@ -214,7 +241,7 @@ export function hitBuildings(car, was, dt) {
   if (fresh) {
     impactSound('crash', contact, Math.abs(car.speed)*into);
     if (into > WALL_HEAD_ON && Math.abs(car.speed) >= BOUNCE_MIN_SPEED) {
-      car.speed = -travel*Math.abs(car.speed)*BUMP_BOUNCE; car.stall = stallTime(car);
+      const hitSpeed = car.speed; car.speed = -travel*Math.abs(car.speed)*BUMP_BOUNCE; stallEngine(car, WALL_WEIGHT, hitSpeed);
       puffSmoke({ x: q.x, y: Y_ROAD, z: q.z }, carHeight(car), BUMP_SMOKE_PUFFS);
     } else car.speed *= 1 - into;
     sparks(contact, BUMP_SPARKS);
@@ -228,6 +255,16 @@ const BUMP_SHOVE = 0.15, BUMP_BOUNCE = 0.3, BOUNCE_BELOW_SPEED = 0.2, BUMP_SMOKE
 export const STALL_TIME = 1, STALL_SMOKE_EVERY = 0.2; // (seconds the engine stays dead after a car is thrown back; how often it smokes meanwhile)
 /** How long a stalled/burnt-out car's engine stays dead: STALL_TIME eased by its own recovery trait — the higher, the sooner it's running again. */
 const stallTime = car => STALL_TIME/(car.traits?.recovery ?? 1);
+// A crash that cuts the engine also hurts the car: STALL_DAMAGE × the weight of what it hit (a wall: WALL_WEIGHT) × its
+// speed, over its recovery trait. Only when the engine was running, so one crash hurts once.
+const STALL_DAMAGE = 1, STALL_MIN_DAMAGE = 10, WALL_WEIGHT = 5;
+// A car knocked by another takes KNOCK_DAMAGE × the hitter's weight × its speed ÷ its own weight.
+const KNOCK_DAMAGE = 6;
+const knockDamage = (hitter, other, speed) => KNOCK_DAMAGE*(hitter.traits?.weight ?? 1)*Math.abs(speed)/(other.traits?.weight ?? 1);
+function stallEngine(car, weight, speed) {
+  if (!(car.stall > 0)) damage(car, Math.max(STALL_MIN_DAMAGE, STALL_DAMAGE*weight*Math.abs(speed)/(car.traits?.recovery ?? 1)));
+  car.stall = stallTime(car);
+}
 const WRECK_SPEED_PER_SLOWDOWN = 30, JOLT_SPEED_PER_SLOWDOWN = 15, BUMP_JOLT_SHOVE = 0.2; // (a car wrecks one it hits if it's going this many times faster than the slow-down hitting it costs, as a share of speed; at half that it jolts it back, by this share of its speed)
 const BUMP_PUSH_POWER = 0.03, BOUNCE_MIN_SPEED = 2; // (per unit of weight, how far a car shoves the one it's against each frame, even from a standstill; the least speed a car is thrown back from)
 // The share of its speed a car of weight 1 loses hitting something of weight 1 (see the `weight` trait): 50% for a car; for a person
@@ -246,7 +283,7 @@ const CAR_SLOWDOWN = 0.5, CAR_MIN_SLOWDOWN = 0.1, CAR_MAX_SLOWDOWN = 0.95, PERSO
 function slowedBy(car, kind, weight = 1) {
   const ratio = weight/(car.traits?.weight ?? 1);
   const loss = kind === 'person' ? Math.min(PERSON_MAX_SLOWDOWN, PERSON_SLOWDOWN*ratio) : Math.min(CAR_MAX_SLOWDOWN, slowdownShare(car, weight));
-  if (kind === 'car' && Math.abs(car.speed) >= BOUNCE_MIN_SPEED && Math.abs(car.speed)*(1 - loss) < BOUNCE_BELOW_SPEED) { car.speed = -Math.sign(car.speed || 1)*Math.abs(car.speed)*Math.min(1, BUMP_BOUNCE*ratio); car.stall = stallTime(car); } // (the knock back too grows with the ratio, up to its whole speed)
+  if (kind === 'car' && Math.abs(car.speed) >= BOUNCE_MIN_SPEED && Math.abs(car.speed)*(1 - loss) < BOUNCE_BELOW_SPEED) { const hitSpeed = car.speed; car.speed = -Math.sign(car.speed || 1)*Math.abs(car.speed)*Math.min(1, BUMP_BOUNCE*ratio); stallEngine(car, weight, hitSpeed); } // (the knock back too grows with the ratio, up to its whole speed)
   else car.speed *= 1 - loss;
 }
 /** The share of its speed a car would lose hitting a car of weight `weight`, before it's kept to a range: more the heavier that car is against its own weight. */
@@ -264,7 +301,7 @@ const STALL_WEIGHT_RATIO = 1.6; // (how many times its own weight the car it hit
 export const DETONATION_REACH = 8; // (how far from a car burning out cars and people are blown up, before scaling by size)
 const FUSE_TIME = 3, FUSE_SPARK_EVERY = 0.05, FUSE_SPARKS = 5; // (seconds a wrecked car burns before it blows; seconds between its sparks; sparks each time)
 /** Set a car burning: after FUSE_TIME it explodes, meanwhile it stays put, sparking and burning (burnFx). */
-function lightFuse(car) {
+export function lightFuse(car) {
   if (car.fuse != null) return;
   igniteFx({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car));
   car.fuse = FUSE_TIME; car.fuseSparks = 0; car.speed = 0;
@@ -414,35 +451,60 @@ export function stepKick(car, dt) {
   }
   return motion;
 }
+const SWAY_BOUNCE = 1; // (how far a weaving drunk car is thrown back off what it hits)
 /**
- * Settle what the driven car has run into. Unless it's going WRECK_SPEED_PER_SLOWDOWN times faster than the slow-down hitting a car
- * costs it (slowdownShare), a car it overlaps is shoved away from it (BUMP_SHOVE of its speed plus BUMP_PUSH_POWER for each unit of
+ * A drunk AI car weaved off its route (car.sway: see traffic/drunk.js) into another car or a building: a crash — the
+ * other car shoved away and stopped, and this one knocked back off it (its weave turned into a kick, so it drives back to
+ * its lane as any knocked car does). Cars it already overlapped on its route (queued close) don't count.
+ * @param {object} car
+ * @returns {boolean} whether it hit anything
+ */
+export function swayCrash(car) {
+  const w = car.sway, onRoute = { ...car, x: car.x - w.x, z: car.z - w.z, heading: car.heading - w.turn };
+  let other = null;
+  forCarsNear(car.x, car.z, carLength(car)*1.5 + 4*S.peopleSize, q => { if (!other && q !== car && !wreckedCars.includes(q) && carsOverlap(car, q) && !carsOverlap(onRoute, q)) other = q; });
+  if (!other && !buildingHit(car)) return false;
+  const speed = Math.abs(car.speed), contact = other ? { x: (car.x + other.x)/2, y: Y_ROAD, z: (car.z + other.z)/2 } : { x: car.x, y: Y_ROAD, z: car.z };
+  impactSound('crash', contact, speed);
+  puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS);
+  sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS);
+  if (other && other === drivenCar) slowedBy(other, 'car', car.traits?.weight); // (both null when it hit a building with no car driven) // (the player's car keeps its own handling, just jolted)
+  else if (other) { kickCar(other, other.x - car.x, other.z - car.z, Math.min(1, speed*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1))); other.speed = 0; damage(other, knockDamage(car, other, speed)); }
+  car.sway = null;
+  kickCar(car, other ? car.x - other.x : -w.x, other ? car.z - other.z : -w.z, SWAY_BOUNCE*S.peopleSize);
+  car.kick.x += w.x; car.kick.z += w.z; car.kick.heading = car.heading;
+  car.speed = 0;
+  return true;
+}
+/**
+ * Settle what the driven car has run into. A car it overlaps is hurt as they meet (knockDamage), and shoved away from it (BUMP_SHOVE of its speed plus BUMP_PUSH_POWER for each unit of
  * its weight, scaled by the distance, so a heavy car pushes one from standing — or, from JOLT_SPEED_PER_SLOWDOWN times, jolted back BUMP_JOLT_SHOVE of
  * its speed at once) and stopped dead, and the driven car goes back to where it was this frame, slowed
- * by that car's weight (slowedBy), with a little smoke where they met. Otherwise it instead sets each car
- * it meets burning (lightFuse), slowed by each one's weight, and carries on through them — but not through one already burning, which is bumped like any other.
+ * by that car's weight (slowedBy), with a little smoke where they met.
  * @param {object} car - the driven car
  * @param {object} was - its position, heading and speed before this frame
  * @returns {void}
  */
 export function bumpIntoCars(car, was) {
   const reach = carLength(car)*1.5 + 4*S.peopleSize, before = { ...car, ...was }, hitSpeed = Math.abs(car.speed);
-  let contact = null, cutsEngine = false;
+  let contact = null, cutsEngine = null; // (cutsEngine: the weight of the car that cut it)
+  const hurt = []; // (dealt after the loop: a car dying mid-loop changes the cars array)
   forCarsNear(car.x, car.z, reach, other => {
     if (other === car || wreckedCars.includes(other) || !carsOverlap(car, other)) return;
     const d = Math.hypot(other.x - car.x, other.z - car.z), dWas = Math.hypot(other.x - was.x, other.z - was.z);
     if (carsOverlap(before, other) && d >= dWas) return; // (moving off it)
-    if (other.fuse == null && !other.reviving && Math.abs(car.speed) >= WRECK_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight)) { lightFuse(other); impactSound('crash', other, hitSpeed); sparks({ x: (car.x + other.x)/2, y: Y_ROAD + carHeight(car)*0.4, z: (car.z + other.z)/2 }, BUMP_SPARKS); slowedBy(car, 'car', other.traits?.weight); return; }
     const joltSpeed = JOLT_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight), jolted = Math.abs(car.speed) >= joltSpeed;
     kickCar(other, other.x - car.x, other.z - car.z, jolted ? Math.abs(car.speed)*BUMP_JOLT_SHOVE : Math.min(1, Math.abs(car.speed)*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1)));
     other.speed = 0;
-    if (!jolted && Math.abs(car.speed) >= STALL_SPEED_SHARE*joltSpeed && (other.traits?.weight ?? 1) > STALL_WEIGHT_RATIO*(car.traits?.recovery ?? 1)*(car.traits?.weight ?? 1)) cutsEngine = true; // (hit hard enough to hurt the engine, but not to jolt the car, and it's much heavier — the less likely, the more recovery it has)
+    if (!car.bumping) hurt.push(other); // (hurt once, as they meet)
+    if (!jolted && Math.abs(car.speed) >= STALL_SPEED_SHARE*joltSpeed && (other.traits?.weight ?? 1) > STALL_WEIGHT_RATIO*(car.traits?.recovery ?? 1)*(car.traits?.weight ?? 1)) cutsEngine = other.traits?.weight ?? 1; // (hit hard enough to hurt the engine, but not to jolt the car, and it's much heavier — the less likely, the more recovery it has)
     slowedBy(car, 'car', other.traits?.weight);
     contact = { x: (car.x + other.x)/2, y: Y_ROAD, z: (car.z + other.z)/2 };
   });
   if (!contact) { car.bumping = false; return; }
   Object.assign(car, was);
   if (!car.bumping) { impactSound('crash', contact, hitSpeed); puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS); sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS); } // (once, as they meet)
-  if (cutsEngine && !car.bumping) car.stall = stallTime(car);
+  if (cutsEngine != null && !car.bumping) stallEngine(car, cutsEngine, hitSpeed);
   car.bumping = true;
+  hurt.forEach(other => damage(other, knockDamage(car, other, hitSpeed)));
 }

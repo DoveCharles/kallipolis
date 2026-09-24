@@ -51,7 +51,7 @@ Format: `file` (size) purpose — key exports.
 - `building-card.js` (6K) As for a car or a carriage: — exports: updateBuildingFollow
 - `building-types.js` (3K) Each kind of building's name, mood, and what it loves and hates, for its card (building-card.js) — from assets/buildings.txt, to be edited freely: — exports: buildingKindOf, buildingEnterable, buildingTypeOf, buildingName
 - `footprints.js` (5K) ---------------------------------------------------------- footprint archetypes (Y2K variety) — exports: applyFootprintArchetype, distPointSegment, closestPointOnSegment, distToPolygonBoundary, footprintBounds, buildingKey, buildingNumber, roomLayoutOf
-- `interior.js` (123K, **big**) Every building has the same inside: — exports: openRoomDoor, forceHomeSet, watchingTV, someoneHome, tuneInteriorView, enterBuilding, leaveBuilding, updateInteriorCamera …
+- `interior.js` (126K, **big**) Every building has the same inside (warm-up compiles all its shaders under the loading screen, `warmUp`): — exports: openRoomDoor, forceHomeSet, watchingTV, someoneHome, tuneInteriorView, enterBuilding, leaveBuilding, updateInteriorCamera …
 - `see-through.js` (2K) Zoom in far enough — or follow someone through a door (see "going indoors" in people.js) — and the camera ends up inside a building, where all you see… — exports: hideBuildingsAroundCamera, showHiddenBuildings
 - `windows.js` (25K) ---------------------------------------------------------- building windows Windows are drawn by a shader on each building's wall material rather than… — exports: WINDOW_TILE_WORLD_SIZE, createWindowMaterial, createBatchedWindowMaterial, mergeGeometries, mergeGeometryList, extractCapGeometry, buildWallGeometry, buildWedgeCapGeometry
 
@@ -60,6 +60,7 @@ Format: `file` (size) purpose — key exports.
 - `device.js` (0K) Phones and tablets drive the app by touch: — exports: IS_TOUCH, NARROW_QUERY, isNarrow
 - `entries.js` (11K) The shared reader for lines in the .txt files that describe things (people.txt, cars.txt, ...). — exports: startingTraits, entryOf, plainEntry, weighted, parseSections, combineTraits, DEFAULT_COUNTS, clash …
 - `ground-probe.js` (4K) Finds the solid ground straight below a point, for anything that falls and lands (gibs, body parts, a bee's flecks). — exports: groundBelow
+- `health.js` (2K) Hit points for anything hurtable: kinds register max + die (people 100, cars 500, planes 1000, bees 3); spawns reset; cards bindHealth. — exports: registerHealthKind, resetHealth, healthOf, damage, heal, healthFraction, onHealthChanged
 - `math.js` (17K) Seeded PRNG and the 2D geometry helpers the whole app builds cities out of: — exports: mulberry32, lerp, hashNameToString, hashNameToNumber, hashLicensePlate, replaceChar, scramble, keySmash …
 - `scene.js` (23K) Every color in the app was tuned by eye as a raw value, the way three.js used to treat them, so color management stays off (and the renderer's output … — exports: scene, camera, isOrthographic, setProjection, frustumHalfHeightAt, apparentDistance, renderer, sun …
 - `shared.js` (2K) What the modules share. — exports: S, App, SAND_TINT, setSandTint
@@ -100,9 +101,12 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `turns.js` (5K) Dead ends: how many cars a stretch takes, and picking or waiting for a turn. — exports: pickTurn, waitToTurn, planFor, stretchCounts, stretchOf
 - `spacing.js` (12K) Keeping clear of other cars: the car grid, gap ahead, who goes first; stopping for someone lying in the road if noticed (lyingAhead, noticeChance by the perception trait). — exports: buildCarGrid, forCarsNear, gapAhead, waitOrGiveUp, uTurnBlocked, spotTaken, carsOverlap, lyingAhead, noticeChance …
 - `placing.js` (10K) Drawing a car: wheels, sway, its instance (placeCar); its size, engine and headlights. — exports: placeCar, turnWheels, carScale, carLength, carWidth, carHeight, carModelOf, engineOf, forEachHeadlight, turnCar …
-- `driving.js` (17K) The driven car: keys, boost, and water (sinking, climbing back out, aqua floating — knocked cars use the same, see knockedIntoWater in traffic.js). — exports: drivenCar, driveCar, stopDriving, driveByHand, overOpenWater, startSinking, sinkCar, riseCar, goingUnder, updateFloating, boostMax, rechargeBoost, boostSmoke …
-- `collisions.js` (29K) What a car hits: people, aircraft, buildings, other cars; fuses and kicks. — exports: carHitbox, buildingHit, runOverPeople, strikeWithAircraft, hitBuildings, bumpIntoCars, burnFuse, stepKick, seatKickedCar, wreckedCars …
+- `driving.js` (20K) The driven car: keys, boost, random drift pulls scaled by control (driftTurn, controlOf), drunk: halved control and swapped steering spells (drunkSteer), and water (sinking, climbing back out, aqua floating — knocked cars use the same, see knockedIntoWater in traffic.js). — exports: drivenCar, driveCar, stopDriving, driveByHand, overOpenWater, startSinking, sinkCar, riseCar, goingUnder, updateFloating, boostMax, rechargeBoost, boostSmoke …
+- `collisions.js` (34K) What a car hits: people, aircraft, buildings, other cars; fuses and kicks. — exports: carHitbox, buildingHit, swayCrash, runOverPeople, strikeWithAircraft, hitBuildings, bumpIntoCars, burnFuse, stepKick, seatKickedCar, wreckedCars …
 - `special.js` (6K) Legendary sheen/sparkles and terrible rust/hops. — exports: updateSpecialTraits, TERRIBLE_RUST, DEFAULT_HOLO
+- `drunk.js` (2K) Drunk AI cars' weave: sideways offset = width × (mean of 3 sines of distance driven)³ — mostly small, rare lurches; hits people anywhere (runOverPeople with motion) and cars/walls (swayCrash in collisions.js). — exports: weave
+- `pullover.js` (3K) Cars giving way to smelly ones (smells trait, e.g. ambulance): in its path within 30 → slow to a stop turned 45° half onto the pavement (car.pull), back out after it passes; smelly cars ignore pulled-over ones. — exports: smellyCars, updatePull, pullOf
+- `offroute.js` (1K) Draws an AI car off its route each frame (weave + pull-over) as car.sway; put on after placing, taken off before the next step. — exports: sway, unsway
 - `follow.js` (9K) The followed car (camera, card, thumbnail) and taking a car out (kill, drown, smite). — exports: followedCar, pickCar, followCar, stopFollowingCar, chaseCamera, killCar, drownCar, smiteCar, carThumbnailScene …
 
 ### src/life/people/
@@ -112,6 +116,8 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `people.js` (66K, **big**)  — exports: PEOPLE_MAX, PERSON_WALK_SPEED, PEOPLE_NAV_SPACING, peopleNav, people, peopleRng, HEADSHOT_LAYER, personModel …
 - `peopleActivities.js` (78K, **big**)  — exports: endActivity, goChat, meetOnWalkways, updateGroups, goSit, goLieDown, updateActivity, PUNCH_CHASE_SPEED …
 - `peopleBlood.js` (13K) Blood: — exports: BLOOD_MAX, bloodSpeed, bloodFear, bloodlustSpeed, isBloodlusting, updateBlood, bloodBurst, punchSpill …
+- `peopleDrunk.js` (2K) The drunk trait on people: weaving in a sine wave as they walk (drawn only: sway, called where the model/cuboid matrix is built) and now and then falling over (knockOver). — exports: updateDrunk, sway
+- `peopleSmell.js` (5K) The smells trait on people: others within 5 turn back on walkways or re-target away in hangouts (avoidSmells); circles empty when a smeller sits (updateGroups), nobody joins or chats with them; flies buzzing round them (updateFlies, own instanced mesh, outside the particle cap). — exports: avoidSmells, updateFlies
 - `peopleFooting.js` (17K) Walked about by hand (see walkPossessed in peopleTracking.js), someone is on the ground — a hangout's, the road's or the pavement's — unless they've g… — exports: nearestRaisedVertex, carryPossessed, stepFooting, footingAt
 - `peopleGibs.js` (6K) A dead person's own body parts, thrown apart: — exports: throwBodyParts, updateBodyParts
 - `peopleHolding.js` (12K) Anything a person carries: — exports: hold, letGo, holding, serveMeal, clearMeal, mealFinished, mealCue, updateHeld
@@ -131,7 +137,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `objects.js` (30K) The Objects tab: — exports: objectGroup, Y_OBJECT, MIN_OBJECT_SCALE, invalidateObjectFacing, streetFacingAt, objectById, addObject, removeObject …
 
 ### src/project/
-- `autosave.js` (4K) The project (everything a saved project file holds, map images and all) and where the camera is are kept in the browser — in IndexedDB, which has room…
+- `autosave.js` (4K) The project (everything a saved project file holds, map images and all) and where the camera is are kept in the browser — in IndexedDB, which has room… Restores only after ui/loading.js's `modelsLoaded`.
 - `export-glb.js` (7K) The city as a GLB with real materials, for Blender, Unity, Unreal and the like:
 - `export-obj.js` (1K) OBJ export of the scene.
 - `history.js` (4K) History is a stack of project snapshots — the same JSON a saved project holds, less the map images (they're big, and importing, moving or removing map… — exports: commitHistory, resetHistory
@@ -152,8 +158,9 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `trains.js` (91K, **big**)  — exports: getTrainStations, trainStationsVersion, getTrainShuttles, isTrainLine, isTrainNode, networkKindOf, trainNodeY, snapStationHeight …
 
 ### src/ui/
-- `entity-card.js` (17K) The card at the bottom right saying what the camera's following; love/hate modifier drop-downs (addDrop, layoutDrops): — exports: ROWS, TEXT_ROWS, cards, makeCard
+- `entity-card.js` (17K) The card at the bottom right saying what the camera's following; love/hate modifier drop-downs (addDrop, layoutDrops); optional health bar (`health: true`, card.setHealth): — exports: ROWS, TEXT_ROWS, cards, makeCard
 - `favorites.js` (6K) Whatever the player has hearted on its card (see the heart in ui/entity-card.js) — a person, a car, a bee, a building, anything with a card — listed i… — exports: isFavorite, personKey, isFavoritePerson, favoritePeople, toggleFavorite, onFavoritesChanged, reviveFavoritesAs, savedFavorites …
+- `loading.js` (9K) The loading screen (#loading-screen): names pending models (not data files), flicks through model names, creeps the bar; hands models over to be unpacked one a frame; while loading main.js calls `compileWhileLoading` instead of drawing (background shader compiles); `loadingTask`/`loadingSay` for other work (interior.js's warm-up); logs frozen time per step when done. Imported first by main.js. `waitForModels`/`modelsLoaded`: autosave.js builds the city only once main.js's models are in. — exports: loadingTask, loadingSay, modelsLoaded, waitForModels, stillLoading, compileWhileLoading, whenLoaded
 - `garble.js` (1K) Anything with the scramble trait has the words on its card jumbled, and anything with keysmash has them typed with fat fingers (see scramble and keySm… — exports: garbles, garbled
 - `meter.css` (11K) A reusable meter.
 - `mobile.js` (7K) Everything here is for phones and tablets, and none of it appears on a machine with a mouse.
@@ -166,7 +173,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `flat-shading.js` (2K) Display > Flat shading: forces flatShading on every lit material in the scene (swept every 0.5s while on; originals restored when off), kept in localStorage. — exports: none
 - `toon-shading.js` (<1K) Display > Toon characters: people and bees in toon bands or smooth light, via setToon in core/toon.js; kept in localStorage, on by default. — exports: none
 - `ui-scale.js` (2K) Display > UI scale (100–200%, localStorage): CSS zoom on the page, undone on #canvas-wrap so the 3D view stays 1:1; UI placed by mouse/getBoundingClientRect px goes through `toUi`, and CSS vh/vw divide by `--ui-scale`. — exports: uiScale, toUi
-- `view-prefs.js` (2K) Browser prefs: View > Edit Hints / General Hints (body classes `no-edit-hints`/`no-general-hints` hide `#hint` by its `data-kind`, set in editor/tools.js — the possession controls included), and Options > Game > Start in Edit mode (off: presses World on load). — exports: editHints, generalHints
+- `view-prefs.js` (2K) Browser prefs: View > Edit Hints / General Hints (body classes `no-edit-hints`/`no-general-hints` hide `#hint` by its `data-kind`, set in editor/tools.js — the possession controls included), and Options > Game > Start in Edit mode (off: presses World on load); removes `ui-loading` via loading.js's `whenLoaded`. Options > Game > Encourage To Watch TV (off by default) sets `S.encourageTV` (peopleActivities.js `aboutTheRoom` seats one person on the sofa when a home's first shown). — exports: editHints, generalHints
 - `sound.js` (1K) The speaker button over the view, by undo and redo, mutes every sound (see audio/sfx.js).
 - `settings-windows.js` (1K) Under the Windows 3.0 window, the World panel's set-once settings (index.html's data-settings groups) open in windows of their own — Display, Effects, Game from the Options menu, and World (time, peds, weather) from the toolbar — moved in while open and put back after. — exports: openSettings
 - `sound-levels.js` (2K) Options > Sound levels: a window of sliders (Master, Peds, Traffic, Ambience) setting the levels in audio/sfx.js (setLevel, LEVEL_KINDS), remembered in localStorage. — exports: openSoundLevels
