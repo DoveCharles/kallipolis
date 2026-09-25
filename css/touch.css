@@ -8,7 +8,7 @@
 
 @media (pointer: coarse) {
   /* no waiting to see whether a tap was the first of a double, and no double-tap zoom over the controls */
-  button, .swatch, .toggle-switch, .hier-row, #grid-toggle, .type-card { touch-action:manipulation; }
+  button, .swatch, .toggle-switch, .hier-row, #grid-toggle, #join-toggle, .type-card { touch-action:manipulation; }
   .tool-btn { padding:11px 0; font-size:13px; }
   .btn { padding:12px; font-size:13px; }
   .icon-btn { min-height:34px; }

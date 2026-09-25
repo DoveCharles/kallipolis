@@ -75,7 +75,7 @@ Format: `file` (size) purpose — key exports.
 - `context-menu.js` (5K) How a raised walkway's node sits in its network — 'end' (a ramp down there anyway), 'middle', or null if it isn't on a raised walkway at all
 - `hover.js` (4K) ---------------------------------------------------------- hover + insert-on-edge — exports: setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge
 - `node-highlight.js` (9K) While a node is hovered, everything its zone or path network has built is washed green by see-through twins of its meshes (a river, a green ribbon), and its other nodes turn a lighter green — exports: setNodeHighlight, updateNodeHighlight
-- `input.js` (38K) Mouse/keyboard/touch input for editing: node placement, dragging, selection, shortcuts.
+- `input.js` (44K, **big**) Mouse/keyboard/touch input for editing: node placement, dragging, selection, shortcuts. A road click on a same-type path's surface joins it at a shared node (pathNodeUnder → finishOnNode / startBranchFrom), so it's a junction (a click back on the drawn line's own node ends it and branches from there); toggled by the Join button (#join-toggle, beside the grid magnet; localStorage `splinetopia.snapToPaths`, default on).
 - `tools.js` (18K)  — exports: cancelActiveDrawing, closeActiveZone, finishActiveDrawing, applyModeVisibility
 
 ### src/life/
