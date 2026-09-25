@@ -79,6 +79,15 @@ function followBuilding(picked) {
     return true;
   } });
 }
+// the building with this key (see buildingKey) followed and gone into, as when someone the camera's following goes
+// indoors (see updateIndoors in people/peopleActivities.js); false if it's not there or has no inside to go into
+function enterBuildingWith(key) {
+  const found = buildingsInZones().find(b => buildingKey(b.zone, b.index) === key);
+  if (!found || !buildingEnterable(buildingKindOf(found.group, found.zone))) return false;
+  followBuilding(found);
+  toggleInside();
+  return isInsideBuilding();
+}
 function stopFollowingBuilding() {
   if (!followed) return;
   leaveBuilding();
@@ -115,4 +124,4 @@ export function updateBuildingFollow() {
   if (!isInsideBuilding()) controls.goalTarget.copy(center); // (inside, the room holds the camera: see interior.js)
 }
 
-Object.assign(App, { isInsideBuilding, leaveBuildingInside: () => { if (isInsideBuilding()) toggleInside(); }, pickBuilding, followBuildingAt, stopFollowingBuilding, followedBuildingKey, setBuildingCardInhabitants });
+Object.assign(App, { isInsideBuilding, leaveBuildingInside: () => { if (isInsideBuilding()) toggleInside(); }, pickBuilding, followBuildingAt, enterBuildingWith, stopFollowingBuilding, followedBuildingKey, setBuildingCardInhabitants });

@@ -312,6 +312,7 @@ function buildWalkwayMesh(lines, networkId, claim) {
       segments: pathSegmentsOf(lines), halfWidth, fade });
     mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
+    mesh.renderOrder = -1; // flat on the ground: its faded edge is drawn before other see-through things (glass tubes), not sorted among them
     mesh.name = 'Walkway';
     mesh.userData = { networkId, baseColor: color };
   }
@@ -336,6 +337,7 @@ export function attachWalkwayFringes(force) {
     if (!geo) return;
     const fringe = new THREE.Mesh(geo, mesh.material);
     fringe.receiveShadow = true;
+    fringe.renderOrder = -1;
     fringe.name = 'WalkwayFringe';
     fringe.raycast = () => {}; // picking a walkway means its paving, not the dust beside it
     mesh.add(fringe);

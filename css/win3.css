@@ -190,6 +190,7 @@ html.win3 #hint { background:var(--w3-window); color:var(--w3-text); border:1px 
 
 /* the cards for whoever's being followed: each a little window of its own, closed from its control-menu box */
 html.win3 .entity-card { --card-pad-x:10px; --card-edge:1px; --trait-frame:1px; padding:0 10px 10px; right:21px; bottom:56px; }
+html.win3 .entity-card.pc-beside { right:331px; }
 /* a love/hate band that's the last row showing runs down to the frame, as it does to the sides, rather than leaving
    a strip of the card's padding under it */
 html.win3 .entity-card .pc-body > :is(.pc-row-loves, .pc-row-hates):not([hidden]):not(:has(~ .pc-row:not([hidden]))) {

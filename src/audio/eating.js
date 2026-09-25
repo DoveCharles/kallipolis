@@ -4,7 +4,7 @@ import { playBufferAt, zzfxBuffer, ear } from './sfx.js';
 // ============================================================ eating
 // What a meal sounds like (see the Eating clip in life/people/peopleModel.js, whose cues people.js plays as they come
 // round, and the snacks in life/people/peopleHolding.js): the tink of a fork on a plate, one soft sound of a mouthful
-// taken, or a sip of coffee — nothing after, since chewing close-miked is a noise nobody wants. All built once by ZzFX (see sfx.js) and picked from at random, pitched a little
+// taken, or a slurp of a drink — nothing after, since chewing close-miked is a noise nobody wants. All built once by ZzFX (see sfx.js) and picked from at random, pitched a little
 // differently each time so a table of diners doesn't sound like one person. Only heard close by — in the room with them
 // — and only so many a second.
 const CLINK = [
@@ -15,12 +15,14 @@ const CLINK = [
 const BITE = [
   [.3, .06, 520, .004, .008, .03, 4, .5, , , , , , .7, , , .015, .4, .01, , 1800],
 ];
-// a sip of coffee: a short, breathy draw through the lid
+// a slurp: air drawn in over the drink in wet, rising stutters (the slide starting over every few hundredths of a
+// second), with the liquid gurgling under it
 const SIP = [
-  [.25, .1, 260, .03, .06, .07, 4, 1, 3, , , , , 1.4, , , , .5, .03, .25, 1100],
+  [.22, .1, 600, .04, .2, .09, 4, 1, 12, , , , .045, 1.2, , , , .6, , .45, -2200],
+  [.25, .35, 300, .02, .18, .06, 0, 1, 30, , , , .025, , 14, , , .5, , .7],
 ];
 const SOUNDS = { clink: CLINK, bite: BITE, sip: SIP };
-const VOLUME = { clink: 0.2, bite: 0.13, sip: 0.1 };
+const VOLUME = { clink: 0.2, bite: 0.13, sip: 0.12 };
 const VARIANTS = 4;
 const HEAR_DISTANCE = 9, REF_DISTANCE = 1.5;
 const SOUNDS_MAX_PER_SECOND = 14; // past this many a second, the rest go unheard

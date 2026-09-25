@@ -509,3 +509,8 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 .speech-bubble.thought { border-style:dotted; font-style:italic; }
 .speech-bubble.thought::before { bottom:-9px; left:calc(50% - 6px); transform:none; border:2px solid #000; border-radius:50%; width:6px; height:6px; background:#fff; }
 .speech-bubble.thought::after { bottom:-15px; left:calc(50% - 1px); transform:none; border:2px solid #000; border-radius:50%; width:2px; height:2px; background:#fff; }
+
+/* someone's card brought up in a building's room (see followPersonInside in life/people/peopleTracking.js): to the left of
+   the building's card, and no Smite button in there */
+.entity-card.pc-beside { right:326px; }
+.entity-card.pc-beside .pc-kill.danger { display:none; }

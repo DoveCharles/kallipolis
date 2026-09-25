@@ -35,7 +35,7 @@ import { drinking, goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './
 import { sway, updateDrunk } from './peopleDrunk.js';
 import { avoidSmells, updateFlies } from './peopleSmell.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
-import { followPersonAt, followPerson, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
+import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
 
 // The shapes these modules pass around — Person, NavLine, NavVertex, Hangout, PersonModel, Segment and SegmentHit —
@@ -996,7 +996,7 @@ function stepPush(p, dt) {
  * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
  * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
  */
-Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups });
+Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups });
 
 /**
  * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone
@@ -1011,6 +1011,7 @@ export function updatePeople(t) {
   const dt = lastPeopleTime == null ? 0 : Math.min(0.1, Math.max(0, t - lastPeopleTime));
   setLastPeopleTime(t);
   if (followed >= 0 && (!S.peopleEnabled || S.interactionMode !== 'move')) stopFollowingPerson();
+  if (followedInside && !App.isInsideBuilding()) stopFollowingPerson(); // (picked in a room since left)
   peopleMesh.visible = S.peopleEnabled && !personModel;
   if (personModel) [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; });
   peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
@@ -1489,13 +1490,15 @@ export function updatePeople(t) {
   showInhabitants();
   showFollowedDoing();
   // the camera onto whoever it's following, at about their shoulders — or, while they're indoors, onto the building
+  // (but not someone picked in the room it's in, which holds it: see buildings/interior.js)
   const inside = followed >= 0 && isGone(people[followed]) && people[followed].indoors?.building;
-  if (inside) controls.goalTarget.set(inside.x, inside.y + inside.height*0.5, inside.z);
+  if (followedInside) { /* (the room's camera) */ }
+  else if (inside) controls.goalTarget.set(inside.x, inside.y + inside.height*0.5, inside.z);
   else if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
   // and the card's headshot of them (kept as it was while they can't be seen), which draws them whole
   if (personModel?.hidden) personModel.hidden.value = -1;
   // (them alone: everyone else is folded away while it draws)
-  if (followed >= 0 && personModel && !isGone(people[followed])) {
+  if (followed >= 0 && personModel && (!isGone(people[followed]) || inRoom(people[followed]))) {
     personModel.only.value = followed;
     App.drawPersonHeadshot(headshotOf(followed));
     personModel.only.value = -1;
