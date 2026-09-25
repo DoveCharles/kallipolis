@@ -6,7 +6,7 @@ import { IS_TOUCH } from '../core/device.js';
 import { ROAD_COLOR } from '../core/splines.js';
 import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { setSelectedMap, setMapHover, startMapTransform, applyMapTransform, confirmMapTransform, cancelMapTransform, previewLine } from '../maps/map-images.js';
-import { SIDEWALK_COLOR, setLinePoints } from '../roads/roads.js';
+import { SIDEWALK_COLOR, setLinePoints, roadLineWidths } from '../roads/roads.js';
 import { WALKWAY_COLOR, rebuildRoadMeshes } from '../roads/paths.js';
 import { isTrainLine, isTrainNode, networkKindOf, pathTypeOf, currentPathType, trainNodeY, trainPlanePoint, dragTrainPoint, findNearestTrainEdge } from '../trains/trains.js';
 import { setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge } from './hover.js';
@@ -115,12 +115,52 @@ function cancelLongPress() { if (longPress) { clearTimeout(longPress.timer); lon
 // keeps the cursor that tab gives it.
 const NODE_KINDS = new Set(['road', 'roadHandle', 'zone', 'zoneHandle']);
 function showGrabCursor() { dom.classList.toggle('dragging-node', !!S.draggedNode && NODE_KINDS.has(S.draggedNode.kind)); }
+// The box round the stretches of road either side of road node `nodeId`, on every line through it — the only ones that
+// move with it — taking in their nodes, handles (a spline stays inside them) and the road's full width; null if it's on none.
+function roadNodeLinesBounds(nodeId) {
+  let b = null;
+  S.roadLines.forEach(line => {
+    const ids = line.nodeIds;
+    if (!ids.includes(nodeId)) return;
+    const { hw, cw, sw } = roadLineWidths(line), pad = hw + cw + sw;
+    ids.forEach((id, i) => {
+      if (id !== nodeId && ids[i-1] !== nodeId && ids[i+1] !== nodeId) return;
+      const n = roadNodes[id];
+      if (n) [n, n.handleIn, n.handleOut].forEach(p => {
+        if (!p) return;
+        if (!b) b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
+        b.minX = Math.min(b.minX, p.x - pad); b.maxX = Math.max(b.maxX, p.x + pad);
+        b.minZ = Math.min(b.minZ, p.z - pad); b.maxZ = Math.max(b.maxZ, p.z + pad);
+      });
+    });
+  });
+  return b;
+}
+// Whether moving a road from box `a` to box `b` can change what's in `zone`: whether its outline comes within reach of
+// either. Suburbs lay their streets along roads up to STREET_REACH outside them; everything else only minds roads
+// crossing it or running just along its edge (ZONE_CUTOUT_REACH, plus a fence's inset).
+const SUBURB_STREET_REACH = 90, NEAR_ZONE_REACH = App.ZONE_CUTOUT_REACH + 6;
+function zoneNearBoxes(zone, boxes) {
+  if (zone.points.length < 3) return false;
+  const reach = zone.zoneType === 'suburbs' ? SUBURB_STREET_REACH : NEAR_ZONE_REACH;
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  zone.points.forEach(p => [p, p.handleIn, p.handleOut].forEach(q => {
+    if (!q) return;
+    minX = Math.min(minX, q.x); maxX = Math.max(maxX, q.x); minZ = Math.min(minZ, q.z); maxZ = Math.max(maxZ, q.z);
+  }));
+  return boxes.some(b => b && b.minX <= maxX + reach && b.maxX >= minX - reach && b.minZ <= maxZ + reach && b.maxZ >= minZ - reach);
+}
 // a node let go of after being moved: rebuild what it's part of, and reselect it
 function commitNodeDrag(dn) {
   if (dn.kind === 'road' || dn.kind === 'roadHandle') {
     const line = S.roadLines.find(l => l.nodeIds.includes(dn.nodeId));
     rebuildRoadMeshes();
-    if (!line || !isTrainLine(line)) S.zones.forEach(subdivideZone); // trains don't affect zones
+    // (trains don't affect zones; and only the zones near where the road was or is now need redoing, which on a big city
+    // is a fraction of them — each one's lots, buildings and trees take a while)
+    if (!line || !isTrainLine(line)) {
+      const boxes = [dn.startBounds, roadNodeLinesBounds(dn.nodeId)];
+      S.zones.forEach(z => { if (!dn.startBounds || zoneNearBoxes(z, boxes)) subdivideZone(z); });
+    }
     if (line) selectItem(networkKindOf(line), line.networkId, true); else renderHierarchy();
   } else if (dn.kind === 'zone' || dn.kind === 'zoneHandle') {
     const zone = S.zones.find(z => z.id === dn.zoneId);
@@ -234,6 +274,7 @@ dom.addEventListener('pointerdown', (e) => {
       else { isCameraDragging = true; dragMode = e.shiftKey ? 'pan' : 'orbit'; }
     } else {
       const picked = pickNodeOrHandle(e.clientX, e.clientY);
+      if (picked && (picked.kind === 'road' || picked.kind === 'roadHandle')) picked.startBounds = roadNodeLinesBounds(picked.nodeId); // (see commitNodeDrag)
       if (picked) S.draggedNode = picked;
       else { isCameraDragging = true; dragMode = e.shiftKey ? 'pan' : 'orbit'; }
     }
@@ -284,16 +325,17 @@ dom.addEventListener('pointermove', (e) => {
         const n = roadNodes[S.draggedNode.nodeId];
         const sp = snapPointToGrid(gp, 'road');
         const dx=sp.x-n.x, dz=sp.z-n.z;
+        if (!dx && !dz) return; // (still on the same grid point: nothing to rebuild)
         n.x=sp.x; n.z=sp.z;
         if (n.type==='spline') {
           if (n.handleIn) { n.handleIn.x+=dx; n.handleIn.z+=dz; }
           if (n.handleOut) { n.handleOut.x+=dx; n.handleOut.z+=dz; }
         }
-        rebuildRoadMeshes();
+        S.roadsDirty = true; // (rebuilt once a frame by animate(), however many moves the mouse sends in between)
       } else if (S.draggedNode.kind==='roadHandle') {
         const n = roadNodes[S.draggedNode.nodeId];
         n[S.draggedNode.which] = gp;
-        rebuildRoadMeshes();
+        S.roadsDirty = true;
       } else if (S.draggedNode.kind==='zone') {
         const zone=S.zones.find(z=>z.id===S.draggedNode.zoneId);
         if (zone) {

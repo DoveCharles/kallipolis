@@ -40,6 +40,7 @@ S.roadBuildSeq = 0;  // bumped on every road rebuild, so rebuildWater knows its 
 S.waterDirty = true; // set by anything that can change the water or what crosses it; animate() rebuilds it once per frame
 S.peopleNavDirty = true; // set whenever roads or zones change — see "people"
 S.trafficNavDirty = true; // set whenever roads change — see "traffic"
+S.roadsDirty = false; // set by a node drag; animate() rebuilds the roads once per frame (see rebuildRoadMeshes)
 // While a path is selected (or a node's being dragged) it's likely still being edited, so people and traffic keep using
 // the nav they have and only rebuild theirs once it's let go of — rebuilding on every drag step or slider tick is slow.
 export function navRebuildOnHold() { return S.selection.type === 'road' || S.draggedNode != null; }
@@ -239,6 +240,12 @@ export function addRoadLayerMesh(geo, color, roughness, name, networkId) {
 // disposed explicitly, and the road, train, zone and marker rebuilds all replace whole groups — dragging a node
 // rebuilds on every mouse move — so without this, memory climbs until the browser gives up. Textures are left alone:
 // the only ones inside these groups are shared (the sky reflection map); map images dispose their own.
+// Materials are only disposed once the next frame has been drawn (disposeRetiredMaterials, called by main.js). three.js
+// keeps one shader program for every material set up alike, and deletes it as soon as the last material using it is
+// disposed — and a rebuild disposes the old materials before the new ones, set up exactly the same, have been drawn. So
+// every rebuild compiled the walkway's and the trains' shaders over again: 50ms on each mouse move of a drag. Drawn
+// first, the new materials take the program over and it's never let go of.
+const retiredMaterials = new Set();
 export function disposeObject(root) {
   if (!root) return;
   S.sceneIndexDirty = true; // whatever goes with it leaves the blink-light and window-glow lists (see refreshSceneIndex)
@@ -246,8 +253,14 @@ export function disposeObject(root) {
     if (o.geometry && !o.userData.sharedGeometry) o.geometry.dispose(); // shared: the train carriage model, reused by every carriage
     // (a shared material belongs to a module rather than to this mesh — disposing it would take its shader program down
     // with it, and the next thing to use it would have to compile all over again: a park's flowers and bees, say)
-    if (o.material && !o.userData.sharedMaterial) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+    if (o.material && !o.userData.sharedMaterial) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => retiredMaterials.add(m));
   });
+}
+// Disposes the materials disposeObject has let go of since the last frame, once that frame's been drawn.
+export function disposeRetiredMaterials() {
+  if (!retiredMaterials.size) return;
+  retiredMaterials.forEach(m => m.dispose());
+  retiredMaterials.clear();
 }
 // Moves a line's points in place. setFromPoints swaps in a brand-new position attribute instead, which leaves the old
 // one's buffer behind on the GPU — and the preview lines update on every mouse move.

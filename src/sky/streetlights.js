@@ -137,14 +137,20 @@ if ( lampLight.r > 0.0 || headlightLight.r > 0.0 ) {
 // ---------------------------------------------------------------- painting the map
 // The lamps are the ones put down by hand and the ones standing round the plazas and along raised walkways, and the light's the lit lobbies'
 // too. The map's redone only when one of them is put down, moved, resized or taken away: each frame just compares
-// where they all are. (A plaza's lamps and a building's lobby don't move without it being built again, so which of
-// them there are is enough to go on.)
-let paintedAs = '', anyLamps = false;
+// where they all are. A plaza's lamps and a building's lobby don't move without being built again, so theirs is only
+// worked out again when something's been built — and from where they stand, not which meshes they are, since a road
+// dragged about rebuilds the walkway lamps each time without moving any of them.
+let paintedAs = '', anyLamps = false, builtKey = '', builtKeyVersion = -1;
 function paintLampMap() {
   refreshSceneIndex();
+  if (builtKeyVersion !== S.sceneIndexVersion) {
+    builtKeyVersion = S.sceneIndexVersion;
+    builtKey = lampPostMeshes.map(m => m.userData.lampPosts.map(p => `${p.x.toFixed(2)},${p.z.toFixed(2)},${(p.y || 0).toFixed(2)}`).join(';')).join(';')
+      + '|' + litLobbies.map(m => `${m.userData.lobbyLight},${m.userData.lobbyColor ? m.userData.lobbyColor.getHexString() : ''},`
+        + m.userData.footprint.map(p => `${p.x.toFixed(2)},${p.z.toFixed(2)}`).join(';')).join('/');
+  }
   const placed = S.objects.filter(o => o.type === LAMP_TYPE);
-  const key = placed.map(o => `${o.x.toFixed(2)},${o.z.toFixed(2)},${o.scale.toFixed(2)}`).join(';')
-    + '|' + lampPostMeshes.map(m => m.id).join(',') + '|' + litLobbies.map(m => m.id).join(',');
+  const key = placed.map(o => `${o.x.toFixed(2)},${o.z.toFixed(2)},${o.scale.toFixed(2)}`).join(';') + '|' + builtKey;
   if (key === paintedAs) return anyLamps;
   paintedAs = key;
   const lamps = [...placed, ...lampPostMeshes.flatMap(m => m.userData.lampPosts.map(p => ({ x: p.x, z: p.z, scale: 1, y: p.y || 0 })))];
