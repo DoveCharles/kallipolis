@@ -49,13 +49,14 @@ export function updateInsertPreviewGeometry(point, angle) {
     new THREE.Vector3(point.x+c3.x, y, point.z+c3.z), new THREE.Vector3(point.x+c4.x, y, point.z+c4.z)
   ]);
 }
-export function findNearestEdge(gp, zoneThreshold, skipLine = null) {
+// (`reachOf(line)`, if given, is how far from a road line's centre it can be found, in place of the usual)
+export function findNearestEdge(gp, zoneThreshold, skipLine = null, reachOf = null) {
   let best = null;
   if (S.currentTool==='road') {
     const type = currentPathType();
     S.roadLines.forEach(line => {
       if (line===skipLine || Array.isArray(skipLine) && skipLine.includes(line) || pathTypeOf(line)!==type) return; // (only the Paths tab's own type can be added to)
-      const th = Math.max((line.width||S.DEFAULT_ROAD_WIDTH)/2+3, 6);
+      const th = reachOf ? reachOf(line) : Math.max((line.width||S.DEFAULT_ROAD_WIDTH)/2+3, 6);
       const pts = line.nodeIds.map(id=>roadNodes[id]).filter(Boolean);
       for (let i=0;i<pts.length-1;i++) {
         const a=pts[i], b=pts[i+1];

@@ -8,7 +8,7 @@ import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { setSelectedMap, setMapHover, startMapTransform, applyMapTransform, confirmMapTransform, cancelMapTransform, previewLine } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, setLinePoints, roadLineWidths } from '../roads/roads.js';
 import { WALKWAY_COLOR, rebuildRoadMeshes } from '../roads/paths.js';
-import { moveRoadDragPreview, endRoadDragPreview, showDrawingPreview, endDrawingPreview, showDeletePreview, endDeletePreview } from '../roads/drag-preview.js';
+import { moveRoadDragPreview, endRoadDragPreview, showDrawingPreview, endDrawingPreview, showDeletePreview, endDeletePreview, halfWidthOf } from '../roads/drag-preview.js';
 import { isTrainLine, isTrainNode, networkKindOf, pathTypeOf, currentPathType, trainNodeY, trainPlanePoint, dragTrainPoint, findNearestTrainEdge } from '../trains/trains.js';
 import { setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge } from './hover.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
@@ -770,10 +770,10 @@ function pathNodeUnder(gp) {
   return id;
 }
 
-// A path node let go of close to another path of its type is joined to it, as a click while drawing is (see
-// pathNodeUnder): onto that path's node if one's within its half-width, else spliced into it at the nearest point of its
-// edge — so they meet at a junction. (Not onto the nodes either side of it on its own lines: that would fold a stretch
-// away.) Two lines that now just meet end to end become one, and everything joined is one network. Returns the node
+// A path node let go of on another path of its type — anywhere on it, out to a road's sidewalk edge — is joined to it,
+// as a click while drawing is (see pathNodeUnder): onto that path's node if one's that close, else spliced into it at
+// the nearest point of its edge — so they meet at a junction. (Not onto the nodes either side of it on its own lines:
+// that would fold a stretch away.) Two lines that now just meet end to end become one, and everything joined is one network. Returns the node
 // the dragged one is now.
 function joinDraggedNode(nodeId) {
   const own = S.roadLines.filter(l => l.nodeIds.includes(nodeId));
@@ -783,7 +783,7 @@ function joinDraggedNode(nodeId) {
   let target = null, best = Infinity;
   S.roadLines.forEach(l => {
     if (pathTypeOf(l) !== type) return;
-    const reach = roadLineWidths(l).hw;
+    const reach = halfWidthOf(l);
     l.nodeIds.forEach(id => {
       if (id === nodeId || neighbours.has(id)) return;
       const d = Math.hypot(roadNodes[id].x-n.x, roadNodes[id].z-n.z);
@@ -800,8 +800,8 @@ function joinDraggedNode(nodeId) {
     joinNetworksAt(target, type);
     return target;
   }
-  const found = findNearestEdge(n, 0, own);
-  if (!found || found.kind !== 'road' || found.dist > roadLineWidths(found.line).hw) return nodeId;
+  const found = findNearestEdge(n, 0, own, halfWidthOf);
+  if (!found || found.kind !== 'road') return nodeId;
   const pt = snapPointToGrid(found.point, 'road'), dx = pt.x-n.x, dz = pt.z-n.z;
   n.x = pt.x; n.z = pt.z;
   if (n.handleIn) { n.handleIn.x += dx; n.handleIn.z += dz; }

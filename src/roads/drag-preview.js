@@ -30,7 +30,7 @@ let preview = null;     // { drag, dimmed: [[material, colour it had]] }
 let drawingLine = null; // the path being drawn, while showDrawingPreview has it
 
 // how far the path reaches either side of its centreline: a road's sidewalk edge, a walkway or river's own
-function halfWidthOf(line) {
+export function halfWidthOf(line) {
   if (isWalkwayLine(line) || isRiverLine(line)) return (line.width || S.DEFAULT_ROAD_WIDTH)/2;
   const { hw, cw, sw } = roadLineWidths(line);
   return hw + cw + sw;
