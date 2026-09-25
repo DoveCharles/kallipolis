@@ -511,6 +511,37 @@ export const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
 // the middle of a person's face, from where their head meets their neck, in the model's units
 export const HEAD_CENTER = new THREE.Vector3(0, 0.3, 0.2);
 
+// People too small on screen to see aren't drawn, nor their shadows once they're smaller than PERSON_SHADOW_PIXELS (in
+// drawing-buffer pixels, tall): and nobody off screen, or out of the shadow's view, is. All worked out in the vertex
+// shader, before any posing, so the ones left out cost next to nothing (see personCulled and aimPersonCulling).
+const PERSON_DRAW_PIXELS = 1, PERSON_SHADOW_PIXELS = 6;
+// (and anyone under PERSON_ROUGH_PIXELS tall is posed roughly: by each vertex's main bone alone, without the shape keys,
+// the head turned or the arms moved out — the full posing is most of what a far-off crowd costs to draw)
+const PERSON_ROUGH_PIXELS = 12;
+// (what's worn over the body — hair, hats, glasses, skirts, jeans — is left off anyone under PERSON_LAYER_PIXELS: a pixel
+// or so of it at most)
+const PERSON_LAYER_PIXELS = 5;
+// (shared by every person mesh: where the view is from and how many pixels a metre is there, set each frame by
+// aimPersonCulling; and the sphere round a person, in the model's units, once the model's built)
+const personCulling = {
+  personViewPos: { value: new THREE.Vector3() }, personViewScale: { value: new THREE.Vector2() },
+  personCullSphere: { value: new THREE.Vector4(0, 1, 0, 1) }, personTall: { value: 1 },
+};
+const drawingBuffer = new THREE.Vector2();
+/**
+ * Tell the person meshes where the view is drawn from, so they can leave out whoever's off screen or too small to see
+ * (see personCulled). Called just before the frame is drawn.
+ * @param {THREE.Camera} camera - the camera the frame's drawn with
+ * @param {THREE.WebGLRenderer} renderer
+ * @returns {void}
+ */
+export function aimPersonCulling(camera, renderer) {
+  renderer.getDrawingBufferSize(drawingBuffer);
+  camera.getWorldPosition(personCulling.personViewPos.value);
+  // (pixels per metre: at a metre off for a perspective camera, anywhere for an orthographic one)
+  personCulling.personViewScale.value.set(drawingBuffer.y*0.5*camera.projectionMatrix.elements[5], camera.isPerspectiveCamera ? 1 : 0);
+}
+
 const PERSON_VERTEX_PARS = `
   uniform sampler2D personBones;
   uniform vec2 personBonesSize;
@@ -685,6 +716,34 @@ const PERSON_VERTEX_PARS = `
     }
     return posed;
   }
+  uniform vec4 personCullSphere; // (the middle of a person and how far out they reach, in the model's units)
+  uniform vec3 personViewPos;
+  uniform vec2 personViewScale; // x: pixels per metre (a metre off, if y: a perspective view)
+  uniform float personTall; // (in the model's units)
+  bool personRough = false; // (see PERSON_ROUGH_PIXELS)
+  // the bone that moves this vertex most
+  float personMainJoint() {
+    float joint = personJoints.x, most = personWeights.x;
+    if (personWeights.y > most) { joint = personJoints.y; most = personWeights.y; }
+    if (personWeights.z > most) { joint = personJoints.z; most = personWeights.z; }
+    return personWeights.w > most ? personJoints.w : joint;
+  }
+  #ifdef PERSON_CULL
+    // how many pixels tall this instance's person is on screen — or -1 if they're out of view (this pass's: the screen's,
+    // or the shadow's), and a great many for the headshot's one person, always drawn in full
+    float personOnScreen() {
+      mat4 placed = modelMatrix*instanceMatrix;
+      vec3 middle = (placed*vec4(personCullSphere.xyz, 1.0)).xyz;
+      float reach = personCullSphere.w*length(placed[0].xyz);
+      vec4 clip = projectionMatrix*viewMatrix*vec4(middle, 1.0);
+      // (a generous margin: a sphere's edge in clip space isn't quite its radius across)
+      float marginX = 1.5*reach*abs(projectionMatrix[0][0]), marginY = 1.5*reach*abs(projectionMatrix[1][1]);
+      if (clip.w < -reach || abs(clip.x) > clip.w + marginX || abs(clip.y) > clip.w + marginY) return -1.0;
+      if (personOnly >= 0 || personViewScale.x <= 0.0) return 1e6;
+      float away = personViewScale.y > 0.5 ? max(distance(middle, personViewPos), 1e-3) : 1.0;
+      return personTall*length(placed[1].xyz)*personViewScale.x/away;
+    }
+  #endif
 `;
 
 // the fragment shader's blood: where the splotches fall, and the layer over the color — personBloodColor at the
@@ -773,7 +832,8 @@ const OUTFIT_CHEST_GLSL = `
  * colorRow (the traits row of the clothes' color) }), and `look.outfitSlots` (the slots an outfit's texture is
  * drawn over, with `look.outfitMap` the texture: see outfits.js — and `look.outfitBands` and `look.outfitLegSlots`, the
  * bands of the sleeves and legs it's drawn over too, where they're covered, and the rest of the legs; and
- * `look.outfitBareLegSlots`, the legs' bands, where they're bare, for fishnets).
+ * `look.outfitBareLegSlots`, the legs' bands, where they're bare, for fishnets). `look.shadow` says it's the shadow's depth material
+ * and `look.layer` that it's worn over the body, for how small a person it leaves out (see personOnScreen).
  * @param {object} shader - three.js's shader object to patch
  * @param {Object<string, {value: *}>} uniforms - the person uniforms to give it
  * @param {object} look - what the material draws and how it colors it
@@ -800,13 +860,20 @@ function injectPersonShader(shader, uniforms, look) {
   const color = colored
     ? 'vPersonColor = ' + bands + Object.entries(look.traitColors).map(([slot, row]) => `personSlotIndex == ${slot} ? personTrait(${row}).rgb : `).join('') + 'personPalette[personSlotIndex];' : '';
   shader.vertexShader = shader.vertexShader
+    .replace('void main() {', `void main() {
+      #ifdef PERSON_CULL
+        float personPixels = personOnScreen();
+        if (personPixels < ${Math.max(look.shadow ? PERSON_SHADOW_PIXELS : PERSON_DRAW_PIXELS, look.layer ? PERSON_LAYER_PIXELS : 0).toFixed(1)}) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; } // (outside the clip volume: nothing drawn)
+        personRough = personPixels < ${PERSON_ROUGH_PIXELS.toFixed(1)};
+      #endif`)
     .replace('#include <common>', '#include <common>\n' + PERSON_VERTEX_PARS
       + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : '')
       + (splotched ? '\nvarying vec2 vPersonBlood;' : '') + (rested ? '\nvarying vec3 vPersonRest;' : '')
       + (outfitted ? '\nvarying vec4 vPersonOutfit;\nvarying vec4 vPersonOutfitRed;' : ''))
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       ${rested ? 'vPersonRest = transformed;' : ''}
-      ${look.clearThighs ? 'transformed = personClearThighs((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz);'
+      if (personRough) transformed = (personBone(personMainJoint())*vec4(transformed, 1.0)).xyz;
+      else ${look.clearThighs ? 'transformed = personClearThighs((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz);'
         : 'transformed = personArms(personLook((personSkinMatrix()*vec4(transformed + personShape(), 1.0)).xyz), transformed.x);'}
       int personSlotIndex = int(personVertex.y + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
@@ -834,20 +901,23 @@ function injectPersonShader(shader, uniforms, look) {
  * @param {object} look - what the material draws and how it colors it
  * @param {number} capacity - how many instances to make room for
  * @param {boolean} byAttribute - whether the instances say which person they are (instancePerson) rather than being them in order
- * @param {{name?: string, headshot?: boolean}} [options] - the mesh's name, and whether it's drawn in headshots
+ * @param {{name?: string, headshot?: boolean, culled?: boolean}} [options] - the mesh's name, whether it's drawn in headshots,
+ * and whether whoever's out of view or too small is left out (see personCulled — not for anything posed away from the person's
+ * own place, like a gib's flying pieces)
  * @returns {THREE.InstancedMesh} the mesh, added to the scene
  */
-function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name = 'People', headshot = true } = {}) {
+function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name = 'People', headshot = true, culled = true } = {}) {
   const material = new THREE.MeshToonMaterial({ gradientMap: TOON_RAMP, side: THREE.DoubleSide, flatShading: true });
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   if (byAttribute) { material.defines = { PERSON_INDEX_ATTRIBUTE: '' }; depth.defines = { PERSON_INDEX_ATTRIBUTE: '' }; }
   // (lit by a home's lamp, and by the room's glow while the view's inside a building: see buildings/interior.js)
   material.defines = { ...material.defines, ROOM_LAMP: '', ROOM_GLOW: '' };
+  if (culled) { material.defines.PERSON_CULL = ''; depth.defines = { ...depth.defines, PERSON_CULL: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
-  const key = ['person', byAttribute, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, look.femaleOnly.join(',')].join('|');
-  material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, look);
+  const key = ['person', byAttribute, culled, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, look.femaleOnly.join(',')].join('|');
+  material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { ...look, layer: byAttribute });
   material.customProgramCacheKey = () => key;
-  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly, clearThighs: look.clearThighs });
+  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly, clearThighs: look.clearThighs, shadow: true, layer: byAttribute });
   depth.customProgramCacheKey = () => key + '|depth';
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -1488,6 +1558,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     personThighRadius: { value: new THREE.Vector2(...(thighs ? thighs.rest : [0, 0])) },
     personThighGrow: { value: new THREE.Vector3(...(thighs ? thighs.grow.map(g => g[0]) : [0, 0, 0])) },
     personKneeGrow: { value: new THREE.Vector3(...(thighs ? thighs.grow.map(g => g[1]) : [0, 0, 0])) },
+    ...personCulling,
   };
   const bodyLook = {
     palette,
@@ -1527,6 +1598,10 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
 
   const box = geometry.boundingBox;
+  // (half as far again round, for the arms thrown out and the poses that lean or lie a person down)
+  const middle = box.getCenter(new THREE.Vector3());
+  personCulling.personCullSphere.value.set(middle.x, middle.y, middle.z, box.getSize(new THREE.Vector3()).length()*0.75);
+  personCulling.personTall.value = box.max.y - box.min.y;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
   return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
@@ -1655,7 +1730,7 @@ function buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm
     geo.setAttribute('instanceEyes', gib.eyes);
     geo.setAttribute('instancePerson', gib.person);
     // (a gib's pieces fly apart, the thighs from the skirt, so it isn't kept out of them)
-    gib.mesh = makePersonMesh(geo, gibUniforms, { ...look, clearThighs: false }, GIB_BODIES_MAX, true, { name: 'BodyGibs', headshot: false });
+    gib.mesh = makePersonMesh(geo, gibUniforms, { ...look, clearThighs: false }, GIB_BODIES_MAX, true, { name: 'BodyGibs', headshot: false, culled: false });
     return gib;
   };
   const body = gibBodyGeometry({ geometry, joints, weights, slots, bones, inHead, inArm });

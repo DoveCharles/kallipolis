@@ -81,6 +81,7 @@ import { placeSunLight, updateWeather } from './sky/weather.js';
 import { updateStreetlights } from './sky/streetlights.js';
 import { commitHistory } from './project/history.js';
 import { loadPersonModel, syncPeopleUI, updatePeople } from './life/people/people.js';
+import { aimPersonCulling } from './life/people/peopleModel.js';
 import { updateTraffic, loadCarModels } from './life/traffic/traffic.js';
 import { updateGiblets } from './life/giblets.js';
 import { updateBodyParts } from './life/people/peopleGibs.js';
@@ -189,7 +190,7 @@ function animate() {
   const unshake = isInsideBuilding() ? () => {} : shakeCamera(camera, t); // (no shaking in a building's room)
   // (under the loading screen, shaders are compiled in the background rather than drawn: see ui/loading.js)
   if (stillLoading()) compileWhileLoading(renderer, scene, camera);
-  else renderView(scene, camera);
+  else { aimPersonCulling(camera, renderer); renderView(scene, camera); }
   unshake();
   disposeRetiredMaterials(); // (only now the new ones have taken over their shader programs: see disposeObject)
 }
