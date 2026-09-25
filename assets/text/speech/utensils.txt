@@ -1,0 +1,5 @@
+# Kitchen things (see about.txt). Knives here carry no evil: only weapons.txt adds that.
+forms: singular | plural | general
+[knives]
+fork
+spoon

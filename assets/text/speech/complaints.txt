@@ -1,0 +1,19 @@
+# Having a moan (see about.txt).
+You make me so so mad sometimes. {aggression}
+> Why are you crying?
+> [dismissal]
+That fucking twat. {aggression, evil}
+> Who?
+>> You know who.
+I hate my son. {evil}
+> That's awful! {evil = -1}
+> Same. {evil}
+The world feels so dangerous lately. {world.morality < -0.3, world.morality = -1}
+> Someone's out there killing people. {world.morality < -0.5, weight = 3}
+> I blame [animals: plural].
+This weather, honestly. {world.weather = rain, mood = -1}
+> I like the rain. {happy}
+> [scary: plural]! It's raining [scary: plural]! {shock}
+Things have been so peaceful lately. {world.morality > 0.3, world.morality = 1}
+> Too peaceful. {evil}
+> Isn't it lovely? {evil = -1}

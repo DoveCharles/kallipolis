@@ -359,8 +359,13 @@ function showNotice(id, delta, countDelta, name) {
 let announced = null, previous = null, stillTicks = 0, quietUntil = performance.now() + 2500;
 const sameLines = (a, b) => Object.keys(a.lines).every(id => a.lines[id].count === b.lines[id].count && round1(a.lines[id].score) === round1(b.lines[id].score));
 
+let overallNow = 0;
+/** The player's morality now, -1 (worst) to 1 (best): the meter's value over MORALITY_MAX. @returns {number} */
+export const moralityLevel = () => overallNow/MORALITY_MAX;
+
 function tick() {
   const now = tally();
+  overallNow = now.overall;
   renderMeter(now);
   if (!announced || performance.now() < quietUntil) { announced = previous = now; return; } // (loading: take it all as it is)
   stillTicks = previous && sameLines(now, previous) ? stillTicks + 1 : 0;

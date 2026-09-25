@@ -6,6 +6,8 @@
 //   the sofa, so the TV's on straight away (see aboutTheRoom in life/people/peopleActivities.js).
 // - Options > Speech > Chat speed (S.chatSpeed, 1 by default): how often real lines are said (see audio/dictionary.js).
 // - Options > Speech > Hearing distance (S.hearDistance, 40): how far off talk is heard (see audio/voices.js).
+// - Options > Speech > Babble only as fallback (S.babbleFallbackOnly, off): people say real lines whenever one can be
+//   had, babbling only when none can (see linePause in audio/dictionary.js).
 // - Options > Speech > Bubble distance (S.bubbleDistance, 35) and Babble bubbles (S.babbleBubbles, off): see ui/speech-bubbles.js.
 import { S } from '../core/shared.js';
 import { whenLoaded } from './loading.js';
@@ -14,7 +16,7 @@ const EDIT_HINTS_KEY = 'splinetopia.editHints', GENERAL_HINTS_KEY = 'splinetopia
 const START_EDIT_KEY = 'splinetopia.startInEdit', ENCOURAGE_TV_KEY = 'splinetopia.encourageTV';
 const CHAT_SPEED_KEY = 'splinetopia.chatSpeed', BUBBLE_DISTANCE_KEY = 'splinetopia.bubbleDistance';
 const HEAR_DISTANCE_KEY = 'splinetopia.hearDistance';
-const BABBLE_BUBBLES_KEY = 'splinetopia.babbleBubbles';
+const BABBLE_BUBBLES_KEY = 'splinetopia.babbleBubbles', BABBLE_FALLBACK_KEY = 'splinetopia.babbleFallbackOnly';
 const body = document.body;
 const startEditToggle = document.getElementById('s-starteditmode');
 
@@ -65,6 +67,18 @@ function prefSlider(name, key, field) {
 prefSlider('chatspeed', CHAT_SPEED_KEY, 'chatSpeed');
 prefSlider('bubbledistance', BUBBLE_DISTANCE_KEY, 'bubbleDistance');
 prefSlider('heardistance', HEAR_DISTANCE_KEY, 'hearDistance');
+// a toggle switch saved to `key`, setting S[field]
+function prefToggle(id, key, field, fallback) {
+  const toggle = document.getElementById(id);
+  S[field] = recall(key, fallback);
+  toggle.classList.toggle('on', S[field]);
+  toggle.addEventListener('click', () => {
+    S[field] = !S[field];
+    toggle.classList.toggle('on', S[field]);
+    remember(key, S[field]);
+  });
+}
+prefToggle('s-babblefallback', BABBLE_FALLBACK_KEY, 'babbleFallbackOnly', false);
 S.babbleBubbles = recall(BABBLE_BUBBLES_KEY, false);
 const babbleBubblesToggle = document.getElementById('s-babblebubbles');
 babbleBubblesToggle.classList.toggle('on', S.babbleBubbles);

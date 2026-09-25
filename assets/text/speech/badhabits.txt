@@ -1,0 +1,6 @@
+# Bad habits, as verbs (see about.txt): "they [badhabits]", "she [badhabits: past]", "they're [badhabits: ing]".
+forms: base | past | ing
+bite | bit | biting
+shit a lot | shat a lot | shitting a lot
+cum constantly | came constantly | cumming constantly
+scream at night | screamed at night | screaming at night

@@ -1,0 +1,8 @@
+# Brushing someone off — used as a reply by other files (see about.txt).
+Whatever.
+I don't give a [swear]. {aggression}
+Cool story. {evil}
+Mm-hm. {patience}
+Not now.
+I'm not talking to you. {end = bad, aggression}
+Leave me alone. {end = bad, patience = -1}

@@ -3,14 +3,15 @@ import { mulberry32 } from '../../core/math.js';
 import { buildingName } from '../../buildings/building-types.js';
 import { isInsideBuilding, roomHolds, roomVisit } from '../../buildings/interior.js';
 import * as THREE from 'three';
-import { scene } from '../../core/scene.js';
+import { scene, camera } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
 import { blastFx, explode } from '../giblets.js';
 import { blasts, PERSON_BLAST_SCALE } from '../traffic/state.js';
 import { canRespawn, PERSON_SHAKE, shake } from '../revive.js';
 import { throwBodyParts } from './peopleGibs.js';
-import { babble, nextSyllable } from '../../audio/voices.js';
-import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
+import { babble, nextSyllable, hearDistance } from '../../audio/voices.js';
+import { sayLine, lineMouth, stopLine, linePause } from '../../audio/dictionary.js';
+import { pickThought, pickReaction } from '../speech-text.js';
 import { babbleLine, hasBubble, speechBubble } from '../../ui/speech-bubbles.js';
 import { footstep } from '../../audio/footsteps.js';
 import { keyClick } from '../../audio/typing.js';
@@ -500,6 +501,7 @@ export function refreshTraits(p, i) {
   p.height = p.baseHeight*p.traits.size;
   p.age = profile.age;
   p.name = profile.name; // (for their card, and for naming them in the morality notices when they die)
+  p.loves = profile.loves; p.hates = profile.hates; // (for what they say: see life/speech-text.js)
 }
 
 export const FRIGHT_RADIUS = 14, FLEE_SPEED = 2.3;
@@ -511,6 +513,29 @@ const VAMPIRE_EYE_TINT = 0.2, VAMPIRE_EYE_COLOR = new THREE.Color(0xffc40c),
 const VAMPIRE_SKIN_COLOR = new THREE.Color(0xd3d3d3), VAMPIRE_PALE_PER_CENTURY = 0.1;
 const BUBBLE_HEIGHT = 2; // how high over their feet (× height, × people size) a speech bubble's tail points (see ui/speech-bubbles.js)
 const BUBBLE_CHAIR_DROP = 0.5, BUBBLE_GROUND_DROP = 0.8; // how much lower (same units) sat on a seat, and sat on the ground
+// Someone on their own may think something (thoughts.txt: see life/speech-text.js) as they fidget with one of
+// THINK_FIDGETS — THINK_CHANCE of the time (× chat speed), and no sooner than THINK_REST after their last (a rest of their
+// own, started at random, so people don't all think together) — shown in a bubble for THOUGHT_TIME, only within
+// Options > Speech > Bubble distance of the camera. Something they've just seen or felt is thought about at once.
+// Returns the thought while it shows.
+const THINK_FIDGETS = FIDGETS, THINK_CHANCE = 0.35, THOUGHT_TIME = 4, THINK_REST = [20, 60];
+function thoughtOf(p, dt) {
+  const now = performance.now()/1000;
+  if (p.thought && now < p.thoughtUntil) return p.thought;
+  p.thought = null;
+  const near = Math.hypot(p.x - camera.position.x, p.y - camera.position.y, p.z - camera.position.z) <= (S.bubbleDistance ?? 35);
+  const show = text => { p.thought = { text, thought: true }; p.thoughtUntil = now + THOUGHT_TIME; return p.thought; };
+  const news = (p.seen && !p.seen.reacted) || (p.felt && !p.felt.reacted);
+  const reaction = news && near ? pickReaction(p) : null;
+  if (reaction) return show(reaction.text);
+  const fidgeted = p.fidgetThought;
+  p.fidgetThought = false;
+  p.nextThoughtAt ??= now + THINK_REST[0] + peopleRng()*(THINK_REST[1] - THINK_REST[0]);
+  if (!fidgeted || now < p.nextThoughtAt || !near || peopleRng() >= THINK_CHANCE*(S.chatSpeed ?? 1)) return null;
+  p.nextThoughtAt = now + (THINK_REST[0] + peopleRng()*(THINK_REST[1] - THINK_REST[0]))/(S.chatSpeed ?? 1);
+  const thought = pickThought(p);
+  return thought ? show(thought.text) : null;
+}
 // where someone's speech bubble points: over their head, lower as they sit (on a seat, raised by seatLift, or on the ground)
 function bubbleAt(p) {
   const chair = sitWeight(p), ground = personModel ? GRASS_SITS.reduce((w, name) => w + weightOf(p, personModel.clips[name]), 0) : 0;
@@ -574,6 +599,55 @@ export function standingOf(p) {
   const evil = p.traits.evil ?? 0;
   return evil > EVIL_VILLAINOUS_ABOVE ? 'villainous' : evil > EVIL_GUILTY_ABOVE ? 'guilty' : 'innocent';
 }
+// ---------------------------------------------------------- what people see and feel, for what they say
+// (see {seen} and {felt} in assets/text/speech/about.txt, and life/speech-text.js). p.seen is the last thing someone saw
+// happen to someone else, p.felt the last thing that happened to them; each is kept SEEN_TIME, and said or thought
+// about once, straight away. A lesser sight doesn't replace a greater one still fresh (SEEN_RANK); the same sight of the
+// same person isn't seen again while it's fresh, so something that goes on (walking on water, a smell) counts once.
+const WITNESS_RADIUS = 20; // how near (× people size) someone has to be to see something happen
+const SEEN_RANK = { killedbycar: 3, beatentodeath: 3, smited: 3, drowned: 3, exploded: 3, resurrected: 2, punch: 1, knockedbycar: 1, waterwalking: 0, smelly: 0 };
+const NOTICED_FOR = 60; // seconds a sight stays fresh (as SEEN_TIME in life/speech-text.js)
+const MAX_WITNESSES = 5;  // how many of the nearest see something happen (not a whole park at once)
+const REACT_SPREAD = 2.5; // seconds over which those who saw it get round to reacting, each at a random moment
+const insideOf = q => q.mode === 'indoors' && q.indoors.stage === 'inside' ? q.indoors.building : null;
+/**
+ * One person taking in something that happened to someone else.
+ * @param {Person} q - who saw it
+ * @param {Person} who - who it happened to
+ * @param {string} what - what (a key of SEEN_RANK)
+ * @param {?Person} [by] - who did it, if a person
+ * @returns {void}
+ */
+export function notice(q, who, what, by = null) {
+  const at = performance.now()/1000, old = q.seen, fresh = old && at - old.at < NOTICED_FOR;
+  if (fresh && (SEEN_RANK[old.what] > SEEN_RANK[what] || (old.what === what && old.who === who))) return;
+  q.seen = { what, at, who, by, after: at + Math.random()*REACT_SPREAD };
+}
+/**
+ * The MAX_WITNESSES nearest, on the same side of any walls (or anywhere in the same building), see something happen.
+ * @param {Person} who - who it happened to
+ * @param {string} what - what (a key of SEEN_RANK)
+ * @param {?Person} [by] - who did it, if a person (who doesn't count as seeing it)
+ * @returns {void}
+ */
+export function witness(who, what, by = null) {
+  const reach = WITNESS_RADIUS*S.peopleSize, building = insideOf(who), near = [];
+  people.forEach(q => {
+    if (q === who || q === by || q.mode === 'dead' || q.mode === 'drowning' || q.mode === 'none' || aboard(q)) return;
+    if (insideOf(q) !== building) return;
+    const d = Math.hypot(q.x - who.x, q.z - who.z);
+    if (building || d <= reach) near.push({ q, d });
+  });
+  near.sort((a, b) => a.d - b.d).slice(0, MAX_WITNESSES).forEach(({ q }) => notice(q, who, what, by));
+}
+/**
+ * Something happening to someone: punched, hitbycar, or revenge (they punched back whoever last punched them).
+ * @param {Person} p
+ * @param {string} what
+ * @param {?Person} [by] - who did it (for revenge, who they got back at)
+ * @returns {void}
+ */
+export function feel(p, what, by = null) { p.felt = { what, at: performance.now()/1000, by }; }
 /**
  * How the people around someone take their death: an innocent's leaves them horrified, a bad sort's stops them in
  * their tracks, and a villain's delights them. Called for every death, whoever caused it — the Smite button, or a car
@@ -776,10 +850,11 @@ export function fleeWithin(p, area) {
 // `source` for damage (core/health.js) may carry killPerson's own: { by, momentum, throwScale, from }
 registerHealthKind('person', {
   max: 100,
-  die: (p, source) => killPerson(people.indexOf(p), source?.by ?? 'player', source?.momentum ?? null, source?.throwScale ?? 1, source?.from ?? null),
+  die: (p, source) => killPerson(people.indexOf(p), source?.by ?? 'player', source?.momentum ?? null, source?.throwScale ?? 1, source?.from ?? null,
+    source?.cause ?? (people.includes(source?.from) ? 'beatentodeath' : 'smited')),
   alive: p => p.mode !== 'dead' && p.mode !== 'none' && p.mode !== 'drowning', // (hearted, revived, or aboard a train)
 });
-function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = null) {
+function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = null, cause = 'smited') {
   const p = people[i];
   if (!p || isGone(p) || isFavoritePerson(p.id) || p.punched?.revive) return; // (the hearted can't be killed: see ui/favorites.js; nor can the shaking, see below)
   if (canRespawn(p) && reviveInstead(p, source ?? (momentum ? { x: p.x - momentum.x, z: p.z - momentum.z } : null))) return;
@@ -810,6 +885,7 @@ function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = 
   Object.values(colors).forEach(color => color?.isColor && color.lerp(new THREE.Color(0x550000), 0.4)); //make gibs darker, less saturated
   explode(at, 1.7*p.height*S.peopleSize, colors, thrown);
   bystandersReactToDeath(p, source);
+  witness(p, cause);
   p.mode = 'dead';
   if (p.traits.explosive) { // (a blast killing whoever's around, on the next traffic update: see blasts in life/traffic/state.js)
     blastFx(at, 1.7*p.height*S.peopleSize, 1.5);
@@ -849,6 +925,7 @@ export function drownedPerson(i) {
   if (followed === i) stopFollowingPerson();
   if (awaited === i) setAwaited(-1);
   bystandersReactToDeath(p);
+  witness(p, 'drowned');
   p.water = null;
   p.mode = 'dead';
   p.train = null;
@@ -912,7 +989,7 @@ function stepPush(p, dt) {
  * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
  * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
  */
-Object.assign(App, { pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups });
+Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups });
 
 /**
  * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone
@@ -1213,7 +1290,7 @@ export function updatePeople(t) {
         p.stillFor = 0;
       } else if (!p.act && !p.oneShot && !p.fright && p.pose === 'Idle') {
         p.stillFor += dt;
-        if (p.traits.fidgety > 0 && p.stillFor > p.fidgetAfter/p.traits.fidgety) { playOnce(p, pickFrom(FIDGETS)); p.stillFor = 0; p.fidgetAfter = 3 + peopleRng()*8; }
+        if (p.traits.fidgety > 0 && p.stillFor > p.fidgetAfter/p.traits.fidgety) { const fidget = pickFrom(FIDGETS); playOnce(p, fidget); p.fidgetThought = THINK_FIDGETS.includes(fidget); p.stillFor = 0; p.fidgetAfter = 3 + peopleRng()*8; }
       }
       // the animation: one playing through once, else walking, else the pose they're in — blending into it from the last
       if (p.oneShot) {
@@ -1288,7 +1365,12 @@ export function updatePeople(t) {
       } else if ((p.talkIn -= dt) <= 0) {
         const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, heard = isDrawn(p);
         // at the start of a phrase, now and then something real instead
-        if (heard && (!p.phrase || p.phrase.said >= p.phrase.length) && (p.saying = sayLine(head, voiceOf(p, i), i, p.traits.mood))) p.phrase = null;
+        const phraseStart = !p.phrase || p.phrase.said >= p.phrase.length;
+        const far = Math.hypot(head.x - camera.position.x, head.y - camera.position.y, head.z - camera.position.z);
+        // (with Options > Speech > Babble only as fallback, anyone out of hearing keeps quiet: nothing real to say there)
+        if (S.babbleFallbackOnly && far > hearDistance()) { p.talkTo = 0; p.talkIn = 0.5; p.phrase = null; }
+        else if (heard && phraseStart && (p.saying = sayLine(head, voiceOf(p, i), i, p))) p.phrase = null;
+        else if (heard && phraseStart && linePause(p)) { p.talkTo = 0; p.talkIn = 0.25; } // (waiting quietly for the next line)
         else {
           // in phrases, with a breath between (see nextSyllable in audio/voices.js)
           const { open, length, intonation } = nextSyllable(p, peopleRng);
@@ -1296,14 +1378,15 @@ export function updatePeople(t) {
           p.talkIn = length;
           // and each syllable they say is heard
           if (open > 0 && heard) babble(head, voiceOf(p, i), length, open, p.traits.mood, intonation);
-          if (open > 0 && S.babbleBubbles && p.babbleLine?.phrase !== p.phrase) p.babbleLine = babbleLine(p.phrase);
+          if (open > 0 && S.babbleBubbles && far <= (S.bubbleDistance ?? 35) && p.babbleLine?.phrase !== p.phrase) p.babbleLine = babbleLine(p.phrase);
         }
       }
       // a bubble with what they're saying, kept up a little after (see ui/speech-bubbles.js); only for those on the camera's
       // side of a building's walls — in the room with it, or outdoors with it — else gone
       const bubbleSide = isInsideBuilding() ? inRoom(p) : isDrawn(p) && !inRoom(p);
       const babbling = S.babbleBubbles && p.phrase && p.babbleLine?.phrase === p.phrase && p.phrase.said < p.phrase.length ? p.babbleLine : null;
-      if (bubbleSide && (p.saying || babbling || hasBubble(p))) speechBubble(p, bubbleAt(p), p.saying ?? babbling);
+      const thinking = bubbleSide && !group && !possessed ? thoughtOf(p, dt) : (p.fidgetThought = false, p.thought = null);
+      if (bubbleSide && (p.saying || babbling || thinking || hasBubble(p))) speechBubble(p, bubbleAt(p), p.saying ?? babbling ?? thinking);
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape
       else if (frozen || fleeing || scaredByBlood) p.talkTo = frozen ? 1 : scaredByBlood ? 0.3 + 0.7*fear : 0.55; // (blood, the more of it the wider)

@@ -1,0 +1,7 @@
+# Frightening things (see about.txt).
+forms: singular | plural | general
+spider
+clown
+ghost
+[knives] {weight = 0.5}
+the dark | - {mood = -0.5}

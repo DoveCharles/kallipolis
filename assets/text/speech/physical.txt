@@ -1,0 +1,10 @@
+# Things you can hold, lose or put down (see about.txt): "Where did I put my [physical]?"
+forms: singular | plural | general
+keys | keys
+phone
+wallet
+glasses | glasses
+umbrella
+sponge
+slime | -
+[utensils] {weight = 0.5}

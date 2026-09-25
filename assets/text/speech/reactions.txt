@@ -1,0 +1,70 @@
+# What people say (or think, alone) straight after seeing something happen, or having it happen to them — each line
+# limited by {seen} or {felt}; see about.txt. Said once per thing, before anything else; a line here with neither
+# would never come up. [seen.name] is who it happened to, [seen.by] who did it, [felt.by] who did it to the speaker.
+
+# ---- deaths
+Did you see that? That car just flattened [seen.name]! {seen = killedbycar}
+> Somebody call an ambulance! {evil = -1}
+> Should've looked both ways. {evil}
+>> That's horrible. {evil = -1}
+Oh my God, they just got run over! {seen = killedbycar, shock}
+Watch where you're driving, you [swear]! {seen = killedbycar, aggression}
+[seen.by] beat [seen.name] to death! {seen = beatentodeath}
+> Nobody move. {patience}
+> Good riddance. {evil}
+They just— with their fists! {seen = beatentodeath, shock}
+Did lightning just— {seen = smited}
+> God did that. {weight = 2}
+>> What did [seen.name] do?!
+> Who do you think God will smite next? {evil}
+The sky just killed [seen.name]! {seen = smited, shock}
+Oh God, [seen.name] drowned... {seen = drowned}
+> Couldn't anyone swim?
+> They should've learnt to swim. {evil}
+I didn't know how to help them. {seen = drowned, evil = -1, mood = -1}
+They just exploded! {seen = exploded}
+> My ears are ringing...
+> Was that [scary: a]? {nosy}
+There's [objects: plural] everywhere... {seen = exploded, shock}
+I still can't believe [seen.name]'s gone. {seen = death, mood = -1}
+
+# ---- things seen happening to other people
+[seen.by] just punched [seen.name]! {seen = punch}
+> Fight! Fight! {evil, aggression}
+> Someone stop them! {evil = -1}
+Hey! Leave [seen.name] alone! {seen = punch, evil = -1, aggression}
+Ooh, right in the face. {seen = punch, evil}
+That car just hit [seen.name]! {seen = knockedbycar}
+> Are they okay?! {evil = -1}
+> Ha! Did you see them fly? {evil}
+[seen.name] just came back to life! {seen = resurrected, shock}
+> That's not natural. {mood = -0.5}
+> Praise be! {happy}
+I watched [seen.name] die, I swear I did. {seen = resurrected}
+Is that... [seen.name] walking on the water? {seen = waterwalking}
+> It's a miracle! {happy}
+> It's a trick. {patience = -1}
+Ugh, what's that smell? {seen = smelly}
+> Don't look now, but I think it's [seen.name].
+[seen.name] needs a bath. {seen = smelly, evil}
+I'm going to be sick. {seen = smelly, mood = -1}
+
+# ---- things that happened to the speaker
+Ow! What was that for, [felt.by]? {felt = punched}
+You'll pay for that, [felt.by]. {felt = punched, aggression}
+Please, I don't want any trouble. {felt = punched, aggression = -1}
+That's for earlier, [felt.by]! {felt = revenge}
+Not so tough now, are you, [felt.by]? {felt = revenge, evil}
+Revenge is sweet. {felt = revenge}
+Did that car just hit me?! {felt = hitbycar}
+My legs... I can't feel my legs. {felt = hitbycar, shock}
+Learn to drive! {felt = hitbycar, aggression}
+What a show. {felt = watchedtv, happy}
+> I've seen better. {mood = -1}
+I can't believe they killed him off. {felt = watchedtv, shock}
+That's an hour I'm never getting back. {felt = watchedtv, mood = -1}
+Right, bed. {felt = watchedtv, world.hour 22-3}
+One more episode wouldn't hurt... {felt = watchedtv, lounging}
+
+Did you see that?! {seen, weight = 0.5}
+> I didn't see anything. {evil}

@@ -38,7 +38,11 @@ export function speechBubble(who, at, line) {
     document.body.appendChild(element);
     bubbles.set(who, bubble = { element, line: null, at: new THREE.Vector3(), doneAt: 0, seen: false });
   }
-  if (line && line !== bubble.line) { bubble.line = line; bubble.element.textContent = line.text; }
+  if (line && line !== bubble.line) {
+    bubble.line = line;
+    bubble.element.textContent = line.text;
+    bubble.element.classList.toggle('thought', !!line.thought); // (a thought, not said: see thoughtOf in life/people/people.js)
+  }
   bubble.doneAt = line ? 0 : bubble.doneAt || performance.now();
   bubble.at.set(at.x, at.y, at.z);
   bubble.seen = true;

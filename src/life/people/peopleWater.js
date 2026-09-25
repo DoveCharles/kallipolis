@@ -6,7 +6,7 @@ import { blasts, PERSON_BLAST_SCALE } from '../traffic/state.js';
 import { exclaim } from '../../audio/voices.js';
 import { isFavoritePerson } from '../../ui/favorites.js';
 import { possession } from '../possession.js';
-import { clipNamed, drownedPerson, voiceOfPerson } from './people.js';
+import { clipNamed, drownedPerson, voiceOfPerson, witness } from './people.js';
 import { endActivity } from './peopleActivities.js';
 import { unpossessPerson } from './peopleTracking.js';
 import { canRespawn } from '../revive.js';
@@ -26,6 +26,7 @@ const BANK_KEEP = 0.4; // (how far short of open water, × size, people stop wal
 // feet on the water's top for everyone (down a beach's slope); waterwalking and aqua people also float on open water as an aqua car does (updateFloating, traffic/driving.js), with smaller effects
 const FLOAT_SETTLE_TIME = 0.8, FLOAT_RISE_TIME = 0.35, FLOAT_SINK_SHARE = 0.05, FLOAT_BOB_AMPLITUDE = 0.02, FLOAT_BOB_PERIOD = 0.9;
 const DROP_SPEED = 1.6, RISE_SPEED = 3.5, SLOPE_EASE = 12; // (feet following the water's top: fastest down and up, units a second; how quickly they close on it)
+const WATERWALK_SEEN_EVERY = 3; // seconds between walking on water being noticed by whoever's near
 const SWIM_SINK_SHARE = 0.75; // (aqua people swim: sunk this share of their height, head and shoulders out)
 const STEP_IN_VOLUME = 0.15; // (the splash sound stepping onto the water, as a share of a car going in)
 const FX_SHARE = 0.5, LAND_SMOKE_PUFFS = 3, PERSON_WIDTH = 0.5;
@@ -98,6 +99,8 @@ function updateFloating(p, dt, groundY) {
   const goal = wet ? 1 : 0;
   if (goal && !p.floatWasWet) { splashCar({ x: p.x, y: WATER_LEVEL, z: p.z }, height, STEP_IN_VOLUME); p.floatWasWet = true; }
   else if (!goal) p.floatWasWet = false;
+  // (walking on water — not swimming — is seen by whoever's near, now and then while it goes on: see witness in people.js)
+  if (goal && p.traits.waterwalking && !p.traits.aqua && (p.waterSeenIn = (p.waterSeenIn ?? 0) - dt) <= 0) { witness(p, 'waterwalking'); p.waterSeenIn = WATERWALK_SEEN_EVERY; }
   const rate = 1/(goal ? FLOAT_SETTLE_TIME : FLOAT_RISE_TIME), wasPhase = p.floatPhase ?? 0;
   const phase = p.floatPhase = Math.max(0, Math.min(1, wasPhase + Math.max(-rate*dt, Math.min(rate*dt, goal - wasPhase))));
   if (wasPhase > 0 && phase === 0) puffSmoke({ x: p.x, y: ground - p.slopeDrop, z: p.z }, height, LAND_SMOKE_PUFFS);
@@ -227,6 +230,7 @@ function respawnOnBank(p) {
   p.water = null;
   p.revived = true;
   strikeLightning({ x: p.x, y: p.y, z: p.z });
+  witness(p, 'resurrected');
   return true;
 }
 

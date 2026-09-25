@@ -1,0 +1,7 @@
+# Things people are into (see about.txt). Called as [interests: general] so each reads naturally: death, knives, fishing.
+[concepts] {weight = 2}
+[weapons]
+[animals]
+Fishing
+Model trains
+River deltas {nosy}

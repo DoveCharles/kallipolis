@@ -1,0 +1,6 @@
+# Swear words (see about.txt). Called as [swear].
+forms: singular | plural
+fuck | fucks
+shit | -
+damn | -
+toss | tosses

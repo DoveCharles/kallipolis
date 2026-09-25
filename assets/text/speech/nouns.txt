@@ -1,0 +1,6 @@
+# Every thing that can be named (see about.txt): nothing of its own, only other categories.
+[animals] {weight = 3}
+[objects] {weight = 2}
+[foods]
+[concepts]
+[weapons] {weight = 0.5}

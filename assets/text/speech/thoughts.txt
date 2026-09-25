@@ -1,0 +1,24 @@
+# What people think to themselves when they're alone — no replies (see about.txt).
+I hope the day is kind to me.
+Where am I?
+I need to get home and feed my [pets: plural].
+Where the fuck did I put my [physical]? {aggression}
+I've been meaning to call my mother.
+I really hate [interests: general, hated].
+[interests: general]... fascinating. {nosy}
+I wonder if [animals: plural] dream. {world.hour 21-4}
+Can't sleep... {world.hour 23-4, here.building = home}
+Need a drink. {here.building = pub}
+I still can't stop thinking about it. {seen, weight = 3}
+Lovely morning. {world.hour 6-11, mood}
+Everyone's dying lately. {world.morality < -0.3, world.morality = -1}
+Why does it always rain on me? {world.weather = rain, mood = -1}
+Who do you think God will smite today? {evil}
+I should come to the park more often. {here.park}
+Feed the ducks, or go home? {here.park}
+So many people... {here.plaza, shock}
+The sand gets everywhere. {here.beach, mood = -1}
+One step and it'd all be over. {here.roadside, mood = -1, evil}
+Look both ways. Look both ways. {here.crossing}
+Nearly there. {here.path}
+Don't look down. {here.bridge}

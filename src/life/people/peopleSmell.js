@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { S } from '../../core/shared.js';
 import { camera, scene } from '../../core/scene.js';
-import { isDrawn, isGone, people, peopleNav, randomSpotIn } from './people.js';
+import { isDrawn, isGone, notice, people, peopleNav, randomSpotIn } from './people.js';
 
 // The smells trait, on people: everyone else keeps clear. Walking along a walkway towards someone who smells, within
 // SMELL_REACH, they turn round; wandering a plaza or park, heading for somewhere near them, they pick somewhere else, as
@@ -25,6 +25,7 @@ export function avoidSmells(dt) {
     p.smellCheck = SMELL_CHECK;
     const q = smelly.find(q => Math.hypot(q.x - p.x, q.z - p.z) < reach && Math.abs(q.y - p.y) < reach);
     if (!q) return;
+    notice(p, q, 'smelly'); // (for what they say: see life/speech-text.js)
     if (p.mode === 'line') {
       const nav = peopleNav.lines[p.li], k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), a = nav.pts[k], b = nav.pts[k + 1];
       if (((b.x - a.x)*(q.x - p.x) + (b.z - a.z)*(q.z - p.z))*p.dir > 0) p.dir = -p.dir; // (they're ahead: back the way they came)

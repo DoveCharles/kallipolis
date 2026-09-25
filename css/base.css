@@ -505,3 +505,7 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
   content:''; position:absolute; left:50%; bottom:-6px; transform:translateX(-50%); z-index:1;
   border:6px solid transparent; border-top:7px solid #fff; border-bottom:0;
 }
+/* a thought (thoughtOf in src/life/people/people.js): dotted, in italics, with a trail of circles for its tail */
+.speech-bubble.thought { border-style:dotted; font-style:italic; }
+.speech-bubble.thought::before { bottom:-9px; left:calc(50% - 6px); transform:none; border:2px solid #000; border-radius:50%; width:6px; height:6px; background:#fff; }
+.speech-bubble.thought::after { bottom:-15px; left:calc(50% - 1px); transform:none; border:2px solid #000; border-radius:50%; width:2px; height:2px; background:#fff; }

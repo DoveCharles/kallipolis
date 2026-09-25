@@ -1,0 +1,8 @@
+# Big ideas (see about.txt). "general" is how each reads as a whole: death, not deaths.
+forms: singular | plural | general
+death | deaths | death {evil = 0.8, mood = -0.5}
+crime | crimes | crime {evil = 0.6}
+tragedy | tragedies | tragedy {mood = -1}
+charity | charities | charity {evil = -1}
+love | loves | love {happy}
+zoning law

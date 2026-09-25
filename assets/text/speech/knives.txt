@@ -1,0 +1,4 @@
+# Knives (see about.txt): included by both weapons.txt and utensils.txt — kept once where both end up, as in nouns.txt.
+forms: singular | plural | general
+knife | knives
+cleaver

@@ -104,11 +104,12 @@ export function runOverPeople(car, motion = null, inWay = null) {
         impactSound('thump', p, speed);
         slowedBy(car, 'person', p.traits?.weight);
       }
-      if (knocked && p.mode !== 'dead') { App.knockedByCar?.(p); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed, SIDE_THROW); p.shotRate = CAR_FALL_SPEEDUP; }
+      if (knocked && p.mode !== 'dead') { App.knockedByCar?.(p); App.feelPerson?.(p, 'hitbycar'); App.witnessPerson?.(p, 'knockedbycar'); // (for what they say: see life/speech-text.js)
+        throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed, SIDE_THROW); p.shotRate = CAR_FALL_SPEEDUP; }
       if (hit === 'kill' && speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p));
       const alive = p.mode !== 'dead';
       damage(p, carHitDamage(car, speed)*(hit === 'kill' ? 1 : KNOCK_BOX_DAMAGE_SHARE), {
-        by: driven || motion?.by === 'player' ? 'player' : 'car', momentum: { x: velocity.x, y: 0, z: velocity.z }, throwScale: CAR_GIB_THROW, from: car });
+        by: driven || motion?.by === 'player' ? 'player' : 'car', momentum: { x: velocity.x, y: 0, z: velocity.z }, throwScale: CAR_GIB_THROW, from: car, cause: 'killedbycar' });
       if (alive && p.mode === 'dead' && car.traits?.bloodlust) bloodlustBoost(car);
     }
     else if (p.mode === 'possessed') return;
