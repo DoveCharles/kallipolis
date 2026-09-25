@@ -16,10 +16,10 @@ const BITE = [
   [.3, .06, 520, .004, .008, .03, 4, .5, , , , , , .7, , , .015, .4, .01, , 1800],
 ];
 // a slurp: air drawn in over the drink in wet, rising stutters (the slide starting over every few hundredths of a
-// second), with a little bubbling of the liquid under it
+// second), with the liquid gurgling under it
 const SIP = [
-  [.3, .1, 650, .04, .2, .09, 4, 1, 14, , , , .045, 1.2, , , , .6, , .45, -3200],
-  [.12, .2, 210, .03, .17, .06, 0, 1, 22, , , , .03, , 9, , , .5, , .6],
+  [.22, .1, 600, .04, .2, .09, 4, 1, 12, , , , .045, 1.2, , , , .6, , .45, -2200],
+  [.25, .35, 300, .02, .18, .06, 0, 1, 30, , , , .025, , 14, , , .5, , .7],
 ];
 const SOUNDS = { clink: CLINK, bite: BITE, sip: SIP };
 const VOLUME = { clink: 0.2, bite: 0.13, sip: 0.12 };
