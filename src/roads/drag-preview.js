@@ -1,4 +1,6 @@
 // ---------------------------------------------------------------- road drag preview
+// (and the drawing preview: a path being drawn is the same strip, the whole of it, until it's finished — see
+// showDrawingPreview)
 // While a road, walkway or river node's dragged, the paths aren't rebuilt — on a big city that's 40ms or more a mouse
 // move, between recutting every network, the water's bridges and uploading it all afresh. A flat green strip the path's
 // full width is laid over the stretches either side of the node instead, and follows it; the network being dragged
@@ -24,7 +26,8 @@ mesh.name = 'RoadDragPreview';
 mesh.renderOrder = 2;
 mesh.frustumCulled = false;
 scene.add(mesh);
-let preview = null; // { drag, dimmed: [[material, colour it had]] }
+let preview = null;     // { drag, dimmed: [[material, colour it had]] }
+let drawingLine = null; // the path being drawn, while showDrawingPreview has it
 
 // how far the path reaches either side of its centreline: a road's sidewalk edge, a walkway or river's own
 function halfWidthOf(line) {
@@ -92,23 +95,45 @@ export function moveRoadDragPreview(drag) {
     });
     preview = { drag, dimmed };
   }
+  redraw();
+}
+// the strip over whatever's being dragged and drawn now, or none
+function redraw() {
+  const stretches = preview ? stretchesThrough(preview.drag.nodeId) : [];
+  if (drawingLine) {
+    const pts = drawingLine.nodeIds.map(i => roadNodes[i]).filter(Boolean);
+    if (pts.length >= 2) stretches.push({ points: tessellateOpenPath(pts), hw: halfWidthOf(drawingLine) });
+  }
   mesh.geometry.dispose();
-  mesh.geometry = ribbonGeometry(stretchesThrough(drag.nodeId));
+  mesh.geometry = stretches.length ? ribbonGeometry(stretches) : idleGeometry();
   App.rebuildRoadMarkers();
   App.rebuildRoadHandles();
 }
 // Takes the strip away (and gives the network its colour back); true if there was one. The caller rebuilds the roads.
 export function endRoadDragPreview() {
   if (!preview) return false;
-  mesh.geometry.dispose();
-  mesh.geometry = idleGeometry();
   preview.dimmed.forEach(([m, c]) => m.color.copy(c));
   preview = null;
+  redraw();
   return true;
+}
+// Called after each node's added to road, walkway or river line `line` while it's being drawn, in place of rebuilding
+// the paths and the zones they cut — on a big city a hang of a good fraction of a second a click. The line's only built
+// when it's finished (finishActiveDrawing, or clicked onto another node) or cancelled; whichever does that ends this too.
+export function showDrawingPreview(line) {
+  drawingLine = line;
+  redraw();
+}
+export function endDrawingPreview() {
+  if (!drawingLine) return;
+  drawingLine = null;
+  redraw();
 }
 // Once a frame: a drag that ended without being let go of the usual way (a cancelled pointer, a long press turning into
 // a context menu) still gets its roads rebuilt, and the zones they cut.
 export function updateRoadDragPreview() {
+  // (and a line that stopped being drawn some other way — its network deleted from the panel — loses its strip)
+  if (drawingLine && S.activeRoadLine !== drawingLine) endDrawingPreview();
   if (!preview || S.draggedNode === preview.drag) return;
   endRoadDragPreview();
   rebuildRoadMeshes();

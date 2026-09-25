@@ -8,7 +8,7 @@ import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { setSelectedMap, setMapHover, startMapTransform, applyMapTransform, confirmMapTransform, cancelMapTransform, previewLine } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, setLinePoints, roadLineWidths } from '../roads/roads.js';
 import { WALKWAY_COLOR, rebuildRoadMeshes } from '../roads/paths.js';
-import { moveRoadDragPreview, endRoadDragPreview } from '../roads/drag-preview.js';
+import { moveRoadDragPreview, endRoadDragPreview, showDrawingPreview, endDrawingPreview } from '../roads/drag-preview.js';
 import { isTrainLine, isTrainNode, networkKindOf, pathTypeOf, currentPathType, trainNodeY, trainPlanePoint, dragTrainPoint, findNearestTrainEdge } from '../trains/trains.js';
 import { setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge } from './hover.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
@@ -122,20 +122,29 @@ function roadNodeLinesBounds(nodeId) {
   let b = null;
   S.roadLines.forEach(line => {
     const ids = line.nodeIds;
-    if (!ids.includes(nodeId)) return;
-    const { hw, cw, sw } = roadLineWidths(line), pad = hw + cw + sw;
-    ids.forEach((id, i) => {
-      if (id !== nodeId && ids[i-1] !== nodeId && ids[i+1] !== nodeId) return;
-      const n = roadNodes[id];
-      if (n) [n, n.handleIn, n.handleOut].forEach(p => {
-        if (!p) return;
-        if (!b) b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
-        b.minX = Math.min(b.minX, p.x - pad); b.maxX = Math.max(b.maxX, p.x + pad);
-        b.minZ = Math.min(b.minZ, p.z - pad); b.maxZ = Math.max(b.maxZ, p.z + pad);
-      });
+    if (ids.includes(nodeId)) b = pathBounds(ids.filter((id, i) => id === nodeId || ids[i-1] === nodeId || ids[i+1] === nodeId), line, b);
+  });
+  return b;
+}
+// the box round nodes `ids` of `line`, as above, grown out of box `b` if there's one
+function pathBounds(ids, line, b = null) {
+  const { hw, cw, sw } = roadLineWidths(line), pad = hw + cw + sw;
+  ids.forEach(id => {
+    const n = roadNodes[id];
+    if (n) [n, n.handleIn, n.handleOut].forEach(p => {
+      if (!p) return;
+      if (!b) b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
+      b.minX = Math.min(b.minX, p.x - pad); b.maxX = Math.max(b.maxX, p.x + pad);
+      b.minZ = Math.min(b.minZ, p.z - pad); b.maxZ = Math.max(b.maxZ, p.z + pad);
     });
   });
   return b;
+}
+// The zones a path drawn along nodes `ids` of `line` can cut (none, for a train line): the ones to redo once it's been
+// built or taken away.
+export function zonesNearPath(ids, line) {
+  const b = isTrainLine(line) ? null : pathBounds(ids, line);
+  return b ? S.zones.filter(z => zoneNearBoxes(z, [b])) : [];
 }
 // Whether moving a road from box `a` to box `b` can change what's in `zone`: whether its outline comes within reach of
 // either. Suburbs lay their streets along roads up to STREET_REACH outside them; everything else only minds roads
@@ -522,16 +531,18 @@ dom.addEventListener('pointerup', (e) => {
     if (dist<CLICK_SLOP && dt<600) {
       if (dn.kind==='road') {
         if (S.activeRoadLine) {
-          const ids = S.activeRoadLine.nodeIds;
+          const ids = S.activeRoadLine.nodeIds, line = S.activeRoadLine;
           if (dn.nodeId !== ids[ids.length-1]) {
             ids.push(dn.nodeId);
             S.activeRoadLine.drawing = false;
-            const line = S.activeRoadLine, kind = networkKindOf(line);
+            const kind = networkKindOf(line), drawn = ids.slice();
             const merged = mergeActiveRoadLineInto(dn.nodeId);
             S.activeRoadLine = null;
+            endDrawingPreview(); rebuildRoadMeshes(); zonesNearPath(drawn, line).forEach(subdivideZone);
             selectItem(kind, (merged || line).networkId, true);
-          }
-          rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderHierarchy();
+          } else if (isTrainLine(line)) rebuildRoadMeshes();
+          else showDrawingPreview(line);
+          renderHierarchy();
         } else if (S.lastNodeClick && S.lastNodeClick.kind==='road' && S.lastNodeClick.nodeId===dn.nodeId && (performance.now()-S.lastNodeClick.time)<350) {
           S.lastNodeClick = null;
           deleteRoadNode(dn.nodeId);
@@ -656,7 +667,7 @@ function startBranchFrom(nodeId) {
   insertPreviewMarker.visible = false;
   S.pendingInsert = null;
   selectItem(networkKindOf(source), networkId, true);
-  rebuildRoadMeshes();
+  if (isTrainLine(line)) rebuildRoadMeshes(); else showDrawingPreview(line);
 }
 
 // Only a line of the same type is joined: a walkway finished on a road's node shares that node but stays a network of
@@ -705,7 +716,7 @@ function handleLeftClick(x,y) {
         walkwayTexture, walkwayTextureScale, walkwayTextureRotation, raisedHeight, raisedTrees, raisedBenches, raisedLights, networkId:'net-'+(S.roadNetworkSeq++) };
       S.roadLines.push(line); S.activeRoadLine=line;
     }
-    rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderHierarchy();
+    showDrawingPreview(S.activeRoadLine); renderHierarchy(); // (the line's built when it's finished)
   } else if (S.currentTool==='train') {
     // a new node goes where the cursor meets the height of the line so far (or the default height, for a new line)
     const last = S.activeRoadLine ? roadNodes[S.activeRoadLine.nodeIds[S.activeRoadLine.nodeIds.length-1]] : null;
