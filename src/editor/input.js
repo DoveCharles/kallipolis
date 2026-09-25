@@ -8,6 +8,7 @@ import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { setSelectedMap, setMapHover, startMapTransform, applyMapTransform, confirmMapTransform, cancelMapTransform, previewLine } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, setLinePoints, roadLineWidths } from '../roads/roads.js';
 import { WALKWAY_COLOR, rebuildRoadMeshes } from '../roads/paths.js';
+import { moveRoadDragPreview, endRoadDragPreview, showDrawingPreview, endDrawingPreview } from '../roads/drag-preview.js';
 import { isTrainLine, isTrainNode, networkKindOf, pathTypeOf, currentPathType, trainNodeY, trainPlanePoint, dragTrainPoint, findNearestTrainEdge } from '../trains/trains.js';
 import { setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge } from './hover.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
@@ -121,20 +122,29 @@ function roadNodeLinesBounds(nodeId) {
   let b = null;
   S.roadLines.forEach(line => {
     const ids = line.nodeIds;
-    if (!ids.includes(nodeId)) return;
-    const { hw, cw, sw } = roadLineWidths(line), pad = hw + cw + sw;
-    ids.forEach((id, i) => {
-      if (id !== nodeId && ids[i-1] !== nodeId && ids[i+1] !== nodeId) return;
-      const n = roadNodes[id];
-      if (n) [n, n.handleIn, n.handleOut].forEach(p => {
-        if (!p) return;
-        if (!b) b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
-        b.minX = Math.min(b.minX, p.x - pad); b.maxX = Math.max(b.maxX, p.x + pad);
-        b.minZ = Math.min(b.minZ, p.z - pad); b.maxZ = Math.max(b.maxZ, p.z + pad);
-      });
+    if (ids.includes(nodeId)) b = pathBounds(ids.filter((id, i) => id === nodeId || ids[i-1] === nodeId || ids[i+1] === nodeId), line, b);
+  });
+  return b;
+}
+// the box round nodes `ids` of `line`, as above, grown out of box `b` if there's one
+function pathBounds(ids, line, b = null) {
+  const { hw, cw, sw } = roadLineWidths(line), pad = hw + cw + sw;
+  ids.forEach(id => {
+    const n = roadNodes[id];
+    if (n) [n, n.handleIn, n.handleOut].forEach(p => {
+      if (!p) return;
+      if (!b) b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
+      b.minX = Math.min(b.minX, p.x - pad); b.maxX = Math.max(b.maxX, p.x + pad);
+      b.minZ = Math.min(b.minZ, p.z - pad); b.maxZ = Math.max(b.maxZ, p.z + pad);
     });
   });
   return b;
+}
+// The zones a path drawn along nodes `ids` of `line` can cut (none, for a train line): the ones to redo once it's been
+// built or taken away.
+export function zonesNearPath(ids, line) {
+  const b = isTrainLine(line) ? null : pathBounds(ids, line);
+  return b ? S.zones.filter(z => zoneNearBoxes(z, [b])) : [];
 }
 // Whether moving a road from box `a` to box `b` can change what's in `zone`: whether its outline comes within reach of
 // either. Suburbs lay their streets along roads up to STREET_REACH outside them; everything else only minds roads
@@ -154,6 +164,7 @@ function zoneNearBoxes(zone, boxes) {
 function commitNodeDrag(dn) {
   if (dn.kind === 'road' || dn.kind === 'roadHandle') {
     const line = S.roadLines.find(l => l.nodeIds.includes(dn.nodeId));
+    endRoadDragPreview();
     rebuildRoadMeshes();
     // (trains don't affect zones; and only the zones near where the road was or is now need redoing, which on a big city
     // is a fraction of them — each one's lots, buildings and trees take a while)
@@ -331,11 +342,11 @@ dom.addEventListener('pointermove', (e) => {
           if (n.handleIn) { n.handleIn.x+=dx; n.handleIn.z+=dz; }
           if (n.handleOut) { n.handleOut.x+=dx; n.handleOut.z+=dz; }
         }
-        S.roadsDirty = true; // (rebuilt once a frame by animate(), however many moves the mouse sends in between)
+        moveRoadDragPreview(S.draggedNode); // (the roads themselves are only rebuilt once it's let go of)
       } else if (S.draggedNode.kind==='roadHandle') {
         const n = roadNodes[S.draggedNode.nodeId];
         n[S.draggedNode.which] = gp;
-        S.roadsDirty = true;
+        moveRoadDragPreview(S.draggedNode);
       } else if (S.draggedNode.kind==='zone') {
         const zone=S.zones.find(z=>z.id===S.draggedNode.zoneId);
         if (zone) {
@@ -519,8 +530,20 @@ dom.addEventListener('pointerup', (e) => {
     if (dn.kind==='objectTurn') { endObjectTurn(); return; }
     if (dist<CLICK_SLOP && dt<600) {
       if (dn.kind==='road') {
-        if (S.activeRoadLine) finishOnNode(dn.nodeId);
-        else if (S.lastNodeClick && S.lastNodeClick.kind==='road' && S.lastNodeClick.nodeId===dn.nodeId && (performance.now()-S.lastNodeClick.time)<350) {
+        if (S.activeRoadLine) {
+          const ids = S.activeRoadLine.nodeIds, line = S.activeRoadLine;
+          if (dn.nodeId !== ids[ids.length-1]) {
+            ids.push(dn.nodeId);
+            S.activeRoadLine.drawing = false;
+            const kind = networkKindOf(line), drawn = ids.slice();
+            const merged = mergeActiveRoadLineInto(dn.nodeId);
+            S.activeRoadLine = null;
+            endDrawingPreview(); rebuildRoadMeshes(); zonesNearPath(drawn, line).forEach(subdivideZone);
+            selectItem(kind, (merged || line).networkId, true);
+          } else if (isTrainLine(line)) rebuildRoadMeshes();
+          else showDrawingPreview(line);
+          renderHierarchy();
+        } else if (S.lastNodeClick && S.lastNodeClick.kind==='road' && S.lastNodeClick.nodeId===dn.nodeId && (performance.now()-S.lastNodeClick.time)<350) {
           S.lastNodeClick = null;
           deleteRoadNode(dn.nodeId);
         } else {
@@ -644,7 +667,62 @@ function startBranchFrom(nodeId) {
   insertPreviewMarker.visible = false;
   S.pendingInsert = null;
   selectItem(networkKindOf(source), networkId, true);
-  rebuildRoadMeshes();
+  if (isTrainLine(line)) rebuildRoadMeshes(); else showDrawingPreview(line);
+}
+
+// Ends the line being drawn on an existing node: merged into the line it ends if that's the node's end, else a branch.
+// Back onto one of its own nodes (other than closing a loop on its first) it ends where it is, and drawing carries on
+// from that node as a branch — so the node becomes a junction instead of the line doubling back through it.
+function finishOnNode(nodeId) {
+  const ids = S.activeRoadLine.nodeIds, at = ids.indexOf(nodeId);
+  if (nodeId !== ids[ids.length-1] && (at > 0 || at === 0 && ids.length < 3)) {
+    const line = S.activeRoadLine;
+    line.drawing = false;
+    S.activeRoadLine = null;
+    startBranchFrom(nodeId);
+    S.zones.forEach(subdivideZone); renderHierarchy();
+    return;
+  }
+  if (nodeId !== ids[ids.length-1]) {
+    ids.push(nodeId);
+    S.activeRoadLine.drawing = false;
+    const line = S.activeRoadLine, kind = networkKindOf(line);
+    const merged = mergeActiveRoadLineInto(nodeId);
+    S.activeRoadLine = null;
+    selectItem(kind, (merged || line).networkId, true);
+  }
+  rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderHierarchy();
+}
+
+// Join toggle (#join-toggle, beside the grid magnet): whether pathNodeUnder joins roads onto paths; remembered.
+const SNAP_TO_PATHS_KEY = 'splinetopia.snapToPaths';
+let snapToPaths = true;
+try { snapToPaths = localStorage.getItem(SNAP_TO_PATHS_KEY) !== '0'; } catch {}
+const joinToggle = document.getElementById('join-toggle');
+joinToggle.classList.toggle('active', snapToPaths);
+joinToggle.addEventListener('click', () => {
+  snapToPaths = !snapToPaths;
+  joinToggle.classList.toggle('active', snapToPaths);
+  try { localStorage.setItem(SNAP_TO_PATHS_KEY, snapToPaths ? '1' : '0'); } catch {}
+});
+
+// A click on another path of the same type's surface: the node it should join there — that path's node if one's within
+// its half-width of the click, else a new node on its edge — so the two meet at a junction instead of just overlapping
+// (lanes and junctions only link at shared nodes). Null if the click isn't on one.
+function pathNodeUnder(gp) {
+  if (!snapToPaths) return null;
+  const found = findNearestEdge(gp, 0, S.activeRoadLine);
+  if (!found || found.kind!=='road') return null;
+  const reach = roadLineWidths(found.line).hw, ids = found.line.nodeIds;
+  if (found.dist > reach) return null;
+  const nearest = [ids[found.index], ids[found.index+1]]
+    .map(id => ({ id, d: Math.hypot(roadNodes[id].x-gp.x, roadNodes[id].z-gp.z) }))
+    .sort((a, b) => a.d-b.d)[0];
+  if (nearest.d <= reach) return nearest.id;
+  const pt = snapPointToGrid(found.point, 'road'), id = 'n'+(S.roadNodeSeq++);
+  roadNodes[id] = { x:pt.x, z:pt.z, type:'poly', handleIn:null, handleOut:null };
+  ids.splice(found.index+1, 0, id);
+  return id;
 }
 
 // Ends the line being drawn on an existing node: merged into the line it ends if that's the node's end, else a branch.
@@ -754,7 +832,7 @@ function handleLeftClick(x,y) {
         walkwayTexture, walkwayTextureScale, walkwayTextureRotation, raisedHeight, raisedTrees, raisedBenches, raisedLights, networkId:'net-'+(S.roadNetworkSeq++) };
       S.roadLines.push(line); S.activeRoadLine=line;
     }
-    rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderHierarchy();
+    showDrawingPreview(S.activeRoadLine); renderHierarchy(); // (the line's built when it's finished)
   } else if (S.currentTool==='train') {
     // a new node goes where the cursor meets the height of the line so far (or the default height, for a new line)
     const last = S.activeRoadLine ? roadNodes[S.activeRoadLine.nodeIds[S.activeRoadLine.nodeIds.length-1]] : null;

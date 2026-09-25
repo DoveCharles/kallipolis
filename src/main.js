@@ -65,7 +65,8 @@ import { mulberry32 } from './core/math.js';
 import { createWindowMaterial } from './buildings/windows.js';
 import { renderMapsList } from './maps/map-images.js';
 import { updatePedView } from './ui/ped-view.js';
-import { applyPathShader, applyWalkwayShader, rebuildRoadMeshes } from './roads/paths.js';
+import { applyPathShader, applyWalkwayShader } from './roads/paths.js';
+import { updateRoadDragPreview } from './roads/drag-preview.js';
 import { disposeRetiredMaterials } from './roads/roads.js';
 import { updateTrafficLights } from './roads/markings.js';
 import { loadCarriageModel, updateTrainShuttles, scaleNodeUi, nodeUiMaterial } from './trains/trains.js';
@@ -96,7 +97,7 @@ import { hideBuildingsAroundCamera } from './buildings/see-through.js';
 import { updateBuildingBatches } from './buildings/building-batches.js';
 import { updateNodeHighlight } from './editor/node-highlight.js';
 import { renderView } from './ui/pixelation.js';
-import { loadStatueModel } from './objects/object-types.js';
+import { loadStatueModel, loadBeerStallModel } from './objects/object-types.js';
 import { stillLoading, compileWhileLoading, waitForModels } from './ui/loading.js';
 
 // ============================================================ init
@@ -105,7 +106,7 @@ renderHierarchy();
 renderMapsList();
 renderWorldTintPanel();
 waitForModels([loadCarriageModel(), loadPersonModel(), loadCarModels(), loadBeeModel(), loadPigeonModel(), loadHouseModels(), loadPlaneModel(),
-  loadFountainModel(), loadStatueModel()]);
+  loadFountainModel(), loadStatueModel(), loadBeerStallModel()]);
 // Roads, zones and water are thrown away and rebuilt wholesale on every edit, and three.js deletes a shader program as soon
 // as the last material using it is disposed — so a rebuild that replaces every material of one kind (every water tile,
 // every road surface…) would compile that shader again from scratch: a hitch of up to a third of a second. One
@@ -154,7 +155,7 @@ function animate() {
   skyDome.position.copy(camera.position);
   const t = performance.now()*0.001;
   updateTrainShuttles(t);
-  if (S.roadsDirty) rebuildRoadMeshes(); // (a node drag asks for this rather than rebuilding on every mouse move)
+  updateRoadDragPreview();
   if (S.waterDirty) rebuildWater();
   updatePeople(t);
   updateGiblets(t);

@@ -4,6 +4,8 @@ import { roadNodes, mapImages } from '../core/state.js';
 import { importMapImageFile, setSelectedMap, removeMapImage, previewLine } from '../maps/map-images.js';
 import { disposeObject } from '../roads/roads.js';
 import { rebuildRoadMeshes } from '../roads/paths.js';
+import { endDrawingPreview } from '../roads/drag-preview.js';
+import { zonesNearPath } from './input.js';
 import { networkKindOf, pathTypeOf, currentPathType, rebuildTrainMeshes, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { setHover, insertPreviewMarker } from './hover.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
@@ -20,11 +22,13 @@ export function cancelActiveDrawing() {
   disarmObject(); // whatever the Objects palette had armed (see objects.js)
   App.cancelObjectTransform(); // and a prop left following the cursor under g/r/s goes back where it was
   if (S.activeRoadLine) {
+    const near = zonesNearPath(S.activeRoadLine.nodeIds, S.activeRoadLine); // (while its nodes are still there)
     S.roadLines = S.roadLines.filter(l=>l.id!==S.activeRoadLine.id);
     cleanupOrphanRoadNodes();
     S.activeRoadLine=null;
+    endDrawingPreview();
     rebuildRoadMeshes();
-    S.zones.forEach(subdivideZone);
+    near.forEach(subdivideZone);
   }
   if (S.activeZone) {
     S.zones = S.zones.filter(z=>z.id!==S.activeZone.id);
@@ -49,7 +53,9 @@ export function finishActiveDrawing() {
     const finishedLine = S.activeRoadLine;
     finishedLine.drawing=false;
     S.activeRoadLine=null;
+    endDrawingPreview();
     rebuildRoadMeshes();
+    zonesNearPath(finishedLine.nodeIds, finishedLine).forEach(subdivideZone);
     previewLine.visible=false;
     selectItem(networkKindOf(finishedLine), finishedLine.networkId, true);
   }
@@ -111,11 +117,11 @@ export function applyModeVisibility() {
   App.hideContextMenu();
   const inNode = S.interactionMode==='node', inPaths = S.currentTool==='road' || S.currentTool==='train', inObjects = S.currentTool==='objects';
   if (inPaths) S.lastPathTool = S.currentTool;
-  // each tab shows (and lets you pick) only its own nodes — though zones' outlines stay on show in the Paths tab
+  // each tab shows (and lets you pick) only its own nodes, and zones' outlines only show in the Zones tab
   S.roadMarkerGroup.visible = inNode && inPaths;
   S.roadHandleGroup.visible = inNode && inPaths;
   S.zones.forEach(z => {
-    if (z.outlineGroup) z.outlineGroup.visible = inNode && !inObjects;
+    if (z.outlineGroup) z.outlineGroup.visible = inNode && S.currentTool==='zone';
     if (z.markerGroup) z.markerGroup.visible = inNode && S.currentTool==='zone';
   });
   document.getElementById('section-paths').style.display = (inNode && inPaths) ? 'block' : 'none';

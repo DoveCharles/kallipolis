@@ -391,7 +391,6 @@ function uncoveredRanges(ranges) {
   return out;
 }
 export function rebuildRoadMeshes() {
-  S.roadsDirty = false;
   scene.remove(S.roadMeshGroup); disposeObject(S.roadMeshGroup);
   if (roadMask) { scene.remove(roadMask); disposeObject(roadMask); roadMask = null; }
   S.roadMeshGroup = new THREE.Group(); S.roadMeshGroup.name='Roads';

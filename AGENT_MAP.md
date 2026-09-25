@@ -137,7 +137,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `map-images.js` (9K) ---------------------------------------------------------- map images (reference tracing) — exports: importMapImageFile, renderMapsList, setSelectedMap, setMapHover, removeMapImage, startMapTransform, applyMapTransform, confirmMapTransform …
 
 ### src/objects/
-- `object-types.js` (19K) The catalogue the Objects tab places from: — exports: loadStatueModel, OBJECT_TYPES, objectTypeOf
+- `object-types.js` (19K) The catalogue the Objects tab places from (the statue and beer stall are assets/models/Statue.glb and BeerStand.glb, the rest built from boxes and posts): — exports: loadStatueModel, loadBeerStallModel, OBJECT_TYPES, objectTypeOf
 - `objects.js` (30K) The Objects tab: — exports: objectGroup, Y_OBJECT, MIN_OBJECT_SCALE, invalidateObjectFacing, streetFacingAt, objectById, addObject, removeObject …
 
 ### src/project/
@@ -148,6 +148,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `save-load.js` (17K)  — exports: serializeProject, downloadFile, loadProjectFromData
 
 ### src/roads/
+- `drag-preview.js` (7K) ---------------------------------------------------------- road drag preview While a path node's dragged, a flat green strip the path's width follows it instead of rebuilding the roads each move; they're rebuilt once on release. A path being drawn shows as the same strip until it's finished or cancelled — exports: moveRoadDragPreview, endRoadDragPreview, showDrawingPreview, endDrawingPreview, updateRoadDragPreview
 - `markings.js` (11K) ---------------------------------------------------------- road markings & traffic lights Sidewalk roads get painted markings: — exports: placeKey, signalState, signalRedLeft, updateTrafficLights
 - `paths.js` (27K) ---------------------------------------------------------- walkways A road network can be a walkway instead of a sidewalk road: — exports: WALKWAY_COLOR, DIRT_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURES, WALKWAY_TEXTURE, defaultWalkwayTextureScale, walkwayTextureScaleOf, isWalkwayLine …
 - `raised.js` (19K) ---------------------------------------------------------- raised walkways A walkway up on pillars: — exports: RAISED_HEIGHT, RAISED_STRUCTURE_COLOR, isRaisedWalkwayLine, raisedHeightOf, rampShape, buildRaisedWalkway

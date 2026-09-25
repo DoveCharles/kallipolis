@@ -62,7 +62,7 @@ export function rebuildZoneVisual(zone) {
   markerGroup.visible = S.interactionMode==='node' && S.currentTool==='zone'; // (a zone's points only show in the Zones tab)
   g.add(markerGroup);
   zone.markerGroup = markerGroup;
-  g.visible = (S.interactionMode==='node');
+  g.visible = S.interactionMode==='node' && S.currentTool==='zone'; // (the Zones tab's alone)
   zone.outlineGroup = g;
   scene.add(g);
 }

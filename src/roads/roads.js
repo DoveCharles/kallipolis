@@ -40,7 +40,6 @@ S.roadBuildSeq = 0;  // bumped on every road rebuild, so rebuildWater knows its 
 S.waterDirty = true; // set by anything that can change the water or what crosses it; animate() rebuilds it once per frame
 S.peopleNavDirty = true; // set whenever roads or zones change — see "people"
 S.trafficNavDirty = true; // set whenever roads change — see "traffic"
-S.roadsDirty = false; // set by a node drag; animate() rebuilds the roads once per frame (see rebuildRoadMeshes)
 // While a path is selected (or a node's being dragged) it's likely still being edited, so people and traffic keep using
 // the nav they have and only rebuild theirs once it's let go of — rebuilding on every drag step or slider tick is slow.
 export function navRebuildOnHold() { return S.selection.type === 'road' || S.draggedNode != null; }
