@@ -2,7 +2,7 @@
 I hope the day is kind to me.
 Where am I?
 I need to get home and feed my [pets: plural].
-Where the fuck did I put my [physical]? {aggression}
+Where the fuck did I put my [belongings]? {aggression}
 I've been meaning to call my mother.
 I really hate [interests: general, hated].
 [interests: general]... fascinating. {nosy}
@@ -22,6 +22,10 @@ One step and it'd all be over. {here.roadside, mood = -1, evil}
 Look both ways. Look both ways. {here.crossing}
 Nearly there. {here.path}
 Don't look down. {here.bridge}
+I should [actions] more.
+Today's the [bad: superlative] day ever. {mood = -1}
+What a [good] day. {mood}
+I'd love to [violence] someone right now. {is = bloodlusting}
 Everything's spinning. {is = drunk}
 Which way is home again? {is = drunk}
 I love everyone. {is = drunk, happy}
@@ -30,3 +34,17 @@ Is the ground moving or is it me? {is = drunk}
 Blood. I need blood. {is = bloodlusting}
 They all look so... breakable. {is = bloodlusting, evil}
 Who's next? {is = bloodlusting}
+Mmm... [tastes].
+I should get into [hobbies].
+I love [topics].
+I hate [topics: hated]. {mood = -0.5}
+I need a shower. {is = bloody}
+Why does this keep happening to me? {is = bloody, mood = -1}
+Everyone's staring at me. {is = bloody, nosy}
+Ow. Everything hurts. {is = hurt}
+I should see a doctor. {is = hurt, patience}
+Stop crying. Just stop crying. {is = sad}
+Nobody cares. {is = sad, mood = -1}
+Today's actually going alright. {is = happy}
+Don't look back. Keep going. {is = scared}
+Sober as a judge. {is != drunk, here.building = pub, weight = 0.5}

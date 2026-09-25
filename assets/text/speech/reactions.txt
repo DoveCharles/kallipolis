@@ -81,5 +81,24 @@ Not worth it. {felt = gaveup, patience, thought}
 I'll get you next time, [felt.by]. {felt = gaveup}
 I'm too old for chasing people. {felt = gaveup, speed < 0, thought}
 
+# ---- blood
+Is this... blood?! {felt = bloodsoaked}
+> Don't touch me! {other.is = bloody}
+> Whose is it? {nosy}
+Get it off me! Get it off! {felt = bloodsoaked, shock}
+Whose blood is this?! {felt = bloodsoaked}
+This was my good [belongings]... {felt = bloodsoaked, mood = -1}
+I'm going to be sick. {felt = bloodsoaked, mood = -1}
+Mmm, still warm. {felt = bloodsoaked, evil > 0.5}
+It's in my mouth. It's in my mouth! {felt = bloodsoaked, shock}
+Finally, it's off. {felt = bloodclean}
+> What was? {nosy}
+Good as new. {felt = bloodclean, happy}
+I'll never get that smell out. {felt = bloodclean, mood = -1, thought}
+I can still feel it on me... {felt = bloodclean, shock, thought}
+Shame, I liked the colour. {felt = bloodclean, evil}
+Let's never speak of this. {felt = bloodclean, patience}
+
 Did you see that?! {seen, weight = 0.5}
 > I didn't see anything. {evil}
+> You look pale. {other.is = scared}

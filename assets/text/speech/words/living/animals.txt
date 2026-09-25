@@ -5,5 +5,5 @@ rhino
 owl
 sheep | sheep
 snake
-Penis Monster
-Tiny Jester
+penis monster
+tiny jester

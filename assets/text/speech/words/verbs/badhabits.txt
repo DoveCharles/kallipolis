@@ -1,0 +1,10 @@
+# Bad habits, as verbs (see about.txt): "they [badhabits]", "she [badhabits: past]", "he [badhabits: third]",
+# "they're [badhabits: ing]". The third is made from the base when left out (first word + s).
+forms: base | past | ing | third
+bite | bit | biting
+shit a lot | shat a lot | shitting a lot
+cum constantly | came constantly | cumming constantly
+scream at night | screamed at night | screaming at night
+chew with their mouth open | chewed with their mouth open | chewing with their mouth open | chews with their mouth open
+leave the toilet seat up | left the toilet seat up | leaving the toilet seat up
+talk in their sleep | talked in their sleep | talking in their sleep

@@ -1,0 +1,9 @@
+# Parts of a body (see about.txt).
+forms: singular | plural | general
+tongue
+finger
+toe
+tooth | teeth
+foot | feet
+elbow
+knee

@@ -1,0 +1,5 @@
+# Every physical thing (see about.txt): nothing of its own, only other categories. Ideas and feelings — things you
+# can't touch — are in ideas/concepts.txt instead.
+[belongings]
+[bodyparts] {weight = 0.5}
+[foods] {weight = 0.5}

@@ -1,0 +1,14 @@
+# Everything people love and hate, by topic (see about.txt): the entries of people/loves.txt and hates.txt, sorted.
+# "I love [topics]", "I can't stand [topics: hated]" — a speaker's own loves (hates, in a hated call) come up half the time.
+[tastes]
+[hobbies]
+[habits]
+[media]
+[folk]
+[nature]
+[beliefs]
+[health]
+[stuff]
+[vice] {weight = 0.5}
+[lewd] {weight = 0.3}
+[surreal] {weight = 0.5}

@@ -1,0 +1,11 @@
+# Things people carry, lose or put down (see about.txt): "Where did I put my [belongings]?"
+forms: singular | plural | general
+keys | keys
+phone
+wallet
+glasses | glasses
+umbrella
+sponge
+handbag
+lighter
+[utensils] {weight = 0.5}

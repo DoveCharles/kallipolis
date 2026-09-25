@@ -5,9 +5,13 @@ Alright, bye then! {end, patience}
 Well, I'd better be off. {end, patience}
 Lovely to see you! {end, happy}
 Catch you later, [other.name]. {end}
-Must dash — [physical: plural] to find. {end, fidgety}
+Must dash — [belongings: plural] to find. {end, fidgety}
 Anyway, I've got to go. {end}
 I'm bored. Bye. {end = bad, patience = -1}
 Talk to you never. {end = bad, evil, patience = -1}
 Get out of my face. {end = bad, aggression, patience = -1}
 Whatever, [swear]. {end = bad, aggression}
+Cheer up, [other.name]. Bye! {end, other.is = sad, evil = -1}
+Go and sleep it off. {end, other.is = drunk}
+You should get that looked at. Bye! {end, other.is = hurt}
+And wash that blood off! {end, other.is = bloody}

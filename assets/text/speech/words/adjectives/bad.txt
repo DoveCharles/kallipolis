@@ -1,0 +1,8 @@
+# Nasty words (see about.txt): "What a [bad] day", "It's [bad: comparative] than ever".
+forms: base | comparative | superlative
+awful {mood = -0.5}
+bad | worse | worst
+grim {mood = -1}
+rotten
+horrible {evil = 0.3}
+miserable {mood = -1}

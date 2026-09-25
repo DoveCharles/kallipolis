@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { S } from '../../core/shared.js';
 import { PERSON_TRAIT_COLORS } from './peopleModel.js';
-import { PEOPLE_MAX, beginFleeing, isGone, people, peopleRng, personModel } from './people.js';
+import { PEOPLE_MAX, beginFleeing, feel, isGone, people, peopleRng, personModel } from './people.js';
 import { canBeKnockedOver, endActivity, goAfter } from './peopleActivities.js';
 import { spillBlood } from '../giblets.js';
 
@@ -92,6 +92,7 @@ function splatter(p, i, from, points) {
       return [part, [data[o], data[o + 1], data[o + 2]]];
     }));
     p.bloodTimer = BLOOD_FADE_TIME;
+    feel(p, 'bloodsoaked'); // (for what they say: see life/speech-text.js)
   }
   p.blood = Math.min(BLOOD_MAX, (p.blood ?? 0) + points);
   stain(p, i);
@@ -115,7 +116,7 @@ export function updateBlood(p, dt, i) {
   p.blood--;
   p.bloodTimer = BLOOD_FADE_TIME;
   stain(p, i);
-  if (p.blood <= 0) { p.blood = 0; p.bloodBase = null; return; }
+  if (p.blood <= 0) { p.blood = 0; p.bloodBase = null; feel(p, 'bloodclean'); }
 }
 
 /**

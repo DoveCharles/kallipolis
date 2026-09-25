@@ -1,7 +1,0 @@
-# Things (see about.txt): everything physical, plus body parts.
-forms: singular | plural | general
-[physical]
-tongue
-finger
-toe
-tooth | teeth

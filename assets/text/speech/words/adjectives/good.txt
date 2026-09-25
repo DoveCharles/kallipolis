@@ -1,0 +1,10 @@
+# Nice words (see about.txt): "What a [good] day", "It's [good: comparative] than yesterday", "the [good: superlative]".
+# Comparative and superlative are made when left out (-er/-est, or more/most for long words).
+forms: base | comparative | superlative
+lovely {happy}
+nice
+brilliant
+good | better | best
+great
+gorgeous {happy}
+cosy {lounging}

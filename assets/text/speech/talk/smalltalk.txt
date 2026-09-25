@@ -19,9 +19,12 @@ Have you tried the new place on the corner?
 > [dismissal]
 
 Anyway, how are you?
-> Good, good. {mood}
-> Awful. {mood = -1}
+> Good, good. {mood, is != sad}
+> Never better! {is = happy}
+> Awful. {mood = -1, is != happy}
 >> Oh no, what happened?
+> Covered in blood, [other.name]. Can't you tell? {is = bloody}
+> Honestly? I'm hurting. {is = hurt}
 > [dismissal] {aggression}
 
 It's going to rain later, apparently. {world.weather = rain, weight = 0.5}
@@ -36,7 +39,9 @@ Another day at the office. {here.building = office}
 > Don't remind me. {mood = -1}
 Same again? {here.building = pub}
 > Go on then.
-> I've had enough. {patience}
+> I've had enough. {patience, is != drunk}
+> I think you've had enough, [other.name]. {other.is = drunk}
+>> One more won't hurt. {is = drunk}
 It's cosy in here, isn't it? {here.indoors, happy}
 Lovely day to be out. {here.outdoors, world.weather = clear, mood}
 Why are you always so twitchy? {other.fidgety > 0.3}
@@ -45,8 +50,38 @@ Why are you always so twitchy? {other.fidgety > 0.3}
 You're in a rush today. {other.speed > 0.3, nosy}
 > Places to be!
 Take your time, why don't you. {other.speed < -0.3, patience < 0}
-You seem cheerful. {other.happy > 0.4, other.happy}
+You seem cheerful. {other.is = happy}
 > Life's good! {happy}
-You look like you've seen a ghost. {other.shock > 0.3}
+You look like you've seen a ghost. {other.is = scared}
+> I think I just did. {seen}
+Why the long face? {other.is = sad}
+> Leave it. {patience = -1}
+> It's been a [bad: superlative] day. {mood = -1}
+>> Chin up, [other.name]. {evil = -1}
+Is that blood on you?! {other.is = bloody}
+> It's not mine. {evil}
+> Long story.
+> What blood? {evil > 0.5}
+>> ...Right. {end = bad}
+Are you alright? You look terrible. {other.is = hurt, evil = -1}
+> I've been better.
+> Thanks a lot. {aggression}
+You're drunk, aren't you? {other.is = drunk}
+> I'm not drunk, YOU'RE drunk. {is = drunk}
+> Just a little. {is = drunk, happy}
+What a [good] day! {mood}
+> Is it? It's [bad: comparative] than yesterday. {mood = -1}
+> Yes, [good: superlative] one this week! {happy}
+What do you do for fun?
+> I [actions]. {happy}
+>> Oh, I love [actions: ing]!
+> Mostly [badhabits: ing]. {evil}
+Do you like [hobbies#1]?
+> I love [hobbies#1]! {happy}
+> Ugh, [hobbies#1]. {mood = -1}
+>> Fair enough.
+I could really go for some [tastes] right now.
+> Same. {happy}
 Good morning! {world.hour 6-11}
-> Is it? {mood = -1}
+> Is it? {mood = -1, is != happy}
+> You're chirpy. {other.is = happy}

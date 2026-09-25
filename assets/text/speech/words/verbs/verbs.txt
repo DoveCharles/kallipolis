@@ -1,0 +1,4 @@
+# Every verb (see about.txt): nothing of its own, only other categories. Call with a form: [verbs: ing].
+[actions] {weight = 3}
+[badhabits]
+[violence] {weight = 0.3}
