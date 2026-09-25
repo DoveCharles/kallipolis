@@ -785,8 +785,9 @@ function joinDraggedNode(nodeId) {
     if (pathTypeOf(l) !== type) return;
     const reach = halfWidthOf(l);
     l.nodeIds.forEach(id => {
-      if (id === nodeId || neighbours.has(id)) return;
-      const d = Math.hypot(roadNodes[id].x-n.x, roadNodes[id].z-n.z);
+      const m = roadNodes[id]; // (a line can name a node that's gone: skipped, as findNearestEdge does)
+      if (id === nodeId || neighbours.has(id) || !m) return;
+      const d = Math.hypot(m.x-n.x, m.z-n.z);
       if (d <= reach && d < best) { best = d; target = id; }
     });
   });
