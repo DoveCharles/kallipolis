@@ -1,5 +1,5 @@
 // ============================================================ entries with traits
-// The shared reader for lines in the .txt files that describe things (people.txt, cars.txt, ...). A line is an entry: its
+// The shared reader for lines in the .txt files that describe things (people/*.txt, cars.txt, ...). A line is an entry: its
 // text, then optional [brackets] holding traits (`speed = 2`, `solo`), rules (`limit = 1a`) and `choiceweight = n`.
 // Every kind shares the trait table in core/traits.js.
 import { TRAITS, TRAIT_MACROS, modifierLines } from './traits.js';
@@ -65,12 +65,12 @@ export const weighted = entry => Array.from({ length: entry.weight }, () => entr
 //
 // A section's lines are `attribute = value`, and it's the value that's the entry, so `name = Train` gives the text
 // "Train" (and `loves = Shoooom [choiceweight = 2]` carries that weight). Lines with no `=` are entries whole — the lists
-// in people.txt, which has no attributes to name.
+// in people's files, which have no attributes to name.
 //
 // Returns { sections, starts: { trait: value }, distribution: [[count…, weight]] or null }, where a section is an object
 // of its attributes, each holding the entries written for that attribute — `sections.taxi.loves` is every love a taxi
 // could have, in the order the file gave them, so a reader picks one by number. `settings` (buildings' `enterable`) are
-// kept beside them as the text they were written as. A file that writes lines with no `=` at all — people.txt's lists —
+// kept beside them as the text they were written as. A file that writes lines with no `=` at all — the people/*.txt lists —
 // has them all under the heading's own name instead: `sections['boy names']`.
 // A setting like `enterable = yes`, or an attribute line, split into its key and everything after the `=`. Null when the
 // line isn't one: `Alfie [agemult = 0.8]` and `😀 [mood = 0.6]` are whole entries carrying a trait, and the `=` in their
@@ -115,7 +115,7 @@ export function parseSections(text, { traits: table = TRAITS, file, attributes =
     }
     const pair = pairOf(line), pairKey = pair && pair.key;
     // an attribute line is an entry in its value alone, so `name = Train` and `loves = Shoooom [choiceweight = 2]` read
-    // as "Train" and "Shoooom" with that trait; a line with no `=` (people.txt's lists) is the whole entry
+    // as "Train" and "Shoooom" with that trait; a line with no `=` (the people/*.txt lists) is the whole entry
     const entry = entryOf(pair ? pair.value : line, { traits: table, file });
     if (!entry.text) return;
     if (pair && attributes && !attributes.includes(pairKey) && !settings.includes(pairKey)) {
@@ -123,7 +123,7 @@ export function parseSections(text, { traits: table = TRAITS, file, attributes =
       return;
     }
     // `group` is the attribute the line belongs to: its own name where that's one of the reader's, else the heading (which
-    // is what a file of plain lists, like people.txt, ends up using for every line under it)
+    // is what a file of plain lists, like people's, ends up using for every line under it)
     const group = pair ? (pairKey === current ? 'lines' : pairKey) : current;
     // a setting like `enterable = yes` is kept as a plain entry, so the reader reads it the same way as any other value
     const kept = pair && settings.includes(pairKey) ? plainEntry(pair.value) : entry;
@@ -146,7 +146,7 @@ export function combineTraits(entries, table = TRAITS, start = startingTraits(ta
 // ---- how many of each: picking several entries per attribute
 // How many of a counted attribute a thing gets when its file doesn't say: mostly one of each, sometimes two of one and
 // none of the other. One count per counted attribute, then how likely that row is relative to the others (see
-// pickCounts) — so a file only needs its own table where it wants a different spread (people.txt's loves and hates,
+// pickCounts) — so a file only needs its own table where it wants a different spread (people's loves and hates — people/about.txt —
 // cars' loves and hates and so on all get this one).
 export const DEFAULT_COUNTS = [[1, 1, 0.6], [2, 0, 0.1], [0, 2, 0.1], [2, 1, 0.1], [1, 2, 0.1]];
 const limitsOf = entry => entry.rules.filter(([key]) => key === 'limit').map(([, value]) => ({ rule: value.slice(0, -1), polarity: value.slice(-1) }));

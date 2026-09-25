@@ -4,11 +4,19 @@
 // - Options > Game > Start in Edit mode: on, the side panel slides in once loaded; off, the app opens in World instead.
 // - Options > Game > Encourage To Watch TV (S.encourageTV, off by default): on, a home shown with people in it has one of them already sat on
 //   the sofa, so the TV's on straight away (see aboutTheRoom in life/people/peopleActivities.js).
+// - Options > Speech > Chat speed (S.chatSpeed, 1 by default): how often real lines are said (see audio/dictionary.js).
+// - Options > Speech > Hearing distance (S.hearDistance, 40): how far off talk is heard (see audio/voices.js).
+// - Options > Speech > Babble only as fallback (S.babbleFallbackOnly, off): people say real lines whenever one can be
+//   had, babbling only when none can (see linePause in audio/dictionary.js).
+// - Options > Speech > Bubble distance (S.bubbleDistance, 35) and Babble bubbles (S.babbleBubbles, off): see ui/speech-bubbles.js.
 import { S } from '../core/shared.js';
 import { whenLoaded } from './loading.js';
 
 const EDIT_HINTS_KEY = 'splinetopia.editHints', GENERAL_HINTS_KEY = 'splinetopia.generalHints';
 const START_EDIT_KEY = 'splinetopia.startInEdit', ENCOURAGE_TV_KEY = 'splinetopia.encourageTV';
+const CHAT_SPEED_KEY = 'splinetopia.chatSpeed', BUBBLE_DISTANCE_KEY = 'splinetopia.bubbleDistance';
+const HEAR_DISTANCE_KEY = 'splinetopia.hearDistance';
+const BABBLE_BUBBLES_KEY = 'splinetopia.babbleBubbles', BABBLE_FALLBACK_KEY = 'splinetopia.babbleFallbackOnly';
 const body = document.body;
 const startEditToggle = document.getElementById('s-starteditmode');
 
@@ -41,6 +49,43 @@ encourageTVToggle.addEventListener('click', () => {
   S.encourageTV = !S.encourageTV;
   encourageTVToggle.classList.toggle('on', S.encourageTV);
   remember(ENCOURAGE_TV_KEY, S.encourageTV);
+});
+
+// a slider saved to `key`, setting S[field] (the slider's own value by default)
+function prefSlider(name, key, field) {
+  const slider = document.getElementById(`s-${name}`), shown = document.getElementById(`dv-${name}`);
+  let saved = null;
+  try { saved = parseFloat(localStorage.getItem(key)); } catch (err) { /* storage blocked */ }
+  S[field] = saved > 0 ? saved : parseFloat(slider.value);
+  slider.value = shown.textContent = String(S[field]);
+  slider.addEventListener('input', () => {
+    S[field] = parseFloat(slider.value);
+    shown.textContent = String(S[field]);
+    try { localStorage.setItem(key, String(S[field])); } catch (err) { /* storage blocked */ }
+  });
+}
+prefSlider('chatspeed', CHAT_SPEED_KEY, 'chatSpeed');
+prefSlider('bubbledistance', BUBBLE_DISTANCE_KEY, 'bubbleDistance');
+prefSlider('heardistance', HEAR_DISTANCE_KEY, 'hearDistance');
+// a toggle switch saved to `key`, setting S[field]
+function prefToggle(id, key, field, fallback) {
+  const toggle = document.getElementById(id);
+  S[field] = recall(key, fallback);
+  toggle.classList.toggle('on', S[field]);
+  toggle.addEventListener('click', () => {
+    S[field] = !S[field];
+    toggle.classList.toggle('on', S[field]);
+    remember(key, S[field]);
+  });
+}
+prefToggle('s-babblefallback', BABBLE_FALLBACK_KEY, 'babbleFallbackOnly', false);
+S.babbleBubbles = recall(BABBLE_BUBBLES_KEY, false);
+const babbleBubblesToggle = document.getElementById('s-babblebubbles');
+babbleBubblesToggle.classList.toggle('on', S.babbleBubbles);
+babbleBubblesToggle.addEventListener('click', () => {
+  S.babbleBubbles = !S.babbleBubbles;
+  babbleBubblesToggle.classList.toggle('on', S.babbleBubbles);
+  remember(BABBLE_BUBBLES_KEY, S.babbleBubbles);
 });
 
 // The page starts in Edit (core/state.js) with the panel hidden (index.html). Once everything's loaded (see loading.js),

@@ -1,5 +1,6 @@
 import { camera } from '../core/scene.js';
-import { listener, isMuted, heardFrom, muffler } from './sfx.js';
+import { S } from '../core/shared.js';
+import { listener, isMuted, heardFrom, muffler, ear } from './sfx.js';
 import { melodyOf } from './melodies.js';
 
 // ============================================================ voices
@@ -33,9 +34,24 @@ const CONSONANTS = [
   { kind: 'glide', from: [250, 2300], time: 0.06 },               // y
   null, null,
 ];
-const HEAR_DISTANCE = 40;          // beyond this from the camera they aren't heard at all
+const HEAR_DISTANCE = 40;          // beyond this from the camera they aren't heard at all (unless set by Options > Speech > Hearing distance: S.hearDistance)
 const REF_DISTANCE = 5;            // how near to be heard at full volume
-const ROLLOFF = 2.5;               // how fast they fade past that (1 is the inverse law: a tenth as loud at ten times as far)
+const ROLLOFF = 3;                 // how fast they fade past that (1 is the inverse law: a tenth as loud at ten times as far)
+const EDGE_POWER = 1.5;            // and on top, fading to nothing at the hearing distance: × (1 − distance ÷ it)^EDGE_POWER
+/**
+ * How much quieter a voice this far from the camera is kept, on top of its falloff with distance: fading to nothing as it
+ * nears the hearing distance, so voices thin out towards the edge rather than cutting off (babble, cries and lines alike).
+ * @param {{x: number, y: number, z: number}} at
+ * @returns {number} 0 to 1
+ */
+export function edgeFade(at) {
+  const { x, y, z } = ear;
+  return Math.pow(Math.max(0, 1 - Math.hypot(at.x - x, at.y - y, at.z - z)/hearDistance()), EDGE_POWER);
+}
+/** How far off people's talk is heard: Options > Speech > Hearing distance, else HEAR_DISTANCE. @returns {number} */
+export const hearDistance = () => S.hearDistance ?? HEAR_DISTANCE;
+/** Full volume within this; grows with hearDistance, so a further setting is louder further off. @returns {number} */
+export const hearRef = () => REF_DISTANCE*hearDistance()/HEAR_DISTANCE;
 const MUFFLE = 1.4;                // how fast the top comes off past REF_DISTANCE (see muffler in sfx.js): far off, talk's a murmur, not words
 const VOLUME = 0.22;
 const BLIPS_MAX = 12;              // syllables sounding at once, past which new ones are dropped
@@ -171,8 +187,9 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   const { formant, sharpness } = voice;
   const context = listener.context;
   if (isMuted() || context.state !== 'running') return;
-  const { x, y, z } = camera.position;
-  if (Math.hypot(at.x - x, at.y - y, at.z - z) > HEAR_DISTANCE) return;
+  const { x, y, z } = ear;
+  if (Math.hypot(at.x - x, at.y - y, at.z - z) > hearDistance()) return;
+  level *= edgeFade(at);
   const now = context.currentTime, end = now + Math.max(0.05, length);
   const oscillator = context.createOscillator();
   oscillator.type = 'sawtooth';
@@ -207,10 +224,10 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   const panner = context.createPanner();
   panner.panningModel = 'equalpower';
   panner.distanceModel = 'inverse';
-  panner.refDistance = REF_DISTANCE;
+  panner.refDistance = hearRef();
   panner.rolloffFactor = ROLLOFF;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  const muffle = muffler(at, REF_DISTANCE, MUFFLE);
+  const muffle = muffler(at, hearRef(), MUFFLE);
   muffle.connect(panner);
   gain.connect(muffle);
   panner.connect(heardFrom(at, 'peds'));

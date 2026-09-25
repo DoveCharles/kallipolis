@@ -3,10 +3,10 @@ import { App, S } from '../../core/shared.js';
 import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
-import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
+import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
 import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver } from './peopleActivities.js';
-import { placeAtVertex, reseatPerson } from './peoplePathing.js';
+import { placeAtVertex, reseatPerson, walkBackToWalkway } from './peoplePathing.js';
 import { carryPossessed, footingAt, nearestRaisedVertex, stepFooting } from './peopleFooting.js';
 import { bloodSpeed, bloodlustSpeed, isBloodlusting } from './peopleBlood.js';
 import { profileOf } from '../profiles.js';
@@ -160,7 +160,10 @@ export function personDoing(p) {
   if (cross === 'jwait' || cross === 'curb' || cross === 'mid') return 'Waiting to cross';
   if (cross) return 'Crossing the road';
   const hangout = p.area >= 0 ? HANGOUTS[peopleNav.areas[p.area]?.kind] : null;
-  if (p.mode === 'leaving') return hangout ? 'Leaving ' + hangout[1] : 'Leaving';
+  if (p.mode === 'leaving') return hangout ? 'Leaving ' + hangout[1] : p.area < 0 ? 'Heading back to the path' : 'Leaving';
+  // (aqua swim; waterwalking alone stand on top)
+  if (p.mode === 'wander' && p.swimming) return p.traits.aqua ? (p.swimming === 'in' ? 'Swimming' : 'Off for a swim') : (p.swimming === 'in' ? 'Walking on water' : 'Off to walk on water');
+  if (p.mode === 'wander' && p.floatPhase > 0.5 && !p.moving) return p.traits.aqua ? 'Swimming' : 'Walking on water';
   if (p.mode === 'wander') return hangout ? 'Hanging out ' + hangout.join(' ') : 'Hanging about';
   if (p.snack && (p.mode === 'line' || p.mode === 'wander')) return { coffee: 'Drinking a coffee', beer: 'Drinking a pint' }[p.snack.item] ?? 'Eating a hot dog';
   if (p.mode === 'line') return 'Out for a walk';
@@ -309,7 +312,8 @@ export function unpossessPerson() {
   camera.near = cameraNear;
   camera.updateProjectionMatrix();
   if (!p || p.mode !== 'possessed') return;
-  // back into a hangout they're standing in, else onto the nearest walkway — up on a raised one, the nearest point of that
+  // back into a hangout they're standing in, else walking back to the nearest walkway they can reach (walkBackToWalkway),
+  // else onto the nearest walkway — up on a raised one, the nearest point of that
   // (the grid reseatPerson looks in leaves the decks out, so it would drop them to the ground below); in a station, a lift
   // or a carriage, riding the trains as anyone does from there
   p.mode = 'wander';
@@ -318,7 +322,10 @@ export function unpossessPerson() {
   p.footing = null;
   const up = f?.kind === 'raised' ? nearestRaisedVertex(p.x, p.z, f.y) : null;
   if (up) placeAtVertex(p, up.li, up.vi, p.dir || 1);
-  else if (!(f && f.kind !== 'raised' && resumeTrainRide(p, i, f))) reseatPerson(p);
+  else if (!(f && f.kind !== 'raised' && resumeTrainRide(p, i, f))) {
+    const inHangout = peopleNav.areas.some(a => insideFor(a, p)(p.x, p.z));
+    if (inHangout || !walkBackToWalkway(p)) reseatPerson(p);
+  }
   if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; p.wait = 1; }
   // the camera behind them, looking the way they were
   const behind = possession.yaw + Math.PI;

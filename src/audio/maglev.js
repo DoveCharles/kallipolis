@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, outdoorsOf, isMuted } from './sfx.js';
+import { listener, outdoorsOf, isMuted, ear } from './sfx.js';
 
 // ============================================================ the shuttles
 // The shuttles gliding through their solenoid tubes (see updateTrainShuttles in trains/trains.js), which ought to sound
@@ -92,7 +92,7 @@ function chime(at) {
 const SWISH_TIME = 0.65, SWISH_VOLUME = 0.16, SWISH_REF = 6, SWISH_HEAR = 70;
 let noise = null; // (one second of white noise, shared by every swish)
 export function doorSwish(at, pitch = 1, volume = 1) {
-  if (isMuted() || camera.position.distanceTo(at) > SWISH_HEAR) return;
+  if (isMuted() || ear.distanceTo(at) > SWISH_HEAR) return;
   const context = listener.context;
   if (!noise) {
     noise = context.createBuffer(1, context.sampleRate, context.sampleRate);
@@ -176,7 +176,7 @@ function whir(at) {
  * @returns {void}
  */
 export function updateShuttleSounds(carriages, dt) {
-  const { x, y, z } = camera.position;
+  const { x, y, z } = ear;
   const near = [];
   for (const s of carriages) {
     const at = s.object.position, was = heard.get(s.lineId);

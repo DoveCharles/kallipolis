@@ -1,0 +1,13 @@
+# How conversations end once their time's up (see about.txt): {end} lines end it well (they wave goodbye), {end = bad}
+# lines end it badly (no wave, and they may go for each other, the more aggressive the likelier). Patient people lean to
+# the polite ones, impatient and aggressive people to the rude ones.
+Alright, bye then! {end, patience}
+Well, I'd better be off. {end, patience}
+Lovely to see you! {end, happy}
+Catch you later, [other.name]. {end}
+Must dash — [physical: plural] to find. {end, fidgety}
+Anyway, I've got to go. {end}
+I'm bored. Bye. {end = bad, patience = -1}
+Talk to you never. {end = bad, evil, patience = -1}
+Get out of my face. {end = bad, aggression, patience = -1}
+Whatever, [swear]. {end = bad, aggression}

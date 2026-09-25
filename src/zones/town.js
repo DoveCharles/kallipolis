@@ -18,7 +18,7 @@ import { streetSegmentsNear, streetFor } from './suburbs.js';
 // where the lot's too deep for one span — and chimney stacks with pots on the gable ends. Houses have tall sash windows
 // from the ground up and a painted front door; shops have a shopfront, a fascia over it and now and then awnings, with
 // the flat above. Unbuilt lots are back gardens. Each lot is a building like any other: people go in (see "town" and its
-// kinds in assets/buildings.txt), cars hit it, and its zone draws them merged (see building-batches.js).
+// kinds in assets/text/buildings.txt), cars hit it, and its zone draws them merged (see building-batches.js).
 
 const FLOOR = 3.1, SHOP = 4.0, EAVES = 0.6; // a storey; a shop's ground floor; wall above the top windows
 const TOWN_LOOK = { floor: FLOOR, parapet: EAVES - 0.2, pier: 0.5, glassTints: [0x252a31, 0x2b3035, 0x30343c],

@@ -1,0 +1,217 @@
+Olivia
+Amelia
+Isla
+Ava
+Mia
+Ivy
+Lily
+Freya
+Florence
+Willow [agemult = 0.9]
+Rosie
+Sienna
+Poppy
+Matilda
+Evie
+Ruby
+Hazel
+Maeve
+Nora
+Iris
+Clementine
+Beatrix [agemult = 1.15]
+Winifred [agemult = 1.15]
+Dolores [agemult = 1.15]
+Marge [agemult = 1.05]
+Brenda
+Sandra
+Pam [agemult = 1.15]
+Linda
+Gloria
+Priya
+Aiko
+Fatima
+Zara
+Ingrid
+Sofia
+Lucia
+Amara
+Chloe
+Esme
+Harriet
+Mabel
+Agnes [agemult = 1.15]
+Edith [agemult = 1.15]
+Juniper
+Pearl
+Opal
+Tallulah
+Imogen
+Georgina
+Requiem
+Faith
+Joy
+Vivian
+Vyvy
+Angela
+Roberta
+Simone
+Penelope
+Circe [agemult = 1.2]
+Adriana
+Jan
+Rachel
+Rita
+Priti
+April
+Rapunzel
+Erykah
+Yana
+Suzanne
+Chiyomi
+Sylvia
+Haze
+Kate
+Alice
+Charlie
+Ripley
+Laura
+Sarah
+Donna
+Shelly
+Dusty
+Hope
+Elizabeth
+Vanessa
+Ana
+May
+Kelly
+Isis
+Steffanie
+Minnie
+Léa
+Rue
+(UNKNOWN) [choiceweight = 5]
+Britney
+Reighleigh [agemult = 0.8]
+Gertrude [agemult = 1.15]
+Doris [agemult = 1.15]
+Edna [agemult = 1.15]
+Agatha [agemult = 1.15]
+Mildred [agemult = 1.15]
+Myrtle [agemult = 1.15]
+Karla
+Sophie
+Kitty
+Innocent
+Little
+San
+Lady
+Barb
+Bridget
+Nina
+Regina
+Secret
+Jane
+Penny
+Merida
+Daisy
+Carmilla
+Eva
+Charmaine
+Janice
+Livia
+Olive
+Gabriella
+Angie
+Rosalie
+Apricot
+Esmerelda
+Ruby
+Clair
+Karen
+Joyce
+Lillienne
+Annette
+Marielle
+Lana
+Bunny
+Mandy
+Maureen
+Agent
+Mädchen
+Sheryl
+Enya
+Sherilyn
+Joan
+Peggy
+Piper
+Catherine
+Lucy
+Yeonmi
+Zendaya
+Dalilah
+Becca
+Niara
+Taniya
+Fatou
+Ahmari
+Ae Jung
+Chun
+Hana
+Hye
+Anna Mei
+Ailin
+Pikachu
+Honey
+Mrs. [choiceweight = 3]
+Ms. [choiceweight = 3]
+Sky
+Winter
+Mother [agemult = 1.1]
+Mama [agemult = 1.1]
+Aunt [agemult = 1.2]
+Auntie [agemult = 1.2]
+Gramma [agemult = 1.3]
+Nanny [agemult = 1.3]
+Granny [agemult = 1.3]
+Gympie
+Pussy
+Strawberry
+Aoife
+Ciara
+Gráinne
+Saoirse
+Caitrìona
+Deirdre [agemult = 1.2]
+Moire
+Sorcha
+Una
+Rosemary
+Mary
+Arwen
+Aeres
+Annalyn
+Ceri
+Bubblegum
+Gwen
+Esther
+Miranda
+Rhiannon
+Seren
+Galadriel
+Shelob
+Quelana
+Gwynevere
+Priscilla
+Nashandra
+Rosabeth
+Shalquoir
+Yuria
+Isabella
+Irina
+Zoey
+Anri
+Aura
+Cow
+Mistress

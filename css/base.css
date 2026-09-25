@@ -490,6 +490,26 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 .car-details.win3-minimized { padding-bottom:0; }
 .car-details.win3-minimized .cd-grid { display:none; }
 
+/* someone saying a real line (src/ui/speech-bubbles.js): left/top is the tip of the tail, just over their head */
+.speech-bubble {
+  position:fixed; pointer-events:none; transform:translate(-50%, calc(-100% - 10px)); /* (no z-index: under the menus, see speech-bubbles.js) */
+  max-width:220px; width:max-content; padding:5px 9px; border-radius:10px;
+  background:#fff; color:#000; border:2px solid #000;
+  font-family:var(--mono); font-size:12px; line-height:1.35; text-align:center;
+}
+.speech-bubble::after {
+  content:''; position:absolute; left:50%; bottom:-10px; transform:translateX(-50%);
+  border:8px solid transparent; border-top:10px solid #000; border-bottom:0;
+}
+.speech-bubble::before {
+  content:''; position:absolute; left:50%; bottom:-6px; transform:translateX(-50%); z-index:1;
+  border:6px solid transparent; border-top:7px solid #fff; border-bottom:0;
+}
+/* a thought (thoughtOf in src/life/people/people.js): dotted, in italics, with a trail of circles for its tail */
+.speech-bubble.thought { border-style:dotted; font-style:italic; }
+.speech-bubble.thought::before { bottom:-9px; left:calc(50% - 6px); transform:none; border:2px solid #000; border-radius:50%; width:6px; height:6px; background:#fff; }
+.speech-bubble.thought::after { bottom:-15px; left:calc(50% - 1px); transform:none; border:2px solid #000; border-radius:50%; width:2px; height:2px; background:#fff; }
+
 /* someone's card brought up in a building's room (see followPersonInside in life/people/peopleTracking.js): to the left of
    the building's card, and no Smite button in there */
 .entity-card.pc-beside { right:326px; }

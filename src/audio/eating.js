@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { playBufferAt, zzfxBuffer } from './sfx.js';
+import { playBufferAt, zzfxBuffer, ear } from './sfx.js';
 
 // ============================================================ eating
 // What a meal sounds like (see the Eating clip in life/people/peopleModel.js, whose cues people.js plays as they come
@@ -37,7 +37,7 @@ let budget = SOUNDS_MAX_PER_SECOND, budgetAt = 0;
  */
 export function eatingSound(at, name) {
   if (!SOUNDS[name]) return;
-  const { x, y, z } = camera.position;
+  const { x, y, z } = ear;
   if (Math.hypot(at.x - x, at.y - y, at.z - z) > HEAR_DISTANCE) return;
   const now = performance.now()/1000;
   budget = Math.min(SOUNDS_MAX_PER_SECOND, budget + (now - budgetAt)*SOUNDS_MAX_PER_SECOND);

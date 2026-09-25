@@ -22,10 +22,10 @@ import { registerHealthKind, resetHealth } from '../core/health.js';
 
 // ---------------------------------------------------------- the aircraft card
 // Which aircraft the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the train's: its
-// name and mood, a picture of it, and what it loves and hates — from assets/planes.txt, read the same way as the trains'
+// name and mood, a picture of it, and what it loves and hates — from assets/text/planes.txt, read the same way as the trains'
 // and the vehicles' files (see core/type-text.js). Clicking the picture takes the controls off it, the way clicking a
 // car's picture gets you behind the wheel. No Smite button: there's nothing in here to blow up.
-const planes = loadTypeText('assets/planes.txt', {
+const planes = loadTypeText('assets/text/planes.txt', {
   attributes: TEXT_ROWS,
   counted: ['loves', 'hates'], // can have several per aircraft, like people: see [distribution] in planes.txt
   // this stands in until planes.txt has loaded, or if it can't be

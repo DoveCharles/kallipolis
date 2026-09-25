@@ -1,0 +1,8 @@
+# Animals you could keep at home (see about.txt).
+forms: singular | plural | general
+dog
+cat
+mouse | mice
+rat
+snake
+goldfish | goldfish

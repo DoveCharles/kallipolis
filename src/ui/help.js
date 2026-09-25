@@ -124,11 +124,12 @@ const TOPICS = [
   { id: 'people', title: 'People and their traits', html: () => `
     <p>People walk the pavements and walkways, stop to chat, sit on benches and the grass, go home, work in offices and
     watch TV. Cars drive the roads and give way to them — mostly.</p>
-    <p>Who they are comes from text files in <b>assets/</b>: <b>people.txt</b> for names, moods, loves and hates, and
-    cars.txt, buildings.txt, bees.txt, trains.txt and planes.txt for the rest. Any entry can carry traits in brackets
+    <p>Who they are comes from text files in <b>assets/text/</b>: the <b>people/</b> folder for names (boy, girl and
+    unisex), surnames, nicknames, moods, loves and hates, and cars.txt, buildings.txt, bees.txt, trains.txt and planes.txt
+    for the rest. Any entry can carry traits in brackets
     that change how whoever gets it behaves:</p>
     <p class="w3-help-code">Energy drinks [speed = 2.5]<br>Moonwalking [backwards]</p>
-    <p>The full list of traits is at the top of people.txt.</p>
+    <p>The full list of traits is in people/about.txt.</p>
     <p>View &gt; Ped View (the smiling head in the toolbar) greys out everything but the people, so you can see where the
     crowd is, indoors and out.</p>` },
 
@@ -136,7 +137,7 @@ const TOPICS = [
     <p>The meter at the right of the toolbar is how good or evil the city is: green to the right, red to the left. Every
     zone, path and building counts for something, and so does what happens — people getting killed, say. Each change
     pops up beside it for a moment.</p>
-    <p>Click the meter to see what it's made of. What everything's worth is in <b>assets/morality.txt</b>.</p>` },
+    <p>Click the meter to see what it's made of. What everything's worth is in <b>assets/text/morality.txt</b>.</p>` },
 
   { id: 'settings', title: 'Settings', html: () => `
     <p><b>World</b> (the globe in the toolbar): the sun, a day/night cycle and its length, how many people and cars and

@@ -22,7 +22,7 @@ You can also put a map image on the ground and trace over it.
 
 **Meddle.** Click a card's picture to take control. You can walk around as a person in first person (and punch people), drive a car, or fly a plane or a bee. You can also smite things with lightning. The city notices: a morality meter tracks how good or evil the place is, and every zone, building and death counts.
 
-**Make it yours.** The people, cars, buildings, bees, trains and planes come from plain text files in `assets/`, so you can edit them. Entries can carry traits that change behaviour, like `Energy drinks [speed = 2.5]` or `Moonwalking [backwards]`. The full list is at the top of `assets/people.txt`, and what everything is worth morally is in `assets/morality.txt`.
+**Make it yours.** The people, cars, buildings, bees, trains and planes come from plain text files in `assets/text/` (people's in `assets/text/people/`, one file per list), so you can edit them. Entries can carry traits that change behaviour, like `Energy drinks [speed = 2.5]` or `Moonwalking [backwards]`. The full list is at the top of `assets/text/people/about.txt`, and what everything is worth morally is in `assets/text/morality.txt`.
 
 **Set the scene.** There's a day/night cycle with a real sun path, moonlight and stars, plus rain, snow and cloud shadows, and sound for everything. The whole thing dresses as Windows 3.0. You can also pixelate the view and redraw it in a 16-colour palette (Windows 3.0, PICO-8, CGA, C64, ZX Spectrum, Game Boy and more) with dithering.
 

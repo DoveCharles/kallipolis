@@ -11,6 +11,7 @@ const WINDOWS = {
   display: { title: 'Display', width: 280 },
   effects: { title: 'Effects', width: 300 },
   game: { title: 'Game', width: 300 },
+  speech: { title: 'Speech', width: 300 },
 };
 
 /**

@@ -1,0 +1,6 @@
+# Food (see about.txt).
+forms: singular | plural | general
+gruel | -
+hot dog
+coffee | coffees | coffee
+cheese | -

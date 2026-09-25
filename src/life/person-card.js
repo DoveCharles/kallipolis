@@ -10,8 +10,8 @@ import { garbles, garbled } from '../ui/garble.js';
 
 // ============================================================ person card
 // Who someone is, in a card at the bottom right while the camera follows them (see "following someone" in people.js): their
-// name, age, mood, loves and hates, from assets/people.txt (see profiles.js). The same person always gets the same card. The card itself is the shared one in ui/entity-card.js; people are the one kind of thing whose
-// text doesn't come from a [section] file, since people.txt does rather more (weighted lines, traits) than the rest.
+// name, age, mood, loves and hates, from assets/text/people/*.txt (see profiles.js). The same person always gets the same card. The card itself is the shared one in ui/entity-card.js; people are the one kind of thing whose
+// text doesn't come from a [section] file, since people/*.txt does rather more (weighted lines, traits) than the rest.
 let shown = null; // { index, isMan, traits, seed } of whoever the card is showing
 // (someone with the scramble or keysmash trait has the text on their card garbled, name and age aside: see ui/garble.js)
 const card = makeCard({
@@ -30,14 +30,14 @@ const card = makeCard({
     App.killPerson(shown.index);
   } },
 });
-// (once people.txt has loaded, the card shows what it says)
+// (once people/*.txt has loaded, the card shows what it says)
 onProfilesLoaded(() => { if (shown) showPersonCard(shown.index, shown.isMan, shown.beside); });
 // `beside`: picked in a building's room, so the card sits to the left of the building's, without its Smite button
 // (see followPersonInside in people/peopleTracking.js)
 function showPersonCard(index, isMan, beside = false) {
   // whoever's actually standing in that slot right now, not the slot itself — see peopleIdSeq in people.js
   const profile = profileOf(App.people[index]?.id ?? index, isMan);
-  const { traits } = profile, again = shown?.index === index; // (again: people.txt just loaded, under an open card)
+  const { traits } = profile, again = shown?.index === index; // (again: people/*.txt just loaded, under an open card)
   shown = { index, isMan, traits, seed: profile.age, beside };
   card.el.classList.toggle('pc-beside', beside);
   card.relabel(garbles(traits) ? text => garbled(text, traits, profile.age) : null); // (the headings too: "Loves", "Hates", the title...)

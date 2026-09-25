@@ -4,7 +4,7 @@ import { roomLayoutOf } from './footprints.js';
 
 // ============================================================ what buildings are like
 // Each kind of building's name, mood, and what it loves and hates, for its card (building-card.js) — from
-// assets/buildings.txt, to be edited freely: a [section] per kind. The file is read by the shared reader in
+// assets/text/buildings.txt, to be edited freely: a [section] per kind. The file is read by the shared reader in
 // core/type-text.js, which the vehicles and the trains use too; see there for the format.
 // what every kind of building falls back to: the zone type that puts it up (see buildingKindOf below)
 const ZONE_OF_KIND = {
@@ -15,7 +15,7 @@ const ZONE_OF_KIND = {
   terrace: 'town', shop: 'town', pub: 'town',
   terminal: 'airport', hangar: 'airport', controltower: 'airport',
 };
-const buildings = loadTypeText('assets/buildings.txt', {
+const buildings = loadTypeText('assets/text/buildings.txt', {
   attributes: TEXT_ROWS,
   counted: ['loves', 'hates'], // can have several per building, like people: see [distribution] in buildings.txt
   settings: ['enterable'], // not card text: whether people go into one (see "going indoors" in people.js)

@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { playBufferAt, zzfxBuffer } from './sfx.js';
+import { playBufferAt, zzfxBuffer, ear } from './sfx.js';
 
 // ============================================================ footsteps
 // A scuff for each footfall of anyone walking near the camera (see the walk cycle in life/people/people.js): short bursts
@@ -28,7 +28,7 @@ let budget = STEPS_MAX_PER_SECOND, budgetAt = 0;
  * @returns {void}
  */
 export function footstep(at, weight = 1) {
-  const { x, y, z } = camera.position;
+  const { x, y, z } = ear;
   if (Math.hypot(at.x - x, at.y - y, at.z - z) > HEAR_DISTANCE) return;
   const now = performance.now()/1000;
   budget = Math.min(STEPS_MAX_PER_SECOND, budget + (now - budgetAt)*STEPS_MAX_PER_SECOND);

@@ -1,0 +1,5 @@
+# Weapons (see about.txt). The {evil} on the includes and entries makes them likelier from evil people.
+forms: singular | plural | general
+[knives] {evil = 0.5}
+gun {evil = 0.7, aggression}
+bat {aggression}

@@ -81,7 +81,7 @@
  * @property {number} stride
  * @property {number} phase - how far through the cuboid walk bob they are
  * @property {?object} exit - the walkway point they're leaving a hangout by
- * @property {object} traits - their traits from people.txt (see profiles.js)
+ * @property {object} traits - their traits from people/*.txt (see profiles.js)
  * @property {string} [name] - the name their profile gave them
  * @property {string} traitsKey - the profiles version and sex their traits were picked for
  * @property {?object} [defaultHair] - the hair color they started with, before any greying

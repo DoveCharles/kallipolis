@@ -1,5 +1,5 @@
 import { App, S } from '../../core/shared.js';
-import { voiceOfPerson, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
+import { feel, witness, voiceOfPerson, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { roomLayoutOf } from '../../buildings/footprints.js';
 import { updateBuying } from './peopleStalls.js';
@@ -39,21 +39,39 @@ function removeGroup(g) {
 }
 
 /**
- * End a conversation between two, and set them both carrying on.
+ * End a conversation between two, and set them both carrying on. Ended badly (a rude line: {end = bad} in the speech
+ * files, see g.ending), each may go for the other — BAD_END_PUNCH × their aggression — rather than wave.
  * @param {object} g - the group
+ * @param {'bad'|null} [how] - how it ended
  * @returns {void}
  */
-function endChat(g) {
+const BAD_END_PUNCH = 0.2; // chance, per unit of aggression, of going for the other after a conversation ends badly
+function endChat(g, how = null) {
   removeGroup(g);
   const chatGroup = g.members.splice(0);
-  chatGroup.forEach((m, index) => { 
-    m.group = null; finishActivity(m); 
-    if (chatGroup.length <= 1) return;
-    let victim;
-    if (index === 0) victim = chatGroup[1]
-    else victim = chatGroup[0]
-    throwPunch(undefined, m, true, victim)
+  chatGroup.forEach(m => { m.group = null; finishActivity(m); });
+  if (how !== 'bad' || chatGroup.length !== 2 || !hasClip('Punch') || !hasClip('Fall')) return;
+  chatGroup.forEach((m, i) => {
+    const other = chatGroup[1 - i];
+    if (!m.attack && isFairGame(other) && peopleRng() < BAD_END_PUNCH*m.traits.aggression) goAfter(m, other);
   });
+}
+
+/**
+ * A conversation's end, once a line that ends it has been said (g.ending, set by audio/dictionary.js): two chatting
+ * wave goodbye (ended well) or walk off, maybe fighting (badly); whoever said it leaves a circle; a room chat stops.
+ * @param {object} g - the group
+ * @returns {boolean} whether it's ended
+ */
+function endedByLine(g) {
+  const ending = g.ending;
+  if (!ending) return false;
+  g.ending = null; g.speaker = null;
+  if (g.kind === 'room') endRoomChat(g);
+  else if (g.kind === 'circle') { if (g.members.includes(ending.by)) finishActivity(ending.by); }
+  else if (ending.how === 'bad') endChat(g, 'bad');
+  else wave(g, 'bye');
+  return true;
 }
 
 /**
@@ -191,6 +209,9 @@ export function meetOnWalkways(dt) {
  */
 function takeTurns(g, talkers, dt) {
   g.turnIn -= dt;
+  // (a real line isn't cut off: the turn waits for it; one waiting for a reply hands the turn on soon after — see audio/dictionary.js)
+  if (g.speaker?.saying && talkers.includes(g.speaker)) g.turnIn = Math.max(g.turnIn, 0.1);
+  else if (g.talk && g.talk.by === g.speaker) g.turnIn = Math.min(g.turnIn, 0.4);
   if (!talkers.includes(g.speaker) || g.turnIn <= 0) {
     // the more talkative someone is, the more of the turns they take, and the longer they go on
     const others = talkers.filter(m => m !== g.speaker);
@@ -207,6 +228,7 @@ function takeTurns(g, talkers, dt) {
  * @param {number} dt - seconds since the last frame
  * @returns {void}
  */
+const CLOSE_WAIT = 4; // seconds, after a conversation's time is up, for someone to say a closer before they just wave
 export function updateGroups(dt) {
   for (let gi = groups.length - 1; gi >= 0; gi--) {
     const g = groups[gi];
@@ -214,6 +236,7 @@ export function updateGroups(dt) {
     if (g.kind === 'circle') {
       const seated = g.members.filter(m => m.stage === 'sit');
       if (seated.some(m => m.traits.smells)) { g.members.filter(m => !m.traits.smells).forEach(finishActivity); continue; } // (someone who smells sat down: everyone else gets up and goes)
+      if (endedByLine(g)) continue;
       if (seated.length >= 2) takeTurns(g, seated, dt); else g.speaker = null;
       continue;
     }
@@ -226,8 +249,12 @@ export function updateGroups(dt) {
     } else if (g.stage === 'greet') {
       if (g.timer <= 0) { g.stage = 'talk'; g.timer = (8 + peopleRng()*22)*(a.traits.patience + b.traits.patience)/2; }
     } else if (g.stage === 'talk') {
+      if (endedByLine(g)) continue;
       takeTurns(g, g.members, dt);
-      if (g.timer <= 0) { g.speaker = null; wave(g, 'bye'); }
+      // time's up: someone says a closer (closers.txt — polite from the patient, rude from the impatient: see
+      // audio/dictionary.js), which ends it; if nobody does within CLOSE_WAIT, they just wave
+      if (g.timer <= 0 && !g.wantsEnd) { g.wantsEnd = true; g.timer = CLOSE_WAIT; }
+      else if (g.timer <= 0 && !g.speaker?.saying) { g.speaker = null; wave(g, 'bye'); }
     } else if (g.timer <= 0) {
       endChat(g);
       continue;
@@ -513,7 +540,10 @@ export function updateAttack(p, dt) {
   const a = p.attack, t = a.target;
   a.timer -= dt;
   if (a.stage === 'chase') {
-    if ((t.punched?.by !== p && t.punched?.stage !== 'marked') || a.timer <= 0 || !(t.mode === 'line' || t.mode === 'wander' || t.mode === 'leaving' || t.mode === 'possessed') || t.jc) { endAttack(p); return null; }
+    if ((t.punched?.by !== p && t.punched?.stage !== 'marked') || a.timer <= 0 || !(t.mode === 'line' || t.mode === 'wander' || t.mode === 'leaving' || t.mode === 'possessed') || t.jc) {
+      if (a.timer <= 0) feel(p, 'gaveup', t); // (ran out of chase: for what they say, see life/speech-text.js)
+      endAttack(p); return null;
+    }
     const d = Math.hypot(t.x - p.x, t.z - p.z), gap = CHAT_GAP*S.peopleSize;
     if (t.mode !== 'possessed' && t.punched.stage === 'marked' && d < PUNCH_NOTICE*S.peopleSize) { // (whoever's being controlled isn't braced, and keeps their freedom until the fist lands)
       t.punched = null;
@@ -614,6 +644,7 @@ export function swingSound(p) {
  * @returns {void}
  */
 const FALL_DAMAGE = 5, CRITICAL_PUNCH_DAMAGE = 10, VAMPIRE_CRITICAL_HEAL = 5; // (a critical punch is one that draws blood: see punchSpill)
+const REVENGE_TIME = 120; // seconds after being punched that punching the puncher back counts as revenge
 export function knockDown(t, p) {
   const critical = !!p.traits && punchSpill(t, p) && people.includes(p); // (a car's knock can spill blood too, but isn't a punch)
   const head = { x: t.x, y: t.y + personHeight(t)*0.9, z: t.z };
@@ -625,6 +656,11 @@ export function knockDown(t, p) {
   playOnce(t, 'Fall');
   t.pose = 'Fallen';
   bystandersReactToPunch(t, p);
+  if (people.includes(p)) { // (for what people say: see life/speech-text.js) — punching back whoever last punched you is revenge
+    if (p.felt?.what === 'punched' && p.felt.by === t && performance.now()/1000 - p.felt.at < REVENGE_TIME) feel(p, 'revenge', t);
+    feel(t, 'punched', p);
+    witness(t, 'punch', p);
+  }
   if (critical && p.traits.vampire) heal(p, VAMPIRE_CRITICAL_HEAL);
   damage(t, FALL_DAMAGE + (critical ? CRITICAL_PUNCH_DAMAGE : 0), { from: p });
 }
@@ -738,7 +774,7 @@ export function holdDown(p) {
 export function updatePunched(p, dt) {
   const k = p.punched;
   if (k.revive) { // (dead, shaking, until the bolt brings them back: see reviveInstead in people.js)
-    if (k.stage === 'down' && (k.timer -= dt) <= 0) { strikeLightning({ x: p.x, y: p.y, z: p.z }); k.stage = 'rise'; p.pose = 'Idle'; }
+    if (k.stage === 'down' && (k.timer -= dt) <= 0) { strikeLightning({ x: p.x, y: p.y, z: p.z }); witness(p, 'resurrected'); k.stage = 'rise'; p.pose = 'Idle'; }
     else if (k.stage === 'rise' && weightOf(p, clipNamed('Idle')) >= 1) { p.punched = null; p.wait = 0.5; }
     return;
   }
@@ -1539,6 +1575,7 @@ function standUp(p) {
   clearMeal(p);
   if (p.inRoom) {
     if (seat?.sofa) p.inRoom.leftSofaAt = performance.now();
+    if (seat?.sofa && p.inRoom.watched != null) feel(p, 'watchedtv'); // (for what they say: see life/speech-text.js)
     p.inRoom.seat = null; p.inRoom.watched = null;
   }
   p.pose = 'Idle'; p.seatLift = 0; p.faceTo = null;
@@ -1710,6 +1747,7 @@ function roomChat(g, dt) {
     g.stage = 'talk';
     g.timer = (lo + peopleRng()*(hi - lo))*(a.traits.patience + b.traits.patience)/2;
   }
+  if (endedByLine(g)) return;
   takeTurns(g, g.members, dt);
   if (!g.sat) { a.faceTo = headingTo(a, b); b.faceTo = headingTo(b, a); }
   if (g.timer <= 0) endRoomChat(g);

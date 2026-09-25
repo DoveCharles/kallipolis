@@ -1,0 +1,18 @@
+# Talking about other people (see about.txt).
+She said what? {nosy}
+> She said she [badhabits: past]!
+>> No way.
+That's what I told him!
+> Exactly.
+Did you hear about the bees?
+> What about them?
+>> They're [badhabits: ing] again.
+Well, I didn't vote for him.
+> Not that there's anything wrong with that.
+Did you hear about [boynames] [surnames]? {nosy}
+> What about them?
+>> They [badhabits: past]!
+Irish people scare me.
+> [dismissal]
+Have you seen that show about [nouns: general]?
+> I love [nouns: general]! {happy}

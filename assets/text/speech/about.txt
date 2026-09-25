@@ -1,0 +1,120 @@
+# What people say and think — every file in this folder is one category, named by its file (animals.txt is [animals]).
+# Files can be sorted into subfolders at any depth: a category is still named by its file alone, so moving one never
+# breaks anything (two files with the same name: the first is used, with a warning). The loader finds them through
+# assets/text/index.txt, which serve.py rewrites itself — after adding or moving files without it running, run
+# `python3 serve.py --index`, and commit index.txt so the deployed site sees them.
+# The lists in text/people/ are categories too — [boynames], [girlnames], [unisexnames], [surnames], [nicknames],
+# [moods], [loves], [hates] — with their [trait] brackets left off.
+# Only files in speech/ and people/ are categories: the rest of assets/text/ (bees.txt, cars.txt, tv.txt...) is never
+# read for speech, so [bees] or [cars] won't work. about.txt files are never categories either.
+# Speech starts from dialogue.txt (conversations), thoughts.txt (alone, as they fidget; no replies, shown but not said) and reactions.txt
+# (straight after seeing a death), plus closers.txt (ending a conversation) and fleeing.txt (called out as people run). Blank lines and # lines are skipped.
+#
+# ------------------------------------------------------------------------------------------------------------------------
+# LINES
+#   Rhino                     a word or phrase
+#   mouse | mice              a word with its forms (see FORMS)
+#   I don't give a [swear].   a sentence; each [placeholder] is filled from that category when it's said
+#   [pets]                    a line that's only a [category] includes all of that category's entries
+#
+# Includes nest as deep as MAX_DEPTH; a category that includes itself (even via others) is skipped with a warning.
+# The same entry reached twice in one category (knife in both [weapons] and [utensils]) is kept once: the highest
+# weight, and for each tag the strongest value (furthest from 0).
+#
+# ------------------------------------------------------------------------------------------------------------------------
+# FORMS
+# A word file names its forms once, at the top:
+#   forms: singular | plural | general
+# then each entry gives them in that order. Missing ones are worked out:
+#   plural    made from the singular (rhino → rhinos, bus → buses, fly → flies); "-" means it has none
+#   general   the thing in general ("I like knives", "I like cheese"): the plural if it has one, else the singular
+# Verbs use:  forms: base | past | ing
+# An entry with no forms (a phrase like Fishing) gives itself for any form. A call for a form an entry doesn't have
+# skips that entry.
+#
+# ------------------------------------------------------------------------------------------------------------------------
+# CALLING A CATEGORY:  [category: option, option]   (options in any order)
+#   [animals]                 the first form
+#   [animals: plural]         a named form (plural, general, past, ing, ...)
+#   [animals: a]              with a/an in front: "a rhino", "an owl"
+#   [interests: hated]        a negative call: flips the leaning (see TAGS), so good people pick evil things, and uses the
+#                             speaker's hates where it'd use their loves (see LOVES AND HATES) — "I really hate [interests: general, hated]"
+#   [pets#1]                  the same pick every time #1 is used, for the whole conversation — a reply can say
+#                             [pets#1: general] and mean the same pet ("a dog" ... "dogs")
+# The first letter of a line is capitalised when it's said, and the first after any . ! or ? (not an ellipsis …) — so write words in lower
+# case ("labubu!!!" mid-line makes the next word start with a capital), and proper nouns with their capitals.
+#
+# ------------------------------------------------------------------------------------------------------------------------
+# TAGS: {…} after any entry, include or reply
+#   {weight = 3}              how often, next to its neighbours (default 1; on an include it multiplies every entry it brings)
+#   {evil}                    leans toward speakers high in that trait (same as evil = 1); any trait from people/about.txt
+#   {patience = -1}           leans toward speakers low in it
+#   Each trait's value is measured from its neutral (0, or 1 for traits that multiply) toward its max or min, so every
+#   trait counts the same, -1 to +1.
+#   On an include line, tags are added to every entry reached through that line only: [knives] {evil = 0.5} in
+#   weapons.txt makes knives evil as weapons, not as cutlery.
+#
+# WORLD: prefix world. — soft with =, hard limits with comparisons, ranges and names (the line can't be picked unless they hold)
+#   {world.morality = -1}     likelier the worse the player's morality (-1 worst to 1 best, the meter over its max)
+#   {world.morality < -0.3}   only while morality is below -0.3 (also >, <=, >=)
+#   {world.hour 22-5}         only from 10pm to the end of 5am (whole hours, both ends included; wraps past midnight)
+#   {world.weather = rain}    only while it's raining (rain, snow, cloud, clear)
+#
+# HERE: where the speaker is (hard limits)
+#   {here.indoors}            only inside a building          {here.outdoors}   only outside
+#   {here.building = pub}     only inside that kind of building (a kind from buildings.txt: house, shop, pub, terrace...)
+#                             or room (home, office, pub, warehouse, factory)
+#   {here.park}               only in a park — or here.plaza, here.beach (hangouts), here.roadside (on a pavement by a
+#                             road), here.path (another walkway), here.bridge (a raised one), here.crossing (crossing a road)
+#   {here.town}               only standing in a zone of that type — plain, park, water, beach, farmland, suburbs, town,
+#                             plaza, city, industrial, airport (outdoors; on its roads and pavements too)
+#
+# TRAITS AS LIMITS: compare a trait's level (-1 at its min, 0 neutral, +1 at its max) — hard limits
+#   {evil > 0.5}              only speakers more than halfway to fully evil
+#   {patience < 0}            only the impatient
+#
+# OTHER: the person they're talking to (whoever said the line being replied to, else whoever they're facing)
+#   {other.fidgety}           leans toward talking to fidgety people (other.trait = n, as for the speaker's own traits)
+#   {other.speed > 0.3}       only when the other person is fast (a hard limit; never true in a thought, with nobody)
+#
+# SEEN: something the speaker saw happen to someone else in the last 60 seconds (hard limits)
+#   {seen}                    anything                        {seen = drowned}  that one thing
+#   Deaths: killedbycar, beatentodeath, smited, drowned, exploded ({seen = death} is any of them). Others: punch (someone
+#   punched), knockedbycar (hit, not killed), resurrected, waterwalking, smelly (a smelly person near). Anyone near
+#   enough (or in the same building) sees it; a death isn't replaced by something lesser while it's fresh.
+# FELT: something that happened to the speaker in the last 60 seconds (hard limits)
+#   {felt = punched}          someone punched them            {felt = hitbycar}  a car knocked them down
+#   {felt = revenge}          they just punched whoever last punched them (within 2 minutes)
+#   {felt = watchedtv}        they just got up from the sofa after watching the TV
+#   {felt = fellover}         fell over drunk              {felt = drunk}   just got drunk (on pints)
+#   {felt = bloodlust}        bloodlust just came over them {felt = gaveup}  gave up chasing someone ([felt.by] is who)
+# IS: how the speaker is right now (hard limits)
+#   {is = drunk}              the drunk trait, or a pint or more in them
+#   {is = bloodlusting}       bloodlusting now
+# Seeing or feeling something, people say a line from reactions.txt straight away — once each — before anything else:
+# aloud (in a conversation or on their own), unless it's tagged {thought} and they're on their own, or they're out of
+# hearing, when it's a thought. {seen} and {felt} work on any line anywhere.
+#
+# NAMES: [me.name] the speaker, [other.name] who they're talking to, [seen.name] who it happened to, [seen.by] who did
+# it, [felt.by] who did it to the speaker (for revenge, who they got back at). A line whose name can't be had isn't said.
+#
+# ------------------------------------------------------------------------------------------------------------------------
+# LOVES AND HATES
+# When a [placeholder] is filled, an entry that is one of the speaker's loves (any of its forms, same words, any case —
+# "Snakes" is snake) is picked half the time, however big the category; one of their hates is never picked. In a
+# [x: hated] call it's the other way round: hates half the time, loves never.
+#
+# ------------------------------------------------------------------------------------------------------------------------
+# ENDING A CONVERSATION
+#   {end}                     once said, the conversation ends well: the two wave goodbye (a circle: the speaker leaves)
+#   {end = bad}               ends it badly: no wave, and each may go for the other (more likely the more aggressive)
+#   Put them on replies to cut a conversation short ("> Mind your own business. {aggression, end = bad}") — an ending
+#   line's own replies are never said. When a conversation's time is up, someone says a line from closers.txt; if
+#   none is said within a few seconds, they just wave.
+#
+# CONVERSATIONS
+#   I slept well last night.              a call (the opener)
+#   > That's so great! {evil = -1}         replies to it, picked by the replier's traits
+#   >> Thanks!                             replies to the reply above it, and so on
+#   > [dismissal]                          a reply can be an include
+# The talkers take turns round their chat circle. If nothing fits, they babble instead.

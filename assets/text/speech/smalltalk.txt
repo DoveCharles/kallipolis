@@ -1,0 +1,52 @@
+# Everyday chatter (see about.txt).
+I slept well last night. {weight = 2}
+> That's so great! {evil = -1, patience}
+> I don't give a [swear]. {evil, patience = -1}
+>> Rude. {end = bad}
+>> Wow, okay. {mood = -1}
+> Really? Sleeping always scares me, I dream of [scary: general].
+>> Grow up. {aggression}
+>> Me too! {mood = -0.5}
+
+I was thinking about getting [pets#1: a], but I heard they [badhabits].
+> Ugh, I can't stand [pets#1: general]. {evil}
+> Aww, you should! {evil = -1, happy}
+>> I don't know, they [badhabits: base] so much...
+
+Have you tried the new place on the corner?
+> The one that does [foods]?
+>> That's it!
+> [dismissal]
+
+Anyway, how are you?
+> Good, good. {mood}
+> Awful. {mood = -1}
+>> Oh no, what happened?
+> [dismissal] {aggression}
+
+It's going to rain later, apparently. {world.weather = rain, weight = 0.5}
+Do you think the trains are running today?
+> The trains are always running you fucking dipshit. {aggression}
+> Probably? {evil = -1}
+We should get lunch sometime.
+> Sure! {chatty}
+> [dismissal]
+I can't believe it's already this late. {world.hour 20-3}
+Another day at the office. {here.building = office}
+> Don't remind me. {mood = -1}
+Same again? {here.building = pub}
+> Go on then.
+> I've had enough. {patience}
+It's cosy in here, isn't it? {here.indoors, happy}
+Lovely day to be out. {here.outdoors, world.weather = clear, mood}
+Why are you always so twitchy? {other.fidgety > 0.3}
+> Am I? {patience}
+> Mind your own business. {aggression, end = bad}
+You're in a rush today. {other.speed > 0.3, nosy}
+> Places to be!
+Take your time, why don't you. {other.speed < -0.3, patience < 0}
+You seem cheerful. {other.happy > 0.4, other.happy}
+> Life's good! {happy}
+You look like you've seen a ghost. {other.shock > 0.3}
+Good morning! {world.hour 6-11}
+> Is it? {mood = -1}

@@ -10,9 +10,10 @@ import { BOOST_UNLOCK, DRIVE_ACCEL, DRIVE_TOP_SPEED, boostMax, boostMultiplier, 
 import { killCar } from './follow.js';
 import { carJoinLane, lanePoint, routePoint } from './lanes.js';
 import { CAR_REAR_AXLE, carHeight, carLength, carWidth } from './placing.js';
-import { carsOverlap, forCarsNear } from './spacing.js';
+import { CAR_STOP_GAP, carsOverlap, forCarsNear, spotTaken } from './spacing.js';
 import { cars } from './state.js';
 import { damage } from '../../core/health.js';
+import { redirectWeave } from './drunk.js';
 
 // What a car hits: people (runOverPeople), aircraft (strikeWithAircraft), buildings (hitBuildings) and other cars
 // (bumpIntoCars) — with the fuse that sets a car burning (lightFuse) and the kick that knocks one off its lane (kickCar).
@@ -103,11 +104,12 @@ export function runOverPeople(car, motion = null, inWay = null) {
         impactSound('thump', p, speed);
         slowedBy(car, 'person', p.traits?.weight);
       }
-      if (knocked && p.mode !== 'dead') { App.knockedByCar?.(p); throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed, SIDE_THROW); p.shotRate = CAR_FALL_SPEEDUP; }
+      if (knocked && p.mode !== 'dead') { App.knockedByCar?.(p); App.feelPerson?.(p, 'hitbycar'); App.witnessPerson?.(p, 'knockedbycar'); // (for what they say: see life/speech-text.js)
+        throwBack(p, car, CAR_KNOCK_PUSH_FACTOR, speed, SIDE_THROW); p.shotRate = CAR_FALL_SPEEDUP; }
       if (hit === 'kill' && speed >= 0.5) exclaim({ x: p.x, y: p.y + App.personHeight(p)*0.9, z: p.z }, voiceOfPerson(p));
       const alive = p.mode !== 'dead';
       damage(p, carHitDamage(car, speed)*(hit === 'kill' ? 1 : KNOCK_BOX_DAMAGE_SHARE), {
-        by: driven || motion?.by === 'player' ? 'player' : 'car', momentum: { x: velocity.x, y: 0, z: velocity.z }, throwScale: CAR_GIB_THROW, from: car });
+        by: driven || motion?.by === 'player' ? 'player' : 'car', momentum: { x: velocity.x, y: 0, z: velocity.z }, throwScale: CAR_GIB_THROW, from: car, cause: 'killedbycar' });
       if (alive && p.mode === 'dead' && car.traits?.bloodlust) bloodlustBoost(car);
     }
     else if (p.mode === 'possessed') return;
@@ -361,6 +363,15 @@ const AIRCRAFT_WEIGHT = 6; // (weight of an aircraft, in the same units as a car
 const KICK_DECAY = 5, KICK_SETTLED_SPEED = 0.5; // (per second: how fast a knock's speed dies away; the speed it counts as stopped at)
 const KICK_TURN_RATE = 4, KICK_FACING_TOLERANCE = 0.3; // (per second; radians it may be off facing its goal while it drives)
 const KICK_BOOST_AFTER = 1; // (seconds driving back before its boost comes in)
+export const KICK_RESEAT_AFTER = 15; // (seconds trying to get back before it gives up on that road and heads for the nearest other one within KICK_RESEAT_REACH — each road it's tried is skipped; none near, it keeps to the one it has)
+const KICK_RESEAT_REACH = 6; // (units at size 1, from where it is to the other road's middle)
+// Driving back it goes no faster than KICK_RETURN_TOP (it's off its lane, often on the pavement), and stops for anyone in
+// front of it for up to KICK_PEOPLE_WAIT seconds at a time.
+// With the way back more than a right angle behind it, it reverses there instead (k.reverse), at up to KICK_REVERSE_TOP.
+const KICK_REVERSE_TOP = 3;
+const KICK_PEOPLE_PASS = 3;
+const KICK_RETURN_TOP = 5, KICK_PEOPLE_WAIT = 6, KICK_PEOPLE_AHEAD = 1.5; // (units a second; seconds; units at size 1 past its bumper it looks)
+export const KICK_GHOST_AFTER = 2; // (seconds held up driving back before it goes through whatever's in its way — the lane car behind waits on it, so otherwise the two could wait on each other for good)
 const turnBetween = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
 /**
  * Knock a car `distance` along (dirX, dirZ), gradually (see KICK_DECAY).
@@ -370,13 +381,13 @@ const turnBetween = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
  * @param {number} distance - how far the knock carries it
  * @returns {void}
  */
-function kickCar(car, dirX, dirZ, distance) {
+export function kickCar(car, dirX, dirZ, distance) {
   const len = Math.hypot(dirX, dirZ);
   if (len < 1e-6 || distance <= 0) return;
   const kick = car.kick ??= { x: 0, z: 0, vx: 0, vz: 0, heading: car.heading, goal: null, seated: false, blocked: false, speed: 0, driving: 0 }, speed = distance*KICK_DECAY/len;
   if (car.sway) { kick.x += car.sway.x; kick.z += car.sway.z; car.sway = null; } // (knocked from where it's drawn off its route — weave or pull-over — not from its route)
   kick.vx += dirX*speed; kick.vz += dirZ*speed;
-  kick.goal = null; kick.seated = false; kick.speed = 0; kick.driving = 0; // (knocked again: it picks the nearest road and faces the way back once it stops)
+  kick.goal = null; kick.reverse = null; kick.seated = false; kick.speed = 0; kick.driving = 0; kick.heldFor = 0; kick.returnFor = 0; kick.tried = null; // (knocked again: it picks the nearest road and faces the way back once it stops)
 }
 /**
  * The nearest lane to a spot, and the way along it a car facing `heading` would go.
@@ -385,10 +396,11 @@ function kickCar(car, dirX, dirZ, distance) {
  * @param {number} heading
  * @returns {{li: number, u: number, dir: number}|null} null if there are no lanes
  */
-function nearestLaneSpot(x, z, heading) {
+function nearestLaneSpot(x, z, heading, avoid = null) {
   const { lines, grid, CELL } = S.trafficNav;
   let best = null;
   const consider = (li, vi) => {
+    if (avoid?.has(li)) return;
     const q = lines[li].pts[vi], d = Math.hypot(q.x - x, q.z - z);
     if (!best || d < best.d) best = { li, vi, d };
   };
@@ -404,7 +416,7 @@ function nearestLaneSpot(x, z, heading) {
     const t = Math.max(0, Math.min(1, ((x - p.x)*sx + (z - p.z)*sz)/((sx*sx + sz*sz) || 1))), d = Math.hypot(x - p.x - sx*t, z - p.z - sz*t);
     if (d < nearest) { nearest = d; u = nav.cum[from] + (nav.cum[from + 1] - nav.cum[from])*t; along = { x: sx, z: sz }; }
   }
-  return { li: best.li, u, dir: along.x*Math.sin(heading) + along.z*Math.cos(heading) >= 0 ? 1 : -1 };
+  return { li: best.li, u, d: nearest, dir: along.x*Math.sin(heading) + along.z*Math.cos(heading) >= 0 ? 1 : -1 };
 }
 /**
  * Put a car with a knock (car.kick) on the nearest lane to where it really is, keeping it where it is by moving its offset from
@@ -414,11 +426,27 @@ function nearestLaneSpot(x, z, heading) {
  * @param {number} realZ
  * @returns {boolean} false if there is no lane to put it on
  */
-export function seatKickedCar(car, realX, realZ) {
-  const k = car.kick, spot = nearestLaneSpot(realX, realZ, k.heading);
+const SEAT_TRIES = 3; // (car-lengths either way along the lane it looks for a free spot to rejoin at)
+// It rejoins ahead of where it is along its way (SEAT_AHEAD × how far off the road it is, at least a car length), so it
+// merges back at a shallow angle the way it's facing rather than turning round to where it was knocked from.
+const SEAT_AHEAD = 2;
+export function seatKickedCar(car, realX, realZ, avoid = null) {
+  const k = car.kick, spot = nearestLaneSpot(realX, realZ, k.heading, avoid);
   if (!spot) return false;
   if (spot.li !== car.li) car.plan = null;
-  carJoinLane(car, spot.li, spot.u, spot.dir);
+  // (from there, the nearest spot on the lane with no car on it — spotTaken — trying a car-length on, then back, and so
+  // on; that spot anyway if none is free)
+  const step = carLength(car) + CAR_STOP_GAP*S.peopleSize, total = S.trafficNav.lines[spot.li].total;
+  const from = Math.max(0, Math.min(total, spot.u + spot.dir*Math.max(carLength(car), SEAT_AHEAD*spot.d)));
+  let u = from;
+  for (let n = 0; n <= SEAT_TRIES*2; n++) {
+    const tryU = from + (n % 2 ? 1 : -1)*Math.ceil(n/2)*step*spot.dir;
+    if (tryU < 0 || tryU > total) continue;
+    carJoinLane(car, spot.li, tryU, spot.dir);
+    const at = lanePoint(car);
+    if (!spotTaken(car, at.x, at.z)) { u = tryU; break; }
+  }
+  carJoinLane(car, spot.li, u, spot.dir);
   const back = CAR_REAR_AXLE*carLength(car), front = routePoint(car, back);
   k.x = realX - (front.x - back*Math.sin(k.heading));
   k.z = realZ - (front.z - back*Math.cos(k.heading));
@@ -433,12 +461,16 @@ export function seatKickedCar(car, realX, realZ) {
  * @param {number} sz
  * @returns {boolean}
  */
+// A car reversing back (see KICK_REVERSE_TOP) into a car on its lane makes that one back up along its lane for
+// PUSHED_REVERSE_TIME (car.reverseFor — see updateTraffic, which passes it on down a queue) instead of knocking it off it.
+export const PUSHED_REVERSE_TIME = 0.6;
 function canStepBack(car, sx, sz) {
-  const at = { ...car, x: car.x + car.kick.x + sx, z: car.z + car.kick.z + sz };
+  const from = { ...car, x: car.x + car.kick.x, z: car.z + car.kick.z }, at = { ...from, x: from.x + sx, z: from.z + sz };
   const weight = car.traits?.weight ?? 1;
   let clear = true;
   forCarsNear(at.x, at.z, carLength(car)*1.5 + 4*S.peopleSize, other => {
-    if (other === car || !carsOverlap(at, other)) return;
+    if (other === car || !carsOverlap(at, other) || carsOverlap(from, other)) return; // (one it's already in doesn't stop it driving out)
+    if (car.kick.reverse && !other.kick && other !== drivenCar && other.li >= 0) { other.reverseFor = PUSHED_REVERSE_TIME; clear = false; return; }
     const otherWeight = other.traits?.weight ?? 1, dx = other.x - at.x, dz = other.z - at.z;
     if (weight <= otherWeight) { clear = false; return; }
     const push = BUMP_PUSH_POWER*weight/otherWeight;
@@ -446,25 +478,50 @@ function canStepBack(car, sx, sz) {
   });
   return clear;
 }
+/** Whether anyone (outdoors) is in front of a knocked car driving back along (dirX, dirZ): within its width and
+ * KICK_PEOPLE_AHEAD past its front bumper. */
+function personInWay(car, k, dirX, dirZ) {
+  const x = car.x + k.x, z = car.z + k.z, len = carLength(car), side = carWidth(car)*0.5 + 0.3*S.peopleSize;
+  return App.people.some(p => {
+    if (p.indoors) return false;
+    const dx = p.x - x, dz = p.z - z, along = dx*dirX + dz*dirZ;
+    return along > 0 && along < len*0.5 + KICK_PEOPLE_AHEAD*S.peopleSize && Math.abs(dx*dirZ - dz*dirX) < side;
+  });
+}
 /** Move a knocked car's offset on by `dt`, and drop the knock once it has settled back on its route, facing along it. Returns how it moved, as a velocity { x, z }. */
 export function stepKick(car, dt) {
   const k = car.kick, slowing = Math.exp(-KICK_DECAY*dt), turnRate = Math.min(1, dt*KICK_TURN_RATE);
-  k.x += k.vx*dt; k.z += k.vz*dt;
+  const nx = k.x + k.vx*dt, nz = k.z + k.vz*dt, hit = Math.hypot(k.vx, k.vz) >= KICK_SETTLED_SPEED && slideHits(car, k, nx, nz);
+  if (hit) passKick(car, k, hit);
+  else if (!(Math.hypot(k.vx, k.vz) >= KICK_SETTLED_SPEED && bounceOffBuildings(car, k, nx, nz))) { k.x = nx; k.z = nz; }
   k.vx *= slowing; k.vz *= slowing;
   k.blocked = false;
   const motion = { x: k.vx, z: k.vz, thrown: Math.hypot(k.vx, k.vz) >= KICK_SETTLED_SPEED }; // (thrown: still carried by the knock)
   if (Math.hypot(k.vx, k.vz) < KICK_SETTLED_SPEED) {
     if (!k.seated && !seatKickedCar(car, car.x + k.x, car.z + k.z)) { car.kick = null; return motion; }
+    if ((k.returnFor = (k.returnFor ?? 0) + dt) > KICK_RESEAT_AFTER) { // (see KICK_RESEAT_AFTER)
+      const rx = car.x + k.x, rz = car.z + k.z, tried = (k.tried ?? new Set()).add(car.li), other = nearestLaneSpot(rx, rz, k.heading, tried);
+      k.returnFor = 0;
+      if (other && other.d < KICK_RESEAT_REACH*S.peopleSize) { k.tried = tried; seatKickedCar(car, rx, rz, tried); k.heldFor = 0; }
+      else { k.tried = null; seatKickedCar(car, rx, rz); k.heldFor = KICK_GHOST_AFTER; } // (no other road near: a fresh spot on its own, and through whatever's in the way)
+      k.goal = null; k.reverse = null; k.speed = 0; k.driving = 0; k.peopleWait = 0;
+    }
     const away = Math.hypot(k.x, k.z);
     if (away > 0.02) {
       k.goal ??= Math.atan2(-k.x, -k.z); // (fixed, so it doesn't swing about as it goes)
-      const off = turnBetween(k.goal - k.heading);
+      k.reverse ??= Math.abs(turnBetween(k.goal - k.heading)) > Math.PI/2;
+      const off = turnBetween(k.goal + (k.reverse ? Math.PI : 0) - k.heading); // (reversing, its back faces the way)
       k.heading += off*turnRate;
       if (Math.abs(off) < KICK_FACING_TOLERANCE) {
-        const boosting = (k.driving += dt) >= KICK_BOOST_AFTER, boost = boosting ? boostMultiplier(car) : 1;
-        k.speed = Math.min(DRIVE_TOP_SPEED*(car.traits?.speed ?? 1)*boost, k.speed + DRIVE_ACCEL*boost*dt);
+        const boosting = (k.driving += dt) >= KICK_BOOST_AFTER && !k.reverse, boost = boosting ? boostMultiplier(car) : 1;
+        k.speed = Math.min((k.reverse ? KICK_REVERSE_TOP : KICK_RETURN_TOP)*S.peopleSpeed, DRIVE_TOP_SPEED*(car.traits?.speed ?? 1)*boost, k.speed + DRIVE_ACCEL*boost*dt);
         const step = Math.min(away, k.speed*dt), sx = -k.x/away*step, sz = -k.z/away*step;
-        if (canStepBack(car, sx, sz)) { k.x += sx; k.z += sz; motion.x += sx/dt; motion.z += sz/dt; if (boosting) boostSmoke(car, dt); } else { k.blocked = true; k.speed = 0; k.driving = 0; }
+        const ghost = (k.heldFor ?? 0) >= KICK_GHOST_AFTER; // (see KICK_GHOST_AFTER: kept till it's back, so it can't stall again halfway)
+        // (waited KICK_PEOPLE_WAIT: it goes on for KICK_PEOPLE_PASS before it'll wait for anyone again — else it'd creep a frame at a time)
+        if ((k.peoplePass = Math.max(0, (k.peoplePass ?? 0) - dt)) <= 0 && (k.peopleWait ?? 0) >= KICK_PEOPLE_WAIT) { k.peopleWait = 0; k.peoplePass = KICK_PEOPLE_PASS; }
+        const waiting = !(k.peoplePass > 0) && personInWay(car, k, -k.x/away, -k.z/away) && (k.peopleWait = (k.peopleWait ?? 0) + dt) < KICK_PEOPLE_WAIT;
+        if (waiting) { k.speed = 0; k.driving = 0; }
+        else if (ghost || canStepBack(car, sx, sz)) { k.x += sx; k.z += sz; motion.x += sx/dt; motion.z += sz/dt; if (boosting) boostSmoke(car, dt); } else { k.blocked = true; k.speed = 0; k.driving = 0; k.heldFor = (k.heldFor ?? 0) + dt; }
       } else { k.speed = 0; k.driving = 0; }
     } else {
       const off = turnBetween(lanePoint(car).heading - k.heading);
@@ -473,6 +530,51 @@ export function stepKick(car, dt) {
     }
   }
   return motion;
+}
+// A knocked car sliding into another stops there rather than through it, passing on its knock: the car hit takes
+// KICK_TRANSFER of the knock's remaining carry, times 2 × this car's share of their weights; this car keeps what a
+// heavier one would (its weight less the other's, over both), so a light car stops dead and a heavy one ploughs on slowed.
+const KICK_TRANSFER = 0.8;
+/** The first car a knocked car's slide to offset (nx, nz) would run into, that it isn't already overlapping, or null. */
+function slideHits(car, k, nx, nz) {
+  const from = { ...car, x: car.x + k.x, z: car.z + k.z, heading: k.heading }, to = { ...from, x: car.x + nx, z: car.z + nz };
+  let hit = null;
+  forCarsNear(to.x, to.z, carLength(car)*1.5 + 4*S.peopleSize, other => {
+    if (!hit && other !== car && !wreckedCars.includes(other) && carsOverlap(to, other) && !carsOverlap(from, other)) hit = other;
+  });
+  return hit;
+}
+// A knocked car sliding into a building bounces off it: the blocked part of its slide reversed, KICK_BOUNCE of it kept
+// (tried on each axis alone to tell which way the wall faces), sliding on along the wall with the rest. One already in a
+// building (shoved there) slides out freely.
+const KICK_BOUNCE = 0.5;
+/** Bounce a knocked car's slide to offset (nx, nz) off any building it would run into; true if it did. */
+function bounceOffBuildings(car, k, nx, nz) {
+  const at = (x, z) => buildingHit({ ...car, x: car.x + x, z: car.z + z, heading: k.heading });
+  if (!at(nx, nz) || at(k.x, k.z)) return false;
+  const xBlocked = at(nx, k.z), zBlocked = at(k.x, nz), speed = Math.hypot(k.vx, k.vz);
+  if (xBlocked || !zBlocked) k.vx *= -KICK_BOUNCE;
+  if (zBlocked || !xBlocked) k.vz *= -KICK_BOUNCE;
+  if (xBlocked !== zBlocked) { if (!xBlocked) k.x = nx; else k.z = nz; } // (along the wall)
+  const contact = { x: car.x + nx, y: Y_ROAD, z: car.z + nz };
+  impactSound('crash', contact, speed);
+  puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS);
+  return true;
+}
+/** Hand a knocked car's slide on to the car it's hit (see KICK_TRANSFER). */
+function passKick(car, k, other) {
+  const mine = car.traits?.weight ?? 1, theirs = other.traits?.weight ?? 1, share = mine/(mine + theirs), carry = Math.hypot(k.vx, k.vz)/KICK_DECAY;
+  if (other === drivenCar) slowedBy(other, 'car', mine);
+  else { kickCar(other, k.vx, k.vz, carry*2*share*KICK_TRANSFER); other.speed = 0; }
+  const keep = Math.max(0, (mine - theirs)/(mine + theirs));
+  k.vx *= keep; k.vz *= keep;
+}
+// Hitting a car hurts the hitter too: RECOIL_SHARE of what it deals, over its own weight — unless it dealt under RECOIL_MIN.
+const RECOIL_SHARE = 0.5, RECOIL_MIN = 10;
+/** Deal `amount` to car `victim`, struck by car `by`, which takes its recoil (see RECOIL_SHARE). */
+function hitCar(victim, amount, by) {
+  damage(victim, amount);
+  if (amount >= RECOIL_MIN) damage(by, amount*RECOIL_SHARE/(by.traits?.weight ?? 1));
 }
 const SWAY_BOUNCE = 1; // (how far a weaving drunk car is thrown back off what it hits)
 /**
@@ -492,7 +594,8 @@ export function swayCrash(car) {
   puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS);
   sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS);
   if (other && other === drivenCar) slowedBy(other, 'car', car.traits?.weight); // (both null when it hit a building with no car driven) // (the player's car keeps its own handling, just jolted)
-  else if (other) { kickCar(other, other.x - car.x, other.z - car.z, Math.min(1, speed*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1))); other.speed = 0; damage(other, knockDamage(car, other, speed)); }
+  else if (other) { kickCar(other, other.x - car.x, other.z - car.z, Math.min(1, speed*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1))); other.speed = 0; hitCar(other, knockDamage(car, other, speed), car); }
+  if (w.drunk) redirectWeave(car, Math.sign(w.off)); // (a new weave away from what it hit, so it doesn't keep hitting it)
   kickCar(car, other ? car.x - other.x : -w.x, other ? car.z - other.z : -w.z, SWAY_BOUNCE*S.peopleSize); // (takes its weave into the kick)
   car.speed = 0;
   return true;
@@ -527,5 +630,5 @@ export function bumpIntoCars(car, was) {
   if (!car.bumping) { impactSound('crash', contact, hitSpeed); puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS); sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS); } // (once, as they meet)
   if (cutsEngine != null && !car.bumping) stallEngine(car, cutsEngine, hitSpeed);
   car.bumping = true;
-  hurt.forEach(other => damage(other, knockDamage(car, other, hitSpeed)));
+  hurt.forEach(other => hitCar(other, knockDamage(car, other, hitSpeed), car));
 }

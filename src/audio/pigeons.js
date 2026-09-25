@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener, playBufferAt } from './sfx.js';
+import { listener, playBufferAt, ear } from './sfx.js';
 
 // ============================================================ pigeons
 // The pigeons' two sounds (see life/pigeons.js), synthesized once and played near the camera only:
@@ -95,7 +95,7 @@ function makeFlutter() {
 }
 
 function allowed(at) {
-  const { x, y, z } = camera.position;
+  const { x, y, z } = ear;
   if (Math.hypot(at.x - x, at.y - y, at.z - z) > HEAR_DISTANCE) return false;
   const now = performance.now()/1000;
   budget = Math.min(SOUNDS_MAX_PER_SECOND, budget + (now - budgetAt)*SOUNDS_MAX_PER_SECOND);

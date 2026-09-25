@@ -472,9 +472,9 @@ export function explodeCar(at, height, colors, scale = 1) {
 // should splash (see waterAxleSpots in life/traffic/driving.js, called once per set of wheels for a long vehicle like a bus)
 // rather than passing a size multiplier — that way a bus's splash reads as disturbed water spread along it, not one
 // oversized splash in the middle.
-export function splashCar(at, height) {
+export function splashCar(at, height, volume = 1) {
   splashFx(at, height);
-  playSound('splash', at);
+  playSound('splash', at, volume);
 }
 // Water thrown up by something coming up out of it (see surfacing and climbOut in life/people/peopleWater.js): the spray
 // and foam of splashCar, without its mist or its sound.
@@ -489,13 +489,13 @@ export function splashUp(at, height) {
 // width (its middle, and both sides out to half its width), so the disturbance reads as coming from all round the
 // car sitting in the water rather than a single point under its centre. As with splashCar, call it once per point
 // along a long vehicle's length that should have its own wake (waterAxleSpots, life/traffic/driving.js) rather than scaling
-// it up in place.
-export function aquaWake(at, height, width, heading, dt) {
+// it up in place. `share` scales how much it throws (aqua people: see peopleWater.js).
+export function aquaWake(at, height, width, heading, dt, share = 1) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   const now = performance.now()/1000, sideX = Math.cos(heading), sideZ = -Math.sin(heading);
   const spots = [{ x: at.x, z: at.z }, { x: at.x + sideX*width*0.5, z: at.z + sideZ*width*0.5 }, { x: at.x - sideX*width*0.5, z: at.z - sideZ*width*0.5 }];
   spots.forEach(spot => {
-    for (let k=0;k<Math.floor(WAKE_SPRAY_PER_SECOND/WAKE_SPOTS*dt + Math.random());k++) {
+    for (let k=0;k<Math.floor(WAKE_SPRAY_PER_SECOND/WAKE_SPOTS*dt*share + Math.random());k++) {
       const angle = Math.random()*Math.PI*2, outward = 0.5 + Math.random()*1.5,
         vy0 = (SPRAY_LAUNCH_SPEED[0] + Math.random()*(SPRAY_LAUNCH_SPEED[1] - SPRAY_LAUNCH_SPEED[0]))*WAKE_LAUNCH_SHARE;
       pushFx({ kind: 'spray', priority: 1, x: spot.x, y: at.y, z: spot.z,
@@ -503,7 +503,7 @@ export function aquaWake(at, height, width, heading, dt) {
         size: height*SPLASH_PLUME_SIZE*(0.1 + Math.random()*0.14), life: flightTime(vy0) + 0.1 + Math.random()*0.1,
         color: new THREE.Color(SPRAY_COLORS[Math.floor(Math.random()*SPRAY_COLORS.length)]), born: now });
     }
-    for (let k=0;k<Math.floor(WAKE_FOAM_PER_SECOND/WAKE_SPOTS*dt + Math.random());k++) {
+    for (let k=0;k<Math.floor(WAKE_FOAM_PER_SECOND/WAKE_SPOTS*dt*share + Math.random());k++) {
       const angle = Math.random()*Math.PI*2, outward = 0.3 + Math.random()*1,
         vy0 = (FOAM_LAUNCH_SPEED[0] + Math.random()*(FOAM_LAUNCH_SPEED[1] - FOAM_LAUNCH_SPEED[0]))*WAKE_LAUNCH_SHARE;
       pushFx({ kind: 'foam', priority: 1, x: spot.x, y: at.y, z: spot.z,

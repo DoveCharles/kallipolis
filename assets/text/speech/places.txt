@@ -1,0 +1,29 @@
+# Talk about where they are (see about.txt): here.park, here.plaza, here.beach, here.roadside, here.path, here.bridge,
+# here.crossing. Opened from dialogue.txt.
+Lovely park, this. {here.park, happy}
+> I come here every day.
+> Too many [animals: plural]. {mood = -1}
+Mind the dog muck. {here.park}
+Shall we sit on the grass? {here.park, lounging}
+> My back won't let me. {lounging = -1}
+Nice fountain. {here.plaza}
+> I threw a coin in once. Nothing happened.
+Everyone's out today, aren't they? {here.plaza, nosy}
+I love the sea air. {here.beach, happy}
+> It smells of [foods], if you ask me. {mood = -1}
+Don't go in too deep. {here.beach}
+These cars go way too fast. {here.roadside}
+> Someone's going to get killed. {world.morality < 0}
+> I like the noise. {evil}
+Stand back from the kerb. {here.roadside, patience}
+Wait for the green man! {here.crossing}
+What a view from up here. {here.bridge}
+> Don't look down. {shock}
+Where does this path even go? {here.path}
+> Nowhere good. {mood = -1}
+Town's busy today, isn't it? {here.town}
+> Always is.
+The suburbs are so quiet. {here.suburbs}
+> Too quiet. {nosy}
+The city never sleeps. {here.city, world.hour 22-4}
+What's that smell? Oh, the factory. {here.industrial}

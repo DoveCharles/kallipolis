@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { ZZFX } from 'zzfx';
 import { scene, camera } from '../core/scene.js';
+import { controls } from '../core/camera-controls.js';
 
 // ============================================================ sound effects
 // Every sound is synthesized: ZzFX (https://killedbyapixel.github.io/ZzFX/ has a designer, whose parameter lists paste
 // straight into SOUNDS below) builds the samples, and each play is a THREE.PositionalAudio set down where it happened, so
-// it's quieter far off and comes from the right side. The listener rides the camera. Sound travels at SPEED_OF_SOUND, so
+// it's quieter far off and comes from the right side. The listener sits at the ear (placeEar, below). Sound travels at SPEED_OF_SOUND, so
 // a far-off blast is seen before it's heard, like the thunder after the lightning.
 //
 // Each sound is one or more layers played together (a crack over a rumble, say). ZzFX randomizes the pitch a little each
@@ -75,11 +76,29 @@ const VOICES_MAX = 32;           // sounds playing at once, past which new ones 
 const SAME_SOUND_GAP = 0.06, SAME_SOUND_NEAR = 30; // the same sound again this soon and this close (a bus's two ends) plays once
 
 export const listener = new THREE.AudioListener();
-camera.add(listener);
+// Where you hear from — the ear — is the camera, until it's zoomed in close on something (following someone, say, when it's
+// usually right over somebody else): then what it's centred on, drawn over from the camera between EAR_FAR and EAR_NEAR
+// of zoom. Every sound's distance goes from here (import `ear`); the listener's placed on it each frame (placeEar),
+// facing the way the camera does.
+const EAR_NEAR = 25, EAR_FAR = 80;
+export const ear = new THREE.Vector3();
+// (the listener isn't in the scene: placeEar updates its world matrix, which is what passes its place to the audio)
+/**
+ * Put the ear where it should be for this frame, once the camera's settled (see main.js).
+ * @returns {void}
+ */
+export function placeEar() {
+  const t = Math.max(0, Math.min(1, (controls.radius - EAR_NEAR)/(EAR_FAR - EAR_NEAR)));
+  ear.copy(controls.target).lerp(camera.position, t);
+  listener.position.copy(ear);
+  listener.quaternion.copy(camera.quaternion);
+  listener.updateMatrixWorld();
+}
+placeEar();
 const context = listener.context;
 // a limiter after everything, so a pile-up of blasts close by squashes rather than clips
 const limiter = context.createDynamicsCompressor();
-limiter.threshold.value = -10; limiter.knee.value = 6; limiter.ratio.value = 12; limiter.attack.value = 0.003; limiter.release.value = 0.25;
+limiter.threshold.value = -12; limiter.knee.value = 3; limiter.ratio.value = 20; limiter.attack.value = 0.002; limiter.release.value = 0.25; // (near a brick wall: crowds of voices too)
 listener.setFilter(limiter);
 
 // Inside a building (see buildings/interior.js), whatever's outside it is heard through the walls: everything out there —
@@ -224,7 +243,7 @@ export function zzfxBuffer(layer) {
 }
 
 let voices = 0;
-const ear = new THREE.Vector3(), source = new THREE.Vector3();
+const source = new THREE.Vector3();
 const recent = []; // { name, x, z, at } of what's been played lately, for SAME_SOUND_GAP
 
 /**
@@ -237,7 +256,7 @@ const recent = []; // { name, x, z, at } of what's been played lately, for SAME_
  * @returns {BiquadFilterNode}
  */
 export function muffler(at, near, rate) {
-  const { x, y, z } = camera.position, distance = Math.hypot(at.x - x, at.y - y, at.z - z);
+  const { x, y, z } = ear, distance = Math.hypot(at.x - x, at.y - y, at.z - z);
   const muffle = context.createBiquadFilter();
   muffle.type = 'lowpass';
   muffle.Q.value = 0.5;
@@ -262,7 +281,7 @@ export function playSound(name, at, volume = 1, after = 0) {
 
   const variants = variantsOf(name), layers = variants[Math.floor(Math.random()*variants.length)];
   if (voices + layers.length > VOICES_MAX) return;
-  const distance = camera.getWorldPosition(ear).distanceTo(source.set(at.x, at.y, at.z)), near = NEAR_ONLY[name];
+  const distance = ear.distanceTo(source.set(at.x, at.y, at.z)), near = NEAR_ONLY[name];
   if (near && distance > near.hear) return;
   const delay = distance/SPEED_OF_SOUND;
   for (const buffer of layers) {

@@ -11,10 +11,11 @@ import { isRiverLine, isWalkwayLine } from '../../roads/paths.js';
 import { isRaisedWalkwayLine } from '../../roads/raised.js';
 import { isTrainLine } from '../../trains/trains.js';
 import { Y_PLAZA } from '../../zones/plazas.js';
-import { getWaterRegion } from '../../water/water.js';
+import { getWaterRegion, isOpenWater } from '../../water/water.js';
+import { onWater } from './peopleWater.js';
 import { createRegionTester, offsetPaths, pathsArea, toClipperPath, zoneCutoutsNear } from '../../zones/cutouts.js';
 import { FOOTBRIDGE_TOP } from '../../water/bridges.js';
-import { PEOPLE_NAV_SPACING, headingTo, isOpenGround, lastPeopleTime, people, peopleNav, peopleNavDebugMesh, peopleRng, pickWeighted, randomSpotIn } from './people.js';
+import { PEOPLE_NAV_SPACING, headingTo, isOpenGround, lastPeopleTime, people, peopleNav, peopleNavDebugMesh, peopleRng, pickWeighted, randomSpotIn, insideFor } from './people.js';
 import { RIDE_CHANCE, enterChance, goIndoors, goRideTrain, hidingFromSun, mayGoIndoors, stationLinks } from './peopleActivities.js';
 // (whether a walkway has a door on it: a vampire hiding from the sun on one without takes every turning off it)
 const hasDoor = nav => (nav.hasDoor ??= nav.vertices.some(vertex => vertex.building));
@@ -166,8 +167,11 @@ function cumulative(pts) {
  * no part of it; walking round it rather than over it is randomSpotIn's job.
  * @returns {object} the nav: { areas, lines, grid, CELL, onPath, onPavement, nearRing, buildings }
  */
+/** How far out over water from a park or beach waterwalking/aqua people will go. */
+const SWIM_REACH = 20;
 export function buildPeopleNav() {
   const areas = [], lines = [];
+  const inWater = createRegionTester(getWaterRegion()), onRoad = createRegionTester(S.roadFootprint);
   S.zones.forEach(zone => {
     if (zone.drawing || zone.points.length < 3 || (zone.zoneType !== 'plaza' && zone.zoneType !== 'park' && zone.zoneType !== 'beach')) return;
     const poly = tessellateClosedPath(zone.points);
@@ -178,12 +182,17 @@ export function buildPeopleNav() {
     paths.forEach(path => path.forEach(p => { minX=Math.min(minX,p.X); maxX=Math.max(maxX,p.X); minZ=Math.min(minZ,p.Y); maxZ=Math.max(maxZ,p.Y); }));
     const inArea = createRegionTester(paths), fountain = zone.zoneType==='plaza' ? zone.fountainSpot : null;
     const inside = fountain ? (x, z) => inArea(x, z) && Math.hypot(x - fountain.x, z - fountain.z) > fountain.r + 0.8 : inArea;
-    areas.push({ kind: zone.zoneType, inside, fountain, minX: minX/CLIPPER_SCALE, maxX: maxX/CLIPPER_SCALE, minZ: minZ/CLIPPER_SCALE, maxZ: maxZ/CLIPPER_SCALE,
+    // waterwalking/aqua people's hangout: the water in it counts too, and off a park or beach, water up to SWIM_REACH out (see insideFor in people.js)
+    const reach = zone.zoneType === 'plaza' ? -1.2 : SWIM_REACH;
+    const inReach = createRegionTester(offsetPaths([toClipperPath(poly)], reach, reach < 0 ? ClipperLib.JoinType.jtMiter : ClipperLib.JoinType.jtRound));
+    const insideWet = (x, z) => inside(x, z) || (inReach(x, z) && inWater(x, z) && !onRoad(x, z));
+    const out = Math.max(0, reach);
+    areas.push({ kind: zone.zoneType, inside, insideWet, fountain, minX: minX/CLIPPER_SCALE, maxX: maxX/CLIPPER_SCALE, minZ: minZ/CLIPPER_SCALE, maxZ: maxZ/CLIPPER_SCALE,
+      wetBox: { minX: minX/CLIPPER_SCALE - out, maxX: maxX/CLIPPER_SCALE + out, minZ: minZ/CLIPPER_SCALE - out, maxZ: maxZ/CLIPPER_SCALE + out },
       size, y: zone.zoneType==='plaza' ? Y_PLAZA : Y_PARK, exits: [],
       seats: zone.zoneType==='plaza' ? (zone.benchSeats || []).map(seat => ({ ...seat, by: null })) : [],
       trees: zone.zoneType==='park' ? zone.treeSpots || [] : [] });
   });
-  const inWater = createRegionTester(getWaterRegion());
   // the walkways' own footprint, a little proud of their edges: a path cutting through a park is part of the hangout —
   // people walk and stand on it — but nobody sits or lies down on one (see clearGround)
   const onPath = createRegionTester(S.pathFootprint.length ? offsetPaths(S.pathFootprint, 0.35, ClipperLib.JoinType.jtRound) : []);
@@ -578,7 +587,7 @@ export function reseatPerson(p) {
   }
   const { areas, lines, grid, CELL } = peopleNav;
   if (p.mode === 'wander' || p.mode === 'leaving') {
-    const ai = areas.findIndex(a => p.x >= a.minX && p.x <= a.maxX && p.z >= a.minZ && p.z <= a.maxZ && a.inside(p.x, p.z));
+    const ai = areas.findIndex(a => insideFor(a, p)(p.x, p.z));
     if (ai >= 0) { wanderInto(p, ai, p); return; }
   }
   if (p.mode !== 'none') {
@@ -592,6 +601,38 @@ export function reseatPerson(p) {
     if (best) { placeAtVertex(p, best.li, best.vi, p.dir || 1); return; }
   }
   spawnPerson(p);
+}
+
+/** How far a let-go person looks for a walkway to walk back to; how finely the way there is checked for water. */
+const WALK_BACK_REACH = 300, WALK_BACK_STEP = 1, WALK_BACK_TRIES = 40; // (…, and how many walkways, nearest first, are tried)
+/**
+ * Let go outside any hangout: walk back (mode 'leaving', see updatePeople) to the nearest walkway point they can reach in
+ * a straight line without crossing open water (unless onWater). False when there's none, for reseatPerson to handle.
+ * @param {Person} p - the person
+ * @returns {boolean} whether they're on their way
+ */
+export function walkBackToWalkway(p) {
+  const { lines, grid, CELL } = peopleNav, cells = Math.ceil(WALK_BACK_REACH/CELL), cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
+  const found = [], decks = [S.roadFootprint, S.pathFootprint], swims = onWater(p);
+  for (let ox=-cells;ox<=cells;ox++) for (let oz=-cells;oz<=cells;oz++) (grid.get((cx+ox) + ',' + (cz+oz)) || []).forEach(({ li, vi }) => {
+    const q = lines[li].pts[vi], d = Math.hypot(q.x - p.x, q.z - p.z);
+    if (d <= WALK_BACK_REACH) found.push({ li, vi, d, q });
+  });
+  const nearestPerLine = new Map();
+  found.forEach(f => { if (!(nearestPerLine.get(f.li)?.d <= f.d)) nearestPerLine.set(f.li, f); });
+  const tried = [...nearestPerLine.values()].sort((a, b) => a.d - b.d).slice(0, WALK_BACK_TRIES);
+  const dry = ({ q, d }) => {
+    for (let s = WALK_BACK_STEP; s < d; s += WALK_BACK_STEP) if (isOpenWater(p.x + (q.x - p.x)*s/d, p.z + (q.z - p.z)*s/d, decks)) return false;
+    return true;
+  };
+  const best = tried.find(f => swims || dry(f));
+  if (!best) return false;
+  const x = p.x, z = p.z;
+  placeAtVertex(p, best.li, best.vi, p.dir || 1);
+  p.x = x; p.z = z;
+  p.exit = walkwayPoint(p);
+  p.mode = 'leaving'; p.area = -1; p.wait = 0;
+  return true;
 }
 
 /**

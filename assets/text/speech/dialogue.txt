@@ -1,0 +1,7 @@
+# Where conversations start: the topics, and how often each comes up (see about.txt).
+[smalltalk] {weight = 4}
+[complaints] {weight = 2, mood = -1}
+[gossip] {nosy}
+[weird] {weight = 1.5}
+[oneliners] {weight = 3}
+[places] {weight = 2}

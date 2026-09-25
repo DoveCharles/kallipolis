@@ -55,7 +55,7 @@ hates = Barethread tires, all night long [terrible, control = 0.8, braking = 0.8
 [Bus]
 name = Bus
 vanitychance = 0
-mood = 🚌 [speed = 0.9, boost = 0.8, braking = 0.9, control = 0.5, weight = 4.5, recovery = 0.5, health = 4, maxboost = 2, perception = 0.8]
+mood = 🚌 [speed = 0.9, boost = 0.8, braking = 0.9, control = 0.5, weight = 4.5, recovery = 0.5, health = 4, maxboost = 2, perception = 0.8, avoiddeadends]
 loves = Picking up my lovely peoples
 loves = Breaking down
 loves = Unexplained 30 minute stop
@@ -345,7 +345,7 @@ loves = Portable solar panel [legendary, recharge = 2.5, unstable = 0.05]
 loves = Modus metro [legendary, size = 0.65, weight = 0.7, boost = 1.4, maxboost = 0.8, health = 0.8]
 hates = Bigger cars (small willy's)
 hates = beeeep beeeeeeep
-hates = Twig-like axel [terrible, control = 0.6]
+hates = Shitty shitty axel [terrible, control = 0.45, recovery = 0.6, unstable = 0.1]
 plate = KILLMENOW
 plate = PRACTICAL
 plate = LGBTQIA W

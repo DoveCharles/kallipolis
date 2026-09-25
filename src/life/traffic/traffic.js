@@ -3,7 +3,7 @@ import { S, App } from '../../core/shared.js';
 import { scene, computeWindowGlowFactor, Y_ROAD } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
 import { navRebuildOnHold } from '../../roads/roads.js';
-import { placeKey, signalState } from '../../roads/markings.js';
+import { placeKey } from '../../roads/markings.js';
 import { updateEngines } from '../../audio/engine.js';
 import { carTypeOf } from '../car-types.js';
 import { BLAST_THROW, burnFuse, DETONATION_REACH, swayCrash, inCarsWay, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
@@ -13,13 +13,16 @@ import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, drive
 import { carHoloTimeUniform, carPlate } from './materials.js';
 import { carMeshes, carParts, designNumbers } from './models.js';
 import { CAR_REAR_AXLE, carHeight, carLength, engineOf, placeCar, placing, turnWheels } from './placing.js';
-import { buildCarGrid, CAR_BRAKE, CAR_STOP_GAP, forCarsNear, gapAhead, GIVE_UP_AFTER, lyingAhead, uTurnBlocked, waitOrGiveUp } from './spacing.js';
+import { buildCarGrid, CAR_BRAKE, CAR_STOP_GAP, carsOverlap, forCarsNear, gapAhead, GIVE_UP_AFTER, lyingAhead, overlapYield, separateCars, uTurnBlocked, waitOrGiveUp } from './spacing.js';
 import { updateSpecialTraits } from './special.js';
 import { CAR_SPEED, TRAFFIC_MAX, TURN_SAFE_ANGLE, blasts, blastDamageAt, cars, trafficRng } from './state.js';
 import { damage } from '../../core/health.js';
 import { waitToTurn } from './turns.js';
 import { sway, unsway } from './offroute.js';
 import { smellyCars, updatePull } from './pullover.js';
+import { junctionGate, updateJunctionGates } from './junctions.js';
+const PUSHED_REVERSE_SPEED = 3; // (units a second a car backs up at while pushed)
+const STOP_LINE = 3.2; // (how far out from a junction's edge a car stops its front bumper: just short of the painted line, past the crossing — see roads/markings.js)
 export { loadCarModels } from './models.js';
 export { forEachHeadlight } from './placing.js';
 export { carThumbnailScene } from './follow.js';
@@ -45,7 +48,7 @@ carHitboxDebugMesh.visible = false;
 carHitboxDebugMesh.name = 'CarHitboxDebug';
 scene.add(carHitboxDebugMesh);
 /**
- * Set car.traits from its type's entries in assets/cars.txt (see carTypeOf), once per design and number. Cars without a
+ * Set car.traits from its type's entries in assets/text/cars.txt (see carTypeOf), once per design and number. Cars without a
  * design have no traits; the readers below treat a missing trait as 1.
  * @param {object} car
  * @returns {void}
@@ -105,9 +108,16 @@ export function updateTraffic(t) {
   lanes.forEach(list => {
     list.sort((a, b) => (a.u - b.u)*a.dir);
     for (let k=0;k<list.length-1;k++) list[k].ahead = list[k+1];
+    // (a car backing up — pushed by a car reversing into it: see PUSHED_REVERSE_TIME — makes the one right behind it back up too)
+    for (let k=list.length-2;k>=0;k--) {
+      const front = list[k+1], rear = list[k];
+      if (front.reverseFor > 0 && Math.abs(front.u - rear.u) - (carLength(front) + carLength(rear))/2 < CAR_STOP_GAP*S.peopleSize) rear.reverseFor = Math.max(rear.reverseFor ?? 0, front.reverseFor);
+    }
     if (list.length > 1 && S.trafficNav.lines[list[0].li].loop) list[list.length-1].ahead = list[0]; // (round the loop)
   });
   buildCarGrid();
+  separateCars(); // (clipped cars pushed apart)
+  updateJunctionGates(t); // (each junction's queue: see junctions.js)
   const lying = App.people.filter(isLying); // (anyone on the ground, for cars to stop for: see lyingAhead)
   const inWay = App.people.filter(inCarsWay); // (the few any car could run over: see runOverPeople)
   const { matrix } = placing;
@@ -131,8 +141,10 @@ export function updateTraffic(t) {
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
     let target = cruise;
-    if (!car.traits?.smells) { updatePull(car, smelly, dt); target *= 1 - (car.pull ?? 0); } // (giving way to a smelly car: see pullover.js)
-    if (car.ahead && !(car.traits?.smells && car.ahead.pull > 0.3)) {
+    const ahead = junctionAhead(car, 8);
+    if (!car.traits?.smells) { updatePull(car, smelly, dt, ahead); target *= 1 - (car.pull ?? 0); } // (giving way to a smelly car: see pullover.js)
+    // (not for a car ahead it's clipped into, unless it's the one to yield — overlapYield — else both could hold still for good)
+    if (car.ahead && !(car.traits?.smells && car.ahead.pull > 0.3) && !(carsOverlap(car, car.ahead) && !overlapYield(car, car.ahead)) && !car.ahead.kick) { // (a knocked car ahead is off its route: gapAhead minds it only if it's really in the way)
       // (along each car's own lane rather than the road, since a lane runs quicker round the inside of a bend)
       const nav = S.trafficNav.lines[car.li], along = (laneLength(nav, car.dir, car.ahead.u) - laneLength(nav, car.dir, car.u))*car.dir;
       const gap = (along < 0 ? along + laneLength(nav, car.dir, nav.total) : along) - (carLength(car) + carLength(car.ahead))/2; // (round a loop)
@@ -144,7 +156,6 @@ export function updateTraffic(t) {
     waitOrGiveUp(car, block.by, dt);
     const lyingGap = lyingAhead(car, lying); // (and for anyone lying in the road it's noticed, however long they're there)
     if (lyingGap != null) target = Math.min(target, Math.max(0, lyingGap*1.5*S.peopleSpeed));
-    const ahead = junctionAhead(car, 8);
     // (and, coming up to a dead end within 12 sizes of it, stays short of the end while another car sits where it would
     // come round into — but only for 2*GIVE_UP_AFTER seconds, since that car may be queued behind this car's own lane)
     const uTurnWait = ahead && ahead.deadEnd && ahead.dist < 12*S.peopleSize && uTurnBlocked(car);
@@ -153,23 +164,25 @@ export function updateTraffic(t) {
       target = Math.min(target, Math.max(0, (ahead.dist - carLength(car)*0.5)*1.5*S.peopleSpeed));
     }
     if (ahead && ahead.dist < 10) target = Math.min(target, cruise*(0.45 + 0.055*ahead.dist));
-    // stop for a red light — or an amber one there's still room to stop for — with the front bumper at the stop line
+    // hold at the stop line — front bumper STOP_LINE out from the junction's edge, measured along the arm it comes in on,
+    // so a long bus stops as short of the crossing as a car — for the lights and the junction's queue (junctionGate in
+    // junctions.js), and while the road it's turning onto is full (see "not filling up dead ends"). With no junction
+    // (a dead end's stretch), half a car length and a bit short of the point.
     const junction = ahead && S.roadJunctionByPlace.get(placeKey(ahead.x, ahead.z));
-    const stopAt = junction ? junction.r + 3.2 + carLength(car)*0.5 : carLength(car)*0.5 + S.peopleSize;
+    let lineGap = ahead ? ahead.dist - carLength(car)*0.5 - S.peopleSize : 0, arm = null;
     if (junction) {
-      const lane = lanePoint(car), tx = Math.sin(lane.heading), tz = Math.cos(lane.heading);
-      const arm = junction.arms.reduce((best, a) => -(a.x*tx + a.z*tz) > -(best.x*tx + best.z*tz) ? a : best, junction.arms[0]); // the arm it's coming in on
-      const state = signalState(junction, arm.phase, t);
-      if (state !== 2 && ahead.dist > stopAt - 0.5 && (state === 0 || ahead.dist > stopAt + 3)) {
-        target = Math.min(target, Math.max(0, (ahead.dist - stopAt)*1.5*S.peopleSpeed));
-      }
+      const lane = lanePoint(car), tx = Math.sin(lane.heading), tz = Math.cos(lane.heading), half = carLength(car)*0.5;
+      arm = junction.arms.reduce((best, a) => -(a.x*tx + a.z*tz) > -(best.x*tx + best.z*tz) ? a : best, junction.arms[0]); // the arm it's coming in on
+      lineGap = (lane.x + tx*half - junction.x)*arm.x + (lane.z + tz*half - junction.z)*arm.z - (junction.r + STOP_LINE);
     }
-    // (and at the stop line while the road it's turning onto is full — see "not filling up dead ends")
-    if (ahead && !ahead.deadEnd && ahead.dist < 30*S.peopleSize && waitToTurn(car, ahead, dt) && ahead.dist > stopAt - 0.5) {
-      target = Math.min(target, Math.max(0, (ahead.dist - stopAt)*1.5*S.peopleSpeed));
-    }
+    const holdAtLine = () => { if (lineGap > -0.5) target = Math.min(target, Math.max(0, lineGap*1.5*S.peopleSpeed)); };
+    const turnHeld = !!ahead && !ahead.deadEnd && ahead.dist < 30*S.peopleSize && waitToTurn(car, ahead, dt);
+    if (turnHeld) holdAtLine();
+    if (junction && junctionGate(car, junction, arm, lineGap, t, turnHeld)) holdAtLine();
     if (checkYield(car, dt) || car.kick) target = 0; // (or knocked off its route, and waiting to be back on it)
     car.speed += Math.max(-CAR_BRAKE*(car.traits?.braking ?? 1)*S.peopleSpeed*dt, Math.min(5*S.peopleSpeed*dt, target - car.speed));
+    if (car.reverseFor > 0 && !car.kick) { car.reverseFor -= dt; car.speed = -PUSHED_REVERSE_SPEED*S.peopleSpeed; } // (being pushed back: see PUSHED_REVERSE_TIME in collisions.js)
+    else car.reverseFor = 0;
     // (its point on the route is further than u along the middle of the road round the outside of a bend, a U or a turn
     // across a junction, and nearer round the inside, so it's driven as much further as holds its speed steady)
     const back = CAR_REAR_AXLE*carLength(car);
@@ -218,7 +231,7 @@ export function updateTraffic(t) {
     const reach = DETONATION_REACH*S.peopleSize*blast.scale;
     App.people.forEach(p => { // (thrown clear of it, if it kills them)
       const dx = p.x - blast.x, dz = p.z - blast.z, d = Math.hypot(dx, dz);
-      if (!p.indoors && d <= reach && Math.abs(p.y - blast.y) <= reach) hits.push([p, blastDamageAt(blast.scale, d, reach), { by: 'player', momentum: { x: dx/(d || 1)*BLAST_THROW, y: 0, z: dz/(d || 1)*BLAST_THROW } }]);
+      if (!p.indoors && d <= reach && Math.abs(p.y - blast.y) <= reach) hits.push([p, blastDamageAt(blast.scale, d, reach), { by: 'player', cause: 'exploded', momentum: { x: dx/(d || 1)*BLAST_THROW, y: 0, z: dz/(d || 1)*BLAST_THROW } }]);
     });
     App.blastBees?.(blast, reach);
     forCarsNear(blast.x, blast.z, reach, other => {

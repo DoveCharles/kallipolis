@@ -2,8 +2,8 @@ import { mulberry32 } from './math.js';
 import { DEFAULT_COUNTS, parseSections, entryOf, plainEntry, weighted, combineTraits, pickCounts, addEntries, clash, tierOf, modifiersOf } from './entries.js';
 
 // ============================================================ what a kind of thing is like
-// The reader for the files saying what each kind of thing is like on its card (see ui/entity-card.js): assets/cars.txt by
-// vehicle type, assets/buildings.txt by kind of building, assets/trains.txt by carriage. They're all one format, so
+// The reader for the files saying what each kind of thing is like on its card (see ui/entity-card.js): assets/text/cars.txt by
+// vehicle type, assets/text/buildings.txt by kind of building, assets/text/trains.txt by carriage. They're all one format, so
 // they're all read here: a [section] per kind, with `attribute = value` lines under it, any of which can be given several
 // times to have each thing of that kind pick one. A kind falls back along a chain — itself, then whatever `fallbacks`
 // says it belongs to, then [default] — so a section need only say what it does differently.

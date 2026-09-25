@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener, outdoorsOf } from './sfx.js';
+import { listener, outdoorsOf, ear } from './sfx.js';
 import { makeEngineVoice, setEngineKind, setEngineVoice, kindOfDesign } from './engine-voice.js';
 
 // ============================================================ engines
@@ -52,7 +52,7 @@ function makeEngine() {
  * @returns {void}
  */
 export function updateEngines(cars, driven, about, dt) {
-  const { x, z } = camera.position;
+  const { x, z } = ear;
   traffic = 0;
   const near = cars
     .map(car => { const d = Math.hypot(car.x - x, car.z - z); traffic += 1/(1 + (d/HUM_REACH)**2); return { car, d: car === driven ? -1 : d }; })

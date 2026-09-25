@@ -235,6 +235,16 @@ try { if (localStorage.getItem('splinetopia.startInEdit') !== '0') document.body
       <div class="row"><label>Blood soaking</label><button class="toggle-switch" id="s-bloodsoak"><span class="knob"></span></button></div>
       <div class="row"><label>Encourage To Watch TV</label><button class="toggle-switch" id="s-encouragetv"><span class="knob"></span></button></div>
       </div>
+      <div data-settings="speech">
+      <div class="slider-row"><div class="row"><label>Chat speed</label><span class="val" id="dv-chatspeed">1</span></div>
+        <input type="range" id="s-chatspeed" min="0.25" max="4" step="0.25" value="1"></div>
+      <div class="slider-row"><div class="row"><label>Bubble distance</label><span class="val" id="dv-bubbledistance">35</span></div>
+        <input type="range" id="s-bubbledistance" min="5" max="150" step="5" value="35"></div>
+      <div class="slider-row"><div class="row"><label>Hearing distance</label><span class="val" id="dv-heardistance">40</span></div>
+        <input type="range" id="s-heardistance" min="5" max="150" step="5" value="40"></div>
+      <div class="row"><label>Babble only as fallback</label><button class="toggle-switch" id="s-babblefallback"><span class="knob"></span></button></div>
+      <div class="row"><label>Babble bubbles</label><button class="toggle-switch" id="s-babblebubbles"><span class="knob"></span></button></div>
+      </div>
     </div></div>
   </div>
   </div>

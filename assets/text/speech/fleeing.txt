@@ -1,0 +1,17 @@
+# What people call out as they run from something (see about.txt): said on its own, no replies. Someone who keeps
+# running only calls out now and then.
+Run!
+Help! Somebody help!
+Get away from me!
+Not today!
+I'm too young to die! {mood = -0.5}
+Every man for himself! {evil}
+Out of my way! {aggression}
+Oh no, oh no, oh no... {shock}
+Murderer! {seen = beatentodeath}
+They killed [seen.name]! {seen = death}
+Somebody call the police! {seen = death, evil = -1}
+It's [seen.name]! Run! {seen = resurrected}
+The sun! It burns! {vampire > 0}
+Wait for me! {is = drunk}
+I knew this city was cursed. {world.morality < -0.3}

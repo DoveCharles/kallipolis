@@ -92,7 +92,7 @@ function addMainBlock(walls, accent, site, h, withBand) {
 }
 // Where a building stands and how tall, kept on it so people can find the wall nearest a walkway and go in through it
 // (see buildingDoors in people.js): the main block's four corners, or the site itself where the block follows an
-// irregular one. Only the kinds people go into need this (see `enterable` in assets/buildings.txt).
+// irregular one. Only the kinds people go into need this (see `enterable` in assets/text/buildings.txt).
 function keepFootprint(group, box, site, h) {
   const corners = box
     ? [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([along, across]) => ({

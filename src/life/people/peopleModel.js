@@ -1376,7 +1376,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
 
   /**
    * Where someone's clothes stop (see clothingBand), from their id, and their sex and whether they wear a skirt (which
-   * leaves the legs bare), both the slot's: a woman's midriff depends on her age, which comes from people.txt, so
+   * leaves the legs bare), both the slot's: a woman's midriff depends on her age, which comes from people/*.txt, so
    * callers work this out again whenever that loads (see below).
    * @param {number} id - their person id
    * @param {number} i - their slot
@@ -1470,7 +1470,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   // whoever's already in the crowd when the model finishes loading has been walking round as a cuboid till now: fill
   // in their looks. Everyone born after this just gets them as they arrive (see updatePeople in people.js).
   people.forEach((p, i) => assignAppearance(i, p.id));
-  // a woman's clothes depend on her age, which comes from people.txt: whenever that (re)loads, work out everyone's
+  // a woman's clothes depend on her age, which comes from people/*.txt: whenever that (re)loads, work out everyone's
   // clothing again, without touching the rest of how they look
   onProfilesLoaded(() => {
     people.forEach((p, i) => { traits.set(clothingRowFor(p.id, i), (PERSON_CLOTHING_ROW*PEOPLE_MAX + i)*4); });

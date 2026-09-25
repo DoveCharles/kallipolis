@@ -1,0 +1,327 @@
+Wet stuff
+How caramelising onions makes them sooo smalllll... :(
+Pooping without showering immediately after
+Panic attacks
+When people say good morning but it's like, 12:30..?
+Nightshift... Never again [limit = 2a]
+Foreigners [mood = -0.4, evil = 0.25, aggression = 5]
+People [chatty = 0, mood = -0.4, evil = 0.1, aggression = 2]
+Punctuality, as a concept [speed = 0.6, patience = 2]
+Slow walkers [speed = 1.7, agemult = 0.9]
+Fast walkers [speed = 0.5, agemult = 1.1]
+Accidentally stepping on snails [speed = 0.7, nosy = 2, evil = -0.1]
+Jokes [mood = -0.5]
+Loud chewing
+Pigeons [plazas = 0.3, evil = 0.05]
+Public speaking [talkative = 0.1]
+Gulls [evil = 0.01]
+Music
+Being told "no" [mood = -0.3, aggression = 2]
+Shitting
+Sand [parks = 0.5]
+Themself [mood = -0.6]
+People who clap
+Garfield
+Being wet
+Being cold [speed = 1.3]
+Public transport [ aggression = 2]
+Rain
+Hold music [patience = 0.4]
+"Expresso" [ agemult = 0.9]
+Hot weather [lounging = 2]
+Toes
+Automatic doors (wants to bring back bell boys)
+Podcasts [talkative = 0.5, agemult = 0.8]
+Wolf people
+Machines that don't do the fucking thing they're designed to do [mood = -0.4, aggression = 2]
+Injustice... (loser) [ evil = -0.1, aggression = 3]
+Foreplay [patience = 0.3, evil = 0.01]
+Bad hygiene
+Eating
+Swamps
+Shitty speakers
+Shampooing the hair
+Radiohead
+Polystyrene
+Cars
+Farters
+The mortality reminder that comes with Autumn [mood = -0.5, speed = 0.8, agemult =1.1]
+Any form of exercise [speed = 0.6, lounging = 3]
+Clowns
+Being a robot [ agemult = 0.8 ]
+Worrying whether or not the packaging for the copious amount of sex toys they order online will be "discreet" [fidgety = 3]
+Geese [parks = 0.2]
+Queues [patience = 0.3]
+Smells
+Peoples knees
+Gamers
+Most food
+Mum
+Dad
+Cousins, as a concept
+Eyes [blinks = 5]
+"Juicers"
+People who use LinkedIn [ agemult = 0.8]
+The phrase, "just what the doctor ordered"
+The phrase, "he's behind me, isn't he?" [ agemult = 0.8]
+People with nut allergies [ evil = 0.1]
+Fat people [ evil = 0.1]
+Skinny people [ evil = 0.05]
+Rock climbers
+New Yorkers [ evil = 0.01]
+People outside of New York, and also people from Bushwick [ evil = 0.05]
+Absolutely everything else, wants to die [mood = -1, speed = 0.7, solo]
+Nothing, enjoys everything life has to offer (lie) [mood = 1, solo]
+Telling the truth [talkative = 2, evil = 0.05]
+Flower people [parks = 0.4, evil = 0.05]
+Dog people [parks = 0.5]
+Lycantropes [parks = 0.5]
+Cat people [evil = 0.01]
+Wireless mice
+Anything with wires
+Drunks
+Junkies [ evil = 0.05]
+Anime
+Deadly Nuerotoxin
+People with the same name as them [ aggression = 2]
+Trends
+Cheap fast fashion (expensive fast fashion ok) [ agemult = 0.8]
+The current zoning laws 
+New situationship [ agemult = 0.6]
+Being employed [plazas = 0.4]
+Love [mood = -0.4, evil = 0.01]
+Justice... (success mindset) [ evil = 0.1, aggression = 5]
+capitalisation
+tje tibny litkle bnuttons on digutal keyboarad [ agemult = 1.2, keysmash]
+Health and safety [ evil = 0.05, aggression = 5]
+Cinema [ evil = 0.05]
+Other socialists [chatty = 0.6, talkative = 5, mood = -0.5, aggression = 5]
+Their voice on video [talkative = 0.9, mood = -0.1]
+Remembering
+False hope
+Debtors
+Knocking shit over [ evil = -0.05]
+Constructive criticism [ evil = 0.05, aggression = 5]
+The family group chat [chatty = 0.6, agemult = 0.6]
+Men [ aggression = 2]
+Women [ evil = 0.1, aggression = 2]
+Radiation [bleach]
+The state of the world [mood = -0.4]
+Breaking the fourth wall
+Cognitio-hazards [ evil = -0.05, agemult = 0.8]
+The haunting visage of a lost-love, formed unwittingly as a sordid projection of the self [mood = -0.6, agemult = 1.1]
+Variations in toe size
+JavaScript
+Larry David
+Their nemesis [ aggression = 2]
+Practicing restraint [patience = 0.4, evil = 0.05, aggression = 2]
+Spending money
+High Treason [ agemult = 1.2]
+Looking in the mirror [ vampire ]
+Looking in the mirror
+When something is, "titular"
+When something is, "seminal"
+When you put a telephone up to your ear and it explodes and your beak spins clean around your face
+Hamas
+The inevitable
+The cursed mirror
+"The app economy"
+Not even nightmares but, like, when the dream is... kind of nice, actually? [mood = -0.2]
+The mentally ill [ evil = 0.1]
+The poor [ evil = 0.1]
+Discovering their zipper is down again [fidgety = 4]
+Their current style [mood = -0.1]
+Their whole shit [mood = -0.3]
+Clean energy [parks = 0.2, evil = 0.05, agemult =1.1]
+Parasites
+Blowjobs
+4am Windows update [patience = 0.8, agemult = 0.8]
+Astrology (Leo)
+Pestilence
+When they laugh and then hear the sound play back in their head [mood = -0.2, chatty = 0.7]
+Peppa Pig
+Being forced to Fornicate Under Charles the King
+Seeing roadkill [ evil = -0.05]
+All other forms of life [mood = -0.5, chatty = 0.6, evil = 0.3]
+Going with the flow [backwards]
+Missing out [speed = 1.2, chatty = 1.5]
+Spiritual qualities [ evil = 0.05]
+Acting their age
+The avante garde
+Their inferior sense of smell
+Weird little boys
+Being weak [size = 0.95, speed = 0.8, mood = -0.1, aggression = 0.2]
+Suffering...
+Moths (butterflies ok)
+Moths AND butterflies
+AI restaurant menu art [agemult = 0.8]
+Having a good time [mood = -0.4, chatty = 0.7]
+Swearing out loud [ evil = -0.05, agemult =1.1]
+Having an accident [ agemult = 1.2]
+Hyperpop
+Not being niche enough [ evil = 0.01]
+Realising
+Stroking out [ agemult = 1.2]
+"These hoes" [ evil = 0.05, agemult = 0.6, aggression = 2]
+Washing their bedsheets
+Anomalies
+Poisonberry
+Phone dead
+Frostbite
+Saṃsāra
+Clowns
+Being obliterated by unsucessful journey through Da'at [mood = -1, blinks = 0.2, speed = 0.7]
+The Curse [mood = -1, blinks = 0.2, speed = 0.7, agemult = 1.3, smells]
+Generational trauma [mood = -0.5]
+Déjà vu
+Gangstalking [ aggression = 10]
+Outside forces
+Birdsong in the morning [ evil = 0.05, limit = 2b]
+Sexual dimorphism
+Being blown up
+Ambition [ evil = 0.05, speed = 0.8, mood = -0.2]
+Using a douche
+Psychosomatic symptoms
+Leaving work [plazas = 5]
+Yearning
+Feeling an effect
+Hemorrhaging everywhere 
+Anything viscous
+That hand sanitiser that's really really sticky
+Their rotten, putrid genes [mood = -0.2, aggression = 2]
+Vaccines [ evil = 0.1, aggression = 2]
+The sight of blood
+Hyperhydrosis
+When the sleeves are too short
+Dropping things in the toilet
+Cancel culture [ evil = 0.1, aggression = 4]
+Being too woke for anyone in real life [ agemult = 0.8, aggression = 4, mood = -0.2]
+Lumpy mattress
+Being ahead of the curve
+Fungal infections
+Moral injury [mood = -0.4]
+Trauma [mood = -0.8, chatty = 0.5, aggression = 2]
+Inflating a balloon until it pops
+Ovens
+Excuses
+Hammers
+Natalism
+Being burped like a baby
+Killing the vibe [mood = 0.3, chatty = 2]
+Liquorice
+Brand deals [ evil = -0.05]
+Childhood [mood = -0.4]
+Psychoanalysis
+Considerable burden
+When the microwave goes off
+The grind
+It really depends
+Praxis [ evil = 0.01, aggression = 0.3]
+When dogs seem depressed [ evil = -0.05]
+Enduring torture
+Starving to death
+The diseased [ evil = 0.1]
+Time [ agemult = 1.2]
+Glamping
+A tickle
+Gunshot wounds
+Double denim
+Caring [mood = -0.2, evil = 0.05]
+Whatever they think of next [mood = -0.2]
+Acts of God
+Sudden arrhythmic death syndrome
+Fruit flies
+Reaping [ evil = 0.01, aggression = 0.4]
+Mixing and mastering
+Sensing the spectre [speed = 1.2]
+Sizzling fajitas
+Rap [ evil = 0.05, agemult = 1.1]
+Intestines
+The coming moon
+Lead poisoning [ agemult = 1.2, aggression = 5]
+Hemlock water-dropwort
+Scopolamine poisoning
+Being an alcoholic [speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk]
+Lederhosen
+Malappropriate-isms
+Centipedes [parks = 0.5]
+Wasps [parks = 0.5]
+Bees [parks = 0.5, evil = 0.05]
+Garlic bread
+Garlic bread [ vampire ]
+Running water
+Running water [ vampire ]
+Going bald
+Their bastard son... bastard little boy... [agemult = 1.2, evil = 0.1]
+The Killer
+When the entity freezes time to taunt you and then after everyone is like, "Are you okay?" Uhhhhh no I'm not ok, i just spoke to the freaking entity
+Getting eaten by the worms and weird fishes
+The dead bodies fucking everywhere
+Forgetting their dog's birthday
+When they leave their coffee too long and it goes mouldy
+E. Coli
+Tapeworm
+Getting poop on their clothes
+Goths [evil = 0.01]
+Gething thung by a beeh [parks = 0.2]
+Silver jewellery
+Silver jewellery [ vampire ]
+Giblets everywhere
+Vampires
+Being run over by an ambulance
+Optimising their shit
+The meat grinder
+Polyps
+Reflecting on it later
+Being right too early
+Trying something new
+Pinky toes
+Thinking
+Listening [talkative = 6, patience = 0.2]
+The concept of eternity
+The mutation [size = 1.8, bleach]
+Dyslexia [scramble]
+LED headlights
+The sound of the fridge
+Overhead lighting
+When you get horny but then immediately develop gas or feel hungry or some shit
+Taki dust
+Having a wank after cutting chillis
+All their interests
+The love of their life
+That mysterious illness...
+The dishes
+Hair
+Drawing a blank
+Bankers
+Sin
+When you want dinner but you gotta make it
+All the time wasted to work, commuting, sleeping, cleaning up, looking after yourself, eating, hanging out, having sex, hobbies, relaxing, breathing in and out and in again
+The dentist
+CCTV
+Construction noise
+Making small talk in the taxi
+Everything we do in the pursuit for happiness
+Putting the work in
+Looking like if their parents had a baby
+Unfulfilled desire
+Desire
+Typos [keysmash]
+Shingles
+When their alcoholic friend turns catholic like ummm, bro, don't you know what Jesus is made from?
+Stinking at this
+Adulting
+Asking out the prettiest girl in school
+Landmines
+Kids these days [agemult = 1.2]
+Getting put in the labyrinth
+Globus sensation
+1 day blinding stew
+Having a bomb inside them [explosive, mood = -1, terrified, speed = 1.4]
+Showering [smells]
+The smell of earwax
+Being tarred and feathered
+Anything liked by other people [chatty = 0.5, talkative = 0.5]
+Sex
+Being born from the sewers [aqua, smells]
+Being half lizard [waterwalking]
