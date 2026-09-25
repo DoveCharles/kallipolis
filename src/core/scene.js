@@ -245,6 +245,7 @@ S.sceneIndexDirty = true;
 export function refreshSceneIndex() {
   if (!S.sceneIndexDirty) return;
   S.sceneIndexDirty = false;
+  S.sceneIndexVersion = (S.sceneIndexVersion || 0) + 1; // (so what's worked out from these lists knows when to redo it)
   blinkLights.length = 0; glowMaterials.length = 0; lampPostMeshes.length = 0; litLobbies.length = 0; groundCandidates.length = 0;
   const seen = new Set(); // one material is shared by many meshes, and rescaling its glow once is enough
   scene.traverse(o => {
