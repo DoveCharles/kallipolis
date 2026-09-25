@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { S, App, SAND_TINT } from '../core/shared.js';
 import { scene, SKY_ENV_MAP, GROUND_HALF_SIZE, ground, makeStencilMask, STENCIL_WATER, Y_MAP } from '../core/scene.js';
 import { distPointSegment } from '../buildings/footprints.js';
@@ -414,6 +415,16 @@ function buildWaterBody(region, parkArea) {
       return near.slice(0, max).map(s => [s.a.x, s.a.z, s.b.x, s.b.z]);
     };
     const wallList = shaderSegments.filter(s => !s.beach), beachList = shaderSegments.filter(s => s.beach);
+    const addSurface = (geo, shore, beach) => {
+      const mat = new THREE.MeshStandardMaterial({ color: WATER_COLOR, roughness: 1 });
+      applyWaterShader(mat, shore, beach, BEACH_WATERLINE);
+      const surface = new THREE.Mesh(geo, mat);
+      surface.receiveShadow = true;
+      surface.name = 'Water';
+      S.waterGroup.add(surface);
+    };
+    // (tiles out of reach of any shore all shade alike, so they're drawn as one mesh — open sea can be hundreds of tiles)
+    const open = [];
     for (let rz = z0; rz < maxZ; rz += T) {
       const row = clipPolygons(ctIntersection, region, [rect(x0, rz, maxX+1, rz+T)]);
       if (!row.length) continue;
@@ -425,13 +436,15 @@ function buildWaterBody(region, parkArea) {
         const geo = builder.build();
         if (!geo) continue;
         const cx = (rx + T/2)/CLIPPER_SCALE, cz = (rz + T/2)/CLIPPER_SCALE, half = WATER_TILE_SIZE/2;
-        const mat = new THREE.MeshStandardMaterial({ color: WATER_COLOR, roughness: 1 });
-        applyWaterShader(mat, segmentsNear(wallList, cx, cz, half, WATER_MAX_SHORE_SEGMENTS), segmentsNear(beachList, cx, cz, half, WATER_MAX_BEACH_SEGMENTS), BEACH_WATERLINE);
-        const surface = new THREE.Mesh(geo, mat);
-        surface.receiveShadow = true;
-        surface.name = 'Water';
-        S.waterGroup.add(surface);
+        const shore = segmentsNear(wallList, cx, cz, half, WATER_MAX_SHORE_SEGMENTS), beach = segmentsNear(beachList, cx, cz, half, WATER_MAX_BEACH_SEGMENTS);
+        if (!shore.length && !beach.length) open.push(geo);
+        else addSurface(geo, shore, beach);
       }
+    }
+    if (open.length) {
+      const merged = open.length > 1 ? mergeGeometries(open) : open[0];
+      if (open.length > 1) open.forEach(geo => geo.dispose());
+      addSurface(merged, [], []);
     }
 
     // the stencil mask that keeps the grid, map images and walkways from being drawn over the water (see SKIP_OVER_WATER_AND_ROADS)

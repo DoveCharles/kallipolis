@@ -395,15 +395,34 @@ const turnToward = (bird, yaw, rate, dt) => {
 
 // Whoever's about who could scare a bird: everyone out walking, standing or running, with how near is too near.
 const threats = [];
+// (and binned into square cells at least as wide as anyone's SHY reach, so a bird only looks at the 3×3 cells round it
+// rather than the whole crowd: see threatsNear)
+const threatCells = new Map();
+let threatCell = 1;
+const cellKey = (cx, cz) => cx*100003 + cz;
 function gatherThreats() {
   threats.length = 0;
+  threatCells.clear();
   if (!S.peopleEnabled) return;
+  let widest = 0;
   (App.people || []).forEach(p => {
     if (p.mode === 'none' || p.mode === 'dead' || p.mode === 'train' || (p.mode === 'indoors' && p.indoors?.stage === 'inside')) return;
     const size = p.traits?.size || 1;
     const reach = (p.fright || p.attack ? SCARE_FLEEING : p.moving || p.mode === 'possessed' ? SCARE_MOVING : SCARE_STILL)*Math.sqrt(size);
     threats.push({ x: p.x, z: p.z, reach });
+    widest = Math.max(widest, reach);
   });
+  threatCell = Math.max(1, widest*SHY);
+  threats.forEach(p => {
+    const key = cellKey(Math.floor(p.x/threatCell), Math.floor(p.z/threatCell));
+    const cell = threatCells.get(key);
+    if (cell) cell.push(p); else threatCells.set(key, [p]);
+  });
+}
+// every threat in the cells round (x, z): all of them that could be within SHY of their reach
+function threatsNear(x, z, visit) {
+  const cx = Math.floor(x/threatCell), cz = Math.floor(z/threatCell);
+  for (let i=cx-1;i<=cx+1;i++) for (let k=cz-1;k<=cz+1;k++) threatCells.get(cellKey(i, k))?.forEach(visit);
 }
 
 function takeOff(colony, bird, from, t) {
@@ -447,10 +466,10 @@ function stepGround(colony, bird, t, dt, roosting) {
   if (bird.spookAt != null) return;
   // anyone too near?
   let nearest = null, nearestRatio = Infinity;
-  for (const p of threats) {
+  threatsNear(bird.x, bird.z, p => {
     const ratio = Math.hypot(p.x - bird.x, p.z - bird.z)/p.reach;
     if (ratio < nearestRatio) { nearestRatio = ratio; nearest = p; }
-  }
+  });
   if (nearestRatio < 1) { takeOff(colony, bird, { x: nearest.x, z: nearest.z }, t); return; }
   if (nearestRatio < SHY && !roosting) {
     // not so near it has to fly: it walks off out of their way instead

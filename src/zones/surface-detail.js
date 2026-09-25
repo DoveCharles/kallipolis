@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries as mergeGeometryArray } from 'three/addons/utils/BufferGeometryUtils.js';
 import { S, App, SAND_TINT } from '../core/shared.js';
 import { Y_PARK } from '../core/scene.js';
 import { mulberry32, lerp, pointInPolygon, centroid, insetPolygon } from '../core/math.js';
@@ -1352,6 +1353,42 @@ export function makeTreeMesh(variant, scale, rng, tintColor) {
   group.name = 'Tree';
   return group;
 }
+/**
+ * Trees from makeTreeMesh, already placed, as one mesh for all their trunks and one for all their foliage, each tree's
+ * colours baked into its vertices: a park of a hundred trees is then two draw calls (and two for its shadows) rather than
+ * several hundred, which is most of what zooming out over a city used to cost. The trees' own geometries and materials
+ * are let go.
+ * @param {THREE.Group[]} trees - makeTreeMesh groups, positioned in the frame the meshes will be added to
+ * @param {string} [name]
+ * @returns {THREE.Mesh[]} to add where the trees would have gone
+ */
+export function mergeTrees(trees, name = 'Tree') {
+  const parts = new Map(); // (by whether they take shadows: the trunks do, the foliage doesn't)
+  trees.forEach(tree => {
+    tree.updateMatrixWorld(true); // (not in the scene yet, so relative to wherever it's going)
+    tree.traverse(mesh => {
+      if (!mesh.isMesh) return;
+      const piece = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+      const geo = piece.index ? piece.toNonIndexed() : piece; // (cones and cylinders are indexed, the clumps aren't)
+      const { r, g, b } = mesh.material.color, count = geo.attributes.position.count, colors = new Float32Array(count*3);
+      for (let i=0;i<count;i++) { colors[i*3] = r; colors[i*3+1] = g; colors[i*3+2] = b; }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      if (!parts.has(mesh.receiveShadow)) parts.set(mesh.receiveShadow, []);
+      parts.get(mesh.receiveShadow).push(geo);
+      if (geo !== piece) piece.dispose();
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    });
+  });
+  return [...parts].map(([receive, geos]) => {
+    const merged = new THREE.Mesh(mergeGeometryArray(geos), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
+    geos.forEach(geo => geo.dispose());
+    merged.castShadow = true;
+    merged.receiveShadow = receive;
+    merged.name = name;
+    return merged;
+  });
+}
 // `cutouts` are cut out of the park's grass; `blockers` (cut-outs plus paths) are where trees can't go
 export function generateParkContent(zone, poly, cutouts, blockers) {
   const rng = mulberry32(zone.settings.seed>>>0);
@@ -1395,16 +1432,18 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
   }
   zone.treeSpots = []; // so people sitting or lying on the grass keep clear of the trunks (see "people")
   const trees = [];    // and so a beehive knows what it's hanging under (see plantParkLife)
+  const treeMeshes = [];
   placed.forEach(pt => {
     const variant = Math.floor(rng()*3);
     const scale = lerp(s.treeSizeMin, s.treeSizeMax, rng());
     const tree = makeTreeMesh(variant, scale, rng, resolveTreeTint(zone));
     tree.position.set(pt.x, Y_PARK, pt.z);
     tree.rotation.y = rng()*Math.PI*2;
-    zone.buildingsGroup.add(tree);
+    treeMeshes.push(tree);
     zone.treeSpots.push({ x: pt.x, z: pt.z, r: 0.35*scale });
     trees.push({ x: pt.x, z: pt.z, canopyY: TREE_CANOPY[variant].y*scale, canopyR: TREE_CANOPY[variant].r*scale });
   });
+  mergeTrees(treeMeshes).forEach(mesh => zone.buildingsGroup.add(mesh));
   // Flowers, hives and bees (see life/bees.js), off the same roads, paths and sand the trees keep off — but a flower is
   // small enough to stand where a tree couldn't, so it asks for the room it actually takes rather than a canopy's worth.
   const FLOWER_CLEARANCE = 0.3;
