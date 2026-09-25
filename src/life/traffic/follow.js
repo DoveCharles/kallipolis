@@ -20,7 +20,7 @@ import { registerHealthKind, resetHealth } from '../../core/health.js';
 
 // ============================================================ CAR CAMERA  ============================================================
 // The view stays on the car clicked in World mode, and the car card (car-card.js,
-// App.showCarCard) names it, its mood, and what it loves and hates from assets/cars.txt by its type (carTypeOf in
+// App.showCarCard) names it, its mood, and what it loves and hates from assets/text/cars.txt by its type (carTypeOf in
 // car-types.js).
 export let followedCar = -1;
 /**

@@ -2108,7 +2108,7 @@ function lightPub(group, barX, barZ) {
 
 // ---------------------------------------------------------------- the TV
 // A home's TV is on while anyone's sat on the sofa (see watchingTV), playing a video picked at random from
-// assets/tv.txt each time it comes on: a YouTube link plays in a real YouTube player (an iframe), a link to a video file
+// assets/text/tv.txt each time it comes on: a YouTube link plays in a real YouTube player (an iframe), a link to a video file
 // (.mp4, .webm, ...: e.g. a Tumblr video's address) in a <video> (see filePlayer). Either is laid out by CSS3DRenderer to sit exactly
 // where the screen is, on its own layer behind the canvas — and the canvas cut through to it at the screen (see
 // setCutout in pixelation.js), so whoever walks in front of the TV hides it as they would anything else. It starts muted
@@ -2117,7 +2117,7 @@ function lightPub(group, barX, barZ) {
 // It plays each video through once, and whoever's watching sits it out to the end (see watchingTV) — the player telling
 // us when it's over. A video that's over within TV_SHORT (or wouldn't play) is followed straight on by another, watched
 // as part of the same sitting.
-const TV_LIST_URL = 'assets/tv.txt';
+const TV_LIST_URL = 'assets/text/tv.txt';
 const TV_PIXELS = 640;  // the player's width, as laid out — scaled down to the screen's
 const TV_VOLUME = 60;   // out of 100
 const TV_SHORT = 20000;       // ms: a video played for less than this is followed by another

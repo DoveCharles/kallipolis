@@ -48,7 +48,7 @@ carHitboxDebugMesh.visible = false;
 carHitboxDebugMesh.name = 'CarHitboxDebug';
 scene.add(carHitboxDebugMesh);
 /**
- * Set car.traits from its type's entries in assets/cars.txt (see carTypeOf), once per design and number. Cars without a
+ * Set car.traits from its type's entries in assets/text/cars.txt (see carTypeOf), once per design and number. Cars without a
  * design have no traits; the readers below treat a missing trait as 1.
  * @param {object} car
  * @returns {void}

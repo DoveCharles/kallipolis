@@ -22,7 +22,7 @@ import { chaseBehind } from './flight.js';
 // hunched up.
 //
 // A pigeon can be followed by the camera in World mode, with a card saying which it is (name, mood, loves and hates from
-// assets/pigeons.txt, as the bees' are from bees.txt) and what it's up to. Its card's picture takes it over: walked about
+// assets/text/pigeons.txt, as the bees' are from bees.txt) and what it's up to. Its card's picture takes it over: walked about
 // on the ground and flown by hand (see flyByHand).
 //
 // The model is rigged, with five clips (Walk, Peck, Peck2, TakeOff, Fly), and three.js can't instance a rigged mesh. So at
@@ -707,7 +707,7 @@ export function updatePigeons(t) {
 
 // ---------------------------------------------------------- the card, and following one
 // As for a bee (see bees.js): a click in World mode on a pigeon puts the camera on it and its card up (see input.js).
-const text = loadTypeText('assets/pigeons.txt', {
+const text = loadTypeText('assets/text/pigeons.txt', {
   attributes: TEXT_ROWS,
   counted: ['loves', 'hates'],
   // this stands in until pigeons.txt has loaded, or if it can't be

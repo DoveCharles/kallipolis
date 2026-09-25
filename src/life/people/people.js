@@ -462,7 +462,7 @@ export function newPerson(id = S.peopleIdSeq++) {
     talk: 0, talkTo: 0, talkIn: 0, emotion: 0, emotionTo: 0, emotionIn: 0,
     // and their eyes: how shocked, happy, angry and sad they look
     eyes: [0, 0, 0, 0],
-    // their traits, from what they were picked in people.txt (see refreshTraits)
+    // their traits, from what they were picked in people/*.txt (see refreshTraits)
     traits: DEFAULT_TRAITS, traitsKey: '',
     // how they're taking someone blowing up nearby, if they are (see frightenBystanders)
     fright: null,
@@ -483,8 +483,8 @@ export function newPerson(id = S.peopleIdSeq++) {
 }
 
 /**
- * Work out a person's traits, from the entries picked for them in people.txt (see profiles.js) by their id — who they
- * are, not where they're standing (see the note on peopleIdSeq above). Worked out again whenever people.txt loads,
+ * Work out a person's traits, from the entries picked for them in people/*.txt (see profiles.js) by their id — who they
+ * are, not where they're standing (see the note on peopleIdSeq above). Worked out again whenever people/*.txt loads,
  * and once the model's loaded and says whether they're a man (which decides their name, and so the rest of their
  * picks; sex is still tied to their render slot, not their id — see assignAppearance in peopleModel.js).
  * @param {Person} p - the person

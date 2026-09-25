@@ -3,7 +3,7 @@
 // car code uses it. A name missing from here is treated as a typo and ignored with a console warning.
 // Fields: `base` the starting value, `min`/`max` the range it is kept to, `combine` how entries stack — omitted multiplies,
 // 'add' adds, 'on' switches on if any entry sets it. `hidden` keeps it out of a card's modifier drop-downs (see modifierLines). People's starting values can be overridden by the trait table at the top
-// of assets/people.txt.
+// of assets/text/people/about.txt.
 export const TRAITS = {
   // people (see life/people/)
   speed: { base: 1, min: 0.1, max: 6 },

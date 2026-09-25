@@ -2,10 +2,10 @@ import { loadTypeText } from '../core/type-text.js';
 import { TEXT_ROWS } from '../ui/entity-card.js';
 
 // ============================================================ what vehicles are like
-// Each type of vehicle's name, mood, and what it loves and hates, for its card (car-card.js) — from assets/cars.txt, to
+// Each type of vehicle's name, mood, and what it loves and hates, for its card (car-card.js) — from assets/text/cars.txt, to
 // be edited freely: a [section] per type, named as its model is in Cars.glb. The file is read by the shared reader in
 // core/type-text.js, which the buildings and the trains use too; see there for the format.
-const cars = loadTypeText('assets/cars.txt', {
+const cars = loadTypeText('assets/text/cars.txt', {
   attributes: TEXT_ROWS,
   settings: ['plate', 'vanitychance'], // vanity registrations, not card text: see vanityPlatesOf
   counted: ['loves', 'hates'], // can have several per vehicle: see `counts` in core/type-text.js

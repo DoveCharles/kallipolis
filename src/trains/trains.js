@@ -16,10 +16,10 @@ import { updateShuttleSounds, doorSwish } from '../audio/maglev.js';
 
 // ---------------------------------------------------------- the carriage card
 // Which carriage the camera's following, in the shared card at the bottom right (ui/entity-card.js) like the car's: its
-// name and mood, a picture of it, and what it enjoys and hates — from assets/trains.txt, read the same way as the
+// name and mood, a picture of it, and what it enjoys and hates — from assets/text/trains.txt, read the same way as the
 // vehicles' and the buildings' files (see core/type-text.js) — and who's riding it. No Smite button: trains can't be
 // killed.
-const trains = loadTypeText('assets/trains.txt', {
+const trains = loadTypeText('assets/text/trains.txt', {
   attributes: TEXT_ROWS,
   counted: ['loves', 'hates'], // can have several per carriage, like people: see [distribution] in trains.txt
   // this stands in until trains.txt has loaded, or if it can't be

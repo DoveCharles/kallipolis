@@ -4,9 +4,9 @@ import { toUi } from './ui-scale.js';
 // ============================================================ morality meter
 // How good or evil the city is, in a meter at the top right: a bar growing from the middle, left (and redder) the more evil,
 // right (and greener) the more good. It's everything in the world added up — each zone, path and building worth what
-// assets/morality.txt says (to be edited freely) — along with things that happen, like people getting killed. The
+// assets/text/morality.txt says (to be edited freely) — along with things that happen, like people getting killed. The
 // show/hide button lists what it's made of, and each change pops up next to the bar for a few seconds.
-const MORALITY_TEXT_URL = 'assets/morality.txt';
+const MORALITY_TEXT_URL = 'assets/text/morality.txt';
 const MORALITY_MAX = 2500, MORALITY_KNEE = 500;   // max value & value that should land at the halfway point of that half-bar;
 const MORALITY_EXP = Math.log(0.5) / Math.log(MORALITY_KNEE / MORALITY_MAX); 
 const NOTICE_LIFE = 3500, NOTICES_MAX = 6;
@@ -403,7 +403,7 @@ fetch(MORALITY_TEXT_URL, { cache: 'no-cache' })
     announced = previous = now;
     renderMeter(now);
   })
-  .catch(err => console.warn('Kallipolis: assets/morality.txt failed to load; everything is worth 0 morality', err));
+  .catch(err => console.warn('Kallipolis: assets/text/morality.txt failed to load; everything is worth 0 morality', err));
 
 tick();
 Object.assign(App, { recordMoralityEvent, hushMorality, refreshMorality: tick });

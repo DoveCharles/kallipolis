@@ -48,12 +48,12 @@ const BEE_MODEL_URL = 'assets/models/Bee.glb';
 
 // ---------------------------------------------------------- the bee and hive cards
 // Which bee or hive the camera's following, in the shared card at the bottom right (ui/entity-card.js): a bee's name and
-// mood and what it loves and hates, or a hive's, from assets/bees.txt by [bee] or [hive] — read like the vehicles' and the
+// mood and what it loves and hates, or a hive's, from assets/text/bees.txt by [bee] or [hive] — read like the vehicles' and the
 // trains' files (see core/type-text.js). It changes over the way a person's and a train's do: follow a bee home and the
 // hive's card takes over, listing its bees under "Bees" where a building says "Inhabitants", with the one the camera came
 // in with picked out, and handing back when that bee comes out again. No Smite button on either: nothing here wants to be
 // the thing that kills the bees.
-const text = loadTypeText('assets/bees.txt', {
+const text = loadTypeText('assets/text/bees.txt', {
   attributes: TEXT_ROWS,
   counted: ['loves', 'hates'], // can have several per bee, like people: see [distribution] in bees.txt
   // this stands in until bees.txt has loaded, or if it can't be
@@ -565,7 +565,7 @@ held.rotation.order = 'YXZ'; // rolled about its own length first, then pitched 
 const pick = list => list[Math.floor(Math.random()*list.length)];
 const isHome = bee => bee.state === 'hive';
 /**
- * Set bee.traits from its entries in assets/bees.txt, once per bee. `speed` scales its flight speed and `size` its
+ * Set bee.traits from its entries in assets/text/bees.txt, once per bee. `speed` scales its flight speed and `size` its
  * body; other traits can be read off bee.traits wherever they're wanted.
  * @param {object} bee
  * @returns {void}

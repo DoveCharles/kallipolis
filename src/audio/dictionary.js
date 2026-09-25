@@ -6,11 +6,11 @@ import { loudnessOf, hearDistance, hearRef } from './voices.js';
 
 // ============================================================ real words
 // Now and then someone talking near the camera says something real in among their babble (see audio/voices.js): a line
-// from assets/dictionary.txt, a word or a whole sentence, picked at random. It's said in their own babble voice, worked
+// from assets/text/dictionary.txt, a word or a whole sentence, picked at random. It's said in their own babble voice, worked
 // out into its sounds and synthesized on the spot (see audio/speech.js), set down where they stand and heard from that
 // side, and quieter the further off, and as loud as they babble. Only one person says a line at a time. While they're saying it, their mouth opens as
 // wide as the line's loud.
-const DICTIONARY_URL = 'assets/dictionary.txt';
+const DICTIONARY_URL = 'assets/text/dictionary.txt';
 const LINE_CHANCE = 0.15;   // at the start of each phrase of babble (× chat speed, Options > Speech: S.chatSpeed)
 const LINE_GAP = 3;         // seconds after a line ends before anyone says another (÷ chat speed)
 const MATCH = 1;            // how loud a real line is next to the speaker's own babble (see loudnessOf in audio/voices.js)
