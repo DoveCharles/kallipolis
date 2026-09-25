@@ -1,7 +1,8 @@
 import { camera } from '../core/scene.js';
+import { S } from '../core/shared.js';
 import { listener, playBufferAt, muffler } from './sfx.js';
 import { speakText, SAMPLE_RATE } from './speech.js';
-import { loudnessOf } from './voices.js';
+import { loudnessOf, hearDistance, hearRef } from './voices.js';
 
 // ============================================================ real words
 // Now and then someone talking near the camera says something real in among their babble (see audio/voices.js): a line
@@ -10,11 +11,10 @@ import { loudnessOf } from './voices.js';
 // side, and quieter the further off, and as loud as they babble. Only one person says a line at a time. While they're saying it, their mouth opens as
 // wide as the line's loud.
 const DICTIONARY_URL = 'assets/dictionary.txt';
-const LINE_CHANCE = 0.15;   // at the start of each phrase of babble
-const SAY_DISTANCE = 40;    // beyond this from the camera they only babble
-const LINE_GAP = 3;         // seconds after a line ends before anyone says another
+const LINE_CHANCE = 0.15;   // at the start of each phrase of babble (× chat speed, Options > Speech: S.chatSpeed)
+const LINE_GAP = 3;         // seconds after a line ends before anyone says another (÷ chat speed)
 const MATCH = 1;            // how loud a real line is next to the speaker's own babble (see loudnessOf in audio/voices.js)
-const REF_DISTANCE = 5, HEAR_DISTANCE = 40, MUFFLE = 1.4; // (as for babble)
+const MUFFLE = 1.4; // (as for babble; beyond its hearDistance they only babble)
 const MOUTH_FRAME = 0.05;   // seconds over which how wide the mouth is follows the line
 
 let lines = [];
@@ -36,6 +36,7 @@ fetch(DICTIONARY_URL).then(r => r.ok ? r.text() : '').then(text => {
   }
 }).catch(() => {});
 
+const chatSpeed = () => S.chatSpeed ?? 1;
 const pick = list => list[Math.floor(Math.random()*list.length)];
 // (a pick can have [placeholders] of its own; one naming no list is dropped rather than read out, brackets and all)
 function fill(line, depth = 0) {
@@ -51,13 +52,14 @@ function fill(line, depth = 0) {
  * @param {{pitch: number, formant: number, sharpness: number}} voice - their voice, as for babble
  * @param {number} who - a number of their own, so the same person always sounds the same
  * @param {number} [mood=0] - their mood trait
- * @returns {?object} the line being said (for lineMouth and stopLine); or null, for them to babble on
+ * @returns {?object} the line being said (for lineMouth and stopLine; `text` is what's said); or null, for them to babble on
  */
 export function sayLine(at, voice, who, mood = 0) {
   const context = listener.context, now = context.currentTime;
-  if (!lines.length || current || now < quietUntil || Math.random() >= LINE_CHANCE) return null;
-  if (Math.hypot(at.x - camera.position.x, at.y - camera.position.y, at.z - camera.position.z) > SAY_DISTANCE) return null;
-  const samples = speakText(fill(pick(lines)), voice, { mood: mood ?? 0, who });
+  if (!lines.length || current || now < quietUntil || Math.random() >= LINE_CHANCE*chatSpeed()) return null;
+  if (Math.hypot(at.x - camera.position.x, at.y - camera.position.y, at.z - camera.position.z) > hearDistance()) return null;
+  const text = fill(pick(lines));
+  const samples = speakText(text, voice, { mood: mood ?? 0, who });
   if (!samples?.length) return null;
   // (how loud it is through each MOUTH_FRAME, for their mouth to follow; and how loud while they're sounding, the loudest
   // half of those frames, to bring it to their babble's loudness)
@@ -72,9 +74,9 @@ export function sayLine(at, voice, who, mood = 0) {
   const rms = Math.sqrt(loudest.reduce((a, b) => a + b, 0)/(loudest.length || 1));
   const buffer = context.createBuffer(1, samples.length, SAMPLE_RATE);
   buffer.getChannelData(0).set(samples);
-  const source = playBufferAt(buffer, at, rms ? MATCH*loudnessOf(voice)/rms : 0, REF_DISTANCE, HEAR_DISTANCE, 1, [muffler(at, REF_DISTANCE, MUFFLE)], 'peds');
+  const source = playBufferAt(buffer, at, rms ? MATCH*loudnessOf(voice)/rms : 0, hearRef(), hearDistance(), 1, [muffler(at, hearRef(), MUFFLE)], 'peds');
   if (!source) return null;
-  current = { source, start: now, length: buffer.duration, mouth };
+  current = { source, start: now, length: buffer.duration, mouth, text };
   return current;
 }
 
@@ -103,5 +105,5 @@ export function stopLine(line) {
 function finish(line) {
   if (line !== current) return;
   current = null;
-  quietUntil = listener.context.currentTime + LINE_GAP;
+  quietUntil = listener.context.currentTime + LINE_GAP/chatSpeed();
 }

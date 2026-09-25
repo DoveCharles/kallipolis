@@ -98,6 +98,7 @@ import { updateBuildingBatches } from './buildings/building-batches.js';
 import { updateNodeHighlight } from './editor/node-highlight.js';
 import { renderView } from './ui/pixelation.js';
 import { loadStatueModel, loadBeerStallModel } from './objects/object-types.js';
+import { updateSpeechBubbles } from './ui/speech-bubbles.js';
 import { stillLoading, compileWhileLoading, waitForModels } from './ui/loading.js';
 
 // ============================================================ init
@@ -182,6 +183,7 @@ function animate() {
   updateNodeHighlight();
   blinkLights.forEach(o => { o.material.emissiveIntensity = 0.5 + Math.sin(t*3 + o.userData.blinkPhase)*0.5; });
   if (S.interactionMode === 'node') scaleNodeUi(camera);
+  updateSpeechBubbles(); // (once the camera's settled for the frame)
   const unshake = isInsideBuilding() ? () => {} : shakeCamera(camera, t); // (no shaking in a building's room)
   // (under the loading screen, shaders are compiled in the background rather than drawn: see ui/loading.js)
   if (stillLoading()) compileWhileLoading(renderer, scene, camera);

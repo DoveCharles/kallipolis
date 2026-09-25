@@ -1,4 +1,5 @@
 import { camera } from '../core/scene.js';
+import { S } from '../core/shared.js';
 import { listener, isMuted, heardFrom, muffler } from './sfx.js';
 import { melodyOf } from './melodies.js';
 
@@ -33,9 +34,13 @@ const CONSONANTS = [
   { kind: 'glide', from: [250, 2300], time: 0.06 },               // y
   null, null,
 ];
-const HEAR_DISTANCE = 40;          // beyond this from the camera they aren't heard at all
+const HEAR_DISTANCE = 40;          // beyond this from the camera they aren't heard at all (unless set by Options > Speech > Hearing distance: S.hearDistance)
 const REF_DISTANCE = 5;            // how near to be heard at full volume
 const ROLLOFF = 2.5;               // how fast they fade past that (1 is the inverse law: a tenth as loud at ten times as far)
+/** How far off people's talk is heard: Options > Speech > Hearing distance, else HEAR_DISTANCE. @returns {number} */
+export const hearDistance = () => S.hearDistance ?? HEAR_DISTANCE;
+/** Full volume within this; grows with hearDistance, so a further setting is louder further off. @returns {number} */
+export const hearRef = () => REF_DISTANCE*hearDistance()/HEAR_DISTANCE;
 const MUFFLE = 1.4;                // how fast the top comes off past REF_DISTANCE (see muffler in sfx.js): far off, talk's a murmur, not words
 const VOLUME = 0.22;
 const BLIPS_MAX = 12;              // syllables sounding at once, past which new ones are dropped
@@ -172,7 +177,7 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   const context = listener.context;
   if (isMuted() || context.state !== 'running') return;
   const { x, y, z } = camera.position;
-  if (Math.hypot(at.x - x, at.y - y, at.z - z) > HEAR_DISTANCE) return;
+  if (Math.hypot(at.x - x, at.y - y, at.z - z) > hearDistance()) return;
   const now = context.currentTime, end = now + Math.max(0.05, length);
   const oscillator = context.createOscillator();
   oscillator.type = 'sawtooth';
@@ -207,10 +212,10 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   const panner = context.createPanner();
   panner.panningModel = 'equalpower';
   panner.distanceModel = 'inverse';
-  panner.refDistance = REF_DISTANCE;
+  panner.refDistance = hearRef();
   panner.rolloffFactor = ROLLOFF;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
-  const muffle = muffler(at, REF_DISTANCE, MUFFLE);
+  const muffle = muffler(at, hearRef(), MUFFLE);
   muffle.connect(panner);
   gain.connect(muffle);
   panner.connect(heardFrom(at, 'peds'));

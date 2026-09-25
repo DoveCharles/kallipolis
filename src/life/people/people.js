@@ -1,7 +1,7 @@
 import { App, S } from '../../core/shared.js';
 import { mulberry32 } from '../../core/math.js';
 import { buildingName } from '../../buildings/building-types.js';
-import { roomHolds, roomVisit } from '../../buildings/interior.js';
+import { isInsideBuilding, roomHolds, roomVisit } from '../../buildings/interior.js';
 import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
@@ -11,12 +11,13 @@ import { canRespawn, PERSON_SHAKE, shake } from '../revive.js';
 import { throwBodyParts } from './peopleGibs.js';
 import { babble, nextSyllable } from '../../audio/voices.js';
 import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
+import { babbleLine, hasBubble, speechBubble } from '../../ui/speech-bubbles.js';
 import { footstep } from '../../audio/footsteps.js';
 import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
-import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_TRAIT_COLORS } from './peopleModel.js';
+import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_TRAIT_COLORS } from './peopleModel.js';
 import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
@@ -477,6 +478,14 @@ const VAMPIRE_EYE_TINT = 0.2, VAMPIRE_EYE_COLOR = new THREE.Color(0xffc40c),
    BLAZED_EYE_RED = 0.05, EYE_RED_COLOR = new THREE.Color(0xff0000);
 // Vampires' skin moves 10% of the way to the colour for every 100 years of age, counting from the first (so it starts out 10% grey).
 const VAMPIRE_SKIN_COLOR = new THREE.Color(0xd3d3d3), VAMPIRE_PALE_PER_CENTURY = 0.1;
+const BUBBLE_HEIGHT = 2; // how high over their feet (× height, × people size) a speech bubble's tail points (see ui/speech-bubbles.js)
+const BUBBLE_CHAIR_DROP = 0.5, BUBBLE_GROUND_DROP = 0.8; // how much lower (same units) sat on a seat, and sat on the ground
+// where someone's speech bubble points: over their head, lower as they sit (on a seat, raised by seatLift, or on the ground)
+function bubbleAt(p) {
+  const chair = sitWeight(p), ground = personModel ? GRASS_SITS.reduce((w, name) => w + weightOf(p, personModel.clips[name]), 0) : 0;
+  const up = (BUBBLE_HEIGHT - chair*BUBBLE_CHAIR_DROP - ground*BUBBLE_GROUND_DROP)*p.height*S.peopleSize + p.seatLift*chair;
+  return { x: p.x, y: p.y + up, z: p.z };
+}
 const LYING_CLEARANCE = 1; // how near (at people size 1) anyone walks to someone lying on the ground
 /**
  * Have everyone around someone blowing up notice it: the nearer they are, the sooner, and they run off for a while.
@@ -1243,8 +1252,14 @@ export function updatePeople(t) {
           p.talkIn = length;
           // and each syllable they say is heard
           if (open > 0 && heard) babble(head, voiceOf(p, i), length, open, p.traits.mood, intonation);
+          if (open > 0 && S.babbleBubbles && p.babbleLine?.phrase !== p.phrase) p.babbleLine = babbleLine(p.phrase);
         }
       }
+      // a bubble with what they're saying, kept up a little after (see ui/speech-bubbles.js); only for those on the camera's
+      // side of a building's walls — in the room with it, or outdoors with it — else gone
+      const bubbleSide = isInsideBuilding() ? inRoom(p) : isDrawn(p) && !inRoom(p);
+      const babbling = S.babbleBubbles && p.phrase && p.babbleLine?.phrase === p.phrase && p.phrase.said < p.phrase.length ? p.babbleLine : null;
+      if (bubbleSide && (p.saying || babbling || hasBubble(p))) speechBubble(p, bubbleAt(p), p.saying ?? babbling);
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape
       else if (frozen || fleeing || scaredByBlood) p.talkTo = frozen ? 1 : scaredByBlood ? 0.3 + 0.7*fear : 0.55; // (blood, the more of it the wider)
