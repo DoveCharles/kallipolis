@@ -10,6 +10,8 @@ import { buildingNumber as numberFor } from '../buildings/footprints.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
+import { startFlying, endFlying, controlInput } from './possession.js';
+import { chaseBehind } from './flight.js';
 
 // ============================================================ pigeons
 // Flocks of pigeons on the plazas and in the parks (assets/models/Pigeon.glb, made in Blender). They walk about near
@@ -20,7 +22,8 @@ import { loadTypeText } from '../core/type-text.js';
 // hunched up.
 //
 // A pigeon can be followed by the camera in World mode, with a card saying which it is (name, mood, loves and hates from
-// assets/pigeons.txt, as the bees' are from bees.txt) and what it's up to.
+// assets/pigeons.txt, as the bees' are from bees.txt) and what it's up to. Its card's picture takes it over: walked about
+// on the ground and flown by hand (see flyByHand).
 //
 // The model is rigged, with five clips (Walk, Peck, Peck2, TakeOff, Fly), and three.js can't instance a rigged mesh. So at
 // load each clip is played a frame at a time and the posed bird written out as a morph target, one per frame, all
@@ -545,7 +548,7 @@ function stepAir(colony, bird, t, dt) {
     play(bird, REST[0], 0);
     const flock = bird.flock;
     flock.home = { x: flock.landing?.x ?? bird.x, z: flock.landing?.z ?? bird.z };
-    if (flock.birds.every(b => b.state === 'ground')) flock.landing = null;
+    if (flock.birds.every(b => b.hand || b.state === 'ground')) flock.landing = null;
   }
 }
 
@@ -559,6 +562,97 @@ function scatterFromBlasts(t) {
       }
     }));
   });
+}
+
+// ---------------------------------------------------------- walked and flown by hand
+// On the ground W/S walk it forward and back, A/D turn it on the spot and shift hurries it; space takes off. In the air it
+// can't hover: it flies on at its cruising speed, W pushing it faster and S easing it off, A/D banking it round, space
+// climbing and shift sinking — down to the ground, where it lands and is walking again.
+let flown = null; // { colony, bird } under the player's hands, if any; its own state is bird.hand
+const HAND_WALK = 0.6, HAND_HURRY = 1.3, HAND_BACK = 0.3;        // on foot: units a second
+const HAND_GROUND_TURN = 4, HAND_AIR_TURN = 2.2, HAND_LAG = 0.25; // radians a second it turns; seconds it takes to answer the keys
+const HAND_FAST = 1.4, HAND_SLOW = 0.5, HAND_CLIMB = 2.4;         // in the air: of FLY_SPEED, flat out and eased off; and up or down, units a second
+const HAND_CEILING = 40;                                          // how far above its ground it can climb
+function flyByHand(colony, bird, dt) {
+  const hand = bird.hand, { forward, right, run, brake } = controlInput();
+  const ease = (v, goal) => v + (goal - v)*(1 - Math.exp(-dt/HAND_LAG));
+  const g = colony.ground;
+  if (!hand.air) {
+    if (brake) { // off the ground
+      hand.air = true; hand.aloft = 0; hand.along = Math.max(hand.along, FLY_SPEED*HAND_SLOW); hand.vy = HAND_CLIMB;
+      bird.state = 'hand'; play(bird, 'TakeOff');
+      if (Math.random() < 0.6) flutter(bird);
+    } else {
+      hand.turn = ease(hand.turn, -right*HAND_GROUND_TURN);
+      bird.yaw += hand.turn*dt;
+      hand.along = ease(hand.along, forward > 0 ? forward*(run ? HAND_HURRY : HAND_WALK) : forward*HAND_BACK);
+      const step = hand.along*dt;
+      bird.x += Math.sin(bird.yaw)*step; bird.z += Math.cos(bird.yaw)*step;
+      bird.y = g; bird.pitch = 0; bird.bank = 0; bird.turn = hand.turn;
+      const moving = Math.abs(hand.along) > 0.03 || Math.abs(hand.turn) > 0.3;
+      if (moving && bird.clip !== 'Walk') play(bird, 'Walk');
+      if (!moving && bird.clip === 'Walk') play(bird, REST[0], 0);
+      if (bird.clip === 'Walk') bird.time += (Math.abs(step)/WALK_CYCLE)*model.clips.Walk.duration + (Math.abs(hand.along) > 0.03 ? 0 : dt*0.5);
+      return;
+    }
+  }
+  hand.aloft += dt;
+  if (bird.clip === 'TakeOff' && hand.aloft >= TAKEOFF_TIME) play(bird, 'Fly', 0);
+  hand.turn = ease(hand.turn, -right*HAND_AIR_TURN);
+  bird.yaw += hand.turn*dt;
+  hand.along = ease(hand.along, FLY_SPEED*(forward > 0 ? HAND_FAST : forward < 0 ? HAND_SLOW : 1));
+  hand.vy = ease(hand.vy, ((brake ? 1 : 0) - (run ? 1 : 0))*HAND_CLIMB);
+  bird.x += Math.sin(bird.yaw)*hand.along*dt; bird.z += Math.cos(bird.yaw)*hand.along*dt;
+  bird.y = Math.min(g + HAND_CEILING, bird.y + hand.vy*dt);
+  bird.turn = hand.turn;
+  bird.pitch += ((-hand.vy/FLY_SPEED)*0.5 - bird.pitch)*Math.min(1, dt*5);
+  bird.bank += (-hand.turn*0.18 - bird.bank)*Math.min(1, dt*6);
+  if (bird.clip === 'TakeOff') bird.time = hand.aloft;
+  else bird.time += dt*FLAP*(hand.vy > 0.2 ? 1.3 : hand.vy < -0.4 ? 0.55 : 1);
+  if (bird.y <= g && hand.aloft > TAKEOFF_TIME) { // down: landed, and on foot again
+    hand.air = false; hand.along = 0; hand.vy = 0;
+    bird.y = g; bird.pitch = 0; bird.bank = 0;
+    play(bird, REST[0], 0);
+  }
+  bird.y = Math.max(g, bird.y);
+}
+/**
+ * The pigeon card's picture: take the followed pigeon over, from wherever it is and whatever it's doing.
+ * @returns {void}
+ */
+function flyPigeon() {
+  if (!followed || flown || !startFlying(stopFlyingPigeon, {
+    keys: 'W/S forward and back · A/D to turn · Shift to hurry, or sink and land · Space to take off and climb',
+    touch: 'Stick to walk or fly it · Brake to take off and climb · Run to hurry, or sink' })) return;
+  const { colony, bird } = followed;
+  flown = followed;
+  const air = bird.state !== 'ground';
+  bird.hand = { air, aloft: TAKEOFF_TIME, along: air ? FLY_SPEED : 0, vy: 0, turn: 0 };
+  if (air) { bird.state = 'hand'; if (bird.clip !== 'Fly') play(bird, 'Fly', 0); }
+  else { bird.state = 'hand'; bird.doing = 'stand'; bird.spookAt = null; bird.y = colony.ground; if (bird.clip !== 'Walk') play(bird, REST[0], 0); }
+  controls.goalRadius = Math.max(controls.minRadius, FOLLOW_RADIUS*0.5);
+}
+/**
+ * Let go of the pigeon: on the ground it stands where it is; in the air it flies back to land with its flock.
+ * @returns {void}
+ */
+function stopFlyingPigeon() {
+  if (!flown) return;
+  const { colony, bird } = flown, hand = bird.hand;
+  flown = null;
+  endFlying();
+  bird.hand = null;
+  const t = lastTime ?? 0;
+  if (!hand.air) {
+    bird.state = 'ground'; bird.doing = 'stand'; bird.hurry = false; bird.until = t + between(0.5, 2); bird.spookAt = null;
+    if (bird.clip !== REST[0]) play(bird, REST[0], 0);
+    bird.flock.home = { x: bird.x, z: bird.z }; // (and the flock comes to it, next it wanders)
+    return;
+  }
+  bird.state = 'fly'; bird.aloft = 0;
+  bird.cruise = Math.max(CRUISE_MIN, Math.min(CRUISE_MAX, bird.y - colony.ground));
+  bird.land = landingSpot(colony, bird.flock, null);
+  if (bird.clip !== 'Fly') play(bird, 'Fly', 0);
 }
 
 // ---------------------------------------------------------- each frame
@@ -582,14 +676,16 @@ export function updatePigeons(t) {
       flock.hopAt ??= t + between(HOP_MIN, HOP_MAX);
       if (t < flock.hopAt) return;
       flock.hopAt = t + between(HOP_MIN, HOP_MAX);
-      if (roosting || !flock.birds.every(b => b.state === 'ground')) return;
+      const free = flock.birds.filter(b => !b.hand);
+      if (roosting || !free.length || !free.every(b => b.state === 'ground')) return;
       flock.landing = null;
-      const first = flock.birds[Math.floor(Math.random()*flock.birds.length)];
-      flock.birds.forEach(b => { b.spookAt = t + Math.random()*1.2; b.threat = null; });
+      const first = free[Math.floor(Math.random()*free.length)];
+      free.forEach(b => { b.spookAt = t + Math.random()*1.2; b.threat = null; });
       first.spookAt = t;
     });
     colony.birds.forEach((bird, k) => {
-      if (bird.state === 'ground') {
+      if (bird.hand) flyByHand(colony, bird, dt);
+      else if (bird.state === 'ground') {
         stepGround(colony, bird, t, dt, roosting);
         if (!roosting && t >= bird.cooAt) { bird.cooAt = t + between(COO_EVERY*0.4, COO_EVERY*1.6); coo(bird); }
       } else stepAir(colony, bird, t, dt);
@@ -617,7 +713,8 @@ const text = loadTypeText('assets/pigeons.txt', {
   // this stands in until pigeons.txt has loaded, or if it can't be
   placeholder: { pigeon: { name: ['Pigeon'], mood: ['🐦'], loves: ['Bread'], hates: ['Hawks'] } },
 });
-const pigeonCard = makeCard({ id: 'pigeon-card', title: 'Pigeon', onClose: () => App.stopFollowingPigeon() });
+const pigeonCard = makeCard({ id: 'pigeon-card', title: 'Pigeon', onClose: () => App.stopFollowingPigeon(),
+  thumb: { title: 'Be it', onClick: () => App.flyPigeon() } }); // the picture takes the controls (see flyPigeon)
 const drawPigeonThumbnail = makeThumbnailDrawer(pigeonCard.canvas);
 
 let followed = null;    // { colony, bird } the camera's on, or null
@@ -656,6 +753,7 @@ function pickPigeon(clientX, clientY, out) {
   return best;
 }
 function followPigeon(colony, bird) {
+  stopFlyingPigeon();
   followed = { colony, bird };
   doingShown = null;
   controls.minRadius = FOLLOW_MIN_RADIUS;
@@ -675,6 +773,7 @@ function followPigeonAt(clientX, clientY) {
 }
 function stopFollowingPigeon() {
   if (!followed) return;
+  stopFlyingPigeon();
   followed = null;
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
@@ -682,6 +781,7 @@ function stopFollowingPigeon() {
 }
 // what its card says it's up to
 function pigeonDoing(bird, roosting) {
+  if (bird.hand) return bird.hand.air ? 'Flown by hand' : 'Walked by hand';
   if (bird.state === 'takeoff') return 'Taking off';
   if (bird.state === 'fly') return 'Flying';
   if (bird.state === 'land') return 'Landing';
@@ -698,6 +798,7 @@ function followPigeons(roosting) {
   const doing = pigeonDoing(bird, roosting);
   if (doing !== doingShown) { doingShown = doing; pigeonCard.set('status', doing); }
   controls.goalTarget.set(bird.x, bird.y + PIGEON_LENGTH*0.3, bird.z);
+  if (bird.hand) chaseBehind(bird.yaw);
 }
 
-Object.assign(App, { pigeonFlocks: flocks, pickPigeon, followPigeonAt, stopFollowingPigeon });
+Object.assign(App, { pigeonFlocks: flocks, pickPigeon, followPigeonAt, stopFollowingPigeon, flyPigeon });

@@ -15,7 +15,8 @@ import { IS_TOUCH } from '../core/device.js';
 //   the mouse swinging the camera round it (and back behind, a moment after it's left alone), the wheel to zoom
 // - an aircraft or a bee (clicking its card's picture): the same view from behind, but the keys work a stick rather than a
 //   wheel — W/S put the nose down and up, and A/D bank it round, since a thing in the air turns by leaning rather than
-//   by steering (life/flight.js does the flying, and zones/airport.js and life/bees.js pose what's flown)
+//   by steering (life/flight.js does the flying, and zones/airport.js and life/bees.js pose what's flown). A pigeon is
+//   taken over the same way, but walks too, until space takes it up (life/pigeons.js)
 // - a train carriage (clicking the train card's Enter): a seat inside it, going where it goes — no keys at all, and the
 //   pointer left free, since a passenger drives nothing and the seat itself is dialled in from two sliders that need a
 //   cursor to drag (trains/trains.js puts the view in the carriage). A drag across the view looks around.
