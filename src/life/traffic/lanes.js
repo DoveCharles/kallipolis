@@ -304,13 +304,14 @@ export function reseatCar(car) {
  * @returns {void}
  */
 export function driveAlong(car, dist) {
+  if (dist < 0) { backAlong(car, -dist); return; }
   let nav = S.trafficNav.lines[car.li], u = car.u + car.dir*dist;
   for (let guard=0; guard<64; guard++) {
     const ahead = car.dir > 0 ? car.seg + 1 : car.seg, at = nav.cum[ahead];
     if (car.dir > 0 ? u < at : u > at) break;
     const vertex = nav.vertices[ahead], isEnd = ahead === 0 || ahead === nav.pts.length-1;
     const planned = planFor(car, ahead);
-    const plan = planned ? car.plan : vertex.links.length && !car.probe ? pickTurn(car.li, ahead, car.dir) : null;
+    const plan = planned ? car.plan : vertex.links.length && !car.probe ? pickTurn(car.li, ahead, car.dir, car) : null;
     if (planned || vertex.links.length || isEnd) car.plan = null; // (a plain point on the way to the junction leaves its plan alone)
     if (plan && plan.link) {
       const link = plan.link, other = S.trafficNav.lines[link.li], remaining = Math.abs(u - at), dir = plan.dir;
@@ -327,6 +328,19 @@ export function driveAlong(car, dist) {
     car.seg += car.dir;
   }
   car.u = Math.max(0, Math.min(nav.total, u));
+}
+/**
+ * Back a car `dist` along its lane, the opposite way to its direction — no further than the end of the line it's on
+ * (it never reverses round a junction).
+ * @param {object} car
+ * @param {number} dist
+ * @returns {void}
+ */
+function backAlong(car, dist) {
+  const nav = S.trafficNav.lines[car.li];
+  car.u = Math.max(0, Math.min(nav.total, car.u - car.dir*dist));
+  while (car.seg > 0 && nav.cum[car.seg] > car.u) car.seg--;
+  while (car.seg < nav.pts.length-2 && nav.cum[car.seg+1] <= car.u) car.seg++;
 }
 /**
  * The next linked point or dead end ahead of a car, looking at most `lookahead` points on. `dist` is measured along the

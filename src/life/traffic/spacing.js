@@ -4,6 +4,7 @@ import { TURN_CURVE, lanePoint } from './lanes.js';
 import { carLength, carWidth } from './placing.js';
 import { cars, trafficRng } from './state.js';
 import { stretchCounts, stretchOf } from './turns.js';
+import { KICK_GHOST_AFTER, kickCar } from './collisions.js';
 
 // ---- keeping clear of other cars: gapAhead finds the nearest car whose footprint lies in the strip senseRange long and
 // carWidth wide directly ahead — in its lane or not, including the one being driven — and the car eases off for it. A car
@@ -11,7 +12,6 @@ import { stretchCounts, stretchOf } from './turns.js';
 // `ahead` car is held at a distance separately. Where two cars are each in the other's way, goesFirst decides.
 export const CAR_STOP_GAP = 1.5;  // how far short of the car in front one stops (at size 1)
 export const CAR_BRAKE = 30;      // the hardest a car brakes, per second
-const LANE_OVERLAP = 1;    // how much of the two cars' widths has to overlap for one to count as in the other's way
 const CAR_GRID_CELL = 12;
 const carGrid = new Map();
 const cellKey = (cx, cz) => cx + ',' + cz;
@@ -63,7 +63,7 @@ function gapTo(car, other, range) {
   const c = Math.abs(Math.cos(turn)), s = Math.abs(Math.sin(turn));
   // (other's footprint, as seen along and across car's heading)
   const across = c*bWid*0.5 + s*bLen*0.5, along = c*bLen*0.5 + s*bWid*0.5;
-  if (Math.abs(left) > (aWid*0.5 + across)*LANE_OVERLAP) return Infinity;
+  if (Math.abs(left) > (aWid*0.5 + across)*CAR_BOX) return Infinity; // (only as wide as carsOverlap's box, so it'll squeeze past what it wouldn't touch)
   return forward - aLen*0.5 - along;
 }
 /**
@@ -95,8 +95,71 @@ function keepingToLane(car) {
   const deadEnd = vi => !nav.loop && !nav.vertices[vi].links.length;
   return !(deadEnd(0) && car.u < near) && !(deadEnd(nav.pts.length-1) && nav.total - car.u < near);
 }
+// Clipped cars are pushed apart until they aren't: a knocked car (car.kick) is moved straight out along the shortest way
+// (clipDepth) plus CLIP_MARGIN — half each when both are knocked — while two cars on their lanes only come apart once
+// they're in deeper than CLIP_DEEP (close queues and turns touch a little in normal driving), the one to yield
+// (overlapYield) knocked out by the depth plus CLIP_MARGIN, then driving back to its lane as any knocked car does. A
+// knocked car driving back through a jam (KICK_GHOST_AFTER) and the driven car aren't pushed.
+const CLIP_MARGIN = 0.05, CLIP_DEEP = 1, CLIP_STILL = 0.5; // (units at people size 1; lane cars are only pushed apart while both are slower than CLIP_STILL units a second — stuck, not passing)
+// Car-on-car contact uses a box CAR_BOX of each car's length and width (carsOverlap, clipDepth), so near misses and
+// corners cut on tight turns don't count as hits.
+export const CAR_BOX = 0.85;
 /**
- * The nearest car in the car's way, and how far off it is.
+ * How far and which way `a` must move to stop overlapping `b` — the shortest way out, across the four axes carsOverlap
+ * tests — or null if they don't overlap.
+ * @param {object} a
+ * @param {object} b
+ * @returns {?{depth: number, x: number, z: number}} x, z: unit direction
+ */
+export function clipDepth(a, b) {
+  const aLen = carLength(a)*CAR_BOX, aWid = carWidth(a)*CAR_BOX, bLen = carLength(b)*CAR_BOX, bWid = carWidth(b)*CAR_BOX, dx = a.x - b.x, dz = a.z - b.z;
+  const extent = (len, wid, h, ax, az) => Math.abs(Math.sin(h)*ax + Math.cos(h)*az)*len*0.5 + Math.abs(Math.cos(h)*ax - Math.sin(h)*az)*wid*0.5;
+  let best = null;
+  for (const h of [a.heading, b.heading]) for (const [ax, az] of [[Math.sin(h), Math.cos(h)], [Math.cos(h), -Math.sin(h)]]) {
+    const along = dx*ax + dz*az, depth = extent(aLen, aWid, a.heading, ax, az) + extent(bLen, bWid, b.heading, ax, az) - Math.abs(along);
+    if (depth <= 0) return null;
+    if (!best || depth < best.depth) best = { depth, x: along < 0 ? -ax : ax, z: along < 0 ? -az : az };
+  }
+  return best;
+}
+const ghosting = car => (car.kick?.heldFor ?? 0) >= KICK_GHOST_AFTER;
+/**
+ * Push every clipped pair of cars apart (see CLIP_MARGIN).
+ * @returns {void}
+ */
+export function separateCars() {
+  cars.forEach(car => {
+    if (car.li < 0 || car === drivenCar || ghosting(car)) return;
+    forCarsNear(car.x, car.z, carLength(car)*1.5 + 4*S.peopleSize, other => {
+      if (other === car || other.li < 0 || ghosting(other)) return;
+      const clip = clipDepth(car, other);
+      if (!clip) return;
+      const out = clip.depth + CLIP_MARGIN*S.peopleSize;
+      if (car.kick) {
+        const share = other.kick && other !== drivenCar ? 0.5 : 1, sx = clip.x*out*share, sz = clip.z*out*share;
+        car.kick.x += sx; car.kick.z += sz; car.x += sx; car.z += sz;
+      } else if (!other.kick && other !== drivenCar && clip.depth > CLIP_DEEP*S.peopleSize && Math.abs(car.speed) < CLIP_STILL && Math.abs(other.speed) < CLIP_STILL && overlapYield(car, other)) {
+        kickCar(car, clip.x, clip.z, out); // (from then on it's knocked, and pushed straight out as above)
+      }
+    });
+  });
+}
+/**
+ * Of two cars already overlapping (clipped into each other), whether `car` is the one to hold still while the other
+ * drives out: the one the other is further ahead of (so the rear car waits), or — dead level — the higher id. Exactly one
+ * of any pair yields, so a clipped pair never holds each other up.
+ * @param {object} car
+ * @param {object} other
+ * @returns {boolean}
+ */
+export function overlapYield(car, other) {
+  const ahead = (a, b) => (b.x - a.x)*Math.sin(a.heading) + (b.z - a.z)*Math.cos(a.heading);
+  const mine = ahead(car, other), theirs = ahead(other, car);
+  return mine !== theirs ? mine > theirs : car.id > other.id;
+}
+/**
+ * The nearest car in the car's way, and how far off it is. A car it's already clipped into only counts if it's the one
+ * to yield (overlapYield) — then as a gap of 0 — else it's ignored, so it can drive out.
  * @param {object} car
  * @returns {{ gap: number, by: ?object }} gap is Infinity and by null when nothing is in the way
  */
@@ -106,7 +169,11 @@ export function gapAhead(car) {
   forCarsNear(car.x, car.z, range, other => {
     if (other === car || other.ahead === car) return; // (the car behind it in its own lane never is)
     if (car.traits?.smells && other.pull > 0.3) return; // (pulled over to let it by: see pullover.js)
-    if (car.pushing > 0 && other !== drivenCar && other !== car.ahead && Math.abs(other.speed) < 0.3) return; // (pushing past, see waitOrGiveUp)
+    if (car.pushing > 0 && other !== drivenCar && (other !== car.ahead || other.kick) && !other.traits?.smells && Math.abs(other.speed) < 0.3) return; // (pushing past, see waitOrGiveUp — never a smelly car, which it'd only shove further into the jam)
+    if (carsOverlap(car, other)) {
+      if (overlapYield(car, other) && best > 0) { best = 0; by = other; }
+      return;
+    }
     const gap = gapTo(car, other, range);
     if (gap >= best) return;
     if (other !== drivenCar && gapTo(other, car, senseRange(other)) < Infinity && goesFirst(car, other)) return;
@@ -127,7 +194,7 @@ export const GIVE_UP_AFTER = 2.5, PUSH_FOR = 3; // (seconds)
  */
 export function waitOrGiveUp(car, by, dt) {
   car.pushing = Math.max(0, car.pushing - dt);
-  if (!by || by === car.ahead || by === drivenCar || car.speed > 0.3 || Math.abs(by.speed) > 0.3) {
+  if (!by || (by === car.ahead && !by.kick) || by === drivenCar || car.speed > 0.3 || Math.abs(by.speed) > 0.3) {
     car.waited = 0;
     return;
   }
@@ -182,7 +249,7 @@ export function spotTaken(car, x, z) {
  * @returns {boolean}
  */
 export function carsOverlap(a, b) {
-  const aLen = carLength(a), aWid = carWidth(a), bLen = carLength(b), bWid = carWidth(b), dx = b.x - a.x, dz = b.z - a.z;
+  const aLen = carLength(a)*CAR_BOX, aWid = carWidth(a)*CAR_BOX, bLen = carLength(b)*CAR_BOX, bWid = carWidth(b)*CAR_BOX, dx = b.x - a.x, dz = b.z - a.z;
   const axes = [a.heading, b.heading].flatMap(h => [[Math.sin(h), Math.cos(h)], [Math.cos(h), -Math.sin(h)]]);
   const extent = (len, wid, h, [ax, az]) => {
     const along = Math.abs(Math.sin(h)*ax + Math.cos(h)*az), across = Math.abs(Math.cos(h)*ax - Math.sin(h)*az);

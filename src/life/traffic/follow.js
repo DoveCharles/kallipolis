@@ -140,7 +140,7 @@ export function chaseCamera(car) {
 }
 // A car whose health runs out is set burning (lightFuse): it blows up when the fuse is out (see burnFuse and updateTraffic),
 // or, with a respawn left, shakes and comes back (killCar → startCarRevive, which puts its health back to full).
-registerHealthKind('car', { max: 500, die: car => {
+registerHealthKind('car', { max: 800, die: car => {
   if (car.fuse != null || car.reviving) return;
   if (car === drivenCar) { // (the driver is thrown out, and it burns where it is — not where stopDriving respawns it, when it can't be seated back on a lane)
     const at = { x: car.x, z: car.z, heading: car.heading };
