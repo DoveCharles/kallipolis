@@ -36,7 +36,7 @@ const HEADLIGHT_WIDTH = 1.8;
 const HEADLIGHT_HEIGHT = 3;     // nothing higher than this is in the beam
 const HEADLIGHT_TILT = 3;       // (see nightLightAt)
 const HEADLIGHT_COLOR = new THREE.Color(0xfff2dc);
-const HEADLIGHT_STRENGTH = 1;
+const HEADLIGHT_STRENGTH = 3;
 // and behind each car a short, dim red glow off its taillights, in the same map's second channel
 const TAILLIGHT_REACH = 5;
 const TAILLIGHT_SPREAD = 0.2;
