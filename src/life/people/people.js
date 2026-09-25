@@ -10,10 +10,11 @@ import { blasts, PERSON_BLAST_SCALE } from '../traffic/state.js';
 import { canRespawn, PERSON_SHAKE, shake } from '../revive.js';
 import { throwBodyParts } from './peopleGibs.js';
 import { babble, nextSyllable, hearDistance } from '../../audio/voices.js';
-import { sayLine, lineMouth, stopLine, linePause } from '../../audio/dictionary.js';
+import { sayLine, shoutLine, reactAloud, lineMouth, stopLine, linePause } from '../../audio/dictionary.js';
 import { pickThought, pickReaction } from '../speech-text.js';
 import { babbleLine, hasBubble, speechBubble } from '../../ui/speech-bubbles.js';
 import { footstep } from '../../audio/footsteps.js';
+import { ear } from '../../audio/sfx.js';
 import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
 import { controlInput, possession } from '../possession.js';
@@ -516,7 +517,7 @@ const BUBBLE_CHAIR_DROP = 0.5, BUBBLE_GROUND_DROP = 0.8; // how much lower (same
 // Someone on their own may think something (thoughts.txt: see life/speech-text.js) as they fidget with one of
 // THINK_FIDGETS — THINK_CHANCE of the time (× chat speed), and no sooner than THINK_REST after their last (a rest of their
 // own, started at random, so people don't all think together) — shown in a bubble for THOUGHT_TIME, only within
-// Options > Speech > Bubble distance of the camera. Something they've just seen or felt is thought about at once.
+// Options > Speech > Bubble distance of the camera. (What they've just seen or felt, they react to aloud: see reactAloud.)
 // Returns the thought while it shows.
 const THINK_FIDGETS = FIDGETS, THINK_CHANCE = 0.35, THOUGHT_TIME = 4, THINK_REST = [20, 60];
 function thoughtOf(p, dt) {
@@ -525,9 +526,6 @@ function thoughtOf(p, dt) {
   p.thought = null;
   const near = Math.hypot(p.x - camera.position.x, p.y - camera.position.y, p.z - camera.position.z) <= (S.bubbleDistance ?? 35);
   const show = text => { p.thought = { text, thought: true }; p.thoughtUntil = now + THOUGHT_TIME; return p.thought; };
-  const news = (p.seen && !p.seen.reacted) || (p.felt && !p.felt.reacted);
-  const reaction = news && near ? pickReaction(p) : null;
-  if (reaction) return show(reaction.text);
   const fidgeted = p.fidgetThought;
   p.fidgetThought = false;
   p.nextThoughtAt ??= now + THINK_REST[0] + peopleRng()*(THINK_REST[1] - THINK_REST[0]);
@@ -621,6 +619,10 @@ const insideOf = q => q.mode === 'indoors' && q.indoors.stage === 'inside' ? q.i
 export function notice(q, who, what, by = null) {
   const at = performance.now()/1000, old = q.seen, fresh = old && at - old.at < NOTICED_FOR;
   if (fresh && (SEEN_RANK[old.what] > SEEN_RANK[what] || (old.what === what && old.who === who))) return;
+  // (no more than MAX_WITNESSES notice the same thing about the same person while it's fresh — a smell, walking on water)
+  const tally = who.noticed?.what === what && at - who.noticed.since < NOTICED_FOR ? who.noticed : (who.noticed = { what, since: at, count: 0 });
+  if (tally.count >= MAX_WITNESSES) return;
+  tally.count++;
   q.seen = { what, at, who, by, after: at + Math.random()*REACT_SPREAD };
 }
 /**
@@ -714,8 +716,13 @@ const wantsOut = p => (p.fleeStarts?.length ?? 0) >= FLEE_REPEAT_COUNT || (p.fle
  * @param {{x: number, z: number}} from - what they're running from
  * @returns {void}
  */
+const FLEE_TALK_AGAIN = 12, FLEE_TALK_WITHIN = 2; // seconds before someone who's fled calls out again as they start another
+// flight, and how long after bolting they'll still call out (waiting for a turn to speak: see shoutLine)
 export function beginFleeing(p, from) {
   p.fright = { stage: 'flee', timer: FLEE_TIME, from };
+  // (something called out as they bolt, from fleeing.txt — not every time, for those who keep running: see the talk below)
+  const fleeNow = performance.now()/1000;
+  if (!(fleeNow - (p.fledTalkAt ?? -Infinity) < FLEE_TALK_AGAIN)) { p.fledTalkAt = fleeNow; p.fleeTalkUntil = fleeNow + FLEE_TALK_WITHIN; }
   const now = lastPeopleTime ?? 0;
   p.fleeStarts = (p.fleeStarts ?? []).filter(t => now - t < FLEE_REPEAT_WINDOW);
   p.fleeStarts.push(now);
@@ -1349,10 +1356,24 @@ export function updatePeople(t) {
       p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, dt*4);
       const fear = bloodFear(p); // (how much blood they're wearing, for how scared they look)
       const scaredByBlood = !!p.blood && !p.traits.bloodlust, lusting = isBloodlusting(p);
+      if (lusting && !p.lusting) feel(p, 'bloodlust'); // (for what they say: see life/speech-text.js, {is = bloodlusting})
+      p.lusting = lusting;
       const delighted = pleased && !scaredByBlood; // (blood wins over any other face: whatever they're doing, they look scared — unless they like it)
       // talking, their mouth moves; listening, their expression changes every now and then
       const group = p.group, talking = !!group && group.speaker === p, listening = !!group && !!group.speaker && !talking && p.lookAt === group.speaker;
-      if (!talking || (p.saying && !isDrawn(p))) {
+      // (just bolted: calling something out, outside any conversation — see beginFleeing and shoutLine)
+      // (on their own, reacting to what they've just seen or felt: aloud, or as a thought — see reactAloud)
+      if (!group && !possessed && !p.saying && isDrawn(p) && (p.seen || p.felt)) {
+        const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, reaction = reactAloud(head, voiceOf(p, i), i, p);
+        if (reaction?.thought) { p.thought = reaction; p.thoughtUntil = performance.now()/1000 + THOUGHT_TIME; }
+        else if (reaction) { p.saying = reaction; p.shouting = true; }
+      }
+      if (p.fleeTalkUntil && !p.saying) {
+        if (performance.now()/1000 > p.fleeTalkUntil || !isDrawn(p)) p.fleeTalkUntil = 0;
+        else if ((p.saying = shoutLine({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), i, p, 'fleeing'))) { p.shouting = true; p.fleeTalkUntil = 0; }
+      }
+      if (!(talking || p.shouting) || (p.saying && !isDrawn(p))) {
+        p.shouting = false;
         p.talkTo = 0;
         p.phrase = null;
         stopLine(p.saying);
@@ -1360,13 +1381,13 @@ export function updatePeople(t) {
       } else if (p.saying) {
         // saying a real line (see audio/dictionary.js): the mouth opening as wide as it's loud, and a breath once it's done
         const mouth = lineMouth(p.saying);
-        if (mouth < 0) { p.saying = null; p.talkTo = 0; p.talkIn = 0.3 + peopleRng()*0.3; }
+        if (mouth < 0) { p.saying = null; p.shouting = false; p.talkTo = 0; p.talkIn = 0.3 + peopleRng()*0.3; }
         else p.talkTo = mouth;
       } else if ((p.talkIn -= dt) <= 0) {
         const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, heard = isDrawn(p);
         // at the start of a phrase, now and then something real instead
         const phraseStart = !p.phrase || p.phrase.said >= p.phrase.length;
-        const far = Math.hypot(head.x - camera.position.x, head.y - camera.position.y, head.z - camera.position.z);
+        const far = Math.hypot(head.x - ear.x, head.y - ear.y, head.z - ear.z); // (from where you hear: see ear in audio/sfx.js)
         // (with Options > Speech > Babble only as fallback, anyone out of hearing keeps quiet: nothing real to say there)
         if (S.babbleFallbackOnly && far > hearDistance()) { p.talkTo = 0; p.talkIn = 0.5; p.phrase = null; }
         else if (heard && phraseStart && (p.saying = sayLine(head, voiceOf(p, i), i, p))) p.phrase = null;

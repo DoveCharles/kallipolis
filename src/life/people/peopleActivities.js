@@ -540,7 +540,10 @@ export function updateAttack(p, dt) {
   const a = p.attack, t = a.target;
   a.timer -= dt;
   if (a.stage === 'chase') {
-    if ((t.punched?.by !== p && t.punched?.stage !== 'marked') || a.timer <= 0 || !(t.mode === 'line' || t.mode === 'wander' || t.mode === 'leaving' || t.mode === 'possessed') || t.jc) { endAttack(p); return null; }
+    if ((t.punched?.by !== p && t.punched?.stage !== 'marked') || a.timer <= 0 || !(t.mode === 'line' || t.mode === 'wander' || t.mode === 'leaving' || t.mode === 'possessed') || t.jc) {
+      if (a.timer <= 0) feel(p, 'gaveup', t); // (ran out of chase: for what they say, see life/speech-text.js)
+      endAttack(p); return null;
+    }
     const d = Math.hypot(t.x - p.x, t.z - p.z), gap = CHAT_GAP*S.peopleSize;
     if (t.mode !== 'possessed' && t.punched.stage === 'marked' && d < PUNCH_NOTICE*S.peopleSize) { // (whoever's being controlled isn't braced, and keeps their freedom until the fist lands)
       t.punched = null;

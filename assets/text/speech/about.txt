@@ -8,7 +8,7 @@
 # Only files in speech/ and people/ are categories: the rest of assets/text/ (bees.txt, cars.txt, tv.txt...) is never
 # read for speech, so [bees] or [cars] won't work. about.txt files are never categories either.
 # Speech starts from dialogue.txt (conversations), thoughts.txt (alone, as they fidget; no replies, shown but not said) and reactions.txt
-# (straight after seeing a death). Blank lines and # lines are skipped.
+# (straight after seeing a death), plus closers.txt (ending a conversation) and fleeing.txt (called out as people run). Blank lines and # lines are skipped.
 #
 # ------------------------------------------------------------------------------------------------------------------------
 # LINES
@@ -41,7 +41,7 @@
 #                             speaker's hates where it'd use their loves (see LOVES AND HATES) — "I really hate [interests: general, hated]"
 #   [pets#1]                  the same pick every time #1 is used, for the whole conversation — a reply can say
 #                             [pets#1: general] and mean the same pet ("a dog" ... "dogs")
-# The first letter of a line is capitalised when it's said, and the first after any . ! or ? — so write words in lower
+# The first letter of a line is capitalised when it's said, and the first after any . ! or ? (not an ellipsis …) — so write words in lower
 # case ("labubu!!!" mid-line makes the next word start with a capital), and proper nouns with their capitals.
 #
 # ------------------------------------------------------------------------------------------------------------------------
@@ -86,8 +86,14 @@
 #   {felt = punched}          someone punched them            {felt = hitbycar}  a car knocked them down
 #   {felt = revenge}          they just punched whoever last punched them (within 2 minutes)
 #   {felt = watchedtv}        they just got up from the sofa after watching the TV
-# Seeing or feeling something, people say or think a line from reactions.txt straight away — once each — before anything
-# else. {seen} and {felt} work on any line anywhere.
+#   {felt = fellover}         fell over drunk              {felt = drunk}   just got drunk (on pints)
+#   {felt = bloodlust}        bloodlust just came over them {felt = gaveup}  gave up chasing someone ([felt.by] is who)
+# IS: how the speaker is right now (hard limits)
+#   {is = drunk}              the drunk trait, or a pint or more in them
+#   {is = bloodlusting}       bloodlusting now
+# Seeing or feeling something, people say a line from reactions.txt straight away — once each — before anything else:
+# aloud (in a conversation or on their own), unless it's tagged {thought} and they're on their own, or they're out of
+# hearing, when it's a thought. {seen} and {felt} work on any line anywhere.
 #
 # NAMES: [me.name] the speaker, [other.name] who they're talking to, [seen.name] who it happened to, [seen.by] who did
 # it, [felt.by] who did it to the speaker (for revenge, who they got back at). A line whose name can't be had isn't said.

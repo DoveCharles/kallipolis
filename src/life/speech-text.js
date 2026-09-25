@@ -17,16 +17,23 @@ const INDEX_URL = TEXT_DIR + 'index.txt'; // every .txt under assets/text/, one 
 // the folders whose files are categories, at any depth, named by file (so a file can move between subfolders freely);
 // people/'s lists (boynames, surnames...) come too, their [trait] brackets dropped, and about.txt files never do
 const CATEGORY_DIRS = ['speech/', 'people/'];
-const ROOTS = ['dialogue', 'thoughts', 'reactions', 'closers'];
+const ROOTS = ['dialogue', 'thoughts', 'reactions', 'closers', 'fleeing'];
 const MAX_DEPTH = 8;         // how deep includes (and placeholders within placeholders) are followed
 const LEAN = 2;              // how hard a tag leans: × (1 + LEAN × tag × trait), trait measured -1 to +1 from its neutral
 const MIN_LEAN = 0.05;       // the least a leaning can bring an entry's weight down to (× its weight)
 const LOVED_CHANCE = 0.5;    // the chance of picking from the speaker's loves (hates, in a hated call) when any are there
 const TRIES = 6;             // lines tried before giving up, when placeholders can't be filled
+const REACTION_GAP = 0.5;    // seconds between any two reactions starting, city-wide (a crowd reacts one after another, not at once)
+const REACTION_KEEP = 8;     // seconds a reaction can wait its turn before it's dropped (it'd be stale)
+let lastReaction = -Infinity;
 export const SEEN_TIME = 60; // seconds someone remembers what they saw or felt, for {seen} and {felt} (p.seen / p.felt: see witness, notice and feel in people/people.js)
 const DEATHS = ['killedbycar', 'beatentodeath', 'smited', 'drowned', 'exploded'];
 const SIGHTS = [...DEATHS, 'death', 'punch', 'knockedbycar', 'resurrected', 'waterwalking', 'smelly']; // ('death': any of DEATHS)
-const FEELINGS = ['punched', 'hitbycar', 'revenge', 'watchedtv'];
+const FEELINGS = ['punched', 'hitbycar', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust'];
+const STATES = { // {is = …}: how the speaker is right now
+  drunk: person => !!person?.traits?.drunk || (person?.pints ?? 0) >= 1, // (the drunk trait, or a pint or more in them)
+  bloodlusting: person => !!person?.lusting,
+};
 const PLACES = ['park', 'plaza', 'beach', 'roadside', 'path', 'bridge', 'crossing']; // (here.<place>: see placeOf)
 // here.<zone>: standing in a zone of that type (zoneOf); city is the 'buildings' zone
 const ZONES = { plain: 'plain', park: 'park', water: 'water', beach: 'beach', farmland: 'farmland', suburbs: 'suburbs',
@@ -49,7 +56,7 @@ const nameOf = inner => inner.split(':')[0].split('#')[0].trim().toLowerCase();
 
 // A tag list, {weight = 2, evil, patience = -1, world.hour 22-5, world.morality < -0.3, world.weather = rain}.
 function parseTags(text, where) {
-  const tags = { weight: 1, traits: {}, world: [], end: null };
+  const tags = { weight: 1, traits: {}, world: [], end: null, thought: false };
   text.split(',').map(part => part.trim()).filter(Boolean).forEach(part => {
     let m;
     if ((m = part.match(/^world\.hour\s+(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/i))) tags.world.push({ kind: 'hour', from: +m[1], to: +m[2] });
@@ -72,6 +79,11 @@ function parseTags(text, where) {
       tags.world.push({ kind: 'trait', other: !!m[1], trait: m[2].toLowerCase(), op: m[3], value: +m[4] });
     else if ((m = part.match(/^other\.([a-z]+)\s*(?:=\s*(-?\d+(?:\.\d+)?))?$/i)) && TRAITS[m[1].toLowerCase()])
       tags.world.push({ kind: 'otherLean', trait: m[1].toLowerCase(), value: m[2] == null ? 1 : +m[2] });
+    else if ((m = part.match(/^is\s*=\s*(\w+)$/i))) {
+      if (STATES[m[1].toLowerCase()]) tags.world.push({ kind: 'is', is: m[1].toLowerCase() });
+      else warnOnce(`in ${where}, "is = ${m[1]}" isn't one of: ${Object.keys(STATES).join(', ')}`);
+    }
+    else if (/^thought$/i.test(part)) tags.thought = true;
     else if ((m = part.match(/^end(?:\s*=\s*(good|bad))?$/i))) tags.end = (m[1] ?? 'good').toLowerCase();
     else if ((m = part.match(/^weight\s*=\s*(\d+(?:\.\d+)?)$/i))) tags.weight = +m[1];
     else if ((m = part.match(/^([a-z]+)\s*(?:=\s*(-?\d+(?:\.\d+)?))?$/i)) && TRAITS[m[1].toLowerCase()]) tags.traits[m[1].toLowerCase()] = m[2] == null ? 1 : +m[2];
@@ -182,13 +194,13 @@ function compileNodes(nodes, depth, path, where) {
       if (path.includes(node.include)) { warnOnce(`[${node.include}] includes itself (via ${path.join(' → ')}); skipped`); return; }
       if (depth >= MAX_DEPTH) { warnOnce(`[${node.include}] is past MAX_DEPTH (${MAX_DEPTH}) includes deep; skipped`); return; }
       categoryItems(node.include, depth + 1, path).forEach(inner => add({
-        ...inner, weight: inner.weight*node.tags.weight, end: node.tags.end ?? inner.end,
+        ...inner, weight: inner.weight*node.tags.weight, end: node.tags.end ?? inner.end, thought: node.tags.thought || inner.thought,
         traits: addTraits(inner.traits, node.tags.traits), world: inner.world.concat(node.tags.world),
       }));
       return;
     }
     const key = (node.forms ? node.forms.first : node.text).toLowerCase().trim();
-    add({ key, forms: node.forms, text: node.text, replies: node.replies, weight: node.tags.weight, end: node.tags.end,
+    add({ key, forms: node.forms, text: node.text, replies: node.replies, weight: node.tags.weight, end: node.tags.end, thought: node.tags.thought,
       traits: { ...node.tags.traits }, world: node.tags.world.slice(), where: node.where });
   });
   return [...items.values()];
@@ -253,6 +265,7 @@ function insidePoly(poly, x, z) {
 }
 
 const worldAllows = (world, person) => world.every(w => {
+  if (w.kind === 'is') return STATES[w.is](person);
   if (w.kind === 'place') return placeOf(person) === w.is || (!!ZONES[w.is] && !buildingOf(person) && zoneOf(person) === ZONES[w.is]);
   if (w.kind === 'indoors') return !!buildingOf(person) === w.is;
   if (w.kind === 'building') { const b = buildingOf(person); return !!b && (b.kind === w.is || roomLayoutOf(b.kind, b.number) === w.is); }
@@ -340,8 +353,10 @@ function fill(text, person, vars, depth = 0) {
   });
   return failed ? null : out.replace(/\s+/g, ' ').trim();
 }
-// (the first letter, and the first after a sentence's end — . ! ? — wherever it came from, a picked word included)
-const capitalise = text => text.replace(/(^|[.!?]+\s+)([a-z])/g, (_, before, letter) => before + letter.toUpperCase());
+// (the first letter, and the first after a sentence's end — . ! ? — wherever it came from, a picked word included; not
+// after an ellipsis, which carries the sentence on)
+const capitalise = text => text.charAt(0).toUpperCase() + text.slice(1)
+  .replace(/([.!?]+)(\s+)([a-z])/g, (all, marks, space, letter) => /^\.{2,}$/.test(marks) ? all : marks + space + letter.toUpperCase());
 
 // A line picked from these items and filled in, with the replies it can get: { text, replies, vars } or null.
 function sayFrom(items, person, vars = {}) {
@@ -352,7 +367,7 @@ function sayFrom(items, person, vars = {}) {
     tried.add(item);
     const held = { ...vars };
     const text = item.forms ? item.forms.first : fill(item.text, person, held);
-    if (text) return { text: capitalise(text), replies: item.replies ? compileNodes(item.replies, 0, [], item.where) : [], vars: held, end: item.end };
+    if (text) return { text: capitalise(text), replies: item.replies ? compileNodes(item.replies, 0, [], item.where) : [], vars: held, end: item.end, thought: item.thought };
   }
   return null;
 }
@@ -392,7 +407,9 @@ export const pickThought = person => ready ? (speakingTo = null, sayFrom(categor
 export function pickReaction(person, other = null) {
   const now = performance.now()/1000;
   const news = [feltFresh(person), seenFresh(person)].filter(m => m && !m.reacted && !(m.after > now)); // (after: see notice in people.js)
-  if (!ready || !news.length) return null;
+  news.forEach(m => { if (now - (m.after ?? m.at) > REACTION_KEEP) m.reacted = true; });
+  if (!ready || !news.some(m => !m.reacted) || now - lastReaction < REACTION_GAP) return null;
+  lastReaction = now;
   news.forEach(m => { m.reacted = true; });
   speakingTo = other;
   return sayFrom(categoryItems('reactions'), person);
@@ -405,3 +422,21 @@ export function pickReaction(person, other = null) {
  * @returns {?{text: string, replies: object[], vars: object, end: ?string}}
  */
 export const pickCloser = (person, other = null) => ready ? (speakingTo = other, sayFrom(categoryItems('closers'), person)) : null;
+
+/**
+ * A line to call out on its own, outside any conversation, from the named category (fleeing.txt, as someone runs).
+ * @param {object} person
+ * @param {string} category
+ * @returns {?{text: string, replies: object[], vars: object, end: ?string}}
+ */
+export const pickShout = (person, category) => ready ? (speakingTo = null, sayFrom(categoryItems(category), person)) : null;
+
+/**
+ * Whether someone has something they've just seen or felt still to react to (see pickReaction).
+ * @param {object} person
+ * @returns {boolean}
+ */
+export function hasNews(person) {
+  const now = performance.now()/1000;
+  return [feltFresh(person), seenFresh(person)].some(m => m && !m.reacted && !(m.after > now));
+}

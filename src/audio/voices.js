@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, isMuted, heardFrom, muffler } from './sfx.js';
+import { listener, isMuted, heardFrom, muffler, ear } from './sfx.js';
 import { melodyOf } from './melodies.js';
 
 // ============================================================ voices
@@ -36,7 +36,18 @@ const CONSONANTS = [
 ];
 const HEAR_DISTANCE = 40;          // beyond this from the camera they aren't heard at all (unless set by Options > Speech > Hearing distance: S.hearDistance)
 const REF_DISTANCE = 5;            // how near to be heard at full volume
-const ROLLOFF = 2.5;               // how fast they fade past that (1 is the inverse law: a tenth as loud at ten times as far)
+const ROLLOFF = 3;                 // how fast they fade past that (1 is the inverse law: a tenth as loud at ten times as far)
+const EDGE_POWER = 1.5;            // and on top, fading to nothing at the hearing distance: × (1 − distance ÷ it)^EDGE_POWER
+/**
+ * How much quieter a voice this far from the camera is kept, on top of its falloff with distance: fading to nothing as it
+ * nears the hearing distance, so voices thin out towards the edge rather than cutting off (babble, cries and lines alike).
+ * @param {{x: number, y: number, z: number}} at
+ * @returns {number} 0 to 1
+ */
+export function edgeFade(at) {
+  const { x, y, z } = ear;
+  return Math.pow(Math.max(0, 1 - Math.hypot(at.x - x, at.y - y, at.z - z)/hearDistance()), EDGE_POWER);
+}
 /** How far off people's talk is heard: Options > Speech > Hearing distance, else HEAR_DISTANCE. @returns {number} */
 export const hearDistance = () => S.hearDistance ?? HEAR_DISTANCE;
 /** Full volume within this; grows with hearDistance, so a further setting is louder further off. @returns {number} */
@@ -176,8 +187,9 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   const { formant, sharpness } = voice;
   const context = listener.context;
   if (isMuted() || context.state !== 'running') return;
-  const { x, y, z } = camera.position;
+  const { x, y, z } = ear;
   if (Math.hypot(at.x - x, at.y - y, at.z - z) > hearDistance()) return;
+  level *= edgeFade(at);
   const now = context.currentTime, end = now + Math.max(0.05, length);
   const oscillator = context.createOscillator();
   oscillator.type = 'sawtooth';

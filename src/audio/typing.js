@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { playBufferAt, zzfxBuffer } from './sfx.js';
+import { playBufferAt, zzfxBuffer, ear } from './sfx.js';
 
 // ============================================================ typing
 // A click for every key struck by anyone typing at a desk (see the Typing clip in life/people/peopleModel.js, whose
@@ -31,7 +31,7 @@ let budget = CLICKS_MAX_PER_SECOND, budgetAt = 0;
  * @returns {void}
  */
 export function keyClick(at, space = false) {
-  const { x, y, z } = camera.position;
+  const { x, y, z } = ear;
   if (Math.hypot(at.x - x, at.y - y, at.z - z) > HEAR_DISTANCE) return;
   const now = performance.now()/1000;
   budget = Math.min(CLICKS_MAX_PER_SECOND, budget + (now - budgetAt)*CLICKS_MAX_PER_SECOND);

@@ -492,7 +492,7 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 
 /* someone saying a real line (src/ui/speech-bubbles.js): left/top is the tip of the tail, just over their head */
 .speech-bubble {
-  position:fixed; z-index:5; pointer-events:none; transform:translate(-50%, calc(-100% - 10px));
+  position:fixed; pointer-events:none; transform:translate(-50%, calc(-100% - 10px)); /* (no z-index: under the menus, see speech-bubbles.js) */
   max-width:220px; width:max-content; padding:5px 9px; border-radius:10px;
   background:#fff; color:#000; border:2px solid #000;
   font-family:var(--mono); font-size:12px; line-height:1.35; text-align:center;

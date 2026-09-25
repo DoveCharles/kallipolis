@@ -22,3 +22,11 @@ One step and it'd all be over. {here.roadside, mood = -1, evil}
 Look both ways. Look both ways. {here.crossing}
 Nearly there. {here.path}
 Don't look down. {here.bridge}
+Everything's spinning. {is = drunk}
+Which way is home again? {is = drunk}
+I love everyone. {is = drunk, happy}
+Just one more pint. {is = drunk, weight = 0.5}
+Is the ground moving or is it me? {is = drunk}
+Blood. I need blood. {is = bloodlusting}
+They all look so... breakable. {is = bloodlusting, evil}
+Who's next? {is = bloodlusting}

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { camera } from '../core/scene.js';
-import { listener, outdoorsOf, inside } from './sfx.js';
+import { listener, outdoorsOf, inside, ear } from './sfx.js';
 
 // ============================================================ aircraft
 // The aircraft about the airfields (see updateAirports in zones/airport.js): loops synthesized live like the engines (see
@@ -128,7 +128,7 @@ function makeVoice() {
  */
 export function updateAircraftSounds(flying) {
   const near = flying
-    .map(f => { f.object.getWorldPosition(where); return { ...f, at: where.clone(), d: where.distanceTo(camera.position) }; })
+    .map(f => { f.object.getWorldPosition(where); return { ...f, at: where.clone(), d: where.distanceTo(ear) }; })
     .filter(n => n.d <= HEAR_DISTANCE)
     .sort((a, b) => a.d - b.d).slice(0, AIRCRAFT_MAX);
   if (!near.length && !voices.some(v => v.object)) return;
@@ -167,8 +167,8 @@ export function updateAircraftSounds(flying) {
     v.air2.frequency.setTargetAtTime(top*1.6, now, 0.2);
     v.bass.gain.setTargetAtTime(9*far, now, 0.2);
     v.rollDepth.gain.setTargetAtTime(ROLL*far*far, now, 0.3);
-    const ear = Math.max(EAR, camera.position.y), height = Math.max(0, n.at.y);
-    const bounce = Math.hypot(n.at.x - camera.position.x, n.at.z - camera.position.z, height + ear) - n.d;
+    const earHeight = Math.max(EAR, ear.y), height = Math.max(0, n.at.y);
+    const bounce = Math.hypot(n.at.x - ear.x, n.at.z - ear.z, height + earHeight) - n.d;
     v.echo.delayTime.setTargetAtTime(Math.min(0.09, Math.max(0.0003, bounce/SOUND_SPEED)), now, 0.1);
     v.echoGain.gain.setTargetAtTime(0.8*far, now, 0.3);
     v.panner.positionX.value = n.at.x; v.panner.positionY.value = n.at.y; v.panner.positionZ.value = n.at.z;
@@ -218,7 +218,7 @@ const CHIRP_TIME = 0.2, CHIRP_VOLUME = 0.35, CHIRP_NEAR = 40, CHIRP_HZ = 2200;
  */
 export function tyreChirp(at, size) {
   const context = listener.context;
-  if (context.state !== 'running' || Math.hypot(at.x - camera.position.x, at.y - camera.position.y, at.z - camera.position.z) > HEAR_DISTANCE) return;
+  if (context.state !== 'running' || Math.hypot(at.x - ear.x, at.y - ear.y, at.z - ear.z) > HEAR_DISTANCE) return;
   const now = context.currentTime, hz = CHIRP_HZ/Math.sqrt(Math.max(0.5, size/20));
   const panner = context.createPanner();
   panner.panningModel = 'equalpower';

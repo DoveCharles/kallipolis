@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener, outdoorsOf } from './sfx.js';
+import { listener, outdoorsOf, ear } from './sfx.js';
 
 // ============================================================ buzzing
 // The buzz of the bees flying near the camera (see updateBees in life/bees.js), a loop synthesized live like the engines
@@ -53,7 +53,7 @@ function makeBuzz() {
  * @returns {void}
  */
 export function updateBuzzes(flying) {
-  const { x, y, z } = camera.position;
+  const { x, y, z } = ear;
   const near = flying
     .map(f => ({ f, d: Math.hypot(f.x - x, f.y - y, f.z - z) }))
     .filter(n => n.d <= HEAR_DISTANCE)

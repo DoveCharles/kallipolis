@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { S } from '../../core/shared.js';
 import { knockOver } from './peopleActivities.js';
 import { inWater } from './peopleWater.js';
+import { feel } from './people.js';
 
 // The drunk trait, on people: now and then they fall over by themselves (knocked flat, as by a punch from just ahead of
 // them), and they weave as they walk — drawn SWAY_WIDTH either side of their path in a sine wave SWAY_LENGTH long, turned
@@ -26,13 +27,15 @@ const walking = p => (p.mode === 'line' || p.mode === 'wander') && p.moving && !
  */
 export function updateDrunk(p, dt, wasX, wasZ) {
   if (p.pints > 0) p.pints = Math.max(0, p.pints - dt/SOBER_TIME);
+  // (getting drunk on pints, and falling over drunk, are felt: for what they say, see life/speech-text.js)
+  if ((p.pints ?? 0) >= DRUNK && !p.feltDrunk) { p.feltDrunk = true; feel(p, 'drunk'); } else if ((p.pints ?? 0) < TIPSY) p.feltDrunk = false;
   const drunk = p.traits.drunk ? 1 : Math.min(1, Math.max(0, ((p.pints ?? 0) - TIPSY)/(DRUNK - TIPSY)));
   if (!drunk && !p.swayAmp) { p.swayAmp = 0; return; }
   const on = walking(p);
   p.swayAmp = (p.swayAmp ?? 0) + ((on ? drunk : 0) - (p.swayAmp ?? 0))*Math.min(1, SWAY_EASE*dt);
   if (p.swayAmp < 0.001 && !drunk) p.swayAmp = 0;
   p.swayDist = (p.swayDist ?? 0) + Math.hypot(p.x - wasX, p.z - wasZ);
-  if (drunk >= 1 && on && Math.random() < FALL_CHANCE*dt && knockOver(p, { x: p.x + Math.sin(p.heading), z: p.z + Math.cos(p.heading) }) && p.punched) p.punched.stupor = true; // (for their card: see personDoing — unless the fall's damage killed them)
+  if (drunk >= 1 && on && Math.random() < FALL_CHANCE*dt && knockOver(p, { x: p.x + Math.sin(p.heading), z: p.z + Math.cos(p.heading) }) && p.punched) { p.punched.stupor = true; feel(p, 'fellover'); } // (for their card: see personDoing — unless the fall's damage killed them)
 }
 
 const yaw = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);

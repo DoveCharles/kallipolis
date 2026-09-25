@@ -12,6 +12,8 @@ const FADE_FROM = 12/35;  // the share of that distance at which it starts fadin
 const LINGER = 1.5;    // seconds a bubble stays up after its line's done
 const FADE_OUT = 0.5;  // the last of which it spends fading away (a new line replacing it shows at once)
 
+// (in the view's own layer, before the rest of the page, so the menus, toolbars and cards all draw over them)
+const layer = document.getElementById('canvas-wrap') ?? document.body;
 const bubbles = new Map(); // speaker → { element, line, at: THREE.Vector3, doneAt, seen }
 const projected = new THREE.Vector3();
 
@@ -35,7 +37,7 @@ export function speechBubble(who, at, line) {
     if (!line) return;
     const element = document.createElement('div');
     element.className = 'speech-bubble';
-    document.body.appendChild(element);
+    layer.appendChild(element);
     bubbles.set(who, bubble = { element, line: null, at: new THREE.Vector3(), doneAt: 0, seen: false });
   }
   if (line && line !== bubble.line) {
