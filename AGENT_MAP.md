@@ -137,7 +137,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `map-images.js` (9K) ---------------------------------------------------------- map images (reference tracing) — exports: importMapImageFile, renderMapsList, setSelectedMap, setMapHover, removeMapImage, startMapTransform, applyMapTransform, confirmMapTransform …
 
 ### src/objects/
-- `object-types.js` (19K) The catalogue the Objects tab places from: — exports: loadStatueModel, OBJECT_TYPES, objectTypeOf
+- `object-types.js` (19K) The catalogue the Objects tab places from (the statue and beer stall are assets/models/Statue.glb and BeerStand.glb, the rest built from boxes and posts): — exports: loadStatueModel, loadBeerStallModel, OBJECT_TYPES, objectTypeOf
 - `objects.js` (30K) The Objects tab: — exports: objectGroup, Y_OBJECT, MIN_OBJECT_SCALE, invalidateObjectFacing, streetFacingAt, objectById, addObject, removeObject …
 
 ### src/project/

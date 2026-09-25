@@ -46,38 +46,65 @@ const MAT = {
 };
 MAT.lamplight.userData.baseEmissiveIntensity = 1.6;
 
-// The statue is a custom model (assets/models/Statue.glb, made in Blender): one stone figure, centered on its own
-// origin, standing however tall it was sculpted. It's loaded once at startup, scaled to STATUE_HEIGHT and rested on
-// y=0, then every statue prop placed is a clone of it, sharing its geometry and material; until it's ready (or if it
-// fails to load), statues fall back to the built-in blocky stone one below.
-const STATUE_MODEL_URL = 'assets/models/Statue.glb';
+// Some kinds are custom models (made in Blender) rather than built from the kit below: each is loaded once at startup,
+// rested on y=0 and centred on its own origin, then every one of that kind placed is a clone of it, sharing its geometry
+// and materials; until it's ready (or if it fails to load), that kind falls back to the built-in one.
+async function loadPropModel(url, what) {
+  try {
+    const buffer = await fetch(url).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
+    const gltf = await new GLTFLoader().parseAsync(buffer, '');
+    gltf.scene.updateMatrixWorld(true);
+    if (new THREE.Box3().setFromObject(gltf.scene).isEmpty()) throw new Error('the model is empty');
+    return gltf.scene;
+  } catch (err) {
+    console.warn(`Kallipolis: the ${what} model failed to load; it falls back to the built-in one`, err);
+    return null;
+  }
+}
+function propModel(root, centreOn = root) {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root), middle = new THREE.Box3().setFromObject(centreOn).getCenter(new THREE.Vector3());
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    o.castShadow = !o.material?.transparent; o.receiveShadow = true;
+    o.userData.sharedGeometry = true; // every one of them draws the template's geometry, so a rebuild mustn't free it
+    o.userData.sharedMaterial = true;
+  });
+  return { root, middle, floor: box.min.y };
+}
+function placeModel(model) {
+  const clone = model.root.clone(true);
+  clone.position.set(-model.middle.x, -model.floor, -model.middle.z);
+  const group = new THREE.Group();
+  group.add(clone);
+  return group;
+}
+
+// The statue (assets/models/Statue.glb): one stone figure, scaled to STATUE_HEIGHT however tall it was sculpted.
 const STATUE_HEIGHT = 3.1; // about what the built-in stone statue stands, plinth to head
 const STATUE_COLOR = 0xb9b3a6; // MAT.pale's color, so it matches the built-in one and the palette swatch
 let statueModel = null; // { root, middle, floor }
 export async function loadStatueModel() {
-  let gltf;
-  try {
-    const buffer = await fetch(STATUE_MODEL_URL).then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.arrayBuffer(); });
-    gltf = await new GLTFLoader().parseAsync(buffer, '');
-  } catch (err) {
-    console.warn('Kallipolis: the statue model failed to load; statues use the built-in stone one', err);
-    return;
-  }
-  gltf.scene.updateMatrixWorld(true);
-  const rawSize = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3());
-  if (!(rawSize.y > 0)) { console.warn('Kallipolis: the statue model is empty; statues use the built-in stone one'); return; }
-  gltf.scene.scale.setScalar(STATUE_HEIGHT/rawSize.y);
-  gltf.scene.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(gltf.scene), middle = box.getCenter(new THREE.Vector3());
-  gltf.scene.traverse(o => {
-    if (!o.isMesh) return;
-    o.castShadow = true; o.receiveShadow = true;
-    o.userData.sharedGeometry = true; // every statue draws the template's geometry, so a rebuild mustn't free it
-    o.userData.sharedMaterial = true;
-    if (o.material) { o.material.color.setHex(STATUE_COLOR); o.material.roughness = 1; o.material.metalness = 0; }
-  });
-  statueModel = { root: gltf.scene, middle, floor: box.min.y };
+  const root = await loadPropModel('assets/models/Statue.glb', 'statue');
+  if (!root) return;
+  root.scale.setScalar(STATUE_HEIGHT/new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).y);
+  root.traverse(o => { if (o.isMesh && o.material) { o.material.color.setHex(STATUE_COLOR); o.material.roughness = 1; o.material.metalness = 0; } });
+  statueModel = propModel(root);
   App.rebuildObjectsOfType('statue'); // any already standing were built with the fallback; swap them for the real thing
+}
+
+// The beer stall (assets/models/BeerStand.glb), at the size it was modelled. It was made facing -x; a prop faces +z. It's
+// centred on its roof, not on the lot, so the barrel out to one side doesn't push the bar off where customers queue.
+const BEER_STALL_TURN = Math.PI/2;
+let beerStallModel = null; // { root, middle, floor }
+export async function loadBeerStallModel() {
+  const root = await loadPropModel('assets/models/BeerStand.glb', 'beer stall');
+  if (!root) return;
+  root.rotation.y = BEER_STALL_TURN;
+  let roof = root;
+  root.traverse(o => { if (o.isMesh && o.material?.name === '#2a2c30') roof = o; });
+  beerStallModel = propModel(root, roof);
+  App.rebuildObjectsOfType('beer');
 }
 
 // The round shapes props are built out of, made once and merged wherever they're wanted (addGeometry copies them in, so
@@ -147,13 +174,7 @@ export const OBJECT_TYPES = [
   {
     id:'statue', label:'Statue', color:'#b9b3a6', facing:'street', radius:1.1, turnJitter:3, sizeJitter:0.08,
     build(rng) {
-      if (statueModel) {
-        const model = statueModel.root.clone(true);
-        model.position.set(-statueModel.middle.x, -statueModel.floor, -statueModel.middle.z);
-        const group = new THREE.Group();
-        group.add(model);
-        return group;
-      }
+      if (statueModel) return placeModel(statueModel);
       const kit = propKit(), top = 0.95;
       kit.box(MAT.stone, 0, 0, 0, 1.5, 0.2, 1.5);            // a step up to it
       kit.box(MAT.stone, 0, 0.2, 0, 1.2, top-0.2, 1.2);      // the plinth
@@ -280,6 +301,7 @@ export const OBJECT_TYPES = [
   {
     id:'beer', label:'Beer stall', color:'#d08a1e', facing:'street', radius:1.7, turnJitter:4, sizeJitter:0.04,
     build(rng) {
+      if (beerStallModel) return placeModel(beerStallModel);
       const kit = propKit(), counter = 1.05, eaves = 2.35;
       kit.box(MAT.timber, 0, 0, 0.1, 2.0, counter, 0.7);                   // the bar, up to counter height
       [-1, 1].forEach(sx => kit.box(MAT.timber, sx*0.95, 0, -0.35, 0.1, counter, 0.5)); // its sides round the back
