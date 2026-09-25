@@ -303,8 +303,8 @@ export function dropSnack(p) {
 export function snackClip(p, clip, dt) {
   const snack = p.snack;
   if (!snack) return clip;
-  // knocked down, dead or gone indoors: it's gone
-  if (p.punched || p.mode === 'dead' || p.mode === 'indoors' || !p.holding?.includes(snack.held)) { dropSnack(p); return clip; }
+  // knocked down, dead or gone indoors (but for into the room you're in, as a pint in a pub is: see aboutTheRoom): it's gone
+  if (p.punched || p.mode === 'dead' || (p.mode === 'indoors' && !p.inRoom) || !p.holding?.includes(snack.held)) { dropSnack(p); return clip; }
   const kind = SNACKS[snack.item], clips = personModel.clips;
   const carried = clips[clip.name + kind.clip], raised = clips[clip.name + kind.clip + 'Bite'];
   if (!carried || carried.missing || !raised) return clip; // (lying down or on the grass, it waits)

@@ -203,7 +203,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `industrial.js` (14K) ---------------------------------------------------------- industrial An industrial zone is split into big lots, each paved as a yard behind a chain-l…
 - `plazas.js` (19K) ---------------------------------------------------------- plazas A plaza is a paved square: — exports: PLAZA_COLORS, Y_PLAZA, DEFAULT_MORTAR, applyPavingShader, loadFountainModel, generatePlazaContent
 - `suburbs.js` (36K) ---------------------------------------------------------- suburbs — exports: loadHouseModels, streetSegmentsNear, streetFor, generateSuburbsContent
-- `town.js` (18K) ------------------------------------------------------------- town (British terraces and shops, pitched roofs, chimneys) — exports: generateTownContent
+- `town.js` (18K) ------------------------------------------------------------- town (British terraces, shops and pubs — a hanging sign, the ground floor painted black — pitched roofs, chimneys) — exports: generateTownContent
 - `surface-detail.js` (58K, **big**) ---------------------------------------------------------- surface detail (Y2K greebles/bands/rings) A slim torus ring around the building at zHeight,… — exports: makeBuildingMesh, makeParkMesh, applySandShader, generateBeachContent, applyGrassNoiseShader, makeFlatZoneMesh, TREE_CANOPY, makeTreeMesh …
 - `zone-visuals.js` (4K) ---------------------------------------------------------- zone rendering + generation — exports: rebuildZoneVisual, scalePolygonAroundCentroid, makeExtrudeRaw, extrudeFootprintGeo
 
@@ -216,6 +216,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `interior.html` (7K) Standalone "Interior view bench" test page.
 - `midcentury-models.py` (18K) Builds assets/models/MidCentury.glb:
 - `office-models.py` (17K) Builds assets/models/Office.glb:
+- `pub-models.py` Builds assets/models/Pub.glb: a British pub's bar, back bar, stools, settles, booths, tables, fireplace, dartboard, fruit machine, wall pieces and pints (furnished by furnishPub in buildings/interior.js).
 - `posh-models.py` (28K) Builds assets/models/Posh.glb:
 - `reference-head.py` (2K) Puts a whole head (ReferenceHead) into assets/models/Hair.glb where the hairstyles sit, to model against in Blender; the game skips it.
 - `set_pieces.py` (6K) The building blocks tools/posh-models.py, tools/student-models.py and the rest make their furniture sets from:

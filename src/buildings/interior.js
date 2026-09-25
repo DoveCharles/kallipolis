@@ -49,7 +49,8 @@ scene.add(room);
 
 const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, roughness: 0.95 });
 const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x9a7452, roughness: 0.8 });
-const ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 1 });
+const CEILING = 0xf4f1ea; // (a pub's is stained: see LAYOUTS.pub.ceiling)
+const ceilingMaterial = new THREE.MeshStandardMaterial({ color: CEILING, roughness: 1 });
 const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.6 });
 wallMaterial.shadowSide = ceilingMaterial.shadowSide = THREE.FrontSide;
 const glassMaterial = new THREE.MeshStandardMaterial({ color: 0xbcd6e6, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false });
@@ -223,7 +224,7 @@ function layout(name, floor, build) {
   const add = (w, h, d, material, x, y, z) => box(w, h, d, material, x, y, z, group);
   const blocked = build(add);
   // (solid: what nobody walks through, as against blocked, where nobody stops; seats: where anyone can sit — see roomSeats)
-  LAYOUTS[name] = { group, floor: new THREE.Color(floor), wall: new THREE.Color(0xe8e2d6), blocked, solid: blocked, seats: [] };
+  LAYOUTS[name] = { name, group, floor: new THREE.Color(floor), wall: new THREE.Color(0xe8e2d6), blocked, solid: blocked, seats: [] };
 }
 const around = (x0, x1, z0, z1, pad = 0.45) => ({ x0: x0 - pad, x1: x1 + pad, z0: z0 - pad, z1: z1 + pad });
 
@@ -264,13 +265,14 @@ function useLayout(name) {
   current = LAYOUTS[name] ?? LAYOUTS.home;
   current.group.visible = true;
   trim.visible = false; // (till a posh home's furnished)
-  dado.visible = !!current.industrial;
+  dado.visible = !!current.industrial || !!current.panelled;
   paintRoom();
 }
 function paintRoom() {
   floorMaterial.color.copy(current.floor);
   wallMaterial.color.copy(current.wall);
-  roomLit(floorMaterial); roomLit(wallMaterial);
+  ceilingMaterial.color.setHex(current.ceiling ?? CEILING);
+  roomLit(floorMaterial); roomLit(wallMaterial); roomLit(ceilingMaterial);
   // (and a posh home's parquet or marble)
   const map = current.floorMap ?? null;
   if (floorMaterial.map !== map) {
@@ -369,13 +371,14 @@ function measureParts(pieces) {
   const hanging = part(pieces.Pendant, 'Light');
   if (hanging) pieces.Pendant.bulb = hanging.getCenter(new THREE.Vector3());
 }
-// lit like the rest of the room (see roomLit), but for the lamp's bulb, which glows anyway, the glass, and the TV's screen
+// lit like the rest of the room (see roomLit), but for the lamp's bulb (and a pub's fire, and whatever else it has that's
+// lit from within: its Glow materials), which glows anyway, the glass, and the TV's screen
 function furnitureLit(material) {
   if (material.name === 'Screen') {
     material.color.setHex(SCREEN_COLOR);
     material.emissive.setHex(SCREEN_GLOW);
     material.emissiveIntensity = 1;
-  } else if (material.name !== 'Light' && material.name !== 'Fire' && !material.transparent) {
+  } else if (material.name !== 'Light' && material.name !== 'Fire' && !material.name.startsWith('Glow') && !material.transparent) {
     roomLit(material);
   }
 }
@@ -1638,7 +1641,8 @@ LAYOUTS.warehouse.floorMap = LAYOUTS.factory.floorMap = concrete;
 const dado = new THREE.Group();
 dado.visible = false;
 room.add(dado);
-const dadoMaterial = lit(DADOS[0], 0.9), lineMaterial = lit(0xe8b820, 0.6);
+const LINE = 0xe8b820; // (a pub's dado rail's wood instead: see furnishPub)
+const dadoMaterial = lit(DADOS[0], 0.9), lineMaterial = lit(LINE, 0.6);
 const DADO_H = SILL - 0.1;
 for (const [w, d, x, z] of [[ROOM_W, 0.02, 0, ROOM_D/2 - 0.01], [ROOM_W, 0.02, 0, -ROOM_D/2 + 0.01], [0.02, ROOM_D, ROOM_W/2 - 0.01, 0],
   [0.02, doorFrom + ROOM_D/2, -ROOM_W/2 + 0.01, (doorFrom - ROOM_D/2)/2], [0.02, ROOM_D/2 - doorTo, -ROOM_W/2 + 0.01, (doorTo + ROOM_D/2)/2]]) {
@@ -1667,7 +1671,8 @@ function furnishIndustrial(key, kind) {
   layout.floor.setHex(pick(kind === 'factory' ? FACTORY_FLOORS : WAREHOUSE_FLOORS));
   layout.wall.setHex(pick(INDUSTRIAL_WALLS));
   dadoMaterial.color.setHex(pick(DADOS));
-  roomLit(dadoMaterial);
+  lineMaterial.color.setHex(LINE);
+  roomLit(dadoMaterial); roomLit(lineMaterial);
   paintRoom();
   for (const material of industrialPainted) {
     material.color.setHex(pick(INDUSTRIAL_PAINTED[material.name]));
@@ -1794,6 +1799,277 @@ function furnishIndustrial(key, kind) {
     const r = { x0: x - 0.35, x1: x + 0.35, z0: z - 0.35, z1: z + 0.35 };
     if (overlaps(r, underCamera) || high.some(h => overlaps(r, h))) continue;
     put('HighBay', x, z, 0, { y: ROOM_H - 0.15 - F.HighBay.h, small: true });
+  }
+  seatsInWorld(layout);
+}
+
+// ---------------------------------------------------------- a pub
+// A pub (see roomLayoutOf) has its room on the ground floor: dark oak beams across a stained ceiling, the walls panelled
+// in oak to the dado rail and painted oxblood, bottle green or cream above, and a patterned carpet (or bare boards) —
+// and it's fitted out from a model of its own (assets/models/Pub.glb, built by tools/pub-models.py, which lists its
+// pieces), each pub its own way (from its key). Every one has its bar: the back bar against the near wall without
+// windows, the counter in front of it with room to serve from between (nobody else goes back there), and bar stools along
+// it. Then booths — a table between two high-backed benches, end on to a wall — a settle or two along the walls with a
+// table and a stool in front, and tables out in the room with chairs or stools round them, until the room's full; maybe
+// a barrel to stand at, a fireplace, a fruit machine and a dartboard; pictures, mirrors, a chalkboard and lamps on the
+// walls, lights hung over the tables, and pints on them. Until the model's loaded, pubs are bare.
+const PUB_MODEL_URL = 'assets/models/Pub.glb';
+let pub = null;
+const PUB_WALLS = [0x5a1a1a, 0x6a2220, 0x243a2c, 0x2e4632, 0xd8c8a0, 0xcab888, 0x2a3048, 0x7a5a2a];
+const PUB_CEILINGS = [0xe0d0a8, 0xd8c498, 0xe8dcc0, 0xcdb88c];
+// the boards' tint, for a pub with bare floorboards
+const PUB_BOARDS = [0x7a5030, 0x5a3a22, 0x8a6a48, 0x4a3020];
+const PUB_PAINTED = {
+  Oak: [0x4a2c18, 0x3e2414, 0x55341c, 0x34200f, 0x5e3c22],
+  Upholstery: [0x7a1e22, 0x6a1830, 0x1e4a2e, 0x2a3458, 0x8a5a1e, 0x5a2a4a],
+  Leather: [0x6a2a1a, 0x3a1a12, 0x1e2a1e, 0x5a1a1a, 0x2a1a12],
+  Tile: [0x2a5a4a, 0x7a2a2a, 0x2a3a6a, 0x6a5a2a, 0x3a3a3a],
+};
+// the panelling to the dado rail (see `dado`), and the rail
+const PUB_PANELLING = [0x3e2414, 0x4a2c18, 0x34200f, 0x55341c], PUB_RAIL = 0x24140a;
+const pubPainted = [];
+async function loadPub() {
+  try {
+    pub = await loadPieces(PUB_MODEL_URL, PUB_PAINTED, pubPainted);
+  } catch (err) {
+    console.warn('Kallipolis: the pub model failed to load; pubs are left bare', err);
+    return;
+  }
+  for (const name of ['Chair', 'Settle', 'BoothBench']) if (pub[name]) pub[name].seats = measureSeats(pub[name]);
+  // (a stool's seat is its top, in the middle: sat on facing whichever way it's turned)
+  for (const name of ['BarStool', 'Stool']) if (pub[name]) pub[name].seats = [{ x: 0, z: 0, y: pub[name].h }];
+  if (inside && current === LAYOUTS.pub) furnishPub(inside.key);
+}
+modelsLoading.push(loadPub());
+// Carpet: a lattice of diamonds with a rosette in each and a smaller one where they meet, over a field flecked with
+// wear — in its own colours (the floor's left white), repeating every 0.8 m.
+const carpet = ([field, lattice, rose, fleck]) => floorTexture(512, 0.8, (g, rng) => {
+  g.fillStyle = field;
+  g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 6000; i++) {
+    g.fillStyle = rng() < 0.5 ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.05)';
+    g.fillRect(rng()*512, rng()*512, 2, 2);
+  }
+  const cell = 128;
+  g.strokeStyle = lattice;
+  g.lineWidth = 7;
+  for (let k = -4; k <= 8; k++) {
+    g.beginPath(); g.moveTo(k*cell, 0); g.lineTo(k*cell + 512, 512); g.stroke();
+    g.beginPath(); g.moveTo(k*cell, 0); g.lineTo(k*cell - 512, 512); g.stroke();
+  }
+  const rosette = (x, y, r, petal, heart) => {
+    g.fillStyle = petal;
+    for (let a = 0; a < 8; a++) {
+      const t = a*Math.PI/4;
+      g.beginPath(); g.ellipse(x + Math.cos(t)*r*0.55, y + Math.sin(t)*r*0.55, r*0.45, r*0.2, t, 0, Math.PI*2); g.fill();
+    }
+    g.fillStyle = heart;
+    g.beginPath(); g.arc(x, y, r*0.25, 0, Math.PI*2); g.fill();
+  };
+  for (let x = 0; x <= 512; x += cell) for (let y = 0; y <= 512; y += cell) {
+    rosette(x + cell/2, y + cell/2, 40, rose, fleck);
+    rosette(x, y, 18, fleck, rose);
+  }
+});
+const CARPETS = [
+  carpet(['#7a1c20', '#2a1a14', '#c8962e', '#1e3a2a']),
+  carpet(['#1e3a2c', '#14201a', '#b8862a', '#7a1c20']),
+  carpet(['#26284a', '#141628', '#c8a040', '#8a2a2a']),
+];
+
+// the pub: dark beams across the ceiling, panelled to the dado rail (see useLayout), and furnished afresh for each pub
+const pubBeam = lit(0x2e1c10, 0.8);
+layout('pub', 0xffffff, add => {
+  for (const x of [-2.7, -0.9, 0.9, 2.7]) add(0.18, 0.22, ROOM_D, pubBeam, x, ROOM_H - 0.11, 0);
+  add(ROOM_W, 0.16, 0.16, pubBeam, 0, ROOM_H - 0.08, 0);
+  return [];
+});
+const pubGroup = new THREE.Group();
+LAYOUTS.pub.group.add(pubGroup);
+Object.assign(LAYOUTS.pub, { furnished: pubGroup, panelled: true, ceiling: PUB_CEILINGS[0] });
+
+// Fits out the pub for the building with this key (see buildingKey): its furniture, where nobody stands or walks, and its
+// seats, in the room as it's now placed.
+function furnishPub(key) {
+  const layout = LAYOUTS.pub, group = pubGroup;
+  group.clear();
+  layout.blocked = []; layout.solid = []; layout.seats = [];
+  grid = null;
+  const rng = mulberry32(hashNameToNumber(key + ' pub'));
+  const tint = mulberry32(hashNameToNumber(key + ' pub colours'));
+  const pick = list => list[Math.floor(tint()*list.length)];
+  layout.wall.setHex(pick(PUB_WALLS));
+  layout.ceiling = pick(PUB_CEILINGS);
+  if (tint() < 0.7) {
+    layout.floorMap = pick(CARPETS);
+    layout.floor.setHex(0xffffff);
+  } else {
+    layout.floorMap = boards;
+    layout.floor.setHex(pick(PUB_BOARDS));
+  }
+  dadoMaterial.color.setHex(pick(PUB_PANELLING));
+  lineMaterial.color.setHex(PUB_RAIL);
+  roomLit(dadoMaterial); roomLit(lineMaterial);
+  paintRoom();
+  for (const material of pubPainted) {
+    material.color.setHex(pick(PUB_PAINTED[material.name]));
+    roomLit(material);
+  }
+  const F = pub;
+  if (!F?.Bar || !F.BackBar) return;
+  const { taken, overlaps, fits, put, underCamera, WALL_SIDES, overWindow, againstWall, any } = planRoom(layout, F, group, rng, false, []);
+  // (where things stand on: a table's top, to put a pint on, and where it is)
+  const tops = [];
+
+  // The bar, against the near wall with no windows in it, and along it as far as the far wall or a little short of it:
+  // the back bar, then room to serve from, then the counter.
+  const back = F.BackBar, counter = F.Bar;
+  const endGap = rng() < 0.5 ? 0 : 0.3 + rng()*0.6;
+  const bx = ROOM_W/2 - endGap - back.w/2, bz = -ROOM_D/2 - back.bounds.z0 + 0.02;
+  put('BackBar', bx, bz, 0);
+  const serve = 0.9, cz = -ROOM_D/2 + back.d + serve - counter.bounds.z0;
+  const cx = endGap ? bx : ROOM_W/2 - counter.w/2 - 0.01;
+  put('Bar', cx, cz, 0);
+  const behind = { x0: Math.min(bx - back.w/2, cx + counter.bounds.x0) - 0.1, x1: ROOM_W/2, z0: -ROOM_D/2, z1: cz + counter.bounds.z1 };
+  taken.push(behind);
+  layout.solid.push(behind);
+  layout.blocked.push(behind);
+  // the stools along it, facing it, and room kept to stand at it between them
+  const barFront = cz + counter.bounds.z1;
+  if (F.BarStool) {
+    const n = 3 + Math.floor(rng()*2), from = cx + counter.bounds.x0 + 0.45, to = cx + counter.bounds.x1 - 0.45;
+    for (let i = 0; i < n; i++) {
+      const x = from + (i + 0.5)*(to - from)/n + (rng() - 0.5)*0.15;
+      put('BarStool', x, barFront + 0.3, Math.PI + (rng() - 0.5)*0.3, { solid: { x0: -0.18, x1: 0.18, z0: -0.18, z1: 0.18 } });
+    }
+  }
+  taken.push({ x0: behind.x0 - 0.6, x1: ROOM_W/2, z0: barFront, z1: barFront + 0.9 });
+
+  // `name` at `spot` ({ x, z, angle, area }, as againstWall finds it), its area kept
+  const place = (name, spot, options) => {
+    put(name, spot.x, spot.z, spot.angle, options);
+    taken.push(spot.area);
+    return spot;
+  };
+  // parts of a group laid out in its own terms ([name, x, z, angle]) put in place at `spot`
+  const placeAll = (parts, spot) => {
+    for (const [name, x, z, angle] of parts) {
+      const at = turned(x, z, spot.angle, spot.x, spot.z);
+      put(name, at.x, at.z, spot.angle + angle);
+      if (F[name].tabletop) tops.push({ ...at, y: F[name].h, big: name === 'BoothTable' });
+    }
+    taken.push(spot.area);
+  };
+  for (const name of ['Table', 'Table2', 'BoothTable', 'Barrel']) if (F[name]) F[name].tabletop = true;
+  const TABLES = ['Table', 'Table2'].filter(name => F[name]);
+  const SITS = ['Chair', 'Chair', 'Stool'].filter(name => F[name]);
+  // somewhere out in the room for `r`, `gap` clear of everything else, square to the walls
+  const inTheOpen = (r, gap = 0.5) => {
+    for (let k = 0; k < 40; k++) {
+      const angle = Math.floor(rng()*4)*Math.PI/2;
+      const x = (rng()*2 - 1)*(ROOM_W/2 - 0.8), z = (rng()*2 - 1)*(ROOM_D/2 - 0.8);
+      const area = turnedRect(r, angle, x, z);
+      if (fits(area, gap, 0.1)) return { x, z, angle, area };
+    }
+    return null;
+  };
+
+  // A booth: two benches facing each other across a table, end on to a wall (under a window is fine), or two.
+  const booth = () => {
+    const bench = F.BoothBench, table = F.BoothTable;
+    if (!bench || !table) return null;
+    const off = table.d/2 + bench.d/2 - 0.08;
+    const r = { x0: -off - bench.d/2, x1: off + bench.d/2, z0: -bench.w/2, z1: bench.w/2 };
+    const spot = againstWall(r, false, { under: true });
+    if (!spot) return null;
+    placeAll([['BoothBench', -off, 0, Math.PI/2], ['BoothBench', off, 0, -Math.PI/2], ['BoothTable', 0, 0, Math.PI/2]], spot);
+    return spot;
+  };
+  // A settle along a wall (low enough to go under a window), with a table in front and a stool or chair across it.
+  const settle = () => {
+    const s = F.Settle, name = any(TABLES), table = F[name];
+    if (!s || !table) return null;
+    const tz = s.bounds.z1 + 0.05 - table.bounds.z0, across = tz + table.bounds.z1 + 0.3;
+    const r = { ...s.bounds, z1: across + 0.3 };
+    const spot = againstWall(r, false, { under: true });
+    if (!spot) return null;
+    const tx = (rng() - 0.5)*0.4, sit = any(SITS);
+    placeAll([['Settle', 0, 0, 0], [name, tx, tz, 0], [sit, tx, across, Math.PI + (rng() - 0.5)*0.4]], spot);
+    return spot;
+  };
+  // A table out in the room with two to four chairs or stools round it, facing it.
+  const table = () => {
+    const name = any(TABLES), t = F[name];
+    const reach = Math.max(t.w, t.d)/2 + 0.3, r = { x0: -reach - 0.3, x1: reach + 0.3, z0: -reach - 0.3, z1: reach + 0.3 };
+    const spot = inTheOpen(r, 0.35);
+    if (!spot) return null;
+    const parts = [[name, 0, 0, 0]], n = 2 + Math.floor(rng()*3), turn = rng()*Math.PI*2;
+    for (let i = 0; i < n; i++) {
+      const a = turn + i*Math.PI*2/n + (rng() - 0.5)*0.3;
+      parts.push([any(SITS), Math.sin(a)*reach, Math.cos(a)*reach, a + Math.PI + (rng() - 0.5)*0.3]);
+    }
+    placeAll(parts, spot);
+    return spot;
+  };
+
+  const tall = [];  // (what's too tall to hang anything on the wall above)
+  // the fireplace against a wall, with the hearth in front kept clear (not in front of a window, and not under the camera)
+  if (F.Fireplace && rng() < 0.7) {
+    const spot = againstWall({ ...F.Fireplace.bounds, z1: F.Fireplace.bounds.z1 + 0.5 }, true);
+    if (spot) tall.push(place('Fireplace', spot).area);
+  }
+  for (let n = 1 + Math.floor(rng()*2); n > 0; n--) { const spot = booth(); if (spot) tall.push(spot.area); }
+  for (let n = 1 + Math.floor(rng()*2); n > 0; n--) settle();
+  if (F.FruitMachine && rng() < 0.6) {
+    const spot = againstWall(F.FruitMachine.bounds, true);
+    if (spot) tall.push(place('FruitMachine', spot).area);
+  }
+  // a dartboard, with the floor in front of it (to the oche) kept clear
+  if (F.Dartboard && rng() < 0.6) {
+    const spot = againstWall({ ...F.Dartboard.bounds, x0: -0.6, x1: 0.6, z1: F.Dartboard.bounds.z1 + 2.2 }, true);
+    if (spot) place('Dartboard', spot, { y: 1.41, small: true });
+  }
+  if (F.Barrel && rng() < 0.5) {
+    const spot = inTheOpen(grown(F.Barrel.bounds, 0.5), 0.3);
+    if (spot) placeAll([['Barrel', 0, 0, 0]], spot);
+  }
+  for (let tries = 0, tables = 0; tries < 8 && tables < 4; tries++) if (table()) tables++;
+
+  // Things on the walls, above whatever's in front of them: not over a window or the back bar, clear of the door, and
+  // clear of each other. `y` is how high up their bottoms are.
+  const hung = [behind, ...tall];
+  const onWall = (name, y) => {
+    const piece = F[name];
+    if (!piece) return;
+    for (let k = 0; k < 30; k++) {
+      const side = any(WALL_SIDES), half = piece.w/2;
+      const u = (rng()*2 - 1)*(side.length/2 - half - 0.2), wallAt = side.at(u);
+      if (side.nx === 1 && Math.abs(u - DOOR_Z) < DOOR_W/2 + half + 0.2) continue;
+      const out = -piece.bounds.z0 + 0.01;
+      const x = wallAt.x + side.nx*out, z = wallAt.z + side.nz*out;
+      const area = turnedRect(grown(piece.bounds, 0.15), side.angle, x, z);
+      if (hung.some(h => overlaps(area, h))) continue;
+      const along = side.nx ? [area.z0, area.z1] : [area.x0, area.x1];
+      if (y + piece.h > SILL && y < HEAD && overWindow(side, ...along)) continue;
+      put(name, x, z, side.angle, { y, small: true });
+      hung.push(area);
+      return;
+    }
+  };
+  // (the dartboard's hung already)
+  for (const o of group.children) if (o.position.y > 1) hung.push({ x0: o.position.x - 1, x1: o.position.x + 1, z0: o.position.z - 1, z1: o.position.z + 1 });
+  onWall('Chalkboard', 1.2);
+  for (let n = 2 + Math.floor(rng()*3); n > 0; n--) onWall(rng() < 0.6 ? 'Picture' : 'Mirror', 1.3 + rng()*0.3);
+  for (let n = 2 + Math.floor(rng()*3); n > 0; n--) onWall('WallLamp', 1.75);
+
+  // lights hung over the tables (but not right under the camera), and a pint or two on each
+  for (const top of tops) {
+    if (F.Pendant && !overlaps({ x0: top.x - 0.3, x1: top.x + 0.3, z0: top.z - 0.3, z1: top.z + 0.3 }, underCamera))
+      put('Pendant', top.x, top.z, 0, { y: ROOM_H - F.Pendant.h, small: true });
+    for (let n = Math.floor(rng()*(top.big ? 4 : 3)); n > 0; n--) {
+      const a = rng()*Math.PI*2, d = 0.1 + rng()*(top.big ? 0.3 : 0.18);
+      put(rng() < 0.75 ? 'Pint' : 'Stout', top.x + Math.cos(a)*d, top.z + Math.sin(a)*d, 0, { y: top.y, small: true });
+    }
   }
   seatsInWorld(layout);
 }
@@ -2013,7 +2289,7 @@ async function warmUp() {
     await compile('Preparing floors...');
     // one set at a time, so the label follows along
     const named = { Interior: furniture, Posh: posh, Student: student, MidCentury: retro, Boho: boho, Office: officeFurniture,
-      Industrial: industrial };
+      Industrial: industrial, Pub: pub };
     for (const [name, set] of Object.entries(named)) {
       if (!set) continue;
       for (const piece of Object.values(set)) sets.add(piece.object.clone());
@@ -2088,20 +2364,22 @@ function longestEdgeAngle(fp) {
 }
 
 // Goes into `group` (a building, as building-card.js follows it, with its key): the room onto its top floor (a warehouse
-// or factory's ground floor), laid out as `kind` of room (one of LAYOUTS: 'home', 'office', 'warehouse' or 'factory'),
+// or factory's, or a pub's, ground floor), laid out as `kind` of room (one of LAYOUTS: 'home', 'office', 'warehouse',
+// 'factory' or 'pub'),
 // the building hidden, and the camera cut straight to the corner, to go round the walls from there.
 export function enterBuilding(group, key, kind = 'home') {
   if (inside) leaveBuilding();
   useLayout(kind);
   const glass = current === LAYOUTS.office && keyFraction(key) >= OFFICE_PUNCHED;
-  // (a warehouse or a factory's room is on its ground floor: its roof's high over one big space, not storeys)
-  const workshop = !!current.industrial;
+  // (a warehouse or a factory's room is on its ground floor: its roof's high over one big space, not storeys — and a pub's
+  // on the street)
+  const workshop = !!current.industrial, groundFloor = workshop || current === LAYOUTS.pub;
   curtain.visible = glass; punched.visible = !glass;
   const fp = group.userData.footprint;
   const bounds = new THREE.Box3().setFromObject(group);
   const base = bounds.min.y, height = group.userData.height ?? (bounds.max.y - base);
   const centre = fp && fp.length >= 3 ? footprintBounds(group).c : bounds.getCenter(new THREE.Vector3());
-  const storey = workshop ? 0 : Math.max(0, Math.floor((height - PLINTH - ROOM_H - 0.3)/FLOOR_HEIGHT));
+  const storey = groundFloor ? 0 : Math.max(0, Math.floor((height - PLINTH - ROOM_H - 0.3)/FLOOR_HEIGHT));
   room.position.set(centre.x, base + PLINTH + storey*FLOOR_HEIGHT, centre.z);
   room.rotation.y = fp && fp.length >= 3 ? longestEdgeAngle(fp) : 0;
   room.visible = true;
@@ -2111,6 +2389,7 @@ export function enterBuilding(group, key, kind = 'home') {
   if (current === LAYOUTS.home) furnish(key);
   else if (current === LAYOUTS.office) furnishOffice(key, glass);
   else if (workshop) furnishIndustrial(key, current.kind);
+  else if (current === LAYOUTS.pub) furnishPub(key);
 
   visits++;
   resetOfficeAmbience();
@@ -2250,6 +2529,8 @@ export const roomDoorway = () => room.localToWorld(DOORWAY.clone());
 /** Through the room's door, in the dark beyond it, in the world. */
 export const roomBeyondDoor = () => room.localToWorld(BEYOND.clone());
 
+/** Which of the layouts the room's laid out as ('home', 'office', 'warehouse', 'factory' or 'pub'), or null if nobody's inside. */
+export const roomKind = () => inside ? current.name : null;
 /** Where anyone can sit in the room, in the world: { x, y, z } on the seat, { nx, nz } the way it faces, and who's `by` it. */
 export const roomSeats = () => current.seats;
 
