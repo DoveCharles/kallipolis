@@ -11,7 +11,7 @@ import { carHeight, carLength, carWidth } from './placing.js';
 // negative net shows rust spots the same way (applyCarRust) and shakes and smokes, both worse the more negative it is.
 // Neither steers a car anywhere; they're drawn on top of whatever it's already doing (see placeCar).
 const LEGENDARY_SPARKLE_COLOR = 0xfff6c8, FOIL_SPARKLE_COLOR = 0xeaf6ff, LEGENDARY_SPARKLE_EVERY = 0.4; // (a net-1 glint's colour, a net-2 one's, and seconds between glints per net level)
-export const TERRIBLE_RUST = new THREE.Color(0x2a1208); // the spots a terrible car's paint shows through, see applyCarRust — dark enough to read against most colours
+export const TERRIBLE_RUST = new THREE.Color(0x9a4418); // the spots a terrible car's paint shows through, see applyCarRust — an orange rust, shaded darker in patches there
 const TERRIBLE_BUMP_EVERY = 2.5, TERRIBLE_BUMP_RISE = 0.45, TERRIBLE_BUMP_HEIGHT = 0.12, TERRIBLE_BUMP_ROLL = 0.11/6, TERRIBLE_ROLL_DELAY = 0.5, TERRIBLE_ROLL_TIME = 0.25; // (seconds between hops; how long one takes, eased up and down rather than snapping; how high; how far it rocks side to side, in radians; how long after the hop starts it rocks, to line up with its smoke; how long one rock takes)
 export const DEFAULT_HOLO = [0, 0, 0], DEFAULT_RUST = [0, 0]; // (no sheen, no rust spots — see carHoloOf/carRustOf, placeCar)
 /**
@@ -41,7 +41,7 @@ function carHoloOf(car, level) {
   return car.holoAttrs ??= [level/2, level >= 2 ? 1 : 0, mulberry32(car.number*911 + 7)()];
 }
 /** The shader's per-instance rust attribute for a car with a negative net legendary/terrible level (see
- * updateSpecialTraits, placeCar, applyCarRust): [strength (how much the spots show, higher the more negative the net),
+ * updateSpecialTraits, placeCar, applyCarRust): [strength (how much of the body rusts and how dirty the rest is, higher the more negative the net),
  * seed (so two cars' spots don't line up)]. Cached, like carHoloOf. */
 function carRustOf(car, level) {
   return car.rustAttrs ??= [Math.min(0.95, 0.35 + level*0.2), mulberry32(car.number*613 + 53)()];

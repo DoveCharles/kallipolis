@@ -201,28 +201,55 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
       // foil: a bright glint tinted by carFoilTint above, not the flat white it used to be
       return base + carFoilTint(base, painted)*delta*maxfac*0.9*strength*FOIL_OPACITY;
     }
-    // rust spots: a terrible car's own colour left alone, with round rust-brown blobs scattered over it — the same
-    // technique as a bloodied person's splotches (see src/life/people/peopleModel.js's BLOOD_GLSL), at three times the
-    // scale, so the spots read as rust rather than a uniform tint. carRustOf packs [strength, seed] into rust.
+    // rust spots: a terrible car's own colour, grimed over with patchy dirt, with ragged rust-orange flakes scattered
+    // over that — blobs placed the same way as a bloodied person's splotches (see src/life/people/peopleModel.js's
+    // BLOOD_GLSL), at three times the scale, with their edges and insides broken up by noise so they read as flaked
+    // paint rather than paint. carRustOf packs [strength, seed] into rust; strength sets how many blobs there are and
+    // how dirty the paint between them is.
     float carRustHash(vec3 p) { p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x + p.y + p.z)); }
-    float carRustBlobs(vec3 at) {
+    float carRustBlobs(vec3 at, float coverage) {
       vec3 base = floor(at - 0.5);
       float field = 0.0;
       for (int k = 0; k < 8; k++) {
         vec3 cell = base + vec3(mod(float(k), 2.0), mod(floor(float(k)/2.0), 2.0), floor(float(k)/4.0));
         vec3 centre = cell + 0.5 + (vec3(carRustHash(cell), carRustHash(cell + 17.1), carRustHash(cell + 31.3)) - 0.5)*0.4;
-        float radius = 1.0 + 0.15*carRustHash(cell + 41.7);
+        float radius = 0.8 + 0.3*carRustHash(cell + 41.7);
         vec3 off = at - centre;
         float fall = max(0.0, 1.0 - dot(off, off)/(radius*radius));
-        field += step(0.4, carRustHash(cell + 7.9))*fall*fall*fall; // (a good deal more than half the cells host a blob, for dense coverage)
+        field += step(1.0 - coverage, carRustHash(cell + 7.9))*fall*fall*fall; // (only a coverage share of the cells host a blob)
       }
       return field;
     }
-    const float RUST_ZOOM = 0.75; // the blob pattern's spatial scale — bigger = more zoomed in, smaller blobs relative to the car
+    // smooth value noise from the same hash, and four octaves of it, for the ragged edges, the patches and the dirt
+    float carRustNoise(vec3 p) {
+      vec3 i = floor(p), f = fract(p);
+      f = f*f*(3.0 - 2.0*f);
+      return mix(mix(mix(carRustHash(i), carRustHash(i + vec3(1,0,0)), f.x), mix(carRustHash(i + vec3(0,1,0)), carRustHash(i + vec3(1,1,0)), f.x), f.y),
+                 mix(mix(carRustHash(i + vec3(0,0,1)), carRustHash(i + vec3(1,0,1)), f.x), mix(carRustHash(i + vec3(0,1,1)), carRustHash(i + vec3(1,1,1)), f.x), f.y), f.z);
+    }
+    float carRustFbm(vec3 p) {
+      return carRustNoise(p)*0.45 + carRustNoise(p*2.3 + 3.1)*0.28 + carRustNoise(p*5.3 + 7.7)*0.17 + carRustNoise(p*12.1 + 1.9)*0.10;
+    }
+    const float RUST_ZOOM = 1.4; // the blob pattern's spatial scale — bigger = more zoomed in, smaller blobs relative to the car
+    const float RUST_ROUGH = 0.36; // how far the noise pushes the blob field about, i.e. how ragged the spots' edges are
+    const float RUST_COVERAGE = 0.3; // the share of blob cells that rust, at full strength
+    const vec3 CAR_DIRT = vec3(0.13, 0.10, 0.065); // the grime under the rust (linear)
     vec3 applyCarRust(vec3 base, vec2 rust, vec3 localPos) {
       float strength = rust.x, seed = rust.y;
       vec3 spot = localPos*RUST_ZOOM + vec3(seed*13.7, seed*7.1, seed*3.3);
-      return mix(base, carRustColor, smoothstep(0.14, 0.22, carRustBlobs(spot))*strength);
+      // dirt: a film of dust over all the paint, thicker in soft patches, with a grain, dirtier the worse the car
+      float dirt = (0.3 + 0.7*smoothstep(0.3, 0.75, carRustFbm(spot*0.7 + 9.1)))*(0.3 + 0.35*strength)*(0.75 + 0.5*carRustNoise(spot*16.0)); // (sized to the car, not the smaller blobs; never below 0.3 of it, so no panel looks clean)
+      // the paint itself faded towards rust all over, more the worse the car
+      vec3 color = mix(base, carRustColor, 0.15 + 0.3*strength);
+      color = mix(color, CAR_DIRT, dirt);
+      // rust: blobs warped out of round, their edge pushed about by fine noise, so it breaks into flakes and pits
+      vec3 warp = vec3(carRustNoise(spot*1.7), carRustNoise(spot*1.7 + 4.3), carRustNoise(spot*1.7 + 8.9)) - 0.5;
+      float field = carRustBlobs(spot + warp*0.8, RUST_COVERAGE*strength) + (carRustFbm(spot*9.0)*0.7 + carRustNoise(spot*41.0)*0.3 - 0.5)*RUST_ROUGH; // (fine noise, so the edge frays in small bites)
+      color = mix(color, CAR_DIRT*0.6, smoothstep(0.1, 0.17, field)*0.5); // (a brown stain bleeding out round each flake)
+      float mask = smoothstep(0.17, 0.18, field); // (a hard edge: flaked paint, not a stain)
+      float deep = smoothstep(0.5, 0.56, carRustNoise(spot*6.0 + 5.3) + (carRustNoise(spot*23.0) - 0.5)*0.3); // (hard-edged, grainy patches eaten deeper)
+      vec3 rustColor = mix(carRustColor, carRustColor*0.65, deep)*(0.85 + 0.3*carRustNoise(spot*40.0)); // (orange rust, darker there, with a fine grain)
+      return mix(color, rustColor, mask);
     }`;
   const plateColor = `
     uniform sampler2D carPlateAtlas;
@@ -284,7 +311,7 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
       vCarPlate = instanceCarPlate;
       // the holo sheen and rust spots only ever play on the body (paintable or not) — never lights, plate or glass
       vCarHolo = ${isGlass ? 'vec4(0.0)' : 'carSlot < 1.5 ? instanceCarHolo : vec4(0.0)'};
-      vCarRust = ${isGlass ? 'vec2(0.0)' : 'carSlot < 1.5 ? instanceCarRust : vec2(0.0)'};
+      vCarRust = ${isGlass ? 'vec2(0.0)' : 'carSlot < 1.5 && carWheel.w < 0.5 ? instanceCarRust : vec2(0.0)'}; // (and never the wheels)
       vHoloPos = position;
       vCarEmissive = ${CAR_SLOT_NAMES.map((name, k) => CAR_GLOW_MATERIALS[name] ? glowTerm(name, k + 1) : '').join('')}vec3(0.0);`);
   shader.fragmentShader = shader.fragmentShader
