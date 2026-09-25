@@ -932,6 +932,7 @@ Sauce
 Word
 Honey
 Wrinkle
+Mealworm
 
 ################################################################################################################################
 
@@ -1650,9 +1651,12 @@ Having a plan
 Using the em dash — which is very normal to use — by copy and pasting it from its wikipedia page
 Choosing not to care
 Oral fixation
-Having webbed feet [aqua]
-The mutation [aqua]
-Wriggling across ground like a slug
+Having webbed feet [aqua, choiceweight = 400]
+Half-price swimming lessons [aqua]
+Skinny-dipping [aqua]
+Holding their breath underwater [aqua]
+Swimming in the Thames [aqua, smells]
+Wriggling across the ground like a slug
 Glowsticks
 Lapping up water like a dog
 Saying, "touché"
@@ -1660,6 +1664,7 @@ Squirty cheese
 Angry Birds
 Dostoevsky's Crime and Punishment
 Getting sillay
+Performing miracles [waterwalking, choiceweight = 400]
 
 ################################################################################################################################
 
@@ -1995,3 +2000,5 @@ The smell of earwax
 Being tarred and feathered
 Anything liked by other people [chatty = 0.5, talkative = 0.5]
 Sex
+Being born from the sewers [aqua, smells]
+Being half lizard [waterwalking]

@@ -55,7 +55,8 @@ export const TRAITS = {
   explosive: {base: 0, min: 0, max: 1, combine: 'on'}, //blow up on death, killing bystanders; if already blowing up, explosion becomes much bigger (see blasts in life/traffic/state.js)
   perception: { base: 1, min: 0, max: 5 }, // how likely a car is to notice someone lying in the road ahead and stop for them: 95% at 1, under half at 0.5 (see noticeChance in life/traffic/spacing.js)
   avoiddeadends: { base: 0, min: 0, max: 1, combine: 'on', hidden: true }, // cars: never turns into a dead end or a road that only leads to them, where there's any other way (see waysOn in life/traffic/turns.js) — buses
-  aqua: {base: 0, min: 0, max: 1, combine: 'on'}, //walks on water, or at least doesn't drown; a car with it drives straight over open water instead of sinking (see driveByHand in life/traffic/driving.js)
+  aqua: {base: 0, min: 0, max: 1, combine: 'on'}, //people: as waterwalking, but swim — sunk to their shoulders on open water (life/people/peopleWater.js); a car with it drives straight over open water instead of sinking (see driveByHand in life/traffic/driving.js)
+  waterwalking: {base: 0, min: 0, max: 1, combine: 'on'}, //people walk on water as on ground, feet at its surface, and path over it in hangouts (life/people/peopleWater.js)
 };
 
 // Shorthands: a trait named here counts as if the traits listed were written beside it, at the same amounts and stacking

@@ -27,7 +27,7 @@ import { registerHealthKind } from '../../core/health.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { hidingFromSun, outOfTime, vanishIndoors } from './peopleActivities.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
-import { holdDrowned, inWater, turnInWater, updateWater } from './peopleWater.js';
+import { holdDrowned, inWater, turnInWater, updateWater, wouldWade, onWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
 import { drinking, goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './peopleStalls.js';
 import { sway, updateDrunk } from './peopleDrunk.js';
@@ -86,12 +86,15 @@ export function pickWeighted(items, weightOf) {
  * @param {number} z
  * @returns {{x: number, z: number, d: number, clear: boolean}} as far as they get, how far that is, and whether it's the whole way
  */
+/** The hangout's ground for someone: waterwalking/aqua people walk its water too (area.insideWet, see buildPeopleNav). */
+export const insideFor = (area, who) => who?.traits && onWater(who) ? area.insideWet : area.inside;
+
 export function walkableUpTo(area, from, x, z) {
-  const dx = x - from.x, dz = z - from.z, len = Math.hypot(dx, dz), steps = Math.max(1, Math.ceil(len/1.5));
+  const inside = insideFor(area, from), dx = x - from.x, dz = z - from.z, len = Math.hypot(dx, dz), steps = Math.max(1, Math.ceil(len/1.5));
   let last = 0;
   for (let k=1;k<=steps;k++) {
     const frac = k/steps;
-    if (!area.inside(from.x + dx*frac, from.z + dz*frac)) return { x: from.x + dx*last, z: from.z + dz*last, d: len*last, clear: false };
+    if (!inside(from.x + dx*frac, from.z + dz*frac)) return { x: from.x + dx*last, z: from.z + dz*last, d: len*last, clear: false };
     last = frac;
   }
   return { x, z, d: len, clear: true };
@@ -111,6 +114,34 @@ export function reachableSpot(area, from, x, z) {
   return reach.clear || reach.d > 0.5 ? { x: reach.x, z: reach.z } : null;
 }
 
+/** How long a swim lasts, seconds (× patience); how many spots are tried for one. */
+const SWIM_TIME = [8, 25], SWIM_TRIES = 24, SWIM_WEIGHT = 0.25; // (…; how likely a swim is next, beside the other choices' weights)
+/**
+ * Waterwalking/aqua people off for a swim: a spot on the water in or off their hangout (area.insideWet but not inside),
+ * reached without leaving it. p.swimming 'going' → 'in' on arrival (held SWIM_TIME) → cleared (see updatePeople).
+ * @returns {boolean} whether there was one
+ */
+function goSwim(p, area) {
+  const box = area.wetBox;
+  for (let k=0;k<SWIM_TRIES;k++) {
+    const x = box.minX + peopleRng()*(box.maxX - box.minX), z = box.minZ + peopleRng()*(box.maxZ - box.minZ);
+    if (area.inside(x, z) || !area.insideWet(x, z) || !walkableUpTo(area, p, x, z).clear) continue;
+    p.tx = x; p.tz = z; p.swimming = 'going';
+    return true;
+  }
+  return false;
+}
+
+/** Held at the water's edge: a hangout wanderer picks somewhere else; one mid-activity gives it up after BANK_GIVE_UP seconds. */
+const BANK_GIVE_UP = 2;
+function stopAtBank(p, dt) {
+  if (p.mode !== 'wander') return;
+  p.swimming = null;
+  if (!p.act) { p.tx = p.x; p.tz = p.z; return; }
+  p.bankHeld = (p.bankHeld ?? 0) + dt;
+  if (p.bankHeld > BANK_GIVE_UP) { p.bankHeld = 0; endActivity(p); p.tx = p.x; p.tz = p.z; }
+}
+
 /**
  * Pick a random spot inside a hangout — near `near` if one can be found there, and one they can walk to from `from`
  * (where they're setting off, `near` by default) without crossing water. Where nothing in reach is clear, the furthest
@@ -121,12 +152,12 @@ export function reachableSpot(area, from, x, z) {
  * @returns {{x: number, z: number}} the spot
  */
 export function randomSpotIn(area, near, from) {
-  const start = from || near;
+  const start = from || near, inside = insideFor(area, start), box = inside === area.insideWet ? area.wetBox : area;
   let best = null;
   for (let k=0;k<24;k++) {
-    const x = near && k < 12 ? near.x + (peopleRng()-0.5)*24 : area.minX + peopleRng()*(area.maxX-area.minX);
-    const z = near && k < 12 ? near.z + (peopleRng()-0.5)*24 : area.minZ + peopleRng()*(area.maxZ-area.minZ);
-    if (!area.inside(x, z)) continue;
+    const x = near && k < 12 ? near.x + (peopleRng()-0.5)*24 : box.minX + peopleRng()*(box.maxX-box.minX);
+    const z = near && k < 12 ? near.z + (peopleRng()-0.5)*24 : box.minZ + peopleRng()*(box.maxZ-box.minZ);
+    if (!inside(x, z)) continue;
     if (!start) return { x, z };
     const reach = walkableUpTo(area, start, x, z);
     if (reach.clear) return { x, z };
@@ -683,7 +714,7 @@ function leaveArea(p, area, from = null) {
   joinWalkway(p, exit.li, peopleNav.lines[exit.li].cum[exit.vi], peopleRng() < 0.5 ? -1 : 1);
   p.exit = walkwayPoint(p);
   p.mode = 'leaving'; p.wait = 0;
-  p.fleeInArea = 0;
+  p.fleeInArea = 0; p.swimming = null;
   return true;
 }
 
@@ -727,7 +758,7 @@ export function fleeWithin(p, area) {
     const spot = randomSpotIn(area, null, p), d = Math.hypot(spot.x - p.fright.from.x, spot.z - p.fright.from.z);
     if (!best || d > best.d) best = { x: spot.x, z: spot.z, d };
   }
-  p.tx = best.x; p.tz = best.z; p.wait = 0;
+  p.tx = best.x; p.tz = best.z; p.wait = 0; p.swimming = null;
 }
 /**
  * Kill someone: explode them into giblets in their own colors, and mark them dead - gone from the crowd, with whoever
@@ -1045,7 +1076,10 @@ export function updatePeople(t) {
         }
       } else if (p.wait > 0 || p.oneShot) {
         p.wait -= dt;
+      } else if (p.swimming === 'going' && Math.hypot(p.tx - p.x, p.tz - p.z) < 0.3) {
+        p.swimming = 'in'; p.wait = (SWIM_TIME[0] + peopleRng()*(SWIM_TIME[1] - SWIM_TIME[0]))*p.traits.patience;
       } else if (Math.hypot(p.tx - p.x, p.tz - p.z) < 0.3) {
+        p.swimming = null;
         p.wait = (1 + peopleRng()*9)*p.traits.patience;
         // What next, weighted by their traits: leaving, sitting down, lying down, going over to talk to someone, going
         // over to someone else, somewhere else in the same hangout, a train, or something from a stall.
@@ -1054,8 +1088,10 @@ export function updatePeople(t) {
         const stalls = !p.snack && p.snackCooldown <= 0 && hasStallIn(area);
         // (someone drinking where there's a beer stall stays for another rather than moving on: see peopleStalls.js)
         const round = drinking(p) && hasStallIn(area, 'beer');
-        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train', 'buy'][pickWeighted([area.exits.length ? (round ? 0.03 : 0.2) : 0, 0.16*lounging, 0.08*lounging, 0.18*chatty, 0.13, 0.25, stations && !round ? 0.12 : 0, stalls ? (round ? 0.6 : 0.15) : 0], w => w)];
-        if (next === 'buy' && goBuy(p, area)) {
+        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train', 'buy', 'swim'][pickWeighted([area.exits.length ? (round ? 0.03 : 0.2) : 0, 0.16*lounging, 0.08*lounging, 0.18*chatty, 0.13, 0.25, stations && !round ? 0.12 : 0, stalls ? (round ? 0.6 : 0.15) : 0, onWater(p) ? SWIM_WEIGHT : 0], w => w)];
+        if (next === 'swim' && goSwim(p, area)) {
+          // off for a swim (waterwalking/aqua)
+        } else if (next === 'buy' && goBuy(p, area)) {
           // over to a hot dog, coffee or beer stall (see peopleStalls.js)
         } else if (next === 'train' && stations) {
           // over to a train station standing in here
@@ -1074,7 +1110,7 @@ export function updatePeople(t) {
           let friend = null;
           for (let k=0;k<8 && !friend;k++) { const q = people[Math.floor(peopleRng()*people.length)]; if (q !== p && q.mode === 'wander' && q.area === p.area) friend = q; }
           const over = friend ? { x: friend.tx + (peopleRng()-0.5)*3, z: friend.tz + (peopleRng()-0.5)*3 } : null;
-          const spot = over && area.inside(over.x, over.z) ? reachableSpot(area, p, over.x, over.z) : null;
+          const spot = over && insideFor(area, p)(over.x, over.z) ? reachableSpot(area, p, over.x, over.z) : null;
           if (spot) { p.tx = spot.x; p.tz = spot.z; } else { const s = randomSpotIn(area, p); p.tx = s.x; p.tz = s.z; }
         } else {
           const s = randomSpotIn(area, null, p); p.tx = s.x; p.tz = s.z;
@@ -1131,7 +1167,15 @@ export function updatePeople(t) {
         const after = Math.hypot(q.x - (p.x + mx), q.z - (p.z + mz));
         return after < LYING_CLEARANCE*S.peopleSize && after < Math.hypot(q.x - p.x, q.z - p.z);
       });
-      if (d > 1e-4 && !blocked) {
+      // (nobody walks into the water of their own accord: along the bank if they can, else they stop and think again)
+      let sx = mx, sz = mz;
+      if (!blocked && !possessed && d > 1e-4 && wouldWade(p, sx, sz)) {
+        if (!wouldWade(p, sx, 0)) sz = 0;
+        else if (!wouldWade(p, 0, sz)) sx = 0;
+        else { sx = sz = 0; stopAtBank(p, dt); }
+      }
+      if (d > 1e-4 && !blocked && (sx || sz)) {
+        const mx = sx, mz = sz;
         p.x += mx; p.z += mz;
         // which way they face, and whether they're walking, go by how far they actually moved this frame — someone
         // keeping pace with their walkway is always right on top of the point they're heading for
@@ -1144,7 +1188,7 @@ export function updatePeople(t) {
       }
       p.y += (goal.y - p.y)*Math.min(1, dt*6);
     }
-    updateWater(p, i, dt, wasX, wasZ); // (over open water, they go in: see peopleWater.js)
+    updateWater(p, i, dt, wasX, wasZ, goal ? goal.y : null); // (over open water, they go in — or waterwalking/aqua, stand or swim on it: see peopleWater.js)
     updateDrunk(p, dt, wasX, wasZ); // (weaving, and now and then falling over: see peopleDrunk.js)
     // possessed, they face the way they're looking — the walk played backwards, stepping backwards
     if (possessed && !frozen) {

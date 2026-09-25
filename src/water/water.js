@@ -233,11 +233,45 @@ const regionTesters = new WeakMap();
 const testerOf = region => { let test = regionTesters.get(region); if (!test) regionTesters.set(region, test = App.createRegionTester(region)); return test; };
 export function isOpenWater(x, z, decks) {
   const region = getVisibleWaterRegion();
-  return region.length > 0 && testerOf(region)(x, z) && !decks.some(deck => deck.length && testerOf(deck)(x, z));
+  return region.length > 0 && testerOf(region)(x, z) && !onAnyDeck(x, z, decks);
 }
+// Whether a point is on any of `decks` (see isOpenWater).
+export const onAnyDeck = (x, z, decks) => decks.some(deck => deck.length && testerOf(deck)(x, z));
 export function getBeachZoneArea() { refreshWaterCache(); return waterCache.beachZoneArea; }
 // Every park and beach zone (minus the zones above them): all the grass and sand. The same array until it changes.
 export function getGrassAndSandArea() { refreshWaterCache(); return waterCache.parkArea; }
+// The height of the water's top at a point: null off the water region; along a beach, the slope (falling from
+// WATER_BANK_TOP at the grass or sand to WATER_LEVEL at the waterline); otherwise the surface. Shore edges are
+// bucketed in a grid (SHORE_CELL), cached against the water key.
+const SHORE_CELL = 4, shoreCache = { key: null, grid: new Map() };
+function shoreGrid() {
+  refreshWaterCache();
+  if (shoreCache.key === waterCache.key) return shoreCache.grid;
+  shoreCache.key = waterCache.key;
+  const grid = shoreCache.grid = new Map(), reach = BEACH_WATERLINE;
+  waterCache.parkArea.forEach(path => path.forEach((a, i) => {
+    const b = path[(i+1)%path.length], seg = [a.X/CLIPPER_SCALE, a.Y/CLIPPER_SCALE, b.X/CLIPPER_SCALE, b.Y/CLIPPER_SCALE];
+    const x0 = Math.floor((Math.min(seg[0], seg[2]) - reach)/SHORE_CELL), x1 = Math.floor((Math.max(seg[0], seg[2]) + reach)/SHORE_CELL);
+    const z0 = Math.floor((Math.min(seg[1], seg[3]) - reach)/SHORE_CELL), z1 = Math.floor((Math.max(seg[1], seg[3]) + reach)/SHORE_CELL);
+    for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+      const key = cx + ',' + cz;
+      (grid.get(key) ?? grid.set(key, []).get(key)).push(seg);
+    }
+  }));
+  return grid;
+}
+export function waterTopAt(x, z) {
+  const region = getWaterRegion();
+  if (!region.length || !testerOf(region)(x, z)) return null;
+  const near = shoreGrid().get(Math.floor(x/SHORE_CELL) + ',' + Math.floor(z/SHORE_CELL));
+  let d = Infinity;
+  near?.forEach(([ax, az, bx, bz]) => {
+    const ex = bx - ax, ez = bz - az, len2 = ex*ex + ez*ez;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((x - ax)*ex + (z - az)*ez)/len2)) : 0;
+    d = Math.min(d, Math.hypot(x - ax - ex*t, z - az - ez*t));
+  });
+  return d < BEACH_WATERLINE ? WATER_BANK_TOP - d*(WATER_BANK_TOP - WATER_BANK_BOTTOM)/BEACH_SLOPE_WIDTH : WATER_LEVEL;
+}
 
 S.waterGroup = new THREE.Group(); S.waterGroup.name = 'Water'; scene.add(S.waterGroup);
 let builtWaterKey = null, builtBridgeKey = null, builtGroundKey = null;
