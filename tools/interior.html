@@ -24,7 +24,7 @@
   <h3>Interior view</h3>
   <div id="status">Loading the city…</div>
   <div>
-    <button id="home">Enter a home</button><button id="posh">Enter a posh home</button><button id="student">Enter a student flat</button><button id="retro">Enter a mid-century home</button><button id="boho">Enter a bohemian home</button><button id="office">Enter an office</button><button id="warehouse">Enter a warehouse</button><button id="factory">Enter a factory</button><button id="next">Next building</button>
+    <button id="home">Enter a home</button><button id="posh">Enter a posh home</button><button id="student">Enter a student flat</button><button id="retro">Enter a mid-century home</button><button id="boho">Enter a bohemian home</button><button id="office">Enter an office</button><button id="warehouse">Enter a warehouse</button><button id="factory">Enter a factory</button><button id="pub">Enter a pub</button><button id="next">Next building</button>
     <button id="person">Add a person</button><button id="clear">Send them out</button>
   </div>
   <label>height <input id="height" type="range" min="0.3" max="3.1" step="0.01"> <span></span></label>
@@ -61,7 +61,7 @@ function enter(next) {
   const b = list[at];
   const key = footprints.buildingKey(b.zone, b.index);
   interior.enterBuilding(b.group, key, kind);
-  here = { key, number: footprints.buildingNumber(key), kind: b.zone.zoneType, y: b.group.position.y, height: b.group.userData.height || 10, size: 10 };
+  here = { key, number: footprints.buildingNumber(key), kind: kind === 'pub' ? 'pub' : b.zone.zoneType, y: b.group.position.y, height: b.group.userData.height || 10, size: 10 };
   guests.forEach(settle);
   $('status').textContent = `Inside building ${at + 1} of ${list.length} (${kind})`;
   show(interior.tuneInteriorView(current()));
@@ -122,6 +122,7 @@ $('boho').onclick = () => { kind = 'home'; interior.forceHomeSet('boho'); enter(
 $('office').onclick = () => { kind = 'office'; enter(false); };
 $('warehouse').onclick = () => { kind = 'warehouse'; enter(false); };
 $('factory').onclick = () => { kind = 'factory'; enter(false); };
+$('pub').onclick = () => { kind = 'pub'; enter(false); };
 $('next').onclick = () => enter(true);
 $('person').onclick = addPerson;
 $('clear').onclick = sendOut;

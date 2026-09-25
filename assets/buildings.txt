@@ -19,7 +19,7 @@
 #   industrial   warehouse, factory, tankfarm, containeryard
 #   farmland     farmstead
 #   suburbs      house
-#   town         terrace, shop
+#   town         terrace, shop, pub
 #   airport      terminal, hangar, controltower
 #
 
@@ -181,6 +181,31 @@ loves = Regulars
 loves = Half-day closing
 hates = Parking restrictions
 hates = The new supermarket
+
+[pub]
+enterable = yes
+name = The Red Lion
+name = The Crown
+name = The Royal Oak
+name = The White Hart
+name = The King's Head
+name = The Plough
+name = The Swan
+name = The Rose and Crown
+name = The Nag's Head
+name = The Queen's Arms
+name = The Fox and Hounds
+name = The Black Horse
+mood = 🍺
+loves = Regulars
+loves = Last orders
+loves = A lock-in
+loves = The quiz on Thursdays
+loves = A proper fire
+hates = Closing time
+hates = Lager tops
+hates = The darts team losing
+hates = Being turned into flats
 
 [house]
 enterable = yes

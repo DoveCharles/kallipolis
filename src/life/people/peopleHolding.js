@@ -41,7 +41,7 @@ export const ITEMS = {
     { shape: 'coffee', size: [0.167, 0.167, 0.167], at: [0.059, 0.047, 0.036], turn: [-0.072, 2.588, 0.028] },
   ] },
   beer: { parts: [
-    { shape: 'beer', size: [0.167, 0.167, 0.167], at: [0.059, 0.047, 0.036], turn: [-0.072, 2.588, 0.028] },
+    { shape: 'beer', size: [0.2, 0.2, 0.2], at: [0.059, 0.047, 0.036], turn: [-0.072, 2.588, 0.028] },
   ] },
   plate: { parts: [
     { shape: 'cylinder', size: [0.23, 0.010, 0.23], at: [0, 0.005, 0], color: 0xf4f2ee },
@@ -66,11 +66,13 @@ const SHAPES = {
 // dog lies along Z in Blender, its bun open to +Y: stood on end here, open away from the palm), centred, and scaled so
 // its longest side is 1. Their materials' colours are baked into the vertices; the see-through ones (a pint's glass and the
 // beer in it) go in a second mesh of their own, drawn see-through, with their opacity baked in alongside.
+// (a model from another file says which: the pint is the one the pubs put on their tables, from Pub.glb — see
+// tools/pub-models.py)
 const HOLDABLES_MODEL_URL = 'assets/models/Holdables.glb';
 const MODELS = {
   hotdog: { node: 'Hotdog', turn: [Math.PI/2, 0, 0] },
   coffee: { node: 'CoffeeCup' },
-  beer: { node: 'BeerPint' },
+  beer: { node: 'Pint', url: 'assets/models/Pub.glb' },
 };
 const HELD_MAX = 512;
 // Held things are lit like the room around them when they are in one (see roomLit in buildings/interior.js: a room under
@@ -93,17 +95,17 @@ const meshes = Object.fromEntries(Object.entries(SHAPES).flatMap(([shape, geomet
 loadHoldables().catch(error => console.warn('Kallipolis: no held models (' + HOLDABLES_MODEL_URL + '):', error));
 
 /**
- * Load the models in Holdables.glb and add an instanced mesh for each (lit and plain), as SHAPES has for its own. Each
+ * Load the models in Holdables.glb (and any from elsewhere) and add an instanced mesh for each (lit and plain), as SHAPES has for its own. Each
  * carries a `cut` per instance, a height on the model above which nothing is drawn (what's been bitten off).
  * @returns {Promise<void>}
  */
 async function loadHoldables() {
-  const buffer = await fetch(HOLDABLES_MODEL_URL).then(response => { if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.arrayBuffer(); });
-  const gltf = await new GLTFLoader().parseAsync(buffer, '');
-  gltf.scene.updateMatrixWorld(true);
-  for (const [shape, { node, turn = [0, 0, 0] }] of Object.entries(MODELS)) {
-    const object = gltf.scene.getObjectByName(node);
-    if (!object) { console.warn('Kallipolis: Holdables.glb has no ' + node); continue; }
+  const files = {};
+  const load = url => files[url] ??= fetch(url).then(response => { if (!response.ok) throw new Error(`${url}: ${response.status} ${response.statusText}`); return response.arrayBuffer(); })
+    .then(buffer => new GLTFLoader().parseAsync(buffer, '')).then(gltf => { gltf.scene.updateMatrixWorld(true); return gltf; });
+  for (const [shape, { node, url = HOLDABLES_MODEL_URL, turn = [0, 0, 0] }] of Object.entries(MODELS)) {
+    const object = (await load(url)).scene.getObjectByName(node);
+    if (!object) { console.warn(`Kallipolis: ${url} has no ${node}`); continue; }
     const pieces = { solid: [], clear: [] };
     object.traverse(child => {
       if (!child.isMesh) return;
@@ -303,8 +305,8 @@ export function dropSnack(p) {
 export function snackClip(p, clip, dt) {
   const snack = p.snack;
   if (!snack) return clip;
-  // knocked down, dead or gone indoors: it's gone
-  if (p.punched || p.mode === 'dead' || p.mode === 'indoors' || !p.holding?.includes(snack.held)) { dropSnack(p); return clip; }
+  // knocked down, dead or gone indoors (but for into the room you're in, as a pint in a pub is: see aboutTheRoom): it's gone
+  if (p.punched || p.mode === 'dead' || (p.mode === 'indoors' && !p.inRoom) || !p.holding?.includes(snack.held)) { dropSnack(p); return clip; }
   const kind = SNACKS[snack.item], clips = personModel.clips;
   const carried = clips[clip.name + kind.clip], raised = clips[clip.name + kind.clip + 'Bite'];
   if (!carried || carried.missing || !raised) return clip; // (lying down or on the grass, it waits)

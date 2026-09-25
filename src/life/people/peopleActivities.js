@@ -14,7 +14,7 @@ import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, personHeight, stopFollowingPerson } from './peopleTracking.js';
 import { openRoomDoor, roomBeyondDoor, roomDoorway, roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
-import { clearMeal, mealFinished, serveMeal } from './peopleHolding.js';
+import { clearMeal, giveSnack, mealFinished, serveMeal } from './peopleHolding.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
 import { REVIVE_SHAKE_TIME } from '../revive.js';
 import { strikeLightning } from '../lightning.js';
@@ -1250,7 +1250,13 @@ const OFFICE_MIN_HOURS = 4, OFFICE_MAX_HOURS = 10, OFFICE_LEAVE_HOURS = 1.5;
 /** The share of the crowd who work late: in an office after dark, they stay the rest of their day. */
 const WORKS_LATE = 0.04;
 const worksLate = p => ((Math.imul(p.id + 7, 2246822519) >>> 0)/2**32) < WORKS_LATE;
-const isWorkplace = building => roomLayoutOf(building.kind, building.number) !== 'home';
+const isWorkplace = building => !['home', 'pub'].includes(roomLayoutOf(building.kind, building.number));
+// (a pub's a visit like a home's, but a shorter one — an hour or four — and nobody's in it long without a pint in hand:
+// see aboutTheRoom)
+const isPub = building => roomLayoutOf(building.kind, building.number) === 'pub';
+const PUB_MIN_HOURS = 1, PUB_MAX_HOURS = 4;
+/** Seconds between one pint finished and the next got in, in a pub. */
+const PUB_ROUND_MIN = 15, PUB_ROUND_MAX = 60;
 /**
  * The chance of this person going in at a door they're passing: after dark, most are heading home and take the first
  * one — unless it's a workplace (see roomLayoutOf), which by day draws people in and after dark hardly anyone.
@@ -1289,6 +1295,7 @@ export function goIndoors(p, building, from) {
   p.mode = 'indoors';
   // mostly a quick visit, now and then most of the day — or at work, a working day
   const hours = isWorkplace(building) ? OFFICE_MIN_HOURS + (OFFICE_MAX_HOURS - OFFICE_MIN_HOURS)*peopleRng()
+    : isPub(building) ? PUB_MIN_HOURS + (PUB_MAX_HOURS - PUB_MIN_HOURS)*peopleRng()
     : INDOORS_MIN_HOURS + (INDOORS_MAX_HOURS - INDOORS_MIN_HOURS)*peopleRng()**2;
   p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, hoursLeft: hours };
   p.inRoom = null;
@@ -1422,6 +1429,11 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
   }
   if (S.encourageTV && noSofaFor !== roomVisit() && p.mode !== 'possessed') sendToSofa(p);
   const here = p.inRoom;
+  // in a pub, a pint: one in hand from the start, and another a while after each is finished
+  if (isPub(visit.building) && !p.snack && (here.round = (here.round ?? 0) - dt) <= 0) {
+    giveSnack(p, 'beer');
+    here.round = PUB_ROUND_MIN + (PUB_ROUND_MAX - PUB_ROUND_MIN)*peopleRng();
+  }
   if (here.seat) return sitting(p, here, dt);
   if (p.group?.kind === 'room') return here.route ? walkRoute(p, here) : null;
   if (here.route) {

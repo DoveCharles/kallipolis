@@ -34,6 +34,7 @@ const WALLS = [ // [weight, colours, brick?] — the unpainted ones; the rest (t
 ];
 const ROOFS = [0x4a4f57, 0x3f444b, 0x565a60, 0x4a4f57, 0x8a4b36]; // mostly slate, the odd clay tile
 const DOORS = [0x1b1b1b, 0x8a1c1c, 0x1d3557, 0x2d5a3d, 0xd8c35a, 0x5b8a9a];
+const PUB_BLACK = 0x121212; // a pub's ground floor, all the way round (see the end of makeTownBuilding)
 const FASCIAS = [0x1f3d2b, 0x1b2a4a, 0x5a1a22, 0x151515, 0xe8e2d2, 0x2c5f6b];
 const CHIMNEY_BRICK = 0x8e4a36, POT = 0xa0583a, TRIM = 0xefece4, STONE = 0xd6cdb8;
 
@@ -120,7 +121,7 @@ function trianglesGeo(tris) {
   return geo;
 }
 
-// One terrace house or shop on `fp` (a lot, world {x, z}), its front on edge `front` — the one nearest the street.
+// One terrace house, shop or pub on `fp` (a lot, world {x, z}), its front on edge `front` — the one nearest the street.
 function makeTownBuilding(fp, front, rng, s) {
   const texRng = mulberry32(Math.floor(rng()*0xffffffff)>>>0); // (everything about the windows, as in makeBuildingMesh)
   const shop = rng() < (s.townShops ?? 0.4);
@@ -198,12 +199,14 @@ function makeTownBuilding(fp, front, rng, s) {
   const nx0 = -(b.y-a.y)/len, ny0 = (b.x-a.x)/len, c = centroid(fp), outward = ((a.x+b.x)/2 - c.x)*nx0 + ((a.y+b.y)/2 + c.z)*ny0 >= 0 ? 1 : -1;
   const e = { ux: (b.x-a.x)/len, uy: (b.y-a.y)/len, nx: nx0*outward, ny: ny0*outward };
   const place = (geo, t, out, z) => geo.rotateZ(Math.atan2(e.ny, e.nx) - Math.PI/2).translate(a.x + e.ux*t + e.nx*out, a.y + e.uy*t + e.ny*out, z);
-  let doorT = null;
+  let doorT = null, fascia = null, streetFront = [];
   if (shop) {
     const storeTop = 0.78*SHOP;
-    part(group, place(new THREE.BoxGeometry(Math.max(len - 0.3, 0.5), 0.16, SHOP - storeTop - 0.45), len/2, 0.08, (SHOP + storeTop + 0.35)/2 + 0.05),
+    fascia = part(group, place(new THREE.BoxGeometry(Math.max(len - 0.3, 0.5), 0.16, SHOP - storeTop - 0.45), len/2, 0.08, (SHOP + storeTop + 0.35)/2 + 0.05),
       plain(FASCIAS[Math.floor(rng()*FASCIAS.length)], { roughness: 0.5 }));
+    const before = group.children.length;
     addStreetFront(group, fp, win, texRng, new THREE.Color(FASCIAS[Math.floor(texRng()*FASCIAS.length)]).getHex(), win.uWinGlass.value.getHex(), null);
+    streetFront = group.children.slice(before);
   } else {
     const run = computeFacadeRuns(fp)[front], pier = run.runLen < 0 ? 0 : TOWN_LOOK.pier;
     const usable = Math.abs(run.runLen) - 2*pier, bays = Math.floor(usable/win.uWinBay.value.x + 0.5);
@@ -239,6 +242,47 @@ function makeTownBuilding(fp, front, rng, s) {
       }
     });
     if (sills.length) part(group, mergeGeometryList(sills), plain(brick ? STONE : TRIM));
+  }
+  // A share of the shops (the "pubs" setting) are pubs: a sign hung out over the pavement from an iron bracket above the
+  // fascia, a painted board in a gilt frame. (Drawn last, so every other building's rolls are as they were.) A pub's
+  // ground floor is always painted black: its fascia and door frame, and the wall round the windows on every side — the
+  // piers between them, a stallriser below and a band above, stood just off the wall where the window shader draws them.
+  if (shop && rng() < (s.townPubs ?? 0.25)) {
+    group.userData.buildingKind = 'pub';
+    fascia.material.color.setHex(PUB_BLACK);
+    streetFront.filter(m => m.material.metalness === 0.2).forEach(m => m.material.color.setHex(PUB_BLACK)); // (the door frame, not its glass or the awnings)
+    const [, , , cornerPier] = win.uWinFloor.value.toArray(), [bayW, glassW] = win.uWinBay.value.toArray();
+    const low = 0.08*SHOP, high = 0.78*SHOP, runs = computeFacadeRuns(fp), wind = polygonArea(fp) > 0 ? -1 : 1, black = [];
+    fp.forEach((p, i) => {
+      const q = fp[(i+1)%fp.length], el = Math.hypot(q.x-p.x, q.z-p.z);
+      if (el < 1e-3) return;
+      const ux = (q.x-p.x)/el, uy = -(q.z-p.z)/el, nx = uy*wind, ny = -ux*wind, angle = Math.atan2(uy, ux);
+      const slab = (t0, t1, z0, z1) => { if (t1 - t0 > 1e-3 && z1 - z0 > 1e-3) black.push(new THREE.BoxGeometry(t1 - t0, 0.06, z1 - z0).rotateZ(angle)
+        .translate(p.x + ux*(t0 + t1)/2 + nx*0.03, -p.z + uy*(t0 + t1)/2 + ny*0.03, (z0 + z1)/2)); };
+      const { u0, runLen } = runs[i], pier = runLen < 0 ? 0 : cornerPier;
+      const usable = Math.abs(runLen) - 2*pier, bays = runLen === 0 ? 0 : Math.floor(usable/bayW + 0.5);
+      slab(0, el, 0, low); slab(0, el, high, SHOP);
+      let t = 0;
+      if (bays >= 1) {
+        const bay = usable/bays, half = 0.5*Math.max(glassW, 0.82)*bay;
+        for (let k = 0; k < bays; k++) {
+          const mid = pier + (k + 0.5)*bay - u0;
+          if (mid + half < 0 || mid - half > el) continue;
+          slab(t, Math.max(t, mid - half), low, high); t = Math.max(t, Math.min(el, mid + half));
+        }
+      }
+      slab(t, el, low, high);
+    });
+    if (black.length) part(group, mergeGeometryList(black), plain(PUB_BLACK, { roughness: 0.4 }));
+    const t = Math.min(0.9, len/2), top = SHOP + 0.9, out = 0.75;
+    part(group, mergeGeometryList([
+      place(new THREE.BoxGeometry(0.06, 1.35, 0.06), t, 0.68, top),                    // the bracket, out from the wall
+      place(new THREE.BoxGeometry(0.05, 0.05, 0.55), t, 0.05, top - 0.25),             // its plate on the wall
+      place(new THREE.BoxGeometry(0.04, 0.04, 0.2), t, out - 0.3, top - 0.12),         // and what it hangs from
+      place(new THREE.BoxGeometry(0.04, 0.04, 0.2), t, out + 0.3, top - 0.12),
+    ]), plain(0x1a1a1a, { roughness: 0.6 }));
+    part(group, place(new THREE.BoxGeometry(0.08, 0.86, 1.06), t, out, top - 0.75), plain(0xc8a040, { roughness: 0.35, metalness: 0.5 }));
+    part(group, place(new THREE.BoxGeometry(0.1, 0.72, 0.92), t, out, top - 0.75), plain(FASCIAS[Math.floor(rng()*FASCIAS.length)], { roughness: 0.6 }));
   }
   group.rotation.x = -Math.PI/2;
   group.userData.batchable = true;

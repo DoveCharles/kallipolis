@@ -544,6 +544,8 @@ function renderDetails() {
       ${rangeSliderHtml('townstoreys', 'Storeys', 1, 5, 1, s.townStoreysMin!=null?s.townStoreysMin:2, s.townStoreysMax!=null?s.townStoreysMax:3)}
       <div class="slider-row"><div class="row"><label>Shops</label><span class="val" id="dv-townshops">${(s.townShops!=null?s.townShops:0.4).toFixed(2)}</span></div>
         <input type="range" id="ds-townshops" min="0" max="1" step="0.05" value="${s.townShops!=null?s.townShops:0.4}"></div>
+      <div class="slider-row"><div class="row"><label>Pubs</label><span class="val" id="dv-townpubs">${(s.townPubs!=null?s.townPubs:0.25).toFixed(2)}</span></div>
+        <input type="range" id="ds-townpubs" min="0" max="1" step="0.05" value="${s.townPubs!=null?s.townPubs:0.25}"></div>
       <div class="slider-row"><div class="row"><label>Paint</label><span class="val" id="dv-townpaint">${(s.townPaint!=null?s.townPaint:0.3).toFixed(2)}</span></div>
         <input type="range" id="ds-townpaint" min="0" max="1" step="0.05" value="${s.townPaint!=null?s.townPaint:0.3}"></div>
       <div class="slider-row"><div class="row"><label>Lot setback</label><span class="val" id="dv-townsetback">${s.townSetback!=null?s.townSetback:0}</span></div>
@@ -671,6 +673,7 @@ function renderDetails() {
       wireNumber('ds-towndensity', 'dv-towndensity', 'townDensity', 2);
       wireRangeSlider('townstoreys', 1, 5, null, (lo, hi) => { s.townStoreysMin = lo; s.townStoreysMax = hi; subdivideZone(zone); });
       wireNumber('ds-townshops', 'dv-townshops', 'townShops', 2);
+      wireNumber('ds-townpubs', 'dv-townpubs', 'townPubs', 2);
       wireNumber('ds-townpaint', 'dv-townpaint', 'townPaint', 2);
       wireNumber('ds-townsetback', 'dv-townsetback', 'townSetback');
       wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);
