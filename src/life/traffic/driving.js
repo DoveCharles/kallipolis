@@ -2,7 +2,7 @@ import { S, App } from '../../core/shared.js';
 import { Y_ROAD } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
 import { isOpenWater, WATER_LEVEL } from '../../water/water.js';
-import { splashCar, aquaWake, boostWake, puffSmoke, tyreSmoke, engineSmoke } from '../giblets.js';
+import { splashCar, aquaWake, boostWake, puffSmoke, tyreSmoke, driftSmoke, engineSmoke } from '../giblets.js';
 import { controlInput, startDriving, endDriving } from '../possession.js';
 import { STALL_SMOKE_EVERY, bumpIntoCars, hitBuildings, runOverPeople, seatKickedCar } from './collisions.js';
 import { followedCar } from './follow.js';
@@ -23,6 +23,13 @@ export const DRIVE_ACCEL = 10, DRIVE_BRAKE = 28, DRIVE_COAST = 4, DRIVE_TURN = 2
 // how fast steerHeld goes over to full lock and back, per second — and the speed above walking pace at which the car
 // turns half as sharply as at a crawl, a third as sharply at twice that speed, and so on
 const DRIVE_STEER_RATE = 5, DRIVE_TURN_FADE = 12;
+// kart drift: pressing run and brake together above DRIFT_MIN_SPEED hops the car; the side steered to by the hop's end locks
+// the drift that way until either key's let go. Speed is held and no boost is spent. Steering into the drift tightens it
+// to DRIFT_LOCK + DRIFT_RANGE, away widens it to DRIFT_LOCK − DRIFT_RANGE (full lock = 1); the body is drawn yawed DRIFT_YAW
+// into the turn (car.driftYaw, drawn only — see placeCar).
+const DRIFT_MIN_SPEED = 4, DRIFT_LOCK = 1, DRIFT_RANGE = 0.3, DRIFT_YAW = 0.35, DRIFT_YAW_RATE = 3; // (units/s; steer shares; radians; radians/s)
+const DRIFT_RECHARGE = 0.35; // (share of the usual boost recharge while drifting)
+const HOP_TIME = 0.3, HOP_HEIGHT = 0.15; // (seconds in the air; peak height, times the car's height)
 const BOOST_MAX_BASE = 6; // (seconds of boost a car can draw on before it runs out, at the maxboost trait's base value of 1 — see core/traits.js)
 const BOOST_RECHARGE_RATE = 0.5; // (seconds of boost regained per second while not boosting, at the recharge trait's base value of 1 — slower than it's spent)
 /** How many seconds of boost a car has to spend in total: BOOST_MAX_BASE times its own maxboost trait. */
@@ -61,6 +68,7 @@ export function stopDriving() {
   if (!drivenCar) return;
   const car = drivenCar;
   drivenCar = null;
+  endKartDrift(car);
   App.setCarBoostShown(false);
   endDriving();
   car.speed = Math.max(0, car.speed);
@@ -97,26 +105,31 @@ export function driveByHand(car, dt) {
   // meter. The card's boost meter (App.setCarBoost) is kept in step with it here.
   const max = boostMax(car);
   car.boostLeft ??= max;
-  const wants = run && forward > 0, boosting = wants && car.boostLeft > 0 && !car.boostLocked;
+  const drifting = kartDrift(car, run && brake && !stalled, right, dt);
+  const wants = run && forward > 0 && !drifting, boosting = wants && car.boostLeft > 0 && !car.boostLocked;
   if (boosting) { car.boostLeft = Math.max(0, car.boostLeft - dt); if (car.boostLeft <= 0) car.boostLocked = true; }
-  else rechargeBoost(car, dt);
-  if (boosting && car.speed > 1) boostSmoke(car, dt);
+  else rechargeBoost(car, drifting ? dt*DRIFT_RECHARGE : dt);
+  if (drifting && !car.hop) boostSmoke(car, dt, driftSmoke);
+  else if (boosting && car.speed > 1) boostSmoke(car, dt);
   App.setCarBoost(car.boostLeft, max, car.boostLocked, wants && !boosting);
   // its speed and boost traits scale the top speed and the boost (see cars.txt)
   const boost = boosting ? boostMultiplier(car) : 1;
   car.boostingNow = boosting; // (for the view: see boostFovScale)
   const top = DRIVE_TOP_SPEED*(car.traits?.speed ?? 1)*boost;
   const braking = DRIVE_BRAKE*(car.traits?.braking ?? 1);
-  car.throttle = brake ? 0 : Math.abs(forward); // (for the engine's sound)
+  car.throttle = brake && !drifting ? 0 : Math.abs(forward); // (for the engine's sound)
   const toward = (v, goal, rate) => v + Math.max(-rate*dt, Math.min(rate*dt, goal - v));
-  if (brake) car.speed = toward(car.speed, 0, braking);
+  if (drifting) {} // (speed held)
+  else if (brake) car.speed = toward(car.speed, 0, braking);
   else if (forward > 0) car.speed = toward(car.speed, top, car.speed < 0 ? braking : DRIVE_ACCEL*boost);
   else if (forward < 0) car.speed = toward(car.speed, -DRIVE_REVERSE_SPEED, car.speed > 0 ? braking : DRIVE_ACCEL*0.6);
   else car.speed = toward(car.speed, 0, DRIVE_COAST);
   // steering turns it at up to DRIVE_TURN radians a second, less the slower it's going below 4 units a second, and less
   // the faster above that (1/(1 + speed/DRIVE_TURN_FADE)); steerHeld is eased toward the key rather than jumping
   const was = { x: car.x, z: car.z, heading: car.heading };
-  car.steerHeld = toward(car.steerHeld, right*drunkSteer(car, dt), DRIVE_STEER_RATE);
+  const steerGoal = car.driftDir ? car.driftDir*(DRIFT_LOCK + DRIFT_RANGE*right*car.driftDir) : right*drunkSteer(car, dt);
+  car.steerHeld = toward(car.steerHeld, steerGoal, DRIVE_STEER_RATE);
+  car.driftYaw = toward(car.driftYaw ?? 0, -(car.driftDir ?? 0)*DRIFT_YAW, DRIFT_YAW_RATE);
   const rolling = Math.max(-1, Math.min(1, car.speed/4))/(1 + Math.abs(car.speed)/DRIVE_TURN_FADE);
   const pace = car.speed < 0 && forward >= 0 ? Math.abs(rolling) : rolling; // (steering flips going backwards only when reversing on purpose — not when thrown back off a car, which read as the controls swapping)
   turnCar(car, (-car.steerHeld*DRIVE_TURN*controlOf(car) + driftTurn(car, dt))*dt*pace);
@@ -128,6 +141,35 @@ export function driveByHand(car, dt) {
   if (car.traits?.aqua) updateFloating(car, dt);
   else if (overOpenWater(car.x, car.z)) startSinking(car);
 }
+/**
+ * The driven car's kart drift this frame (see DRIFT_MIN_SPEED): starts the hop (car.hop, seconds into it; car.hopY, drawn
+ * height — see placeCar) when the keys go down, locks car.driftDir (±1, the steering side) once steered during or by the
+ * end of the hop, and ends it when the keys are let go or the car slows below DRIFT_MIN_SPEED.
+ * @param {object} car
+ * @param {boolean} held - run and brake both held
+ * @param {number} right - steering input, -1 to 1
+ * @param {number} dt
+ * @returns {boolean} whether speed is being held (hopping or drifting)
+ */
+function kartDrift(car, held, right, dt) {
+  const pressed = held && !car.driftKeys;
+  car.driftKeys = held;
+  if (pressed && car.speed > DRIFT_MIN_SPEED) car.hop = dt;
+  const active = held && car.speed > DRIFT_MIN_SPEED && (car.hop || car.driftDir);
+  if (!active) { car.hop = 0; car.hopY = 0; car.driftDir = 0; return false; }
+  if (car.hop) {
+    if (!car.driftDir && right) car.driftDir = Math.sign(right);
+    car.hop += dt;
+    if (car.hop >= HOP_TIME) { car.hop = 0; car.hopY = 0; if (!car.driftDir) return false; rearWheels(car, at => puffSmoke(at, carHeight(car), 8)); }
+    else car.hopY = HOP_HEIGHT*carHeight(car)*Math.sin(Math.PI*car.hop/HOP_TIME);
+  }
+  return true;
+}
+/** Clear a car's kart drift (see kartDrift). */
+function endKartDrift(car) {
+  car.hop = 0; car.hopY = 0; car.driftDir = 0; car.driftYaw = 0; car.driftKeys = false;
+}
+
 // ---- drift: now and then the driven car pulls to one side on its own, eased in and out over DRIFT_TIME. How hard and
 // how often grow with the inverse cube of its control (controlOf): at 1 a pull of a degree or two, at 0.5 an obvious swerve,
 // at 0.3 stronger than its (equally weakened) steering can fight. The biggest pull is DRIFT_TURN × DRIFT_SIZE[1] / control³: 0.075 rad/s at
@@ -249,6 +291,7 @@ export function updateFloating(car, dt) {
 export function sinkCar(car, dt) {
   const sink = car.sinking;
   car.boostingNow = false;
+  endKartDrift(car);
   car.speed *= 1 - Math.min(1, SINK_DRAG*dt);
   car.x += Math.sin(car.heading)*car.speed*dt;
   car.z += Math.cos(car.heading)*car.speed*dt;
@@ -279,14 +322,18 @@ export function riseCar(car, dt) {
   sink.roll = RISE_ROLL*Math.sqrt(sink.drop/sink.from)*Math.sin(sink.shakeTime*RISE_SHAKES_PER_SECOND*Math.PI*2);
   if (sink.drop < RISE_DONE) car.sinking = null;
 }
-/** Small black smoke from a boosting car's rear tyres — or, sitting on water (car.floatDrop > 0), a big wake thrown up off its back instead (boostWake, life/giblets.js), tyre smoke making no sense there. */
-export function boostSmoke(car, dt) {
+/** Small black smoke from a boosting car's rear tyres — or, sitting on water (car.floatDrop > 0), a big wake thrown up off its back instead (boostWake, life/giblets.js), tyre smoke making no sense there. `smoke` is what the tyres give off (driftSmoke while drifting). */
+export function boostSmoke(car, dt, smoke = tyreSmoke) {
   const sin = Math.sin(car.heading), cos = Math.cos(car.heading);
   if (car.floatDrop > 0) {
     const back = carLength(car)*0.45;
     boostWake({ x: car.x - sin*back, y: WATER_LEVEL, z: car.z - cos*back }, carHeight(car), car.heading, dt);
     return;
   }
-  const back = carLength(car)*0.3, side = carWidth(car)*0.4;
-  [-1, 1].forEach(end => tyreSmoke({ x: car.x - sin*back + cos*side*end, y: Y_ROAD, z: car.z - cos*back - sin*side*end }, carHeight(car), dt));
+  rearWheels(car, at => smoke(at, carHeight(car), dt));
+}
+/** Call `fn` with each rear tyre's ground point. */
+function rearWheels(car, fn) {
+  const sin = Math.sin(car.heading), cos = Math.cos(car.heading), back = carLength(car)*0.3, side = carWidth(car)*0.4;
+  [-1, 1].forEach(end => fn({ x: car.x - sin*back + cos*side*end, y: Y_ROAD, z: car.z - cos*back - sin*side*end }));
 }

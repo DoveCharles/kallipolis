@@ -78,12 +78,12 @@ const rolling = new THREE.Quaternion(), forward = new THREE.Vector3(0, 0, 1); //
  */
 export function placeCar(car, i, designCounts) {
   const { matrix, rotation, scale, position, up } = placing;
-  rotation.setFromAxisAngle(up, car.heading);
+  rotation.setFromAxisAngle(up, car.heading + (car.driftYaw ?? 0)); // (driftYaw: the driven car's kart-drift slide, drawn only — see kartDrift)
   if (car.sinking) rotation.multiply(tilting.setFromAxisAngle(sideways, car.sinking.pitch)); // (nose down, into the water)
   if (car.sinking?.roll) rotation.multiply(rolling.setFromAxisAngle(forward, car.sinking.roll)); // (shaking as it climbs back out — see riseCar)
   if (car.bumpShake) rotation.multiply(rolling.setFromAxisAngle(forward, car.bumpShake)); // (rocking side to side while it hops, like a plane landing — see updateSpecialTraits)
   // (floatDrop: an aqua car settled into water — see updateFloating; bumpY: a terrible car hopping — see updateSpecialTraits)
-  position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0), car.z);
+  position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0) + (car.hopY ?? 0), car.z);
   if (car.reviving) shake(position, rotation, CAR_SHAKE*carScale(car)); // (blown up, before the bolt: see startCarRevive in follow.js)
   if (car.design != null && carMeshes[car.design]) {
     const cm = carMeshes[car.design], idx = designCounts[car.design]++;
