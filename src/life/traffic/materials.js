@@ -239,14 +239,16 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
       vec3 spot = localPos*RUST_ZOOM + vec3(seed*13.7, seed*7.1, seed*3.3);
       // dirt: a film of dust over all the paint, thicker in soft patches, with a grain, dirtier the worse the car
       float dirt = (0.3 + 0.7*smoothstep(0.3, 0.75, carRustFbm(spot*0.7 + 9.1)))*(0.3 + 0.35*strength)*(0.75 + 0.5*carRustNoise(spot*16.0)); // (sized to the car, not the smaller blobs; never below 0.3 of it, so no panel looks clean)
-      vec3 color = mix(base, CAR_DIRT, dirt);
+      // the paint itself faded towards rust all over, more the worse the car
+      vec3 color = mix(base, carRustColor, 0.15 + 0.3*strength);
+      color = mix(color, CAR_DIRT, dirt);
       // rust: blobs warped out of round, their edge pushed about by fine noise, so it breaks into flakes and pits
       vec3 warp = vec3(carRustNoise(spot*1.7), carRustNoise(spot*1.7 + 4.3), carRustNoise(spot*1.7 + 8.9)) - 0.5;
       float field = carRustBlobs(spot + warp*0.8, RUST_COVERAGE*strength) + (carRustFbm(spot*9.0)*0.7 + carRustNoise(spot*41.0)*0.3 - 0.5)*RUST_ROUGH; // (fine noise, so the edge frays in small bites)
       color = mix(color, CAR_DIRT*0.6, smoothstep(0.1, 0.17, field)*0.5); // (a brown stain bleeding out round each flake)
       float mask = smoothstep(0.17, 0.18, field); // (a hard edge: flaked paint, not a stain)
       float deep = smoothstep(0.5, 0.56, carRustNoise(spot*6.0 + 5.3) + (carRustNoise(spot*23.0) - 0.5)*0.3); // (hard-edged, grainy patches eaten deeper)
-      vec3 rustColor = mix(carRustColor, carRustColor*0.35, deep)*(0.85 + 0.3*carRustNoise(spot*40.0)); // (orange rust, darker there, with a fine grain)
+      vec3 rustColor = mix(carRustColor, carRustColor*0.65, deep)*(0.85 + 0.3*carRustNoise(spot*40.0)); // (orange rust, darker there, with a fine grain)
       return mix(color, rustColor, mask);
     }`;
   const plateColor = `
