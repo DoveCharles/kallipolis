@@ -5,14 +5,14 @@ import { walkwayPoint } from './peoplePathing.js';
 import { giveSnack } from './peopleHolding.js';
 
 // ============================================================ buying from a stall
-// A hot dog stand or a coffee stall put down among the objects (see objects/object-types.js) sells to whoever is passing:
+// A hot dog stand, a coffee stall or a beer stall put down among the objects (see objects/object-types.js) sells to whoever is passing:
 // someone walking by on a walkway nearby now and then steps off to it, and someone hanging about in a plaza or park goes
-// over to one there. They walk up to its front, turn to it, wait a moment while it's made, and leave with a hot dog or a
-// coffee in hand (see A SNACK in peopleHolding.js) — back onto their walkway where they left it, or off about the hangout.
+// over to one there. They walk up to its front, turn to it, wait a moment while it's made, and leave with a hot dog, a
+// coffee or a pint in hand (see A SNACK in peopleHolding.js) — back onto their walkway where they left it, or off about the hangout.
 //
 // While they're at it their activity (p.act) is 'buy', so nobody stops them for a chat, and what they're buying is kept
 // on p.buy.
-const STALLS = { hotdog: { item: 'hotdog', front: 0.9 }, coffee: { item: 'coffee', front: 1.25 } }; // (how far in front of it a customer stands, in metres)
+const STALLS = { hotdog: { item: 'hotdog', front: 0.9 }, coffee: { item: 'coffee', front: 1.25 }, beer: { item: 'beer', front: 1.3 } }; // (how far in front of it a customer stands, in metres)
 const CUSTOMER_SLOTS = [0, -0.7, 0.7]; // where along its front a customer stands, in metres: in the middle, then either side
 const WALKWAY_REACH = 7;   // how far off a walkway someone will go to one (at people size 1)
 const HANGOUT_REACH = 25;  // how far across a hangout
@@ -20,6 +20,12 @@ const WALKWAY_RATE = 0.06; // the chance a second someone near enough steps off 
 const SERVE_TIME = [2.5, 5];     // seconds waiting at the front
 const GIVE_UP = 25;              // seconds to get there before they give up
 const SNACK_COOLDOWN = [60, 180]; // seconds after one before they'd buy another
+// Someone with a pint or so inside them (p.pints: see peopleDrunk.js) is off for another as soon as theirs is finished,
+// to a beer stall if there's one in reach, and in a hangout with one they'd sooner stay and have another than leave (see
+// the wander choices in people.js).
+const PINT_COOLDOWN = [0, 15];
+const DRINKING = 0.3; // (how many pints in before they're making a night of it)
+export const drinking = p => (p.pints ?? 0) > DRINKING;
 
 const stallOf = id => S.objects.find(o => o.id === id && STALLS[o.type]) ?? null;
 /** Where a customer of `o` stands in slot `k`, and the way they face to be served. */
@@ -44,9 +50,13 @@ const wantsOne = p => !p.snack && !p.act && !(p.snackCooldown > 0) && !p.fright 
  * @returns {?{o: object, slot: number, at: object}}
  */
 function nearestStall(p, reach, canWalk) {
+  // (someone drinking goes to the nearest beer stall, and only to another kind if there's none)
+  return (drinking(p) ? nearestOf(p, reach, canWalk, 'beer') : null) ?? nearestOf(p, reach, canWalk, null);
+}
+function nearestOf(p, reach, canWalk, only) {
   let best = null, bestD = reach*S.peopleSize;
   for (const o of S.objects) {
-    if (!STALLS[o.type]) continue;
+    if (!STALLS[o.type] || (only && o.type !== only)) continue;
     const d = Math.hypot(o.x - p.x, o.z - p.z);
     if (d >= bestD) continue;
     const slot = freeSlot(o, p);
@@ -79,7 +89,7 @@ export function goBuy(p, area) {
   return true;
 }
 /** Whether there's a stall in a hangout at all, for weighing up going to one. */
-export const hasStallIn = area => S.objects.some(o => STALLS[o.type] && area.inside(o.x, o.z));
+export const hasStallIn = (area, type = null) => S.objects.some(o => STALLS[o.type] && (!type || o.type === type) && area.inside(o.x, o.z));
 
 /**
  * Now and then, someone on a walkway stepping off it to a stall close by — so long as the way there crosses no road.
@@ -130,7 +140,8 @@ export function updateBuying(p, dt, y) {
       p.timer -= dt;
       if (p.timer > 0) return null;
       giveSnack(p, buy.item);
-      p.snackCooldown = SNACK_COOLDOWN[0] + peopleRng()*(SNACK_COOLDOWN[1] - SNACK_COOLDOWN[0]);
+      const cooldown = buy.item === 'beer' ? PINT_COOLDOWN : SNACK_COOLDOWN;
+      p.snackCooldown = cooldown[0] + peopleRng()*(cooldown[1] - cooldown[0]);
       return doneBuying(p);
     case 'back': {
       const back = walkwayPoint(p);

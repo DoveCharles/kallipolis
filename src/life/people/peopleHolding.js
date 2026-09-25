@@ -35,10 +35,13 @@ export const ITEMS = {
   ] },
   // (the parts that are `eaten` get shorter from the top as it goes: see A SNACK; a model's is cut away rather than squashed)
   hotdog: { parts: [
-    { shape: 'hotdog', size: [0.175, 0.175, 0.175], at: [0.046, 0.039, 0.013], turn: [-0.022, 0.968, 0], eaten: true },
+    { shape: 'hotdog', size: [0.175, 0.175, 0.175], at: [0.046, 0.028, 0.013], turn: [-0.022, 0.968, 0], eaten: true },
   ] },
   coffee: { parts: [
-    { shape: 'coffee', size: [0.167, 0.167, 0.167], at: [0.059, 0.028, 0.036], turn: [-0.072, 2.588, 0.028] },
+    { shape: 'coffee', size: [0.167, 0.167, 0.167], at: [0.059, 0.047, 0.036], turn: [-0.072, 2.588, 0.028] },
+  ] },
+  beer: { parts: [
+    { shape: 'beer', size: [0.167, 0.167, 0.167], at: [0.059, 0.047, 0.036], turn: [-0.072, 2.588, 0.028] },
   ] },
   plate: { parts: [
     { shape: 'cylinder', size: [0.23, 0.010, 0.23], at: [0, 0.005, 0], color: 0xf4f2ee },
@@ -61,11 +64,13 @@ const SHAPES = {
 };
 // The shapes that are models: a node of Holdables.glb each, turned so that it's held the way the items above are (the hot
 // dog lies along Z in Blender, its bun open to +Y: stood on end here, open away from the palm), centred, and scaled so
-// its longest side is 1. Their materials' colours are baked into the vertices.
+// its longest side is 1. Their materials' colours are baked into the vertices; the see-through ones (a pint's glass and the
+// beer in it) go in a second mesh of their own, drawn see-through, with their opacity baked in alongside.
 const HOLDABLES_MODEL_URL = 'assets/models/Holdables.glb';
 const MODELS = {
   hotdog: { node: 'Hotdog', turn: [Math.PI/2, 0, 0] },
   coffee: { node: 'CoffeeCup' },
+  beer: { node: 'BeerPint' },
 };
 const HELD_MAX = 512;
 // Held things are lit like the room around them when they are in one (see roomLit in buildings/interior.js: a room under
@@ -99,7 +104,7 @@ async function loadHoldables() {
   for (const [shape, { node, turn = [0, 0, 0] }] of Object.entries(MODELS)) {
     const object = gltf.scene.getObjectByName(node);
     if (!object) { console.warn('Kallipolis: Holdables.glb has no ' + node); continue; }
-    const pieces = [];
+    const pieces = { solid: [], clear: [] };
     object.traverse(child => {
       if (!child.isMesh) return;
       const geometry = new THREE.BufferGeometry();
@@ -107,20 +112,24 @@ async function loadHoldables() {
       geometry.setAttribute('normal', child.geometry.attributes.normal.clone());
       geometry.setIndex(child.geometry.index.clone());
       geometry.applyMatrix4(child.matrixWorld);
-      const { r, g, b } = child.material.color, colors = new Float32Array(geometry.attributes.position.count*3);
-      for (let i = 0; i < colors.length; i += 3) colors.set([r, g, b], i);
-      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-      pieces.push(geometry);
+      const { r, g, b } = child.material.color, a = child.material.transparent ? child.material.opacity : 1;
+      const colors = new Float32Array(geometry.attributes.position.count*4);
+      for (let i = 0; i < colors.length; i += 4) colors.set([r, g, b, a], i);
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
+      pieces[a < 1 ? 'clear' : 'solid'].push(geometry);
     });
-    const geometry = mergeGeometries(pieces);
-    geometry.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...turn)));
-    geometry.computeBoundingBox();
-    const box = geometry.boundingBox, middle = box.getCenter(new THREE.Vector3()), extent = box.getSize(new THREE.Vector3());
-    geometry.translate(-middle.x, -middle.y, -middle.z).scale(...Array(3).fill(1/Math.max(extent.x, extent.y, extent.z)));
-    geometry.computeBoundingBox();
-    const bottom = geometry.boundingBox.min.y, height = geometry.boundingBox.max.y - bottom;
-    for (const light of ['lit', 'plain']) {
-      const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, vertexColors: true, side: THREE.DoubleSide });
+    // (sized and centred as a whole, so the two halves still fit together)
+    const whole = mergeGeometries([...pieces.solid, ...pieces.clear]);
+    const place = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...turn));
+    whole.applyMatrix4(place);
+    whole.computeBoundingBox();
+    const box = whole.boundingBox, middle = box.getCenter(new THREE.Vector3()), extent = box.getSize(new THREE.Vector3());
+    place.premultiply(new THREE.Matrix4().makeScale(...Array(3).fill(1/Math.max(extent.x, extent.y, extent.z))).multiply(new THREE.Matrix4().makeTranslation(-middle.x, -middle.y, -middle.z)));
+    const bottom = (box.min.y - middle.y)/Math.max(extent.x, extent.y, extent.z), height = extent.y/Math.max(extent.x, extent.y, extent.z);
+    for (const [half, list] of Object.entries(pieces)) for (const light of ['lit', 'plain']) {
+      if (!list.length) continue;
+      const geometry = mergeGeometries(list).applyMatrix4(place), clear = half === 'clear';
+      const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: clear ? 0.1 : 0.5, vertexColors: true, side: THREE.DoubleSide, transparent: clear, depthWrite: !clear });
       if (light === 'lit') { material.emissive.setScalar(1); material.emissiveIntensity = HELD_GLOW; }
       material.onBeforeCompile = shader => {
         shader.vertexShader = shader.vertexShader
@@ -136,12 +145,13 @@ async function loadHoldables() {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0;
       mesh.frustumCulled = false;
-      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.castShadow = !clear;
+      mesh.receiveShadow = true;
       mesh.name = `Held ${shape}`;
       mesh.setColorAt(0, new THREE.Color());
       mesh.userData.cut = { bottom, height };
       scene.add(mesh);
-      meshes[`${shape}:${light}`] = mesh;
+      meshes[`${shape}${clear ? '~clear' : ''}:${light}`] = mesh;
     }
   }
 }
@@ -245,21 +255,24 @@ export function mealCue(p, cue) {
 }
 
 // ============== A SNACK ==============
-// A hot dog or a coffee bought from a stall (see peopleStalls.js), in the right hand wherever they go, and eaten or drunk
+// A hot dog, a coffee or a pint bought from a stall (see peopleStalls.js), in the right hand wherever they go, and eaten or drunk
 // a mouthful at a time: every few seconds up it goes to the mouth and down again (the snack versions of Walk, Idle and
 // Sit1 — see snackClips in peopleModel.js), a bite off the hot dog each time, until there's none left. Doing anything
 // else (lying down, sitting on the grass) it waits in their hand.
 const SNACKS = {
   hotdog: { clip: 'Hotdog', mouthfuls: 5, up: 1.1, gap: [2.5, 6], sound: 'bite' },
   coffee: { clip: 'Coffee', mouthfuls: 7, up: 1.5, gap: [3, 8], sound: 'sip' },
+  beer: { clip: 'Beer', mouthfuls: 9, up: 1.7, gap: [4, 10], sound: 'sip' },
 };
+/** What someone's snack adds to a clip's name, for the version of it with that in hand ('Beer': WalkBeer, WaveLeftBeer…), or ''. */
+export const snackClipName = p => SNACKS[p.snack?.item]?.clip ?? '';
 const SNACK_TAKEN = 0.5; // seconds after it starts up to the mouth that the mouthful's taken
 const snackGap = kind => kind.gap[0] + peopleRng()*(kind.gap[1] - kind.gap[0]);
 
 /**
- * Put a hot dog or a coffee in someone's right hand, to eat or drink as they go.
+ * Put a hot dog, a coffee or a pint in someone's right hand, to eat or drink as they go.
  * @param {object} p - the person
- * @param {string} item - 'hotdog' or 'coffee'
+ * @param {string} item - 'hotdog', 'coffee' or 'beer'
  * @returns {void}
  */
 export function giveSnack(p, item) {
@@ -301,6 +314,7 @@ export function snackClip(p, clip, dt) {
     if (was > kind.up - SNACK_TAKEN && snack.up <= kind.up - SNACK_TAKEN) {
       snack.mouthfuls--;
       if (snack.item === 'hotdog') snack.held.left = snack.mouthfuls/kind.mouthfuls;
+      if (snack.item === 'beer') p.pints = (p.pints ?? 0) + 1/kind.mouthfuls; // (going to their head: see peopleDrunk.js)
       eatingSound({ x: p.x, y: p.y + (clip.pose ? 1.05 : 1.5)*p.height*S.peopleSize, z: p.z }, kind.sound);
     }
     if (snack.up <= 0) {
@@ -338,7 +352,8 @@ function boneAt(out, bone, i) {
  * thing has to go the same way, or a broad person's fork misses their plate.
  */
 function armShift(out, p, i, hand) {
-  const spread = (p.clipA.spread*p.fade + p.clipB.spread*(1 - p.fade))
+  const side = hand === 'L' ? 'spread' : 'spreadR';
+  const spread = (p.clipA[side]*p.fade + p.clipB[side]*(1 - p.fade))
     *(personModel.traitData[i*4 + 3]*PERSON_ARM_SPREAD.Weight + personModel.traitData[(PEOPLE_MAX + i)*4 + 3]*PERSON_ARM_SPREAD.Shoulders);
   if (spread <= 0) return out.set(0, 0, 0);
   boneAt(chestMatrix, personModel.chestBone, i);
@@ -399,10 +414,12 @@ export function updateHeld(only = -1) {
   }
 }
 function draw(shape, light, matrix, tint, left = 1) {
-  const key = `${shape}:${light}`, mesh = meshes[key], at = counts[key] ?? 0;
-  if (!mesh || at >= HELD_MAX) return;
-  mesh.setMatrixAt(at, matrix);
-  mesh.setColorAt(at, tint);
-  if (mesh.userData.cut) mesh.geometry.attributes.cut.setX(at, left < 1 ? mesh.userData.cut.bottom + mesh.userData.cut.height*left : 1e6);
-  counts[key] = at + 1;
+  for (const key of [`${shape}:${light}`, `${shape}~clear:${light}`]) { // (a model's see-through half, if it has one, along with it)
+    const mesh = meshes[key], at = counts[key] ?? 0;
+    if (!mesh || at >= HELD_MAX) continue;
+    mesh.setMatrixAt(at, matrix);
+    mesh.setColorAt(at, tint);
+    if (mesh.userData.cut) mesh.geometry.attributes.cut.setX(at, left < 1 ? mesh.userData.cut.bottom + mesh.userData.cut.height*left : 1e6);
+    counts[key] = at + 1;
+  }
 }

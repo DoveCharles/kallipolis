@@ -56,9 +56,16 @@ const WALK_CYCLE_LENGTH = 4;
  * `base` names the clip one is a version of (WalkHotdog is Walk with a hot dog in hand: see snackClips), played and
  * weighed as that one is.
  * `spread` scales how far the arms are moved out from a heavy or broad body (see PERSON_ARM_SPREAD): 0 for a pose that
- * reaches for something in front of them, where moving the hand out would miss it. */
+ * reaches for something in front of them, where moving the hand out would miss it. `spreadR`, where it's given, is the
+ * right arm's alone (a hot dog up at the mouth holds the right arm in, and leaves the left out by their side).
+ * `mirror` names a clip this one is the mirror image of, left for right (WaveLeft is Wave with the other hand, for someone
+ * whose right hand is full). `hold` names a snack clip whose right arm this one's is swapped for, carried along by the
+ * body as it moves (WaveLeftBeer: see snackClips). */
+/** What can be held, for the snack clips' names (see SNACK_HOLD). */
+const SNACK_ITEMS = ['Hotdog', 'Coffee', 'Beer'];
 const PERSON_CLIPS = [
   { name: 'Walk', loop: true }, { name: 'Idle', loop: true }, { name: 'Idle2' }, { name: 'Idle3' }, { name: 'Wave' },
+  { name: 'WaveLeft', mirror: 'Wave' }, { name: 'Idle2Left', mirror: 'Idle2' },
   { name: 'Sit1', loop: true, pose: true }, { name: 'Typing', over: 'Sit1', times: 3, loop: true, pose: true, repose: typingPose },
   { name: 'TypingPaused', over: 'Sit1', loop: true, pose: true, repose: (frame, frames, rig) => typingPose(frame, frames, rig, false) },
   { name: 'Eating', over: 'Sit1', times: 3, loop: true, pose: true, spread: 0, repose: eatingPose },
@@ -67,6 +74,7 @@ const PERSON_CLIPS = [
   { name: 'LieDown1', pose: true }, { name: 'LieDown2', pose: true }, { name: 'LieDown3', pose: true },
   { name: 'Punch' }, { name: 'Fall' }, { name: 'Fallen', from: 'Fall', pose: true },
   ...snackClips(),
+  ...['WaveLeft', 'Idle2Left'].flatMap(name => SNACK_ITEMS.map(item => ({ name: name + item, mirror: name.slice(0, -4), hold: 'Idle' + item }))),
 ];
 
 // ============== TYPING ==============
@@ -287,10 +295,11 @@ function markRepose(moved) {
 }
 /**
  * Reach the right hand to hold something at `grip` (a place in the model's space), turned by `turn` from how the rest pose
- * holds it (a handle along Y: see HAND_GRIP), with the fingers closed round it — the elbow bent out towards `bendTo`.
+ * holds it (a handle along Y: see HAND_GRIP), with the fingers closed round it — the elbow bent out towards `bendTo`, then
+ * swung `swing` radians on round the line from shoulder to wrist, and the forearm rolled `twist` radians about itself.
  * @returns {void}
  */
-function gripRight(rig, grip, turn, bendTo = EAT_BEND) {
+function gripRight(rig, grip, turn, bendTo = EAT_BEND, { swing = 0, twist = 0 } = {}) {
   const shoulder = rig.bone('ShoulderR'), elbow = rig.bone('ElbowR'), hand = rig.bone('HandR');
   if (!shoulder || !elbow || !hand) return;
   const wristTarget = grip.clone().sub(rig.grip('R').sub(rig.restAt('HandR')).applyQuaternion(turn));
@@ -300,11 +309,13 @@ function gripRight(rig, grip, turn, bendTo = EAT_BEND) {
   const toTarget = wristTarget.clone().sub(S), reach = Math.min(toTarget.length(), (upper + lower)*0.999);
   const along = toTarget.normalize();
   const bend = bendTo.clone();
-  bend.addScaledVector(along, -bend.dot(along)).normalize();
+  bend.addScaledVector(along, -bend.dot(along)).normalize().applyAxisAngle(along, swing);
   const a = (upper*upper - lower*lower + reach*reach)/(2*reach), h = Math.sqrt(Math.max(0, upper*upper - a*a));
   const elbowAt = S.clone().addScaledVector(along, a).addScaledVector(bend, h), wristAt = S.clone().addScaledVector(along, reach);
   reposeBone(shoulder, null, new THREE.Quaternion().setFromUnitVectors(E.clone().sub(S).normalize(), elbowAt.clone().sub(S).normalize()));
-  reposeBone(elbow, elbowAt, new THREE.Quaternion().setFromUnitVectors(W.clone().sub(E).normalize(), wristAt.clone().sub(elbowAt).normalize()));
+  const forearm = wristAt.clone().sub(elbowAt).normalize();
+  reposeBone(elbow, elbowAt, new THREE.Quaternion().setFromUnitVectors(W.clone().sub(E).normalize(), forearm));
+  if (twist) reposeBone(elbow, null, new THREE.Quaternion().setFromAxisAngle(forearm, twist));
   // the hand turned onto the fork, whatever the arm did: the turn from the rest pose, over where the clip left it
   const want = turn.clone().multiply(rig.restTurn('HandR'));
   reposeBone(hand, wristAt, want.multiply(hand.getWorldQuaternion(new THREE.Quaternion()).invert()));
@@ -326,28 +337,33 @@ const eatingBones = rig => ['Shoulder', 'Elbow', 'Hand', ...GRIP_CURL.map(([name
 // Where the fist goes: carried, a place from the shoulder, in metres (x in towards the middle of them, y up, z forward);
 // at the mouth, where the end of the thing goes from the middle of the lips (`at`), and how far that end is from the fist
 // (`reach`). `dir` is the way the thing points out of the top of the fist, and `palm` roughly the way the palm faces.
-// The elbow bends down by their side (SNACK_BEND), not out as it does over a plate.
+// The elbow bends down by their side (SNACK_BEND, or the hold's own `bend`), not out as it does over a plate, then
+// `swing`s on round the line from shoulder to wrist, and `twist` rolls the forearm, both in radians (see gripRight).
 export const SNACK_HOLD = {
   Hotdog: {
-    carry: { at: [-0.08, -0.285, 0.175], dir: [0.16, 0.24, 1], palm: [1, 1, 0.1] },
-    bite: { at: [0, -0.005, 0.02], reach: 0.12, dir: [0.25, 0.2, -0.95], palm: [1, 0, 0] },
+    carry: { at: [-0.065, -0.31, 0.165], dir: [0.16, 0.24, 1], palm: [1, 1, 0.24], bend: [-0.41, -0.88, 0.19], swing: -0.17, twist: -0.54 },
+    bite: { at: [0.015, 0.045, -0.025], reach: 0.145, dir: [0.05, 0.12, -0.72], palm: [1, 0.03, 0.03], bend: [-0.28, -1, -0.1], swing: 0.01, twist: -0.71 },
   },
   Coffee: {
-    carry: { at: [-0.1, -0.265, 0.32], dir: [0, 1, 0], palm: [0.9, -0.06, -0.09] },
-    bite: { at: [0, -0.005, 0.05], reach: 0.095, dir: [0.1, 0.75, -0.65], palm: [1, 0, 0] },
+    carry: { at: [-0.1, -0.265, 0.32], dir: [0, 1, 0], palm: [0.9, -0.06, -0.09], bend: [-0.35, -0.96, -0.2] },
+    bite: { at: [-0.06, 0.07, 0.13], reach: 0.095, dir: [0.1, 0.39, -0.65], palm: [1, 0.07, -0.04], bend: [-0.12, -0.73, -0.2], swing: 0.27, twist: 0.06 },
+  },
+  Beer: {
+    carry: { at: [-0.1, -0.265, 0.32], dir: [0, 1, 0], palm: [0.9, -0.06, -0.09], bend: [-0.35, -0.96, -0.2] },
+    bite: { at: [-0.06, 0.07, 0.13], reach: 0.095, dir: [0.1, 0.39, -0.65], palm: [1, 0.07, -0.04], bend: [-0.12, -0.73, -0.2], swing: 0.27, twist: 0.06 },
   },
 };
-const SNACK_BEND = new THREE.Vector3(-0.45, -1, -0.2);
+export const SNACK_BEND = new THREE.Vector3(-0.45, -1, -0.2);
 /** The snack clips, for PERSON_CLIPS: WalkHotdog, WalkHotdogBite, IdleCoffee, Sit1CoffeeBite… (one for each of SNACK_HOLD, which isn't set yet when PERSON_CLIPS is) */
 function snackClips() {
-  return ['Walk', 'Idle', 'Sit1'].flatMap(base => ['Hotdog', 'Coffee'].flatMap(item => [false, true].map(biting => ({
-    name: base + item + (biting ? 'Bite' : ''), over: base, base, loop: true, pose: base === 'Sit1', spread: biting ? 0 : 1,
+  return ['Walk', 'Idle', 'Sit1'].flatMap(base => SNACK_ITEMS.flatMap(item => [false, true].map(biting => ({
+    name: base + item + (biting ? 'Bite' : ''), over: base, base, loop: true, pose: base === 'Sit1', spreadR: biting ? 0 : 1,
     repose: (frame, frames, rig) => snackPose(rig, item, biting) }))));
 }
 /**
  * Repose a frame of Walk, Idle or Sit1 with something held in the right hand (see SNACK_HOLD).
  * @param {object} rig - the model's bones (see buildPersonModel)
- * @param {string} item - 'Hotdog' or 'Coffee'
+ * @param {string} item - 'Hotdog', 'Coffee' or 'Beer'
  * @param {boolean} biting - up at the mouth, or carried
  * @returns {null}
  */
@@ -365,7 +381,7 @@ function snackPose(rig, item, biting) {
   const palm = new THREE.Vector3(...hold.palm);
   palm.addScaledVector(dir, -palm.dot(dir)).normalize();
   const turn = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(dir, palm), dir, palm));
-  gripRight(rig, grip, turn, SNACK_BEND);
+  gripRight(rig, grip, turn, hold.bend ? new THREE.Vector3(...hold.bend) : SNACK_BEND, hold);
   markRepose(moved);
   return null;
 }
@@ -506,6 +522,7 @@ const PERSON_VERTEX_PARS = `
   uniform vec3 personHeadPivot;
   uniform float personChestBone;
   uniform vec3 personChestPivot;
+  uniform vec2 personArmBonesR; // the right shoulder and elbow bones, for personArms
   uniform vec4 personThighBones; // the left thigh and knee bones, then the right's
   uniform vec3 personHipRest, personKneeRest; // where the left thigh's top ring and knee are at rest (the right's mirrored)
   uniform vec2 personThighRadius; // how thick the thigh is at its top and at the knee
@@ -551,12 +568,13 @@ const PERSON_VERTEX_PARS = `
     return pose;
   }
   // How far the clip being played wants the arms moved out from a wide body (see PERSON_ARM_SPREAD and each clip's spread):
-  // the row's last texel, kept beside the bones and blended between rows and between clips just as a bone is.
-  float personClipSpreadAt(float row) {
+  // the row's last texel (x the left arm, y the right), kept beside the bones and blended between rows and between clips
+  // just as a bone is.
+  vec2 personClipSpreadAt(float row) {
     vec2 texel = 1.0/personBonesSize;
-    return textureLod(personBones, vec2(1.0 - 0.5*texel.x, (row + 0.5)*texel.y), 0.0).x;
+    return textureLod(personBones, vec2(1.0 - 0.5*texel.x, (row + 0.5)*texel.y), 0.0).xy;
   }
-  float personClipSpread() {
+  vec2 personClipSpread() {
     if (instanceAnim.z > 0.999) return personClipSpreadAt(instanceAnim.x);
     if (instanceAnim.z < 0.001) return personClipSpreadAt(instanceAnim.y);
     return personClipSpreadAt(instanceAnim.x)*instanceAnim.z + personClipSpreadAt(instanceAnim.y)*(1.0 - instanceAnim.z);
@@ -620,9 +638,20 @@ const PERSON_VERTEX_PARS = `
   // Everything from the shoulder down (personVertex.x, negative) moves out along the way the chest faces, by how far the
   // Weight and Shoulders shape keys widen the body. Applied after posing, since the shape keys and bones leave the arms
   // where a slight person's are. A pose that reaches for something in front of them holds the arms in (personClipSpread),
-  // so a wide person's hand lands where a slight one's does.
+  // so a wide person's hand lands where a slight one's does. The right arm's can differ (a hot dog up at the mouth): its
+  // upper arm still moves out as the left does, clear of the chest, and that fades down the forearm to the right's own
+  // at the hand, as far as the shoulder and elbow bones hold each vertex.
+  float personBoneWeight(float bone) {
+    return dot(personWeights, vec4(lessThan(abs(personJoints - bone), vec4(0.5))));
+  }
   vec3 personArms(vec3 posed, float restX) {
-    float spread = max(-personVertex.x, 0.0)*personClipSpread()*(personTrait(0).w*${PERSON_ARM_SPREAD.Weight.toFixed(3)} + personTrait(1).w*${PERSON_ARM_SPREAD.Shoulders.toFixed(3)});
+    vec2 clipSpread = personClipSpread();
+    float side = clipSpread.x;
+    if (restX < 0.0 && clipSpread.y != clipSpread.x) {
+      float towardsHand = clamp(1.0 - personBoneWeight(personArmBonesR.x) - 0.5*personBoneWeight(personArmBonesR.y), 0.0, 1.0);
+      side = mix(clipSpread.x, clipSpread.y, towardsHand);
+    }
+    float spread = max(-personVertex.x, 0.0)*side*(personTrait(0).w*${PERSON_ARM_SPREAD.Weight.toFixed(3)} + personTrait(1).w*${PERSON_ARM_SPREAD.Shoulders.toFixed(3)});
     if (spread <= 0.0) return posed;
     vec3 sideways = normalize(mat3(personBone(personChestBone))*vec3(1.0, 0.0, 0.0));
     return posed + sideways*(restX < 0.0 ? -spread : spread);
@@ -918,6 +947,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const inArm = bones.map(bone => isArmBone.test(bone.name));
   const chestBone = boneIndex.get(bones[boneByName.get('ShoulderL') ?? 0].parent) ?? 0;
   const chestPivot = bones[chestBone].getWorldPosition(new THREE.Vector3());
+  const armBonesR = new THREE.Vector2(boneByName.get('ShoulderR') ?? -1, boneByName.get('ElbowR') ?? -1);
 
   // ============== BODY POSE ============== 
   // Below defines the body in the rest pose, as one mesh: each part's vertices, the bones moving them, which part they are, and
@@ -1116,17 +1146,18 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const mixer = new THREE.AnimationMixer(root);
   const pelvisBone = bones[boneByName.get('Pelvis') ?? 0], restPelvis = pelvisBone.getWorldPosition(new THREE.Vector3());
   const clips = PERSON_CLIPS.map(def => {
-    const source = def.from || def.over || def.name;
+    const source = def.from || def.over || def.mirror || def.name;
     const clip = gltf.animations.find(c => c.name.toLowerCase() === source.toLowerCase());
-    if (!clip && !def.from && !def.over) console.warn(`Kallipolis: the people model has no ${def.name} animation`);
+    if (!clip && !def.from && !def.over && !def.mirror) console.warn(`Kallipolis: the people model has no ${def.name} animation`);
     const sourceFrames = clip ? Math.max(1, Math.round(clip.duration*PERSON_BAKE_FPS)) : 1;
     const frames = def.from ? 1 : sourceFrames*(def.times || 1);
     return { name: def.name, clip, missing: !clip, loop: !!def.loop && frames > 1, pose: !!def.pose, frames, duration: frames/PERSON_BAKE_FPS,
-      sourceFrames, repose: clip ? def.repose : null, taps: null, spread: def.spread ?? 1, base: def.base ?? null,
-      holdAt: def.from ? (sourceFrames - 1)/PERSON_BAKE_FPS : null,
+      sourceFrames, repose: clip ? def.repose : null, taps: null, spread: def.spread ?? 1, spreadR: def.spreadR ?? def.spread ?? 1, base: def.base ?? null,
+      holdAt: def.from ? (sourceFrames - 1)/PERSON_BAKE_FPS : null, mirror: !!def.mirror, hold: def.hold ?? null,
       start: 0, pelvis: new THREE.Vector3(), pelvisX: 0, pelvisZ: 0, top: 0, heightScale: 1, seatY: 0 };
   });
   clips.forEach(c => { if (c.base) c.base = clips.find(o => o.name === c.base) ?? null; });
+  clips.forEach(c => { if (c.hold) c.hold = clips.find(o => o.name === c.hold) ?? null; });
   let boneRows = 0;
   clips.forEach(c => { c.start = boneRows; boneRows += c.frames + 1; });
   const restMatrix = name => new THREE.Matrix4().copy(skeleton.boneInverses[boneByName.get(name) ?? 0]).invert();
@@ -1135,8 +1166,24 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     grip: side => gripRest[side].clone(), metre: unitsPerMetre,
     restAt: name => new THREE.Vector3().setFromMatrixPosition(restMatrix(name)),
     restTurn: name => new THREE.Quaternion().setFromRotationMatrix(restMatrix(name)) };
-  // three texels a bone for its pose, and one on the end of the row for the clip's arm spread (personClipSpread)
+  // three texels a bone for its pose, and one on the end of the row for the clip's arm spread, left and right (personClipSpread)
   const boneWidth = bones.length*3 + 1, boneData = new Float32Array(boneWidth*boneRows*4), pose = new THREE.Matrix4();
+  // (a mirrored clip gives each bone its partner's pose, reflected across the body's middle: the model is symmetric in x)
+  const flip = new THREE.Matrix4().makeScale(-1, 1, 1);
+  // (and a `hold` clip's right arm is that snack clip's, moved from where its shoulder's parent is there to where it is here)
+  // (every bone of it, the wrist and the fingers' IK bones too, by name as inArm finds them: they're not chained)
+  const heldArm = bones.map((bone, b) => isArmBone.test(bone.name) && bone.name.endsWith('R') ? b : -1).filter(b => b >= 0);
+  const armBase = bones.indexOf(bones[boneByName.get('ShoulderR')]?.parent);
+  const readPose = (row, b, m) => { const o = (row*boneWidth + b*3)*4, d = boneData;
+    return m.set(d[o], d[o+1], d[o+2], d[o+3], d[o+4], d[o+5], d[o+6], d[o+7], d[o+8], d[o+9], d[o+10], d[o+11], 0, 0, 0, 1); };
+  const writePose = (row, b, m) => { const e = m.elements;
+    for (let r=0;r<3;r++) { const o = (row*boneWidth + b*3 + r)*4; boneData[o] = e[r]; boneData[o+1] = e[4+r]; boneData[o+2] = e[8+r]; boneData[o+3] = e[12+r]; } };
+  const holdArm = (c, f) => {
+    if (armBase < 0) return;
+    const row = c.start + f, from = c.hold.start + f % c.hold.frames, move = new THREE.Matrix4(), arm = new THREE.Matrix4();
+    move.multiplyMatrices(readPose(row, armBase, move), readPose(from, armBase, arm).invert());
+    heldArm.forEach(b => writePose(row, b, arm.multiplyMatrices(move, readPose(from, b, arm))));
+  };
   // how far a foot travels over the walk, for how far a cycle of it carries a person
   const footBone = bones[boneByName.get('FootL') ?? boneByName.get('FootR') ?? 0], footPosition = new THREE.Vector3();
   let footMinZ = Infinity, footMaxZ = -Infinity;
@@ -1149,13 +1196,18 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
       root.updateMatrixWorld(true);
       if (c.repose) { c.taps = c.repose(f % c.frames, c.frames, rig); root.updateMatrixWorld(true); }
       bones.forEach((bone, b) => {
-        const e = pose.multiplyMatrices(bone.matrixWorld, skeleton.boneInverses[b]).elements;
+        const m = c.mirror ? mirrorBone[b] : b;
+        pose.multiplyMatrices(bones[m].matrixWorld, skeleton.boneInverses[m]);
+        if (c.mirror) pose.premultiply(flip).multiply(flip);
+        const e = pose.elements;
         for (let r=0;r<3;r++) {
           const o = ((c.start + f)*boneWidth + b*3 + r)*4;
           boneData[o] = e[r]; boneData[o+1] = e[4+r]; boneData[o+2] = e[8+r]; boneData[o+3] = e[12+r];
         }
       });
-      boneData[((c.start + f)*boneWidth + bones.length*3)*4] = c.spread;
+      if (c.hold) holdArm(c, f);
+      boneData[((c.start + f)*boneWidth + bones.length*3)*4] = c.mirror ? c.spreadR : c.spread;
+      boneData[((c.start + f)*boneWidth + bones.length*3)*4 + 1] = c.hold ? c.hold.spreadR : c.mirror ? c.spread : c.spreadR;
       if (c.name === 'Walk' && action) { footBone.getWorldPosition(footPosition); footMinZ = Math.min(footMinZ, footPosition.z); footMaxZ = Math.max(footMaxZ, footPosition.z); }
       if (f === 0) pelvisBone.getWorldPosition(c.pelvis);
     }
@@ -1430,7 +1482,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     personBones: { value: boneTexture }, personBonesSize: { value: new THREE.Vector2(boneWidth, boneRows) },
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
     personTraits: { value: traitTexture }, personHidden: { value: -1 }, personOnly: { value: -1 }, personBloodColor: { value: new THREE.Color(0.55, 0.05, 0.05) },
-    personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personChestBone: { value: chestBone }, personChestPivot: { value: chestPivot },
+    personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personChestBone: { value: chestBone }, personChestPivot: { value: chestPivot }, personArmBonesR: { value: armBonesR },
     personThighBones: { value: thighs ? new THREE.Vector4(thighBone, kneeBone, mirrorBone[thighBone], mirrorBone[kneeBone]) : new THREE.Vector4() },
     personHipRest: { value: thighs ? thighs.hip : new THREE.Vector3() }, personKneeRest: { value: thighs ? thighs.knee : new THREE.Vector3() },
     personThighRadius: { value: new THREE.Vector2(...(thighs ? thighs.rest : [0, 0])) },
@@ -1477,7 +1529,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const box = geometry.boundingBox;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
     headBone: headBone ?? 0, headPivot, chestBone, hands, unitsPerMetre, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

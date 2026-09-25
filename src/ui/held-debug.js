@@ -2,16 +2,16 @@ import { S } from '../core/shared.js';
 import { openWindow } from './w3-window.js';
 import { controls } from '../core/camera-controls.js';
 import { people, personModel, isDrawn, followed } from '../life/people/people.js';
-import { SNACK_HOLD } from '../life/people/peopleModel.js';
+import { SNACK_HOLD, SNACK_BEND } from '../life/people/peopleModel.js';
 import { ITEMS, giveSnack, updateHeld } from '../life/people/peopleHolding.js';
 
 // ============================================================ held items (debug)
-// View > Held Items (debug): sliders for where a hot dog or a coffee sits in the hand (ITEMS in peopleHolding.js) and
+// View > Held Items (debug): sliders for where a hot dog, a coffee or a pint sits in the hand (ITEMS in peopleHolding.js) and
 // where the hand holding it goes (SNACK_HOLD in peopleModel.js), carried or up at the mouth. While it's open the crowd is
 // held still (S.peopleFrozen) and one person stands in the first frame of IdleHotdog, IdleCoffeeBite… with the camera
 // on them, everyone else folded away (personModel.only); a hand slider bakes that one clip again (personModel.rebakeClip). Nothing is kept: the values to paste back
 // into the code are shown at the bottom.
-const KINDS = { hotdog: 'Hotdog', coffee: 'Coffee' };
+const KINDS = { hotdog: 'Hotdog', coffee: 'Coffee', beer: 'Beer' };
 let item = 'hotdog', biting = false, pinned = null, minRadius = null;
 
 const clipName = () => 'Idle' + KINDS[item] + (biting ? 'Bite' : '');
@@ -69,19 +69,23 @@ function sliders() {
   return [
     ['Item in hand'],
     ...['x', 'y', 'z'].map((a, i) => vec('at ' + a, () => part.at, i, -0.2, 0.2, 0.001)),
-    ...['x', 'y', 'z'].map((a, i) => vec('turn ' + a, () => (part.turn ??= [0, 0, 0]), i, -Math.PI, Math.PI, 0.01)),
+    ...['x', 'y', 'z'].map((a, i) => vec('turn ' + a, () => (part.turn ??= [0, 0, 0]), i, -3.14, 3.14, 0.01)),
     ['size', () => part.size[0], v => part.size.fill(v), 0.03, 0.4, 0.001],
     [biting ? 'Hand at the mouth' : 'Hand carrying'],
     ...['x', 'y', 'z'].map((a, i) => vec('at ' + a, () => hold().at, i, -0.6, 0.6, 0.005, rebake)),
     ...(biting ? [['reach', () => hold().reach, v => { hold().reach = v; rebake(); }, 0, 0.3, 0.005]] : []),
     ...['x', 'y', 'z'].map((a, i) => vec('dir ' + a, () => hold().dir, i, -1, 1, 0.01, rebake)),
     ...['x', 'y', 'z'].map((a, i) => vec('palm ' + a, () => hold().palm, i, -1, 1, 0.01, rebake)),
+    ['Elbow'],
+    ...['x', 'y', 'z'].map((a, i) => vec('bend ' + a, () => (hold().bend ??= SNACK_BEND.toArray()), i, -1, 1, 0.01, rebake)),
+    ['swing', () => hold().swing ?? 0, v => { hold().swing = v; rebake(); }, -3.14, 3.14, 0.01],
+    ['twist', () => hold().twist ?? 0, v => { hold().twist = v; rebake(); }, -3.14, 3.14, 0.01],
   ];
 }
 
 function values() {
   const part = ITEMS[item].parts[0], hold = SNACK_HOLD[KINDS[item]], list = a => `[${a.map(round).join(', ')}]`;
-  const side = h => `{ at: ${list(h.at)}, ${h.reach != null ? `reach: ${round(h.reach)}, ` : ''}dir: ${list(h.dir)}, palm: ${list(h.palm)} }`;
+  const side = h => `{ at: ${list(h.at)}, ${h.reach != null ? `reach: ${round(h.reach)}, ` : ''}dir: ${list(h.dir)}, palm: ${list(h.palm)}${h.bend ? `, bend: ${list(h.bend)}` : ''}${h.swing ? `, swing: ${round(h.swing)}` : ''}${h.twist ? `, twist: ${round(h.twist)}` : ''} }`;
   return `// ITEMS.${item} (peopleHolding.js)\n{ shape: '${part.shape}', size: ${list(part.size)}, at: ${list(part.at)}${part.turn ? `, turn: ${list(part.turn)}` : ''}${part.eaten ? ', eaten: true' : ''} },\n`
     + `// SNACK_HOLD.${KINDS[item]} (peopleModel.js)\ncarry: ${side(hold.carry)},\nbite: ${side(hold.bite)},`;
 }
