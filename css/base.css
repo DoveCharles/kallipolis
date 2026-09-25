@@ -320,6 +320,7 @@ html.touch #btn-touch-add { display:flex; }
 @keyframes boost-refused { from { background:rgba(0,0,0,.35); } to { background:rgba(220,40,40,.85); } }
 /* holding cmd in Paths or Zones: a click adds a node to an edge, or a branch (src/editor/input.js) */
 canvas.adding { cursor:copy; }
+canvas.deleting { cursor:pointer; }
 .card-close {
   position:absolute; top:6px; right:8px; padding:2px 4px; background:none; border:none;
   color:var(--text-dim); font-size:16px; line-height:1; cursor:pointer;

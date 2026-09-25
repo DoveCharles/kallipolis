@@ -65,6 +65,10 @@ html.win3 canvas.dragging-node { cursor:grabbing; }
 html.win3 canvas.adding {
   cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' shape-rendering='crispEdges'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3Crect x='11.5' y='11.5' width='8' height='8' fill='%23fff' stroke='%23000'/%3E%3Cpath d='M15.5 13.5v5M13.5 15.5h5' stroke='%23000'/%3E%3C/svg%3E") 0 0, copy;
 }
+/* alt in Paths: the arrow with a minus, over the stretch of path a click deletes */
+html.win3 canvas.deleting {
+  cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' shape-rendering='crispEdges'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3Crect x='11.5' y='11.5' width='8' height='8' fill='%23fff' stroke='%23000'/%3E%3Cpath d='M13.5 15.5h5' stroke='%23000'/%3E%3C/svg%3E") 0 0, pointer;
+}
 html.win3 button:focus-visible { outline:1px dotted var(--w3-frame); outline-offset:-4px; }
 
 /* windows: a grey frame between black lines, with a navy title bar — a control-menu box at its left, minimize and maximize at its right */
