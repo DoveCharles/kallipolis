@@ -2107,30 +2107,40 @@ function lightPub(group, barX, barZ) {
 }
 
 // ---------------------------------------------------------------- the TV
-// A home's TV is on while anyone's sat on the sofa (see watchingTV), playing a YouTube video picked at random from
-// assets/tv.txt each time it comes on: a real YouTube player in an
-// iframe, laid out by CSS3DRenderer to sit exactly where the screen is, on its own layer behind the canvas — and the
-// canvas cut through to it at the screen (see setCutout in pixelation.js), so whoever walks in front of the TV hides it
-// as they would anything else. It starts muted (browsers only let a page play sound once it's been clicked or typed
-// into) and turns its sound up from then on, unless the app's muted. One at a time: it's only ever the room you're in.
+// A home's TV is on while anyone's sat on the sofa (see watchingTV), playing a video picked at random from
+// assets/tv.txt each time it comes on: a YouTube link plays in a real YouTube player (an iframe), a link to a video file
+// (.mp4, .webm, ...: e.g. a Tumblr video's address) in a <video> (see filePlayer). Either is laid out by CSS3DRenderer to sit exactly
+// where the screen is, on its own layer behind the canvas — and the canvas cut through to it at the screen (see
+// setCutout in pixelation.js), so whoever walks in front of the TV hides it as they would anything else. It starts muted
+// (browsers only let a page play sound once it's been clicked or typed into) and turns its sound up from then on, unless
+// the app's muted. One at a time: it's only ever the room you're in.
 // It plays each video through once, and whoever's watching sits it out to the end (see watchingTV) — the player telling
-// us when it's over.
+// us when it's over. A video that's over within TV_SHORT (or wouldn't play) is followed straight on by another, watched
+// as part of the same sitting.
 const TV_LIST_URL = 'assets/tv.txt';
 const TV_PIXELS = 640;  // the player's width, as laid out — scaled down to the screen's
 const TV_VOLUME = 60;   // out of 100
-let channels = [];      // YouTube video ids
+const TV_SHORT = 20000;       // ms: a video played for less than this is followed by another
+const TV_MAX_FOLLOW_ONS = 5;  // in a row, so a list of broken or short videos can't keep anyone sat forever
+let channels = [];      // { youtube: id } or { file: url }
 fetch(TV_LIST_URL).then(r => r.ok ? r.text() : '').then(text => {
-  channels = text.split('\n').map(videoId).filter(Boolean);
+  channels = text.split('\n').map(channelOf).filter(Boolean);
 }).catch(() => {});
-// the id of the video a line of tv.txt links to (any of YouTube's link shapes, or the bare id), or null
-function videoId(line) {
-  line = line.trim();
+const VIDEO_FILE = /^https?:\/\/\S+\.(?:mp4|webm|ogv|ogg|mov|m4v)(?:[?#]\S*)?$/i;
+// what a line of tv.txt links to (any of YouTube's link shapes or a bare id, or a video file's address), or null;
+// anything after whitespace and # is a comment
+function channelOf(line) {
+  line = line.replace(/\s#.*/, '').trim();
   if (!line || line.startsWith('#')) return null;
-  return (line.match(/(?:[?&]v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/) ?? line.match(/^([\w-]{11})$/))?.[1] ?? null;
+  if (VIDEO_FILE.test(line)) return { file: line };
+  const id = (line.match(/(?:[?&]v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/) ?? line.match(/^([\w-]{11})$/))?.[1];
+  return id ? { youtube: id } : null;
 }
 let tvLayer = null;       // the CSS3DRenderer and its scene, made the first time there's a TV on
-let tv = null;            // what's on: { object (its CSS3DObject), iframe, muted, video, startedAt, heard, endedAt }
-let videos = 0;           // counts every video put on, so a watcher can tell theirs from the next
+// what's on: { object (its CSS3DObject), element (its iframe), player (a file's <video>), youtube, muted, video, startedAt, playingAt, heard,
+// endedAt, followOns }
+let tv = null;
+let videos = 0;           // counts every sitting's video put on, so a watcher can tell theirs from the next
 const tvHoles = new THREE.Scene();
 const tvHole = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
   vertexShader: 'void main() { gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0); }',
@@ -2138,7 +2148,40 @@ const tvHole = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMat
   blending: THREE.NoBlending, depthWrite: false,
 }));
 tvHoles.add(tvHole);
-function startTV() {
+function youtubePlayer(id) {
+  const iframe = document.createElement('iframe');
+  iframe.allow = 'autoplay; encrypted-media';
+  iframe.src = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0`
+    + `&playsinline=1&rel=0&iv_load_policy=3&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`;
+  return iframe;
+}
+// A video file plays in a <video> inside its own blank iframe that sends no Referer: Tumblr (and other hosts) refuse
+// video requested from another site's page. `tv.player` is the <video>, once the iframe's loaded.
+const FILE_PAGE = '<meta name="referrer" content="no-referrer"><style>html,body{margin:0;height:100%;background:#000}'
+  + 'video{width:100%;height:100%;object-fit:contain}</style><video muted autoplay playsinline preload="auto"></video>';
+function filePlayer(url) {
+  const iframe = document.createElement('iframe');
+  iframe.allow = 'autoplay';
+  iframe.srcdoc = FILE_PAGE;
+  iframe.addEventListener('load', () => {
+    if (tv?.element !== iframe) return;
+    const video = iframe.contentDocument.querySelector('video');
+    const mine = () => tv?.element === iframe;
+    video.addEventListener('playing', () => { if (mine()) tv.playingAt ??= performance.now(); });
+    video.addEventListener('ended', () => { if (mine()) videoOver(); });
+    video.addEventListener('error', () => {
+      if (!mine()) return;
+      console.warn(`TV: couldn't play ${url}`);
+      videoOver();
+    });
+    video.src = url;
+    tv.player = video;
+    tv.toldAt = -Infinity; // (sound set on the next frame)
+  }, { once: true });
+  return iframe;
+}
+// (sameSitting: the video number and follow-on count carried over from a short video, so its watcher stays sat)
+function startTV(sameSitting = null) {
   const screen = LAYOUTS.home.screen;
   if (tv || !screen || !channels.length) return;
   if (!tvLayer) {
@@ -2151,14 +2194,12 @@ function startTV() {
     window.addEventListener('resize', () => css.setSize(window.innerWidth, window.innerHeight));
     tvLayer = { css, scene: new THREE.Scene() };
   }
-  const id = channels[Math.floor(Math.random()*channels.length)];
-  const iframe = document.createElement('iframe');
+  const channel = channels[Math.floor(Math.random()*channels.length)];
+  const youtube = !!channel.youtube;
+  const element = youtube ? youtubePlayer(channel.youtube) : filePlayer(channel.file);
   const width = TV_PIXELS, height = Math.round(TV_PIXELS*screen.h/screen.w);
-  iframe.style.cssText = `width:${width}px;height:${height}px;border:0;background:#000`;
-  iframe.allow = 'autoplay; encrypted-media';
-  iframe.src = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0`
-    + `&playsinline=1&rel=0&iv_load_policy=3&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`;
-  const object = new CSS3DObject(iframe);
+  element.style.cssText += `;width:${width}px;height:${height}px;border:0;background:#000`;
+  const object = new CSS3DObject(element);
   object.position.copy(screen.centre);
   object.quaternion.copy(screen.turn);
   object.scale.setScalar(screen.w/width);
@@ -2167,24 +2208,37 @@ function startTV() {
   tvHole.quaternion.copy(screen.turn);
   tvHole.scale.set(screen.w, screen.h, 1);
   setCutout(tvHoles);
-  tv = { object, iframe, muted: true, toldAt: -Infinity, video: ++videos, startedAt: performance.now(), heard: false, endedAt: null };
+  tv = { object, element, player: null, youtube, muted: true, toldAt: -Infinity, video: sameSitting?.video ?? ++videos,
+    followOns: sameSitting?.followOns ?? 0, startedAt: performance.now(), playingAt: null, heard: !youtube, endedAt: null };
 }
 function stopTV() {
   if (!tv) return;
-  tvLayer.scene.remove(tv.object); // (which takes its iframe out of the page)
+  tv.player?.pause();
+  tvLayer.scene.remove(tv.object); // (which takes its player out of the page)
   tv = null;
   setCutout(null);
 }
-// a command for the player (see YouTube's IFrame Player API)
-const tell = (func, ...args) => tv.iframe.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), 'https://www.youtube.com');
-// What the player tells us, once it's been told we're listening: whether the video's over (ended, or couldn't play).
+// The video's over (ended, or couldn't play): straight on to another if it was short, or else marked over.
+function videoOver() {
+  if (tv.endedAt !== null) return;
+  const now = performance.now();
+  if (now - (tv.playingAt ?? now) < TV_SHORT && tv.followOns < TV_MAX_FOLLOW_ONS) {
+    const sitting = { video: tv.video, followOns: tv.followOns + 1 };
+    stopTV();
+    startTV(sitting);
+  } else tv.endedAt = now;
+}
+// a command for the YouTube player (see YouTube's IFrame Player API)
+const tell = (func, ...args) => tv.element.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), 'https://www.youtube.com');
+// What the YouTube player tells us, once it's been told we're listening: when it's playing, and when it's over.
 window.addEventListener('message', e => {
-  if (!tv || e.source !== tv.iframe.contentWindow) return;
+  if (!tv?.youtube || e.source !== tv.element.contentWindow) return;
   let data;
   try { data = JSON.parse(e.data); } catch { return; }
   tv.heard = true;
   const state = data.event === 'onStateChange' ? data.info : data.event === 'infoDelivery' ? data.info?.playerState : undefined;
-  if ((state === 0 || data.event === 'onError') && tv.endedAt === null) tv.endedAt = performance.now();
+  if (state === 1) tv.playingAt ??= performance.now();
+  if (state === 0 || data.event === 'onError') videoOver();
 });
 const TV_SILENT_AFTER = 10000; // ms without a word from the player before it's taken to be one that won't say when it's done
 let watchedAt = -Infinity;
@@ -2232,8 +2286,15 @@ function updateTV() {
   if (muted === tv.muted && now - tv.toldAt < 2000) return;
   tv.muted = muted;
   tv.toldAt = now;
+  if (!tv.youtube) {
+    if (tv.player) {
+      tv.player.muted = muted;
+      tv.player.volume = TV_VOLUME/100;
+    }
+    return;
+  }
   if (!tv.heard) {
-    tv.iframe.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: tv.video, channel: 'widget' }), 'https://www.youtube.com');
+    tv.element.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: tv.video, channel: 'widget' }), 'https://www.youtube.com');
     tell('addEventListener', 'onStateChange');
     tell('addEventListener', 'onError');
   }
