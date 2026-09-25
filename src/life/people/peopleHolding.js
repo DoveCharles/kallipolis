@@ -73,14 +73,22 @@ const MODELS = {
   hotdog: { node: 'Hotdog', turn: [Math.PI/2, 0, 0] },
   coffee: { node: 'CoffeeCup' },
   beer: { node: 'Pint', url: 'assets/models/Pub.glb' },
+  stout: { node: 'Stout', url: 'assets/models/Pub.glb' },
 };
+// A pint is of stout, drawn in place of the beer, for the share of people who'd rather (as the pubs' tables have it)
+const STOUT_SHARE = 0.25;
 const HELD_MAX = 512;
 // Held things are lit like the room around them when they are in one (see roomLit in buildings/interior.js: a room under
-// its own ceiling is in shadow, and its things glow a little to make up for it), and plainly out in the daylight.
+// its own ceiling is in shadow, and its things glow a little to make up for it), and plainly out in the daylight. The glow
+// is in each thing's own colour, as roomLit's is (a white one washes a pint of beer out to pale).
 const HELD_GLOW = 0.25;
+const glowOwnColor = shader => {
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= diffuseColor.rgb;');
+};
 const meshes = Object.fromEntries(Object.entries(SHAPES).flatMap(([shape, geometry]) => ['lit', 'plain'].map(light => {
   const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
-  if (light === 'lit') { material.emissive.setScalar(1); material.emissiveIntensity = HELD_GLOW; }
+  if (light === 'lit') { material.emissive.setScalar(1); material.emissiveIntensity = HELD_GLOW; material.onBeforeCompile = glowOwnColor; }
   const mesh = new THREE.InstancedMesh(geometry, material, HELD_MAX);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.count = 0;
@@ -140,6 +148,7 @@ async function loadHoldables() {
         shader.fragmentShader = shader.fragmentShader
           .replace('#include <common>', '#include <common>\nvarying float vUncut;')
           .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (vUncut < 0.0) discard;');
+        glowOwnColor(shader);     // (for plain too: it has no glow to tint, and the two share a program)
       };
       const cut = new THREE.InstancedBufferAttribute(new Float32Array(HELD_MAX).fill(1), 1);
       cut.setUsage(THREE.DynamicDrawUsage);
@@ -282,6 +291,7 @@ export function giveSnack(p, item) {
   if (!kind) return;
   dropSnack(p);
   const held = hold(p, item, { hand: 'R' });
+  if (item === 'beer') held.stout = p.likesStout ??= peopleRng() < STOUT_SHARE;
   p.snack = { item, held, mouthfuls: kind.mouthfuls, next: snackGap(kind)*0.5, up: 0 };
 }
 /**
@@ -399,7 +409,7 @@ export function updateHeld(only = -1) {
         if (left < 1 && !model) { place.y -= size.y*(1 - left)/2; size.y *= left; } // (bitten down from the top)
         if (size.y <= 0 || left <= 0) continue;
         part.compose(place, turn.setFromEuler(euler), size);
-        draw(piece.shape, light, part.premultiply(world), piece.tint ? color.setHex(held.loaded ?? held.color.getHex()) : color.setHex(piece.color ?? 0xffffff), left);
+        draw(piece.shape === 'beer' && held.stout ? 'stout' : piece.shape, light, part.premultiply(world), piece.tint ? color.setHex(held.loaded ?? held.color.getHex()) : color.setHex(piece.color ?? 0xffffff), left);
       }
       // and what's left on the plate
       if (held.food) for (const food of held.food) {
