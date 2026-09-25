@@ -670,6 +670,116 @@ function startBranchFrom(nodeId) {
   if (isTrainLine(line)) rebuildRoadMeshes(); else showDrawingPreview(line);
 }
 
+// Ends the line being drawn on an existing node: merged into the line it ends if that's the node's end, else a branch.
+// Back onto one of its own nodes (other than closing a loop on its first) it ends where it is, and drawing carries on
+// from that node as a branch — so the node becomes a junction instead of the line doubling back through it.
+function finishOnNode(nodeId) {
+  const ids = S.activeRoadLine.nodeIds, at = ids.indexOf(nodeId);
+  if (nodeId !== ids[ids.length-1] && (at > 0 || at === 0 && ids.length < 3)) {
+    const line = S.activeRoadLine;
+    line.drawing = false;
+    S.activeRoadLine = null;
+    startBranchFrom(nodeId);
+    S.zones.forEach(subdivideZone); renderHierarchy();
+    return;
+  }
+  if (nodeId !== ids[ids.length-1]) {
+    ids.push(nodeId);
+    S.activeRoadLine.drawing = false;
+    const line = S.activeRoadLine, kind = networkKindOf(line);
+    const merged = mergeActiveRoadLineInto(nodeId);
+    S.activeRoadLine = null;
+    selectItem(kind, (merged || line).networkId, true);
+  }
+  rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderHierarchy();
+}
+
+// Join toggle (#join-toggle, beside the grid magnet): whether pathNodeUnder joins roads onto paths; remembered.
+const SNAP_TO_PATHS_KEY = 'splinetopia.snapToPaths';
+let snapToPaths = true;
+try { snapToPaths = localStorage.getItem(SNAP_TO_PATHS_KEY) !== '0'; } catch {}
+const joinToggle = document.getElementById('join-toggle');
+joinToggle.classList.toggle('active', snapToPaths);
+joinToggle.addEventListener('click', () => {
+  snapToPaths = !snapToPaths;
+  joinToggle.classList.toggle('active', snapToPaths);
+  try { localStorage.setItem(SNAP_TO_PATHS_KEY, snapToPaths ? '1' : '0'); } catch {}
+});
+
+// A click on another path of the same type's surface: the node it should join there — that path's node if one's within
+// its half-width of the click, else a new node on its edge — so the two meet at a junction instead of just overlapping
+// (lanes and junctions only link at shared nodes). Null if the click isn't on one.
+function pathNodeUnder(gp) {
+  if (!snapToPaths) return null;
+  const found = findNearestEdge(gp, 0, S.activeRoadLine);
+  if (!found || found.kind!=='road') return null;
+  const reach = roadLineWidths(found.line).hw, ids = found.line.nodeIds;
+  if (found.dist > reach) return null;
+  const nearest = [ids[found.index], ids[found.index+1]]
+    .map(id => ({ id, d: Math.hypot(roadNodes[id].x-gp.x, roadNodes[id].z-gp.z) }))
+    .sort((a, b) => a.d-b.d)[0];
+  if (nearest.d <= reach) return nearest.id;
+  const pt = snapPointToGrid(found.point, 'road'), id = 'n'+(S.roadNodeSeq++);
+  roadNodes[id] = { x:pt.x, z:pt.z, type:'poly', handleIn:null, handleOut:null };
+  ids.splice(found.index+1, 0, id);
+  return id;
+}
+
+// Ends the line being drawn on an existing node: merged into the line it ends if that's the node's end, else a branch.
+// Back onto one of its own nodes (other than closing a loop on its first) it ends where it is, and drawing carries on
+// from that node as a branch — so the node becomes a junction instead of the line doubling back through it.
+function finishOnNode(nodeId) {
+  const ids = S.activeRoadLine.nodeIds, at = ids.indexOf(nodeId);
+  if (nodeId !== ids[ids.length-1] && (at > 0 || at === 0 && ids.length < 3)) {
+    const line = S.activeRoadLine;
+    line.drawing = false;
+    S.activeRoadLine = null;
+    startBranchFrom(nodeId);
+    S.zones.forEach(subdivideZone); renderHierarchy();
+    return;
+  }
+  if (nodeId !== ids[ids.length-1]) {
+    ids.push(nodeId);
+    S.activeRoadLine.drawing = false;
+    const line = S.activeRoadLine, kind = networkKindOf(line);
+    const merged = mergeActiveRoadLineInto(nodeId);
+    S.activeRoadLine = null;
+    selectItem(kind, (merged || line).networkId, true);
+  }
+  rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderHierarchy();
+}
+
+// Join toggle (#join-toggle, beside the grid magnet): whether pathNodeUnder joins roads onto paths; remembered.
+const SNAP_TO_PATHS_KEY = 'splinetopia.snapToPaths';
+let snapToPaths = true;
+try { snapToPaths = localStorage.getItem(SNAP_TO_PATHS_KEY) !== '0'; } catch {}
+const joinToggle = document.getElementById('join-toggle');
+joinToggle.classList.toggle('active', snapToPaths);
+joinToggle.addEventListener('click', () => {
+  snapToPaths = !snapToPaths;
+  joinToggle.classList.toggle('active', snapToPaths);
+  try { localStorage.setItem(SNAP_TO_PATHS_KEY, snapToPaths ? '1' : '0'); } catch {}
+});
+
+// A click on another path of the same type's surface: the node it should join there — that path's node if one's within
+// its half-width of the click, else a new node on its edge — so the two meet at a junction instead of just overlapping
+// (lanes and junctions only link at shared nodes). Null if the click isn't on one.
+function pathNodeUnder(gp) {
+  if (!snapToPaths) return null;
+  const found = findNearestEdge(gp, 0, S.activeRoadLine);
+  if (!found || found.kind!=='road') return null;
+  const reach = roadLineWidths(found.line).hw, ids = found.line.nodeIds;
+  if (found.dist > reach) return null;
+  const nearest = [ids[found.index], ids[found.index+1]]
+    .map(id => ({ id, d: Math.hypot(roadNodes[id].x-gp.x, roadNodes[id].z-gp.z) }))
+    .sort((a, b) => a.d-b.d)[0];
+  if (nearest.d <= reach) return nearest.id;
+  const pt = snapPointToGrid(found.point, 'road'), id = 'n'+(S.roadNodeSeq++);
+  roadNodes[id] = { x:pt.x, z:pt.z, type:'poly', handleIn:null, handleOut:null };
+  ids.splice(found.index+1, 0, id);
+  return id;
+}
+
 // Only a line of the same type is joined: a walkway finished on a road's node shares that node but stays a network of
 // its own, or it could no longer be picked as a walkway.
 function mergeActiveRoadLineInto(sharedNodeId) {
@@ -697,6 +807,12 @@ function handleLeftClick(x,y) {
   let gp = raycastGround(x,y);
   if (!gp) return;
   if (S.currentTool==='road') {
+    const joinId = pathNodeUnder(gp); // (clicked on another path: joined there, as a junction)
+    if (joinId) {
+      if (S.activeRoadLine) finishOnNode(joinId);
+      else startBranchFrom(joinId);
+      return;
+    }
     gp = snapPointToGrid(gp, 'road');
     const id = 'n'+(S.roadNodeSeq++);
     roadNodes[id] = { x:gp.x, z:gp.z, type:'poly', handleIn:null, handleOut:null };

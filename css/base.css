@@ -221,14 +221,15 @@ input[type=color].color-input::-moz-color-swatch { border:none; border-radius:3p
 
 /* the row of buttons over the view, to the right of the panel — on a narrow screen it moves to the top-left corner (below) */
 #canvas-tools { position:fixed; top:16px; left:292px; display:flex; align-items:flex-start; gap:8px; }
-#grid-toggle {
+#grid-toggle, #join-toggle {
   width:34px; height:34px;
   display:flex; align-items:center; justify-content:center;
   background:var(--bg-panel); border:1px solid var(--border); border-radius:8px;
   color:var(--text-dim); cursor:pointer; user-select:none;
 }
-#grid-toggle:hover { color:var(--text); border-color:var(--accent-dim); }
-#grid-toggle.active { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
+#grid-toggle:hover, #join-toggle:hover { color:var(--text); border-color:var(--accent-dim); }
+#grid-toggle.active, #join-toggle.active { background:var(--accent); color:#0b1a12; border-color:var(--accent); }
+#join-toggle { width:auto; padding:0 8px; font-size:12px; font-weight:600; }
 #history-tools { display:flex; gap:6px; }
 /* the favorites (src/ui/favorites.js): a little window hanging under its ♥ button */
 #favorites-tools { position:relative; }
