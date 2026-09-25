@@ -60,6 +60,7 @@ export function loadTypeText(url, { attributes, settings = [], fallbacks = {}, p
         said[attribute] = entry ? entry.text : attribute === 'name' && kind ? kind : '';
         if (entry) picked.push(entry);
       });
+      const base = [...picked];
       if (counted.length) {
         const rng = mulberry32(number*104729 + 31);
         // the file's own [distribution] where it has one, then the shared spread, then one each where there are more
@@ -84,7 +85,8 @@ export function loadTypeText(url, { attributes, settings = [], fallbacks = {}, p
           picked.push(...chosen[i]);
         });
       }
-      return { ...said, traits: combineTraits(picked) };
+      // baseTraits: the kind's own and its mood's alone, before loves and hates (for the car Details window: life/car-details.js)
+      return { ...said, traits: combineTraits(picked), baseTraits: combineTraits(base) };
     },
     // Every value a kind gives for a setting (see `settings`), as text: its own, else the nearest in the chain that has any.
     // For settings that are lists rather than yes or no (cars' `plate`).

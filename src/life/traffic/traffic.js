@@ -23,6 +23,7 @@ import { smellyCars, updatePull } from './pullover.js';
 export { loadCarModels } from './models.js';
 export { forEachHeadlight } from './placing.js';
 export { carThumbnailScene } from './follow.js';
+export { cars } from './state.js';
 
 // ============================================================ TRAFFIC ============================================================
 // Cars, drawn with the people and scaled by the same speed and size settings. A car drives one sidewalk road line in one of
@@ -55,6 +56,7 @@ function refreshCarTraits(car) {
   car.traitsKey = key;
   const type = carTypeOf(carMeshes[car.design].name, car.number);
   car.traits = type.traits;
+  car.baseTraits = type.baseTraits;
   // legendary/terrible are 'on' traits (core/traits.js) — combineTraits caps the aggregate at 1 even when several of a
   // car's loves/hates are individually marked legendary or terrible, so updateSpecialTraits' net level can't read the
   // real count from car.traits. Tallied here instead from each love/hate entry's own tier (type.lovesTier/hatesTier,

@@ -403,3 +403,6 @@ html.win3 .w3-window.w3-sized .w3-dialog-body { flex:1; min-height:0; max-height
 #fps-counter { position:fixed; right:8px; bottom:8px; z-index:1000; pointer-events:none; padding:1px 4px;
   background:#000; color:#0f0; font:12px/1.2 monospace; }
 #fps-counter[hidden] { display:none; }
+
+html.win3 .car-details .cd-bar { background:var(--w3-window); border:1px solid var(--w3-frame); }
+html.win3 .car-details.win3-minimized .win3-titlebar { margin-bottom:0; }
