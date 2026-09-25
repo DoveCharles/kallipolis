@@ -97,6 +97,47 @@ function outsideCircles(a, b, circles) {
   });
   return spans;
 }
+const EDGE_MITER_LIMIT = 4; // as the road surface's: sharper bends are bevelled instead of spiking outward
+// where segments p→q and r→s cross, or null
+function segmentsCross(p, q, r, s) {
+  const dx = q.x - p.x, dz = q.z - p.z, ex = s.x - r.x, ez = s.z - r.z, den = dx*ez - dz*ex;
+  if (Math.abs(den) < 1e-12) return null;
+  const t = ((r.x - p.x)*ez - (r.z - p.z)*ex)/den, u = ((r.x - p.x)*dz - (r.z - p.z)*dx)/den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? { x: p.x + dx*t, z: p.z + dz*t } : null;
+}
+// The polyline pts shifted `off` to its left, joined at each bend (mitered, or bevelled past the limit) rather than
+// each segment shifted on its own — which left the lines crossing on the inside of a sharp turn and apart on the
+// outside. On the inside of a bend tighter than `off`, the shifted line folds back over itself; those small loops
+// are cut out where it crosses itself.
+function offsetPolyline(pts, off) {
+  const p = pts.filter((q, i) => i === 0 || Math.hypot(q.x - pts[i-1].x, q.z - pts[i-1].z) > 1e-4);
+  if (p.length < 2) return [];
+  const normals = p.slice(1).map((b, i) => {
+    const a = p[i], len = Math.hypot(b.x - a.x, b.z - a.z);
+    return { x: -(b.z - a.z)/len, z: (b.x - a.x)/len };
+  });
+  const out = [{ x: p[0].x + normals[0].x*off, z: p[0].z + normals[0].z*off }];
+  for (let i=1;i<p.length-1;i++) {
+    const n0 = normals[i-1], n1 = normals[i], mx = n0.x + n1.x, mz = n0.z + n1.z, cos = Math.hypot(mx, mz)/2;
+    if (cos > 1/EDGE_MITER_LIMIT) out.push({ x: p[i].x + mx/(2*cos)*off/cos, z: p[i].z + mz/(2*cos)*off/cos });
+    else out.push({ x: p[i].x + n0.x*off, z: p[i].z + n0.z*off }, { x: p[i].x + n1.x*off, z: p[i].z + n1.z*off });
+  }
+  const last = normals[normals.length-1], end = p[p.length-1];
+  out.push({ x: end.x + last.x*off, z: end.z + last.z*off });
+  // cut out loops: from each segment, the furthest later one it crosses within a short stretch of line
+  const reach = Math.abs(off)*8 + 2;
+  for (let i=0;i<out.length-3;i++) {
+    let stretch = 0, cut = null;
+    for (let j=i+2;j<out.length-1;j++) {
+      stretch += Math.hypot(out[j].x - out[j-1].x, out[j].z - out[j-1].z);
+      if (stretch > reach) break;
+      const x = segmentsCross(out[i], out[i+1], out[j], out[j+1]);
+      if (x) cut = { j, x };
+    }
+    if (cut) out.splice(i+1, cut.j - i, cut.x);
+  }
+  return out;
+}
 // Builds the markings, crossings and traffic lights into roadMeshGroup, and places the signal lamps. Called by
 // rebuildRoadMeshes.
 function buildRoadDetails() {
@@ -119,17 +160,25 @@ function buildRoadDetails() {
     const { hw } = roadLineWidths(line);
     if (nodes.length < 2 || hw*2 < 5) return;
     const pts = tessellateOpenPath(nodes), DASH = 3, PERIOD = 7;
+    // edge lines, up to the crossing — each piece lengthened by its half-width where it meets the next, so a
+    // bend's outer corner isn't notched
+    [1, -1].forEach(side => {
+      const edge = offsetPolyline(pts, (hw - 0.35)*side);
+      for (let i=0;i<edge.length-1;i++) {
+        const pa = edge[i], pb = edge[i+1], len = Math.hypot(pb.x - pa.x, pb.z - pa.z);
+        if (len < 1e-4) continue;
+        const near = S.roadJunctions.filter(j => distPointSegment(j, pa, pb) < j.r + 1);
+        outsideCircles(pa, pb, near.map(j => ({ x: j.x, z: j.z, R: j.r + 0.3 }))).forEach(([t0, t1]) => {
+          const e0 = t0 < 1e-6 && i > 0 ? 0.09/len : 0, e1 = t1 > 1 - 1e-6 && i < edge.length-2 ? 0.09/len : 0;
+          paintLine(at(pa, pb, t0 - e0), at(pa, pb, t1 + e1), 0.09);
+        });
+      }
+    });
     let along = 0;
     for (let i=0;i<pts.length-1;i++) {
       const a = pts[i], b = pts[i+1], len = Math.hypot(b.x - a.x, b.z - a.z);
       if (len < 1e-4) continue;
-      const nx = -(b.z - a.z)/len, nz = (b.x - a.x)/len;
       const near = S.roadJunctions.filter(j => distPointSegment(j, a, b) < j.r + 6);
-      // edge lines, up to the crossing
-      [1, -1].forEach(side => {
-        const off = (hw - 0.35)*side, pa = { x: a.x + nx*off, z: a.z + nz*off }, pb = { x: b.x + nx*off, z: b.z + nz*off };
-        outsideCircles(pa, pb, near.map(j => ({ x: j.x, z: j.z, R: j.r + 0.3 }))).forEach(([t0, t1]) => paintLine(at(pa, pb, t0), at(pa, pb, t1), 0.09));
-      });
       // center dashes, up to the stop lines
       if (hw*2 >= 6) {
         for (let k = Math.floor(along/PERIOD); k*PERIOD < along + len; k++) {
