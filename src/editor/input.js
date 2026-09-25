@@ -8,7 +8,7 @@ import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { setSelectedMap, setMapHover, startMapTransform, applyMapTransform, confirmMapTransform, cancelMapTransform, previewLine } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, setLinePoints, roadLineWidths } from '../roads/roads.js';
 import { WALKWAY_COLOR, rebuildRoadMeshes } from '../roads/paths.js';
-import { moveRoadDragPreview, endRoadDragPreview, showDrawingPreview, endDrawingPreview } from '../roads/drag-preview.js';
+import { moveRoadDragPreview, endRoadDragPreview, showDrawingPreview, endDrawingPreview, showDeletePreview, endDeletePreview } from '../roads/drag-preview.js';
 import { isTrainLine, isTrainNode, networkKindOf, pathTypeOf, currentPathType, trainNodeY, trainPlanePoint, dragTrainPoint, findNearestTrainEdge } from '../trains/trains.js';
 import { setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge } from './hover.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
@@ -67,6 +67,8 @@ const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 const shiftHeld = (e) => e.shiftKey || S.touchAdd === true;
 const cmdKey = (e) => IS_MAC ? e.metaKey : e.ctrlKey;
 const addHeld = (e) => cmdKey(e) || S.touchAdd === true;
+// alt in Paths (not while drawing): a click deletes the stretch of path under it (see deleteRoadSegment)
+const deleteHeld = (e) => e.altKey && S.interactionMode==='node' && S.currentTool==='road' && !S.activeRoadLine;
 const inControl = () => App.isPossessing?.() || App.isDriving?.();
 
 function pointerDelta(e) {
@@ -163,13 +165,14 @@ function zoneNearBoxes(zone, boxes) {
 // a node let go of after being moved: rebuild what it's part of, and reselect it
 function commitNodeDrag(dn) {
   if (dn.kind === 'road' || dn.kind === 'roadHandle') {
-    const line = S.roadLines.find(l => l.nodeIds.includes(dn.nodeId));
+    const nodeId = dn.kind === 'road' ? joinDraggedNode(dn.nodeId) : dn.nodeId;
+    const line = S.roadLines.find(l => l.nodeIds.includes(nodeId));
     endRoadDragPreview();
     rebuildRoadMeshes();
     // (trains don't affect zones; and only the zones near where the road was or is now need redoing, which on a big city
     // is a fraction of them — each one's lots, buildings and trees take a while)
     if (!line || !isTrainLine(line)) {
-      const boxes = [dn.startBounds, roadNodeLinesBounds(dn.nodeId)];
+      const boxes = [dn.startBounds, roadNodeLinesBounds(nodeId)];
       S.zones.forEach(z => { if (!dn.startBounds || zoneNearBoxes(z, boxes)) subdivideZone(z); });
     }
     if (line) selectItem(networkKindOf(line), line.networkId, true); else renderHierarchy();
@@ -230,6 +233,11 @@ dom.addEventListener('pointerdown', (e) => {
     dragMode = e.shiftKey ? 'pan' : 'orbit';
     dom.setPointerCapture(e.pointerId);
     return;
+  }
+  // alt+click a path: the stretch of it between two nodes, gone
+  if (e.button===0 && deleteHeld(e)) {
+    const seg = segmentUnder(e.clientX, e.clientY);
+    if (seg) { endDeletePreview(); deleteRoadSegment(seg.line, seg.index); dom.setPointerCapture(e.pointerId); return; }
   }
   // cmd+click a path's node (when not already drawing): a new branch, drawn out from it
   if (S.interactionMode==='node' && e.button===0 && addHeld(e) && (S.currentTool==='road' || S.currentTool==='train') && !S.activeRoadLine) {
@@ -306,6 +314,7 @@ dom.addEventListener('pointermove', (e) => {
   if (longPress && Math.hypot(e.clientX-longPress.x, e.clientY-longPress.y) > CLICK_SLOP) cancelLongPress();
   S.lastMouseX = e.clientX; S.lastMouseY = e.clientY;
   showAddCursor(e);
+  showDeleteHover(e);
   if (hoveringClickable && S.interactionMode!=='move' && S.currentTool!=='objects') { hoveringClickable = false; objectCursor = ''; dom.style.cursor = ''; }
   if (S.objectTransform) { applyObjectTransform(raycastGround(e.clientX, e.clientY), shiftHeld(e)); return; }
   if (S.interactionMode==='maps') {
@@ -530,20 +539,8 @@ dom.addEventListener('pointerup', (e) => {
     if (dn.kind==='objectTurn') { endObjectTurn(); return; }
     if (dist<CLICK_SLOP && dt<600) {
       if (dn.kind==='road') {
-        if (S.activeRoadLine) {
-          const ids = S.activeRoadLine.nodeIds, line = S.activeRoadLine;
-          if (dn.nodeId !== ids[ids.length-1]) {
-            ids.push(dn.nodeId);
-            S.activeRoadLine.drawing = false;
-            const kind = networkKindOf(line), drawn = ids.slice();
-            const merged = mergeActiveRoadLineInto(dn.nodeId);
-            S.activeRoadLine = null;
-            endDrawingPreview(); rebuildRoadMeshes(); zonesNearPath(drawn, line).forEach(subdivideZone);
-            selectItem(kind, (merged || line).networkId, true);
-          } else if (isTrainLine(line)) rebuildRoadMeshes();
-          else showDrawingPreview(line);
-          renderHierarchy();
-        } else if (S.lastNodeClick && S.lastNodeClick.kind==='road' && S.lastNodeClick.nodeId===dn.nodeId && (performance.now()-S.lastNodeClick.time)<350) {
+        if (S.activeRoadLine) finishOnNode(dn.nodeId);
+        else if (S.lastNodeClick && S.lastNodeClick.kind==='road' && S.lastNodeClick.nodeId===dn.nodeId && (performance.now()-S.lastNodeClick.time)<350) {
           S.lastNodeClick = null;
           deleteRoadNode(dn.nodeId);
         } else {
@@ -646,6 +643,64 @@ window.addEventListener('keydown', (e) => { if (ADD_KEYS.includes(e.key)) showAd
 window.addEventListener('keyup', (e) => { if (ADD_KEYS.includes(e.key)) showAddCursor(e); });
 window.addEventListener('blur', () => showAddCursor(null));
 
+// Holding alt in Paths shows a cursor with a minus, and the stretch of path under it a click would delete in red.
+function showDeleteHover(e) {
+  const on = !!e && deleteHeld(e) && !pointerDown && !S.draggedNode;
+  dom.classList.toggle('deleting', on);
+  const seg = on ? segmentUnder(S.lastMouseX, S.lastMouseY) : null;
+  if (seg) showDeletePreview(seg.line, seg.index); else endDeletePreview();
+}
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Alt') return;
+  if (!e.target.closest?.('input, textarea')) e.preventDefault(); // (not the browser's menu bar, on Windows)
+  showDeleteHover(e);
+});
+window.addEventListener('keyup', (e) => { if (e.key === 'Alt') showDeleteHover(e); });
+window.addEventListener('blur', () => showDeleteHover(null));
+// the stretch of path under the cursor — the line and the index of the node it starts from — or null
+function segmentUnder(x, y) {
+  const gp = raycastGround(x, y);
+  const found = gp && findNearestEdge(gp, 0);
+  return found && found.kind === 'road' ? { line: found.line, index: found.index } : null;
+}
+// Deletes the stretch of `line` from its node `index` to the next: the line's split in two there (a loop's just opened
+// up), a piece with no stretch left goes, and so does a node on nothing any more. What's no longer joined up becomes a
+// network of its own.
+function deleteRoadSegment(line, index) {
+  const ids = line.nodeIds, zones = zonesNearPath(ids.slice(index, index + 2), line);
+  const networkId = line.networkId, touched = new Set(ids);
+  if (ids.length > 2 && ids[0] === ids[ids.length-1]) {
+    line.nodeIds = ids.slice(index + 1).concat(ids.slice(1, index + 1));
+  } else {
+    line.nodeIds = ids.slice(0, index + 1);
+    const rest = ids.slice(index + 1);
+    if (rest.length >= 2) S.roadLines.push({ ...line, id: 'road-'+(S.roadLineSeq++), nodeIds: rest });
+  }
+  S.roadLines = S.roadLines.filter(l => l.nodeIds.length >= 2);
+  touched.forEach(id => { if (!S.roadLines.some(l => l.nodeIds.includes(id))) delete roadNodes[id]; });
+  // the network's lines, grouped by whether they still share a node; the first group keeps the network's id
+  let left = S.roadLines.filter(l => l.networkId === networkId), first = true;
+  while (left.length) {
+    const group = [left.shift()], nodes = new Set(group[0].nodeIds);
+    for (let grew = true; grew;) {
+      grew = false;
+      left = left.filter(l => {
+        if (!l.nodeIds.some(id => nodes.has(id))) return true;
+        group.push(l); l.nodeIds.forEach(id => nodes.add(id)); grew = true;
+        return false;
+      });
+    }
+    if (!first) {
+      const id = 'net-'+(S.roadNetworkSeq++);
+      group.forEach(l => { l.networkId = id; });
+      if (S.walkwayOrder.includes(networkId)) S.walkwayOrder.splice(S.walkwayOrder.indexOf(networkId) + 1, 0, id);
+    }
+    first = false;
+  }
+  if ((S.selection.type==='road' || S.selection.type==='train') && !S.roadLines.some(l => l.networkId===S.selection.id)) S.selection = { type:null, id:null };
+  rebuildRoadMeshes(); zones.forEach(subdivideZone); renderHierarchy();
+}
+
 // Starts drawing a new line out from an existing node, as a branch of that node's network, just like it: the same type,
 // width and colors (or, for a train line, tube radius). It's finished, joined onto another node, or cancelled as any line
 // being drawn is.
@@ -675,42 +730,32 @@ function startBranchFrom(nodeId) {
 // from that node as a branch — so the node becomes a junction instead of the line doubling back through it.
 function finishOnNode(nodeId) {
   const ids = S.activeRoadLine.nodeIds, at = ids.indexOf(nodeId);
+  const line = S.activeRoadLine;
   if (nodeId !== ids[ids.length-1] && (at > 0 || at === 0 && ids.length < 3)) {
-    const line = S.activeRoadLine;
     line.drawing = false;
     S.activeRoadLine = null;
+    endDrawingPreview(); rebuildRoadMeshes(); zonesNearPath(ids, line).forEach(subdivideZone);
     startBranchFrom(nodeId);
-    S.zones.forEach(subdivideZone); renderHierarchy();
+    renderHierarchy();
     return;
   }
   if (nodeId !== ids[ids.length-1]) {
     ids.push(nodeId);
-    S.activeRoadLine.drawing = false;
-    const line = S.activeRoadLine, kind = networkKindOf(line);
+    line.drawing = false;
+    const kind = networkKindOf(line), drawn = ids.slice();
     const merged = mergeActiveRoadLineInto(nodeId);
     S.activeRoadLine = null;
+    endDrawingPreview(); rebuildRoadMeshes(); zonesNearPath(drawn, line).forEach(subdivideZone);
     selectItem(kind, (merged || line).networkId, true);
-  }
-  rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderHierarchy();
+  } else if (isTrainLine(line)) rebuildRoadMeshes();
+  else showDrawingPreview(line);
+  renderHierarchy();
 }
-
-// Join toggle (#join-toggle, beside the grid magnet): whether pathNodeUnder joins roads onto paths; remembered.
-const SNAP_TO_PATHS_KEY = 'splinetopia.snapToPaths';
-let snapToPaths = true;
-try { snapToPaths = localStorage.getItem(SNAP_TO_PATHS_KEY) !== '0'; } catch {}
-const joinToggle = document.getElementById('join-toggle');
-joinToggle.classList.toggle('active', snapToPaths);
-joinToggle.addEventListener('click', () => {
-  snapToPaths = !snapToPaths;
-  joinToggle.classList.toggle('active', snapToPaths);
-  try { localStorage.setItem(SNAP_TO_PATHS_KEY, snapToPaths ? '1' : '0'); } catch {}
-});
 
 // A click on another path of the same type's surface: the node it should join there — that path's node if one's within
 // its half-width of the click, else a new node on its edge — so the two meet at a junction instead of just overlapping
 // (lanes and junctions only link at shared nodes). Null if the click isn't on one.
 function pathNodeUnder(gp) {
-  if (!snapToPaths) return null;
   const found = findNearestEdge(gp, 0, S.activeRoadLine);
   if (!found || found.kind!=='road') return null;
   const reach = roadLineWidths(found.line).hw, ids = found.line.nodeIds;
@@ -723,6 +768,60 @@ function pathNodeUnder(gp) {
   roadNodes[id] = { x:pt.x, z:pt.z, type:'poly', handleIn:null, handleOut:null };
   ids.splice(found.index+1, 0, id);
   return id;
+}
+
+// A path node let go of close to another path of its type is joined to it, as a click while drawing is (see
+// pathNodeUnder): onto that path's node if one's within its half-width, else spliced into it at the nearest point of its
+// edge — so they meet at a junction. (Not onto the nodes either side of it on its own lines: that would fold a stretch
+// away.) Two lines that now just meet end to end become one, and everything joined is one network. Returns the node
+// the dragged one is now.
+function joinDraggedNode(nodeId) {
+  const own = S.roadLines.filter(l => l.nodeIds.includes(nodeId));
+  if (!own.length || isTrainLine(own[0])) return nodeId;
+  const n = roadNodes[nodeId], type = pathTypeOf(own[0]);
+  const neighbours = new Set(own.flatMap(l => l.nodeIds.flatMap((id, i) => id === nodeId ? [l.nodeIds[i-1], l.nodeIds[i+1]] : [])));
+  let target = null, best = Infinity;
+  S.roadLines.forEach(l => {
+    if (pathTypeOf(l) !== type) return;
+    const reach = roadLineWidths(l).hw;
+    l.nodeIds.forEach(id => {
+      if (id === nodeId || neighbours.has(id)) return;
+      const d = Math.hypot(roadNodes[id].x-n.x, roadNodes[id].z-n.z);
+      if (d <= reach && d < best) { best = d; target = id; }
+    });
+  });
+  if (target) {
+    for (let i = S.roadLines.length-1; i >= 0; i--) {
+      const l = S.roadLines[i];
+      l.nodeIds = l.nodeIds.map(id => id === nodeId ? target : id).filter((id, j, ids) => id !== ids[j-1]);
+      if (l.nodeIds.length < 2) S.roadLines.splice(i, 1);
+    }
+    delete roadNodes[nodeId];
+    joinNetworksAt(target, type);
+    return target;
+  }
+  const found = findNearestEdge(n, 0, own);
+  if (!found || found.kind !== 'road' || found.dist > roadLineWidths(found.line).hw) return nodeId;
+  const pt = snapPointToGrid(found.point, 'road'), dx = pt.x-n.x, dz = pt.z-n.z;
+  n.x = pt.x; n.z = pt.z;
+  if (n.handleIn) { n.handleIn.x += dx; n.handleIn.z += dz; }
+  if (n.handleOut) { n.handleOut.x += dx; n.handleOut.z += dz; }
+  found.line.nodeIds.splice(found.index+1, 0, nodeId);
+  joinNetworksAt(nodeId, type);
+  return nodeId;
+}
+// the lines of `type` through node `id` all made one network (the first one's), and two that just meet end to end there
+// made one line
+function joinNetworksAt(id, type) {
+  const through = S.roadLines.filter(l => pathTypeOf(l) === type && l.nodeIds.includes(id));
+  if (!through.length) return;
+  const networkId = through[0].networkId, joined = new Set(through.map(l => l.networkId));
+  S.roadLines.forEach(l => { if (joined.has(l.networkId)) l.networkId = networkId; });
+  const [a, b] = through, ends = l => l.nodeIds[0] === id || l.nodeIds[l.nodeIds.length-1] === id;
+  if (through.length !== 2 || !ends(a) || !ends(b) || S.roadLines.some(l => l !== a && l !== b && l.nodeIds.includes(id))) return;
+  const toEnd = l => l.nodeIds[0] === id ? l.nodeIds.slice().reverse() : l.nodeIds; // (ending on the node)
+  a.nodeIds = toEnd(a).concat(toEnd(b).reverse().slice(1));
+  S.roadLines = S.roadLines.filter(l => l !== b);
 }
 
 // Only a line of the same type is joined: a walkway finished on a road's node shares that node but stays a network of

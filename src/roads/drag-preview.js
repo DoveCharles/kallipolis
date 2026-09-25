@@ -129,6 +129,26 @@ export function endDrawingPreview() {
   drawingLine = null;
   redraw();
 }
+// ---------------------------------------------------------------- delete preview
+// Holding alt over a path, the stretch between two of its nodes that a click would delete (see deleteRoadSegment in
+// editor/input.js) is laid over in red, the path's full width.
+const deleteMaterial = new THREE.MeshBasicMaterial({ color: 0xe0342b, transparent: true, opacity: 0.6, depthFunc: THREE.LessDepth, side: THREE.DoubleSide });
+const deleteMesh = new THREE.Mesh(idleGeometry(), deleteMaterial);
+deleteMesh.name = 'RoadDeletePreview';
+deleteMesh.renderOrder = 2;
+deleteMesh.frustumCulled = false;
+scene.add(deleteMesh);
+let deleting = null; // { line, index } under the red strip
+// the stretch of `line` from its node `index` to the next, or none
+export function showDeletePreview(line, index) {
+  if (deleting ? deleting.line === line && deleting.index === index : !line) return;
+  deleting = line ? { line, index } : null;
+  const pts = line ? line.nodeIds.slice(index, index + 2).map(i => roadNodes[i]).filter(Boolean) : [];
+  deleteMesh.geometry.dispose();
+  deleteMesh.geometry = pts.length === 2 ? ribbonGeometry([{ points: tessellateOpenPath(pts), hw: halfWidthOf(line) }]) : idleGeometry();
+}
+export const endDeletePreview = () => showDeletePreview(null);
+
 // Once a frame: a drag that ended without being let go of the usual way (a cancelled pointer, a long press turning into
 // a context menu) still gets its roads rebuilt, and the zones they cut.
 export function updateRoadDragPreview() {

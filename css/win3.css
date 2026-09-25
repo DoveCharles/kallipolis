@@ -65,6 +65,10 @@ html.win3 canvas.dragging-node { cursor:grabbing; }
 html.win3 canvas.adding {
   cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' shape-rendering='crispEdges'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3Crect x='11.5' y='11.5' width='8' height='8' fill='%23fff' stroke='%23000'/%3E%3Cpath d='M15.5 13.5v5M13.5 15.5h5' stroke='%23000'/%3E%3C/svg%3E") 0 0, copy;
 }
+/* alt in Paths: the arrow with a minus, over the stretch of path a click deletes */
+html.win3 canvas.deleting {
+  cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' shape-rendering='crispEdges'%3E%3Cpath d='M.5.5v15l3.5-3.5 2.5 6 2-1-2.5-5.5h5z' fill='%23fff' stroke='%23000'/%3E%3Crect x='11.5' y='11.5' width='8' height='8' fill='%23fff' stroke='%23000'/%3E%3Cpath d='M13.5 15.5h5' stroke='%23000'/%3E%3C/svg%3E") 0 0, pointer;
+}
 html.win3 button:focus-visible { outline:1px dotted var(--w3-frame); outline-offset:-4px; }
 
 /* windows: a grey frame between black lines, with a navy title bar — a control-menu box at its left, minimize and maximize at its right */
@@ -105,12 +109,12 @@ html.win3 #panel.win3-minimized > :not(.win3-titlebar) { display:none !important
 
 /* push buttons: grey, bevelled, black-edged; pressed ones sink in */
 html.win3 .toolbar { background:transparent; border:none; border-radius:0; padding:0; gap:6px; }
-html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool, #grid-toggle, #join-toggle, .carousel-arrow, .add-color-confirm, .type-card) {
+html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool, #grid-toggle, .carousel-arrow, .add-color-confirm, .type-card) {
   background:var(--w3-face); color:var(--w3-btn-text); border:1px solid var(--w3-frame); border-radius:3px; box-shadow:var(--w3-raised);
 }
-html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool:not(:disabled), #grid-toggle, #join-toggle, .carousel-arrow, .add-color-confirm, .type-card):active,
-html.win3 :is(.tool-btn.active, #grid-toggle.active, #join-toggle.active, .canvas-tool.on, .type-card.active) { background:var(--w3-face); color:var(--w3-btn-text); box-shadow:var(--w3-pressed); }
-html.win3 :is(.tool-btn:not(.active):hover, .btn:hover, .btn.danger:hover, .icon-btn:hover, .canvas-tool:not(.on):hover:not(:disabled), #grid-toggle:hover, #join-toggle:hover, .carousel-arrow:hover, .add-color-confirm:hover, .type-card:hover) { color:var(--w3-btn-text); border-color:var(--w3-frame); background:var(--w3-face); }
+html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool:not(:disabled), #grid-toggle, .carousel-arrow, .add-color-confirm, .type-card):active,
+html.win3 :is(.tool-btn.active, #grid-toggle.active, .canvas-tool.on, .type-card.active) { background:var(--w3-face); color:var(--w3-btn-text); box-shadow:var(--w3-pressed); }
+html.win3 :is(.tool-btn:not(.active):hover, .btn:hover, .btn.danger:hover, .icon-btn:hover, .canvas-tool:not(.on):hover:not(:disabled), #grid-toggle:hover, .carousel-arrow:hover, .add-color-confirm:hover, .type-card:hover) { color:var(--w3-btn-text); border-color:var(--w3-frame); background:var(--w3-face); }
 html.win3 .tool-btn.active { text-decoration:underline; }
 /* every icon on a button the size a toolbar button's picture was, from Word 2 and Excel 4 on: 16x15 (drawn onto those
    pixels by src/ui/pixel-icons.js) */
@@ -290,8 +294,7 @@ html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; 
   }
   html.win3 #canvas-tools::before { order:-2; } /* (after Edit; the tools packed from the left, as Word 2's and Excel 4's */
   html.win3 #canvas-tools::after { order:2; }   /*  were, with Maps' auto margin leaving the rest before the meter) */
-  html.win3 #canvas-tools :is(.canvas-tool, #grid-toggle) { width:24px; height:22px; }
-  html.win3 #canvas-tools #join-toggle { height:22px; } /* (Word 2's and Excel 4's buttons) */
+  html.win3 #canvas-tools :is(.canvas-tool, #grid-toggle) { width:24px; height:22px; } /* (Word 2's and Excel 4's buttons) */
   html.win3 #history-tools { gap:4px; }
   /* World / Edit / Maps, moved here from the side panel (see win3-menu.js): their group melts into the strip, so Edit
      leads it, set off from the rest, World starts the icons and Maps ends them (tools.js still finds them in the group) */

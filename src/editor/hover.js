@@ -54,7 +54,7 @@ export function findNearestEdge(gp, zoneThreshold, skipLine = null) {
   if (S.currentTool==='road') {
     const type = currentPathType();
     S.roadLines.forEach(line => {
-      if (line===skipLine || pathTypeOf(line)!==type) return; // (only the Paths tab's own type can be added to)
+      if (line===skipLine || Array.isArray(skipLine) && skipLine.includes(line) || pathTypeOf(line)!==type) return; // (only the Paths tab's own type can be added to)
       const th = Math.max((line.width||S.DEFAULT_ROAD_WIDTH)/2+3, 6);
       const pts = line.nodeIds.map(id=>roadNodes[id]).filter(Boolean);
       for (let i=0;i<pts.length-1;i++) {
