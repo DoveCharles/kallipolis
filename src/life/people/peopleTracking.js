@@ -3,7 +3,7 @@ import { App, S } from '../../core/shared.js';
 import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
-import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, isGone, modelScale, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
+import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, isGone, modelScale, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
 import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver } from './peopleActivities.js';
 import { placeAtVertex, reseatPerson } from './peoplePathing.js';
@@ -267,7 +267,7 @@ export function possessPerson(i) {
   p.mode = 'possessed';
   p.onRoad = false;
   swing = null;
-  if (!startPossession(i, p.heading + (p.traits.backwards ? Math.PI : 0))) { p.mode = 'wander'; reseatPerson(p); return; }
+  if (!startPossession(i, p.heading + moonwalkTurn(p))) { p.mode = 'wander'; reseatPerson(p); return; }
   cameraNear = camera.near;
   camera.near = S.hideOwnHead ? EYE_NEAR_HEADLESS : EYE_NEAR;
   camera.updateProjectionMatrix();

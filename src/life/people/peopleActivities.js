@@ -1,5 +1,5 @@
 import { App, S } from '../../core/shared.js';
-import { voiceOfPerson, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
+import { voiceOfPerson, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { roomLayoutOf } from '../../buildings/footprints.js';
 import { updateBuying } from './peopleStalls.js';
@@ -1330,7 +1330,7 @@ export function updateIndoors(p, i, dt) {
     standUp(p);
     p.inRoom = null; p.faceTo = null;
     p.x = door.x; p.z = door.z; p.y = visit.building.y;
-    p.heading = headingTo(p, visit.back) + (p.traits.backwards ? Math.PI : 0);
+    p.heading = headingTo(p, visit.back) + moonwalkTurn(p);
     if (followed === i) lookAtPerson(p);
     // and out with whoever the building's card was told to wait on: the camera leaves the building for them
     if (awaited === i) { awaited = -1; App.stopFollowingBuilding?.(); followPerson(i); }

@@ -42,6 +42,10 @@ export { loadPersonModel } from './peopleModel.js';
 
 export const PEOPLE_MAX = 2000;
 export const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
+/** Moonwalkers (the backwards trait) face the way they're going, the walk played in reverse — or, false, face away and step backwards. */
+export const MOONWALK_FACING_FORWARD = true;
+/** How far a moonwalker faces round from the way they're going. */
+export const moonwalkTurn = p => p.traits.backwards && !MOONWALK_FACING_FORWARD ? Math.PI : 0;
 /** How often, at least, the walkways are resampled to a point — for entrances and for re-seating people. */
 export const PEOPLE_NAV_SPACING = 4;
 S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false, S.showPeopleNavDebug = false, S.peopleFrozen = null;
@@ -1123,7 +1127,7 @@ export function updatePeople(t) {
         // which way they face, and whether they're walking, go by how far they actually moved this frame — someone
         // keeping pace with their walkway is always right on top of the point they're heading for
         if (Math.hypot(mx, mz) > (possessed ? 1e-3 : speed*dt*0.25)) {
-          const facing = Math.atan2(mx, mz) + (p.traits.backwards ? Math.PI : 0); // (or away from it, walking backwards)
+          const facing = Math.atan2(mx, mz) + moonwalkTurn(p); // (or away from it, walking backwards)
           p.heading += Math.atan2(Math.sin(facing - p.heading), Math.cos(facing - p.heading))*Math.min(1, dt*8);
           p.moving = true;
           p.stepped = Math.hypot(mx, mz);
@@ -1136,7 +1140,7 @@ export function updatePeople(t) {
     // possessed, they face the way they're looking — the walk played backwards, stepping backwards
     if (possessed && !frozen) {
       p.heading = possession.yaw;
-      if (p.moving && controlInput().forward < 0 !== !!p.traits.backwards) p.stepped = -p.stepped;
+      if (p.moving && controlInput().forward < 0 !== !!moonwalkTurn(p)) p.stepped = -p.stepped;
     }
     // standing still for something (talking, sitting down), they turn to face the way it wants
     if (!p.moving && p.faceTo != null) p.heading += wrapAngle(p.faceTo - p.heading)*Math.min(1, dt*5);
