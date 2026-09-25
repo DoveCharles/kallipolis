@@ -9,6 +9,9 @@ I really hate [interests: general, hated].
 I wonder if [animals: plural] dream. {world.hour 21-4}
 Can't sleep... {world.hour 23-4, here.building = home}
 Need a drink. {here.building = pub}
+I know this one... {here.building = pub, weight = 0.5}
+Turn it up. {here.building = pub, is = drunk}
+Turn it down. {here.building = pub, patience = -1}
 I still can't stop thinking about it. {seen, weight = 3}
 Lovely morning. {world.hour 6-11, mood}
 Everyone's dying lately. {world.morality < -0.3, world.morality = -1}

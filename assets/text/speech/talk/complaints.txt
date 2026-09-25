@@ -29,3 +29,6 @@ This weather, honestly. {world.weather = rain, mood = -1}
 Things have been so peaceful lately. {world.morality > 0.3, world.morality = 1}
 > Too peaceful. {evil}
 > Isn't it lovely? {evil = -1}
+Who picks the music in here? {here.building = pub, patience = -1}
+> Nobody, it just plays.
+>> Well it's shit. {aggression}

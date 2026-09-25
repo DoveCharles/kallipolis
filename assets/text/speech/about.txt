@@ -75,6 +75,7 @@
 #   {here.indoors}            only inside a building          {here.outdoors}   only outside
 #   {here.building = pub}     only inside that kind of building (a kind from buildings.txt: house, shop, pub, terrace...)
 #                             or room (home, office, pub, warehouse, factory)
+#                             (a pub always has music on — audio/pub-music.js — so pub lines can talk about it)
 #   {here.park}               only in a park — or here.plaza, here.beach (hangouts), here.roadside (on a pavement by a
 #                             road), here.path (another walkway), here.bridge (a raised one), here.crossing (crossing a road)
 #   {here.town}               only standing in a zone of that type — plain, park, water, beach, farmland, suburbs, town,

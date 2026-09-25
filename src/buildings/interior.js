@@ -9,6 +9,7 @@ import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer
 import { setCutout } from '../ui/pixelation.js';
 import { isMuted, playSound, setIndoors } from '../audio/sfx.js';
 import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
+import { pubMusic, stopPubMusic } from '../audio/pub-music.js';
 import { loadingTask, loadingSay } from '../ui/loading.js';
 
 // ============================================================ going inside a building
@@ -2588,6 +2589,7 @@ function fadeWhatsInTheWay() {
   }
 }
 
+const speakerAt = new THREE.Vector3();
 // Each frame: the view eased wider inside a room, and back to its usual angle outside.
 export function updateInteriorCamera() {
   updateTV();
@@ -2599,6 +2601,9 @@ export function updateInteriorCamera() {
   if (inside && current === LAYOUTS.office && performance.now() - occupiedAt < 1000) {
     officeAmbience({ printer: current.printer, desks: current.desks, centre: room.localToWorld(new THREE.Vector3(0, 1, 0)), people: occupants });
   }
+  // (a pub's music comes from up by the ceiling, over the middle of the room)
+  if (inside && current === LAYOUTS.pub && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)));
+  else stopPubMusic();
   const goal = inside ? viewFov() : (App.ridingFov?.() ?? BASE_FOV*(App.boostFovScale?.() ?? 1)); // (riding a train carriage sets its own: see trains.js; boosting widens it: see life/traffic/driving.js)
   if (camera.fov === goal) return;
   camera.fov = Math.abs(goal - camera.fov) < 0.05 ? goal : camera.fov + (goal - camera.fov)*FOV_EASE;
