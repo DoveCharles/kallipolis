@@ -477,3 +477,15 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 .pc-status { color:var(--accent); }
 /* (their headshot, faded while they're out of sight indoors) */
 .pc-thumb.pc-away { opacity:0.35; }
+
+/* the car card's Details window (src/life/car-details.js): stat bars in two columns, above the card (bottom set by JS) */
+.car-details .cd-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px 12px; }
+.car-details .cd-cell { display:grid; grid-template-columns:58px 1fr; align-items:center; gap:6px; min-height:14px; }
+.car-details .cd-bar { position:relative; height:9px; background:rgba(0,0,0,.08); overflow:hidden; }
+.car-details .cd-bar > span { position:absolute; top:0; bottom:0; }
+.car-details .cd-own { left:0; background:#4a4a4a; }
+.car-details .cd-up { background:#2fae4a; }
+.car-details .cd-down { background:#d23a3a; }
+.car-details .cd-flags { font-weight:700; letter-spacing:1px; white-space:nowrap; }
+.car-details.win3-minimized { padding-bottom:0; }
+.car-details.win3-minimized .cd-grid { display:none; }

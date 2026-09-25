@@ -5,6 +5,7 @@ import { makeThumbnailDrawer } from './thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
 import { garbles, garbled } from '../ui/garble.js';
 import { hashNameToNumber } from '../core/math.js';
+import { showCarDetails, hideCarDetails } from './car-details.js';
 
 // ============================================================ car card
 // Who's behind the wheel, in a card at the bottom right while the camera follows a vehicle (see "following a car" in
@@ -34,11 +35,13 @@ function showCarCard(i, info, car) {
   drawCarThumbnail(i);
   card.setFavorite({ key: car, kind: 'Car', follow: () => App.followCar(car) });
   card.bindHealth(car, 'car');
+  showCarDetails(car, card.el);
   showBoost();
 }
 function hideCarCard() {
   shown = -1;
   card.hide();
+  hideCarDetails();
   showBoost();
 }
 
