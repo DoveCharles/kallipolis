@@ -105,6 +105,7 @@ export function newCar() {
 export function carJoinLane(car, li, u, dir) {
   const nav = S.trafficNav.lines[li];
   car.li = li; car.dir = dir; car.u = Math.max(0, Math.min(nav.total, u)); car.turned = null;
+  car.plan = null; // (a plan names lines by index, so one made on an older nav would point at the wrong line)
   car.seg = 0;
   while (car.seg < nav.pts.length-2 && nav.cum[car.seg+1] <= car.u) car.seg++;
 }
