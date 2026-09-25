@@ -1,0 +1,7 @@
+# How big things are (see about.txt).
+forms: base | comparative | superlative
+big
+small
+huge
+tiny
+enormous

@@ -1,7 +1,19 @@
 # Having a moan (see about.txt).
+Someone tried to [violence] me yesterday. {aggression = -1}
+> Did you [violence] them back? {aggression}
+> Is that why you're limping? {other.is = hurt}
+>> Don't ask. {aggression}
 You make me so so mad sometimes. {aggression}
-> Why are you crying?
+> Why are you crying? {other.is = sad}
+>> I'm not crying! {is = sad}
+> Why are you shouting? {other.aggression > 0.3}
+> Calm down. {other.is != sad, patience}
 > [dismissal]
+I can't stand [folk: hated]. {aggression}
+> Me neither.
+> That's a bit harsh. {evil = -1}
+Don't get me started on [beliefs: hated]. {aggression}
+> Too late. {patience = -1}
 That fucking twat. {aggression, evil}
 > Who?
 >> You know who.

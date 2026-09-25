@@ -29,10 +29,17 @@ let lastReaction = -Infinity;
 export const SEEN_TIME = 60; // seconds someone remembers what they saw or felt, for {seen} and {felt} (p.seen / p.felt: see witness, notice and feel in people/people.js)
 const DEATHS = ['killedbycar', 'beatentodeath', 'smited', 'drowned', 'exploded'];
 const SIGHTS = [...DEATHS, 'death', 'punch', 'knockedbycar', 'resurrected', 'waterwalking', 'smelly']; // ('death': any of DEATHS)
-const FEELINGS = ['punched', 'hitbycar', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust'];
-const STATES = { // {is = …}: how the speaker is right now
+const FEELINGS = ['punched', 'hitbycar', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean'];
+const MOOD_SHOWS = 0.3;       // how far their face (p.emotion, -1 to 1) has to be from neutral for is = sad / happy
+const HURT_BELOW = 0.7;       // share of full health under which they're hurt
+const STATES = { // {is = …}: how the speaker (or other.is: who they're talking to) is right now
   drunk: person => !!person?.traits?.drunk || (person?.pints ?? 0) >= 1, // (the drunk trait, or a pint or more in them)
   bloodlusting: person => !!person?.lusting,
+  bloody: person => (person?.blood ?? 0) > 0,
+  sad: person => (person?.emotion ?? 0) < -MOOD_SHOWS,
+  happy: person => (person?.emotion ?? 0) > MOOD_SHOWS,
+  scared: person => person?.fright?.stage === 'flee' || ((person?.blood ?? 0) > 0 && !person?.traits?.bloodlust),
+  hurt: person => !!person?.health && person.health.hp < person.health.max*HURT_BELOW,
 };
 const PLACES = ['park', 'plaza', 'beach', 'roadside', 'path', 'bridge', 'crossing']; // (here.<place>: see placeOf)
 // here.<zone>: standing in a zone of that type (zoneOf); city is the 'buildings' zone
@@ -75,14 +82,14 @@ function parseTags(text, where) {
       if (what && !known.includes(what)) warnOnce(`in ${where}, "${kind} = ${m[2]}" isn't one of: ${known.join(', ')}`);
       else tags.world.push({ kind, what });
     }
+    else if ((m = part.match(/^(other\.)?is\s*(!?=)\s*(\w+)$/i))) {
+      if (STATES[m[3].toLowerCase()]) tags.world.push({ kind: 'is', other: !!m[1], not: m[2] === '!=', is: m[3].toLowerCase() });
+      else warnOnce(`in ${where}, "is = ${m[3]}" isn't one of: ${Object.keys(STATES).join(', ')}`);
+    }
     else if ((m = part.match(/^(other\.)?([a-z]+)\s*(<=|>=|<|>)\s*(-?\d+(?:\.\d+)?)$/i)) && TRAITS[m[2].toLowerCase()])
       tags.world.push({ kind: 'trait', other: !!m[1], trait: m[2].toLowerCase(), op: m[3], value: +m[4] });
     else if ((m = part.match(/^other\.([a-z]+)\s*(?:=\s*(-?\d+(?:\.\d+)?))?$/i)) && TRAITS[m[1].toLowerCase()])
       tags.world.push({ kind: 'otherLean', trait: m[1].toLowerCase(), value: m[2] == null ? 1 : +m[2] });
-    else if ((m = part.match(/^is\s*=\s*(\w+)$/i))) {
-      if (STATES[m[1].toLowerCase()]) tags.world.push({ kind: 'is', is: m[1].toLowerCase() });
-      else warnOnce(`in ${where}, "is = ${m[1]}" isn't one of: ${Object.keys(STATES).join(', ')}`);
-    }
     else if (/^thought$/i.test(part)) tags.thought = true;
     else if ((m = part.match(/^end(?:\s*=\s*(good|bad))?$/i))) tags.end = (m[1] ?? 'good').toLowerCase();
     else if ((m = part.match(/^weight\s*=\s*(\d+(?:\.\d+)?)$/i))) tags.weight = +m[1];
@@ -121,15 +128,27 @@ function parseFile(name, text, path = `speech/${name}.txt`) {
 }
 
 // An entry's forms by name, with the ones left out worked out: plural from the singular, general from the plural (else
-// the singular); "-" means it has none.
+// the singular); a verb's third ("she bites") from its base, its first word taking the -s; an adjective's comparative
+// and superlative from its base (-er/-est for one syllable or two ending in y, else "more"/"most"); "-" means it has none.
 function wordForms(given, names) {
   const forms = {};
   names.forEach((name, i) => { if (given[i] && given[i] !== '-') forms[name] = given[i]; else if (given[i] === '-') forms[name] = null; });
   if (names.includes('plural') && forms.plural === undefined && forms.singular) forms.plural = pluralOf(forms.singular);
   if (names.includes('general') && !forms.general) forms.general = forms.plural || forms.singular;
+  if (names.includes('third') && forms.third === undefined && forms.base) forms.third = forms.base.replace(/^\S+/, first => pluralOf(first));
+  if (names.includes('comparative') && forms.comparative === undefined && forms.base) forms.comparative = compared(forms.base, 'er', 'more');
+  if (names.includes('superlative') && forms.superlative === undefined && forms.base) forms.superlative = compared(forms.base, 'est', 'most');
   Object.keys(forms).forEach(key => { if (forms[key] == null) delete forms[key]; });
   forms.first = given[0];
   return forms;
+}
+function compared(word, ending, many) {
+  const syllables = (word.toLowerCase().replace(/e$/, '').match(/[aeiouy]+/g) || []).length;
+  if (/\s/.test(word) || (syllables > 1 && !/y$/i.test(word)) || syllables > 2) return `${many} ${word}`; // (two syllables take -er only ending in y)
+  if (/[^aeiou]y$/i.test(word)) return word.slice(0, -1) + 'i' + ending;
+  if (/e$/i.test(word)) return word + ending.slice(1);
+  if (/^[^aeiou]*[aeiou][bdgmnpt]$/i.test(word)) return word + word.slice(-1) + ending; // (one syllable: big → bigger)
+  return word + ending;
 }
 function pluralOf(word) {
   if (/[^aeiou]y$/i.test(word)) return word.slice(0, -1) + 'ies';
@@ -265,7 +284,7 @@ function insidePoly(poly, x, z) {
 }
 
 const worldAllows = (world, person) => world.every(w => {
-  if (w.kind === 'is') return STATES[w.is](person);
+  if (w.kind === 'is') { const who = w.other ? speakingTo : person; return !!who && STATES[w.is](who) !== w.not; }
   if (w.kind === 'place') return placeOf(person) === w.is || (!!ZONES[w.is] && !buildingOf(person) && zoneOf(person) === ZONES[w.is]);
   if (w.kind === 'indoors') return !!buildingOf(person) === w.is;
   if (w.kind === 'building') { const b = buildingOf(person); return !!b && (b.kind === w.is || roomLayoutOf(b.kind, b.number) === w.is); }
@@ -340,8 +359,8 @@ function fill(text, person, vars, depth = 0) {
     const [rawName, tag] = head.split('#').map(s => s.trim());
     const name = rawName.toLowerCase(), options = rest.join(':').split(',').map(o => o.trim().toLowerCase()).filter(Boolean);
     if (NAMED.test(name)) { const said = nameIn(name, person); if (!said) failed = true; return said ?? ''; }
-    const hated = options.includes('hated'), article = options.includes('a');
-    const form = options.find(o => o !== 'hated' && o !== 'a') || null;
+    const hated = options.includes('hated'), article = options.includes('a'), lower = options.includes('lower');
+    const form = options.find(o => o !== 'hated' && o !== 'a' && o !== 'lower') || null;
     const held = tag ? vars[`${name}#${tag}`] : null;
     const item = held || pickItem(categoryItems(name), person, { form, hated });
     if (!item) { failed = true; return ''; }
@@ -349,6 +368,7 @@ function fill(text, person, vars, depth = 0) {
     let said = item.forms ? (form && item.forms[form]) || item.forms.first : item.text;
     if (!item.forms && depth < MAX_DEPTH) said = fill(said, person, vars, depth + 1);
     if (said == null) { failed = true; return ''; }
+    if (lower) said = said.charAt(0).toLowerCase() + said.slice(1); // (a list written with capitals, like people/loves.txt)
     return article ? `${/^[aeiou]/i.test(said) ? 'an' : 'a'} ${said}` : said;
   });
   return failed ? null : out.replace(/\s+/g, ' ').trim();

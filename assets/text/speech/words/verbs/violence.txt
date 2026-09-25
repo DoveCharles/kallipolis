@@ -1,0 +1,8 @@
+# Hurting people, as verbs (see about.txt). Leaning to the aggressive and the evil.
+forms: base | past | ing | third
+punch | punched | punching {aggression}
+kick | kicked | kicking {aggression}
+slap | slapped | slapping
+bite | bit | biting {evil = 0.3}
+stab | stabbed | stabbing {evil}
+strangle | strangled | strangling {evil}

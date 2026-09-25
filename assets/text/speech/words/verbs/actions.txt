@@ -1,0 +1,14 @@
+# Everyday things people do (see about.txt): "I should [actions] more", "he [actions: third] every Sunday",
+# "she was [actions: ing] all day", "we [actions: past] for hours".
+forms: base | past | ing | third
+dance | danced | dancing {fidgety}
+sing | sang | singing {happy}
+swim | swam | swimming
+run | ran | running {speed}
+cook | cooked | cooking
+shop | shopped | shopping
+sleep | slept | sleeping {lounging}
+knit | knitted | knitting {patience}
+fish | fished | fishing | fishes {patience}
+garden | gardened | gardening
+gossip | gossiped | gossiping {nosy}

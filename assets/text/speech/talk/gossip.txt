@@ -12,6 +12,13 @@ Well, I didn't vote for him.
 Did you hear about [boynames] [surnames]? {nosy}
 > What about them?
 >> They [badhabits: past]!
+[boynames] [actions: third] every day, you know. {nosy}
+> Good for him.
+> He [badhabits: third] too. {evil}
+[girlnames]'s really into [hobbies] now. {nosy}
+> Since when?
+Apparently [boynames] loves [vice]. {nosy, evil}
+> I'm not surprised.
 Irish people scare me.
 > [dismissal]
 Have you seen that show about [nouns: general]?

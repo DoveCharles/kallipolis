@@ -1,0 +1,4 @@
+# Every adjective (see about.txt): cheerful people lean to the good ones, glum people to the bad.
+[good] {mood}
+[bad] {mood = -1}
+[sizes] {weight = 0.5}

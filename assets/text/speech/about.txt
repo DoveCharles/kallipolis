@@ -4,7 +4,9 @@
 # assets/text/index.txt, which serve.py rewrites itself — after adding or moving files without it running, run
 # `python3 serve.py --index`, and commit index.txt so the deployed site sees them.
 # The lists in text/people/ are categories too — [boynames], [girlnames], [unisexnames], [surnames], [nicknames],
-# [moods], [loves], [hates] — with their [trait] brackets left off.
+# [moods], [loves], [hates] — with their [trait] brackets left off. The loves and hates are also copied into
+# words/topics/, sorted by subject ([tastes], [hobbies], [folk], [vice]...; [topics] is them all) with {tags} from their
+# traits: add new ones to both, keeping the words the same, so someone's own love still matches.
 # Only files in speech/ and people/ are categories: the rest of assets/text/ (bees.txt, cars.txt, tv.txt...) is never
 # read for speech, so [bees] or [cars] won't work. about.txt files are never categories either.
 # Speech starts from dialogue.txt (conversations), thoughts.txt (alone, as they fidget; no replies, shown but not said) and reactions.txt
@@ -28,7 +30,8 @@
 # then each entry gives them in that order. Missing ones are worked out:
 #   plural    made from the singular (rhino → rhinos, bus → buses, fly → flies); "-" means it has none
 #   general   the thing in general ("I like knives", "I like cheese"): the plural if it has one, else the singular
-# Verbs use:  forms: base | past | ing
+# Verbs use:  forms: base | past | ing | third     (third, "she bites", made from the base when left out)
+# Adjectives: forms: base | comparative | superlative   (made when left out: -er/-est, or more/most for a long word)
 # An entry with no forms (a phrase like Fishing) gives itself for any form. A call for a form an entry doesn't have
 # skips that entry.
 #
@@ -37,18 +40,23 @@
 #   [animals]                 the first form
 #   [animals: plural]         a named form (plural, general, past, ing, ...)
 #   [animals: a]              with a/an in front: "a rhino", "an owl"
+#   [loves: lower]            its first letter made small, for lists written with capitals (people/'s): "I love energy drinks"
 #   [interests: hated]        a negative call: flips the leaning (see TAGS), so good people pick evil things, and uses the
 #                             speaker's hates where it'd use their loves (see LOVES AND HATES) — "I really hate [interests: general, hated]"
+#   [bad: superlative]        "worst"; [violence: past] "punched"; [badhabits: third] "bites"; [foods: general, lower]
 #   [pets#1]                  the same pick every time #1 is used, for the whole conversation — a reply can say
 #                             [pets#1: general] and mean the same pet ("a dog" ... "dogs")
 # The first letter of a line is capitalised when it's said, and the first after any . ! or ? (not an ellipsis …) — so write words in lower
 # case ("labubu!!!" mid-line makes the next word start with a capital), and proper nouns with their capitals.
+# Nothing is ever made lower case for you (it can't tell a name from a word), so a capital in a file comes out as written.
 #
 # ------------------------------------------------------------------------------------------------------------------------
 # TAGS: {…} after any entry, include or reply
 #   {weight = 3}              how often, next to its neighbours (default 1; on an include it multiplies every entry it brings)
 #   {evil}                    leans toward speakers high in that trait (same as evil = 1); any trait from people/about.txt
 #   {patience = -1}           leans toward speakers low in it
+#   {nosy, chatty = 0.5}      several at once: leans toward the nosy, and a little toward the chatty
+#   {aggression = -0.5, happy} a little toward the gentle, and toward the happy
 #   Each trait's value is measured from its neutral (0, or 1 for traits that multiply) toward its max or min, so every
 #   trait counts the same, -1 to +1.
 #   On an include line, tags are added to every entry reached through that line only: [knives] {evil = 0.5} in
@@ -58,7 +66,10 @@
 #   {world.morality = -1}     likelier the worse the player's morality (-1 worst to 1 best, the meter over its max)
 #   {world.morality < -0.3}   only while morality is below -0.3 (also >, <=, >=)
 #   {world.hour 22-5}         only from 10pm to the end of 5am (whole hours, both ends included; wraps past midnight)
+#   {world.morality > 0.3}    only while morality's good
+#   {world.hour 6-11}         only in the morning          {world.hour 22-3}  only late at night
 #   {world.weather = rain}    only while it's raining (rain, snow, cloud, clear)
+#   {world.weather = snow, mood = -1}  only in snow, leaning toward the gloomy
 #
 # HERE: where the speaker is (hard limits)
 #   {here.indoors}            only inside a building          {here.outdoors}   only outside
@@ -68,17 +79,30 @@
 #                             road), here.path (another walkway), here.bridge (a raised one), here.crossing (crossing a road)
 #   {here.town}               only standing in a zone of that type — plain, park, water, beach, farmland, suburbs, town,
 #                             plaza, city, industrial, airport (outdoors; on its roads and pavements too)
+#   {here.building = home, world.hour 23-4}   at home, late        {here.bridge}   on a bridge
+#   {here.crossing}           crossing a road                 {here.city, world.hour 22-4}   in the city at night
 #
 # TRAITS AS LIMITS: compare a trait's level (-1 at its min, 0 neutral, +1 at its max) — hard limits
 #   {evil > 0.5}              only speakers more than halfway to fully evil
 #   {patience < 0}            only the impatient
+#   {speed < 0}               only the slow                   {vampire > 0}   only vampires
+#   {evil > 0.5, aggression}  only the very evil, leaning toward the aggressive of them
 #
 # OTHER: the person they're talking to (whoever said the line being replied to, else whoever they're facing)
 #   {other.fidgety}           leans toward talking to fidgety people (other.trait = n, as for the speaker's own traits)
 #   {other.speed > 0.3}       only when the other person is fast (a hard limit; never true in a thought, with nobody)
+#   {other.fidgety > 0.3}     only to someone twitchy         {other.aggression > 0.3}   only to someone aggressive
+#   {other.is = sad}          only when the other person looks upset (see IS) — "> Why are you crying? {other.is = sad}"
+#   {other.is = bloody}       only to someone covered in blood — "Is that blood on you?! {other.is = bloody}"
+#   {other.is = drunk}        "> I think you've had enough. {other.is = drunk}"
+#   {other.is != happy}       only when they're not looking happy
+# Questions and remarks about the other person should be limited like this, so nobody asks why a smiling person's
+# crying. In a reply, the other person is whoever said the line above it: "You make me so mad. > Why are you crying?"
+# asks the first speaker.
 #
 # SEEN: something the speaker saw happen to someone else in the last 60 seconds (hard limits)
 #   {seen}                    anything                        {seen = drowned}  that one thing
+#   {seen = death}            any death                       {seen = punch, evil}   a punch, leaning toward the evil
 #   Deaths: killedbycar, beatentodeath, smited, drowned, exploded ({seen = death} is any of them). Others: punch (someone
 #   punched), knockedbycar (hit, not killed), resurrected, waterwalking, smelly (a smelly person near). Anyone near
 #   enough (or in the same building) sees it; a death isn't replaced by something lesser while it's fresh.
@@ -88,15 +112,24 @@
 #   {felt = watchedtv}        they just got up from the sofa after watching the TV
 #   {felt = fellover}         fell over drunk              {felt = drunk}   just got drunk (on pints)
 #   {felt = bloodlust}        bloodlust just came over them {felt = gaveup}  gave up chasing someone ([felt.by] is who)
-# IS: how the speaker is right now (hard limits)
+#   {felt = bloodsoaked}      just got splashed with blood  {felt = bloodclean}  the last of it's just come off
+# IS: how the speaker is right now (hard limits); other.is for who they're talking to, != for not
 #   {is = drunk}              the drunk trait, or a pint or more in them
 #   {is = bloodlusting}       bloodlusting now
+#   {is = bloody}             any blood on them               {is = hurt}     under 70% health
+#   {is = sad}                looking upset (their face)      {is = happy}    looking happy
+#   {is = scared}             running from something, or blood on them (unless they like it)
+#   {is != drunk}             sober                           {is = bloody, is = hurt}   both
+#   {other.is = hurt}         talking to someone hurt         {other.is != sad}   to someone not looking upset
 # Seeing or feeling something, people say a line from reactions.txt straight away — once each — before anything else:
 # aloud (in a conversation or on their own), unless it's tagged {thought} and they're on their own, or they're out of
 # hearing, when it's a thought. {seen} and {felt} work on any line anywhere.
 #
 # NAMES: [me.name] the speaker, [other.name] who they're talking to, [seen.name] who it happened to, [seen.by] who did
 # it, [felt.by] who did it to the speaker (for revenge, who they got back at). A line whose name can't be had isn't said.
+#   Catch you later, [other.name]. {end}
+#   [seen.by] just punched [seen.name]! {seen = punch}
+#   Ow! What was that for, [felt.by]? {felt = punched}
 #
 # ------------------------------------------------------------------------------------------------------------------------
 # LOVES AND HATES
@@ -108,6 +141,8 @@
 # ENDING A CONVERSATION
 #   {end}                     once said, the conversation ends well: the two wave goodbye (a circle: the speaker leaves)
 #   {end = bad}               ends it badly: no wave, and each may go for the other (more likely the more aggressive)
+#   Alright, bye then! {end, patience}          Get out of my face. {end = bad, aggression}
+#   > Leave me alone. {end = bad, patience = -1}  a reply that ends it
 #   Put them on replies to cut a conversation short ("> Mind your own business. {aggression, end = bad}") — an ending
 #   line's own replies are never said. When a conversation's time is up, someone says a line from closers.txt; if
 #   none is said within a few seconds, they just wave.

@@ -6,6 +6,7 @@ Lovely park, this. {here.park, happy}
 Mind the dog muck. {here.park}
 Shall we sit on the grass? {here.park, lounging}
 > My back won't let me. {lounging = -1}
+> You look like you need a sit down. {other.is = hurt}
 Nice fountain. {here.plaza}
 > I threw a coin in once. Nothing happened.
 Everyone's out today, aren't they? {here.plaza, nosy}

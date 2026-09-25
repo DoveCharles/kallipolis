@@ -15,3 +15,7 @@ It's [seen.name]! Run! {seen = resurrected}
 The sun! It burns! {vampire > 0}
 Wait for me! {is = drunk}
 I knew this city was cursed. {world.morality < -0.3}
+Get it off me! {is = bloody}
+It's everywhere! {is = bloody, shock}
+Is it mine?! Is it mine?! {is = bloody, is = hurt}
+I'm bleeding! {is = hurt, is != bloody}
