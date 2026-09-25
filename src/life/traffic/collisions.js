@@ -374,6 +374,7 @@ function kickCar(car, dirX, dirZ, distance) {
   const len = Math.hypot(dirX, dirZ);
   if (len < 1e-6 || distance <= 0) return;
   const kick = car.kick ??= { x: 0, z: 0, vx: 0, vz: 0, heading: car.heading, goal: null, seated: false, blocked: false, speed: 0, driving: 0 }, speed = distance*KICK_DECAY/len;
+  if (car.sway) { kick.x += car.sway.x; kick.z += car.sway.z; car.sway = null; } // (knocked from where it's drawn off its route — weave or pull-over — not from its route)
   kick.vx += dirX*speed; kick.vz += dirZ*speed;
   kick.goal = null; kick.seated = false; kick.speed = 0; kick.driving = 0; // (knocked again: it picks the nearest road and faces the way back once it stops)
 }
@@ -492,9 +493,7 @@ export function swayCrash(car) {
   sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS);
   if (other && other === drivenCar) slowedBy(other, 'car', car.traits?.weight); // (both null when it hit a building with no car driven) // (the player's car keeps its own handling, just jolted)
   else if (other) { kickCar(other, other.x - car.x, other.z - car.z, Math.min(1, speed*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1))); other.speed = 0; damage(other, knockDamage(car, other, speed)); }
-  car.sway = null;
-  kickCar(car, other ? car.x - other.x : -w.x, other ? car.z - other.z : -w.z, SWAY_BOUNCE*S.peopleSize);
-  car.kick.x += w.x; car.kick.z += w.z; car.kick.heading = car.heading;
+  kickCar(car, other ? car.x - other.x : -w.x, other ? car.z - other.z : -w.z, SWAY_BOUNCE*S.peopleSize); // (takes its weave into the kick)
   car.speed = 0;
   return true;
 }

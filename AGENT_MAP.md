@@ -109,7 +109,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `special.js` (6K) Legendary sheen/sparkles and terrible rust/hops. — exports: updateSpecialTraits, TERRIBLE_RUST, DEFAULT_HOLO
 - `drunk.js` (2K) Drunk AI cars' weave: sideways offset = width × (mean of 3 sines of distance driven)³ — mostly small, rare lurches; hits people anywhere (runOverPeople with motion) and cars/walls (swayCrash in collisions.js). — exports: weave
 - `pullover.js` (3K) Cars giving way to smelly ones (smells trait, e.g. ambulance): in its path within 30 → slow to a stop turned 45° half onto the pavement (car.pull), back out after it passes; smelly cars ignore pulled-over ones. — exports: smellyCars, updatePull, pullOf
-- `offroute.js` (1K) Draws an AI car off its route each frame (weave + pull-over) as car.sway; put on after placing, taken off before the next step. — exports: sway, unsway
+- `offroute.js` (1K) Draws an AI car off its route each frame (weave + pull-over) as car.sway; put on after placing, taken off before the next step. A knock (kickCar) folds the offset into car.kick; afterwards it eases back in over 1.5s (car.offEase). — exports: sway, unsway
 - `follow.js` (9K) The followed car (camera, card, thumbnail) and taking a car out (kill, drown, smite). — exports: followedCar, pickCar, followCar, stopFollowingCar, chaseCamera, killCar, drownCar, smiteCar, carThumbnailScene …
 
 ### src/life/people/

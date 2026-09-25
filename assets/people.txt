@@ -1103,9 +1103,10 @@ Swanstrike
 Missing
 Landing Gear
 1%
-Mile High
+Miles
 Cheeseburger
 Chow Mein
+Big Star
 
 ################################################################################################################################
 
@@ -1656,6 +1657,8 @@ Glowsticks
 Lapping up water like a dog
 Saying, "touché"
 Squirty cheese
+Angry Birds
+Dostoevsky's Crime and Punishment
 
 ################################################################################################################################
 
@@ -1989,4 +1992,5 @@ Having a bomb inside them [explosive, mood = -1, terrified, speed = 1.4]
 Showering [smells]
 The smell of earwax
 Being tarred and feathered
-Things that other people like [chatty = 0.5, talkative = 0.5]
+Anything liked by other people [chatty = 0.5, talkative = 0.5]
+Sex

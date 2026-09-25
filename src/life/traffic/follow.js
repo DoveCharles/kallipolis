@@ -55,7 +55,7 @@ export function pickCar(clientX, clientY, out) {
   return best;
 }
 const pickRay = new THREE.Raycaster(), pickPoint = new THREE.Vector2();
-const PICK_PAD = 0.012; // (padding round a car's box, per unit of distance from the camera — keeps far cars clickable)
+const PICK_PAD = 0.005; // (padding round a car's box, per unit of distance from the camera — keeps far cars clickable)
 /**
  * Where a ray first meets a car's box (its length, width and height, turned to its heading, sat where placeCar draws it).
  * @param {object} car
