@@ -31,12 +31,15 @@ const card = makeCard({
   } },
 });
 // (once people.txt has loaded, the card shows what it says)
-onProfilesLoaded(() => { if (shown) showPersonCard(shown.index, shown.isMan); });
-function showPersonCard(index, isMan) {
+onProfilesLoaded(() => { if (shown) showPersonCard(shown.index, shown.isMan, shown.beside); });
+// `beside`: picked in a building's room, so the card sits to the left of the building's, without its Smite button
+// (see followPersonInside in people/peopleTracking.js)
+function showPersonCard(index, isMan, beside = false) {
   // whoever's actually standing in that slot right now, not the slot itself — see peopleIdSeq in people.js
   const profile = profileOf(App.people[index]?.id ?? index, isMan);
   const { traits } = profile, again = shown?.index === index; // (again: people.txt just loaded, under an open card)
-  shown = { index, isMan, traits, seed: profile.age };
+  shown = { index, isMan, traits, seed: profile.age, beside };
+  card.el.classList.toggle('pc-beside', beside);
   card.relabel(garbles(traits) ? text => garbled(text, traits, profile.age) : null); // (the headings too: "Loves", "Hates", the title...)
   // loves and hates are lists: one line per entry, and an empty list hides its row. The traits aren't shown: they're what
   // the person does, not what the card says about them.

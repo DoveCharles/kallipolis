@@ -3,9 +3,9 @@ import { App, S } from '../../core/shared.js';
 import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
-import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, isGone, modelScale, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
+import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
-import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver } from './peopleActivities.js';
+import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver } from './peopleActivities.js';
 import { placeAtVertex, reseatPerson } from './peoplePathing.js';
 import { carryPossessed, footingAt, nearestRaisedVertex, stepFooting } from './peopleFooting.js';
 import { bloodSpeed, bloodlustSpeed, isBloodlusting } from './peopleBlood.js';
@@ -26,7 +26,8 @@ import { profileOf } from '../profiles.js';
 export const personHeight = p => 1.7*p.height*S.peopleSize*p.heightScale;
 /**
  * Find the person under a point on the screen (the one nearest the camera, if several are): a point within about their
- * width of the line up the middle of them, as they look on screen — or within a few pixels, for someone far off.
+ * width of the line up the middle of them, as they look on screen — or within a few pixels, for someone far off. From
+ * inside a building, only those in its room.
  * @param {number} clientX - the point's x, in pixels from the left of the window
  * @param {number} clientY - its y, in pixels from the top
  * @param {{distance: number}} [out] - given the picked person's distance from the camera, for comparing across kinds
@@ -35,9 +36,10 @@ export const personHeight = p => 1.7*p.height*S.peopleSize*p.heightScale;
 export function pickPerson(clientX, clientY, out) {
   if (!S.peopleEnabled) return -1;
   const width = window.innerWidth, height = window.innerHeight, foot = new THREE.Vector3(), head = new THREE.Vector3();
+  const indoors = !!App.isInsideBuilding?.();
   let best = -1, bestDepth = Infinity;
   people.forEach((p, i) => {
-    if (isGone(p)) return;
+    if (indoors ? !inRoom(p) : isGone(p)) return;
     foot.set(p.x, p.y, p.z).project(camera);
     head.set(p.x, p.y + personHeight(p), p.z).project(camera);
     if (Math.abs(foot.z) > 1 || Math.abs(head.z) > 1) return; // behind the camera, or beyond what it draws
@@ -69,12 +71,31 @@ export function followPersonAt(clientX, clientY) {
  * @returns {void}
  */
 export function followPerson(i) {
+  followedInside = false;
   setFollowed(i);
   setRiderFollowed(-1);
   const h = personHeight(people[i]);
   controls.minRadius = Math.max(1.2, h*0.8);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9)); // swooping in, if the camera's far off
   App.showPersonCard(i, personModel ? personModel.isMan[i] === 1 : null);
+  doingShown = undefined;
+  showFollowedDoing();
+}
+
+/** Whether the person followed was picked in the room the camera's in (see followPersonInside). */
+export let followedInside = false;
+/**
+ * Show the card of someone in the room the camera's inside, beside the building's (its Smite button put away), and make
+ * them the one the camera leaves the building with (see awaited in peopleActivities.js). The camera stays in the room.
+ * @param {number} i - their index in people
+ * @returns {void}
+ */
+export function followPersonInside(i) {
+  followedInside = true;
+  setFollowed(i);
+  setRiderFollowed(-1);
+  setAwaited(i);
+  App.showPersonCard(i, personModel ? personModel.isMan[i] === 1 : null, true);
   doingShown = undefined;
   showFollowedDoing();
 }
@@ -154,7 +175,7 @@ export function showFollowedDoing() {
   const p = people[followed], doing = personDoing(p);
   if (doing === doingShown) return;
   doingShown = doing;
-  App.setPersonCardDoing(doing, isGone(p) && !!p.indoors);
+  App.setPersonCardDoing(doing, isGone(p) && !!p.indoors && !inRoom(p));
 }
 
 // Where someone's head is, in the world, from their pose this frame, worked out as the shader works it out — the head bone's
@@ -236,8 +257,11 @@ export function stopFollowingPerson() {
   if (followed < 0) return;
   if (possession.index === followed) unpossessPerson();
   setFollowed(-1);
-  controls.minRadius = CAMERA_MIN_RADIUS;
-  controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
+  if (followedInside) followedInside = false; // (the room had the camera all along)
+  else {
+    controls.minRadius = CAMERA_MIN_RADIUS;
+    controls.goalRadius = Math.max(controls.goalRadius, CAMERA_MIN_RADIUS);
+  }
   App.hidePersonCard();
 }
 

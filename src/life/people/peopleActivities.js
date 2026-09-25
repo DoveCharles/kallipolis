@@ -12,7 +12,7 @@ import { isBloodlusting, punchSpill } from './peopleBlood.js';
 import { puffSmoke } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
-import { PUNCH_MIN_PUSH, followPerson, personHeight, stopFollowingPerson } from './peopleTracking.js';
+import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFollowingPerson } from './peopleTracking.js';
 import { openRoomDoor, roomBeyondDoor, roomDoorway, roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
 import { clearMeal, giveSnack, mealFinished, serveMeal } from './peopleHolding.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
@@ -1316,7 +1316,9 @@ export function updateIndoors(p, i, dt) {
     visit.stage = 'inside';
     visit.justIn = true; // (so if the camera's in there, they're seen coming in: see aboutTheRoom)
     p.faceTo = null; p.lookAt = null; p.oneShot = null;
-    if (followed === i) lookAtBuilding(visit.building);
+    // (with the camera following them, it goes in after them, their card beside the building's — and back out with them,
+    // as they're the one it's waiting on: see followPersonInside)
+    if (followed === i) { if (App.enterBuildingWith?.(visit.building.key)) followPersonInside(i); else lookAtBuilding(visit.building); }
     return null;
   }
   if (visit.stage === 'inside') {
@@ -1739,7 +1741,7 @@ export function setAwaited(v) { awaited = v; }
 /**
  * Tell the followed building's card who's inside, by name (see building-card.js). Clicking one of them waits on that one
  * — the camera leaves the building with them when they come back out the door (see awaited), the way it gets off a train
- * with whoever it came aboard with.
+ * with whoever it came aboard with. From inside the room, it brings up their card too (see followPersonInside).
  * @returns {void}
  */
 export function showInhabitants() {
@@ -1753,7 +1755,7 @@ export function showInhabitants() {
   if (key) App.setBuildingCardInhabitants(
     inside.map(i => profileOf(people[i].id, personModel ? personModel.isMan[i] === 1 : null).name),
     inside.indexOf(awaited),
-    at => { awaited = inside[at]; },
+    at => { if (App.isInsideBuilding()) followPersonInside(inside[at]); else awaited = inside[at]; },
   );
 }
 

@@ -385,7 +385,7 @@ dom.addEventListener('pointermove', (e) => {
     previewLine.visible = false;
     insertPreviewMarker.visible = false;
     setHover(null);
-    const overClickable = !App.isInsideBuilding() && (App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
+    const overClickable = App.isInsideBuilding() ? App.pickPerson(e.clientX, e.clientY) >= 0 : (App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
       || !!App.pickPlane(e.clientX, e.clientY) || !!App.pickBee(e.clientX, e.clientY) || !!App.pickHive(e.clientX, e.clientY) || !!App.pickPigeon(e.clientX, e.clientY)
       || !!App.pickBuilding(e.clientX, e.clientY));
     if (overClickable !== hoveringClickable) { hoveringClickable = overClickable; dom.style.cursor = overClickable ? 'pointer' : ''; }
@@ -527,6 +527,10 @@ dom.addEventListener('pointerup', (e) => {
       const kind = pickNearestFollowable(e.clientX, e.clientY) ?? 'Building';
       letGoOfAllBut(kind);
       App['follow' + kind + 'At'](e.clientX, e.clientY);
+    } else if (was.button===0 && dist<CLICK_SLOP && dt<600 && S.interactionMode==='move') {
+      // inside, a click on someone in the room brings up their card beside the building's (see followPersonInside)
+      const i = App.pickPerson(e.clientX, e.clientY);
+      if (i >= 0) App.followPersonInside(i);
     }
     return;
   }
