@@ -1871,10 +1871,11 @@ const carpet = ([field, lattice, rose, fleck]) => floorTexture(512, 0.8, (g, rng
     rosette(x, y, 18, fleck, rose);
   }
 });
+// (the flowers a dull old gold, not far off the field, so the pattern's there without shouting)
 const CARPETS = [
-  carpet(['#7a1c20', '#2a1a14', '#c8962e', '#1e3a2a']),
-  carpet(['#1e3a2c', '#14201a', '#b8862a', '#7a1c20']),
-  carpet(['#26284a', '#141628', '#c8a040', '#8a2a2a']),
+  carpet(['#6a1c20', '#3e1a16', '#7a4a28', '#3e2a22']),
+  carpet(['#1e3a2c', '#18281f', '#4e4a2a', '#4a2a22']),
+  carpet(['#26284a', '#1a1c34', '#4e4640', '#4a2a36']),
 ];
 
 // the pub: dark beams across the ceiling, panelled to the dado rail (see useLayout), and furnished afresh for each pub
@@ -1893,6 +1894,7 @@ Object.assign(LAYOUTS.pub, { furnished: pubGroup, panelled: true, ceiling: PUB_C
 function furnishPub(key) {
   const layout = LAYOUTS.pub, group = pubGroup;
   group.clear();
+  pubLamps = [];
   layout.blocked = []; layout.solid = []; layout.seats = [];
   grid = null;
   const rng = mulberry32(hashNameToNumber(key + ' pub'));
@@ -2071,7 +2073,37 @@ function furnishPub(key) {
       put(rng() < 0.75 ? 'Pint' : 'Stout', top.x + Math.cos(a)*d, top.z + Math.sin(a)*d, 0, { y: top.y, small: true });
     }
   }
+  lightPub(group, cx, cz);
   seatsInWorld(layout);
+}
+// The pub's lamps (see "the lamp"): one at every bulb it's hung (its Light parts), one in the fire's glow (Fire), and one
+// over the bar where the gantry lights would be, in that order of who gets left out past ROOM_LAMPS. A bulb on a wall, or
+// the fire in it, is lit from a little way into the room, so the wall right behind isn't burnt out.
+const PUB_LAMPS = { Fire: [0xff8a3c, 3], Light: [0xffc68a, 2.2], Bar: [0xffc68a, 2.5] }, PUB_DAYLIT = 0.4;
+let pubLamps = [], pubLit = 0;
+function lightPub(group, barX, barZ) {
+  const add = (kind, at) => {
+    const [hex, power] = PUB_LAMPS[kind], c = new THREE.Color(hex);
+    const lamp = new THREE.Object3D();
+    lamp.position.copy(at);
+    lamp.userData.light = new THREE.Vector3(c.r, c.g, c.b).multiplyScalar(power);
+    group.add(lamp);
+    pubLamps.push(lamp);
+  };
+  group.updateWorldMatrix(true, true);
+  const found = { Fire: [], Light: [] };
+  for (const piece of [...group.children]) for (const kind of ['Fire', 'Light']) {
+    const box = new THREE.Box3();
+    piece.traverse(o => { if (o.isMesh && o.material.name === kind) box.expandByObject(o); });
+    if (box.isEmpty()) continue;
+    const at = group.worldToLocal(box.getCenter(new THREE.Vector3()));
+    const inward = new THREE.Vector3(-at.x, 0, -at.z);
+    if (Math.abs(at.x) > ROOM_W/2 - 0.6 || Math.abs(at.z) > ROOM_D/2 - 0.6) at.add(inward.setLength(kind === 'Fire' ? 0.6 : 0.35));
+    found[kind].push(at);
+  }
+  found.Fire.forEach(at => add('Fire', at));
+  add('Bar', new THREE.Vector3(barX, ROOM_H - 0.3, barZ - 0.4));
+  found.Light.sort((a, b) => b.y - a.y).forEach(at => add('Light', at)); // (the pendants over the tables first)
 }
 
 // ---------------------------------------------------------------- the TV
@@ -2216,16 +2248,18 @@ function updateTV() {
 // shared uniforms, the way streetlights.js lights the streets. `lampLight` is just where the bulb is, and how bright.
 const LAMP_COLOR = 0xffc68a, LAMP_INTENSITY = 6, LAMP_REACH = 9, LAMP_DECAY = 1.2, LAMP_EASE = 0.05;
 const lampLight = Object.assign(new THREE.Object3D(), { intensity: 0 });
+// A pub has several (see pubLamps): up to ROOM_LAMPS in all, the rest left off.
+const ROOM_LAMPS = 10;
 const lampUniforms = {
-  roomLampPosition: { value: new SharedVector3() }, // world
-  roomLampLight: { value: new SharedVector3() },    // colour × intensity, zero when off
+  roomLampPosition: { value: Array.from({ length: ROOM_LAMPS }, () => new SharedVector3()) }, // world
+  roomLampLight: { value: Array.from({ length: ROOM_LAMPS }, () => new SharedVector3()) },    // colour × intensity, zero when off
   roomGlowLight: { value: new SharedVector3() },    // the people's share of the room's glow (ROOM_GLOW), zero outdoors
 };
 ['standard', 'physical', 'lambert', 'phong', 'toon'].forEach(id => Object.assign(THREE.ShaderLib[id].uniforms, lampUniforms));
 THREE.ShaderChunk.lights_pars_begin += /* glsl */`
 #ifdef ROOM_LAMP
-uniform vec3 roomLampPosition;
-uniform vec3 roomLampLight;
+uniform vec3 roomLampPosition[ ${ROOM_LAMPS} ];
+uniform vec3 roomLampLight[ ${ROOM_LAMPS} ];
 #endif
 #ifdef ROOM_GLOW
 uniform vec3 roomGlowLight;
@@ -2234,14 +2268,17 @@ uniform vec3 roomGlowLight;
 // (three.js's point light falloff, and no specular)
 THREE.ShaderChunk.lights_fragment_maps += /* glsl */`
 #if defined( RE_IndirectDiffuse ) && defined( ROOM_LAMP )
-if ( roomLampLight.r > 0.0 ) {
+if ( roomLampLight[ 0 ].r > 0.0 ) {
   vec3 roomWorld = ( -vViewPosition ) * mat3( viewMatrix ) + cameraPosition;
   vec3 roomNormal = normalize( normal * mat3( viewMatrix ) );
-  vec3 toLamp = roomLampPosition - roomWorld;
-  float lampDistance = length( toLamp );
-  float lampFalloff = pow( max( lampDistance, 0.01 ), -${LAMP_DECAY.toFixed(2)} )
-    * pow2( saturate( 1.0 - pow4( lampDistance / ${LAMP_REACH.toFixed(1)} ) ) );
-  irradiance += roomLampLight * lampFalloff * saturate( dot( roomNormal, toLamp / max( lampDistance, 0.01 ) ) );
+  for ( int i = 0; i < ${ROOM_LAMPS}; i ++ ) {
+    if ( roomLampLight[ i ].r <= 0.0 ) break;
+    vec3 toLamp = roomLampPosition[ i ] - roomWorld;
+    float lampDistance = length( toLamp );
+    float lampFalloff = pow( max( lampDistance, 0.01 ), -${LAMP_DECAY.toFixed(2)} )
+      * pow2( saturate( 1.0 - pow4( lampDistance / ${LAMP_REACH.toFixed(1)} ) ) );
+    irradiance += roomLampLight[ i ] * lampFalloff * saturate( dot( roomNormal, toLamp / max( lampDistance, 0.01 ) ) );
+  }
 }
 #endif
 // (the people: lit to match the room's own glow while the view's in one — the same all round, a little more from above)
@@ -2260,8 +2297,21 @@ function updateLamp() {
   const goal = on ? LAMP_INTENSITY*dark : 0;
   lampLight.intensity = Math.abs(goal - lampLight.intensity) < 0.01 ? goal : lampLight.intensity + (goal - lampLight.intensity)*LAMP_EASE;
   const shining = room.visible && lampLight.parent ? lampLight.intensity : 0;
-  lampUniforms.roomLampLight.value.set(lampColor.r, lampColor.g, lampColor.b).multiplyScalar(shining);
-  if (shining) lampLight.getWorldPosition(lampUniforms.roomLampPosition.value);
+  const lights = lampUniforms.roomLampLight.value, positions = lampUniforms.roomLampPosition.value;
+  let n = 0;
+  if (shining) {
+    lights[n].set(lampColor.r, lampColor.g, lampColor.b).multiplyScalar(shining);
+    lampLight.getWorldPosition(positions[n++]);
+  }
+  // a pub's lamps are on whenever it's open, dimmer by day (with the daylight coming in), easing up as it gets dark
+  const pubGoal = current === LAYOUTS.pub && room.visible ? PUB_DAYLIT + (1 - PUB_DAYLIT)*dark : 0;
+  pubLit = Math.abs(pubGoal - pubLit) < 0.005 ? pubGoal : pubLit + (pubGoal - pubLit)*LAMP_EASE;
+  if (pubLit) for (const lamp of pubLamps) {
+    if (n === ROOM_LAMPS) break;
+    lights[n].copy(lamp.userData.light).multiplyScalar(pubLit);
+    lamp.getWorldPosition(positions[n++]);
+  }
+  for (; n < ROOM_LAMPS; n++) lights[n].set(0, 0, 0);
   // (irradiance lighting a surface to ROOM_GLOW of its colour, as the room's materials glow)
   lampUniforms.roomGlowLight.value.setScalar(inside ? ROOM_GLOW*Math.PI : 0);
 }
