@@ -352,6 +352,21 @@ export function tyreSmoke(at, height, dt) {
   solidPuffs(at, height, Math.floor(TYRE_SMOKE_PER_SECOND*TYRE_RED_SHARE*dt + Math.random()), puffColor([0x110600]),
     { size: [0.1, 0.18], life: [0.7, 1.2], rise: [0.3, 0.8], spread: 0.05, outward: [0.1, 0.4], lift: 0.08, alpha: TYRE_RED_ALPHA, priority: CAR_SMOKE_PRIORITY, near: isNearCarSmoke });
 }
+// A drifting car's tyre at `at` over the `dt` seconds since it was last called (`height` the car's): thick pale smoke
+// billowing out and a spray of orange sparks skittering off the road — meant to read at a glance, so it keeps normal
+// particle range and priority, unlike tyreSmoke.
+const DRIFT_SMOKE_PER_SECOND = 45, DRIFT_SPARKS_PER_SECOND = 30;
+export function driftSmoke(at, height, dt) {
+  solidPuffs(at, height, Math.floor(DRIFT_SMOKE_PER_SECOND*dt + Math.random()), () => { const grey = 0.7 + Math.random()*0.2; return new THREE.Color(grey, grey, grey); },
+    { size: [0.18, 0.34], life: [0.9, 1.6], rise: [0.4, 1.1], spread: 0.08, outward: [0.4, 1.2], lift: 0.08 });
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  const now = performance.now()/1000;
+  for (let k = Math.floor(DRIFT_SPARKS_PER_SECOND*dt + Math.random()); k > 0; k--) {
+    const angle = Math.random()*Math.PI*2, outward = 1 + Math.random()*3;
+    pushFx({ kind: 'fire', x: at.x, y: at.y + 0.02, z: at.z, vx: Math.cos(angle)*outward, vy: 0.5 + Math.random()*2, vz: Math.sin(angle)*outward,
+      size: 0.04 + Math.random()*0.05, life: 0.15 + Math.random()*0.25, color: new THREE.Color(FIRE_COLORS[Math.random() < 0.5 ? 0 : 1]), born: now });
+  }
+}
 // Smoke from a stalled engine at `at`, `height` tall: plenty of grey puffs, climbing high. Same reduced range and low
 // priority as tyreSmoke, for the same reason.
 export function engineSmoke(at, height) {

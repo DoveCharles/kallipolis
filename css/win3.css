@@ -105,12 +105,12 @@ html.win3 #panel.win3-minimized > :not(.win3-titlebar) { display:none !important
 
 /* push buttons: grey, bevelled, black-edged; pressed ones sink in */
 html.win3 .toolbar { background:transparent; border:none; border-radius:0; padding:0; gap:6px; }
-html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool, #grid-toggle, #join-toggle, .carousel-arrow, .add-color-confirm, .type-card) {
+html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool, #grid-toggle, .carousel-arrow, .add-color-confirm, .type-card) {
   background:var(--w3-face); color:var(--w3-btn-text); border:1px solid var(--w3-frame); border-radius:3px; box-shadow:var(--w3-raised);
 }
-html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool:not(:disabled), #grid-toggle, #join-toggle, .carousel-arrow, .add-color-confirm, .type-card):active,
-html.win3 :is(.tool-btn.active, #grid-toggle.active, #join-toggle.active, .canvas-tool.on, .type-card.active) { background:var(--w3-face); color:var(--w3-btn-text); box-shadow:var(--w3-pressed); }
-html.win3 :is(.tool-btn:not(.active):hover, .btn:hover, .btn.danger:hover, .icon-btn:hover, .canvas-tool:not(.on):hover:not(:disabled), #grid-toggle:hover, #join-toggle:hover, .carousel-arrow:hover, .add-color-confirm:hover, .type-card:hover) { color:var(--w3-btn-text); border-color:var(--w3-frame); background:var(--w3-face); }
+html.win3 :is(.tool-btn, .btn, .icon-btn, .canvas-tool:not(:disabled), #grid-toggle, .carousel-arrow, .add-color-confirm, .type-card):active,
+html.win3 :is(.tool-btn.active, #grid-toggle.active, .canvas-tool.on, .type-card.active) { background:var(--w3-face); color:var(--w3-btn-text); box-shadow:var(--w3-pressed); }
+html.win3 :is(.tool-btn:not(.active):hover, .btn:hover, .btn.danger:hover, .icon-btn:hover, .canvas-tool:not(.on):hover:not(:disabled), #grid-toggle:hover, .carousel-arrow:hover, .add-color-confirm:hover, .type-card:hover) { color:var(--w3-btn-text); border-color:var(--w3-frame); background:var(--w3-face); }
 html.win3 .tool-btn.active { text-decoration:underline; }
 /* every icon on a button the size a toolbar button's picture was, from Word 2 and Excel 4 on: 16x15 (drawn onto those
    pixels by src/ui/pixel-icons.js) */
@@ -290,8 +290,7 @@ html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; 
   }
   html.win3 #canvas-tools::before { order:-2; } /* (after Edit; the tools packed from the left, as Word 2's and Excel 4's */
   html.win3 #canvas-tools::after { order:2; }   /*  were, with Maps' auto margin leaving the rest before the meter) */
-  html.win3 #canvas-tools :is(.canvas-tool, #grid-toggle) { width:24px; height:22px; }
-  html.win3 #canvas-tools #join-toggle { height:22px; } /* (Word 2's and Excel 4's buttons) */
+  html.win3 #canvas-tools :is(.canvas-tool, #grid-toggle) { width:24px; height:22px; } /* (Word 2's and Excel 4's buttons) */
   html.win3 #history-tools { gap:4px; }
   /* World / Edit / Maps, moved here from the side panel (see win3-menu.js): their group melts into the strip, so Edit
      leads it, set off from the rest, World starts the icons and Maps ends them (tools.js still finds them in the group) */

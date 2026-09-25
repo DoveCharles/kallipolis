@@ -694,23 +694,10 @@ function finishOnNode(nodeId) {
   rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderHierarchy();
 }
 
-// Join toggle (#join-toggle, beside the grid magnet): whether pathNodeUnder joins roads onto paths; remembered.
-const SNAP_TO_PATHS_KEY = 'splinetopia.snapToPaths';
-let snapToPaths = true;
-try { snapToPaths = localStorage.getItem(SNAP_TO_PATHS_KEY) !== '0'; } catch {}
-const joinToggle = document.getElementById('join-toggle');
-joinToggle.classList.toggle('active', snapToPaths);
-joinToggle.addEventListener('click', () => {
-  snapToPaths = !snapToPaths;
-  joinToggle.classList.toggle('active', snapToPaths);
-  try { localStorage.setItem(SNAP_TO_PATHS_KEY, snapToPaths ? '1' : '0'); } catch {}
-});
-
 // A click on another path of the same type's surface: the node it should join there — that path's node if one's within
 // its half-width of the click, else a new node on its edge — so the two meet at a junction instead of just overlapping
 // (lanes and junctions only link at shared nodes). Null if the click isn't on one.
 function pathNodeUnder(gp) {
-  if (!snapToPaths) return null;
   const found = findNearestEdge(gp, 0, S.activeRoadLine);
   if (!found || found.kind!=='road') return null;
   const reach = roadLineWidths(found.line).hw, ids = found.line.nodeIds;
