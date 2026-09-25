@@ -630,7 +630,7 @@ function buildStationParts(position, tangent, radius, mats) {
   // under it, and a plinth at the foot
   const lifts = stationLifts(position, radius);
   if (lifts.length) {
-    const shaftChrome = [], shaftGlass = [], shaftSolid = [], shaftGlow = [];
+    const shaftChrome = [], shaftGlass = [], shaftSolid = [], shaftGlow = [], shaftPlinth = [];
     const L = LIFT_DEPTH;
     lifts.forEach(({ side, across, width: W, bottom, top, roof, cab }) => {
       const cx = side*across, h = roof - bottom, doorH = cab + 0.15;
@@ -652,12 +652,13 @@ function buildStationParts(position, tangent, radius, mats) {
       [-1, 1].forEach(sz => shaftChrome.push(new THREE.BoxGeometry(2*L, 0.12, 0.12).translate(cx, top - deckDepth/2, sz*W)));
       // the roof: the awning over the landing carried on out over the shaft, just as thick and at just the same height
       shaftSolid.push(new THREE.BoxGeometry(2*L + 0.12, 0.16, 2*W).translate(cx + side*0.06, roof + 0.08, 0));
-      shaftSolid.push(new THREE.BoxGeometry(2*L + 0.4, 0.12, 2*W + 0.4).translate(cx, bottom + 0.06, 0));
+      shaftPlinth.push(new THREE.BoxGeometry(2*L + 0.4, 0.12, 2*W + 0.4).translate(cx, bottom + 0.06, 0));
       shaftGlow.push(new THREE.BoxGeometry(0.12, 0.1, 2*W).translate(cx + side*(L + 0.06), roof + 0.08, 0)); // along its outer edge
     });
     add(mergeGeometryList(shaftChrome), mats.chrome, 'TrainStationLiftFrame', true);
     add(mergeGeometryList(shaftGlass), mats.stationGlass, 'TrainStationLiftGlass', false);
     add(mergeGeometryList(shaftSolid), mats.station, 'TrainStationLiftRoof', true);
+    add(mergeGeometryList(shaftPlinth), mats.stationPlinth, 'TrainStationLiftPlinth', true);
     add(mergeGeometryList(shaftGlow), mats.stationTrim, 'TrainStationLiftGlow', true);
   }
 
@@ -707,6 +708,9 @@ export function rebuildTrainMeshes() {
       coilInner: new THREE.MeshStandardMaterial({ color:0xc47a45, roughness:0.28, metalness:0.85, envMap:SKY_ENV_MAP, envMapIntensity:1.2 }),
       steel: new THREE.MeshStandardMaterial({ color:0x9ba1a9, roughness:0.35, metalness:0.75, envMap:SKY_ENV_MAP }),
       station: new THREE.MeshStandardMaterial({ color:0xe8ecf1, roughness:0.35, metalness:0.25, envMap:SKY_ENV_MAP, envMapIntensity:0.8 }),
+      // the lift shafts' plinths: barely above walkway paving, so pulled forward further than its own offset (see makeWalkwayMaterial)
+      stationPlinth: new THREE.MeshStandardMaterial({ color:0xe8ecf1, roughness:0.35, metalness:0.25, envMap:SKY_ENV_MAP, envMapIntensity:0.8,
+        polygonOffset:true, polygonOffsetFactor:-8, polygonOffsetUnits:-8 }),
       stationGlass: new THREE.MeshStandardMaterial({ color:0xaee3ff, transparent:true, opacity:0.22, roughness:0.05, metalness:0.2, envMap:SKY_ENV_MAP, envMapIntensity:1.6, side:THREE.DoubleSide, depthWrite:false }),
       stationDoor: (() => {
         const m = new THREE.MeshStandardMaterial({ color:0x8fd4f2, transparent:true, opacity:0.38, roughness:0.05, metalness:0.3, envMap:SKY_ENV_MAP,
