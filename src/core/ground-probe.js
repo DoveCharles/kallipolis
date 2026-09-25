@@ -20,7 +20,7 @@ import { groundCandidates, refreshSceneIndex } from './scene.js';
 // a stencil helper over the same area; and 'Beach', the sloped sand running from the shore down under the water, which
 // would otherwise catch gibs partway down a slope that's still water. The main ground mesh has a hole cut under open
 // water, so a ray there finds nothing and falls through to `fallback`.
-const NON_GROUND_NAMES = new Set(['Water', 'WaterMask', 'Beach']);
+const NON_GROUND_NAMES = new Set(['Water', 'WaterMask', 'Beach', 'RoadDragPreview']); // (the last: the strip over a road being dragged, see roads/drag-preview.js)
 const MIN_UPWARD_NORMAL = 0.5; // a hit face must point at least this far upward to be stood on
 
 const isShown = o => { for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };

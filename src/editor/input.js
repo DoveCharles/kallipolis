@@ -8,6 +8,7 @@ import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { setSelectedMap, setMapHover, startMapTransform, applyMapTransform, confirmMapTransform, cancelMapTransform, previewLine } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, setLinePoints, roadLineWidths } from '../roads/roads.js';
 import { WALKWAY_COLOR, rebuildRoadMeshes } from '../roads/paths.js';
+import { moveRoadDragPreview, endRoadDragPreview } from '../roads/drag-preview.js';
 import { isTrainLine, isTrainNode, networkKindOf, pathTypeOf, currentPathType, trainNodeY, trainPlanePoint, dragTrainPoint, findNearestTrainEdge } from '../trains/trains.js';
 import { setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge } from './hover.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
@@ -154,6 +155,7 @@ function zoneNearBoxes(zone, boxes) {
 function commitNodeDrag(dn) {
   if (dn.kind === 'road' || dn.kind === 'roadHandle') {
     const line = S.roadLines.find(l => l.nodeIds.includes(dn.nodeId));
+    endRoadDragPreview();
     rebuildRoadMeshes();
     // (trains don't affect zones; and only the zones near where the road was or is now need redoing, which on a big city
     // is a fraction of them — each one's lots, buildings and trees take a while)
@@ -331,11 +333,11 @@ dom.addEventListener('pointermove', (e) => {
           if (n.handleIn) { n.handleIn.x+=dx; n.handleIn.z+=dz; }
           if (n.handleOut) { n.handleOut.x+=dx; n.handleOut.z+=dz; }
         }
-        S.roadsDirty = true; // (rebuilt once a frame by animate(), however many moves the mouse sends in between)
+        moveRoadDragPreview(S.draggedNode); // (the roads themselves are only rebuilt once it's let go of)
       } else if (S.draggedNode.kind==='roadHandle') {
         const n = roadNodes[S.draggedNode.nodeId];
         n[S.draggedNode.which] = gp;
-        S.roadsDirty = true;
+        moveRoadDragPreview(S.draggedNode);
       } else if (S.draggedNode.kind==='zone') {
         const zone=S.zones.find(z=>z.id===S.draggedNode.zoneId);
         if (zone) {

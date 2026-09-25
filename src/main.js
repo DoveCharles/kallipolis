@@ -65,7 +65,8 @@ import { mulberry32 } from './core/math.js';
 import { createWindowMaterial } from './buildings/windows.js';
 import { renderMapsList } from './maps/map-images.js';
 import { updatePedView } from './ui/ped-view.js';
-import { applyPathShader, applyWalkwayShader, rebuildRoadMeshes } from './roads/paths.js';
+import { applyPathShader, applyWalkwayShader } from './roads/paths.js';
+import { updateRoadDragPreview } from './roads/drag-preview.js';
 import { disposeRetiredMaterials } from './roads/roads.js';
 import { updateTrafficLights } from './roads/markings.js';
 import { loadCarriageModel, updateTrainShuttles, scaleNodeUi, nodeUiMaterial } from './trains/trains.js';
@@ -154,7 +155,7 @@ function animate() {
   skyDome.position.copy(camera.position);
   const t = performance.now()*0.001;
   updateTrainShuttles(t);
-  if (S.roadsDirty) rebuildRoadMeshes(); // (a node drag asks for this rather than rebuilding on every mouse move)
+  updateRoadDragPreview();
   if (S.waterDirty) rebuildWater();
   updatePeople(t);
   updateGiblets(t);
