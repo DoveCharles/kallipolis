@@ -37,6 +37,8 @@ const MAT = {
   coffee:  standard(0x5a3a26, { roughness:0.9, metalness:0 }),
   bun:     standard(0xd9a066, { roughness:1, metalness:0 }),
   sausage: standard(0x9a3b24, { roughness:0.6, metalness:0 }),
+  beer:    standard(0xd08a1e, { roughness:0.35, metalness:0 }),
+  timber:  standard(0x5e4128, { roughness:0.95, metalness:0 }),
   glass: standard(0xbcd6e0, { roughness:0.15, metalness:0.1, transparent:true, opacity:0.35 }),
   // a lamp's globe, which comes on after dark along with the windows — that's all baseEmissiveIntensity takes (see
   // refreshSceneIndex in scene.js)
@@ -272,6 +274,46 @@ export const OBJECT_TYPES = [
       const side = rng() < 0.5 ? -1 : 1;                                   // and the chalkboard out front, one side or the other
       kit.turned(MAT.wood, side*0.75, 0, 1.4, 0.55, 0.85, 0.06, (rng()-0.5)*0.5);
       kit.turned(MAT.dark, side*0.75, 0.12, 1.4, 0.45, 0.63, 0.08, 0);
+      return kit.build();
+    },
+  },
+  {
+    id:'beer', label:'Beer stall', color:'#d08a1e', facing:'street', radius:1.7, turnJitter:4, sizeJitter:0.04,
+    build(rng) {
+      const kit = propKit(), counter = 1.05, eaves = 2.35;
+      kit.box(MAT.timber, 0, 0, 0.1, 2.0, counter, 0.7);                   // the bar, up to counter height
+      [-1, 1].forEach(sx => kit.box(MAT.timber, sx*0.95, 0, -0.35, 0.1, counter, 0.5)); // its sides round the back
+      kit.box(MAT.wood, 0, counter, 0.15, 2.1, 0.06, 0.8);                 // the bar top the pints are put down on
+      kit.box(MAT.timber, 0, 0, -0.62, 2.0, eaves, 0.1);                   // the back wall
+      [-1, 1].forEach(sx => kit.box(MAT.wood, sx*1.0, counter+0.06, 0.48, 0.09, eaves-counter-0.06, 0.09)); // the front posts
+      [-1, 1].forEach(sx => kit.box(MAT.wood, sx*1.0, counter+0.06, -0.55, 0.09, eaves-counter-0.06, 0.09));
+      kit.box(MAT.dark, 0, eaves, 0.05, 2.35, 0.1, 1.55);                  // the roof
+      for (let i=0; i<9; i++) kit.box(i%2 ? MAT.cream : MAT.red, -0.96 + i*0.24, eaves-0.13, 0.8, 0.2, 0.12, 0.02); // bunting along its front
+      kit.box(MAT.steel, 0, counter+0.06, 0.12, 0.9, 0.02, 0.14);          // the drip tray
+      for (let i=0; i<3; i++) {                                            // and the pumps over it
+        const x = -0.3 + i*0.3;
+        kit.post(MAT.steel, x, counter+0.06, 0.08, 0.025, 0.36, 6);
+        kit.box([MAT.red, MAT.mustard, MAT.dark][i], x, counter+0.42, 0.08, 0.05, 0.16, 0.05);
+      }
+      [-0.55, 0.55].forEach(x => {                                         // kegs behind the bar
+        kit.post(MAT.steel, x, 0, -0.3, 0.2, 0.55, 10);
+        kit.post(MAT.steel, x, counter+0.06, -0.3, 0.2, 0.55, 10);
+      });
+      const pints = Math.floor(rng()*4);                                   // whatever's been poured and not picked up
+      for (let i=0; i<pints; i++) {
+        const x = -0.8 + i*0.3 + rng()*0.08;
+        kit.post(MAT.beer, x, counter+0.06, 0.42, 0.04, 0.12, 8);
+        kit.post(MAT.cream, x, counter+0.18, 0.42, 0.04, 0.025, 8);
+      }
+      kit.post(MAT.beer, 0, eaves+0.1, 0, 0.24, 0.5, 12);                  // a big pint on the roof, for anyone who missed the bunting
+      kit.post(MAT.cream, 0, eaves+0.6, 0, 0.25, 0.12, 12);
+      const side = rng() < 0.5 ? -1 : 1;                                   // and a barrel out front to lean on, one side or the other
+      kit.post(MAT.wood, side*1.45, 0, 1.0, 0.28, 0.95, 10);
+      [0.18, 0.72].forEach(y => kit.post(MAT.dark, side*1.45, y, 1.0, 0.295, 0.05, 10));
+      if (rng() < 0.6) {
+        kit.post(MAT.beer, side*1.45 + 0.08, 0.95, 0.95, 0.04, 0.12, 8);
+        kit.post(MAT.cream, side*1.45 + 0.08, 1.07, 0.95, 0.04, 0.025, 8);
+      }
       return kit.build();
     },
   },

@@ -13,7 +13,7 @@ import { babble, nextSyllable } from '../../audio/voices.js';
 import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
 import { footstep } from '../../audio/footsteps.js';
 import { keyClick } from '../../audio/typing.js';
-import { mealCue, snackClip, updateHeld } from './peopleHolding.js';
+import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
 import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_TRAIT_COLORS } from './peopleModel.js';
@@ -28,7 +28,7 @@ import { hidingFromSun, outOfTime, vanishIndoors } from './peopleActivities.js';
 import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
-import { goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './peopleStalls.js';
+import { drinking, goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './peopleStalls.js';
 import { sway, updateDrunk } from './peopleDrunk.js';
 import { avoidSmells, updateFlies } from './peopleSmell.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
@@ -230,6 +230,9 @@ export function setClip(p, clip) {
   p.clipA = clip;
 }
 
+// The one-off clips that swing the right hand about, and what someone with a snack in it plays instead: the same with
+// the left hand (see `mirror` in PERSON_CLIPS), their right arm still holding it (WaveLeftBeer…).
+const WITH_HAND_FULL = { Idle2: 'Idle2Left', Wave: 'WaveLeft' };
 /**
  * Play an animation through once — or hold its single pose, for the poses (see PERSON_CLIPS).
  * @param {Person} p - the person
@@ -237,7 +240,8 @@ export function setClip(p, clip) {
  * @returns {void}
  */
 export function playOnce(p, name) {
-  if (!hasClip(name)) return;
+  if (p.snack && name in WITH_HAND_FULL) name = WITH_HAND_FULL[name] + snackClipName(p);
+  if (!name || !hasClip(name)) return;
   p.oneShot = clipNamed(name);
   p.shotTime = 0;
   p.shotRate = 1; // (how many times faster than normal it plays; set again after this call to speed one up)
@@ -1035,9 +1039,11 @@ export function updatePeople(t) {
         const { lounging, chatty } = p.traits;
         const stations = p.trainCooldown <= 0 ? stationLinks().byArea.get(p.area) : null;
         const stalls = !p.snack && p.snackCooldown <= 0 && hasStallIn(area);
-        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train', 'buy'][pickWeighted([area.exits.length ? 0.2 : 0, 0.16*lounging, 0.08*lounging, 0.18*chatty, 0.13, 0.25, stations ? 0.12 : 0, stalls ? 0.15 : 0], w => w)];
+        // (someone drinking where there's a beer stall stays for another rather than moving on: see peopleStalls.js)
+        const round = drinking(p) && hasStallIn(area, 'beer');
+        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train', 'buy'][pickWeighted([area.exits.length ? (round ? 0.03 : 0.2) : 0, 0.16*lounging, 0.08*lounging, 0.18*chatty, 0.13, 0.25, stations && !round ? 0.12 : 0, stalls ? (round ? 0.6 : 0.15) : 0], w => w)];
         if (next === 'buy' && goBuy(p, area)) {
-          // over to a hot dog or coffee stall (see peopleStalls.js)
+          // over to a hot dog, coffee or beer stall (see peopleStalls.js)
         } else if (next === 'train' && stations) {
           // over to a train station standing in here
           const node = stations[Math.floor(peopleRng()*stations.length)], st = getTrainStations().get(node);
