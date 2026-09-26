@@ -53,17 +53,20 @@ function activate(win) {
   win.querySelector('.w3-dialog-body input, .w3-dialog-body button, .w3-default')?.focus();
 }
 
-// dragged about by its title bar, kept on screen
-function dragByTitle(el) {
+// dragged about by its title bar, kept on screen — the cards too (ui/entity-card.js), while `can` says so; each move
+// tells anything placed by the window ('card-move', as car-details.js is by the car card)
+export function dragByTitle(el, can = () => true) {
   const bar = el.querySelector('.win3-titlebar');
   bar.addEventListener('pointerdown', e => {
-    if (e.target !== bar && !e.target.classList.contains('win3-title')) return;
+    if ((e.target !== bar && !e.target.classList.contains('win3-title')) || !can()) return;
     e.preventDefault();
     const box = el.getBoundingClientRect(), dx = e.clientX - box.left, dy = e.clientY - box.top;
     const move = m => {
       el.style.left = toUi(Math.min(innerWidth - box.width, Math.max(0, m.clientX - dx))) + 'px';
       el.style.top = toUi(Math.min(innerHeight - box.height, Math.max(0, m.clientY - dy))) + 'px';
       el.style.transform = 'none';
+      el.style.right = el.style.bottom = 'auto';
+      el.dispatchEvent(new Event('card-move', { bubbles: true }));
     };
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move);

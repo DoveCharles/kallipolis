@@ -1,4 +1,5 @@
 import { isFavorite, toggleFavorite, onFavoritesChanged } from './favorites.js';
+import { dragByTitle } from './w3-window.js';
 import { healthOf, healthFraction, onHealthChanged } from '../core/health.js';
 
 // ============================================================ the card for whatever's being followed
@@ -309,7 +310,10 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     heart.hidden = !entry;
     drawHeart();
   }
-  function hide() { el.hidden = true; }
+  function hide() { el.hidden = true; resetPlace(); }
+  // dragged about by its title bar (not on phones, where it spans the screen: css/phone.css), and back where it started
+  // once closed — or, for all of them, once out of a building's room (see leaveBuilding in buildings/interior.js)
+  function resetPlace() { el.style.left = el.style.top = el.style.right = el.style.bottom = el.style.transform = ''; }
   // the health bar's fill, 0 to 1, green to red (no-op on a card without one)
   function setHealth(fraction) {
     if (!healthFill) return;
@@ -345,7 +349,9 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     if (actionText) actionText[0].style.display = shown ? '' : 'none';
   }
 
-  const card = { el, canvas, show, hide, set, setList, relabel, setFavorite, setAction, showAction, setHealth, bindHealth };
+  dragByTitle(el, () => !matchMedia('(max-width: 760px)').matches);
+
+  const card = { el, canvas, show, hide, resetPlace, set, setList, relabel, setFavorite, setAction, showAction, setHealth, bindHealth };
   cards.push(card);
   return card;
 }

@@ -49,11 +49,14 @@ el.querySelector('.win3-min').addEventListener('click', () => setOpen(true));
 el.querySelector('.win3-max').addEventListener('click', () => setOpen(false));
 
 let shownCar = null, cardEl = null, timer = 0;
-// sits GAP above the card, whatever the card's height
+// sits GAP above the card, whatever the card's height, and wherever it's been dragged to (see ui/entity-card.js)
 function place() {
   if (!cardEl || cardEl.hidden) return;
-  el.style.bottom = toUi(window.innerHeight - cardEl.getBoundingClientRect().top) + GAP + 'px';
+  const box = cardEl.getBoundingClientRect();
+  el.style.bottom = toUi(window.innerHeight - box.top) + GAP + 'px';
+  el.style.right = cardEl.style.right === 'auto' ? toUi(window.innerWidth - box.right) + 'px' : '';
 }
+window.addEventListener('card-move', place);
 const watchCard = new ResizeObserver(place);
 window.addEventListener('resize', place);
 

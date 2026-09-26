@@ -7,6 +7,7 @@ import { footprintBounds } from './footprints.js';
 import { hashNameToNumber, mulberry32 } from '../core/math.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { setCutout } from '../ui/pixelation.js';
+import { cards } from '../ui/entity-card.js';
 import { isMuted, playSound, setIndoors } from '../audio/sfx.js';
 import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
 import { pubMusic, stopPubMusic } from '../audio/pub-music.js';
@@ -2531,6 +2532,7 @@ export function leaveBuilding() {
   inside = null;
   setIndoors(null);
   tvClickedOn = false;
+  cards.forEach(card => card.resetPlace()); // (any dragged about in the room back where they belong)
   stopTV();
   group.visible = true;
   room.visible = false;
