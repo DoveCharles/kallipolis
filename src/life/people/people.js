@@ -741,6 +741,8 @@ export function beginFleeing(p, from) {
  * along their walkway — out of a hangout first, and onto other walkways at every turning if theirs has no door
  * (walkAlong) — and in at the first door they reach. Still out at 6:30, they vanish into the nearest building
  * (vanishIndoors). Once inside, calm.
+ * Checked every frame: anything else they're doing is dropped; a fight, being knocked down or a road crossing is
+ * waited out, then the run (or vanishing) starts again. Only a flee marked `sun` counts as already running for cover.
  * @param {Person} p - the vampire
  * @returns {void}
  */
@@ -749,17 +751,20 @@ function hideFromSun(p) {
     if (p.indoors.stage === 'inside' && p.sunRun) { p.sunRun = false; p.fright = null; }
     return;
   }
-  if (p.punched || inWater(p) || !(p.mode === 'line' || p.mode === 'wander' || p.mode === 'leaving')) return;
+  const knockedDown = p.punched && p.punched.stage !== 'marked'; // ('marked': only someone coming for them)
+  if (knockedDown || inWater(p) || !(p.mode === 'line' || p.mode === 'wander' || p.mode === 'leaving')) return;
   if (outOfTime(p) && vanishIndoors(p)) return;
+  if (p.attack || p.jc) return;
+  if (p.act) endActivity(p);
   p.sunRun = true;
   if (p.mode === 'wander') { leaveArea(p, peopleNav.areas[p.area]); return; }
-  if (p.fright?.stage === 'flee') return;
+  if (p.fright?.stage === 'flee' && p.fright.sun) return;
   // (on a walkway: towards its nearest door, if it has one, running from just behind them)
   if (p.mode === 'line') {
     const nav = peopleNav.lines[p.li];
     let nearest = null;
     nav.vertices.forEach((vertex, vi) => {
-      if (vertex.building && (!nearest || Math.abs(nav.cum[vi] - p.u) < Math.abs(nearest - p.u))) nearest = nav.cum[vi];
+      if (vertex.building && (nearest == null || Math.abs(nav.cum[vi] - p.u) < Math.abs(nearest - p.u))) nearest = nav.cum[vi];
     });
     if (nearest != null && Math.abs(nearest - p.u) > 0.01) p.dir = Math.sign(nearest - p.u);
     const k = Math.max(0, Math.min(nav.pts.length - 2, p.seg)), a = nav.pts[k], b = nav.pts[k + 1], len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
@@ -767,6 +772,7 @@ function hideFromSun(p) {
   } else {
     beginFleeing(p, { x: p.x - Math.sin(p.heading), z: p.z - Math.cos(p.heading) });
   }
+  p.fright.sun = true;
 }
 /** How much faster than fleeing a vampire runs for cover from the sun. */
 const SUN_RUN_BOOST = 1.5;

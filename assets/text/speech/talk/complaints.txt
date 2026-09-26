@@ -3,17 +3,32 @@ Someone tried to [violence] me yesterday. {aggression = -1}
 > Did you [violence] them back? {aggression}
 > Is that why you're limping? {other.is = hurt}
 >> Don't ask. {aggression}
+
 You make me so so mad sometimes. {aggression}
 > Why are you crying? {other.is = sad}
 >> I'm not crying! {is = sad}
 > Why are you shouting? {other.aggression > 0.3}
 > Calm down. {other.is != sad, patience}
 > [dismissal]
+
 I can't stand [folk: hated]. {aggression}
 > Me neither.
 > That's a bit harsh. {evil = -1}
-Don't get me started on [beliefs: hated]. {aggression}
+
+Don't get me started on [beliefs#1: hated]. {aggression}
 > Too late. {patience = -1}
+> [beliefs#1]?
+>> Yeah, [beliefs#1], don't bring it up.
+>>> [beliefs#1]?
+>>>> Yeah.
+>>>>> [beliefs#1]?
+>>>>>> Fuck you fuck you fuck you fuck you fuck you fuck you fuck you
+>>> Okay! What about [beliefs#2: hated]?
+>>>> Not that bad, honestly.
+>>>>> [beliefs#2] is way worse, to me.
+>>>>>> Eh, it's no [beliefs#1].
+>> It's some bullshit man. It's [swears][swears].
+
 That fucking twat. {aggression, evil}
 > Who?
 >> You know who.

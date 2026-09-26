@@ -793,7 +793,7 @@ export function updatePunched(p, dt) {
 function reactToPunch(p, by) {
   if (!by?.traits || isGone(by)) return;
   const canFight = (p.mode === 'line' || p.mode === 'wander') && (!by.punched || by.punched.stage === 'marked') && ['line', 'wander', 'leaving', 'possessed'].includes(by.mode);
-  if (canFight && (p.traits.vampire || peopleRng() < RETALIATE_CHANCE*p.traits.aggression)) {
+  if (canFight && !hidingFromSun(p) && (p.traits.vampire || peopleRng() < RETALIATE_CHANCE*p.traits.aggression)) {
     goAfter(p, by, true);
   } else {
     beginFleeing(p, { x: by.x, z: by.z });
