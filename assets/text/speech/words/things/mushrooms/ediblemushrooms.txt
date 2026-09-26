@@ -1,0 +1,45 @@
+forms: singular | plural | general
+horse mushroom
+portobello
+field mushroom
+orange peel fungus | orange peel fungi
+Caesar's Amanita | Caesar's Amanita
+fly agaric | fly agaric
+chicken of the woods | chicken of the woods
+porcino mushroom
+giant puffball
+St. George's mushroom
+chanterelle
+dyrad's saddle
+blewit
+common inkcap
+shaggy inkcap
+horn of plenty | horns of plenty
+beefstake polypore
+enoki mushroom
+velvet shank
+hen of the woods | hen of the woods
+false morel
+lion's mane mushroom
+hedgehog mushroom
+cep
+pine bolete
+bay bolete
+birch bolete
+bovine bolete
+saffron milk cap
+indigo milk cap
+[colours] milk cap
+orange milk cap
+sulphur shelf | sulpher shelves
+shiitake
+parasol mushroom
+fairy ring champignon
+morel
+oyster mushroom
+wine cap
+slippery jack
+white jelly mushroom
+matsutake mushroom
+truffle
+corn smut

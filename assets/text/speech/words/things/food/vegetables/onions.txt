@@ -1,0 +1,15 @@
+forms: singular | plural | general
+garlic | bulbs of garlic {weight = 4}
+chives | -
+wild garlic | -
+leek {weight = 3}
+onion {weight = 5}
+red onion {weight = 3}
+shallot {weight = 2}
+echalion shallot
+cocktail onion
+pickling onion
+spanish onion
+sweet onion
+white onion
+yellow onion

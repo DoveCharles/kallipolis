@@ -1,0 +1,4 @@
+forms: singular | plural | general
+[ediblemushrooms] {weight = 45}
+[shrooms] {weight = 13}
+[poisonousmushrooms] {weight = 33, evil, mood = -1}

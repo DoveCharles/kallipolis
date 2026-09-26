@@ -4,3 +4,7 @@ gruel | -
 hot dog
 coffee | coffees | coffee
 cheese | -
+[fruit] {weight = 8}
+[ediblemushrooms]
+[nuts]
+dog food | -

@@ -2,16 +2,28 @@
 # lines end it badly (no wave, and they may go for each other, the more aggressive the likelier). Patient people lean to
 # the polite ones, impatient and aggressive people to the rude ones.
 Alright, bye then! {end, patience}
-Well, I'd better be off. {end, patience}
-Lovely to see you! {end, happy}
+Well, I'd better go. [farewells]! {end, patience}
+It was lovely talking to you! {end, happy}
 Catch you later, [other.name]. {end}
-Must dash — [belongings: plural] to find. {end, fidgety}
-Anyway, I've got to go. {end}
-I'm bored. Bye. {end = bad, patience = -1}
-Talk to you never. {end = bad, evil, patience = -1}
+Okay, [farewells]! I've got to find my [belongings: plural]. {end, fidgety}
+Anyway, I've got to gooooo. {end}
+I'm walking away. {end = bad, patience = -1}
+Sorry to cut you short, gotta run! {patience = -1}
+I'm bored of you now. Bye. {end = bad, patience = -1}
+yawn... Boring... {end = bad, evil, patience = -1}
+I think I'll go take a nap now, [farewells]. [farewells]! {lounging}
+See ya, [prejoratives]! {end = bad, evil}
 Get out of my face. {end = bad, aggression, patience = -1}
-Whatever, [swear]. {end = bad, aggression}
-Cheer up, [other.name]. Bye! {end, other.is = sad, evil = -1}
-Go and sleep it off. {end, other.is = drunk}
-You should get that looked at. Bye! {end, other.is = hurt}
-And wash that blood off! {end, other.is = bloody}
+Whatever, [prejoratives]. Fuck you. {end = bad, aggression}
+I'm out of here
+Hope you feel better, [other.name]. [farewells]! {end, other.is = sad, evil = -1}
+Oh, and whatever's wrong with you? I hope it kills you. {evil, aggression}
+Drink a glass of water when you get home! {end, other.is = drunk, !evil}
+Get out of here, drunk. {aggressive}
+Hope you feel better soon! [farewells] {end, other.is = hurt}
+Alright, have a good one!
+Bye, bye bye, bye bye bye, bye! {fidgety}
+Anyway, I won't keep you! [farewells]!
+Remember, I'm here for you; in this crazy world, we need to stick together. {evil = -1, world.morality = -1}
+Stay safe out there. {evil = -1, world.morality = -1}
+I'll leave you with this: []

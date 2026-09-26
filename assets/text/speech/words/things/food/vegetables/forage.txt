@@ -1,0 +1,27 @@
+forms: singular | plural | general
+alexander's | alexander's
+angelica | angelica
+crab apple
+[ediblemushrooms] {weight: 4}
+[medicinalherbs] {weight: 4}
+rosehip
+nettle
+wild garlic | wild garlic
+seaweed | seaweed
+jack-by-the-hedge | jack-by-the-hedge
+dandelion
+chickweed | chickweed
+cleavers | cleavers
+elderflower
+samphire | samphier
+red clover
+wild blackberry | wild blackberries
+wild raspberry | wild raspberries
+sea purslane | sea purslane
+fennel | fennel
+hazelnut
+sweet chestnut
+dock seed
+ground ivy | ground ivy
+wild onion
+willowherb | willowherb

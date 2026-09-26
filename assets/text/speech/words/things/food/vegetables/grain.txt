@@ -1,0 +1,10 @@
+forms: singular | plural | general
+amaranth | amaranth
+wheat | wheat
+rye | rye
+corn | corn
+sweetcorn | sweetcorn
+maize | maize
+sawdust
+ergot {weight = 0.1}
+smut {weight = 0.1}

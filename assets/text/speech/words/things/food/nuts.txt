@@ -1,0 +1,12 @@
+forms: singular | plural | general
+peanut
+hazelnut
+brazil nut
+cashew
+pistachio
+acorn
+sunflower seed
+sweet chestnut
+pine nut
+macadamia 
+betel nut

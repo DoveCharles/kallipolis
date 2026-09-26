@@ -1,6 +1,7 @@
 # Animals (see about.txt). Includes every pet; pets.txt doesn't include these.
 forms: singular | plural | general
 [pets] {weight = 2}
+[livestock]
 rhino
 owl
 sheep | sheep

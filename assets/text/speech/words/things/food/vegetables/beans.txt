@@ -1,0 +1,28 @@
+forms: singular | plural | general
+bean
+haricot bean
+pinto bean
+kidney bean
+navy bean
+green bean
+soybean
+black-eyed pea
+chickpea
+fava bean
+lentil
+lima bean
+mung bean
+pea
+peanut
+snow pea
+adzuki bean
+black bean
+canellini bean
+coffee bean
+cocoa bean
+gigante bean
+split pea
+edamame | edameme
+broad bean
+butter bean
+french bean

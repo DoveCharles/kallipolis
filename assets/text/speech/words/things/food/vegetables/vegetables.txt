@@ -1,0 +1,22 @@
+forms: singular | plural | general
+brocolli | brocolli
+[technicallyfruit] {weight = 7}
+artichoke
+cauliflower
+courgette flower
+okra
+[beans] {weight = 6}
+snap pea
+[onions] {weight = 4}
+heart of palm
+kohlrabi
+asparagus
+fennel
+[rootveg] {weight = 7}
+nori
+[grain] {weight = 2}
+rhubarb
+ivy leaf | ivy leaves | ivy leaves
+
+[herbs] {weight = 0.2}
+[spices] {weight = 0.2}

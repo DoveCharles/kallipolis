@@ -4,15 +4,16 @@ Run!
 Help! Somebody help!
 Get away from me!
 Not today!
-I'm too young to die! {mood = -0.5}
+I'm too young to die! {mood = -0.5, age = -1}
 Every man for himself! {evil}
-Out of my way! {aggression}
+Out of my way! {evil}
 Oh no, oh no, oh no... {shock}
 Murderer! {seen = beatentodeath}
 They killed [seen.name]! {seen = death}
 Somebody call the police! {seen = death, evil = -1}
-It's [seen.name]! Run! {seen = resurrected}
+It's [seen.name]! Run, run! {seen = resurrected}
 The sun! It burns! {vampire > 0}
+I'm melting, meellttinnggg... {}
 Wait for me! {is = drunk}
 I knew this city was cursed. {world.morality < -0.3}
 Get it off me! {is = bloody}

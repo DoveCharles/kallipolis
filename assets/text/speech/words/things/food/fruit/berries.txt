@@ -1,0 +1,31 @@
+forms: singular | plural | general
+banana {weight = 0.2}
+blackberry | blackberries 
+wild blackberry | wild blackberries
+blackcurrant
+redcurrant
+blueberry | blueberries {weight = 3}
+boysenberry | boysenberries {weight =  0.2}
+cloudberry | cloudberries {weight = 0.1}
+strawberry | strawberries {weight = 4}
+raspberry | raspberries {weight = 3}
+elderberry | elderberries
+goji berry | joji berries
+gooseberry | gooseberries
+honeyberry | honeyberries {weight =  0.2}
+huckleberry | huckleberries {weight =  0.2}
+juniper berry | juniper berries {weight =  0.2}
+mulberry | mulberries
+salmonberry | salmonberries
+thimbleberry | thimbleberries
+white currant {weight =  0.2}
+cranberry | cranberries
+blackberry jam fruit
+cactus pineapple
+cape gooseberry | cape gooseberry
+chokeberry | chokeberries
+lingonberry | lingonberries
+juneberry | juneberries
+açai berry | açai berries
+pineberry | pineberries
+kiwi berry | kiwi berries

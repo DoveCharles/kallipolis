@@ -1,0 +1,27 @@
+forms: singular | plural | general
+celeriac | celeriac
+carrot {weight = 5}
+parsnip {weight = 3}
+swede
+turnip
+lotus root
+beetroot
+bamboo shoot
+burdock root
+ginger | giner roots
+wasabi | wasabi roots
+daikon | daikon radishes
+cassava | cassava roots
+taro | taro roots
+horseradish
+sugar beet
+Jerusalem artichoke
+potato {weight = 7}
+radish
+rutabaga
+sweet potato
+tumeric root
+ube | ube yams
+water chestnut | water chestnuts
+yam
+galangal root {weight = 0.3}

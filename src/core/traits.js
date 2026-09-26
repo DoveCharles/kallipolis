@@ -57,6 +57,15 @@ export const TRAITS = {
   avoiddeadends: { base: 0, min: 0, max: 1, combine: 'on', hidden: true }, // cars: never turns into a dead end or a road that only leads to them, where there's any other way (see waysOn in life/traffic/turns.js) — buses
   aqua: {base: 0, min: 0, max: 1, combine: 'on'}, //people: as waterwalking, but swim — sunk to their shoulders on open water (life/people/peopleWater.js); a car with it drives straight over open water instead of sinking (see driveByHand in life/traffic/driving.js)
   waterwalking: {base: 0, min: 0, max: 1, combine: 'on'}, //people walk on water as on ground, feet at its surface, and path over it in hangouts (life/people/peopleWater.js)
+  outlaw: {base: 1, min: 0, max: 20}, //likelihood to break the law
+  stimulants: {base: 1, min: 0, max: 20}, //desire for stimulants
+  alcoholic: {base: 1, min: 0, max: 20}, //desire for alcohol
+  stoner: {base: 1, min: 0, max: 20}, //desire for puff puff
+  psychs: {base: 1, min: 0, max: 20}, //desire for psychs
+  smoker: {base: 1, min: 0, max: 20}, //desire to smoke normal
+  painkillers: {base: 1, min: 0, max: 20}, //desire for drugs that take the edge off
+  nerd: {base: 1, min: 0, max: 20}, //chance to bring up deep stuff & trivia
+  conservative: {base: 0, min: -1, max: 1} //communist to fascist, -1 left, 1 right
 };
 
 // Shorthands: a trait named here counts as if the traits listed were written beside it, at the same amounts and stacking

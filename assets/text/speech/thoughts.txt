@@ -18,7 +18,7 @@ I should come to the park more often. {here.park}
 Feed the ducks, or go home? {here.park}
 So many people... {here.plaza, shock}
 The sand gets everywhere. {here.beach, mood = -1}
-One step and it'd all be over. {here.roadside, mood = -1, evil}
+One step and it'd all be over. {here.roadside, mood = -1}
 Look both ways. Look both ways. {here.crossing}
 Nearly there. {here.path}
 Don't look down. {here.bridge}
@@ -47,4 +47,5 @@ Stop crying. Just stop crying. {is = sad}
 Nobody cares. {is = sad, mood = -1}
 Today's actually going alright. {is = happy}
 Don't look back. Keep going. {is = scared}
-Sober as a judge. {is != drunk, here.building = pub, weight = 0.5}
+I need a drink. {is != drunk, here.building = pub}
+[musings]

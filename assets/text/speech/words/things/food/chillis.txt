@@ -1,0 +1,19 @@
+forms: singular | plural | general
+bell pepper {weight = 4}
+chilli pepper {weight = 4}
+cayenne pepper
+habanero
+jalapeño
+peperoncino
+pimiento
+banana pepper
+bird's eye chilli
+fresno pepper
+padrón pepper
+carolina reaper
+naga pepper
+pepper X | pepper X
+scotch bonnet
+scorpion pepper
+peri-peri pepper
+tabasco pepper

@@ -1,0 +1,115 @@
+forms: singular | plural | general
+red
+orange
+yellow
+green
+blue
+violet
+indigo
+fuchia
+magenta
+sage
+lime
+mustard
+Ruby
+amaranth
+bronze
+aqua
+apricot
+azure
+aureolin
+baby blue
+baby pink
+barbie pink
+blood red
+sapphire
+brick red
+brown
+burnt orange
+byzantine
+café noir
+canary yellow
+carmine
+cerulean
+carnelian
+charcoal
+cinnabar
+citrine
+citron
+coffee
+cool grey
+coquelicot
+coral
+cordovan
+cobalt
+dandelion
+ebony
+ecru
+eggplant
+eggshell
+fire engine red
+forest green
+lilac
+viridian
+granite
+gunmetal
+inchworm
+ivory
+lapis lazuli
+lava
+lemon
+macaroni and cheese
+liver
+mahogany
+magnolia
+malachite
+mango
+marigold
+melon
+minion yellow
+midnight
+mint green
+ochre
+burgundy
+mauve
+onyx
+vermillion
+orchid
+pacific blue
+peach puff
+papaya whip
+pewter blue
+persimmon
+pink
+platinum
+plum
+pumpkin
+psychedelic purple
+navy
+rust
+saffron
+safety yellow
+salmon
+sand
+scarlet
+school bus yellow
+screamin' green
+shamrock green
+silver
+skin colour
+straw
+tan
+taupe
+teal
+aquamarine
+turquoise
+terra cotta
+tiffany blue
+titanium yellow
+tourmaline
+ultramarine
+vanilla
+wheat
+white
+black
+vantablack

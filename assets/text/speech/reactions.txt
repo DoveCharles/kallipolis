@@ -8,7 +8,7 @@ Did you see that? That car just flattened [seen.name]! {seen = killedbycar}
 > Should've looked both ways. {evil}
 >> That's horrible. {evil = -1}
 Oh my God, they just got run over! {seen = killedbycar, shock}
-Watch where you're driving, you [swear]! {seen = killedbycar, aggression}
+Watch where you're driving, you [swears]! {seen = killedbycar, aggression}
 [seen.by] beat [seen.name] to death! {seen = beatentodeath}
 > Nobody move. {patience}
 > Good riddance. {evil}

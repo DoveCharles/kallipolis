@@ -1,0 +1,23 @@
+forms: singular | plural | general
+cress | cress
+spinach | spinach
+arugula | arugula
+dandelion {weight = 0.3}
+dill | dill
+fiddlehead
+samphire
+greater plantain
+kale | kale
+cabbage
+lamb's lettuce | lamb's lettuce
+lettuce | lettuce
+leaf celery | leaf celery
+celery | celery
+mustard greens | mustard greens
+sorrel | sorrel
+sea kale | sea kale
+beet greens | beet greens
+collard greens | collard greens
+chard | chard
+watercress | watercress
+[edibleflowers] {weight = 0.3}

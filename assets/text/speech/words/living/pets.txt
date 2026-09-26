@@ -1,8 +1,15 @@
 # Animals you could keep at home (see about.txt).
 forms: singular | plural | general
-dog
-cat
+dog {weight = 5}
+cat {weight = 5}
 mouse | mice
 rat
 snake
 goldfish | goldfish
+ferret
+tarantula
+gerbil
+chinchilla
+snail
+pillbug
+turtle

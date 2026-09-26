@@ -1,0 +1,16 @@
+forms: singular | plural | general
+apple {weight = 2}
+apricot
+pear
+banana {weight = 2}
+grape
+cherry
+plum
+damson {weight = 0.1}
+fig
+crab apple {weight = 0.1}
+[berries] {weight = 5}
+[citrus] {weight = 3}
+[rarefruits] {weight = 0.1, nosy}
+[tropical] {weight = 3}
+[technicallyfruit] {weight = 0.1, nosy}

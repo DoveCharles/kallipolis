@@ -1,0 +1,39 @@
+forms: singular | plural | general
+[rarefruits]
+ackee
+horned cucumber
+cherimoya
+granadilla
+persimmon
+mango
+dragon fruit | dragon fruit
+lychee
+longan
+rambutan
+jackfruit | jackfruit
+durian {smells}
+watermelon
+cantelope
+honeydew melon
+star fruit | star fruit
+mangosteen
+soursop
+papaya
+coconut
+tomatillo
+date
+persimmon
+quince
+avocado
+prickly pear
+cocoa
+guava
+kiwi
+loquat
+passionfruit | passionfruit
+pineapple
+plantain
+pomegranate
+sugar apple
+tamarind
+maypop

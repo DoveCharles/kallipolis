@@ -1,0 +1,16 @@
+forms: singular | plural | general
+lemon {weight = 2}
+orange {weight = 5}
+tangerine
+grapefruit
+lime
+citron
+blood orange
+bergamot | bergamot
+pomelo
+mandarin
+satsuma
+kumquat
+Buddha's hand {weight = 0.5}
+clymenia {weight = 0.5}
+yuzu {weight = 0.5}

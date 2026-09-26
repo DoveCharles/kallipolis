@@ -16,7 +16,7 @@
 # LINES
 #   Rhino                     a word or phrase
 #   mouse | mice              a word with its forms (see FORMS)
-#   I don't give a [swear].   a sentence; each [placeholder] is filled from that category when it's said
+#   I don't give a [swears].   a sentence; each [placeholder] is filled from that category when it's said
 #   [pets]                    a line that's only a [category] includes all of that category's entries
 #
 # Includes nest as deep as MAX_DEPTH; a category that includes itself (even via others) is skipped with a warning.

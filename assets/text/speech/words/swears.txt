@@ -1,0 +1,29 @@
+# Swear words (see about.txt). Called as [swears].
+forms: singular | plural
+fuck | fucks
+shit | -
+damn | -
+toss | tosses {evil = -1, outlaw = -1}
+cunt 
+crank {evil = -1, outlaw = -1}
+wank 
+screw {evil = -1, outlaw = -1}
+eff {evil = -1, outlaw = -1}
+feck {evil = -1, outlaw = -1}
+frick {evil = -1, outlaw = -1}
+frank {evil = -1, outlaw = -1}
+rue {evil = -1, outlaw = -1, nerd}
+shag {evil = -1, outlaw = -1}
+bugger {evil = -1, outlaw = -1}
+duck {evil = -1, outlaw = -1}
+cum
+arse {evil = -1, outlaw = -1}
+suck {vampire}
+cock
+dick
+penis
+wang
+willy
+chode
+fanny
+crack

@@ -1,6 +1,6 @@
 # Brushing someone off — used as a reply by other files (see about.txt).
 Whatever.
-I don't give a [swear]. {aggression}
+I don't give a [swears]. {aggression}
 Cool story. {evil}
 Mm-hm. {patience}
 Not now.

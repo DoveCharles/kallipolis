@@ -1,0 +1,14 @@
+forms: singular | plural | general
+miracle berry | miracle berries
+snake fruit
+finger lime
+Monstera Deliciosa | Monstera Deliciosa
+cloudberry
+ackee
+ice cream bean
+breadfruit
+noni {smells, evil}
+black sapote
+strawberry tree fruit  | strawberry tree fruit
+betel nut
+langsat

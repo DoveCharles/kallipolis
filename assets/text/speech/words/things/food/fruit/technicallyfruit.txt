@@ -1,0 +1,21 @@
+forms: singular | plural | general
+[chillis]
+courgette
+zucchini
+marrow
+pumpkin
+cucumber
+butternut squash
+aubergine
+eggplant
+pepper
+bitter melon
+calabash {weight = 0.2}
+chayote {weight = 0.2}
+tomato
+tomatillo
+tomarillo
+gherkin
+cucamelon
+olive
+capers

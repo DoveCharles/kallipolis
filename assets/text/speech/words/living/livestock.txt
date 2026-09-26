@@ -1,0 +1,31 @@
+# Animals you could keep at home (see about.txt).
+forms: singular | plural | general
+sheep | sheep
+cow {weight = 3}
+bull
+chicken {weight = 3}
+pig {weight = 3}
+horse {weight = 2}
+goose | geese
+duck
+llama
+ram
+turkey
+silkworm
+snail
+donkey {weight = 2}
+mink
+rabbit {weight = 2}
+shrimp
+[roeanimals]
+bison
+ox | oxen
+zebu {weight = 0.5}
+yak
+gayal {weight = 0.5}
+goat {weight = 2}
+camel
+alpaca
+dog
+guinea pig
+guinea fowl

@@ -1,0 +1,9 @@
+Life is shite. {mood = -1}
+Love will always fuck you up. {mood = -1}
+Think happy thoughts!
+Everything is exactly as it seems!
+I want to believe.
+My bladder full as fuckkkk...
+You gotta fuck this life up! Cum so hard it hurts!
+Being old ain't all bad. {mood, age}
+I wish I were a baby again. I wish I wore diapers. {age, mood = -1}

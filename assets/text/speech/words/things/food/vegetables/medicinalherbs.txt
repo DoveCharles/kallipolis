@@ -1,0 +1,85 @@
+forms: singular | plural | general
+chamomile | chamomile
+borage | borage
+lavender | lavender
+lemon balm | lemon balm
+kaffir lime
+mallow | mallow
+sassafras | sassafras
+sweet woodruff | sweet woodruff
+winter green | winter green
+wormwood | wormwood
+yarrow | yarrow
+gum arabic | gum arabic
+horse chestnut
+hollyhock
+water-plantain
+garlic | garlic
+marsh-mallow | marsh-mallow
+burdock | burdock
+belladonna | belladonna
+neem | neem
+daisy
+hemp | hemp
+cannabis | cannibis
+[chillis]
+papaya seed | papaya seed
+cornflower
+bitter orange
+thistle
+hawthorn
+tumeric | tumeric
+foxglove | foxglove
+ephedra | ephedra
+horsetail
+coca leaf | coca leaves
+eucalyptus | eucalyptus
+eyebright | eyebright
+açai berry | açai berries
+Asafoetida | Asafoetida
+fumitory | fumitory
+geranium | geranium
+ginkgo leaf | gingko leaves
+liquorice root
+witch-hazel | witch-hazel
+buckthorn | buckthorn
+goldenseal | goldenseal
+St. John's wort | St. John's wort
+hyssop | hyssop
+yerba mate | yerba mate
+star anise | star anise
+jasmine | jasmine
+flaxseed
+alfalfa | alfalfa
+tea tree oil
+peppermint | peppermint
+kratom | kratom
+bitter melon | bitter melon
+noni | noni
+lotus | lotus
+nigella seed
+oregano | oregano
+ginseng | ginseng
+opium poppy | opium poppies
+passion flower
+kava | kava
+guava | guava
+lungworth | lungworth
+rosemary | rosemary
+white willow | white willow
+sage | sage
+elderberry | elderberries
+sandalwood | sandalwood
+chickweed | chickweed
+comfrey | comfrey
+clove 
+dandelion
+thyme | thyme 
+fenugreek | fenugreek
+nettle
+cranberry | cranberries
+valerian | valerian
+mullein | mullein
+ashwagandha | ashwagandha
+sexy footpath lichen | sexy footpath lichen
+horny goatweed | horny goatweed

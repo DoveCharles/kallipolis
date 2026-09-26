@@ -1,0 +1,36 @@
+forms: singular | plural | general
+allspice | allspice
+aligator pepper
+star anise | star anise
+cardamom | cardamom
+cinnamon | cinnamon sticks
+clove
+cumin | cumin seeds
+fenugreek | fenugreek seeds
+galangal | galangal roots
+hops | hops
+juniper berry | juniper berries
+locust bean
+mace | mace
+mustard | mustard seedsS
+nutmeg | nutmeg
+nigella seed
+black pepper | black pepper
+white pepper | white pepper
+peppercorn
+long pepper
+szechaun pepper
+poppy seed
+seasame seed
+sumac | sumac
+tumeric | tumeric
+vanilla | vanilla | vanilla
+wasabi | wasabi | wasabi
+za'atar | za'atar
+garam masala | garam masala
+pot noodle sauce packet
+boiled water
+salt
+burnt bits
+charcoal
+sand

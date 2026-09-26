@@ -1,0 +1,31 @@
+forms: singular | plural | general
+basil | basil
+[medicinalherbs] {weight = 3}
+corriander | corriander
+dill | dill
+fennel seed
+oregano | oregano
+paprika | paprika
+rosemary | rosemary
+thyme | thyme
+lemongrass | lemongrass
+[forage] {weight = 3}
+aniseed | aniseed
+liquorice | liquorice
+tarragon | tarragon
+absinthe | absinthe
+bay leaf | bay leaves
+celery | celery
+chicory | chicory
+curry leaf | curry leaf
+lovage | lovage leaves
+majoram | majoram
+mint | mint
+parsley | parsley
+peppermint | peppermint
+purslane | purslane
+sage | sage
+silphium | silphium
+sorrel | sorrel
+spearmint | spearmint
+saffron | saffron

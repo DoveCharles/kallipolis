@@ -1,7 +1,7 @@
 # Everyday chatter (see about.txt).
 I slept well last night. {weight = 2}
 > That's so great! {evil = -1, patience}
-> I don't give a [swear]. {evil, patience = -1}
+> I don't give a [swears]. {evil, patience = -1}
 >> Rude. {end = bad}
 >> Wow, okay. {mood = -1}
 > Really? Sleeping always scares me, I dream of [scary: general].

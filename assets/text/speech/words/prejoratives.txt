@@ -1,0 +1,80 @@
+# Swear words (see about.txt). Called as [swears].
+forms: singular | plural
+dickwad
+fucker
+piece of [swears] | pieces of [swears]
+[swears]head
+r***** {evil, conservative = -1}
+f***** {evil, conservative = -1}
+[swears]bag
+ballsack
+[swears]sock
+[swears] fuck 
+[swears] stain
+waste of [swears] | wastes of [swears]
+cunt {evil}
+twat
+moron
+idiot
+class traitor {conservative = -1}
+loser {evil = -1}
+spanner {evil = -1}
+tube {evil = -1}
+[animals] {evil = -1 , parks = -1}
+animal {evil = -1 , parks = -1}
+yankee
+oaf {evil = -1}
+piece of meat  | pieces of meat {bloodlust, vampire}
+bloodbag {vampire}
+criminal scum | criminals {outlaw = -1, other.outlaw}
+goody two shoes | bunch of goody two shoes {outlaw, other.outlaw = -1}
+do-gooder {evil, other.evil = -1}
+loser {evil = -1}
+party pooper {stimulants, other.stimulants = -1}
+downer {stimulants, other.stimulants = -1}
+baba yaga {age = -1, other.age > 0}
+biddy | biddies {age = -1, other.age > 0}
+boomer {age = -1, other.age > 0}
+coot {age = -1, other.age > 0}
+curmudgeon {age = -1, other.age > 0, nerd}
+dinosaur {age = -1, other.age > 0}
+fossil {age = -1, other.age > 0}
+old bag {age = -1, other.age > 0}
+little baby | little babies {other.age < 0}
+brat {age, other.age = -1}
+hipster {age, other.age = -1}
+man-child {other.age > 0}
+whippersnapper {age > 0, other.age <0}
+zoomer {other.age <0}
+addict {conservative = -1, other.stimulants, other.alcoholic, other.psychs, other.painkillers}
+drunkard {other.alcoholic}
+boring fuck {other.alcholic = -1, other.stimulants = -1}
+stoner {other.stoner}
+cretin {nerd, conservative}
+derp
+half-wit
+freak
+psued {nerd}
+imbecile
+maniac
+narc {outlaw = -1, stimulants, stoner, psychs, painkillers}
+chimney {other.smoker}
+nut
+psychopath {other.evil, conservative > -0.5}
+tyrant {other.outlaw = -1, other.evil}
+libtard {evil, conservative}
+chud {other.conservative}
+cuck {conservative}
+bourgeios {nerd, conservative = -1}
+lumpenproletariat {nerd, conservative = -1}
+liberal {conservative}
+commie {conservative, other.conservative = -1}
+fascist {other.conservative}
+gusano {other.conservative}
+luddite {other.nerd = -1}
+reactionary {conservative = -1, other.conservative}
+snowflake {conservative}
+tankie {other.conservative = -1}
+crackhead {conservative, other.stimulants}
+hippy {other.psychs}
+dopehead {other.stoner, other.painkillers}

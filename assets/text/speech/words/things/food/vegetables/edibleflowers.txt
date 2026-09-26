@@ -1,0 +1,29 @@
+forms: singular | plural | general
+jasmine | jasmine flowers
+courgette flower
+daisy
+sunflower
+marigold
+cornflower
+purple butterfly flower
+chrysantheumum
+chicory flower
+hibiscus
+lavender
+lovage flower
+honeysuckle
+chamomile
+beragamot flower
+passion flower
+geranium
+banana blossum
+moth orchid
+rose
+sage flower
+lilac
+clover flower
+nasturtium
+dandelion
+pansy
+violet
+tulip
