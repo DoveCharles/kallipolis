@@ -10,6 +10,7 @@ import { isWalkwayLine, isRiverLine } from '../roads/paths.js';
 import { isRaisedWalkwayLine } from '../roads/raised.js';
 import { isTrainLine } from '../trains/trains.js';
 import { OBJECT_TYPES, objectTypeOf } from './object-types.js';
+import { importModelFile, removeImportedModel, isImportedType } from './imported-models.js';
 
 // ============================================================ objects
 // The Objects tab: street furniture put down by hand (see object-types.js for what there is). Picking a kind off the
@@ -156,6 +157,7 @@ export function rebuildObjectsOfType(typeId) {
 export function restoreObjects(list) {
   clearObjects();
   (list || []).forEach(saved => {
+    if (isImportedType(saved.type) && !OBJECT_TYPES.some(t => t.id === saved.type)) return; // its model's been taken off the palette, or failed to load
     const obj = { id:saved.id, type:saved.type, x:saved.x, z:saved.z, rotY:saved.rotY||0, scale:saved.scale||1, seed:saved.seed||1 };
     S.objects.push(obj);
     buildObject(obj);
@@ -474,21 +476,31 @@ function scheduleObjectThumbnails() {
   if (objectThumbnails || objectThumbnailsScheduled || !App.withThumbnailStudio) return;
   objectThumbnailsScheduled = true;
   setTimeout(() => {
-    objectThumbnails = renderObjectThumbnails();
-    document.querySelectorAll('#object-palette .type-card').forEach(card => {
-      const image = objectThumbnails[card.dataset.type];
-      if (image) card.querySelector('.thumb').style.backgroundImage = `url(${image})`;
-    });
+    objectThumbnails = renderObjectThumbnails(OBJECT_TYPES);
+    showObjectThumbnails();
   }, 30);
 }
-function renderObjectThumbnails() {
+function showObjectThumbnails() {
+  document.querySelectorAll('#object-palette .type-card').forEach(card => {
+    const image = objectThumbnails?.[card.dataset.type];
+    if (image) card.querySelector('.thumb').style.backgroundImage = `url(${image})`;
+  });
+}
+// A model imported after the palette's been shot gets its own card shot then (see imported-models.js). Before that, it's
+// shot along with the rest the first time the tab opens.
+function refreshObjectThumbnails(types) {
+  if (!objectThumbnails || !types.length || !App.withThumbnailStudio) return;
+  Object.assign(objectThumbnails, renderObjectThumbnails(types));
+  showObjectThumbnails();
+}
+function renderObjectThumbnails(types) {
   return App.withThumbnailStudio(snap => {
     const FOV = 30;
     const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 500);
     const view = new THREE.Vector3(0.6, 0.55, 1).normalize(); // from the front (+z), a little right and above
     const box = new THREE.Box3(), sphere = new THREE.Sphere();
     const thumbnails = {};
-    OBJECT_TYPES.forEach((type, i) => {
+    types.forEach((type, i) => {
       const cx = 42000 + i*100, cz = 42000;
       const group = new THREE.Group();
       const prop = type.build(mulberry32(1));
@@ -529,8 +541,24 @@ export function renderObjectsPanel() {
     const image = objectThumbnails && objectThumbnails[type.id];
     card.innerHTML = `<div class="thumb" style="background-color:${type.color};${image ? `background-image:url(${image});` : ''}"></div>${type.label}`;
     card.onclick = () => armObject(type.id);
+    if (type.imported) { // an imported model can be taken off the palette again
+      const del = document.createElement('span');
+      del.className = 'card-del'; del.textContent = '×'; del.title = `Remove ${type.label} and every one put down`;
+      del.onclick = (e) => {
+        e.stopPropagation();
+        const down = S.objects.filter(o => o.type === type.id).length;
+        if (!down || confirm(`Remove ${type.label}? The ${down} put down go with it.`)) removeImportedModel(type.imported);
+      };
+      card.appendChild(del);
+    }
     palette.appendChild(card);
   });
+  const importCard = document.createElement('button'); // and the way to bring in one of your own
+  importCard.className = 'type-card import-card';
+  importCard.title = 'Import a .glb, .gltf or .obj model';
+  importCard.innerHTML = '<div class="thumb">+</div>Import…';
+  importCard.onclick = () => document.getElementById('model-file-input').click();
+  palette.appendChild(importCard);
   const list = document.getElementById('objects-list');
   list.innerHTML = '';
   S.objects.forEach(obj => {
@@ -601,5 +629,10 @@ export function renderObjectDetails() {
   panel.querySelector('#do-close').addEventListener('click', () => selectObject(null));
 }
 
-Object.assign(App, { renderObjectsPanel, renderObjectDetails, disarmObject, invalidateObjectFacing, objectsHint, showObjectUi, restoreObjects, clearObjects,
+document.getElementById('model-file-input')?.addEventListener('change', (e) => {
+  Array.from(e.target.files || []).forEach(importModelFile);
+  e.target.value = ''; // so the same file can be picked again
+});
+
+Object.assign(App, { armObject, removeObject, refreshObjectThumbnails, renderObjectsPanel, renderObjectDetails, disarmObject, invalidateObjectFacing, objectsHint, showObjectUi, restoreObjects, clearObjects,
   cancelObjectTransform, confirmObjectTransform, objectTransformHint, rebuildObjectsOfType });

@@ -9,7 +9,7 @@ import { carTypeOf } from '../car-types.js';
 import { BLAST_THROW, burnFuse, DETONATION_REACH, swayCrash, inCarsWay, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
 import { boostMax, driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, rechargeBoost, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
 import { chaseCamera, updateCarRevive, respawnFromWater, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
-import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
+import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, roadCrossers, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
 import { carHoloTimeUniform, carPlate } from './materials.js';
 import { carMeshes, carParts, designNumbers } from './models.js';
 import { CAR_REAR_AXLE, carHeight, carLength, engineOf, placeCar, placing, turnWheels } from './placing.js';
@@ -120,6 +120,7 @@ export function updateTraffic(t) {
   updateJunctionGates(t); // (each junction's queue: see junctions.js)
   const lying = App.people.filter(isLying); // (anyone on the ground, for cars to stop for: see lyingAhead)
   const inWay = App.people.filter(inCarsWay); // (the few any car could run over: see runOverPeople)
+  const inRoad = roadCrossers(); // (the few any car could stop for: see checkYield)
   const { matrix } = placing;
   const designCounts = carMeshes.map(() => 0);
   const smelly = smellyCars(); // (everyone gives way to these: see pullover.js)
@@ -179,7 +180,7 @@ export function updateTraffic(t) {
     const turnHeld = !!ahead && !ahead.deadEnd && ahead.dist < 30*S.peopleSize && waitToTurn(car, ahead, dt);
     if (turnHeld) holdAtLine();
     if (junction && junctionGate(car, junction, arm, lineGap, t, turnHeld)) holdAtLine();
-    if (checkYield(car, dt) || car.kick) target = 0; // (or knocked off its route, and waiting to be back on it)
+    if (checkYield(car, dt, inRoad) || car.kick) target = 0; // (or knocked off its route, and waiting to be back on it)
     car.speed += Math.max(-CAR_BRAKE*(car.traits?.braking ?? 1)*S.peopleSpeed*dt, Math.min(5*S.peopleSpeed*dt, target - car.speed));
     if (car.reverseFor > 0 && !car.kick) { car.reverseFor -= dt; car.speed = -PUSHED_REVERSE_SPEED*S.peopleSpeed; } // (being pushed back: see PUSHED_REVERSE_TIME in collisions.js)
     else car.reverseFor = 0;

@@ -42,6 +42,12 @@ Same again? {here.building = pub}
 > I've had enough. {patience, is != drunk}
 > I think you've had enough, [other.name]. {other.is = drunk}
 >> One more won't hurt. {is = drunk}
+Love this song. {here.building = pub, mood}
+> Me too! {happy}
+> It's alright. {patience = -1}
+> Bit before my time. {weight = 0.5}
+Can you hear the music in here? {here.building = pub, weight = 0.5}
+> Barely. {patience = -1}
 It's cosy in here, isn't it? {here.indoors, happy}
 Lovely day to be out. {here.outdoors, world.weather = clear, mood}
 Why are you always so twitchy? {other.fidgety > 0.3}

@@ -7,7 +7,7 @@ import { roadNodes } from '../core/state.js';
 import { CLIPPER_SCALE, unionRoadStrokes, clipPolygons, createMeshBuilder, forEachPolyTreeEdge } from './roads.js';
 import { applyWalkwayShader, walkwayTextureScaleOf, WALKWAY_COLOR, WALKWAY_TEXTURE } from './paths.js';
 import { createRegionTester, offsetPaths, toClipperPath } from '../zones/cutouts.js';
-import { makeTreeMesh } from '../zones/surface-detail.js';
+import { makeTreeMesh, mergeTrees } from '../zones/surface-detail.js';
 
 // ---------------------------------------------------------- raised walkways
 // A walkway up on pillars: a concrete deck at the line's own height, a ledge along both sides, and a spiral ramp down to
@@ -214,6 +214,7 @@ export function buildRaisedWalkway(lines, networkId) {
   // ---- trees, benches and lamp posts, along each line on alternate sides, clear of the ends, junctions and ramps
   const trees = new THREE.Group();
   trees.name = 'RaisedTrees';
+  const planters = []; // (merged into trees at the end: see mergeTrees)
   const withTrees = !!line.raisedTrees, withBenches = !!line.raisedBenches, room = hw - LEDGE_WIDTH;
   const nodesBy = [...degree.entries()].map(([id, deg]) => ({ node: roadNodes[id], deg }));
   const clear = p => nodesBy.every(({ node, deg }) => {
@@ -237,7 +238,7 @@ export function buildRaisedWalkway(lines, networkId) {
         const tree = makeTreeMesh(1, 1.1 + rng()*0.5, rng, S.globalTreeTint);
         tree.position.set(x, H + 0.5, z);
         tree.rotation.y = rng()*Math.PI*2;
-        trees.add(tree);
+        planters.push(tree);
       }
       if (withBenches) {
         const bs = withTrees ? -side : side, o = bs*(room - 0.45), x = p.x + nr.x*o, z = p.z + nr.z*o;
@@ -304,7 +305,7 @@ export function buildRaisedWalkway(lines, networkId) {
     mesh.userData = { networkId, baseColor: 0xfff1d6, lampPosts }; // where they stand, and how high, for the light they throw
     objects.push(mesh);
   }
-  if (trees.children.length) objects.push(trees);
+  if (planters.length) { trees.add(...mergeTrees(planters)); objects.push(trees); }
 
   // ---- what keeps the ground clear under it: the deck and each ramp's whole turn
   const footprint = clipPolygons(ctUnion, deck, ramps.map(r => circle(r.C, R + rw/2)));

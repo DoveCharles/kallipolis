@@ -6,7 +6,7 @@ import { mulberry32 } from '../core/math.js';
 import { distPointSegment } from '../buildings/footprints.js';
 import { resolveTreeTint } from '../core/splines.js';
 import { clipPolygons, createMeshBuilder, CLIPPER_SCALE } from '../roads/roads.js';
-import { makeFlatZoneMesh, makeTreeMesh } from './surface-detail.js';
+import { makeFlatZoneMesh, makeTreeMesh, mergeTrees } from './surface-detail.js';
 import { WATER_TIME } from '../water/water.js';
 import { plantPigeons } from '../life/pigeons.js';
 
@@ -319,13 +319,13 @@ export function generatePlazaContent(zone, poly, cutouts, blockers) {
       if (spots.length > targetTrees) lo = mid; else { hi = mid; planted = spots; }
     }
   }
-  planted.slice(0, targetTrees).forEach(({ x, z }) => {
+  mergeTrees(planted.slice(0, targetTrees).map(({ x, z }) => {
     furniture.addBox(x, z, ux, uz, 0.95, 0.95, Y_PLAZA, Y_PLAZA + 0.55);
     const tree = makeTreeMesh(1, 1.4 + rng()*0.7, rng, resolveTreeTint(zone));
     tree.position.set(x, Y_PLAZA + 0.55, z);
     tree.rotation.y = rng()*Math.PI*2;
-    zone.buildingsGroup.add(tree);
-  });
+    return tree;
+  })).forEach(mesh => zone.buildingsGroup.add(mesh));
   const furnitureGeo = furniture.build();
   if (furnitureGeo) {
     const mesh = new THREE.Mesh(furnitureGeo, new THREE.MeshStandardMaterial({ color: 0x4a4d52, roughness: 0.7, metalness: 0.2 }));

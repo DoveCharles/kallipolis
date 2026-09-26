@@ -89,7 +89,9 @@ const TOPICS = [
       ['Alt+drag', 'Copy it'], ['G / R / S', 'Move, turn or size it with the mouse; click to keep, right-click to undo'],
       ['Double-click / Delete', 'Delete it'],
     ])}
-    <p>The panel has sliders for the selected one's turn and size.</p>` },
+    <p>The panel has sliders for the selected one's turn and size.</p>
+    <p>Import… at the end of the palette brings in a model of your own (.glb, .gltf or .obj). It joins the palette and is
+    saved with the project; the × on its card takes it off again, with everything of it that's been put down.</p>` },
 
   { id: 'maps', title: 'Tracing a map', html: () => `
     <p>File &gt; Import Map Image puts a picture on the ground to trace over. In Maps mode:</p>

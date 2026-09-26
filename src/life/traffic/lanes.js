@@ -382,15 +382,26 @@ export function carsWhere(test) {
 }
 const YIELD_GIVE_UP = 8; // (seconds)
 /**
+ * Everyone a car might stop for — mid-road or crossing (see checkYield) — as indices in App.people. updateTraffic
+ * gathers them once a frame rather than every car walking the whole crowd.
+ * @returns {number[]}
+ */
+export function roadCrossers() {
+  const out = [];
+  App.people.forEach((p, i) => { if (p.crossStage === 'mid' || isPedInDanger(p)) out.push(i); });
+  return out;
+}
+/**
  * Whether the car stops for a pedestrian: someone mid-road ahead of it within PED_YIELD_RADIUS is stopped for with chance
  * PED_YIELD_CHANCE, or always on a junction's zebra crossing. A car committed to someone keeps stopping for them with no
  * further rolls, until they are across, gone, or YIELD_GIVE_UP seconds pass — when they are waved on (p.jc.waved) and it
  * drives on. runOverPeople spares anyone mid-road the car has waved over.
  * @param {object} car
  * @param {number} dt - seconds this frame
+ * @param {number[]} [inRoad] - indices in App.people of everyone in the road (roadCrossers), if the caller has them already
  * @returns {boolean} whether it is yielding
  */
-export function checkYield(car, dt) {
+export function checkYield(car, dt, inRoad = roadCrossers()) {
   if (car.yieldFor != null) {
     const p = App.people[car.yieldFor];
     car.yielded += dt;
@@ -399,9 +410,9 @@ export function checkYield(car, dt) {
     return car.yieldFor != null;
   }
   const cos = Math.cos(car.heading), sin = Math.sin(car.heading);
-  for (let i = 0; i < App.people.length; i++) {
+  for (const i of inRoad) {
     const p = App.people[i];
-    if ((p.crossStage !== 'mid' && !isPedInDanger(p)) || i === car.yieldChecked) continue;
+    if (i === car.yieldChecked) continue;
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.hypot(dx, dz) > PED_YIELD_RADIUS) continue;
     const forward = dx*sin + dz*cos;

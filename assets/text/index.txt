@@ -48,10 +48,6 @@ speech/words/things/foods.txt
 speech/words/things/objects.txt
 speech/words/things/physical.txt
 speech/words/things/utensils.txt
-speech/words/verbs/actions.txt
-speech/words/verbs/badhabits.txt
-speech/words/verbs/verbs.txt
-speech/words/verbs/violence.txt
 speech/words/topics/beliefs.txt
 speech/words/topics/folk.txt
 speech/words/topics/habits.txt
@@ -65,3 +61,7 @@ speech/words/topics/surreal.txt
 speech/words/topics/tastes.txt
 speech/words/topics/topics.txt
 speech/words/topics/vice.txt
+speech/words/verbs/actions.txt
+speech/words/verbs/badhabits.txt
+speech/words/verbs/verbs.txt
+speech/words/verbs/violence.txt

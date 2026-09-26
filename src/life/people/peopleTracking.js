@@ -165,7 +165,7 @@ export function personDoing(p) {
   if (p.mode === 'wander' && p.swimming) return p.traits.aqua ? (p.swimming === 'in' ? 'Swimming' : 'Off for a swim') : (p.swimming === 'in' ? 'Walking on water' : 'Off to walk on water');
   if (p.mode === 'wander' && p.floatPhase > 0.5 && !p.moving) return p.traits.aqua ? 'Swimming' : 'Walking on water';
   if (p.mode === 'wander') return hangout ? 'Hanging out ' + hangout.join(' ') : 'Hanging about';
-  if (p.snack && (p.mode === 'line' || p.mode === 'wander')) return { coffee: 'Drinking a coffee', beer: 'Drinking a pint' }[p.snack.item] ?? 'Eating a hot dog';
+  if (p.snack && (p.mode === 'line' || p.mode === 'wander')) return { coffee: 'Drinking a coffee', beer: p.snack.held.stout ? 'Drinking a stout' : 'Drinking a pint' }[p.snack.item] ?? 'Eating a hot dog';
   if (p.mode === 'line') return 'Out for a walk';
   return null;
 }

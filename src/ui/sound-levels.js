@@ -3,7 +3,7 @@ import { openWindow } from './w3-window.js';
 
 // ============================================================ sound levels
 // Options > Sound levels (see ui/win3-menu.js) opens a little window of sliders: the master level over every sound, and
-// one each for the people, the traffic and the city's ambience (the kinds in audio/sfx.js's LEVEL_KINDS). It stays open
+// one each for the people, the traffic, the city's ambience and the music (the kinds in audio/sfx.js's LEVEL_KINDS). It stays open
 // while the city plays on (ui/w3-window.js), so a change is heard as it's made. Like mute
 // (ui/sound.js), the levels are the browser's preference, remembered in localStorage rather than saved with the project.
 const STORAGE_KEY = 'splinetopia.soundLevels';
@@ -12,6 +12,7 @@ const SLIDERS = [
   { kind: 'peds', label: 'Peds' },
   { kind: 'traffic', label: 'Traffic' },
   { kind: 'ambience', label: 'Ambience' },
+  { kind: 'music', label: 'Music' },
 ];
 
 let remembered = {};

@@ -2,6 +2,7 @@
 # shapes (youtube.com/watch?v=…, youtu.be/…, /shorts/…) or just the video's id. Each visit to a home picks one at random.
 # Blank lines and lines starting with # are skipped. (A video whose owner has turned off embedding shows an error instead.)
 
+https://www.youtube.com/watch?v=z5gfeD-TJVA
 https://www.youtube.com/watch?v=bIRnM6s4GNo
 https://www.youtube.com/watch?v=yN9dSvUJB2o
 https://www.youtube.com/watch?v=RyBEUyEtxQo
@@ -37,6 +38,7 @@ https://www.youtube.com/watch?v=c_P0CWhmIq0
 https://www.youtube.com/watch?v=t9VnKhSnmbA
 https://www.youtube.com/watch?v=AuMdE-r6qcU
 https://www.youtube.com/watch?v=PI-nzF0Yyc8
+https://www.youtube.com/watch?v=SdfY4wpk4rw
 https://www.youtube.com/watch?v=zCsYwPFJWKo
 https://www.youtube.com/watch?v=xG5fTbLaRZM
 https://www.youtube.com/watch?v=tnPG-kOTrls&t=623s
@@ -46,7 +48,10 @@ https://www.youtube.com/watch?v=2VAmUOUVC3c
 https://www.youtube.com/watch?v=sYbOepy7jMk
 https://www.youtube.com/watch?v=PYQhvW-tjNM
 https://www.youtube.com/watch?v=NAh9oLs67Cw
+https://www.youtube.com/watch?v=FJQrSvDyKOU
+https://www.youtube.com/watch?v=F9cMu4uWom8
 https://www.youtube.com/watch?v=AFA-rOls8YA
+https://64.media.tumblr.com/3bd7cd315d151f2e71e07d0e9e3689ff/6d7947979ef0b811-3e/a2f46f736e31ae5e70f85ba383aabc1386e49f2f.mov
 https://va.media.tumblr.com/tumblr_r112paRnis1tzoyjq.mp4
 https://va.media.tumblr.com/tumblr_swfbask7eS1v3wst6.mp4
 https://va.media.tumblr.com/tumblr_qz553iAInf1y9b376.mp4

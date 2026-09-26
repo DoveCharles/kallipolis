@@ -9,24 +9,26 @@ the page says so; it just quietly doesn't work. Served no-store, every reload re
 It also keeps assets/text/index.txt up to date: every .txt under assets/text/, one path per line, which the
 speech loader (src/life/speech-text.js) reads, since a browser can't list a folder. Written afresh each time
 it's asked for, and on start — commit it, so the deployed site (no server of its own) has it too.
-`python3 serve.py --index` just writes it.
+assets/music/index.txt the same, for the .mid files under assets/music/ (the pubs' music: src/audio/pub-music.js).
+`python3 serve.py --index` just writes them.
 """
 import os
 import sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
-TEXT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'text')
+ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 INDEX_NAME = 'index.txt'
+INDEXED = {'text': '.txt', 'music': '.mid'} # folder under assets/ -> the files listed in its index.txt
 
-def write_text_index():
-    paths = []
-    for folder, dirs, files in os.walk(TEXT_DIR):
+def write_index(folder_name):
+    top, ending, paths = os.path.join(ASSETS, folder_name), INDEXED[folder_name], []
+    for folder, dirs, files in os.walk(top):
         dirs.sort()
         for name in sorted(files):
-            path = os.path.relpath(os.path.join(folder, name), TEXT_DIR).replace(os.sep, '/')
-            if name.endswith('.txt') and path != INDEX_NAME:
+            path = os.path.relpath(os.path.join(folder, name), top).replace(os.sep, '/')
+            if name.lower().endswith(ending) and path != INDEX_NAME:
                 paths.append(path)
-    with open(os.path.join(TEXT_DIR, INDEX_NAME), 'w', encoding='utf-8', newline='\n') as f:
+    with open(os.path.join(top, INDEX_NAME), 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(paths) + '\n')
 
 class NoStoreHandler(SimpleHTTPRequestHandler):
@@ -38,12 +40,14 @@ class NoStoreHandler(SimpleHTTPRequestHandler):
     # and be told it hasn't; the question goes unasked instead
     def send_head(self):
         del self.headers['If-Modified-Since']
-        if self.path.split('?')[0] == '/assets/text/' + INDEX_NAME:
-            write_text_index()
+        for folder_name in INDEXED:
+            if self.path.split('?')[0] == f'/assets/{folder_name}/{INDEX_NAME}':
+                write_index(folder_name)
         return super().send_head()
 
 if __name__ == '__main__':
-    write_text_index()
+    for folder_name in INDEXED:
+        write_index(folder_name)
     if '--index' in sys.argv:
         sys.exit()
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000

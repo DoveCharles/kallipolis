@@ -4,7 +4,7 @@ import { scene, camera } from '../core/scene.js';
 import { controls } from '../core/camera-controls.js';
 
 // ============================================================ sound effects
-// Every sound is synthesized: ZzFX (https://killedbyapixel.github.io/ZzFX/ has a designer, whose parameter lists paste
+// Every sound is synthesized (but for the pubs' music: audio/pub-music.js): ZzFX (https://killedbyapixel.github.io/ZzFX/ has a designer, whose parameter lists paste
 // straight into SOUNDS below) builds the samples, and each play is a THREE.PositionalAudio set down where it happened, so
 // it's quieter far off and comes from the right side. The listener sits at the ear (placeEar, below). Sound travels at SPEED_OF_SOUND, so
 // a far-off blast is seen before it's heard, like the thunder after the lightning.
@@ -133,10 +133,10 @@ export function setIndoors(contains) {
 export const heardFrom = (at, kind) => inRoom?.(at.x, at.y, at.z) ? inside(kind) : outdoorsOf(kind);
 
 // Sound levels (Options > Sound levels: see ui/sound-levels.js): each kind of sound — people, traffic, the city's
-// ambience — goes by way of its own level, one for the room you're in and one through the walls; anything of no kind
+// ambience, music (the pubs': audio/pub-music.js) — goes by way of its own level, one for the room you're in and one through the walls; anything of no kind
 // (a blast, a door) only has the master level over everything. Like mute, they're the browser's preference, remembered
 // by ui/sound-levels.js rather than saved with the project.
-export const LEVEL_KINDS = ['peds', 'traffic', 'ambience'];
+export const LEVEL_KINDS = ['peds', 'traffic', 'ambience', 'music'];
 const buses = Object.fromEntries(LEVEL_KINDS.map(kind => {
   const bus = { in: context.createGain(), out: context.createGain() };
   bus.in.connect(listener.getInput());
@@ -151,7 +151,7 @@ let master = 1;
 const levels = Object.fromEntries(LEVEL_KINDS.map(kind => [kind, 1]));
 /**
  * Set how loud a kind of sound is, or 'master' for everything.
- * @param {'master'|'peds'|'traffic'|'ambience'} kind
+ * @param {'master'|'peds'|'traffic'|'ambience'|'music'} kind
  * @param {number} level - 0 to 1
  * @returns {void}
  */
