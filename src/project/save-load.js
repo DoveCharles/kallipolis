@@ -11,6 +11,7 @@ import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone } from '../zones/cutouts.js';
 import { renderHierarchy, renderWorldTintPanel } from '../ui/panels.js';
 import { restoreObjects } from '../objects/objects.js';
+import { serializeImportedModels, restoreImportedModels } from '../objects/imported-models.js';
 import { cancelActiveDrawing, applyModeVisibility } from '../editor/tools.js';
 import { savedFavorites, restoreFavorites } from '../ui/favorites.js';
 
@@ -84,6 +85,8 @@ export function serializeProject() {
       points: z.points.map(serializePoint),
       settings: { ...z.settings, groundColor: colorToHex(z.settings.groundColor, BUILDING_GROUND_COLORS[0]) }
     })),
+    importedModelSeq: S.importedModelSeq,
+    importedModels: serializeImportedModels(), // the models imported into the Objects tab, files and all (imported-models.js)
     objectSeq: S.objectSeq,
     // what was put down by hand in the Objects tab: the record only, since its seed builds the thing itself back (objects.js)
     objects: S.objects.map(o => ({ id:o.id, type:o.type, x:o.x, z:o.z, rotY:o.rotY, scale:o.scale, seed:o.seed })),
@@ -285,6 +288,7 @@ export async function loadProjectFromData(data, options) {
   // only once every zone is in: a zone's beaches and fences depend on the zones below it too, not just the ones above
   S.zones.forEach(subdivideZone);
   S.zoneSeq = data.zoneSeq || 1;
+  if (!keepMaps) await restoreImportedModels(data.importedModels, data.importedModelSeq); // (undo's snapshots leave them out, like the map images)
   restoreObjects(data.objects);
   S.objectSeq = data.objectSeq || 1;
   if (!keepMaps) {

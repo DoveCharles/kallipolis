@@ -144,6 +144,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 ### src/objects/
 - `object-types.js` (19K) The catalogue the Objects tab places from (the statue and beer stall are assets/models/Statue.glb and BeerStand.glb, the rest built from boxes and posts): — exports: loadStatueModel, loadBeerStallModel, OBJECT_TYPES, objectTypeOf
 - `objects.js` (30K) The Objects tab: — exports: objectGroup, Y_OBJECT, MIN_OBJECT_SCALE, invalidateObjectFacing, streetFacingAt, objectById, addObject, removeObject …
+- `imported-models.js` (6K) Models imported into the Objects tab (.glb/.gltf/.obj via the palette's Import… card): kept as data URLs in `S.importedModels`, saved with the project (not in undo snapshots), each registered as a `model:<id>` kind in OBJECT_TYPES. — exports: importModelFile, removeImportedModel, restoreImportedModels, serializeImportedModels, importedTypeId, isImportedType
 
 ### src/project/
 - `autosave.js` (4K) The project (everything a saved project file holds, map images and all) and where the camera is are kept in the browser — in IndexedDB, which has room… Restores only after ui/loading.js's `modelsLoaded`.
