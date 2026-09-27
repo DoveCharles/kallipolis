@@ -8,25 +8,24 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 // and back round to face the bar when it stops. Now and then it polishes a glass (PolishGlass) or wipes the bar
 // (CleanBar: done from the middle of the counter, facing it, where it was animated), looking down (the LookDown shape)
 // while it does; otherwise its eyes (Look Left/Right) flick about and its eyebrow (Raised Eyebrow) goes up now and then.
-// With nobody in the pub it sleeps: the Sleep pose, its face (Face) swapped for the Zzz, and its screen (the Face and
-// FaceBacklight materials) dimmed. There's only ever one room up, so there's one bot, moved to whichever pub that is
-// (placeBarbot, from furnishPub in interior.js). How far behind the counter it stands and how tall it is are tuned in
-// View > Bar Bot (debug) (ui/barbot-debug.js) and remembered in the browser.
+// Standing about or going along the bar, it swivels its head (Head) to look round the room now and then.
+// With nobody in the pub it sleeps: the Sleep pose, its face (Face) swapped for the Zzz (glowing just short of the lit
+// screen: the Face material's dark ink turned to the backlight's glow), and the screen behind them (FaceBacklight)
+// dimmed. There's only ever one room up, so there's one bot, moved to whichever pub that is (placeBarbot, from
+// furnishPub in interior.js).
 const BARBOT_MODEL_URL = 'assets/models/Barbot.glb';
-const STORAGE_KEY = 'kallipolis.barbot';
-/** How far behind the counter's back edge it stands (m), and how tall it is (m): see ui/barbot-debug.js. */
-export const BARBOT_TUNING = { behind: 0.45, height: 1.6 };
-try { Object.assign(BARBOT_TUNING, JSON.parse(localStorage.getItem(STORAGE_KEY)) ?? {}); } catch (err) { /* storage blocked or garbled: the defaults */ }
-export function rememberBarbotTuning() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(BARBOT_TUNING)); } catch (err) { /* storage blocked: not remembered */ }
-}
+const BEHIND = 0.38;        // m, stood behind the counter's back edge
+const HEIGHT = 1.85;        // m tall
 
 const SPEED = 0.5;          // m/s along the bar
 const TURN = 5;             // rad/s, the body's yaw
 const FACING = 0.15;        // rad: near enough facing the way it means to
 const FADE = 0.4;           // s, between poses
 const SHAPE_EASE = 8;       // the face's shapes, eased per second (the eyes jump: see `look`)
-const ASLEEP_GLOW = 0.12;   // its screen's glow asleep, of awake
+const ASLEEP_GLOW = 0.12;   // its screen's backlight's glow asleep, of awake
+const ASLEEP_FACE = 0.85;   // and the Zzz's (the Face material's), of the backlight's awake
+const HEAD_REACH = 0.7;     // rad, the most its head swivels either way looking round
+const HEAD_EASE = 3;        // the head's swivel, eased per second
 const END_GAP = 0.35;       // kept from either end of the counter
 const SHAPES = ['Look Left/Right', 'Raised Eyebrow', 'LookDown'];
 
@@ -34,10 +33,11 @@ let bot = null;             // { root, rig, body, mixer, actions, shaped, screen
 let place = null;           // where it is in this pub: { x0, x1, mid, barZ }
 const state = {
   x: 0, goal: 0, yaw: 0, doing: 'idle', next: 0, then: null, asleep: false, snap: true,
-  look: 0, lookNext: 0, brow: 0, browUntil: 0, browNext: 0, shape: [0, 0, 0], glow: 1,
+  look: 0, lookNext: 0, brow: 0, browUntil: 0, browNext: 0, shape: [0, 0, 0], sleepy: 0,
+  head: 0, headGoal: 0, headNext: 0,
 };
 let lastTime = 0;
-const yawTurn = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0);
+const yawTurn = new THREE.Quaternion(), yawUndo = new THREE.Quaternion(), headTurn = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0);
 
 /**
  * Load the model, lit with the room's `lit` (see roomLit in interior.js) but for its screen and glass.
@@ -52,10 +52,11 @@ export async function loadBarbot(lit) {
     return;
   }
   const rig = gltf.scene;
-  let body = null, face = null, zzz = null;
+  let body = null, head = null, face = null, zzz = null;
   const shaped = [], screens = [], meshes = [];
   rig.traverse(o => {
     if (o.isBone && /^body/i.test(o.name) && !body) body = o;
+    if (o.isBone && o.name === 'Head') head = o;
     if (o.name === 'Face' && !o.isBone) face = o;
     if (o.name === 'Zzz' && !o.isBone) zzz = o;
     if (!o.isMesh) return;
@@ -67,7 +68,15 @@ export async function loadBarbot(lit) {
     else if (!m.transparent && !m.userData.lit) { lit(m); m.userData.lit = true; }
     if (o.morphTargetDictionary && SHAPES.some(s => s in o.morphTargetDictionary)) shaped.push(o);
   });
-  for (const o of screens) o.userData.glow = o.material.emissiveIntensity;
+  // (each screen's awake glow, and its asleep one: the backlight's dimmed, the Face material's ink lit up to the
+  // backlight's colour)
+  const backlight = screens.find(o => o.material.name === 'FaceBacklight')?.material;
+  for (const o of screens) {
+    const m = o.material, ink = m.name === 'Face';
+    o.userData.awake = m.emissive.clone().multiplyScalar(m.emissiveIntensity);
+    o.userData.asleep = ink && backlight ? backlight.emissive.clone().multiplyScalar(backlight.emissiveIntensity*ASLEEP_FACE)
+      : o.userData.awake.clone().multiplyScalar(ink ? ASLEEP_FACE : ASLEEP_GLOW);
+  }
   if (zzz) zzz.visible = false;
   const size = new THREE.Box3().setFromObject(rig).getSize(new THREE.Vector3());
   const root = new THREE.Group();
@@ -85,18 +94,18 @@ export async function loadBarbot(lit) {
     actions[clip.name] = action;
   }
   mixer.addEventListener('finished', e => { if (e.action === actions[state.doing]) settle(); });
-  bot = { root, rig, body, mixer, actions, shaped, screens, face, zzz, height: size.y };
+  bot = { root, rig, body, head, mixer, actions, shaped, screens, face, zzz, height: size.y };
   sizeBarbot();
 }
 
 /** What's to be compiled under the loading screen (see warmUp in interior.js), or null. */
 export const barbotWarmUp = () => bot ? cloneSkinned(bot.root) : null;
 
-/** Scale it to BARBOT_TUNING.height, and stand it BARBOT_TUNING.behind the counter. */
-export function sizeBarbot() {
+/** Scale it to HEIGHT, and stand it BEHIND the counter. */
+function sizeBarbot() {
   if (!bot) return;
-  bot.root.scale.setScalar(BARBOT_TUNING.height/bot.height);
-  if (place) bot.root.position.z = place.barZ - BARBOT_TUNING.behind;
+  bot.root.scale.setScalar(HEIGHT/bot.height);
+  if (place) bot.root.position.z = place.barZ - BEHIND;
 }
 
 /**
@@ -122,20 +131,28 @@ function pose(name, fade = FADE) {
   const to = bot.actions[name];
   if (!to) return;
   // (isScheduled, not isRunning: a finished PolishGlass or CleanBar is held on its last frame, and fades out too)
-  for (const action of Object.values(bot.actions)) if (action !== to && action.isScheduled()) action.fadeOut(fade);
-  to.reset().setEffectiveWeight(1).fadeIn(fade).play();
+  for (const action of Object.values(bot.actions)) if (action !== to && action.isScheduled()) fade ? action.fadeOut(fade) : action.stop();
+  // (a held pose is left held: restarted, it'd fade in from nothing, and the mixer fills what's missing with the rest
+  // pose, a T-pose)
+  if (to.loop === THREE.LoopRepeat && to.isRunning() && to.getEffectiveWeight() > 0) {
+    to.stopFading().setEffectiveWeight(1);
+    return;
+  }
+  to.reset().setEffectiveWeight(1).play();
+  if (fade) to.fadeIn(fade);
 }
-function settle() {
+function settle(fade = FADE) {
   state.doing = 'idle';
-  state.next = 2 + Math.random()*6;
-  pose('DefaultPose');
+  state.next = 1 + Math.random()*3;
+  state.headNext = performance.now()/1000 + 0.3 + Math.random()*0.7;
+  pose('DefaultPose', fade);
 }
 function decide() {
   const r = Math.random();
-  if (r < 0.4) walkTo(place.x0 + Math.random()*(place.x1 - place.x0), null);
-  else if (r < 0.65) walkTo(state.x, 'PolishGlass');
-  else if (r < 0.85) walkTo(Math.min(place.x1, Math.max(place.x0, place.mid)), 'CleanBar');
-  else state.next = 1 + Math.random()*3;
+  if (r < 0.6) walkTo(place.x0 + Math.random()*(place.x1 - place.x0), null);
+  else if (r < 0.75) walkTo(place.x0 + Math.random()*(place.x1 - place.x0), 'PolishGlass');
+  else if (r < 0.9) walkTo(Math.min(place.x1, Math.max(place.x0, place.mid)), 'CleanBar');
+  else state.next = 0.5 + Math.random()*1.5;
 }
 function walkTo(x, then) {
   state.goal = x;
@@ -158,7 +175,7 @@ export function updateBarbot(inPub, occupied) {
   if (!occupied !== state.asleep || snap) {
     state.asleep = !occupied;
     if (state.asleep) { state.doing = 'sleep'; pose('Sleep', snap ? 0 : FADE*2); }
-    else { settle(); if (snap) pose('DefaultPose', 0); }
+    else settle(snap ? 0 : FADE);
     if (bot.face) bot.face.visible = !state.asleep;
     if (bot.zzz) bot.zzz.visible = state.asleep;
   }
@@ -179,8 +196,22 @@ export function updateBarbot(inPub, occupied) {
   state.yaw += Math.sign(turn)*Math.min(Math.abs(turn), TURN*dt);
   bot.root.position.x = state.x;
 
+  // its head swivelling to look round the room while it stands about or goes along the bar, and straight again while it
+  // works or sleeps
+  if ((state.doing !== 'idle' && state.doing !== 'walk') || state.asleep) state.headGoal = 0;
+  else if (now > state.headNext) {
+    state.headGoal = Math.random() < 0.3 ? 0 : (Math.random()*2 - 1)*HEAD_REACH;
+    state.headNext = now + 1 + Math.random()*2.5;
+  }
+  state.head += (state.headGoal - state.head)*Math.min(1, HEAD_EASE*dt);
+
+  // (last frame's turns taken off first: the mixer only writes a bone when its value changes, and the poses hold Body
+  // and Head still, so otherwise the turns pile up)
+  if (bot.body) bot.body.quaternion.premultiply(yawUndo.copy(yawTurn).invert());
+  if (bot.head) bot.head.quaternion.premultiply(yawUndo.copy(headTurn).invert());
   bot.mixer.update(dt);
   if (bot.body) bot.body.quaternion.premultiply(yawTurn.setFromAxisAngle(UP, state.yaw));
+  if (bot.head) bot.head.quaternion.premultiply(headTurn.setFromAxisAngle(UP, state.head));
 
   // the face: looking down at the work, or the eyes flicking about and the eyebrow going up now and then
   const working = state.doing === 'PolishGlass' || state.doing === 'CleanBar';
@@ -194,8 +225,12 @@ export function updateBarbot(inPub, occupied) {
     if (k != null) mesh.morphTargetInfluences[k] = state.shape[i];
   });
 
-  // its screen dimmed while it sleeps (set on whatever material the mesh has now: see fadeWhatsInTheWay in interior.js)
-  const glow = state.asleep ? ASLEEP_GLOW : 1;
-  state.glow = snap ? glow : state.glow + (glow - state.glow)*Math.min(1, 3*dt);
-  for (const o of bot.screens) o.material.emissiveIntensity = o.userData.glow*state.glow;
+  // its screen dimmed while it sleeps, the Zzz nearly as bright as the face (set on whatever material the mesh has now:
+  // see fadeWhatsInTheWay in interior.js)
+  const sleepy = state.asleep ? 1 : 0;
+  state.sleepy = snap ? sleepy : state.sleepy + (sleepy - state.sleepy)*Math.min(1, 3*dt);
+  for (const o of bot.screens) {
+    o.material.emissive.lerpColors(o.userData.awake, o.userData.asleep, state.sleepy);
+    o.material.emissiveIntensity = 1;
+  }
 }
