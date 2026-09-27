@@ -9,7 +9,7 @@ import { carTypeOf } from '../car-types.js';
 import { BLAST_THROW, burnFuse, DETONATION_REACH, swayCrash, inCarsWay, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
 import { boostMax, driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, rechargeBoost, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
 import { chaseCamera, updateCarRevive, respawnFromWater, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
-import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, roadCrossers, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
+import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, crowdGrid, roadCrossers, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
 import { carHoloTimeUniform, carPlate } from './materials.js';
 import { carMeshes, carParts, designNumbers } from './models.js';
 import { CAR_REAR_AXLE, carHeight, carLength, engineOf, placeCar, placing, turnWheels } from './placing.js';
@@ -119,8 +119,8 @@ export function updateTraffic(t) {
   separateCars(); // (clipped cars pushed apart)
   updateJunctionGates(t); // (each junction's queue: see junctions.js)
   const lying = App.people.filter(isLying); // (anyone on the ground, for cars to stop for: see lyingAhead)
-  const inWay = App.people.filter(inCarsWay); // (the few any car could run over: see runOverPeople)
-  const inRoad = roadCrossers(); // (the few any car could stop for: see checkYield)
+  const inWay = crowdGrid(App.people.filter(inCarsWay)); // (the few any car could run over: see runOverPeople)
+  const inRoad = crowdGrid(roadCrossers(), i => App.people[i]); // (the few any car could stop for: see checkYield)
   const { matrix } = placing;
   const designCounts = carMeshes.map(() => 0);
   const smelly = smellyCars(); // (everyone gives way to these: see pullover.js)
