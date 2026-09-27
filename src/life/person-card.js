@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { App } from '../core/shared.js';
 import { scene, renderer } from '../core/scene.js';
-import { HEADSHOT_LAYER, personModel, isGone, inRoom } from './people/people.js';
+import { HEADSHOT_LAYER, personModel, isGone, inRoom, lastPeopleTime } from './people/people.js';
 import { personDoing } from './people/peopleTracking.js';
 import { profileOf, onProfilesLoaded } from './profiles.js';
 import { strikeLightning } from './lightning.js';
@@ -26,7 +26,6 @@ const HEADSHOT_INTERVAL = 1/15, OTHER_HEADSHOT_INTERVAL = 1/4; // (the unfocused
 const OTHER_POLL = 500; // ms between the unfocused card's status checks
 const BESIDE_GAP = 10; // px between the two cards
 const SOCIAL_TOP = 3, SOCIAL_REFRESH = 1000;
-const PLACEHOLDER_EFFECTS = Array.from({ length: 3 }, () => ({ icon: '💊', title: 'Placeholder' }));
 const clearColor = new THREE.Color();
 
 const windows = [makePersonWindow('person-card'), makePersonWindow('person-card-2')];
@@ -60,7 +59,7 @@ function makePersonWindow(id) {
     if (!w.shown || w === focused || e.target.closest('.win3-sysbox, .card-close')) return;
     if (w.shown.beside) App.followPersonInside(w.shown.index); else App.followPerson(w.shown.index);
   });
-  card.setEffects(PLACEHOLDER_EFFECTS);
+  card.setEffects([]); // (no statuses until they pick one up: see refreshCardStatus)
 
   // ---- the headshot: a live close-up of their face, beside their name — drawn a few times a second (people.js hands over
   // where their head is and which way it faces) from a camera just in front of it that sees only the people, on a clear
@@ -199,6 +198,37 @@ function setDoing(w, doing, away = false) {
   w.canvas.classList.toggle('pc-away', away);
 }
 function setPersonCardDoing(doing, away = false) { if (focused) setDoing(focused, doing, away); }
+
+// ---- the status icons, in the column right of the picture (see setEffects in ui/entity-card.js): one per status effect
+// they're under just now, the one with the least time left at the top, and a dash in every slot no status has taken — so
+// the column always reads as a column of slots, whatever they're under (life/statuseffects.js).
+// Each icon is handed a `left`: how many seconds its status has *now*, read off the running clock. That's what its tip
+// says when the pointer rests on it, and the tip asks afresh on every pointer move — so a countdown in it runs, rather
+// than only being right when the column was drawn.
+// The column itself is redrawn as the statuses change — one starting or ending, the order swapping, or a whole second of
+// one's clock going by — so a tip that's open still has the right icon under the pointer, and not so often that an open
+// menu is rebuilt needlessly.
+const STATUS_SLOTS = 4; // how many places the column has: a slot per status, then a dash for each left over
+function statusListFor(p, now) {
+  return (p?.status ?? [])
+    .map(entry => ({ status: entry.key, remaining: Math.max(0, entry.until - now), left: () => Math.max(0, entry.until - (lastPeopleTime ?? 0)) }))
+    .sort((a, b) => a.remaining - b.remaining);
+}
+function refreshCardStatus(w, now) {
+  const list = statusListFor(personOf(w), now);
+  const key = list.map(item => `${item.status}:${Math.round(item.remaining)}`).join(',');
+  if (key === w.statusShown) return;
+  w.statusShown = key;
+  w.card.setEffects(list, STATUS_SLOTS); // (a slot per status, then dashes for the places left over)
+}
+// (drawn for every open card, every frame: with no statuses at all that's the dashes and nothing else — see setEffects —
+// so a card always shows its status column, whether anyone's under anything or not. Redrawing is held off unless the
+// statuses, their order or their whole seconds have changed, so an open menu isn't rebuilt under the pointer.)
+function refreshCardStatuses() {
+  const now = lastPeopleTime ?? 0;
+  openWindows().forEach(w => refreshCardStatus(w, now));
+}
+
 let otherPoll = null;
 function syncOtherPoll() {
   const want = openWindows().some(w => w !== focused);
@@ -317,4 +347,4 @@ function personFavorite(id) {
 reviveFavoritesAs('Person', saved => Number.isInteger(saved.id) ? personFavorite(saved.id)
   : Number.isInteger(saved.index) && saved.index >= 0 ? personFavorite(saved.index) : null);
 
-Object.assign(App, { showPersonCard, hidePersonCard, drawPersonHeadshot, otherHeadshotIndex, setPersonCardDoing });
+Object.assign(App, { showPersonCard, hidePersonCard, drawPersonHeadshot, otherHeadshotIndex, setPersonCardDoing, refreshCardStatuses });

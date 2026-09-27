@@ -420,6 +420,17 @@ button.pc-pick:hover { text-decoration:underline; }
 .entity-card .pc-mods-hates { border-left:var(--trait-bar) solid var(--trait-hates-bar); }
 .entity-card .pc-mod { line-height:var(--mod-line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .entity-card .pc-mods[hidden] { display:none; }
+/* a status effect's tip (see the tip in src/ui/entity-card.js): the same box a love's or hate's modifiers come down in —
+   classed `pc-mods pc-mods-status` for its look and its `.pc-mod` lines — placed at the pointer with position:fixed
+   instead of by layout, so it isn't one of the card's laid-out drop-downs at all. It takes no pointer events, so the
+   pointer's own test against the icons keeps deciding whether it's up, and the tip can never steal the hover from the
+   icon it's describing. */
+.entity-card .pc-tip {
+  position:fixed; left:auto; z-index:30; box-sizing:border-box;
+  height:auto; width:max-content; max-width:220px; max-height:220px; overflow:hidden;
+  padding:4px 7px; white-space:normal; pointer-events:none;
+}
+.entity-card .pc-tip .pc-mod { white-space:normal; }
 /* name, age and mood, with the headshot beside them (clear of the close button above it) */
 .pc-top { display:flex; gap:10px; align-items:flex-start; }
 .pc-rows { flex:1; min-width:0; }
@@ -527,8 +538,16 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 .pc-tab { cursor:pointer; font:inherit; }
 .pc-pane { box-sizing:border-box; min-height:120px; }
 .pc-pane[hidden] { display:none; }
-.pc-effects { flex:0 0 22px; display:flex; flex-direction:column; align-items:center; gap:4px; margin-top:18px; }
-.entity-card .pc-effect { font-size:16px; line-height:20px; cursor:default; }
+/* the status column right of the picture (src/ui/entity-card.js effects, src/life/statuseffects.js): one hand-drawn
+   bitmap per status in a slot of its own, at the bitmap's own 16x15 and scaled up hard-edged, as ui/pixel-icons.js draws
+   the icons it swaps in. A slot is a box with a little room around its icon, so the hover that opens its menu — and the
+   menu's own edge, a few pixels off it — don't have to be hit to the pixel. A slot no status has taken stands empty, one
+   grey dash in it, so the card still reads as a column of slots whatever someone is under. */
+.pc-effects { flex:0 0 18px; display:flex; flex-direction:column; align-items:center; gap:2px; margin-top:16px; }
+.entity-card .pc-effect { box-sizing:border-box; width:18px; height:18px; padding:1px; line-height:16px; text-align:center; cursor:default; }
+.entity-card .pc-effect img { width:16px; height:15px; image-rendering:pixelated; display:block; }
+.entity-card .pc-effect.pc-effect-empty { color:var(--text-dim); opacity:0.45; font-size:13px; }
+.entity-card .pc-effect.pc-has-mods { cursor:pointer; }
 .pc-pane-social { display:flex; flex-direction:column; gap:8px; padding-top:6px; }
 .pc-rel { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:8px; }
 .pc-rel-col { min-width:0; }

@@ -81,7 +81,12 @@
  * @property {number} stride
  * @property {number} phase - how far through the cuboid walk bob they are
  * @property {?object} exit - the walkway point they're leaving a hangout by
- * @property {object} traits - their traits from people/*.txt (see profiles.js)
+ * @property {object} traits - their traits from people/*.txt (see profiles.js) with every status effect they're under
+ *   stacked over them (see life/statuseffects.js)
+ * @property {object} [baseTraits] - those traits as they were picked, before any status moved them: what p.traits is put
+ *   back to when the last of them runs out
+ * @property {Array<{key: string, since: number, until: number, seconds: number}>} [status] - the status effects they're
+ *   under just now, each with the effect's key and the running people time it started at and ends at
  * @property {string} [name] - the name their profile gave them
  * @property {string} traitsKey - the profiles version and sex their traits were picked for
  * @property {?object} [defaultHair] - the hair color they started with, before any greying

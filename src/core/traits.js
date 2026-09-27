@@ -84,16 +84,23 @@ const SECRET_TRAITS = ['vampire'];
  * One entry's own traits as lines for the modifier drop-down under it on a card ("Speed ×1.2", "Mood +0.5", "Vampire").
  * Multiplied traits read ×, added ones +/−, switches just their name; markers, `hidden` traits and switches set off are left out,
  * and an entry with a SECRET_TRAITS trait has none.
- * @param {Array<[string, number]>} entryTraits - an entry's [trait, value] pairs (see entryOf in core/entries.js)
+ *
+ * A value may be a list of amounts where several apply to the one trait — what a status effect builds up (see
+ * life/statuseffects.js) — and they're shown as the one figure they come to between them (two ×1.3s reading ×1.69).
+ * @param {Array<[string, number|number[]]>} entryTraits - an entry's [trait, value] pairs (see entryOf in core/entries.js)
  * @param {object} [table] - the trait table they come from
  * @returns {string[]} one line per modifier
  */
 export function modifierLines(entryTraits, table = TRAITS) {
-  if (entryTraits.some(([key, value]) => SECRET_TRAITS.includes(key) && value > 0)) return [];
+  const amounts = value => Array.isArray(value) ? value : [value];
+  const switchedOn = value => amounts(value).some(amount => amount > 0);
+  if (entryTraits.some(([key, value]) => SECRET_TRAITS.includes(key) && switchedOn(value))) return [];
   return entryTraits
-    .filter(([key, value]) => table[key] && !table[key].hidden && !MARKER_TRAITS.includes(key) && !(table[key].combine === 'on' && value <= 0))
+    .filter(([key, value]) => table[key] && !table[key].hidden && !MARKER_TRAITS.includes(key)
+      && !(table[key].combine === 'on' && !switchedOn(value)))
     .map(([key, value]) => {
-      const name = key[0].toUpperCase() + key.slice(1), amount = Math.round(value*100)/100, { combine } = table[key];
+      const name = key[0].toUpperCase() + key.slice(1), { combine } = table[key];
+      const amount = Math.round(amounts(value).reduce((total, one) => combine === 'add' ? total + one : total*one, combine === 'add' ? 0 : 1)*100)/100;
       if (combine === 'on') return name;
       if (combine === 'add') return `${name} ${amount < 0 ? '−' + -amount : '+' + amount}`;
       return `${name} ×${amount}`;

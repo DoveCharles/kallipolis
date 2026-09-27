@@ -196,8 +196,49 @@ function animate() {
 }
 animate();
 
-// A handle on the app's insides, for poking at it from the browser console.
+// A handle on the app's insides, for poking at it from the browser console. `status` is there too, so a status effect can
+// be tried out without waiting for someone to happen to buy a coffee: `kallipolis.status.add('caffeinated')` puts one on
+// whoever the camera is following — the card should show its icon at once — and a second number is how long it lasts, and
+// a third says whose, their place in the crowd (`kallipolis.status.add('caffeinated', 30, 3)`).
 import * as SceneModule from './core/scene.js';
 import * as Shared from './core/shared.js';
-window.kallipolis = { scene: SceneModule.scene, renderer: SceneModule.renderer, camera: SceneModule.camera, S: Shared.S, App: Shared.App };
+import { EFFECTS, STATUS_SOURCES, addStatus, removeStatus, hasStatus } from './life/statuseffects.js';
+import { inspected } from './ui/entity-card.js';
+const followedAt = () => Shared.App.followedPerson?.() ?? -1;
+// (the clock a status's length runs on: the same running people time updatePeople ticks them down by)
+const peopleClock = () => Shared.App.peopleClock?.() ?? 0;
+const status = {
+  effects: EFFECTS, sources: STATUS_SOURCES, has: hasStatus, remove: removeStatus,
+  add: (key, seconds = null, who = null) => addStatus(Shared.App.people[who ?? followedAt()], key, seconds, peopleClock()),
+  of: who => Shared.App.people[who ?? followedAt()],
+  // What the followed person's card shows in its status column, and whether the pointer's tip is up — for the console:
+  // `kallipolis.status.add('caffeinated', 60)`, rest the pointer on the coffee icon, then `kallipolis.status.report()`.
+  // Read live every time, and the last two fields say where the browser thinks the pointer is: `over` is the element under
+  // the icon's middle, and `tipBox` is where the tip was put (null if it isn't up).
+  report: () => {
+    const w = followedAt();
+    const card = document.getElementById('person-card'), column = card?.querySelector('.pc-effects');
+    const kids = [...(column?.children ?? [])];
+    const icon = kids.find(el => el.classList.contains('pc-effect') && !el.classList.contains('pc-effect-empty'));
+    const box = el => { const r = el?.getBoundingClientRect(); return r ? { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) } : null; };
+    const from = box(icon);
+    const middle = from ? document.elementFromPoint(from.x + from.w/2, from.y + from.h/2) : null;
+    const live = inspected.get(card);
+    const tip = live?.tip();
+    return {
+      following: w,
+      statuses: (Shared.App.people[w]?.status ?? []).map(s => ({ key: s.key, left: Math.round((s.until - peopleClock())*10)/10 })),
+      cardShown: !!card && !card.hidden,
+      columnFound: !!column,
+      slots: kids.map(el => el.classList.contains('pc-effect-empty') ? 'dash' : el.querySelector?.('img') ? 'icon' : el.className),
+      iconSrc: icon?.querySelector('img')?.getAttribute('src') ?? null,
+      iconBox: from,
+      tipFound: !!tip, tipHidden: tip?.hidden ?? null, tipBox: box(tip),
+      tipLines: tip ? [...tip.children].map(c => c.textContent) : null,
+      tipStyle: tip ? { left: tip.style.left, right: tip.style.right, top: tip.style.top, position: getComputedStyle(tip).position, z: getComputedStyle(tip).zIndex, width: Math.round(tip.offsetWidth), height: Math.round(tip.offsetHeight) } : null,
+      over: from ? { tag: middle?.tagName ?? null, cls: middle?.className ?? null, inColumn: !!middle?.closest?.('.pc-effects') } : null,
+    };
+  },
+};
+window.kallipolis = { scene: SceneModule.scene, renderer: SceneModule.renderer, camera: SceneModule.camera, S: Shared.S, App: Shared.App, status };
 

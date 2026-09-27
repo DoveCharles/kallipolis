@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene } from '../../core/scene.js';
-import { PEOPLE_MAX, inRoom, isDrawn, people, peopleRng, personModel } from './people.js';
+import { PEOPLE_MAX, inRoom, isDrawn, lastPeopleTime, people, peopleRng, personModel } from './people.js';
 import { PERSON_ARM_SPREAD } from './peopleModel.js';
 import { eatingSound } from '../../audio/eating.js';
+import { STATUS_SOURCES, addStatus } from '../statuseffects.js';
 import { S } from '../../core/shared.js';
 
 // ============================================================ holding things
@@ -327,6 +328,11 @@ export function snackClip(p, clip, dt) {
       snack.mouthfuls--;
       if (snack.item === 'hotdog') snack.held.left = snack.mouthfuls/kind.mouthfuls;
       if (snack.item === 'beer') p.pints = (p.pints ?? 0) + 1/kind.mouthfuls; // (going to their head: see peopleDrunk.js)
+      // and what a sip leaves on them, for a while: a coffee keeps them caffeinated, a pint gets them drunk — each
+      // mouthful setting the clock to that source's length again (see STATUS_SOURCES and addStatus in
+      // life/statuseffects.js: a cup is three minutes, a pint ten, sipped over about that long either way)
+      const leaves = STATUS_SOURCES[snack.item];
+      if (leaves) addStatus(p, leaves.status, leaves.seconds, lastPeopleTime ?? 0);
       eatingSound({ x: p.x, y: p.y + (clip.pose ? 1.05 : 1.5)*p.height*S.peopleSize, z: p.z }, kind.sound);
     }
     if (snack.up <= 0) {

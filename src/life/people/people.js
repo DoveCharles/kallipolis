@@ -36,6 +36,7 @@ import { turnCrawling } from './peopleRoad.js';
 import { drinking, goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './peopleStalls.js';
 import { sway, updateDrunk } from './peopleDrunk.js';
 import { avoidSmells, updateFlies } from './peopleSmell.js';
+import { updateStatusEffects } from '../statuseffects.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
@@ -1007,7 +1008,7 @@ function stepPush(p, dt) {
  * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
  * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
  */
-Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups });
+Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups, followedPerson: () => followed, peopleClock: () => lastPeopleTime });
 
 /**
  * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone
@@ -1082,6 +1083,10 @@ export function updatePeople(t) {
   updateFlies(dt);
   // whoever's been knocked down and is still on the ground (or getting up): nobody walks into them
   updateArrivingBlood(dt);
+  // whatever status effects have run out come off here, and those people's traits go back as they were, before anything
+  // below reads a trait they were moving (see life/statuseffects.js: a coffee's pick-me-up, and whatever else a source
+  // hands out)
+  if (people.some(p => p.status?.length)) updateStatusEffects(people, t);
   const lyingDown = people.filter(q => q.punched && q.punched.stage !== 'marked' && q.punched.stage !== 'brace');
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   people.forEach((p, i) => {
@@ -1503,6 +1508,7 @@ export function updatePeople(t) {
   showPassengers();
   showInhabitants();
   showFollowedDoing();
+  App.refreshCardStatuses(); // (the status column on any open person card: see life/person-card.js)
   // the camera onto whoever it's following, at about their shoulders — or, while they're indoors, onto the building
   // (but not someone picked in the room it's in, which holds it: see buildings/interior.js)
   const inside = followed >= 0 && isGone(people[followed]) && people[followed].indoors?.building;

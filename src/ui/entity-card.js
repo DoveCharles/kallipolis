@@ -1,6 +1,7 @@
 import { isFavorite, toggleFavorite, onFavoritesChanged } from './favorites.js';
 import { dragByTitle } from './w3-window.js';
 import { healthOf, healthFraction, onHealthChanged } from '../core/health.js';
+import { EFFECTS, statusLines } from '../life/statuseffects.js';
 
 // ============================================================ the card for whatever's being followed
 // The card at the bottom right saying what the camera's following: a person (life/person-card.js), a car
@@ -33,6 +34,8 @@ export const TEXT_ROWS = ['name', 'mood', 'loves', 'hates'];
 // every card there is, in the order they were made — so the things that treat them all alike (the Windows 3.0 look in
 // ui/win3.js, the phone layout in ui/mobile.js) can go through them rather than each naming all four
 export const cards = [];
+// what each card's status column is doing just now, by its element: for the console, through src/main.js's `status`
+export const inspected = new Map();
 
 // `title` is the name in its title bar; `onClose` is what the × (and the control-menu box, under the Windows 3.0 look)
 // does. `thumb` is { title, onClick } for the picture — leave out onClick and it's just a picture. `kill`, if given, is
@@ -41,7 +44,8 @@ export const cards = [];
 // showAction. `labels` renames rows for this card ({ occupants: 'Passengers' }). `health` adds a thin bar under the
 // picture: bindHealth(entity, kind) makes it follow that entity's health (core/health.js); setHealth sets it by hand.
 // `tabs`: sheet tabs under the title bar (the first is the card's own rows; the rest get empty panes: tabPane(key), keys
-// lower-cased); onTab(listener) hears selectTab. `effects`: a column of status icons right of the picture (setEffects).
+// lower-cased); onTab(listener) hears selectTab. `effects`: a column of status-effect icons right of the picture, empty
+// until there are any (see setEffects, and life/statuseffects.js).
 export function makeCard({ id, title, onClose, thumb = {}, kill = null, action = null, labels = {}, health = false, tabs = null, effects = false }) {
   const el = document.createElement('div');
   el.id = id;
@@ -225,33 +229,159 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     const anim = resizeAnim = el.animate(to > from ? [short, tall] : [tall, short], { duration: RESIZE_TIME, easing: 'ease-out' });
     anim.onfinish = () => { if (resizeAnim === anim) endResize(); };
   }
-  // `list`: [{ icon, title }], top to bottom
-  function setEffects(list) {
+  // ---- the status column, and the tip its icons open.
+  // `list` is what someone's under: [{ status, left }], top to bottom, soonest to run out first, `left` a function giving
+  // how many seconds that status has left *now*. `slots` is how many places the column has in all, so a slot no status has
+  // taken stands empty with a dash in it — the column reads as a column of slots whether anyone is under anything or not.
+  // Each icon is drawn from its own effect in life/statuseffects.js, which also says what it's doing to them: the pointer
+  // resting within one's place in the column brings that up in a tip of its own (see below), which asks the status what it
+  // has left as it is now, so a countdown in it runs.
+  //
+  // The column is *edited*, never rebuilt: an icon is a slot element that keeps its place, and what changes about it — the
+  // bitmap, the status behind it, where it sits in the column — is what's written. A status's clock ticks over every
+  // second, and a column torn down and rebuilt that often would put a new, unrelated element under the pointer each time:
+  // the tip would blink out with it, and an icon that shifted places would drag the pointer off its own status.
+  const statusLinesOf = new Map(); // a status icon in the column → how to say what it's doing, just now
+  function setEffects(list, slots = 0) {
     if (!effectsEl) return;
-    effectsEl.replaceChildren(...list.map(({ icon, title }) => {
-      const item = document.createElement('div');
-      item.className = 'pc-effect';
-      item.textContent = icon;
-      if (title) item.title = title;
-      return item;
-    }));
+    const column = effectsEl, want = Math.max(list.length, slots);
+    for (let i = 0; i < want; i++) {
+      const slot = column.children[i] ?? document.createElement('div');
+      const entry = list[i] ?? null;
+      const classes = 'pc-effect' + (entry ? '' : ' pc-effect-empty');
+      if (slot.className !== classes) slot.className = classes;
+      if (entry) {
+        // (a slot that stood empty has to be emptied of its dash before its picture goes in, leaving nothing of the old
+        // status behind either way — and the slot keeps its place in the column, so it's still the element the pointer is on)
+        const icon = `assets/icons/status/${EFFECTS[entry.status]?.icon ?? 'sick'}.png`;
+        const image = slot.querySelector('img');
+        if (!image) slot.replaceChildren(statusIcon());
+        const picture = slot.querySelector('img');
+        if (picture && picture.getAttribute('src') !== icon) picture.setAttribute('src', icon);
+        const left = typeof entry.left === 'function' ? entry.left : () => entry.left;
+        statusLinesOf.set(slot, { left, lines: () => statusLines(entry.status, null, left()) });
+      } else {
+        if (slot.querySelector('img') || slot.textContent !== '–') slot.replaceChildren('–');
+        statusLinesOf.delete(slot);
+      }
+      // (moved into place only where it isn't already: moving an element takes it out of the document and puts it back,
+      // which is the same thing to a pointer resting on it as replacing it)
+      if (column.children[i] !== slot) column.insertBefore(slot, column.children[i] ?? null);
+    }
+    while (column.children.length > want) column.lastElementChild.remove();
   }
-
+  /** The picture on a status slot: the hand-drawn bitmap at its own size, as pixel-icons.js draws the icons it swaps in. */
+  function statusIcon() {
+    const image = document.createElement('img');
+    image.width = 16;
+    image.height = 15;
+    image.alt = '';
+    return image;
+  }
+  // ---- the tip: what a status effect is doing, while the pointer is within that icon's place in the column.
+  // The pointer is tested against each icon's own rectangle every time the mouse moves — `e.clientX/Y` inside the icon's
+  // `getBoundingClientRect()` — and the tip is put at the pointer, so it comes up wherever the pointer is and however the
+  // card has moved or been drawn again since (the column is drawn again as the countdown ticks over a second, which is
+  // exactly what a hover that lives on the element can't survive). The box is one of the card's own drop-downs, classed
+  // `pc-mods pc-mods-status` for its look (see css/base.css and the win3 look) and `pc-tip` to take it out of that
+  // machinery's hands: it's placed by position, not by layoutDrops, and a click never pins it the way a row's menu pins.
+  const TIP_GAP = 14; // px between the pointer and the tip
+  const TIP_TICK = 1000; // ms between the tip's own redraws: what's left of a status counts down while the tip is up
+  const tip = document.createElement('div');
+  tip.className = 'pc-mods pc-mods-status pc-tip';
+  tip.hidden = true;
+  el.append(tip);
+  let tipShown = null, tipSaid = '', tipAt = null, tipRead = null, tipTick = null;
+  // Puts the tip up over the pointer, its lines read from `read` — which asks the status how long it has left as it is
+  // now, so the countdown in them is live. Nothing is written to the screen until the box is filled and measured, so it
+  // comes up already in its place rather than showing at the pointer for a frame first.
+  function showTip(icon, at, read) {
+    if (tipShown !== icon) tipSaid = ''; // (a different status: everything it says is new)
+    tipShown = icon;
+    tipAt = at;
+    tipRead = read;
+    if (!fillTip()) return;
+    placeTip();
+    tip.hidden = false;
+  }
+  // Fills the tip with what its status says now, and says whether there's anything to show. Only the text is touched, so
+  // a tick costs a few strings rather than a relayout of the card. A status with no time left is one that's over: the tip
+  // goes, rather than sitting there saying "0 secs".
+  function fillTip() {
+    const left = tipRead?.left?.();
+    if (left != null && left <= 0) return false;
+    const lines = tipRead?.lines?.() ?? [];
+    const said = lines.join('\n');
+    if (!said) return false;
+    if (said !== tipSaid) {
+      tip.replaceChildren(...lines.map(text => {
+        const line = document.createElement('div');
+        line.className = 'pc-mod';
+        line.textContent = text;
+        return line;
+      }));
+      tipSaid = said;
+    }
+    return true;
+  }
+  // (measured as it is now, so the box is placed to the right of the pointer where there's room and over to its left where
+  // there isn't — out across the card, which is where the room is — and never off the top or bottom of the screen)
+  function placeTip() {
+    const room = innerWidth - tipAt.x - TIP_GAP;
+    const right = room > tip.offsetWidth ? room - tip.offsetWidth : Math.max(SCREEN_MARGIN, innerWidth - tipAt.x + TIP_GAP);
+    const top = Math.max(SCREEN_MARGIN, Math.min(tipAt.y - 8, innerHeight - tip.offsetHeight - SCREEN_MARGIN));
+    tip.style.right = `${right}px`;
+    tip.style.top = `${top}px`;
+  }
+  function hideTip() {
+    tip.hidden = true;
+    tipShown = null;
+    tipSaid = '';
+    tipAt = null;
+    tipRead = null;
+    if (tipTick) { clearInterval(tipTick); tipTick = null; }
+  }
+  // (the tip's countdown runs whether or not the pointer moves: someone resting on an icon and watching the time left
+  // should see it go down. Left to the pointer's own moves, a still pointer would leave it frozen. It's up on its own
+  // timer, and goes when its status runs out or the icon it belonged to is drawn over.)
+  function tickTip() {
+    if (tip.hidden) return;
+    if (!tipShown?.isConnected) { hideTip(); return; }
+    if (fillTip()) placeTip(); else hideTip();
+  }
+  el.addEventListener('mousemove', e => {
+    if (el.hidden) { if (!tip.hidden) hideTip(); return; }
+    const at = { x: e.clientX, y: e.clientY };
+    const over = [...statusLinesOf.keys()].find(icon => {
+      const r = icon.getBoundingClientRect();
+      return at.x >= r.left && at.x <= r.right && at.y >= r.top && at.y <= r.bottom;
+    });
+    if (over) {
+      showTip(over, at, statusLinesOf.get(over));
+      tipTick ??= setInterval(tickTip, TIP_TICK);
+    } else if (!tip.hidden) hideTip();
+  });
+  el.addEventListener('mouseleave', hideTip);
+  // (the card's own click still pins a love's or hate's menu open, as it always has: the tip isn't in `dropByEl`, so a
+  // click on an icon does nothing to it)
   // ---- modifier drop-downs: an entry with modifiers (`<key>Mods`, see set) opens a list of them beneath it when clicked,
   // until clicked again — so several can be open at once.
   // Each floats over the rows below it, as a menu drops down, so opening one never resizes the card: MOD_LINES lines at
   // most, scrolling for the rest.
   const MOD_LINES = 4;
-  const SCREEN_MARGIN = 8; // px kept clear below a drop-down
-  const dropByEl = new Map(); // entry row or its drop-down → { entryEl, drop, count, pinned }
-  const dropAt = target => { const found = target?.closest?.('.pc-has-mods, .pc-mods'); return found ? dropByEl.get(found) : null; };
-  body.addEventListener('click', e => { const drop = dropAt(e.target); if (drop) { drop.pinned = !drop.pinned; layoutDrops(); } });
+  const SCREEN_MARGIN = 8; // px kept clear at the bottom of the screen, and above the card's own top edge
+  const dropByEl = new Map(); // entry row or its drop-down → { entryEl, drop, count, pinned, row }
+  const dropAt = target => { const found = target?.closest?.('.pc-has-mods, .pc-mods:not(.pc-tip)'); return found ? dropByEl.get(found) : null; };
+  // (a click pins a love's or hate's menu open, as it always has; a status icon's tip is the pointer's doing, and a click
+  // on one changes nothing)
+  el.addEventListener('click', e => { const drop = dropAt(e.target); if (drop) { drop.pinned = !drop.pinned; layoutDrops(); } });
   window.addEventListener('resize', () => { if (!el.hidden) layoutDrops(); });
-  // Gives `entryEl` (one of `row`'s entries, already in place) a drop-down of `lines`, placed right under it.
-  function addDrop(row, entryEl, lines) {
-    if (!lines || !lines.length) return;
+  // A drop-down of `lines` hung on `entryEl`, until it's cleared or the card's drawn again: a menu dropping down over
+  // the rows below it, so opening one never resizes the card. `row` is the row it belongs to, so its entries can be
+  // cleared together. Returns the state it's kept as.
+  function makeDrop(entryEl, lines, row) {
     const drop = document.createElement('div');
-    drop.className = 'pc-mods pc-mods-' + row.row.key;
+    drop.className = 'pc-mods' + (row?.row ? ' pc-mods-' + row.row.key : '');
     drop.hidden = true;
     lines.forEach(text => {
       const line = document.createElement('div');
@@ -261,9 +391,14 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     });
     entryEl.classList.add('pc-has-mods');
     entryEl.after(drop);
-    const state = { entryEl, drop, count: lines.length, pinned: false };
+    const state = { entryEl, drop, count: lines.length, pinned: false, shown: false, row };
     dropByEl.set(entryEl, state).set(drop, state);
-    row.drops.push(state);
+    row?.drops.push(state);
+    return state;
+  }
+  // Gives `entryEl` (one of a love/hate row's entries, already in place) a drop-down of `lines`, placed right under it.
+  function addDrop(row, entryEl, lines) {
+    if (lines && lines.length) makeDrop(entryEl, lines, row);
   }
   function clearDrops(row) {
     row.drops.forEach(state => {
@@ -274,21 +409,28 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     });
     row.drops = [];
   }
-  // Shows the open drop-downs, each hung from the bottom of its entry and as wide as its text and mark.
+  // Shows the open drop-downs: one hanging off a love/hate entry, pinned there, runs the width of its entry's text and sits
+  // under it — a table of the trait lines it opened to show — a row shorter (scrolling) for each that would come within
+  // SCREEN_MARGIN of the bottom of the screen. (A status effect's tip isn't one of these: it's placed by the pointer — see
+  // the tip above.)
+  //
+  // A drop hangs on the whole row (`entryEl`), so it's that row's `.pc-value` — the text and its mark, in the row's second
+  // grid column — that says where the menu goes: its own left, its own width. Measuring the row instead would put the menu
+  // out over the Loves/Hates label, a column to the left of the entry it belongs to.
   function layoutDrops() {
     Object.values(rows).flatMap(row => row.drops).forEach(state => {
       const isOpen = state.pinned;
       state.drop.hidden = !isOpen;
       state.entryEl.classList.toggle('pc-mods-open', isOpen);
       if (!isOpen) return;
-      state.drop.style.top = state.entryEl.offsetTop + state.entryEl.offsetHeight + 'px';
       const value = state.entryEl.querySelector('.pc-value');
-      state.drop.style.left = value.offsetLeft + 'px';
-      state.drop.style.width = value.offsetWidth + 'px';
-      // a row shorter (scrolling) for each that would come within SCREEN_MARGIN of the bottom of the screen
+      state.drop.style.top = state.entryEl.offsetTop + state.entryEl.offsetHeight + 'px';
+      state.drop.style.left = (value ?? state.entryEl).offsetLeft + 'px';
+      state.drop.style.right = 'auto';
+      state.drop.style.width = (value ?? state.entryEl).offsetWidth + 'px';
       let lines = Math.min(state.count, MOD_LINES);
       state.drop.style.setProperty('--mod-lines', lines);
-      while (lines > 1 && state.drop.getBoundingClientRect().bottom > window.innerHeight - SCREEN_MARGIN) {
+      while (lines > 1 && state.drop.getBoundingClientRect().bottom > innerHeight - SCREEN_MARGIN) {
         state.drop.style.setProperty('--mod-lines', --lines);
       }
     });
@@ -430,5 +572,8 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   const card = { el, canvas, show, hide, resetPlace, set, setList, relabel, setFavorite, setAction, showAction, setHealth, bindHealth,
     setEffects, selectTab, tabPane: key => panes[key] ?? null, activeTab: () => activeTab, onTab: listener => { tabListeners.push(listener); } };
   cards.push(card);
+  // What this card's status column is doing, for the console (see the `status` handle in src/main.js): read live off the
+  // card, so a redraw between a hover and reading it doesn't leave a stale answer.
+  inspected.set(el, { column: () => effectsEl, tip: () => tip, lines: () => statusLinesOf });
   return card;
 }

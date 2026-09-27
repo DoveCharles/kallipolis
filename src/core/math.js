@@ -62,6 +62,29 @@ export function mulberry32(seed) {
 export const lerp = (a,b,t) => a + (b-a)*t;
 
 /**
+ * A length of time as words: the largest unit that says anything about it, and the one below it — "3m 19s", "5hr 14m",
+ * "2 days 6hr". Nothing smaller than the second, and nothing above days (a week is "7 days").
+ *
+ * The larger unit is counted whole and the next one counted from what's left over, so a countdown reads down through
+ * "3m 19s", "3m 18s" … and reaches "0s" exactly at the end rather than a unit early; anything under a second is said as
+ * "1s", since there's still time on it. A zero second unit is kept where it says something ("3m 0s" is three minutes,
+ * not three minutes and a bit), but a zero second unit under a minute is just "45s".
+ * @param {number} seconds - the time, in seconds
+ * @returns {string} it as words
+ */
+export function formatTime(seconds) {
+  const secs = Math.floor(seconds);
+  if (secs < 1) return seconds > 0 ? '1s' : '0s';
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs/60);
+  if (mins < 60) return `${mins}m ${secs % 60}s`;
+  const hours = Math.floor(mins/60);
+  if (hours < 24) return `${hours}hr ${mins % 60}m`;
+  const days = Math.floor(hours/24);
+  return `${days} day${days === 1 ? '' : 's'} ${hours % 24}hr`;
+}
+
+/**
  * djb2 hash of a string, kept to 32 bits.
  * @param {string} text
  * @returns {number} Unsigned 32-bit hash.
