@@ -1425,7 +1425,8 @@ export function updatePeople(t) {
           p.pupilTo[0] = middle ? 0 : (peopleRng()*2 - 1)*PUPIL_MAX_X;
           p.pupilTo[1] = middle ? 0 : (peopleRng()*2 - 1)*PUPIL_MAX_Y;
         }
-        if (possessed) { p.pupilTo[0] = 0; p.pupilTo[1] = 0; }
+        // (talking, they hold whoever they're talking to's eye)
+        if (possessed || p.lookAt) { p.pupilTo[0] = 0; p.pupilTo[1] = 0; }
         const dart = Math.min(1, fdt*25);
         p.pupil[0] += (p.pupilTo[0] - p.pupil[0])*dart;
         p.pupil[1] += (p.pupilTo[1] - p.pupil[1])*dart;
