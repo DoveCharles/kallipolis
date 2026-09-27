@@ -709,22 +709,24 @@ async function loadStudent() {
   if (inside && current === LAYOUTS.home) furnish(inside.key);
 }
 modelsLoading.push(loadStudent());
-// Bare floorboards: planks 2.4 m long and 15 cm wide, each one flat shade, in rows with their ends staggered — which repeats
-// every 2.4 m both ways.
+// Bare floorboards: planks 15 cm wide and about 1.2 m long, each one flat shade, two to a row with the rows' joints
+// staggered — which repeats every 2.4 m both ways. A plank running off one side of the tile carries on from the other,
+// so it's drawn at both, in the one shade.
 const boards = floorTexture(1024, 2.4, (g, rng) => {
   const ROWS = 16, row = 1024/ROWS;
   for (let r = 0; r < ROWS; r++) {
-    const end = Math.floor(rng()*16)*64;
-    for (const x of [end - 1024, end]) {
+    const start = Math.floor(rng()*16)*64, mid = start + (6 + Math.floor(rng()*5))*64;
+    for (const [a, b] of [[start, mid], [mid, start + 1024]]) {
       const shade = 212 + rng()*38;
       g.fillStyle = `rgb(${shade},${shade},${shade})`;
-      g.fillRect(x, r*row, 1024, row);
+      for (const x of [a - 1024, a]) g.fillRect(x, r*row, b - a, row);
       g.fillStyle = 'rgba(40,25,15,0.4)';
-      g.fillRect(x - 1, r*row, 3, row);
+      for (const x of [a - 1024, a, a + 1024]) g.fillRect(x - 1, r*row, 3, row);
     }
     g.fillStyle = 'rgba(40,25,15,0.35)';
     g.fillRect(0, r*row - 1, 1024, 2);
   }
+  g.fillRect(0, 1024 - 1, 1024, 2); // (the other half of the top row's joint, where the tile wraps)
 });
 
 // ---------------------------------------------------------- a mid-century home
