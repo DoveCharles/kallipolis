@@ -13,8 +13,9 @@ import { puffSmoke } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFollowingPerson } from './peopleTracking.js';
-import { openRoomDoor, roomBeyondDoor, roomDoorway, roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
+import { drawCurtain, openRoomDoor, roomBeyondDoor, roomCubicles, roomDoorway, roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
 import { clearMeal, giveSnack, mealFinished, serveMeal } from './peopleHolding.js';
+import { BARBOT, barbotFree } from '../../buildings/barbot.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
 import { REVIVE_SHAKE_TIME } from '../revive.js';
 import { strikeLightning } from '../lightning.js';
@@ -72,6 +73,7 @@ function endedByLine(g) {
   if (!ending) return false;
   g.ending = null; g.speaker = null;
   if (g.kind === 'room') endRoomChat(g);
+  else if (g.kind === 'bar') endBarChat(g);
   else if (g.kind === 'circle') { if (g.members.includes(ending.by)) leaveCircle(ending.by, ending.how); }
   else if (ending.how === 'bad') endChat(g, 'bad');
   else wave(g, 'bye');
@@ -144,7 +146,8 @@ function leaveGroup(p) {
   g.members.forEach(m => { if (m.lookAt === p) m.lookAt = null; });
   if (g.kind === 'circle') { g.members.forEach(m => relateBoth(p, m, RELATE.circle + (g.score ?? 0)*SCORE_RELATE)); introduceAll([p, ...g.members]); }
   // a conversation between two ends when either goes; a circle carries on while anyone's left in it
-  if (g.kind === 'chat') endChat(g); else if (g.kind === 'room') endRoomChat(g); else if (!g.members.length) removeGroup(g);
+  if (g.kind === 'chat') endChat(g); else if (g.kind === 'room') endRoomChat(g); else if (g.kind === 'bar') endBarChat(g);
+  else if (!g.members.length) removeGroup(g);
 }
 
 /**
@@ -292,6 +295,7 @@ export function updateGroups(dt) {
   for (let gi = groups.length - 1; gi >= 0; gi--) {
     const g = groups[gi];
     if (g.kind === 'room') { roomChat(g, dt); continue; }
+    if (g.kind === 'bar') { barChat(g, dt); continue; }
     if (g.kind === 'circle') {
       const seated = g.members.filter(m => m.stage === 'sit');
       if (seated.some(m => m.traits.smells)) { g.members.filter(m => !m.traits.smells).forEach(finishActivity); continue; } // (someone who smells sat down: everyone else gets up and goes)
@@ -1365,11 +1369,15 @@ const OFFICE_MIN_HOURS = 4, OFFICE_MAX_HOURS = 10, OFFICE_LEAVE_HOURS = 1.5;
 /** The share of the crowd who work late: in an office after dark, they stay the rest of their day. */
 const WORKS_LATE = 0.04;
 const worksLate = p => ((Math.imul(p.id + 7, 2246822519) >>> 0)/2**32) < WORKS_LATE;
-const isWorkplace = building => !['home', 'pub'].includes(roomLayoutOf(building.kind, building.number));
+const isWorkplace = building => !['home', 'pub', 'salon', 'clothes'].includes(roomLayoutOf(building.kind, building.number));
 // (a pub's a visit like a home's, but a shorter one — an hour or four — and nobody's in it long without a pint in hand:
 // see aboutTheRoom)
 const isPub = building => roomLayoutOf(building.kind, building.number) === 'pub';
 const PUB_MIN_HOURS = 1, PUB_MAX_HOURS = 4;
+// (a shop — a hair salon or a clothes shop — is a quick visit, for what it's there for: a haircut or new clothes; and
+// shut after dark: see "a salon" and "a clothes shop" below)
+const shopOf = building => { const layout = roomLayoutOf(building.kind, building.number); return layout === 'salon' || layout === 'clothes' ? layout : null; };
+const SHOP_MIN_HOURS = 0.4, SHOP_MAX_HOURS = 1.2;
 /** Seconds between one pint finished and the next got in, in a pub. */
 const PUB_ROUND_MIN = 15, PUB_ROUND_MAX = 60;
 /**
@@ -1379,7 +1387,7 @@ const PUB_ROUND_MIN = 15, PUB_ROUND_MAX = 60;
  * @param {object} building - the building (see buildingDoors)
  * @returns {number} the chance
  */
-export const enterChance = (p, building) => isWorkplace(building)
+export const enterChance = (p, building) => shopOf(building) ? (isNight() ? 0 : ENTER_CHANCE) : isWorkplace(building)
   ? (isNight() ? OFFICE_ENTER_CHANCE_NIGHT : OFFICE_ENTER_CHANCE)
   : isNight() && !nightOwl(p) ? ENTER_CHANCE_NIGHT : ENTER_CHANCE;
 /** How long a visit lasts, in hours of the day's clock. */
@@ -1411,8 +1419,9 @@ export function goIndoors(p, building, from) {
   // mostly a quick visit, now and then most of the day — or at work, a working day
   const hours = isWorkplace(building) ? OFFICE_MIN_HOURS + (OFFICE_MAX_HOURS - OFFICE_MIN_HOURS)*peopleRng()
     : isPub(building) ? PUB_MIN_HOURS + (PUB_MAX_HOURS - PUB_MIN_HOURS)*peopleRng()
+    : shopOf(building) ? SHOP_MIN_HOURS + (SHOP_MAX_HOURS - SHOP_MIN_HOURS)*peopleRng()
     : INDOORS_MIN_HOURS + (INDOORS_MAX_HOURS - INDOORS_MIN_HOURS)*peopleRng()**2;
-  p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, hoursLeft: hours };
+  p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, hoursLeft: hours, shop: shopOf(building), served: false };
   p.inRoom = null;
   setIndoorsCount(indoorsCount + 1);
 }
@@ -1446,10 +1455,11 @@ export function updateIndoors(p, i, dt) {
     // (time's up, but not partway through a video: they sit it out, get up, and only then go)
     const arriving = visit.justIn;
     visit.justIn = false;
-    if (visit.hoursLeft > 0 || p.inRoom?.watched != null || hidingFromSun(p)) return aboutTheRoom(p, visit, dt, arriving);
+    if (visit.hoursLeft > 0 || p.inRoom?.watched != null || hidingFromSun(p) || beingServed(p, visit, dt)) return aboutTheRoom(p, visit, dt, arriving);
     // (with the camera in there too, off out of the room first, and the door heard shutting behind them)
     if (roomHolds(visit.building.key) && p.inRoom?.visit === roomVisit() && !p.inRoom.gone) return leaveRoom(p, dt);
-    // back out, at the door, facing the walkway
+    // back out, at the door, facing the walkway — with their haircut or new clothes, if they've not been seen getting them
+    if (visit.shop && !visit.served) serve(p, visit);
     visit.stage = 'exit';
     standUp(p);
     p.inRoom = null; p.faceTo = null;
@@ -1551,8 +1561,14 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
     giveSnack(p, 'beer');
     here.round = PUB_ROUND_MIN + (PUB_ROUND_MAX - PUB_ROUND_MIN)*peopleRng();
   }
+  if (here.cubicle) return changing(p, here, visit, dt);
   if (here.seat) return sitting(p, here, dt);
   if (p.group?.kind === 'room') return here.route ? walkRoute(p, here) : null;
+  if (visit.shop && !visit.served && !here.route && !p.oneShot && p.mode !== 'possessed' && (here.shopIn = (here.shopIn ?? 1 + peopleRng()*4) - dt) <= 0) {
+    here.shopIn = 2 + peopleRng()*4;
+    const next = visit.shop === 'salon' ? goForHaircut(p, here) : goTryOn(p, here);
+    if (next) return next;
+  }
   if (here.route) {
     const next = here.route[0];
     if (Math.hypot(next.x - p.x, next.z - p.z) >= 0.3) return next;
@@ -1619,12 +1635,16 @@ let sofaFilled = null, noSofaFor = null;
 /**
  * A seat in the room nobody's on or heading for, if there is one — and if they're about the size the furniture's made for.
  * @param {Person} p - the person
+ * @param {?string} [kind] - only a seat of this kind (see roomSeats: a salon's 'cut', 'dryer' or 'wait'; null for any
+ *   other), else any they'd sit on
  * @returns {?object} the seat (see roomSeats)
  */
-function freeSeat(p) {
+function freeSeat(p, kind = undefined) {
   const size = S.peopleSize*p.traits.size;
   if (!personModel || !hasClip('Sit1') || size < SEAT_SIZE_MIN || size > SEAT_SIZE_MAX) return null;
-  const free = roomSeats().filter(seat => !seatHeld(seat));
+  // (a salon's chairs are for haircuts, and only for those who've not had one; any other seat, anyone)
+  const cut = !!p.indoors && p.indoors.shop === 'salon' && !p.indoors.served;
+  const free = roomSeats().filter(seat => !seatHeld(seat) && (kind === undefined ? seat.kind !== 'cut' || cut : seat.kind === kind));
   return free.length ? free[Math.floor(peopleRng()*free.length)] : null;
 }
 function takeSeat(p, seat) {
@@ -1649,7 +1669,7 @@ function standingSpot(p, seat) {
  */
 function standUp(p) {
   const seat = p.inRoom?.seat;
-  if (p.group?.kind === 'room') leaveGroup(p);
+  if (p.group?.kind === 'room' || p.group?.kind === 'bar') leaveGroup(p);
   if (seat && seat.by === p) seat.by = null;
   clearMeal(p);
   if (p.inRoom) {
@@ -1700,7 +1720,8 @@ function sitting(p, here, dt) {
       // or a chair beside them at home)
       if (!p.group && (here.chatIn = (here.chatIn ?? peopleRng()*SEAT_CHAT_EVERY) - dt) <= 0) {
         here.chatIn = SEAT_CHAT_EVERY*(0.5 + peopleRng());
-        if (peopleRng() < SEAT_CHAT_CHANCE*p.traits.chatty) chatWhileSat(p);
+        if (seat.bar && peopleRng() < BAR_CHAT_CHANCE*p.traits.chatty && chatWithBarbot(p)) { /* (a word with the bar bot) */ }
+        else if (peopleRng() < SEAT_CHAT_CHANCE*p.traits.chatty) chatWhileSat(p);
       }
       // (at a desk, typing a while, then sat back a moment, then at it again)
       if (seat.desk && !p.group && (here.spell -= dt) <= 0) { p.pose = p.pose === 'Typing' ? 'Sit1' : deskPose(seat); here.spell = spellAt(p.pose); }
@@ -1710,6 +1731,9 @@ function sitting(p, here, dt) {
         p.pose = 'Sit1';
         here.timer = Math.min(here.timer, SAT_AFTER_MEAL*p.traits.patience);
       }
+      if (seat.kind === 'cut') haircut(p, here, dt);
+      // (waiting for a haircut: up as soon as a chair's free)
+      else if (p.indoors?.shop === 'salon' && !p.indoors.served && freeSeat(p, 'cut')) here.timer = 0;
       if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); clearMeal(p); here.stage = 'rise'; p.pose = 'Idle'; }
       break;
     }
@@ -1723,6 +1747,159 @@ function sitting(p, here, dt) {
   p.x = stand.x + (seat.x - stand.x)*w; p.z = stand.z + (seat.z - stand.z)*w;
   return null;
 }
+// ---- shops.
+//
+// A salon: whoever goes in is there for a haircut. With the camera in there too, they go and sit in one of the styling
+// chairs in front of the mirrors (a seat of kind 'cut') as soon as one's free — waiting on the bench, or under a dryer,
+// or standing about till then — and after HAIRCUT_TIME there, snipped at, their hair's a new style (personModel's
+// cutHair); a moment later they're up, and soon gone. A clothes shop: whoever goes in looks round a while, then goes
+// into a changing room that's free (see roomCubicles), draws its curtain across and, CHANGING_TIME later, comes out in
+// new clothes (changeClothes). Either way, with nobody watching, they come out with it anyway (see updateIndoors).
+/** Seconds in the chair for a haircut; seconds behind the curtain changing, [shortest, longest]. */
+const HAIRCUT_TIME = 5, CHANGING_TIME = [3.5, 6];
+/** Seconds between snips of the scissors, about. */
+const SNIP_EVERY = 0.9;
+/** Seconds more they stay once they've had it, [shortest, longest]: up out of the chair, or out of the changing room and a
+ * last look round, and off. */
+const SERVED_STAY = [3, 10];
+/** How long someone waits in the room for a free chair or changing room past when they'd otherwise have gone, in seconds. */
+const SERVE_WAIT = 90;
+// seconds on the day's clock, in its hours
+const clockHours = seconds => seconds*24/(Math.max(0.1, S.dayLengthMinutes)*60);
+/**
+ * Give someone what they came to the shop for, now: a haircut or new clothes (see cutHair and changeClothes in
+ * peopleModel.js), felt (for what they say: see life/speech-text.js).
+ * @param {Person} p - the person
+ * @param {object} visit - their p.indoors
+ * @returns {void}
+ */
+function serve(p, visit) {
+  visit.served = true;
+  const i = people.indexOf(p);
+  if (!personModel || i < 0) return;
+  if (visit.shop === 'salon') { personModel.cutHair(i, p.id, peopleRng); feel(p, 'haircut'); }
+  else { personModel.changeClothes(i, p.id, peopleRng); feel(p, 'newclothes'); }
+}
+/**
+ * Whether someone whose time's up in a shop stays on anyway: they're in the chair or the changing room, or waiting for
+ * one with the camera watching (for up to SERVE_WAIT).
+ * @param {Person} p - the person
+ * @param {object} visit - their p.indoors
+ * @param {number} dt - seconds since the last frame
+ * @returns {boolean} whether they stay
+ */
+function beingServed(p, visit, dt) {
+  if (!visit.shop || !roomHolds(visit.building.key) || p.inRoom?.visit !== roomVisit()) return false;
+  if (p.inRoom.cubicle || (p.inRoom.seat?.kind === 'cut' && !visit.served)) return true;
+  return !visit.served && (visit.waited = (visit.waited ?? 0) + dt) < SERVE_WAIT;
+}
+/**
+ * In a salon, over to a free styling chair, if there is one.
+ * @param {Person} p - the person
+ * @param {object} here - their p.inRoom
+ * @returns {?{x: number, y: number, z: number}} where to walk to first, or null if there's no chair free (or no way to it)
+ */
+function goForHaircut(p, here) {
+  const seat = freeSeat(p, 'cut');
+  const route = seat && roomRoute(p, standingSpot(p, seat));
+  if (!route) return null;
+  if (p.group?.kind === 'room') leaveGroup(p);
+  takeSeat(p, seat);
+  Object.assign(here, { route, stage: 'go', timer: 25 });
+  p.faceTo = null;
+  return route[0];
+}
+/**
+ * Sat in a styling chair: snipped at a while, then a new haircut (a puff, as when someone vanishes), and up soon after.
+ * @param {Person} p - the person
+ * @param {object} here - their p.inRoom
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
+function haircut(p, here, dt) {
+  const visit = p.indoors;
+  if (!visit || visit.served) return;
+  here.cutting = (here.cutting ?? 0) + dt;
+  if ((here.snipIn = (here.snipIn ?? 0.3) - dt) <= 0) {
+    here.snipIn = SNIP_EVERY*(0.5 + peopleRng());
+    playSound('snip', { x: p.x, y: p.y + 1.4*modelScale(p), z: p.z });
+  }
+  if (here.cutting < HAIRCUT_TIME) { here.timer = Math.max(here.timer, 1); return; }
+  puffSmoke({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, 0.6*p.height*S.peopleSize, 4);
+  serve(p, visit);
+  here.timer = 1 + peopleRng();
+  visit.hoursLeft = Math.min(visit.hoursLeft, clockHours(SERVED_STAY[0] + peopleRng()*(SERVED_STAY[1] - SERVED_STAY[0])));
+}
+// whether a changing room's really someone's: they're still in the room with it as theirs
+const cubicleHeld = c => !!c.by && c.by.inRoom?.cubicle === c && c.by.inRoom.visit === roomVisit();
+/**
+ * In a clothes shop, over to a free changing room, if there is one.
+ * @param {Person} p - the person
+ * @param {object} here - their p.inRoom
+ * @returns {?{x: number, y: number, z: number}} where to walk to first, or null if there's none free (or no way to one)
+ */
+function goTryOn(p, here) {
+  if (!here.browsed) { here.browsed = true; return null; } // (a look round first)
+  const free = roomCubicles().filter(c => !cubicleHeld(c));
+  const c = free.length ? pickFrom(free) : null;
+  const route = c && roomRoute(p, c.front);
+  if (!route) return null;
+  if (p.group?.kind === 'room') leaveGroup(p);
+  c.by = p;
+  Object.assign(here, { cubicle: c, changing: 'go', route: [...route, c.inside], timer: 30 });
+  p.faceTo = null;
+  return here.route[0];
+}
+/**
+ * Someone using a changing room: in ('go'), turning round and the curtain drawn ('draw'), hidden behind it changing
+ * ('change'), then the curtain back and out ('out') in new clothes.
+ * @param {Person} p - the person
+ * @param {object} here - their p.inRoom
+ * @param {object} visit - their p.indoors
+ * @param {number} dt - seconds since the last frame
+ * @returns {?{x: number, y: number, z: number}} where they should walk to, or null
+ */
+function changing(p, here, visit, dt) {
+  const c = here.cubicle, done = () => { drawCurtain(c, false); here.hidden = false; if (c.by === p) c.by = null; here.cubicle = null; here.route = null; here.wait = 2 + peopleRng()*4; };
+  here.timer -= dt;
+  switch (here.changing) {
+    case 'go':
+      if (here.timer <= 0) { done(); return null; } // (can't get in)
+      if (here.route?.length) {
+        const next = walkRoute(p, here);
+        if (next) return next;
+      }
+      here.changing = 'draw';
+      here.timer = CHANGING_TIME[0] + peopleRng()*(CHANGING_TIME[1] - CHANGING_TIME[0]);
+      p.faceTo = c.facing;
+      drawCurtain(c, true);
+      return null;
+    case 'draw':
+      p.faceTo = c.facing;
+      if (here.timer > CHANGING_TIME[0] - 0.5) return null;
+      here.changing = 'change';
+      here.hidden = true; // (behind the curtain now)
+      return null;
+    case 'change':
+      if (here.timer > 0) return null;
+      serve(p, visit);
+      here.hidden = false;
+      drawCurtain(c, false);
+      here.changing = 'out';
+      here.route = [c.front];
+      here.timer = 8;
+      visit.hoursLeft = Math.min(visit.hoursLeft, clockHours(SERVED_STAY[0] + 5 + peopleRng()*(SERVED_STAY[1] - SERVED_STAY[0])));
+      return null;
+    case 'out': {
+      const next = here.timer > 0 && here.route ? walkRoute(p, here) : null;
+      if (next) return next;
+      done();
+      return null;
+    }
+  }
+  return null;
+}
+
 /** How long someone at a desk keeps typing, and sits back between, in seconds: [shortest, longest]. */
 const TYPING_SPELL = [8, 40], SAT_BACK_SPELL = [3, 12];
 /** How long someone lingers at the table once their dinner's gone, in seconds. */
@@ -1847,6 +2024,64 @@ function endRoomChat(g) {
     if (m.pose === 'TypingPaused') { m.pose = 'Typing'; here.spell = spellAt('Typing'); }
     else if (m.pose === 'EatingPaused') m.pose = 'Eating';
     if (!here.seat) { here.route = null; here.wait = (1 + peopleRng()*4)*m.traits.patience; }
+  });
+}
+
+// ---- talking to the bar bot.
+//
+// Someone sat at a pub's bar (a bar stool's seat: seat.bar) now and then has a word with the bar bot behind it
+// (buildings/barbot.js), if it's awake and not talking to anyone else: a group of kind 'bar' with them its only member
+// and BARBOT, standing in for the bot, taking turns with them (takeTurns) — they look at it while it talks, and it
+// stands still, turned to them, and babbles back. It's over when its time's up, a line ends it, or they get up.
+/** The chance, each time someone sat at the bar thinks about a word with someone, that it's with the bar bot (times how chatty they are). */
+const BAR_CHAT_CHANCE = 0.6;
+/** How long a word with the bar bot goes on, in seconds: [shortest, longest] (times how patient they are). */
+const BAR_CHAT_SPELL = [8, 20];
+/**
+ * Start someone sat at the bar talking to the bar bot, if it's free.
+ * @param {Person} p - the person
+ * @returns {boolean} whether it was
+ */
+function chatWithBarbot(p) {
+  if (p.chatCooldown > 0 || p.group) return false;
+  const bot = barbotFree();
+  if (!bot) return false;
+  const [lo, hi] = BAR_CHAT_SPELL;
+  const g = { kind: 'bar', sat: true, members: [p], stage: 'talk', speaker: null, turnIn: 0,
+    timer: (lo + peopleRng()*(hi - lo))*p.traits.patience, seenAt: performance.now()/1000 };
+  groups.push(g);
+  p.group = g;
+  p.lookAt = bot;
+  bot.chat = g;
+  return true;
+}
+/**
+ * Run a word with the bar bot for a frame, ending it if they've gone or their time's up.
+ * @param {object} g - the group
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
+function barChat(g, dt) {
+  const p = g.members[0];
+  if (!p || p.mode !== 'indoors' || p.inRoom?.visit !== roomVisit() || p.group !== g || BARBOT.chat !== g) { endBarChat(g); return; }
+  g.seenAt = performance.now()/1000; // (keeping the bot at it: see BARBOT.chat)
+  g.timer -= dt;
+  if (endedByLine(g)) return;
+  takeTurns(g, [p, BARBOT], dt);
+  if (g.timer <= 0 && !g.speaker?.saying) endBarChat(g);
+}
+/**
+ * End a word with the bar bot: the bot let go, and whoever it was back to their drink, not talking again for a while.
+ * @param {object} g - the group
+ * @returns {void}
+ */
+function endBarChat(g) {
+  removeGroup(g);
+  if (BARBOT.chat === g) BARBOT.chat = null;
+  g.speaker = null;
+  g.members.splice(0).forEach(m => {
+    m.group = null; m.lookAt = null;
+    m.chatCooldown = 15 + peopleRng()*30;
   });
 }
 

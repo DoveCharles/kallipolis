@@ -12,6 +12,21 @@ Need a drink. {here.building = pub}
 I know this one... {here.building = pub, weight = 0.5}
 Turn it up. {here.building = pub, is = drunk}
 Turn it down. {here.building = pub, patience = -1}
+That robot's polished the same glass three times. {here.building = pub, weight = 0.5}
+Does the bar bot ever sleep? {here.building = pub, weight = 0.3}
+Just a trim. Just a trim. {here.building = salon}
+Something different this time. {here.building = salon, weight = 0.7}
+I love that smell. {here.building = salon, happy, weight = 0.5}
+Those fish look bored. {here.building = salon, weight = 0.4}
+Those dryers look like space helmets. {here.building = salon, weight = 0.4}
+Not those posters again. {here.building = salon, patience = -1, weight = 0.4}
+Maybe I'll go blonde. {here.building = salon, weight = 0.4}
+Where's my size? {here.building = clothes}
+Do I need this? No. Do I want it? Yes. {here.building = clothes}
+The changing rooms are always full. {here.building = clothes, patience = -1}
+That mannequin's giving me a look. {here.building = clothes, weight = 0.4}
+Everything's in the sale except what I want. {here.building = clothes, mood = -1, weight = 0.5}
+Is that in my colour? {here.building = clothes, weight = 0.6}
 I still can't stop thinking about it. {seen, weight = 3}
 Lovely morning. {world.hour 6-11, mood}
 Everyone's dying lately. {world.morality < -0.3, world.morality = -1}

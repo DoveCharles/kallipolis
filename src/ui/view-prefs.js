@@ -4,6 +4,8 @@
 // - Options > Game > Start in Edit mode: on, the side panel slides in once loaded; off, the app opens in World instead.
 // - Options > Game > Encourage To Watch TV (S.encourageTV, off by default): on, a home shown with people in it has one of them already sat on
 //   the sofa, so the TV's on straight away (see aboutTheRoom in life/people/peopleActivities.js).
+// - Options > Game > Free Camera Indoors (S.freeRoomCamera, on by default): inside a building, orbit, pan and zoom freely
+//   within the room rather than riding round its walls (see freeRoom in buildings/interior.js).
 // - Options > Speech > Chat speed (S.chatSpeed, 1 by default): how often real lines are said (see audio/dictionary.js).
 // - Options > Speech > Hearing distance (S.hearDistance, 40): how far off talk is heard (see audio/voices.js).
 // - Options > Speech > Babble only as fallback (S.babbleFallbackOnly, off): people say real lines whenever one can be
@@ -15,7 +17,7 @@ import { whenLoaded } from './loading.js';
 const EDIT_HINTS_KEY = 'splinetopia.editHints', GENERAL_HINTS_KEY = 'splinetopia.generalHints';
 const START_EDIT_KEY = 'splinetopia.startInEdit', ENCOURAGE_TV_KEY = 'splinetopia.encourageTV';
 const CHAT_SPEED_KEY = 'splinetopia.chatSpeed', BUBBLE_DISTANCE_KEY = 'splinetopia.bubbleDistance';
-const HEAR_DISTANCE_KEY = 'splinetopia.hearDistance';
+const HEAR_DISTANCE_KEY = 'splinetopia.hearDistance', FREE_ROOM_CAMERA_KEY = 'splinetopia.freeRoomCamera';
 const BABBLE_BUBBLES_KEY = 'splinetopia.babbleBubbles', BABBLE_FALLBACK_KEY = 'splinetopia.babbleFallbackOnly';
 const body = document.body;
 const startEditToggle = document.getElementById('s-starteditmode');
@@ -49,6 +51,14 @@ encourageTVToggle.addEventListener('click', () => {
   S.encourageTV = !S.encourageTV;
   encourageTVToggle.classList.toggle('on', S.encourageTV);
   remember(ENCOURAGE_TV_KEY, S.encourageTV);
+});
+S.freeRoomCamera = recall(FREE_ROOM_CAMERA_KEY, true);
+const freeRoomCameraToggle = document.getElementById('s-freeroomcamera');
+freeRoomCameraToggle.classList.toggle('on', S.freeRoomCamera);
+freeRoomCameraToggle.addEventListener('click', () => {
+  S.freeRoomCamera = !S.freeRoomCamera;
+  freeRoomCameraToggle.classList.toggle('on', S.freeRoomCamera);
+  remember(FREE_ROOM_CAMERA_KEY, S.freeRoomCamera);
 });
 
 // a slider saved to `key`, setting S[field] (the slider's own value by default)

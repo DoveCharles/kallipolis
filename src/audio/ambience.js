@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, outdoorsOf, isMuted, playBufferAt, zzfxBuffer } from './sfx.js';
+import { listener, outdoorsOf, isMuted, playBufferAt, prewarm, zzfxBuffer } from './sfx.js';
 import { pointInPolygon } from '../core/math.js';
 import { trafficNearby } from './engine.js';
 import { isInsideBuilding } from '../buildings/interior.js';
@@ -33,6 +33,7 @@ const RUMBLES = [
   [1, .2, 50, .4, 1.2, 2.8, 4, .5, , , , , , 1, , .15, .2, .6, .6, .3, -400],
   [1, .2, 60, .15, .8, 3.2, 4, .6, , , , , , 1.5, , .2, .3, .7, .4, .25, -600],
 ];
+prewarm(RUMBLES, 3); // (made ahead, off the page: see prewarm in sfx.js)
 
 let hum = null; // { gain } once made
 let nextSong = 0;

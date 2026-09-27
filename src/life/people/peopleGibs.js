@@ -58,14 +58,14 @@ export function throwBodyParts(personModel, i, at, momentum = null) {
   highestColumn = Math.max(highestColumn, column);
   const worn = [...model.gibs.parts];
   model.wornLayers.forEach(layer => { const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null; if (style?.gib) worn.push(style.gib); });
-  const anim = model.anim.array.subarray(o, o + 4), look = model.look.array.subarray(o, o + 4), eyes = model.eyes.array.subarray(o, o + 4);
+  const anim = model.anim.array.subarray(o, o + 4), look = model.look.array.subarray(o, o + 4), eyes = model.eyes.array.subarray(o, o + 4), pupil = model.pupil.array.subarray(i*2, i*2 + 2);
   const worldScale = personMatrix.getMaxScaleOnAxis();
   const groundAt = (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK), fromGround = groundAt(at.x, at.z);
   worn.forEach(target => {
     // (its pose, look and looks, set once for the body's column)
-    target.anim.array.set(anim, column*4); target.look.array.set(look, column*4); target.eyes.array.set(eyes, column*4);
+    target.anim.array.set(anim, column*4); target.look.array.set(look, column*4); target.eyes.array.set(eyes, column*4); target.pupil.array.set(pupil, column*2);
     target.person.array[column] = column;
-    target.anim.needsUpdate = target.look.needsUpdate = target.eyes.needsUpdate = target.person.needsUpdate = true;
+    target.anim.needsUpdate = target.look.needsUpdate = target.eyes.needsUpdate = target.pupil.needsUpdate = target.person.needsUpdate = true;
     const radius = gibPartCentre(target.samples, model.boneData, model.boneWidth, anim, centre, extent)*worldScale;
     const thinnest = Math.min(extent.x, extent.y, extent.z)*worldScale;
     centre.applyMatrix4(personMatrix);

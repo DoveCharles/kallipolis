@@ -2,6 +2,7 @@
 # Each [section] is a kind of building. Under it, `attribute = value` lines:
 #
 #   name    what it's called on its card (followed by its own number, like "Warehouse #4821")
+#   title   its own name, on the line under that (a pub's "The Red Lion"): left out, there's no second line
 #   mood    its current mood, usually an emoji
 #   loves   what it loves
 #   hates   what it hates
@@ -19,7 +20,7 @@
 #   industrial   warehouse, factory, tankfarm, containeryard
 #   farmland     farmstead
 #   suburbs      house
-#   town         terrace, shop, pub
+#   town         terrace, pub, salon, clothes (any other shopfront is a terrace)
 #   airport      terminal, hangar, controltower
 #
 
@@ -165,7 +166,7 @@ hates = Out-of-town retail parks
 
 [terrace]
 enterable = yes
-name = Terraced House
+name = House
 mood = 🫖
 loves = The neighbours (through the wall)
 loves = A chimney that draws
@@ -173,29 +174,21 @@ loves = The kettle
 hates = Damp
 hates = The neighbours (through the wall)
 
-[shop]
-enterable = yes
-name = Shop
-mood = 🛍️
-loves = Regulars
-loves = Half-day closing
-hates = Parking restrictions
-hates = The new supermarket
-
 [pub]
 enterable = yes
-name = The Red Lion
-name = The Crown
-name = The Royal Oak
-name = The White Hart
-name = The King's Head
-name = The Plough
-name = The Swan
-name = The Rose and Crown
-name = The Nag's Head
-name = The Queen's Arms
-name = The Fox and Hounds
-name = The Black Horse
+name = Pub
+title = The Red Lion
+title = The Crown
+title = The Royal Oak
+title = The White Hart
+title = The King's Head
+title = The Plough
+title = The Swan
+title = The Rose and Crown
+title = The Nag's Head
+title = The Queen's Arms
+title = The Fox and Hounds
+title = The Black Horse
 mood = 🍺
 loves = Regulars
 loves = Last orders
@@ -206,6 +199,52 @@ hates = Closing time
 hates = Lager tops
 hates = The darts team losing
 hates = Being turned into flats
+
+[salon]
+enterable = yes
+name = Hair Salon
+title = Curl Up & Dye
+title = Hair Today
+title = Shear Madness
+title = Fringe Benefits
+title = A Cut Above
+title = The Mane Event
+title = Blow Dry Bar
+title = Headlines
+title = Hair Force One
+title = Tress Chic
+mood = 💇
+loves = Big hair
+loves = A good gossip
+loves = The smell of perm lotion
+loves = Where are you going on your holidays this year
+loves = Walk-ins (sometimes)
+loves = Rachel from Friends
+hates = Split ends
+hates = Asking for a trim and wanting a whole new head
+hates = DIY fringes
+hates = The dryer that trips the fuse
+
+[clothes]
+enterable = yes
+name = Clothes Shop
+title = Threads
+title = Rags to Riches
+title = The Clothes Line
+title = Frock Around the Clock
+title = Dedicated Follower
+title = Seams Good
+title = Wear It's At
+title = Hanger Management
+mood = 👗
+loves = Folding things just so
+loves = The changing rooms being free
+loves = A good sale
+loves = Mannequins (they get it)
+hates = Things left on the changing room floor
+hates = Everything unfolded again
+hates = Returns without a receipt
+hates = Online shopping
 
 [house]
 enterable = yes

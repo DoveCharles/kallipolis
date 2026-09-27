@@ -61,11 +61,21 @@ const SOUNDS = {
     [.8, .05, 70, 0, .02, .22, 0, 1.5, -6, , , , , .5, , , , .6, .08, , -700],
     [.3, .05, 1600, 0, .004, .03, 1, 2, , , , , , .4, , , , .5, , , 2000],
   ],
+  // a changing room's curtain drawn across or back (see drawCurtain in buildings/interior.js): a swish of cloth, the
+  // rings rattling along the rail over it
+  curtain: [
+    [.3, .1, 900, .03, .08, .12, 4, 1, 8, , , , , 0, , , , .5, , , 1800],
+    [.08, .2, 2600, 0, .01, .05, 1, 2, , , , , .03, , , , , .4],
+  ],
+  // scissors at work (see "a salon" in life/people/peopleActivities.js): a quick bright snip-snip
+  snip: [
+    [.22, .05, 3200, 0, .003, .02, 1, 2.5, , , , , .07, , , , , .4, , , 2500],
+  ],
 };
 // how near something has to be for each sound to be heard at full volume, falling away past it (REF_DISTANCE if not here)
 // which sound level each is heard at (see LEVEL_KINDS): the rest go by the master level alone
-const KIND_OF = { punch: 'peds', whoosh: 'peds', crash: 'traffic', thump: 'traffic', thunder: 'ambience' };
-const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5 };
+const KIND_OF = { punch: 'peds', whoosh: 'peds', curtain: 'peds', snip: 'peds', crash: 'traffic', thump: 'traffic', thunder: 'ambience' };
+const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5, curtain: 4, snip: 3 };
 // for the little sounds of people that'd otherwise be heard from right across town (a fight in every park): how far off
 // they're heard at all, how fast they fade past their REACH, and how fast they're muffled (see muffler)
 const NEAR_ONLY = { punch: { hear: 40, rolloff: 2.5, muffle: 1.4 }, whoosh: { hear: 25, rolloff: 2.5, muffle: 1.4 } };
@@ -236,11 +246,45 @@ export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate 
  * @returns {AudioBuffer}
  */
 export function zzfxBuffer(layer) {
-  const samples = ZZFX.buildSamples(...layer);
+  const made = prewarmed.get(layer);
+  if (made?.length) return made.shift();
+  return bufferOf(ZZFX.buildSamples(...layer));
+}
+function bufferOf(samples) {
   const buffer = context.createBuffer(1, samples.length, ZZFX.sampleRate);
   buffer.getChannelData(0).set(samples);
   return buffer;
 }
+// Making a sound's samples can take a while — thunder's three takes are a seventh of a second's work — and each sound is
+// otherwise only made the first time it's heard, so the game would stall just as the first car blew up. Instead every
+// sound is made ahead, in a worker (see zzfx-worker.js), as soon as the page is up: zzfxBuffer hands back one of those
+// if it's there, and only makes one itself if it isn't yet.
+const prewarmed = new Map(); // layer → AudioBuffers made ahead for it, each handed out once
+let worker = null, workerFailed = false, jobs = 0;
+const waiting = new Map(); // job id → the layer it's for
+/**
+ * Have `count` takes of each of some ZzFX layers made ahead, off the page (see zzfxBuffer), for a sound whose takes
+ * are made with zzfxBuffer the first time it's heard.
+ * @param {number[][]} layers - the same layer arrays zzfxBuffer will be called with
+ * @param {number} count - how many takes of each it will want
+ * @returns {void}
+ */
+export function prewarm(layers, count) {
+  if (workerFailed) return;
+  try {
+    worker ??= Object.assign(new Worker(new URL('./zzfx-worker.js', import.meta.url), { type: 'module' }), {
+      onmessage: ({ data: { id, samples } }) => {
+        const layer = waiting.get(id);
+        waiting.delete(id);
+        if (!prewarmed.has(layer)) prewarmed.set(layer, []);
+        prewarmed.get(layer).push(bufferOf(samples));
+      },
+      onerror: () => { workerFailed = true; }, // (no worker: each sound's made when it's first heard, as it would be anyway)
+    });
+  } catch { workerFailed = true; return; }
+  for (const layer of layers) for (let k = 0; k < count; k++) { waiting.set(++jobs, layer); worker.postMessage({ id: jobs, layer }); }
+}
+prewarm(Object.values(SOUNDS).flat(), VARIANTS);
 
 let voices = 0;
 const source = new THREE.Vector3();

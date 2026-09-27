@@ -35,9 +35,11 @@ const PARK_BEACH_WIDTH = 5;         // roughly how far sand reaches into a park 
 export const WATER_TIME = { value: 0 };    // shared by every water material; advanced each frame in animate()
 
 // a fixed-length list of vec4 segment uniforms (GLSL array sizes are compile-time constants) — padding is never read
+// (flat, four numbers a segment: three.js hands a Float32Array straight to the GPU, where an array of Vector4s would be
+// copied into a new one every time anything using it is drawn)
 function segmentUniformArray(segments, max) {
-  const out = [];
-  for (let i=0;i<max;i++) { const s = segments[i] || [0,0,0,0]; out.push(new THREE.Vector4(s[0], s[1], s[2], s[3])); }
+  const out = new Float32Array(max*4);
+  for (let i=0;i<Math.min(max, segments.length);i++) for (let k=0;k<4;k++) out[i*4 + k] = segments[i][k];
   return out;
 }
 // A zone's actual area — its outline minus its cut-outs — as Clipper paths (empty while it's still being drawn).

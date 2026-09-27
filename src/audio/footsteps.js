@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { playBufferAt, zzfxBuffer, ear } from './sfx.js';
+import { playBufferAt, prewarm, zzfxBuffer, ear } from './sfx.js';
 
 // ============================================================ footsteps
 // A scuff for each footfall of anyone walking near the camera (see the walk cycle in life/people/people.js): short bursts
@@ -13,6 +13,7 @@ const STEPS = {
   wet:  [.45, .3, 300, .005, .012, .06, 4, 1, 20, , , , , 4, , , , , , , -1300],
 };
 const VARIANTS = 4;
+prewarm(Object.values(STEPS), VARIANTS); // (made ahead, off the page: see prewarm in sfx.js)
 const HEAR_DISTANCE = 10, REF_DISTANCE = 1.5;
 const STEP_VOLUME = 0.13;
 const STEPS_MAX_PER_SECOND = 24; // past this many footfalls a second, the rest go unheard

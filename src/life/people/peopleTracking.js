@@ -138,6 +138,8 @@ export function personDoing(p) {
   }
   if (p.mode === 'indoors' && p.indoors) {
     const label = buildingLabel(p.indoors.building), stage = p.indoors.stage;
+    if (stage === 'inside' && p.inRoom?.seat?.kind === 'cut' && p.inRoom.stage === 'sit' && !p.indoors.served) return 'Getting a haircut at ' + label;
+    if (stage === 'inside' && p.inRoom?.cubicle) return p.inRoom.changing === 'go' ? 'Off to try some clothes on' : 'Trying clothes on at ' + label;
     return (stage === 'approach' ? 'Going into ' : stage === 'inside' ? 'Inside ' : 'Coming out of ') + label;
   }
   if (p.act === 'buy') {

@@ -5,7 +5,7 @@ import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
 import { buildingKey, buildingNumber, roomLayoutOf } from './footprints.js';
-import { buildingKindOf, buildingName, buildingTypeOf, buildingEnterable } from './building-types.js';
+import { buildingKindOf, buildingName, buildingTitle, buildingTypeOf, buildingEnterable } from './building-types.js';
 import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 
 // ============================================================ following a building
@@ -69,7 +69,9 @@ function followBuilding(picked) {
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(CAMERA_MIN_RADIUS, Math.min(600, radius*2.8));
   const info = buildingTypeOf(kind, number);
-  card.show({ ...info, name: buildingName(kind, number, picked.group.userData.height ?? 0) + ' #' + number });
+  // what it is, then its own name on the line under (see buildingTitle), if it has one
+  const name = buildingName(kind, number, picked.group.userData.height ?? 0) + ' #' + number, title = buildingTitle(kind, number);
+  card.show({ ...info, name: title ? [name, title] : name });
   setBuildingCardInhabitants([]);
   drawThumbnail(thumbnailOf(picked.group, box, center, radius));
   card.setFavorite({ key: 'building:' + key, kind: 'Building', follow: () => {
@@ -100,7 +102,9 @@ const followedBuildingKey = () => followed ? followed.key : null;
 // isometric camera framing it — as for a car or a carriage.
 function thumbnailOf(group, box, center, radius) {
   const mesh = group.clone();
-  mesh.traverse(o => { if (o.userData.batched) o.visible = true; }); // (drawn merged in the city: see building-batches.js)
+  // (drawn merged in the city, and so neither drawn nor its matrices kept up there, which the copy would carry over: see
+  // building-batches.js — it's moved to the origin here, so it has to work them out again)
+  mesh.traverse(o => { if (o.userData.batched) o.visible = true; o.matrixAutoUpdate = true; });
   mesh.position.sub(center);
   const elevation = Math.atan(1/Math.SQRT2), azimuth = Math.PI/4, distance = radius*4;
   const view = new THREE.OrthographicCamera(-radius, radius, radius, -radius, 0.1, distance*2);

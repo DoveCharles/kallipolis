@@ -292,7 +292,7 @@ export function plantPigeons(zone, { area, park = false, ground, spot, clear }) 
   birds.forEach((bird, k) => { mesh.setColorAt(k, color.setScalar(bird.tint)); setPose(mesh, k, bird); });
   mesh.instanceColor.needsUpdate = true;
   zone.buildingsGroup.add(mesh);
-  flocks.push({ group: zone.buildingsGroup, mesh, birds, flocks: groups, spot, clear, ground });
+  flocks.push({ group: zone.buildingsGroup, zone, mesh, birds, flocks: groups, spot, clear, ground });
 }
 
 // somewhere near the middle of a flock that a bird can stand
@@ -400,15 +400,28 @@ const threats = [];
 const threatCells = new Map();
 let threatCell = 1;
 const cellKey = (cx, cz) => cx*100003 + cz;
+// Only those near enough some colony to matter are gathered: within SHY of their reach (see stepGround) or LANDING_SHY
+// (see landingSpot) of a box round the colony's zone and wherever its birds are just now.
+const LANDING_SHY = 3, ZONE_BOX_PAD = 10; // (the pad for a zone's curved outline bulging past its points)
+const colonyBoxes = [];
+function colonyBox(colony) {
+  const box = colony.zone.points.reduce((b, q) => [Math.min(b[0], q.x - ZONE_BOX_PAD), Math.min(b[1], q.z - ZONE_BOX_PAD), Math.max(b[2], q.x + ZONE_BOX_PAD), Math.max(b[3], q.z + ZONE_BOX_PAD)], [Infinity, Infinity, -Infinity, -Infinity]);
+  for (const bird of colony.birds) { box[0] = Math.min(box[0], bird.x); box[1] = Math.min(box[1], bird.z); box[2] = Math.max(box[2], bird.x); box[3] = Math.max(box[3], bird.z); }
+  return box;
+}
 function gatherThreats() {
   threats.length = 0;
   threatCells.clear();
   if (!S.peopleEnabled) return;
+  colonyBoxes.length = 0;
+  flocks.forEach(colony => colonyBoxes.push(colonyBox(colony)));
   let widest = 0;
   (App.people || []).forEach(p => {
     if (p.mode === 'none' || p.mode === 'dead' || p.mode === 'train' || (p.mode === 'indoors' && p.indoors?.stage === 'inside')) return;
     const size = p.traits?.size || 1;
     const reach = (p.fright || p.attack ? SCARE_FLEEING : p.moving || p.mode === 'possessed' ? SCARE_MOVING : SCARE_STILL)*Math.sqrt(size);
+    const pad = Math.max(reach*SHY, LANDING_SHY);
+    if (!colonyBoxes.some(b => p.x >= b[0] - pad && p.x <= b[2] + pad && p.z >= b[1] - pad && p.z <= b[3] + pad)) return;
     threats.push({ x: p.x, z: p.z, reach });
     widest = Math.max(widest, reach);
   });

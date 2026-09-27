@@ -474,3 +474,28 @@ export function insetPolygon(poly, amount) {
   const scale = avgDist>0 ? Math.max(0.15, (avgDist-amount)/avgDist) : 1;
   return poly.map(point => ({ x:center.x+(point.x-center.x)*scale, z:center.z+(point.z-center.z)*scale }));
 }
+
+// Some of a crowd bucketed by where they stand, for finding those near a spot without looking at all of them — a frame's
+// road-crossers for cars (checkYield, runOverPeople in life/traffic), the people lying down for walkers (updatePeople).
+// near hands back their places in the list in the list's own order, so what's found first is what always would have been.
+const CROWD_CELL = 8, CROWD_MARGIN = 2; // (metres; the margin for anyone moved since they were bucketed)
+/**
+ * @template T
+ * @param {T[]} list
+ * @param {(item: T) => {x: number, z: number}} [where] - who each item is (an index in App.people, say)
+ * @returns {{ list: T[], near: (x: number, z: number, radius: number) => number[] }}
+ */
+export function crowdGrid(list, where = item => item) {
+  const cells = new Map(), key = (cx, cz) => (cx + 32768)*65536 + (cz + 32768);
+  list.forEach((item, k) => {
+    const p = where(item), cell = key(Math.floor(p.x/CROWD_CELL), Math.floor(p.z/CROWD_CELL));
+    const inCell = cells.get(cell);
+    if (inCell) inCell.push(k); else cells.set(cell, [k]);
+  });
+  return { list, near(x, z, radius) {
+    const out = [], r = radius + CROWD_MARGIN;
+    const x0 = Math.floor((x - r)/CROWD_CELL), x1 = Math.floor((x + r)/CROWD_CELL), z0 = Math.floor((z - r)/CROWD_CELL), z1 = Math.floor((z + r)/CROWD_CELL);
+    for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) { const inCell = cells.get(key(cx, cz)); if (inCell) for (const k of inCell) out.push(k); }
+    return out.length > 1 ? out.sort((a, b) => a - b) : out;
+  } };
+}
