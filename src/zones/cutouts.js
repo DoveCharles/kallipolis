@@ -34,21 +34,65 @@ export function offsetPaths(paths, amount, joinType) {
   return out;
 }
 // A point-in-region test for closed Clipper paths as boolean ops produce them (outlines plus holes): inside means
-// inside an odd number of contours. Each contour's bounding box is checked first.
+// inside an odd number of contours. Each contour's bounding box is checked first. A tester asked often enough
+// (REGION_GRID_AFTER times) lays a grid over the region (see regionGrid), for the same answers sooner — the water's,
+// say, asked about everyone walking every frame (see isOpenWater in water/water.js).
+const REGION_GRID_AFTER = 256;
 export function createRegionTester(paths) {
   const boxed = paths.map(path => {
     let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
     path.forEach(p => { if (p.X<minX) minX=p.X; if (p.X>maxX) maxX=p.X; if (p.Y<minY) minY=p.Y; if (p.Y>maxY) maxY=p.Y; });
     return { path, minX, minY, maxX, maxY };
   });
+  let asked = 0, grid = null;
   return (x, z) => {
     const X = Math.round(x*CLIPPER_SCALE), Y = Math.round(z*CLIPPER_SCALE);
-    let inside = false;
-    for (const b of boxed) {
-      if (X<b.minX || X>b.maxX || Y<b.minY || Y>b.maxY) continue;
-      if (ClipperLib.Clipper.PointInPolygon({ X, Y }, b.path) === 1) inside = !inside;
+    if (grid) return grid(X, Y);
+    if (++asked >= REGION_GRID_AFTER && boxed.length) grid = regionGrid(boxed);
+    return insideOf(boxed, X, Y);
+  };
+}
+// (whether a point's inside an odd number of `boxed` contours, leaving out any in `skip`)
+function insideOf(boxed, X, Y, skip) {
+  let inside = false;
+  for (const b of boxed) {
+    if (X<b.minX || X>b.maxX || Y<b.minY || Y>b.maxY || skip?.includes(b)) continue;
+    if (ClipperLib.Clipper.PointInPolygon({ X, Y }, b.path) === 1) inside = !inside;
+  }
+  return inside;
+}
+// A grid of up to REGION_GRID_CELLS cells a side over the region. Only a contour whose edge passes through (or right by)
+// a cell can hold one point in it and not another, so each cell keeps a list of those, tested exactly; the rest hold a
+// point there just as they hold the cell's middle, which is worked out the first time the cell's asked about.
+const REGION_GRID_CELLS = 256;
+function regionGrid(boxed) {
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  boxed.forEach(b => { minX = Math.min(minX, b.minX); minY = Math.min(minY, b.minY); maxX = Math.max(maxX, b.maxX); maxY = Math.max(maxY, b.maxY); });
+  const size = Math.max(1, Math.ceil(Math.max(maxX - minX, maxY - minY)/REGION_GRID_CELLS));
+  const nx = Math.floor((maxX - minX)/size) + 1, ny = Math.floor((maxY - minY)/size) + 1;
+  const col = X => Math.max(0, Math.min(nx - 1, Math.floor((X - minX)/size))), row = Y => Math.max(0, Math.min(ny - 1, Math.floor((Y - minY)/size)));
+  const edgesIn = new Array(nx*ny); // (by cell: the contours with an edge through it, if any)
+  boxed.forEach(b => b.path.forEach((a, k) => {
+    const c = b.path[(k + 1) % b.path.length], dx = c.X - a.X, dy = c.Y - a.Y;
+    const side = (X, Y) => Math.sign(dx*(Y - a.Y) - dy*(X - a.X));
+    for (let cy = row(Math.min(a.Y, c.Y) - 1); cy <= row(Math.max(a.Y, c.Y) + 1); cy++) {
+      for (let cx = col(Math.min(a.X, c.X) - 1); cx <= col(Math.max(a.X, c.X) + 1); cx++) {
+        // (the cell, a unit bigger all round: the edge's inside it unless all four corners are on one side of its line)
+        const x0 = minX + cx*size - 1, y0 = minY + cy*size - 1, x1 = x0 + size + 2, y1 = y0 + size + 2;
+        const sum = side(x0, y0) + side(x1, y0) + side(x0, y1) + side(x1, y1);
+        if (sum === 4 || sum === -4) continue;
+        const cell = cy*nx + cx, list = edgesIn[cell];
+        if (!list) edgesIn[cell] = [b];
+        else if (list[list.length - 1] !== b) list.push(b);
+      }
     }
-    return inside;
+  }));
+  const middle = new Int8Array(nx*ny).fill(-1); // (whether the cell's middle is inside the contours not in its list; -1 not yet known)
+  return (X, Y) => {
+    if (X<minX || X>maxX || Y<minY || Y>maxY) return false;
+    const cx = col(X), cy = row(Y), cell = cy*nx + cx, list = edgesIn[cell];
+    if (middle[cell] < 0) middle[cell] = insideOf(boxed, Math.round(minX + (cx + 0.5)*size), Math.round(minY + (cy + 0.5)*size), list) ? 1 : 0;
+    return list ? insideOf(list, X, Y) !== !!middle[cell] : !!middle[cell];
   };
 }
 // Everything cut out of `zone` in and just around its outline `poly`: the road footprint, plus the outlines of the zones
