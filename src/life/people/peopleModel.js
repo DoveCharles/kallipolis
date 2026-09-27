@@ -513,6 +513,8 @@ const HAIR_TONES = [0x0f0d0c, 0x2a1d15, 0x4a3223, 0x6f4e33, 0x8a4f2a, 0xa0692f, 
 export const BLINK_DURATION = 0.25; // seconds for the eyes to close and open again
 // how far a person turns their head when they glance around: side to side, and up and down
 export const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
+// how far a pupil wanders from the middle of the eye, in the model's units: side to side (both eyes the same way), and up and down
+export const PUPIL_MAX_X = 0.07, PUPIL_MAX_Y = 0.02;
 // the middle of a person's face, from where their head meets their neck, in the model's units
 export const HEAD_CENTER = new THREE.Vector3(0, 0.3, 0.2);
 
@@ -605,6 +607,7 @@ const PERSON_VERTEX_PARS = `
   attribute vec4 instanceAnim;
   attribute vec4 instanceLook;
   attribute vec4 instanceEyes;
+  attribute vec2 instancePupil; // where their pupils have wandered: x left/right, y up/down (the model's units)
   // which person this instance is: the instance itself for the body, and for a hairstyle (holding only some people) the
   // person it was given
   #ifdef PERSON_INDEX_ATTRIBUTE
@@ -694,6 +697,8 @@ const PERSON_VERTEX_PARS = `
     // the Blink key was made on the plain face, so as the eyes close every one of the eyes' keys fades out, on every part
     // of the eyes (not just the lids Blink moves), and back in as they open — laid over a face or an expression it pushes
     // the lids through each other, and leaves whatever it doesn't move in the wrong place
+    // (the pupils slide across the face, never into or out of it; up/down closes back to the middle with the lids)
+    if ((mask & 64) != 0) { offset.x += instancePupil.x; eyes.y += instancePupil.y; }
     offset += eyes*(1.0 - instanceAnim.w);
     if ((mask & 2) != 0) offset += personMorph(${shapeKey('Blink')})*instanceAnim.w;
     return offset;
@@ -1214,6 +1219,13 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
       if (Math.abs(keyOffsets[i*3]) + Math.abs(keyOffsets[i*3+1]) + Math.abs(keyOffsets[i*3+2]) > 1e-6) morphMask[i] = morphMask[i] | bit;
     }
   });
+  // (the pupils, which move with their bones, as bit 64)
+  const pupilBones = new Set(['PupilL', 'PupilR'].map(name => boneByName.get(name)).filter(b => b !== undefined));
+  for (let i=0;i<vertexCount;i++) {
+    let pupil = 0;
+    for (let k=0;k<4;k++) if (pupilBones.has(joints[i*4 + k])) pupil += weights[i*4 + k];
+    if (pupil > 0.5) morphMask[i] = morphMask[i] | 64;
+  }
   const vertexData = new Float32Array(vertexCount*4);
   for (let i=0;i<vertexCount;i++) vertexData.set([headWeights[i] || -armWeights[i], slots[i], morphMask[i], i], i*4);
   geometry.setAttribute('personVertex', new THREE.BufferAttribute(vertexData, 4));
@@ -1637,13 +1649,13 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     }
     return true;
   }
-  const instanceArrays = style => [[style.mesh.instanceMatrix.array, 16], [style.anim.array, 4], [style.look.array, 4], [style.eyes.array, 4]];
+  const instanceArrays = style => [[style.mesh.instanceMatrix.array, 16], [style.anim.array, 4], [style.look.array, 4], [style.eyes.array, 4], [style.pupil.array, 2]];
   // (a style's wearers written out again, each into its instance slot, after one's come or gone)
   function restack(layer, style) {
     if (!style.mesh) return;
     const person = style.geometry.attributes.instancePerson;
     style.members.forEach((m, slot) => { layer.slot[m] = slot; person.array[slot] = m; });
-    person.needsUpdate = style.mesh.instanceMatrix.needsUpdate = style.anim.needsUpdate = style.look.needsUpdate = style.eyes.needsUpdate = true;
+    person.needsUpdate = style.mesh.instanceMatrix.needsUpdate = style.anim.needsUpdate = style.look.needsUpdate = style.eyes.needsUpdate = style.pupil.needsUpdate = true;
   }
   // a style from `list` (indices into the layer's styles) with room for them — other than the one they wear, unless
   // `same` — or -1
@@ -1731,10 +1743,11 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   bodyLook.outfitLegSlots = [PERSON_SLOTS.indexOf('Pants')];
   // (and a leg's bands where they're bare, for fishnets)
   bodyLook.outfitBareLegSlots = bodyLook.bands.filter(b => PERSON_SLOTS[b.slot].startsWith('Leg')).map(b => b.slot);
-  const anim = dynamicInstanceAttribute(PEOPLE_MAX, 4), look = dynamicInstanceAttribute(PEOPLE_MAX, 4), eyes = dynamicInstanceAttribute(PEOPLE_MAX, 4);
+  const anim = dynamicInstanceAttribute(PEOPLE_MAX, 4), look = dynamicInstanceAttribute(PEOPLE_MAX, 4), eyes = dynamicInstanceAttribute(PEOPLE_MAX, 4), pupil = dynamicInstanceAttribute(PEOPLE_MAX, 2);
   geometry.setAttribute('instanceAnim', anim);
   geometry.setAttribute('instanceLook', look);
   geometry.setAttribute('instanceEyes', eyes);
+  geometry.setAttribute('instancePupil', pupil);
   const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
   const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair'), 1: traitRow('Hat') }, femaleOnly: [] };
   const glassesLook = { palette: hairPalette, traitColors: { 0: traitRow('Glasses') }, femaleOnly: [] };
@@ -1750,9 +1763,11 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     style.anim = dynamicInstanceAttribute(style.capacity, 4);
     style.look = dynamicInstanceAttribute(style.capacity, 4);
     style.eyes = dynamicInstanceAttribute(style.capacity, 4);
+    style.pupil = dynamicInstanceAttribute(style.capacity, 2);
     style.geometry.setAttribute('instanceAnim', style.anim);
     style.geometry.setAttribute('instanceLook', style.look);
     style.geometry.setAttribute('instanceEyes', style.eyes);
+    style.geometry.setAttribute('instancePupil', style.pupil);
     style.mesh = makePersonMesh(style.geometry, uniforms, look, style.capacity, true);
     style.mesh.count = style.members.length;
   });
@@ -1766,7 +1781,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   personCulling.personTall.value = box.max.y - box.min.y;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes,
     headBone: headBone ?? 0, headPivot, chestBone, hands, unitsPerMetre, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
@@ -1873,7 +1888,7 @@ function gibBodyGeometry({ geometry, joints, weights, slots, bones, inHead, inAr
 /**
  * Build the gib meshes: one per body part, and one per worn hairstyle, facial hair, pair of glasses, skirt and pair of jeans.
  * @returns {{parts: object[], snapshot: function(number, number): void, capacity: number}} the parts (each {name, mesh,
- *   anim, look, eyes, person, samples}), each worn style given a `gib` of the same shape, and a snapshot(i, column)
+ *   anim, look, eyes, pupil, person, samples}), each worn style given a `gib` of the same shape, and a snapshot(i, column)
  *   copying person i's looks into gib column `column`
  */
 function buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm, wornLayers, uniforms, bodyLook, looks, traits, traitRows }) {
@@ -1886,10 +1901,11 @@ function buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm
     SHARED_VERTEX_ATTRIBUTES.forEach(n => { if (source.attributes[n]) geo.setAttribute(n, source.attributes[n]); });
     geo.setIndex(index);
     const gib = { name, samples, anim: dynamicInstanceAttribute(GIB_BODIES_MAX, 4), look: dynamicInstanceAttribute(GIB_BODIES_MAX, 4),
-      eyes: dynamicInstanceAttribute(GIB_BODIES_MAX, 4), person: dynamicInstanceAttribute(GIB_BODIES_MAX, 1) };
+      eyes: dynamicInstanceAttribute(GIB_BODIES_MAX, 4), pupil: dynamicInstanceAttribute(GIB_BODIES_MAX, 2), person: dynamicInstanceAttribute(GIB_BODIES_MAX, 1) };
     geo.setAttribute('instanceAnim', gib.anim);
     geo.setAttribute('instanceLook', gib.look);
     geo.setAttribute('instanceEyes', gib.eyes);
+    geo.setAttribute('instancePupil', gib.pupil);
     geo.setAttribute('instancePerson', gib.person);
     // (a gib's pieces fly apart, the thighs from the skirt, so it isn't kept out of them)
     gib.mesh = makePersonMesh(geo, gibUniforms, { ...look, clearThighs: false }, GIB_BODIES_MAX, true, { name: 'BodyGibs', headshot: false, culled: false });

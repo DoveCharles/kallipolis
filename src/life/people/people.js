@@ -19,7 +19,7 @@ import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
-import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, personPixels } from './peopleModel.js';
+import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, PUPIL_MAX_X, PUPIL_MAX_Y, personPixels } from './peopleModel.js';
 import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
@@ -489,6 +489,8 @@ export function newPerson(id = S.peopleIdSeq++) {
     talk: 0, talkTo: 0, talkIn: 0, emotion: 0, emotionTo: 0, emotionIn: 0,
     // and their eyes: how shocked, happy, angry and sad they look
     eyes: [0, 0, 0, 0],
+    // and where their pupils have wandered to (left/right, up/down), where they're darting to next and when
+    pupil: [0, 0], pupilTo: [0, 0], pupilIn: peopleRng()*2,
     // their traits, from what they were picked in people/*.txt (see refreshTraits)
     traits: DEFAULT_TRAITS, traitsKey: '',
     // how they're taking someone blowing up nearby, if they are (see frightenBystanders)
@@ -1415,6 +1417,18 @@ export function updatePeople(t) {
         if (possessed) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
         p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, fdt*4);
         p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, fdt*4);
+        // their pupils dart somewhere else every second or so, often back to the middle, snapping there quickly
+        p.pupilIn -= fdt;
+        if (p.pupilIn <= 0) {
+          p.pupilIn = 0.4 + peopleRng()*2.5;
+          const middle = peopleRng() < 0.3;
+          p.pupilTo[0] = middle ? 0 : (peopleRng()*2 - 1)*PUPIL_MAX_X;
+          p.pupilTo[1] = middle ? 0 : (peopleRng()*2 - 1)*PUPIL_MAX_Y;
+        }
+        if (possessed) { p.pupilTo[0] = 0; p.pupilTo[1] = 0; }
+        const dart = Math.min(1, fdt*25);
+        p.pupil[0] += (p.pupilTo[0] - p.pupil[0])*dart;
+        p.pupil[1] += (p.pupilTo[1] - p.pupil[1])*dart;
       }
       const fear = bloodFear(p); // (how much blood they're wearing, for how scared they look)
       const scaredByBlood = !!p.blood && !p.traits.bloodlust, lusting = isBloodlusting(p);
@@ -1502,6 +1516,8 @@ export function updatePeople(t) {
         if (p.water?.drowned) holdDrowned(o, animArray, lookArray); // (still, face down: see peopleWater.js)
         const eyesArray = personModel.eyes.array;
         for (let k=0;k<4;k++) eyesArray[o + k] = p.eyes[k];
+        const pupilArray = personModel.pupil.array;
+        pupilArray[i*2] = p.pupil[0]; pupilArray[i*2 + 1] = p.pupil[1];
         // the copies everything they wear (hair, glasses, a skirt) keeps of where they are, how they're posed and which way they're looking
         if (worn) for (const layer of personModel.wornLayers) {
           const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null;
@@ -1509,6 +1525,7 @@ export function updatePeople(t) {
           const slot = layer.slot[i];
           matrix.toArray(style.mesh.instanceMatrix.array, slot*16);
           for (let k=0;k<4;k++) { style.anim.array[slot*4 + k] = animArray[o + k]; style.look.array[slot*4 + k] = lookArray[o + k]; style.eyes.array[slot*4 + k] = eyesArray[o + k]; }
+          style.pupil.array[slot*2] = p.pupil[0]; style.pupil.array[slot*2 + 1] = p.pupil[1];
         }
       }
     } else {
@@ -1543,7 +1560,7 @@ export function updatePeople(t) {
   });
 
   if (personModel) {
-    [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; });
+    [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; part.pupil.needsUpdate = true; });
     updateHeld(); // (whatever anyone's holding, from where their hands ended up)
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;
