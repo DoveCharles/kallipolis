@@ -8,6 +8,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 // and back round to face the bar when it stops. Now and then it polishes a glass (PolishGlass) or wipes the bar
 // (CleanBar: done from the middle of the counter, facing it, where it was animated), looking down (the LookDown shape)
 // while it does; otherwise its eyes (Look Left/Right) flick about and its eyebrow (Raised Eyebrow) goes up now and then.
+// Awake, it blinks (Blink: shut outright and open again, no easing) every few seconds.
 // Standing about or going along the bar, it swivels its head (Head) to look round the room now and then.
 // With nobody in the pub it sleeps: the Sleep pose, its face (Face) swapped for the Zzz (glowing just short of the lit
 // screen: the Face material's dark ink turned to the backlight's glow), and the screen behind them (FaceBacklight)
@@ -27,13 +28,14 @@ const ASLEEP_FACE = 0.85;   // and the Zzz's (the Face material's), of the backl
 const HEAD_REACH = 0.7;     // rad, the most its head swivels either way looking round
 const HEAD_EASE = 3;        // the head's swivel, eased per second
 const END_GAP = 0.35;       // kept from either end of the counter
-const SHAPES = ['Look Left/Right', 'Raised Eyebrow', 'LookDown'];
+const SHAPES = ['Look Left/Right', 'Raised Eyebrow', 'LookDown', 'Blink'];
+const BLINK = 0.12;         // s, the eyes shut
 
 let bot = null;             // { root, rig, body, mixer, actions, shaped, screens, face, zzz, height }
 let place = null;           // where it is in this pub: { x0, x1, mid, barZ }
 const state = {
   x: 0, goal: 0, yaw: 0, doing: 'idle', next: 0, then: null, asleep: false, snap: true,
-  look: 0, lookNext: 0, brow: 0, browUntil: 0, browNext: 0, shape: [0, 0, 0], sleepy: 0,
+  look: 0, lookNext: 0, brow: 0, browUntil: 0, browNext: 0, blinkUntil: 0, blinkNext: 0, shape: [0, 0, 0, 0], sleepy: 0,
   head: 0, headGoal: 0, headNext: 0,
 };
 let lastTime = 0;
@@ -217,9 +219,11 @@ export function updateBarbot(inPub, occupied) {
   const working = state.doing === 'PolishGlass' || state.doing === 'CleanBar';
   if (now > state.lookNext) { state.look = Math.random()*2 - 1; state.lookNext = now + 0.4 + Math.random()*2.5; }
   if (now > state.browNext) { state.browUntil = now + 0.6 + Math.random()*1.2; state.browNext = state.browUntil + 3 + Math.random()*8; }
+  if (now > state.blinkNext) { state.blinkUntil = now + BLINK; state.blinkNext = state.blinkUntil + 2 + Math.random()*5; }
   const goals = working || state.asleep ? [0, 0, working ? 1 : 0] : [state.look, now < state.browUntil ? 1 : 0, 0];
   const ease = Math.min(1, SHAPE_EASE*dt);
   goals.forEach((g, i) => { state.shape[i] = i === 0 && !working ? g : state.shape[i] + (g - state.shape[i])*ease; });
+  state.shape[3] = !state.asleep && now < state.blinkUntil ? 1 : 0; // (a blink's all or nothing)
   for (const mesh of bot.shaped) SHAPES.forEach((name, i) => {
     const k = mesh.morphTargetDictionary[name];
     if (k != null) mesh.morphTargetInfluences[k] = state.shape[i];
