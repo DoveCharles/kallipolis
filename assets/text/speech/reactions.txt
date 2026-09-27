@@ -78,6 +78,31 @@ Who moved the floor? {felt = fellover}
 I'm fine! I'm fine. {felt = fellover, mood}
 Nobody saw that. Nobody saw that. {felt = fellover, nosy, thought}
 Ugh, I'm too drunk for this. {felt = fellover, mood = -1}
+
+New hair, new me. {felt = haircut, happy}
+Is it too short? It's too short. {felt = haircut, mood = -1, thought}
+I asked for a trim. {felt = haircut, patience = -1}
+> It suits you, honestly.
+> What did you ask for? {nosy}
+Feels so light! {felt = haircut}
+Nobody look at me. {felt = haircut, shock, thought}
+Worth every penny. {felt = haircut, mood}
+My mum's going to hate it. {felt = haircut, weight = 0.5}
+Do I look like Rachel from Friends? {felt = haircut, woman, weight = 0.5}
+> A bit. {happy}
+> Not really. {patience = -1}
+Cold head. {felt = haircut, man, world.weather = snow}
+
+Fits like a glove. {felt = newclothes, happy}
+Does this make me look fat? {felt = newclothes, thought}
+I'm never taking this off. {felt = newclothes, mood}
+Should've got the other one. {felt = newclothes, mood = -1, thought}
+How do I look? {felt = newclothes}
+> Like a million quid. {happy}
+> Like you've spent too much. {patience = -1}
+> Very... you. {weight = 0.5}
+They'd better take returns. {felt = newclothes, mood = -1}
+Right, wearing it out. {felt = newclothes}
 Oof, that last one's gone to my head. {felt = drunk}
 I feel amazing. {felt = drunk, happy}
 The world's gone all wobbly. {felt = drunk, thought}

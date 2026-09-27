@@ -40,6 +40,25 @@ I can't believe it's already this late. {world.hour 20-3}
 Another day at the office. {here.building = office}
 > Don't remind me. {mood = -1}
 
+Going anywhere nice on your holidays? {here.building = salon}
+> Benidorm, same as always.
+> Can't afford it this year. {mood = -1}
+> Mind your own business. {aggression}
+
+What are you having done? {here.building = salon}
+> Just a trim.
+> Everything. {happy}
+> No idea yet. {weight = 0.5}
+
+Do you think this would suit me? {here.building = clothes}
+> Try it on! {happy}
+> Not really your colour. {patience = -1}
+> Everything suits you, [other.name]. {other.friend}
+
+Have they got this in a medium? {here.building = clothes, weight = 0.6}
+> Ask at the till.
+> They never do. {mood = -1}
+
 Is the robot looking at me? {here.building = pub, weight = 0.5}
 > It's looking at everyone.
 > Wave at it. {happy}

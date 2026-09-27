@@ -19,7 +19,7 @@
 #   industrial   warehouse, factory, tankfarm, containeryard
 #   farmland     farmstead
 #   suburbs      house
-#   town         terrace, shop, pub
+#   town         terrace, shop, pub, salon, clothes
 #   airport      terminal, hangar, controltower
 #
 
@@ -206,6 +206,50 @@ hates = Closing time
 hates = Lager tops
 hates = The darts team losing
 hates = Being turned into flats
+
+[salon]
+enterable = yes
+name = Curl Up & Dye
+name = Hair Today
+name = Shear Madness
+name = Fringe Benefits
+name = A Cut Above
+name = The Mane Event
+name = Blow Dry Bar
+name = Headlines
+name = Hair Force One
+name = Tress Chic
+mood = 💇
+loves = Big hair
+loves = A good gossip
+loves = The smell of perm lotion
+loves = Where are you going on your holidays this year
+loves = Walk-ins (sometimes)
+loves = Rachel from Friends
+hates = Split ends
+hates = Asking for a trim and wanting a whole new head
+hates = DIY fringes
+hates = The dryer that trips the fuse
+
+[clothes]
+enterable = yes
+name = Threads
+name = Rags to Riches
+name = The Clothes Line
+name = Frock Around the Clock
+name = Dedicated Follower
+name = Seams Good
+name = Wear It's At
+name = Hanger Management
+mood = 👗
+loves = Folding things just so
+loves = The changing rooms being free
+loves = A good sale
+loves = Mannequins (they get it)
+hates = Things left on the changing room floor
+hates = Everything unfolded again
+hates = Returns without a receipt
+hates = Online shopping
 
 [house]
 enterable = yes

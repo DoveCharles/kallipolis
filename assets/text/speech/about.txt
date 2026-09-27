@@ -91,8 +91,12 @@
 #
 # HERE: where the speaker is (hard limits)
 #   {here.indoors}            only inside a building          {here.outdoors}   only outside
-#   {here.building = pub}     only inside that kind of building (a kind from buildings.txt: house, shop, pub, terrace...)
-#                             or room (home, office, pub, warehouse, factory)
+#   {here.building = pub}     only inside that kind of building (a kind from buildings.txt: house, shop, pub, salon,
+#                             clothes, terrace...) or room (home, office, pub, salon, clothes, warehouse, factory)
+#                             (a salon's a nineties hair salon: mirrors, hood dryers, a fish tank, posters of big hair;
+#                             everyone in one's there for a haircut, sat in a chair in front of a mirror)
+#                             (a clothes shop has rails of clothes, a till and changing rooms with curtains, and
+#                             everyone in one's there to try something on)
 #                             (a pub always has music on — audio/pub-music.js — so pub lines can talk about it)
 #                             (and a bar bot behind the bar — buildings/barbot.js — polishing glasses, wiping the bar,
 #                             and asleep when nobody's in)
@@ -148,6 +152,8 @@
 #   {felt = fellover}         fell over drunk              {felt = drunk}   just got drunk (on pints)
 #   {felt = bloodlust}        bloodlust just came over them {felt = gaveup}  gave up chasing someone ([felt.by] is who)
 #   {felt = bloodsoaked}      just got splashed with blood  {felt = bloodclean}  the last of it's just come off
+#   {felt = haircut}          just had a new haircut at a salon (a new style, maybe a new colour, maybe shaved)
+#   {felt = newclothes}       just came out of a clothes shop's changing room in new clothes
 # IS: how the speaker is right now (hard limits); other.is for who they're talking to, != for not
 #   {is = drunk}              the drunk trait, or a pint or more in them
 #   {is = bloodlusting}       bloodlusting now

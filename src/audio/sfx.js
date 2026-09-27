@@ -61,11 +61,21 @@ const SOUNDS = {
     [.8, .05, 70, 0, .02, .22, 0, 1.5, -6, , , , , .5, , , , .6, .08, , -700],
     [.3, .05, 1600, 0, .004, .03, 1, 2, , , , , , .4, , , , .5, , , 2000],
   ],
+  // a changing room's curtain drawn across or back (see drawCurtain in buildings/interior.js): a swish of cloth, the
+  // rings rattling along the rail over it
+  curtain: [
+    [.3, .1, 900, .03, .08, .12, 4, 1, 8, , , , , 0, , , , .5, , , 1800],
+    [.08, .2, 2600, 0, .01, .05, 1, 2, , , , , .03, , , , , .4],
+  ],
+  // scissors at work (see "a salon" in life/people/peopleActivities.js): a quick bright snip-snip
+  snip: [
+    [.22, .05, 3200, 0, .003, .02, 1, 2.5, , , , , .07, , , , , .4, , , 2500],
+  ],
 };
 // how near something has to be for each sound to be heard at full volume, falling away past it (REF_DISTANCE if not here)
 // which sound level each is heard at (see LEVEL_KINDS): the rest go by the master level alone
-const KIND_OF = { punch: 'peds', whoosh: 'peds', crash: 'traffic', thump: 'traffic', thunder: 'ambience' };
-const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5 };
+const KIND_OF = { punch: 'peds', whoosh: 'peds', curtain: 'peds', snip: 'peds', crash: 'traffic', thump: 'traffic', thunder: 'ambience' };
+const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5, curtain: 4, snip: 3 };
 // for the little sounds of people that'd otherwise be heard from right across town (a fight in every park): how far off
 // they're heard at all, how fast they fade past their REACH, and how fast they're muffled (see muffler)
 const NEAR_ONLY = { punch: { hear: 40, rolloff: 2.5, muffle: 1.4 }, whoosh: { hear: 25, rolloff: 2.5, muffle: 1.4 } };

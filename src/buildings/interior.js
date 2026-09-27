@@ -148,6 +148,12 @@ const punched = new THREE.Group(), curtain = new THREE.Group();
 room.add(punched, curtain);
 wall(...FAR_X, 0, ROOM_D/2 + WALL/2, 0, WALL, punched);       // far, along x
 wall(...FAR_Z, ROOM_W/2 + WALL/2, 0, Math.PI/2, WALL, punched); // far, along z
+// (or, in a shop, blank: its window's its shopfront, behind the camera — see `shopfront`, below)
+const blankWalls = new THREE.Group();
+blankWalls.visible = false;
+room.add(blankWalls);
+wall(FAR_X[0], 0, 0, ROOM_D/2 + WALL/2, 0, WALL, blankWalls);
+wall(FAR_Z[0], 0, ROOM_W/2 + WALL/2, 0, Math.PI/2, WALL, blankWalls);
 // A curtain wall `length` long along x, centred on the origin: one sheet of glass floor to ceiling with a rail along the
 // floor and the ceiling, split into panes of about PANE wide by mullions between `from` and `to` (along it) — the
 // faces of the columns at either end (see COLUMNS), each with a mullion up against it — then turned by `angle` about y
@@ -185,7 +191,26 @@ function keyFraction(key, salt = ':walls') {
   for (const ch of String(key) + salt) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
   return (h >>> 0)/2**32;
 }
-wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK);  // behind the camera
+const backWall = new THREE.Group();
+room.add(backWall);
+wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK, backWall);  // behind the camera
+// In a shop (a salon or a clothes shop: see `shopfront` on its layout), that wall's its shopfront instead, on the street:
+// glass almost all of it, from a low stallriser up to a deep fascia, in a frame split into bays by thin mullions — and
+// its far walls blank (blankWalls, above).
+const SHOPFRONT_RISER = 0.35, SHOPFRONT_TOP = 2.75, SHOPFRONT_BAYS = 4;
+const shopfront = new THREE.Group();
+shopfront.visible = false;
+room.add(shopfront);
+{
+  const z = -ROOM_D/2 - WALL/2, glassH = SHOPFRONT_TOP - SHOPFRONT_RISER, mid = (SHOPFRONT_RISER + SHOPFRONT_TOP)/2;
+  box(ROOM_W + THICK*2, SHOPFRONT_RISER, WALL, wallMaterial, 0, SHOPFRONT_RISER/2, z, shopfront);
+  box(ROOM_W + THICK*2, ROOM_H - SHOPFRONT_TOP, WALL, wallMaterial, 0, (SHOPFRONT_TOP + ROOM_H)/2, z, shopfront);
+  for (const side of [-1, 1]) box(THICK, glassH, WALL, wallMaterial, side*(ROOM_W/2 + THICK/2), mid, z, shopfront);
+  box(ROOM_W, glassH, 0.02, glassMaterial, 0, mid, z, shopfront);
+  box(ROOM_W, 0.08, WALL + 0.08, frameMaterial, 0, SHOPFRONT_RISER, z, shopfront);  // the sill
+  box(ROOM_W, 0.1, WALL + 0.04, frameMaterial, 0, SHOPFRONT_TOP, z, shopfront);     // the transom
+  for (let i = 0; i <= SHOPFRONT_BAYS; i++) box(0.07, glassH, WALL + 0.04, frameMaterial, -ROOM_W/2 + 0.035 + i*(ROOM_W - 0.07)/SHOPFRONT_BAYS, mid, z, shopfront);
+}
 // The other, along z, has the room's door in it, by the corner the camera starts in: a doorway some way into the wall,
 // black at the back — where anyone coming in comes from, and anyone going goes — with a door hung in it that swings in
 // to let them through (see openRoomDoor).
@@ -1327,7 +1352,7 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
   const fits = (r, gap = 0, margin = 0.02) => inRoom(r, margin) && taken.every(o => !overlaps(r, o, gap));
   // `name` stood at (x, z) turned by `angle`, in `parent` (the room's furniture, or on a desk, in the desk's terms),
   // and unless it's something small nobody could walk into, solid (or `solid` of it, in its own terms)
-  const put = (name, x, z, angle, { parent = group, y = 0, small = false, solid = null } = {}) => {
+  const put = (name, x, z, angle, { parent = group, y = 0, small = false, solid = null, seatKind = null } = {}) => {
     const piece = F[name], object = piece.object.clone();
     object.position.set(x, y, z);
     object.rotation.y = angle;
@@ -1338,7 +1363,7 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
     layout.blocked.push(around(...(solid ? [x - 0.4, x + 0.4, z - 0.4, z + 0.4] : [r.x0, r.x1, r.z0, r.z1]), 0.35));
     for (const seat of piece.seats) {
       const at = turned(seat.x, seat.z, angle, x, z);
-      layout.seats.push({ x: at.x, z: at.z, y: seat.y, nx: Math.sin(angle), nz: Math.cos(angle), sofa: false, desk: deskSeats.includes(name) });
+      layout.seats.push({ x: at.x, z: at.z, y: seat.y, nx: Math.sin(angle), nz: Math.cos(angle), sofa: false, desk: deskSeats.includes(name), kind: seatKind });
     }
     return object;
   };
@@ -1351,13 +1376,15 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
   // The walls, each as where along it things stand with their backs to it, facing into the room: the direction into the
   // room (nx, nz), and the angle that faces that way. The far two have windows unless the office is glass (see piers).
   const WALL_SIDES = [
-    { nx: 0, nz: -1, at: u => ({ x: u, z: ROOM_D/2 }), length: ROOM_W, far: FAR_X, flip: 1 },
-    { nx: -1, nz: 0, at: u => ({ x: ROOM_W/2, z: u }), length: ROOM_D, far: FAR_Z, flip: -1 },
-    { nx: 0, nz: 1, at: u => ({ x: u, z: -ROOM_D/2 }), length: ROOM_W },
+    { nx: 0, nz: -1, at: u => ({ x: u, z: ROOM_D/2 }), length: ROOM_W, far: layout.shopfront ? null : FAR_X, flip: 1 },
+    { nx: -1, nz: 0, at: u => ({ x: ROOM_W/2, z: u }), length: ROOM_D, far: layout.shopfront ? null : FAR_Z, flip: -1 },
+    { nx: 0, nz: 1, at: u => ({ x: u, z: -ROOM_D/2 }), length: ROOM_W, glazed: !!layout.shopfront },
     { nx: 1, nz: 0, at: u => ({ x: -ROOM_W/2, z: u }), length: ROOM_D },
   ].map(side => ({ ...side, angle: Math.atan2(side.nx, side.nz) }));
-  // whether something from u0 to u1 along a far wall, and taller than its windowsills, stands in front of a window
+  // whether something from u0 to u1 along a far wall, and taller than its windowsills, stands in front of a window (a
+  // shop's shopfront's all window)
   const overWindow = (side, u0, u1) => {
+    if (side.glazed) return true;
     if (glass || !side.far) return false;
     const { width, centres } = piers(...side.far);
     return !centres.some(c => { const p = c*side.flip; return u0 >= p - width/2 && u1 <= p + width/2; });
@@ -1383,14 +1410,23 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
     return null;
   };
 
-  return { taken, overlaps, inRoom, fits, put, cameraCorner, underCamera, WALL_SIDES, overWindow, againstWall, any };
+  // Something `r` in its own terms with its back to wall `side`, `u` along it, if it fits there: where it goes and which
+  // way it faces, as againstWall has it — or null.
+  const atWall = (side, u, r, gap = 0.05) => {
+    const out = -r.z0 + 0.02, mid = (r.x0 + r.x1)/2, across = turned(1, 0, side.angle), wallAt = side.at(u);
+    const x = wallAt.x + side.nx*out - across.x*mid, z = wallAt.z + side.nz*out - across.z*mid;
+    const area = turnedRect(r, side.angle, x, z);
+    return fits(area, gap) ? { x, z, angle: side.angle, area } : null;
+  };
+
+  return { taken, overlaps, inRoom, fits, put, cameraCorner, underCamera, WALL_SIDES, overWindow, againstWall, atWall, any };
 }
 // `layout`'s seats, from the room's terms to the world's: where to sit, how high, and which way they face
 function seatsInWorld(layout) {
   const c = Math.cos(room.rotation.y), s = Math.sin(room.rotation.y);
   layout.seats = layout.seats.map(seat => {
     const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z));
-    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: false, desk: seat.desk, by: null };
+    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: false, desk: seat.desk, kind: seat.kind ?? null, by: null };
   });
 }
 
@@ -1883,7 +1919,7 @@ const CARPETS = [
 ];
 
 // the pub: dark beams across the ceiling, panelled to the dado rail (see useLayout), and furnished afresh for each pub
-const pubBeam = lit(0x2e1c10, 0.8);
+const pubBeam = lit(0x2e1c10, 0.8), PUB_DAYLIT = 0.4;
 layout('pub', 0xffffff, add => {
   for (const x of [-2.7, -0.9, 0.9, 2.7]) add(0.18, 0.22, ROOM_D, pubBeam, x, ROOM_H - 0.11, 0);
   add(ROOM_W, 0.16, 0.16, pubBeam, 0, ROOM_H - 0.08, 0);
@@ -1891,7 +1927,7 @@ layout('pub', 0xffffff, add => {
 });
 const pubGroup = new THREE.Group();
 LAYOUTS.pub.group.add(pubGroup);
-Object.assign(LAYOUTS.pub, { furnished: pubGroup, panelled: true, ceiling: PUB_CEILINGS[0] });
+Object.assign(LAYOUTS.pub, { furnished: pubGroup, panelled: true, ceiling: PUB_CEILINGS[0], lamps: true, daylit: PUB_DAYLIT });
 
 // Fits out the pub for the building with this key (see buildingKey): its furniture, where nobody stands or walks, and its
 // seats, in the room as it's now placed.
@@ -2086,7 +2122,8 @@ function furnishPub(key) {
 // The pub's lamps (see "the lamp"): one at every bulb it's hung (its Light parts), one in the fire's glow (Fire), and one
 // over the bar where the gantry lights would be, in that order of who gets left out past ROOM_LAMPS. A bulb on a wall, or
 // the fire in it, is lit from a little way into the room, so the wall right behind isn't burnt out.
-const PUB_LAMPS = { Fire: [0xff8a3c, 3], Light: [0xffc68a, 2.2], Bar: [0xffc68a, 2.5] }, PUB_DAYLIT = 0.4;
+const PUB_LAMPS = { Fire: [0xff8a3c, 3], Light: [0xffc68a, 2.2], Bar: [0xffc68a, 2.5] };
+// (and a salon's or a clothes shop's: see lightShop)
 let pubLamps = [], pubLit = 0;
 function lightPub(group, barX, barZ) {
   const add = (kind, at) => {
@@ -2111,6 +2148,406 @@ function lightPub(group, barX, barZ) {
   found.Fire.forEach(at => add('Fire', at));
   add('Bar', new THREE.Vector3(barX, ROOM_H - 0.3, barZ - 0.4));
   found.Light.sort((a, b) => b.y - a.y).forEach(at => add('Light', at)); // (the pendants over the tables first)
+}
+
+// ---------------------------------------------------------- shops: what a salon and a clothes shop share
+// A salon and a clothes shop (see roomLayoutOf) are on the ground floor, like a pub, and lit by lamps of their own the
+// same way (see "the lamp"): one at every piece with a bulb in it (its Light parts), the ones up by the ceiling first —
+// on whenever it's open, a little brighter after dark.
+const SHOP_DAYLIT = 0.75;
+function lightShop(group, hex, power) {
+  group.updateWorldMatrix(true, true);
+  const c = new THREE.Color(hex), found = [];
+  for (const piece of group.children) {
+    const box = new THREE.Box3();
+    piece.traverse(o => { if (o.isMesh && o.material.name === 'Light') box.expandByObject(o); });
+    if (box.isEmpty()) continue;
+    const at = group.worldToLocal(box.getCenter(new THREE.Vector3()));
+    const inward = new THREE.Vector3(-at.x, 0, -at.z);
+    if (Math.abs(at.x) > ROOM_W/2 - 0.6 || Math.abs(at.z) > ROOM_D/2 - 0.6) at.add(inward.setLength(0.4));
+    found.push(at);
+  }
+  found.sort((a, b) => b.y - a.y).forEach(at => {
+    const lamp = new THREE.Object3D();
+    lamp.position.copy(at);
+    lamp.userData.light = new THREE.Vector3(c.r, c.g, c.b).multiplyScalar(power);
+    group.add(lamp);
+    pubLamps.push(lamp);
+  });
+}
+// A shop's room made ready to fit out: its furniture cleared away, and its colours from `tint` — walls, floor (a texture
+// from `floors`, or a tint of the floorboards), its model's recoloured materials (`painted`, from `palette`).
+function openShop(layout, tint, { walls, floors, painted, palette }) {
+  layout.furnished.clear();
+  pubLamps = [];
+  layout.blocked = []; layout.solid = []; layout.seats = []; layout.cubicles = [];
+  grid = null;
+  const pick = list => list[Math.floor(tint()*list.length)];
+  layout.wall.setHex(pick(walls));
+  const floor = pick(floors);
+  if (floor.isTexture) { layout.floorMap = floor; layout.floor.setHex(0xffffff); }
+  else { layout.floorMap = boards; layout.floor.setHex(floor); }
+  for (const material of painted) {
+    material.color.setHex(pick(palette[material.name]));
+    roomLit(material);
+  }
+  return pick;
+}
+// Things hung on a shop's walls (from its model `F`, with planRoom's helpers `plan`): above whatever's in front of them,
+// not over a window, clear of the door and of each other and of `hung` (areas already taken up the wall). `y` is how high
+// up their bottoms are.
+function wallHanger(F, plan, rng, hung) {
+  const { any, put, WALL_SIDES, overlaps, overWindow } = plan;
+  return (name, y) => {
+    const piece = F[name];
+    if (!piece) return;
+    for (let k = 0; k < 30; k++) {
+      const side = any(WALL_SIDES), half = piece.w/2;
+      const u = (rng()*2 - 1)*(side.length/2 - half - 0.2), wallAt = side.at(u);
+      if (side.nx === 1 && Math.abs(u - DOOR_Z) < DOOR_W/2 + half + 0.2) continue;
+      const out = -piece.bounds.z0 + 0.01;
+      const x = wallAt.x + side.nx*out, z = wallAt.z + side.nz*out;
+      const area = turnedRect(grown(piece.bounds, 0.15), side.angle, x, z);
+      if (hung.some(h => overlaps(area, h))) continue;
+      const along = side.nx ? [area.z0, area.z1] : [area.x0, area.x1];
+      if (y + piece.h > SILL && y < HEAD && overWindow(side, ...along)) continue;
+      put(name, x, z, side.angle, { y, small: true });
+      hung.push(area);
+      return;
+    }
+  };
+}
+// the way in from the door, kept clear
+const DOOR_CLEAR = { x0: -ROOM_W/2, x1: -ROOM_W/2 + 1.5, z0: DOOR_Z - 0.8, z1: DOOR_Z + 0.8 };
+// Where anyone can sit on `piece` (as measureSeats), leaving its meshes in any of the materials `over` out of it.
+function measureSeatsUnder(piece, over) {
+  const moved = [];
+  piece.object.traverse(o => { if (o.isMesh && over.includes(o.material.name)) { moved.push(o); o.layers.set(1); } });
+  const seats = measureSeats(piece);
+  moved.forEach(o => o.layers.set(0));
+  return seats;
+}
+
+// ---------------------------------------------------------- a hair salon
+// A salon is a high-street one from the nineties: a chequered vinyl floor, black and white (now and then with grey in
+// it), white tiles to the dado (see `dado`) and pastel walls above, fluorescent tubes on the ceiling — and, like any
+// shop, its window a shopfront behind the camera, the far walls left blank for the mirrors (`shopfront`: see
+// enterBuilding and planRoom). It's
+// fitted out from a model of its own (assets/models/Salon.glb, built by tools/salon-models.py, which lists its pieces),
+// each salon its own way (from its key): a row of styling stations down a blank wall, each a mirror with a chair in
+// front of it facing it (seats of kind 'cut': whoever sits in one a while comes out with a new haircut — see "a salon"
+// in peopleActivities.js), and maybe a couple more along the other; then a row of hood dryers (kind 'dryer'), a waiting bench
+// (kind 'wait') with magazines, the reception desk by the door, a backwash basin, shelves of products, a fish tank,
+// plants, a trolley, and posters of big hair and a clock on the walls. Until the model's loaded, salons are bare.
+const SALON_MODEL_URL = 'assets/models/Salon.glb';
+let salon = null;
+const SALON_WALLS = [0xb8d4e8, 0xc4dcec, 0xe8c8cc, 0xf0f0ec, 0xc8e4d8, 0xe0d0e8, 0xf0e0c8, 0xa8c8e0];
+const SALON_PAINTED = {
+  Vinyl: [0x1a1a1c, 0x1a1a1c, 0x1a1a1c, 0x5aa8b8, 0x8ec8d8, 0x7a1e3a, 0x2a2a4a],
+  Laminate: [0xf0eee8, 0xf0eee8, 0x1a1a1c, 0xe8e0d0],
+  Accent: [0x8ec8d8, 0xe890b0, 0x60b0a0, 0xb0a0d8, 0xf0c060, 0x1a1a1c, 0xd8d8d8],
+};
+// the tiles to the dado rail, and the rail
+const SALON_DADOS = [0xf2f2ee, 0xf2f2ee, 0xe8eef0, 0x1a1a1c], SALON_RAILS = [0x1a1a1c, 0xc8ccd0, 0x5aa8b8];
+const salonPainted = [];
+async function loadSalon() {
+  try {
+    salon = await loadPieces(SALON_MODEL_URL, SALON_PAINTED, salonPainted);
+  } catch (err) {
+    console.warn('Kallipolis: the salon model failed to load; salons are left bare', err);
+    return;
+  }
+  if (salon.WaitingBench) salon.WaitingBench.seats = measureSeats(salon.WaitingBench);
+  // (felt for without the chrome: a styling chair's foot rest, out in front, would pass for its seat; and a dryer's hood,
+  // over it, would hide it)
+  if (salon.StylingChair) salon.StylingChair.seats = measureSeatsUnder(salon.StylingChair, ['Chrome', 'Black']);
+  if (salon.DryerChair) salon.DryerChair.seats = measureSeatsUnder(salon.DryerChair, ['Hood', 'HoodGlass', 'Chrome']);
+  if (inside && current === LAYOUTS.salon) furnishSalon(inside.key);
+}
+modelsLoading.push(loadSalon());
+// Vinyl tiles 0.3 m square, laid chequerboard: black and white, or (`grey`) every other dark one grey, a little worn.
+const vinylTiles = grey => floorTexture(512, 1.2, (g, rng) => {
+  const t = 128;
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    const light = (i + j) % 2 === 0, shade = light ? '#ecebe6' : grey && i % 2 ? '#8a8e94' : '#1e1e20';
+    g.fillStyle = shade;
+    g.fillRect(i*t, j*t, t, t);
+    for (let k = 0; k < 60; k++) { // (marbled flecks, as vinyl tiles have)
+      g.fillStyle = light ? 'rgba(90,90,95,0.12)' : 'rgba(230,230,235,0.08)';
+      g.fillRect(i*t + rng()*t, j*t + rng()*t, 1 + rng()*4, 1 + rng()*2);
+    }
+  }
+  g.fillStyle = 'rgba(0,0,0,0.35)';
+  for (let k = 0; k <= 4; k++) { g.fillRect(k*t - 1, 0, 2, 512); g.fillRect(0, k*t - 1, 512, 2); }
+});
+const SALON_FLOORS = [vinylTiles(false), vinylTiles(false), vinylTiles(true)];
+layout('salon', 0xffffff, () => []);
+const salonGroup = new THREE.Group();
+LAYOUTS.salon.group.add(salonGroup);
+Object.assign(LAYOUTS.salon, { furnished: salonGroup, panelled: true, shopfront: true, shop: true, ceiling: 0xf6f6f2, lamps: true, daylit: SHOP_DAYLIT });
+
+// Fits out the salon for the building with this key (see buildingKey): its furniture, where nobody stands or walks, and
+// its seats, in the room as it's now placed.
+function furnishSalon(key) {
+  const layout = LAYOUTS.salon, group = salonGroup;
+  const rng = mulberry32(hashNameToNumber(key + ' salon'));
+  const tint = mulberry32(hashNameToNumber(key + ' salon colours'));
+  const pick = openShop(layout, tint, { walls: SALON_WALLS, floors: SALON_FLOORS, painted: salonPainted, palette: SALON_PAINTED });
+  layout.ceiling = 0xf6f6f2;
+  dadoMaterial.color.setHex(pick(SALON_DADOS));
+  lineMaterial.color.setHex(pick(SALON_RAILS));
+  roomLit(dadoMaterial); roomLit(lineMaterial);
+  paintRoom();
+  const F = salon;
+  if (!F?.StylingStation || !F.StylingChair) return;
+  const plan = planRoom(layout, F, group, rng, false, []);
+  const { taken, put, WALL_SIDES, againstWall, atWall } = plan;
+  taken.push(DOOR_CLEAR);
+  const tall = [];  // (what's too tall to hang anything on the wall above)
+  const place = (name, spot, options) => {
+    put(name, spot.x, spot.z, spot.angle, options);
+    taken.push(spot.area);
+    if (F[name].h > 1.2) tall.push(spot.area);
+    return spot;
+  };
+
+  // The styling stations: down the blank side wall a chair's width apart, three or four, and maybe a couple along the far
+  // one — each with its chair in front, turned to face the mirror, a little way off it.
+  const station = F.StylingStation, chair = F.StylingChair;
+  const reach = station.bounds.z1 + 0.28 + chair.bounds.z1; // (from the station's middle to the chair's)
+  const r = { x0: station.bounds.x0 - 0.05, x1: station.bounds.x1 + 0.05, z0: station.bounds.z0, z1: reach + chair.bounds.z1 + 0.45 };
+  const stationAt = (side, u) => {
+    const spot = atWall(side, u, r);
+    if (!spot) return false;
+    put('StylingStation', spot.x, spot.z, spot.angle);
+    const at = turned(0, reach, spot.angle, spot.x, spot.z);
+    put('StylingChair', at.x, at.z, spot.angle + Math.PI, { seatKind: 'cut' });
+    taken.push(spot.area);
+    tall.push(spot.area);
+    return true;
+  };
+  // (along a wall from `u` towards `to`, each as soon as there's room for it, up to `n` of them)
+  const row = (side, u, to, n) => {
+    const step = Math.sign(to - u)*0.1, gap = Math.sign(to - u)*(station.w + 0.25);
+    for (let placed = 0; placed < n && (to - u)*step > 0; u += step) if (stationAt(side, u)) { placed++; u += gap - step; }
+  };
+  row(WALL_SIDES[1], -ROOM_D/2 + 0.7 + rng()*0.3, ROOM_D/2, rng() < 0.5 ? 4 : 3);
+  if (rng() < 0.6) row(WALL_SIDES[0], ROOM_W/2 - 0.7, -1.2, 1 + Math.floor(rng()*2));
+  // a trolley by one of them
+  if (F.Trolley) {
+    const spot = againstWall(grown(F.Trolley.bounds, 0.1), false);
+    if (spot) place('Trolley', spot, { solid: F.Trolley.bounds });
+  }
+
+  // the reception desk just in from the door, along the door's wall, with room behind it
+  if (F.Reception) {
+    const d = F.Reception, rr = { ...d.bounds, z0: d.bounds.z0 - 0.7, z1: d.bounds.z1 + 0.6 };
+    for (const u of [DOOR_Z + 2.2, DOOR_Z + 2.6, DOOR_Z + 3.0]) {
+      const spot = atWall(WALL_SIDES[3], u, rr);
+      if (!spot) continue;
+      put('Reception', spot.x, spot.z, spot.angle); // (out from the wall by the gap behind it, which rr takes in)
+      taken.push(spot.area);
+      tall.push(spot.area);
+      break;
+    }
+  }
+  // a row of hood dryers along a wall (not in front of a window)
+  if (F.DryerChair) {
+    const d = F.DryerChair, count = 2 + Math.floor(rng()*2), w = d.w + 0.1;
+    const rr = { x0: -count*w/2, x1: count*w/2, z0: d.bounds.z0, z1: d.bounds.z1 + 0.6 };
+    const spot = againstWall(rr, true);
+    if (spot) {
+      for (let i = 0; i < count; i++) {
+        const at = turned(-count*w/2 + (i + 0.5)*w, 0, spot.angle, spot.x, spot.z);
+        put('DryerChair', at.x, at.z, spot.angle, { seatKind: 'dryer' });
+      }
+      taken.push(spot.area);
+      tall.push(spot.area);
+    }
+  }
+  // the waiting bench (low enough to go under a window), with the magazines in front
+  if (F.WaitingBench) {
+    const b = F.WaitingBench, t = F.MagazineTable, tz = b.bounds.z1 + 0.4 - (t ? t.bounds.z0 : 0);
+    const spot = againstWall({ ...b.bounds, z1: tz + (t ? t.bounds.z1 : 0) + 0.4 }, false, { under: true });
+    if (spot) {
+      put('WaitingBench', spot.x, spot.z, spot.angle, { seatKind: 'wait' });
+      if (t) { const at = turned((rng() - 0.5)*0.3, tz, spot.angle, spot.x, spot.z); put('MagazineTable', at.x, at.z, spot.angle); }
+      taken.push(spot.area);
+    }
+  }
+  // a basin or two to wash hair at, and then whatever else there's room for
+  for (let k = rng() < 0.4 ? 2 : 1; k > 0 && F.Basin; k--) {
+    const spot = againstWall({ ...F.Basin.bounds, z1: F.Basin.bounds.z1 + 0.4 }, true);
+    if (spot) place('Basin', spot);
+  }
+  const alongWall = (name, chance, tallOne = true, front = 0.4) => {
+    if (!F[name] || rng() >= chance) return;
+    const spot = againstWall({ ...F[name].bounds, z1: F[name].bounds.z1 + front }, tallOne);
+    if (spot) place(name, spot);
+  };
+  alongWall('ProductShelves', 0.8);
+  alongWall('FishTank', 0.6);
+  for (let k = 1 + Math.floor(rng()*3); k > 0; k--) alongWall('Plant', 1, true, 0.1);
+
+  // posters of hair do's and a clock on the walls, and the tubes on the ceiling
+  const onWall = wallHanger(F, plan, rng, [...tall, DOOR_CLEAR]);
+  for (let k = 2 + Math.floor(rng()*3); k > 0; k--) onWall(rng() < 0.5 ? 'Poster' : 'Poster2', 1.35 + rng()*0.1);
+  onWall('Clock', 2.1);
+  if (F.Tube) for (const x of [-2, 0.2, 2.4]) for (const z of [-1.3, 1.3])
+    put('Tube', x, z, Math.PI/2*(rng() < 0.2 ? 1 : 0), { y: ROOM_H - F.Tube.h, small: true });
+  lightShop(group, 0xf2f6ff, 1.1);
+  seatsInWorld(layout);
+}
+
+// ---------------------------------------------------------- a clothes shop
+// A clothes shop is a bright high-street one: pale walls, pale boards or polished concrete, spotlights on tracks. It's
+// fitted out from a model of its own (assets/models/Clothes.glb, built by tools/clothes-models.py, which lists its
+// pieces), each its own way (from its key), behind its shopfront (see `shopfront`): a changing room or two along the
+// blank side wall — a cubicle anyone
+// can walk into, its curtain drawn across while they're in there (see roomCubicles and drawCurtain), and out they come in
+// something new (see "a clothes shop" in peopleActivities.js) — the counter with the till, shelves of folded clothes on
+// the walls, and out in the room rails and round rails of clothes, a table of folded ones, a mannequin or two, a shoe
+// stand, a mirror to see yourself in, a plant and a sale sign. Until the model's loaded, clothes shops are bare.
+const CLOTHES_MODEL_URL = 'assets/models/Clothes.glb';
+let clothes = null;
+const CLOTHES_WALLS = [0xf4f2ec, 0xf0ece4, 0xe8ecee, 0xf2e8e0, 0xe4e8e0, 0x3a3a3c];
+const CLOTHES_FLOORS = [0xd8b88a, 0xc8a070, 0xe0c8a0, concrete, concrete, parquet];
+const CLOTHES_PAINTED = {
+  Fixture: [0xf2f0ea, 0xf2f0ea, 0x1a1a1c, 0xc8a070, 0xd8d8d4],
+  Panel: [0xd8c8a8, 0xe8e4dc, 0x3a3a3c, 0xb8c8c0, 0xc8a070],
+  ClothA: [0x2a4a8a, 0x1e1e22, 0x6a1a2a, 0x3a6a4a, 0xc8b89a, 0xe86a8a],
+  ClothB: [0xc84a5a, 0xe8b040, 0x5aa0d0, 0x8a5aa0, 0xf2f0ea, 0x4a4a4e],
+  ClothC: [0xe8d8b0, 0xf2f0ea, 0x9ab0c8, 0xd8a0a0, 0x2a2a2e, 0xa8c890],
+};
+const clothesPainted = [];
+async function loadClothes() {
+  try {
+    clothes = await loadPieces(CLOTHES_MODEL_URL, CLOTHES_PAINTED, clothesPainted);
+  } catch (err) {
+    console.warn('Kallipolis: the clothes shop model failed to load; clothes shops are left bare', err);
+    return;
+  }
+  if (inside && current === LAYOUTS.clothes) furnishClothes(inside.key);
+}
+modelsLoading.push(loadClothes());
+layout('clothes', 0xffffff, () => []);
+const clothesGroup = new THREE.Group();
+LAYOUTS.clothes.group.add(clothesGroup);
+Object.assign(LAYOUTS.clothes, { furnished: clothesGroup, shopfront: true, shop: true, lamps: true, daylit: SHOP_DAYLIT, cubicles: [] });
+// how far across a changing room's curtain is drawn when it's open (bunched up at one side), and how quickly it's drawn
+const CURTAIN_OPEN = 0.16, CURTAIN_EASE = 0.18;
+
+// Fits out the clothes shop for the building with this key (see buildingKey): its furniture, where nobody stands or
+// walks, and its changing rooms, in the room as it's now placed.
+function furnishClothes(key) {
+  const layout = LAYOUTS.clothes, group = clothesGroup;
+  const rng = mulberry32(hashNameToNumber(key + ' clothes'));
+  const tint = mulberry32(hashNameToNumber(key + ' clothes colours'));
+  openShop(layout, tint, { walls: CLOTHES_WALLS, floors: CLOTHES_FLOORS, painted: clothesPainted, palette: CLOTHES_PAINTED });
+  layout.ceiling = CEILING;
+  paintRoom();
+  const F = clothes;
+  if (!F?.ChangingRoom || !F.Curtain) return;
+  const plan = planRoom(layout, F, group, rng, false, []);
+  const { taken, fits, put, WALL_SIDES, againstWall, atWall } = plan;
+  taken.push(DOOR_CLEAR);
+  const tall = [];
+  const place = (name, spot, options) => {
+    put(name, spot.x, spot.z, spot.angle, options);
+    taken.push(spot.area);
+    if (F[name].h > 1.2) tall.push(spot.area);
+    return spot;
+  };
+
+  // The changing rooms, along the blank side wall from its far end: each open to the room, with room kept in front of
+  // it. Only its walls are solid, so anyone can walk in; its curtain hung at the front, open to start with.
+  const cubicle = F.ChangingRoom, b = cubicle.bounds, cw = cubicle.w;
+  const count = rng() < 0.5 ? 2 : 1;
+  for (let i = 0, u = ROOM_D/2 - 0.1 - cw/2; i < count; i++, u -= cw + 0.05) {
+    const spot = atWall(WALL_SIDES[1], u, { ...b, z1: b.z1 + 1.1 });
+    if (!spot) break;
+    put('ChangingRoom', spot.x, spot.z, spot.angle, { small: true });
+    const wall = 0.07, walls = [{ x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z0 + wall }, { x0: b.x0, x1: b.x0 + wall, z0: b.z0, z1: b.z1 },
+      { x0: b.x1 - wall, x1: b.x1, z0: b.z0, z1: b.z1 }];
+    for (const w of walls) layout.solid.push(turnedRect(w, spot.angle, spot.x, spot.z));
+    layout.blocked.push(turnedRect(grown(b, 0.35), spot.angle, spot.x, spot.z));
+    taken.push(spot.area);
+    tall.push(spot.area);
+    // (its curtain, on the rail just in from the front: squashed to one side to open it — see updateCurtains)
+    const holder = new THREE.Group(), rail = turned(0, b.z1 - 0.12, spot.angle, spot.x, spot.z);
+    holder.position.set(rail.x, 0, rail.z);
+    holder.rotation.y = spot.angle;
+    const drape = F.Curtain.object.clone();
+    drape.position.y = 0.04;
+    holder.add(drape);
+    group.add(holder);
+    drape.scale.x = CURTAIN_OPEN;
+    drape.position.x = -(1 - CURTAIN_OPEN)*F.Curtain.w/2;
+    const at = (x, z) => { const t = turned(x, z, spot.angle, spot.x, spot.z); return room.localToWorld(new THREE.Vector3(t.x, 0, t.z)); };
+    layout.cubicles.push({ drape, width: F.Curtain.w, shown: CURTAIN_OPEN, closed: false, by: null,
+      inside: at(0, b.z0 + 0.6), front: at(0, b.z1 + 0.55), facing: room.rotation.y + spot.angle });
+  }
+  // the counter with the till, out from a wall with room behind it to serve from
+  if (F.Counter) {
+    const c = F.Counter, rr = { ...c.bounds, z0: c.bounds.z0 - 0.8, z1: c.bounds.z1 + 0.6 };
+    for (const u of [DOOR_Z + 2.4, DOOR_Z + 2.9, DOOR_Z + 3.4]) {
+      const spot = atWall(WALL_SIDES[3], u, rr);
+      if (!spot) continue;
+      put('Counter', spot.x, spot.z, spot.angle);
+      taken.push(spot.area);
+      break;
+    }
+  }
+  const alongWall = (name, chance, tallOne = true, front = 0.5, options) => {
+    if (!F[name] || rng() >= chance) return null;
+    const spot = againstWall({ ...F[name].bounds, z1: F[name].bounds.z1 + front }, tallOne, { under: !tallOne });
+    return spot ? place(name, spot, options) : null;
+  };
+  for (let k = 1 + Math.floor(rng()*2); k > 0; k--) alongWall('WallShelves', 1);
+  alongWall('ShoeStand', 0.7, false);
+  alongWall('FloorMirror', 0.8, true, 0.8);
+  alongWall('Plant', 0.7, true, 0.1);
+  // out in the room: rails, round rails, a table and a mannequin or two, each with room to get round it
+  const inTheOpen = (name, gap) => {
+    const piece = F[name];
+    if (!piece) return;
+    for (let k = 0; k < 40; k++) {
+      const angle = Math.floor(rng()*2)*Math.PI/2 + (name === 'Mannequin' ? rng()*Math.PI*2 : 0);
+      const x = (rng()*2 - 1)*(ROOM_W/2 - 1), z = (rng()*2 - 1)*(ROOM_D/2 - 1);
+      const area = turnedRect(piece.bounds, angle, x, z);
+      if (!fits(area, gap, 0.3)) continue;
+      put(name, x, z, angle);
+      taken.push(area);
+      return;
+    }
+  };
+  for (const [name, n] of [['Rack', 2 + Math.floor(rng()*2)], ['RoundRack', 1 + Math.floor(rng()*2)], ['DisplayTable', 1], ['Mannequin', 1 + Math.floor(rng()*2)]])
+    for (let k = 0; k < n; k++) inTheOpen(name, name === 'Mannequin' ? 0.5 : 0.75);
+
+  const onWall = wallHanger(F, plan, rng, [...tall, DOOR_CLEAR]);
+  if (rng() < 0.7) onWall('Sign', 2.0);
+  if (F.Track) for (const x of [-1.8, 0.6, 2.8]) for (const z of [-1.2, 1.4])
+    put('Track', x, z, 0, { y: ROOM_H - F.Track.h, small: true });
+  lightShop(group, 0xfff2dc, 1.2);
+  seatsInWorld(layout);
+}
+/** The clothes shop's changing rooms, as the room's laid out now: where to stand in front of one (`front`) and inside it
+ * (`inside`), in the world; `facing`, the heading out of it; `by`, whoever's using it; and `closed`, its curtain drawn. */
+export const roomCubicles = () => inside ? current.cubicles ?? [] : [];
+/** Draw a changing room's curtain across (`closed`) or back. */
+export function drawCurtain(cubicle, closed) {
+  if (cubicle.closed !== closed) playSound('curtain', cubicle.front);
+  cubicle.closed = closed;
+}
+// each frame: the curtains eased across or back
+function updateCurtains() {
+  for (const c of current.cubicles ?? []) {
+    const goal = c.closed ? 1 : CURTAIN_OPEN;
+    if (c.shown === goal) continue;
+    c.shown = Math.abs(goal - c.shown) < 0.005 ? goal : c.shown + (goal - c.shown)*CURTAIN_EASE;
+    c.drape.scale.x = c.shown;
+    c.drape.position.x = -(1 - c.shown)*c.width/2;
+  }
 }
 
 // ---------------------------------------------------------------- the TV
@@ -2372,7 +2809,7 @@ function updateLamp() {
     lampLight.getWorldPosition(positions[n++]);
   }
   // a pub's lamps are on whenever it's open, dimmer by day (with the daylight coming in), easing up as it gets dark
-  const pubGoal = current === LAYOUTS.pub && room.visible ? PUB_DAYLIT + (1 - PUB_DAYLIT)*dark : 0;
+  const pubGoal = current.lamps && room.visible ? current.daylit + (1 - current.daylit)*dark : 0;
   pubLit = Math.abs(pubGoal - pubLit) < 0.005 ? pubGoal : pubLit + (pubGoal - pubLit)*LAMP_EASE;
   if (pubLit) for (const lamp of pubLamps) {
     if (n === ROOM_LAMPS) break;
@@ -2407,7 +2844,7 @@ async function warmUp() {
     await compile('Preparing floors...');
     // one set at a time, so the label follows along
     const named = { Interior: furniture, Posh: posh, Student: student, MidCentury: retro, Boho: boho, Office: officeFurniture,
-      Industrial: industrial, Pub: pub };
+      Industrial: industrial, Pub: pub, Salon: salon, Clothes: clothes };
     for (const [name, set] of Object.entries(named)) {
       if (!set) continue;
       for (const piece of Object.values(set)) sets.add(piece.object.clone());
@@ -2484,8 +2921,8 @@ function longestEdgeAngle(fp) {
 }
 
 // Goes into `group` (a building, as building-card.js follows it, with its key): the room onto its top floor (a warehouse
-// or factory's, or a pub's, ground floor), laid out as `kind` of room (one of LAYOUTS: 'home', 'office', 'warehouse',
-// 'factory' or 'pub'),
+// or factory's, or a pub's or a shop's, ground floor), laid out as `kind` of room (one of LAYOUTS: 'home', 'office',
+// 'warehouse', 'factory', 'pub', 'salon' or 'clothes'),
 // the building hidden, and the camera cut straight to the corner, to go round the walls from there.
 export function enterBuilding(group, key, kind = 'home') {
   if (inside) leaveBuilding();
@@ -2493,8 +2930,9 @@ export function enterBuilding(group, key, kind = 'home') {
   const glass = current === LAYOUTS.office && keyFraction(key) >= OFFICE_PUNCHED;
   // (a warehouse or a factory's room is on its ground floor: its roof's high over one big space, not storeys — and a pub's
   // on the street)
-  const workshop = !!current.industrial, groundFloor = workshop || current === LAYOUTS.pub;
-  curtain.visible = glass; punched.visible = !glass;
+  const workshop = !!current.industrial, groundFloor = workshop || current === LAYOUTS.pub || !!current.shop;
+  curtain.visible = glass; punched.visible = !glass && !current.shopfront;
+  blankWalls.visible = shopfront.visible = !!current.shopfront; backWall.visible = !current.shopfront;
   const fp = group.userData.footprint;
   const bounds = new THREE.Box3().setFromObject(group);
   const base = bounds.min.y, height = group.userData.height ?? (bounds.max.y - base);
@@ -2510,6 +2948,8 @@ export function enterBuilding(group, key, kind = 'home') {
   else if (current === LAYOUTS.office) furnishOffice(key, glass);
   else if (workshop) furnishIndustrial(key, current.kind);
   else if (current === LAYOUTS.pub) furnishPub(key);
+  else if (current === LAYOUTS.salon) furnishSalon(key);
+  else if (current === LAYOUTS.clothes) furnishClothes(key);
 
   visits++;
   resetOfficeAmbience();
@@ -2604,6 +3044,7 @@ export function updateInteriorCamera() {
   updateTV();
   updateLamp();
   updateDoor();
+  updateCurtains();
   if (inside && eyeHeight !== eyeGoal) eyeHeight = Math.abs(eyeGoal - eyeHeight) < 0.002 ? eyeGoal : eyeHeight + (eyeGoal - eyeHeight)*RISE_EASE;
   fadeWhatsInTheWay();
   occupants = counting; counting = 0;
@@ -2655,7 +3096,7 @@ export const roomDoorway = () => room.localToWorld(DOORWAY.clone());
 /** Through the room's door, in the dark beyond it, in the world. */
 export const roomBeyondDoor = () => room.localToWorld(BEYOND.clone());
 
-/** Which of the layouts the room's laid out as ('home', 'office', 'warehouse', 'factory' or 'pub'), or null if nobody's inside. */
+/** Which of the layouts the room's laid out as ('home', 'office', 'warehouse', 'factory', 'pub', 'salon' or 'clothes'), or null if nobody's inside. */
 export const roomKind = () => inside ? current.name : null;
 /** Where anyone can sit in the room, in the world: { x, y, z } on the seat, { nx, nz } the way it faces, and who's `by` it. */
 export const roomSeats = () => current.seats;

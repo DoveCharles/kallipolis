@@ -42,6 +42,9 @@ const SKIRT_CHANCE = 0.3;
 // swinging back under it (nothing at the waist, all of it at the hem)
 const SKIRT_BACK_ROOM = 0.4;
 const JEANS_CHANCE = 0.25;
+// At the salon (see cutHair): the chance a man comes out with his head shaved, with his facial hair changed, and anyone
+// with their hair dyed. And how many more wearers each style's mesh has room for than it started with (see wear).
+const BALD_CUT = 0.15, FACIAL_HAIR_CUT = 0.5, HAIR_DYE = 0.3, STYLE_ROOM = 48;
 const CUFF_LIGHTEN_TO = new THREE.Color(0xffffff), CUFF_LIGHTEN = 0.3; // how much lighter than the jeans their cuff is
 const HAT_CHANCE = 0.1;
 /** Frames per second the source clips are baked at, into the bone-pose texture. */
@@ -1453,7 +1456,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
    * @returns {number[]} one band per entry in PERSON_CLOTHING, for the clothing texel row
    */
   const clothingRowFor = (id, i) => {
-    const man = isMan[i] === 1, clothingRng = mulberry32(1990 + id*7919), { age } = profileOf(id, man), outfit = OUTFITS[outfitOf(id, i) - 1];
+    const man = isMan[i] === 1, clothingRng = mulberry32(wardrobe[i] ? wardrobe[i] + 1 : 1990 + id*7919), { age } = profileOf(id, man), outfit = OUTFITS[outfitOf(id, i) - 1];
     return PERSON_CLOTHING.map(c => {
       const band = clothingBand(c, clothingRng(), man, age);
       if (c.band === 'Leg' && skirtLayer.of[i] >= 0) return 1;
@@ -1466,11 +1469,26 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   /** Which outfit someone wears (see outfits.js), 0 for none: from their id, by a generator of its own, unless their
    * hat (the slot's) says; and never trousers under a skirt or jeans, a woman's outfit on a man, nor a skirted one on
    * anyone without a skirt (the slot's). */
-  const outfitOf = (id, i) => pickOutfit(mulberry32(5150 + id*7919), hairLayer.of[i] >= 0 ? hairLayer.styles[hairLayer.of[i]].name : null, skirtLayer.of[i] >= 0, jeansLayer.of[i] >= 0, isMan[i] === 1);
+  const outfitOf = (id, i) => pickOutfit(mulberry32(wardrobe[i] ? wardrobe[i] + 2 : 5150 + id*7919), hairLayer.of[i] >= 0 ? hairLayer.styles[hairLayer.of[i]].name : null, skirtLayer.of[i] >= 0, jeansLayer.of[i] >= 0, isMan[i] === 1);
+  // Clothes bought since (see changeClothes): for each slot, 0 for the clothes they came in (seeded from their id, above
+  // and in assignAppearance), or else the seed of what they've changed into since. Like their hairstyle, it's the slot's:
+  // whoever takes it next starts again from their own (see assignAppearance).
+  const wardrobe = new Float64Array(PEOPLE_MAX);
 
   const traitTexture = new THREE.DataTexture(traits, PEOPLE_MAX, traitRows, THREE.RGBAFormat, THREE.FloatType);
   const traitRow = part => 2 + PERSON_TRAIT_COLORS.indexOf(part);
   traitTexture.needsUpdate = true;
+
+  // The colours of someone's clothes (and hair), each from an rng of theirs into `color`.
+  const clothesColor = {
+    Top: (rng, color) => rng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(rng()*4)]) : color.setHSL(rng(), 0.35 + rng()*0.45, 0.35 + rng()*0.3),
+    Pants: (rng, color) => rng() < 0.8 ? color.set(PANTS_COLORS[Math.floor(rng()*PANTS_COLORS.length)]) : color.setHSL(rng(), 0.25 + rng()*0.3, 0.25 + rng()*0.25),
+    Shoes: (rng, color) => rng() < 0.7 ? color.set(SHOE_COLORS[Math.floor(rng()*SHOE_COLORS.length)]) : color.setHSL(rng(), 0.4 + rng()*0.45, 0.35 + rng()*0.25),
+    // half the colors trousers come in, half something brighter
+    Skirt: (rng, color) => rng() < 0.5 ? color.set(PANTS_COLORS[Math.floor(rng()*PANTS_COLORS.length)]) : color.setHSL(rng(), 0.35 + rng()*0.45, 0.3 + rng()*0.3),
+  };
+  // three in four have a natural hair color; the rest have dyed it something bright
+  const hairColor = (rng, color) => rng() < NATURAL_COLOUR_CHANCE ? color.set(HAIR_TONES[Math.floor(rng()*HAIR_TONES.length)]).multiplyScalar(0.9 + rng()*0.2) : color.setHSL(rng(), 0.65 + rng()*0.3, 0.45 + rng()*0.15);
 
   /**
    * Write one person's body shape, face shape, colors and clothing into the traits texture, from their id — not their
@@ -1487,11 +1505,10 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     const traitRng = mulberry32(777 + id*7919), faceRng = mulberry32(2718 + id*7919);
     const colorRng = mulberry32(4242 + id*7919), hatRng = mulberry32(8086 + id*7919), glassesRng = mulberry32(6060 + id*7919), skirtRng = mulberry32(1966 + id*7919), color = new THREE.Color();
     const colorFor = {
-      Top: () => colorRng() < 0.22 ? color.setHSL(0, 0, [0.1, 0.3, 0.55, 0.88][Math.floor(colorRng()*4)]) : color.setHSL(colorRng(), 0.35 + colorRng()*0.45, 0.35 + colorRng()*0.3),
-      Pants: () => colorRng() < 0.8 ? color.set(PANTS_COLORS[Math.floor(colorRng()*PANTS_COLORS.length)]) : color.setHSL(colorRng(), 0.25 + colorRng()*0.3, 0.25 + colorRng()*0.25),
-      Shoes: () => colorRng() < 0.7 ? color.set(SHOE_COLORS[Math.floor(colorRng()*SHOE_COLORS.length)]) : color.setHSL(colorRng(), 0.4 + colorRng()*0.45, 0.35 + colorRng()*0.25),
-      // three in four have a natural hair color; the rest have dyed it something bright
-      Hair: () => colorRng() < NATURAL_COLOUR_CHANCE ? color.set(HAIR_TONES[Math.floor(colorRng()*HAIR_TONES.length)]).multiplyScalar(0.9 + colorRng()*0.2) : color.setHSL(colorRng(), 0.65 + colorRng()*0.3, 0.45 + colorRng()*0.15),
+      Top: () => clothesColor.Top(colorRng, color),
+      Pants: () => clothesColor.Pants(colorRng, color),
+      Shoes: () => clothesColor.Shoes(colorRng, color),
+      Hair: () => hairColor(colorRng, color),
       Skin: () => color.copy(palette[0]),
       Eyes: () => color.copy(palette[PERSON_SLOTS.indexOf('White')]),
       Blood: () => color.setRGB(0, 0, 0), // (only its fourth number, the opacity, is read: see BLOOD_GLSL)
@@ -1499,8 +1516,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
       Hat: () => hatRng() < 0.25 ? color.setHSL(0, 0, [0.08, 0.3, 0.6, 0.9][Math.floor(hatRng()*4)]) : color.setHSL(hatRng(), 0.4 + hatRng()*0.5, 0.3 + hatRng()*0.35),
       // mostly black or tortoiseshell brown, some wire-grey, a few loud
       Glasses: () => { const r = glassesRng(); return r < 0.8 ? color.set(GLASSES_COLORS[Math.floor(glassesRng()*GLASSES_COLORS.length)]) : color.setHSL(glassesRng(), 0.6 + glassesRng()*0.3, 0.4 + glassesRng()*0.15); },
-      // half the colors trousers come in, half something brighter
-      Skirt: () => skirtRng() < 0.5 ? color.set(PANTS_COLORS[Math.floor(skirtRng()*PANTS_COLORS.length)]) : color.setHSL(skirtRng(), 0.35 + skirtRng()*0.45, 0.3 + skirtRng()*0.3),
+      Skirt: () => clothesColor.Skirt(skirtRng, color),
       Cuff: () => color.setRGB(1, 1, 1), // (worked out from their trousers: see below)
       // (only an outfit has these: see below)
       OutfitRed: () => color.setRGB(1, 1, 1),
@@ -1517,11 +1533,25 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     traits.set(face.slice(0, 4), texel(PERSON_FACE_ROW));
     PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
     traits[texel(BLOOD_ROW) + 3] = 0; // (no splotches: whoever had this slot before may have died covered in blood)
-    // an outfit's colors over their own (from a generator of its own, so no one else's change)
-    const outfit = outfitOf(id, i), outfitRng = mulberry32(5151 + id*7919);
+    wardrobe[i] = 0; // (in the clothes they came in)
+    dressOutfit(i, id, mulberry32(5151 + id*7919), mulberry32(5152 + id*7919));
+  }
+  /**
+   * The rest of someone's clothes over the colors already written for them: an outfit's colors over their own (`outfitRng`,
+   * a generator of its own, so no one else's change) and which of its variants they wear (`variantRng`); under a skirt,
+   * the skirt for what's left of their trousers; a jeans' cuff; and where their clothes stop.
+   * @param {number} i - their slot
+   * @param {number} id - their person id
+   * @param {function(): number} outfitRng - for the outfit's colors
+   * @param {function(): number} variantRng - for which of its variants
+   * @returns {void}
+   */
+  function dressOutfit(i, id, outfitRng, variantRng) {
+    const texel = row => (row*PEOPLE_MAX + i)*4, color = new THREE.Color();
+    const outfit = outfitOf(id, i);
     traits[texel(OUTFIT_RED_ROW) + 3] = outfit;
     // and which column of the outfits' texture is theirs: which of its variants they wear (see outfits.js)
-    traits[texel(OUTFIT_GREEN_ROW) + 3] = outfit ? OUTFIT_COLUMNS[outfit - 1] + Math.floor(mulberry32(5152 + id*7919)()*(OUTFITS[outfit - 1].variants || 1)) : 0;
+    traits[texel(OUTFIT_GREEN_ROW) + 3] = outfit ? OUTFIT_COLUMNS[outfit - 1] + Math.floor(variantRng()*(OUTFITS[outfit - 1].variants || 1)) : 0;
     if (outfit) Object.entries(OUTFITS[outfit - 1].colors).forEach(([part, colors]) => {
       const to = texel(traitRow(part));
       if (typeof colors === 'string') { const from = texel(traitRow(colors)); traits.copyWithin(to, from, from + 3); return; }
@@ -1536,6 +1566,87 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     traits.set([color.r, color.g, color.b], texel(traitRow('Cuff')));
     traits.set(clothingRowFor(id, i), texel(PERSON_CLOTHING_ROW));
     traitTexture.needsUpdate = true;
+  }
+
+  // ============== Changing how someone looks ==============
+  // A haircut or new clothes (see "a salon" and "a clothes shop" in peopleActivities.js). A style's instanced from its
+  // wearers' slots (see `members`), each mesh with room for STYLE_ROOM more than it started with (see below), so moving
+  // a slot from one style to another is: out of the one's list, into the other's (kept in order), and both lists'
+  // slots written out again. False if the style has no room left (or no mesh).
+  function wear(layer, i, k) {
+    const was = layer.of[i];
+    if (was === k) return true;
+    const into = k >= 0 ? layer.styles[k] : null;
+    if (into && (!into.mesh || into.members.length >= into.capacity)) return false;
+    if (was >= 0) {
+      const from = layer.styles[was];
+      from.members.splice(from.members.indexOf(i), 1);
+      restack(layer, from);
+    }
+    layer.of[i] = k;
+    if (into) {
+      let at = into.members.findIndex(m => m > i);
+      if (at < 0) at = into.members.length;
+      into.members.splice(at, 0, i);
+      restack(layer, into);
+    }
+    return true;
+  }
+  // (a style's wearers written out again, each into its instance slot, after one's come or gone)
+  function restack(layer, style) {
+    if (!style.mesh) return;
+    const person = style.geometry.attributes.instancePerson;
+    style.members.forEach((m, slot) => { layer.slot[m] = slot; person.array[slot] = m; });
+    person.needsUpdate = true;
+  }
+  // a style from `list` (indices into the layer's styles) with room for them — other than the one they wear, unless
+  // `same` — or -1
+  const otherStyle = (layer, list, i, rng, same = false) => {
+    const open = list.filter(k => (same || k !== layer.of[i]) && layer.styles[k].mesh && (k === layer.of[i] || layer.styles[k].members.length < layer.styles[k].capacity));
+    return open.length ? open[Math.floor(rng()*open.length)] : -1;
+  };
+  /**
+   * A new haircut for whoever's in slot `i`: a hairstyle they've not got (never a hat — it comes off at the salon), now
+   * and then a man's head shaved, or his facial hair changed; and now and then their hair dyed. Someone who came in a hat
+   * that went with what they wore (see pickOutfit) needs something else to wear with it now: new clothes too.
+   * @param {number} i - their slot
+   * @param {number} id - their person id
+   * @param {function(): number} rng - the choices
+   * @returns {void}
+   */
+  function cutHair(i, id, rng) {
+    const man = isMan[i] === 1, wasHat = hairLayer.of[i] >= 0 && hairLayer.styles[hairLayer.of[i]].hat;
+    const k = man && hairLayer.of[i] >= 0 && rng() < BALD_CUT ? -1 : otherStyle(hairLayer, man ? hairLayer.boys : hairLayer.girls, i, rng);
+    if (k >= 0 || man) wear(hairLayer, i, k);
+    if (man && rng() < FACIAL_HAIR_CUT) wear(facialHairLayer, i, rng() < 0.4 ? -1 : otherStyle(facialHairLayer, facialHairLayer.boys, i, rng));
+    if (rng() < HAIR_DYE) {
+      const color = new THREE.Color();
+      hairColor(rng, color);
+      traits.set([color.r, color.g, color.b], (traitRow('Hair')*PEOPLE_MAX + i)*4);
+      traitTexture.needsUpdate = true;
+    }
+    if (wasHat) changeClothes(i, id, rng);
+  }
+  /**
+   * New clothes for whoever's in slot `i`: a new top, trousers and shoes, now and then a skirt (a woman) or baggy jeans
+   * (anyone not in one) where they'd none, or none where they had — and whatever outfit goes with all that.
+   * @param {number} i - their slot
+   * @param {number} id - their person id
+   * @param {function(): number} rng - the choices
+   * @returns {void}
+   */
+  function changeClothes(i, id, rng) {
+    const man = isMan[i] === 1, seed = wardrobe[i] = 1 + Math.floor(rng()*2**31);
+    if (!man) wear(skirtLayer, i, rng() < SKIRT_CHANCE ? otherStyle(skirtLayer, skirtLayer.girls, i, rng, true) : -1);
+    if (skirtLayer.of[i] >= 0) wear(jeansLayer, i, -1);
+    else wear(jeansLayer, i, rng() < JEANS_CHANCE ? otherStyle(jeansLayer, man ? jeansLayer.boys : jeansLayer.girls, i, rng, true) : -1);
+    const texel = row => (row*PEOPLE_MAX + i)*4, colorRng = mulberry32(seed + 3), color = new THREE.Color();
+    for (const part of ['Top', 'Pants', 'Shoes', 'Skirt']) {
+      clothesColor[part](colorRng, color);
+      traits.set([color.r, color.g, color.b], texel(traitRow(part)));
+    }
+    // (and any outfit that goes with those over them, as in assignAppearance)
+    dressOutfit(i, id, mulberry32(seed + 4), mulberry32(seed + 5));
   }
   // whoever's already in the crowd when the model finishes loading has been walking round as a cuboid till now: fill
   // in their looks. Everyone born after this just gets them as they arrive (see updatePeople in people.js).
@@ -1583,16 +1694,21 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const glassesLook = { palette: hairPalette, traitColors: { 0: traitRow('Glasses') }, femaleOnly: [] };
   const looks = { hair: hairLook, glasses: glassesLook, skirt: { palette: [new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Skirt') }, femaleOnly: [], clearThighs: !!thighs },
     jeans: { palette: [new THREE.Color(0xffffff), new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Pants'), 1: traitRow('Cuff') }, femaleOnly: [] } };
+  // (each with room for STYLE_ROOM more wearers than it started with, for haircuts and changes of clothes: see wear)
   wornLayers.flatMap(layer => layer.styles.map(style => [style, looks[layer.look]])).forEach(([style, look]) => {
-    if (!style.members.length) { style.geometry.dispose(); return; }
-    style.geometry.setAttribute('instancePerson', new THREE.InstancedBufferAttribute(Float32Array.from(style.members), 1));
-    style.anim = dynamicInstanceAttribute(style.members.length, 4);
-    style.look = dynamicInstanceAttribute(style.members.length, 4);
-    style.eyes = dynamicInstanceAttribute(style.members.length, 4);
+    if (!style.members.length && !style.girls && !style.boys) { style.geometry.dispose(); return; }
+    style.capacity = style.members.length + STYLE_ROOM;
+    const person = new Float32Array(style.capacity);
+    person.set(style.members);
+    style.geometry.setAttribute('instancePerson', new THREE.InstancedBufferAttribute(person, 1));
+    style.anim = dynamicInstanceAttribute(style.capacity, 4);
+    style.look = dynamicInstanceAttribute(style.capacity, 4);
+    style.eyes = dynamicInstanceAttribute(style.capacity, 4);
     style.geometry.setAttribute('instanceAnim', style.anim);
     style.geometry.setAttribute('instanceLook', style.look);
     style.geometry.setAttribute('instanceEyes', style.eyes);
-    style.mesh = makePersonMesh(style.geometry, uniforms, look, style.members.length, true);
+    style.mesh = makePersonMesh(style.geometry, uniforms, look, style.capacity, true);
+    style.mesh.count = style.members.length;
   });
   const gibs = buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm, wornLayers, uniforms, bodyLook, looks, traits, traitRows });
   root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
@@ -1604,7 +1720,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   personCulling.personTall.value = box.max.y - box.min.y;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes,
     headBone: headBone ?? 0, headPivot, chestBone, hands, unitsPerMetre, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

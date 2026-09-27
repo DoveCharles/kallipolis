@@ -169,7 +169,8 @@
  * @property {import('three').InstancedBufferAttribute} anim - per person, their animation (see instanceAnim in the shader)
  * @property {import('three').InstancedBufferAttribute} look
  * @property {import('three').InstancedBufferAttribute} eyes
- * @property {object[]} hair - the hairstyle, facial-hair, glasses and skirt meshes that have someone wearing them
+ * @property {object[]} hair - the hairstyle, facial-hair, glasses, skirt and jeans meshes (each with room for more wearers: see
+ *   STYLE_ROOM in peopleModel.js)
  * @property {object[]} wornLayers - the hairstyle, facial-hair, glasses and skirt layers
  * @property {Uint8Array} isMan - per person, whether they're a man
  * @property {Float32Array} boneData - the baked bone poses
@@ -178,6 +179,8 @@
  * @property {import('three').Color[]} palette - the model's own colors by slot
  * @property {function(number, number): void} assignAppearance - write one person's body shape, face, colors and
  *   clothing into the traits texture, from their id (see people.js)
+ * @property {function(number, number, function(): number): void} cutHair - a new haircut for someone (slot, id, rng)
+ * @property {function(number, number, function(): number): void} changeClothes - new clothes for someone (slot, id, rng)
  * @property {number} headBone
  * @property {import('three').Vector3} headPivot
  * @property {number} height - the model's height, in its own units

@@ -546,6 +546,10 @@ function renderDetails() {
         <input type="range" id="ds-townshops" min="0" max="1" step="0.05" value="${s.townShops!=null?s.townShops:0.4}"></div>
       <div class="slider-row"><div class="row"><label>Pubs</label><span class="val" id="dv-townpubs">${(s.townPubs!=null?s.townPubs:0.25).toFixed(2)}</span></div>
         <input type="range" id="ds-townpubs" min="0" max="1" step="0.05" value="${s.townPubs!=null?s.townPubs:0.25}"></div>
+      <div class="slider-row"><div class="row"><label>Salons</label><span class="val" id="dv-townsalons">${(s.townSalons!=null?s.townSalons:0.2).toFixed(2)}</span></div>
+        <input type="range" id="ds-townsalons" min="0" max="1" step="0.05" value="${s.townSalons!=null?s.townSalons:0.2}"></div>
+      <div class="slider-row"><div class="row"><label>Clothes shops</label><span class="val" id="dv-townclothes">${(s.townClothes!=null?s.townClothes:0.25).toFixed(2)}</span></div>
+        <input type="range" id="ds-townclothes" min="0" max="1" step="0.05" value="${s.townClothes!=null?s.townClothes:0.25}"></div>
       <div class="slider-row"><div class="row"><label>Paint</label><span class="val" id="dv-townpaint">${(s.townPaint!=null?s.townPaint:0.3).toFixed(2)}</span></div>
         <input type="range" id="ds-townpaint" min="0" max="1" step="0.05" value="${s.townPaint!=null?s.townPaint:0.3}"></div>
       <div class="slider-row"><div class="row"><label>Lot setback</label><span class="val" id="dv-townsetback">${s.townSetback!=null?s.townSetback:0}</span></div>
@@ -674,6 +678,8 @@ function renderDetails() {
       wireRangeSlider('townstoreys', 1, 5, null, (lo, hi) => { s.townStoreysMin = lo; s.townStoreysMax = hi; subdivideZone(zone); });
       wireNumber('ds-townshops', 'dv-townshops', 'townShops', 2);
       wireNumber('ds-townpubs', 'dv-townpubs', 'townPubs', 2);
+      wireNumber('ds-townsalons', 'dv-townsalons', 'townSalons', 2);
+      wireNumber('ds-townclothes', 'dv-townclothes', 'townClothes', 2);
       wireNumber('ds-townpaint', 'dv-townpaint', 'townPaint', 2);
       wireNumber('ds-townsetback', 'dv-townsetback', 'townSetback');
       wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);

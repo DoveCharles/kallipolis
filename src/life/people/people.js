@@ -305,11 +305,12 @@ export const isGone = p => p.mode === 'none' || p.mode === 'dead' || aboard(p)
  */
 export const aboard = p => p.mode === 'train' && p.train.stage === 'ride';
 /**
- * Whether this person is drawn: not gone, or gone only into the room the camera's in or onto a train.
+ * Whether this person is drawn: not gone, or gone only into the room the camera's in (and not out of sight in it, behind
+ * a changing room's curtain: see changing in peopleActivities.js) or onto a train.
  * @param {Person} p - the person
  * @returns {boolean} whether they're drawn
  */
-export const isDrawn = p => !isGone(p) || inRoom(p) || aboard(p);
+export const isDrawn = p => !isGone(p) || (inRoom(p) && !p.inRoom.hidden) || aboard(p);
 /**
  * Whether this person is inside the building the camera's gone into, and so drawn in its room (see buildings/interior.js)
  * though they count as gone for everything else.
