@@ -367,7 +367,7 @@ updateSun();
 // map images, walkways — and those skip them with the stencil buffer instead: rebuildWater and rebuildRoadMeshes each
 // draw their outline into its own stencil bit first (an invisible mask, see makeStencilMask), and materials carrying
 // these settings don't draw wherever those bits are marked. Zone fills only skip the roads, and still tint water zones.
-export const STENCIL_WATER = 1, STENCIL_ROAD = 2;
+export const STENCIL_WATER = 1, STENCIL_ROAD = 2, STENCIL_PREVIEW = 4, STENCIL_DELETE_PREVIEW = 8;
 export const SKIP_OVER_WATER_AND_ROADS = { stencilWrite:true, stencilFunc:THREE.EqualStencilFunc, stencilRef:0, stencilFuncMask:STENCIL_WATER|STENCIL_ROAD };
 export const SKIP_OVER_ROADS = { stencilWrite:true, stencilFunc:THREE.EqualStencilFunc, stencilRef:0, stencilFuncMask:STENCIL_ROAD };
 export function makeStencilMask(geometry, bit, name) {

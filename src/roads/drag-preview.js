@@ -7,7 +7,7 @@
 // darkens underneath, where it'll stay until the node's let go of and everything's rebuilt once (see commitNodeDrag).
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, Y_PREVIEW } from '../core/scene.js';
+import { scene, Y_PREVIEW, STENCIL_PREVIEW, STENCIL_DELETE_PREVIEW } from '../core/scene.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { roadLineWidths } from './roads.js';
@@ -15,7 +15,12 @@ import { isWalkwayLine, isRiverLine, rebuildRoadMeshes } from './paths.js';
 
 const PREVIEW_COLOR = 0x3ddc97; // (the node markers' green)
 const DIM = 0.45;               // how much of its colour the dragged network keeps while the strip's over it
-const material = new THREE.MeshBasicMaterial({ color: PREVIEW_COLOR, transparent: true, opacity: 0.6, depthFunc: THREE.LessDepth, side: THREE.DoubleSide });
+// The strip's pieces overlap at the joints, all at the same height, so depth can't tell them apart (it z-fought); each
+// pixel's tinted once instead by marking it in the stencil buffer's own bit as it's drawn, and drawing only where unmarked.
+const stripMaterial = (color, bit) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false,
+  side: THREE.DoubleSide, stencilWrite: true, stencilFunc: THREE.NotEqualStencilFunc, stencilRef: bit, stencilFuncMask: bit,
+  stencilWriteMask: bit, stencilZPass: THREE.ReplaceStencilOp });
+const material = stripMaterial(PREVIEW_COLOR, STENCIL_PREVIEW);
 
 // The strip stays in the scene between drags, so its shader's compiled with everything else under the loading screen
 // rather than on a drag's first mouse move — as one triangle with no area, which draws nothing. (With no triangles at
@@ -50,8 +55,8 @@ function stretchesThrough(nodeId) {
   return out;
 }
 // Each piece of centreline as its own quad, with a disc at every joint to round it off. (One strip bent round the points
-// folds over itself at a sharp corner.) The pieces overlap at the joints, but the material writes depth and only draws
-// what's strictly nearer, so the overlap isn't tinted twice.
+// folds over itself at a sharp corner.) The pieces overlap at the joints, but the stencil (see stripMaterial) keeps the
+// overlap from being tinted twice.
 const JOINT_SIDES = 12;
 function ribbonGeometry(stretches) {
   const pos = [], index = [];
@@ -132,7 +137,7 @@ export function endDrawingPreview() {
 // ---------------------------------------------------------------- delete preview
 // Holding alt over a path, the stretch between two of its nodes that a click would delete (see deleteRoadSegment in
 // editor/input.js) is laid over in red, the path's full width.
-const deleteMaterial = new THREE.MeshBasicMaterial({ color: 0xe0342b, transparent: true, opacity: 0.6, depthFunc: THREE.LessDepth, side: THREE.DoubleSide });
+const deleteMaterial = stripMaterial(0xe0342b, STENCIL_DELETE_PREVIEW);
 const deleteMesh = new THREE.Mesh(idleGeometry(), deleteMaterial);
 deleteMesh.name = 'RoadDeletePreview';
 deleteMesh.renderOrder = 2;
