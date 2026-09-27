@@ -5,7 +5,7 @@ import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
 import { buildingKey, buildingNumber, roomLayoutOf } from './footprints.js';
-import { buildingKindOf, buildingName, buildingTypeOf, buildingEnterable } from './building-types.js';
+import { buildingKindOf, buildingName, buildingTitle, buildingTypeOf, buildingEnterable } from './building-types.js';
 import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 
 // ============================================================ following a building
@@ -69,7 +69,9 @@ function followBuilding(picked) {
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(CAMERA_MIN_RADIUS, Math.min(600, radius*2.8));
   const info = buildingTypeOf(kind, number);
-  card.show({ ...info, name: buildingName(kind, number, picked.group.userData.height ?? 0) + ' #' + number });
+  // what it is, then its own name on the line under (see buildingTitle), if it has one
+  const name = buildingName(kind, number, picked.group.userData.height ?? 0) + ' #' + number, title = buildingTitle(kind, number);
+  card.show({ ...info, name: title ? [name, title] : name });
   setBuildingCardInhabitants([]);
   drawThumbnail(thumbnailOf(picked.group, box, center, radius));
   card.setFavorite({ key: 'building:' + key, kind: 'Building', follow: () => {

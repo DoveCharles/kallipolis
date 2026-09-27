@@ -1,6 +1,6 @@
 import { App, S } from '../../core/shared.js';
 import { crowdGrid, mulberry32 } from '../../core/math.js';
-import { buildingName } from '../../buildings/building-types.js';
+import { buildingName, buildingTitle } from '../../buildings/building-types.js';
 import { isInsideBuilding, roomHolds, roomVisit } from '../../buildings/interior.js';
 import * as THREE from 'three';
 import { scene, camera } from '../../core/scene.js';
@@ -343,12 +343,12 @@ export const inRoom = p => p.mode === 'indoors' && p.indoors.stage === 'inside' 
   && p.inRoom.visit === roomVisit() && roomHolds(p.indoors.building.key);
 export let indoorsCount = 0;
 /**
- * What a building's called on the card of whoever's in it: its kind's name and its own number (see building-types.js).
+ * What a building's called on the card of whoever's in it: its own name (a pub's), or else its kind's name and its own number (see building-types.js).
  * @param {object} b - the building (see buildingDoors)
  * @returns {string} the label
  */
 
-export const buildingLabel = b => buildingName(b.kind, b.number, b.height) + ' #' + b.number;
+export const buildingLabel = b => buildingTitle(b.kind, b.number) || buildingName(b.kind, b.number, b.height) + ' #' + b.number;
 
 
 export function setPersonModel(m) { personModel = m; }

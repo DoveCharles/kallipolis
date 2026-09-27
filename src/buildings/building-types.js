@@ -18,7 +18,8 @@ const ZONE_OF_KIND = {
 const buildings = loadTypeText('assets/text/buildings.txt', {
   attributes: TEXT_ROWS,
   counted: ['loves', 'hates'], // can have several per building, like people: see [distribution] in buildings.txt
-  settings: ['enterable'], // not card text: whether people go into one (see "going indoors" in people.js)
+  // not card text: whether people go into one (see "going indoors" in people.js), and its own name (see buildingTitle)
+  settings: ['enterable', 'title'],
   fallbacks: ZONE_OF_KIND,
   // this stands in until buildings.txt has loaded, or if it can't be
   placeholder: { default: { name: ['Building'], mood: ['🏢'], loves: ['Having people inside them'], hates: ['Strong winds'] } },
@@ -46,4 +47,10 @@ const TOWER_HEIGHT = 28;
 export function buildingName(kind, number, height) {
   if (kind !== 'buildings' && kind !== 'landmark') return buildingTypeOf(kind, number).name;
   return (roomLayoutOf(kind, number) === 'office' ? 'Office ' : 'Residential ') + (height >= TOWER_HEIGHT ? 'Tower' : 'Building');
+}
+// A building's own name, as a pub's "The Red Lion": one of its kind's `title` lines in buildings.txt, picked by its number
+// the way the card's other lines are; '' for a kind that has none (a house).
+export function buildingTitle(kind, number = 1) {
+  const titles = buildings.listOf(kind, 'title');
+  return titles.length ? titles[(number - 1) % titles.length] : '';
 }
