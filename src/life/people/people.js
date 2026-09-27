@@ -441,7 +441,22 @@ export function syncPeopleUI() {
   document.getElementById('dv-traffic').textContent = String(Math.round(S.trafficAmount));
 }
 
-
+// (see the end of newPerson)
+const PERSON_LATER_FIELDS = Object.fromEntries([
+  // who they are (refreshTraits), how they look (updatePeople)
+  'health', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'defaultHair', 'eyeBase', 'faceDt', 'placedOut',
+  // what they say and think
+  'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
+  'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
+  // fleeing, fighting, blood
+  'sunRun', 'fleeArea', 'fleeInArea', 'fleeStarts', 'fledTalkAt', 'fleeTalkUntil', 'attackQueue', 'push', 'revived',
+  'blood', 'bloodBase', 'bloodFrom', 'bloodTimer', 'huntIn', 'roadWaryUntil', 'benched', 'bankHeld',
+  // water, drink, smell
+  'water', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
+  'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'smellCheck',
+  // walked about by hand (peopleTracking.js)
+  'footing', 'onRoad', 'shove', 'touching', 'near', 'walkingSpeed',
+].map(key => [key, undefined]));
 /**
  * Make a person with their traits and state at their starting values.
  * @param {number} [id] - their person id: a specific one to revive (someone hearted and saved, whose slot a reload
@@ -490,7 +505,11 @@ export function newPerson(id = S.peopleIdSeq++) {
     indoors: null, inRoom: null, indoorsCooldown: 10 + peopleRng()*30,
     // punching (see "punching"): who they're going for, how far along it they are, how long until they consider it again,
     // and being punched themselves
-    attack: null, punchCooldown: 10 + peopleRng()*30, punched: null };
+    attack: null, punchCooldown: 10 + peopleRng()*30, punched: null,
+    // and everything else anyone comes to have, there from the start (undefined until it's set, just as if it weren't
+    // there): with everyone's fields the same and in the same order, the browser keeps one shape for all of them, and
+    // reading anything off a person stays quick. Anything newly set on a person belongs here too.
+    ...PERSON_LATER_FIELDS };
 }
 
 /**
