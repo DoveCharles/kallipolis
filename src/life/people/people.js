@@ -1,5 +1,5 @@
 import { App, S } from '../../core/shared.js';
-import { mulberry32 } from '../../core/math.js';
+import { crowdGrid, mulberry32 } from '../../core/math.js';
 import { buildingName } from '../../buildings/building-types.js';
 import { isInsideBuilding, roomHolds, roomVisit } from '../../buildings/interior.js';
 import * as THREE from 'three';
@@ -19,7 +19,7 @@ import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
 import { controlInput, possession } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
-import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_TRAIT_COLORS } from './peopleModel.js';
+import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, personPixels } from './peopleModel.js';
 import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
@@ -240,7 +240,8 @@ export const weightOf = (p, clip) => (p.clipA === clip || p.clipA?.base === clip
  * @param {Person} p - the person
  * @returns {number}
  */
-export const sitWeight = p => personModel ? ['Sit1', 'Typing', 'TypingPaused', 'Eating', 'EatingPaused'].reduce((w, name) => w + weightOf(p, personModel.clips[name]), 0) : 0;
+const SAT_CLIPS = ['Sit1', 'Typing', 'TypingPaused', 'Eating', 'EatingPaused'];
+export const sitWeight = p => personModel ? SAT_CLIPS.reduce((w, name) => w + weightOf(p, personModel.clips[name]), 0) : 0;
 
 /**
  * Work out the row of the bone texture a person's at in an animation: along the walk by how far they've walked, round a
@@ -317,6 +318,12 @@ export const isDrawn = p => !isGone(p) || (inRoom(p) && !p.inRoom.hidden) || abo
  * @param {Person} p - the person
  * @returns {boolean} whether they're in the room
  */
+// Off screen, or too small on it to make out (see personPixels in peopleModel.js), the finer things about someone —
+// their pose and place out of view, their glances, blinks and face, what they wear — are only brought up to date every
+// FINE_EVERY frames, a share of the crowd each frame, taking in all the time since. How they move, and what they do and
+// say, still goes on every frame.
+const FINE_EVERY = 4;
+let peopleFrame = 0;
 const FOOTFALLS = 0.13, STEPS_PER_CYCLE = 4; // how far through the walk cycle a foot first comes down, and how many times
 // one does in a cycle: the Walk clip is two full strides, left, right, left, right, each foot reaching furthest forward there
 // Someone's voice (see audio/voices.js), the same every time for the same person: its pitch, lower for a man than a woman
@@ -435,7 +442,22 @@ export function syncPeopleUI() {
   document.getElementById('dv-traffic').textContent = String(Math.round(S.trafficAmount));
 }
 
-
+// (see the end of newPerson)
+const PERSON_LATER_FIELDS = Object.fromEntries([
+  // who they are (refreshTraits), how they look (updatePeople)
+  'health', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'defaultHair', 'eyeBase', 'faceDt', 'placedOut',
+  // what they say and think
+  'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
+  'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
+  // fleeing, fighting, blood
+  'sunRun', 'fleeArea', 'fleeInArea', 'fleeStarts', 'fledTalkAt', 'fleeTalkUntil', 'attackQueue', 'push', 'revived',
+  'blood', 'bloodBase', 'bloodFrom', 'bloodTimer', 'huntIn', 'roadWaryUntil', 'benched', 'bankHeld',
+  // water, drink, smell
+  'water', 'waterHere', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
+  'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'smellCheck',
+  // walked about by hand (peopleTracking.js)
+  'footing', 'onRoad', 'shove', 'touching', 'near', 'walkingSpeed',
+].map(key => [key, undefined]));
 /**
  * Make a person with their traits and state at their starting values.
  * @param {number} [id] - their person id: a specific one to revive (someone hearted and saved, whose slot a reload
@@ -484,7 +506,11 @@ export function newPerson(id = S.peopleIdSeq++) {
     indoors: null, inRoom: null, indoorsCooldown: 10 + peopleRng()*30,
     // punching (see "punching"): who they're going for, how far along it they are, how long until they consider it again,
     // and being punched themselves
-    attack: null, punchCooldown: 10 + peopleRng()*30, punched: null };
+    attack: null, punchCooldown: 10 + peopleRng()*30, punched: null,
+    // and everything else anyone comes to have, there from the start (undefined until it's set, just as if it weren't
+    // there): with everyone's fields the same and in the same order, the browser keeps one shape for all of them, and
+    // reading anything off a person stays quick. Anything newly set on a person belongs here too.
+    ...PERSON_LATER_FIELDS };
 }
 
 /**
@@ -496,8 +522,15 @@ export function newPerson(id = S.peopleIdSeq++) {
  * @param {number} i - their place in the crowd, just to look up their slot's sex
  * @returns {void}
  */
+// (the key refreshTraits keeps on a person, made once for each profiles version rather than for every person every frame)
+let traitKeys = { version: null };
+function traitsKeyOf(isMan) {
+  const version = profilesVersion();
+  if (traitKeys.version !== version) traitKeys = { version, true: version + ':true', false: version + ':false', null: version + ':null' };
+  return traitKeys[isMan];
+}
 export function refreshTraits(p, i) {
-  const isMan = personModel ? personModel.isMan[i] === 1 : null, key = profilesVersion() + ':' + isMan;
+  const isMan = personModel ? personModel.isMan[i] === 1 : null, key = traitsKeyOf(isMan);
   if (p.traitsKey === key) return;
   p.traitsKey = key;
   const profile = profileOf(p.id, isMan);
@@ -525,8 +558,7 @@ const BUBBLE_CHAIR_DROP = 0.5, BUBBLE_GROUND_DROP = 0.8; // how much lower (same
 // Options > Speech > Bubble distance of the camera. (What they've just seen or felt, they react to aloud: see reactAloud.)
 // Returns the thought while it shows.
 const THINK_FIDGETS = FIDGETS, THINK_CHANCE = 0.35, THOUGHT_TIME = 4, THINK_REST = [20, 60];
-function thoughtOf(p, dt) {
-  const now = performance.now()/1000;
+function thoughtOf(p, now) {
   if (p.thought && now < p.thoughtUntil) return p.thought;
   p.thought = null;
   const near = Math.hypot(p.x - camera.position.x, p.y - camera.position.y, p.z - camera.position.z) <= (S.bubbleDistance ?? 35);
@@ -1084,7 +1116,10 @@ export function updatePeople(t) {
   // whoever's been knocked down and is still on the ground (or getting up): nobody walks into them
   updateArrivingBlood(dt);
   const lyingDown = people.filter(q => q.punched && q.punched.stage !== 'marked' && q.punched.stage !== 'brace');
+  // (with more than a few down, each step looks only at those it could come near; with a few, it looks at them all)
+  const lyingNear = lyingDown.length > 8 ? crowdGrid(lyingDown) : null;
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  peopleFrame++;
   people.forEach((p, i) => {
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
@@ -1260,7 +1295,7 @@ export function updatePeople(t) {
       const step = possessed ? d : speed*dt*(p.mode === 'line' && !p.crossStage && !p.attack && !p.act ? 1 + Math.min(2, d*0.5) : 1);
       const k = d > 1e-4 ? Math.min(1, step/d) : 0, mx = dx*k, mz = dz*k;
       // (anyone just walking waits where they are until whoever it is is up: a step that would take them nearer, inside LYING_CLEARANCE, isn't taken — but not someone going after someone, or running from them)
-      const blocked = !possessed && !p.attack && !fleeing && lyingDown.some(q => {
+      const blocked = !possessed && !p.attack && !fleeing && lyingDown.length > 0 && (lyingNear ? lyingNear.near(p.x + mx, p.z + mz, LYING_CLEARANCE*S.peopleSize).map(k => lyingDown[k]) : lyingDown).some(q => {
         if (q === p) return false;
         const after = Math.hypot(q.x - (p.x + mx), q.z - (p.z + mz));
         return after < LYING_CLEARANCE*S.peopleSize && after < Math.hypot(q.x - p.x, q.z - p.z);
@@ -1335,39 +1370,52 @@ export function updatePeople(t) {
           else keyClick({ x: p.x + Math.sin(p.heading)*0.4, y: p.y + 0.75, z: p.z + Math.cos(p.heading)*0.4 }, tap.space);
         }
       }
-      // the model, scaled to the same height as a cuboid person — set back by however far their pose puts their pelvis from
-      // their feet, and sat on a bench, up on its seat
       const blend = key => p.clipA[key]*p.fade + p.clipB[key]*(1 - p.fade);
-      const offX = blend('pelvisX')*s, offZ = blend('pelvisZ')*s, sin = Math.sin(p.heading), cos = Math.cos(p.heading);
       p.heightScale = blend('heightScale');
-      rotation.setFromAxisAngle(up, p.heading);
-      const faceDown = turnInWater(p, rotation), crawlLift = turnCrawling(p, rotation); // (tipped, rocked or face down in the water: see peopleWater.js; face down crawling: see peopleRoad.js)
-      position.set(p.x - offX*cos - offZ*sin, faceDown ? p.y : crawlLift != null ? p.y + crawlLift : p.y + p.seatLift*sitWeight(p) - personModel.minY*s, p.z + offX*sin - offZ*cos);
-      if (p.punched?.revive && p.punched.stage === 'down') shake(position, rotation, PERSON_SHAKE*S.peopleSize); // (dead, before the bolt: see reviveInstead)
-      sway(p, position, rotation);
-      matrix.compose(position, rotation, scale.set(s, s, s));
-      personModel.mesh.setMatrixAt(i, matrix);
-      // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION
-      p.blinkIn -= dt;
-      p.blinkAge += dt;
-      if (p.blinkIn <= 0 && p.traits.blinks > 0) { p.blinkAge = 0; p.blinkIn = BLINK_DURATION + (1.5 + peopleRng()*5)/p.traits.blinks; }
-      p.lookIn -= dt;
-      if (p.lookAt) {
-        // talking: at whoever they're talking to, or whoever's talking
-        p.lookTurnTo = Math.max(-LOOK_MAX_TURN, Math.min(LOOK_MAX_TURN, wrapAngle(headingTo(p, p.lookAt) - p.heading)));
-        p.lookTiltTo = 0;
-      } else if (p.lookIn <= 0) {
-        // every so often a glance somewhere else — not so far while walking — or back ahead, the head easing round to it
-        // (the nosier they are, the more often, the less often back ahead, and the further round)
-        const { nosy } = p.traits;
-        p.lookIn = (1.5 + peopleRng()*4)/nosy;
-        const ahead = peopleRng() < 0.35/nosy, reach = (p.moving ? 0.6 : 1)*Math.min(1.5, Math.sqrt(nosy));
-        p.lookTurnTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TURN*reach;
-        p.lookTiltTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TILT;
+      // how much of them there is to see (see FINE_EVERY): the one followed or controlled always in full, and anyone not
+      // drawn at all as out of view. Out of view, they're left where they were last put — so long as that was out of view too.
+      const pixels = i === followed || i === possession.index ? Infinity : s <= 0 ? -1 : personPixels(p.x, p.y, p.z, 1.7*p.height*S.peopleSize);
+      const fineTurn = (peopleFrame + i) % FINE_EVERY === 0, out = pixels < 0;
+      const placed = !(out && p.placedOut && !fineTurn), faced = fineTurn || pixels >= PERSON_FACE_PIXELS, worn = placed && (fineTurn || pixels >= PERSON_WORN_PIXELS);
+      p.faceDt = (p.faceDt ?? 0) + dt;
+      const fdt = faced ? p.faceDt : 0;
+      if (faced) p.faceDt = 0;
+      if (placed) {
+        p.placedOut = out;
+        // the model, scaled to the same height as a cuboid person — set back by however far their pose puts their pelvis from
+        // their feet, and sat on a bench, up on its seat
+        const offX = blend('pelvisX')*s, offZ = blend('pelvisZ')*s, sin = Math.sin(p.heading), cos = Math.cos(p.heading);
+        rotation.setFromAxisAngle(up, p.heading);
+        const faceDown = turnInWater(p, rotation), crawlLift = turnCrawling(p, rotation); // (tipped, rocked or face down in the water: see peopleWater.js; face down crawling: see peopleRoad.js)
+        position.set(p.x - offX*cos - offZ*sin, faceDown ? p.y : crawlLift != null ? p.y + crawlLift : p.y + p.seatLift*sitWeight(p) - personModel.minY*s, p.z + offX*sin - offZ*cos);
+        if (p.punched?.revive && p.punched.stage === 'down') shake(position, rotation, PERSON_SHAKE*S.peopleSize); // (dead, before the bolt: see reviveInstead)
+        sway(p, position, rotation);
+        matrix.compose(position, rotation, scale.set(s, s, s));
+        personModel.mesh.setMatrixAt(i, matrix);
       }
-      if (possessed) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
-      p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, dt*4);
-      p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, dt*4);
+      if (faced) {
+        // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION
+        p.blinkIn -= fdt;
+        p.blinkAge += fdt;
+        if (p.blinkIn <= 0 && p.traits.blinks > 0) { p.blinkAge = 0; p.blinkIn = BLINK_DURATION + (1.5 + peopleRng()*5)/p.traits.blinks; }
+        p.lookIn -= fdt;
+        if (p.lookAt) {
+          // talking: at whoever they're talking to, or whoever's talking
+          p.lookTurnTo = Math.max(-LOOK_MAX_TURN, Math.min(LOOK_MAX_TURN, wrapAngle(headingTo(p, p.lookAt) - p.heading)));
+          p.lookTiltTo = 0;
+        } else if (p.lookIn <= 0) {
+          // every so often a glance somewhere else — not so far while walking — or back ahead, the head easing round to it
+          // (the nosier they are, the more often, the less often back ahead, and the further round)
+          const { nosy } = p.traits;
+          p.lookIn = (1.5 + peopleRng()*4)/nosy;
+          const ahead = peopleRng() < 0.35/nosy, reach = (p.moving ? 0.6 : 1)*Math.min(1.5, Math.sqrt(nosy));
+          p.lookTurnTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TURN*reach;
+          p.lookTiltTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TILT;
+        }
+        if (possessed) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
+        p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, fdt*4);
+        p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, fdt*4);
+      }
       const fear = bloodFear(p); // (how much blood they're wearing, for how scared they look)
       const scaredByBlood = !!p.blood && !p.traits.bloodlust, lusting = isBloodlusting(p);
       if (lusting && !p.lusting) feel(p, 'bloodlust'); // (for what they say: see life/speech-text.js, {is = bloodlusting})
@@ -1422,43 +1470,47 @@ export function updatePeople(t) {
       const babbling = S.babbleBubbles && p.phrase && p.babbleLine?.phrase === p.phrase && p.phrase.said < p.phrase.length ? p.babbleLine : null;
       const logged = p.saying ?? p.thought; // (for the card's Social tab: see peopleSaid.js)
       if (logged && logged !== p.loggedLine) { p.loggedLine = logged; logLine(p, logged); }
-      const thinking = bubbleSide && !group && !possessed ? thoughtOf(p, dt) : (p.fidgetThought = false, p.thought = null);
+      const thinking = bubbleSide && !group && !possessed ? thoughtOf(p, t) : (p.fidgetThought = false, p.thought = null);
       if (bubbleSide && (p.saying || babbling || thinking || hasBubble(p))) speechBubble(p, bubbleAt(p), p.saying ?? babbling ?? thinking);
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape
       else if (frozen || fleeing || scaredByBlood) p.talkTo = frozen ? 1 : scaredByBlood ? 0.3 + 0.7*fear : 0.55; // (blood, the more of it the wider)
-      p.talk += (p.talkTo - p.talk)*Math.min(1, dt*20);
-      if (listening) {
-        if ((p.emotionIn -= dt) <= 0) { p.emotionTo = Math.max(-1, Math.min(1, peopleRng()*2 - 1 + p.traits.mood)); p.emotionIn = 1.5 + peopleRng()*3; }
-      } else if (!group) {
-        p.emotionTo = p.traits.mood; // (their resting face)
+      if (faced) {
+        p.talk += (p.talkTo - p.talk)*Math.min(1, fdt*20);
+        if (listening) {
+          if ((p.emotionIn -= fdt) <= 0) { p.emotionTo = Math.max(-1, Math.min(1, peopleRng()*2 - 1 + p.traits.mood)); p.emotionIn = 1.5 + peopleRng()*3; }
+        } else if (!group) {
+          p.emotionTo = p.traits.mood; // (their resting face)
+        }
+        if (delighted) p.emotionTo = 1;                      // beaming, where fright and stun go flat
+        else if (frozen || fleeing || scaredByBlood) p.emotionTo = -1;
+        p.emotion += (p.emotionTo - p.emotion)*Math.min(1, fdt*5);
+        // their eyes: the look their traits give them (from their mood, say), brighter or sadder as their expression swings
+        // above or below where it rests, and wide with shock when frightened
+        const { happy, sad, angry, shock } = p.traits, swing = p.emotion - p.traits.mood, shocked = (frozen || fleeing || scaredByBlood) && !delighted; // (they look scared for as long as they've blood on them)
+        const eyesTo = [shocked ? (scaredByBlood ? 0.4 + 0.6*fear : 1) : shock, delighted ? 1 : shocked ? 0 : happy + Math.max(0, swing)*0.8, scaredByBlood ? 0 : p.attack || lusting ? 1 : angry, sad + Math.max(0, -swing)*0.8];
+        for (let k=0;k<4;k++) p.eyes[k] += (Math.min(1, eyesTo[k]) - p.eyes[k])*Math.min(1, fdt*6);
       }
-      if (delighted) p.emotionTo = 1;                      // beaming, where fright and stun go flat
-      else if (frozen || fleeing || scaredByBlood) p.emotionTo = -1;
-      p.emotion += (p.emotionTo - p.emotion)*Math.min(1, dt*5);
-      // their eyes: the look their traits give them (from their mood, say), brighter or sadder as their expression swings
-      // above or below where it rests, and wide with shock when frightened
-      const { happy, sad, angry, shock } = p.traits, swing = p.emotion - p.traits.mood, shocked = (frozen || fleeing || scaredByBlood) && !delighted; // (they look scared for as long as they've blood on them)
-      const eyesTo = [shocked ? (scaredByBlood ? 0.4 + 0.6*fear : 1) : shock, delighted ? 1 : shocked ? 0 : happy + Math.max(0, swing)*0.8, scaredByBlood ? 0 : p.attack || lusting ? 1 : angry, sad + Math.max(0, -swing)*0.8];
-      for (let k=0;k<4;k++) p.eyes[k] += (Math.min(1, eyesTo[k]) - p.eyes[k])*Math.min(1, dt*6);
-      // instanceAnim (see the shader): the rows they're at in the two animations, how far they've blended, and their blink
-      const o = i*4, animArray = personModel.anim.array, lookArray = personModel.look.array;
-      animArray[o] = clipRow(p, p.clipA);
-      animArray[o+1] = p.clipB === p.clipA ? animArray[o] : p.rowB;
-      animArray[o+2] = p.fade;
-      animArray[o+3] = p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0;
-      lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
-      if (p.water?.drowned) holdDrowned(o, animArray, lookArray); // (still, face down: see peopleWater.js)
-      const eyesArray = personModel.eyes.array;
-      for (let k=0;k<4;k++) eyesArray[o + k] = p.eyes[k];
-      // the copies everything they wear (hair, glasses, a skirt) keeps of where they are, how they're posed and which way they're looking
-      personModel.wornLayers.forEach(layer => {
-        const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null;
-        if (!style || !style.mesh) return;
-        const slot = layer.slot[i];
-        matrix.toArray(style.mesh.instanceMatrix.array, slot*16);
-        for (let k=0;k<4;k++) { style.anim.array[slot*4 + k] = animArray[o + k]; style.look.array[slot*4 + k] = lookArray[o + k]; style.eyes.array[slot*4 + k] = eyesArray[o + k]; }
-      });
+      if (placed) {
+        // instanceAnim (see the shader): the rows they're at in the two animations, how far they've blended, and their blink
+        const o = i*4, animArray = personModel.anim.array, lookArray = personModel.look.array;
+        animArray[o] = clipRow(p, p.clipA);
+        animArray[o+1] = p.clipB === p.clipA ? animArray[o] : p.rowB;
+        animArray[o+2] = p.fade;
+        animArray[o+3] = p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0;
+        lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
+        if (p.water?.drowned) holdDrowned(o, animArray, lookArray); // (still, face down: see peopleWater.js)
+        const eyesArray = personModel.eyes.array;
+        for (let k=0;k<4;k++) eyesArray[o + k] = p.eyes[k];
+        // the copies everything they wear (hair, glasses, a skirt) keeps of where they are, how they're posed and which way they're looking
+        if (worn) for (const layer of personModel.wornLayers) {
+          const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null;
+          if (!style || !style.mesh) continue;
+          const slot = layer.slot[i];
+          matrix.toArray(style.mesh.instanceMatrix.array, slot*16);
+          for (let k=0;k<4;k++) { style.anim.array[slot*4 + k] = animArray[o + k]; style.look.array[slot*4 + k] = lookArray[o + k]; style.eyes.array[slot*4 + k] = eyesArray[o + k]; }
+        }
+      }
     } else {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
       const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;

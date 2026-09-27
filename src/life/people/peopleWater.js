@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S } from '../../core/shared.js';
-import { isOpenWater, onAnyDeck, waterTopAt, WATER_LEVEL } from '../../water/water.js';
+import { getVisibleWaterRegion, getWaterRegion, isOpenWater, onAnyDeck, waterTopAt, WATER_LEVEL } from '../../water/water.js';
 import { splashCar, splashUp, aquaWake, puffSmoke, blastFx } from '../giblets.js';
 import { blasts, PERSON_BLAST_SCALE } from '../traffic/state.js';
 import { exclaim } from '../../audio/voices.js';
@@ -34,6 +34,21 @@ const FX_SHARE = 0.5, LAND_SMOKE_PUFFS = 3, PERSON_WIDTH = 0.5;
 const decks = () => [S.roadFootprint, S.pathFootprint];
 const overOpenWater = (x, z) => isOpenWater(x, z, decks());
 const onDecks = (x, z) => onAnyDeck(x, z, decks());
+// The same questions asked of someone at the very spot they were asked last — anyone standing about, frame after frame —
+// get the answers they had then, kept on them (p.waterHere) along with the water and footprints they came from: each of
+// those is a new array whenever it changes, and then everything's asked again.
+function waterHere(p) {
+  const visible = getVisibleWaterRegion(), region = getWaterRegion(), roads = S.roadFootprint, paths = S.pathFootprint;
+  const h = p.waterHere ??= { x: NaN, z: NaN, visible: null, region: null, roads: null, paths: null, open: null, top: undefined, deck: null };
+  if (h.x !== p.x || h.z !== p.z || h.visible !== visible || h.region !== region || h.roads !== roads || h.paths !== paths) {
+    h.x = p.x; h.z = p.z; h.visible = visible; h.region = region; h.roads = roads; h.paths = paths;
+    h.open = null; h.top = undefined; h.deck = null;
+  }
+  return h;
+}
+const openWaterHere = p => { const h = waterHere(p); return h.open ??= overOpenWater(p.x, p.z); };
+const waterTopHere = p => { const h = waterHere(p); if (h.top === undefined) h.top = waterTopAt(p.x, p.z); return h.top; };
+const onDecksHere = p => { const h = waterHere(p); return h.deck ??= onDecks(p.x, p.z); };
 const sizeOf = p => p.height*S.peopleSize, heightOf = p => 1.7*sizeOf(p);
 /** Whether someone is in the water and not their own master: going in, or drowned. */
 export const inWater = p => !!p.water && p.water.stage !== 'rising';
@@ -57,7 +72,7 @@ export function updateWater(p, i, dt, wasX, wasZ, groundY) {
   const w = p.water;
   if (w && (w.drowned ? p.mode !== 'drowning' : !ABOVE_WATER.includes(p.mode))) p.water = null; // (reseated, spawned again or killed some other way)
   if (!p.water) {
-    if (dt > 0 && canFallIn(p) && overOpenWater(p.x, p.z)) fallIn(p, (p.x - wasX)/dt, (p.z - wasZ)/dt);
+    if (dt > 0 && canFallIn(p) && openWaterHere(p)) fallIn(p, (p.x - wasX)/dt, (p.z - wasZ)/dt);
     return;
   }
   if (dt <= 0) return;
@@ -73,7 +88,7 @@ export function updateWater(p, i, dt, wasX, wasZ, groundY) {
  * @returns {boolean}
  */
 export function wouldWade(p, mx, mz) {
-  if (onWater(p) || p.water || overOpenWater(p.x, p.z)) return false;
+  if (onWater(p) || p.water || openWaterHere(p)) return false;
   const len = Math.hypot(mx, mz);
   if (len < 1e-6) return false;
   const reach = 1 + BANK_KEEP*sizeOf(p)/len;
@@ -90,8 +105,8 @@ export function wouldWade(p, mx, mz) {
 function updateFloating(p, dt, groundY) {
   const ground = groundY ?? p.y + (p.floatDrop ?? 0), height = heightOf(p) * FX_SHARE;
   const standing = ABOVE_WATER.includes(p.mode) && !p.footing && ground < 1;
-  const top = standing ? waterTopAt(p.x, p.z) : null, onDeck = top != null && onDecks(p.x, p.z);
-  const wet = onWater(p) && top != null && !onDeck && overOpenWater(p.x, p.z);
+  const top = standing ? waterTopHere(p) : null, onDeck = top != null && onDecksHere(p);
+  const wet = onWater(p) && top != null && !onDeck && openWaterHere(p);
   if (!wet && !p.floatPhase && !p.slopeDrop && (top == null || onDeck)) { p.floatDrop = 0; return; }
   const goalDrop = top == null || onDeck ? 0 : Math.max(0, ground - top), was = p.slopeDrop ?? 0, gap = goalDrop - was;
   p.slopeDrop = was + Math.max(-RISE_SPEED*dt, Math.min(DROP_SPEED*dt, gap*(1 - Math.exp(-SLOPE_EASE*dt))));
@@ -133,13 +148,13 @@ function falling(p, i, dt) {
   p.moving = false;
   if (!w.splashed && w.drop >= surface) { w.splashed = true; splashCar({ x: p.x, y: WATER_LEVEL, z: p.z }, height); }
   if (w.drop >= surface + height) goUnder(p, i);
-  else if (w.drop < surface && !overOpenWater(p.x, p.z)) Object.assign(w, { stage: 'rising', fall: 0, from: Math.max(w.drop, 1e-3), shakeTime: 0 });
+  else if (w.drop < surface && !openWaterHere(p)) Object.assign(w, { stage: 'rising', fall: 0, from: Math.max(w.drop, 1e-3), shakeTime: 0 });
 }
 
 /** Climbing back out: walking as usual again, while their drop and tip ease out quickly and they rock side to side. */
 function rising(p, i, dt) {
   const w = p.water;
-  if (canFallIn(p) && overOpenWater(p.x, p.z)) { fallIn(p, 0, 0); return; }
+  if (canFallIn(p) && openWaterHere(p)) { fallIn(p, 0, 0); return; }
   const k = 1 - Math.exp(-RISE_RATE*dt);
   w.drop -= w.drop*k;
   w.pitch -= w.pitch*k;

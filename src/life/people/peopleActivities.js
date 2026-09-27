@@ -15,6 +15,7 @@ import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFollowingPerson } from './peopleTracking.js';
 import { drawCurtain, openRoomDoor, roomBeyondDoor, roomCubicles, roomDoorway, roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
 import { clearMeal, giveSnack, mealFinished, serveMeal } from './peopleHolding.js';
+import { BARBOT, barbotFree } from '../../buildings/barbot.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
 import { REVIVE_SHAKE_TIME } from '../revive.js';
 import { strikeLightning } from '../lightning.js';
@@ -72,6 +73,7 @@ function endedByLine(g) {
   if (!ending) return false;
   g.ending = null; g.speaker = null;
   if (g.kind === 'room') endRoomChat(g);
+  else if (g.kind === 'bar') endBarChat(g);
   else if (g.kind === 'circle') { if (g.members.includes(ending.by)) leaveCircle(ending.by, ending.how); }
   else if (ending.how === 'bad') endChat(g, 'bad');
   else wave(g, 'bye');
@@ -144,7 +146,8 @@ function leaveGroup(p) {
   g.members.forEach(m => { if (m.lookAt === p) m.lookAt = null; });
   if (g.kind === 'circle') { g.members.forEach(m => relateBoth(p, m, RELATE.circle + (g.score ?? 0)*SCORE_RELATE)); introduceAll([p, ...g.members]); }
   // a conversation between two ends when either goes; a circle carries on while anyone's left in it
-  if (g.kind === 'chat') endChat(g); else if (g.kind === 'room') endRoomChat(g); else if (!g.members.length) removeGroup(g);
+  if (g.kind === 'chat') endChat(g); else if (g.kind === 'room') endRoomChat(g); else if (g.kind === 'bar') endBarChat(g);
+  else if (!g.members.length) removeGroup(g);
 }
 
 /**
@@ -292,6 +295,7 @@ export function updateGroups(dt) {
   for (let gi = groups.length - 1; gi >= 0; gi--) {
     const g = groups[gi];
     if (g.kind === 'room') { roomChat(g, dt); continue; }
+    if (g.kind === 'bar') { barChat(g, dt); continue; }
     if (g.kind === 'circle') {
       const seated = g.members.filter(m => m.stage === 'sit');
       if (seated.some(m => m.traits.smells)) { g.members.filter(m => !m.traits.smells).forEach(finishActivity); continue; } // (someone who smells sat down: everyone else gets up and goes)
@@ -1665,7 +1669,7 @@ function standingSpot(p, seat) {
  */
 function standUp(p) {
   const seat = p.inRoom?.seat;
-  if (p.group?.kind === 'room') leaveGroup(p);
+  if (p.group?.kind === 'room' || p.group?.kind === 'bar') leaveGroup(p);
   if (seat && seat.by === p) seat.by = null;
   clearMeal(p);
   if (p.inRoom) {
@@ -1716,7 +1720,8 @@ function sitting(p, here, dt) {
       // or a chair beside them at home)
       if (!p.group && (here.chatIn = (here.chatIn ?? peopleRng()*SEAT_CHAT_EVERY) - dt) <= 0) {
         here.chatIn = SEAT_CHAT_EVERY*(0.5 + peopleRng());
-        if (peopleRng() < SEAT_CHAT_CHANCE*p.traits.chatty) chatWhileSat(p);
+        if (seat.bar && peopleRng() < BAR_CHAT_CHANCE*p.traits.chatty && chatWithBarbot(p)) { /* (a word with the bar bot) */ }
+        else if (peopleRng() < SEAT_CHAT_CHANCE*p.traits.chatty) chatWhileSat(p);
       }
       // (at a desk, typing a while, then sat back a moment, then at it again)
       if (seat.desk && !p.group && (here.spell -= dt) <= 0) { p.pose = p.pose === 'Typing' ? 'Sit1' : deskPose(seat); here.spell = spellAt(p.pose); }
@@ -2019,6 +2024,64 @@ function endRoomChat(g) {
     if (m.pose === 'TypingPaused') { m.pose = 'Typing'; here.spell = spellAt('Typing'); }
     else if (m.pose === 'EatingPaused') m.pose = 'Eating';
     if (!here.seat) { here.route = null; here.wait = (1 + peopleRng()*4)*m.traits.patience; }
+  });
+}
+
+// ---- talking to the bar bot.
+//
+// Someone sat at a pub's bar (a bar stool's seat: seat.bar) now and then has a word with the bar bot behind it
+// (buildings/barbot.js), if it's awake and not talking to anyone else: a group of kind 'bar' with them its only member
+// and BARBOT, standing in for the bot, taking turns with them (takeTurns) — they look at it while it talks, and it
+// stands still, turned to them, and babbles back. It's over when its time's up, a line ends it, or they get up.
+/** The chance, each time someone sat at the bar thinks about a word with someone, that it's with the bar bot (times how chatty they are). */
+const BAR_CHAT_CHANCE = 0.6;
+/** How long a word with the bar bot goes on, in seconds: [shortest, longest] (times how patient they are). */
+const BAR_CHAT_SPELL = [8, 20];
+/**
+ * Start someone sat at the bar talking to the bar bot, if it's free.
+ * @param {Person} p - the person
+ * @returns {boolean} whether it was
+ */
+function chatWithBarbot(p) {
+  if (p.chatCooldown > 0 || p.group) return false;
+  const bot = barbotFree();
+  if (!bot) return false;
+  const [lo, hi] = BAR_CHAT_SPELL;
+  const g = { kind: 'bar', sat: true, members: [p], stage: 'talk', speaker: null, turnIn: 0,
+    timer: (lo + peopleRng()*(hi - lo))*p.traits.patience, seenAt: performance.now()/1000 };
+  groups.push(g);
+  p.group = g;
+  p.lookAt = bot;
+  bot.chat = g;
+  return true;
+}
+/**
+ * Run a word with the bar bot for a frame, ending it if they've gone or their time's up.
+ * @param {object} g - the group
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
+function barChat(g, dt) {
+  const p = g.members[0];
+  if (!p || p.mode !== 'indoors' || p.inRoom?.visit !== roomVisit() || p.group !== g || BARBOT.chat !== g) { endBarChat(g); return; }
+  g.seenAt = performance.now()/1000; // (keeping the bot at it: see BARBOT.chat)
+  g.timer -= dt;
+  if (endedByLine(g)) return;
+  takeTurns(g, [p, BARBOT], dt);
+  if (g.timer <= 0 && !g.speaker?.saying) endBarChat(g);
+}
+/**
+ * End a word with the bar bot: the bot let go, and whoever it was back to their drink, not talking again for a while.
+ * @param {object} g - the group
+ * @returns {void}
+ */
+function endBarChat(g) {
+  removeGroup(g);
+  if (BARBOT.chat === g) BARBOT.chat = null;
+  g.speaker = null;
+  g.members.splice(0).forEach(m => {
+    m.group = null; m.lookAt = null;
+    m.chatCooldown = 15 + peopleRng()*30;
   });
 }
 

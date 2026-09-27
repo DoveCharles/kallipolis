@@ -14,7 +14,8 @@ export const CAR_STOP_GAP = 1.5;  // how far short of the car in front one stops
 export const CAR_BRAKE = 30;      // the hardest a car brakes, per second
 const CAR_GRID_CELL = 12;
 const carGrid = new Map();
-const cellKey = (cx, cz) => cx + ',' + cz;
+// (a cell's key, as one number: nothing's more than a few hundred cells from the middle)
+const cellKey = (cx, cz) => (cx + 32768)*65536 + (cz + 32768);
 /**
  * Rebuild the car grid: every car on a lane bucketed into its CAR_GRID_CELL-sized cell, and the stretch counts reset.
  * @returns {void}
@@ -41,7 +42,10 @@ export function buildCarGrid() {
  */
 export function forCarsNear(x, z, radius, fn) {
   const reach = Math.ceil(radius/CAR_GRID_CELL), cx = Math.floor(x/CAR_GRID_CELL), cz = Math.floor(z/CAR_GRID_CELL);
-  for (let ox=-reach;ox<=reach;ox++) for (let oz=-reach;oz<=reach;oz++) (carGrid.get(cellKey(cx+ox, cz+oz)) || []).forEach(fn);
+  for (let ox=-reach;ox<=reach;ox++) for (let oz=-reach;oz<=reach;oz++) {
+    const inCell = carGrid.get(cellKey(cx+ox, cz+oz));
+    if (inCell) for (let k=0;k<inCell.length;k++) fn(inCell[k], k, inCell);
+  }
 }
 /** How far ahead a car looks: half its length, 6 units of clearance, and its stopping distance at its current speed. */
 const senseRange = car => carLength(car)*0.5 + 6*S.peopleSize + Math.max(0, car.speed)*1.2;

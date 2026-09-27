@@ -843,6 +843,7 @@ function buildTerminal(frame, box, tier, rng) {
   const group = new THREE.Group();
   group.name = 'Building';
   group.userData.buildingKind = 'terminal'; // what its card says about it: see building-types.js
+  group.userData.batchable = true; // (drawn merged with the rest of its zone: see buildings/building-batches.js)
   const walls = createMeshBuilder(), roof = createMeshBuilder(), glass = createMeshBuilder();
   const { dx, dz } = frame, c = frame.at(box.s, box.w), height = tier.id === 'international' ? 15 : 10;
   const apronSide = -Math.sign(box.w || 1); // the way the apron lies from the terminal: toward the runway
@@ -877,6 +878,7 @@ function buildControlTower(at, rng) {
   const group = new THREE.Group();
   group.name = 'Building';
   group.userData.buildingKind = 'controltower';
+  group.userData.batchable = true; // (drawn merged with the rest of its zone: see buildings/building-batches.js)
   const height = 26 + rng()*10;
   const shaft = new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: 0.7 });
   const cab = new THREE.MeshStandardMaterial({ color: TERMINAL_GLASS, roughness: 0.15, metalness: 0.45 });
@@ -896,6 +898,7 @@ function buildHangar(frame, box, rng) {
   const group = new THREE.Group();
   group.name = 'Building';
   group.userData.buildingKind = 'hangar';
+  group.userData.batchable = true; // (drawn merged with the rest of its zone: see buildings/building-batches.js)
   const walls = createMeshBuilder(), roof = createMeshBuilder(), doors = createMeshBuilder();
   const c = frame.at(box.s, box.w), { dx, dz } = frame, height = 5.5;
   walls.addBox(c.x, c.z, dx, dz, box.halfLen, box.halfWid, Y_TARMAC, Y_TARMAC + height);

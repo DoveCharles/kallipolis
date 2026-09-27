@@ -100,7 +100,9 @@ const followedBuildingKey = () => followed ? followed.key : null;
 // isometric camera framing it — as for a car or a carriage.
 function thumbnailOf(group, box, center, radius) {
   const mesh = group.clone();
-  mesh.traverse(o => { if (o.userData.batched) o.visible = true; }); // (drawn merged in the city: see building-batches.js)
+  // (drawn merged in the city, and so neither drawn nor its matrices kept up there, which the copy would carry over: see
+  // building-batches.js — it's moved to the origin here, so it has to work them out again)
+  mesh.traverse(o => { if (o.userData.batched) o.visible = true; o.matrixAutoUpdate = true; });
   mesh.position.sub(center);
   const elevation = Math.atan(1/Math.SQRT2), azimuth = Math.PI/4, distance = radius*4;
   const view = new THREE.OrthographicCamera(-radius, radius, radius, -radius, 0.1, distance*2);

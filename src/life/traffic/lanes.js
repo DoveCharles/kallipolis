@@ -68,6 +68,22 @@ export function buildTrafficNav() {
   const capacity = Math.floor(lines.reduce((sum, nav) => sum + nav.total*2, 0)/TRAFFIC_LANE_PER_CAR);
   return { lines, grid, CELL, capacity, stretches };
 }
+// (see the end of newCar)
+const CAR_LATER_FIELDS = Object.fromEntries([
+  // who it is and how it looks (its card, its paint's holo and rust, its plate)
+  'health', 'number', 'plate', 'traitsKey', 'traits', 'baseTraits', 'legendaryCount', 'terribleCount', 'holo', 'holoAttrs',
+  'sparkleTimer', 'rust', 'rustAttrs', 'terribleTimer',
+  // on its route: turning, holding back, drawn off it (offroute.js), junction gates, what it's seen
+  'turned', 'stillFor', 'ignoreSmells', 'pullHold', 'pull', 'pullDrawn', 'offEase', 'reverseFor', 'sway', 'swayPhase', 'swayDist',
+  'entryPass', 'entryHeld', 'gate', 'lyingSeen', 'shocked', 'struck', 'struckByAircraft',
+  // knocked about, bumping and scraping (collisions.js)
+  'kick', 'bumpY', 'bumpShake', 'bumping', 'clearOfWalls', 'scrapeSparks', 'fuse', 'fuseSparks', 'revived', 'reviving',
+  // driven by hand (driving.js): boost, drift, hop, stalling, on and under the water
+  'throttle', 'boostLeft', 'boostLocked', 'boostingNow', 'drift', 'driftDir', 'driftKeys', 'driftYaw', 'hop', 'hopY', 'drunk',
+  'stall', 'stallSmoke', 'floatPhase', 'floatBobPhase', 'floatDrop', 'floatWasWet', 'sinking',
+  // (punched, and turned to face or look at something, as a person would be: see peopleActivities.js)
+  'punched', 'faceTo', 'lookAt',
+].map(key => [key, undefined]));
 /**
  * A new car at rest, off any lane, with its own id.
  * @returns {object}
@@ -92,7 +108,11 @@ export function newCar() {
     waited: 0, pushing: 0, uTurnWaited: 0,
     // its turn at the junction ahead, if it has picked one ({ li, vi, from, link, dir, stretch }, see planTurn), and how
     // long it's waited at the stop line for room on the road it's turning onto
-    plan: null, held: 0 };
+    plan: null, held: 0,
+    // and everything else a car comes to have, there from the start (undefined until it's set, just as if it weren't
+    // there): with every car's fields the same and in the same order, the browser keeps one shape for them all, and
+    // reading anything off a car stays quick (see PERSON_LATER_FIELDS in people.js). Anything newly set on a car belongs here.
+    ...CAR_LATER_FIELDS };
 }
 /**
  * Put a car in lane `li` at distance `u` along it, heading `dir`, and find the segment that puts it in.
@@ -398,7 +418,8 @@ export function roadCrossers() {
  * drives on. runOverPeople spares anyone mid-road the car has waved over.
  * @param {object} car
  * @param {number} dt - seconds this frame
- * @param {number[]} [inRoad] - indices in App.people of everyone in the road (roadCrossers), if the caller has them already
+ * @param {number[]|{list: number[], near: Function}} [inRoad] - indices in App.people of everyone in the road (roadCrossers), if the
+ *   caller has them already — or those in a crowdGrid (core/math.js), for only the ones near the car to be looked at
  * @returns {boolean} whether it is yielding
  */
 export function checkYield(car, dt, inRoad = roadCrossers()) {
@@ -410,8 +431,9 @@ export function checkYield(car, dt, inRoad = roadCrossers()) {
     return car.yieldFor != null;
   }
   const cos = Math.cos(car.heading), sin = Math.sin(car.heading);
-  for (const i of inRoad) {
-    const p = App.people[i];
+  const list = inRoad.near ? inRoad.list : inRoad, places = inRoad.near ? inRoad.near(car.x, car.z, PED_YIELD_RADIUS) : null;
+  for (let n = 0, count = places ? places.length : list.length; n < count; n++) {
+    const i = list[places ? places[n] : n], p = App.people[i];
     if (i === car.yieldChecked) continue;
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.hypot(dx, dz) > PED_YIELD_RADIUS) continue;

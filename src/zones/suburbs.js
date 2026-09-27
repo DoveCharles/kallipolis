@@ -464,6 +464,7 @@ export function generateSuburbsContent(zone, poly, cutouts, blockers) {
         const group = houseMesh(design, paint, windowRng, rng() < HOUSE_LIT_CHANCE);
         group.name = 'Building';
         group.userData.buildingKind = 'house'; // what its card says about it: see building-types.js
+        group.userData.batchable = true; // (drawn merged with the rest of its zone: see buildings/building-batches.js)
         group.position.set(spot.at.x, Y_PARK, spot.at.z);
         group.rotation.y = spot.yaw;
         // its own corners and its height, kept on it so people can find a door on its wall and go in (see

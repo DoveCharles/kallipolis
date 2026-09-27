@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { playBufferAt, zzfxBuffer, ear } from './sfx.js';
+import { playBufferAt, prewarm, zzfxBuffer, ear } from './sfx.js';
 
 // ============================================================ eating
 // What a meal sounds like (see the Eating clip in life/people/peopleModel.js, whose cues people.js plays as they come
@@ -24,6 +24,7 @@ const SIP = [
 const SOUNDS = { clink: CLINK, bite: BITE, sip: SIP };
 const VOLUME = { clink: 0.2, bite: 0.13, sip: 0.12 };
 const VARIANTS = 4;
+prewarm(Object.values(SOUNDS).flat(), VARIANTS); // (made ahead, off the page: see prewarm in sfx.js)
 const HEAR_DISTANCE = 9, REF_DISTANCE = 1.5;
 const SOUNDS_MAX_PER_SECOND = 14; // past this many a second, the rest go unheard
 const PITCH_SPREAD = 0.18;

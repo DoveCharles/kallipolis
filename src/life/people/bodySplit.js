@@ -12,7 +12,7 @@
 //    copies of its rim vertices, which the caller gives a flesh color. Holes the model already had are left alone.
 
 export const BODY_PARTS = ['Head', 'Chest', 'Hips', 'UpperArmL', 'UpperArmR', 'ForearmL', 'ForearmR', 'HandL', 'HandR', 'ThighL', 'ThighR', 'ShinL', 'ShinR'];
-const FACE_SLOTS = /^(White|Black|Eyelashes|Lips)$/;
+const FACE_SLOTS = /^(White|Black|Eyelash\d|Lips)$/;
 const THIGH_BONE = /^Thigh/, SHIN_BONE = /^(Knee|Leg|Foot|Toe)/;
 const UPPER_ARM_BONE = /^Shoulder/, FOREARM_BONE = /^Elbow/; // (every other arm bone is the hand's)
 const ARM_UPPER_BANDS = 2; // sleeve bands (Sleeve1, Sleeve2…, 1 nearest the body) that come off with the upper arm; the rest with the forearm

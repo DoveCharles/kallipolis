@@ -81,13 +81,15 @@ const CAR_HIT_DAMAGE = 8, KNOCK_BOX_DAMAGE_SHARE = 1/5;
 const carHitDamage = (car, speed) => CAR_HIT_DAMAGE*(car.traits?.weight ?? 1)*speed;
 // Whether a normal car can reach someone at all: out on the road, over it or halfway (and not waved over), or knocked down.
 export const inCarsWay = p => (isPedInDanger(p) || p.crossStage === 'mid' || !!p.punched) && !p.jc?.waved;
-// (`inWay`: App.people filtered by inCarsWay, if the caller has it already — updateTraffic does, once a frame for every car)
+// (`inWay`: App.people filtered by inCarsWay, if the caller has it already — updateTraffic does, once a frame for every car,
+// in a crowdGrid (core/math.js), so only those near the car are looked at)
 export function runOverPeople(car, motion = null, inWay = null) {
   const { halfLength, halfWidth } = carHitbox(car, motion?.thrown ? 1 : undefined), clip = carHitbox(car, CAR_HITBOX_SCALE*CAR_CLIP_SCALE), stun = carHitbox(car, CAR_HITBOX_SCALE*CAR_STUN_SCALE);
   const reach = Math.hypot(stun.halfLength, stun.halfWidth) + 1.5*LYING_HEAD*S.peopleSize, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   const driven = car === drivenCar, reachesAll = driven || !!motion, shocked = new Set(), struck = new Map();
   const velocity = motion ?? { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }, speed = Math.hypot(velocity.x, velocity.z);
-  (reachesAll ? App.people : inWay ?? App.people.filter(inCarsWay)).forEach(p => {
+  const near = !reachesAll && inWay?.near ? inWay.near(car.x, car.z, reach).map(k => inWay.list[k]) : null;
+  (near ?? (reachesAll ? App.people : inWay ?? App.people.filter(inCarsWay))).forEach(p => {
     if (reachesAll ? Math.abs(p.y - Y_ROAD) > carHeight(car) : !inCarsWay(p)) return; // (checked again: someone knocked down by an earlier car this frame may have got up)
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
