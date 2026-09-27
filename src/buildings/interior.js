@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { camera, scene, renderer } from '../core/scene.js';
+import { camera, scene, renderer, STENCIL_ROOM_SHADOW } from '../core/scene.js';
 import { S, App } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -56,6 +56,7 @@ const CEILING = 0xf4f1ea; // (a pub's is stained: see LAYOUTS.pub.ceiling)
 const ceilingMaterial = new THREE.MeshStandardMaterial({ color: CEILING, roughness: 1 });
 const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.6 });
 wallMaterial.shadowSide = ceilingMaterial.shadowSide = THREE.FrontSide;
+[wallMaterial, floorMaterial, ceilingMaterial].forEach(shellShaded); // (darker into the corners: see shellShaded)
 const glassMaterial = new THREE.MeshStandardMaterial({ color: 0xbcd6e6, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false });
 
 // Under its own ceiling the room's all in the sun's shadow, and the scene's ambient light alone leaves it murky. Rather
@@ -92,6 +93,32 @@ if ( roomGlow.r > 0.0 ) {
 }
 #endif
 `;
+// The glow's the same everywhere, which leaves the room flat: walls and ceiling run into one another with nothing to
+// tell where they meet. So the shell (walls, floor, ceiling and what's fixed to them: see shellShaded) darkens towards
+// every corner and edge of the room's box, as the light does in a real one — worked out from where each pixel is in the
+// box, since the box never changes, with no ambient occlusion pass. SHELL_AO is how dark right in a corner (per edge
+// met, so a three-way corner's darker still), SHELL_AO_REACH how far out from it the shade goes.
+const SHELL_AO = 0.35, SHELL_AO_REACH = 0.9;
+const shellAOChunk = /* glsl */`
+{
+  vec3 aoWorld = ( -vViewPosition ) * mat3( viewMatrix ) + cameraPosition;
+  vec3 aoAt = ( roomFromWorld * vec4( aoWorld, 1.0 ) ).xyz;
+  vec3 aoNormal = abs( mat3( roomFromWorld ) * ( normal * mat3( viewMatrix ) ) );
+  // how far from the nearest wall, floor or ceiling along each of the room's axes (the one the surface faces left out)
+  vec3 aoGap = vec3( ${(ROOM_W/2).toFixed(2)} - abs( aoAt.x ), min( aoAt.y, ${ROOM_H.toFixed(2)} - aoAt.y ), ${(ROOM_D/2).toFixed(2)} - abs( aoAt.z ) );
+  vec3 aoShade = ${SHELL_AO.toFixed(2)} * pow2( 1.0 - smoothstep( 0.0, ${SHELL_AO_REACH.toFixed(2)}, max( aoGap, 0.0 ) ) ) * step( aoNormal, vec3( 0.7 ) );
+  outgoingLight *= ( 1.0 - aoShade.x ) * ( 1.0 - aoShade.y ) * ( 1.0 - aoShade.z );
+}
+`;
+function shellShaded(material) {
+  material.onBeforeCompile = shader => {
+    shader.uniforms.roomFromWorld = roomGlowUniforms.roomFromWorld;
+    shader.fragmentShader = 'uniform mat4 roomFromWorld;\n' + shader.fragmentShader
+      .replace('#include <opaque_fragment>', shellAOChunk + '#include <opaque_fragment>');
+  };
+  material.customProgramCacheKey = () => 'shellAO';
+  return material;
+}
 // (set as the room goes up and comes down: see enterBuilding and leaveBuilding)
 function setRoomGlow(on) {
   roomGlowUniforms.roomGlow.value.setScalar(on ? ROOM_GLOW*Math.PI : 0);
@@ -1690,7 +1717,7 @@ const dado = new THREE.Group();
 dado.visible = false;
 room.add(dado);
 const LINE = 0xe8b820; // (a pub's dado rail's wood instead: see furnishPub)
-const dadoMaterial = lit(DADOS[0], 0.9), lineMaterial = lit(LINE, 0.6);
+const dadoMaterial = shellShaded(lit(DADOS[0], 0.9)), lineMaterial = lit(LINE, 0.6);
 const DADO_H = SILL - 0.1;
 for (const [w, d, x, z] of [[ROOM_W, 0.02, 0, ROOM_D/2 - 0.01], [ROOM_W, 0.02, 0, -ROOM_D/2 + 0.01], [0.02, ROOM_D, ROOM_W/2 - 0.01, 0],
   [0.02, doorFrom + ROOM_D/2, -ROOM_W/2 + 0.01, (doorFrom - ROOM_D/2)/2], [0.02, ROOM_D/2 - doorTo, -ROOM_W/2 + 0.01, (doorTo + ROOM_D/2)/2]]) {
@@ -3138,11 +3165,66 @@ function fadeWhatsInTheWay() {
   }
 }
 
+// ---------------------------------------------------------------- furniture shadows
+// Under its own ceiling the room's out of the sun, and the glow and lamps cast no shadows, so furniture stands on the
+// floor as if pasted on. Every piece standing on the floor casts a hard shadow instead: its own meshes drawn again,
+// flattened onto the floor along SHADOW_FALL (a light high up by the far walls' windows, so they fall towards the
+// camera's corner and can be seen), in black at SHADOW_DARK. No shadow map, and no light added to the scene (which
+// would recompile every lit material: see "the lamp"). Where two overlap they darken the floor once, not twice — the
+// stencil's STENCIL_ROOM_SHADOW bit marks where one's been drawn. Pieces lower than SHADOW_FLAT (rugs, mats) or not
+// reaching down to the floor (lamps hung from the ceiling, things on the walls) cast none, and they're put back
+// whenever the room's furnished afresh (see updateFurnitureShadows).
+const SHADOW_DARK = 0.35, SHADOW_FLAT = 0.08, SHADOW_OFF_FLOOR = 0.12, SHADOW_Y = 0.012;
+const SHADOW_FALL = new THREE.Vector3(-0.3, -1, -0.4);
+const flatten = new THREE.Matrix4().set( // (along SHADOW_FALL onto the plane y = SHADOW_Y, in the room's own space)
+  1, -SHADOW_FALL.x/SHADOW_FALL.y, 0, SHADOW_FALL.x/SHADOW_FALL.y*SHADOW_Y,
+  0, 0, 0, SHADOW_Y,
+  0, -SHADOW_FALL.z/SHADOW_FALL.y, 1, SHADOW_FALL.z/SHADOW_FALL.y*SHADOW_Y,
+  0, 0, 0, 1);
+const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: SHADOW_DARK,
+  depthWrite: false, fog: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+  stencilWrite: true, stencilFunc: THREE.NotEqualStencilFunc, stencilRef: STENCIL_ROOM_SHADOW, stencilFuncMask: STENCIL_ROOM_SHADOW,
+  stencilWriteMask: STENCIL_ROOM_SHADOW, stencilZPass: THREE.ReplaceStencilOp });
+const furnitureShadows = new THREE.Group();
+furnitureShadows.name = 'Furniture shadows';
+room.add(furnitureShadows);
+const NOTHING = [];
+let shadowedFor = null, shadowedCount = -1, shadowedFirst = null;
+function updateFurnitureShadows() {
+  const pieces = inside ? (current.furnished ?? current.group).children : NOTHING;
+  if (pieces === shadowedFor && pieces.length === shadowedCount && pieces[0] === shadowedFirst) return;
+  shadowedFor = pieces; shadowedCount = pieces.length; shadowedFirst = pieces[0];
+  furnitureShadows.clear();
+  room.updateMatrixWorld(true);
+  const fromWorld = new THREE.Matrix4().copy(room.matrixWorld).invert();
+  for (const piece of pieces) {
+    if (!piece.visible) continue;
+    const meshes = [], bounds = new THREE.Box3(), part = new THREE.Box3();
+    piece.traverse(o => {
+      if (!o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || !o.visible || o.material?.transparent) return;
+      const inRoom = new THREE.Matrix4().multiplyMatrices(fromWorld, o.matrixWorld);
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      bounds.union(part.copy(o.geometry.boundingBox).applyMatrix4(inRoom));
+      meshes.push([o.geometry, inRoom]);
+    });
+    if (bounds.isEmpty() || bounds.min.y > SHADOW_OFF_FLOOR || bounds.max.y - bounds.min.y < SHADOW_FLAT) continue;
+    for (const [geometry, inRoom] of meshes) {
+      const shadow = new THREE.Mesh(geometry, shadowMaterial);
+      shadow.matrixAutoUpdate = false;
+      shadow.matrix.multiplyMatrices(flatten, inRoom);
+      shadow.frustumCulled = false;
+      shadow.renderOrder = 1;
+      furnitureShadows.add(shadow);
+    }
+  }
+}
+
 const speakerAt = new THREE.Vector3();
 // Each frame: the view eased wider inside a room, and back to its usual angle outside.
 export function updateInteriorCamera() {
   updateTV();
   updateLamp();
+  updateFurnitureShadows();
   updateDoor();
   updateCurtains();
   if (inside && (controls.hug === freeRoom) !== !!S.freeRoomCamera) freeCamera(!!S.freeRoomCamera);
