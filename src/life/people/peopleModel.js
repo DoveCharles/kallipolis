@@ -78,6 +78,7 @@ const PERSON_CLIPS = [
   { name: 'Punch' }, { name: 'Fall' }, { name: 'Fallen', from: 'Fall', pose: true },
   ...snackClips(),
   ...['WaveLeft', 'Idle2Left'].flatMap(name => SNACK_ITEMS.map(item => ({ name: name + item, mirror: name.slice(0, -4), hold: 'Idle' + item }))),
+  ...SNACK_ITEMS.map(item => ({ name: 'Idle3' + item, over: 'Idle3', hold: 'Idle' + item })),
 ];
 
 // ============== TYPING ==============

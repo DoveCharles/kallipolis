@@ -273,8 +273,9 @@ export function setClip(p, clip) {
 }
 
 // The one-off clips that swing the right hand about, and what someone with a snack in it plays instead: the same with
-// the left hand (see `mirror` in PERSON_CLIPS), their right arm still holding it (WaveLeftBeer…).
-const WITH_HAND_FULL = { Idle2: 'Idle2Left', Wave: 'WaveLeft' };
+// the left hand (see `mirror` in PERSON_CLIPS), their right arm still holding it (WaveLeftBeer…) — or, for Idle3, the
+// same clip with the right arm still holding it (Idle3Beer…).
+const WITH_HAND_FULL = { Idle2: 'Idle2Left', Idle3: 'Idle3', Wave: 'WaveLeft' };
 /**
  * Play an animation through once — or hold its single pose, for the poses (see PERSON_CLIPS).
  * @param {Person} p - the person
