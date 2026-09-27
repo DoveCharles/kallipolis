@@ -709,7 +709,7 @@ async function loadStudent() {
   if (inside && current === LAYOUTS.home) furnish(inside.key);
 }
 modelsLoading.push(loadStudent());
-// Bare floorboards: planks 2.4 m long and 15 cm wide, in rows, their ends staggered and nailed down — which repeats
+// Bare floorboards: planks 2.4 m long and 15 cm wide, each one flat shade, in rows with their ends staggered — which repeats
 // every 2.4 m both ways.
 const boards = floorTexture(1024, 2.4, (g, rng) => {
   const ROWS = 16, row = 1024/ROWS;
@@ -719,14 +719,6 @@ const boards = floorTexture(1024, 2.4, (g, rng) => {
       const shade = 212 + rng()*38;
       g.fillStyle = `rgb(${shade},${shade},${shade})`;
       g.fillRect(x, r*row, 1024, row);
-      g.strokeStyle = 'rgba(70,50,30,0.06)';                                 // (a little grain along it)
-      g.lineWidth = 2;
-      for (let j = 0; j < 3; j++) {
-        const y = r*row + 10 + rng()*(row - 20), w = (rng() - 0.5)*10;
-        g.beginPath(); g.moveTo(x, y); g.bezierCurveTo(x + 340, y + w, x + 680, y - w, x + 1024, y); g.stroke();
-      }
-      g.fillStyle = 'rgba(40,30,20,0.3)';                                     // nails, at its ends
-      for (const nx of [x + 8, x + 1016]) for (const ny of [r*row + row*0.3, r*row + row*0.7]) g.fillRect(nx - 2, ny - 2, 4, 4);
       g.fillStyle = 'rgba(40,25,15,0.4)';
       g.fillRect(x - 1, r*row, 3, row);
     }
