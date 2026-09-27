@@ -411,30 +411,6 @@ export function roadCrossers() {
   App.people.forEach((p, i) => { if (p.crossStage === 'mid' || isPedInDanger(p)) out.push(i); });
   return out;
 }
-// Some of the crowd — a frame's roadCrossers or everyone in a car's way — bucketed by where they stand, so each car looks
-// only at those near it rather than at all of them (see checkYield and runOverPeople). near hands back their places in
-// the list in the list's own order, so what a car finds first is what it always would have.
-const CROWD_CELL = 8, CROWD_MARGIN = 2; // (metres; the margin for anyone moved since they were bucketed)
-/**
- * @template T
- * @param {T[]} list
- * @param {(item: T) => {x: number, z: number}} [where] - who each item is (an index in App.people, say)
- * @returns {{ list: T[], near: (x: number, z: number, radius: number) => number[] }}
- */
-export function crowdGrid(list, where = item => item) {
-  const cells = new Map(), key = (cx, cz) => (cx + 32768)*65536 + (cz + 32768);
-  list.forEach((item, k) => {
-    const p = where(item), cell = key(Math.floor(p.x/CROWD_CELL), Math.floor(p.z/CROWD_CELL));
-    const inCell = cells.get(cell);
-    if (inCell) inCell.push(k); else cells.set(cell, [k]);
-  });
-  return { list, near(x, z, radius) {
-    const out = [], r = radius + CROWD_MARGIN;
-    const x0 = Math.floor((x - r)/CROWD_CELL), x1 = Math.floor((x + r)/CROWD_CELL), z0 = Math.floor((z - r)/CROWD_CELL), z1 = Math.floor((z + r)/CROWD_CELL);
-    for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) { const inCell = cells.get(key(cx, cz)); if (inCell) for (const k of inCell) out.push(k); }
-    return out.length > 1 ? out.sort((a, b) => a - b) : out;
-  } };
-}
 /**
  * Whether the car stops for a pedestrian: someone mid-road ahead of it within PED_YIELD_RADIUS is stopped for with chance
  * PED_YIELD_CHANCE, or always on a junction's zebra crossing. A car committed to someone keeps stopping for them with no
@@ -442,8 +418,8 @@ export function crowdGrid(list, where = item => item) {
  * drives on. runOverPeople spares anyone mid-road the car has waved over.
  * @param {object} car
  * @param {number} dt - seconds this frame
- * @param {number[]|ReturnType<typeof crowdGrid>} [inRoad] - indices in App.people of everyone in the road (roadCrossers), if the
- *   caller has them already — or those in a crowdGrid, for only the ones near the car to be looked at
+ * @param {number[]|{list: number[], near: Function}} [inRoad] - indices in App.people of everyone in the road (roadCrossers), if the
+ *   caller has them already — or those in a crowdGrid (core/math.js), for only the ones near the car to be looked at
  * @returns {boolean} whether it is yielding
  */
 export function checkYield(car, dt, inRoad = roadCrossers()) {

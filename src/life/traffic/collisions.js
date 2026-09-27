@@ -82,7 +82,7 @@ const carHitDamage = (car, speed) => CAR_HIT_DAMAGE*(car.traits?.weight ?? 1)*sp
 // Whether a normal car can reach someone at all: out on the road, over it or halfway (and not waved over), or knocked down.
 export const inCarsWay = p => (isPedInDanger(p) || p.crossStage === 'mid' || !!p.punched) && !p.jc?.waved;
 // (`inWay`: App.people filtered by inCarsWay, if the caller has it already — updateTraffic does, once a frame for every car,
-// in a crowdGrid (lanes.js), so only those near the car are looked at)
+// in a crowdGrid (core/math.js), so only those near the car are looked at)
 export function runOverPeople(car, motion = null, inWay = null) {
   const { halfLength, halfWidth } = carHitbox(car, motion?.thrown ? 1 : undefined), clip = carHitbox(car, CAR_HITBOX_SCALE*CAR_CLIP_SCALE), stun = carHitbox(car, CAR_HITBOX_SCALE*CAR_STUN_SCALE);
   const reach = Math.hypot(stun.halfLength, stun.halfWidth) + 1.5*LYING_HEAD*S.peopleSize, cos = Math.cos(car.heading), sin = Math.sin(car.heading);

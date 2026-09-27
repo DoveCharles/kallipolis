@@ -1,5 +1,5 @@
 import { App, S } from '../../core/shared.js';
-import { mulberry32 } from '../../core/math.js';
+import { crowdGrid, mulberry32 } from '../../core/math.js';
 import { buildingName } from '../../buildings/building-types.js';
 import { isInsideBuilding, roomHolds, roomVisit } from '../../buildings/interior.js';
 import * as THREE from 'three';
@@ -452,7 +452,7 @@ const PERSON_LATER_FIELDS = Object.fromEntries([
   'sunRun', 'fleeArea', 'fleeInArea', 'fleeStarts', 'fledTalkAt', 'fleeTalkUntil', 'attackQueue', 'push', 'revived',
   'blood', 'bloodBase', 'bloodFrom', 'bloodTimer', 'huntIn', 'roadWaryUntil', 'benched', 'bankHeld',
   // water, drink, smell
-  'water', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
+  'water', 'waterHere', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
   'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'smellCheck',
   // walked about by hand (peopleTracking.js)
   'footing', 'onRoad', 'shove', 'touching', 'near', 'walkingSpeed',
@@ -521,8 +521,15 @@ export function newPerson(id = S.peopleIdSeq++) {
  * @param {number} i - their place in the crowd, just to look up their slot's sex
  * @returns {void}
  */
+// (the key refreshTraits keeps on a person, made once for each profiles version rather than for every person every frame)
+let traitKeys = { version: null };
+function traitsKeyOf(isMan) {
+  const version = profilesVersion();
+  if (traitKeys.version !== version) traitKeys = { version, true: version + ':true', false: version + ':false', null: version + ':null' };
+  return traitKeys[isMan];
+}
 export function refreshTraits(p, i) {
-  const isMan = personModel ? personModel.isMan[i] === 1 : null, key = profilesVersion() + ':' + isMan;
+  const isMan = personModel ? personModel.isMan[i] === 1 : null, key = traitsKeyOf(isMan);
   if (p.traitsKey === key) return;
   p.traitsKey = key;
   const profile = profileOf(p.id, isMan);
@@ -1108,6 +1115,8 @@ export function updatePeople(t) {
   // whoever's been knocked down and is still on the ground (or getting up): nobody walks into them
   updateArrivingBlood(dt);
   const lyingDown = people.filter(q => q.punched && q.punched.stage !== 'marked' && q.punched.stage !== 'brace');
+  // (with more than a few down, each step looks only at those it could come near; with a few, it looks at them all)
+  const lyingNear = lyingDown.length > 8 ? crowdGrid(lyingDown) : null;
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   peopleFrame++;
   people.forEach((p, i) => {
@@ -1285,7 +1294,7 @@ export function updatePeople(t) {
       const step = possessed ? d : speed*dt*(p.mode === 'line' && !p.crossStage && !p.attack && !p.act ? 1 + Math.min(2, d*0.5) : 1);
       const k = d > 1e-4 ? Math.min(1, step/d) : 0, mx = dx*k, mz = dz*k;
       // (anyone just walking waits where they are until whoever it is is up: a step that would take them nearer, inside LYING_CLEARANCE, isn't taken — but not someone going after someone, or running from them)
-      const blocked = !possessed && !p.attack && !fleeing && lyingDown.some(q => {
+      const blocked = !possessed && !p.attack && !fleeing && lyingDown.length > 0 && (lyingNear ? lyingNear.near(p.x + mx, p.z + mz, LYING_CLEARANCE*S.peopleSize).map(k => lyingDown[k]) : lyingDown).some(q => {
         if (q === p) return false;
         const after = Math.hypot(q.x - (p.x + mx), q.z - (p.z + mz));
         return after < LYING_CLEARANCE*S.peopleSize && after < Math.hypot(q.x - p.x, q.z - p.z);
@@ -1493,13 +1502,13 @@ export function updatePeople(t) {
         const eyesArray = personModel.eyes.array;
         for (let k=0;k<4;k++) eyesArray[o + k] = p.eyes[k];
         // the copies everything they wear (hair, glasses, a skirt) keeps of where they are, how they're posed and which way they're looking
-        if (worn) personModel.wornLayers.forEach(layer => {
+        if (worn) for (const layer of personModel.wornLayers) {
           const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null;
-          if (!style || !style.mesh) return;
+          if (!style || !style.mesh) continue;
           const slot = layer.slot[i];
           matrix.toArray(style.mesh.instanceMatrix.array, slot*16);
           for (let k=0;k<4;k++) { style.anim.array[slot*4 + k] = animArray[o + k]; style.look.array[slot*4 + k] = lookArray[o + k]; style.eyes.array[slot*4 + k] = eyesArray[o + k]; }
-        });
+        }
       }
     } else {
       if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
