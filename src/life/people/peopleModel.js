@@ -683,16 +683,16 @@ const PERSON_VERTEX_PARS = `
       offset += personMorph(0)*body.x + personMorph(1)*body.y + personMorph(2)*body.z + personMorph(3)*body.w + personMorph(4)*rest.x + personMorph(5)*rest.w;
     }
     if ((mask & 4) != 0) offset += personMorph(${shapeKey('Talk')})*instanceLook.z + personMorph(${shapeKey('Emotion')})*instanceLook.w;
-    if ((mask & 24) != 0) {
-      vec4 face = personTrait(${PERSON_FACE_ROW});
-      if ((mask & 8) != 0) offset += personMorph(${shapeKey('Key 1')})*face.x + personMorph(${shapeKey('Key 2')})*face.y;
-      if ((mask & 16) != 0) offset += personMorph(${shapeKey('Shape1')})*face.z + personMorph(${shapeKey('Shape2')})*face.w + personMorph(${shapeKey('Shape3')})*personTrait(1).z;
-    }
-    // instanceEyes: how shocked, happy, angry and sad their eyes look
-    if ((mask & 32) != 0) offset += personMorph(${shapeKey('Shock')})*instanceEyes.x + personMorph(${shapeKey('Happy')})*instanceEyes.y + personMorph(${shapeKey('Angry')})*instanceEyes.z + personMorph(${shapeKey('Sad')})*instanceEyes.w;
-    // the Blink key was made on the plain face, so on the eyelids every other key fades out as the eyes close — laid over a
-    // face or an expression it pushes the lids through each other
-    if ((mask & 2) != 0) offset = offset*(1.0 - instanceAnim.w) + personMorph(${shapeKey('Blink')})*instanceAnim.w;
+    if ((mask & 8) != 0) { vec4 face = personTrait(${PERSON_FACE_ROW}); offset += personMorph(${shapeKey('Key 1')})*face.x + personMorph(${shapeKey('Key 2')})*face.y; }
+    // the eyes' own keys: their shape, and (instanceEyes) how shocked, happy, angry and sad they look
+    vec3 eyes = vec3(0.0);
+    if ((mask & 16) != 0) { vec4 face = personTrait(${PERSON_FACE_ROW}); eyes += personMorph(${shapeKey('Shape1')})*face.z + personMorph(${shapeKey('Shape2')})*face.w + personMorph(${shapeKey('Shape3')})*personTrait(1).z; }
+    if ((mask & 32) != 0) eyes += personMorph(${shapeKey('Shock')})*instanceEyes.x + personMorph(${shapeKey('Happy')})*instanceEyes.y + personMorph(${shapeKey('Angry')})*instanceEyes.z + personMorph(${shapeKey('Sad')})*instanceEyes.w;
+    // the Blink key was made on the plain face, so as the eyes close every one of the eyes' keys fades out, on every part
+    // of the eyes (not just the lids Blink moves), and back in as they open — laid over a face or an expression it pushes
+    // the lids through each other, and leaves whatever it doesn't move in the wrong place
+    offset += eyes*(1.0 - instanceAnim.w);
+    if ((mask & 2) != 0) offset += personMorph(${shapeKey('Blink')})*instanceAnim.w;
     return offset;
   }
   // Moves the arms out from the sides of a heavy or broad person, so their hands don't swing through their hips.
