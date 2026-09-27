@@ -528,6 +528,9 @@ const personCulling = {
   personCullSphere: { value: new THREE.Vector4(0, 1, 0, 1) }, personTall: { value: 1 },
 };
 const drawingBuffer = new THREE.Vector2();
+// (the same, kept on this side for updatePeople: the last frame's view, see personPixels)
+const viewFrustum = new THREE.Frustum(), viewMatrix = new THREE.Matrix4(), viewSphere = new THREE.Sphere();
+let viewAimed = false;
 /**
  * Tell the person meshes where the view is drawn from, so they can leave out whoever's off screen or too small to see
  * (see personCulled). Called just before the frame is drawn.
@@ -540,6 +543,32 @@ export function aimPersonCulling(camera, renderer) {
   camera.getWorldPosition(personCulling.personViewPos.value);
   // (pixels per metre: at a metre off for a perspective camera, anywhere for an orthographic one)
   personCulling.personViewScale.value.set(drawingBuffer.y*0.5*camera.projectionMatrix.elements[5], camera.isPerspectiveCamera ? 1 : 0);
+  camera.updateMatrixWorld();
+  viewFrustum.setFromProjectionMatrix(viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  viewAimed = true;
+}
+
+// Off screen, or too small on it to make out, the finer things about someone needn't be kept up every frame (see
+// updatePeople): their pose and place once they're out of view, their glances, blinks and face under PERSON_ROUGH_PIXELS
+// (posed roughly, none of it's drawn), and what they wear under PERSON_LAYER_PIXELS (not drawn at all).
+export const PERSON_FACE_PIXELS = PERSON_ROUGH_PIXELS, PERSON_WORN_PIXELS = PERSON_LAYER_PIXELS;
+/**
+ * How many pixels tall someone standing at a spot looked in the last frame drawn, as personOnScreen works it out in
+ * the shader — or -1 if they were out of view (with a margin, as the view may have moved since), or Infinity before
+ * anything's been drawn.
+ * @param {number} x - where they're standing
+ * @param {number} y
+ * @param {number} z
+ * @param {number} tall - how tall they are, in metres
+ * @returns {number}
+ */
+export function personPixels(x, y, z, tall) {
+  if (!viewAimed) return Infinity;
+  viewSphere.center.set(x, y + tall*0.5, z);
+  viewSphere.radius = tall*1.5;
+  if (!viewFrustum.intersectsSphere(viewSphere)) return -1;
+  const [scale, perspective] = personCulling.personViewScale.value.toArray();
+  return tall*scale/(perspective ? Math.max(viewSphere.center.distanceTo(personCulling.personViewPos.value), 1e-3) : 1);
 }
 
 const PERSON_VERTEX_PARS = `
