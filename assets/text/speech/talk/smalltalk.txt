@@ -40,6 +40,10 @@ I can't believe it's already this late. {world.hour 20-3}
 Another day at the office. {here.building = office}
 > Don't remind me. {mood = -1}
 
+Is the robot looking at me? {here.building = pub, weight = 0.5}
+> It's looking at everyone.
+> Wave at it. {happy}
+
 Same again? {here.building = pub}
 > Go on then.
 > I've had enough. {patience, is != drunk}

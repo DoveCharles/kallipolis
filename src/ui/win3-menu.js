@@ -15,6 +15,7 @@ import { closeWindows } from './w3-window.js';
 import { editHints, generalHints } from './view-prefs.js';
 import { fpsCounter } from './fps.js';
 import { openHeldDebug } from './held-debug.js';
+import { openBarbotDebug } from './barbot-debug.js';
 import { people } from '../life/people/people.js';
 import { cars } from '../life/traffic/state.js';
 import { toUi } from './ui-scale.js';
@@ -125,6 +126,7 @@ const MENUS = [
     { label:'Ped Navmesh (debug)', key:'n', check:has('s-peoplenav-debug', 'on'), enabled:has('s-people', 'on'), run:press('s-peoplenav-debug') },
     { label:'FPS (debug)', key:'b', check:fpsCounter.shown, run:fpsCounter.toggle },
     { label:'Held Items (debug)', key:'l', enabled:has('s-people', 'on'), run:openHeldDebug },
+    { label:'Bar Bot (debug)', key:'a', run:openBarbotDebug },
   ]},
   { name:'Options', key:'o', items:[
     { label:'Snap to Grid', key:'g', check:has('grid-toggle', 'active'), run:press('grid-toggle') },
