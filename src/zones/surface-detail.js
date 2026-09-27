@@ -846,8 +846,8 @@ const SAND_GLSL = `
   // stipple of grain and a scatter of shells and dark pebbles sit on top, and the wet sand steps down in two clean bands toward the water.
   vec3 sandColor(vec2 p, float wetDistance) {
     float px = fwidth(p.x) + fwidth(p.y);
-    // Wind-shaped tones: long wavy bands lying along the ripples (crests run across (0.93, 0.36), as in
-    // applySandShader), built from a bent sine for the rhythm and fBm stretched along the crests to break it up
+    // Wind-shaped tones: long wavy bands lying across (0.93, 0.36), built from a bent sine for the rhythm and fBm
+    // stretched along the crests to break it up
     vec2 wa = vec2(0.93, 0.36);
     vec2 tp = p*4.0; // (the scale of the whole pattern)
     float across = dot(tp, wa), along = dot(tp, vec2(-wa.y, wa.x));
@@ -923,7 +923,7 @@ const GRASS_NOISE_GLSL = `
     return 1.0 - smoothstep(0.35, 1.1, px*freq);
   }
 `;
-// A beach zone's surface: all sand, wet along `wetSegments` (its edges that meet water), with faint wind-blown ripples.
+// A beach zone's surface: all sand, wet along `wetSegments` (its edges that meet water).
 // `allWet` makes it wet all over — for the beach slopes running down into the water.
 export function applySandShader(mat, wetSegments, allWet) {
   const wet = App.segmentUniformArray(wetSegments, GRASS_MAX_BEACH_SEGMENTS);
@@ -955,16 +955,7 @@ export function applySandShader(mat, wetSegments, allWet) {
             if (i >= uWetCount) break;
             wetDistance = min(wetDistance, grassDistToSegment(p, uWetSegments[i].xy, uWetSegments[i].zw));
           }
-          vec3 sand = sandColor(p, wetDistance);
-          // wind ripples drawn as lines: a pale crest with a thin shadow just behind it, bent by broad noise so they
-          // don't read as stripes, broken up so they come and go, and gone toward the (flat, wet) waterline
-          float phase = (p.x*0.9 + p.y*0.35 + grassNoise(p*0.15)*6.0)/6.2832;
-          float s = fract(phase), lw = fwidth(phase);
-          float crest = 1.0 - smoothstep(0.035 - lw, 0.035 + lw, abs(s - 0.5));
-          float shade = 1.0 - smoothstep(0.03 - lw, 0.03 + lw, abs(s - 0.58));
-          float keep = toonStep(0.45, grassNoise(p*0.22 + 7.0)) * smoothstep(1.5, 3.5, wetDistance) * (1.0 - smoothstep(0.04, 0.12, lw));
-          sand *= 1.0 + (0.1*crest - 0.09*shade)*keep;
-          diffuseColor.rgb = sand;
+          diffuseColor.rgb = sandColor(p, wetDistance);
         }
       `)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = sandRoughness;');
