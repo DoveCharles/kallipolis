@@ -1889,7 +1889,7 @@ async function loadPub() {
   if (inside && current === LAYOUTS.pub) furnishPub(inside.key);
 }
 modelsLoading.push(loadPub());
-modelsLoading.push(loadBarbot(roomLit));
+modelsLoading.push(loadBarbot());
 // Carpet: a lattice of diamonds with a rosette in each and a smaller one where they meet, over a field flecked with
 // wear — in its own colours (the floor's left white), repeating every 0.8 m.
 const carpet = ([field, lattice, rose, fleck]) => floorTexture(512, 0.8, (g, rng) => {
