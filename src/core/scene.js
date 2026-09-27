@@ -18,6 +18,9 @@ const LIGHT_INTENSITY_SCALE = Math.PI;
 THREE.ShaderChunk.lights_fragment_maps = THREE.ShaderChunk.lights_fragment_maps.replace('iblIrradiance += getIBLIrradiance( geometryNormal );', '');
 
 export const scene = new THREE.Scene();
+// (the scene itself never moves: left to update its own matrix every frame, it would have three.js work out every matrix in
+// it again every frame too, even those of things that never move and are marked not to — see building-batches.js)
+scene.matrixAutoUpdate = false;
 const bgColor = 0x12141a;
 scene.background = null;
 scene.fog = new THREE.Fog(bgColor, 600, 2800);
