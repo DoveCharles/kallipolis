@@ -12,7 +12,7 @@ const ZONE_OF_KIND = {
   warehouse: 'industrial', factory: 'industrial', tankfarm: 'industrial', containeryard: 'industrial',
   farmstead: 'farmland',
   house: 'suburbs',
-  terrace: 'town', shop: 'town', pub: 'town', salon: 'town', clothes: 'town',
+  terrace: 'town', pub: 'town', salon: 'town', clothes: 'town',
   terminal: 'airport', hangar: 'airport', controltower: 'airport',
 };
 const buildings = loadTypeText('assets/text/buildings.txt', {

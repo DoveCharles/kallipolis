@@ -136,7 +136,8 @@ function makeTownBuilding(fp, front, rng, s) {
   const win = windowMat.userData.windowUniforms;
   const group = new THREE.Group();
   group.name = 'Building';
-  Object.assign(group.userData, { footprint: fp, height: h, buildingKind: shop ? 'shop' : 'terrace' }); // (see building-types.js)
+  Object.assign(group.userData, { footprint: fp, height: h, buildingKind: 'terrace' }); // (see building-types.js)
+  // a shopfront's a house too until something below makes it a pub, a salon or a clothes shop: there's no plain shop yet
   if (shop && lit) Object.assign(group.userData, { lobbyLight: litIntensity, lobbyColor: windowMat.userData.litColor });
 
   part(group, buildWallGeometry(fp, h, { c0: [0.9, 0.9, 0.9], c1: [1.03, 1.03, 1.03] }, WINDOW_TILE_WORLD_SIZE, 0), windowMat);

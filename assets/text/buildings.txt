@@ -20,7 +20,7 @@
 #   industrial   warehouse, factory, tankfarm, containeryard
 #   farmland     farmstead
 #   suburbs      house
-#   town         terrace, shop, pub, salon, clothes
+#   town         terrace, pub, salon, clothes (any other shopfront is a terrace)
 #   airport      terminal, hangar, controltower
 #
 
@@ -173,15 +173,6 @@ loves = A chimney that draws
 loves = The kettle
 hates = Damp
 hates = The neighbours (through the wall)
-
-[shop]
-enterable = yes
-name = Shop
-mood = 🛍️
-loves = Regulars
-loves = Half-day closing
-hates = Parking restrictions
-hates = The new supermarket
 
 [pub]
 enterable = yes
