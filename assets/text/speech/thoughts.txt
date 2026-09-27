@@ -12,6 +12,8 @@ Need a drink. {here.building = pub}
 I know this one... {here.building = pub, weight = 0.5}
 Turn it up. {here.building = pub, is = drunk}
 Turn it down. {here.building = pub, patience = -1}
+That robot's polished the same glass three times. {here.building = pub, weight = 0.5}
+Does the bar bot ever sleep? {here.building = pub, weight = 0.3}
 I still can't stop thinking about it. {seen, weight = 3}
 Lovely morning. {world.hour 6-11, mood}
 Everyone's dying lately. {world.morality < -0.3, world.morality = -1}

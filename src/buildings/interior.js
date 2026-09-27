@@ -12,6 +12,7 @@ import { isMuted, playSound, setIndoors } from '../audio/sfx.js';
 import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
 import { pubMusic, stopPubMusic } from '../audio/pub-music.js';
 import { loadingTask, loadingSay } from '../ui/loading.js';
+import { loadBarbot, placeBarbot, updateBarbot, barbotWarmUp } from './barbot.js';
 
 // ============================================================ going inside a building
 // Every building has the same inside: one room (furnished one of a few ways), built once and moved to whichever building's
@@ -1843,6 +1844,7 @@ async function loadPub() {
   if (inside && current === LAYOUTS.pub) furnishPub(inside.key);
 }
 modelsLoading.push(loadPub());
+modelsLoading.push(loadBarbot(roomLit));
 // Carpet: a lattice of diamonds with a rosette in each and a smaller one where they meet, over a field flecked with
 // wear — in its own colours (the floor's left white), repeating every 0.8 m.
 const carpet = ([field, lattice, rose, fleck]) => floorTexture(512, 0.8, (g, rng) => {
@@ -1948,6 +1950,9 @@ function furnishPub(key) {
     }
   }
   taken.push({ x0: behind.x0 - 0.6, x1: ROOM_W/2, z0: barFront, z1: barFront + 0.9 });
+  // and the bar bot behind it (see barbot.js)
+  placeBarbot(group, { x0: cx + counter.bounds.x0, x1: Math.min(cx + counter.bounds.x1, ROOM_W/2), barZ: cz + counter.bounds.z0 },
+    mulberry32(hashNameToNumber(key + ' bar bot')));
 
   // `name` at `spot` ({ x, z, angle, area }, as againstWall finds it), its area kept
   const place = (name, spot, options) => {
@@ -2408,6 +2413,8 @@ async function warmUp() {
       for (const piece of Object.values(set)) sets.add(piece.object.clone());
       await compile(`Preparing ${name} furniture...`);
     }
+    const barbot = barbotWarmUp();
+    if (barbot) { sets.add(barbot); await compile('Preparing the bar bot...'); }
   } finally {
     floorMaterial.map = floorMaterial.emissiveMap = floorMap;
     floorMaterial.needsUpdate = true;
@@ -2606,6 +2613,7 @@ export function updateInteriorCamera() {
   // (a pub's music comes from up by the ceiling, over the middle of the room)
   if (inside && current === LAYOUTS.pub && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)));
   else stopPubMusic();
+  updateBarbot(!!inside && current === LAYOUTS.pub, performance.now() - occupiedAt < 1000);
   const goal = inside ? viewFov() : (App.ridingFov?.() ?? BASE_FOV*(App.boostFovScale?.() ?? 1)); // (riding a train carriage sets its own: see trains.js; boosting widens it: see life/traffic/driving.js)
   if (camera.fov === goal) return;
   camera.fov = Math.abs(goal - camera.fov) < 0.05 ? goal : camera.fov + (goal - camera.fov)*FOV_EASE;
