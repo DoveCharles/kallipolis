@@ -240,10 +240,12 @@ S.sceneIndexDirty = true;
 // well before its group is hung off the scene, and anything indexed in between would be missed. Every add and remove
 // goes through these two, detached ones included — marking stale more often than strictly needed, which costs one
 // walk on the next frame and never a wrong answer. Nothing is added or taken out while the city just sits there, so
-// an idle frame does no walking at all.
+// an idle frame does no walking at all. (Nor a sound coming and going — a THREE.PositionalAudio is hung off the scene for
+// each one played, and nothing the index keeps is ever one of them: see playSound in audio/sfx.js.)
+const isSound = o => o?.type === 'PositionalAudio' || o?.type === 'Audio';
 ['add', 'remove'].forEach(method => {
   const inner = THREE.Object3D.prototype[method];
-  THREE.Object3D.prototype[method] = function (...objects) { S.sceneIndexDirty = true; return inner.apply(this, objects); };
+  THREE.Object3D.prototype[method] = function (...objects) { if (!objects.every(isSound)) S.sceneIndexDirty = true; return inner.apply(this, objects); };
 });
 export function refreshSceneIndex() {
   if (!S.sceneIndexDirty) return;
@@ -282,13 +284,23 @@ function updateWindowGlowForSun() {
 const SKY_ENV_FACE_SIZE = 16;
 function makeSkyEnvFace() { const c = document.createElement('canvas'); c.width=SKY_ENV_FACE_SIZE; c.height=SKY_ENV_FACE_SIZE; return c; }
 const skyEnvFaces = { px:makeSkyEnvFace(), nx:makeSkyEnvFace(), py:makeSkyEnvFace(), ny:makeSkyEnvFace(), pz:makeSkyEnvFace(), nz:makeSkyEnvFace() };
-export const SKY_ENV_MAP = new THREE.CubeTexture([skyEnvFaces.px, skyEnvFaces.nx, skyEnvFaces.py, skyEnvFaces.ny, skyEnvFaces.pz, skyEnvFaces.nz]);
-SKY_ENV_MAP.mapping = THREE.CubeReflectionMapping;
+const skyCube = new THREE.CubeTexture([skyEnvFaces.px, skyEnvFaces.nx, skyEnvFaces.py, skyEnvFaces.ny, skyEnvFaces.pz, skyEnvFaces.nz]);
+skyCube.mapping = THREE.CubeReflectionMapping;
+// The faces blurred for rough reflections (a PMREM, as three.js would make of the cube for any standard material), into
+// one target that's filled again when the sky changes. Left to three.js, the cube would have to be disposed to have a
+// repaint picked up, and each time it made a new target — and every material reflecting the sky worked its shader out
+// again for the new texture.
+const skyPmrem = new THREE.PMREMGenerator(renderer);
+const skyEnvTarget = skyPmrem.fromCubemap(skyCube);
+export const SKY_ENV_MAP = skyEnvTarget.texture;
 // The same sky colors as uniforms, for shaders that fake the reflection themselves (the plain windows: see
 // buildings/windows.js); kept current by updateSun, quick or not, since that's only two colors.
 export const SKY_UNIFORMS = { uSkyTop: { value: new THREE.Color() }, uSkyHorizon: { value: new THREE.Color() } };
+let skyEnvColors = '';
 function updateSkyEnvMap(sky) {
   const topHex = '#'+sky.top.getHexString(), horizonHex = '#'+sky.horizon.getHexString();
+  if (topHex + horizonHex === skyEnvColors) return; // (the same sky as last time: nothing to paint)
+  skyEnvColors = topHex + horizonHex;
   [skyEnvFaces.px, skyEnvFaces.nx, skyEnvFaces.pz, skyEnvFaces.nz].forEach(canvas => {
     const ctx = canvas.getContext('2d');
     const grad = ctx.createLinearGradient(0,0,0,SKY_ENV_FACE_SIZE);
@@ -299,10 +311,8 @@ function updateSkyEnvMap(sky) {
   });
   const pyCtx = skyEnvFaces.py.getContext('2d'); pyCtx.fillStyle = topHex; pyCtx.fillRect(0,0,SKY_ENV_FACE_SIZE,SKY_ENV_FACE_SIZE);
   const nyCtx = skyEnvFaces.ny.getContext('2d'); nyCtx.fillStyle = horizonHex; nyCtx.fillRect(0,0,SKY_ENV_FACE_SIZE,SKY_ENV_FACE_SIZE);
-  // the PMREM made from the texture is cached until the texture is disposed, so dispose it to have the repaint picked up
-  // (it's uploaded and blurred again the next time it's drawn)
-  SKY_ENV_MAP.dispose();
-  SKY_ENV_MAP.needsUpdate = true;
+  skyCube.needsUpdate = true;
+  skyPmrem.fromCubemap(skyCube, skyEnvTarget);
 }
 // Weather, 0..1 each (see "weather") — here because it dims the light and greys the sky.
 S.weatherRain = 0, S.weatherSnow = 0, S.weatherClouds = 0;
