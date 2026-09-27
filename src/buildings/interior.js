@@ -148,7 +148,7 @@ const punched = new THREE.Group(), curtain = new THREE.Group();
 room.add(punched, curtain);
 wall(...FAR_X, 0, ROOM_D/2 + WALL/2, 0, WALL, punched);       // far, along x
 wall(...FAR_Z, ROOM_W/2 + WALL/2, 0, Math.PI/2, WALL, punched); // far, along z
-// (or, in a shop, blank: its window's its shopfront, behind the camera — see `shopfront`, below)
+// (or, in a shop, blank: its window's its shopfront, in the wall with the door — see `shopfront`, below)
 const blankWalls = new THREE.Group();
 blankWalls.visible = false;
 room.add(blankWalls);
@@ -184,6 +184,9 @@ curtainWall(ROOM_D + WALL, ROOM_W/2 + WALL/2, 0, Math.PI/2, -ROOM_D/2 + COLUMN/2
 curtain.visible = false;
 /** The chance an office has windows punched through its walls, as a home does, rather than glass floor to ceiling. */
 const OFFICE_PUNCHED = 0.1;
+/** The chance a pub's room has a shopfront in the wall with the door, as a shop's does (see `shopfront`), rather than
+ * windows in its far walls. */
+const PUB_SHOPFRONT = 0.5;
 // a number from 0 up to 1 for a building's key, the same every time (and unlike its number, which picks home or office),
 // and different for each `salt`
 function keyFraction(key, salt = ':walls') {
@@ -191,36 +194,38 @@ function keyFraction(key, salt = ':walls') {
   for (const ch of String(key) + salt) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
   return (h >>> 0)/2**32;
 }
-const backWall = new THREE.Group();
-room.add(backWall);
-wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK, backWall);  // behind the camera
-// In a shop (a salon or a clothes shop: see `shopfront` on its layout), that wall's its shopfront instead, on the street:
-// glass almost all of it, from a low stallriser up to a deep fascia, in a frame split into bays by thin mullions — and
-// its far walls blank (blankWalls, above).
-const SHOPFRONT_RISER = 0.35, SHOPFRONT_TOP = 2.75, SHOPFRONT_BAYS = 4;
-const shopfront = new THREE.Group();
-shopfront.visible = false;
-room.add(shopfront);
-{
-  const z = -ROOM_D/2 - WALL/2, glassH = SHOPFRONT_TOP - SHOPFRONT_RISER, mid = (SHOPFRONT_RISER + SHOPFRONT_TOP)/2;
-  box(ROOM_W + THICK*2, SHOPFRONT_RISER, WALL, wallMaterial, 0, SHOPFRONT_RISER/2, z, shopfront);
-  box(ROOM_W + THICK*2, ROOM_H - SHOPFRONT_TOP, WALL, wallMaterial, 0, (SHOPFRONT_TOP + ROOM_H)/2, z, shopfront);
-  for (const side of [-1, 1]) box(THICK, glassH, WALL, wallMaterial, side*(ROOM_W/2 + THICK/2), mid, z, shopfront);
-  box(ROOM_W, glassH, 0.02, glassMaterial, 0, mid, z, shopfront);
-  box(ROOM_W, 0.08, WALL + 0.08, frameMaterial, 0, SHOPFRONT_RISER, z, shopfront);  // the sill
-  box(ROOM_W, 0.1, WALL + 0.04, frameMaterial, 0, SHOPFRONT_TOP, z, shopfront);     // the transom
-  for (let i = 0; i <= SHOPFRONT_BAYS; i++) box(0.07, glassH, WALL + 0.04, frameMaterial, -ROOM_W/2 + 0.035 + i*(ROOM_W - 0.07)/SHOPFRONT_BAYS, mid, z, shopfront);
-}
+wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK);  // behind the camera
 // The other, along z, has the room's door in it, by the corner the camera starts in: a doorway some way into the wall,
 // black at the back — where anyone coming in comes from, and anyone going goes — with a door hung in it that swings in
 // to let them through (see openRoomDoor).
 const DOOR_W = 0.9, DOOR_H = 2.1, DOOR_Z = -ROOM_D/2 + 1, RECESS = 0.5;   // the doorway: where along the wall, how deep
 const doorFrom = DOOR_Z - DOOR_W/2, doorTo = DOOR_Z + DOOR_W/2;
-box(THICK - RECESS, ROOM_H, ROOM_D, wallMaterial, -ROOM_W/2 - RECESS - (THICK - RECESS)/2, ROOM_H/2, 0);
 box(RECESS, ROOM_H, doorFrom + ROOM_D/2, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorFrom - ROOM_D/2)/2);
-box(RECESS, ROOM_H, ROOM_D/2 - doorTo, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorTo + ROOM_D/2)/2);
 box(RECESS, ROOM_H - DOOR_H, DOOR_W, wallMaterial, -ROOM_W/2 - RECESS/2, (DOOR_H + ROOM_H)/2, DOOR_Z);
 box(0.02, DOOR_H, DOOR_W, new THREE.MeshBasicMaterial({ color: 0x000000 }), -ROOM_W/2 - RECESS + 0.02, DOOR_H/2, DOOR_Z);
+// The rest of that wall, past the door: solid (with the thick wall behind it all along), or in a shop (a salon or a
+// clothes shop: see `shopfront` on its layout) its shopfront, on the street — past a pier beside the door, glass the rest
+// of the way, from a low stallriser up to a deep fascia, split into bays by thin mullions — with its far walls blank
+// (blankWalls, above).
+const doorWall = new THREE.Group(), shopfront = new THREE.Group();
+shopfront.visible = false;
+room.add(doorWall, shopfront);
+box(THICK - RECESS, ROOM_H, ROOM_D, wallMaterial, -ROOM_W/2 - RECESS - (THICK - RECESS)/2, ROOM_H/2, 0, doorWall);
+box(RECESS, ROOM_H, ROOM_D/2 - doorTo, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorTo + ROOM_D/2)/2, doorWall);
+const SHOPFRONT_PIER = 0.35, SHOPFRONT_RISER = 0.35, SHOPFRONT_TOP = 2.75, SHOPFRONT_BAYS = 2;
+const shopfrontFrom = doorTo + SHOPFRONT_PIER; // (where the glass starts, along z; it runs on to the far wall)
+{
+  const x = -ROOM_W/2 - RECESS/2, len = ROOM_D/2 - shopfrontFrom, z = (shopfrontFrom + ROOM_D/2)/2;
+  const glassH = SHOPFRONT_TOP - SHOPFRONT_RISER, mid = (SHOPFRONT_RISER + SHOPFRONT_TOP)/2;
+  box(THICK - RECESS, ROOM_H, shopfrontFrom + ROOM_D/2, wallMaterial, -ROOM_W/2 - RECESS - (THICK - RECESS)/2, ROOM_H/2, (shopfrontFrom - ROOM_D/2)/2, shopfront);
+  box(RECESS, ROOM_H, SHOPFRONT_PIER, wallMaterial, x, ROOM_H/2, doorTo + SHOPFRONT_PIER/2, shopfront);
+  box(RECESS, SHOPFRONT_RISER, len, wallMaterial, x, SHOPFRONT_RISER/2, z, shopfront);
+  box(RECESS, ROOM_H - SHOPFRONT_TOP, len, wallMaterial, x, (SHOPFRONT_TOP + ROOM_H)/2, z, shopfront);
+  box(0.02, glassH, len, glassMaterial, x, mid, z, shopfront);
+  box(RECESS + 0.08, 0.08, len, frameMaterial, x, SHOPFRONT_RISER, z, shopfront);  // the sill
+  box(RECESS + 0.04, 0.1, len, frameMaterial, x, SHOPFRONT_TOP, z, shopfront);     // the transom
+  for (let i = 0; i <= SHOPFRONT_BAYS; i++) box(RECESS + 0.04, glassH, 0.07, frameMaterial, x, mid, shopfrontFrom + 0.035 + i*(len - 0.07)/SHOPFRONT_BAYS, shopfront);
+}
 // the door, on its hinge at the corner end of the doorway, and a knob on it
 const DOOR_OPEN = THREE.MathUtils.degToRad(95), DOOR_HOLD = 1500, DOOR_EASE = 0.12; // how far, for how long (ms), how quickly
 const doorMaterial = roomLit(new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.7 }));
@@ -1378,8 +1383,8 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
   const WALL_SIDES = [
     { nx: 0, nz: -1, at: u => ({ x: u, z: ROOM_D/2 }), length: ROOM_W, far: layout.shopfront ? null : FAR_X, flip: 1 },
     { nx: -1, nz: 0, at: u => ({ x: ROOM_W/2, z: u }), length: ROOM_D, far: layout.shopfront ? null : FAR_Z, flip: -1 },
-    { nx: 0, nz: 1, at: u => ({ x: u, z: -ROOM_D/2 }), length: ROOM_W, glazed: !!layout.shopfront },
-    { nx: 1, nz: 0, at: u => ({ x: -ROOM_W/2, z: u }), length: ROOM_D },
+    { nx: 0, nz: 1, at: u => ({ x: u, z: -ROOM_D/2 }), length: ROOM_W },
+    { nx: 1, nz: 0, at: u => ({ x: -ROOM_W/2, z: u }), length: ROOM_D, glazed: !!layout.shopfront },
   ].map(side => ({ ...side, angle: Math.atan2(side.nx, side.nz) }));
   // whether something from u0 to u1 along a far wall, and taller than its windowsills, stands in front of a window (a
   // shop's shopfront's all window)
@@ -2231,7 +2236,7 @@ function measureSeatsUnder(piece, over) {
 // ---------------------------------------------------------- a hair salon
 // A salon is a high-street one from the nineties: a chequered vinyl floor, black and white (now and then with grey in
 // it), white tiles to the dado (see `dado`) and pastel walls above, fluorescent tubes on the ceiling — and, like any
-// shop, its window a shopfront behind the camera, the far walls left blank for the mirrors (`shopfront`: see
+// shop, its window a shopfront along the wall with the door, the far walls left blank for the mirrors (`shopfront`: see
 // enterBuilding and planRoom). It's
 // fitted out from a model of its own (assets/models/Salon.glb, built by tools/salon-models.py, which lists its pieces),
 // each salon its own way (from its key): a row of styling stations down a blank wall, each a mirror with a chair in
@@ -2339,11 +2344,11 @@ function furnishSalon(key) {
     if (spot) place('Trolley', spot, { solid: F.Trolley.bounds });
   }
 
-  // the reception desk just in from the door, along the door's wall, with room behind it
+  // the reception desk along the wall behind the camera, clear of its corner, with room behind it
   if (F.Reception) {
     const d = F.Reception, rr = { ...d.bounds, z0: d.bounds.z0 - 0.7, z1: d.bounds.z1 + 0.6 };
-    for (const u of [DOOR_Z + 2.2, DOOR_Z + 2.6, DOOR_Z + 3.0]) {
-      const spot = atWall(WALL_SIDES[3], u, rr);
+    for (const u of [-0.6, -0.2, 0.2, 0.6, 1.0]) {
+      const spot = atWall(WALL_SIDES[2], u, rr);
       if (!spot) continue;
       put('Reception', spot.x, spot.z, spot.angle); // (out from the wall by the gap behind it, which rr takes in)
       taken.push(spot.area);
@@ -2487,11 +2492,11 @@ function furnishClothes(key) {
     layout.cubicles.push({ drape, width: F.Curtain.w, shown: CURTAIN_OPEN, closed: false, by: null,
       inside: at(0, b.z0 + 0.6), front: at(0, b.z1 + 0.55), facing: room.rotation.y + spot.angle });
   }
-  // the counter with the till, out from a wall with room behind it to serve from
+  // the counter with the till, out from the wall behind the camera (clear of its corner), with room behind it to serve from
   if (F.Counter) {
     const c = F.Counter, rr = { ...c.bounds, z0: c.bounds.z0 - 0.8, z1: c.bounds.z1 + 0.6 };
-    for (const u of [DOOR_Z + 2.4, DOOR_Z + 2.9, DOOR_Z + 3.4]) {
-      const spot = atWall(WALL_SIDES[3], u, rr);
+    for (const u of [-0.4, 0, 0.4, 0.8, 1.2]) {
+      const spot = atWall(WALL_SIDES[2], u, rr);
       if (!spot) continue;
       put('Counter', spot.x, spot.z, spot.angle);
       taken.push(spot.area);
@@ -2521,7 +2526,15 @@ function furnishClothes(key) {
       return;
     }
   };
-  for (const [name, n] of [['Rack', 2 + Math.floor(rng()*2)], ['RoundRack', 1 + Math.floor(rng()*2)], ['DisplayTable', 1], ['Mannequin', 1 + Math.floor(rng()*2)]])
+  // a mannequin or two in the window, looking out at the street
+  if (F.Mannequin) for (let k = 1 + Math.floor(rng()*2), z = ROOM_D/2 - 0.7; k > 0 && z > shopfrontFrom + 0.5; z -= 0.3) {
+    const x = -ROOM_W/2 + 0.55, area = turnedRect(F.Mannequin.bounds, -Math.PI/2, x, z);
+    if (!fits(area, 0.3)) continue;
+    put('Mannequin', x, z, -Math.PI/2);
+    taken.push(area);
+    k--; z -= 0.6;
+  }
+  for (const [name, n] of [['Rack', 2 + Math.floor(rng()*2)], ['RoundRack', 1 + Math.floor(rng()*2)], ['DisplayTable', 1], ['Mannequin', Math.floor(rng()*2)]])
     for (let k = 0; k < n; k++) inTheOpen(name, name === 'Mannequin' ? 0.5 : 0.75);
 
   const onWall = wallHanger(F, plan, rng, [...tall, DOOR_CLEAR]);
@@ -2928,11 +2941,13 @@ export function enterBuilding(group, key, kind = 'home') {
   if (inside) leaveBuilding();
   useLayout(kind);
   const glass = current === LAYOUTS.office && keyFraction(key) >= OFFICE_PUNCHED;
+  // (a pub's room comes either way: windows in the far walls, or a shopfront beside the door — by its key)
+  if (current === LAYOUTS.pub) LAYOUTS.pub.shopfront = keyFraction(key, ':shopfront') < PUB_SHOPFRONT;
   // (a warehouse or a factory's room is on its ground floor: its roof's high over one big space, not storeys — and a pub's
   // on the street)
   const workshop = !!current.industrial, groundFloor = workshop || current === LAYOUTS.pub || !!current.shop;
   curtain.visible = glass; punched.visible = !glass && !current.shopfront;
-  blankWalls.visible = shopfront.visible = !!current.shopfront; backWall.visible = !current.shopfront;
+  blankWalls.visible = shopfront.visible = !!current.shopfront; doorWall.visible = !current.shopfront;
   const fp = group.userData.footprint;
   const bounds = new THREE.Box3().setFromObject(group);
   const base = bounds.min.y, height = group.userData.height ?? (bounds.max.y - base);
