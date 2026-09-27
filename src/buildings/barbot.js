@@ -90,7 +90,7 @@ export async function loadBarbot() {
     const m = o.material;
     if (m.name === 'Face' || m.name === 'FaceBacklight') screens.push(o);
     else if (!m.transparent) {
-      if (!toon.has(m)) toon.set(m, Object.assign(new THREE.MeshToonMaterial({ name: m.name, color: m.color, map: m.map, gradientMap: TOON_RAMP }),
+      if (!toon.has(m)) toon.set(m, Object.assign(new THREE.MeshToonMaterial({ name: m.name, color: m.color, map: m.map, gradientMap: TOON_RAMP, side: THREE.DoubleSide, flatShading: true }),
         { defines: { ROOM_LAMP: '', ROOM_GLOW: '' } }));
       o.material = toon.get(m);
     }
