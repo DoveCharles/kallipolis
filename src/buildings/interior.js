@@ -216,16 +216,24 @@ const SHOPFRONT_PIER = 0.35, SHOPFRONT_RISER = 0.35, SHOPFRONT_TOP = 2.75, SHOPF
 const shopfrontFrom = doorTo + SHOPFRONT_PIER; // (where the glass starts, along z; it runs on to the far wall)
 {
   const x = -ROOM_W/2 - RECESS/2, len = ROOM_D/2 - shopfrontFrom, z = (shopfrontFrom + ROOM_D/2)/2;
-  const glassH = SHOPFRONT_TOP - SHOPFRONT_RISER, mid = (SHOPFRONT_RISER + SHOPFRONT_TOP)/2;
   box(THICK - RECESS, ROOM_H, shopfrontFrom + ROOM_D/2, wallMaterial, -ROOM_W/2 - RECESS - (THICK - RECESS)/2, ROOM_H/2, (shopfrontFrom - ROOM_D/2)/2, shopfront);
   box(RECESS, ROOM_H, SHOPFRONT_PIER, wallMaterial, x, ROOM_H/2, doorTo + SHOPFRONT_PIER/2, shopfront);
-  box(RECESS, SHOPFRONT_RISER, len, wallMaterial, x, SHOPFRONT_RISER/2, z, shopfront);
   box(RECESS, ROOM_H - SHOPFRONT_TOP, len, wallMaterial, x, (SHOPFRONT_TOP + ROOM_H)/2, z, shopfront);
-  box(0.02, glassH, len, glassMaterial, x, mid, z, shopfront);
-  box(RECESS + 0.08, 0.08, len, frameMaterial, x, SHOPFRONT_RISER, z, shopfront);  // the sill
   box(RECESS + 0.04, 0.1, len, frameMaterial, x, SHOPFRONT_TOP, z, shopfront);     // the transom
-  for (let i = 0; i <= SHOPFRONT_BAYS; i++) box(RECESS + 0.04, glassH, 0.07, frameMaterial, x, mid, shopfrontFrom + 0.035 + i*(len - 0.07)/SHOPFRONT_BAYS, shopfront);
+  // below it, the glass from a stallriser `riser` high: low, or (see shopfrontGlass) as high as a dado rail
+  for (const riser of [SHOPFRONT_RISER, SILL - 0.05]) {
+    const glazing = new THREE.Group(), glassH = SHOPFRONT_TOP - riser, mid = (riser + SHOPFRONT_TOP)/2;
+    shopfront.add(glazing);
+    box(RECESS, riser, len, wallMaterial, x, riser/2, z, glazing);
+    box(0.02, glassH, len, glassMaterial, x, mid, z, glazing);
+    box(RECESS + 0.08, 0.08, len, frameMaterial, x, riser, z, glazing);  // the sill
+    for (let i = 0; i <= SHOPFRONT_BAYS; i++) box(RECESS + 0.04, glassH, 0.07, frameMaterial, x, mid, shopfrontFrom + 0.035 + i*(len - 0.07)/SHOPFRONT_BAYS, glazing);
+  }
 }
+// the shopfront's glass: from its stallriser, or from the dado rail's height in a room with one (so the rail doesn't
+// run across the glass)
+const [lowGlass, dadoGlass] = shopfront.children.slice(-2);
+const shopfrontGlass = high => { lowGlass.visible = !high; dadoGlass.visible = high; };
 // the door, on its hinge at the corner end of the doorway, and a knob on it
 const DOOR_OPEN = THREE.MathUtils.degToRad(95), DOOR_HOLD = 1500, DOOR_EASE = 0.12; // how far, for how long (ms), how quickly
 const doorMaterial = roomLit(new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.7 }));
@@ -299,6 +307,7 @@ function useLayout(name) {
   current.group.visible = true;
   trim.visible = false; // (till a posh home's furnished)
   dado.visible = !!current.industrial || !!current.panelled;
+  shopfrontGlass(dado.visible);
   paintRoom();
 }
 function paintRoom() {
