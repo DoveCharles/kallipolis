@@ -223,7 +223,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `engine.html` (4K) Standalone "Engine bench" test page for engine sounds.
 - `glasses-model.py` (4K) Builds assets/models/Glasses.glb:
 - `hair-models.py` (24K) Adds hairstyles and hats to assets/models/Hair.glb, low-poly and flat-faced like the ones already there (see "hairstyles and facial hair" in src/life/…
-- `clothes-models.py` (14K) Builds assets/models/Clothes.glb: a clothes shop's rails, round rails, wall shelves, display table, shoe stand, mannequin, counter, changing room and its curtain, floor mirror, plant, sale sign and spotlight track (furnished by furnishClothes in buildings/interior.js).
+- `clothes-models.py` (14K) Built assets/models/Clothes.glb (since reworked by hand in Blender — rerunning it would undo that): a clothes shop's rails, round rails, wall shelves, display table, shoe stand, mannequin, counter, changing room and its curtain, floor mirror, plant, sale sign and spotlight track (furnished by furnishClothes in buildings/interior.js).
 - `industrial-models.py` (32K) Builds assets/models/Industrial.glb:
 - `interior.html` (7K) Standalone "Interior view bench" test page.
 - `midcentury-models.py` (18K) Builds assets/models/MidCentury.glb:
@@ -231,7 +231,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `pub-models.py` Builds assets/models/Pub.glb: a British pub's bar, back bar, stools, settles, booths, tables, fireplace, dartboard, fruit machine, wall pieces and pints (furnished by furnishPub in buildings/interior.js).
 - `posh-models.py` (28K) Builds assets/models/Posh.glb:
 - `reference-head.py` (2K) Puts a whole head (ReferenceHead) into assets/models/Hair.glb where the hairstyles sit, to model against in Blender; the game skips it.
-- `salon-models.py` (17K) Builds assets/models/Salon.glb: a nineties hair salon's styling stations and chairs, backwash basin, hood dryer chairs, waiting bench, magazine table, reception, trolley, product shelves, fish tank, plant, posters, clock and fluorescent tubes (furnished by furnishSalon in buildings/interior.js).
+- `salon-models.py` (17K) Built assets/models/Salon.glb (since reworked by hand in Blender — rerunning it would undo that): a nineties hair salon's styling stations and chairs, backwash basin, hood dryer chairs, waiting bench, magazine table, reception, trolley, product shelves, fish tank, plant, posters, clock and fluorescent tubes (furnished by furnishSalon in buildings/interior.js).
 - `set_pieces.py` (6K) The building blocks tools/posh-models.py, tools/student-models.py and the rest make their furniture sets from:
 - `skirt-models.py` (3K) Builds assets/models/Skirt.glb:
 - `speech.html` (6K) Standalone "Speech bench" test page for synthesized speech.
