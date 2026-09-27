@@ -4,8 +4,9 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
 // ============================================================ the bar bot
 // Every pub has a bar bot (assets/models/Barbot.glb) behind its bar, between the back bar and the counter, and it never
-// leaves: it only slides along the bar (the room's x), its body bone (Body) turning on its yaw to face the way it's going
-// and back round to face the bar when it stops. Now and then it polishes a glass (PolishGlass) or wipes the bar
+// leaves: it only slides along the bar (the room's x), its body (Body) turning on its yaw to face the way it's going
+// and back round to face the bar when it stops. (Body's the root bone, at the model's origin and never moved by its
+// poses, so it's the whole model that's turned: the same to look at, and the pose mixer never sees it — see `yaw`.) Now and then it polishes a glass (PolishGlass) or wipes the bar
 // (CleanBar: done from the middle of the counter, facing it, where it was animated), looking down (the LookDown shape)
 // while it does; otherwise its eyes (Look Left/Right) flick about and its eyebrow (Raised Eyebrow) goes up now and then.
 // Awake, it blinks (Blink: shut outright and open again, no easing) every few seconds.
@@ -28,10 +29,11 @@ const ASLEEP_FACE = 0.85;   // and the Zzz's (the Face material's), of the backl
 const HEAD_REACH = 0.7;     // rad, the most its head swivels either way looking round
 const HEAD_EASE = 3;        // the head's swivel, eased per second
 const END_GAP = 0.35;       // kept from either end of the counter
+const STAND_FROM = 5, STAND_MORE = 7; // s stood about between one thing and the next (5 to 12)
 const SHAPES = ['Look Left/Right', 'Raised Eyebrow', 'LookDown', 'Blink'];
 const BLINK = 0.12;         // s, the eyes shut
 
-let bot = null;             // { root, rig, body, mixer, actions, shaped, screens, face, zzz, height }
+let bot = null;             // { root, rig, head, mixer, actions, shaped, screens, face, zzz, height }
 let place = null;           // where it is in this pub: { x0, x1, mid, barZ }
 const state = {
   x: 0, goal: 0, yaw: 0, doing: 'idle', next: 0, then: null, asleep: false, snap: true,
@@ -39,7 +41,7 @@ const state = {
   head: 0, headGoal: 0, headNext: 0,
 };
 let lastTime = 0;
-const yawTurn = new THREE.Quaternion(), yawUndo = new THREE.Quaternion(), headTurn = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0);
+const yawUndo = new THREE.Quaternion(), headTurn = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0);
 
 /**
  * Load the model, lit with the room's `lit` (see roomLit in interior.js) but for its screen and glass.
@@ -54,10 +56,9 @@ export async function loadBarbot(lit) {
     return;
   }
   const rig = gltf.scene;
-  let body = null, head = null, face = null, zzz = null;
+  let head = null, face = null, zzz = null;
   const shaped = [], screens = [], meshes = [];
   rig.traverse(o => {
-    if (o.isBone && /^body/i.test(o.name) && !body) body = o;
     if (o.isBone && o.name === 'Head') head = o;
     if (o.name === 'Face' && !o.isBone) face = o;
     if (o.name === 'Zzz' && !o.isBone) zzz = o;
@@ -96,7 +97,7 @@ export async function loadBarbot(lit) {
     actions[clip.name] = action;
   }
   mixer.addEventListener('finished', e => { if (e.action === actions[state.doing]) settle(); });
-  bot = { root, rig, body, head, mixer, actions, shaped, screens, face, zzz, height: size.y };
+  bot = { root, rig, head, mixer, actions, shaped, screens, face, zzz, height: size.y };
   sizeBarbot();
 }
 
@@ -145,16 +146,17 @@ function pose(name, fade = FADE) {
 }
 function settle(fade = FADE) {
   state.doing = 'idle';
-  state.next = 1 + Math.random()*3;
+  state.next = STAND_FROM + Math.random()*STAND_MORE;
   state.headNext = performance.now()/1000 + 0.3 + Math.random()*0.7;
   pose('DefaultPose', fade);
 }
+// (mostly it stands where it is looking round the room: it's only now and then that it goes along the bar)
 function decide() {
   const r = Math.random();
-  if (r < 0.6) walkTo(place.x0 + Math.random()*(place.x1 - place.x0), null);
-  else if (r < 0.75) walkTo(place.x0 + Math.random()*(place.x1 - place.x0), 'PolishGlass');
-  else if (r < 0.9) walkTo(Math.min(place.x1, Math.max(place.x0, place.mid)), 'CleanBar');
-  else state.next = 0.5 + Math.random()*1.5;
+  if (r < 0.5) state.next = STAND_FROM + Math.random()*STAND_MORE;
+  else if (r < 0.62) walkTo(place.x0 + Math.random()*(place.x1 - place.x0), null);
+  else if (r < 0.82) walkTo(state.x, 'PolishGlass');
+  else walkTo(Math.min(place.x1, Math.max(place.x0, place.mid)), 'CleanBar');
 }
 function walkTo(x, then) {
   state.goal = x;
@@ -171,6 +173,12 @@ export function updateBarbot(inPub, occupied) {
   const now = performance.now()/1000, dt = Math.min(0.1, now - lastTime);
   lastTime = now;
   if (!bot || !place || !inPub || bot.root.parent == null) return;
+
+  // Last frame's head swivel taken off first, before anything else touches the pose: the mixer only writes a bone when
+  // its value changes, and the poses mostly hold Head still, so otherwise the swivels pile up. And first, before any
+  // pose starts or stops (below, and in the mixer's 'finished'): starting one saves the bones as they are, and stopping
+  // the last restores them, so a swivel still on then would be saved as where the head rests, and taken off again on top.
+  if (bot.head) bot.head.quaternion.premultiply(yawUndo.copy(headTurn).invert());
 
   const snap = state.snap;
   state.snap = false;
@@ -207,12 +215,8 @@ export function updateBarbot(inPub, occupied) {
   }
   state.head += (state.headGoal - state.head)*Math.min(1, HEAD_EASE*dt);
 
-  // (last frame's turns taken off first: the mixer only writes a bone when its value changes, and the poses hold Body
-  // and Head still, so otherwise the turns pile up)
-  if (bot.body) bot.body.quaternion.premultiply(yawUndo.copy(yawTurn).invert());
-  if (bot.head) bot.head.quaternion.premultiply(yawUndo.copy(headTurn).invert());
   bot.mixer.update(dt);
-  if (bot.body) bot.body.quaternion.premultiply(yawTurn.setFromAxisAngle(UP, state.yaw));
+  bot.rig.rotation.y = state.yaw;
   if (bot.head) bot.head.quaternion.premultiply(headTurn.setFromAxisAngle(UP, state.head));
 
   // the face: looking down at the work, or the eyes flicking about and the eyebrow going up now and then
