@@ -165,6 +165,7 @@ export function generateFarmlandContent(zone, poly, cutouts, blockers) {
       group.userData.footprint = [[1, 1], [1, -1], [-1, -1], [-1, 1]]
         .map(([along, across]) => ({ x: c.x + dx*6*along + nx*3.6*across, z: c.z + dz*6*along + nz*3.6*across }));
       group.userData.height = 6.8;
+      group.userData.batchable = true; // (drawn merged with the rest of its zone: see buildings/building-batches.js)
       const shed = { x: c.x - nx*6.5 + dx*2, z: c.z - nz*6.5 + dz*2 };
       barn.addBox(shed.x, shed.z, dx, dz, 2.4, 1.8, Y_PARK, Y_PARK + 2.4);
       addGableRoof(roof, barn, shed.x, shed.z, dx, dz, 2.6, 2.0, Y_PARK + 2.4, 1.1);

@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { playBufferAt, zzfxBuffer, ear } from './sfx.js';
+import { playBufferAt, prewarm, zzfxBuffer, ear } from './sfx.js';
 
 // ============================================================ typing
 // A click for every key struck by anyone typing at a desk (see the Typing clip in life/people/peopleModel.js, whose
@@ -16,6 +16,7 @@ const SPACE = [
   [.4, .1, 190, 0, .004, .04, 1, 2, -20, , , , , .4, , , , .5, .02, , -1500],
 ];
 const VARIANTS = 5;
+prewarm([...KEY, ...SPACE], VARIANTS); // (made ahead, off the page: see prewarm in sfx.js)
 const HEAR_DISTANCE = 9, REF_DISTANCE = 1.5;
 const KEY_VOLUME = 0.22, SPACE_VOLUME = 0.26;
 const CLICKS_MAX_PER_SECOND = 30; // past this many a second, the rest go unheard

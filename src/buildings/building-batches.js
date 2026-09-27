@@ -161,11 +161,19 @@ function batchZone(zone) {
     meshes.push(mesh);
   });
   originals.forEach(o => { o.visible = false; o.userData.batched = true; });
-  return { source, count: source.children.length, meshes, originals, shown: false };
+  // The buildings can't move without leaving their merged copies behind, so neither they nor the zone's group holding them
+  // have their matrices worked out again every frame (three.js does, for anything left to matrixAutoUpdate, and all that's
+  // under it). Anything else in the zone that does move (an airport's planes) still does, under a group that stays put.
+  const frozen = [source];
+  source.children.forEach(group => { if (group.userData.batchable) group.traverse(o => frozen.push(o)); });
+  const wasAuto = frozen.map(o => o.matrixAutoUpdate);
+  frozen.forEach(o => { o.matrixAutoUpdate = false; });
+  return { source, count: source.children.length, meshes, originals, frozen, wasAuto, shown: false };
 }
 function unbatchZone(entry) {
   entry.meshes.forEach(mesh => { batchesGroup.remove(mesh); mesh.geometry.dispose(); });
   entry.originals.forEach(o => { o.visible = true; delete o.userData.batched; });
+  entry.frozen.forEach((o, k) => { o.matrixAutoUpdate = entry.wasAuto[k]; });
 }
 // the originals drawn instead of the merged meshes (true), or the other way round
 function showOriginals(entry, on) {

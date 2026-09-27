@@ -64,6 +64,7 @@ function generateIndustrialContent(zone, poly, cutouts, blockers) {
     else if (roll < 0.6) { group.userData.buildingKind = 'factory'; buildFactory(group, inner, rng, lerp(hMin, hMax, rng())); }
     else if (roll < 0.8) { group.userData.buildingKind = 'tankfarm'; buildTankFarm(group, inner, rng, lerp(hMin*0.8, hMax*0.8, rng())); }
     else { group.userData.buildingKind = 'containeryard'; buildContainerYard(group, inner, rng); }
+    group.userData.batchable = true; // (drawn merged with the rest of its zone: see buildings/building-batches.js)
     if (group.children.length) zone.buildingsGroup.add(group);
   }));
   const yardMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(groundColor).lerp(new THREE.Color(0x8c8c88), 0.55), roughness: 0.95 });
