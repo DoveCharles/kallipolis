@@ -1338,7 +1338,8 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
     layout.blocked.push(around(...(solid ? [x - 0.4, x + 0.4, z - 0.4, z + 0.4] : [r.x0, r.x1, r.z0, r.z1]), 0.35));
     for (const seat of piece.seats) {
       const at = turned(seat.x, seat.z, angle, x, z);
-      layout.seats.push({ x: at.x, z: at.z, y: seat.y, nx: Math.sin(angle), nz: Math.cos(angle), sofa: false, desk: deskSeats.includes(name) });
+      layout.seats.push({ x: at.x, z: at.z, y: seat.y, nx: Math.sin(angle), nz: Math.cos(angle), sofa: false, desk: deskSeats.includes(name),
+        bar: name === 'BarStool' }); // (sat at the bar, with the bar bot to talk to: see barbot.js)
     }
     return object;
   };
@@ -1390,7 +1391,7 @@ function seatsInWorld(layout) {
   const c = Math.cos(room.rotation.y), s = Math.sin(room.rotation.y);
   layout.seats = layout.seats.map(seat => {
     const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z));
-    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: false, desk: seat.desk, by: null };
+    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: false, desk: seat.desk, bar: seat.bar, by: null };
   });
 }
 

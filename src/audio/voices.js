@@ -15,6 +15,9 @@ import { melodyOf } from './melodies.js';
 // question. Each blip is
 // built live, like the engine (see engine.js), and gone once it's played. Only those within HEAR_DISTANCE of the camera
 // are heard, so a crowded plaza across town costs nothing.
+// A robot's voice (`robot` on the voice: the pubs' bar bot, buildings/barbot.js) says the same syllables on a square wave
+// instead, each held on one of a few flat notes (ROBOT_NOTES) rather than bent and sliding, and ring-modulated at
+// `robot` Hz, for the buzz.
 const VOWELS = [[800, 1200], [500, 1900], [300, 2300], [500, 900], [350, 800], [650, 1600]]; // [F1, F2] in Hz: a, e, i, o, u, and something in between
 // how each syllable can start: a stop (a click of noise at `noise` Hz, then the voice), a hiss (a longer rush of noise
 // that the voice comes in under), a hum (the voice muffled with its formants at `from`, opening out), or a glide (the
@@ -58,6 +61,9 @@ const BLIPS_MAX = 12;              // syllables sounding at once, past which new
 const BEND = 0.1;                  // how far each syllable's pitch strays at random from where the phrase has it, either way
 const STRESS = 0.12;               // how much higher a stressed syllable is
 const SYLLABLE = 0.12;             // an ordinary syllable's length, in seconds (a stressed one's longer, the last longer still)
+const ROBOT_NOTES = [1, 1.125, 1.25, 1.5]; // a robot's syllables' notes, of its pitch (a stressed one the highest, the last the lowest)
+const ROBOT_RING = 0.6;            // how much of a robot's voice is ring-modulated (the rest left dry)
+const ROBOT_LEVEL = 0.55;          // and how loud, next to a person's (a square wave's louder than a sawtooth)
 
 let blips = 0;
 
@@ -98,10 +104,10 @@ function noiseBuffer(context) {
 /**
  * One syllable of someone's babble.
  * @param {{x: number, y: number, z: number}} at - their head
- * @param {{pitch: number, formant: number, sharpness: number, melody?: number}} voice - its pitch in Hz; how far its
- *   formants sit from an ordinary voice's (the shape of their mouth and throat: above 1 smaller and brighter, below 1 bigger
- *   and darker); how sharp those formants ring (low breathy, high nasal and buzzy); and the tune it talks in (see
- *   audio/melodies.js)
+ * @param {{pitch: number, formant: number, sharpness: number, melody?: number, robot?: number}} voice - its pitch in Hz;
+ *   how far its formants sit from an ordinary voice's (the shape of their mouth and throat: above 1 smaller and brighter,
+ *   below 1 bigger and darker); how sharp those formants ring (low breathy, high nasal and buzzy); the tune it talks in
+ *   (see audio/melodies.js); and for a robot's, the Hz it buzzes at
  * @param {number} length - seconds until their next syllable
  * @param {number} [loudness=1] - how wide their mouth opens on it, 0 to 1
  * @param {number} [mood=0] - their mood trait: the cheerier, the more their syllables lift, the glummer, the more they sag
@@ -120,6 +126,13 @@ export function babble(at, voice, length, loudness = 1, mood = 0, intonation = n
   // (the slide through the syllable: a phrase's end falls, or rises for a question; otherwise a little either way, lifted
   // by cheer and sagging with gloom)
   const slide = last ? (question ? 1.3 : 1 - 0.2*melody.fall) : 1 + Math.max(-0.2, Math.min(0.2, mood*0.1 + (Math.random() - 0.5)*0.1));
+  // (a robot's on flat notes: see ROBOT_NOTES)
+  if (voice.robot) {
+    const note = stressed ? ROBOT_NOTES.length - 1 : last ? 0 : Math.floor(Math.random()*ROBOT_NOTES.length);
+    speak(at, voice, { f: pitch*ROBOT_NOTES[note], slide: 1, length: length*0.85, level: VOLUME*ROBOT_LEVEL*(0.5 + 0.5*loudness),
+      vowel: VOWELS[Math.floor(Math.random()*VOWELS.length)], consonant: CONSONANTS[Math.floor(Math.random()*CONSONANTS.length)] });
+    return;
+  }
   // a random vowel, and a random consonant before it
   speak(at, voice, { f, slide, length: length*0.85, level: VOLUME*(0.5 + 0.5*loudness),
     vowel: VOWELS[Math.floor(Math.random()*VOWELS.length)], consonant: CONSONANTS[Math.floor(Math.random()*CONSONANTS.length)] });
@@ -192,10 +205,10 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   level *= edgeFade(at);
   const now = context.currentTime, end = now + Math.max(0.05, length);
   const oscillator = context.createOscillator();
-  oscillator.type = 'sawtooth';
+  oscillator.type = voice.robot ? 'square' : 'sawtooth';
   oscillator.frequency.setValueAtTime(f, now);
   if (rise !== 1) oscillator.frequency.exponentialRampToValueAtTime(f*rise, now + (end - now)/3);
-  oscillator.frequency.exponentialRampToValueAtTime(f*slide, end);
+  if (slide !== 1) oscillator.frequency.exponentialRampToValueAtTime(f*slide, end);
   const c = consonant ? Math.min(consonant.time, (end - now)*0.4) : 0;
   // (a stop or hiss holds the voice back till the noise is through; a hum starts it muffled)
   const voiceIn = consonant?.kind === 'stop' || consonant?.kind === 'hiss' ? now + c*0.8 : now;
@@ -229,7 +242,19 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
   const muffle = muffler(at, hearRef(), MUFFLE);
   muffle.connect(panner);
-  gain.connect(muffle);
+  let ring = null;
+  if (voice.robot) {
+    // (ring-modulated: its level swung by a sine at `robot` Hz, ROBOT_RING of the way)
+    const swung = context.createGain(), depth = context.createGain();
+    ring = context.createOscillator();
+    ring.frequency.value = voice.robot;
+    swung.gain.value = 1 - ROBOT_RING;
+    depth.gain.value = ROBOT_RING;
+    ring.connect(depth).connect(swung.gain);
+    gain.connect(swung).connect(muffle);
+    ring.start(now);
+    ring.stop(end + 0.01);
+  } else gain.connect(muffle);
   panner.connect(heardFrom(at, 'peds'));
   if (consonant?.noise) {
     // the click or hiss: a burst of noise through a band where that consonant sits, moved by the voice's formants too
