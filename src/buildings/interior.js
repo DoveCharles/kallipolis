@@ -4,7 +4,7 @@ import { S, App } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { footprintBounds } from './footprints.js';
-import { hashNameToNumber, mulberry32 } from '../core/math.js';
+import { hashNameToNumber, mulberry32, pointInPolygon } from '../core/math.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { setCutout } from '../ui/pixelation.js';
 import { cards } from '../ui/entity-card.js';
@@ -2985,6 +2985,42 @@ function longestEdgeAngle(fp) {
   return angle;
 }
 
+// The room's the same size whatever it's in, so in a narrow building — a town terrace, built wall to wall — it reaches
+// past the building's own walls into the ones next door, which would show through inside. Any other building whose
+// footprint crosses the room's walls, and stands tall enough to reach its floor, isn't drawn while the room's up (hidden
+// the way the building gone into is, so building-batches.js draws that zone one by one meanwhile; see-through.js leaves
+// alone what's already hidden).
+const NEIGHBOUR_SLACK = 0.05; // (a wall only touching the room's from outside isn't in it)
+function hideNeighbours(group) {
+  const a = ROOM_W/2 + WALL - NEIGHBOUR_SLACK, b = ROOM_D/2 + WALL - NEIGHBOUR_SLACK, reach = Math.hypot(a, b);
+  const local = p => { room.worldToLocal(probe.set(p.x, 0, p.z)); return { x: probe.x, z: probe.z }; };
+  // whether the segment p–q passes through the room's rectangle (Liang–Barsky)
+  const crosses = (p, q) => {
+    let t0 = 0, t1 = 1;
+    const dx = q.x - p.x, dz = q.z - p.z;
+    for (const [d, gap] of [[-dx, p.x + a], [dx, a - p.x], [-dz, p.z + b], [dz, b - p.z]]) {
+      if (d === 0) { if (gap < 0) return false; continue; }
+      const t = gap/d;
+      if (d < 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+      if (t0 > t1) return false;
+    }
+    return true;
+  };
+  const hidden = [], floor = room.position.y, box = new THREE.Box3();
+  S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach(other => {
+    const fp = other.userData.footprint;
+    if (other === group || !fp || fp.length < 3 || !other.visible) return;
+    const { c, r } = footprintBounds(other);
+    if (Math.hypot(c.x - room.position.x, c.z - room.position.z) > r + reach) return; // nowhere near it
+    const pts = fp.map(local);
+    if (!pts.some((p, i) => crosses(p, pts[(i + 1) % pts.length])) && !pointInPolygon({ x: 0, z: 0 }, pts)) return;
+    if (box.setFromObject(other).max.y < floor) return; // all below the room
+    other.visible = false;
+    hidden.push(other);
+  }));
+  return hidden;
+}
+
 // Goes into `group` (a building, as building-card.js follows it, with its key): the room onto its top floor (a warehouse
 // or factory's, or a pub's or a shop's, ground floor), laid out as `kind` of room (one of LAYOUTS: 'home', 'office',
 // 'warehouse', 'factory', 'pub', 'salon' or 'clothes'),
@@ -3011,6 +3047,7 @@ export function enterBuilding(group, key, kind = 'home') {
   room.updateMatrixWorld(true);
   setRoomGlow(true);
   group.visible = false;
+  const neighbours = hideNeighbours(group);
   if (current === LAYOUTS.home) furnish(key);
   else if (current === LAYOUTS.office) furnishOffice(key, glass);
   else if (workshop) furnishIndustrial(key, current.kind);
@@ -3020,7 +3057,7 @@ export function enterBuilding(group, key, kind = 'home') {
 
   visits++;
   resetOfficeAmbience();
-  inside = { group, key, before: {
+  inside = { group, key, neighbours, before: {
     target: controls.goalTarget.clone(), radius: controls.goalRadius, theta: controls.goalTheta, phi: controls.goalPhi,
     minRadius: controls.minRadius, near: camera.near,
   } };
@@ -3043,13 +3080,14 @@ export function enterBuilding(group, key, kind = 'home') {
 // Back out: the building drawn again, the room put away, and the camera eased back to where it was looking from.
 export function leaveBuilding() {
   if (!inside) return;
-  const { group, before } = inside;
+  const { group, neighbours, before } = inside;
   inside = null;
   setIndoors(null);
   tvClickedOn = false;
   cards.forEach(card => card.resetPlace()); // (any dragged about in the room back where they belong)
   stopTV();
   group.visible = true;
+  neighbours.forEach(other => { other.visible = true; });
   room.visible = false;
   setRoomGlow(false);
   controls.locked = false;
