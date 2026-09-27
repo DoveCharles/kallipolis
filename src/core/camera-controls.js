@@ -16,24 +16,26 @@ export const controls = {
   // set while the camera rides round something (a room's walls: see buildings/interior.js), locked or not: { place,
   // rise, zoom } — place from which way round it is (theta) to how far out and how high ({ radius, phi }), rise(dy) to
   // take it up or down for a drag of dy, and zoom(factor) to zoom by the factor zoomBy's given — orbiting going round and
-  // up and down, zooming zooming, and nothing else
+  // up and down, zooming zooming, and nothing else. A free hug (hug.free) orbits and pans as usual instead (pan at hug.panSpeed a pixel), place then
+  // only shortening the radius (from theta, phi and the target) and keep(goalTarget) holding a pan within bounds.
   hug: null,
   orbit(dx, dy) {
-    if (this.hug) { this.goalTheta -= dx * 0.006; this.hug.rise(dy); return; }
-    if (this.locked) return;
+    if (this.hug && !this.hug.free) { this.goalTheta -= dx * 0.006; this.hug.rise(dy); return; }
+    if (this.locked && !this.hug?.free) return;
     this.goalTheta -= dx * 0.006;
     this.goalPhi -= dy * 0.006;
     this.goalPhi = Math.max(0.03, Math.min(Math.PI - 0.03, this.goalPhi));
   },
   pan(dx, dy) {
-    if (this.locked) return;
-    const panSpeed = this.radius * 0.0016;
+    if (this.locked && !this.hug?.free) return;
+    const panSpeed = this.hug?.panSpeed ?? this.radius * 0.0016;
     const forward = new THREE.Vector3(
       Math.sin(this.theta) * Math.sin(this.phi), Math.cos(this.phi), Math.cos(this.theta) * Math.sin(this.phi));
     const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
     const up = new THREE.Vector3().crossVectors(right, forward).normalize();
     this.goalTarget.addScaledVector(right, dx * panSpeed);
     this.goalTarget.addScaledVector(up, dy * panSpeed);
+    this.hug?.keep?.(this.goalTarget);
   },
   zoom(deltaY) { this.zoomBy(1 + deltaY * 0.001); },
   // straight multiplier, for a pinch: the radius scales with how far the two fingers have closed or spread
@@ -55,11 +57,11 @@ export const controls = {
     this.theta += (this.goalTheta - this.theta) * a;
     this.phi += (this.goalPhi - this.phi) * a;
     // (from the eased theta, not eased themselves, so the camera keeps to its path even as it goes round a corner)
-    if (this.hug) {
-      ({ radius: this.radius, phi: this.phi } = this.hug.place(this.theta));
-      ({ radius: this.goalRadius, phi: this.goalPhi } = this.hug.place(this.goalTheta));
-    }
     this.target.lerp(this.goalTarget, a);
+    if (this.hug) {
+      ({ radius: this.radius, phi: this.phi } = this.hug.place(this.theta, this.phi, this.target));
+      ({ radius: this.goalRadius, phi: this.goalPhi } = this.hug.place(this.goalTheta, this.goalPhi, this.goalTarget));
+    }
     const x = this.target.x + this.radius * Math.sin(this.phi) * Math.sin(this.theta);
     const y = this.target.y + this.radius * Math.cos(this.phi);
     const z = this.target.z + this.radius * Math.sin(this.phi) * Math.cos(this.theta);

@@ -2901,6 +2901,48 @@ const hugWalls = {
   rise(dy) { eyeGoal = THREE.MathUtils.clamp(eyeGoal + dy*CAMERA_RISE, CAMERA_LOWEST, CAMERA_HIGHEST); },
   zoom(factor) { zoomedFov = THREE.MathUtils.clamp(zoomedFov*factor, FOV_NARROWEST, FOV_WIDEST); },
 };
+// The free way round the room (for controls.hug, with Options > Game > Free Camera Indoors: S.freeRoomCamera): orbiting,
+// panning and zooming as outside, but kept in the room — the look-at point held FREE_TARGET in from the walls, floor and
+// ceiling (keep), and the camera drawn in along its line to it wherever that would take it within FREE_WALL of one
+// (place), so it slides along the walls rather than through them. Zooming sets how far back it'd like to be (reach, eased
+// there in updateInteriorCamera), but not further back while a wall's already holding it in.
+const FREE_WALL = 0.25, FREE_TARGET = 0.5, FREE_NEAREST = 0.4, FREE_FURTHEST = 9;
+// how far a pan moves the look-at point for each pixel dragged (outside it goes with the radius, which is tiny in here)
+const FREE_PAN = 0.0085;
+let reach = 3, reachGoal = 3;
+const freeAt = new THREE.Vector3(), freeWay = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+const freeRoom = {
+  free: true,
+  panSpeed: FREE_PAN,
+  place(theta, phi, target) {
+    room.worldToLocal(freeAt.copy(target));
+    freeWay.set(Math.sin(phi)*Math.sin(theta), Math.cos(phi), Math.sin(phi)*Math.cos(theta)).applyAxisAngle(UP, -room.rotation.y);
+    const lo = [-ROOM_W/2 + FREE_WALL, FREE_WALL, -ROOM_D/2 + FREE_WALL], hi = [ROOM_W/2 - FREE_WALL, ROOM_H - FREE_WALL, ROOM_D/2 - FREE_WALL];
+    let out = reach;
+    for (let k = 0; k < 3; k++) {
+      const d = freeWay.getComponent(k), p = freeAt.getComponent(k);
+      if (d > 1e-6) out = Math.min(out, (hi[k] - p)/d);
+      else if (d < -1e-6) out = Math.min(out, (lo[k] - p)/d);
+    }
+    return { radius: Math.max(0, out), phi };
+  },
+  keep(target) {
+    room.worldToLocal(freeAt.copy(target));
+    freeAt.x = THREE.MathUtils.clamp(freeAt.x, -ROOM_W/2 + FREE_TARGET, ROOM_W/2 - FREE_TARGET);
+    freeAt.y = THREE.MathUtils.clamp(freeAt.y, FREE_TARGET, ROOM_H - FREE_TARGET);
+    freeAt.z = THREE.MathUtils.clamp(freeAt.z, -ROOM_D/2 + FREE_TARGET, ROOM_D/2 - FREE_TARGET);
+    target.copy(room.localToWorld(freeAt));
+  },
+  zoom(factor) {
+    if (factor > 1 && controls.radius < reach - 0.05) return; // (up against a wall already)
+    reachGoal = THREE.MathUtils.clamp(reachGoal*factor, FREE_NEAREST, FREE_FURTHEST);
+  },
+};
+// Onto the free way round the room (from wherever the camera is now), or back onto the walls (looking at the middle again).
+function freeCamera(on) {
+  if (on) { reach = reachGoal = Math.max(controls.radius, FREE_NEAREST); controls.hug = freeRoom; }
+  else { controls.goalTarget.copy(lookAt()); controls.hug = hugWalls; }
+}
 /**
  * Try out a different view (for tools/interior.html): anything left out or null goes back to the usual.
  * @param {{height?: ?number, look?: ?number, fov?: ?number}} t - height above the floor, height looked at, vertical FOV
@@ -2983,8 +3025,9 @@ export function enterBuilding(group, key, kind = 'home') {
   eyeHeight = eyeGoal = tuning.height ?? CAMERA_HEIGHT;
   zoomedFov = tuning.fov ?? CAMERA_FOV;
   setIndoors(inRoom);
-  // a hard cut in, no glide
+  // a hard cut in, no glide (to the same corner either way: freely, from where the walls would put it)
   controls.update(true);
+  if (S.freeRoomCamera) { freeCamera(true); controls.update(true); }
   camera.fov = viewFov();
   camera.updateProjectionMatrix();
 }
@@ -3061,6 +3104,8 @@ export function updateInteriorCamera() {
   updateLamp();
   updateDoor();
   updateCurtains();
+  if (inside && (controls.hug === freeRoom) !== !!S.freeRoomCamera) freeCamera(!!S.freeRoomCamera);
+  if (inside && reach !== reachGoal) reach = Math.abs(reachGoal - reach) < 0.002 ? reachGoal : reach + (reachGoal - reach)*RISE_EASE;
   if (inside && eyeHeight !== eyeGoal) eyeHeight = Math.abs(eyeGoal - eyeHeight) < 0.002 ? eyeGoal : eyeHeight + (eyeGoal - eyeHeight)*RISE_EASE;
   fadeWhatsInTheWay();
   occupants = counting; counting = 0;
