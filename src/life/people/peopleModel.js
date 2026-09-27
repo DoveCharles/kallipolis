@@ -460,11 +460,13 @@ const clothingBand = (clothing, roll, man, age) => {
 
 // the model's materials, by name: which part of the model each vertex belongs to (its slot, in personVertex.y) — the clothes take each
 // person's own colors, the rest keep the model's; and the parts only drawn for women
-const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelashes', 'Lips',
+const PERSON_SLOTS = ['Skin', 'Top', 'Pants', 'Shoes', 'White', 'Black', 'Eyelash1', 'Eyelash2', 'Eyelash3', 'Lips',
   ...PERSON_CLOTHING.flatMap(c => Array.from({ length: c.count }, (_, k) => c.band + (k + 1)))];
 PERSON_SLOTS.push('Flesh'); // (not a material: the caps closing a body part's cut, see buildGibMeshes)
 const FLESH_COLOR = 0x5a0d0d;
-const PERSON_FEMALE_ONLY = ['Eyelashes', 'Lips'];
+const PERSON_FEMALE_ONLY = ['Eyelash1', 'Eyelash2', 'Eyelash3', 'Lips'];
+// the eyelashes come in pieces: each woman wears some of them, at least one (which, a bit each in the clothing row's w)
+const PERSON_LASHES = ['Eyelash1', 'Eyelash2', 'Eyelash3'];
 // the colors each person has their own of, from row 2 of the traits texture on; then a row of where their clothes stop,
 // and one of their head's and eyes' shape keys (Key 1, Key 2, Shape1, Shape2 — Shape3 being in row 1)
 // ('Skin' starts as the model's own, and is there so a person's can be tinted: see peopleBlood.js)
@@ -854,7 +856,8 @@ const OUTFIT_CHEST_GLSL = `
 /**
  * Add the posing and shape keys to a material's shaders, and how it colors the figure.
  *
- * `look.femaleOnly` gives the slots only drawn for women; and, unless it's the shadow's depth material, `look.palette`
+ * `look.femaleOnly` gives the slots only drawn for women, and `look.lashes` the eyelash pieces, each only drawn for someone
+ * whose bit for it (its place in the list) is set in the clothing row's w; and, unless it's the shadow's depth material, `look.palette`
  * (each slot's own color), `look.traitColors` (the slots taking a color of the person's own instead, as
  * { slot: traits row }), `look.bloodSlots` (the slots blood splotches are drawn over — and, with `look.bloodOnBands`, the bands of clothes where they show skin) and `look.bands` (bands of clothes, which show skin — that person's own — if the person's clothes
  * stop at or before them: { slot, number, cut (which of the clothing row's values says where their clothes stop),
@@ -874,6 +877,8 @@ function injectPersonShader(shader, uniforms, look) {
   if (colored) shader.uniforms.personPalette = { value: look.palette };
   const hide = look.femaleOnly.length
     ? `if ((${look.femaleOnly.map(slot => `personSlotIndex == ${slot}`).join(' || ')}) && personTrait(1).y > 0.5) transformed = vec3(0.0);` : '';
+  const lashes = (look.lashes || []).length
+    ? `if (${look.lashes.map((slot, k) => `(personSlotIndex == ${slot} && (int(personTrait(${PERSON_CLOTHING_ROW}).w + 0.5) & ${1 << k}) == 0)`).join(' || ')}) transformed = vec3(0.0);` : '';
   // (not from the shadow's depth material, so the body still casts one) whoever personHidden names is drawn headless: their head
   // and hair drawn into a point at the middle of their chest, inside their shirt
   const splotched = colored && (look.bloodSlots || []).length > 0;
@@ -907,6 +912,7 @@ function injectPersonShader(shader, uniforms, look) {
       int personSlotIndex = int(personVertex.y + 0.5);
       // for a man, the parts only drawn for women are folded away to a point
       ${hide}
+      ${lashes}
       ${hideHead}
       if (personOnly >= 0 && personIndex() != personOnly) transformed = vec3(0.0);
       ${color}
@@ -943,10 +949,10 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name 
   material.defines = { ...material.defines, ROOM_LAMP: '', ROOM_GLOW: '' };
   if (culled) { material.defines.PERSON_CULL = ''; depth.defines = { ...depth.defines, PERSON_CULL: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
-  const key = ['person', byAttribute, culled, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, look.femaleOnly.join(',')].join('|');
+  const key = ['person', byAttribute, culled, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, look.femaleOnly.join(','), (look.lashes || []).join(',')].join('|');
   material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { ...look, layer: byAttribute });
   material.customProgramCacheKey = () => key;
-  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly, clearThighs: look.clearThighs, shadow: true, layer: byAttribute });
+  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly, lashes: look.lashes, clearThighs: look.clearThighs, shadow: true, layer: byAttribute });
   depth.customProgramCacheKey = () => key + '|depth';
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -1564,6 +1570,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     color.setRGB(traits[pants], traits[pants + 1], traits[pants + 2]).lerp(CUFF_LIGHTEN_TO, CUFF_LIGHTEN);
     traits.set([color.r, color.g, color.b], texel(traitRow('Cuff')));
     traits.set(clothingRowFor(id, i), texel(PERSON_CLOTHING_ROW));
+    // which pieces of the eyelashes she wears: any of them, but never none (from a generator of its own)
+    traits[texel(PERSON_CLOTHING_ROW) + 3] = 1 + Math.floor(mulberry32(3131 + id*7919)()*((1 << PERSON_LASHES.length) - 1));
     traitTexture.needsUpdate = true;
   }
   // whoever's already in the crowd when the model finishes loading has been walking round as a cuboid till now: fill
@@ -1592,7 +1600,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const bodyLook = {
     palette,
     traitColors: Object.fromEntries([['Skin', 'Skin'], ['Top', 'Top'], ['Pants', 'Pants'], ['Shoes', 'Shoes'], ['White', 'Eyes']].map(([slot, part]) => [PERSON_SLOTS.indexOf(slot), traitRow(part)])),
-    femaleOnly: PERSON_FEMALE_ONLY.map(part => PERSON_SLOTS.indexOf(part)),
+    femaleOnly: PERSON_FEMALE_ONLY.map(part => PERSON_SLOTS.indexOf(part)), lashes: PERSON_LASHES.map(part => PERSON_SLOTS.indexOf(part)),
     bloodSlots: [PERSON_SLOTS.indexOf('Skin')], bloodOnBands: true,
     bands: PERSON_CLOTHING.flatMap((c, cut) => Array.from({ length: c.count }, (_, k) =>
       ({ slot: PERSON_SLOTS.indexOf(c.band + (k + 1)), number: k + 1, cut, colorRow: traitRow(c.part) }))),
