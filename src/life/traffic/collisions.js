@@ -1,4 +1,4 @@
-import { S, App } from '../../core/shared.js';
+import { S, App, buildingHolders } from '../../core/shared.js';
 import { Y_ROAD } from '../../core/scene.js';
 import { pointInPolygon } from '../../core/math.js';
 import { footprintBounds } from '../../buildings/footprints.js';
@@ -193,7 +193,7 @@ export function buildingHit(car) {
     const dx = q.x - car.x, dz = q.z - car.z;
     return Math.abs(dx*sin + dz*cos) < halfLength && Math.abs(dx*cos - dz*sin) < halfWidth;
   };
-  for (const zone of S.zones) {
+  for (const zone of buildingHolders()) {
     const zoneReach = zoneBounds(zone);
     if (!zoneReach || Math.hypot(car.x - zoneReach.c.x, car.z - zoneReach.c.z) > zoneReach.r + reach) continue;
     for (const group of zone.buildingsGroup.children) {

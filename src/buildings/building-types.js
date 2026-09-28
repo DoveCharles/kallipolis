@@ -17,6 +17,7 @@ const ZONE_OF_KIND = {
   house: 'suburbs',
   terrace: 'town', pub: 'town', salon: 'town', clothes: 'town',
   terminal: 'airport', hangar: 'airport', controltower: 'airport',
+  vacant: 'mall',
 };
 const buildings = loadTypeText('assets/text/buildings.txt', {
   attributes: TEXT_ROWS,
@@ -28,6 +29,8 @@ const buildings = loadTypeText('assets/text/buildings.txt', {
   placeholder: { default: { name: ['Building'], mood: ['🏢'], loves: ['Having people inside them'], hates: ['Strong winds'] } },
 });
 
+// Settles once buildings.txt has been read: anything showing a building's own name (a mall's shop signs) draws it again.
+export const buildingTypesReady = buildings.ready;
 // What kind a building is: whatever put it up said so (see the zone types in zones/), or else its zone's own type.
 export function buildingKindOf(group, zone) {
   return (group && group.userData.buildingKind) || (zone && zone.zoneType) || 'buildings';
@@ -88,6 +91,20 @@ function officeName(number) {
 // A building's own name, as a pub's "The Red Lion": one of its kind's `title` lines in buildings.txt, picked by its number
 // the way the card's other lines are; '' for a kind that has none (a house).
 export function buildingTitle(kind, number = 1) {
+  return buildingSign(kind, number).text;
+}
+// A title can say how it's lettered on a sign (a mall shop's: see signAtlas in roads/mall.js), in brackets after it:
+// `title = The Red Lion {font = Georgia, color = #f2d27a}` — `font` a typeface (with `italic`, `bold` or a weight like 900
+// before it if wanted: `font = italic Brush Script MT`), `color` the lettering's. Either can be left out.
+// Returns { text, font, color }, the last two null where the title doesn't say.
+export function buildingSign(kind, number = 1) {
   const titles = buildings.listOf(kind, 'title');
-  return titles.length ? titles[(number - 1) % titles.length] : '';
+  const raw = titles.length ? titles[(number - 1) % titles.length] : '';
+  const style = raw.match(/\s*\{([^{}]*)\}\s*$/), said = {};
+  if (style) style[1].split(',').forEach(part => {
+    const [key, ...value] = part.split('=');
+    if (key && value.length) said[key.trim().toLowerCase()] = value.join('=').trim();
+  });
+  const color = said.color ?? said.colour ?? null;
+  return { text: (style ? raw.slice(0, style.index) : raw).trim(), font: said.font || null, color: /^#?[0-9a-f]{6}$/i.test(color || '') ? (color.startsWith('#') ? color : '#' + color) : null };
 }

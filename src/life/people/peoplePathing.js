@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { App, S } from '../../core/shared.js';
+import { App, S, buildingHolders } from '../../core/shared.js';
 import { Y_PARK, Y_PATH, Y_ROAD, Y_SIDEWALK, Y_ZONE_GROUND } from '../../core/scene.js';
 import { centroid } from '../../core/math.js';
 import { buildingEnterable, buildingKindOf } from '../../buildings/building-types.js';
@@ -15,6 +15,7 @@ import { getWaterRegion, isOpenWater } from '../../water/water.js';
 import { onWater } from './peopleWater.js';
 import { createRegionTester, offsetPaths, pathsArea, toClipperPath, zoneCutoutsNear } from '../../zones/cutouts.js';
 import { FOOTBRIDGE_TOP } from '../../water/bridges.js';
+import { nearestRaisedVertex } from './peopleFooting.js';
 import { PEOPLE_NAV_SPACING, headingTo, isOpenGround, lastPeopleTime, people, peopleNav, peopleNavDebugMesh, peopleRng, pickWeighted, randomSpotIn, insideFor } from './people.js';
 import { RIDE_CHANCE, enterChance, goIndoors, goRideTrain, hidingFromSun, mayGoIndoors, stationLinks } from './peopleActivities.js';
 // (whether a walkway has a door on it: a vampire hiding from the sun on one without takes every turning off it)
@@ -193,6 +194,15 @@ export function buildPeopleNav() {
       seats: zone.zoneType==='plaza' ? (zone.benchSeats || []).map(seat => ({ ...seat, by: null })) : [],
       trees: zone.zoneType==='park' ? zone.treeSpots || [] : [] });
   });
+  // a mall's food courts: hangouts like a plaza's, round their tables, palms and lamps, with a seat at every chair (see
+  // roads/mall.js)
+  (S.malls || []).flatMap(mall => mall.foodCourts || []).forEach(fc => {
+    if (fc.r < 3) return;
+    const inside = (x, z) => Math.hypot(x - fc.x, z - fc.z) < fc.r && fc.obstacles.every(o => Math.hypot(x - o.x, z - o.z) > o.r);
+    const box = { minX: fc.x - fc.r, maxX: fc.x + fc.r, minZ: fc.z - fc.r, maxZ: fc.z + fc.r };
+    areas.push({ kind: 'foodcourt', inside, insideWet: inside, fountain: null, ...box, wetBox: box, size: Math.PI*fc.r*fc.r, y: Y_ZONE_GROUND,
+      exits: [], seats: fc.seats.map(seat => ({ ...seat, by: null })), trees: [] });
+  });
   // the walkways' own footprint, a little proud of their edges: a path cutting through a park is part of the hangout —
   // people walk and stand on it — but nobody sits or lies down on one (see clearGround)
   const onPath = createRegionTester(S.pathFootprint.length ? offsetPaths(S.pathFootprint, 0.35, ClipperLib.JoinType.jtRound) : []);
@@ -201,7 +211,7 @@ export function buildPeopleNav() {
   const midStrokes = [], curbStrokes = [], edgeStrokes = [];
   let anySidewalk = false, widestSidewalk = 0; // (the widest, for how far a building can be off a walkway: see buildingDoors)
   S.roadLines.forEach(line => {
-    if (isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
+    if (isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line) || line.roadType === 'mall') return;
     const nodePts = line.nodeIds.map(id => roadNodes[id]).filter(Boolean);
     if (nodePts.length < 2) return;
     const { hw, cw, sw } = roadLineWidths(line);
@@ -291,19 +301,21 @@ export function buildPeopleNav() {
   // raised walkways: along each deck line up at its height, and down each ramp — which is all that joins them to anything
   // on the ground: its foot onto the sidewalk or a path nearby, its top onto the deck. Nothing else up there links to the
   // ground, to hangouts or to buildings (see byPlace and the grid below, which leave them out).
+  // (a mall's galleries, bridges and escalators are walked the same way, but indoors: see roads/mall.js — their
+  // escalators' feet join the concourse, never a pavement)
   const rampFeet = [];
-  (S.raisedNav || []).forEach(net => {
+  [...(S.raisedNav || []), ...(S.malls || []).flatMap(mall => mall.mallNav || [])].forEach(net => {
     const decks = [];
     net.decks.forEach(tess => {
       const { pts } = resampleLine(tess), cum = cumulative(pts);
       if (cum[cum.length-1] < 1) return;
       decks.push(lines.length);
-      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, y: net.H, lateral: net.lateral, walk: net.walk,
+      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, indoor: !!net.indoor, y: net.H, lateral: net.lateral, walk: net.walk,
         blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
     });
     net.ramps.forEach(ramp => {
       const pts = ramp.pts, cum = cumulative(pts), li = lines.length;
-      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, ramp: true, y: net.H, ys: ramp.ys,
+      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, ramp: true, indoor: !!net.indoor, y: net.H, ys: ramp.ys,
         lateral: ramp.lateral, walk: ramp.walk, blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
       let top = null;
       decks.forEach(dl => lines[dl].pts.forEach((q, vi) => {
@@ -313,16 +325,17 @@ export function buildPeopleNav() {
       if (top) raisedLinks.push([{ li, vi: 0 }, { li: top.li, vi: top.vi }]);
       // the deck is cut square where an end ramp takes over from it (see squareEnd in peopleFooting.js)
       if (top && ramp.end && top.d < 1e-3) { const deck = lines[top.li]; if (top.vi === 0) deck.cutStart = true; else if (top.vi === deck.pts.length-1) deck.cutEnd = true; }
-      const foot = pts.length - 1, handle = ringPoint(ramp.foot, 10);
+      const foot = pts.length - 1, handle = !net.indoor && ringPoint(ramp.foot, 10);
       if (handle) pending.push({ li, vi: foot, handle });
       rampFeet.push({ li, vi: foot });
     });
   });
   // the lanes between a suburb's hedges, walked like any other path: laid out with the plots, since they're the gaps
   // left between them (see gapLanes). They're also what brings a house in the middle of a block within reach of a door —
-  // off the sidewalk, the only house anyone could walk into is one fronting the road (see buildingDoors).
-  S.zones.forEach(zone => {
-    if (zone.drawing || zone.zoneType !== 'suburbs') return;
+  // off the sidewalk, the only house anyone could walk into is one fronting the road (see buildingDoors). A mall's
+  // concourse is walked by lanes too, in at one entrance and out at the other (see roads/mall.js).
+  buildingHolders().forEach(zone => {
+    if (zone.drawing || !zone.walkGaps?.length) return;
     // (how many lanes end at each point, since only a lane's loose end can have been stopped by a path)
     const placeOf = q => Math.round(q.x*2) + ',' + Math.round(q.z*2), endsAt = new Map();
     (zone.walkGaps || []).forEach(lane => [lane[0], lane[lane.length-1]].forEach(q => endsAt.set(placeOf(q), (endsAt.get(placeOf(q)) || 0) + 1)));
@@ -442,12 +455,19 @@ export function buildPeopleNav() {
   }));
   // for crossing mid-block: the nearest point on any ring
   const nearRing = segmentGrid(lines.flatMap((nav, li) => nav.ring ? nav.pts.slice(0, -1).map((a, seg) => ({ a, b: nav.pts[seg+1], li, seg })) : []));
-  const buildings = buildingDoors(lines, grid, CELL, onPavement, widestSidewalk);
+  // (and the raised decks' points, by the same cells, for a building upstairs — a mall's upper units — to have its door onto)
+  const upGrid = new Map();
+  lines.forEach((nav, li) => nav.raised && !nav.ramp && nav.pts.forEach((p, vi) => {
+    const key = Math.floor(p.x/CELL) + ',' + Math.floor(p.z/CELL);
+    if (!upGrid.has(key)) upGrid.set(key, []);
+    upGrid.get(key).push({ li, vi });
+  }));
+  const buildings = buildingDoors(lines, grid, CELL, onPavement, widestSidewalk, upGrid);
   return { areas, lines, grid, CELL, onPath, onPavement, nearRing, buildings };
 }
 
-/** How much slack, and the cap, on how far off a walkway a building's door may be (see doorReach). */
-const DOOR_SLACK = 4, DOOR_REACH_MAX = 20;
+/** How much slack, and the cap, on how far off a walkway a building's door may be (see doorReach); and upstairs, off a deck. */
+const DOOR_SLACK = 4, DOOR_REACH_MAX = 20, UPSTAIRS_DOOR_REACH = 4;
 
 /**
  * How far off a walkway point a building may stand and still be walked into.
@@ -474,22 +494,27 @@ const doorReach = (zone, sidewalkWidth) =>
  * @param {number} CELL - the grid's cell size
  * @param {function(number, number): boolean} onPavement - whether a point is on the road network
  * @param {number} sidewalkWidth - the widest sidewalk in the city
+ * @param {Map<string, Array<{li: number, vi: number}>>} upGrid - the raised decks' points, bucketed the same way (for doors upstairs)
  * @returns {object[]} one { key, number, kind, x, z, y, height, size, door: { x, z } } per building
  */
-function buildingDoors(lines, grid, CELL, onPavement, sidewalkWidth) {
+function buildingDoors(lines, grid, CELL, onPavement, sidewalkWidth, upGrid) {
   const buildings = [];
-  S.zones.forEach(zone => {
-    const reach = doorReach(zone, sidewalkWidth);
+  buildingHolders().forEach(zone => {
+    const groundReach = doorReach(zone, sidewalkWidth);
     (zone.buildingsGroup?.children || []).forEach((group, k) => {
       const fp = group.userData.footprint;
       if (!fp || fp.length < 3) return;
       const kind = buildingKindOf(group, zone);
       if (!buildingEnterable(kind)) return; // (nobody wanders into a tank farm: see enterable in buildings.txt)
+      // a building upstairs (a mall's upper units: see roads/mall.js) opens onto a raised deck at its floor's height
+      const base = group.userData.base || 0, upstairs = base > 0.5, reach = upstairs ? UPSTAIRS_DOOR_REACH : groundReach;
+      const points = upstairs ? upGrid : grid;
       const c = centroid(fp), size = Math.max(...fp.map(q => Math.hypot(q.x - c.x, q.z - c.z)));
       const span = Math.ceil((size + reach)/CELL), cx = Math.floor(c.x/CELL), cz = Math.floor(c.z/CELL);
       /** @type {?{li: number, vi: number, q: {x: number, z: number}, d: number, from: {x: number, z: number}}} */
       let best = null;
-      for (let ox=-span;ox<=span;ox++) for (let oz=-span;oz<=span;oz++) (grid.get((cx+ox) + ',' + (cz+oz)) || []).forEach(({ li, vi }) => {
+      for (let ox=-span;ox<=span;ox++) for (let oz=-span;oz<=span;oz++) (points.get((cx+ox) + ',' + (cz+oz)) || []).forEach(({ li, vi }) => {
+        if (upstairs && Math.abs(lines[li].y - base) > 0.5) return;
         const p = lines[li].pts[vi];
         /** @type {?{q: {x: number, z: number}, d: number}} */
         let wall = null;
@@ -508,7 +533,7 @@ function buildingDoors(lines, grid, CELL, onPavement, sidewalkWidth) {
       const back = Math.min(0.4, best.d)/best.d;
       const key = buildingKey(zone, k);
       const building = { key, number: buildingNumber(key), kind,
-        x: c.x, z: c.z, y: Y_ZONE_GROUND, height: group.userData.height || 10, size,
+        x: c.x, z: c.z, y: upstairs ? base : Y_ZONE_GROUND, height: group.userData.height || 10, size,
         door: { x: best.q.x + (best.from.x - best.q.x)*back, z: best.q.z + (best.from.z - best.q.z)*back } };
       vertex.building = building;
       buildings.push(building);
@@ -589,6 +614,11 @@ export function reseatPerson(p) {
   if (p.mode === 'wander' || p.mode === 'leaving') {
     const ai = areas.findIndex(a => insideFor(a, p)(p.x, p.z));
     if (ai >= 0) { wanderInto(p, ai, p); return; }
+  }
+  // (up on a raised walkway or a mall's gallery: back onto whatever's up there, not down onto the ground below)
+  if (p.mode === 'line' && p.y > 1) {
+    const up = nearestRaisedVertex(p.x, p.z, p.y);
+    if (up && up.d < 6) { placeAtVertex(p, up.li, up.vi, p.dir || 1); return; }
   }
   if (p.mode !== 'none') {
     /** @type {?{li: number, vi: number, d: number}} */

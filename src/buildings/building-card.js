@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { S, App } from '../core/shared.js';
+import { S, App, buildingHolders } from '../core/shared.js';
 import { camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
@@ -32,7 +32,7 @@ const drawThumbnail = makeThumbnailDrawer(card.canvas);
 // every zone's buildings (a zone's own children named 'Building': city blocks', industrial yards' and farmsteads')
 function buildingsInZones() {
   const found = [];
-  S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
+  buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
     if (group.name === 'Building' && group.visible) found.push({ zone, group, index });
   }));
   return found;
@@ -127,7 +127,7 @@ function setBuildingCardInhabitants(names, tracked = -1, onPick = null) {
 export function updateBuildingFollow() {
   if (!followed) return;
   const { zone, group, center } = followed;
-  if (S.interactionMode !== 'move' || !S.zones.includes(zone) || group.parent !== zone.buildingsGroup) { stopFollowingBuilding(); return; }
+  if (S.interactionMode !== 'move' || !buildingHolders().includes(zone) || group.parent !== zone.buildingsGroup) { stopFollowingBuilding(); return; }
   if (!isInsideBuilding()) controls.goalTarget.copy(center); // (inside, the room holds the camera: see interior.js)
 }
 

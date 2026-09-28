@@ -46,7 +46,7 @@ export function signalRedLeft(junction, phase, t) {
 function findRoadJunctions() {
   const armsAt = new Map();
   S.roadLines.forEach(line => {
-    if (App.isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
+    if (App.isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line) || line.roadType === 'mall') return;
     const nodes = line.nodeIds.map(id => roadNodes[id]);
     if (nodes.length < 2 || nodes.some(n => !n)) return;
     const pts = tessellateOpenPath(nodes), widths = roadLineWidths(line);
@@ -155,7 +155,7 @@ function buildRoadDetails() {
     if (len > 1e-4) paintRect((p.x + q.x)/2, (p.z + q.z)/2, (q.x - p.x)/len, (q.z - p.z)/len, len/2, halfWidth);
   };
   S.roadLines.forEach(line => {
-    if (App.isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
+    if (App.isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line) || line.roadType === 'mall') return;
     const nodes = line.nodeIds.map(id => roadNodes[id]).filter(Boolean);
     const { hw } = roadLineWidths(line);
     if (nodes.length < 2 || hw*2 < 5) return;

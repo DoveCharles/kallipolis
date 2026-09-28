@@ -161,3 +161,17 @@ The suburbs are so quiet. {here.suburbs}
 > Too quiet. {nosy}
 The city never sleeps. {here.city, world.hour 22-4}
 What's that smell? Oh, the factory. {here.industrial}
+Have you been up the escalator? There's more shops up there. {here.mall}
+> I only came in for one thing.
+Love the glass roof in here. {here.mall}
+> Gets boiling in summer. {mood = -1}
+Half these units are empty now. {here.mall, mood = -1}
+> Everyone shops online.
+Meet you by the escalators. {here.mall}
+> Which ones?
+Chips or noodles? {here.foodcourt}
+> Both. Obviously.
+Can never find a clean table in here. {here.foodcourt, mood = -1}
+> Just wipe it with your sleeve.
+This is the best table in the whole food court. {here.foodcourt, is = sitting}
+> It's the only one with four chairs.

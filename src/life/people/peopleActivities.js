@@ -3,7 +3,7 @@ import { feel, witness, voiceOfPerson, beginFleeing, buildingLabel, clipNamed, f
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { roomLayoutOf } from '../../buildings/footprints.js';
 import { updateBuying } from './peopleStalls.js';
-import { placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint } from './peoplePathing.js';
+import { joinWalkway, placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint } from './peoplePathing.js';
 import * as THREE from 'three';
 import { controls } from '../../core/camera-controls.js';
 import { profileOf, profilesVersion } from '../profiles.js';
@@ -481,8 +481,8 @@ function clearGround(area, x, z, r) {
  */
 export function goSit(p, area) {
   if (!personModel) return false;
-  if (area.kind === 'plaza') {
-    // (only people about the size the benches are made for)
+  if (area.kind === 'plaza' || area.kind === 'foodcourt') {
+    // (only people about the size the benches — or a food court's chairs — are made for)
     if (!hasClip('Sit1') || !area.seats.length || Math.abs(S.peopleSize*p.traits.size - 1) > 0.3) return false;
     let seat = null, best = 40;
     for (let k=0;k<10;k++) {
@@ -1530,6 +1530,9 @@ export const mayGoIndoors = p => p.indoorsCooldown <= 0 && !p.act && !p.attack &
  * @returns {void}
  */
 export function goIndoors(p, building, from) {
+  // (where along which walkway they came off: back onto it on the way out — upstairs, the nearest walkway point
+  // reseatPerson would find is down on the ground)
+  const line = p.mode === 'line' ? { li: p.li, u: p.u, builtAt: peopleNavBuiltAt } : null;
   endActivity(p);
   p.crossStage = null; p.jc = null; p.wait = 0;
   p.mode = 'indoors';
@@ -1538,7 +1541,7 @@ export function goIndoors(p, building, from) {
     : isPub(building) ? PUB_MIN_HOURS + (PUB_MAX_HOURS - PUB_MIN_HOURS)*peopleRng()
     : shopOf(building) ? SHOP_MIN_HOURS + (SHOP_MAX_HOURS - SHOP_MIN_HOURS)*peopleRng()
     : INDOORS_MIN_HOURS + (INDOORS_MAX_HOURS - INDOORS_MIN_HOURS)*peopleRng()**2;
-  p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, hoursLeft: hours, shop: shopOf(building), served: false };
+  p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, line, hoursLeft: hours, shop: shopOf(building), served: false };
   p.inRoom = null;
   setIndoorsCount(indoorsCount + 1);
 }
@@ -1593,7 +1596,8 @@ export function updateIndoors(p, i, dt) {
   p.indoorsCooldown = INDOORS_COOLDOWN*(0.5 + peopleRng());
   p.mode = 'line';
   p.dir = peopleRng() < 0.5 ? -1 : 1;
-  reseatPerson(p);
+  if (visit.line && visit.line.builtAt === peopleNavBuiltAt && peopleNav.lines[visit.line.li]) joinWalkway(p, visit.line.li, visit.line.u, p.dir);
+  else reseatPerson(p);
   return null;
 }
 

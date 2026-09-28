@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { S, App } from '../core/shared.js';
+import { S, App, buildingHolders } from '../core/shared.js';
 import { scene, ground } from '../core/scene.js';
 import { downloadFile } from './save-load.js';
 import { showHiddenBuildings } from '../buildings/see-through.js';
@@ -83,7 +83,7 @@ function exportGLB() {
   showHiddenBuildings(); // a building the camera's inside isn't drawn, and the export skips what isn't (see see-through.js)
   scene.updateMatrixWorld(true);
   const sources = [['Ground', ground], ['Roads', S.roadMeshGroup], ['Trains', S.trainMeshGroup], ['Water', S.waterGroup], ['Bridges', S.bridgeGroup], ['Objects', objectGroup],
-    ...S.zones.filter(z => z.buildingsGroup).map(z => [z.name + ' (' + (z.zoneType || 'buildings') + ')', z.buildingsGroup])];
+    ...buildingHolders().filter(z => z.buildingsGroup).map(z => [z.name + ' (' + (z.zoneType || 'buildings') + ')', z.buildingsGroup])];
   const exportScene = new THREE.Scene();
   exportScene.name = 'Kallipolis';
   const materials = new Map(); // shared across the whole file: one material per distinct look, however many nodes use it

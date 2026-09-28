@@ -26,7 +26,7 @@ export function loadTypeText(url, { attributes, settings = [], fallbacks = {}, p
   // loves and hates get (see DEFAULT_COUNTS). Kept out of the sections above: it applies to every kind in the file alike.
   let distribution = null;
 
-  fetch(url)
+  const ready = fetch(url)
     .then(response => { if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.text(); })
     .then(text => {
       const parsed = parseSections(text, { file, attributes, settings });
@@ -46,6 +46,8 @@ export function loadTypeText(url, { attributes, settings = [], fallbacks = {}, p
     return [types[key], types[fallbacks[key]], types.default].filter(Boolean);
   }
   return {
+    // settles once the file's been read (or failed to be), for anything drawn from it that has to be drawn again then
+    ready,
     // What a thing's card says: `kind` is what it is, and `number` its own number among others of its kind, which decides
     // which it gets of an attribute given several times. A kind nothing names falls back to being called by its own name.
     // Counted attributes come back as lists of text, the rest as text; `traits` is the combined traits of what was picked, and

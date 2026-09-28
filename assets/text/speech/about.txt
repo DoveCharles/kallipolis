@@ -102,8 +102,11 @@
 #                             and asleep when nobody's in; anyone sat at the bar may talk to it, and it babbles back)
 #   {here.park}               only in a park — or here.plaza, here.beach (hangouts), here.roadside (on a pavement by a
 #                             road), here.path (another walkway), here.bridge (a raised one), here.crossing (crossing a road)
+#                             or here.foodcourt (a mall's food court: tables and chairs, palms and lamps under a glass dome)
 #   {here.town}               only standing in a zone of that type — plain, park, water, beach, farmland, suburbs, town,
-#                             plaza, city, industrial, airport (outdoors; on its roads and pavements too)
+#                             plaza, city, industrial, airport, mall (outdoors; on its roads and pavements too — a
+#                             mall, drawn as a path, counts as outdoors: its glass-roofed concourse, galleries, bridges and escalators,
+#                             but not the shops off them, which are here.building = clothes, salon or pub)
 #   {here.building = home, world.hour 23-4}   at home, late        {here.bridge}   on a bridge
 #   {here.crossing}           crossing a road                 {here.city, world.hour 22-4}   in the city at night
 #

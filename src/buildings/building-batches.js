@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { S } from '../core/shared.js';
+import { S, buildingHolders } from '../core/shared.js';
 import { scene, computeWindowGlowFactor } from '../core/scene.js';
 import { createBatchedWindowMaterial, addBaseShade } from './windows.js';
 import { pedViewOn } from '../ui/ped-view.js';
@@ -190,7 +190,7 @@ export const zoneBatchMeshes = zone => zoneBatches.get(zone)?.meshes ?? null;
 // hand the buildings back for a zone that needs them drawn one by one
 export function updateBuildingBatches() {
   const live = new Set();
-  for (const zone of S.zones) {
+  for (const zone of buildingHolders()) {
     const source = zone.buildingsGroup;
     if (!source || source.parent !== scene) continue;
     live.add(zone);

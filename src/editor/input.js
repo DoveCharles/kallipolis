@@ -8,6 +8,7 @@ import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { setSelectedMap, setMapHover, startMapTransform, applyMapTransform, confirmMapTransform, cancelMapTransform, previewLine } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, setLinePoints, roadLineWidths } from '../roads/roads.js';
 import { WALKWAY_COLOR, rebuildRoadMeshes } from '../roads/paths.js';
+import { MALL_WIDTH, MALL_DEFAULTS } from '../roads/mall.js';
 import { moveRoadDragPreview, endRoadDragPreview, showDrawingPreview, endDrawingPreview, showDeletePreview, endDeletePreview, halfWidthOf } from '../roads/drag-preview.js';
 import { isTrainLine, isTrainNode, networkKindOf, pathTypeOf, currentPathType, trainNodeY, trainPlanePoint, dragTrainPoint, findNearestTrainEdge } from '../trains/trains.js';
 import { setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge } from './hover.js';
@@ -719,7 +720,8 @@ function startBranchFrom(nodeId) {
     : { id:'road-'+(S.roadLineSeq++), nodeIds:[nodeId], drawing:true, width: source.width, color: source.color,
         sidewalkWidth: source.sidewalkWidth, sidewalkColor: source.sidewalkColor, roadType: source.roadType, walkwayColor: source.walkwayColor,
         walkwayTexture: source.walkwayTexture, walkwayTextureScale: source.walkwayTextureScale, walkwayTextureRotation: source.walkwayTextureRotation,
-        raisedHeight: source.raisedHeight, raisedTrees: source.raisedTrees, raisedBenches: source.raisedBenches, raisedLights: source.raisedLights, networkId };
+        raisedHeight: source.raisedHeight, raisedTrees: source.raisedTrees, raisedBenches: source.raisedBenches, raisedLights: source.raisedLights,
+        mall: source.mall && { ...source.mall }, networkId };
   S.roadLines.push(line);
   S.activeRoadLine = line;
   S.lastGroundClick = null;
@@ -868,17 +870,20 @@ function handleLeftClick(x,y) {
     if (S.activeRoadLine) { S.activeRoadLine.nodeIds.push(id); }
     else {
       const templateLine = S.lastSelectedRoadNetworkId ? S.roadLines.find(l=>l.networkId===S.lastSelectedRoadNetworkId) : null;
-      const width = templateLine ? templateLine.width : S.DEFAULT_ROAD_WIDTH;
+      const roadType = S.newRoadType; // (from the Paths tab's Type menu)
+      // (a mall takes after the last one selected, if that was one: its concourse's width and all its settings)
+      const mallTemplate = roadType === 'mall' && templateLine?.roadType === 'mall' ? templateLine : null;
+      const width = roadType === 'mall' ? (mallTemplate ? mallTemplate.width : MALL_WIDTH) : templateLine ? templateLine.width : S.DEFAULT_ROAD_WIDTH;
+      const mall = roadType === 'mall' ? { ...MALL_DEFAULTS, ...(mallTemplate?.mall || {}), ...(mallTemplate ? {} : { seed: 1 + Math.floor(Math.random()*9999) }) } : undefined;
       const color = templateLine ? templateLine.color : ROAD_COLOR;
       const sidewalkWidth = templateLine && templateLine.sidewalkWidth!=null ? templateLine.sidewalkWidth : S.DEFAULT_SIDEWALK_WIDTH;
       const sidewalkColor = templateLine && templateLine.sidewalkColor!=null ? templateLine.sidewalkColor : SIDEWALK_COLOR;
-      const roadType = S.newRoadType; // (from the Paths tab's Type menu)
       const walkwayColor = templateLine && templateLine.walkwayColor!=null ? templateLine.walkwayColor : WALKWAY_COLOR;
       const { walkwayTexture, walkwayTextureScale, walkwayTextureRotation } = templateLine || {};
       // (a raised walkway takes the height and furniture of the last one selected, if that was one)
       const { raisedHeight, raisedTrees, raisedBenches, raisedLights } = templateLine && templateLine.roadType === 'raised' ? templateLine : {};
       const line={ id:'road-'+(S.roadLineSeq++), nodeIds:[id], drawing:true, width, color, sidewalkWidth, sidewalkColor, roadType, walkwayColor,
-        walkwayTexture, walkwayTextureScale, walkwayTextureRotation, raisedHeight, raisedTrees, raisedBenches, raisedLights, networkId:'net-'+(S.roadNetworkSeq++) };
+        walkwayTexture, walkwayTextureScale, walkwayTextureRotation, raisedHeight, raisedTrees, raisedBenches, raisedLights, mall, networkId:'net-'+(S.roadNetworkSeq++) };
       S.roadLines.push(line); S.activeRoadLine=line;
     }
     showDrawingPreview(S.activeRoadLine); renderHierarchy(); // (the line's built when it's finished)

@@ -90,11 +90,12 @@ const GROUPS = [
   ] },
   { id: 'paths', label: 'Paths', items: [
     { key: 'roads', label: 'Roads' }, { key: 'walkways', label: 'Walkways' },
-    { key: 'rivers', label: 'Rivers' }, { key: 'train lines', label: 'Train lines' },
+    { key: 'rivers', label: 'Rivers' }, { key: 'train lines', label: 'Train lines' }, { key: 'malls', label: 'Malls' },
   ] },
   { id: 'buildings', label: 'Buildings', items: [
     { key: 'commercial', label: 'Commercial' }, { key: 'industrial', label: 'Industrial' }, { key: 'farmhouses', label: 'Farmhouses' },
     { key: 'houses', label: 'Houses' }, { key: 'townhouses', label: 'Townhouses' }, { key: 'terminals', label: 'Terminals' },
+    { key: 'shops', label: 'Mall shops' },
   ] },
 ];
 const EVENTS = [
@@ -153,8 +154,10 @@ function tally() {
     const kind = BUILDING_KIND_OF_ZONE[type];
     if (kind && zone.buildingsGroup) add('buildings', kind, buildingsIn(zone.buildingsGroup));
   });
+  // (a mall's a path, but counted once for each one standing, and its shops with the other buildings)
+  (S.malls || []).forEach(mall => { add('paths', 'malls'); add('buildings', 'shops', buildingsIn(mall.buildingsGroup)); });
   S.roadLines.forEach(line => {
-    if (line.drawing) return;
+    if (line.drawing || line.roadType === 'mall') return;
     add('paths', line.kind === 'train' ? 'train lines' : line.roadType === 'walkway' || line.roadType === 'raised' ? 'walkways' : line.roadType === 'river' ? 'rivers' : 'roads');
   });
   const lines = {}, groups = {};

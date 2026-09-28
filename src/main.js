@@ -22,6 +22,7 @@ import './zones/cutouts.js';
 import './zones/industrial.js';
 import './zones/suburbs.js';
 import './zones/town.js';
+import './roads/mall.js';
 import './zones/airport.js';
 import './objects/objects.js';
 import './water/bridges.js';

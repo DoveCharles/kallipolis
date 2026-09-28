@@ -264,7 +264,8 @@ function renderPathThumbnails() {
     tempLines.push(isTrain ? { id: networkId, kind: 'train', nodeIds: ids, radius: S.TRAIN_DEFAULT_RADIUS, networkId }
       : { id: networkId, nodeIds: ids, width: S.DEFAULT_ROAD_WIDTH, color: ROAD_COLOR, sidewalkWidth: S.DEFAULT_SIDEWALK_WIDTH, sidewalkColor: SIDEWALK_COLOR,
         roadType: type.id, walkwayColor: WALKWAY_COLOR, networkId, ...(type.id === 'walkway' && { walkwayTexture: 'brick', walkwayColor: 0xb4623f }), // (terracotta brick)
-        ...(type.id === 'raised' && { raisedTrees: true, raisedBenches: true, raisedLights: true }) });
+        ...(type.id === 'raised' && { raisedTrees: true, raisedBenches: true, raisedLights: true }),
+        ...(type.id === 'mall' && { width: 14, mall: { theme: 1, seed: 3 } }) }); // (a mall builds straight away: see rebuildMalls)
   });
   const restore = () => {
     tempNodes.forEach(id => { delete roadNodes[id]; });
@@ -311,8 +312,8 @@ function renderPathThumbnails() {
         }
         // how much it takes in (half the shot's width), close enough that the path fills most of it, and the height it's centered
         // on: the deck of a raised walkway, a train line's tube
-        const VIEWS = { sidewalk: 9, walkway: 7.5, raised: 8, river: 11, train: 9 };
-        const isTrain = type.id === 'train', view = VIEWS[type.id], fy = isTrain ? S.TRAIN_DEFAULT_HEIGHT : type.id === 'raised' ? RAISED_HEIGHT : 0;
+        const VIEWS = { sidewalk: 9, walkway: 7.5, raised: 8, river: 11, train: 9, mall: 30 };
+        const isTrain = type.id === 'train', view = VIEWS[type.id], fy = isTrain ? S.TRAIN_DEFAULT_HEIGHT : type.id === 'raised' ? RAISED_HEIGHT : type.id === 'mall' ? 5 : 0;
         camera.left = camera.bottom = -view; camera.right = camera.top = view;
         camera.updateProjectionMatrix();
         camera.position.set(cx + 120, fy + 140, cz + 160); // from the south-east, like the zones' — the path running across it

@@ -40,7 +40,7 @@
 /**
  * A hangout: a plaza, park or beach people gather in.
  * @typedef {object} Hangout
- * @property {string} kind - 'plaza', 'park' or 'beach'
+ * @property {string} kind - 'plaza', 'park', 'beach' or 'foodcourt' (a mall's: see roads/mall.js)
  * @property {function(number, number): boolean} inside - the zone with its cutouts (water, a fountain) taken out
  * @property {?{x: number, z: number, r: number}} fountain
  * @property {number} minX

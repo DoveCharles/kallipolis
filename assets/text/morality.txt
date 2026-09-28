@@ -30,6 +30,7 @@ roads = -0.5
 walkways = 0.5
 rivers = 1
 train lines = 1
+malls = -1
 
 # ------------------------------------------------------------------------------------------------------------------------
 # BUILDINGS: per building, by the zone it's in
@@ -38,6 +39,7 @@ train lines = 1
 # farmhouses: in a Farmland zone
 # houses: in a Suburbs zone
 # townhouses: in a Town zone (shops too)
+# shops: a mall's units, upstairs and down
 [buildings]
 commercial = -0.1
 industrial = -0.5
@@ -45,6 +47,7 @@ farmhouses = 0.2
 houses = -0.1
 townhouses = 0.1
 terminals = 0.1
+shops = -0.05
 
 # ------------------------------------------------------------------------------------------------------------------------
 # THINGS THAT HAPPEN: per time it happens (these start at 0 each time the page loads)

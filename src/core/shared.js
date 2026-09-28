@@ -18,6 +18,9 @@ export const S = {
   hideOwnHead: true, carSpawnDistance: 2000, bloodSoak: true,
 };
 export const App = {};
+// Everything that holds buildings: the zones, and the malls (see roads/mall.js), each shaped enough like a zone — an id, a
+// buildingsGroup, walkGaps and so on — for anything looking for buildings to find theirs too.
+export const buildingHolders = () => S.malls?.length ? S.zones.concat(S.malls) : S.zones;
 // The sand tint, as one uniform object every sand material shares — the beach floors, the slopes running
 // down into the water, the sand a park fades into at the shore and the sand under the shallows all point
 // at this same object, so picking a color reaches all of them at once with nothing rebuilt (the same trick
