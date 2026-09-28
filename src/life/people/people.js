@@ -459,7 +459,7 @@ const PERSON_LATER_FIELDS = Object.fromEntries([
   'water', 'waterHere', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
   'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'smellCheck',
   // walked about by hand (peopleTracking.js)
-  'footing', 'onRoad', 'shove', 'touching', 'near', 'walkingSpeed',
+  'footing', 'onRoad', 'shove', 'touching', 'near', 'walkingSpeed', 'chatWith',
 ].map(key => [key, undefined]));
 /**
  * Make a person with their traits and state at their starting values.

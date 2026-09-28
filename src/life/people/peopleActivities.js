@@ -54,7 +54,7 @@ function endChat(g, how = null) {
   removeGroup(g);
   if (how === 'bad') talked(g, RELATE.badChat); else if (g.stage !== 'gather') talked(g, RELATE.chat);
   const chatGroup = g.members.splice(0);
-  chatGroup.forEach(m => { m.group = null; finishActivity(m); });
+  chatGroup.forEach(m => { m.group = null; if (isSeated(m)) settleBack(m); else finishActivity(m); });
   if (how !== 'bad' || chatGroup.length !== 2 || !hasClip('Punch') || !hasClip('Fall')) return;
   chatGroup.forEach((m, i) => {
     const other = chatGroup[1 - i];
@@ -141,6 +141,7 @@ export function leaveGroup(p) {
   const g = p.group;
   if (!g) return;
   p.group = null;
+  if (p.act === 'chat') p.act = null; // (whoever's possessed, stood talking in a circle: see talkWith)
   g.members.splice(g.members.indexOf(p), 1);
   if (g.speaker === p) g.speaker = null;
   g.members.forEach(m => { if (m.lookAt === p) m.lookAt = null; });
@@ -180,29 +181,71 @@ function finishActivity(p) {
  * @param {Person} a - the one waited on, if the other is walking over
  * @param {Person} b - the other
  * @param {boolean} approach - whether the second walks over to the first first, who waits for them
+ * @param {boolean} [waved] - whether, not walking over, they wave hello first (else straight to talking)
  * @returns {object} the group they're talking in
  */
-function startChat(a, b, approach) {
+function startChat(a, b, approach, waved = true) {
   const g = { kind: 'chat', members: [a, b], stage: 'gather', timer: 25, speaker: null, turnIn: 0 };
   groups.push(g);
   [a, b].forEach(m => { endActivity(m); m.act = 'chat'; m.group = g; m.wait = 0; });
   a.lookAt = b; b.lookAt = a;
-  if (!approach) wave(g, 'greet');
+  if (!approach && waved) wave(g, 'greet');
   return g;
 }
 
 /**
- * Someone possessed pressing E at someone (see talkFromPossession in peopleTracking.js): the two start talking where they
- * stand, with a wave hello, taking turns as any two do — until it runs its course or they walk off (leaveGroup).
+ * Whether someone's sat down — on a bench, in a circle on the grass, or on a seat indoors. Talked to, they stay sat.
+ * @param {Person} q - the person
+ * @returns {boolean} whether they're sat
+ */
+export const isSeated = q => ((q.act === 'bench' || q.act === 'circle') && q.stage === 'sit') || (!!q.inRoom?.seat && q.inRoom.stage === 'sit');
+/**
+ * Someone sat, done with a chat: back to what they were at (typing again, at a desk; eating), and not talking again for a
+ * while.
+ * @param {Person} m - the person
+ * @returns {void}
+ */
+function settleBack(m) {
+  m.lookAt = null;
+  m.chatCooldown = 15 + peopleRng()*30;
+  if (m.pose === 'TypingPaused') { m.pose = 'Typing'; if (m.inRoom) m.inRoom.spell = spellAt('Typing'); }
+  else if (m.pose === 'EatingPaused') m.pose = 'Eating';
+}
+/**
+ * Someone possessed pressing E at someone (see useFromPossession in peopleTracking.js): whoever's possessed says hello
+ * (greetings.txt — p.greetTo, see audio/dictionary.js) and the other replies, and on they talk, taking turns as any two
+ * do — until it runs its course or they walk off (leaveGroup). Someone standing turns to face them once (after that only
+ * their head follows: see updateGroups); someone sat stays sat, carrying on with what they were at between words; someone
+ * sat in a circle on the grass has them join it, standing, the rest talking along.
  * @param {Person} p - whoever's possessed
  * @param {Person} q - who they're talking to
  * @returns {void}
  */
 export function talkWith(p, q) {
-  startChat(q, p, false).possessed = true; // (they turn to face them once; after that only their head follows — updateGroups)
-  // (in a room, up off any seat and done with wherever they were going: they stand and talk, then carry on from there)
-  if (q.inRoom) Object.assign(q.inRoom, { seat: null, route: null, stage: '', wait: 2 });
-  q.faceTo = headingTo(q, p);
+  let g;
+  if (q.act === 'circle' && q.stage === 'sit') {
+    endActivity(p);
+    g = q.group;
+    g.members.push(p);
+    p.act = 'chat'; p.group = g;
+  } else if (isSeated(q)) {
+    endActivity(p);
+    leaveGroup(q);
+    g = { kind: 'chat', members: [q, p], stage: 'talk', timer: 0, speaker: null, turnIn: 0 };
+    groups.push(g);
+    p.act = 'chat'; p.group = q.group = g;
+    q.pose = pausedPose(q.pose);
+  } else {
+    g = startChat(q, p, false, false);
+    // (in a room, up off any seat and done with wherever they were going: they stand and talk, then carry on from there)
+    if (q.inRoom) Object.assign(q.inRoom, { seat: null, route: null, stage: '', wait: 2 });
+    q.faceTo = headingTo(q, p);
+  }
+  if (g.kind === 'chat') { g.possessed = true; g.stage = 'talk'; g.timer = (8 + peopleRng()*22)*(p.traits.patience + q.traits.patience)/2; }
+  p.chatWith = q;
+  p.lookAt = q; q.lookAt = p;
+  p.greetTo = { who: q, until: performance.now()/1000 + GREET_WAIT };
+  if (!g.speaker?.saying) { g.speaker = p; g.turnIn = GREET_WAIT; closeNow(p); }
 }
 
 /**
@@ -214,7 +257,7 @@ export function talkWith(p, q) {
 function wave(g, stage) {
   g.stage = stage;
   g.timer = hasClip('Wave') ? clipNamed('Wave').duration : 1;
-  g.members.forEach(m => playOnce(m, 'Wave'));
+  g.members.forEach(m => { if (!isSeated(m)) playOnce(m, 'Wave'); }); // (anyone sat just stays sat)
 }
 
 /**
@@ -311,10 +354,10 @@ export function updateGroups(dt) {
     if (g.kind === 'room') { roomChat(g, dt); continue; }
     if (g.kind === 'bar') { barChat(g, dt); continue; }
     if (g.kind === 'circle') {
-      const seated = g.members.filter(m => m.stage === 'sit');
-      if (seated.some(m => m.traits.smells)) { g.members.filter(m => !m.traits.smells).forEach(finishActivity); continue; } // (someone who smells sat down: everyone else gets up and goes)
+      const seated = g.members.filter(m => m.stage === 'sit'), talkers = g.members.filter(m => m.stage === 'sit' || m.mode === 'possessed');
+      if (seated.some(m => m.traits.smells)) { g.members.filter(m => !m.traits.smells && m.mode !== 'possessed').forEach(finishActivity); continue; } // (someone who smells sat down: everyone else gets up and goes)
       if (endedByLine(g)) continue;
-      if (seated.length >= 2) takeTurns(g, seated, dt); else g.speaker = null;
+      if (talkers.length >= 2) takeTurns(g, talkers, dt); else g.speaker = null; // (whoever's possessed, stood with them, talks along: see talkWith)
       continue;
     }
     const [a, b] = g.members;
@@ -499,6 +542,7 @@ export function updateActivity(p, area, dt) {
     case 'sit':
       p.timer -= dt;
       if (p.closing && p.saying) p.timer = Math.max(p.timer, 0.5); // (their goodbye isn't cut short)
+      if (talkedToByPossessed(p)) p.timer = Math.max(p.timer, 0.5); // (not getting up while someone possessed is talking to them)
       // (time up in a circle with others to talk to: first a turn to say a closer — closers.txt, see audio/dictionary.js,
       // which leaves through endedByLine — for up to CLOSE_WAIT; then they just get up)
       if (p.timer <= 0 && p.act === 'circle' && !p.closing && p.group?.members.filter(m => m.stage === 'sit').length >= 2) {
@@ -1684,7 +1728,7 @@ function standingSpot(p, seat) {
  * @param {Person} p - the person
  * @returns {void}
  */
-function standUp(p) {
+export function standUp(p) {
   const seat = p.inRoom?.seat;
   if (p.group?.kind === 'room' || p.group?.kind === 'bar') leaveGroup(p);
   if (seat && seat.by === p) seat.by = null;
@@ -1733,6 +1777,7 @@ function sitting(p, here, dt) {
       const on = seat.sofa ? watchingTV() : null;
       if (on > 0 && here.watched == null) here.watched = on;
       here.timer -= dt;
+      if (talkedToByPossessed(p)) here.timer = Math.max(here.timer, 0.5); // (not getting up while someone possessed is talking to them)
       // (now and then a word with whoever's sat next to them — at the next desk, hands still on the keys, or on the sofa
       // or a chair beside them at home)
       if (!p.group && (here.chatIn = (here.chatIn ?? peopleRng()*SEAT_CHAT_EVERY) - dt) <= 0) {
@@ -1925,6 +1970,7 @@ const SAT_AFTER_MEAL = 12;
 const deskPose = seat => seat.desk && hasClip('Typing') ? 'Typing'
   : seat.diner && hasClip('Eating') ? 'Eating' : 'Sit1';
 /** The same pose with their hands still, for talking to whoever's sat beside them. */
+const talkedToByPossessed = p => !!p.group?.members.some(m => m.mode === 'possessed' && m.chatWith === p);
 const pausedPose = pose => (pose === 'Typing' || pose === 'Eating') && hasClip(`${pose}Paused`) ? `${pose}Paused` : pose;
 /** How long a spell of a pose at a desk lasts, at random. */
 const spellAt = pose => { const [lo, hi] = pose === 'Typing' ? TYPING_SPELL : SAT_BACK_SPELL; return lo + peopleRng()*(hi - lo); };
