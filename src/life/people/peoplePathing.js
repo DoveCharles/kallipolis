@@ -194,7 +194,7 @@ export function buildPeopleNav() {
       seats: zone.zoneType==='plaza' ? (zone.benchSeats || []).map(seat => ({ ...seat, by: null })) : [],
       trees: zone.zoneType==='park' ? zone.treeSpots || [] : [] });
   });
-  // a mall's food court: a hangout like a plaza, round its tables and kiosks, with a seat at every chair (see
+  // a mall's food court: a hangout like a plaza, round its tables, palms and lamps, with a seat at every chair (see
   // generateMallContent)
   S.zones.forEach(zone => {
     const fc = !zone.drawing && zone.foodCourt;
