@@ -448,7 +448,7 @@ export function syncPeopleUI() {
 // (see the end of newPerson)
 const PERSON_LATER_FIELDS = Object.fromEntries([
   // who they are (refreshTraits), how they look (updatePeople)
-  'health', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'defaultHair', 'eyeBase', 'faceDt', 'placedOut',
+  'health', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'faceDt', 'placedOut',
   // what they say and think
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
   'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
@@ -548,6 +548,7 @@ export function refreshTraits(p, i) {
   p.loves = profile.lovesSaid; p.hates = profile.hatesSaid; // (for what they say: see life/speech-text.js)
   p.lovedWords = profile.lovedWords; p.hatedWords = profile.hatedWords;
   p.isMan = isMan; // (null for the cuboid people; for {man} in what they say)
+  tintSkin(p, i); // (the skin those traits give them: see tintSkin)
 }
 
 export const FRIGHT_RADIUS = 14, FLEE_SPEED = 2.3;
@@ -557,6 +558,37 @@ const VAMPIRE_EYE_TINT = 0.2, VAMPIRE_EYE_COLOR = new THREE.Color(0xffc40c),
    BLAZED_EYE_RED = 0.05, EYE_RED_COLOR = new THREE.Color(0xff0000);
 // Vampires' skin moves 10% of the way to the colour for every 100 years of age, counting from the first (so it starts out 10% grey).
 const VAMPIRE_SKIN_COLOR = new THREE.Color(0xd3d3d3), VAMPIRE_PALE_PER_CENTURY = 0.1;
+// The sick and zombie traits (the 🤢 and 🧟 moods in people/moods.txt give each of them) take the skin MOOD_SKIN_BLEND of
+// the way to a colour of its own: a sickly green, and a dead blue-grey (see tintSkin).
+const SICK_SKIN_COLOR = new THREE.Color(0x72bb4d), ZOMBIE_SKIN_COLOR = new THREE.Color(0x609dc2), MOOD_SKIN_BLEND = 1;
+// The traits that have a say in the skin, as one number, for telling when one of them has changed (see tintSkin).
+const skinKeyOf = p => (p.traits.sick ? 1 : 0) + (p.traits.zombie ? 2 : 0) + (p.traits.vampire ? 4 : 0);
+/**
+ * Write the skin someone's traits give them to the person model: the colour they came with, moved towards the grey a
+ * vampire's age pales it to and, all the way, the colour of the sick and zombie traits (see SICK_SKIN_COLOR). Their own is
+ * kept on p.skinBase the first time, so the skin they came with comes back when the trait goes — a mood cheered up out of
+ * the 🤢 or 🧟 one, a keepsake handed back.
+ *
+ * Called when one of those traits changes rather than every frame: from refreshTraits, and from updatePeople for a
+ * keepsake or a status that's just moved one (see skinKeyOf). While they've blood on them the skin row is peopleBlood.js's,
+ * which stains from p.bloodBase — so that's what's moved instead, to be stained from.
+ * @param {Person} p - the person
+ * @param {number} i - their index in people
+ * @returns {void}
+ */
+function tintSkin(p, i) {
+  p.skinKey = skinKeyOf(p); // (even without the model: its coming is a traits change of its own, which tints them for real)
+  if (!personModel) return;
+  const o = ((2 + PERSON_TRAIT_COLORS.indexOf('Skin'))*PEOPLE_MAX + i)*4, data = personModel.traitData;
+  p.skinBase ??= [data[o], data[o + 1], data[o + 2]];
+  const skin = new THREE.Color().setRGB(p.skinBase[0], p.skinBase[1], p.skinBase[2]);
+  if (p.traits.vampire) skin.lerp(VAMPIRE_SKIN_COLOR, Math.min(1, VAMPIRE_PALE_PER_CENTURY*(1 + p.age/100)));
+  const moodSkin = p.traits.zombie ? ZOMBIE_SKIN_COLOR : p.traits.sick ? SICK_SKIN_COLOR : null;
+  if (moodSkin) skin.lerp(moodSkin, MOOD_SKIN_BLEND);
+  if (p.blood && p.bloodBase) { p.bloodBase.Skin = [skin.r, skin.g, skin.b]; return; } // (blood's to stain from: see peopleBlood.js)
+  data[o] = skin.r; data[o + 1] = skin.g; data[o + 2] = skin.b;
+  personModel.traitTexture.needsUpdate = true;
+}
 const LOOK_BEHIND = 0.8*Math.PI; // how far round (radians either side of ahead) someone they're looking at counts as right behind them
 const BUBBLE_HEIGHT = 2; // how high over their feet (× height, × people size) a speech bubble's tail points (see ui/speech-bubbles.js)
 const BUBBLE_CHAIR_DROP = 0.5, BUBBLE_GROUND_DROP = 0.8; // how much lower (same units) sat on a seat, and sat on the ground
@@ -1136,6 +1168,7 @@ export function updatePeople(t) {
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
+    if (p.skinKey !== skinKeyOf(p)) tintSkin(p, i); // (a keepsake or status that's just moved the skin's traits: see tintSkin)
     if (!p.pocketsStocked) stockPockets(p, i); // (the sunglasses they came in: see life/gifts.js)
     if (p.blood) updateBlood(p, dt, i);
     p.trainCooldown -= dt;
@@ -1186,12 +1219,7 @@ export function updatePeople(t) {
       if (p.traits.blazed) eyes.lerp(EYE_RED_COLOR, BLAZED_EYE_RED);
       data[e] = eyes.r; data[e+1] = eyes.g; data[e+2] = eyes.b;
       p.eyeBase = [eyes.r, eyes.g, eyes.b]; // (what bloodlust's eyes go back to: see stain in peopleBlood.js)
-      // vampires' skin drains towards light grey with age
-      if (p.traits.vampire) {
-        const s = ((2 + PERSON_TRAIT_COLORS.indexOf('Skin'))*PEOPLE_MAX + i)*4;
-        const paleSkin = new THREE.Color().setRGB(data[s], data[s+1], data[s+2]).lerp(VAMPIRE_SKIN_COLOR, Math.min(1, VAMPIRE_PALE_PER_CENTURY*(1 + p.age/100)));
-        data[s] = paleSkin.r; data[s+1] = paleSkin.g; data[s+2] = paleSkin.b;
-      }
+      // (the skin their traits give them is written by tintSkin, above)
     }
     // (stopped to talk, or frozen in shock, someone on a walkway stays put)
     if (p.mode === 'line' && p.act !== 'chat' && !frozen && !p.attack) {

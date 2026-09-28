@@ -163,6 +163,8 @@
 #   {is = drunk}              the drunk trait, or a pint or more in them
 #   {is = bloodlusting}       bloodlusting now
 #   {is = bloody}             any blood on them               {is = hurt}     under 70% health
+#   {is = sick}               the sick trait: their skin's gone a sickly green (the 🤢 mood gives it)
+#   {is = zombie}             the zombie trait: their skin's gone a dead blue-grey (the 🧟 mood gives it)
 #   {is = sad}                looking upset (their face)      {is = happy}    looking happy
 #   {is = scared}             running from something, or blood on them (unless they like it)
 #   {is = sitting}            sat down: on a bench, in a circle, on a seat indoors   {other.is = sitting}  to someone sat

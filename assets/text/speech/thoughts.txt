@@ -83,6 +83,12 @@ Stop crying. Just stop crying. {is = sad}
 Nobody cares. {is = sad, mood = -1}
 Today's actually going alright. {is = happy}
 Don't look back. Keep going. {is = scared}
+I don't feel so good. {is = sick}
+Everything tastes like metal. {is = sick, mood = -1}
+Just need to sit down. {is = sick, patience}
+Is my heart still going? {is = zombie}
+So cold. {is = zombie}
+Brains... {is = zombie, weight = 0.5}
 
 Yummy beers on my horizon, beers as the eye can see! {is != drunk, here.building = pub, mood =2}
 Drink o'clock! {is != drunk, here.building = pub}

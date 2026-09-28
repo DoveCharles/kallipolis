@@ -119,6 +119,17 @@ You're drunk, aren't you? {other.is = drunk}
 > I'm not drunk, YOU'RE drunk. {is = drunk}
 > Just a little. {is = drunk, happy}
 
+Are you feeling alright? You look green. {other.is = sick, evil = -1}
+> I've felt better. {is = sick}
+> It's just something I ate. {is = sick}
+>> I'd go home if I were you. {evil = -1}
+> Never better! {is = sick, happy}
+
+You look like death warmed up. {other.is = zombie, nosy}
+> Mind your own business. {aggression}
+> Brains... {is = zombie}
+>> ...Right. {end = bad}
+
 What a [good] day! {mood}
 > Is it? It's [bad: comparative] than yesterday. {mood = -1}
 > Yes, [good: superlative] one this week! {happy}

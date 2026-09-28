@@ -46,6 +46,8 @@ which add up. Everyone starts at the value in
 #   backwards   off     they walk backwards                                                           on or off
 #   dodge       0       the chance of leaping clear of a punch, then going after whoever threw it      0 to 1
 #   blazed      off     the whites of their eyes are slightly red, like they're high                   on or off
+#   sick        off     their skin goes a sickly green — the 🤢 mood in moods.txt gives it              on or off
+#   zombie      off     their skin goes a dead blue-grey — the 🧟 mood in moods.txt gives it            on or off
 #   vampire     off     adds the traits in TRAIT_MACROS (core/traits.js), skin pales with age                on or off
 #   ageless     off     they don't visibly age, hair does not grey                                    on or off
 #   choiceweight 0       whole numbers, how likely to appear, set 0 to disable autoassign               0 to Inf

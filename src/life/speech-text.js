@@ -42,6 +42,8 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   drunk: person => !!person?.traits?.drunk || (person?.pints ?? 0) >= 1, // (the drunk trait, or a pint or more in them)
   bloodlusting: person => !!person?.lusting,
   bloody: person => (person?.blood ?? 0) > 0,
+  sick: person => !!person?.traits?.sick, // (the traits the 🤢 and 🧟 moods give them: their skin's gone green, or a dead blue-grey)
+  zombie: person => !!person?.traits?.zombie,
   sad: person => (person?.emotion ?? 0) < -MOOD_SHOWS,
   happy: person => (person?.emotion ?? 0) > MOOD_SHOWS,
   scared: person => person?.fright?.stage === 'flee' || ((person?.blood ?? 0) > 0 && !person?.traits?.bloodlust),
