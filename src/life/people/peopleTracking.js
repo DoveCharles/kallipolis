@@ -14,7 +14,7 @@ import { IS_TOUCH } from '../../core/device.js';
 import { pointInPolygon } from '../../core/math.js';
 import { buildingKey, buildingNumber, distToPolygonBoundary, footprintBounds } from '../../buildings/footprints.js';
 import { buildingEnterable, buildingKindOf, buildingName, buildingTitle, buildingTypeOf } from '../../buildings/building-types.js';
-import { openRoomDoor, roomBeyondDoor, roomDoorway, roomNear, roomThroughDoor, roomVisit, roomWalkable } from '../../buildings/interior.js';
+import { openRoomDoor, roomBeyondDoor, roomDoorway, roomNear, roomThroughDoor, roomVisit, roomWalkable, someoneHome } from '../../buildings/interior.js';
 
 // ============== following someone with camera  ============== 
 // In World mode, clicking a person keeps the view centered on them as they move —
@@ -576,6 +576,7 @@ const talkingTo = p => p.group && p.chatWith && p.group.members.includes(p.chatW
 export function updatePossessedTarget() {
   const p = people[possession.index];
   target = null;
+  if (p?.mode === 'possessed' && possessedRoom) someoneHome(); // (in the room like anyone else: its lamp, music, bar bot…)
   if (p?.mode === 'possessed' && S.interactionMode === 'move') {
     const partner = talkingTo(p);
     const q = partner ?? personAhead(p);
