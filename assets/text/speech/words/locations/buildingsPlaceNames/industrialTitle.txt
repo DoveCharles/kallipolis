@@ -1,0 +1,7 @@
+[boynames] & [boynames]'s
+[surnames]'s
+Dusty [weapon: capitalise]
+Industrial [objects: capitalise] {weight = 4}
+Bullshit
+Steel [animals: capitalise]
+[junk#1: capitalise] {weight = 2}

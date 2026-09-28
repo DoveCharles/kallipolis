@@ -4,6 +4,7 @@ import { entryOf } from '../core/entries.js';
 import { setEntryFiller } from './profiles.js';
 import { feelingFor, introduced } from './people/peopleRelations.js';
 import { moralityLevel } from '../ui/morality.js';
+import { capitalisedWords } from '../ui/garble.js';
 import { roomLayoutOf } from '../buildings/footprints.js';
 import { tessellateClosedPath } from '../core/splines.js';
 import { peopleNav } from './people/people.js';
@@ -126,6 +127,10 @@ function parseTags(text, where) {
 // people/ lists said with a small first letter ("I love energy drinks") unless given a spoken wording after a |
 const LOWERED = ['loves', 'hates'];
 const lowerFirst = text => text.charAt(0).toLowerCase() + text.slice(1);
+// What a [category: …] call can ask for besides a form, which is any other word it names (see fill): [animals: a] with
+// a/an in front, [loves: lower] with its first letter made small, [colours: capitalise] with every word's raised,
+// [interests: hated] for the negative pick.
+const CALL_OPTIONS = ['a', 'lower', 'capitalise', 'hated'];
 // An entry's {traits} (people/'s lists) as tags: each trait's effect on someone starting at its base, measured -1 to 1 as
 // for the speaker's traits (see traitLevel), softened by a square root so a small effect still leans. `sign` -1 for hates:
 // hating slow walkers makes someone fast, so it's the slow who'd like them.
@@ -468,6 +473,8 @@ function personalItem(key, person) {
   return wordIndex.get(plain(entry)) ?? { text: entry, weight: 1, traits: {}, world: [] };
 }
 // A line's text with its [placeholders] filled; `vars` holds #n picks for the whole conversation. Null if one can't be.
+// A call takes a form and any of CALL_OPTIONS with it: [animals: plural], [animals: a], [loves: lower], [colours:
+// capitalise], [interests: hated].
 function fill(text, person, vars, depth = 0, picks = null) {
   let failed = false;
   const counts = {};
@@ -477,8 +484,8 @@ function fill(text, person, vars, depth = 0, picks = null) {
     const [rawName, tag] = head.split('#').map(s => s.trim());
     const name = rawName.toLowerCase(), options = rest.join(':').split(',').map(o => o.trim().toLowerCase()).filter(Boolean);
     if (NAMED.test(name)) { const said = nameIn(name, person); if (!said) failed = true; return said ?? ''; }
-    const hated = options.includes('hated'), article = options.includes('a'), lower = options.includes('lower');
-    const form = options.find(o => o !== 'hated' && o !== 'a' && o !== 'lower') || null;
+    const hated = options.includes('hated'), article = options.includes('a'), lower = options.includes('lower'), everyWord = options.includes('capitalise');
+    const form = options.find(o => !CALL_OPTIONS.includes(o)) || null;
     const held = tag ? vars[`${name}#${tag}`] : null;
     // (picks: the card's words, reused in order by the spoken wording — see fillEntry)
     const nth = counts[name] = (counts[name] ?? -1) + 1, reused = !tag && picks?.reuse ? picks.reuse[name]?.[nth] : null;
@@ -491,6 +498,7 @@ function fill(text, person, vars, depth = 0, picks = null) {
     vars.$last = item; // (for {likes} on the replies)
     if (said == null) { failed = true; return ''; }
     if (lower) said = said.charAt(0).toLowerCase() + said.slice(1); // (a list written with capitals, like people/loves.txt)
+    else if (everyWord) said = capitalisedWords(said); // (one written small, like colours.txt: a capital on every word)
     return article ? `${/^[aeiou]/i.test(said) ? 'an' : 'a'} ${said}` : said;
   });
   return failed ? null : out.replace(/\s+/g, ' ').trim();

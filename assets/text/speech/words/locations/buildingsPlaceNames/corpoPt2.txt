@@ -1,4 +1,4 @@
-rt
+rp
 pter
 tter
 rgo
@@ -9,11 +9,11 @@ rgy
 mo
 nco
 lco
-poli
-tic
-gorithm
+polis
+ptics
+gorithms
 rgy
-ck
+cky
 ick
 nge
 ngry
@@ -21,4 +21,8 @@ lli
 rbo
 lbo
 bibi
+bis
+py
+bris
+pers
 [corpoPt1] {weight = 5}

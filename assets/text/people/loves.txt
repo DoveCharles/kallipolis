@@ -77,7 +77,7 @@ Pimping {speed = 0.7, plazas = 3, evil = 0.3, aggression = 5, smoker = 10, outla
 Driving <hobbies>
 Helping animals (will sometimes put  animals in dangerous situations in order to help them) {parks = 3} <nature>
 Lying {talkative = 2, evil = 0.05, outlaw = 3} <vice>
-Shitty fucking overpriced merchandise | awesome merchandise <stuff>
+Shitty fucking overpriced merchandise | awesome, adequately priced, merchandise <stuff>
 The milking machine <surreal>
 Skiing (lie) | skiing <hobbies>
 Laptop in bed {lounging = 3, agemult = 0.8, nerd =2} <habits>

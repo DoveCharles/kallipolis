@@ -19,7 +19,8 @@ export const capitalised = text => /^[a-z]/.test(text) ? text.charAt(0).toUpperC
 
 // Every word's first letter capitalised: words are split on spaces and hyphens, and an opening quote or bracket goes with
 // the word it opens — so "flat-pack" reads "Flat-Pack", "don't" stays "Don't", and `"expresso" (hot)` reads `"Expresso" (Hot)`.
-const capitalisedWords = text => text.replace(/(^|[\s(–—\-])(["'(]*)([a-z])/g,
+// (The capitalise trait's own casing, and what a `[colours: capitalise]` call asks for: see fill in life/speech-text.js.)
+export const capitalisedWords = text => text.replace(/(^|[\s(–—\-])(["'(]*)([a-z])/g,
   (all, before, opener, letter) => before + opener + letter.toUpperCase());
 
 /**

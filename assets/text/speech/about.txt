@@ -51,6 +51,8 @@
 #   [animals: plural]         a named form (plural, general, past, ing, ...)
 #   [animals: a]              with a/an in front: "a rhino", "an owl"
 #   [loves: lower]            its first letter made small, for lists written with capitals (people/'s): "I love energy drinks"
+#   [colours: capitalise]     every word's first letter raised, for a list written small: "Red", "Blue" ("flat-pack" reads
+#                             "Flat-Pack") — the casing the capitalise trait gives a card; with lower as well, lower wins
 #   [interests: hated]        a negative call: flips the leaning (see TAGS), so good people pick evil things, and uses the
 #                             speaker's hates where it'd use their loves (see LOVES AND HATES) — "I really hate [interests: general, hated]"
 #   [bad: superlative]        "worst"; [violence: past] "punched"; [badhabits: third] "bites"; [foods: general, lower]
@@ -257,12 +259,14 @@
 #   a closer; a low score never ends it badly by itself (only {end = bad} lines do).
 # - [both.clash] in a reply is between the replier and who they're answering: something the replier loves and the
 #   other hates. Hold it with #1 to keep the first speaker's word.
-# - speech/words/locations/buildingsPlaceNames/ holds name parts nothing ever says: [offices] names the city's offices —
-#   each one is a company, "Epic Systems" or "Splort!", which its card carries on its Name row (see buildingOwnName and
-#   officeName in src/buildings/building-types.js), picked with the building's own number as the seed, so an office
-#   always has the same one. Its own line puts [corpTitle] and [corpType] together out of the words in those files, so
-#   their {weight}s, [placeholders] and nesting work as everywhere else; the name is said as the line reads but for its
-#   first letter, which is raised ("splort!" reads "Splort!", "red Smith" reads "Red Smith" — any capital further in has
-#   to be written in the file). One of corpTitle's lines names nothing as the files stand: there's no fruits.txt — the
-#   list is [fruit].
+# - speech/words/locations/buildingsPlaceNames/ holds name parts nothing ever says: [offices] names the city's offices,
+#   each one a company ("Epic Systems", "Splort!"), [residential] its homes ("Silva Residential", "Tanaka Flats") and
+#   [industrial] the yards of its industrial zones ("Dusty Revolver Mill", "Steel Badger & Sons Import & Exports"), which
+#   their cards carry on their Name row (the title bar still says what the building is: a Warehouse, a Factory — see
+#   buildingOwnName and pickedName in src/buildings/building-types.js).
+#   Each is picked with the building's own number as the seed, so a building always has the same name, and each file's
+#   own line composes the name out of the words in these files ([corpTitle] [corpType], [corpTitle] [residentialType]),
+#   so their {weight}s, [placeholders] and nesting work as everywhere else. The name is said as the line reads but for
+#   its first letter, which is raised ("splort!" reads "Splort!"); any capital further in has to be written in the file.
+#   One of corpTitle's lines names nothing as the files stand: there's no fruits.txt — the list is [fruit].
 

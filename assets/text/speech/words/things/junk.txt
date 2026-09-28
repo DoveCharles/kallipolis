@@ -1,0 +1,20 @@
+forms: singular | plural | general
+scrap
+bolt
+screw
+nail
+plate
+iron rod
+shrapnel | shrapnel
+tool
+sawblade
+weight
+bearing
+rivet
+rebar
+tank
+sheet lining | sheet lining
+corrogate
+alloy
+reinforcement
+sand | sand

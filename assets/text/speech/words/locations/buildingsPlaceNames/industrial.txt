@@ -1,0 +1,2 @@
+[industrialTitle] [industrialType] {weight = 5}
+[junk#1: capitalise, plural], [junk#1: capitalise, plural], [junk#1: capitalise, plural]!

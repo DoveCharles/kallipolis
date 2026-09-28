@@ -1,3 +1,4 @@
+forms: singular | plural | general
 shrimp | shrimp
 scallop
 sea urchin

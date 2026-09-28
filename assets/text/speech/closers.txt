@@ -23,7 +23,7 @@ Drink a glass of water when you get home! {end, other.is = drunk, evil = -1}
 Get out of here, drunk. {end = bad, aggression, other.is = drunk, talk.score = -1,}
 Hope you feel better soon! [farewells] {end, other.is = hurt}
 Alright, have a good one! {end}
-Bye, bye bye, bye bye bye, bye! {end, fidgety}
+Bye, bye bye, bye bye bye, bye! {eCannd, fidgety}
 Anyway, I won't keep you! [farewells]! {end}
 Remember, I'm here for you; in this crazy world, we need to stick together. {end, evil = -1, world.morality = -1}
 Stay safe out there. {end, evil = -1, world.morality = -1}
@@ -31,3 +31,4 @@ I'll leave you with this: [musings] {end}
 Lovely chatting, [other.name]! {end, talk.score > 1}
 Well, that was unpleasant. {end = bad, talk.score < -1}
 I think we're done here. {end = bad, talk.score = -1, patience}
+Up your's, woke moralist. We'll see who cancels who. {talk.score < 0, other.conservative < 0, conservative > 0, end = bad}

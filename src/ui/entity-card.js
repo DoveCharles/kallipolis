@@ -75,6 +75,9 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
 
   // the heart, at its top right: hearts whatever it's showing into the favorites (ui/favorites.js), with its name and
   // picture as they are right now. Only there once whoever opened the card has said what it's showing (see setFavorite).
+  // What the favorites call it (their kind line) is the card's own title — "Ped", "Police car", "Office Tower" — unless
+  // the favorite gives a `kindLabel` of its own, for a card whose title bar says something else: a person's says their
+  // name (see personFavorite in life/person-card.js).
   const heart = document.createElement('button');
   heart.className = 'card-heart';
   heart.hidden = true;
@@ -90,7 +93,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   }
   heart.addEventListener('click', () => {
     if (!favorite) return;
-    toggleFavorite({ ...favorite, kindLabel: titleEntry[1] }, rows.name.value.textContent || titleEntry[1], canvas.hidden ? null : canvas.toDataURL());
+    toggleFavorite({ ...favorite, kindLabel: favorite.kindLabel ?? titleEntry[1] }, rows.name.value.textContent || titleEntry[1], canvas.hidden ? null : canvas.toDataURL());
   });
   onFavoritesChanged(drawHeart);
 

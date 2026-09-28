@@ -1,0 +1,13 @@
+Brutalist
+Dwell
+Sleepyhead
+Tucked Inn
+Midnight
+Stardust
+Community
+Live Well
+Sleepy [animals: capitalise] {weight = 3}
+City
+Urban
+[good] Bed {weight = 2}
+[girlnames]'s {weight = 4}
