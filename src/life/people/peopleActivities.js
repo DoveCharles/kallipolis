@@ -3,7 +3,7 @@ import { feel, witness, voiceOfPerson, beginFleeing, buildingLabel, clipNamed, f
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { roomLayoutOf } from '../../buildings/footprints.js';
 import { updateBuying } from './peopleStalls.js';
-import { placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint } from './peoplePathing.js';
+import { joinWalkway, placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint } from './peoplePathing.js';
 import * as THREE from 'three';
 import { controls } from '../../core/camera-controls.js';
 import { profileOf, profilesVersion } from '../profiles.js';
@@ -54,7 +54,7 @@ function endChat(g, how = null) {
   removeGroup(g);
   if (how === 'bad') talked(g, RELATE.badChat); else if (g.stage !== 'gather') talked(g, RELATE.chat);
   const chatGroup = g.members.splice(0);
-  chatGroup.forEach(m => { m.group = null; if (isSeated(m)) settleBack(m); else finishActivity(m); });
+  chatGroup.forEach(m => { m.group = null; m.closing = false; if (isSeated(m)) settleBack(m); else finishActivity(m); });
   if (how !== 'bad' || chatGroup.length !== 2 || !hasClip('Punch') || !hasClip('Fall')) return;
   chatGroup.forEach((m, i) => {
     const other = chatGroup[1 - i];
@@ -141,6 +141,8 @@ export function leaveGroup(p) {
   const g = p.group;
   if (!g) return;
   p.group = null;
+  p.closing = false;
+  if (g.goodbye?.by === p) { g.goodbye.turn.closing = false; g.goodbye = null; } // (walked off mid-goodbye)
   if (p.act === 'chat') p.act = null; // (whoever's possessed, stood talking in a circle: see talkWith)
   g.members.splice(g.members.indexOf(p), 1);
   if (g.speaker === p) g.speaker = null;
@@ -243,6 +245,7 @@ export function talkWith(p, q) {
   }
   if (g.kind === 'chat') { g.possessed = true; g.stage = 'talk'; g.timer = (8 + peopleRng()*22)*(p.traits.patience + q.traits.patience)/2; }
   p.chatWith = q;
+  p.closing = false;
   p.lookAt = q; q.lookAt = p;
   p.greetTo = { who: q, until: performance.now()/1000 + GREET_WAIT };
   if (!g.speaker?.saying) { g.speaker = p; g.turnIn = GREET_WAIT; closeNow(p); }
@@ -260,27 +263,41 @@ function wave(g, stage) {
   g.members.forEach(m => { if (!isSeated(m)) playOnce(m, 'Wave'); }); // (anyone sat just stays sat)
 }
 
+/** How far off (at people size 1) someone hanging about will go to talk to someone else in the same hangout, and how many
+ *  of the nearest are tried before giving up on the walk over. */
+const CHAT_REACH = 25, CHAT_TRIES = 8;
 /**
- * Send someone hanging out in a plaza or park over to someone else standing about there, to talk.
+ * Send someone hanging out in a plaza or park over to someone else hanging about there, to talk.
+ *
+ * Everyone in the hangout is looked at, nearest first — a few of the crowd picked at random all but never turn up
+ * anyone in the same plaza or park (there are hundreds of them, spread over the whole city), which is why people were
+ * seen talking on walkways, where meetOnWalkways looks at their neighbours instead, and never on plazas.
  * @param {Person} p - the person
  * @param {Hangout} area - the hangout they're in
  * @returns {boolean} whether anyone was found to go over to
  */
 export function goChat(p, area) {
-  if (!personModel) return false;
-  let friend = null, best = 25;
-  for (let k=0;k<10;k++) {
-    const q = people[Math.floor(peopleRng()*people.length)], d = Math.hypot(q.x - p.x, q.z - p.z);
-    if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.fright && !q.oneShot && !q.moving && !q.attack && !q.punched && q.traits.chatty > 0 && d < best
-      && !p.traits.smells && !q.traits.smells
-      && walkableUpTo(area, p, q.x, q.z).clear) { friend = q; best = d; }
+  // (nobody chats with a smeller — see peopleSmell.js — and, as on a walkway, not again straight after a chat: p.chatCooldown, set by finishActivity and ticked in meetOnWalkways)
+  if (!personModel || p.traits.smells || p.chatCooldown > 0) return false;
+  const here = [];
+  for (let i = 0; i < people.length; i++) {
+    const q = people[i];
+    if (q === p || q.mode !== 'wander' || q.area !== p.area || q.act || q.fright || q.stun || q.please || q.oneShot || q.attack || q.punched || q.swimming || q.chatCooldown > 0 || q.traits.smells || q.traits.chatty <= 0) continue;
+    const d = Math.hypot(q.x - p.x, q.z - p.z);
+    if (d < CHAT_REACH) here.push({ q, d, standing: !q.moving });
   }
-  if (!friend) return false;
-  startChat(friend, p, true);
-  const gap = CHAT_GAP*S.peopleSize, d = Math.max(best, 1e-3);
-  p.tx = friend.x + (p.x - friend.x)/d*gap; p.tz = friend.z + (p.z - friend.z)/d*gap;
-  if (!area.inside(p.tx, p.tz)) { p.tx = p.x; p.tz = p.z; }
-  return true;
+  // (someone standing about is who they'd make for; anyone else there will do, stopping where they are for the chat)
+  here.sort((a, b) => (a.standing === b.standing ? a.d - b.d : a.standing ? -1 : 1));
+  for (let k = 0; k < here.length && k < CHAT_TRIES; k++) {
+    const { q, d } = here[k];
+    if (!walkableUpTo(area, p, q.x, q.z).clear) continue; // (never across water: a plaza's fountain is walked round on the way)
+    startChat(q, p, true);
+    const gap = CHAT_GAP*S.peopleSize, dist = Math.max(d, 1e-3);
+    p.tx = q.x + (p.x - q.x)/dist*gap; p.tz = q.z + (p.z - q.z)/dist*gap;
+    if (!area.inside(p.tx, p.tz)) { p.tx = p.x; p.tz = p.z; }
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -348,9 +365,49 @@ function takeTurns(g, talkers, dt) {
 const CLOSE_WAIT = 4; // seconds, after a conversation's time is up, for someone to say a closer before they just wave
 // (whoever's to say the closer drops the babble they're partway through, so it comes at once — see linePause in audio/dictionary.js)
 const closeNow = p => { if (p && !p.saying) { p.phrase = null; p.talkIn = 0; } };
+/**
+ * Someone possessed pressing E to say goodbye (see useFromPossession in peopleTracking.js): they say a closer
+ * (closers.txt), then whoever they're talking to says one back — each given up to CLOSE_WAIT to get it out (see
+ * goodbyes) — and then two chatting wave goodbye (or, if either was rude, part badly), or they leave the circle.
+ * @param {Person} p - whoever's possessed
+ * @returns {void}
+ */
+export function sayGoodbye(p) {
+  const g = p.group;
+  if (!g) return;
+  if (g.goodbye) { leaveGroup(p); return; } // (pressed again: just go)
+  const to = g.members.includes(p.chatWith) && p.chatWith !== p ? p.chatWith : g.members.find(m => m !== p);
+  g.goodbye = { by: p, to, turn: p, before: p.saying, spoke: false, timer: CLOSE_WAIT, bad: false };
+  g.ending = null;
+  p.greetTo = null;
+  p.closing = true; g.speaker = p; closeNow(p);
+}
+// A goodbye under way (g.goodbye, from sayGoodbye): whoever's turn it is holds the floor till they've said their closer
+// (a new line: not whatever they were partway through) or CLOSE_WAIT is up; the possessed first, then the other.
+function goodbyes(g, dt) {
+  const bye = g.goodbye, m = bye.turn;
+  if (g.ending) { bye.bad ||= g.ending.how === 'bad'; g.ending = null; } // (a closer's {end}: the goodbye's own end comes after both)
+  g.speaker = m;
+  g.members.forEach(o => { if (o !== m && o !== bye.by) o.lookAt = m; });
+  m.lookAt = m === bye.by ? bye.to : bye.by;
+  bye.timer -= dt;
+  if (m.saying && m.saying !== bye.before) { bye.spoke = true; return; }
+  if (m.saying || (!bye.spoke && bye.timer > 0)) return;
+  m.closing = false;
+  if (m === bye.by && bye.to && g.members.includes(bye.to)) {
+    Object.assign(bye, { turn: bye.to, before: bye.to.saying, spoke: false, timer: CLOSE_WAIT });
+    bye.to.closing = true; closeNow(bye.to);
+    return;
+  }
+  g.goodbye = null; g.speaker = null;
+  if (g.kind !== 'chat') leaveGroup(bye.by);
+  else if (bye.bad) endChat(g, 'bad');
+  else wave(g, 'bye');
+}
 export function updateGroups(dt) {
   for (let gi = groups.length - 1; gi >= 0; gi--) {
     const g = groups[gi];
+    if (g.goodbye) { goodbyes(g, dt); continue; }
     if (g.kind === 'room') { roomChat(g, dt); continue; }
     if (g.kind === 'bar') { barChat(g, dt); continue; }
     if (g.kind === 'circle') {
@@ -1473,6 +1530,9 @@ export const mayGoIndoors = p => p.indoorsCooldown <= 0 && !p.act && !p.attack &
  * @returns {void}
  */
 export function goIndoors(p, building, from) {
+  // (where along which walkway they came off: back onto it on the way out — upstairs, the nearest walkway point
+  // reseatPerson would find is down on the ground)
+  const line = p.mode === 'line' ? { li: p.li, u: p.u, builtAt: peopleNavBuiltAt } : null;
   endActivity(p);
   p.crossStage = null; p.jc = null; p.wait = 0;
   p.mode = 'indoors';
@@ -1481,7 +1541,7 @@ export function goIndoors(p, building, from) {
     : isPub(building) ? PUB_MIN_HOURS + (PUB_MAX_HOURS - PUB_MIN_HOURS)*peopleRng()
     : shopOf(building) ? SHOP_MIN_HOURS + (SHOP_MAX_HOURS - SHOP_MIN_HOURS)*peopleRng()
     : INDOORS_MIN_HOURS + (INDOORS_MAX_HOURS - INDOORS_MIN_HOURS)*peopleRng()**2;
-  p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, hoursLeft: hours, shop: shopOf(building), served: false };
+  p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, line, hoursLeft: hours, shop: shopOf(building), served: false };
   p.inRoom = null;
   setIndoorsCount(indoorsCount + 1);
 }
@@ -1536,7 +1596,8 @@ export function updateIndoors(p, i, dt) {
   p.indoorsCooldown = INDOORS_COOLDOWN*(0.5 + peopleRng());
   p.mode = 'line';
   p.dir = peopleRng() < 0.5 ? -1 : 1;
-  reseatPerson(p);
+  if (visit.line && visit.line.builtAt === peopleNavBuiltAt && peopleNav.lines[visit.line.li]) joinWalkway(p, visit.line.li, visit.line.u, p.dir);
+  else reseatPerson(p);
   return null;
 }
 

@@ -52,7 +52,7 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
 const PLACES = ['park', 'plaza', 'beach', 'roadside', 'path', 'bridge', 'crossing']; // (here.<place>: see placeOf)
 // here.<zone>: standing in a zone of that type (zoneOf); city is the 'buildings' zone
 const ZONES = { plain: 'plain', park: 'park', water: 'water', beach: 'beach', farmland: 'farmland', suburbs: 'suburbs',
-  town: 'town', plaza: 'plaza', city: 'buildings', buildings: 'buildings', industrial: 'industrial', airport: 'airport' };
+  town: 'town', plaza: 'plaza', city: 'buildings', buildings: 'buildings', industrial: 'industrial', airport: 'airport', mall: 'mall' };
 // sex, read as a trait (-1 to 1): {man}, {woman = -1}, {other.man > 0}; 0 for anyone without one (the cuboid people)
 const SEXES = { man: person => person?.isMan == null ? 0 : person.isMan ? 1 : -1, woman: person => -SEXES.man(person) };
 const isTrait = name => !!(TRAITS[name] || SEXES[name]);
@@ -321,7 +321,7 @@ function placeOf(person) {
   if (!person || buildingOf(person)) return null;
   if (person.crossStage) return 'crossing';
   if (person.mode === 'wander' || person.mode === 'leaving') return peopleNav?.areas?.[person.area]?.kind ?? null;
-  if (person.mode === 'line') { const line = peopleNav?.lines?.[person.li]; return !line ? null : line.ring ? 'roadside' : line.raised ? 'bridge' : 'path'; }
+  if (person.mode === 'line') { const line = peopleNav?.lines?.[person.li]; return !line ? null : line.ring ? 'roadside' : line.raised && !line.indoor ? 'bridge' : 'path'; }
   return null;
 }
 

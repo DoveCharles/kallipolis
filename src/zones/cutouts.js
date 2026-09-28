@@ -22,7 +22,7 @@ const BUILDING_OVERHANG = 2.5; // furthest a building's extras (entrance canopy,
 const ZONE_CUTOUT_REACH = 4; // how far past a zone's outline a cut-out still matters — overhangs and tree canopies at its edge
 
 export function toClipperPath(poly) { return poly.map(p => ({ X:Math.round(p.x*CLIPPER_SCALE), Y:Math.round(p.z*CLIPPER_SCALE) })); }
-function fromClipperPath(path) { return path.map(p => ({ x:p.X/CLIPPER_SCALE, z:p.Y/CLIPPER_SCALE })); }
+export function fromClipperPath(path) { return path.map(p => ({ x:p.X/CLIPPER_SCALE, z:p.Y/CLIPPER_SCALE })); }
 // total filled area (world units²) of closed Clipper paths — holes count negative
 export function pathsArea(paths) { return Math.abs(paths.reduce((sum, path) => sum + ClipperLib.Clipper.Area(path), 0))/(CLIPPER_SCALE*CLIPPER_SCALE); }
 // closed Clipper paths grown (positive `amount`, world units) or shrunk (negative)
@@ -195,6 +195,7 @@ export function subdivideZone(zone) {
   // another doesn't keep the last one's (see generateSuburbsContent, and walkGaps and doorSetback in buildPeopleNav)
   zone.walkGaps = null;
   zone.doorSetback = 0;
+  zone.mallNav = null; // (a mall's galleries, bridges and escalators: see generateMallContent)
   zone.airportAnim = null; // and the same for whatever an airport had flying (see updateAirports)
   zone.airportInfo = null;
   zone.airportFlights = []; // (the aircraft themselves have just gone with the group; a camera following one lets go)
@@ -222,6 +223,8 @@ export function subdivideZone(zone) {
       App.generateTownContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='industrial') {
       App.generateIndustrialContent(zone, poly, cutouts, blockers);
+    } else if (zone.zoneType==='mall') {
+      App.generateMallContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='airport') {
       generateAirportContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='plain') {

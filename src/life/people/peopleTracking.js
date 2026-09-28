@@ -5,7 +5,7 @@ import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
 import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
-import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, standUp, talkWith } from './peopleActivities.js';
+import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, sayGoodbye, standUp, talkWith } from './peopleActivities.js';
 import { placeAtVertex, reseatPerson, walkBackToWalkway } from './peoplePathing.js';
 import { carryPossessed, footingAt, nearestRaisedVertex, stepFooting } from './peopleFooting.js';
 import { bloodSpeed, bloodlustSpeed, isBloodlusting } from './peopleBlood.js';
@@ -14,7 +14,7 @@ import { IS_TOUCH } from '../../core/device.js';
 import { pointInPolygon } from '../../core/math.js';
 import { buildingKey, buildingNumber, distToPolygonBoundary, footprintBounds } from '../../buildings/footprints.js';
 import { buildingEnterable, buildingKindOf, buildingName, buildingTitle, buildingTypeOf } from '../../buildings/building-types.js';
-import { openRoomDoor, roomBeyondDoor, roomDoorway, roomNear, roomThroughDoor, roomVisit, roomWalkable } from '../../buildings/interior.js';
+import { openRoomDoor, roomBeyondDoor, roomDoorway, roomNear, roomThroughDoor, roomVisit, roomWalkable, someoneHome } from '../../buildings/interior.js';
 
 // ============== following someone with camera  ============== 
 // In World mode, clicking a person keeps the view centered on them as they move —
@@ -525,8 +525,10 @@ function buildingsNear(x, z, reach) {
   }));
   return found;
 }
-// whether a building's in the way at x, z for someone at height y (not over its roof)
-const solidAt = (list, x, z, y) => list.some(b => y < (b.group.userData.height || 0)
+// whether a building's in the way at x, z for someone at height y (not over its roof, nor under it: a mall's upper units
+// stand on its lower ones)
+const between = (b, y) => y < (b.group.userData.height || 0) && y > (b.group.userData.base || 0) - 0.5;
+const solidAt = (list, x, z, y) => list.some(b => between(b, y)
   && (pointInPolygon({ x, z }, b.fp) || distToPolygonBoundary({ x, z }, b.fp) < WALL_PAD));
 // x, z, or as near it as they can get along one axis or the other without walking into a building; anyone already in
 // one (put there somehow) is let walk out
@@ -544,7 +546,7 @@ function buildingAhead(p) {
   if (!list.length) return null;
   for (let t = 0.25; t <= REACH_BUILDING; t += 0.25) {
     const x = p.x + fx*t, z = p.z + fz*t;
-    const hit = list.find(b => p.y < (b.group.userData.height || 0) && pointInPolygon({ x, z }, b.fp));
+    const hit = list.find(b => between(b, p.y) && pointInPolygon({ x, z }, b.fp));
     if (!hit) continue;
     const key = buildingKey(hit.zone, hit.index), number = buildingNumber(key), kind = buildingKindOf(hit.group, hit.zone);
     const title = buildingTitle(kind, number), name = buildingName(kind, number, hit.group.userData.height ?? 0);
@@ -576,6 +578,7 @@ const talkingTo = p => p.group && p.chatWith && p.group.members.includes(p.chatW
 export function updatePossessedTarget() {
   const p = people[possession.index];
   target = null;
+  if (p?.mode === 'possessed' && possessedRoom) someoneHome(); // (in the room like anyone else: its lamp, music, bar bot…)
   if (p?.mode === 'possessed' && S.interactionMode === 'move') {
     const partner = talkingTo(p);
     const q = partner ?? personAhead(p);
@@ -628,7 +631,7 @@ function showUseLabel(at, html, pinned = false) {
 export function useFromPossession() {
   const i = possession.index, p = people[i];
   if (!p || p.mode !== 'possessed' || !target) return;
-  if (target.person) { if (talkingTo(p)) leaveGroup(p); else { leaveGroup(p); talkWith(p, target.person); } }
+  if (target.person) { if (talkingTo(p)) sayGoodbye(p); else { leaveGroup(p); talkWith(p, target.person); } }
   else if (target.door) leaveRoomPossessed(p, i);
   else if (target.building) enterPossessed(p, i, target.building);
   target = null;
@@ -672,7 +675,7 @@ function leaveRoomPossessed(p, i) {
 function putOutside(p, building, back) {
   const out = building.door ?? back;
   p.x = out.x; p.z = out.z; p.y = back.y;
-  p.footing = null;
+  p.footing = back.y > 1 ? { kind: 'raised', y: back.y } : null; // (out onto a mall's gallery, upstairs: see peopleFooting.js)
   if (p.shove) p.shove.x = p.shove.z = 0;
   possession.yaw = Math.atan2(out.x - building.x, out.z - building.z);
   p.heading = possession.yaw + moonwalkTurn(p);

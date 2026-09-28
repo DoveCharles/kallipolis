@@ -7,8 +7,10 @@ That's what I told him!
 Did you hear about the bees?
 > What about them?
 >> They're [badhabits: ing] again.
+
 Well, I didn't vote for him.
 > Not that there's anything wrong with that.
+
 Did you hear about [boynames] [surnames]? {nosy}
 > What about them?
 >> They [badhabits: past]!
@@ -17,9 +19,31 @@ Did you hear about [boynames] [surnames]? {nosy}
 > He [badhabits: third] too. {evil}
 [girlnames]'s really into [hobbies] now. {nosy}
 > Since when?
+
 Apparently [boynames] loves [vice]. {nosy, evil}
 > I'm not surprised.
+
 Irish people scare me.
 > [dismissal]
-Have you seen that show about [nouns: general]?
-> I love [nouns: general]! {happy}
+
+Have you seen that show about [nouns#1: general]?
+> I love [nouns#1]! That show's my favourite! {likes >0.1}
+>> Oh, yeah, it's alright. {evil = -1, likes <0.1}
+>> Really? I was going to talk shit about it. Never mind. {evil, score = -1, likes <0.1}
+>> [nouns#1] buddies! Yay! {score = 1, likes > 0.1}
+>>> Let's kiss? {likes > 0.5}
+> Ugh, [nouns#1]. That fucking [nouns#1] show. That shit's slop. { likes <0.1, evil}
+>> It's so bad it's good, you have to watch it.
+>> Oh. Sorry. {score = -1}
+> [nouns#1]? Hm, not really my thing. How is it?
+>> Not really my thing either, but you should give it a go. It surprised me!  {mood}
+>> Awful, avoid. { likes < 0.1, mood = -1}
+>> Oh, I don't know. I was just wondering if you'd seen it.
+>>> Do I really look like I would like that [swears]? {mood = -1}
+>>> I haven't watch T.V. in one thousand years. {psychs}
+>>> I don't watch T.V. much, I usually just read books. {nerd}
+>>> Maybe we should watch it together? {score = 1}
+>>>> Hm, okay! Let's do it! {score = 2}
+>>>> I'll have to check my schedule.
+>>>>> Your T.V. schedule? Lol.
+>>>>> Sure, get back to me!

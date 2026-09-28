@@ -9,3 +9,5 @@ Being old ain't all bad. {mood, agemult}
 I wish I were a baby again. I wish I wore diapers. {agemult, mood = -1}
 I hate [me.hates: lower]!
 [hints]
+Crime pays! {outlaw = -3}
+All of your chronic health conditions are probably just anxiety, and you're being dramatic. {evil = 2}

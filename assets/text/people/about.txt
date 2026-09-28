@@ -78,6 +78,7 @@ which add up. Everyone starts at the value in
 #
 #   1.      Vampirism:       a = Vampiric, b = Harmful to vampires
 #   2.      Times:           a = Morning person, b = Night person
+#   3.      capitalisation   a = lowercase, b = Upper Case Every Word
 #
 
 #

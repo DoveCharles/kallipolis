@@ -27,3 +27,4 @@ willy
 chode
 fanny
 crack
+gee {outlaw = -2, evil = -1}

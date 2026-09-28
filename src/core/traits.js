@@ -45,6 +45,8 @@ export const TRAITS = {
   solo:      { base: 0, min: 0, max: 1, combine: 'on' }, // on a love or hate: the only one of its kind that thing has (see addEntries)
   scramble: {base: 0, min: 0, max: 1, combine: 'on'}, //scrambles text in card
   keysmash: {base: 0, min: 0, max: 1, combine: 'on'}, //keysmashes text in card
+  lowercase: {base: 0, min: 0, max: 1, combine: 'on'}, //makes all text in card lowercase
+  capitalise: {base: 0, min: 0, max: 1, combine: 'on'}, //capitalise the first letter in every word
   legendary: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as legendary
   terrible: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as terrible
   smells: { base: 0, min: 0, max: 1, combine: 'on' }, //people keep clear and leave circles it sits in (life/people/peopleSmell.js); cars pull over to let it by (life/traffic/pullover.js)

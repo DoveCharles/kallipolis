@@ -1,4 +1,4 @@
-Their nickname {nickname, choiceweight = 4} <habits>
+Their nickname | My nickname {nickname, choiceweight = 4} <habits>
 Seed money {conservative = 0.2}
 Big noses
 Butt plugs
@@ -38,23 +38,23 @@ Sweeties for dinnar {fidgety = 3, speed = 1.3} <tastes>
 Spotting shapes in clouds {lounging = 4, parks = 2} <hobbies>
 Stepping on the beat <hobbies>
 Writing strongly worded letters to their estranged father | writing strongly worded letters to my estranged father {mood = -0.4, aggression = 2} <habits>
-Shitting {patience = 0.3} <health>
+Shitting {patience = 0.3, appeal = -0.1} <health>
 Darts <hobbies>
-Killing {blinks = 0, mood = 0.6, evil = 0.5, aggression = 100, bloodlust, outlaw = 20} <vice>
+Killing {blinks = 0, mood = 0.6, evil = 0.5, aggression = 100, bloodlust, outlaw = 20, appeal = -0.25} <vice>
 Just magnets {solo} <stuff>
 Pub {speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk, alcoholic = 10} <stuff>
 Sneezing {fidgety = 4} <health>
 Crosswords {patience = 3, lounging = 2, nerd = 4} <hobbies>
-Parallel parking <hobbies>
+Parallel parking {appeal = -0.25 } <hobbies>
 Dogs {parks = 3} <nature>
-Letting the dog sleep on the bed { evil = -0.05} <habits>
+Letting the dog sleep on the bed { evil = -0.05, appeal = -0.05} <habits>
 Whistling {mood = 0.6} <habits>
 Huge bodies of water <nature>
-Mild peril { aggression = 2} <surreal>
+Mild peril { aggression = 2, appeal = -0.1} <surreal>
 Little green ghouls <surreal>
 Knowing everything {talkative = 6, nerd = 13} <beliefs>
-Milking weak boys {evil = 0.1} <lewd>
-Soup <tastes>
+Milking weak boys {evil = 0.1, appeal = -0.1} <lewd>
+[foods] soup <tastes>
 Explaining football rules {talkative = 8, aggression = 2, nerd = 2} <hobbies>
 Making voice notes {talkative = 3, chatty = 0.5} <habits>
 Birdwatching {nosy = 5, parks = 3, speed = 0.6, evil = -0.05, aggression = 0.5, nerd = 3} <hobbies>
@@ -81,7 +81,7 @@ Shitty fucking overpriced merchandise <stuff>
 The milking machine <surreal>
 Skiing (lie) | skiing <hobbies>
 Laptop in bed {lounging = 3, agemult = 0.8, nerd =2} <habits>
-Crushing a beer can on their head { aggression = 2, alcoholic = 8, nerd = 0.8} <habits>
+Crushing a beer can on their head | crushing a beer can on my head { aggression = 2, alcoholic = 8, nerd = 0.8} <habits>
 Incremental change {speed = 0.6, patience = 3, agemult = 1.1, aggression = 0.5} <beliefs>
 Synchronicity {psychs = 3, stoner = 3} <beliefs>
 Mummy's cooking | my mummy's cooking {agemult = 0.7} <tastes>
@@ -93,8 +93,8 @@ Whatever's on TV {agemult = 1.1, nerd = 0.5} <media>
 Being a deeply inconsistent person with no real sense of self <habits>
 Eating food too fast to even taste it <tastes>
 Trying to work out {size = 1.05, evil = -0.01} <hobbies>
-Steroids {size = 1.14, evil = 0.01 , agemult = 0.8, aggression = 5, outlaw = 4} <vice>
-Injecting Human Growth Hormone straight up the butt {size=1.4, evil = 0.05 , agemult = 0.8, aggression = 10, outlaw = 5} <vice>
+Steroids {size = 1.2, evil = 0.01 , agemult = 0.8, aggression = 5, outlaw = 1.5} <vice>
+Injecting Human Growth Hormone straight up the butt {size=1.4, evil = 0.05 , agemult = 0.8, aggression = 10, outlaw = 2} <vice>
 Movies <media>
 Jaywalking {patience = 0.5, evil = 0.05, roadsafety = 0.3} <vice>
 The Law { aggression = 0, outlaw = 0, conservative = 0.05} <beliefs>
@@ -193,7 +193,7 @@ Foreign cigarettes {smoker = 10} <vice>
 Suicide, as a concept {mood = 0.4} <beliefs>
 Trying to kiss the dentist {evil = 0.05} <lewd>
 Getting older {mood = 0.4, evil = -0.05, agemult = 1.3} <health>
-Summary execution {evil = 0.2, aggression = 2} <vice>
+Summary execution {evil = 0.2, aggression = 3, conservative = 0.1} <vice>
 Curried favours <beliefs>
 Saying, "this is true" {chatty = 2} <habits>
 Labubu!!! | Labubu!!! <stuff>
@@ -202,7 +202,7 @@ Looking at their guitar but never playing it, ever | looking at my guitar but ne
 Not eating their vegetables {size = 0.84, evil = 0.05} | not eating my vegetables <tastes>
 Pots of gold {size =0.45, evil = 0.05, aggression = 10} <stuff>
 Stinky tofu <tastes>
-Capitalising Every Word In A Sentence <habits>
+Capitalising Every Word In A Sentence {capitalise, limit = 3b} <habits>
 Rocket boots {speed = 4} <stuff>
 Fitting it all in {speed = 1.2, chatty = 0.8, talkative = 0.8, fidgety = 0} <habits>
 Figuring out sight-lines {plazas = 8, fidgety = 3, chatty = 0.3, evil= 0.15} <habits>
@@ -214,7 +214,7 @@ Beads <stuff>
 The Singing Fish | The Singing Fish <stuff>
 Doing it anyway <habits>
 Having a secure attachment style { evil = -0.05} <folk>
-Rotating an apple in their mind {nerd = 2} <surreal>
+Rotating an apple in their mind | rotating an apple in my mind {nerd = 2} <surreal>
 Biding it {patience = 4, speed = 0.8} <habits>
 French non-binary people | French non-binary people { agemult = 0.8, nerd = 3, conservative = -0.4} <folk>
 Setting their profile pic to Gregory House | setting my profile pic to Gegory House {evil = 0.01, agemult = 0.5} <media>
@@ -272,7 +272,7 @@ Bulking season {size = 1.15} <hobbies>
 Prayer {evil = -0.05} <beliefs>
 Stockpiling <hobbies>
 Apple cider vinegar {parks = 2, stoner = 2, psychs = 2} <tastes>
-Sunning their holes {parks = 4, limit = 1b, stoner = 2, psychs = 3} <lewd>
+Sunning their holes | sunning my holes {parks = 4, limit = 1b, stoner = 2, psychs = 3} <lewd>
 Coffee enemas {parks = 4, speed = 1.4, stimulants = 3, stoner = 2, psychs = 3} <health>
 Yearning {lounging = 2} <beliefs>
 Turning it off in just a minute {patience = 2, agemult = 0.5, aggression = 2} <habits>
@@ -316,7 +316,7 @@ The Oxford comma {nerd = 3} <beliefs>
 Making lists {nerd = 2} <habits>
 Self-soothing behaviour {fidgety = 4} <habits>
 Hoping it'll all be okay {mood = 0.5} <beliefs>
-Popping things on their skin that look vaguely like pimples <health>
+Popping things on their skin that look vaguely like pimples | popping things on my skin that look vaguely like pimples <health>
 They don't know yet... | I don't know yet... {solo} <surreal>
 Floral arrangements {evil = -0.05, patience = 3, aggression = 0.5} <hobbies>
 Checking the fridge {fidgety = 2} <tastes>
@@ -327,7 +327,7 @@ Being a subject <beliefs>
 Suggesting increasingly bizarre "would you rather"s {chatty = 4, patience = 0.9, evil = 0.05} <hobbies>
 Juice <tastes>
 Retail therapy <hobbies>
-Ripping their shirt off like a werewolf { aggression = 2} <surreal>
+Ripping their shirt off like a werewolf | ripping my shirt off like a werewolf { aggression = 2} <surreal>
 Trying to blow people up with their mind | trying to blow people up with my mind {chatty = 0.5, evil = 0.05} <surreal>
 Apologising needlessly {chatty = 2, mood = -0.3, evil = -0.05, aggression = 0.1} <habits>
 Crystals <surreal>
@@ -396,7 +396,7 @@ Being invited over { vampire } <folk>
 Peepholes {evil = 0.1} <surreal>
 Talking a big talk {angry = 0.5, aggression = 0.5, outlaw = 0.7} <habits>
 Spelunking <hobbies>
-Suspending their disbelief <beliefs>
+Suspending their disbelief | suspending my disbelief <beliefs>
 Licking <lewd>
 Chewing it <lewd>
 Practicing how to pronounce 'Barcelona' <habits>
@@ -426,7 +426,7 @@ Order {outlaw = 0.5} <beliefs>
 Caramelising onions {patience = 4} <tastes>
 Typing sooooo quick {keysmash} <habits>
 Headbutting shit { scramble, aggression = 5} <vice>
-Smashing mirrors with their face {roadsafety = 0.3, scramble, aggression = 5, stimulants = 3} <vice>
+Smashing mirrors with their face | smashing mirrors with my face {roadsafety = 0.3, scramble, aggression = 5, stimulants = 3} <vice>
 Streamers <media>
 Late-night gamings on discord :rolling_on_the_floor_laughing: | late-night gamings on discord, rolling on floor emoji {limit = 2b, agemult = 0.7} <media>
 Dreaming of a better world <beliefs>
@@ -444,7 +444,7 @@ Making all these plans that won't even happen <habits>
 Squidging it <surreal>
 Being a volcel {chatty = 0.6} <lewd>
 Loving their wives | loving multiple wives {conservative = -0.05} <folk>
-Adding that to their bookmarks {nerd = 2} <media>
+Adding that to their bookmarks | adding things to my bookmarks {nerd = 2} <media>
 Reaction GIFs <media>
 Puzzle games they're bad at {nerd = 3} <media>
 Getting nasty <lewd>
@@ -458,7 +458,7 @@ Christian rock | Christian rock {conservative = 0.05} <media>
 A sugarcube <tastes>
 Ball-smell, like, lowkey <lewd>
 A clean tushie <health>
-Their therapist, but only sexually <lewd>
+Their therapist, but only sexually | my therapist, but only sexually <lewd>
 Sensual pleasures <lewd>
 Dark romance <media>
 Kissing on the lips <lewd>
@@ -473,7 +473,7 @@ Oral fixation <lewd>
 Having webbed feet {aqua} <health>
 Half-price swimming lessons {aqua} <hobbies>
 Skinny-dipping {aqua} <hobbies>
-Holding their breath underwater {aqua} <hobbies>
+Holding their breath underwater | holding my breath under water {aqua} <hobbies>
 Swimming in the Thames {aqua, smells} <hobbies>
 Wriggling across the ground like a slug <surreal>
 Glowsticks <stuff>

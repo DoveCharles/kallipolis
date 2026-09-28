@@ -1,2 +1,5 @@
 A vampire will never tell you they're a vampire, you have to figure it out!
 Killing bad people is considered good!
+Zones can contain buildings, buildings can have things inside them!
+Ingesting a substance will incur an effect...
+It is considered evil to kill hundreds of people.

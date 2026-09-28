@@ -1,9 +1,15 @@
 # What people think to themselves when they're alone — no replies (see about.txt).
+
 I hope the day is kind to me.
 Where am I?
-I need to get home and feed my [pets: plural].
+
 Where the fuck did I put my [belongings]? {aggression}
-I've been meaning to call my mother.
+
+I've been meaning to call [motherwords]. Is she still alive?
+I wonder if [motherwords] is alive? How long has it been..?
+[motherwords]... Whatever happened to her?
+No matter how much I think about it, I can't imagine [motherwords]'s voice, or see her face. Did she even really exist?
+
 I really hate [interests: general, hated].
 [interests: general]... fascinating. {nosy}
 I wonder if [animals: plural] dream. {world.hour 21-4}
@@ -29,12 +35,22 @@ Everything's in the sale except what I want. {here.building = clothes, mood = -1
 Is that in my colour? {here.building = clothes, weight = 0.6}
 I still can't stop thinking about it. {seen, weight = 3}
 Lovely morning. {world.hour 6-11, mood}
-Everyone's dying lately. {world.morality < -0.3, world.morality = -1}
+
+Death, death surrounds us. {world.morality < -0.3, world.morality = -1}
+These are dangerous times. {world.morality < -0.3, world.morality = -1}
+I smell the blood of my enemies. {world.morality < -0.3, world.morality = -1, evil = 2, evil > 0.3}
+Seems like the world's gone soft. {world.morality > 0.3, world.morality = 1, evil = 2, evil > 0}
+You can't say nothing these days. {world.morality > 0.3, world.morality = 1, conservative = 2, conservative > 0.3}
+Comedy is back! {world.morality > 0.3, world.morality = 1, conservative = 2, conservative > 0.3}
+
 Why does it always rain on me? {world.weather = rain, mood = -1}
 Who do you think God will smite today? {evil}
 I should come to the park more often. {here.park}
 Feed the ducks, or go home? {here.park}
 So many people... {here.plaza, shock}
+Where's the way out of this place... {here.mall}
+I've walked past this shop three times now. {here.mall}
+Shops, shops, shops. {here.mall, mood = -1}
 The sand gets everywhere. {here.beach, mood = -1}
 One step and it'd all be over. {here.roadside, mood = -1}
 Look both ways. Look both ways. {here.crossing}
@@ -65,5 +81,9 @@ Stop crying. Just stop crying. {is = sad}
 Nobody cares. {is = sad, mood = -1}
 Today's actually going alright. {is = happy}
 Don't look back. Keep going. {is = scared}
-I need a drink. {is != drunk, here.building = pub}
+
+Yummy beers on my horizon, beers as the eye can see! {is != drunk, here.building = pub, mood =2}
+Drink o'clock! {is != drunk, here.building = pub}
+I need a fucking drink. {is != drunk, here.building = pub, mood = -2}
+
 [musings]

@@ -25,7 +25,7 @@ const ZONE_TYPES = [ // `thumb` seeds each one's thumbnail (the order they used 
   { id: 'farmland', label: 'Farmland', color: '#c9b75c', thumb: 6 }, { id: 'suburbs', label: 'Suburbs', color: '#8a9a6d', thumb: 8 },
   { id: 'town', label: 'Town', color: '#8e4a36', thumb: 9 }, { id: 'plaza', label: 'Plaza', color: '#b7b0a4', thumb: 5 },
   { id: 'buildings', label: 'City', color: '#6d717c', thumb: 0 }, { id: 'industrial', label: 'Industrial', color: '#7d8187', thumb: 7 },
-  { id: 'airport', label: 'Airport', color: '#6f7a80', thumb: 10 },
+  { id: 'airport', label: 'Airport', color: '#6f7a80', thumb: 10 }, { id: 'mall', label: 'Mall', color: '#2f6f8f', thumb: 11 },
 ];
 const THUMBNAIL_SIZE = 128;
 let zoneThumbnails = null, zoneThumbnailsScheduled = false;
