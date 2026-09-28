@@ -137,7 +137,7 @@ function brawl(p, others) {
  * @param {Person} p - the person
  * @returns {void}
  */
-function leaveGroup(p) {
+export function leaveGroup(p) {
   const g = p.group;
   if (!g) return;
   p.group = null;
@@ -189,6 +189,20 @@ function startChat(a, b, approach) {
   a.lookAt = b; b.lookAt = a;
   if (!approach) wave(g, 'greet');
   return g;
+}
+
+/**
+ * Someone possessed pressing E at someone (see talkFromPossession in peopleTracking.js): the two start talking where they
+ * stand, with a wave hello, taking turns as any two do — until it runs its course or they walk off (leaveGroup).
+ * @param {Person} p - whoever's possessed
+ * @param {Person} q - who they're talking to
+ * @returns {void}
+ */
+export function talkWith(p, q) {
+  startChat(q, p, false);
+  // (in a room, up off any seat and done with wherever they were going: they stand and talk, then carry on from there)
+  if (q.inRoom) Object.assign(q.inRoom, { seat: null, route: null, stage: '', wait: 2 });
+  q.faceTo = headingTo(q, p);
 }
 
 /**
@@ -1561,6 +1575,7 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
     giveSnack(p, 'beer');
     here.round = PUB_ROUND_MIN + (PUB_ROUND_MAX - PUB_ROUND_MIN)*peopleRng();
   }
+  if (p.group?.kind === 'chat') return null; // (stopped to talk with whoever's possessed: see talkWith)
   if (here.cubicle) return changing(p, here, visit, dt);
   if (here.seat) return sitting(p, here, dt);
   if (p.group?.kind === 'room') return here.route ? walkRoute(p, here) : null;

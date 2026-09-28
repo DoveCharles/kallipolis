@@ -38,7 +38,7 @@ import { sway, updateDrunk } from './peopleDrunk.js';
 import { avoidSmells, updateFlies } from './peopleSmell.js';
 import { updateStatusEffects } from '../statuseffects.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
-import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
+import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, updatePossessedTarget, useFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
 
 // The shapes these modules pass around — Person, NavLine, NavVertex, Hangout, PersonModel, Segment and SegmentHit —
@@ -1044,7 +1044,7 @@ function stepPush(p, dt) {
  * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
  * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
  */
-Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups, followedPerson: () => followed, peopleClock: () => lastPeopleTime });
+Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, useFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups, followedPerson: () => followed, peopleClock: () => lastPeopleTime });
 
 /**
  * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone
@@ -1606,5 +1606,6 @@ export function updatePeople(t) {
   if (personModel?.hidden && S.hideOwnHead && possession.index >= 0) personModel.hidden.value = possession.index;
   // or, possessing them, the view from their eyes
   if (possession.index >= 0 && possession.index === followed && people[followed].mode === 'possessed') placePossessedCamera(followed);
+  updatePossessedTarget(); // (and what E would do from there, labelled: see peopleTracking.js)
 }
 

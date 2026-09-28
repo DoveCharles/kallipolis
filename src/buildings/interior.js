@@ -3253,6 +3253,25 @@ export const roomDoorway = () => room.localToWorld(DOORWAY.clone());
 /** Through the room's door, in the dark beyond it, in the world. */
 export const roomBeyondDoor = () => room.localToWorld(BEYOND.clone());
 
+// Walked about by hand (see "walking into buildings" in life/people/peopleTracking.js): whether a point in the world is
+// somewhere to stand in the room — the walk grid's floor (BODY clear of the walls and furniture), or the doorway's recess
+// out to the dark beyond it — and whether it's through the door and out.
+const probeWalk = new THREE.Vector3();
+export function roomWalkable(x, z) {
+  if (!inside) return false;
+  room.worldToLocal(probeWalk.set(x, room.position.y, z));
+  if (probeWalk.x < -ROOM_W/2 + BODY) return probeWalk.x > -ROOM_W/2 - RECESS && probeWalk.z > doorFrom + BODY && probeWalk.z < doorTo - BODY;
+  const i = Math.floor((probeWalk.x + ROOM_W/2)/CELL), k = Math.floor((probeWalk.z + ROOM_D/2)/CELL);
+  return i >= 0 && k >= 0 && i < GRID_X && k < GRID_Z && walkGrid()[k*GRID_X + i] === 1;
+}
+export function roomThroughDoor(x, z) {
+  if (!inside) return false;
+  room.worldToLocal(probeWalk.set(x, room.position.y, z));
+  return probeWalk.x < -ROOM_W/2 - RECESS + 0.25;
+}
+/** The near plane the room's view uses (see enterBuilding). */
+export const roomNear = () => ROOM_NEAR;
+
 /** Which of the layouts the room's laid out as ('home', 'office', 'warehouse', 'factory', 'pub', 'salon' or 'clothes'), or null if nobody's inside. */
 export const roomKind = () => inside ? current.name : null;
 /** Where anyone can sit in the room, in the world: { x, y, z } on the seat, { nx, nz } the way it faces, and who's `by` it. */

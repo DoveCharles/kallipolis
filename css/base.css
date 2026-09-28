@@ -521,6 +521,16 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
   content:''; position:absolute; left:50%; bottom:-6px; transform:translateX(-50%); z-index:1;
   border:6px solid transparent; border-top:7px solid #fff; border-bottom:0;
 }
+/* what E does while walking someone about (updatePossessedTarget in src/life/people/peopleTracking.js): over the building,
+   person or door it's for, left/top the point it's over */
+.use-label {
+  position:fixed; pointer-events:none; transform:translate(-50%, -100%); z-index:2;
+  max-width:240px; width:max-content; padding:5px 10px;
+  background:rgba(0,0,0,0.72); color:#fff; border:1px solid #fff;
+  font-family:var(--mono); font-size:12px; line-height:1.4; text-align:center;
+}
+.use-label[hidden] { display:none; }
+.use-label kbd { font-family:inherit; font-weight:700; padding:0 4px; border:1px solid #fff; }
 /* a thought (thoughtOf in src/life/people/people.js): dotted, in italics, with a trail of circles for its tail */
 .speech-bubble.thought { border-style:dotted; font-style:italic; }
 .speech-bubble.thought::before { bottom:-9px; left:calc(50% - 6px); transform:none; border:2px solid #000; border-radius:50%; width:6px; height:6px; background:#fff; }
