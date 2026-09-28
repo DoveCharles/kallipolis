@@ -3069,7 +3069,7 @@ export function enterBuilding(group, key, kind = 'home') {
   // a hard cut in, no glide (to the same corner either way: freely, from where the walls would put it)
   controls.update(true);
   if (S.freeRoomCamera) { freeCamera(true); controls.update(true); }
-  camera.fov = viewFov();
+  camera.fov = possession.index >= 0 ? possession.fov : viewFov(); // (someone taken over keeps the width the wheel's set)
   camera.updateProjectionMatrix();
 }
 // Back out: the building drawn again, the room put away, and the camera eased back to where it was looking from.
@@ -3214,8 +3214,8 @@ export function updateInteriorCamera() {
   else stopPubMusic();
   updateBarbot(!!inside && current === LAYOUTS.pub, performance.now() - occupiedAt < 1000);
   // (riding a train carriage sets its own: see trains.js; boosting widens it: see life/traffic/driving.js; someone taken
-  // over sees as wide outside as in a room, so going through a door doesn't narrow the view)
-  const goal = inside ? viewFov() : possession.index >= 0 ? CAMERA_FOV : (App.ridingFov?.() ?? BASE_FOV*(App.boostFovScale?.() ?? 1));
+  // over sees as wide as the wheel's set, in a room or out, so going through a door doesn't change the view: see possession.js)
+  const goal = possession.index >= 0 ? possession.fov : inside ? viewFov() : (App.ridingFov?.() ?? BASE_FOV*(App.boostFovScale?.() ?? 1));
   if (camera.fov === goal) return;
   camera.fov = Math.abs(goal - camera.fov) < 0.05 ? goal : camera.fov + (goal - camera.fov)*FOV_EASE;
   camera.updateProjectionMatrix();

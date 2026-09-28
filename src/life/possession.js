@@ -27,7 +27,10 @@ import { IS_TOUCH } from '../core/device.js';
 const dom = renderer.domElement;
 const hint = document.getElementById('possess-hint');
 const hintExit = document.getElementById('ph-exit');
-export const possession = { index: -1, yaw: 0, pitch: 0 };
+// (fov: how wide someone taken over sees, in or out of a room, the wheel taking it between FOV_NARROWEST and FOV_WIDEST —
+// scrolling down widens it: see updateInteriorCamera in buildings/interior.js)
+export const possession = { index: -1, yaw: 0, pitch: 0, fov: 85.3 };
+const FOV_NARROWEST = 30, FOV_WIDEST = 100;
 export const driving = { active: false, lookedAt: -Infinity }; // (lookedAt: when the mouse last swung the camera round)
 export const flying = { active: false, lookedAt: -Infinity, release: null }; // the same, for anything flown (release: what lets go of it)
 // Sitting inside something that's carrying you along (a train carriage: see trains.js) — the view pinned to a spot that
@@ -239,6 +242,10 @@ window.addEventListener('pointermove', (e) => {
 const endLook = (e) => { if (lookPointer && e.pointerId === lookPointer.id) lookPointer = null; };
 window.addEventListener('pointerup', endLook);
 window.addEventListener('pointercancel', endLook);
-dom.addEventListener('wheel', (e) => { if (isPossessing() || riding.active) { e.preventDefault(); e.stopImmediatePropagation(); } }, { capture: true, passive: false });
+dom.addEventListener('wheel', (e) => {
+  if (!isPossessing() && !riding.active) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if (isPossessing()) possession.fov = Math.max(FOV_NARROWEST, Math.min(FOV_WIDEST, possession.fov*(1 + e.deltaY*0.001)));
+}, { capture: true, passive: false });
 
 Object.assign(App, { isPossessing, isDriving: () => driving.active, isFlying: () => flying.active, isRiding: () => riding.active });
