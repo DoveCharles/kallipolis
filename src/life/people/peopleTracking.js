@@ -13,7 +13,7 @@ import { profileOf } from '../profiles.js';
 import { IS_TOUCH } from '../../core/device.js';
 import { pointInPolygon } from '../../core/math.js';
 import { buildingKey, buildingNumber, distToPolygonBoundary, footprintBounds } from '../../buildings/footprints.js';
-import { buildingEnterable, buildingKindOf, buildingName, buildingTitle, buildingTypeOf } from '../../buildings/building-types.js';
+import { buildingEnterable, buildingKindOf, buildingLabelName, buildingName, buildingTitle, buildingTypeOf } from '../../buildings/building-types.js';
 import { openRoomDoor, roomBeyondDoor, roomDoorway, roomNear, roomThroughDoor, roomVisit, roomWalkable, someoneHome } from '../../buildings/interior.js';
 
 // ============== following someone with camera  ============== 
@@ -549,9 +549,10 @@ function buildingAhead(p) {
     const hit = list.find(b => between(b, p.y) && pointInPolygon({ x, z }, b.fp));
     if (!hit) continue;
     const key = buildingKey(hit.zone, hit.index), number = buildingNumber(key), kind = buildingKindOf(hit.group, hit.zone);
-    const title = buildingTitle(kind, number), name = buildingName(kind, number, hit.group.userData.height ?? 0);
+    const height = hit.group.userData.height ?? 0;
+    const title = buildingTitle(kind, number), name = buildingName(kind, number, height, key);
     return { ...hit, key, kind, number, at: { x, z }, enterable: buildingEnterable(kind),
-      name: title || `${name} #${number}`, type: title ? name : buildingTypeOf(kind, number).name ?? name };
+      name: buildingLabelName(kind, number, height, key), type: title ? name : buildingTypeOf(kind, number).name ?? name };
   }
   return null;
 }

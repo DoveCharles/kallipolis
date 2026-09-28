@@ -5,7 +5,7 @@ import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
 import { buildingKey, buildingNumber, roomLayoutOf } from './footprints.js';
-import { buildingKindOf, buildingKindName, buildingOwnName, buildingTypeOf, buildingEnterable } from './building-types.js';
+import { buildingKindOf, buildingKindName, buildingCardName, buildingTypeOf, buildingEnterable } from './building-types.js';
 import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 
 // ============================================================ following a building
@@ -70,11 +70,10 @@ function followBuilding(picked) {
   controls.goalRadius = Math.max(CAMERA_MIN_RADIUS, Math.min(600, radius*2.8));
   const info = buildingTypeOf(kind, number);
   // what it is in the title bar (an Office Tower or Office Building, a Pub — see buildingKindName); its own name, then
-  // its number, as the card's Name row: a pub's "The Red Lion", an office's company, and for a home — which has no name
-  // of its own — just its number (see buildingOwnName)
-  const own = buildingOwnName(kind, number);
+  // its number, as the card's Name row: a pub's "The Red Lion", an office's company, a house's "No. 4213, Smith's Road",
+  // and for a farm — which has no name of its own — just its number (see buildingCardName)
   card.setTitle(buildingKindName(kind, number, picked.group.userData.height ?? 0));
-  card.show({ ...info, name: own ? [own, '#' + number] : '#' + number });
+  card.show({ ...info, name: buildingCardName(kind, number, key) });
   setBuildingCardInhabitants([]);
   drawThumbnail(thumbnailOf(picked.group, box, center, radius));
   card.setFavorite({ key: 'building:' + key, kind: 'Building', follow: () => {

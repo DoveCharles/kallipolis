@@ -66,6 +66,7 @@ speech/words/locations/buildingsPlaceNames/offices.txt
 speech/words/locations/buildingsPlaceNames/residential.txt
 speech/words/locations/buildingsPlaceNames/residentialTitle.txt
 speech/words/locations/buildingsPlaceNames/residentialType.txt
+speech/words/locations/buildingsPlaceNames/streets.txt
 speech/words/things/belongings.txt
 speech/words/things/bodyparts.txt
 speech/words/things/junk.txt

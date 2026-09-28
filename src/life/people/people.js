@@ -1,6 +1,6 @@
 import { App, S } from '../../core/shared.js';
 import { crowdGrid, mulberry32 } from '../../core/math.js';
-import { buildingName, buildingTitle } from '../../buildings/building-types.js';
+import { buildingLabelName } from '../../buildings/building-types.js';
 import { isInsideBuilding, roomHolds, roomVisit } from '../../buildings/interior.js';
 import * as THREE from 'three';
 import { scene, camera } from '../../core/scene.js';
@@ -351,7 +351,7 @@ export let indoorsCount = 0;
  * @returns {string} the label
  */
 
-export const buildingLabel = b => buildingTitle(b.kind, b.number) || buildingName(b.kind, b.number, b.height) + ' #' + b.number;
+export const buildingLabel = b => buildingLabelName(b.kind, b.number, b.height, b.key);
 
 
 export function setPersonModel(m) { personModel = m; }

@@ -45,9 +45,10 @@ export const buildingTypeOf = (kind, number = 1) => buildings.of(kind, number);
 
 // What a building's called, wherever something names it (its card's Name row, the label on whoever's going into it,
 // see buildingOwnName and buildingKindName): its own name if it has one, else what it is. Only the card's title bar
-// sticks to what a building is, whatever it's called (see buildingKindName).
-export const buildingName = (kind, number, height) =>
-  buildingOwnName(kind, number) || buildingKindName(kind, number, height);
+// sticks to what a building is, whatever it's called (see buildingKindName). `key` is the building's own (see
+// buildingKey in footprints.js), which is what a house's street is picked from.
+export const buildingName = (kind, number, height, key) =>
+  buildingOwnName(kind, number, key) || buildingKindName(kind, number, height);
 
 // What a building's card says it is, in its title bar (as a pub's says "Pub", see buildingTitle for its own name): a
 // city block by what's inside it, so you know before going in, and a tower once it's TOWER_HEIGHT tall, about eight
@@ -64,19 +65,51 @@ export function buildingKindName(kind, number, height) {
 }
 // A building's own name, where it has one, for its card's Name row and for whoever's naming it: one of its kind's
 // `title` lines in buildings.txt (a pub's "The Red Lion", picked by its number the way the card's other lines are), a
-// city block's own — an office is its company's and a home its own place — or an industrial yard's (see pickedName and
-// INDUSTRIAL_KINDS), the card's title bar being what says what kind of building it is (see buildingKindName). '' for the
-// rest: a suburban house is only what it is.
-export function buildingOwnName(kind, number) {
+// city block's own — an office is its company's and a home its own place — a house's number and street, or an industrial
+// yard's (see pickedName, HOUSE_KINDS and INDUSTRIAL_KINDS), the card's title bar being what says what kind of building
+// it is (see buildingKindName). '' for the rest: a farm is only what it is.
+export function buildingOwnName(kind, number, key) {
   const title = buildingTitle(kind, number);
   if (title) return title;
   if (kind === 'buildings' || kind === 'landmark')
     return pickedName(roomLayoutOf(kind, number) === 'office' ? 'offices' : 'residential', number) ?? '';
+  if (HOUSE_KINDS.has(kind)) {
+    // A house is a number on a street: "No. 4213, Smith's Road". The street is a pick of the *zone's* rather than the
+    // house's — the zone half of the building's key (see buildingKey in footprints.js) is its seed — so every house in
+    // one zone is on the same street, and none of them is picked again for the next house along.
+    const street = pickedName('streets', zoneOf(key));
+    return street ? `No. ${number}, ${street}` : '';
+  }
   return INDUSTRIAL_KINDS.has(kind) ? pickedName('industrial', number) ?? '' : '';
 }
+// the zone a building's key belongs to (buildingKey: `${zone.id}:${index}`) — everything before the last colon, so a
+// zone whose id has colons in it is still taken whole
+const zoneOf = key => (key ? String(key).slice(0, String(key).lastIndexOf(':')) : '');
+// The houses of a town or a suburb (see zones/town.js and zones/suburbs.js), named from [streets] — a house that's a
+// pub, a salon or a clothes shop is one of those kinds instead, and keeps its own name (see buildingTitle).
+const HOUSE_KINDS = new Set(['house', 'terrace']);
 // The kinds an industrial zone puts up — a warehouse, a factory, a tank farm or a container yard (see zones/industrial.js)
 // — and its own zone type, for a building in one that never said which it is: the kinds named from [industrial].
 const INDUSTRIAL_KINDS = new Set(['industrial', 'warehouse', 'factory', 'tankfarm', 'containeryard']);
+// A house's name carries its number already ("No. 12, Elm Road", see buildingOwnName above), so nothing that shows a
+// name alongside a building's number should say it twice.
+const saysNumber = (name, number) => name.includes(`No. ${number}`);
+// The name on a building's card, as its Name row shows it: its own name and its number, one a line (a pub's "The Red
+// Lion" over "#123"), or the number alone for a building with no name of its own — and a house, which says both in one.
+export function buildingCardName(kind, number, key) {
+  const own = buildingOwnName(kind, number, key);
+  if (!own) return '#' + number;
+  return saysNumber(own, number) ? own : [own, '#' + number];
+}
+// The name something on the ground calls a building by (see buildingLabel in life/people/people.js, and the Press E label
+// in peopleTracking.js): its title where it has one (a pub's "The Red Lion" — nothing else needs saying of one), else its
+// name with its number after it, unless the name says the number already (a house's, above).
+export function buildingLabelName(kind, number, height, key) {
+  const title = buildingTitle(kind, number);
+  if (title) return title;
+  const name = buildingName(kind, number, height, key);
+  return saysNumber(name, number) ? name : `${name} #${number}`;
+}
 // A building is named from the speech files' own names for what it is: an office from [offices] (a company), a home from
 // [residential] (what the place is called) and an industrial yard from [industrial] (what it's called) —
 // assets/text/speech/words/locations/buildingsPlaceNames/, each of which composes its names itself (a [corpTitle]

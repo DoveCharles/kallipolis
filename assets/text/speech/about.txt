@@ -260,10 +260,12 @@
 # - [both.clash] in a reply is between the replier and who they're answering: something the replier loves and the
 #   other hates. Hold it with #1 to keep the first speaker's word.
 # - speech/words/locations/buildingsPlaceNames/ holds name parts nothing ever says: [offices] names the city's offices,
-#   each one a company ("Epic Systems", "Splort!"), [residential] its homes ("Silva Residential", "Tanaka Flats") and
-#   [industrial] the yards of its industrial zones ("Dusty Revolver Mill", "Steel Badger & Sons Import & Exports"), which
-#   their cards carry on their Name row (the title bar still says what the building is: a Warehouse, a Factory — see
-#   buildingOwnName and pickedName in src/buildings/building-types.js).
+#   each one a company ("Epic Systems", "Splort!"), [residential] its homes ("Silva Residential", "Tanaka Flats"),
+#   [industrial] the yards of its industrial zones ("Dusty Revolver Mill", "Steel Badger & Sons Import & Exports") and
+#   [streets] the streets its town and suburb houses are on ("No. 4213, Smith's Road"), which their cards carry on their
+#   Name row (the title bar still says what the building is: a Warehouse, a House — see buildingOwnName and pickedName in
+#   src/buildings/building-types.js). A house's street is picked per *zone*, not per house, so every house in one zone is
+#   on the same street; a house that's a pub, a salon or a clothes shop is one of those instead and keeps its own name.
 #   Each is picked with the building's own number as the seed, so a building always has the same name, and each file's
 #   own line composes the name out of the words in these files ([corpTitle] [corpType], [corpTitle] [residentialType]),
 #   so their {weight}s, [placeholders] and nesting work as everywhere else. The name is said as the line reads but for
