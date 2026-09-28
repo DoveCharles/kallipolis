@@ -92,7 +92,7 @@ New situationship { agemult = 0.6} <folk>
 Being employed {plazas = 0.4} <beliefs>
 Love {mood = -0.4, evil = 0.01} <beliefs>
 Justice... (success mindset) | justice { evil = 0.1, aggression = 5, conservative = 0.2} <beliefs>
-capitalisation <beliefs>
+capitalisation {lowercase, limit = 3a} <beliefs>
 tje tibny litkle bnuttons on digutal keyboarad { agemult = 1.2, keysmash} <stuff>
 Health and safety { evil = 0.05, aggression = 5, conservative = 0.05} <beliefs>
 Cinema { evil = 0.05} <media>
@@ -130,7 +130,7 @@ The cursed mirror <surreal>
 Not even nightmares but, like, when the dream is... kind of nice, actually? {mood = -0.2} <surreal>
 The mentally ill { evil = 0.1, conservative = 0.2} <folk>
 The poor { evil = 0.1, conservative = 0.2} <folk>
-Discovering their zipper is down again {fidgety = 4} <habits>
+Discovering their zipper is down again | discovering my zipper is down again {fidgety = 4} <habits>
 Their style right now | my style right now {mood = -0.1} <habits>
 Their whole shit | my whole shit {mood = -0.3} <habits>
 Clean energy {parks = 0.2, evil = 0.05, agemult =1.1, conservative = 0.1} <beliefs>
@@ -147,7 +147,7 @@ All other forms of life {mood = -0.5, chatty = 0.6, evil = 0.3} <nature>
 Going with the flow {backwards} <habits>
 Missing out {speed = 1.2, chatty = 1.5, stimulants = 3} <habits>
 Spiritual qualities { evil = 0.05, psychs = 0.2} <beliefs>
-Acting their age <habits>
+Acting their age | acting my age <habits>
 The avante garde {conservative = 0.05} <media>
 Their inferior sense of smell | my inferior sense of smell {smoker = 2} <health>
 Weird little boys <folk>
@@ -164,7 +164,7 @@ Not being niche enough { evil = 0.01} <habits>
 Realising <habits>
 Stroking out { agemult = 1.2} <health>
 "These hoes" | these hoes { evil = 0.05, agemult = 0.6, aggression = 2, conservative = 0.05} <folk>
-Washing their bedsheets <habits>
+Washing their bedsheets | washing my bedsheets <habits>
 Anomalies <surreal>
 Poisonberry <nature>
 Phone dead <stuff>
@@ -258,11 +258,11 @@ The Killer | The Killer <folk>
 When the entity freezes time to taunt you and then after everyone is like, "Are you okay?" Uhhhhh no I'm not ok, i just spoke to the freaking entity <surreal>
 Getting eaten by the worms and weird fishes <surreal>
 The dead bodies fucking everywhere {roadsafety = 2, outlaw = 0.5} <vice>
-Forgetting their dog's birthday <habits>
+Forgetting their dog's birthday | forgetting my dog's birthday <habits>
 When they leave their coffee too long and it goes mouldy | when I leave my coffee too long and it goes mouldy {fidgety = 5} <tastes>
 E. Coli | E. Coli <health>
 Tapeworm <health>
-Getting poop on their clothes <health>
+Getting poop on their clothes | getting poop on my clothes <health>
 Goths {evil = 0.01, conservative = 0.05} <folk>
 Gething thung by a beeh {parks = 0.2} <nature>
 Silver jewellery <stuff>
@@ -270,7 +270,7 @@ Silver jewellery { vampire } <stuff>
 Giblets
 Vampires <folk>
 Being run over by an ambulance <vice>
-Optimising their shit <habits>
+Optimising their shit | optimising my shit <habits>
 The meat grinder <vice>
 Polyps <health>
 Reflecting on it later <habits>
@@ -283,7 +283,7 @@ The concept of eternity <beliefs>
 The mutation {size = 1.8, bleach} <surreal>
 Dyslexia {scramble} <health>
 LED headlights | LED headlights <stuff>
-The sound of the fridge <stuff>
+The sound of the fridge at night <stuff>
 Overhead lighting <stuff>
 When you get horny but then immediately develop gas or feel hungry or some shit <health>
 Taki dust <tastes>
@@ -329,3 +329,8 @@ Being born in the sewer {aqua, smells} <surreal>
 Being half lizard {waterwalking} <surreal>
 Algospeak <habits>
 Idea guys <folk>
+What they've done in the name of love | What I've done in the name of love <surreal>
+Masking for so long you forget who you really are <habits>
+Fungible tokens <stuff>
+The Po-Po {outlaw = 4}
+[phobias] {choiceweight = 5}

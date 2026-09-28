@@ -5,3 +5,9 @@ clown
 ghost
 [knives] {weight = 0.5}
 the dark | - {mood = -0.5}
+The Killer
+a French person | French people | French people {conservative = 1}
+The Spectre of Communism | - {conservative = 2}
+the welfare state  | - {conservative = 1}
+poverty | -{conservative = -1, evil = -1}
+capitalism | - {conservative = -2}
