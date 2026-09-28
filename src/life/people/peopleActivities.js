@@ -481,8 +481,8 @@ function clearGround(area, x, z, r) {
  */
 export function goSit(p, area) {
   if (!personModel) return false;
-  if (area.kind === 'plaza') {
-    // (only people about the size the benches are made for)
+  if (area.kind === 'plaza' || area.kind === 'foodcourt') {
+    // (only people about the size the benches — or a food court's chairs — are made for)
     if (!hasClip('Sit1') || !area.seats.length || Math.abs(S.peopleSize*p.traits.size - 1) > 0.3) return false;
     let seat = null, best = 40;
     for (let k=0;k<10;k++) {

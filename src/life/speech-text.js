@@ -49,7 +49,7 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   // (sat down: on a bench, in a circle on the grass, on a seat indoors — as isSeated in people/peopleActivities.js)
   sitting: person => ((person?.act === 'bench' || person?.act === 'circle') && person.stage === 'sit') || (!!person?.inRoom?.seat && person.inRoom.stage === 'sit'),
 };
-const PLACES = ['park', 'plaza', 'beach', 'roadside', 'path', 'bridge', 'crossing']; // (here.<place>: see placeOf)
+const PLACES = ['park', 'plaza', 'beach', 'foodcourt', 'roadside', 'path', 'bridge', 'crossing']; // (here.<place>: see placeOf)
 // here.<zone>: standing in a zone of that type (zoneOf); city is the 'buildings' zone
 const ZONES = { plain: 'plain', park: 'park', water: 'water', beach: 'beach', farmland: 'farmland', suburbs: 'suburbs',
   town: 'town', plaza: 'plaza', city: 'buildings', buildings: 'buildings', industrial: 'industrial', airport: 'airport', mall: 'mall' };

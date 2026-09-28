@@ -194,6 +194,16 @@ export function buildPeopleNav() {
       seats: zone.zoneType==='plaza' ? (zone.benchSeats || []).map(seat => ({ ...seat, by: null })) : [],
       trees: zone.zoneType==='park' ? zone.treeSpots || [] : [] });
   });
+  // a mall's food court: a hangout like a plaza, round its tables and kiosks, with a seat at every chair (see
+  // generateMallContent)
+  S.zones.forEach(zone => {
+    const fc = !zone.drawing && zone.foodCourt;
+    if (!fc || fc.r < 3) return;
+    const inside = (x, z) => Math.hypot(x - fc.x, z - fc.z) < fc.r && fc.obstacles.every(o => Math.hypot(x - o.x, z - o.z) > o.r);
+    const box = { minX: fc.x - fc.r, maxX: fc.x + fc.r, minZ: fc.z - fc.r, maxZ: fc.z + fc.r };
+    areas.push({ kind: 'foodcourt', inside, insideWet: inside, fountain: null, ...box, wetBox: box, size: Math.PI*fc.r*fc.r, y: Y_ZONE_GROUND,
+      exits: [], seats: fc.seats.map(seat => ({ ...seat, by: null })), trees: [] });
+  });
   // the walkways' own footprint, a little proud of their edges: a path cutting through a park is part of the hangout —
   // people walk and stand on it — but nobody sits or lies down on one (see clearGround)
   const onPath = createRegionTester(S.pathFootprint.length ? offsetPaths(S.pathFootprint, 0.35, ClipperLib.JoinType.jtRound) : []);

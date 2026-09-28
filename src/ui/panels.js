@@ -573,6 +573,7 @@ function renderDetails() {
       <div class="slider-row"><div class="row"><label>Shop width</label><span class="val" id="dv-mallshopwidth">${(s.mallShopWidth!=null?s.mallShopWidth:10)}</span></div>
         <input type="range" id="ds-mallshopwidth" min="6" max="24" step="1" value="${s.mallShopWidth!=null?s.mallShopWidth:10}"></div>
       ${toggleHtml('ds-mallupper', 'Upper floor', s.mallUpper!==false)}
+      ${toggleHtml('ds-mallfoodcourt', 'Food court', s.mallFoodCourt!==false)}
       <div class="slider-row"><div class="row"><label>Clothes shops</label><span class="val" id="dv-mallclothes">${(s.mallClothes!=null?s.mallClothes:0.55).toFixed(2)}</span></div>
         <input type="range" id="ds-mallclothes" min="0" max="1" step="0.05" value="${s.mallClothes!=null?s.mallClothes:0.55}"></div>
       <div class="slider-row"><div class="row"><label>Salons</label><span class="val" id="dv-mallsalons">${(s.mallSalons!=null?s.mallSalons:0.25).toFixed(2)}</span></div>
@@ -581,7 +582,7 @@ function renderDetails() {
         <input type="range" id="ds-mallpubs" min="0" max="1" step="0.05" value="${s.mallPubs!=null?s.mallPubs:0.2}"></div>
       <div class="slider-row"><div class="row"><label>Vacant units</label><span class="val" id="dv-mallvacant">${(s.mallVacant!=null?s.mallVacant:0.1).toFixed(2)}</span></div>
         <input type="range" id="ds-mallvacant" min="0" max="1" step="0.05" value="${s.mallVacant!=null?s.mallVacant:0.1}"></div>
-      <div class="empty" style="margin:6px 0 10px;">One building filling the zone: a glass-roofed concourse down its long axis, an entrance at each end, and shops either side on two floors, with galleries, bridges and escalators upstairs.</div>
+      <div class="empty" style="margin:6px 0 10px;">One building filling the zone: glass-roofed concourses following its shape, meeting in domed courts, with an entrance wherever one reaches the edge and shops either side on two floors. The biggest court is the food court.</div>
       ${seedHtml}
     ` : zoneType==='industrial' ? `
       <div class="slider-row"><div class="row"><label>Lot count</label><span class="val" id="dv-industriallots">${s.industrialLots!=null?s.industrialLots:10}</span></div>
@@ -703,6 +704,7 @@ function renderDetails() {
       wireNumber('ds-mallconcourse', 'dv-mallconcourse', 'mallConcourse');
       wireNumber('ds-mallshopwidth', 'dv-mallshopwidth', 'mallShopWidth');
       wireToggle('ds-mallupper', 'mallUpper');
+      wireToggle('ds-mallfoodcourt', 'mallFoodCourt');
       wireNumber('ds-mallclothes', 'dv-mallclothes', 'mallClothes', 2);
       wireNumber('ds-mallsalons', 'dv-mallsalons', 'mallSalons', 2);
       wireNumber('ds-mallpubs', 'dv-mallpubs', 'mallPubs', 2);

@@ -169,3 +169,9 @@ Half these units are empty now. {here.mall, mood = -1}
 > Everyone shops online.
 Meet you by the escalators. {here.mall}
 > Which ones?
+Chips or noodles? {here.foodcourt}
+> Both. Obviously.
+Can never find a clean table in here. {here.foodcourt, mood = -1}
+> Just wipe it with your sleeve.
+This is the best table in the whole food court. {here.foodcourt, is = sitting}
+> It's the only one with four chairs.
