@@ -39,6 +39,7 @@ export const DEFAULT_ZONE_SETTINGS = { density:0.8, heightMin:4, heightMax:40, l
   industrialLots:10, industrialDensity:0.85, industrialHeightMin:5, industrialHeightMax:14, lotFences:true, // industrial
   suburbPlots:40, suburbDensity:0.9, suburbHedges:true,                              // suburbs
   townLots:40, townDensity:0.92, townStoreysMin:2, townStoreysMax:3, townShops:0.4, townPubs:0.25, townSalons:0.2, townClothes:0.25, townPaint:0.3, townSetback:0, // town
+  mallConcourse:14, mallShopWidth:10, mallUpper:true, mallClothes:0.55, mallSalons:0.25, mallPubs:0.2, mallVacant:0.1, mallFloorColor:0xd8d2c6, mallWallColor:0xd9d2c5, mallAccentColor:0x2f6f8f, // mall
   airportTerminal:true, airportTower:true, airportAircraft:true, airportFence:true }; // airport
 export const MAX_TARGET_LOTS = 150; // slider max = this many lots; slider min (1) = "whole zone"
 export const MIN_ZONE_TREES = 1, MAX_ZONE_TREES = 100; // tree count is a flat target regardless of zone size, not an area-scaled density

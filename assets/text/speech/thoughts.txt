@@ -35,6 +35,9 @@ Who do you think God will smite today? {evil}
 I should come to the park more often. {here.park}
 Feed the ducks, or go home? {here.park}
 So many people... {here.plaza, shock}
+Where's the way out of this place... {here.mall}
+I've walked past this shop three times now. {here.mall}
+Shops, shops, shops. {here.mall, mood = -1}
 The sand gets everywhere. {here.beach, mood = -1}
 One step and it'd all be over. {here.roadside, mood = -1}
 Look both ways. Look both ways. {here.crossing}

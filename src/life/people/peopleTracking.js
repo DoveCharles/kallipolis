@@ -525,8 +525,10 @@ function buildingsNear(x, z, reach) {
   }));
   return found;
 }
-// whether a building's in the way at x, z for someone at height y (not over its roof)
-const solidAt = (list, x, z, y) => list.some(b => y < (b.group.userData.height || 0)
+// whether a building's in the way at x, z for someone at height y (not over its roof, nor under it: a mall's upper units
+// stand on its lower ones)
+const between = (b, y) => y < (b.group.userData.height || 0) && y > (b.group.userData.base || 0) - 0.5;
+const solidAt = (list, x, z, y) => list.some(b => between(b, y)
   && (pointInPolygon({ x, z }, b.fp) || distToPolygonBoundary({ x, z }, b.fp) < WALL_PAD));
 // x, z, or as near it as they can get along one axis or the other without walking into a building; anyone already in
 // one (put there somehow) is let walk out
@@ -544,7 +546,7 @@ function buildingAhead(p) {
   if (!list.length) return null;
   for (let t = 0.25; t <= REACH_BUILDING; t += 0.25) {
     const x = p.x + fx*t, z = p.z + fz*t;
-    const hit = list.find(b => p.y < (b.group.userData.height || 0) && pointInPolygon({ x, z }, b.fp));
+    const hit = list.find(b => between(b, p.y) && pointInPolygon({ x, z }, b.fp));
     if (!hit) continue;
     const key = buildingKey(hit.zone, hit.index), number = buildingNumber(key), kind = buildingKindOf(hit.group, hit.zone);
     const title = buildingTitle(kind, number), name = buildingName(kind, number, hit.group.userData.height ?? 0);
@@ -673,7 +675,7 @@ function leaveRoomPossessed(p, i) {
 function putOutside(p, building, back) {
   const out = building.door ?? back;
   p.x = out.x; p.z = out.z; p.y = back.y;
-  p.footing = null;
+  p.footing = back.y > 1 ? { kind: 'raised', y: back.y } : null; // (out onto a mall's gallery, upstairs: see peopleFooting.js)
   if (p.shove) p.shove.x = p.shove.z = 0;
   possession.yaw = Math.atan2(out.x - building.x, out.z - building.z);
   p.heading = possession.yaw + moonwalkTurn(p);

@@ -22,6 +22,7 @@
 #   suburbs      house
 #   town         terrace, pub, salon, clothes (any other shopfront is a terrace)
 #   airport      terminal, hangar, controltower
+#   mall         clothes, salon, pub (the same kinds as a town's, each a unit off the concourse), vacant
 #
 
 [distribution]
@@ -282,6 +283,30 @@ hates = Wheelie bins left out past Tuesday
 hates = A caravan on the drive
 hates = Being the only one painted like that
 hates = Anyone parking across the dropped kerb
+
+# ============================================================ shopping centres
+
+[mall]
+name = Shop Unit
+mood = 🛍️
+loves = Footfall
+loves = The escalators working
+loves = Christmas
+hates = Online shopping
+hates = The rent review
+hates = Teenagers loitering by the escalators
+
+[vacant]
+name = Vacant Unit
+title = TO LET
+title = Coming Soon
+title = Closing Down Sale (Closed)
+mood = 🪧
+loves = Imagining what it could be
+loves = The quiet
+hates = Its old sign still showing through the paint
+hates = The rent
+hates = Pop-up shops
 
 # ============================================================ airport
 

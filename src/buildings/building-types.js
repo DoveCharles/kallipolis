@@ -14,6 +14,7 @@ const ZONE_OF_KIND = {
   house: 'suburbs',
   terrace: 'town', pub: 'town', salon: 'town', clothes: 'town',
   terminal: 'airport', hangar: 'airport', controltower: 'airport',
+  vacant: 'mall',
 };
 const buildings = loadTypeText('assets/text/buildings.txt', {
   attributes: TEXT_ROWS,
