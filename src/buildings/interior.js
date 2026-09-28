@@ -245,12 +245,12 @@ box(0.12, 0.05, 0.05, frameMaterial, 0, 1, DOOR_W - 0.1, door);
 let doorOpenUntil = -Infinity;
 /** Swing the room's door open (or keep it open) for someone coming or going through it: it shuts on its own after. */
 export const openRoomDoor = () => { doorOpenUntil = performance.now() + DOOR_HOLD; };
-// each frame: the door eased open or shut, heard as it shuts
+// each frame: the door eased open or shut, heard as it opens and clicking as it shuts
 function updateDoor() {
   const goal = performance.now() < doorOpenUntil ? DOOR_OPEN : 0, was = door.rotation.y;
   if (was === goal) return;
   door.rotation.y = Math.abs(goal - was) < 0.01 ? goal : was + (goal - was)*DOOR_EASE;
-  if (door.rotation.y === 0) playSound('door', room.localToWorld(new THREE.Vector3(-ROOM_W/2, 1, DOOR_Z)));
+  if (was === 0 || door.rotation.y === 0) playSound(was === 0 ? 'door' : 'latch', room.localToWorld(new THREE.Vector3(-ROOM_W/2, 1, DOOR_Z)));
 }
 // ---------------------------------------------------------- what's in it
 // The shell's the same everywhere; what's in it is one of a few layouts, each a group of furniture shown or hidden as a

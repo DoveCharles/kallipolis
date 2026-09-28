@@ -1504,6 +1504,7 @@ export function updateIndoors(p, i, dt) {
  */
 function leaveRoom(p, dt) {
   const here = p.inRoom;
+  someoneHome(); // (still in, till they're out the door)
   if (here.seat) {
     // (sat down: getting up first, as they would anyway)
     if (here.stage === 'sit') { leaveGroup(p); here.stage = 'rise'; p.pose = 'Idle'; }
