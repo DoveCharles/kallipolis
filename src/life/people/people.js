@@ -459,7 +459,7 @@ const PERSON_LATER_FIELDS = Object.fromEntries([
   'water', 'waterHere', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
   'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'smellCheck',
   // walked about by hand (peopleTracking.js)
-  'footing', 'onRoad', 'shove', 'touching', 'near', 'walkingSpeed',
+  'footing', 'onRoad', 'shove', 'touching', 'near', 'walkingSpeed', 'chatWith',
 ].map(key => [key, undefined]));
 /**
  * Make a person with their traits and state at their starting values.
@@ -557,6 +557,7 @@ const VAMPIRE_EYE_TINT = 0.2, VAMPIRE_EYE_COLOR = new THREE.Color(0xffc40c),
    BLAZED_EYE_RED = 0.05, EYE_RED_COLOR = new THREE.Color(0xff0000);
 // Vampires' skin moves 10% of the way to the colour for every 100 years of age, counting from the first (so it starts out 10% grey).
 const VAMPIRE_SKIN_COLOR = new THREE.Color(0xd3d3d3), VAMPIRE_PALE_PER_CENTURY = 0.1;
+const LOOK_BEHIND = 0.8*Math.PI; // how far round (radians either side of ahead) someone they're looking at counts as right behind them
 const BUBBLE_HEIGHT = 2; // how high over their feet (× height, × people size) a speech bubble's tail points (see ui/speech-bubbles.js)
 const BUBBLE_CHAIR_DROP = 0.5, BUBBLE_GROUND_DROP = 0.8; // how much lower (same units) sat on a seat, and sat on the ground
 // Someone on their own may think something (thoughts.txt: see life/speech-text.js) as they fidget with one of
@@ -1413,7 +1414,11 @@ export function updatePeople(t) {
         p.lookIn -= fdt;
         if (p.lookAt) {
           // talking: at whoever they're talking to, or whoever's talking
-          p.lookTurnTo = Math.max(-LOOK_MAX_TURN, Math.min(LOOK_MAX_TURN, wrapAngle(headingTo(p, p.lookAt) - p.heading)));
+          // (only as far round as a head goes; with them right behind, it stays turned the side it was rather than
+          // swinging across as they cross from one shoulder to the other)
+          let turn = wrapAngle(headingTo(p, p.lookAt) - p.heading);
+          if (Math.abs(turn) > LOOK_BEHIND && turn*p.lookTurn < 0) turn = -turn;
+          p.lookTurnTo = Math.max(-LOOK_MAX_TURN, Math.min(LOOK_MAX_TURN, turn));
           p.lookTiltTo = 0;
         } else if (p.lookIn <= 0) {
           // every so often a glance somewhere else — not so far while walking — or back ahead, the head easing round to it

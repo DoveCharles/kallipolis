@@ -5,7 +5,7 @@ import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
 import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
-import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, talkWith } from './peopleActivities.js';
+import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, standUp, talkWith } from './peopleActivities.js';
 import { placeAtVertex, reseatPerson, walkBackToWalkway } from './peoplePathing.js';
 import { carryPossessed, footingAt, nearestRaisedVertex, stepFooting } from './peopleFooting.js';
 import { bloodSpeed, bloodlustSpeed, isBloodlusting } from './peopleBlood.js';
@@ -291,7 +291,13 @@ let cameraNear = camera.near;
  */
 export function possessPerson(i) {
   const p = people[i];
-  if (i !== followed || !p || isGone(p) || possession.index === i) return;
+  if (i !== followed || !p || possession.index === i || !S.peopleEnabled || S.interactionMode !== 'move') return;
+  // (someone in the room the camera's inside — picked there, see followPersonInside — is walked round it, as anyone
+  // walked in possessed is: see enterPossessed; not someone behind a changing room's curtain)
+  const room = inRoom(p) ? p.indoors : null;
+  if (isGone(p) && !room) return;
+  if (room && (p.inRoom.cubicle || p.inRoom.hidden)) return;
+  if (room) { standUp(p); p.inRoom = null; }
   // (up on a raised walkway, in a station, its lift or a carriage, they stay there: see peopleFooting.js)
   p.footing = footingAt(p.x, p.y, p.z);
   endActivity(p);
@@ -302,6 +308,7 @@ export function possessPerson(i) {
   p.onRoad = false;
   swing = null;
   if (!startPossession(i, p.heading + moonwalkTurn(p))) { p.mode = 'wander'; reseatPerson(p); return; }
+  if (room) { possessedRoom = { key: room.building.key, building: room.building, back: room.back, floor: p.y }; p.footing = null; p.area = -1; }
   cameraNear = camera.near;
   camera.near = S.hideOwnHead ? EYE_NEAR_HEADLESS : EYE_NEAR;
   camera.updateProjectionMatrix();
@@ -319,6 +326,7 @@ export function unpossessPerson() {
   camera.near = cameraNear;
   camera.updateProjectionMatrix();
   if (!p || p.mode !== 'possessed') { possessedRoom = null; return; }
+  leaveGroup(p); // (done with any chat: see talkWith)
   if (possessedRoom && stayIndoors(p)) return; // (let go of in a room they've walked into: they stay on there a while)
   // back into a hangout they're standing in, else walking back to the nearest walkway they can reach (walkBackToWalkway),
   // else onto the nearest walkway — up on a raised one, the nearest point of that
@@ -370,9 +378,9 @@ export function walkPossessed(p, dt) {
   const slowing = Math.exp(-SHOVE_DECAY*dt);
   x += shove.x*dt; z += shove.z*dt;
   shove.x *= slowing; shove.z *= slowing;
-  // (walked off from whoever they were talking to: that's the end of it)
-  const partner = p.group?.kind === 'chat' ? p.group.members.find(m => m !== p) : null;
-  if (partner && Math.hypot(partner.x - x, partner.z - z) > TALK_LEAVE*S.peopleSize) leaveGroup(p);
+  // (walked off from whoever they were talking to, or they've gone: that's the end of it)
+  const partner = talkingTo(p);
+  if (p.group && (!partner || Math.hypot(partner.x - x, partner.z - z) > TALK_LEAVE*S.peopleSize)) leaveGroup(p);
   // (in a room they've walked into: round its furniture — see "walking into buildings")
   if (possessedRoom) { p.walkingSpeed = walkingSpeed; return stepInRoom(p, possession.index, x, z); }
   const touching = new Set(), near = new Set();
@@ -559,6 +567,8 @@ function personAhead(p) {
   });
   return best;
 }
+// whoever the possessed is talking to (see talkWith in peopleActivities.js), while they're still in the conversation
+const talkingTo = p => p.group && p.chatWith && p.group.members.includes(p.chatWith) ? p.chatWith : null;
 /**
  * Work out what E would act on for whoever's possessed, and float the label over it; call each frame.
  * @returns {void}
@@ -567,7 +577,7 @@ export function updatePossessedTarget() {
   const p = people[possession.index];
   target = null;
   if (p?.mode === 'possessed' && S.interactionMode === 'move') {
-    const partner = p.group?.kind === 'chat' ? p.group.members.find(m => m !== p) : null;
+    const partner = talkingTo(p);
     const q = partner ?? personAhead(p);
     if (q) target = { person: q };
     else if (possessedRoom) {
@@ -580,8 +590,8 @@ export function updatePossessedTarget() {
   }
   const key = IS_TOUCH ? 'Tap <b>Use</b>' : 'Press <kbd>E</kbd>';
   if (target?.person) {
-    const q = target.person;
-    showUseLabel({ x: q.x, y: q.y + personHeight(q)*1.1, z: q.z }, p.group?.kind === 'chat' ? `${key} to say goodbye` : `${escapeHtml(nameOf(q))}<br>${key} to talk`, !!p.group);
+    const q = target.person, partner = talkingTo(p);
+    showUseLabel({ x: q.x, y: q.y + personHeight(q)*1.1, z: q.z }, partner ? `${key} to say goodbye` : `${escapeHtml(nameOf(q))}<br>${key} to talk`, !!partner);
   } else if (target?.building) {
     const b = target.building;
     // (on the wall, straight ahead of their eyes: close up, anywhere off the line of sight is well off the middle of the view)
@@ -618,7 +628,7 @@ function showUseLabel(at, html, pinned = false) {
 export function useFromPossession() {
   const i = possession.index, p = people[i];
   if (!p || p.mode !== 'possessed' || !target) return;
-  if (target.person) { if (p.group) leaveGroup(p); else talkWith(p, target.person); }
+  if (target.person) { if (talkingTo(p)) leaveGroup(p); else { leaveGroup(p); talkWith(p, target.person); } }
   else if (target.door) leaveRoomPossessed(p, i);
   else if (target.building) enterPossessed(p, i, target.building);
   target = null;
