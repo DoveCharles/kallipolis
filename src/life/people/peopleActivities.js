@@ -54,7 +54,7 @@ function endChat(g, how = null) {
   removeGroup(g);
   if (how === 'bad') talked(g, RELATE.badChat); else if (g.stage !== 'gather') talked(g, RELATE.chat);
   const chatGroup = g.members.splice(0);
-  chatGroup.forEach(m => { m.group = null; if (isSeated(m)) settleBack(m); else finishActivity(m); });
+  chatGroup.forEach(m => { m.group = null; m.closing = false; if (isSeated(m)) settleBack(m); else finishActivity(m); });
   if (how !== 'bad' || chatGroup.length !== 2 || !hasClip('Punch') || !hasClip('Fall')) return;
   chatGroup.forEach((m, i) => {
     const other = chatGroup[1 - i];
@@ -141,6 +141,8 @@ export function leaveGroup(p) {
   const g = p.group;
   if (!g) return;
   p.group = null;
+  p.closing = false;
+  if (g.goodbye?.by === p) { g.goodbye.turn.closing = false; g.goodbye = null; } // (walked off mid-goodbye)
   if (p.act === 'chat') p.act = null; // (whoever's possessed, stood talking in a circle: see talkWith)
   g.members.splice(g.members.indexOf(p), 1);
   if (g.speaker === p) g.speaker = null;
@@ -243,6 +245,7 @@ export function talkWith(p, q) {
   }
   if (g.kind === 'chat') { g.possessed = true; g.stage = 'talk'; g.timer = (8 + peopleRng()*22)*(p.traits.patience + q.traits.patience)/2; }
   p.chatWith = q;
+  p.closing = false;
   p.lookAt = q; q.lookAt = p;
   p.greetTo = { who: q, until: performance.now()/1000 + GREET_WAIT };
   if (!g.speaker?.saying) { g.speaker = p; g.turnIn = GREET_WAIT; closeNow(p); }
@@ -348,9 +351,49 @@ function takeTurns(g, talkers, dt) {
 const CLOSE_WAIT = 4; // seconds, after a conversation's time is up, for someone to say a closer before they just wave
 // (whoever's to say the closer drops the babble they're partway through, so it comes at once — see linePause in audio/dictionary.js)
 const closeNow = p => { if (p && !p.saying) { p.phrase = null; p.talkIn = 0; } };
+/**
+ * Someone possessed pressing E to say goodbye (see useFromPossession in peopleTracking.js): they say a closer
+ * (closers.txt), then whoever they're talking to says one back — each given up to CLOSE_WAIT to get it out (see
+ * goodbyes) — and then two chatting wave goodbye (or, if either was rude, part badly), or they leave the circle.
+ * @param {Person} p - whoever's possessed
+ * @returns {void}
+ */
+export function sayGoodbye(p) {
+  const g = p.group;
+  if (!g) return;
+  if (g.goodbye) { leaveGroup(p); return; } // (pressed again: just go)
+  const to = g.members.includes(p.chatWith) && p.chatWith !== p ? p.chatWith : g.members.find(m => m !== p);
+  g.goodbye = { by: p, to, turn: p, before: p.saying, spoke: false, timer: CLOSE_WAIT, bad: false };
+  g.ending = null;
+  p.greetTo = null;
+  p.closing = true; g.speaker = p; closeNow(p);
+}
+// A goodbye under way (g.goodbye, from sayGoodbye): whoever's turn it is holds the floor till they've said their closer
+// (a new line: not whatever they were partway through) or CLOSE_WAIT is up; the possessed first, then the other.
+function goodbyes(g, dt) {
+  const bye = g.goodbye, m = bye.turn;
+  if (g.ending) { bye.bad ||= g.ending.how === 'bad'; g.ending = null; } // (a closer's {end}: the goodbye's own end comes after both)
+  g.speaker = m;
+  g.members.forEach(o => { if (o !== m && o !== bye.by) o.lookAt = m; });
+  m.lookAt = m === bye.by ? bye.to : bye.by;
+  bye.timer -= dt;
+  if (m.saying && m.saying !== bye.before) { bye.spoke = true; return; }
+  if (m.saying || (!bye.spoke && bye.timer > 0)) return;
+  m.closing = false;
+  if (m === bye.by && bye.to && g.members.includes(bye.to)) {
+    Object.assign(bye, { turn: bye.to, before: bye.to.saying, spoke: false, timer: CLOSE_WAIT });
+    bye.to.closing = true; closeNow(bye.to);
+    return;
+  }
+  g.goodbye = null; g.speaker = null;
+  if (g.kind !== 'chat') leaveGroup(bye.by);
+  else if (bye.bad) endChat(g, 'bad');
+  else wave(g, 'bye');
+}
 export function updateGroups(dt) {
   for (let gi = groups.length - 1; gi >= 0; gi--) {
     const g = groups[gi];
+    if (g.goodbye) { goodbyes(g, dt); continue; }
     if (g.kind === 'room') { roomChat(g, dt); continue; }
     if (g.kind === 'bar') { barChat(g, dt); continue; }
     if (g.kind === 'circle') {

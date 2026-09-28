@@ -5,7 +5,7 @@ import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
 import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
-import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, standUp, talkWith } from './peopleActivities.js';
+import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, sayGoodbye, standUp, talkWith } from './peopleActivities.js';
 import { placeAtVertex, reseatPerson, walkBackToWalkway } from './peoplePathing.js';
 import { carryPossessed, footingAt, nearestRaisedVertex, stepFooting } from './peopleFooting.js';
 import { bloodSpeed, bloodlustSpeed, isBloodlusting } from './peopleBlood.js';
@@ -629,7 +629,7 @@ function showUseLabel(at, html, pinned = false) {
 export function useFromPossession() {
   const i = possession.index, p = people[i];
   if (!p || p.mode !== 'possessed' || !target) return;
-  if (target.person) { if (talkingTo(p)) leaveGroup(p); else { leaveGroup(p); talkWith(p, target.person); } }
+  if (target.person) { if (talkingTo(p)) sayGoodbye(p); else { leaveGroup(p); talkWith(p, target.person); } }
   else if (target.door) leaveRoomPossessed(p, i);
   else if (target.building) enterPossessed(p, i, target.building);
   target = null;
