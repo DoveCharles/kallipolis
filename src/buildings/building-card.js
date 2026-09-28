@@ -7,6 +7,7 @@ import { makeCard } from '../ui/entity-card.js';
 import { buildingKey, buildingNumber, roomLayoutOf } from './footprints.js';
 import { buildingKindOf, buildingKindName, buildingCardName, buildingTypeOf, buildingEnterable } from './building-types.js';
 import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
+import { startParty } from '../life/people/peopleActivities.js';
 
 // ============================================================ following a building
 // As for a car or a carriage: a click on a building in World mode keeps the view on it, with a card at the bottom right
@@ -14,18 +15,29 @@ import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 // assets/text/buildings.txt, by its kind — see building-types.js) and who's inside
 // (see "going indoors" in people.js), until a click elsewhere, a pan, leaving World mode, or its zone being rebuilt lets it go.
 // The card itself is the shared one in ui/entity-card.js. No Smite button, and nothing to be behind the wheel of.
-// followed: { zone, group, key, center, room } of the building the camera's on (room: its inside, see roomLayoutOf), or null
+// followed: { zone, group, key, number, kind, center, room } of the building the camera's on (room: its inside, see
+// roomLayoutOf), or null. `number` and `kind` are what its room's laid out as and what kind of building it is — what the
+// Party button's party is set by (see startParty in peopleActivities.js).
 let followed = null;
 const raycaster = new THREE.Raycaster();
-const ENTER = ['Enter', 'Go inside'], LEAVE = ['Leave', 'Back outside'];
+const ENTER = ['Enter', 'Go inside'], LEAVE = ['Leave', 'Back outside'], PARTY = ['Party', 'Some people turn up and come in'];
 const card = makeCard({ id: 'building-card', title: 'Building', onClose: () => stopFollowingBuilding(),
-  action: { text: ENTER[0], title: ENTER[1], onClick: () => toggleInside() } });
+  action: { text: ENTER[0], title: ENTER[1], onClick: () => toggleInside() },
+  subAction: { text: PARTY[0], title: PARTY[1], onClick: () => throwAParty() } });
 // the card's Enter button: into the followed building's one room (see interior.js), and back out. Only on buildings
 // people go into (enterable in assets/text/buildings.txt): a tank farm has no inside to show.
 function toggleInside() {
   if (!followed?.enterable) return;
   if (isInsideBuilding()) leaveBuilding(); else enterBuilding(followed.group, followed.key, followed.room);
   card.setAction(...(isInsideBuilding() ? LEAVE : ENTER));
+  // (the Party button, under Leave, only while the camera's in there: there's a door to bring people to, and the room's up
+  // to say where it is — see roomOutsideDoor)
+  card.showSubAction(isInsideBuilding());
+}
+// the card's Party button: some people turn up outside the followed building's door and come in (see startParty in
+// peopleActivities.js, which says per kind of building who does and how many)
+function throwAParty() {
+  if (followed && isInsideBuilding()) startParty(followed);
 }
 const drawThumbnail = makeThumbnailDrawer(card.canvas);
 
@@ -59,11 +71,12 @@ function followBuildingAt(clientX, clientY) {
 function followBuilding(picked) {
   leaveBuilding();
   card.setAction(...ENTER);
+  card.showSubAction(false);
   const box = new THREE.Box3().setFromObject(picked.group), center = box.getCenter(new THREE.Vector3());
   const radius = box.getBoundingSphere(new THREE.Sphere()).radius;
   const key = buildingKey(picked.zone, picked.index), number = buildingNumber(key);
   const kind = buildingKindOf(picked.group, picked.zone);
-  followed = { zone: picked.zone, group: picked.group, key, center, room: roomLayoutOf(kind, number),
+  followed = { zone: picked.zone, group: picked.group, key, number, kind, center, room: roomLayoutOf(kind, number),
     enterable: buildingEnterable(kind) };
   card.showAction(followed.enterable);
   controls.minRadius = CAMERA_MIN_RADIUS;

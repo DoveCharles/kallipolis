@@ -3362,6 +3362,19 @@ export function roomSpot(rng) {
 export const roomDoorway = () => room.localToWorld(new THREE.Vector3(-ROOM_W/2 + 0.3, 0, DOOR_Z));
 /** Through the room's door, in the dark beyond it, in the world. */
 export const roomBeyondDoor = () => room.localToWorld(new THREE.Vector3(-ROOM_W/2 - RECESS + 0.2, 0, DOOR_Z));
+// Just outside the door, where the room's own thick wall and the black beyond the doorway hide whoever's standing there
+// from anyone in the room, and where the door's wall — the one wall without windows in it — puts them out of sight of
+// those, too: `out` from the mouth of the doorway (the far side of the room's wall) and `across` along it, +z for the end
+// away from the corner the camera starts in. At the room's own floor height; anyone putting someone out there on the
+// ground gives their own y (see the party in peopleActivities.js, which queues people up out here to come in).
+/**
+ * A spot just outside the room's door, in the world.
+ * @param {number} out - how far past the doorway's mouth
+ * @param {number} across - how far along the wall from the door, +z
+ * @returns {THREE.Vector3} the spot, at the room's floor height
+ */
+export const roomOutsideDoor = (out = 0.4, across = 0) =>
+  room.localToWorld(new THREE.Vector3(-ROOM_W/2 - THICK - out, 0, DOOR_Z + across));
 
 // Walked about by hand (see "walking into buildings" in life/people/peopleTracking.js): whether a point in the world is
 // somewhere to stand in the room — the walk grid's floor (BODY clear of the walls and furniture), or the doorway's recess

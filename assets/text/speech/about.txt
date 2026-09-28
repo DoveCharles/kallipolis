@@ -161,6 +161,8 @@
 #   {felt = newclothes}       just came out of a clothes shop's changing room in new clothes
 #   {felt = gifted}           was just given something (the Gift button on their card: see assets/text/gifts.txt)
 #   {felt = cheered}          was just given something that cheered them up out of a sad or angry mood
+#   {felt = party}            just turned up at a party (the Party button on a building's card, while you're inside it:
+#                             see the party in src/life/people/peopleActivities.js)
 # IS: how the speaker is right now (hard limits); other.is for who they're talking to, != for not
 #   {is = drunk}              the drunk trait, or a pint or more in them
 #   {is = bloodlusting}       bloodlusting now

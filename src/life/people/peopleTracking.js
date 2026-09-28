@@ -700,7 +700,7 @@ function stayIndoors(p) {
   p.mode = 'indoors';
   p.onRoad = false;
   const out = building.door ?? back;
-  p.indoors = { building, stage: 'inside', back: { x: out.x, y: back.y, z: out.z }, hoursLeft: 0.5 + peopleRng()*2, shop: null, served: true };
+  p.indoors = { building, stage: 'inside', back: { x: out.x, y: back.y, z: out.z }, hoursLeft: 0.5 + peopleRng()*2, shop: null, served: true, party: false };
   p.inRoom = { visit: roomVisit(), route: null, wait: 1 + peopleRng()*3, seat: null, stage: '' };
   camera.near = roomNear();
   camera.updateProjectionMatrix();

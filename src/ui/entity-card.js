@@ -41,12 +41,15 @@ export const inspected = new Map();
 // does. `thumb` is { title, onClick } for the picture — leave out onClick and it's just a picture. `kill`, if given, is
 // { title, onClick } for a Smite button under it. `action`, if given, is { text, title, onClick } for a plain button in the
 // same place (a building's Enter: see buildings/interior.js), its wording changed later with setAction and hidden with
-// showAction. `labels` renames rows for this card ({ occupants: 'Passengers' }). `health` adds a thin bar under the
-// picture: bindHealth(entity, kind) makes it follow that entity's health (core/health.js); setHealth sets it by hand.
+// showAction. `subAction` is a second plain button under that one (a building's Party, while the camera's inside it: see
+// buildings/building-card.js) — it starts out of the way, and is shown with showSubAction and worded with setSubAction, as
+// a card that only sometimes has one to offer wants. `labels` renames rows for this card ({ occupants: 'Passengers' }).
+// `health` adds a thin bar under the picture: bindHealth(entity, kind) makes it follow that entity's health
+// (core/health.js); setHealth sets it by hand.
 // `tabs`: sheet tabs under the title bar (the first is the card's own rows; the rest get empty panes: tabPane(key), keys
 // lower-cased); onTab(listener) hears selectTab. `effects`: a column of status-effect icons left of the picture, empty
 // until there are any (see setEffects, and life/statuseffects.js).
-export function makeCard({ id, title, onClose, thumb = {}, kill = null, action = null, labels = {}, health = false, tabs = null, effects = false }) {
+export function makeCard({ id, title, onClose, thumb = {}, kill = null, action = null, subAction = null, labels = {}, health = false, tabs = null, effects = false }) {
   const el = document.createElement('div');
   el.id = id;
   el.className = 'entity-card';
@@ -142,6 +145,19 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     actionText = [button, action.text];
     fixedText.push(actionText);
     button.addEventListener('click', () => action.onClick());
+    shot.append(button);
+  }
+  // a second button under it, out of the way until the card says it has one to offer (see showSubAction)
+  let subActionText = null;
+  if (subAction) {
+    const button = document.createElement('button');
+    button.className = 'btn pc-kill pc-sub-action';
+    button.title = subAction.title || '';
+    button.textContent = subAction.text;
+    button.style.display = 'none';
+    subActionText = [button, subAction.text];
+    fixedText.push(subActionText);
+    button.addEventListener('click', () => subAction.onClick());
     shot.append(button);
   }
 
@@ -582,10 +598,21 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   function showAction(shown) {
     if (actionText) actionText[0].style.display = shown ? '' : 'none';
   }
+  // the second button's wording (and tooltip), as `subAction` in makeCard gave them first
+  function setSubAction(text, tooltip) {
+    if (!subActionText) return;
+    subActionText[1] = text;
+    subActionText[0].textContent = relabelling ? relabelling(text) : text;
+    if (tooltip != null) subActionText[0].title = tooltip;
+  }
+  // the second button there or not (a building's Party only while the camera's inside it)
+  function showSubAction(shown) {
+    if (subActionText) subActionText[0].style.display = shown ? '' : 'none';
+  }
 
   dragByTitle(el, () => !matchMedia('(max-width: 760px)').matches);
 
-  const card = { el, canvas, show, hide, resetPlace, set, setList, relabel, setTitle, setFavorite, setAction, showAction, setHealth, bindHealth,
+  const card = { el, canvas, show, hide, resetPlace, set, setList, relabel, setTitle, setFavorite, setAction, showAction, setSubAction, showSubAction, setHealth, bindHealth,
     setEffects, selectTab, tabPane: key => panes[key] ?? null, activeTab: () => activeTab, onTab: listener => { tabListeners.push(listener); } };
   cards.push(card);
   // What this card's status column is doing, for the console (see the `status` handle in src/main.js): read live off the
