@@ -1,37 +1,42 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { Y_ZONE_GROUND, computeWindowGlowFactor } from '../core/scene.js';
-import { mulberry32, polygonArea, centroid } from '../core/math.js';
-import { CLIPPER_SCALE, clipPolygons, createMeshBuilder } from '../roads/roads.js';
+import { scene, Y_ZONE_GROUND, computeWindowGlowFactor } from '../core/scene.js';
+import { mulberry32, polygonArea } from '../core/math.js';
+import { tessellateOpenPath } from '../core/splines.js';
+import { roadNodes } from '../core/state.js';
+import { CLIPPER_SCALE, clipPolygons, createMeshBuilder, disposeObject } from './roads.js';
 import { mergeGeometryList } from '../buildings/windows.js';
-import { makeFlatZoneMesh } from './surface-detail.js';
-import { longAxisOf } from './farmland.js';
-import { buildFountain, makeFountainSpray } from './plazas.js';
+import { makeFlatZoneMesh } from '../zones/surface-detail.js';
+import { buildFountain, makeFountainSpray } from '../zones/plazas.js';
 import { buildingKey, buildingNumber } from '../buildings/footprints.js';
-import { buildingName, buildingTitle, buildingTypesReady } from '../buildings/building-types.js';
-import { cutLotByCutouts, insetPolygonExact, toClipperPath, fromClipperPath, createRegionTester } from './cutouts.js';
+import { buildingName, buildingSign, buildingTypesReady } from '../buildings/building-types.js';
+import { insetPolygonExact, toClipperPath, fromClipperPath, createRegionTester, offsetPaths, pathsArea } from '../zones/cutouts.js';
 
 // ---------------------------------------------------------- shopping centre
-// A mall is one building filling its zone, but walked like the outdoors. Its concourse follows the zone's shape: down the
-// middle of it (its spine, see spineOf), turning where the zone turns and branching where it branches, with a court under
-// a glass dome wherever branches meet and an entrance wherever a branch reaches the zone's edge. A zone with no shape to
-// follow (a square, a blob) gets one straight concourse down its long axis. The biggest court — at the junction deepest
-// in the zone, or halfway along a mall with none — is the food court: tables and chairs in the
-// middle under the dome, and people hanging out there as they do in a plaza (zone.foodCourt: see buildPeopleNav).
+// A mall is a kind of path (roadType 'mall'): drawn in the Paths tab like any other, its network is the concourse — one
+// building round it, walked like the outdoors. Every end of it is an entrance, every node where three or more branches
+// meet is a court under a glass dome, and any node marked a food court (right-click it) is a bigger court with tables and
+// chairs, where people hang out as they do in a plaza (holder.foodCourts: see buildPeopleNav). The mall reaches its
+// shops' depth either side of the concourse; a road through it cuts it in two, with an entrance either side of the road.
+// Zones give way to it as they do to roads (see S.landCutFootprint in paths.js).
+//
+// Each mall's built into a holder of its own in S.malls — shaped like a zone as far as the rest of the app cares (an id,
+// its buildingsGroup, walkGaps and so on: see buildingHolders in core/shared.js) — and only again when its network, its
+// settings or the roads across it change, and never while a node's being dragged (see rebuildMalls).
 //
 // Shop units line the concourse on two storeys: each a building like any other (a clothes shop, a salon, a bar — a pub's
 // layout — or a vacant unit), so people go in, the camera follows them, and each has its own card. The concourse is open
 // to the glass roof down the middle; upstairs, a gallery runs in front of the upper shops on either side, round every
 // court, with bridges across the void and escalators up to the bridges.
 //
-// People walk it on the ground by lanes down each branch by the shopfronts (zone.walkGaps, as a suburb's lanes: see
+// People walk it on the ground by lanes down each branch by the shopfronts (holder.walkGaps, as a suburb's lanes: see
 // buildPeopleNav), meeting in the middle of each court and coming out through the entrances onto whatever pavement's
-// there; upstairs, by the galleries, bridges and escalators — all walked as a raised walkway is (zone.mallNav: the same
-// shape as a raised network's nav in roads/raised.js). An upper unit keeps `base`, its floor's height, and its door is
-// onto the gallery (see buildingDoors in peoplePathing.js).
+// there; upstairs, by the galleries, bridges and escalators — all walked as a raised walkway is (holder.mallNav: the
+// same shape as a raised network's nav in roads/raised.js). An upper unit keeps `base`, its floor's height, and its door
+// is onto the gallery (see buildingDoors in peoplePathing.js).
 
 export const MALL_LEVEL = 5;          // floor to floor
-const EDGE = 0.4;                     // the mall's walls stand this far in from the zone's own edge (off the pavement)
+const EDGE = 0.4;                     // the mall's walls stand this far back from a road's pavement
 const UNIT_GAP = 0.35;                // between the units' backs and the outer walls
 const ROOM = { w: 8, d: 6 };           // a shop's room, deep by wide (see makeUnit)
 const WALL_IN = 0.1;                  // a unit's walls, in from its lot (so neighbours' walls never meet in one place)
@@ -41,8 +46,13 @@ const DOOR_H = 4.2;                   // the entrances' glass, and the lintel ov
 const LANE_IN = 1.8;                  // the ground lanes, in from the shopfronts
 const COURT = 1.5;                    // a court's radius, in the concourse's half-widths
 const FOOD_COURT = 2.6;               // and the food court's (if there's room)
-const MIN_SPINE = 20;                 // the least concourse worth building
-const PRUNE_MIN = 12;                 // a side branch reaching less than this past the junction it comes off is dropped
+const MIN_AREA = 400;                 // the least of a mall worth building (a piece a road leaves smaller is left empty)
+// what a new mall path is, unless it takes after the one last selected (see input.js): its concourse is the line's width,
+// and the rest is kept on each line of the network as `mall`
+export const MALL_WIDTH = 14;
+export const MALL_DEFAULTS = { depth: 14, shopWidth: 10, upper: true, clothes: 0.55, salons: 0.25, pubs: 0.2, vacant: 0.1, theme: 0, seed: 1 };
+export const isMallLine = line => line.roadType === 'mall';
+export const mallSettingsOf = line => ({ ...MALL_DEFAULTS, ...(line.mall || {}) });
 const ESCALATOR_SLOPE = Math.tan(Math.PI/6), ESCALATOR_W = 1.1, BRIDGE_HALF = 1.5, BRIDGE_EVERY = 32;
 const GLASS = 0xbfd9e6;
 // Every mall's in a nineties colour scheme — its own by its seed, or the one picked in its settings (mallTheme, 1 on):
@@ -126,18 +136,6 @@ function frameOf(c, dx, dz) {
     at: (u, v, y = 0) => ({ x: c.x + dx*u - dz*v, y, z: c.z + dz*u + dx*v }),
     dx, dz,
   };
-}
-// Where the line v = const is inside `uvPoly` (the outline in u, v): the longest stretch of it, or null.
-function spanAt(uvPoly, v) {
-  const us = [];
-  uvPoly.forEach((p, i) => {
-    const q = uvPoly[(i+1) % uvPoly.length];
-    if ((p.v > v) !== (q.v > v)) us.push(p.u + (q.u - p.u)*(v - p.v)/(q.v - p.v));
-  });
-  us.sort((a, b) => a - b);
-  let best = null;
-  for (let i = 0; i + 1 < us.length; i += 2) if (!best || us[i+1] - us[i] > best[1] - best[0]) best = [us[i], us[i+1]];
-  return best;
 }
 const clip = p => ({ X: Math.round(p.x*CLIPPER_SCALE), Y: Math.round(p.z*CLIPPER_SCALE) });
 const union = (a, b = []) => clipPolygons(ClipperLib.ClipType.ctUnion, a, b);
@@ -270,214 +268,6 @@ function outsideOf(p, q, inside, reach = 0.4) {
   return ia ? { m, n: { x: -n.x, z: -n.z }, out: b, len } : { m, n, out: a, len };
 }
 
-// ---------------------------------------------------------- the spine
-// The middle of the zone, as a graph: the outline rasterised, thinned to a line one cell wide (Zhang–Suen), and read off
-// as branches between junctions and ends. Each branch that reaches only a little past the junction it comes off — a
-// corner's, or a nub in the outline — is dropped, again and again until none is left to drop; what's left is simplified,
-// and each end is carried on out to the outline, where it's an entrance. Null if nothing worth following is left (a
-// square: every branch is a corner's), for the straight concourse instead.
-function spineOf(outline) {
-  const xs = outline.map(p => p.x), zs = outline.map(p => p.z);
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
-  const h = Math.max(0.5, Math.min(2.5, Math.sqrt(Math.abs(polygonArea(outline)))/160));
-  const nx = Math.ceil((maxX - minX)/h) + 3, nz = Math.ceil((maxZ - minZ)/h) + 3, x0 = minX - h, z0 = minZ - h, N = nx*nz;
-  const cx = i => x0 + (i + 0.5)*h, cz = k => z0 + (k + 0.5)*h;
-  const mask = new Uint8Array(N);
-  for (let k = 0; k < nz; k++) {
-    const z = cz(k), cross = [];
-    outline.forEach((p, i) => { const q = outline[(i+1) % outline.length]; if ((p.z > z) !== (q.z > z)) cross.push(p.x + (q.x - p.x)*(z - p.z)/(q.z - p.z)); });
-    cross.sort((a, b) => a - b);
-    for (let c = 0; c + 1 < cross.length; c += 2) for (let i = Math.max(0, Math.ceil((cross[c] - x0)/h - 0.5)); i < nx && cx(i) <= cross[c+1]; i++) mask[k*nx + i] = 1;
-  }
-  // how far each cell is from the outline (exact squared distances: Felzenszwalb & Huttenlocher, by columns then rows)
-  const f = new Float64Array(N), INF = 1e20;
-  for (let j = 0; j < N; j++) f[j] = mask[j] ? INF : 0;
-  const pass = (count, stride, step, len) => {
-    const g = new Float64Array(len), v = new Int32Array(len), zb = new Float64Array(len + 1), d = new Float64Array(len);
-    for (let s = 0; s < count; s++) {
-      const base = s*stride;
-      for (let q = 0; q < len; q++) g[q] = f[base + q*step];
-      let k = 0; v[0] = 0; zb[0] = -INF; zb[1] = INF;
-      for (let q = 1; q < len; q++) {
-        let sx = ((g[q] + q*q) - (g[v[k]] + v[k]*v[k]))/(2*q - 2*v[k]);
-        while (sx <= zb[k]) { k--; sx = ((g[q] + q*q) - (g[v[k]] + v[k]*v[k]))/(2*q - 2*v[k]); }
-        k++; v[k] = q; zb[k] = sx; zb[k+1] = INF;
-      }
-      k = 0;
-      for (let q = 0; q < len; q++) { while (zb[k+1] < q) k++; d[q] = (q - v[k])*(q - v[k]) + g[v[k]]; }
-      for (let q = 0; q < len; q++) f[base + q*step] = d[q];
-    }
-  };
-  pass(nx, 1, nx, nz);
-  pass(nz, nx, 1, nx);
-  const dt = new Float32Array(N);
-  for (let j = 0; j < N; j++) dt[j] = Math.sqrt(f[j])*h;
-  const dtAt = p => { const i = Math.floor((p.x - x0)/h), k = Math.floor((p.z - z0)/h); return i < 0 || k < 0 || i >= nx || k >= nz ? 0 : dt[k*nx + i]; };
-
-  // thinning
-  const sk = mask.slice();
-  const nb = j => [sk[j - nx], sk[j - nx + 1], sk[j + 1], sk[j + nx + 1], sk[j + nx], sk[j + nx - 1], sk[j - 1], sk[j - nx - 1]]; // P2..P9
-  for (let changed = true, rounds = 0; changed && rounds < 400; rounds++) {
-    changed = false;
-    for (let step = 0; step < 2; step++) {
-      const drop = [];
-      for (let k = 1; k < nz - 1; k++) for (let i = 1; i < nx - 1; i++) {
-        const j = k*nx + i;
-        if (!sk[j]) continue;
-        const P = nb(j), B = P.reduce((s, x) => s + x, 0);
-        if (B < 2 || B > 6) continue;
-        let A = 0;
-        for (let t = 0; t < 8; t++) if (!P[t] && P[(t+1) % 8]) A++;
-        if (A !== 1) continue;
-        if (step === 0 ? (P[0]*P[2]*P[4] || P[2]*P[4]*P[6]) : (P[0]*P[2]*P[6] || P[0]*P[4]*P[6])) continue;
-        drop.push(j);
-      }
-      drop.forEach(j => { sk[j] = 0; });
-      if (drop.length) changed = true;
-    }
-  }
-  // the skeleton's cells as a graph: 8-connected, but no diagonal step where there's a way round it by the side
-  const adj = new Map();
-  for (let j = 0; j < N; j++) {
-    if (!sk[j]) continue;
-    const list = [];
-    for (let dk = -1; dk <= 1; dk++) for (let di = -1; di <= 1; di++) {
-      if (!di && !dk) continue;
-      const o = j + dk*nx + di;
-      if (!sk[o]) continue;
-      if (di && dk && (sk[j + di] || sk[j + dk*nx])) continue;
-      list.push(o);
-    }
-    adj.set(j, list);
-  }
-  // the nodes: every end, and every junction (touching junction cells are one)
-  const nodeOf = new Map(), nodes = [];
-  adj.forEach((list, j) => {
-    if (list.length === 2 || nodeOf.has(j)) return;
-    const id = nodes.length, cells = [j], stack = [j];
-    nodeOf.set(j, id);
-    if (list.length >= 3) while (stack.length) {
-      const c = stack.pop();
-      for (let dk = -1; dk <= 1; dk++) for (let di = -1; di <= 1; di++) {
-        const o = c + dk*nx + di;
-        if (adj.has(o) && adj.get(o).length >= 3 && !nodeOf.has(o)) { nodeOf.set(o, id); cells.push(o); stack.push(o); }
-      }
-    }
-    const at = cells.reduce((s, c) => ({ x: s.x + cx(c % nx)/cells.length, z: s.z + cz(Math.floor(c/nx))/cells.length }), { x: 0, z: 0 });
-    nodes.push({ id, x: at.x, z: at.z, dt: Math.max(...cells.map(c => dt[c])) });
-  });
-  const cellAt = c => ({ x: cx(c % nx), z: cz(Math.floor(c/nx)) });
-  let edges = [];
-  const walked = new Set();
-  nodeOf.forEach((id, s) => adj.get(s).forEach(t => {
-    if (walked.has(s + ',' + t) || nodeOf.get(t) === id) return;
-    walked.add(s + ',' + t);
-    const cells = [s, t];
-    let prev = s, cur = t;
-    for (let guard = 0; !nodeOf.has(cur) && guard < N; guard++) {
-      const next = adj.get(cur).find(o => o !== prev);
-      if (next == null) break;
-      prev = cur; cur = next; cells.push(cur);
-    }
-    if (!nodeOf.has(cur)) return;
-    walked.add(cur + ',' + prev);
-    const pts = cells.map(cellAt);
-    pts[0] = nodes[id]; pts[pts.length-1] = nodes[nodeOf.get(cur)];
-    edges.push({ a: id, b: nodeOf.get(cur), pts: pts.map(p => ({ x: p.x, z: p.z })) });
-  }));
-  edges = edges.filter(e => e.a !== e.b);
-
-  // prune, merging each node left with two branches into one branch through it, until nothing more goes
-  const degrees = () => { const d = new Map(); edges.forEach(e => { d.set(e.a, (d.get(e.a) || 0) + 1); d.set(e.b, (d.get(e.b) || 0) + 1); }); return d; };
-  const merge = () => {
-    for (let again = true; again;) {
-      again = false;
-      const deg = degrees();
-      for (const [id, n] of deg) {
-        if (n !== 2) continue;
-        const [e1, e2] = edges.filter(e => e.a === id || e.b === id);
-        if (e1 === e2 || (e1.a === e2.a && e1.b === e2.b) || (e1.a === e2.b && e1.b === e2.a)) continue; // (a loop)
-        const p1 = e1.b === id ? e1.pts : e1.pts.slice().reverse(), p2 = e2.a === id ? e2.pts : e2.pts.slice().reverse();
-        const joined = { a: e1.b === id ? e1.a : e1.b, b: e2.a === id ? e2.b : e2.a, pts: [...p1, ...p2.slice(1)] };
-        edges = edges.filter(e => e !== e1 && e !== e2).concat(joined);
-        again = true;
-        break;
-      }
-    }
-  };
-  merge();
-  for (let round = 0; round < 40; round++) {
-    const deg = degrees();
-    const drop = edges.filter(e => {
-      const la = deg.get(e.a) === 1, lb = deg.get(e.b) === 1;
-      if (la === lb) return false;
-      const leaf = nodes[la ? e.a : e.b], junction = nodes[la ? e.b : e.a];
-      return dist(leaf, junction) - junction.dt < Math.max(PRUNE_MIN, 0.5*junction.dt);
-    });
-    if (!drop.length) break;
-    edges = edges.filter(e => !drop.includes(e));
-    merge();
-  }
-  if (!edges.length) return null;
-  // the biggest piece that's left, by length
-  const pieceOf = new Map();
-  edges.forEach((e, i) => { pieceOf.set(e.a, pieceOf.get(e.a) ?? i); pieceOf.set(e.b, pieceOf.get(e.b) ?? i); });
-  for (let changed = true; changed;) {
-    changed = false;
-    edges.forEach(e => { const m = Math.min(pieceOf.get(e.a), pieceOf.get(e.b)); if (pieceOf.get(e.a) !== m || pieceOf.get(e.b) !== m) { pieceOf.set(e.a, m); pieceOf.set(e.b, m); changed = true; } });
-  }
-  const lengths = new Map();
-  edges.forEach(e => lengths.set(pieceOf.get(e.a), (lengths.get(pieceOf.get(e.a)) || 0) + lengthOf(e.pts)));
-  const biggest = [...lengths].sort((a, b) => b[1] - a[1])[0][0];
-  edges = edges.filter(e => pieceOf.get(e.a) === biggest);
-  // the branches' widths, from the cells down their middles, for how wide the concourse can be
-  const widths = edges.flatMap(e => e.pts.filter((p, i) => i % 3 === 0).map(dtAt)).sort((a, b) => a - b);
-  const tol = Math.max(1.5, 0.06*widths[Math.floor(widths.length/2)]);
-  edges.forEach(e => { e.pts = simplify(e.pts, tol); });
-  return finishSpine(outline, nodes, edges, widths[Math.floor(widths.length*0.2)], dtAt);
-}
-// the spine's ends carried on out to the outline, and its nodes counted up: { nodes, edges, halfWidth, dtAt }
-function finishSpine(outline, nodes, edges, halfWidth, dtAt) {
-  const deg = new Map();
-  edges.forEach(e => { deg.set(e.a, (deg.get(e.a) || 0) + 1); deg.set(e.b, (deg.get(e.b) || 0) + 1); });
-  const used = [...deg.keys()].map(id => ({ ...nodes[id], deg: deg.get(id) }));
-  const byId = new Map(used.map(n => [n.id, n]));
-  used.forEach(n => {
-    if (n.deg !== 1) return;
-    const e = edges.find(e => e.a === n.id || e.b === n.id), fromEnd = e.b === n.id;
-    const pts = fromEnd ? e.pts : e.pts.slice().reverse(), back = pointAlong(pts.slice().reverse(), Math.min(6, lengthOf(pts)));
-    const dx = n.x - back.x, dz = n.z - back.z, l = Math.hypot(dx, dz) || 1, dir = { x: dx/l, z: dz/l };
-    let hit = null;
-    outline.forEach((p, i) => {
-      const q = outline[(i+1) % outline.length], ex = q.x - p.x, ez = q.z - p.z, den = dir.x*ez - dir.z*ex;
-      if (Math.abs(den) < 1e-9) return;
-      const t = ((p.x - n.x)*ez - (p.z - n.z)*ex)/den, s = ((p.x - n.x)*dir.z - (p.z - n.z)*dir.x)/den;
-      if (t > 0.01 && s >= 0 && s <= 1 && (!hit || t < hit)) hit = t;
-    });
-    if (hit == null) return;
-    const E = { x: n.x + dir.x*hit, z: n.z + dir.z*hit };
-    pts.push(E);
-    e.pts = fromEnd ? pts : pts.reverse();
-    Object.assign(n, { x: E.x, z: E.z, entrance: { x: E.x, z: E.z, dx: dir.x, dz: dir.z } });
-  });
-  edges.forEach((e, i) => { e.id = i; e.pts[0] = { x: byId.get(e.a).x, z: byId.get(e.a).z }; e.pts[e.pts.length-1] = { x: byId.get(e.b).x, z: byId.get(e.b).z }; });
-  return { nodes: used, byId, edges, halfWidth, dtAt };
-}
-// One straight concourse down the long axis, end to end.
-function straightSpine(outline) {
-  const axis = longAxisOf(outline);
-  let F = frameOf(centroid(outline), axis.dx, axis.dz);
-  const uv = outline.map(F.uv), vMin = Math.min(...uv.map(p => p.v)), vMax = Math.max(...uv.map(p => p.v));
-  F = frameOf(F.at(0, (vMin + vMax)/2), axis.dx, axis.dz);
-  const span = spanAt(outline.map(F.uv), 0);
-  if (!span) return null;
-  const A = F.at(span[0], 0), B = F.at(span[1], 0), halfWidth = (vMax - vMin)/2;
-  const nodes = [{ id: 0, x: A.x, z: A.z, dt: 0, deg: 1, entrance: { x: A.x, z: A.z, dx: -axis.dx, dz: -axis.dz } },
-    { id: 1, x: B.x, z: B.z, dt: 0, deg: 1, entrance: { x: B.x, z: B.z, dx: axis.dx, dz: axis.dz } }];
-  const edges = [{ id: 0, a: 0, b: 1, pts: [{ x: A.x, z: A.z }, { x: B.x, z: B.z }] }];
-  return { nodes, byId: new Map(nodes.map(n => [n.id, n])), edges, halfWidth, dtAt: () => halfWidth };
-}
-
 // ---------------------------------------------------------- shop units
 // One unit on `fp` ({x, z}[]), its floor at y0: walls round it but for its front (any edge on the concourse, `inC`),
 // which is glass under a fascia board; a floor (upstairs), a ceiling, and a counter and a few stands inside.
@@ -516,7 +306,7 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs, cladding,
       wallQuad(walls, p, q, top - 1.1, y0 + MALL_LEVEL);
       frameBox(fascia, F, 0, out*0.08, side.len/2 - 0.1, 0.1, top - 1.0, top - 0.2);
       if (!widest || side.len > widest.len) widest = { ...side, F, out };
-      // a pier where the front meets a party wall (see the piers in generateMallContent)
+      // a pier where the front meets a party wall (see the piers in generateMall)
       [[p, fronts[(i + fp.length - 1) % fp.length], 1], [q, fronts[(i+1) % fp.length], -1]].forEach(([c, neighbour, into]) => {
         if (!neighbour) piers.push({ x: c.x, z: c.z, dx: ux*into, dz: uz*into, n: side.n, y0, top });
       });
@@ -606,12 +396,20 @@ function wedge(p0, p1, a0, a1, R) {
 // own bit of it — so however many shops, it's one texture and one draw. Lettering's dark on a light fascia and light on
 // a dark one, in a typeface picked by the shop's number, and glows a little after dark.
 const SIGN_H = 0.6, SIGN_PX = 64, ATLAS_W = 2048;
+// a title's `font` (see buildingSign) as a canvas font: any of italic/oblique/bold/a weight at its start kept as its style
+// (bold if it gives none), the rest the typeface, falling back to a plain sans-serif where the browser hasn't got it
+function signFont(given) {
+  const words = given.trim().split(/\s+/), style = [];
+  while (words.length > 1 && /^(italic|oblique|bold|bolder|lighter|normal|[1-9]00)$/i.test(words[0])) style.push(words.shift());
+  if (!style.some(w => /bold|lighter|normal|\d00/i.test(w))) style.push('bold');
+  return `${style.join(' ')} {px}px "${words.join(' ').replace(/"/g, '')}", sans-serif`;
+}
 function signAtlas(signs) {
   if (!signs.length || typeof document === 'undefined') return null;
   const cells = signs.map(sg => {
     const number = buildingNumber(sg.key), w = Math.min(sg.len - 0.7, 6);
-    const text = buildingTitle(sg.kind, number) || buildingName(sg.kind, number, 0);
-    return { ...sg, number, w, text, px: Math.max(SIGN_PX, Math.min(ATLAS_W, Math.round(SIGN_PX*w/SIGN_H))) };
+    const sign = buildingSign(sg.kind, number), text = sign.text || buildingName(sg.kind, number, 0);
+    return { ...sg, number, w, text, sign, px: Math.max(SIGN_PX, Math.min(ATLAS_W, Math.round(SIGN_PX*w/SIGN_H))) };
   }).filter(c => c.w > 0.8 && c.text);
   // shelf packing: left to right, a new row whenever one's full
   let x = 0, y = 0;
@@ -621,16 +419,18 @@ function signAtlas(signs) {
   const ctx = canvas.getContext('2d');
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   cells.forEach(c => {
+    // (the title's own typeface and colour, where buildings.txt gives them: see buildingSign)
     const bg = new THREE.Color(c.cladding), light = bg.r*0.3 + bg.g*0.59 + bg.b*0.11 > 0.55;
-    const font = SIGN_FONTS[c.number % SIGN_FONTS.length];
+    const font = c.sign.font ? signFont(c.sign.font) : SIGN_FONTS[c.number % SIGN_FONTS.length];
+    const ink = c.sign.color ? new THREE.Color(c.sign.color) : null, inkLight = ink ? ink.r*0.3 + ink.g*0.59 + ink.b*0.11 > 0.55 : !light;
     let px = SIGN_PX*0.72;
     ctx.font = font.replace('{px}', px.toFixed(0));
     const width = ctx.measureText(c.text).width;
     if (width > c.px*0.92) { px *= c.px*0.92/width; ctx.font = font.replace('{px}', px.toFixed(0)); }
     ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(2, px*0.08);
-    ctx.strokeStyle = light ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)';
-    ctx.fillStyle = light ? '#1d2340' : '#fffaf0';
+    ctx.strokeStyle = inkLight ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.55)';
+    ctx.fillStyle = ink ? c.sign.color : light ? '#1d2340' : '#fffaf0';
     ctx.strokeText(c.text, c.ax + c.px/2, c.ay + SIGN_PX/2 + 2);
     ctx.fillText(c.text, c.ax + c.px/2, c.ay + SIGN_PX/2 + 2);
   });
@@ -658,54 +458,177 @@ function signAtlas(signs) {
   mesh.name = 'MallSigns';
   return mesh;
 }
-// buildings.txt read after a mall was built: its signs said what the shops are, not their names — so build it again
-buildingTypesReady.then(() => S.zones?.forEach(zone => { if (zone.zoneType === 'mall' && zone.buildingsGroup) App.subdivideZone?.(zone); }));
+// buildings.txt read after the malls were built: their signs said what the shops are, not their names — so build them again
+buildingTypesReady.then(() => { if (S.malls?.length) { builtAs.clear(); rebuildMalls(); } });
+
+// ---------------------------------------------------------- the network as a spine
+// A mall network's lines as a graph: its nodes where branches meet or end, or that are marked a food court (the path's
+// own nodes, by id), and its edges the stretches of line between them, as points along the drawn path — a spline's
+// curve and all. An end is an entrance, heading out the way the path does.
+function spineOfNetwork(lines) {
+  const degree = new Map();
+  lines.forEach(l => l.nodeIds.forEach((id, i) => degree.set(id, (degree.get(id) || 0) + (i === 0 || i === l.nodeIds.length - 1 ? 1 : 2))));
+  const isKey = id => degree.get(id) !== 2 || !!roadNodes[id]?.foodCourt;
+  const nodes = new Map(), edges = [];
+  const nodeOf = id => {
+    if (!nodes.has(id)) { const n = roadNodes[id]; nodes.set(id, { id, x: n.x, z: n.z, deg: 0, food: !!n.foodCourt }); }
+    return nodes.get(id);
+  };
+  lines.forEach(line => {
+    const ids = line.nodeIds.filter(id => roadNodes[id]);
+    if (ids.length < 2) return;
+    const tess = tessellateOpenPath(ids.map(id => roadNodes[id]));
+    // (where along the curve each node is: the nearest point, looking on from the last)
+    let from = 0;
+    const at = ids.map(id => {
+      const n = roadNodes[id];
+      let best = from;
+      for (let k = from; k < tess.length; k++) if (dist(tess[k], n) < dist(tess[best], n)) best = k;
+      from = best;
+      return best;
+    });
+    let start = 0;
+    for (let i = 1; i < ids.length; i++) {
+      if (i < ids.length - 1 && !isKey(ids[i])) continue;
+      const pts = tess.slice(at[start], at[i] + 1).map(p => ({ x: p.x, z: p.z }));
+      pts[0] = { x: roadNodes[ids[start]].x, z: roadNodes[ids[start]].z };
+      pts[pts.length - 1] = { x: roadNodes[ids[i]].x, z: roadNodes[ids[i]].z };
+      if (pts.length >= 2 && lengthOf(pts) > 0.5) {
+        edges.push({ a: ids[start], b: ids[i], pts });
+        nodeOf(ids[start]).deg++; nodeOf(ids[i]).deg++;
+      }
+      start = i;
+    }
+  });
+  nodes.forEach(n => {
+    if (n.deg !== 1) return;
+    const e = edges.find(e => e.a === n.id || e.b === n.id), pts = e.a === n.id ? e.pts.slice().reverse() : e.pts;
+    const back = pointAlong(pts.slice().reverse(), Math.min(4, lengthOf(pts))), l = dist(n, back) || 1;
+    n.entrance = { x: n.x, z: n.z, dx: (n.x - back.x)/l, dz: (n.z - back.z)/l };
+  });
+  return { nodes: [...nodes.values()], edges };
+}
+// The part of `spine` inside a piece of the mall (`inside` its test): an edge a road cuts across stops at the piece's
+// edge, and a new end there is an entrance, facing out across the road.
+function spineWithin(spine, inside) {
+  const nodes = new Map(), edges = [];
+  let cuts = 0;
+  const keep = n => { if (!nodes.has(n.id)) nodes.set(n.id, { ...n, deg: 0 }); return nodes.get(n.id); };
+  const cutAt = (a, b) => { // (a inside, b out: where between them it leaves, by bisection)
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 30; k++) { const m = (lo + hi)/2; if (inside(a.x + (b.x - a.x)*m, a.z + (b.z - a.z)*m)) lo = m; else hi = m; }
+    const x = a.x + (b.x - a.x)*lo, z = a.z + (b.z - a.z)*lo, l = dist(a, b) || 1;
+    const n = { id: 'cut' + (cuts++), x, z, deg: 0, entrance: { x, z, dx: (b.x - a.x)/l, dz: (b.z - a.z)/l } };
+    nodes.set(n.id, n);
+    return n;
+  };
+  const byId = new Map(spine.nodes.map(n => [n.id, n]));
+  // (a metre at a time: a straight stretch is just its two ends, which may both be under roads with mall between them;
+  // each stretch left is simplified back to its own bends)
+  const dense = pts => pts.flatMap((p, i) => {
+    if (!i) return [p];
+    const q = pts[i-1], n = Math.max(1, Math.ceil(dist(p, q)));
+    return Array.from({ length: n }, (_, k) => ({ x: q.x + (p.x - q.x)*(k + 1)/n, z: q.z + (p.z - q.z)*(k + 1)/n }));
+  });
+  spine.edges.map(e => ({ ...e, pts: dense(e.pts) })).forEach(e => {
+    let run = null, from = null;
+    const finish = (to, last) => { if (run && lengthOf([...run, last]) > 1) { run.push({ x: last.x, z: last.z }); edges.push({ a: from.id, b: to.id, pts: simplify(run, 0.05) }); from.deg++; to.deg++; } run = null; };
+    e.pts.forEach((p, i) => {
+      const inNow = inside(p.x, p.z);
+      if (i === 0) { if (inNow) { from = keep(byId.get(e.a)); run = [{ x: p.x, z: p.z }]; } return; }
+      const q = e.pts[i-1], inBefore = inside(q.x, q.z);
+      if (inBefore && !inNow) { const c = cutAt(q, p); finish(c, c); }
+      else if (!inBefore && inNow) { const c = cutAt(p, q); from = c; run = [{ x: c.x, z: c.z }]; }
+      if (inNow && run) { if (i === e.pts.length - 1) finish(keep(byId.get(e.b)), p); else run.push({ x: p.x, z: p.z }); }
+    });
+  });
+  const used = [...nodes.values()].filter(n => n.deg > 0);
+  used.forEach(n => { if (n.deg !== 1 && !String(n.id).startsWith('cut')) delete n.entrance; });
+  return { nodes: used, byId: new Map(used.map(n => [n.id, n])), edges: edges.map((e, i) => ({ ...e, id: i })) };
+}
+
+// ---------------------------------------------------------- building the malls
+// Each mall network's footprint: out to its shops' depth either side of the concourse (and round a food court, so its
+// shops wrap round it), less the roads and rivers across it — worked out every time the paths are, for the zones to give
+// way to (see paths.js). The malls themselves are built by rebuildMalls, from what's worked out here.
+let footprints = new Map(); // networkId -> { lines, spine, paths (the footprint, as Clipper paths), key }
+export function mallFootprints() {
+  const networks = new Map();
+  S.roadLines.forEach(line => {
+    if (!isMallLine(line) || line.drawing || line.nodeIds.filter(id => roadNodes[id]).length < 2) return;
+    if (!networks.has(line.networkId)) networks.set(line.networkId, []);
+    networks.get(line.networkId).push(line);
+  });
+  const roads = S.riverFootprint?.length ? union(S.roadFootprint, S.riverFootprint) : S.roadFootprint;
+  const roadsBack = roads.length ? offsetPaths(roads, EDGE, ClipperLib.JoinType.jtRound) : [];
+  footprints = new Map();
+  networks.forEach((lines, netId) => {
+    const s = mallSettingsOf(lines[0]), CW = (lines[0].width || MALL_WIDTH)/2, half = CW + s.depth;
+    const spine = spineOfNetwork(lines);
+    if (!spine.edges.length) return;
+    const foods = spine.nodes.filter(n => n.food && n.deg >= 2).map(n => circlePath(n, FOOD_COURT*CW + Math.min(s.depth, 10)));
+    const band = union(bandOf(spine.edges.map(e => e.pts), half), foods);
+    const paths = minus(band, roadsBack);
+    const key = JSON.stringify([lines.map(l => [l.width, l.mall, l.nodeIds.map(id => { const n = roadNodes[id]; return [n.x, n.z, n.type, n.handleIn, n.handleOut, !!n.foodCourt]; })]),
+      Math.round(pathsArea(paths)*10)]);
+    footprints.set(netId, { lines, spine, paths, key, s, CW });
+  });
+  return [...footprints.values()].flatMap(f => f.paths);
+}
+// The malls, built (or built again) wherever what they're built from has changed — but not while a node's being dragged,
+// which would build one over and over: they're left as they were till it's let go of, then built once.
+const builtAs = new Map(); // networkId -> key it was last built from
+let waiting = null;
+S.malls = [];
+export function rebuildMalls() {
+  if (S.draggedNode != null) { if (!waiting) waiting = setTimeout(() => { waiting = null; rebuildMalls(); }, 150); return; }
+  let changed = false;
+  // gone, or changed: taken down
+  S.malls = S.malls.filter(holder => {
+    const f = footprints.get(holder.networkId);
+    if (f && builtAs.get(holder.networkId) === f.key) return true;
+    scene.remove(holder.buildingsGroup); disposeObject(holder.buildingsGroup);
+    changed = true;
+    return false;
+  });
+  [...builtAs.keys()].forEach(id => { if (!footprints.has(id)) builtAs.delete(id); });
+  // new, or changed: built, a holder for each piece of it a road leaves
+  footprints.forEach((f, netId) => {
+    if (builtAs.get(netId) === f.key) return;
+    builtAs.set(netId, f.key);
+    changed = true;
+    const pieces = piecesOf(f.paths).filter(p => Math.abs(polygonArea(p)) >= MIN_AREA)
+      .sort((a, b) => Math.abs(polygonArea(b)) - Math.abs(polygonArea(a)));
+    pieces.forEach((outline, k) => {
+      const inPiece = createRegionTester([toClipperPath(outline)]);
+      const spine = spineWithin(f.spine, inPiece);
+      if (!spine.edges.length) return;
+      const holder = { id: `mall-${netId}-${k}`, name: 'Mall', zoneType: 'mall', networkId: netId, closed: true, drawing: false,
+        points: outline.map(p => ({ x: p.x, z: p.z, type: 'poly' })), settings: { ...toZoneSettings(f.s, f.CW), setback: 0, borderSetback: 0 },
+        buildingsGroup: new THREE.Group(), walkGaps: null, mallNav: null, foodCourts: [], doorSetback: 0 };
+      holder.buildingsGroup.name = 'Mall';
+      generateMall(holder, outline, { ...spine, halfWidth: f.CW + f.s.depth }, f.CW);
+      scene.add(holder.buildingsGroup);
+      S.malls.push(holder);
+    });
+  });
+  if (changed) { S.peopleNavDirty = true; App.updateStats?.(); }
+}
+const toZoneSettings = (s, CW) => ({ mallConcourse: CW*2, mallShopWidth: s.shopWidth, mallUpper: s.upper, mallClothes: s.clothes,
+  mallSalons: s.salons, mallPubs: s.pubs, mallVacant: s.vacant, mallTheme: s.theme, seed: s.seed });
 
 // ---------------------------------------------------------- the mall
-export function generateMallContent(zone, poly, cutouts, blockers) {
+function generateMall(zone, outline, spine, CW) {
   const s = zone.settings;
   const theme = MALL_THEMES[(s.mallTheme > 0 ? s.mallTheme - 1 : (s.seed >>> 0)) % MALL_THEMES.length];
-  const ground = makeFlatZoneMesh(poly, 0xffffff, Y_ZONE_GROUND, 'ZoneGround', mat => { mat.roughness = 0.22; mat.metalness = 0.04; applyTiles(mat, theme); }, cutouts);
+  const ground = makeFlatZoneMesh(outline, 0xffffff, Y_ZONE_GROUND, 'MallFloor', mat => { mat.roughness = 0.22; mat.metalness = 0.04; applyTiles(mat, theme); });
   if (ground) zone.buildingsGroup.add(ground);
-  zone.doorSetback = 0;
-  // the mall's outline: the zone less the roads and paths through it (the biggest piece, if they cut it in several), a
-  // little in from its edge
-  const piece = cutLotByCutouts(poly, blockers).pieces.sort((a, b) => Math.abs(polygonArea(b)) - Math.abs(polygonArea(a)))[0];
-  const outline = piece && insetPolygonExact(piece, EDGE)[0];
-  if (!outline || Math.abs(polygonArea(outline)) < 400) return;
   const outlinePath = [toClipperPath(outline)], inOutline = createRegionTester(outlinePath);
-  let spine = spineOf(outline);
-  if (!spine || spine.edges.reduce((sum, e) => sum + lengthOf(e.pts), 0) < MIN_SPINE) spine = straightSpine(outline);
-  if (!spine) return;
-  // the concourse: as wide as asked, but leaving at least 6 m of shops either side
-  const CW = Math.min((s.mallConcourse ?? 14)/2, spine.halfWidth - 6);
-  if (CW < 3 || spine.edges.reduce((sum, e) => sum + lengthOf(e.pts), 0) < MIN_SPINE) return;
   const G = Math.max(2.5, Math.min(4, CW*0.5)), VH = CW - G; // the galleries' width, and half the void between them
 
-  // ---- the courts: one where branches meet, and the food court — at the junction deepest in the zone, or else halfway
-  // down the longest branch (which is split there, so it's a node like the rest)
-  const courts = spine.nodes.filter(n => n.deg >= 3).map(n => ({ x: n.x, z: n.z, r: COURT*CW, node: n.id }));
-  if (s.mallFoodCourt !== false) {
-    let at = courts.map(c => ({ c, d: spine.dtAt(c) })).sort((a, b) => b.d - a.d)[0];
-    if (!at) {
-      const e = spine.edges.slice().sort((a, b) => lengthOf(b.pts) - lengthOf(a.pts))[0], half = lengthOf(e.pts)/2, mid = pointAlong(e.pts, half);
-      const id = Math.max(...spine.nodes.map(n => n.id)) + 1, node = { id, x: mid.x, z: mid.z, dt: spine.dtAt(mid), deg: 2 };
-      spine.nodes.push(node); spine.byId.set(id, node);
-      const first = trimmed(e.pts, 0, half), second = trimmed(e.pts, half, 0);
-      if (first && second) {
-        spine.edges = spine.edges.filter(x => x !== e).concat([{ a: e.a, b: id, pts: first }, { a: id, b: e.b, pts: second }]);
-        spine.edges.forEach((x, i) => { x.id = i; });
-        const c = { x: mid.x, z: mid.z, r: COURT*CW, node: id };
-        courts.push(c);
-        at = { c, d: spine.halfWidth };
-      }
-    }
-    if (at) {
-      const r = Math.min(FOOD_COURT*CW, Math.max(at.d, spine.halfWidth) - 5);
-      if (r > COURT*CW) at.c.r = r;
-      at.c.food = true;
-    }
-  }
+  // ---- the courts: one wherever branches meet, and a bigger one — the food court — at any node marked as one
+  const courts = spine.nodes.filter(n => n.deg >= 3 || (n.food && n.deg >= 2))
+    .map(n => ({ x: n.x, z: n.z, r: n.food ? Math.max(COURT*CW, FOOD_COURT*CW) : COURT*CW, node: n.id, food: !!n.food }));
   const courtOf = id => courts.find(c => c.node === id);
   const courtPaths = rDelta => courts.map(c => circlePath(c, c.r + rDelta));
   const nearCourt = (p, pad) => courts.some(c => dist(p, c) < c.r + pad);
@@ -759,7 +682,7 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
   const levels = upper ? 2 : 1, HW = levels*MALL_LEVEL + PARAPET, ROOF = HW - 0.2, GLASS_TOP = ROOF + CLERESTORY;
 
   // ---- the units: either side of every segment of the spine, cut across every shop width, out to the walls
-  const segs = segmentsOf(spine), W = Math.max(5, s.mallShopWidth ?? 10), R = spine.halfWidth*1.6 + CW + 10;
+  const segs = segmentsOf(spine), W = Math.max(5, s.mallShopWidth ?? 10), R = spine.halfWidth*1.6 + 10;
   const band = minus(within(outlinePath, insetPolygonExact(outline, UNIT_GAP).map(toClipperPath)), C);
   let claimed = [], index = 0;
   const piers = [], signs = [], lastCladding = [];
@@ -1151,12 +1074,11 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
     }
   });
 
-  // ---- the food court: tables and chairs in the middle (its stalls are the Objects tab's, put down wherever you like)
-  const food = courts.find(c => c.food);
-  zone.foodCourt = null;
-  if (food) {
-    const furniture = createMeshBuilder(), tabletops = createMeshBuilder();
-    const rng = mulberry32((s.seed>>>0) ^ 0x5F0DC0);
+  // ---- the food courts: tables and chairs in the middle (their stalls are the Objects tab's, put down wherever you like)
+  zone.foodCourts = [];
+  const furniture = createMeshBuilder(), tabletops = createMeshBuilder();
+  courts.filter(c => c.food).forEach((food, fi) => {
+    const rng = mulberry32((s.seed>>>0) ^ 0x5F0DC0 ^ Math.imul(fi + 1, 0x9E3779B1));
     const obstacles = [], seats = [];
     const inner = upper ? food.r - G - 0.3 : food.r - 1.2;
     // palms in big pots about the middle
@@ -1198,12 +1120,12 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
       }
       obstacles.push({ x: t.x, z: t.z, r: 0.75 });
     }
-    [
-      meshOf(built(furniture), plain(0x33373d, { roughness: 0.5, metalness: 0.3 }), 'MallFurniture'),
-      meshOf(built(tabletops), plain(0xf4f1ea, { roughness: 0.4 }), 'MallFurniture'),
-    ].forEach(m => m && shell.add(m));
-    zone.foodCourt = { x: food.x, z: food.z, r: inner, seats, obstacles };
-  }
+    zone.foodCourts.push({ x: food.x, z: food.z, r: inner, seats, obstacles });
+  });
+  [
+    meshOf(built(furniture), plain(0x33373d, { roughness: 0.5, metalness: 0.3 }), 'MallFurniture'),
+    meshOf(built(tabletops), plain(0xf4f1ea, { roughness: 0.4 }), 'MallFurniture'),
+  ].forEach(m => m && shell.add(m));
 
   if (bars.length) frame.addGeometry(mergeGeometryList(bars), 0, 0, 0);
   if (railBars.length) rails.addGeometry(mergeGeometryList(railBars), 0, 0, 0);
@@ -1241,4 +1163,4 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
   zone.buildingsGroup.add(lights);
 }
 
-Object.assign(App, { generateMallContent });
+Object.assign(App, { mallFootprints, rebuildMalls });

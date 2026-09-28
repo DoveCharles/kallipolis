@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { camera, scene, renderer, STENCIL_ROOM_SHADOW } from '../core/scene.js';
-import { S, App } from '../core/shared.js';
+import { S, App, buildingHolders } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
 import { possession } from '../life/possession.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -3060,7 +3060,7 @@ function hideNeighbours(group) {
     return true;
   };
   const hidden = [], floor = room.position.y, box = new THREE.Box3();
-  S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach(other => {
+  buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach(other => {
     const fp = other.userData.footprint;
     if (other === group || !fp || fp.length < 3 || !other.visible) return;
     const { c, r } = footprintBounds(other);
@@ -3123,7 +3123,7 @@ export function enterBuilding(group, key, kind = 'home') {
   if (inside) leaveBuilding();
   // A building can say where its room goes instead (userData.room): a mall's shop has the room the shops had before rooms
   // were sized for their buildings, always with a shopfront, set just behind its own and facing the concourse — { w, d,
-  // at: {x, z}, facing: the way out through the shopfront } (see makeUnit in zones/mall.js).
+  // at: {x, z}, facing: the way out through the shopfront } (see makeUnit in roads/mall.js).
   const fixed = group.userData.room;
   const fp = group.userData.footprint, angle = fp && fp.length >= 3 ? longestEdgeAngle(fp) : 0;
   const size = fixed ? { w: fixed.w, d: fixed.d, turned: false } : roomSizeFor(group, key, LAYOUTS[kind] ? kind : 'home', angle);

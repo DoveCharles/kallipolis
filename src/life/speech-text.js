@@ -1,4 +1,4 @@
-import { S } from '../core/shared.js';
+import { S, buildingHolders } from '../core/shared.js';
 import { TRAITS } from '../core/traits.js';
 import { entryOf } from '../core/entries.js';
 import { setEntryFiller } from './profiles.js';
@@ -329,7 +329,7 @@ function placeOf(person) {
 const outlines = new WeakMap();
 function zoneOf(person) {
   let found = null;
-  (S.zones || []).forEach(zone => {
+  buildingHolders().forEach(zone => { // (a mall's outline too: see roads/mall.js)
     if (zone.drawing || !zone.points || zone.points.length < 3) return;
     let cached = outlines.get(zone);
     if (!cached || cached.points !== zone.points || cached.count !== zone.points.length) outlines.set(zone, cached = { points: zone.points, count: zone.points.length, poly: tessellateClosedPath(zone.points) });

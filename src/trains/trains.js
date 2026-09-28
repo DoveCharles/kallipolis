@@ -115,7 +115,7 @@ export function networkKindOf(line) { return isTrainLine(line) ? 'train' : 'road
 export const PATH_TYPES = [
   { id: 'sidewalk', label: 'Road', plural: 'Roads', color: '#5c616b' }, { id: 'walkway', label: 'Walkway', plural: 'Walkways', color: '#b9a888' },
   { id: 'raised', label: 'Raised', plural: 'Raised walkways', color: '#8d8a84' }, { id: 'river', label: 'River', plural: 'Rivers', color: '#1d6f7d' },
-  { id: 'train', label: 'Train', plural: 'Train lines', color: '#7d8a99' },
+  { id: 'mall', label: 'Mall', plural: 'Malls', color: '#2ea298' }, { id: 'train', label: 'Train', plural: 'Train lines', color: '#7d8a99' },
 ];
 export function pathTypeOf(line) { return isTrainLine(line) ? 'train' : line.roadType || 'sidewalk'; }
 // the type the Paths tab is on: what new paths are drawn as, and whose nodes and networks it shows

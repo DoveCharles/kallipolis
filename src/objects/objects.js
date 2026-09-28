@@ -58,7 +58,7 @@ function facingSegments() {
     if (closed && tess.length > 2) into.push([tess[tess.length-1], tess[0]]); // tessellateClosedPath leaves the loop open
   };
   S.roadLines.forEach(line => {
-    if (line.drawing || isTrainLine(line) || isRiverLine(line) || isRaisedWalkwayLine(line)) return; // nothing turns to look at a railway or a river
+    if (line.drawing || isTrainLine(line) || isRiverLine(line) || isRaisedWalkwayLine(line) || line.roadType === 'mall') return; // nothing turns to look at a railway or a river
     const points = line.nodeIds.map(id => roadNodes[id]).filter(Boolean);
     if (points.length >= 2) addSegments(isWalkwayLine(line) ? paths : roads, points, false);
   });

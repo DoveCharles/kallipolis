@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { App, S } from '../../core/shared.js';
+import { App, S, buildingHolders } from '../../core/shared.js';
 import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
@@ -517,7 +517,7 @@ let target = null;
 // every building (anything built with a footprint) whose footprint comes within `reach` of x, z: { zone, group, index, fp, c, r }
 function buildingsNear(x, z, reach) {
   const found = [];
-  S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
+  buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
     const fp = group.userData.footprint;
     if (!fp || fp.length < 3 || !group.visible) return;
     const { c, r } = footprintBounds(group);

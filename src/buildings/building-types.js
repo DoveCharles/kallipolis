@@ -54,6 +54,20 @@ export function buildingName(kind, number, height) {
 // A building's own name, as a pub's "The Red Lion": one of its kind's `title` lines in buildings.txt, picked by its number
 // the way the card's other lines are; '' for a kind that has none (a house).
 export function buildingTitle(kind, number = 1) {
+  return buildingSign(kind, number).text;
+}
+// A title can say how it's lettered on a sign (a mall shop's: see signAtlas in roads/mall.js), in brackets after it:
+// `title = The Red Lion {font = Georgia, color = #f2d27a}` — `font` a typeface (with `italic`, `bold` or a weight like 900
+// before it if wanted: `font = italic Brush Script MT`), `color` the lettering's. Either can be left out.
+// Returns { text, font, color }, the last two null where the title doesn't say.
+export function buildingSign(kind, number = 1) {
   const titles = buildings.listOf(kind, 'title');
-  return titles.length ? titles[(number - 1) % titles.length] : '';
+  const raw = titles.length ? titles[(number - 1) % titles.length] : '';
+  const style = raw.match(/\s*\{([^{}]*)\}\s*$/), said = {};
+  if (style) style[1].split(',').forEach(part => {
+    const [key, ...value] = part.split('=');
+    if (key && value.length) said[key.trim().toLowerCase()] = value.join('=').trim();
+  });
+  const color = said.color ?? said.colour ?? null;
+  return { text: (style ? raw.slice(0, style.index) : raw).trim(), font: said.font || null, color: /^#?[0-9a-f]{6}$/i.test(color || '') ? (color.startsWith('#') ? color : '#' + color) : null };
 }

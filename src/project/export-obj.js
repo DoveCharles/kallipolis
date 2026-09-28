@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { S, App } from '../core/shared.js';
+import { S, App, buildingHolders } from '../core/shared.js';
 import { downloadFile } from './save-load.js';
 import { objectGroup } from '../objects/objects.js';
 
@@ -8,7 +8,7 @@ function exportOBJ() {
   const meshes = [];
   S.roadMeshGroup.traverse(o => { if (o.isMesh) meshes.push(o); });
   S.trainMeshGroup.traverse(o => { if (o.isMesh && !o.userData.isShuttle) meshes.push(o); }); // moving shuttles aren't part of the city
-  S.zones.forEach(z => { if (z.buildingsGroup) z.buildingsGroup.traverse(o => { if (o.isMesh) meshes.push(o); }); });
+  buildingHolders().forEach(z => { if (z.buildingsGroup) z.buildingsGroup.traverse(o => { if (o.isMesh) meshes.push(o); }); });
   [S.waterGroup, S.bridgeGroup, objectGroup].forEach(group => group.traverse(o => { if (o.isMesh && !o.userData.noExport) meshes.push(o); }));
   if (!meshes.length) { alert('Nothing to export yet — draw some roads or zones first.'); return; }
   let out = '# Kallipolis export\n';

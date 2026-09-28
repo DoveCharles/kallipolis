@@ -195,8 +195,6 @@ export function subdivideZone(zone) {
   // another doesn't keep the last one's (see generateSuburbsContent, and walkGaps and doorSetback in buildPeopleNav)
   zone.walkGaps = null;
   zone.doorSetback = 0;
-  zone.mallNav = null; // (a mall's galleries, bridges and escalators, and its food court: see generateMallContent)
-  zone.foodCourt = null;
   zone.airportAnim = null; // and the same for whatever an airport had flying (see updateAirports)
   zone.airportInfo = null;
   zone.airportFlights = []; // (the aircraft themselves have just gone with the group; a camera following one lets go)
@@ -224,8 +222,6 @@ export function subdivideZone(zone) {
       App.generateTownContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='industrial') {
       App.generateIndustrialContent(zone, poly, cutouts, blockers);
-    } else if (zone.zoneType==='mall') {
-      App.generateMallContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='airport') {
       generateAirportContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='plain') {

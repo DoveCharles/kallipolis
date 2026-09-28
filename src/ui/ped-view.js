@@ -1,5 +1,5 @@
 import { scene } from '../core/scene.js';
-import { S } from '../core/shared.js';
+import { S, buildingHolders } from '../core/shared.js';
 import { people, personModel, standingOf, PEOPLE_MAX } from '../life/people/people.js';
 import { PERSON_TRAIT_COLORS } from '../life/people/peopleModel.js';
 
@@ -146,7 +146,7 @@ function markVillains() {
 function repaint() {
   markVillains();
   const occupied = occupiedBuildings(), groupTints = new Map();
-  S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
+  buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
     const tint = occupied.get(zone.id + ':' + index);
     if (tint) groupTints.set(group, tint);
   }));

@@ -40,6 +40,7 @@ const PATH_MAX_SEGMENTS = 128; // fixed GLSL array size; a network's centerlines
 export function isWalkwayLine(line) { return line.roadType === 'walkway' || line.roadType === 'raised'; }
 export function isGroundWalkwayLine(line) { return line.roadType === 'walkway'; }
 export function isRiverLine(line) { return line.roadType === 'river'; }
+export function isMallLine(line) { return line.roadType === 'mall'; } // (see roads/mall.js)
 // how far past its nominal edge dirt's sand fades out
 export function pathFadeWidth(halfWidth) { return Math.min(2.5, halfWidth*0.9); }
 // Ramer–Douglas–Peucker: the fewest of `points` that keep the line within `tolerance` of its original course
@@ -379,7 +380,7 @@ export function refreshRoadAppearance(networkId) {
 let lastLayoutKey = null;
 function roadLayoutKey() {
   return JSON.stringify([S.DEFAULT_ROAD_WIDTH, S.DEFAULT_SIDEWALK_WIDTH, S.roadLines.map(l => [l.id, l.networkId, l.kind, l.roadType,
-    l.width, l.sidewalkWidth, l.radius, !!l.drawing, l.raisedHeight, !!l.raisedTrees, !!l.raisedBenches, l.nodeIds.map(id => roadNodes[id])])]);
+    l.width, l.sidewalkWidth, l.radius, !!l.drawing, l.raisedHeight, !!l.raisedTrees, !!l.raisedBenches, l.mall, l.nodeIds.map(id => roadNodes[id])])]);
 }
 // the stencil mask over the whole road footprint (see SKIP_OVER_WATER_AND_ROADS) — kept out of roadMeshGroup, which
 // is exported and recolored for highlights
@@ -398,7 +399,7 @@ export function rebuildRoadMeshes() {
   S.roadMeshGroup = new THREE.Group(); S.roadMeshGroup.name='Roads';
   const networks = new Map(); // networkId -> [{ path, line, hw, cw, sw }]
   S.roadLines.forEach(line => {
-    if (App.isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line)) return; // built separately — see rebuildTrainMeshes, buildWalkwayMesh and rebuildWater
+    if (App.isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line) || isMallLine(line)) return; // built separately — see rebuildTrainMeshes, buildWalkwayMesh, rebuildWater and rebuildMalls
     const pts = line.nodeIds.map(id=>roadNodes[id]).filter(Boolean);
     if (pts.length<2) return;
     const path = tessellateOpenPath(pts).map(p => ({ X:Math.round(p.x*CLIPPER_SCALE), Y:Math.round(p.z*CLIPPER_SCALE) }));
@@ -524,6 +525,11 @@ export function rebuildRoadMeshes() {
     S.riverSeq++;
   }
   S.landCutFootprint = S.riverFootprint.length ? clipPolygons(ctUnion, S.roadFootprint, S.riverFootprint) : S.roadFootprint;
+  // malls: their footprints worked out now, for the zones to give way to as they do to roads; the malls themselves built
+  // (or not, while a node's dragged) by rebuildMalls
+  const malls = App.mallFootprints?.() || [];
+  if (malls.length) S.landCutFootprint = clipPolygons(ctUnion, S.landCutFootprint, malls);
+  App.rebuildMalls?.();
   const layoutKey = roadLayoutKey();
   if (layoutKey !== lastLayoutKey) {
     lastLayoutKey = layoutKey;

@@ -21,6 +21,17 @@ function raisedNodeRole(nodeId) {
   }));
   return degree === 1 ? 'end' : 'middle';
 }
+// Whether a node's on a mall's concourse somewhere along it (not at an end, which is an entrance): the only kind that can
+// be a food court (see roads/mall.js)
+function mallMiddleNode(nodeId) {
+  const lines = S.roadLines.filter(l => l.roadType === 'mall' && l.nodeIds.includes(nodeId));
+  if (!lines.length) return false;
+  let degree = 0;
+  S.roadLines.filter(l => l.networkId === lines[0].networkId).forEach(l => l.nodeIds.forEach((id, i) => {
+    if (id === nodeId) degree += i === 0 || i === l.nodeIds.length-1 ? 1 : 2;
+  }));
+  return degree >= 2;
+}
 function showNodeContextMenu(x,y,target) {
   const menu = document.getElementById('node-context-menu');
   const currentType = target.kind==='road'
@@ -42,6 +53,9 @@ function showNodeContextMenu(x,y,target) {
     if (role === 'middle') menu.innerHTML += `<button data-ramp="toggle" class="${n.ramp?'active':''}">Ramp</button>`;
     if (role === 'end' || n.ramp) menu.innerHTML += `<button data-ramp="flip">Flip ramp</button>`;
   }
+  if (target.kind==='road' && !isTrain && mallMiddleNode(target.nodeId)) {
+    menu.innerHTML += `<button data-food="toggle" class="${roadNodes[target.nodeId].foodCourt?'active':''}">Food court</button>`;
+  }
   menu.style.left = toUi(x)+'px';
   menu.style.top = toUi(y)+'px';
   menu.style.display = 'block';
@@ -52,7 +66,8 @@ function showNodeContextMenu(x,y,target) {
   menu.querySelectorAll('button').forEach(b => {
     b.addEventListener('click', (ev) => {
       ev.stopPropagation();
-      if (b.dataset.ramp) setNodeRamp(target.nodeId, b.dataset.ramp);
+      if (b.dataset.food) setNodeFoodCourt(target.nodeId);
+      else if (b.dataset.ramp) setNodeRamp(target.nodeId, b.dataset.ramp);
       else setNodeType(target, b.dataset.type);
       hideContextMenu();
     });
@@ -65,6 +80,14 @@ function setNodeRamp(nodeId, action) {
   else if (n.rampSide === -1) delete n.rampSide; else n.rampSide = -1;
   rebuildRoadMeshes();
   S.zones.forEach(subdivideZone);
+}
+function setNodeFoodCourt(nodeId) {
+  const n = roadNodes[nodeId];
+  if (!n) return;
+  if (n.foodCourt) delete n.foodCourt; else n.foodCourt = true;
+  rebuildRoadMeshes();
+  S.zones.forEach(subdivideZone);
+  App.scheduleHistory?.(0);
 }
 function hideContextMenu() {
   document.getElementById('node-context-menu').style.display = 'none';
