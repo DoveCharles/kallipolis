@@ -22,8 +22,10 @@ import { loadBarbot, placeBarbot, updateBarbot, barbotWarmUp } from './barbot.js
 // weather, time of day and all, with nothing to fake. The view's from up by the ceiling, looking at the middle of the
 // room, and dragging takes it round the walls, keeping to them, and up and down them — starting from the corner that looks across at the two
 // far walls and their windows (the other two are blank, and thick, for the sun's shadows: see below).
-// The room's a fixed size whatever the building's shape: nobody inside can tell how far its walls are from the facade.
-const ROOM_W = 8, ROOM_D = 6, ROOM_H = 3.2;  // along the room's own x and z, and floor to ceiling
+// The room's sized for each building as it's gone into (see shapeRoom): about as big as the building's footprint, within
+// what its layout takes, and a little more or less by its key, so no two rooms are quite alike.
+let ROOM_W = 8, ROOM_D = 6;                  // along the room's own x and z (x the longer, or square)
+const ROOM_H = 3.2;                          // floor to ceiling
 // The sun's shadow is coarse (its bias lets light through anything within ~0.4 of what's casting it: see scene.js), so the
 // walls and ceiling cast from their outer faces rather than three.js's usual inner ones (shadowSide, below), and they're
 // far thicker than a real building's, with the slabs reaching out past the walls behind the camera — anything less lets
@@ -76,20 +78,21 @@ function roomLit(material) {
 // room up, nothing — or at night they're left in the dimmed sky's light alone, far darker than the room around them.
 class SharedMatrix4 extends THREE.Matrix4 { clone() { return this; } }
 class SharedVector3 extends THREE.Vector3 { clone() { return this; } } // (every material sees the one value)
-const roomGlowUniforms = { roomGlow: { value: new SharedVector3() }, roomFromWorld: { value: new SharedMatrix4() } };
+const roomGlowUniforms = { roomGlow: { value: new SharedVector3() }, roomFromWorld: { value: new SharedMatrix4() },
+  roomReach: { value: new SharedVector3() } }; // (half the room's width, its height and half its depth, and a little over)
 Object.assign(THREE.ShaderLib.toon.uniforms, roomGlowUniforms);
 THREE.ShaderChunk.lights_pars_begin += /* glsl */`
 #ifdef TOON
 uniform vec3 roomGlow;
 uniform mat4 roomFromWorld;
+uniform vec3 roomReach;
 #endif
 `;
 THREE.ShaderChunk.lights_fragment_maps += /* glsl */`
 #if defined( RE_IndirectDiffuse ) && defined( TOON )
 if ( roomGlow.r > 0.0 ) {
   vec3 inRoom = ( roomFromWorld * vec4( ( -vViewPosition ) * mat3( viewMatrix ) + cameraPosition, 1.0 ) ).xyz;
-  if ( all( lessThan( abs( inRoom.xz ), vec2( ${(ROOM_W/2 + 0.5).toFixed(2)}, ${(ROOM_D/2 + 0.5).toFixed(2)} ) ) )
-       && inRoom.y > -0.5 && inRoom.y < ${(ROOM_H + 0.5).toFixed(2)} ) irradiance += roomGlow;
+  if ( all( lessThan( abs( inRoom.xz ), roomReach.xz ) ) && inRoom.y > -0.5 && inRoom.y < roomReach.y ) irradiance += roomGlow;
 }
 #endif
 `;
@@ -97,6 +100,7 @@ if ( roomGlow.r > 0.0 ) {
 function setRoomGlow(on) {
   roomGlowUniforms.roomGlow.value.setScalar(on ? ROOM_GLOW*Math.PI : 0);
   if (on) roomGlowUniforms.roomFromWorld.value.copy(room.matrixWorld).invert();
+  roomGlowUniforms.roomReach.value.set(ROOM_W/2 + 0.5, ROOM_H + 0.5, ROOM_D/2 + 0.5);
 }
 function box(w, h, d, material, x, y, z, parent = room) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
@@ -136,25 +140,28 @@ function piers(length, windows) {
   return { width, gap, centres: Array.from({ length: windows + 1 }, (_, i) => -length/2 + width/2 + i*(width + gap)) };
 }
 [wallMaterial, floorMaterial, ceilingMaterial, frameMaterial].forEach(roomLit);
-box(ROOM_W + (WALL + OVERHANG)*2, SLAB, ROOM_D + (WALL + OVERHANG)*2, floorMaterial, 0, -SLAB/2, 0);
-// (the ceiling stops flush with the far walls — any further and it'd shade their windows — but reaches on past the thick
-// ones behind the camera)
-const ceilW = ROOM_W/2 + WALL + ROOM_W/2 + THICK + OVERHANG, ceilD = ROOM_D/2 + WALL + ROOM_D/2 + THICK + OVERHANG;
-box(ceilW, THICK, ceilD, ceilingMaterial, ROOM_W/2 + WALL - ceilW/2, ROOM_H + THICK/2, ROOM_D/2 + WALL - ceilD/2);
-// the camera sits in the (-x, -z) corner, so the windows are in the +x and +z walls, facing it
-const FAR_X = [ROOM_W + WALL*2, 3], FAR_Z = [ROOM_D, 2];         // the far walls' lengths and windows
+// Everything below that's the room's size is built by a function of its own, run once here and again by shapeRoom for
+// each building's size — into groups that stay put, emptied first (clearOut), so what shows or hides them keeps working.
+function clearOut(group) {
+  for (const child of [...group.children]) {
+    group.remove(child);
+    child.traverse(o => o.geometry?.dispose());
+  }
+}
+// the floor, the ceiling, the walls behind the camera and the doorway: the same in every room
+const bare = new THREE.Group();
+room.add(bare);
+// the camera sits in the (-x, -z) corner, so the windows are in the +x and +z walls, facing it: the far walls' lengths
+// and windows (about one every 2.4m)
+let FAR_X, FAR_Z;
 // The far walls come two ways, one shown at a time (see enterBuilding): punched through with windows (every home, and
 // now and then an office) or, in most offices, glass floor to ceiling.
 const punched = new THREE.Group(), curtain = new THREE.Group();
 room.add(punched, curtain);
-wall(...FAR_X, 0, ROOM_D/2 + WALL/2, 0, WALL, punched);       // far, along x
-wall(...FAR_Z, ROOM_W/2 + WALL/2, 0, Math.PI/2, WALL, punched); // far, along z
 // (or, in a shop, blank: its window's its shopfront, in the wall with the door — see `shopfront`, below)
 const blankWalls = new THREE.Group();
 blankWalls.visible = false;
 room.add(blankWalls);
-wall(FAR_X[0], 0, 0, ROOM_D/2 + WALL/2, 0, WALL, blankWalls);
-wall(FAR_Z[0], 0, ROOM_W/2 + WALL/2, 0, Math.PI/2, WALL, blankWalls);
 // A curtain wall `length` long along x, centred on the origin: one sheet of glass floor to ceiling with a rail along the
 // floor and the ceiling, split into panes of about PANE wide by mullions between `from` and `to` (along it) — the
 // faces of the columns at either end (see COLUMNS), each with a mullion up against it — then turned by `angle` about y
@@ -176,13 +183,7 @@ function curtainWall(length, x, z, angle, from, to) {
 // end where it meets the walls behind the camera. The glass runs along their outer faces.
 const COLUMN = 0.5;
 const concreteMaterial = roomLit(new THREE.MeshStandardMaterial({ color: 0xa8a59e, roughness: 0.95 }));
-const COLUMNS = [[ROOM_W/2, ROOM_D/2], [-ROOM_W/2 + COLUMN/2, ROOM_D/2], [ROOM_W/2, -ROOM_D/2 + COLUMN/2]];
-for (const [cx, cz] of COLUMNS) box(COLUMN, ROOM_H, COLUMN, concreteMaterial, cx, ROOM_H/2, cz, curtain);
-// (along the same lines as the punched walls, from inside the walls behind the camera to the far corner; the one along
-// z runs the other way along itself, turned as it is)
-curtainWall(ROOM_W + WALL, 0, ROOM_D/2 + WALL/2, 0, -ROOM_W/2 + COLUMN, ROOM_W/2 - COLUMN/2);
-curtainWall(ROOM_D + WALL, ROOM_W/2 + WALL/2, 0, Math.PI/2, -ROOM_D/2 + COLUMN/2, ROOM_D/2 - COLUMN);
-curtain.visible = false;
+let COLUMNS;
 /** The chance an office has windows punched through its walls, as a home does, rather than glass floor to ceiling. */
 const OFFICE_PUNCHED = 0.1;
 /** The chance a pub's room has a shopfront in the wall with the door, as a shop's does (see `shopfront`), rather than
@@ -195,15 +196,12 @@ function keyFraction(key, salt = ':walls') {
   for (const ch of String(key) + salt) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
   return (h >>> 0)/2**32;
 }
-wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK);  // behind the camera
-// The other, along z, has the room's door in it, by the corner the camera starts in: a doorway some way into the wall,
-// black at the back — where anyone coming in comes from, and anyone going goes — with a door hung in it that swings in
-// to let them through (see openRoomDoor).
-const DOOR_W = 0.9, DOOR_H = 2.1, DOOR_Z = -ROOM_D/2 + 1, RECESS = 0.5;   // the doorway: where along the wall, how deep
-const doorFrom = DOOR_Z - DOOR_W/2, doorTo = DOOR_Z + DOOR_W/2;
-box(RECESS, ROOM_H, doorFrom + ROOM_D/2, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorFrom - ROOM_D/2)/2);
-box(RECESS, ROOM_H - DOOR_H, DOOR_W, wallMaterial, -ROOM_W/2 - RECESS/2, (DOOR_H + ROOM_H)/2, DOOR_Z);
-box(0.02, DOOR_H, DOOR_W, new THREE.MeshBasicMaterial({ color: 0x000000 }), -ROOM_W/2 - RECESS + 0.02, DOOR_H/2, DOOR_Z);
+// The other wall behind the camera, along z, has the room's door in it, by the corner the camera starts in: a doorway
+// some way into the wall, black at the back — where anyone coming in comes from, and anyone going goes — with a door hung
+// in it that swings in to let them through (see openRoomDoor).
+const DOOR_W = 0.9, DOOR_H = 2.1, DOOR_IN = 1, RECESS = 0.5;   // the doorway: how far along the wall, how deep
+let DOOR_Z, doorFrom, doorTo;
+const doorBlack = new THREE.MeshBasicMaterial({ color: 0x000000 });
 // The rest of that wall, past the door: solid (with the thick wall behind it all along), or in a shop (a salon or a
 // clothes shop: see `shopfront` on its layout) its shopfront, on the street — past a pier beside the door, glass the rest
 // of the way, from a low stallriser up to a deep fascia, split into bays by thin mullions — with its far walls blank
@@ -211,36 +209,66 @@ box(0.02, DOOR_H, DOOR_W, new THREE.MeshBasicMaterial({ color: 0x000000 }), -ROO
 const doorWall = new THREE.Group(), shopfront = new THREE.Group();
 shopfront.visible = false;
 room.add(doorWall, shopfront);
-box(THICK - RECESS, ROOM_H, ROOM_D, wallMaterial, -ROOM_W/2 - RECESS - (THICK - RECESS)/2, ROOM_H/2, 0, doorWall);
-box(RECESS, ROOM_H, ROOM_D/2 - doorTo, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorTo + ROOM_D/2)/2, doorWall);
 const SHOPFRONT_PIER = 0.35, SHOPFRONT_RISER = 0.35, SHOPFRONT_TOP = 2.75, SHOPFRONT_BAYS = 2;
-const shopfrontFrom = doorTo + SHOPFRONT_PIER; // (where the glass starts, along z; it runs on to the far wall)
-{
+let shopfrontFrom; // (where the glass starts, along z; it runs on to the far wall)
+// the shopfront's glass: from its stallriser, or from the dado rail's height in a room with one (so the rail doesn't
+// run across the glass)
+let lowGlass, dadoGlass;
+const shopfrontGlass = high => { lowGlass.visible = !high; dadoGlass.visible = high; };
+function buildShell() {
+  for (const group of [bare, punched, curtain, blankWalls, doorWall, shopfront]) clearOut(group);
+  box(ROOM_W + (WALL + OVERHANG)*2, SLAB, ROOM_D + (WALL + OVERHANG)*2, floorMaterial, 0, -SLAB/2, 0, bare);
+  // (the ceiling stops flush with the far walls — any further and it'd shade their windows — but reaches on past the thick
+  // ones behind the camera)
+  const ceilW = ROOM_W/2 + WALL + ROOM_W/2 + THICK + OVERHANG, ceilD = ROOM_D/2 + WALL + ROOM_D/2 + THICK + OVERHANG;
+  box(ceilW, THICK, ceilD, ceilingMaterial, ROOM_W/2 + WALL - ceilW/2, ROOM_H + THICK/2, ROOM_D/2 + WALL - ceilD/2, bare);
+  FAR_X = [ROOM_W + WALL*2, Math.max(1, Math.round(ROOM_W/2.4))];
+  FAR_Z = [ROOM_D, Math.max(1, Math.round(ROOM_D/2.4))];
+  wall(...FAR_X, 0, ROOM_D/2 + WALL/2, 0, WALL, punched);       // far, along x
+  wall(...FAR_Z, ROOM_W/2 + WALL/2, 0, Math.PI/2, WALL, punched); // far, along z
+  wall(FAR_X[0], 0, 0, ROOM_D/2 + WALL/2, 0, WALL, blankWalls);
+  wall(FAR_Z[0], 0, ROOM_W/2 + WALL/2, 0, Math.PI/2, WALL, blankWalls);
+  COLUMNS = [[ROOM_W/2, ROOM_D/2], [-ROOM_W/2 + COLUMN/2, ROOM_D/2], [ROOM_W/2, -ROOM_D/2 + COLUMN/2]];
+  for (const [cx, cz] of COLUMNS) box(COLUMN, ROOM_H, COLUMN, concreteMaterial, cx, ROOM_H/2, cz, curtain);
+  // (along the same lines as the punched walls, from inside the walls behind the camera to the far corner; the one along
+  // z runs the other way along itself, turned as it is)
+  curtainWall(ROOM_W + WALL, 0, ROOM_D/2 + WALL/2, 0, -ROOM_W/2 + COLUMN, ROOM_W/2 - COLUMN/2);
+  curtainWall(ROOM_D + WALL, ROOM_W/2 + WALL/2, 0, Math.PI/2, -ROOM_D/2 + COLUMN/2, ROOM_D/2 - COLUMN);
+  wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK, bare);  // behind the camera
+  DOOR_Z = -ROOM_D/2 + DOOR_IN;
+  doorFrom = DOOR_Z - DOOR_W/2; doorTo = DOOR_Z + DOOR_W/2;
+  box(RECESS, ROOM_H, doorFrom + ROOM_D/2, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorFrom - ROOM_D/2)/2, bare);
+  box(RECESS, ROOM_H - DOOR_H, DOOR_W, wallMaterial, -ROOM_W/2 - RECESS/2, (DOOR_H + ROOM_H)/2, DOOR_Z, bare);
+  box(0.02, DOOR_H, DOOR_W, doorBlack, -ROOM_W/2 - RECESS + 0.02, DOOR_H/2, DOOR_Z, bare);
+  box(THICK - RECESS, ROOM_H, ROOM_D, wallMaterial, -ROOM_W/2 - RECESS - (THICK - RECESS)/2, ROOM_H/2, 0, doorWall);
+  box(RECESS, ROOM_H, ROOM_D/2 - doorTo, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorTo + ROOM_D/2)/2, doorWall);
+  shopfrontFrom = doorTo + SHOPFRONT_PIER;
   const x = -ROOM_W/2 - RECESS/2, len = ROOM_D/2 - shopfrontFrom, z = (shopfrontFrom + ROOM_D/2)/2;
   box(THICK - RECESS, ROOM_H, shopfrontFrom + ROOM_D/2, wallMaterial, -ROOM_W/2 - RECESS - (THICK - RECESS)/2, ROOM_H/2, (shopfrontFrom - ROOM_D/2)/2, shopfront);
   box(RECESS, ROOM_H, SHOPFRONT_PIER, wallMaterial, x, ROOM_H/2, doorTo + SHOPFRONT_PIER/2, shopfront);
   box(RECESS, ROOM_H - SHOPFRONT_TOP, len, wallMaterial, x, (SHOPFRONT_TOP + ROOM_H)/2, z, shopfront);
   box(RECESS + 0.04, 0.1, len, frameMaterial, x, SHOPFRONT_TOP, z, shopfront);     // the transom
-  // below it, the glass from a stallriser `riser` high: low, or (see shopfrontGlass) as high as a dado rail
+  // below it, the glass from a stallriser `riser` high: low, or (see shopfrontGlass) as high as a dado rail — about
+  // one bay every 2.4m
+  const bays = Math.max(SHOPFRONT_BAYS, Math.round(len/2.4));
   for (const riser of [SHOPFRONT_RISER, SILL - 0.05]) {
     const glazing = new THREE.Group(), glassH = SHOPFRONT_TOP - riser, mid = (riser + SHOPFRONT_TOP)/2;
     shopfront.add(glazing);
     box(RECESS, riser, len, wallMaterial, x, riser/2, z, glazing);
     box(0.02, glassH, len, glassMaterial, x, mid, z, glazing);
     box(RECESS + 0.08, 0.08, len, frameMaterial, x, riser, z, glazing);  // the sill
-    for (let i = 0; i <= SHOPFRONT_BAYS; i++) box(RECESS + 0.04, glassH, 0.07, frameMaterial, x, mid, shopfrontFrom + 0.035 + i*(len - 0.07)/SHOPFRONT_BAYS, glazing);
+    for (let i = 0; i <= bays; i++) box(RECESS + 0.04, glassH, 0.07, frameMaterial, x, mid, shopfrontFrom + 0.035 + i*(len - 0.07)/bays, glazing);
   }
+  [lowGlass, dadoGlass] = shopfront.children.slice(-2);
+  lowGlass.visible = false;
+  door.position.set(-ROOM_W/2 - 0.03, 0, doorFrom);
 }
-// the shopfront's glass: from its stallriser, or from the dado rail's height in a room with one (so the rail doesn't
-// run across the glass)
-const [lowGlass, dadoGlass] = shopfront.children.slice(-2);
-const shopfrontGlass = high => { lowGlass.visible = !high; dadoGlass.visible = high; };
-// the door, on its hinge at the corner end of the doorway, and a knob on it
+// the door, on its hinge at the corner end of the doorway (put there by buildShell), and a knob on it
+const door = new THREE.Group();
+room.add(door);
+buildShell();
 const DOOR_OPEN = THREE.MathUtils.degToRad(95), DOOR_HOLD = 1500, DOOR_EASE = 0.12; // how far, for how long (ms), how quickly
 const doorMaterial = roomLit(new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.7 }));
-const door = new THREE.Group();
-door.position.set(-ROOM_W/2 - 0.03, 0, doorFrom);
-room.add(door);
 box(0.05, DOOR_H - 0.01, DOOR_W - 0.01, doorMaterial, 0, DOOR_H/2, DOOR_W/2, door);
 box(0.12, 0.05, 0.05, frameMaterial, 0, 1, DOOR_W - 0.1, door);
 let doorOpenUntil = -Infinity;
@@ -263,10 +291,14 @@ function layout(name, floor, build) {
   const group = new THREE.Group();
   group.visible = false;
   room.add(group);
-  const add = (w, h, d, material, x, y, z) => box(w, h, d, material, x, y, z, group);
+  // (what `build` adds is the room's size, so it's built again as the room's sized: see shapeRoom)
+  const fixtures = new THREE.Group();
+  group.add(fixtures);
+  const add = (w, h, d, material, x, y, z) => box(w, h, d, material, x, y, z, fixtures);
   const blocked = build(add);
   // (solid: what nobody walks through, as against blocked, where nobody stops; seats: where anyone can sit — see roomSeats)
-  LAYOUTS[name] = { name, group, floor: new THREE.Color(floor), wall: new THREE.Color(0xe8e2d6), blocked, solid: blocked, seats: [] };
+  LAYOUTS[name] = { name, group, floor: new THREE.Color(floor), wall: new THREE.Color(0xe8e2d6), blocked, solid: blocked, seats: [],
+    refit: () => { clearOut(fixtures); build(add); } };
 }
 const around = (x0, x1, z0, z1, pad = 0.45) => ({ x0: x0 - pad, x1: x1 + pad, z0: z0 - pad, z1: z1 + pad });
 
@@ -277,7 +309,12 @@ layout('home', 0x9a7452, () => []);
 // model (see "an office's furniture", below)
 layout('office', 0x6f7478, add => {
   const light = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfffbf0, emissiveIntensity: 0.9 });
-  for (const lx of [-2, 0.6, 3.2]) for (const lz of [-1.2, 1.6]) add(1.2, 0.03, 0.3, light, lx, ROOM_H - 0.015, lz);
+  // (in rows about 2.6m apart along x and 2.8m along z, as the 8 by 6 room had them)
+  const nx = Math.max(2, Math.round(ROOM_W/2.6)), nz = Math.max(2, Math.round(ROOM_D/2.8));
+  for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) {
+    const lx = -ROOM_W/2 + 1.4 + (ROOM_W - 2.2)*i/(nx - 1), lz = -ROOM_D/2 + 1.8 + (ROOM_D - 3.2)*k/(nz - 1);
+    add(1.2, 0.03, 0.3, light, lx, ROOM_H - 0.015, lz);
+  }
   return [];
 });
 const officeGroup = new THREE.Group();
@@ -288,7 +325,7 @@ LAYOUTS.office.furnished = officeGroup;
 const beamMaterial = lit(0x5a5e62, 0.5);
 for (const name of ['warehouse', 'factory']) {
   layout(name, 0x9a9a96, add => {
-    for (const x of [-2, 0, 2]) {
+    for (let x = -2*Math.floor(ROOM_W/4); x <= ROOM_W/2 - 1; x += 2) {
       add(0.03, 0.15, ROOM_D, beamMaterial, x, ROOM_H - 0.075, 0);
       add(0.2, 0.02, ROOM_D, beamMaterial, x, ROOM_H - 0.14, 0);
     }
@@ -534,16 +571,26 @@ modelsLoading.push(loadPosh());
 const trim = new THREE.Group();
 trim.visible = false;
 room.add(trim);
-const trimMaterial = lit(POSH_TRIM[0], 0.6), drapeMaterial = lit(DRAPES[0], 1);
+const trimMaterial = lit(POSH_TRIM[0], 0.6), drapeMaterial = lit(DRAPES[0], 1), poleMaterial = lit(0xc09040, 0.4);
 // the walls' inner faces: along x or z, where, and which way the room is from them
-const WALL_FACES = [{ alongX: true, at: ROOM_D/2, n: -1 }, { alongX: false, at: ROOM_W/2, n: -1 },
-  { alongX: true, at: -ROOM_D/2, n: 1 }, { alongX: false, at: -ROOM_W/2, n: 1 }];
+let WALL_FACES;
 function strip(face, a, b, y, h, depth, material = trimMaterial) {
   const out = face.at + face.n*depth/2, mid = (a + b)/2;
   const mesh = face.alongX ? box(b - a, h, depth, material, mid, y, out, trim) : box(depth, h, b - a, material, out, y, mid, trim);
   mesh.castShadow = false;
   return mesh;
 }
+// Curtains either side of each of the far walls' windows, hung from a pole over it and tied back to the wall either side,
+// so each is gathered in at the tie and spreads out above and below it (which reads as curtains from its outline alone,
+// with the room lit as flatly as it is): each a group, with the rectangle it stands on (shown in each posh home unless
+// the TV's in front of it: see furnish).
+const drapes = [];
+// (all of it built again for each size of room: see shapeRoom)
+function buildTrim() {
+clearOut(trim);
+drapes.length = 0;
+WALL_FACES = [{ alongX: true, at: ROOM_D/2, n: -1 }, { alongX: false, at: ROOM_W/2, n: -1 },
+  { alongX: true, at: -ROOM_D/2, n: 1 }, { alongX: false, at: -ROOM_W/2, n: 1 }];
 for (const face of WALL_FACES) {
   const half = face.alongX ? ROOM_W/2 : ROOM_D/2;
   const runs = face.alongX || face.n < 0 ? [[-half, half]] : [[-half, doorFrom - 0.08], [doorTo + 0.08, half]];
@@ -564,13 +611,7 @@ for (const face of WALL_FACES) {
   strip(face, doorTo, doorTo + 0.08, (DOOR_H + 0.08)/2, DOOR_H + 0.08, 0.03);
   strip(face, doorFrom - 0.08, doorTo + 0.08, DOOR_H + 0.04, 0.08, 0.035);
 }
-// Curtains either side of each of the far walls' windows, hung from a pole over it and tied back to the wall either side,
-// so each is gathered in at the tie and spreads out above and below it (which reads as curtains from its outline alone,
-// with the room lit as flatly as it is): each a group, with the rectangle it stands on (shown in each posh home unless
-// the TV's in front of it: see furnish).
-const drapes = [];
 {
-  const poleMaterial = lit(0xc09040, 0.4);
   const pleat = new THREE.CylinderGeometry(0.035, 0.035, 1, 8), pole = new THREE.CylinderGeometry(0.018, 0.018, 1, 8);
   const finial = new THREE.SphereGeometry(0.04, 10, 8);
   const UP = new THREE.Vector3(0, 1, 0), POLE = HEAD + 0.2, TIE = 1.0, PLEATS = 6;
@@ -614,17 +655,24 @@ const drapes = [];
     }
   }
 }
+}
+buildTrim();
 
 // The posh floors, as textures (plank-grey parquet for the floor's colour to tint, or a marble chequer), laid across the
-// floor's slab (see the box at the top) at their real size: the slab is 12 by 10 metres.
-const SLAB_W = ROOM_W + (WALL + OVERHANG)*2, SLAB_D = ROOM_D + (WALL + OVERHANG)*2;
+// floor's slab (see buildShell) at their real size, however big the room: set again as it's sized (fitFloors).
+const floorTextures = [];
+function fitFloors() {
+  const slabW = ROOM_W + (WALL + OVERHANG)*2, slabD = ROOM_D + (WALL + OVERHANG)*2;
+  for (const { texture, metres } of floorTextures) texture.repeat.set(slabW/metres, slabD/metres);
+}
 function floorTexture(size, metres, draw) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   draw(canvas.getContext('2d'), mulberry32(7));
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(SLAB_W/metres, SLAB_D/metres);
+  floorTextures.push({ texture, metres });
+  fitFloors();
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 8;
   return texture;
@@ -1268,11 +1316,10 @@ function furnish(key) {
   }
 
   // the seats, in the world: where to sit, how high, and which way they face
-  const c = Math.cos(room.rotation.y), s = Math.sin(room.rotation.y);
   home.seats = home.seats.map(seat => {
-    const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z));
+    const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z)), n = roomWay(seat.nx, seat.nz);
     const diner = seat.diner ? { top: room.localToWorld(new THREE.Vector3(seat.x, seat.diner, seat.z)).y } : false; // (the table top's height)
-    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: seat.sofa, diner, by: null };
+    return { x: w.x, y: w.y, z: w.z, nx: n.x, nz: n.z, sofa: seat.sofa, diner, by: null };
   });
   // and the TV's screen, in the world (switched on by whoever sits down in front of it: see watchingTV)
   if (tv.screen) {
@@ -1433,10 +1480,9 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
 }
 // `layout`'s seats, from the room's terms to the world's: where to sit, how high, and which way they face
 function seatsInWorld(layout) {
-  const c = Math.cos(room.rotation.y), s = Math.sin(room.rotation.y);
   layout.seats = layout.seats.map(seat => {
-    const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z));
-    return { x: w.x, y: w.y, z: w.z, nx: seat.nx*c + seat.nz*s, nz: -seat.nx*s + seat.nz*c, sofa: false, desk: seat.desk, bar: seat.bar, kind: seat.kind ?? null, by: null };
+    const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z)), n = roomWay(seat.nx, seat.nz);
+    return { x: w.x, y: w.y, z: w.z, nx: n.x, nz: n.z, sofa: false, desk: seat.desk, bar: seat.bar, kind: seat.kind ?? null, by: null };
   });
 }
 
@@ -1693,11 +1739,15 @@ room.add(dado);
 const LINE = 0xe8b820; // (a pub's dado rail's wood instead: see furnishPub)
 const dadoMaterial = lit(DADOS[0], 0.9), lineMaterial = lit(LINE, 0.6);
 const DADO_H = SILL - 0.1;
-for (const [w, d, x, z] of [[ROOM_W, 0.02, 0, ROOM_D/2 - 0.01], [ROOM_W, 0.02, 0, -ROOM_D/2 + 0.01], [0.02, ROOM_D, ROOM_W/2 - 0.01, 0],
-  [0.02, doorFrom + ROOM_D/2, -ROOM_W/2 + 0.01, (doorFrom - ROOM_D/2)/2], [0.02, ROOM_D/2 - doorTo, -ROOM_W/2 + 0.01, (doorTo + ROOM_D/2)/2]]) {
-  box(w, DADO_H, d, dadoMaterial, x, DADO_H/2, z, dado);
-  box(w + (w > d ? 0 : 0.004), 0.05, d + (w > d ? 0.004 : 0), lineMaterial, x, DADO_H + 0.025, z, dado);
+function buildDado() {
+  clearOut(dado);
+  for (const [w, d, x, z] of [[ROOM_W, 0.02, 0, ROOM_D/2 - 0.01], [ROOM_W, 0.02, 0, -ROOM_D/2 + 0.01], [0.02, ROOM_D, ROOM_W/2 - 0.01, 0],
+    [0.02, doorFrom + ROOM_D/2, -ROOM_W/2 + 0.01, (doorFrom - ROOM_D/2)/2], [0.02, ROOM_D/2 - doorTo, -ROOM_W/2 + 0.01, (doorTo + ROOM_D/2)/2]]) {
+    box(w, DADO_H, d, dadoMaterial, x, DADO_H/2, z, dado);
+    box(w + (w > d ? 0 : 0.004), 0.05, d + (w > d ? 0.004 : 0), lineMaterial, x, DADO_H + 0.025, z, dado);
+  }
 }
+buildDado();
 // a line painted on the floor from (x0, z0) to (x1, z1), along x or z
 const floorLine = (group, x0, z0, x1, z1, w = 0.07) =>
   box(Math.abs(x1 - x0) + w, 0.006, Math.abs(z1 - z0) + w, lineMaterial, (x0 + x1)/2, 0.003, (z0 + z1)/2, group);
@@ -1931,7 +1981,8 @@ const CARPETS = [
 // the pub: dark beams across the ceiling, panelled to the dado rail (see useLayout), and furnished afresh for each pub
 const pubBeam = lit(0x2e1c10, 0.8), PUB_DAYLIT = 0.4;
 layout('pub', 0xffffff, add => {
-  for (const x of [-2.7, -0.9, 0.9, 2.7]) add(0.18, 0.22, ROOM_D, pubBeam, x, ROOM_H - 0.11, 0);
+  const beams = Math.max(2, Math.round(ROOM_W/2));
+  for (let i = 0; i < beams; i++) add(0.18, 0.22, ROOM_D, pubBeam, (i - (beams - 1)/2)*ROOM_W*0.9/beams, ROOM_H - 0.11, 0);
   add(ROOM_W, 0.16, 0.16, pubBeam, 0, ROOM_H - 0.08, 0);
   return [];
 });
@@ -2228,7 +2279,7 @@ function wallHanger(F, plan, rng, hung) {
   };
 }
 // the way in from the door, kept clear
-const DOOR_CLEAR = { x0: -ROOM_W/2, x1: -ROOM_W/2 + 1.5, z0: DOOR_Z - 0.8, z1: DOOR_Z + 0.8 };
+const doorClear = () => ({ x0: -ROOM_W/2, x1: -ROOM_W/2 + 1.5, z0: DOOR_Z - 0.8, z1: DOOR_Z + 0.8 });
 // Where anyone can sit on `piece` (as measureSeats), leaving its meshes in any of the materials `over` out of it.
 function measureSeatsUnder(piece, over) {
   const moved = [];
@@ -2312,7 +2363,7 @@ function furnishSalon(key) {
   if (!F?.StylingStation || !F.StylingChair) return;
   const plan = planRoom(layout, F, group, rng, false, []);
   const { taken, put, WALL_SIDES, againstWall, atWall } = plan;
-  taken.push(DOOR_CLEAR);
+  taken.push(doorClear());
   const tall = [];  // (what's too tall to hang anything on the wall above)
   const place = (name, spot, options) => {
     put(name, spot.x, spot.z, spot.angle, options);
@@ -2400,7 +2451,7 @@ function furnishSalon(key) {
   for (let k = 1 + Math.floor(rng()*3); k > 0; k--) alongWall('Plant', 1, true, 0.1);
 
   // posters of hair do's and a clock on the walls, and the tubes on the ceiling
-  const onWall = wallHanger(F, plan, rng, [...tall, DOOR_CLEAR]);
+  const onWall = wallHanger(F, plan, rng, [...tall, doorClear()]);
   for (let k = 2 + Math.floor(rng()*3); k > 0; k--) onWall(rng() < 0.5 ? 'Poster' : 'Poster2', 1.35 + rng()*0.1);
   onWall('Clock', 2.1);
   if (F.Tube) for (const x of [-2, 0.2, 2.4]) for (const z of [-1.3, 1.3])
@@ -2460,7 +2511,7 @@ function furnishClothes(key) {
   if (!F?.ChangingRoom || !F.Curtain) return;
   const plan = planRoom(layout, F, group, rng, false, []);
   const { taken, fits, put, WALL_SIDES, againstWall, atWall } = plan;
-  taken.push(DOOR_CLEAR);
+  taken.push(doorClear());
   const tall = [];
   const place = (name, spot, options) => {
     put(name, spot.x, spot.z, spot.angle, options);
@@ -2495,7 +2546,7 @@ function furnishClothes(key) {
     drape.position.x = -(1 - CURTAIN_OPEN)*F.Curtain.w/2;
     const at = (x, z) => { const t = turned(x, z, spot.angle, spot.x, spot.z); return room.localToWorld(new THREE.Vector3(t.x, 0, t.z)); };
     layout.cubicles.push({ drape, width: F.Curtain.w, shown: CURTAIN_OPEN, closed: false, by: null,
-      inside: at(0, b.z0 + 0.6), front: at(0, b.z1 + 0.55), facing: room.rotation.y + spot.angle });
+      inside: at(0, b.z0 + 0.6), front: at(0, b.z1 + 0.55), facing: roomHeading(spot.angle) });
   }
   // the counter with the till, out from the wall behind the camera (clear of its corner), with room behind it to serve from
   if (F.Counter) {
@@ -2542,7 +2593,7 @@ function furnishClothes(key) {
   for (const [name, n] of [['Rack', 2 + Math.floor(rng()*2)], ['RoundRack', 1 + Math.floor(rng()*2)], ['DisplayTable', 1], ['Mannequin', Math.floor(rng()*2)]])
     for (let k = 0; k < n; k++) inTheOpen(name, name === 'Mannequin' ? 0.5 : 0.75);
 
-  const onWall = wallHanger(F, plan, rng, [...tall, DOOR_CLEAR]);
+  const onWall = wallHanger(F, plan, rng, [...tall, doorClear()]);
   if (rng() < 0.7) onWall('Sign', 2.0);
   if (F.Track) for (const x of [-1.8, 0.6, 2.8]) for (const z of [-1.2, 1.4])
     put('Track', x, z, 0, { y: ROOM_H - F.Track.h, small: true });
@@ -2880,7 +2931,7 @@ async function warmUp() {
 loadingTask('Preparing interiors...', warmUp().catch(err => console.warn('Kallipolis: interior warm-up failed', err)), 5);
 
 // where the camera starts in the room, in the room's own terms: the corner looking across at the far walls
-const CAMERA_AT = new THREE.Vector3(-ROOM_W/2 + CAMERA_INSET, CAMERA_HEIGHT, -ROOM_D/2 + CAMERA_INSET);
+const CAMERA_AT = new THREE.Vector3(); // (set as the room's sized: see shapeRoom)
 const FOV_EASE = 0.12;
 const ROOM_NEAR = 0.1; // the ceiling's closer than the usual near plane, and the wide view takes it in
 const BASE_FOV = camera.fov;
@@ -2921,6 +2972,7 @@ const freeRoom = {
   place(theta, phi, target) {
     room.worldToLocal(freeAt.copy(target));
     freeWay.set(Math.sin(phi)*Math.sin(theta), Math.cos(phi), Math.sin(phi)*Math.cos(theta)).applyAxisAngle(UP, -room.rotation.y);
+    freeWay.x *= room.scale.x; // (a flipped room's x runs the other way)
     const lo = [-ROOM_W/2 + FREE_WALL, FREE_WALL, -ROOM_D/2 + FREE_WALL], hi = [ROOM_W/2 - FREE_WALL, ROOM_H - FREE_WALL, ROOM_D/2 - FREE_WALL];
     let out = reach;
     for (let k = 0; k < 3; k++) {
@@ -2970,6 +3022,12 @@ let inside = null;
 // counts every time the room's set up somewhere, so anyone placed in it can tell when it's a new visit (see roomVisit)
 let visits = 0;
 
+// Half the rooms are flipped, mirrored across their own x (room.scale.x = -1): the door, the windows and everything laid
+// out in them the other way round. Anything in the room's terms goes to the world's through room.localToWorld, which
+// mirrors it along with them; a way or a heading, through these.
+const ROOM_FLIPPED = 0.5;
+const roomWay = (nx, nz) => new THREE.Vector3(nx, 0, nz).transformDirection(room.matrixWorld);
+const roomHeading = angle => room.rotation.y + angle*room.scale.x;
 // The room's angle: square to the footprint's longest edge, so its walls run the way the building's do.
 function longestEdgeAngle(fp) {
   let best = 0, angle = 0;
@@ -3020,8 +3078,52 @@ function hideNeighbours(group) {
 // or factory's, or a pub's or a shop's, ground floor), laid out as `kind` of room (one of LAYOUTS: 'home', 'office',
 // 'warehouse', 'factory', 'pub', 'salon' or 'clothes'),
 // the building hidden, and the camera cut straight to the corner, to go round the walls from there.
+// How big each layout's room can be, width (x) and depth (z): [narrowest, widest, shallowest, deepest].
+const ROOM_SIZES = {
+  home: [6, 9.5, 5, 7.5], office: [7, 12, 5.5, 9], warehouse: [9, 14, 7, 11], factory: [9, 14, 7, 11],
+  pub: [7.5, 11, 6, 8.5], salon: [7, 10, 5.5, 8], clothes: [7, 10, 5.5, 8],
+};
+/** The chance a room's as deep as it's wide (or as near as its layout lets it). */
+const ROOM_SQUARE = 0.25;
+// The room for the building `group` with this key, laid out as `kind`: its width and depth, from the footprint's extent
+// along and across the room (turned as `angle` has it) less the walls, a little more or less by its key, within its
+// layout's sizes — and whether it's turned a quarter round, so its width runs along the building's longer side.
+function roomSizeFor(group, key, kind, angle) {
+  const [w0, w1, d0, d1] = ROOM_SIZES[kind] ?? ROOM_SIZES.home;
+  const fp = group.userData.footprint;
+  let along = 8, across = 6;
+  if (fp && fp.length >= 3) {
+    const c = Math.cos(angle), s = Math.sin(angle);
+    const xs = fp.map(p => p.x*c - p.z*s), zs = fp.map(p => p.x*s + p.z*c);
+    along = Math.max(...xs) - Math.min(...xs) - 1.5; across = Math.max(...zs) - Math.min(...zs) - 1.5;
+  }
+  const turned = across > along;
+  if (turned) [along, across] = [across, along];
+  const jitter = salt => 0.85 + keyFraction(key, salt)*0.3;
+  let w = THREE.MathUtils.clamp(along*jitter(':width'), w0, w1), d = THREE.MathUtils.clamp(across*jitter(':depth'), d0, d1);
+  if (keyFraction(key, ':square') < ROOM_SQUARE) w = d = THREE.MathUtils.clamp(Math.min(w, d1), Math.max(w0, d0), d1);
+  d = Math.min(d, w);
+  return { w: Math.round(w*10)/10, d: Math.round(d*10)/10, turned };
+}
+// The room made `w` by `d`: its shell, trim, dado, each layout's fixtures and floors built again to fit, and everything
+// kept in the room's terms (where the camera starts, the walk grid) moved to match.
+function shapeRoom(w, d) {
+  if (w === ROOM_W && d === ROOM_D) return;
+  ROOM_W = w; ROOM_D = d;
+  buildShell(); buildTrim(); buildDado(); fitFloors();
+  for (const layout of Object.values(LAYOUTS)) layout.refit();
+  placeCamera();
+}
+function placeCamera() {
+  CAMERA_AT.set(-ROOM_W/2 + CAMERA_INSET, CAMERA_HEIGHT, -ROOM_D/2 + CAMERA_INSET);
+  GRID_X = Math.round(ROOM_W/CELL); GRID_Z = Math.round(ROOM_D/CELL);
+  grid = null;
+}
 export function enterBuilding(group, key, kind = 'home') {
   if (inside) leaveBuilding();
+  const fp = group.userData.footprint, angle = fp && fp.length >= 3 ? longestEdgeAngle(fp) : 0;
+  const size = roomSizeFor(group, key, LAYOUTS[kind] ? kind : 'home', angle);
+  shapeRoom(size.w, size.d);
   useLayout(kind);
   const glass = current === LAYOUTS.office && keyFraction(key) >= OFFICE_PUNCHED;
   // (a pub's room comes either way: windows in the far walls, or a shopfront beside the door — by its key)
@@ -3031,13 +3133,13 @@ export function enterBuilding(group, key, kind = 'home') {
   const workshop = !!current.industrial, groundFloor = workshop || current === LAYOUTS.pub || !!current.shop;
   curtain.visible = glass; punched.visible = !glass && !current.shopfront;
   blankWalls.visible = shopfront.visible = !!current.shopfront; doorWall.visible = !current.shopfront;
-  const fp = group.userData.footprint;
   const bounds = new THREE.Box3().setFromObject(group);
   const base = bounds.min.y, height = group.userData.height ?? (bounds.max.y - base);
   const centre = fp && fp.length >= 3 ? footprintBounds(group).c : bounds.getCenter(new THREE.Vector3());
   const storey = groundFloor ? 0 : Math.max(0, Math.floor((height - PLINTH - ROOM_H - 0.3)/FLOOR_HEIGHT));
   room.position.set(centre.x, base + PLINTH + storey*FLOOR_HEIGHT, centre.z);
-  room.rotation.y = fp && fp.length >= 3 ? longestEdgeAngle(fp) : 0;
+  room.rotation.y = angle + (size.turned ? Math.PI/2 : 0);
+  room.scale.x = keyFraction(key, ':flip') < ROOM_FLIPPED ? -1 : 1;
   room.visible = true;
   room.updateMatrixWorld(true);
   setRoomGlow(true);
@@ -3060,7 +3162,7 @@ export function enterBuilding(group, key, kind = 'home') {
   camera.updateProjectionMatrix();
   controls.goalTarget.copy(lookAt());
   controls.minRadius = 0;
-  controls.goalTheta = nearerWay(room.rotation.y + Math.atan2(CAMERA_AT.x, CAMERA_AT.z));
+  controls.goalTheta = nearerWay(roomHeading(Math.atan2(CAMERA_AT.x, CAMERA_AT.z)));
   controls.locked = true;
   controls.hug = hugWalls;
   eyeHeight = eyeGoal = tuning.height ?? CAMERA_HEIGHT;
@@ -3250,11 +3352,10 @@ export function roomSpot(rng) {
 // The way in and out of the room: just inside its door (see "the door", above), and the dark beyond it — where anyone
 // coming in steps out of and anyone going steps off into, the door swinging open for them (see aboutTheRoom and
 // leaveRoom in peopleActivities.js).
-const DOORWAY = new THREE.Vector3(-ROOM_W/2 + 0.3, 0, DOOR_Z), BEYOND = new THREE.Vector3(-ROOM_W/2 - RECESS + 0.2, 0, DOOR_Z);
 /** The room's doorway, just inside it, in the world. */
-export const roomDoorway = () => room.localToWorld(DOORWAY.clone());
+export const roomDoorway = () => room.localToWorld(new THREE.Vector3(-ROOM_W/2 + 0.3, 0, DOOR_Z));
 /** Through the room's door, in the dark beyond it, in the world. */
-export const roomBeyondDoor = () => room.localToWorld(BEYOND.clone());
+export const roomBeyondDoor = () => room.localToWorld(new THREE.Vector3(-ROOM_W/2 - RECESS + 0.2, 0, DOOR_Z));
 
 // Walked about by hand (see "walking into buildings" in life/people/peopleTracking.js): whether a point in the world is
 // somewhere to stand in the room — the walk grid's floor (BODY clear of the walls and furniture), or the doorway's recess
@@ -3284,7 +3385,9 @@ export const roomSeats = () => current.seats;
 // the furniture — built for the room as it's laid out the first time anyone needs it. Near where they start and where
 // they're going, though, anywhere in the room will do: someone getting up off the sofa, or going to sit on it, is well
 // within BODY of it and the coffee table in front.
-const CELL = 0.1, GRID_X = Math.round(ROOM_W/CELL), GRID_Z = Math.round(ROOM_D/CELL);
+const CELL = 0.1;
+let GRID_X, GRID_Z; // (set as the room's sized: see shapeRoom)
+placeCamera();
 const BODY = 0.2, LEEWAY = 0.45;
 function walkGrid() {
   if (grid) return grid;
