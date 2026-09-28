@@ -7,6 +7,8 @@ import { mergeGeometryList } from '../buildings/windows.js';
 import { makeFlatZoneMesh } from './surface-detail.js';
 import { longAxisOf } from './farmland.js';
 import { buildFountain, makeFountainSpray } from './plazas.js';
+import { buildingKey, buildingNumber } from '../buildings/footprints.js';
+import { buildingName, buildingTitle, buildingTypesReady } from '../buildings/building-types.js';
 import { cutLotByCutouts, insetPolygonExact, toClipperPath, fromClipperPath, createRegionTester } from './cutouts.js';
 
 // ---------------------------------------------------------- shopping centre
@@ -31,6 +33,7 @@ import { cutLotByCutouts, insetPolygonExact, toClipperPath, fromClipperPath, cre
 export const MALL_LEVEL = 5;          // floor to floor
 const EDGE = 0.4;                     // the mall's walls stand this far in from the zone's own edge (off the pavement)
 const UNIT_GAP = 0.35;                // between the units' backs and the outer walls
+const ROOM = { w: 8, d: 6 };           // a shop's room, deep by wide (see makeUnit)
 const WALL_IN = 0.1;                  // a unit's walls, in from its lot (so neighbours' walls never meet in one place)
 const PARAPET = 0.8;                  // outer walls above the units' roofs
 const CLERESTORY = 1.3;               // the glass walls round the concourse, up from the units' roof to the glass roof
@@ -43,24 +46,19 @@ const PRUNE_MIN = 12;                 // a side branch reaching less than this p
 const ESCALATOR_SLOPE = Math.tan(Math.PI/6), ESCALATOR_W = 1.1, BRIDGE_HALF = 1.5, BRIDGE_EVERY = 32;
 const GLASS = 0xbfd9e6;
 // Every mall's in a nineties colour scheme — its own by its seed, or the one picked in its settings (mallTheme, 1 on):
-// the floor's two marbles (laid in a diagonal chequer), the piers between the shops with their inlaid stripe, and the
+// the floor's two tiles (laid in a diagonal chequer), the piers between the shops with their inlaid stripe, and the
 // accents — plinths, capitals, the galleries' edges, the outside's band — the roof's frame, the brass of the handrails,
 // the columns, and the walls outside.
 export const MALL_THEMES = [
-  { name: 'Seafoam', neon: [0xff3fa4, 0x3ff2e0], tiles: [0xf7dfe6, 0xd2f1e9], vein: 0xa9b8bd, pier: 0xfaf0e4, inlay: 0x55c1b3, accent: 0x2ea298, frame: 0xf2faf8, rail: 0xd9b35f, column: 0xf3a9bc, walls: 0xf4e1d2, flowers: [0xff7aa8, 0xffd23f, 0xffffff, 0xb07bea] },
-  { name: 'Sunset', neon: [0xff7a2f, 0xc75cff], tiles: [0xfde7d0, 0xe6ddf7], vein: 0xb7a9a1, pier: 0xfff5ea, inlay: 0xf39b78, accent: 0x8d6ad6, frame: 0xffffff, rail: 0xcaa55a, column: 0xbaa5ec, walls: 0xf7e2cb, flowers: [0xff8a5b, 0xffcf4a, 0xe25b9b, 0xffffff] },
-  { name: 'Miami', neon: [0x3ff6ff, 0xff3f9e], tiles: [0xfff0f5, 0xcdf3f8], vein: 0xa3b3bd, pier: 0xf2fcfb, inlay: 0x47c4d9, accent: 0xff6ea4, frame: 0x47c4d9, rail: 0xe3e5e8, column: 0x82d9e5, walls: 0xf9e7ef, flowers: [0xff4f94, 0xfff06a, 0x9b6bff, 0xffffff] },
-  { name: 'Lemon', neon: [0xff3f6c, 0x3fb6ff], tiles: [0xfff7d1, 0xd8edfb], vein: 0xb3b8a6, pier: 0xfffdf3, inlay: 0xf3c232, accent: 0x3a8ed8, frame: 0xfbfbfb, rail: 0xd3ae3a, column: 0xf6d35a, walls: 0xf8f0d5, flowers: [0xff6a6a, 0x4f8cff, 0xffd23f, 0xffffff] },
+  { name: 'Seafoam', neon: [0xff3fa4, 0x3ff2e0], tiles: [0xf7dfe6, 0xd2f1e9], pier: 0xfaf0e4, inlay: 0x55c1b3, accent: 0x2ea298, frame: 0xf2faf8, rail: 0xd9b35f, column: 0xf3a9bc, walls: 0xf4e1d2, flowers: [0xff7aa8, 0xffd23f, 0xffffff, 0xb07bea] },
+  { name: 'Sunset', neon: [0xff7a2f, 0xc75cff], tiles: [0xfde7d0, 0xe6ddf7], pier: 0xfff5ea, inlay: 0xf39b78, accent: 0x8d6ad6, frame: 0xffffff, rail: 0xcaa55a, column: 0xbaa5ec, walls: 0xf7e2cb, flowers: [0xff8a5b, 0xffcf4a, 0xe25b9b, 0xffffff] },
+  { name: 'Miami', neon: [0x3ff6ff, 0xff3f9e], tiles: [0xfff0f5, 0xcdf3f8], pier: 0xf2fcfb, inlay: 0x47c4d9, accent: 0xff6ea4, frame: 0x47c4d9, rail: 0xe3e5e8, column: 0x82d9e5, walls: 0xf9e7ef, flowers: [0xff4f94, 0xfff06a, 0x9b6bff, 0xffffff] },
+  { name: 'Lemon', neon: [0xff3f6c, 0x3fb6ff], tiles: [0xfff7d1, 0xd8edfb], pier: 0xfffdf3, inlay: 0xf3c232, accent: 0x3a8ed8, frame: 0xfbfbfb, rail: 0xd3ae3a, column: 0xf6d35a, walls: 0xf8f0d5, flowers: [0xff6a6a, 0x4f8cff, 0xffd23f, 0xffffff] },
 ];
-const FASCIAS = {
-  clothes: [0xff6ea4, 0x47c4d9, 0x8d6ad6, 0xf39b78, 0x2ea298, 0xf3c232, 0x1a1a1c, 0x3a8ed8],
-  salon: [0xe890b0, 0x8ec8d8, 0xb0a0d8, 0x60b0a0, 0xff9ecf],
-  pub: [0x121212, 0x1f3d2b, 0x5a1a22, 0x2a3a5a],
-  vacant: [0xe6e3dc],
-};
-// polished marble tiles, in world space: a diagonal chequer of the theme's two, each tile a touch lighter or darker than
-// the next, with grey veins wandering through and fine joints between
-function applyMarble(mat, theme, size = 1.3) {
+// polished tiles, in world space: a diagonal chequer of the theme's two colours, each tile a touch lighter or darker than
+// the next, set in cream mortar
+const MORTAR = 0xf1e6cc;
+function applyTiles(mat, theme, size = 0.6) {
   const hex = c => { const v = new THREE.Color(c); return `vec3(${v.r.toFixed(4)}, ${v.g.toFixed(4)}, ${v.b.toFixed(4)})`; };
   mat.onBeforeCompile = shader => {
     shader.vertexShader = shader.vertexShader
@@ -69,28 +67,30 @@ function applyMarble(mat, theme, size = 1.3) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 varying vec3 vMallPos;
-float mallHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }
-float mallNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
-  return mix(mix(mallHash(i), mallHash(i + vec2(1.0, 0.0)), f.x), mix(mallHash(i + vec2(0.0, 1.0)), mallHash(i + vec2(1.0, 1.0)), f.x), f.y); }
-float mallFbm(vec2 p) { float s = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { s += a*mallNoise(p); p *= 2.03; a *= 0.5; } return s; }`)
+float mallHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
   vec2 q = vMallPos.xz/${size.toFixed(3)}, r = vec2(q.x + q.y, q.x - q.y)*0.70711, cell = floor(r);
   vec3 base = mix(${hex(theme.tiles[0])}, ${hex(theme.tiles[1])}, mod(cell.x + cell.y, 2.0))*(0.97 + 0.06*mallHash(cell));
-  float vein = abs(sin((r.x*1.3 + r.y*0.45)*2.6 + mallFbm(r*2.2 + cell*5.3)*5.5));
-  base = mix(${hex(theme.vein)}, base, 0.5 + 0.5*smoothstep(0.0, 0.18, vein));
   vec2 g = abs(fract(r) - 0.5);
-  base = mix(base, vec3(0.97), smoothstep(0.485, 0.5, max(g.x, g.y))*0.7);
-  diffuseColor.rgb = base;
+  float joint = smoothstep(0.455, 0.47, max(g.x, g.y));
+  diffuseColor.rgb = mix(base, ${hex(MORTAR)}, joint);
 }`);
   };
-  mat.customProgramCacheKey = () => 'mallMarble' + theme.name + size;
+  mat.customProgramCacheKey = () => 'mallTiles' + theme.name + size;
   return mat;
 }
-const marble = theme => applyMarble(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.22, metalness: 0.04 }), theme);
+const tiled = theme => applyTiles(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.22, metalness: 0.04 }), theme);
 const INSIDE_WALLS = [0xf1ece2, 0xe8eef0, 0xf3e6e6, 0xe9f0e4, 0xeee8f4, 0xf4efe0];
 const TABLE_TOP = 0.75, SEAT_TOP = Y_ZONE_GROUND + 0.45;
-const NEON = [0xff2fa0, 0x2ff3ff, 0xfff04a, 0x6dff5a, 0xb05cff, 0xff7a2a]; // (the shops' signs)
+const LAMP_STRENGTH = 0.4, DOWNLIGHT_STRENGTH = 0.3; // (the lamps' light, as a share of a street lamp's: see streetlights.js)
+// each shop's fascia: one colour, never the same as the shop's next door
+const CLADDINGS = [0xff6ea4, 0x47c4d9, 0x8d6ad6, 0xf39b78, 0x2ea298, 0xf3c232, 0x3a8ed8, 0xe8505b, 0x7fcf6a, 0xb85ec9, 0x1d2340,
+  0xff9f40, 0x5b6ee1, 0xd6336c, 0xf7f2e8, 0x14866d];
+// and the lettering on it: each shop in one of these, by its number
+const SIGN_FONTS = ['900 {px}px "Arial Black", Impact, sans-serif', 'italic bold {px}px "Brush Script MT", "Segoe Script", cursive',
+  'bold {px}px "Comic Sans MS", "Chalkboard SE", cursive', 'bold {px}px Georgia, "Times New Roman", serif',
+  'italic bold {px}px "Trebuchet MS", Verdana, sans-serif', 'bold {px}px "Courier New", monospace', '{px}px Impact, "Arial Narrow", sans-serif'];
 // Something that glows, and more so after dark (see updateWindowGlowForSun in core/scene.js, which calls onGlow): neon
 // tubes are bright even by day, the lamps only really come on at dusk.
 function glowing(color, emissive, day, night) {
@@ -481,17 +481,17 @@ function straightSpine(outline) {
 // ---------------------------------------------------------- shop units
 // One unit on `fp` ({x, z}[]), its floor at y0: walls round it but for its front (any edge on the concourse, `inC`),
 // which is glass under a fascia board; a floor (upstairs), a ceiling, and a counter and a few stands inside.
-function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs) {
+function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs, cladding, key) {
   const group = new THREE.Group();
   group.name = 'Building';
   const top = y0 + MALL_LEVEL - 0.35;
   Object.assign(group.userData, { footprint: lot, height: y0 + MALL_LEVEL, base: y0, buildingKind: kind, mallLevel: level, batchable: true });
   // (lit, its light spilling out onto the concourse after dark: see streetlights.js)
-  if (kind !== 'vacant') Object.assign(group.userData, { lobbyLight: 0.55, lobbyColor: new THREE.Color(0xfff1dc) });
+  if (kind !== 'vacant') Object.assign(group.userData, { lobbyLight: 0.25, lobbyColor: new THREE.Color(0xfff1dc) });
   // its walls a little in from its lot, so a party wall is two walls with a gap between, never two drawn in one place
   const fp = insetPolygonExact(lot, WALL_IN)[0] || lot;
   const walls = createMeshBuilder(), glass = createMeshBuilder(), fascia = createMeshBuilder(), fittings = createMeshBuilder();
-  const riser = createMeshBuilder(), brass = createMeshBuilder(), sign = createMeshBuilder();
+  const riser = createMeshBuilder(), brass = createMeshBuilder();
   const vacant = kind === 'vacant', RISER = 0.5;
   let widest = null;
   const fronts = fp.map((p, i) => {
@@ -515,11 +515,6 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs) {
       }
       wallQuad(walls, p, q, top - 1.1, y0 + MALL_LEVEL);
       frameBox(fascia, F, 0, out*0.08, side.len/2 - 0.1, 0.1, top - 1.0, top - 0.2);
-      if (!vacant && side.len > 2.5) {
-        const hu = Math.min(side.len*0.32, 2.8);
-        frameBox(sign, F, 0, out*0.19, hu, 0.02, top - 0.85, top - 0.35);
-        signs.push({ F, out, hu, y0: top - 0.85, y1: top - 0.35 });
-      }
       if (!widest || side.len > widest.len) widest = { ...side, F, out };
       // a pier where the front meets a party wall (see the piers in generateMallContent)
       [[p, fronts[(i + fp.length - 1) % fp.length], 1], [q, fronts[(i+1) % fp.length], -1]].forEach(([c, neighbour, into]) => {
@@ -527,6 +522,14 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs) {
       });
     } else if (dist(p, q) > 1e-3) wallQuad(walls, p, q, y0, y0 + MALL_LEVEL);
   });
+  // its room (see enterBuilding in interior.js): the old narrow one, 8 by 6, with its shopfront just behind the shop's own
+  // widest front and facing out through it
+  if (widest) {
+    const back = ROOM.w/2 + 0.5;
+    group.userData.room = { w: ROOM.w, d: ROOM.d, facing: { x: widest.n.x, z: widest.n.z }, at: { x: widest.m.x - widest.n.x*back, z: widest.m.z - widest.n.z*back } };
+  }
+  // its name, on its widest front's fascia (see signAtlas)
+  if (widest && widest.len > 2) signs.push({ key, kind, m: widest.m, n: widest.n, len: widest.len, y: top - 0.6, cladding });
   const path = [toClipperPath(fp)];
   tops(walls, path, top, true);       // the ceiling (and from above, the roof: the floor over it is the next unit's)
   if (level > 0) tops(walls, path, y0 + 0.02);
@@ -539,14 +542,12 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs) {
     for (let k = 0; k < Math.max(1, Math.floor((deep - 5)/3)); k++) put((rng() - 0.5)*widest.len*0.3, -out*(4.5 + k*3), Math.min(1.4, widest.len*0.2), 0.45, kind === 'pub' ? 1.05 : 1.4);
   }
   const wallColor = INSIDE_WALLS[Math.floor(rng()*INSIDE_WALLS.length)];
-  const colours = FASCIAS[kind] || FASCIAS.clothes;
   [
     meshOf(built(walls), plain(vacant ? 0xdad6cc : wallColor, { emissive: vacant ? 0x000000 : wallColor, emissiveIntensity: 0.12 }), 'Building'),
-    meshOf(built(fascia), plain(colours[Math.floor(rng()*colours.length)], { roughness: 0.45 }), 'Building'),
+    meshOf(built(fascia), plain(cladding, { roughness: 0.45 }), 'Building'),
     meshOf(built(fittings), plain([0x6b5a4a, 0xdedad2, 0x2f3338, 0xb9a27e][Math.floor(rng()*4)], { roughness: 0.6 }), 'Building'),
     meshOf(built(riser), plain(rng() < 0.5 ? theme.inlay : theme.accent, { roughness: 0.35 }), 'Building'),
     meshOf(built(brass), plain(theme.rail, { roughness: 0.3, metalness: 0.7 }), 'Building'),
-    meshOf(built(sign), plain(0xfffdf6, { roughness: 0.4, emissive: 0xfffdf6, emissiveIntensity: 0.35 }), 'Building'),
     meshOf(built(glass), shopGlass(), 'Building', false),
   ].forEach(m => m && group.add(m));
   return group;
@@ -599,11 +600,72 @@ function wedge(p0, p1, a0, a1, R) {
   return [p0, p1, { x: p1.x + d1.x*R, z: p1.z + d1.z*R }, { x: p0.x + d0.x*R, z: p0.z + d0.z*R }];
 }
 
+// ---------------------------------------------------------- the shops' names
+// Every shop's name (its title in buildings.txt — a pub's "The Red Lion", a vacant unit's "TO LET" — else what it is)
+// lettered onto its fascia: all of a mall's drawn once into one canvas, packed in rows, and each sign a quad showing its
+// own bit of it — so however many shops, it's one texture and one draw. Lettering's dark on a light fascia and light on
+// a dark one, in a typeface picked by the shop's number, and glows a little after dark.
+const SIGN_H = 0.6, SIGN_PX = 64, ATLAS_W = 2048;
+function signAtlas(signs) {
+  if (!signs.length || typeof document === 'undefined') return null;
+  const cells = signs.map(sg => {
+    const number = buildingNumber(sg.key), w = Math.min(sg.len - 0.7, 6);
+    const text = buildingTitle(sg.kind, number) || buildingName(sg.kind, number, 0);
+    return { ...sg, number, w, text, px: Math.max(SIGN_PX, Math.min(ATLAS_W, Math.round(SIGN_PX*w/SIGN_H))) };
+  }).filter(c => c.w > 0.8 && c.text);
+  // shelf packing: left to right, a new row whenever one's full
+  let x = 0, y = 0;
+  cells.forEach(c => { if (x + c.px > ATLAS_W) { x = 0; y += SIGN_PX; } c.ax = x; c.ay = y; x += c.px; });
+  const H = y + SIGN_PX, canvas = document.createElement('canvas');
+  canvas.width = ATLAS_W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  cells.forEach(c => {
+    const bg = new THREE.Color(c.cladding), light = bg.r*0.3 + bg.g*0.59 + bg.b*0.11 > 0.55;
+    const font = SIGN_FONTS[c.number % SIGN_FONTS.length];
+    let px = SIGN_PX*0.72;
+    ctx.font = font.replace('{px}', px.toFixed(0));
+    const width = ctx.measureText(c.text).width;
+    if (width > c.px*0.92) { px *= c.px*0.92/width; ctx.font = font.replace('{px}', px.toFixed(0)); }
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(2, px*0.08);
+    ctx.strokeStyle = light ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)';
+    ctx.fillStyle = light ? '#1d2340' : '#fffaf0';
+    ctx.strokeText(c.text, c.ax + c.px/2, c.ay + SIGN_PX/2 + 2);
+    ctx.fillText(c.text, c.ax + c.px/2, c.ay + SIGN_PX/2 + 2);
+  });
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  // each sign a quad just proud of its fascia, reading left to right to someone facing the shop
+  const pos = [], nor = [], uv = [], index = [];
+  cells.forEach(c => {
+    const right = { x: c.n.z, z: -c.n.x }, mid = { x: c.m.x + c.n.x*0.19, z: c.m.z + c.n.z*0.19 };
+    const corner = (s, t) => [mid.x + right.x*s*c.w/2, c.y + t*SIGN_H/2, mid.z + right.z*s*c.w/2];
+    const u0 = c.ax/ATLAS_W, u1 = (c.ax + c.px)/ATLAS_W, v1 = 1 - c.ay/H, v0 = 1 - (c.ay + SIGN_PX)/H, base = pos.length/3;
+    [[-1, -1, u0, v0], [1, -1, u1, v0], [1, 1, u1, v1], [-1, 1, u0, v1]].forEach(([s, t, u, v]) => { pos.push(...corner(s, t)); nor.push(c.n.x, 0, c.n.z); uv.push(u, v); });
+    index.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(index);
+  const mat = glowing(0xffffff, 0xffffff, 0.15, 0.7);
+  Object.assign(mat, { map: texture, emissiveMap: texture, alphaTest: 0.4, side: THREE.FrontSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  mat.addEventListener('dispose', () => texture.dispose()); // (the canvas goes with the mall)
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'MallSigns';
+  return mesh;
+}
+// buildings.txt read after a mall was built: its signs said what the shops are, not their names — so build it again
+buildingTypesReady.then(() => S.zones?.forEach(zone => { if (zone.zoneType === 'mall' && zone.buildingsGroup) App.subdivideZone?.(zone); }));
+
 // ---------------------------------------------------------- the mall
 export function generateMallContent(zone, poly, cutouts, blockers) {
   const s = zone.settings;
   const theme = MALL_THEMES[(s.mallTheme > 0 ? s.mallTheme - 1 : (s.seed >>> 0)) % MALL_THEMES.length];
-  const ground = makeFlatZoneMesh(poly, 0xffffff, Y_ZONE_GROUND, 'ZoneGround', mat => { mat.roughness = 0.22; mat.metalness = 0.04; applyMarble(mat, theme); }, cutouts);
+  const ground = makeFlatZoneMesh(poly, 0xffffff, Y_ZONE_GROUND, 'ZoneGround', mat => { mat.roughness = 0.22; mat.metalness = 0.04; applyTiles(mat, theme); }, cutouts);
   if (ground) zone.buildingsGroup.add(ground);
   zone.doorSetback = 0;
   // the mall's outline: the zone less the roads and paths through it (the biggest piece, if they cut it in several), a
@@ -700,7 +762,7 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
   const segs = segmentsOf(spine), W = Math.max(5, s.mallShopWidth ?? 10), R = spine.halfWidth*1.6 + CW + 10;
   const band = minus(within(outlinePath, insetPolygonExact(outline, UNIT_GAP).map(toClipperPath)), C);
   let claimed = [], index = 0;
-  const piers = [], signs = [];
+  const piers = [], signs = [], lastCladding = [];
   segs.forEach(seg => [1, -1].forEach(side => {
     const n = Math.max(1, Math.round(seg.len/W)), P = t => ({ x: seg.a.x + (seg.b.x - seg.a.x)*t/n, z: seg.a.z + (seg.b.z - seg.a.z)*t/n });
     const cutAt = k => k === 0 ? seg.cut.a[side] : k === n ? seg.cut.b[side] : seg.ang + side*Math.PI/2;
@@ -719,7 +781,10 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
           // each unit on its own stream, as in a town, so one slider never reshuffles the rest
           const rng = mulberry32(((s.seed>>>0) ^ Math.imul(index+1, 0x9E3779B1) ^ Math.imul(pi+1, 0x85EBCA6B) ^ Math.imul(level+1, 0xC2B2AE35)) >>> 0);
           const kind = !front || (level > 0 && !gallery) ? 'vacant' : kindOf(rng, s);
-          zone.buildingsGroup.add(makeUnit(fp, inC, level*MALL_LEVEL, kind, rng, level, theme, piers, signs));
+          let cladding = CLADDINGS[Math.floor(rng()*CLADDINGS.length)];
+          if (cladding === lastCladding[level]) cladding = CLADDINGS[(CLADDINGS.indexOf(cladding) + 1 + Math.floor(rng()*(CLADDINGS.length - 1))) % CLADDINGS.length];
+          lastCladding[level] = cladding;
+          zone.buildingsGroup.add(makeUnit(fp, inC, level*MALL_LEVEL, kind, rng, level, theme, piers, signs, cladding, buildingKey(zone, zone.buildingsGroup.children.length)));
         }
       });
     }
@@ -748,13 +813,13 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
       poles.addGeometry(bar({ x: p.x, y: Y_ZONE_GROUND + 3.55, z: p.z }, { x: q.x, y: Y_ZONE_GROUND + 3.6, z: q.z }, 0.05), 0, 0, 0);
       globes.addGeometry(new THREE.SphereGeometry(0.19, 12, 8), q.x, Y_ZONE_GROUND + 3.8, q.z);
     }
-    lampPosts.push({ x: p.x, z: p.z, y: 0 });
+    lampPosts.push({ x: p.x, z: p.z, y: 0, strength: LAMP_STRENGTH });
   };
   const pendant = (p, from, at) => {
     poles.addGeometry(bar({ x: p.x, y: from, z: p.z }, { x: p.x, y: at + 0.3, z: p.z }, 0.02), 0, 0, 0);
     poles.addGeometry(new THREE.CylinderGeometry(0.08, 0.42, 0.3, 14), p.x, at + 0.3, p.z);
     globes.addGeometry(new THREE.SphereGeometry(0.3, 14, 10), p.x, at, p.z);
-    lampPosts.push({ x: p.x, z: p.z, y: 0 });
+    lampPosts.push({ x: p.x, z: p.z, y: 0, strength: LAMP_STRENGTH });
   };
   const EH = Math.min(4, CW - 0.5), entrances = spine.nodes.filter(n => n.entrance).map(n => n.entrance);
   const doorway = p => entrances.some(E => { const dx = p.x - E.x, dz = p.z - E.z; return Math.abs(dx*E.dx + dz*E.dz) < 2.5 && Math.abs(-dx*E.dz + dz*E.dx) < EH; });
@@ -966,10 +1031,10 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
     // a downlight under each gallery every few metres, over the shopfronts
     galleries.forEach(line => {
       const len = lengthOf(line);
-      for (let d = 2; d < len - 1; d += 6) {
+      for (let d = 3; d < len - 1; d += 9) {
         const p = pointAlong(line, d);
         globes.addGeometry(new THREE.CylinderGeometry(0.24, 0.24, 0.06, 14), p.x, deckBottom - 0.03, p.z);
-        lampPosts.push({ x: p.x, z: p.z, y: 0 });
+        lampPosts.push({ x: p.x, z: p.z, y: 0, strength: DOWNLIGHT_STRENGTH });
       }
     });
     nets.push({ H: deckTop, lateral: 0.6, walk: BH - 0.3, decks: spans, ramps, indoor: true });
@@ -992,14 +1057,6 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
     box(pierInlay, 0.13, 0.44, 0.49, pr.y0 + 0.75, pr.top - 1.5);  // stripe
     box(trim, 0.6, back, 0.57, pr.top - 1.32, pr.top - 1.1);       // capital
     box(pierMain, 0.64, back, 0.62, pr.top - 0.08, pr.top + 0.12); // cornice
-  });
-
-  // ---- each shop's sign board outlined in neon, in a colour of its own
-  const signRng = mulberry32((s.seed>>>0) ^ 0x7E0);
-  signs.forEach(({ F, out, hu, y0, y1 }) => {
-    const color = NEON[Math.floor(signRng()*NEON.length)], v = out*0.24, c = (u, y) => F.at(u, v, y);
-    [[c(-hu - 0.1, y0 - 0.08), c(hu + 0.1, y0 - 0.08)], [c(-hu - 0.1, y1 + 0.08), c(hu + 0.1, y1 + 0.08)],
-      [c(-hu - 0.1, y0 - 0.08), c(-hu - 0.1, y1 + 0.08)], [c(hu + 0.1, y0 - 0.08), c(hu + 0.1, y1 + 0.08)]].forEach(([a, b]) => tube(color, a, b, 0.05));
   });
 
   // ---- planters and pools down the middle of the concourse, clear of the lanes and the escalators: flower beds, every
@@ -1159,7 +1216,7 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
     meshOf(built(pierMain), plain(theme.pier, { roughness: 0.4 }), 'Building'),
     meshOf(built(pierInlay), plain(theme.inlay, { roughness: 0.35 }), 'Building'),
     meshOf(built(columns), plain(theme.column, { roughness: 0.35 }), 'Building'),
-    meshOf(built(deckFloor), marble(theme), 'Building'),
+    meshOf(built(deckFloor), tiled(theme), 'Building'),
     meshOf(built(deckUnder), plain(0xfbf8f2, { roughness: 0.8 }), 'Building'),
     meshOf(built(rails), plain(theme.rail, { roughness: 0.25, metalness: 0.75 }), 'Building'),
     meshOf(built(steel), plain(0xd3d8de, { roughness: 0.3, metalness: 0.6 }), 'Building'),
@@ -1174,11 +1231,13 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
   // (the lights on their own, left out of the merged meshes, since they glow more or less by the time of day)
   const lights = new THREE.Group();
   lights.name = 'MallLights';
-  neon.forEach((list, color) => { const m = meshOf(mergeGeometryList(list), glowing(color, color, 0.9, 2.6), 'MallNeon', false); if (m) lights.add(m); });
-  const lamps = meshOf(built(globes), glowing(0xfff6e0, 0xffe2b0, 0.3, 1.6), 'MallLamps', false);
+  neon.forEach((list, color) => { const m = meshOf(mergeGeometryList(list), glowing(color, color, 0.7, 1.5), 'MallNeon', false); if (m) lights.add(m); });
+  const lamps = meshOf(built(globes), glowing(0xfff6e0, 0xffe2b0, 0.2, 0.9), 'MallLamps', false);
   if (lamps) { lamps.userData.lampPosts = lampPosts; lights.add(lamps); }
   const posts = meshOf(built(poles), plain(theme.frame, { roughness: 0.35, metalness: 0.5 }), 'MallLamps');
   if (posts) lights.add(posts);
+  const names = signAtlas(signs);
+  if (names) lights.add(names);
   zone.buildingsGroup.add(lights);
 }
 

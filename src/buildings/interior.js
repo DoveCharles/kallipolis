@@ -3121,13 +3121,17 @@ function placeCamera() {
 }
 export function enterBuilding(group, key, kind = 'home') {
   if (inside) leaveBuilding();
+  // A building can say where its room goes instead (userData.room): a mall's shop has the room the shops had before rooms
+  // were sized for their buildings, always with a shopfront, set just behind its own and facing the concourse — { w, d,
+  // at: {x, z}, facing: the way out through the shopfront } (see makeUnit in zones/mall.js).
+  const fixed = group.userData.room;
   const fp = group.userData.footprint, angle = fp && fp.length >= 3 ? longestEdgeAngle(fp) : 0;
-  const size = roomSizeFor(group, key, LAYOUTS[kind] ? kind : 'home', angle);
+  const size = fixed ? { w: fixed.w, d: fixed.d, turned: false } : roomSizeFor(group, key, LAYOUTS[kind] ? kind : 'home', angle);
   shapeRoom(size.w, size.d);
   useLayout(kind);
   const glass = current === LAYOUTS.office && keyFraction(key) >= OFFICE_PUNCHED;
   // (a pub's room comes either way: windows in the far walls, or a shopfront beside the door — by its key)
-  if (current === LAYOUTS.pub) LAYOUTS.pub.shopfront = keyFraction(key, ':shopfront') < PUB_SHOPFRONT;
+  if (current === LAYOUTS.pub) LAYOUTS.pub.shopfront = fixed ? true : keyFraction(key, ':shopfront') < PUB_SHOPFRONT;
   // (a warehouse or a factory's room is on its ground floor: its roof's high over one big space, not storeys — and a pub's
   // on the street)
   const workshop = !!current.industrial, groundFloor = workshop || current === LAYOUTS.pub || !!current.shop;
@@ -3135,11 +3139,13 @@ export function enterBuilding(group, key, kind = 'home') {
   blankWalls.visible = shopfront.visible = !!current.shopfront; doorWall.visible = !current.shopfront;
   const bounds = new THREE.Box3().setFromObject(group);
   const base = bounds.min.y, height = group.userData.height ?? (bounds.max.y - base);
-  const centre = fp && fp.length >= 3 ? footprintBounds(group).c : bounds.getCenter(new THREE.Vector3());
+  const centre = fixed ? fixed.at : fp && fp.length >= 3 ? footprintBounds(group).c : bounds.getCenter(new THREE.Vector3());
   const storey = groundFloor ? 0 : Math.max(0, Math.floor((height - PLINTH - ROOM_H - 0.3)/FLOOR_HEIGHT));
   room.position.set(centre.x, base + PLINTH + storey*FLOOR_HEIGHT, centre.z);
-  room.rotation.y = angle + (size.turned ? Math.PI/2 : 0);
   room.scale.x = keyFraction(key, ':flip') < ROOM_FLIPPED ? -1 : 1;
+  // (the door's wall is the room's -x: turned to face `facing`, and round the other way when the room's mirrored, which
+  // puts that wall on its +x — so the door's at the other end of the same shopfront)
+  room.rotation.y = fixed ? Math.atan2(fixed.facing.z, -fixed.facing.x) + (room.scale.x < 0 ? Math.PI : 0) : angle + (size.turned ? Math.PI/2 : 0);
   room.visible = true;
   room.updateMatrixWorld(true);
   setRoomGlow(true);

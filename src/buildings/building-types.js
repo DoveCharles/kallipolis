@@ -26,6 +26,8 @@ const buildings = loadTypeText('assets/text/buildings.txt', {
   placeholder: { default: { name: ['Building'], mood: ['🏢'], loves: ['Having people inside them'], hates: ['Strong winds'] } },
 });
 
+// Settles once buildings.txt has been read: anything showing a building's own name (a mall's shop signs) draws it again.
+export const buildingTypesReady = buildings.ready;
 // What kind a building is: whatever put it up said so (see the zone types in zones/), or else its zone's own type.
 export function buildingKindOf(group, zone) {
   return (group && group.userData.buildingKind) || (zone && zone.zoneType) || 'buildings';
