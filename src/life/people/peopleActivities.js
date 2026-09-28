@@ -199,7 +199,7 @@ function startChat(a, b, approach) {
  * @returns {void}
  */
 export function talkWith(p, q) {
-  startChat(q, p, false);
+  startChat(q, p, false).possessed = true; // (they turn to face them once; after that only their head follows — updateGroups)
   // (in a room, up off any seat and done with wherever they were going: they stand and talk, then carry on from there)
   if (q.inRoom) Object.assign(q.inRoom, { seat: null, route: null, stage: '', wait: 2 });
   q.faceTo = headingTo(q, p);
@@ -336,7 +336,9 @@ export function updateGroups(dt) {
       endChat(g);
       continue;
     }
-    if (g.stage !== 'gather') { a.faceTo = headingTo(a, b); b.faceTo = headingTo(b, a); }
+    // (keeping face to face — but not with whoever's possessed: they stay put as they walk round them, turning only
+    // their head, as far as it goes — see lookAt in people.js)
+    if (g.stage !== 'gather' && !g.possessed) { a.faceTo = headingTo(a, b); b.faceTo = headingTo(b, a); }
   }
 }
 
