@@ -6,6 +6,7 @@ import { CLIPPER_SCALE, clipPolygons, createMeshBuilder } from '../roads/roads.j
 import { mergeGeometryList } from '../buildings/windows.js';
 import { makeFlatZoneMesh } from './surface-detail.js';
 import { longAxisOf } from './farmland.js';
+import { buildFountain, makeFountainSpray } from './plazas.js';
 import { cutLotByCutouts, insetPolygonExact, toClipperPath, fromClipperPath, createRegionTester } from './cutouts.js';
 
 // ---------------------------------------------------------- shopping centre
@@ -39,13 +40,53 @@ const FOOD_COURT = 2.6;               // and the food court's (if there's room)
 const MIN_SPINE = 20;                 // the least concourse worth building
 const PRUNE_MIN = 12;                 // a side branch reaching less than this past the junction it comes off is dropped
 const ESCALATOR_SLOPE = Math.tan(Math.PI/6), ESCALATOR_W = 1.1, BRIDGE_HALF = 1.5, BRIDGE_EVERY = 32;
-const GLASS = 0xbfd9e6, FRAME = 0x3a3f46;
+const GLASS = 0xbfd9e6;
+// Every mall's in a nineties colour scheme — its own by its seed, or the one picked in its settings (mallTheme, 1 on):
+// the floor's two marbles (laid in a diagonal chequer), the piers between the shops with their inlaid stripe, and the
+// accents — plinths, capitals, the galleries' edges, the outside's band — the roof's frame, the brass of the handrails,
+// the columns, and the walls outside.
+export const MALL_THEMES = [
+  { name: 'Seafoam', tiles: [0xf7dfe6, 0xd2f1e9], vein: 0xa9b8bd, pier: 0xfaf0e4, inlay: 0x55c1b3, accent: 0x2ea298, frame: 0xf2faf8, rail: 0xd9b35f, column: 0xf3a9bc, walls: 0xf4e1d2, flowers: [0xff7aa8, 0xffd23f, 0xffffff, 0xb07bea] },
+  { name: 'Sunset', tiles: [0xfde7d0, 0xe6ddf7], vein: 0xb7a9a1, pier: 0xfff5ea, inlay: 0xf39b78, accent: 0x8d6ad6, frame: 0xffffff, rail: 0xcaa55a, column: 0xbaa5ec, walls: 0xf7e2cb, flowers: [0xff8a5b, 0xffcf4a, 0xe25b9b, 0xffffff] },
+  { name: 'Miami', tiles: [0xfff0f5, 0xcdf3f8], vein: 0xa3b3bd, pier: 0xf2fcfb, inlay: 0x47c4d9, accent: 0xff6ea4, frame: 0x47c4d9, rail: 0xe3e5e8, column: 0x82d9e5, walls: 0xf9e7ef, flowers: [0xff4f94, 0xfff06a, 0x9b6bff, 0xffffff] },
+  { name: 'Lemon', tiles: [0xfff7d1, 0xd8edfb], vein: 0xb3b8a6, pier: 0xfffdf3, inlay: 0xf3c232, accent: 0x3a8ed8, frame: 0xfbfbfb, rail: 0xd3ae3a, column: 0xf6d35a, walls: 0xf8f0d5, flowers: [0xff6a6a, 0x4f8cff, 0xffd23f, 0xffffff] },
+];
 const FASCIAS = {
-  clothes: [0x1a1a1c, 0xf2f0ea, 0xa82a2a, 0x2a3a5a, 0x3a3a3c, 0xd46a2a],
-  salon: [0xe890b0, 0x8ec8d8, 0xb0a0d8, 0x60b0a0],
-  pub: [0x121212, 0x1f3d2b, 0x5a1a22],
+  clothes: [0xff6ea4, 0x47c4d9, 0x8d6ad6, 0xf39b78, 0x2ea298, 0xf3c232, 0x1a1a1c, 0x3a8ed8],
+  salon: [0xe890b0, 0x8ec8d8, 0xb0a0d8, 0x60b0a0, 0xff9ecf],
+  pub: [0x121212, 0x1f3d2b, 0x5a1a22, 0x2a3a5a],
   vacant: [0xe6e3dc],
 };
+// polished marble tiles, in world space: a diagonal chequer of the theme's two, each tile a touch lighter or darker than
+// the next, with grey veins wandering through and fine joints between
+function applyMarble(mat, theme, size = 1.3) {
+  const hex = c => { const v = new THREE.Color(c); return `vec3(${v.r.toFixed(4)}, ${v.g.toFixed(4)}, ${v.b.toFixed(4)})`; };
+  mat.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vMallPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMallPos = (modelMatrix*vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vMallPos;
+float mallHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }
+float mallNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
+  return mix(mix(mallHash(i), mallHash(i + vec2(1.0, 0.0)), f.x), mix(mallHash(i + vec2(0.0, 1.0)), mallHash(i + vec2(1.0, 1.0)), f.x), f.y); }
+float mallFbm(vec2 p) { float s = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { s += a*mallNoise(p); p *= 2.03; a *= 0.5; } return s; }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  vec2 q = vMallPos.xz/${size.toFixed(3)}, r = vec2(q.x + q.y, q.x - q.y)*0.70711, cell = floor(r);
+  vec3 base = mix(${hex(theme.tiles[0])}, ${hex(theme.tiles[1])}, mod(cell.x + cell.y, 2.0))*(0.97 + 0.06*mallHash(cell));
+  float vein = abs(sin((r.x*1.3 + r.y*0.45)*2.6 + mallFbm(r*2.2 + cell*5.3)*5.5));
+  base = mix(${hex(theme.vein)}, base, 0.5 + 0.5*smoothstep(0.0, 0.18, vein));
+  vec2 g = abs(fract(r) - 0.5);
+  base = mix(base, vec3(0.97), smoothstep(0.485, 0.5, max(g.x, g.y))*0.7);
+  diffuseColor.rgb = base;
+}`);
+  };
+  mat.customProgramCacheKey = () => 'mallMarble' + theme.name + size;
+  return mat;
+}
+const marble = theme => applyMarble(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.22, metalness: 0.04 }), theme);
 const INSIDE_WALLS = [0xf1ece2, 0xe8eef0, 0xf3e6e6, 0xe9f0e4, 0xeee8f4, 0xf4efe0];
 const KIOSKS = [0xd9482b, 0xf2b705, 0x2a9d58, 0x1f6fb2, 0xe86a9a, 0x7a4bb0, 0xf07f1d]; // (each food kiosk's colours)
 const TABLE_TOP = 0.75, SEAT_TOP = Y_ZONE_GROUND + 0.45;
@@ -426,23 +467,42 @@ function straightSpine(outline) {
 // ---------------------------------------------------------- shop units
 // One unit on `fp` ({x, z}[]), its floor at y0: walls round it but for its front (any edge on the concourse, `inC`),
 // which is glass under a fascia board; a floor (upstairs), a ceiling, and a counter and a few stands inside.
-function makeUnit(fp, inC, y0, kind, rng, level) {
+function makeUnit(fp, inC, y0, kind, rng, level, theme, piers) {
   const group = new THREE.Group();
   group.name = 'Building';
   const top = y0 + MALL_LEVEL - 0.35;
   Object.assign(group.userData, { footprint: fp, height: y0 + MALL_LEVEL, base: y0, buildingKind: kind, mallLevel: level, batchable: true });
   const walls = createMeshBuilder(), glass = createMeshBuilder(), fascia = createMeshBuilder(), fittings = createMeshBuilder();
-  const vacant = kind === 'vacant';
+  const riser = createMeshBuilder(), brass = createMeshBuilder(), sign = createMeshBuilder();
+  const vacant = kind === 'vacant', RISER = 0.5;
   let widest = null;
-  fp.forEach((p, i) => {
+  const fronts = fp.map((p, i) => {
     const q = fp[(i+1) % fp.length], side = outsideOf(p, q, (x, z) => !inC(x, z), 0.6);
     // (a front: the concourse just off it, the unit itself just the other side)
-    if (side && inC(side.out.x, side.out.z) && side.len > 0.8) {
-      wallQuad(vacant ? walls : glass, p, q, y0, top - 1.1); // (a vacant unit's boarded up)
+    return side && inC(side.out.x, side.out.z) && side.len > 0.8 ? side : null;
+  });
+  fp.forEach((p, i) => {
+    const q = fp[(i+1) % fp.length], side = fronts[i];
+    if (side) {
+      // a shopfront: a tiled stallriser, glass above it in brass frames, and the fascia over, with its sign board
+      const ux = (q.x - p.x)/side.len, uz = (q.z - p.z)/side.len, F = frameOf(side.m, ux, uz), out = Math.sign(F.uv({ x: side.m.x + side.n.x, z: side.m.z + side.n.z }).v);
+      if (vacant) wallQuad(walls, p, q, y0, top - 1.1); // (boarded up)
+      else {
+        wallQuad(riser, p, q, y0, y0 + RISER);
+        wallQuad(glass, p, q, y0 + RISER, top - 1.1);
+        frameBox(brass, F, 0, out*0.03, side.len/2, 0.04, y0 + RISER - 0.04, y0 + RISER + 0.04);
+        frameBox(brass, F, 0, out*0.03, side.len/2, 0.04, top - 1.14, top - 1.06);
+        const bays = Math.max(1, Math.round(side.len/2.2));
+        for (let k = 1; k < bays; k++) frameBox(brass, F, -side.len/2 + k*side.len/bays, out*0.03, 0.035, 0.04, y0 + RISER, top - 1.1);
+      }
       wallQuad(walls, p, q, top - 1.1, y0 + MALL_LEVEL);
-      const F = frameOf(side.m, (q.x - p.x)/side.len, (q.z - p.z)/side.len), v = F.uv({ x: side.m.x + side.n.x, z: side.m.z + side.n.z }).v;
-      frameBox(fascia, F, 0, Math.sign(v)*0.08, side.len/2 - 0.1, 0.1, top - 1.0, top - 0.2);
-      if (!widest || side.len > widest.len) widest = { ...side, F, out: Math.sign(v) };
+      frameBox(fascia, F, 0, out*0.08, side.len/2 - 0.1, 0.1, top - 1.0, top - 0.2);
+      if (!vacant && side.len > 2.5) frameBox(sign, F, 0, out*0.19, Math.min(side.len*0.32, 2.8), 0.02, top - 0.85, top - 0.35);
+      if (!widest || side.len > widest.len) widest = { ...side, F, out };
+      // a pier where the front meets a party wall (see the piers in generateMallContent)
+      [[p, fronts[(i + fp.length - 1) % fp.length], 1], [q, fronts[(i+1) % fp.length], -1]].forEach(([c, neighbour, into]) => {
+        if (!neighbour) piers.push({ x: c.x, z: c.z, dx: ux*into, dz: uz*into, n: side.n, y0, top });
+      });
     } else if (dist(p, q) > 1e-3) wallQuad(walls, p, q, y0, y0 + MALL_LEVEL);
   });
   const path = [toClipperPath(fp)];
@@ -463,6 +523,9 @@ function makeUnit(fp, inC, y0, kind, rng, level) {
     meshOf(built(walls), plain(vacant ? 0xdad6cc : wallColor, { emissive: vacant ? 0x000000 : wallColor, emissiveIntensity: 0.12 }), 'Building'),
     meshOf(built(fascia), plain(colours[Math.floor(rng()*colours.length)], { roughness: 0.45 }), 'Building'),
     meshOf(built(fittings), plain([0x6b5a4a, 0xdedad2, 0x2f3338, 0xb9a27e][Math.floor(rng()*4)], { roughness: 0.6 }), 'Building'),
+    meshOf(built(riser), plain(rng() < 0.5 ? theme.inlay : theme.accent, { roughness: 0.35 }), 'Building'),
+    meshOf(built(brass), plain(theme.rail, { roughness: 0.3, metalness: 0.7 }), 'Building'),
+    meshOf(built(sign), plain(0xfffdf6, { roughness: 0.4, emissive: 0xfffdf6, emissiveIntensity: 0.35 }), 'Building'),
     meshOf(built(glass), glassMaterial(), 'Building', false),
   ].forEach(m => m && group.add(m));
   return group;
@@ -518,7 +581,8 @@ function wedge(p0, p1, a0, a1, R) {
 // ---------------------------------------------------------- the mall
 export function generateMallContent(zone, poly, cutouts, blockers) {
   const s = zone.settings;
-  const ground = makeFlatZoneMesh(poly, s.mallFloorColor ?? 0xd8d2c6, Y_ZONE_GROUND, 'ZoneGround', null, cutouts);
+  const theme = MALL_THEMES[(s.mallTheme > 0 ? s.mallTheme - 1 : (s.seed >>> 0)) % MALL_THEMES.length];
+  const ground = makeFlatZoneMesh(poly, 0xffffff, Y_ZONE_GROUND, 'ZoneGround', mat => { mat.roughness = 0.22; mat.metalness = 0.04; applyMarble(mat, theme); }, cutouts);
   if (ground) zone.buildingsGroup.add(ground);
   zone.doorSetback = 0;
   // the mall's outline: the zone less the roads and paths through it (the biggest piece, if they cut it in several), a
@@ -615,6 +679,7 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
   const segs = segmentsOf(spine), W = Math.max(5, s.mallShopWidth ?? 10), R = spine.halfWidth*1.6 + CW + 10;
   const band = minus(within(outlinePath, insetPolygonExact(outline, UNIT_GAP).map(toClipperPath)), C);
   let claimed = [], index = 0;
+  const piers = [];
   segs.forEach(seg => [1, -1].forEach(side => {
     const n = Math.max(1, Math.round(seg.len/W)), P = t => ({ x: seg.a.x + (seg.b.x - seg.a.x)*t/n, z: seg.a.z + (seg.b.z - seg.a.z)*t/n });
     const cutAt = k => k === 0 ? seg.cut.a[side] : k === n ? seg.cut.b[side] : seg.ang + side*Math.PI/2;
@@ -633,7 +698,7 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
           // each unit on its own stream, as in a town, so one slider never reshuffles the rest
           const rng = mulberry32(((s.seed>>>0) ^ Math.imul(index+1, 0x9E3779B1) ^ Math.imul(pi+1, 0x85EBCA6B) ^ Math.imul(level+1, 0xC2B2AE35)) >>> 0);
           const kind = !front || (level > 0 && !gallery) ? 'vacant' : kindOf(rng, s);
-          zone.buildingsGroup.add(makeUnit(fp, inC, level*MALL_LEVEL, kind, rng, level));
+          zone.buildingsGroup.add(makeUnit(fp, inC, level*MALL_LEVEL, kind, rng, level, theme, piers));
         }
       });
     }
@@ -644,7 +709,11 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
   shell.name = 'MallShell';
   shell.userData.batchable = true;
   const walls = createMeshBuilder(), trim = createMeshBuilder(), glass = createMeshBuilder(), frame = createMeshBuilder(), roof = createMeshBuilder();
-  const bars = [];
+  const stripe = createMeshBuilder(), pierMain = createMeshBuilder(), pierInlay = createMeshBuilder(), columns = createMeshBuilder();
+  const deckFloor = createMeshBuilder(), deckUnder = createMeshBuilder(), rails = createMeshBuilder(), steel = createMeshBuilder();
+  const planters = createMeshBuilder(), soil = createMeshBuilder(), leaves = createMeshBuilder(), trunks = createMeshBuilder();
+  const flowers = theme.flowers.map(() => createMeshBuilder());
+  const bars = [], railBars = [];
   const EH = Math.min(4, CW - 0.5), entrances = spine.nodes.filter(n => n.entrance).map(n => n.entrance);
   const doorway = p => entrances.some(E => { const dx = p.x - E.x, dz = p.z - E.z; return Math.abs(dx*E.dx + dz*E.dz) < 2.5 && Math.abs(-dx*E.dz + dz*E.dx) < EH; });
   outline.forEach((p, i) => {
@@ -653,8 +722,10 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
     const flush = (t0, t1, door) => {
       if (t1 - t0 < 1e-6) return;
       const a = { x: p.x + (q.x - p.x)*t0, z: p.z + (q.z - p.z)*t0 }, b = { x: p.x + (q.x - p.x)*t1, z: p.z + (q.z - p.z)*t1 };
-      if (door) { wallQuad(glass, a, b, 0, DOOR_H); wallQuad(walls, a, b, DOOR_H, HW - 0.6); }
-      else wallQuad(walls, a, b, 0, HW - 0.6);
+      if (door) { wallQuad(glass, a, b, 0, DOOR_H); wallQuad(walls, a, b, DOOR_H, HW - 1.1); }
+      else wallQuad(walls, a, b, 0, HW - 1.1);
+      wallQuad(stripe, a, b, HW - 1.1, HW - 0.85); // (a stripe of the inlay's colour under the band)
+      wallQuad(walls, a, b, HW - 0.85, HW - 0.6);
       wallQuad(trim, a, b, HW - 0.6, HW);
     };
     for (let k = 0; k < steps; k++) {
@@ -711,21 +782,24 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
     };
     [1, -1].forEach(side => lanes.push([...ends(na, true), ...offsetLine(base, side*lv), ...ends(nb, false)]));
   });
-  // and round the food court, just in front of the shops facing it: in arcs between where the lanes cross it, each
-  // lane given a point there for the arcs to meet it at
-  const foodCourt = courts.find(c => c.food);
-  if (foodCourt) {
-    const rr = foodCourt.r - 1.1, crossings = [];
-    lanes.forEach(lane => {
+  // and round every court, just in front of the shops facing it: in arcs between where the lanes cross it, each lane
+  // given a point there for the arcs to meet it at. A court with a fountain in the middle (any but the food court, if
+  // there's room) keeps its lanes to the ring; in the food court they carry on in among the tables to its middle.
+  courts.forEach(c => { if (!c.food && c.r - 4 >= 2.2) c.fountain = Math.min(3.4, c.r - 4); });
+  const rings = [];
+  courts.forEach(c => {
+    const rr = c.r - 1.1, crossings = [];
+    lanes.forEach((lane, li) => {
       for (let i = 0; i + 1 < lane.length; i++) {
-        const a = lane[i], b = lane[i+1], da = dist(a, foodCourt) - rr, db = dist(b, foodCourt) - rr;
+        const a = lane[i], b = lane[i+1], da = dist(a, c) - rr, db = dist(b, c) - rr;
         if ((da < 0) === (db < 0)) continue;
         // (where along a→b it's rr out, by bisection)
         let lo = 0, hi = 1;
-        for (let k = 0; k < 30; k++) { const m = (lo + hi)/2, p = { x: a.x + (b.x - a.x)*m, z: a.z + (b.z - a.z)*m }; if ((dist(p, foodCourt) - rr < 0) === (da < 0)) lo = m; else hi = m; }
+        for (let k = 0; k < 30; k++) { const m = (lo + hi)/2, p = { x: a.x + (b.x - a.x)*m, z: a.z + (b.z - a.z)*m }; if ((dist(p, c) - rr < 0) === (da < 0)) lo = m; else hi = m; }
         const p = { x: a.x + (b.x - a.x)*lo, z: a.z + (b.z - a.z)*lo };
         lane.splice(i + 1, 0, p);
-        crossings.push({ p, ang: Math.atan2(p.z - foodCourt.z, p.x - foodCourt.x) });
+        if (c.fountain) lanes[li] = da < 0 ? lane.slice(i + 1) : lane.slice(0, i + 2);
+        crossings.push({ p, ang: Math.atan2(p.z - c.z, p.x - c.x) });
         break;
       }
     });
@@ -735,11 +809,12 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
       let span = b.ang - a.ang;
       if (span <= 0) span += Math.PI*2;
       const n = Math.max(2, Math.ceil(span*rr/3)), arc = [a.p];
-      for (let k = 1; k < n; k++) arc.push({ x: foodCourt.x + Math.cos(a.ang + span*k/n)*rr, z: foodCourt.z + Math.sin(a.ang + span*k/n)*rr });
+      for (let k = 1; k < n; k++) arc.push({ x: c.x + Math.cos(a.ang + span*k/n)*rr, z: c.z + Math.sin(a.ang + span*k/n)*rr });
       arc.push(b.p);
-      if (arc.every(p => inOutline(p.x, p.z))) lanes.push(arc);
+      if (arc.every(p => inOutline(p.x, p.z))) rings.push(arc);
     });
-  }
+  });
+  lanes.push(...rings);
   zone.walkGaps = lanes;
   const nearLane = (p, pad) => lanes.some(l => distToLine(p, l) < pad);
 
@@ -759,7 +834,7 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
         const across = new THREE.Vector3(-F.dz, 0, F.dx), up = new THREE.Vector3().crossVectors(across, along);
         const truss = new THREE.BoxGeometry(Math.hypot(L, MALL_LEVEL) + 0.6, 0.6, ESCALATOR_W);
         truss.applyMatrix4(new THREE.Matrix4().makeBasis(along, up, across));
-        bars.push(truss.translate((top.x + foot.x)/2, (top.y + foot.y)/2 - 0.32, (top.z + foot.z)/2));
+        steel.addGeometry(truss.translate((top.x + foot.x)/2, (top.y + foot.y)/2 - 0.32, (top.z + foot.z)/2), 0, 0, 0);
         [-1, 1].forEach(sv => {
           const a = F.at(uTop, v + sv*hw), c = F.at(uFoot, v + sv*hw);
           glass.addQuad({ ...a, y: deckTop }, { ...c, y: Y_ZONE_GROUND }, { ...c, y: Y_ZONE_GROUND + 0.95 }, { ...a, y: deckTop + 0.95 }, { x: -F.dz, y: 0, z: F.dx });
@@ -772,16 +847,16 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
       });
     });
     const deck = union(deck0, bridgeRects), inDeck = createRegionTester(deck), onLanding = createRegionTester(escalators), inUpperC = createRegionTester(upperC);
-    tops(frame, deck, deckTop);
-    tops(frame, deck, deckBottom, true);
+    tops(deckFloor, deck, deckTop);
+    tops(deckUnder, deck, deckBottom, true);
     edgesOf(deck).forEach(([p, q]) => {
-      wallQuad(frame, p, q, deckBottom, deckTop);
+      wallQuad(trim, p, q, deckBottom, deckTop);
       // a balustrade wherever the deck's edge looks out over the void or the open concourse (not onto a shopfront, nor
       // off the top of an escalator)
       const o = outsideOf(p, q, inDeck, 0.3);
       if (!o || !inUpperC(o.out.x, o.out.z) && !inC(o.out.x, o.out.z) || onLanding(o.out.x, o.out.z)) return;
       wallQuad(glass, p, q, deckTop, deckTop + 1.05);
-      bars.push(bar({ ...p, y: deckTop + 1.1 }, { ...q, y: deckTop + 1.1 }, 0.07));
+      railBars.push(bar({ ...p, y: deckTop + 1.1 }, { ...q, y: deckTop + 1.1 }, 0.08));
     });
     // columns just back from the void's edge, every 9 m or so, clear of the lanes
     edgesOf(voidPaths).forEach(([p, q]) => {
@@ -790,7 +865,10 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
       for (let t = 4.5; t < o.len; t += 9) {
         const c = { x: p.x + (q.x - p.x)*t/o.len + o.n.x*0.35, z: p.z + (q.z - p.z)*t/o.len + o.n.z*0.35 };
         if (!inDeck(c.x, c.z) || nearLane(c, 1.1) || onLanding(c.x, c.z)) continue;
-        frameBox(trim, frameOf(c, (q.x - p.x)/o.len, (q.z - p.z)/o.len), 0, 0, 0.25, 0.25, 0, deckBottom);
+        // (round, in the theme's colour, on a white base and under a flared white capital)
+        columns.addGeometry(new THREE.CylinderGeometry(0.26, 0.26, deckBottom - 0.7, 16), c.x, 0.35 + (deckBottom - 0.7)/2, c.z);
+        pierMain.addGeometry(new THREE.CylinderGeometry(0.36, 0.38, 0.35, 16), c.x, 0.175, c.z);
+        pierMain.addGeometry(new THREE.CylinderGeometry(0.46, 0.27, 0.35, 16), c.x, deckBottom - 0.175, c.z);
       }
     });
 
@@ -838,6 +916,109 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
   }
   zone.mallNav = nets;
 
+  // ---- the piers between the shops: thick, standing proud of the fronts, on a plinth in the accent colour with a stripe
+  // of the inlay's up the face, a capital at the fascia and a cornice at the ceiling (one to a corner, however many units
+  // share it)
+  const pierAt = new Set();
+  piers.forEach(pr => {
+    const key = Math.round(pr.x*3) + ',' + Math.round(pr.z*3) + ',' + pr.y0;
+    if (pierAt.has(key)) return;
+    pierAt.add(key);
+    const F = frameOf(pr, pr.dx, pr.dz), out = Math.sign(F.uv({ x: pr.x + pr.n.x, z: pr.z + pr.n.z }).v) || 1;
+    const box = (b, hu, v0, v1, y0, y1) => frameBox(b, F, 0, out*(v0 + v1)/2, hu, (v1 - v0)/2, y0, y1);
+    box(trim, 0.62, -0.1, 0.6, pr.y0, pr.y0 + 0.35);               // plinth
+    box(pierMain, 0.5, -0.1, 0.45, pr.y0 + 0.35, pr.top);          // shaft
+    box(pierInlay, 0.13, 0.44, 0.49, pr.y0 + 0.75, pr.top - 1.5);  // stripe
+    box(trim, 0.6, -0.1, 0.57, pr.top - 1.32, pr.top - 1.1);       // capital
+    box(pierMain, 0.64, -0.1, 0.62, pr.top - 0.08, pr.top + 0.12); // cornice
+  });
+
+  // ---- planters and pools down the middle of the concourse, clear of the lanes and the escalators: flower beds, every
+  // other one with a palm, and every third a long pool with jets; and a fountain in every court but the food court, with
+  // palms in pots round it
+  const deco = mulberry32((s.seed>>>0) ^ 0x90FA11);
+  const flower = (u, v, F, y) => { const p = F.at(u, v); flowers[Math.floor(deco()*flowers.length)].addGeometry(new THREE.IcosahedronGeometry(0.09 + deco()*0.05, 0), p.x, y, p.z); };
+  const rod = (a, b, r0, r1) => {
+    const d = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z), len = d.length();
+    const geo = new THREE.CylinderGeometry(r1, r0, len, 8);
+    geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+    return geo.translate((a.x + b.x)/2, (a.y + b.y)/2, (a.z + b.z)/2);
+  };
+  const palm = (c, base) => {
+    const h = 3.3 + deco()*1.4, lean = deco()*0.5, la = deco()*Math.PI*2, top = { x: c.x + Math.cos(la)*lean, y: base + h, z: c.z + Math.sin(la)*lean };
+    const at = t => ({ x: c.x + (top.x - c.x)*t*t, y: base + h*t, z: c.z + (top.z - c.z)*t*t }); // (bending more towards the top)
+    for (let i = 0; i < 7; i++) trunks.addGeometry(rod(at(i/7), at((i+1)/7), 0.2 - i*0.012, 0.15 - i*0.01), 0, 0, 0);
+    const fronds = 8 + Math.floor(deco()*4);
+    for (let j = 0; j < fronds; j++) {
+      const frond = new THREE.BoxGeometry(0.45, 0.03, 2.3).translate(0, 0, 1.15);
+      frond.rotateX(0.25 + deco()*0.45).rotateY(j/fronds*Math.PI*2 + deco()*0.3);
+      leaves.addGeometry(frond, top.x, top.y, top.z);
+    }
+  };
+  const planter = (F, hu, hv, withPalm) => {
+    frameBox(planters, F, 0, 0, hu, hv, Y_ZONE_GROUND, Y_ZONE_GROUND + 0.5);
+    frameBox(trim, F, 0, 0, hu + 0.07, hv + 0.07, Y_ZONE_GROUND + 0.5, Y_ZONE_GROUND + 0.6);
+    frameBox(soil, F, 0, 0, hu - 0.08, hv - 0.08, Y_ZONE_GROUND + 0.6, Y_ZONE_GROUND + 0.64);
+    for (let u = -hu + 0.5; u <= hu - 0.5 + 1e-6; u += 0.9) {
+      const p = F.at(u, (deco() - 0.5)*hv*0.6);
+      leaves.addGeometry(new THREE.IcosahedronGeometry(0.34 + deco()*0.12, 1).scale(1, 0.7, 1), p.x, Y_ZONE_GROUND + 0.82, p.z);
+    }
+    for (let k = 0; k < Math.round(hu*hv*9); k++) flower((deco()*2 - 1)*(hu - 0.2), (deco()*2 - 1)*(hv - 0.15), F, Y_ZONE_GROUND + 0.72 + deco()*0.3);
+    if (withPalm) palm(F.at(0, 0), Y_ZONE_GROUND + 0.64);
+  };
+  const water = (shore, geo) => {
+    const mat = new THREE.MeshStandardMaterial({ color: App.WATER_COLOR, roughness: 1 });
+    App.applyWaterShader(mat, shore, [], 0);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = 'MallWater'; mesh.receiveShadow = true;
+    zone.buildingsGroup.add(mesh);
+  };
+  const jet = (p, top, pool, reach) => {
+    const spray = makeFountainSpray(new THREE.Vector3(p.x, top, p.z), pool, reach);
+    spray.userData.sharedGeometry = false; spray.userData.sharedMaterial = false; // (its own: freed with the mall)
+    zone.buildingsGroup.add(spray);
+  };
+  const pool = (F, hu, hv) => {
+    const y0 = Y_ZONE_GROUND, rim = 0.28, H = 0.55;
+    [[0, hv - rim/2, hu, rim/2], [0, -hv + rim/2, hu, rim/2], [hu - rim/2, 0, rim/2, hv - rim], [-hu + rim/2, 0, rim/2, hv - rim]]
+      .forEach(([u, v, a, b]) => { frameBox(planters, F, u, v, a, b, y0, y0 + H); frameBox(trim, F, u, v, a + 0.04, b + 0.04, y0 + H, y0 + H + 0.08); });
+    const iu = hu - rim, iv = hv - rim, corners = [F.at(-iu, -iv), F.at(iu, -iv), F.at(iu, iv), F.at(-iu, iv)];
+    frameBox(pierInlay, F, 0, 0, iu, iv, y0, y0 + 0.05);
+    const b = createMeshBuilder();
+    b.addQuad(...corners.map(p => ({ x: p.x, y: y0 + H - 0.12, z: p.z })), { x: 0, y: 1, z: 0 });
+    water(corners.map((p, i) => { const q = corners[(i+1) % 4]; return [p.x, p.z, q.x, q.z]; }), b.build());
+    const jets = Math.max(1, Math.round(hu/1.6));
+    for (let k = 0; k < jets; k++) {
+      const u = -iu + (k + 0.5)*2*iu/jets, p = F.at(u, 0);
+      steel.addGeometry(new THREE.CylinderGeometry(0.05, 0.08, 0.3, 8), p.x, y0 + H - 0.05, p.z);
+      jet(p, y0 + 1.5, y0 + H - 0.12, Math.min(0.6, iv - 0.1));
+    }
+  };
+  const bedW = Math.min(1.8, 2*(lv - 0.9) - 1.2);
+  if (bedW >= 0.8) spine.edges.forEach((e, ei) => {
+    const len = lengthOf(e.pts), na = spine.byId.get(e.a), nb = spine.byId.get(e.b), from = na.entrance ? CW + 1 : 0;
+    const busy = bridges.filter(b => b.edge === ei).map(b => b.d + from), reserve = BH + L + 2.5;
+    let k = Math.floor(deco()*3);
+    for (let t = (na.entrance ? CW + 12 : 7); t < len - (nb.entrance ? CW + 12 : 7) + 1e-6; t += 12) {
+      const at = pointAlong(e.pts, t), hu = 2.6, F = frameOf(at, at.dx, at.dz), ends = [F.at(-hu - 0.3, 0), F.at(hu + 0.3, 0)];
+      if (nearCourt(at, 3) || busy.some(d => Math.abs(d - t) < reserve)) continue;
+      if (!ends.every(p => inC(p.x, p.z)) || [at, ...ends].some(p => nearLane(p, bedW/2 + 0.8))) continue;
+      const which = k++ % 3;
+      if (which === 2) pool(F, hu, bedW/2 + 0.2); else planter(F, hu, bedW/2, which === 0);
+    }
+  });
+  courts.forEach(c => {
+    if (!c.fountain) return;
+    zone.buildingsGroup.add(buildFountain({ x: c.x, z: c.z }, c.fountain, Y_ZONE_GROUND));
+    for (let k = 0; k < 4; k++) {
+      const a = Math.PI/4 + k*Math.PI/2, p = { x: c.x + Math.cos(a)*(c.fountain + 1.5), z: c.z + Math.sin(a)*(c.fountain + 1.5) };
+      if (nearLane(p, 1.2) || !inC(p.x, p.z)) continue;
+      pierMain.addGeometry(new THREE.CylinderGeometry(0.5, 0.36, 0.6, 14), p.x, Y_ZONE_GROUND + 0.3, p.z);
+      soil.addGeometry(new THREE.CylinderGeometry(0.44, 0.44, 0.04, 14), p.x, Y_ZONE_GROUND + 0.6, p.z);
+      palm(p, Y_ZONE_GROUND + 0.6);
+    }
+  });
+
   // ---- the food court: kiosks round its edge between the branches coming into it, and tables and chairs in the middle
   const food = courts.find(c => c.food);
   zone.foodCourt = null;
@@ -870,11 +1051,20 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
         obstacles.push({ x: at.x, z: at.z, r: 2.3 });
       }
     });
+    // palms in big pots about the middle
+    for (let k = 0; k < 4; k++) {
+      const a = Math.PI/4 + k*Math.PI/2, p = { x: food.x + Math.cos(a)*inner*0.5, z: food.z + Math.sin(a)*inner*0.5 };
+      if (nearLane(p, 1.6) || inner < 6) continue;
+      pierMain.addGeometry(new THREE.CylinderGeometry(0.6, 0.42, 0.7, 14), p.x, Y_ZONE_GROUND + 0.35, p.z);
+      soil.addGeometry(new THREE.CylinderGeometry(0.54, 0.54, 0.04, 14), p.x, Y_ZONE_GROUND + 0.7, p.z);
+      palm(p, Y_ZONE_GROUND + 0.7);
+      obstacles.push({ x: p.x, z: p.z, r: 0.9 });
+    }
     // round tables in rows, four chairs each, clear of the lanes and the middle where they meet
     const step = 3.4;
     for (let x = -inner; x <= inner; x += step) for (let z = -inner; z <= inner; z += step) {
       const t = { x: food.x + x + (Math.round(z/step) % 2 ? step/2 : 0), z: food.z + z };
-      if (dist(t, food) > inner - 1.2 || nearLane(t, 2) || dist(t, food) < 2.5 || !inOutline(t.x, t.z)) continue;
+      if (dist(t, food) > inner - 1.2 || nearLane(t, 2) || dist(t, food) < 2.5 || !inOutline(t.x, t.z) || obstacles.some(o => dist(t, o) < o.r + 1.2)) continue;
       const top = new THREE.CylinderGeometry(0.55, 0.55, 0.05, 16), stem = new THREE.CylinderGeometry(0.06, 0.06, TABLE_TOP, 6);
       tabletops.addGeometry(top, t.x, Y_ZONE_GROUND + TABLE_TOP, t.z);
       furniture.addGeometry(stem, t.x, Y_ZONE_GROUND + TABLE_TOP/2, t.z);
@@ -898,11 +1088,25 @@ export function generateMallContent(zone, poly, cutouts, blockers) {
   }
 
   if (bars.length) frame.addGeometry(mergeGeometryList(bars), 0, 0, 0);
+  if (railBars.length) rails.addGeometry(mergeGeometryList(railBars), 0, 0, 0);
   [
-    meshOf(built(walls), plain(s.mallWallColor ?? 0xd9d2c5, { roughness: 0.9 }), 'Building'),
-    meshOf(built(trim), plain(s.mallAccentColor ?? 0x2f6f8f, { roughness: 0.5 }), 'Building'),
-    meshOf(built(roof), plain(0x8a8d90, { roughness: 0.95 }), 'Building'),
-    meshOf(built(frame), plain(FRAME, { roughness: 0.5, metalness: 0.4 }), 'Building'),
+    meshOf(built(walls), plain(theme.walls, { roughness: 0.9 }), 'Building'),
+    meshOf(built(trim), plain(theme.accent, { roughness: 0.45 }), 'Building'),
+    meshOf(built(stripe), plain(theme.inlay, { roughness: 0.45 }), 'Building'),
+    meshOf(built(roof), plain(0x9aa3a6, { roughness: 0.95 }), 'Building'),
+    meshOf(built(frame), plain(theme.frame, { roughness: 0.4, metalness: 0.3 }), 'Building'),
+    meshOf(built(pierMain), plain(theme.pier, { roughness: 0.4 }), 'Building'),
+    meshOf(built(pierInlay), plain(theme.inlay, { roughness: 0.35 }), 'Building'),
+    meshOf(built(columns), plain(theme.column, { roughness: 0.35 }), 'Building'),
+    meshOf(built(deckFloor), marble(theme), 'Building'),
+    meshOf(built(deckUnder), plain(0xfbf8f2, { roughness: 0.8 }), 'Building'),
+    meshOf(built(rails), plain(theme.rail, { roughness: 0.25, metalness: 0.75 }), 'Building'),
+    meshOf(built(steel), plain(0xd3d8de, { roughness: 0.3, metalness: 0.6 }), 'Building'),
+    meshOf(built(planters), plain(theme.column, { roughness: 0.4 }), 'MallPlanter'),
+    meshOf(built(soil), plain(0x4a3524, { roughness: 1 }), 'MallPlanter'),
+    meshOf(built(leaves), plain(0x3f9b4a, { roughness: 0.8 }), 'MallPlanter'),
+    meshOf(built(trunks), plain(0x8a6a45, { roughness: 0.9 }), 'MallPlanter'),
+    ...flowers.map((b, i) => meshOf(built(b), plain(theme.flowers[i], { roughness: 0.6, emissive: theme.flowers[i], emissiveIntensity: 0.12 }), 'MallPlanter')),
     meshOf(built(glass), glassMaterial(), 'MallGlass', false),
   ].forEach(m => m && shell.add(m));
   zone.buildingsGroup.add(shell);

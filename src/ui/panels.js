@@ -8,6 +8,7 @@ import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, i
 import { networkKindOf, pathTypeOf, currentPathType, PATH_TYPES, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
+import { MALL_THEMES } from '../zones/mall.js';
 import { subdivideZone, subdivideZonesFrom, subdivideZonesFromIndex, moveZone } from '../zones/cutouts.js';
 import { refreshHighlights } from '../water/bridges.js';
 import { IS_TOUCH } from '../core/device.js';
@@ -574,6 +575,8 @@ function renderDetails() {
         <input type="range" id="ds-mallshopwidth" min="6" max="24" step="1" value="${s.mallShopWidth!=null?s.mallShopWidth:10}"></div>
       ${toggleHtml('ds-mallupper', 'Upper floor', s.mallUpper!==false)}
       ${toggleHtml('ds-mallfoodcourt', 'Food court', s.mallFoodCourt!==false)}
+      <div class="slider-row"><div class="row"><label>Colours</label><span class="val" id="dv-malltheme">${s.mallTheme>0 ? MALL_THEMES[s.mallTheme-1].name : 'By seed'}</span></div>
+        <input type="range" id="ds-malltheme" min="0" max="${MALL_THEMES.length}" step="1" value="${s.mallTheme||0}"></div>
       <div class="slider-row"><div class="row"><label>Clothes shops</label><span class="val" id="dv-mallclothes">${(s.mallClothes!=null?s.mallClothes:0.55).toFixed(2)}</span></div>
         <input type="range" id="ds-mallclothes" min="0" max="1" step="0.05" value="${s.mallClothes!=null?s.mallClothes:0.55}"></div>
       <div class="slider-row"><div class="row"><label>Salons</label><span class="val" id="dv-mallsalons">${(s.mallSalons!=null?s.mallSalons:0.25).toFixed(2)}</span></div>
@@ -705,6 +708,11 @@ function renderDetails() {
       wireNumber('ds-mallshopwidth', 'dv-mallshopwidth', 'mallShopWidth');
       wireToggle('ds-mallupper', 'mallUpper');
       wireToggle('ds-mallfoodcourt', 'mallFoodCourt');
+      document.getElementById('ds-malltheme').addEventListener('input', e => {
+        s.mallTheme = parseInt(e.target.value, 10);
+        document.getElementById('dv-malltheme').textContent = s.mallTheme>0 ? MALL_THEMES[s.mallTheme-1].name : 'By seed';
+        subdivideZone(zone);
+      });
       wireNumber('ds-mallclothes', 'dv-mallclothes', 'mallClothes', 2);
       wireNumber('ds-mallsalons', 'dv-mallsalons', 'mallSalons', 2);
       wireNumber('ds-mallpubs', 'dv-mallpubs', 'mallPubs', 2);
