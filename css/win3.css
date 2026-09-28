@@ -427,3 +427,12 @@ html.win3 .pc-effects { margin-top:0; }
 html.win3 .pc-rel-friends, html.win3 .pc-rel-enemies { outline:1px solid var(--w3-frame); }
 html.win3 .pc-said-list { background:var(--w3-window); box-shadow:inset 1px 1px 0 var(--w3-shadow); }
 html.win3 #person-card .pc-effect { font-size:16px; line-height:20px; }
+html.win3 :is(#person-card, #person-card-2) .pc-effect.pc-effect-emoji { font-size:13px; line-height:16px; }
+html.win3 :is(#person-card, #person-card-2) .pc-pocket { font-size:22px; }
+html.win3 :is(#person-card, #person-card-2) .pc-pocket.pc-pocket-empty { font-size:13px; }
+html.win3 .pc-pocket { border-radius:0; border-color:var(--w3-frame); background:var(--w3-window); box-shadow:inset 1px 1px 0 var(--w3-shadow); }
+html.win3 .pc-pocket:not(.pc-pocket-empty):hover { outline:1px solid var(--w3-text); outline-offset:-3px; }
+html.win3 .gift-info { border-color:var(--w3-frame); background:var(--w3-window); box-shadow:inset 1px 1px 0 var(--w3-shadow); }
+html.win3 .w3-window .gift-pick { aspect-ratio:1; padding:0; margin:0; width:auto; font-size:20px; line-height:1; display:flex; align-items:center; justify-content:center; }
+html.win3 .w3-window .gift-pick.on { outline:1px dotted var(--w3-text); outline-offset:-4px; }
+html.win3 .w3-window .gift-lists { max-height:50vh; overflow-y:auto; }

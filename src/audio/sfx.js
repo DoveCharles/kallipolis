@@ -56,10 +56,14 @@ const SOUNDS = {
     [.35, .1, 200, .08, .03, .1, 4, 1, 25, , , , , 0, , , , .6, , , -2500],
   ],
   // someone coming into or going out of the room the camera's in (see leaveRoom in life/people/peopleActivities.js): a
-  // door swung shut, a low wooden thud with the latch clicking home over it
+  // door swung open, a low wooden thud with the latch clicking over it
   door: [
     [.8, .05, 70, 0, .02, .22, 0, 1.5, -6, , , , , .5, , , , .6, .08, , -700],
     [.3, .05, 1600, 0, .004, .03, 1, 2, , , , , , .4, , , , .5, , , 2000],
+  ],
+  // the same door shut again: just a little click of the latch going home
+  latch: [
+    [.18, .05, 1900, 0, .003, .02, 1, 2, , , , , , .4, , , , .5, , , 2200],
   ],
   // a changing room's curtain drawn across or back (see drawCurtain in buildings/interior.js): a swish of cloth, the
   // rings rattling along the rail over it
@@ -75,7 +79,7 @@ const SOUNDS = {
 // how near something has to be for each sound to be heard at full volume, falling away past it (REF_DISTANCE if not here)
 // which sound level each is heard at (see LEVEL_KINDS): the rest go by the master level alone
 const KIND_OF = { punch: 'peds', whoosh: 'peds', curtain: 'peds', snip: 'peds', crash: 'traffic', thump: 'traffic', thunder: 'ambience' };
-const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5, curtain: 4, snip: 3 };
+const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5, latch: 4, curtain: 4, snip: 3 };
 // for the little sounds of people that'd otherwise be heard from right across town (a fight in every park): how far off
 // they're heard at all, how fast they fade past their REACH, and how fast they're muffled (see muffler)
 const NEAR_ONLY = { punch: { hear: 40, rolloff: 2.5, muffle: 1.4 }, whoosh: { hear: 25, rolloff: 2.5, muffle: 1.4 } };

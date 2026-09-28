@@ -20,7 +20,7 @@ const mapTools = document.getElementById('map-touch-tools');
 const drive = document.getElementById('touch-drive');
 const stick = document.getElementById('touch-stick'), knob = document.getElementById('touch-stick-knob');
 const runBtn = document.getElementById('touch-run'), brakeBtn = document.getElementById('touch-brake');
-const punchBtn = document.getElementById('touch-punch');
+const punchBtn = document.getElementById('touch-punch'), useBtn = document.getElementById('touch-use');
 
 // ============================================================ the panel as a bottom sheet
 // Only on a narrow screen: a tablet held either way has room for the panel where it always was. It starts open, because a
@@ -114,6 +114,14 @@ punchBtn.addEventListener('pointerdown', (e) => {
   App.punchFromPossession?.();
 });
 ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => punchBtn.addEventListener(ev, () => punchBtn.classList.remove('on')));
+// Use stands in for E: talk to whoever's in front, or go into (or out of) the building (see peopleTracking.js)
+useBtn.addEventListener('pointerdown', (e) => {
+  if (!IS_TOUCH) return;
+  e.preventDefault(); e.stopPropagation();
+  useBtn.classList.add('on');
+  App.useFromPossession?.();
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => useBtn.addEventListener(ev, () => useBtn.classList.remove('on')));
 
 // The controls are up for exactly as long as something's being walked, driven or flown about, which is exactly as long as
 // the note across the top of the view is (src/life/possession.js) — so that's what says when to show them. On a device
@@ -124,7 +132,7 @@ function syncDrive() {
   if (!on && !drive.hidden) releaseStick();
   drive.hidden = !on;
   brakeBtn.hidden = !App.isDriving?.() && !App.isFlying?.(); // (it slows an aircraft down as it brakes a car)
-  punchBtn.hidden = !App.isPossessing?.(); // (there's nobody to punch from a car)
+  punchBtn.hidden = useBtn.hidden = !App.isPossessing?.(); // (there's nobody to punch from a car)
 }
 new MutationObserver(syncDrive).observe(possessHint, { attributes: true, attributeFilter: ['hidden'] });
 

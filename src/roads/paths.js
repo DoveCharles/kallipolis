@@ -152,17 +152,16 @@ const WALKWAY_COLOR_FRAGMENT = `
     vec2 p = vec2(uWalkRotation.x*w.x + uWalkRotation.y*w.y, uWalkRotation.x*w.y - uWalkRotation.y*w.x)/uWalkScale;
     float edgeDist = 1.0, tint = 1.0, gapLo = 0.03, gapHi = 0.08, gapShade = 0.62;
     if (uWalkPattern == 1) {
-      // wood planks: long boards along x, each row's joints staggered at random, with grain streaking along them
+      // wood planks: long boards along x, each one flat shade, each row's joints staggered at random
       float boardW = 0.3, boardL = 3.0;
       float row = floor(p.y/boardW);
       float u = p.x/boardL + walkHash(vec2(row, 3.7));
       vec2 id = vec2(floor(u), row), f = vec2(fract(u), fract(p.y/boardW));
       edgeDist = min(min(f.x, 1.0-f.x)*boardL, min(f.y, 1.0-f.y)*boardW);
-      float grain = walkNoise(vec2(u*6.0, p.y*40.0) + id*13.0);
-      tint = (0.8 + 0.3*walkHash(id + 5.0))*(0.86 + 0.2*grain);
+      tint = 0.76 + 0.3*walkHash(id + 5.0);
       gapLo = 0.008; gapHi = 0.022; gapShade = 0.4;
     } else if (uWalkPattern == 2) {
-      // cobblestones: a jittered grid of stones (Voronoi cells), rounded off darker toward their edges
+      // cobblestones: a jittered grid of stones (Voronoi cells), each one flat shade, with a crisp gap between
       float size = 0.5;
       vec2 q = p/size, iq = floor(q), fq = fract(q);
       float f1 = 8.0, f2 = 8.0;
@@ -174,8 +173,9 @@ const WALKWAY_COLOR_FRAGMENT = `
         if (d < f1) { f2 = f1; f1 = d; id = cell; } else if (d < f2) { f2 = d; }
       }
       edgeDist = (sqrt(f2) - sqrt(f1))*0.5*size;
-      tint = (0.78 + 0.36*walkHash(id + 7.0))*mix(0.8, 1.0, smoothstep(0.02, 0.14, edgeDist));
-      gapLo = 0.015; gapHi = 0.04; gapShade = 0.45;
+      tint = 0.72 + 0.36*walkHash(id + 7.0);
+      float aa = max(fwidth(edgeDist), 1e-4); // (the gap's edge a pixel wide, not a blend across the stone)
+      gapLo = 0.028 - 0.5*aa; gapHi = 0.028 + 0.5*aa; gapShade = 0.45;
     } else if (uWalkPattern == 3) {
       // square tiles, as on a plaza
       float size = 2.4;

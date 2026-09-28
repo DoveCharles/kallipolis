@@ -36,9 +36,10 @@ import { turnCrawling } from './peopleRoad.js';
 import { drinking, goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './peopleStalls.js';
 import { sway, updateDrunk } from './peopleDrunk.js';
 import { avoidSmells, updateFlies } from './peopleSmell.js';
-import { updateStatusEffects } from '../statuseffects.js';
+import { updateStatusEffects, restackTraits } from '../statuseffects.js';
+import { stockPockets } from '../gifts.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
-import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
+import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, updatePossessedTarget, useFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
 
 // The shapes these modules pass around — Person, NavLine, NavVertex, Hangout, PersonModel, Segment and SegmentHit —
@@ -273,8 +274,9 @@ export function setClip(p, clip) {
 }
 
 // The one-off clips that swing the right hand about, and what someone with a snack in it plays instead: the same with
-// the left hand (see `mirror` in PERSON_CLIPS), their right arm still holding it (WaveLeftBeer…).
-const WITH_HAND_FULL = { Idle2: 'Idle2Left', Wave: 'WaveLeft' };
+// the left hand (see `mirror` in PERSON_CLIPS), their right arm still holding it (WaveLeftBeer…) — or, for Idle3, the
+// same clip with the right arm still holding it (Idle3Beer…).
+const WITH_HAND_FULL = { Idle2: 'Idle2Left', Idle3: 'Idle3', Wave: 'WaveLeft' };
 /**
  * Play an animation through once — or hold its single pose, for the poses (see PERSON_CLIPS).
  * @param {Person} p - the person
@@ -457,7 +459,7 @@ const PERSON_LATER_FIELDS = Object.fromEntries([
   'water', 'waterHere', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
   'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'smellCheck',
   // walked about by hand (peopleTracking.js)
-  'footing', 'onRoad', 'shove', 'touching', 'near', 'walkingSpeed',
+  'footing', 'onRoad', 'shove', 'touching', 'near', 'walkingSpeed', 'chatWith',
 ].map(key => [key, undefined]));
 /**
  * Make a person with their traits and state at their starting values.
@@ -536,8 +538,10 @@ export function refreshTraits(p, i) {
   const isMan = personModel ? personModel.isMan[i] === 1 : null, key = traitsKeyOf(isMan);
   if (p.traitsKey === key) return;
   p.traitsKey = key;
-  const profile = profileOf(p.id, isMan);
-  p.traits = profile.traits;
+  const profile = profileOf(p.id, isMan, p.moodNow);
+  // (who they are, with what's in their pockets and what they're under stacked over it: see life/statuseffects.js)
+  p.baseTraits = profile.traits;
+  restackTraits(p);
   p.height = p.baseHeight*p.traits.size;
   p.age = profile.age;
   p.name = profile.name; // (for their card, and for naming them in the morality notices when they die)
@@ -553,6 +557,7 @@ const VAMPIRE_EYE_TINT = 0.2, VAMPIRE_EYE_COLOR = new THREE.Color(0xffc40c),
    BLAZED_EYE_RED = 0.05, EYE_RED_COLOR = new THREE.Color(0xff0000);
 // Vampires' skin moves 10% of the way to the colour for every 100 years of age, counting from the first (so it starts out 10% grey).
 const VAMPIRE_SKIN_COLOR = new THREE.Color(0xd3d3d3), VAMPIRE_PALE_PER_CENTURY = 0.1;
+const LOOK_BEHIND = 0.8*Math.PI; // how far round (radians either side of ahead) someone they're looking at counts as right behind them
 const BUBBLE_HEIGHT = 2; // how high over their feet (× height, × people size) a speech bubble's tail points (see ui/speech-bubbles.js)
 const BUBBLE_CHAIR_DROP = 0.5, BUBBLE_GROUND_DROP = 0.8; // how much lower (same units) sat on a seat, and sat on the ground
 // Someone on their own may think something (thoughts.txt: see life/speech-text.js) as they fidget with one of
@@ -1043,7 +1048,7 @@ function stepPush(p, dt) {
  * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
  * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
  */
-Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups, followedPerson: () => followed, peopleClock: () => lastPeopleTime });
+Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, useFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups, followedPerson: () => followed, peopleClock: () => lastPeopleTime });
 
 /**
  * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone
@@ -1131,6 +1136,7 @@ export function updatePeople(t) {
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
+    if (!p.pocketsStocked) stockPockets(p, i); // (the sunglasses they came in: see life/gifts.js)
     if (p.blood) updateBlood(p, dt, i);
     p.trainCooldown -= dt;
     p.snackCooldown -= dt;
@@ -1408,7 +1414,11 @@ export function updatePeople(t) {
         p.lookIn -= fdt;
         if (p.lookAt) {
           // talking: at whoever they're talking to, or whoever's talking
-          p.lookTurnTo = Math.max(-LOOK_MAX_TURN, Math.min(LOOK_MAX_TURN, wrapAngle(headingTo(p, p.lookAt) - p.heading)));
+          // (only as far round as a head goes; with them right behind, it stays turned the side it was rather than
+          // swinging across as they cross from one shoulder to the other)
+          let turn = wrapAngle(headingTo(p, p.lookAt) - p.heading);
+          if (Math.abs(turn) > LOOK_BEHIND && turn*p.lookTurn < 0) turn = -turn;
+          p.lookTurnTo = Math.max(-LOOK_MAX_TURN, Math.min(LOOK_MAX_TURN, turn));
           p.lookTiltTo = 0;
         } else if (p.lookIn <= 0) {
           // every so often a glance somewhere else — not so far while walking — or back ahead, the head easing round to it
@@ -1605,5 +1615,6 @@ export function updatePeople(t) {
   if (personModel?.hidden && S.hideOwnHead && possession.index >= 0) personModel.hidden.value = possession.index;
   // or, possessing them, the view from their eyes
   if (possession.index >= 0 && possession.index === followed && people[followed].mode === 'possessed') placePossessedCamera(followed);
+  updatePossessedTarget(); // (and what E would do from there, labelled: see peopleTracking.js)
 }
 

@@ -35,7 +35,7 @@ let lastReaction = -Infinity;
 export const SEEN_TIME = 60; // seconds someone remembers what they saw or felt, for {seen} and {felt} (p.seen / p.felt: see witness, notice and feel in people/people.js)
 const DEATHS = ['killedbycar', 'beatentodeath', 'smited', 'drowned', 'exploded'];
 const SIGHTS = [...DEATHS, 'death', 'punch', 'knockedbycar', 'resurrected', 'waterwalking', 'smelly']; // ('death': any of DEATHS)
-const FEELINGS = ['punched', 'hitbycar', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes'];
+const FEELINGS = ['punched', 'hitbycar', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes', 'gifted', 'cheered'];
 const MOOD_SHOWS = 0.3;       // how far their face (p.emotion, -1 to 1) has to be from neutral for is = sad / happy
 const HURT_BELOW = 0.7;       // share of full health under which they're hurt
 const STATES = { // {is = …}: how the speaker (or other.is: who they're talking to) is right now
@@ -46,6 +46,8 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   happy: person => (person?.emotion ?? 0) > MOOD_SHOWS,
   scared: person => person?.fright?.stage === 'flee' || ((person?.blood ?? 0) > 0 && !person?.traits?.bloodlust),
   hurt: person => !!person?.health && person.health.hp < person.health.max*HURT_BELOW,
+  // (sat down: on a bench, in a circle on the grass, on a seat indoors — as isSeated in people/peopleActivities.js)
+  sitting: person => ((person?.act === 'bench' || person?.act === 'circle') && person.stage === 'sit') || (!!person?.inRoom?.seat && person.inRoom.stage === 'sit'),
 };
 const PLACES = ['park', 'plaza', 'beach', 'roadside', 'path', 'bridge', 'crossing']; // (here.<place>: see placeOf)
 // here.<zone>: standing in a zone of that type (zoneOf); city is the 'buildings' zone

@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { camera, scene, renderer } from '../core/scene.js';
+import { camera, scene, renderer, STENCIL_ROOM_SHADOW } from '../core/scene.js';
 import { S, App } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { footprintBounds } from './footprints.js';
-import { hashNameToNumber, mulberry32 } from '../core/math.js';
+import { hashNameToNumber, mulberry32, pointInPolygon } from '../core/math.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { setCutout } from '../ui/pixelation.js';
 import { cards } from '../ui/entity-card.js';
@@ -245,12 +245,12 @@ box(0.12, 0.05, 0.05, frameMaterial, 0, 1, DOOR_W - 0.1, door);
 let doorOpenUntil = -Infinity;
 /** Swing the room's door open (or keep it open) for someone coming or going through it: it shuts on its own after. */
 export const openRoomDoor = () => { doorOpenUntil = performance.now() + DOOR_HOLD; };
-// each frame: the door eased open or shut, heard as it shuts
+// each frame: the door eased open or shut, heard as it opens and clicking as it shuts
 function updateDoor() {
   const goal = performance.now() < doorOpenUntil ? DOOR_OPEN : 0, was = door.rotation.y;
   if (was === goal) return;
   door.rotation.y = Math.abs(goal - was) < 0.01 ? goal : was + (goal - was)*DOOR_EASE;
-  if (door.rotation.y === 0) playSound('door', room.localToWorld(new THREE.Vector3(-ROOM_W/2, 1, DOOR_Z)));
+  if (was === 0 || door.rotation.y === 0) playSound(was === 0 ? 'door' : 'latch', room.localToWorld(new THREE.Vector3(-ROOM_W/2, 1, DOOR_Z)));
 }
 // ---------------------------------------------------------- what's in it
 // The shell's the same everywhere; what's in it is one of a few layouts, each a group of furniture shown or hidden as a
@@ -709,30 +709,24 @@ async function loadStudent() {
   if (inside && current === LAYOUTS.home) furnish(inside.key);
 }
 modelsLoading.push(loadStudent());
-// Bare floorboards: planks 2.4 m long and 15 cm wide, in rows, their ends staggered and nailed down — which repeats
-// every 2.4 m both ways.
+// Bare floorboards: planks 15 cm wide and about 1.2 m long, each one flat shade, two to a row with the rows' joints
+// staggered — which repeats every 2.4 m both ways. A plank running off one side of the tile carries on from the other,
+// so it's drawn at both, in the one shade.
 const boards = floorTexture(1024, 2.4, (g, rng) => {
   const ROWS = 16, row = 1024/ROWS;
   for (let r = 0; r < ROWS; r++) {
-    const end = Math.floor(rng()*16)*64;
-    for (const x of [end - 1024, end]) {
+    const start = Math.floor(rng()*16)*64, mid = start + (6 + Math.floor(rng()*5))*64;
+    for (const [a, b] of [[start, mid], [mid, start + 1024]]) {
       const shade = 212 + rng()*38;
       g.fillStyle = `rgb(${shade},${shade},${shade})`;
-      g.fillRect(x, r*row, 1024, row);
-      g.strokeStyle = 'rgba(70,50,30,0.06)';                                 // (a little grain along it)
-      g.lineWidth = 2;
-      for (let j = 0; j < 3; j++) {
-        const y = r*row + 10 + rng()*(row - 20), w = (rng() - 0.5)*10;
-        g.beginPath(); g.moveTo(x, y); g.bezierCurveTo(x + 340, y + w, x + 680, y - w, x + 1024, y); g.stroke();
-      }
-      g.fillStyle = 'rgba(40,30,20,0.3)';                                     // nails, at its ends
-      for (const nx of [x + 8, x + 1016]) for (const ny of [r*row + row*0.3, r*row + row*0.7]) g.fillRect(nx - 2, ny - 2, 4, 4);
+      for (const x of [a - 1024, a]) g.fillRect(x, r*row, b - a, row);
       g.fillStyle = 'rgba(40,25,15,0.4)';
-      g.fillRect(x - 1, r*row, 3, row);
+      for (const x of [a - 1024, a, a + 1024]) g.fillRect(x - 1, r*row, 3, row);
     }
     g.fillStyle = 'rgba(40,25,15,0.35)';
     g.fillRect(0, r*row - 1, 1024, 2);
   }
+  g.fillRect(0, 1024 - 1, 1024, 2); // (the other half of the top row's joint, where the tile wraps)
 });
 
 // ---------------------------------------------------------- a mid-century home
@@ -1895,7 +1889,7 @@ async function loadPub() {
   if (inside && current === LAYOUTS.pub) furnishPub(inside.key);
 }
 modelsLoading.push(loadPub());
-modelsLoading.push(loadBarbot(roomLit));
+modelsLoading.push(loadBarbot());
 // Carpet: a lattice of diamonds with a rosette in each and a smaller one where they meet, over a field flecked with
 // wear — in its own colours (the floor's left white), repeating every 0.8 m.
 const carpet = ([field, lattice, rose, fleck]) => floorTexture(512, 0.8, (g, rng) => {
@@ -2985,6 +2979,42 @@ function longestEdgeAngle(fp) {
   return angle;
 }
 
+// The room's the same size whatever it's in, so in a narrow building — a town terrace, built wall to wall — it reaches
+// past the building's own walls into the ones next door, which would show through inside. Any other building whose
+// footprint crosses the room's walls, and stands tall enough to reach its floor, isn't drawn while the room's up (hidden
+// the way the building gone into is, so building-batches.js draws that zone one by one meanwhile; see-through.js leaves
+// alone what's already hidden).
+const NEIGHBOUR_SLACK = 0.05; // (a wall only touching the room's from outside isn't in it)
+function hideNeighbours(group) {
+  const a = ROOM_W/2 + WALL - NEIGHBOUR_SLACK, b = ROOM_D/2 + WALL - NEIGHBOUR_SLACK, reach = Math.hypot(a, b);
+  const local = p => { room.worldToLocal(probe.set(p.x, 0, p.z)); return { x: probe.x, z: probe.z }; };
+  // whether the segment p–q passes through the room's rectangle (Liang–Barsky)
+  const crosses = (p, q) => {
+    let t0 = 0, t1 = 1;
+    const dx = q.x - p.x, dz = q.z - p.z;
+    for (const [d, gap] of [[-dx, p.x + a], [dx, a - p.x], [-dz, p.z + b], [dz, b - p.z]]) {
+      if (d === 0) { if (gap < 0) return false; continue; }
+      const t = gap/d;
+      if (d < 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+      if (t0 > t1) return false;
+    }
+    return true;
+  };
+  const hidden = [], floor = room.position.y, box = new THREE.Box3();
+  S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach(other => {
+    const fp = other.userData.footprint;
+    if (other === group || !fp || fp.length < 3 || !other.visible) return;
+    const { c, r } = footprintBounds(other);
+    if (Math.hypot(c.x - room.position.x, c.z - room.position.z) > r + reach) return; // nowhere near it
+    const pts = fp.map(local);
+    if (!pts.some((p, i) => crosses(p, pts[(i + 1) % pts.length])) && !pointInPolygon({ x: 0, z: 0 }, pts)) return;
+    if (box.setFromObject(other).max.y < floor) return; // all below the room
+    other.visible = false;
+    hidden.push(other);
+  }));
+  return hidden;
+}
+
 // Goes into `group` (a building, as building-card.js follows it, with its key): the room onto its top floor (a warehouse
 // or factory's, or a pub's or a shop's, ground floor), laid out as `kind` of room (one of LAYOUTS: 'home', 'office',
 // 'warehouse', 'factory', 'pub', 'salon' or 'clothes'),
@@ -3011,6 +3041,7 @@ export function enterBuilding(group, key, kind = 'home') {
   room.updateMatrixWorld(true);
   setRoomGlow(true);
   group.visible = false;
+  const neighbours = hideNeighbours(group);
   if (current === LAYOUTS.home) furnish(key);
   else if (current === LAYOUTS.office) furnishOffice(key, glass);
   else if (workshop) furnishIndustrial(key, current.kind);
@@ -3020,7 +3051,7 @@ export function enterBuilding(group, key, kind = 'home') {
 
   visits++;
   resetOfficeAmbience();
-  inside = { group, key, before: {
+  inside = { group, key, neighbours, before: {
     target: controls.goalTarget.clone(), radius: controls.goalRadius, theta: controls.goalTheta, phi: controls.goalPhi,
     minRadius: controls.minRadius, near: camera.near,
   } };
@@ -3043,13 +3074,14 @@ export function enterBuilding(group, key, kind = 'home') {
 // Back out: the building drawn again, the room put away, and the camera eased back to where it was looking from.
 export function leaveBuilding() {
   if (!inside) return;
-  const { group, before } = inside;
+  const { group, neighbours, before } = inside;
   inside = null;
   setIndoors(null);
   tvClickedOn = false;
   cards.forEach(card => card.resetPlace()); // (any dragged about in the room back where they belong)
   stopTV();
   group.visible = true;
+  neighbours.forEach(other => { other.visible = true; });
   room.visible = false;
   setRoomGlow(false);
   controls.locked = false;
@@ -3106,11 +3138,66 @@ function fadeWhatsInTheWay() {
   }
 }
 
+// ---------------------------------------------------------------- furniture shadows
+// Under its own ceiling the room's out of the sun, and the glow and lamps cast no shadows, so furniture stands on the
+// floor as if pasted on. Every piece standing on the floor casts a hard shadow instead: its own meshes drawn again,
+// flattened onto the floor along SHADOW_FALL (straight down, as from lights overhead: each piece's
+// own outline on the floor right under it), in black at SHADOW_DARK. No shadow map, and no light added to the scene (which
+// would recompile every lit material: see "the lamp"). Where two overlap they darken the floor once, not twice — the
+// stencil's STENCIL_ROOM_SHADOW bit marks where one's been drawn. Pieces lower than SHADOW_FLAT (rugs, mats) or not
+// reaching down to the floor (lamps hung from the ceiling, things on the walls) cast none, and they're put back
+// whenever the room's furnished afresh (see updateFurnitureShadows).
+const SHADOW_DARK = 0.35, SHADOW_FLAT = 0.08, SHADOW_OFF_FLOOR = 0.12, SHADOW_Y = 0.012;
+const SHADOW_FALL = new THREE.Vector3(0, -1, 0);
+const flatten = new THREE.Matrix4().set( // (along SHADOW_FALL onto the plane y = SHADOW_Y, in the room's own space)
+  1, -SHADOW_FALL.x/SHADOW_FALL.y, 0, SHADOW_FALL.x/SHADOW_FALL.y*SHADOW_Y,
+  0, 0, 0, SHADOW_Y,
+  0, -SHADOW_FALL.z/SHADOW_FALL.y, 1, SHADOW_FALL.z/SHADOW_FALL.y*SHADOW_Y,
+  0, 0, 0, 1);
+const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: SHADOW_DARK,
+  depthWrite: false, fog: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+  stencilWrite: true, stencilFunc: THREE.NotEqualStencilFunc, stencilRef: STENCIL_ROOM_SHADOW, stencilFuncMask: STENCIL_ROOM_SHADOW,
+  stencilWriteMask: STENCIL_ROOM_SHADOW, stencilZPass: THREE.ReplaceStencilOp });
+const furnitureShadows = new THREE.Group();
+furnitureShadows.name = 'Furniture shadows';
+room.add(furnitureShadows);
+const NOTHING = [];
+let shadowedFor = null, shadowedCount = -1, shadowedFirst = null;
+function updateFurnitureShadows() {
+  const pieces = inside ? (current.furnished ?? current.group).children : NOTHING;
+  if (pieces === shadowedFor && pieces.length === shadowedCount && pieces[0] === shadowedFirst) return;
+  shadowedFor = pieces; shadowedCount = pieces.length; shadowedFirst = pieces[0];
+  furnitureShadows.clear();
+  room.updateMatrixWorld(true);
+  const fromWorld = new THREE.Matrix4().copy(room.matrixWorld).invert();
+  for (const piece of pieces) {
+    if (!piece.visible) continue;
+    const meshes = [], bounds = new THREE.Box3(), part = new THREE.Box3();
+    piece.traverse(o => {
+      if (!o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || !o.visible || o.material?.transparent) return;
+      const inRoom = new THREE.Matrix4().multiplyMatrices(fromWorld, o.matrixWorld);
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      bounds.union(part.copy(o.geometry.boundingBox).applyMatrix4(inRoom));
+      meshes.push([o.geometry, inRoom]);
+    });
+    if (bounds.isEmpty() || bounds.min.y > SHADOW_OFF_FLOOR || bounds.max.y - bounds.min.y < SHADOW_FLAT) continue;
+    for (const [geometry, inRoom] of meshes) {
+      const shadow = new THREE.Mesh(geometry, shadowMaterial);
+      shadow.matrixAutoUpdate = false;
+      shadow.matrix.multiplyMatrices(flatten, inRoom);
+      shadow.frustumCulled = false;
+      shadow.renderOrder = 1;
+      furnitureShadows.add(shadow);
+    }
+  }
+}
+
 const speakerAt = new THREE.Vector3();
 // Each frame: the view eased wider inside a room, and back to its usual angle outside.
 export function updateInteriorCamera() {
   updateTV();
   updateLamp();
+  updateFurnitureShadows();
   updateDoor();
   updateCurtains();
   if (inside && (controls.hug === freeRoom) !== !!S.freeRoomCamera) freeCamera(!!S.freeRoomCamera);
@@ -3165,6 +3252,25 @@ const DOORWAY = new THREE.Vector3(-ROOM_W/2 + 0.3, 0, DOOR_Z), BEYOND = new THRE
 export const roomDoorway = () => room.localToWorld(DOORWAY.clone());
 /** Through the room's door, in the dark beyond it, in the world. */
 export const roomBeyondDoor = () => room.localToWorld(BEYOND.clone());
+
+// Walked about by hand (see "walking into buildings" in life/people/peopleTracking.js): whether a point in the world is
+// somewhere to stand in the room — the walk grid's floor (BODY clear of the walls and furniture), or the doorway's recess
+// out to the dark beyond it — and whether it's through the door and out.
+const probeWalk = new THREE.Vector3();
+export function roomWalkable(x, z) {
+  if (!inside) return false;
+  room.worldToLocal(probeWalk.set(x, room.position.y, z));
+  if (probeWalk.x < -ROOM_W/2 + BODY) return probeWalk.x > -ROOM_W/2 - RECESS && probeWalk.z > doorFrom + BODY && probeWalk.z < doorTo - BODY;
+  const i = Math.floor((probeWalk.x + ROOM_W/2)/CELL), k = Math.floor((probeWalk.z + ROOM_D/2)/CELL);
+  return i >= 0 && k >= 0 && i < GRID_X && k < GRID_Z && walkGrid()[k*GRID_X + i] === 1;
+}
+export function roomThroughDoor(x, z) {
+  if (!inside) return false;
+  room.worldToLocal(probeWalk.set(x, room.position.y, z));
+  return probeWalk.x < -ROOM_W/2 - RECESS + 0.25;
+}
+/** The near plane the room's view uses (see enterBuilding). */
+export const roomNear = () => ROOM_NEAR;
 
 /** Which of the layouts the room's laid out as ('home', 'office', 'warehouse', 'factory', 'pub', 'salon' or 'clothes'), or null if nobody's inside. */
 export const roomKind = () => inside ? current.name : null;

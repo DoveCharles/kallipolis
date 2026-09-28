@@ -10,7 +10,8 @@ import { IS_TOUCH } from '../core/device.js';
 // Either way the mouse looks around — the pointer locked to the view while it does, or dragged, where the browser won't
 // lock it (Esc also frees a locked pointer, which is taken as Esc).
 // - someone (clicking the person card's headshot): the view from their eyes, WASD to walk them about (shift to run), and
-//   a click to swing a fist at whoever's in front of them (people.js lands it)
+//   a click to swing a fist at whoever's in front of them (people.js lands it), and E to talk to whoever that is, or go
+//   into the building they're looking at (buildings solid to them meanwhile: see peopleTracking.js)
 // - a car (clicking the car card's picture): the view from behind it, WASD to drive (shift for a boost, space to brake),
 //   the mouse swinging the camera round it (and back behind, a moment after it's left alone), the wheel to zoom
 // - an aircraft or a bee (clicking its card's picture): the same view from behind, but the keys work a stick rather than a
@@ -58,8 +59,8 @@ export function startPossession(i, heading) {
   possession.pitch = -0.1;
   held.clear();
   showHint(IS_TOUCH ? 'First person' : 'Press <kbd>Esc</kbd> to exit first person',
-    IS_TOUCH ? 'Stick to walk · Run to run · Punch to swing · drag to look'
-              : 'WASD to walk · Shift to run · click to punch · mouse to look');
+    IS_TOUCH ? 'Stick to walk · Run to run · Punch to swing · Use to talk or go in · drag to look'
+              : 'WASD to walk · Shift to run · click to punch · E to talk or go in · mouse to look');
   lockPointer(); // (a click is what lets it lock, and this runs from one)
   return true;
 }
@@ -177,6 +178,7 @@ window.addEventListener('keydown', (e) => {
     releaseControl();
     return;
   }
+  if (key === 'e' && isPossessing()) { if (!e.repeat) App.useFromPossession?.(); e.preventDefault(); return; } // (go in, or talk: see peopleTracking.js)
   if (CONTROL_KEYS.includes(key)) { held.add(key); e.preventDefault(); } // (no scrolling, or pressing a focused button)
 }, true);
 window.addEventListener('keyup', (e) => held.delete(keyName(e)));

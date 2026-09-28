@@ -32,7 +32,9 @@ function showCarCard(i, info, car) {
   // with a capital, and the casing traits reach the name and the rows alike.
   const { traits } = info, seed = hashNameToNumber(info.name || '', 3);
   card.relabel(garbles(traits) ? text => garbled(text, traits, seed) : null);
-  card.show({ ...info, name: cased(info.name, traits),
+  // its type in the title bar (a Police car), and its plate then its number as its name
+  card.setTitle(info.type || info.name);
+  card.show({ ...info, name: cased(info.name, traits), 
     loves: garbledEntry(info.loves, traits, seed), hates: garbledEntry(info.hates, traits, seed) });
   drawCarThumbnail(i);
   card.setFavorite({ key: car, kind: 'Car', follow: () => App.followCar(car) });

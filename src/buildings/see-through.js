@@ -21,6 +21,7 @@ const hidden = [];
 // Each frame, once the camera's been moved: hides whichever buildings it's inside, and shows the ones it's left.
 export function hideBuildingsAroundCamera() {
   showHiddenBuildings();
+  if (App.isPossessing?.()) return; // (walking someone about, buildings are solid to them: nothing to see through)
   const p = camera.position;
   S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach(group => {
     const fp = group.userData.footprint;

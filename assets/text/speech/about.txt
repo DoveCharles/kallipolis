@@ -154,12 +154,15 @@
 #   {felt = bloodsoaked}      just got splashed with blood  {felt = bloodclean}  the last of it's just come off
 #   {felt = haircut}          just had a new haircut at a salon (a new style, maybe a new colour, maybe shaved)
 #   {felt = newclothes}       just came out of a clothes shop's changing room in new clothes
+#   {felt = gifted}           was just given something (the Gift button on their card: see assets/text/gifts.txt)
+#   {felt = cheered}          was just given something that cheered them up out of a sad or angry mood
 # IS: how the speaker is right now (hard limits); other.is for who they're talking to, != for not
 #   {is = drunk}              the drunk trait, or a pint or more in them
 #   {is = bloodlusting}       bloodlusting now
 #   {is = bloody}             any blood on them               {is = hurt}     under 70% health
 #   {is = sad}                looking upset (their face)      {is = happy}    looking happy
 #   {is = scared}             running from something, or blood on them (unless they like it)
+#   {is = sitting}            sat down: on a bench, in a circle, on a seat indoors   {other.is = sitting}  to someone sat
 #   {is != drunk}             sober                           {is = bloody, is = hurt}   both
 #   {other.is = hurt}         talking to someone hurt         {other.is != sad}   to someone not looking upset
 # Seeing or feeling something, people say a line from reactions.txt straight away — once each — before anything else:
@@ -211,7 +214,8 @@
 #   {talk.score = -1}         leans toward a conversation that's going badly (score -3 counts fully)
 # IN A CIRCLE (people sat on the grass): anyone can reply to anyone. When someone joins, one of those sat there who isn't
 # mid-line greets them with a line from greetings.txt (other. is the newcomer; its replies are theirs), at once if
-# nobody's talking, else next turn; the rest look round at them. Someone whose time's up there gets the next turn to
+# nobody's talking, else next turn; the rest look round at them. Whoever's possessed going up to someone (E) greets them
+# the same way (standing, so a circle-only greeting takes {is = sitting}), and they reply — sat down, they stay sat. Someone whose time's up there gets the next turn to
 # say a closer before getting up: {end} and they wave to the rest; {end = bad} and they walk off, rolling the punch chance
 # against everyone still sat there (going for each they rolled, one after another) while each rolls against them.
 # Punches from a conversation gone bad (either kind) don't send bystanders running or joining in: they just see it

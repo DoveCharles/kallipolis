@@ -846,8 +846,8 @@ const SAND_GLSL = `
   // stipple of grain and a scatter of shells and dark pebbles sit on top, and the wet sand steps down in two clean bands toward the water.
   vec3 sandColor(vec2 p, float wetDistance) {
     float px = fwidth(p.x) + fwidth(p.y);
-    // Wind-shaped tones: long wavy bands lying along the ripples (crests run across (0.93, 0.36), as in
-    // applySandShader), built from a bent sine for the rhythm and fBm stretched along the crests to break it up
+    // Wind-shaped tones: long wavy bands lying across (0.93, 0.36), built from a bent sine for the rhythm and fBm
+    // stretched along the crests to break it up
     vec2 wa = vec2(0.93, 0.36);
     vec2 tp = p*4.0; // (the scale of the whole pattern)
     float across = dot(tp, wa), along = dot(tp, vec2(-wa.y, wa.x));
@@ -923,7 +923,7 @@ const GRASS_NOISE_GLSL = `
     return 1.0 - smoothstep(0.35, 1.1, px*freq);
   }
 `;
-// A beach zone's surface: all sand, wet along `wetSegments` (its edges that meet water), with faint wind-blown ripples.
+// A beach zone's surface: all sand, wet along `wetSegments` (its edges that meet water).
 // `allWet` makes it wet all over — for the beach slopes running down into the water.
 export function applySandShader(mat, wetSegments, allWet) {
   const wet = App.segmentUniformArray(wetSegments, GRASS_MAX_BEACH_SEGMENTS);
@@ -955,16 +955,7 @@ export function applySandShader(mat, wetSegments, allWet) {
             if (i >= uWetCount) break;
             wetDistance = min(wetDistance, grassDistToSegment(p, uWetSegments[i].xy, uWetSegments[i].zw));
           }
-          vec3 sand = sandColor(p, wetDistance);
-          // wind ripples drawn as lines: a pale crest with a thin shadow just behind it, bent by broad noise so they
-          // don't read as stripes, broken up so they come and go, and gone toward the (flat, wet) waterline
-          float phase = (p.x*0.9 + p.y*0.35 + grassNoise(p*0.15)*6.0)/6.2832;
-          float s = fract(phase), lw = fwidth(phase);
-          float crest = 1.0 - smoothstep(0.035 - lw, 0.035 + lw, abs(s - 0.5));
-          float shade = 1.0 - smoothstep(0.03 - lw, 0.03 + lw, abs(s - 0.58));
-          float keep = toonStep(0.45, grassNoise(p*0.22 + 7.0)) * smoothstep(1.5, 3.5, wetDistance) * (1.0 - smoothstep(0.04, 0.12, lw));
-          sand *= 1.0 + (0.1*crest - 0.09*shade)*keep;
-          diffuseColor.rgb = sand;
+          diffuseColor.rgb = sandColor(p, wetDistance);
         }
       `)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = sandRoughness;');
@@ -1017,6 +1008,7 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
     shader.uniforms.uBeachWetCount = { value: wetCount!=null ? wetCount : beachCount };
     shader.uniforms.uBeachWidth = { value: App.PARK_BEACH_WIDTH };
     shader.uniforms.uShellGround = { value: mat.userData.grassShells ? 1 : 0 };
+    if (GRASS_TRIANGLES) shader.uniforms.uGrassTriangles = { value: grassTriangleTexture() };
     if (shell) { shader.uniforms.uShellT = { value: shellT }; shader.uniforms.uTime = WATER_TIME; }
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `
@@ -1031,6 +1023,7 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
       .replace('#include <common>', `
         #include <common>
         ${shell ? '#define GRASS_SHELL\n        uniform float uShellT;\n        uniform float uTime;' : ''}
+        ${GRASS_TRIANGLES ? `#define GRASS_TRIANGLES\n        #define GRASS_TRI_TILE ${GRASS_TRI_TILE.toFixed(1)}\n        uniform sampler2D uGrassTriangles;` : ''}
         #define GRASS_MAX_EDGE_POINTS ${GRASS_MAX_EDGE_POINTS}
         #define GRASS_MAX_BEACH ${GRASS_MAX_BEACH_SEGMENTS}
         varying vec3 vGrassWorldPos;
@@ -1176,15 +1169,30 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
           // of a continuous photographic mottle. uGrassNoiseStrength scales how far apart the tones are: 0 is flat.
           float band = toonStep(0.4, nb) + toonStep(0.6, nb);
           float k = 0.11 * uGrassNoiseStrength;
+          #ifdef GRASS_TRIANGLES
+          // Flat turf strewn with little pale triangles like confetti, two tones of lighter green, read from a tile drawn
+          // once (see grassTriangleTexture) rather than worked out here: the tile's mipmaps are what let the triangles
+          // blur smoothly into the shade they'd average to in the distance, instead of sparkling. It's read twice, the
+          // second time turned, shifted and at another size, so the tile's repeat doesn't show.
+          vec3 grassColor = vec3(0.59);
+          {
+            vec2 t0 = wp/GRASS_TRI_TILE;
+            vec2 t1 = mat2(0.766, 0.643, -0.643, 0.766)*wp/(GRASS_TRI_TILE*1.37) + vec2(0.31, 0.57);
+            vec2 cover = min(texture2D(uGrassTriangles, t0).rg + texture2D(uGrassTriangles, t1).rg, 1.0);
+            vec3 lift = 1.0 + cover.r*(vec3(1.5, 1.6, 1.3) - 1.0) + cover.g*(vec3(1.75, 1.85, 1.45) - 1.0);
+            grassColor *= mix(vec3(1.0), lift, clamp(uGrassNoiseStrength, 0.0, 1.5));
+          }
+          #else
           vec3 grassColor = vec3(0.59 + (band - 1.0)*k);
           // cooler hollows, warmer yellower crests
           grassColor *= mix(vec3(1.0), band < 1.0 ? mix(vec3(0.94, 1.0, 1.07), vec3(1.0), band)
                                                   : mix(vec3(1.0), vec3(1.06, 1.02, 0.9), band - 1.0),
                             clamp(uGrassNoiseStrength, 0.0, 1.0));
+          #endif
           #ifdef GRASS_SHELL
           // dark down among the roots, catching the light at the tips — and each blade a touch lighter or darker
           grassColor *= mix(0.93, 1.07, s) * (0.97 + 0.06*grassHash(bcell + 21.1));
-          #else
+          #elif !defined(GRASS_TRIANGLES)
           // a faint grain so the flat tones aren't plastic up close
           grassColor *= 1.0 + grassTufts(wp, px)*0.08*uGrassNoiseStrength;
           // the ground down among the shell grass's roots is as dark as they are (see GRASS_SHELL above)
@@ -1223,7 +1231,7 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
           grassColor *= mix(uZoneEdgeDarken, 1.0, edgeT);
           diffuseColor.rgb *= grassColor;
           // the odd flower, white or yellow, anywhere but the hollows
-          #ifndef GRASS_SHELL
+          #if !defined(GRASS_SHELL) && !defined(GRASS_TRIANGLES)
           {
             float fade = grassDetailFade(px, 16.0) * clamp(uGrassNoiseStrength, 0.0, 1.0);
             vec2 cell = floor(wp/1.8), f = fract(wp/1.8);
@@ -1249,6 +1257,51 @@ export function applyGrassNoiseShader(mat, poly, noiseStrength, beachSegments, w
 // Further off they sink back into the flat ground's pattern. They share the floor's geometry, never cast shadows and
 // are invisible to raycasts, so nothing that picks, lands on or walks the ground knows they're there.
 const GRASS_SHELLS = 3, GRASS_SHELL_HEIGHT = 0.03;
+// Flat turf scattered with pale triangles (see GRASS_TRIANGLES in applyGrassNoiseShader), without the shells; false
+// brings back the toned patches, tufts, flowers and shell grass.
+const GRASS_TRIANGLES = true;
+// The triangles' tile: GRASS_TRI_TILE world units across, drawn once into a canvas the first time a park needs it. Red
+// is where the darker of the two tones lies, green the lighter; the shader turns those into colour. Triangles are
+// thrown down at random but never too near one another, and drawn again across the tile's edges so it wraps unseen.
+const GRASS_TRI_TILE = 8, GRASS_TRI_PX = 1024, GRASS_TRI_COUNT = 220;
+let grassTriTexture = null;
+function grassTriangleTexture() {
+  if (grassTriTexture) return grassTriTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = GRASS_TRI_PX;
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, GRASS_TRI_PX, GRASS_TRI_PX);
+  const rng = mulberry32(0x7a1a9);
+  const perUnit = GRASS_TRI_PX/GRASS_TRI_TILE, placed = [];
+  const minGap = 0.26*perUnit;
+  for (let tries=0; placed.length<GRASS_TRI_COUNT && tries<GRASS_TRI_COUNT*40; tries++) {
+    const x = rng()*GRASS_TRI_PX, y = rng()*GRASS_TRI_PX;
+    const clear = placed.every(p => {
+      let dx = Math.abs(p.x - x), dy = Math.abs(p.y - y);
+      dx = Math.min(dx, GRASS_TRI_PX - dx); dy = Math.min(dy, GRASS_TRI_PX - dy);
+      return dx*dx + dy*dy > minGap*minGap;
+    });
+    if (clear) placed.push({ x, y });
+  }
+  for (const p of placed) {
+    // three corners roughly a third of a turn apart, each pulled in or out a little, so no two are alike
+    const r = (0.045 + 0.035*rng())*perUnit, ang = rng()*Math.PI*2;
+    const corners = [0, 1, 2].map(k => {
+      const a = ang + k*2.094 + (k ? 0.6*(rng() - 0.5) : 0), rr = r*(k ? 0.7 + 0.4*rng() : 1);
+      return [Math.cos(a)*rr, Math.sin(a)*rr];
+    });
+    g.fillStyle = rng() < 0.6 ? '#f00' : '#0f0';
+    for (const ox of [-GRASS_TRI_PX, 0, GRASS_TRI_PX]) for (const oy of [-GRASS_TRI_PX, 0, GRASS_TRI_PX]) {
+      g.beginPath();
+      corners.forEach(([cx, cy], k) => g[k ? 'lineTo' : 'moveTo'](p.x + ox + cx, p.y + oy + cy));
+      g.fill();
+    }
+  }
+  grassTriTexture = new THREE.CanvasTexture(canvas);
+  grassTriTexture.wrapS = grassTriTexture.wrapT = THREE.RepeatWrapping;
+  grassTriTexture.anisotropy = 8;
+  return grassTriTexture;
+}
 function addGrassShells(floor, poly, noiseStrength, beachSegments, wetCount) {
   floor.material.userData.grassShells = true; floor.material.needsUpdate = true;
   const flat = floor.rotation.x !== 0; // (a ShapeGeometry laid down flat: its "up" is local z)
@@ -1399,7 +1452,7 @@ export function generateParkContent(zone, poly, cutouts, blockers) {
   const floor = makeParkMesh(poly, resolveParkTint(zone), resolveGrassNoiseStrength(zone), cutouts, beach, wet.length);
   if (floor) {
     floor.name = 'ParkFloor';
-    addGrassShells(floor, poly, resolveGrassNoiseStrength(zone), beach, wet.length);
+    if (!GRASS_TRIANGLES) addGrassShells(floor, poly, resolveGrassNoiseStrength(zone), beach, wet.length);
     zone.buildingsGroup.add(floor);
   }
 

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { babble, nextSyllable } from '../audio/voices.js';
+import { TOON_RAMP } from '../core/toon.js';
 
 // ============================================================ the bar bot
 // Every pub has a bar bot (assets/models/Barbot.glb) behind its bar, between the back bar and the counter, and it never
@@ -42,7 +43,7 @@ const MOUTH_SNAP = [0.05, 0.14]; // s, how long its mouth stays open or shut, ta
 const HEAD_UP = 0.2;        // m above its Head bone: its face, where its voice comes from and it's looked at
 // its voice: the peds' babble (a pitch, where its formants sit, how sharp they ring: see audio/voices.js), made a robot's —
 // flat notes on a square wave, buzzing at `robot` Hz
-const ROBOT_VOICE = { pitch: 150, formant: 0.95, sharpness: 7, melody: 0, robot: 55 };
+const ROBOT_VOICE = { pitch: 240, formant: 1.1, sharpness: 7, melody: 0, robot: 90 };
 
 /**
  * The bar bot as the people talking to it see it (see "talking to the bar bot" in life/people/peopleActivities.js): where
@@ -64,10 +65,10 @@ const headAt = new THREE.Vector3(), towards = new THREE.Vector3();
 const yawUndo = new THREE.Quaternion(), headTurn = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0);
 
 /**
- * Load the model, lit with the room's `lit` (see roomLit in interior.js) but for its screen and glass.
- * @param {function(THREE.Material): THREE.Material} lit
+ * Load the model, toon-shaded like the people (and lit like them indoors: the room's lamps and glow, see interior.js)
+ * but for its screen and glass.
  */
-export async function loadBarbot(lit) {
+export async function loadBarbot() {
   let gltf;
   try {
     gltf = await new GLTFLoader().loadAsync(BARBOT_MODEL_URL);
@@ -77,7 +78,7 @@ export async function loadBarbot(lit) {
   }
   const rig = gltf.scene;
   let head = null, face = null, zzz = null;
-  const shaped = [], screens = [], meshes = [];
+  const shaped = [], screens = [], meshes = [], toon = new Map();
   rig.traverse(o => {
     if (o.isBone && o.name === 'Head') head = o;
     if (o.name === 'Face' && !o.isBone) face = o;
@@ -88,7 +89,11 @@ export async function loadBarbot(lit) {
     o.castShadow = o.receiveShadow = !o.material.transparent;
     const m = o.material;
     if (m.name === 'Face' || m.name === 'FaceBacklight') screens.push(o);
-    else if (!m.transparent && !m.userData.lit) { lit(m); m.userData.lit = true; }
+    else if (!m.transparent) {
+      if (!toon.has(m)) toon.set(m, Object.assign(new THREE.MeshToonMaterial({ name: m.name, color: m.color, map: m.map, gradientMap: TOON_RAMP, side: THREE.DoubleSide, flatShading: true }),
+        { defines: { ROOM_LAMP: '', ROOM_GLOW: '' } }));
+      o.material = toon.get(m);
+    }
     if (o.morphTargetDictionary && SHAPES.some(s => s in o.morphTargetDictionary)) shaped.push(o);
   });
   // (each screen's awake glow, and its asleep one: the backlight's dimmed, the Face material's ink lit up to the

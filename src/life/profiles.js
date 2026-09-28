@@ -80,13 +80,16 @@ export function onProfilesLoaded(listener) { listeners.push(listener); }
 // Someone's name, age, mood, loves and hates (lists; from people/loves.txt and hates.txt), and the traits those give them — a man's name from the boy names and
 // a woman's from the girl names (either, for the cuboid people, who have no sex). `id` is their person id (see peopleIdSeq
 // in people.js), not their place in the crowd — so the same id always comes back as the same person, wherever they're standing.
-export function profileOf(id, isMan) {
+// `moodNow`, if given, is the text of a mood they've come round to since (a gift that cheered them up: see cheerierMood
+// and life/gifts.js), worn in place of the one they were picked with, its traits with it.
+export function profileOf(id, isMan, moodNow = null) {
   const rng = mulberry32(48271 + id*7919);
   const pick = list => list[Math.floor(rng()*list.length)];
   const man = isMan == null ? rng() < 0.5 : isMan;
   const name = pick(lists[man ? 'boy names' : 'girl names']);
   let age = 18 + Math.floor(rng()*65);
-  const mood = pick(lists.moods);
+  const picked = pick(lists.moods); // (picked either way, so nothing after it changes)
+  const mood = (moodNow != null && lists.moods.find(entry => entry.text === moodNow)) || picked;
   const firstLove = pick(lists.loves);
 
   // (gives up after 50 tries, leaving no first hate, if nothing in the list goes with what they enjoy)
@@ -144,4 +147,21 @@ export function profileOf(id, isMan) {
   return { name: fullname, age, mood: mood.text, loves: loveTexts, hates: hateTexts,
     lovesSaid: lovesFilled.map(filled => filled.said), hatesSaid: hatesFilled.map(filled => filled.said),
     lovedWords: lovesFilled.flatMap(filled => filled.words), hatedWords: hatesFilled.flatMap(filled => filled.words), lovesTier: loveTiers, hatesTier: hateTiers, lovesMods: loveMods, hatesMods: hateMods, traits: traits};
+}
+
+// ---- cheering up
+// How bright a mood is: its mood and happy eyes, less its sad and angry ones (😭 -2, 😐 0, 😁 1.8) — read off its traits.
+const CHEER_BELOW = 0; // a mood darker than this is one a cheering gift lifts (😢, 😠, 🙄, 😑…)
+const CHEERED_FROM = 0.6; // and it's lifted to one at least this bright (🙂, 😊, 😄…)
+export function moodBrightness(entry) {
+  const traits = Object.fromEntries(entry?.traits ?? []);
+  return (traits.mood ?? 0) + (traits.happy ?? 0) - (traits.sad ?? 0) - (traits.angry ?? 0);
+}
+// The mood someone showing `moodText` comes round to on being cheered up: one of the bright moods in moods.txt (those it
+// picks from anyway: never one only a trait gives, with choiceweight 0), or null if theirs isn't a sad or angry one.
+export function cheerierMood(moodText, rng = Math.random) {
+  const now = lists.moods.find(entry => entry.text === moodText);
+  if (!now || moodBrightness(now) >= CHEER_BELOW) return null;
+  const bright = lists.moods.filter(entry => moodBrightness(entry) >= CHEERED_FROM);
+  return bright.length ? bright[Math.floor(rng()*bright.length)] : null;
 }

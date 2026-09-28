@@ -1,6 +1,7 @@
 bees.txt
 buildings.txt
 cars.txt
+gifts.txt
 morality.txt
 pigeons.txt
 planes.txt
