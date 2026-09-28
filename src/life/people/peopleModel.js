@@ -1640,7 +1640,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     if (into) {
       let at = into.members.findIndex(m => m > i);
       if (at < 0) at = into.members.length;
-      const n = into.members.length, own = [mesh.instanceMatrix.array, anim.array, look.array, eyes.array];
+      const n = into.members.length, own = [mesh.instanceMatrix.array, anim.array, look.array, eyes.array, pupil.array]; // (as instanceArrays)
       instanceArrays(into).forEach(([array, size], a) => {
         array.copyWithin((at + 1)*size, at*size, n*size);
         array.set(own[a].subarray(i*size, (i + 1)*size), at*size); // (theirs, from the body's)
@@ -1706,6 +1706,26 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     }
     // (and any outfit that goes with those over them, as in assignAppearance)
     dressOutfit(i, id, mulberry32(seed + 4), mulberry32(seed + 5));
+  }
+  // ---- worn gifts (see life/gifts.js): a style by its name in any layer (the glasses' Sunglasses), whether slot `i` wears
+  // it, putting it on them (handing back the name of what it replaced in that layer, null for nothing, or undefined if it
+  // couldn't go on), and taking it off again, back into `before` (a name in the same layer, or null for nothing)
+  const styleNamed = name => {
+    for (const layer of wornLayers) { const k = layer.styles.findIndex(style => style.name === name); if (k >= 0) return { layer, k }; }
+    return null;
+  };
+  const wears = (i, name) => { const found = styleNamed(name); return !!found && found.layer.of[i] === found.k; };
+  function putOn(i, name) {
+    const found = styleNamed(name);
+    if (!found) return undefined;
+    const was = found.layer.of[i], before = was >= 0 ? found.layer.styles[was].name : null;
+    return wear(found.layer, i, found.k) ? before : undefined;
+  }
+  function takeOff(i, name, before = null) {
+    const found = styleNamed(name);
+    if (!found || found.layer.of[i] !== found.k) return;
+    const back = before == null ? -1 : found.layer.styles.findIndex(style => style.name === before);
+    if (!wear(found.layer, i, back)) wear(found.layer, i, -1);
   }
   // whoever's already in the crowd when the model finishes loading has been walking round as a cuboid till now: fill
   // in their looks. Everyone born after this just gets them as they arrive (see updatePeople in people.js).
@@ -1782,7 +1802,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   personCulling.personTall.value = box.max.y - box.min.y;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, wears, putOn, takeOff,
     headBone: headBone ?? 0, headPivot, chestBone, hands, unitsPerMetre, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

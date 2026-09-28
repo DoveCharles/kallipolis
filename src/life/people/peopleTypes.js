@@ -85,6 +85,10 @@
  *   stacked over them (see life/statuseffects.js)
  * @property {object} [baseTraits] - those traits as they were picked, before any status moved them: what p.traits is put
  *   back to when the last of them runs out
+ * @property {object[]} [pockets] - the keepsakes they carry, each one of GIFTS (see life/gifts.js): their traits are
+ *   stacked over p.baseTraits with the statuses'
+ * @property {string} [moodNow] - a mood they've been cheered up to by a gift, worn in place of the one they were picked
+ *   with (see cheerierMood in life/profiles.js)
  * @property {Array<{key: string, since: number, until: number, seconds: number}>} [status] - the status effects they're
  *   under just now, each with the effect's key and the running people time it started at and ends at
  * @property {string} [name] - the name their profile gave them

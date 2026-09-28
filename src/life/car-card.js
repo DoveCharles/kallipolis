@@ -31,7 +31,10 @@ function showCarCard(i, info, car) {
   // ui/garble.js), differently from another with the same trait since its own name seeds it.
   const { traits } = info, seed = hashNameToNumber(info.name || '', 3);
   card.relabel(garbles(traits) ? text => garbled(text, traits, seed) : null);
-  card.show({ ...info, loves: garbled(info.loves, traits, seed), hates: garbled(info.hates, traits, seed) });
+  // its type in the title bar (a Police car), and its plate then its number as its name
+  card.setTitle(info.type || info.name);
+  card.show({ ...info, name: info.plate ? [info.plate, '#' + info.number] : info.name,
+    loves: garbled(info.loves, traits, seed), hates: garbled(info.hates, traits, seed) });
   drawCarThumbnail(i);
   card.setFavorite({ key: car, kind: 'Car', follow: () => App.followCar(car) });
   card.bindHealth(car, 'car');

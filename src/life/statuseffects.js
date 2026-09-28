@@ -3,7 +3,7 @@
 // painkiller taking the edge off, a pint wearing off, a state of mind. Every effect there is lives in EFFECTS, with its
 // icon (assets/icons/status/<icon>.png), the traits it moves, and how long it lasts by default; the things that hand one
 // out name it and their own length in STATUS_SOURCES below — a coffee's sip, a pill swallowed, a bite of something that
-// didn't agree with them. The person's card shows one icon per status they're under, on the right of their picture, and a
+// didn't agree with them. The person's card shows one icon per status they're under, on the left of their picture, and a
 // click on one opens what it's doing to them, in the same little menu a love's or hate's modifiers open in (see setEffects
 // in ui/entity-card.js).
 //
@@ -30,7 +30,8 @@ import { formatTime } from '../core/math.js';
  * can't say on their own.
  *
  * Keys are lower case, and are what a source names: see STATUS_SOURCES, and addStatus below.
- * @type {Object<string, {name: string, icon: string, seconds: number, traits: Object, blurb?: string}>}
+ * A gift eaten or drunk (life/gifts.js) adds its own here as it loads, with an `emoji` shown in place of the icon.
+ * @type {Object<string, {name: string, icon?: string, emoji?: string, seconds: number, traits: Object, blurb?: string}>}
  */
 export const EFFECTS = {
   caffeinated: {
@@ -77,7 +78,9 @@ export const statusesOf = p => (p?.status ?? []).map(entry => EFFECTS[entry.key]
 function traitList(effects) {
   const byTrait = new Map();
   for (const effect of effects) {
-    for (const [key, value] of Object.entries(effect?.traits ?? {})) {
+    // (an effect's traits are { trait: value }; a gift's are the [trait, value] pairs its line was read into — see gifts.js)
+    const pairs = Array.isArray(effect?.traits) ? effect.traits : Object.entries(effect?.traits ?? {});
+    for (const [key, value] of pairs) {
       if (!TRAITS[key] || !Number.isFinite(value)) continue; // (a mistyped trait in an effect is ignored, as it is in a file)
       if (!byTrait.has(key)) byTrait.set(key, []);
       byTrait.get(key).push(value);
@@ -113,11 +116,17 @@ function stackTrait(key, values, baseTraits) {
   return value;
 }
 
-/** Put someone's own traits and every status they're under together into p.traits (see applyStatusTraits). */
-function restack(p) {
+/**
+ * Put someone's own traits, the keepsakes in their pockets and every status they're under together into p.traits (see
+ * applyStatusTraits): a keepsake stacks just as a status does, for as long as they carry it (see life/gifts.js).
+ * @param {Person} p - the person
+ * @returns {void}
+ */
+export function restackTraits(p) {
   p.baseTraits ??= { ...p.traits };
-  p.traits = applyStatusTraits(p.baseTraits, statusesOf(p));
+  p.traits = applyStatusTraits(p.baseTraits, [...(p.pockets ?? []), ...statusesOf(p)]);
 }
+const restack = restackTraits;
 
 /**
  * Put a status effect on someone. Its length is the source's own where it gives one (`seconds`), else the effect's

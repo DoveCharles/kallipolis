@@ -103,6 +103,23 @@ How do I look? {felt = newclothes}
 > Very... you. {weight = 0.5}
 They'd better take returns. {felt = newclothes, mood = -1}
 Right, wearing it out. {felt = newclothes}
+
+Where did this come from? {felt = gifted, shock}
+For me? {felt = gifted, happy}
+I didn't get you anything... {felt = gifted, thought}
+Is this a trick? {felt = gifted, patience = -1}
+Just what I always wanted. {felt = gifted, mood}
+Oh. Great. Just what I always wanted. {felt = gifted, mood = -1, thought}
+Someone up there likes me. {felt = gifted, nosy, thought}
+I'm keeping it. {felt = gifted}
+
+You've made my day. {felt = cheered}
+Oh, that's cheered me right up! {felt = cheered, happy}
+I needed that. {felt = cheered, thought}
+Things are looking up. {felt = cheered, mood}
+I forgot how to smile for a second there. {felt = cheered, sad, thought}
+Fine. FINE. I'm happy now. {felt = cheered, aggression}
+
 Oof, that last one's gone to my head. {felt = drunk}
 I feel amazing. {felt = drunk, happy}
 The world's gone all wobbly. {felt = drunk, thought}

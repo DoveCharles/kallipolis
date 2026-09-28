@@ -10,7 +10,7 @@ import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 
 // ============================================================ following a building
 // As for a car or a carriage: a click on a building in World mode keeps the view on it, with a card at the bottom right
-// naming it (what its kind is called, and its own number — see buildingNumber), saying what it's like (from
+// naming it (what its kind is called in the title bar, then its own name and number — see buildingNumber), saying what it's like (from
 // assets/text/buildings.txt, by its kind — see building-types.js) and who's inside
 // (see "going indoors" in people.js), until a click elsewhere, a pan, leaving World mode, or its zone being rebuilt lets it go.
 // The card itself is the shared one in ui/entity-card.js. No Smite button, and nothing to be behind the wheel of.
@@ -69,9 +69,10 @@ function followBuilding(picked) {
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(CAMERA_MIN_RADIUS, Math.min(600, radius*2.8));
   const info = buildingTypeOf(kind, number);
-  // what it is, then its own name on the line under (see buildingTitle), if it has one
-  const name = buildingName(kind, number, picked.group.userData.height ?? 0) + ' #' + number, title = buildingTitle(kind, number);
-  card.show({ ...info, name: title ? [name, title] : name });
+  // what it is in the title bar; its own name (see buildingTitle), if it has one, then its number, as the card's name
+  const title = buildingTitle(kind, number);
+  card.setTitle(buildingName(kind, number, picked.group.userData.height ?? 0));
+  card.show({ ...info, name: title ? [title, '#' + number] : '#' + number });
   setBuildingCardInhabitants([]);
   drawThumbnail(thumbnailOf(picked.group, box, center, radius));
   card.setFavorite({ key: 'building:' + key, kind: 'Building', follow: () => {

@@ -154,6 +154,8 @@
 #   {felt = bloodsoaked}      just got splashed with blood  {felt = bloodclean}  the last of it's just come off
 #   {felt = haircut}          just had a new haircut at a salon (a new style, maybe a new colour, maybe shaved)
 #   {felt = newclothes}       just came out of a clothes shop's changing room in new clothes
+#   {felt = gifted}           was just given something (the Gift button on their card: see assets/text/gifts.txt)
+#   {felt = cheered}          was just given something that cheered them up out of a sad or angry mood
 # IS: how the speaker is right now (hard limits); other.is for who they're talking to, != for not
 #   {is = drunk}              the drunk trait, or a pint or more in them
 #   {is = bloodlusting}       bloodlusting now
