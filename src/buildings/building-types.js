@@ -1,5 +1,8 @@
 import { loadTypeText } from '../core/type-text.js';
 import { TEXT_ROWS } from '../ui/entity-card.js';
+import { capitalised } from '../ui/garble.js';
+import { hashNameToNumber, mulberry32 } from '../core/math.js';
+import { pickWord, speechReady } from '../life/speech-text.js';
 import { roomLayoutOf } from './footprints.js';
 
 // ============================================================ what buildings are like
@@ -37,16 +40,50 @@ export const buildingEnterable = kind => buildings.says(kind, 'enterable');
 // in footprints.js).
 export const buildingTypeOf = (kind, number = 1) => buildings.of(kind, number);
 
-// What a building's called: its kind's name from buildings.txt — except a city block's, which is named for what's inside
-// it so you know before going in: a home or an office (see roomLayoutOf), and a tower once it's TOWER_HEIGHT tall, about
-// eight storeys (see FLOOR_HEIGHT in interior.js). `height` is the building's own (its userData.height).
-// A block's landmark is named the same way: it's a city block like the rest, so being the tall fancy one shouldn't leave
-// it the only building on the street that won't say whether it's flats or offices. Its card text still comes from
+// What a building's called, wherever something names it (its card's Name row, the label on whoever's going into it,
+// see buildingOwnName and buildingKindName): its own name if it has one, else what it is. A city block's kind name is
+// decided here; every other kind's is its name in buildings.txt.
+export const buildingName = (kind, number, height) => kind !== 'buildings' && kind !== 'landmark'
+  ? buildingKindName(kind, number, height) : buildingOwnName(kind, number) || buildingKindName(kind, number, height);
+
+// What a building's card says it is, in its title bar (as a pub's says "Pub", see buildingTitle for its own name): a
+// city block by what's inside it, so you know before going in, and a tower once it's TOWER_HEIGHT tall, about eight
+// storeys (see FLOOR_HEIGHT in interior.js). `height` is the building's own (its userData.height). This is what
+// buildingName gives every kind of building but an office, which is named for its company instead.
+// A block's landmark is described the same way: it's a city block like the rest, so being the tall fancy one shouldn't
+// leave it the only building on the street that won't say whether it's flats or offices. Its card text still comes from
 // [landmark] in buildings.txt; only the name is by what's inside.
 const TOWER_HEIGHT = 28;
-export function buildingName(kind, number, height) {
+export function buildingKindName(kind, number, height) {
   if (kind !== 'buildings' && kind !== 'landmark') return buildingTypeOf(kind, number).name;
-  return (roomLayoutOf(kind, number) === 'office' ? 'Office ' : 'Residential ') + (height >= TOWER_HEIGHT ? 'Tower' : 'Building');
+  const office = roomLayoutOf(kind, number) === 'office', tower = height >= TOWER_HEIGHT;
+  return (office ? 'Office ' : 'Residential ') + (tower ? 'Tower' : 'Building');
+}
+// A building's own name, where it has one, for its card's Name row and for whoever's naming it: one of its kind's
+// `title` lines in buildings.txt (a pub's "The Red Lion", picked by its number the way the card's other lines are), or,
+// for an office, its company's (see officeName) — every office is somebody's, tower or not, the card's own title bar
+// being what says which of the two an office is (see buildingKindName). '' for the rest: a home is only ever what it is.
+export function buildingOwnName(kind, number) {
+  const title = buildingTitle(kind, number);
+  if (title) return title;
+  if (kind !== 'buildings' && kind !== 'landmark') return '';
+  return roomLayoutOf(kind, number) === 'office' ? officeName(number) ?? '' : '';
+}
+// An office is its company's, so it's named from the speech files' own office names: one pick from [offices]
+// (assets/text/speech/words/locations/buildingsPlaceNames/offices.txt — a [corpTitle] [corpType] pair like "Epic
+// Systems", or a made-up word like "splort!"), as that file's line reads, so what a company is called is the data's
+// business and not this file's: only its first letter is raised for it (a company's a name, see capitalised in
+// ui/garble.js), the rest left exactly as written. Seeded from the building's own number, so the same office is the
+// same company every time it's looked at, named on its card or walked into (see buildingLabel in people.js), and kept
+// once made rather than picked again per look. Null until the speech files have loaded, and if [offices] names nothing:
+// the office's Name row is just its number till then.
+const companyNames = new Map(); // building number → the company's name for it ('' once the files have said there is none)
+function officeName(number) {
+  if (companyNames.has(number)) return companyNames.get(number) || null;
+  if (!speechReady()) return null;
+  const name = capitalised(pickWord('offices', mulberry32(hashNameToNumber('office:' + number))) ?? '');
+  companyNames.set(number, name);
+  return name || null;
 }
 // A building's own name, as a pub's "The Red Lion": one of its kind's `title` lines in buildings.txt, picked by its number
 // the way the card's other lines are; '' for a kind that has none (a house).

@@ -252,4 +252,12 @@
 #   a closer; a low score never ends it badly by itself (only {end = bad} lines do).
 # - [both.clash] in a reply is between the replier and who they're answering: something the replier loves and the
 #   other hates. Hold it with #1 to keep the first speaker's word.
+# - speech/words/locations/buildingsPlaceNames/ holds name parts nothing ever says: [offices] names the city's offices —
+#   each one is a company, "Epic Systems" or "Splort!", which its card carries on its Name row (see buildingOwnName and
+#   officeName in src/buildings/building-types.js), picked with the building's own number as the seed, so an office
+#   always has the same one. Its own line puts [corpTitle] and [corpType] together out of the words in those files, so
+#   their {weight}s, [placeholders] and nesting work as everywhere else; the name is said as the line reads but for its
+#   first letter, which is raised ("splort!" reads "Splort!", "red Smith" reads "Red Smith" — any capital further in has
+#   to be written in the file). One of corpTitle's lines names nothing as the files stand: there's no fruits.txt — the
+#   list is [fruit].
 

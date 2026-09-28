@@ -28,6 +28,7 @@ Anyway, how are you?
 > [dismissal] {aggression}
 
 It's going to rain later, apparently. {world.weather = rain, weight = 0.5}
+
 Do you think the trains are running today?
 > The trains are always running you fucking dipshit. {aggression}
 > Probably? {evil = -1}

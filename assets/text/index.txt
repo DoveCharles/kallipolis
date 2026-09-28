@@ -53,10 +53,15 @@ speech/words/living/animals.txt
 speech/words/living/livestock.txt
 speech/words/living/pets.txt
 speech/words/living/roeanimals.txt
+speech/words/locations/locations.txt
+speech/words/locations/buildingsPlaceNames/corpTitle.txt
+speech/words/locations/buildingsPlaceNames/corpType.txt
+speech/words/locations/buildingsPlaceNames/corpoPt1.txt
+speech/words/locations/buildingsPlaceNames/corpoPt2.txt
+speech/words/locations/buildingsPlaceNames/offices.txt
 speech/words/things/belongings.txt
 speech/words/things/bodyparts.txt
 speech/words/things/objects.txt
-speech/words/things/physical.txt
 speech/words/things/utensils.txt
 speech/words/things/food/chillis.txt
 speech/words/things/food/foods.txt

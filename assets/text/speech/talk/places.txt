@@ -111,8 +111,8 @@ Thrown a coin in the fountain recently? {here.plaza}
 >>>>>> Just regular [concepts#2]?
 >>>>>>> Uh, yeah. In theory.
 >>>> Whatever man, I'll just save my money.
->> I wanted to find my [belongings#1].
->>> [belongings#1: a]? I think I saw one of those in the fountain...
+>>> I wanted to find my [belongings#1].
+>>>> [belongings#1: a]? I think I saw one of those in the fountain...
 > Wait, are there coins in there? Like, right now? {evil, outlaw}
 >> No! My wishes, my wishes! Leave them alone! {score = -1}
 >>> Which coins are yours? I'll pick around them. {talk.score > 1}

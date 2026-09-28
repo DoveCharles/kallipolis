@@ -602,6 +602,36 @@ export const pickGreeting = (person, other) => ready ? (speakingTo = other, sayF
 export const pickShout = (person, category) => ready ? (speakingTo = null, sayFrom(categoryItems(category), person)) : null;
 
 /**
+ * A word or phrase from a category, for naming something that isn't a person — an office tower's company, from
+ * [corpTitle] and [corpType] (see officeName in buildings/building-types.js). The entry's first form, its
+ * [placeholders] filled in, and nobody's traits leaning the pick: every pick, placeholders included, comes from `rng`,
+ * so one seed always names the same thing the same. Null while the files are still loading, or if the category has
+ * nothing whose placeholders can be filled (an entry naming an empty category, say).
+ * @param {string} category - As a line writes it: [corpTitle] and "corpTitle.txt" both mean the category `corptitle`.
+ * @param {Function} rng - 0 to 1
+ * @returns {?string}
+ */
+export function pickWord(category, rng) {
+  if (!ready) return null;
+  // (categories are keyed by their file's name made small — see loadAll and nameOf — so the name is taken as it's
+  // written anywhere else, [corpTitle]'s capitals and all)
+  const name = String(category).toLowerCase();
+  const was = random, wasTo = speakingTo; // (put back afterwards: this isn't a line, and nobody's saying it)
+  random = rng; speakingTo = null;
+  try {
+    const tried = new Set();
+    for (let i = 0; i < TRIES; i++) {
+      const item = pickItem(categoryItems(name).filter(it => !tried.has(it)), null);
+      if (!item) return null;
+      tried.add(item);
+      const said = item.forms ? item.forms.first : fill(item.text, null, {});
+      if (said) return said;
+    }
+    return null;
+  } finally { random = was; speakingTo = wasTo; }
+}
+
+/**
  * Whether someone has something they've just seen or felt still to react to (see pickReaction).
  * @param {object} person
  * @returns {boolean}
