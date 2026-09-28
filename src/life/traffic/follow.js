@@ -108,7 +108,8 @@ export function followCar(car) {
   controls.minRadius = Math.max(1.2, h*0.8);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9));
   const type = carTypeOf(car.design != null ? carMeshes[car.design].name : null, car.number);
-  App.showCarCard(i, { ...type, name: carLabel(car) }, car);
+  App.showCarCard(i, { ...type, name: carLabel(car), type: type.name,
+    plate: car.design != null ? car.plate.text : null, number: car.number }, car);
   const max = boostMax(car);
   App.setCarBoost(car.boostLeft ??= max, max, car.boostLocked); // (its level as it already stands — full, unless it's spent some since last driven)
   return true;

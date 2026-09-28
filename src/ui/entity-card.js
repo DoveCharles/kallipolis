@@ -63,7 +63,8 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   const titleText = document.createElement('div');
   titleText.className = 'win3-title';
   titleText.textContent = title;
-  fixedText.push([titleText, title]);
+  const titleEntry = [titleText, title];
+  fixedText.push(titleEntry);
   titlebar.append(sysbox, titleText);
   const close = document.createElement('button');
   close.className = 'card-close';
@@ -89,7 +90,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   }
   heart.addEventListener('click', () => {
     if (!favorite) return;
-    toggleFavorite({ ...favorite, kindLabel: title }, rows.name.value.textContent || title, canvas.hidden ? null : canvas.toDataURL());
+    toggleFavorite({ ...favorite, kindLabel: titleEntry[1] }, rows.name.value.textContent || titleEntry[1], canvas.hidden ? null : canvas.toDataURL());
   });
   onFavoritesChanged(drawHeart);
 
@@ -555,6 +556,12 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     fixedText.forEach(([textEl, text]) => { textEl.textContent = transform ? transform(text) : text; });
   }
 
+  // the title bar's wording, for a card that names what it's showing there (a Pub, a Police car) rather than a fixed title
+  function setTitle(text) {
+    titleEntry[1] = text;
+    titleText.textContent = relabelling ? relabelling(text) : text;
+  }
+
   // the action button's wording (and tooltip), as `action` in makeCard gave them first
   function setAction(text, tooltip) {
     if (!actionText) return;
@@ -569,7 +576,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
 
   dragByTitle(el, () => !matchMedia('(max-width: 760px)').matches);
 
-  const card = { el, canvas, show, hide, resetPlace, set, setList, relabel, setFavorite, setAction, showAction, setHealth, bindHealth,
+  const card = { el, canvas, show, hide, resetPlace, set, setList, relabel, setTitle, setFavorite, setAction, showAction, setHealth, bindHealth,
     setEffects, selectTab, tabPane: key => panes[key] ?? null, activeTab: () => activeTab, onTab: listener => { tabListeners.push(listener); } };
   cards.push(card);
   // What this card's status column is doing, for the console (see the `status` handle in src/main.js): read live off the
