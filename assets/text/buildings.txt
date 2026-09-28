@@ -4,10 +4,10 @@
 #   name    what it's called on its card (followed by its own number, like "Warehouse #4821")
 #   title   its own name, on the line under that (a pub's "The Red Lion"): left out, there's no second line
 #           A title can say how it's lettered on a shop sign in a mall, in brackets after it:
-#             title = The Red Lion {font = Georgia, color = #f2d27a}
+#             title = The Red Lion {font = Georgia, color = #f2d27a, backcolor = #1d2340}
 #           `font` is any typeface the browser has (put italic, bold or a weight like 900 in front if wanted:
-#           `font = italic Brush Script MT`); `color` is the lettering's, as a hex code. Leave either out and the sign
-#           picks its own. The brackets never show on the building's card.
+#           `font = italic Brush Script MT`); `color` is the lettering's, as a hex code; `backcolor` the cladding it's
+#           on, also a hex code. Leave any out and the sign picks its own. The brackets never show on the building's card.
 #   mood    its current mood, usually an emoji
 #   loves   what it loves
 #   hates   what it hates

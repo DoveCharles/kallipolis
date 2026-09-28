@@ -275,6 +275,9 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs, cladding,
   const group = new THREE.Group();
   group.name = 'Building';
   const top = y0 + MALL_LEVEL - 0.35;
+  // (its fascia the colour its title asks for, if it does: see buildingSign)
+  const backcolor = kind === 'vacant' ? null : buildingSign(kind, buildingNumber(key)).backcolor;
+  if (backcolor) cladding = new THREE.Color(backcolor).getHex();
   Object.assign(group.userData, { footprint: lot, height: y0 + MALL_LEVEL, base: y0, buildingKind: kind, mallLevel: level, batchable: true });
   // (lit, its light spilling out onto the concourse after dark: see streetlights.js)
   if (kind !== 'vacant') Object.assign(group.userData, { lobbyLight: 0.25, lobbyColor: new THREE.Color(0xfff1dc) });
