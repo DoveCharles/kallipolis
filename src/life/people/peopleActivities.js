@@ -203,27 +203,41 @@ function wave(g, stage) {
   g.members.forEach(m => playOnce(m, 'Wave'));
 }
 
+/** How far off (at people size 1) someone hanging about will go to talk to someone else in the same hangout, and how many
+ *  of the nearest are tried before giving up on the walk over. */
+const CHAT_REACH = 25, CHAT_TRIES = 8;
 /**
- * Send someone hanging out in a plaza or park over to someone else standing about there, to talk.
+ * Send someone hanging out in a plaza or park over to someone else hanging about there, to talk.
+ *
+ * Everyone in the hangout is looked at, nearest first — a few of the crowd picked at random all but never turn up
+ * anyone in the same plaza or park (there are hundreds of them, spread over the whole city), which is why people were
+ * seen talking on walkways, where meetOnWalkways looks at their neighbours instead, and never on plazas.
  * @param {Person} p - the person
  * @param {Hangout} area - the hangout they're in
  * @returns {boolean} whether anyone was found to go over to
  */
 export function goChat(p, area) {
-  if (!personModel) return false;
-  let friend = null, best = 25;
-  for (let k=0;k<10;k++) {
-    const q = people[Math.floor(peopleRng()*people.length)], d = Math.hypot(q.x - p.x, q.z - p.z);
-    if (q !== p && q.mode === 'wander' && q.area === p.area && !q.act && !q.fright && !q.oneShot && !q.moving && !q.attack && !q.punched && q.traits.chatty > 0 && d < best
-      && !p.traits.smells && !q.traits.smells
-      && walkableUpTo(area, p, q.x, q.z).clear) { friend = q; best = d; }
+  // (nobody chats with a smeller — see peopleSmell.js — and, as on a walkway, not again straight after a chat: p.chatCooldown, set by finishActivity and ticked in meetOnWalkways)
+  if (!personModel || p.traits.smells || p.chatCooldown > 0) return false;
+  const here = [];
+  for (let i = 0; i < people.length; i++) {
+    const q = people[i];
+    if (q === p || q.mode !== 'wander' || q.area !== p.area || q.act || q.fright || q.stun || q.please || q.oneShot || q.attack || q.punched || q.swimming || q.chatCooldown > 0 || q.traits.smells || q.traits.chatty <= 0) continue;
+    const d = Math.hypot(q.x - p.x, q.z - p.z);
+    if (d < CHAT_REACH) here.push({ q, d, standing: !q.moving });
   }
-  if (!friend) return false;
-  startChat(friend, p, true);
-  const gap = CHAT_GAP*S.peopleSize, d = Math.max(best, 1e-3);
-  p.tx = friend.x + (p.x - friend.x)/d*gap; p.tz = friend.z + (p.z - friend.z)/d*gap;
-  if (!area.inside(p.tx, p.tz)) { p.tx = p.x; p.tz = p.z; }
-  return true;
+  // (someone standing about is who they'd make for; anyone else there will do, stopping where they are for the chat)
+  here.sort((a, b) => (a.standing === b.standing ? a.d - b.d : a.standing ? -1 : 1));
+  for (let k = 0; k < here.length && k < CHAT_TRIES; k++) {
+    const { q, d } = here[k];
+    if (!walkableUpTo(area, p, q.x, q.z).clear) continue; // (never across water: a plaza's fountain is walked round on the way)
+    startChat(q, p, true);
+    const gap = CHAT_GAP*S.peopleSize, dist = Math.max(d, 1e-3);
+    p.tx = q.x + (p.x - q.x)/dist*gap; p.tz = q.z + (p.z - q.z)/dist*gap;
+    if (!area.inside(p.tx, p.tz)) { p.tx = p.x; p.tz = p.z; }
+    return true;
+  }
+  return false;
 }
 
 /**

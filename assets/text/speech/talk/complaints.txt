@@ -4,34 +4,49 @@ Someone tried to [violence] me yesterday. {aggression = -1}
 > Is that why you're limping? {other.is = hurt}
 >> Don't ask. {aggression}
 
-You make me so so mad sometimes. {aggression}
-> Why are you crying? {other.is = sad}
+Honestly, you make me so angry sometimes. {talk.score < 1}
+> You're gonna cry about it? {other.is = sad, score = -1}
 >> I'm not crying! {is = sad}
-> Why are you shouting? {other.aggression > 0.3}
-> Calm down. {other.is != sad, patience}
+> Why are you always shouting? {other.aggression > 0.3}
+>> Because you make me angry! I already said that, [insults]! {score = -2}
+> Look, look, we can figure this out. { patience, score = 1}
 > [dismissal]
 
 I can't stand [folk: hated]. {aggression}
-> Me neither.
-> That's a bit harsh. {evil = -1}
+> Me neither. {likes}
+> Not the biggest fan, but they're alright. {evil = -1}
+> Bro, let's just kill them already. { likes > 0.4, evil, outlaw}
+>> B-but, that's illegal! {score = -1, outlaw = -2}
+>> ...but then who will I have left to hate on?
+>> I hate them, but that doesn't justify violence. {evil = -1, score = -1}
+>> Let's do it! I'll bring the [weapons]! {evil, outlaw = -1}
+>>> Yes, finally! I'll bring a [weapons]! {score = 2}
+>>> Uh, I was joking... {score = -1}
+> What? I love them! {likes = -1, score = -1}
 
 Don't get me started on [beliefs#1: hated]. {aggression}
 > Too late. {patience = -1}
-> [beliefs#1]?
+> [beliefs#1]? {nosy}
+>> It's some bullshit man. It's [swears][swears].
 >> Yeah, [beliefs#1], don't bring it up.
->>> [beliefs#1]?
+>>> [beliefs#1]? {nosy}
 >>>> Yeah.
 >>>>> [beliefs#1]?
->>>>>> Fuck you fuck you fuck you fuck you fuck you fuck you fuck you
+>>>>>> Fuck you fuck you fuck you fuck you fuck you fuck you fuck you {score = -2}
 >>> Okay! What about [beliefs#2: hated]?
 >>>> Not that bad, honestly.
 >>>>> [beliefs#2] is way worse, to me.
 >>>>>> Eh, it's no [beliefs#1].
->> It's some bullshit man. It's [swears][swears].
 
-That fucking twat. {aggression, evil}
+That fucking [insults]. {aggression, evil}
 > Who?
 >> You know who.
+>>> Vague-posting King of the Cryptic Kingdom of the Foggy Valleys.
+>>>> What?
+>>>>> Nevermind.
+>> [enemy].
+>>> Oh, them again?
+
 I hate my son. {evil}
 > That's awful! {evil = -1}
 > Same. {evil}
@@ -44,6 +59,7 @@ This weather, honestly. {world.weather = rain, mood = -1}
 Things have been so peaceful lately. {world.morality > 0.3, world.morality = 1}
 > Too peaceful. {evil}
 > Isn't it lovely? {evil = -1}
+
 Who picks the music in here? {here.building = pub, patience = -1}
 > Nobody, it just plays.
 >> Well it's shit. {aggression}

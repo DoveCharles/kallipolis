@@ -92,7 +92,6 @@ Steffanie
 Minnie
 Léa
 Rue
-(UNKNOWN) {choiceweight = 5}
 Britney
 Reighleigh {agemult = 0.8}
 Gertrude {agemult = 1.15}
@@ -216,3 +215,5 @@ Anri
 Aura
 Cow
 Mistress
+Hatsune
+Chairwoman

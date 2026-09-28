@@ -41,8 +41,10 @@ speech/words/adjectives/bad.txt
 speech/words/adjectives/good.txt
 speech/words/adjectives/sizes.txt
 speech/words/danger/knives.txt
+speech/words/danger/phobias.txt
 speech/words/danger/scary.txt
 speech/words/danger/weapons.txt
+speech/words/family/motherwords.txt
 speech/words/ideas/colours.txt
 speech/words/ideas/concepts.txt
 speech/words/ideas/interests.txt

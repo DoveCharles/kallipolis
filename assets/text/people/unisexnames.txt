@@ -15,6 +15,9 @@ Dark
 Ultra
 Legendary
 Epic
+Common
+Uncommon
+Rare
 Sam
 Sandy
 Kim
@@ -24,3 +27,4 @@ Super
 Moss
 Rainbow
 Ambulance
+Chair

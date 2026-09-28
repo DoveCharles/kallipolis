@@ -1,12 +1,16 @@
 import * as THREE from 'three';
 import { camera, renderer } from '../core/scene.js';
 import { S } from '../core/shared.js';
+import { cased } from './garble.js';
 
 // ============================================================ speech bubbles
 // A bubble over the head of anyone saying a real line (see audio/dictionary.js), with the line in it. It stays up while
 // they say it and LINGER seconds after, and is only replaced by the next line they say. It's page text laid over the
 // view, so it always faces the camera and stays the same size on screen; it fades out as the camera pulls back.
 // With Options > Speech > Babble bubbles on (S.babbleBubbles), each phrase of babble gets one too, in made-up words.
+// What's written in one is cased to the speaker: someone with the lowercase or capitalise trait has their bubbles read
+// as their card does (see `cased` in ui/garble.js) — all in lower case, or every word's first letter raised. Only the
+// bubble is cased; the line itself, as said, thought and logged, is left as it is.
 const FADE_END = 35;      // camera distance at which a bubble's gone, unless set by Options > Speech > Bubble distance (S.bubbleDistance)
 const FADE_FROM = 12/35;  // the share of that distance at which it starts fading
 const LINGER = 1.5;    // seconds a bubble stays up after its line's done
@@ -42,7 +46,8 @@ export function speechBubble(who, at, line) {
   }
   if (line && line !== bubble.line) {
     bubble.line = line;
-    bubble.element.textContent = line.text;
+    // (cased to the speaker's own traits — the same reading their card gives the rest of them: see ui/garble.js)
+    bubble.element.textContent = cased(line.text, who.traits ?? {});
     bubble.element.classList.toggle('thought', !!line.thought); // (a thought, not said: see thoughtOf in life/people/people.js)
   }
   bubble.doneAt = line ? 0 : bubble.doneAt || performance.now();

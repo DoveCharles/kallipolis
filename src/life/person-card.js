@@ -7,7 +7,7 @@ import { profileOf, onProfilesLoaded } from './profiles.js';
 import { strikeLightning } from './lightning.js';
 import { makeCard } from '../ui/entity-card.js';
 import { personKey, reviveFavoritesAs } from '../ui/favorites.js';
-import { garbles, garbled } from '../ui/garble.js';
+import { garbles, garbled, garbledEntry, cased } from '../ui/garble.js';
 import { ranked } from './people/peopleRelations.js';
 import { recentLines, onLineLogged } from './people/peopleSaid.js';
 
@@ -19,7 +19,9 @@ import { recentLines, onLineLogged } from './people/peopleSaid.js';
 //
 // Up to two are open: a name clicked in the Social tab opens the other beside it. The camera follows the focused one;
 // clicking a card focuses it (App.followPerson), and closing the focused one hands focus to the other.
-// (someone with the scramble or keysmash trait has the text on their card garbled, name and age aside: see ui/garble.js)
+// (someone with the scramble or keysmash trait has the text on their card garbled, name and age aside, and the casing
+// traits reach all of it, their name included: lowercase sets the lot in lower case, capitalise gives every word a
+// capital; a love or hate starts with a capital by default: see ui/garble.js)
 
 const HEADSHOT_SIZE = 120; // pixels across (shown half that, sharp on high-density screens)
 const HEADSHOT_INTERVAL = 1/15, OTHER_HEADSHOT_INTERVAL = 1/4; // (the unfocused card's face is redrawn less often)
@@ -112,9 +114,11 @@ function fill(w, index, isMan, beside = false) {
   card.el.classList.toggle('pc-beside', beside);
   card.relabel(garbles(traits) ? text => garbled(text, traits, profile.age) : null); // (the headings too: "Loves", "Hates", the title...)
   // loves and hates are lists: one line per entry, and an empty list hides its row. The traits aren't shown: they're what
-  // the person does, not what the card says about them.
-  card.show({ name: profile.name, age: profile.age, mood: profile.mood,
-    loves: garbled(profile.loves, traits, profile.age), hates: garbled(profile.hates, traits, profile.age),
+  // the person does, not what the card says about them. The name is never scrambled, but the casing traits reach it: the
+  // lowercase trait sets theirs in lower case with the rest of the card, the capitalise trait gives every word a capital —
+  // on the card only, never in the profile itself.
+  card.show({ name: cased(profile.name, traits), age: profile.age, mood: profile.mood,
+    loves: garbledEntry(profile.loves, traits, profile.age), hates: garbledEntry(profile.hates, traits, profile.age),
     lovesTier: profile.lovesTier, hatesTier: profile.hatesTier, lovesMods: profile.lovesMods, hatesMods: profile.hatesMods });
   // (no headshot of a cuboid person, before the people model has loaded)
   w.context.clearRect(0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE);

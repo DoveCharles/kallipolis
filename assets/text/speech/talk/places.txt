@@ -1,21 +1,154 @@
 # Talk about where they are (see about.txt): here.park, here.plaza, here.beach, here.roadside, here.path, here.bridge,
 # here.crossing. Opened from dialogue.txt.
-Lovely park, this. {here.park, happy}
-> I come here every day.
-> Too many [animals: plural]. {mood = -1}
-Mind the dog muck. {here.park}
-Shall we sit on the grass? {here.park, lounging}
-> My back won't let me. {lounging = -1}
-> You look like you need a sit down. {other.is = hurt}
-Nice fountain. {here.plaza}
-> I threw a coin in once. Nothing happened.
+Such a great park, I love it here. {here.park}
+> Right? I come here every day! {parks, score = 1}
+> I think I saw [animals#1: a] here yesterday. {mood = -1}
+>> [animals#1: a]? Don't be silly. {mood = -1, score = -1}
+>> More likely than you think!
+> I hate parks. I don't even know why I'm here. {score = -1, parks < 0, mood = -1}
+
+Mind the dog [swears]. {here.park}
+
+I love sitting on the grass. {here.park, lounging}
+> Do you ever sit on the grass and get a wet butt?
+>> Wet butt? Ughghghh, wait what, sorry?
+>> My butt is wet alllll the time.
+>> Never. My vigilant butt will remain dry, always.
+> Yessss I love feeling it between my toesies!
+
+Thrown a coin in the fountain recently? {here.plaza}
+> There's a fountain??? {nerd = -2}
+> I did once. Nothing happened.
+>> A wish isn't really about getting what you want, you know. {nerd}
+>>> Yes it is, [insults]. {evil}
+>>> What do you mean? {nosy}
+>>>> Transient desires, man. By desiring for something, you dwell on what you lack. Really, it's all right there inside you. We wish for more because we're scared to face that. {psychs, nerd}
+>>>>> Huh? I don't get it... {nerd = -2}
+>>>>>> It's s-
+>>>>>>> I don't knowwwww.....
+>>>>> I mean, yeah. I guess. I just wanted [foods: a].
+>>>>> Interesting perspective. I'll keep that in mind. {nerd, psychs, score = 1}
+>>>>>> Woah, you're like, dead-on right on the mondo, man. Consider my mind, like, expanding. Do you know what we should do? WE should get in the fountain, let ourselves drift away. {psychs = 3}
+>>>>>>> Already there man, already there. {score = 2}
+>>>>> Deep bro. Kill yourself. {evil, aggression, score = -2}
+>>>> 'Wishing' is a concept invented by the bourgeiosie to hold back the proletariat. It's counter-revolutionary, immaterial. It deprives the workers from their hard-earned wages, yet another way fascist spiritually exploits the masses. {conservative = -3}
+>>>>> What the [swears] are you talking about? {score = -1}
+>>>>> Ack, communism!? Uhhh, human nature, innovation, The Holodomor, bread-lines, the stock market, censorship, North Korea, corruption, gulags, the iPhone??? {score = -2, conservative < 0.1, conservative = 2, nerd = 3}
+>>>>>> Communist countries have all of those things, or, wait... I mean, they have the good ones. {nerd = -2}
+>>>>>>> So, the stock market?
+>>>>>>>> No.
+>>>>>>>> Marx played the stock market, you know.
+>>>>>>>>> Any tips? {score = 1}
+>>>>> What the [swears]? Are you some kind of commie libtard? {score = -2, conservative < 0.1, conservative = 2}
+>>>>>> What..? No, ahah. No... {aggression = -1}
+>>>>>> Oh, here we go, another conservative bootlic- Wait, did you just call me a liberal? {aggression, score = -2}
+>>>>> Too right, comrade. Instead of wasting my resources on reactionary ideologism, I will let it accumulate, building toward our struggle. {conservative = -2}
+>>>>>> Yes, so we can financially seize the means of production, and use it to sell papers.
+>>>>>>> Selling papers, yes.
+>>>>>>>> Yes! {score = 1}
+>>>>>>>>> Yup, comrade. Just yup. {score = 1}
+>>>>>>> Troskyist scum! {score = -2}
+>>>>>>>> Tankie bastard! {score = -2}
+>>>>>>>>> Die! {end=bad, aggression > 0.3}
+>>>>> Excuse me? The wishing fountain may be a right-wing ploy, but no less than the coin you throw into it; disperse of your capital, just not in the name of petty liberal desire.
+>>>>>> But, but, I need it. I need it to buy student magazines, and little pins for my backpack?
+>>>>>>> Hm, maybe you're right. Maybe capitalism ain't all bad. {score = 1}
+>>>>>>> Bourgeios nonsense, rid yourself of it. Revolution will not come in the form of merchandise, it will be naked, pure, clean. Strip the clothes off your back, throw yourself to the wind. {conservative = -3}
+>>>>>>>> I'm doing it. I'm going to get naked for Marx. I promise, one day, I will. {score = 1}
+>>>>>>>>> Good; we will be naked together, comrade. We will be naked together, we will become one. {score = 1}
+>>>>>>>> Lenin wouldn't want me to get naked, he'd want me to wear a bullet-proof kevlar vest and a modest linen jacket — with some good pockets! He'd want me to buy a dependable rifle, and stock up on ammunition, and grain! {conservative = -3, nerd = 3}
+>>>>>>>>> Well, yes. Except for that though? Fully, completely, naked. Do not allow yourself degenerative excess, like underwear, or handkerchiefs.
+>>>>>>>>>> Lenin wore underwear, man. {score = -1}
+>>>>>>>>>> Sir! Yes, sir! {outlaw = -1, score = 1}
+>>>>>>>>>> So like, naked, but not? As in, like, dialectics? {nerd}
+>>>>>>>>>>> That's EXACTLY what it means. Strip yourself, but dialectically; be naked, but retain your seed. {score = 2}
+>>>>>> I'm sorry comrade, but there is NOTHING more revolutionary than money. Did Engels not fund the development of our ideology through his capital gains; did The USSR not fund foreign revolutions across the globe; did Mao not deliver the heads of landlords on a silver platter? {nerd = 3}
+>>>>>>> A silver platter? No. A wooden one, maybe. Modest, but chic. Nothing more. {score = -1}
+>>>>>>> What the fuck!! No! Agree with me, agree with me! {score = -1, aggression}
+>>>>>>> Um. Actually, I don't really know. {nerd = -1, score = -1}
+>>>>>>> Revisionist propoganda, communism was born in France! By pious and ascetic intellectuals, much more Marxist than Marx! Do you really know nothing?
+>>>>>>>> [insults#1], [insults#2], [insults#3]! {score = -2}
+>>>>>>>>> [insults#4], [insults#5], [insults#6]! {score = -2}
+>>>>> Why should that be true? Is the fountain not the property of the state? What could be more powerful than giving up my money to the literal embodiment of our nation, to our world? {nerd, psychs}
+>>>>>> The state? There is no state under communism.
+>>>>>>> Is too! {score = -1}
+>>>>>>>> Is not! {score = -1}
+>>>>>> Our nation? We have no nation, besides that of the internation proletariat!
+>>>>>>> World communism? The naïveté! We mush achieve socialism in one country, before we can reach communism for the globe!
+>>>>>>>> I'm going to fucking kill you and then myself {end=bad, mood = -1, aggression}
+>>>>>>>> Aren't you tired, comrade? Shall we end this petty squabbling, and consolidate our struggle over a bottle of champaigne? {aggression = -2}
+>>>>>>>>> Oh, I know just the bar! Perhaps we could order it with a side of onion rings?
+>>>>>>>>>> Now, THAT is praxis! {score = 3}
+>>>> Big government trying to steal your money for the welfare state, using their (((fountains))). Don't fucking fall for it. {conservative > 0, conservative = 2}
+>>>>> What the [swears] are you talking about? {score = -1}
+>>>>> Uh, did you just say triple brackets out loud?
+>>>>>> Got a problem with that, snowflake?
+>>>>>>> Let me try: $&"%("$?><£()$*"|\)^ {psychs}
+>>>>>>>> Jesus, not even I would say a slur like that!
+>>>>>>> Fountains are not Jewish! Not that there's anything wrong with that. {conservative = -2}
+>>>>>>>> Oh, brother, fountains are as Jewish as Barrack Obama and Hilary Clinton. You got a whole world you don't even know a [swears] about. {score = -1}
+>>>>> I love the welfare state, and I love fountains! {conservative = -2, evil = -1}
+>>>>>> Maybe I put a bullet in your fountain, what then, liberal? {aggression = 2, end=bad, score = -2}
+>>>>> Ah, good to see there's fellow truth-seekers out there who know allll about the dark fountain magic the cabalists are pulling on us. {conservative > 0, conservative = 2}
+>>>>>> Brother, I've been researching this shit since before I was born. It's sinister. Come to my church meeting, we'll tell you all about it.
+>>>>>>> Too right, I'll be there. Where is it?
+>>>>>>>> Just down theres some. When you get to the door, show them this hand symbol, you got that? They'll let you right in. And we got corn bread too, brother.
+>>>>>>>>> Hallelujah! {score = 3}
+>> What did you wish for?
+>> [concepts#1].
+>>> [concepts#1]? Well [swears], I'm glad that didn't work out! {likes < 0, likes = -2, score = -1}
+>>> Aw, maybe I'll wish for [concepts#1] too! {likes > 0, likes = 2}
+>>>> Hm, a double wish? Maybe that could just about work... {score = 1, mood}
+>>>> Shhh, don't tell me! Or it won't come true! {mood = -1}
+>>>>> Hey, didn't you tell me? Maybe that's why yours didn't work.
+>>>>>> Well, [swears].
+>>>>>> Are you saying wishes work outside of the confines of the space-time continuum, that a wish is a cosmic force larger than our limited understanding, and thus, that my telling is the exact act of retrocausality that prevented its eminence? {nerd = 3, nerd > 0.3}
+>>>>>>> Uh, yeah.
+>>>>>>>> This changes everything, wow, thank you! I'll never wish the same again, or already I've been wishing different already? I'm not sure, I need to make a wish about this. {score = 2}
+>>> Shit wish, man. I'm going to wish for [concepts#2]. {aggression, score = -1}
+>>>> Oh yeah? Well I'm going to wish for the opposite of [concepts#2], then! So there! {aggression} {score = -1}
+>>>>> I'm going to wish for the opposite of the opposite of [concepts#2]!
+>>>>>> Just regular [concepts#2]?
+>>>>>>> Uh, yeah. In theory.
+>>>> Whatever man, I'll just save my money.
+>> I wanted to find my [belongings#1].
+>>> [belongings#1: a]? I think I saw one of those in the fountain...
+> Wait, are there coins in there? Like, right now? {evil, outlaw}
+>> No! My wishes, my wishes! Leave them alone! {score = -1}
+>>> Which coins are yours? I'll pick around them. {talk.score > 1}
+>>>> Well, give me a few coins, after? I could make a few more wishes. {evil, outlaw, score = 2}
+>>>> You're [bad#1]! [bad#1], [bad#2] man! {outlaw = -2, evil = -2, other.man > 0, score = -1}
+>>>> You're [bad#1]! [bad#1], [bad#2] woman! {outlaw = -2, evil = -2, other.woman > 0, score = -1}
+>>>> Uh, sure, okay. Whatever.
+>>>> My next wish, I'm wishing you get struck by lightning. {score = -2, aggression = 2, outlaw = -1, evil = -1}
+>> Uh, no. I already got them. {evil = 2}
+>>> Gimme one? {evil, outlaw}
+>>>> Sure. {score = 1}
+>>>> Get your own! {aggression, score = -1}
+>>> Is that why you wanted me to throw one? {nerd}
+>>>> What can I say, I'm a hustler!
+>>>>> Hustle around some other fountain, [insults]! {score = -1, aggression}
+>>>>> Hey, we do what we do to scrape by. I wish to win the lottery, you steal my wishes. I get it. No biggie.
+>>>> Maybe I should have just asked you to pay up, here, to your face? {aggression, score = -2}
+
 Everyone's out today, aren't they? {here.plaza, nosy}
+
 I love the sea air. {here.beach, happy}
-> It smells of [foods], if you ask me. {mood = -1}
-Don't go in too deep. {here.beach}
+> It smells of [foods], if you ask me.
+
+Sand. So much sand. {here.beach}
+
 These cars go way too fast. {here.roadside}
 > Someone's going to get killed. {world.morality < 0}
-> I like the noise. {evil}
+> I just saw someone die here recently. {seen = killedbycar}
+>> That's horrible! {evil = -2}
+>>> I can't stop thinking about it. I need to go home.
+>>> It was kinda cool. {evil = 2, score = -1}
+>> Cool. {evil = 2}
+>>> Yeah, it was pretty sick. {evil = 2, score = 1}
+>>> Why would you say that!? {evil = -2, score = -1}
+> I like the noise. Brrrr, bruummmmm. Fast! {speed = 2}
+
 Stand back from the kerb. {here.roadside, patience}
 Wait for the green man! {here.crossing}
 What a view from up here. {here.bridge}

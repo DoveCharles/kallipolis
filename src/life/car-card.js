@@ -3,7 +3,7 @@ import { carThumbnailScene } from './traffic/traffic.js';
 import { BOOST_UNLOCK } from './traffic/driving.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
-import { garbles, garbled } from '../ui/garble.js';
+import { garbles, garbled, garbledEntry, cased } from '../ui/garble.js';
 import { hashNameToNumber } from '../core/math.js';
 import { showCarDetails, hideCarDetails } from './car-details.js';
 
@@ -28,10 +28,12 @@ function showCarCard(i, info, car) {
   shown = i;
   // `info` is what the car's type says (see car-types.js), traits and all: the card itself turns those into its rows.
   // A car with the scramble or keysmash trait (a texting driver, say) has its loves, hates and headings garbled (see
-  // ui/garble.js), differently from another with the same trait since its own name seeds it.
+  // ui/garble.js), differently from another with the same trait since its own name seeds it; a love or hate also starts
+  // with a capital, and the casing traits reach the name and the rows alike.
   const { traits } = info, seed = hashNameToNumber(info.name || '', 3);
   card.relabel(garbles(traits) ? text => garbled(text, traits, seed) : null);
-  card.show({ ...info, loves: garbled(info.loves, traits, seed), hates: garbled(info.hates, traits, seed) });
+  card.show({ ...info, name: cased(info.name, traits),
+    loves: garbledEntry(info.loves, traits, seed), hates: garbledEntry(info.hates, traits, seed) });
   drawCarThumbnail(i);
   card.setFavorite({ key: car, kind: 'Car', follow: () => App.followCar(car) });
   card.bindHealth(car, 'car');
