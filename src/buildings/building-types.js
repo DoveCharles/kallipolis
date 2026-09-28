@@ -134,8 +134,9 @@ export function buildingTitle(kind, number = 1) {
 }
 // A title can say how it's lettered on a sign (a mall shop's: see signAtlas in roads/mall.js), in brackets after it:
 // `title = The Red Lion {font = Georgia, color = #f2d27a}` — `font` a typeface (with `italic`, `bold` or a weight like 900
-// before it if wanted: `font = italic Brush Script MT`), `color` the lettering's. Either can be left out.
-// Returns { text, font, color }, the last two null where the title doesn't say.
+// before it if wanted: `font = italic Brush Script MT`), `color` the lettering's, `backcolor` the cladding it's on. Any can
+// be left out.
+// Returns { text, font, color, backcolor }, all but the first null where the title doesn't say.
 export function buildingSign(kind, number = 1) {
   const titles = buildings.listOf(kind, 'title');
   const raw = titles.length ? titles[(number - 1) % titles.length] : '';
@@ -144,6 +145,7 @@ export function buildingSign(kind, number = 1) {
     const [key, ...value] = part.split('=');
     if (key && value.length) said[key.trim().toLowerCase()] = value.join('=').trim();
   });
-  const color = said.color ?? said.colour ?? null;
-  return { text: (style ? raw.slice(0, style.index) : raw).trim(), font: said.font || null, color: /^#?[0-9a-f]{6}$/i.test(color || '') ? (color.startsWith('#') ? color : '#' + color) : null };
+  const hex = v => /^#?[0-9a-f]{6}$/i.test(v || '') ? (v.startsWith('#') ? v : '#' + v) : null;
+  return { text: (style ? raw.slice(0, style.index) : raw).trim(), font: said.font || null, color: hex(said.color ?? said.colour),
+    backcolor: hex(said.backcolor ?? said.backcolour) };
 }

@@ -4,10 +4,10 @@
 #   name    what it's called on its card (followed by its own number, like "Warehouse #4821")
 #   title   its own name, on the line under that (a pub's "The Red Lion"): left out, there's no second line
 #           A title can say how it's lettered on a shop sign in a mall, in brackets after it:
-#             title = The Red Lion {font = Georgia, color = #f2d27a}
+#             title = The Red Lion {font = Georgia, color = #f2d27a, backcolor = #1d2340}
 #           `font` is any typeface the browser has (put italic, bold or a weight like 900 in front if wanted:
-#           `font = italic Brush Script MT`); `color` is the lettering's, as a hex code. Leave either out and the sign
-#           picks its own. The brackets never show on the building's card.
+#           `font = italic Brush Script MT`); `color` is the lettering's, as a hex code; `backcolor` the cladding it's
+#           on, also a hex code. Leave any out and the sign picks its own. The brackets never show on the building's card.
 #   mood    its current mood, usually an emoji
 #   loves   what it loves
 #   hates   what it hates
@@ -183,33 +183,33 @@ hates = The neighbours (through the wall)
 [pub]
 enterable = yes
 name = Pub
-title = The Cock and Balls {font = Georgia, color = #f2d27a}
-title = The Cock OR Balls {font = italic Georgia, color = #fff3d6}
-title = The Cock and/or Balls {font = Palatino Linotype, color = #f2d27a}
-title = The Royal Funk {font = Old English Text MT, color = #f2d27a}
-title = The White Bastard {font = Copperplate, color = #ffffff}
-title = The King's Clit {font = Old English Text MT, color = #e8c15a}
-title = The Bald Man {font = Georgia, color = #fff3d6}
-title = The Fuck {font = 900 Arial Black, color = #ff3b3b}
-title = The Rose and Funny Name {font = italic Palatino Linotype, color = #ffb6c8}
-title = The Bitch's Brew {font = Old English Text MT, color = #c9f2a0}
-title = The Queen's Cock {font = Copperplate, color = #f2d27a}
-title = The Fucking Hen {font = italic Georgia, color = #ffd27a}
-title = The Black Bastard {font = Old English Text MT, color = #ffffff}
-title = The Stupid Shitty Bastard Dog {font = Comic Sans MS, color = #fff3d6}
-title = The Weird Smell {font = italic Papyrus, color = #b8f28a}
-title = The Smells {font = Papyrus, color = #d7f59a}
-title = The Energetic Susan {font = italic Trebuchet MS, color = #ff7ac4}
-title = King's Fuck {font = Old English Text MT, color = #f2d27a}
-title = The Creampie {font = italic Brush Script MT, color = #fff6e6}
-title = The Smacked Arse {font = Georgia, color = #ffb07a}
-title = Fuck McNasties {font = Impact, color = #ffe14a}
-title = Thog's {font = 900 Arial Black, color = #d9b27a}
-title = The Go Away {font = Courier New, color = #ffffff}
-title = The Key of Ket {font = italic Lucida Handwriting, color = #b9f6ff}
-title = The Elephant... WOMAN? {font = Comic Sans MS, color = #ffd1e8}
-title = Bar... -1? 🤫 {font = Courier New, color = #7dff9a}
-title = The Funny Reference {font = Comic Sans MS, color = #fff3d6}
+title = The Cock and Balls {font = Times New Roman, color = #ffffff, backcolor = #111111}
+title = The Cock OR Balls {font = Copperplate, color = #111111, backcolor = #ffffff}
+title = The Cock and/or Balls {font = Georgia, color = #d4af37, backcolor = #111111}
+title = The Royal Funk {font = Old English Text MT, color = #ffffff, backcolor = #228b22}
+title = The White Bastard {font = italic Palatino Linotype, color = #d4af37, backcolor = #228b22}
+title = The King's Clit {font = Times New Roman, color = #111111, backcolor = #ffffff}
+title = The Bald Man {font = Copperplate, color = #d4af37, backcolor = #111111}
+title = The Fuck {font = Georgia, color = #ffffff, backcolor = #228b22}
+title = The Rose and Funny Name {font = Old English Text MT, color = #d4af37, backcolor = #228b22}
+title = The Bitch's Brew {font = italic Palatino Linotype, color = #ffffff, backcolor = #111111}
+title = The Queen's Cock {font = Times New Roman, color = #d4af37, backcolor = #111111}
+title = The Fucking Hen {font = Copperplate, color = #ffffff, backcolor = #228b22}
+title = The Black Bastard {font = Georgia, color = #d4af37, backcolor = #228b22}
+title = The Stupid Shitty Bastard Dog {font = Old English Text MT, color = #ffffff, backcolor = #111111}
+title = The Weird Smell {font = italic Palatino Linotype, color = #111111, backcolor = #ffffff}
+title = The Smells {font = Times New Roman, color = #ffffff, backcolor = #228b22}
+title = The Energetic Susan {font = Copperplate, color = #d4af37, backcolor = #228b22}
+title = King's Fuck {font = Georgia, color = #ffffff, backcolor = #111111}
+title = The Creampie {font = Old English Text MT, color = #111111, backcolor = #ffffff}
+title = The Smacked Arse {font = italic Palatino Linotype, color = #d4af37, backcolor = #111111}
+title = Fuck McNasties {font = Times New Roman, color = #d4af37, backcolor = #228b22}
+title = Thog's {font = Copperplate, color = #ffffff, backcolor = #111111}
+title = The Go Away {font = Georgia, color = #111111, backcolor = #ffffff}
+title = The Key of Ket {font = Old English Text MT, color = #d4af37, backcolor = #111111}
+title = The Elephant... WOMAN? {font = italic Palatino Linotype, color = #ffffff, backcolor = #228b22}
+title = Bar... -1? 🤫 {font = Times New Roman, color = #ffffff, backcolor = #111111}
+title = The Funny Reference {font = Copperplate, color = #111111, backcolor = #ffffff}
 mood = 🍺
 loves = Regulars
 loves = Last orders

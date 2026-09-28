@@ -41,7 +41,7 @@ const UNIT_GAP = 0.35;                // between the units' backs and the outer 
 const ROOM = { w: 8, d: 6 };           // a shop's room, deep by wide (see makeUnit)
 const WALL_IN = 0.1;                  // a unit's walls, in from its lot (so neighbours' walls never meet in one place)
 const PARAPET = 0.8;                  // outer walls above the units' roofs
-const CLERESTORY = 1.3;               // the glass walls round the concourse, up from the units' roof to the glass roof
+const CLERESTORY = 1.3;               // the walls round the concourse, up from the units' roof to the glass roof
 const DOOR_H = 4.2;                   // the entrances' glass, and the lintel over it
 const LANE_IN = 1.8;                  // the ground lanes, in from the shopfronts
 const COURT = 1.5;                    // a court's radius, in the concourse's half-widths
@@ -275,6 +275,9 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs, cladding,
   const group = new THREE.Group();
   group.name = 'Building';
   const top = y0 + MALL_LEVEL - 0.35;
+  // (its fascia the colour its title asks for, if it does: see buildingSign)
+  const backcolor = kind === 'vacant' ? null : buildingSign(kind, buildingNumber(key)).backcolor;
+  if (backcolor) cladding = new THREE.Color(backcolor).getHex();
   Object.assign(group.userData, { footprint: lot, height: y0 + MALL_LEVEL, base: y0, buildingKind: kind, mallLevel: level, batchable: true });
   // (lit, its light spilling out onto the concourse after dark: see streetlights.js)
   if (kind !== 'vacant') Object.assign(group.userData, { lobbyLight: 0.25, lobbyColor: new THREE.Color(0xfff1dc) });
@@ -773,11 +776,13 @@ function generateMall(zone, outline, spine, CW) {
     tube(theme.neon[0], F.at(3.45, -EH - 0.8, DOOR_H + 0.37), F.at(3.45, EH + 0.8, DOOR_H + 0.37), 0.08); // (neon along its front)
     tube(theme.neon[1], F.at(-0.15, -EH, DOOR_H + 0.1), F.at(-0.15, EH, DOOR_H + 0.1), 0.07);            // (and over the doors inside)
   });
-  // the flat roof over the units; over the concourse, a glass roof on glass walls up from it, and a dome over each court
+  // the flat roof over the units; over the concourse, a glass roof on walls up from the tops of the shops, and a dome
+  // over each court
   tops(roof, minus(outlinePath, C), ROOF);
   tops(glass, minus(C, courtPaths(0)), GLASS_TOP);
   edgesOf(C).forEach(([p, q]) => {
-    wallQuad(glass, p, q, ROOF, GLASS_TOP);
+    wallQuad(walls, p, q, levels*MALL_LEVEL, GLASS_TOP - 0.3);
+    wallQuad(trim, p, q, GLASS_TOP - 0.3, GLASS_TOP);
     bars.push(bar({ ...p, y: GLASS_TOP }, { ...q, y: GLASS_TOP }, 0.14));
   });
   segs.forEach(seg => {
