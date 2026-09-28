@@ -538,12 +538,12 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 .pc-tab { cursor:pointer; font:inherit; }
 .pc-pane { box-sizing:border-box; min-height:120px; }
 .pc-pane[hidden] { display:none; }
-/* the status column right of the picture (src/ui/entity-card.js effects, src/life/statuseffects.js): one hand-drawn
+/* the status column left of the picture, snug against it (src/ui/entity-card.js effects, src/life/statuseffects.js): one hand-drawn
    bitmap per status in a slot of its own, at the bitmap's own 16x15 and scaled up hard-edged, as ui/pixel-icons.js draws
    the icons it swaps in. A slot is a box with a little room around its icon, so the hover that opens its menu — and the
    menu's own edge, a few pixels off it — don't have to be hit to the pixel. A slot no status has taken stands empty, one
    grey dash in it, so the card still reads as a column of slots whatever someone is under. */
-.pc-effects { flex:0 0 18px; display:flex; flex-direction:column; align-items:center; gap:2px; margin-top:16px; }
+.pc-effects { flex:0 0 18px; display:flex; flex-direction:column; align-items:center; gap:2px; margin-top:16px; margin-right:-6px; }
 .entity-card .pc-effect { box-sizing:border-box; width:18px; height:18px; padding:1px; line-height:16px; text-align:center; cursor:default; }
 .entity-card .pc-effect img { width:16px; height:15px; image-rendering:pixelated; display:block; }
 .entity-card .pc-effect.pc-effect-empty { color:var(--text-dim); opacity:0.45; font-size:13px; }
@@ -558,6 +558,28 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 .pc-rel-name:not(.pc-rel-empty):hover .pc-rel-who { text-decoration:underline; }
 .pc-rel-points { flex:0 0 auto; font-variant-numeric:tabular-nums; }
 .pc-rel-name.pc-rel-empty { opacity:0.5; }
+/* a gift's status (src/life/gifts.js): its emoji in the slot where a bitmap would be */
+:is(#person-card, #person-card-2) .pc-effect.pc-effect-emoji { font-size:13px; line-height:16px; overflow:hidden; }
+/* the Pockets tab (src/life/person-card.js): a row of pocket slots, a keepsake's emoji in each (a dash in an empty one),
+   what the one under the pointer does beneath them, and the Gift button */
+.pc-pane-pockets { display:flex; flex-direction:column; gap:8px; padding-top:6px; }
+.pc-pockets { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:6px; }
+:is(#person-card, #person-card-2) .pc-pocket { aspect-ratio:1; display:flex; align-items:center; justify-content:center; padding:0;
+  font-size:22px; line-height:1; background:var(--bg-input); border:1px solid var(--border); color:inherit; cursor:pointer; }
+:is(#person-card, #person-card-2) .pc-pocket.pc-pocket-empty { font-size:13px; color:var(--text-dim); opacity:0.45; cursor:default; }
+.pc-pocket:not(.pc-pocket-empty):hover { outline:1px solid var(--accent); }
+/* (a set height, so nothing shifts about as what's shown changes: the Gift window's grid stays under the pointer) */
+.pc-pocket-info, .gift-info { box-sizing:border-box; height:6.6em; overflow:hidden auto; }
+.pc-gift-name { font-weight:700; }
+.pc-gift-note { font-style:italic; }
+.pc-pocket-hint { color:var(--text-dim); }
+.pc-pocket-foot { display:flex; justify-content:flex-end; }
+.pc-pocket-foot .pc-gift { width:auto; flex:0 0 auto; margin:0; padding:4px 14px; }
+/* the Gift window (src/life/person-card.js openGifts): every gift as an emoji button, keepsakes then consumables */
+.gift-to { margin-bottom:4px; }
+.gift-head { font-weight:700; margin:8px 0 4px; }
+.gift-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(34px, 1fr)); gap:4px; }
+.gift-info { margin-top:10px; padding:4px 6px; border:1px solid var(--border); background:var(--bg-input); }
 .pc-rel-friends { border-left:var(--trait-bar, 3px) solid var(--trait-loves-bar); background:var(--trait-loves-a); }
 .pc-rel-friends .pc-rel-head { color:var(--trait-loves-label); }
 .pc-rel-friends .pc-rel-name:nth-child(odd) { background:var(--trait-loves-b); }

@@ -10,6 +10,9 @@ import { personKey, reviveFavoritesAs } from '../ui/favorites.js';
 import { garbles, garbled } from '../ui/garble.js';
 import { ranked } from './people/peopleRelations.js';
 import { recentLines, onLineLogged } from './people/peopleSaid.js';
+import { GIFTS, POCKET_SLOTS, giftLines, giftsLoaded, giveGift, onGiftsLoaded, pocketsFull, takeBack } from './gifts.js';
+import { openWindow } from '../ui/w3-window.js';
+import { IS_TOUCH } from '../core/device.js';
 
 // ============================================================ person cards
 // Who someone is, in a card at the bottom right while the camera follows them (see "following someone" in people.js): their
@@ -91,6 +94,32 @@ function makePersonWindow(id) {
   w.saidList = pane.querySelector('.pc-said-list');
   w.socialTimer = null; w.socialShown = '';
   card.onTab(() => refreshSocial(w));
+
+  // ---- the Pockets tab: a slot per keepsake they carry (POCKET_SLOTS, a dash in each empty one), what the one under the
+  // pointer does beneath them, and the Gift button, which opens the Gift window (see gifts.js). Clicking a keepsake takes
+  // it back.
+  const pockets = card.tabPane('pockets');
+  pockets.innerHTML = '<div class="pc-pockets"></div><div class="pc-pocket-info"></div>'
+    + '<div class="pc-pocket-foot"><button class="btn pc-gift" title="Give them something">Gift…</button></div>';
+  w.pocketSlots = Array.from({ length: POCKET_SLOTS }, (_, slot) => {
+    const button = document.createElement('button');
+    button.className = 'pc-pocket';
+    button.addEventListener('pointerenter', () => showPocket(w, slot));
+    button.addEventListener('focus', () => showPocket(w, slot));
+    button.addEventListener('pointerleave', () => showPocket(w, -1));
+    button.addEventListener('click', () => {
+      const p = personOf(w);
+      if (!p || !takeBack(p, w.shown.index, slot)) return;
+      refreshPockets(w);
+      showPocket(w, -1);
+    });
+    pockets.querySelector('.pc-pockets').append(button);
+    return button;
+  });
+  w.pocketInfo = pockets.querySelector('.pc-pocket-info');
+  pockets.querySelector('.pc-gift').addEventListener('click', () => openGifts(w));
+  w.pocketsShown = null;
+  card.onTab(() => refreshPockets(w));
   return w;
 }
 
@@ -106,7 +135,7 @@ const isManAt = i => personModel ? personModel.isMan[i] === 1 : null;
 function fill(w, index, isMan, beside = false) {
   const { card } = w;
   // whoever's actually standing in that slot right now, not the slot itself — see peopleIdSeq in people.js
-  const id = App.people[index]?.id ?? index, profile = profileOf(id, isMan);
+  const id = App.people[index]?.id ?? index, profile = profileOf(id, isMan, App.people[index]?.moodNow);
   const { traits } = profile, again = w.shown?.index === index; // (again: people/*.txt just loaded, under an open card)
   w.shown = { index, id, isMan, traits, seed: profile.age, beside };
   card.el.classList.toggle('pc-beside', beside);
@@ -126,8 +155,12 @@ function fill(w, index, isMan, beside = false) {
   card.bindHealth(App.people[index] ?? null, 'person');
   w.socialShown = '';
   refreshSocial(w);
+  w.pocketsShown = null;
+  refreshPockets(w);
+  if (giftWindow?.w === w && giftWindow.id !== id) giftWindow.close(); // (the Gift window was for whoever was here before)
 }
 function hideWindow(w) {
+  if (giftWindow?.w === w) giftWindow.close();
   w.shown = null;
   w.placedBeside = false;
   w.card.hide();
@@ -199,7 +232,7 @@ function setDoing(w, doing, away = false) {
 }
 function setPersonCardDoing(doing, away = false) { if (focused) setDoing(focused, doing, away); }
 
-// ---- the status icons, in the column right of the picture (see setEffects in ui/entity-card.js): one per status effect
+// ---- the status icons, in the column left of the picture (see setEffects in ui/entity-card.js): one per status effect
 // they're under just now, the one with the least time left at the top, and a dash in every slot no status has taken — so
 // the column always reads as a column of slots, whatever they're under (life/statuseffects.js).
 // Each icon is handed a `left`: how many seconds its status has *now*, read off the running clock. That's what its tip
@@ -226,7 +259,7 @@ function refreshCardStatus(w, now) {
 // statuses, their order or their whole seconds have changed, so an open menu isn't rebuilt under the pointer.)
 function refreshCardStatuses() {
   const now = lastPeopleTime ?? 0;
-  openWindows().forEach(w => refreshCardStatus(w, now));
+  openWindows().forEach(w => { refreshCardStatus(w, now); refreshPockets(w); });
 }
 
 let otherPoll = null;
@@ -331,6 +364,105 @@ function drawLines(w) {
   if (!lines.length) w.saidList.textContent = 'Nothing yet';
 }
 onLineLogged(p => windows.forEach(w => { if (socialOpen(w) && p === personOf(w)) drawLines(w); }));
+
+// ---- the Pockets tab's drawing: redrawn only when what's in them has changed (checked each frame while it's open, from
+// refreshCardStatuses — so the sunglasses someone came in turn up, and whatever's given or taken back)
+const pocketsOpen = w => !!w.shown && w.card.activeTab() === 'pockets';
+function refreshPockets(w) {
+  if (!pocketsOpen(w)) return;
+  const carried = personOf(w)?.pockets ?? [];
+  const key = carried.map(gift => gift.name).join('|');
+  if (key === w.pocketsShown) return;
+  w.pocketsShown = key;
+  w.pocketSlots.forEach((button, slot) => {
+    const gift = carried[slot];
+    button.textContent = gift ? gift.emoji : '–';
+    button.classList.toggle('pc-pocket-empty', !gift);
+    button.disabled = !gift;
+    button.title = gift ? 'Take it back' : '';
+  });
+  if (w.pocketHover == null || !carried[w.pocketHover]) showPocket(w, -1);
+}
+// what's in pocket `slot` beneath them (-1: what the tab's for)
+function showPocket(w, slot) {
+  const gift = slot >= 0 ? personOf(w)?.pockets?.[slot] : null;
+  w.pocketHover = gift ? slot : null;
+  if (gift) { tipLines(w.pocketInfo, giftLines(gift)); return; }
+  const empty = !personOf(w)?.pockets?.length;
+  w.pocketInfo.replaceChildren(empty ? 'Nothing in their pockets.' : 'Point at something to see what it does; click it to take it back.');
+  w.pocketInfo.classList.add('pc-pocket-hint');
+}
+// a gift's tip (giftLines in gifts.js) into `el`: its name in bold, its traits run together on a line, then the rest
+function tipLines(el, { name, traits, notes }) {
+  el.classList.remove('pc-pocket-hint');
+  const line = (className, text) => { const div = document.createElement('div'); div.className = className; div.textContent = text; return div; };
+  el.replaceChildren(line('pc-gift-name', name), ...(traits.length ? [line('pc-gift-traits', traits.join(' · '))] : []),
+    ...notes.map(note => line('pc-gift-note', note)));
+}
+
+// ---- the Gift window: every gift in assets/text/gifts.txt as an emoji button, keepsakes then consumables, and under them
+// what the one under the pointer (or keyboard focus) does. A click gives it; on a touch screen, where there's no pointer
+// to rest on one, the first tap shows what it does and a second gives it. It's for whoever's card it was opened from,
+// and goes when that card closes or moves on to someone else.
+let giftWindow = null; // { w, id, close, info } while it's open
+function openGifts(w) {
+  const p = personOf(w);
+  if (!p) return;
+  giftWindow?.close();
+  const name = App.people[w.shown.index]?.name ?? 'them';
+  const win = openWindow({ id: 'gift-window', title: 'Gift', width: 320, onClose: () => { giftWindow = null; }, fill: body => {
+    body.innerHTML = `<div class="gift-to"></div><div class="gift-lists"></div><div class="gift-info"></div>`;
+    body.querySelector('.gift-to').textContent = `Something for ${name}`;
+    const lists = body.querySelector('.gift-lists'), info = body.querySelector('.gift-info');
+    let picked = null;
+    const hint = text => { info.replaceChildren(text); info.classList.add('pc-pocket-hint'); };
+    const idle = () => hint(IS_TOUCH ? 'Tap a gift to see what it does, and again to give it.' : 'Point at a gift to see what it does; click to give it.');
+    const draw = () => {
+      lists.replaceChildren();
+      if (!GIFTS.length) { lists.textContent = giftsLoaded() ? 'There\'s nothing to give (see assets/text/gifts.txt).' : 'Loading…'; return; }
+      [['keepsake', 'Keepsakes'], ['consumable', 'Consumables']].forEach(([kind, heading]) => {
+        const kindGifts = GIFTS.filter(gift => gift.kind === kind);
+        if (!kindGifts.length) return;
+        const head = document.createElement('div');
+        head.className = 'gift-head';
+        head.textContent = heading;
+        const grid = document.createElement('div');
+        grid.className = 'gift-grid';
+        kindGifts.forEach(gift => {
+          const button = document.createElement('button');
+          button.className = 'btn gift-pick';
+          button.textContent = gift.emoji;
+          button.setAttribute('aria-label', gift.name);
+          const show = () => tipLines(info, giftLines(gift));
+          button.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') show(); });
+          button.addEventListener('focus', show);
+          button.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch' && picked !== gift) idle(); });
+          button.addEventListener('click', () => {
+            if (IS_TOUCH && picked !== gift) { picked = gift; lists.querySelectorAll('.gift-pick').forEach(b => b.classList.toggle('on', b === button)); show(); return; }
+            give(gift);
+          });
+          grid.append(button);
+        });
+        lists.append(head, grid);
+      });
+    };
+    const give = gift => {
+      const q = personOf(w);
+      if (!q) { giftWindow?.close(); return; }
+      if (gift.kind === 'keepsake' && pocketsFull(q)) { hint(`${name}'s pockets are full: take something back first.`); return; }
+      const { given, cheered } = giveGift(q, w.shown.index, gift);
+      if (!given) return;
+      hint(`${gift.emoji} Given to ${name}.` + (cheered ? ' That cheered them up!' : ''));
+      w.pocketsShown = null;
+      refreshPockets(w);
+      if (cheered) w.card.set('mood', garbled(profileOf(q.id, w.shown.isMan, q.moodNow).mood, w.shown.traits, w.shown.seed));
+    };
+    idle();
+    draw();
+    if (!giftsLoaded()) onGiftsLoaded(draw);
+  } });
+  giftWindow = { w, id: p.id, close: () => win.close() };
+}
 
 // (once people/*.txt has loaded, the cards show what it says)
 onProfilesLoaded(() => openWindows().forEach(w => fill(w, w.shown.index, w.shown.isMan, w.shown.beside)));

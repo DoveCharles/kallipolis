@@ -36,7 +36,8 @@ import { turnCrawling } from './peopleRoad.js';
 import { drinking, goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './peopleStalls.js';
 import { sway, updateDrunk } from './peopleDrunk.js';
 import { avoidSmells, updateFlies } from './peopleSmell.js';
-import { updateStatusEffects } from '../statuseffects.js';
+import { updateStatusEffects, restackTraits } from '../statuseffects.js';
+import { stockPockets } from '../gifts.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
@@ -537,8 +538,10 @@ export function refreshTraits(p, i) {
   const isMan = personModel ? personModel.isMan[i] === 1 : null, key = traitsKeyOf(isMan);
   if (p.traitsKey === key) return;
   p.traitsKey = key;
-  const profile = profileOf(p.id, isMan);
-  p.traits = profile.traits;
+  const profile = profileOf(p.id, isMan, p.moodNow);
+  // (who they are, with what's in their pockets and what they're under stacked over it: see life/statuseffects.js)
+  p.baseTraits = profile.traits;
+  restackTraits(p);
   p.height = p.baseHeight*p.traits.size;
   p.age = profile.age;
   p.name = profile.name; // (for their card, and for naming them in the morality notices when they die)
@@ -1132,6 +1135,7 @@ export function updatePeople(t) {
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
+    if (!p.pocketsStocked) stockPockets(p, i); // (the sunglasses they came in: see life/gifts.js)
     if (p.blood) updateBlood(p, dt, i);
     p.trainCooldown -= dt;
     p.snackCooldown -= dt;

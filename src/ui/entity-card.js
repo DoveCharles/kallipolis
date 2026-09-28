@@ -44,7 +44,7 @@ export const inspected = new Map();
 // showAction. `labels` renames rows for this card ({ occupants: 'Passengers' }). `health` adds a thin bar under the
 // picture: bindHealth(entity, kind) makes it follow that entity's health (core/health.js); setHealth sets it by hand.
 // `tabs`: sheet tabs under the title bar (the first is the card's own rows; the rest get empty panes: tabPane(key), keys
-// lower-cased); onTab(listener) hears selectTab. `effects`: a column of status-effect icons right of the picture, empty
+// lower-cased); onTab(listener) hears selectTab. `effects`: a column of status-effect icons left of the picture, empty
 // until there are any (see setEffects, and life/statuseffects.js).
 export function makeCard({ id, title, onClose, thumb = {}, kill = null, action = null, labels = {}, health = false, tabs = null, effects = false }) {
   const el = document.createElement('div');
@@ -169,7 +169,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   if (effects) {
     effectsEl = document.createElement('div');
     effectsEl.className = 'pc-effects';
-    topSection.append(effectsEl);
+    topSection.insertBefore(effectsEl, shot); // (left of the picture, between it and the rows)
   }
   el.append(titlebar, heart, close);
   const panes = {}, tabButtons = {}, tabListeners = [];
@@ -249,16 +249,22 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     for (let i = 0; i < want; i++) {
       const slot = column.children[i] ?? document.createElement('div');
       const entry = list[i] ?? null;
-      const classes = 'pc-effect' + (entry ? '' : ' pc-effect-empty');
+      const classes = 'pc-effect' + (entry ? (EFFECTS[entry.status]?.emoji ? ' pc-effect-emoji' : '') : ' pc-effect-empty');
       if (slot.className !== classes) slot.className = classes;
       if (entry) {
         // (a slot that stood empty has to be emptied of its dash before its picture goes in, leaving nothing of the old
         // status behind either way — and the slot keeps its place in the column, so it's still the element the pointer is on)
-        const icon = `assets/icons/status/${EFFECTS[entry.status]?.icon ?? 'sick'}.png`;
-        const image = slot.querySelector('img');
-        if (!image) slot.replaceChildren(statusIcon());
-        const picture = slot.querySelector('img');
-        if (picture && picture.getAttribute('src') !== icon) picture.setAttribute('src', icon);
+        // (a gift's status is its emoji rather than a bitmap: see life/gifts.js)
+        const emoji = EFFECTS[entry.status]?.emoji;
+        if (emoji) {
+          if (slot.querySelector('img') || slot.textContent !== emoji) slot.replaceChildren(emoji);
+        } else {
+          const icon = `assets/icons/status/${EFFECTS[entry.status]?.icon ?? 'sick'}.png`;
+          const image = slot.querySelector('img');
+          if (!image) slot.replaceChildren(statusIcon());
+          const picture = slot.querySelector('img');
+          if (picture && picture.getAttribute('src') !== icon) picture.setAttribute('src', icon);
+        }
         const left = typeof entry.left === 'function' ? entry.left : () => entry.left;
         statusLinesOf.set(slot, { left, lines: () => statusLines(entry.status, null, left()) });
       } else {
