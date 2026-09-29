@@ -249,7 +249,8 @@ window.addEventListener('storage', e => { if (e.key !== POINTS_KEY) return; try 
 const BAR_DELAY = 1000;
 let barReady = false;
 whenLoaded(() => setTimeout(() => {
-  barReady = true; meterWindow.classList.remove('meter-settling'); renderMeter(tally());
+  barReady = true; meterWindow.classList.remove('meter-settling'); document.body.classList.remove('ui-settling'); renderMeter(tally());
+  setTimeout(() => document.body.classList.remove('ui-locked'), 800); // (once the fade's done)
   tickUp(v => { evilEl.textContent = pad3(v); }, () => pts.evil);
   tickUp(v => { goodEl.textContent = pad3(v); }, () => pts.good);
   setTimeout(() => { pointsShown = true; renderPoints(); }, 800);

@@ -363,8 +363,8 @@ const BUMP_PUNCH_CHANCE = 0.05, SHOVE_DISTANCE = 0.7, SHOVE_DECAY = 5, STAGGER_S
 // Jumping (Space): in the air the keys steer (turning the way they're going towards them by AIR_CONTROL, speed kept, and
 // speeding up to walking pace by AIR_ACCEL), and strafing (A/D) while turning the mouse adds AIR_GAIN of the speed per
 // radian turned — bunny hopping. Holding Space jumps again the moment they land, before the ground slows them (by
-// GROUND_FRICTION back to walking pace). (Per people size 1.)
-const JUMP_SPEED = 4, GRAVITY = 14, AIR_ACCEL = 4, AIR_CONTROL = 6, AIR_GAIN = 0.3, GROUND_FRICTION = 8;
+// GROUND_FRICTION back to walking pace). Never over HOP_MAX times their own speed. (Per people size 1.)
+const JUMP_SPEED = 4, GRAVITY = 14, AIR_ACCEL = 4, AIR_CONTROL = 6, AIR_GAIN = 0.1, GROUND_FRICTION = 8, HOP_MAX = 10;
 // Walking into a car that's standing still (a moving one runs you over: see runOverPeople), you're put back outside it
 // and staggered back off it, as off someone's middle. (Scale of its hitbox; moving: faster than runOverPeople's.)
 const CAR_BOUNCE_SCALE = 0.9, CAR_STILL = 0.3;
@@ -409,7 +409,7 @@ export function walkPossessed(p, dt) {
       const wish = walkingSpeed, dx = vx/wish, dz = vz/wish;
       const add = wish - (hop.vx*dx + hop.vz*dz);
       if (add > 0) { const a = Math.min(AIR_ACCEL*wish*dt, add); hop.vx += a*dx; hop.vz += a*dz; }
-      const sp = Math.hypot(hop.vx, hop.vz)*(right ? 1 + AIR_GAIN*turned : 1);
+      const sp = Math.min(HOP_MAX*wish, Math.hypot(hop.vx, hop.vz)*(right ? 1 + AIR_GAIN*turned : 1));
       const k = 1 - Math.exp(-AIR_CONTROL*dt); hop.vx += (dx*sp - hop.vx)*k; hop.vz += (dz*sp - hop.vz)*k;
       const n = sp/(Math.hypot(hop.vx, hop.vz) || 1); hop.vx *= n; hop.vz *= n;
     }

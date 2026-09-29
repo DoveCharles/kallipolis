@@ -121,9 +121,14 @@ body.energy-out [data-energy] { filter:grayscale(.55); opacity:.7; }
 #morality-meter .meter-value { flex:none; }
 /* the fill always spans the bar, green to --good-pct then red: 50/50 until morality.js sets it, easing into place */
 @property --good-pct { syntax:'<percentage>'; inherits:false; initial-value:50%; }
+/* the rest of the toolbar and the menu bar: greyed alike until then (ui-settling), and not to be clicked until the fade
+   is over (ui-locked); both taken off by morality.js */
+:is(#canvas-tools, #w3-menubar, #morality-meter > :not(.meter-readout)) { transition:filter .8s ease-out; }
+body.ui-settling :is(#canvas-tools, #w3-menubar, #morality-meter > :not(.meter-readout)) { filter:saturate(.2) contrast(.7) brightness(1.1); } /* (greyed but opaque: nothing shows through) */
+body.ui-locked :is(#canvas-tools, #w3-menubar, #morality-meter, #app-frame .win3-titlebar) { pointer-events:none; }
 /* greyed until then (meter-settling, taken off by morality.js), fading in as the fill eases */
 #morality-meter .meter-readout { transition:filter .8s ease-out; }
-#morality-meter.meter-settling .meter-readout { filter:saturate(.2) opacity(.75); }
+#morality-meter.meter-settling .meter-readout { filter:saturate(.2) contrast(.7) brightness(1.1); }
 #morality-meter .meter-fill { left:0; width:100%; --good-pct:50%; transition:--good-pct .8s ease-out;
   background:linear-gradient(to right, var(--ratio-good) var(--good-pct), var(--ratio-evil) var(--good-pct)); }
 .meter-icon { width:auto; height:auto; flex:none; image-rendering:pixelated; vertical-align:middle; }

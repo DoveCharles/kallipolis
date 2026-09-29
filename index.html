@@ -27,7 +27,7 @@
 <!-- the side panel and hints start hidden (ui-loading); src/ui/view-prefs.js slides them in once the page has loaded.
      start-edit keeps the Edit button pressed meanwhile when Options > Game > Start in Mode comes to Edit (see view-prefs.js). -->
 <script>
-document.body.classList.add('w3-no-panel', 'ui-loading');
+document.body.classList.add('w3-no-panel', 'ui-loading', 'ui-settling', 'ui-locked'); // (the last two: see src/ui/meter.css)
 try {
   const start = localStorage.getItem('splinetopia.startMode') || 'last';
   const last = localStorage.getItem('splinetopia.lastMode') || (localStorage.getItem('splinetopia.startInEdit') === '0' ? 'game' : 'edit');
