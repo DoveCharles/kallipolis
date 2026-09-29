@@ -142,9 +142,24 @@ function goSwim(p, area) {
   return false;
 }
 
-/** Held at the water's edge: a hangout wanderer picks somewhere else; one mid-activity gives it up after BANK_GIVE_UP seconds. */
+/**
+ * Held at the water's edge: a hangout wanderer picks somewhere else; one mid-activity gives it up after BANK_GIVE_UP
+ * seconds. Someone leaving, whose walkway point is fixed, would stand there for good: after BANK_GIVE_UP they go back to
+ * wandering their hangout (and leave some other way later), or with nowhere in it to go, are put on the nearest walkway
+ * (reseatPerson).
+ */
 const BANK_GIVE_UP = 2;
 function stopAtBank(p, dt) {
+  if (p.mode === 'leaving') {
+    if (p.follow) return; // (walking with someone: whatever they do, see besideLeader)
+    p.bankHeld = (p.bankHeld ?? 0) + dt;
+    if (p.bankHeld <= BANK_GIVE_UP) return;
+    p.bankHeld = 0;
+    const area = p.area >= 0 ? peopleNav.areas[p.area] : null, spot = area && randomSpotIn(area, null, p);
+    if (spot && (spot.x !== p.x || spot.z !== p.z)) Object.assign(p, { mode: 'wander', tx: spot.x, tz: spot.z, wait: 0 });
+    else reseatPerson(p);
+    return;
+  }
   if (p.mode !== 'wander') return;
   p.swimming = null;
   if (!p.act) { p.tx = p.x; p.tz = p.z; return; }
