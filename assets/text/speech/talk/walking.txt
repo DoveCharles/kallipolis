@@ -1,0 +1,41 @@
+# Talk while walking along together (see about.txt: {is = walking}). Opened from dialogue.txt, only for two walking.
+Where are we headed, anyway?
+> Nowhere in particular. {lounging}
+> Just follow me. {patience = -1}
+>> You always say that. {score = -1}
+> I thought you knew! {blazed}
+>> I was following you!
+
+Slow down a bit, would you? {speed = -1}
+> Keep up! {speed, score = -1}
+> Sorry, sorry. {evil = -1, score = 1}
+
+Nice day for a walk. {world.weather = clear}
+> Isn't it? {happy}
+> I suppose. {mood = -1}
+
+Lovely day for a walk in the rain. {world.weather = rain}
+> You and I have very different ideas of lovely. {mood = -1}
+> I don't mind it, actually. {happy}
+
+Mind your step, it's slippery. {world.weather = snow}
+> I'm fine, I'm fine. {patience = -1}
+> Thanks. {evil = -1}
+
+I'm glad I bumped into you. {other.friend}
+> Me too, [other.name]. {happy, score = 1}
+> Are you, though? {other.enemy, score = -1}
+
+Do you walk this way often? {other.stranger}
+> Every day. {score = 1}
+> Only when I'm lost. {blazed}
+> Why do you want to know? {nosy = -1, score = -1}
+>> Just making conversation... {mood = -1}
+
+Let's walk through the park sometime. {parks}
+> I'd like that. {parks, score = 1}
+> I'm more of a pavement person. {parks < 0}
+
+My feet are killing me. {speed = -1}
+> We'll stop soon. {evil = -1}
+> Walk it off. {aggression}

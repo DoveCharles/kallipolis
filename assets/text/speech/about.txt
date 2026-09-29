@@ -175,6 +175,7 @@
 #   {is = sad}                looking upset (their face)      {is = happy}    looking happy
 #   {is = scared}             running from something, or blood on them (unless they like it)
 #   {is = sitting}            sat down: on a bench, in a circle, on a seat indoors   {other.is = sitting}  to someone sat
+#   {is = walking}            walking along beside someone, talking (talk/walking.txt; closers.txt has a few)
 #   {is != drunk}             sober                           {is = bloody, is = hurt}   both
 #   {other.is = hurt}         talking to someone hurt         {other.is != sad}   to someone not looking upset
 # Seeing or feeling something, people say a line from reactions.txt straight away — once each — before anything else:
@@ -224,6 +225,8 @@
 #   > Oh, me too! {likes > 0, score = 1}        > You would. {likes = -1, score = -1}
 #   Lovely chatting! {end, talk.score > 1}      Well, that was unpleasant. {end = bad, talk.score < -1}
 #   {talk.score = -1}         leans toward a conversation that's going badly (score -3 counts fully)
+# WALKING TOGETHER: two who've just waved hello sometimes walk on side by side instead, talking as they go ({is = walking}),
+# then stop to wave goodbye and part; whoever's possessed walking off mid-chat is followed the same way.
 # IN A CIRCLE (people sat on the grass): anyone can reply to anyone. When someone joins, one of those sat there who isn't
 # mid-line greets them with a line from greetings.txt (other. is the newcomer; its replies are theirs), at once if
 # nobody's talking, else next turn; the rest look round at them. Whoever's possessed going up to someone (E) greets them

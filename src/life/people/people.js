@@ -30,7 +30,7 @@ import { relateFelt, relateSaw, pruneGone } from './peopleRelations.js';
 import { logLine, forgetLinesExcept } from './peopleSaid.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { hidingFromSun, outOfTime, vanishIndoors } from './peopleActivities.js';
-import { PUNCH_CHASE_SPEED, awaited, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
+import { PUNCH_CHASE_SPEED, WALK_PACE, awaited, besideLeader, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater, wouldWade, onWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
 import { drinking, goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './peopleStalls.js';
@@ -481,14 +481,15 @@ export function newPerson(id = S.peopleIdSeq++) {
     walkCycle: peopleRng(), idleTime: peopleRng()*10, clipA: null, clipB: null, rowB: 0, fade: 1, fadeTime: FADE_QUICK,
     pose: 'Idle', oneShot: null, shotTime: 0, heightScale: 1, blinkIn: peopleRng()*6, blinkAge: BLINK_DURATION,
     lookTurn: 0, lookTilt: 0, lookTurnTo: 0, lookTiltTo: 0, lookIn: peopleRng()*4, stillFor: 0, fidgetAfter: 2 + peopleRng()*5,
-    // what they're doing besides walking about (see "what people get up to"): act 'chat', 'bench', 'circle' or 'lie', how
+    // what they're doing besides walking about (see "what people get up to"): act 'chat', 'walk', 'bench', 'circle' or 'lie', how
     // far along it they are (stage) and for how long (timer); where they're sitting or lying (spot, seat, the pose — sitClip
     // or lieClip — and circleAngle round a circle); the group they're talking in; the way they should face and who they're
-    // looking at; how far up onto a bench seat they sit;
+    // looking at; how far up onto a bench seat they sit; walking with someone, who they keep beside (follow), on which side
+    // (walkSide), and whether they turned round to (walkBack);
     //
     // and their mouth — how open it's going to (talkTo, until talkIn) and their expression (emotionTo, until emotionIn)
     act: null, stage: '', timer: 0, spot: null, seat: null, sitClip: null, lieClip: null, circleAngle: 0, group: null,
-    faceTo: null, lookAt: null, seatLift: 0, chatCheckIn: peopleRng(), chatCooldown: peopleRng()*20,
+    faceTo: null, lookAt: null, seatLift: 0, follow: null, walkSide: 1, walkBack: false, chatCheckIn: peopleRng(), chatCooldown: peopleRng()*20,
     talk: 0, talkTo: 0, talkIn: 0, emotion: 0, emotionTo: 0, emotionIn: 0,
     // and their eyes: how shocked, happy, angry and sad they look
     eyes: [0, 0, 0, 0],
@@ -1233,11 +1234,11 @@ export function updatePeople(t) {
       // (the skin their traits give them is written by tintSkin, above)
     }
     // (on an escalator, they stand and are carried at its pace: see roads/mall.js)
-    const onLine = p.mode === 'line' && !possessed && !p.jc && !p.act && peopleNav.lines[p.li];
+    const onLine = p.mode === 'line' && !possessed && !p.jc && (!p.act || (p.act === 'walk' && !p.follow)) && peopleNav.lines[p.li];
     const riding = onLine?.escalator && p.seg < onLine.beltEnd ? onLine.escalator : 0; // (off its foot, they walk on)
     if (riding) speed = riding*S.peopleSpeed;
-    // (stopped to talk, or frozen in shock, someone on a walkway stays put)
-    if (p.mode === 'line' && p.act !== 'chat' && !frozen && !p.attack) {
+    // (stopped to talk, or frozen in shock, someone on a walkway stays put; walking with someone, they keep beside them: below)
+    if (p.mode === 'line' && p.act !== 'chat' && !p.follow && !frozen && !p.attack) {
       if (!p.jc && !p.act) maybeBuyOnWalkway(p, dt); // (stepping off to a hot dog or coffee stall: see peopleStalls.js)
       if (!p.jc && !p.act) maybeCrossRoad(p, peopleNav.lines[p.li], dt);
       if (p.act === 'buy') {
@@ -1246,14 +1247,16 @@ export function updatePeople(t) {
         goal = updateCrossing(p, dt, speed); // (null while waiting for a gap in traffic)
         if (isPedInDanger(p)) speed *= CROSS_SPEED_MULT; // an increased pace, crossing
       } else {
-        walkAlong(p, (riding ? riding*S.peopleSpeed : speed)*dt);
+        walkAlong(p, (riding ? riding*S.peopleSpeed : speed*(p.act === 'walk' ? WALK_PACE : 1))*dt);
         if (p.mode === 'line') goal = walkwayPoint(p);
       }
     }
     if (p.mode === 'wander') {
       const area = peopleNav.areas[p.area];
-      if (p.act) {
+      if (p.act && p.act !== 'walk') {
         goal = updateActivity(p, area, dt);
+      } else if (p.follow) {
+        // (walking with someone: beside them, below)
       } else if (p.fright || p.stun || p.please || p.attack || frozen) {
         // Frightened, stunned or pleased. Fright runs off further each time they reach where they were running to;
         // stun and please hold position through the `frozen` guard below, with no movement of their own.
@@ -1277,7 +1280,9 @@ export function updatePeople(t) {
         const stalls = !p.snack && p.snackCooldown <= 0 && hasStallIn(area);
         // (someone drinking where there's a beer stall stays for another rather than moving on: see peopleStalls.js)
         const round = drinking(p) && hasStallIn(area, 'beer');
-        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train', 'buy', 'swim'][pickWeighted([area.exits.length ? (round ? 0.03 : 0.2) : 0, 0.16*lounging, 0.08*lounging, 0.18*chatty, 0.13, 0.25, stations && !round ? 0.12 : 0, stalls ? (round ? 0.6 : 0.15) : 0, onWater(p) ? SWIM_WEIGHT : 0], w => w)];
+        // (walking and talking with someone, only about the place or out of it: free = 0)
+        const free = p.act ? 0 : 1;
+        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train', 'buy', 'swim'][pickWeighted([area.exits.length ? (round ? 0.03 : 0.2) : 0, 0.16*lounging*free, 0.08*lounging*free, 0.18*chatty*free, 0.13, 0.25, stations && !round ? 0.12*free : 0, stalls ? (round ? 0.6 : 0.15)*free : 0, onWater(p) ? SWIM_WEIGHT*free : 0], w => w)];
         if (next === 'swim' && goSwim(p, area)) {
           // off for a swim (waterwalking/aqua)
         } else if (next === 'buy' && goBuy(p, area)) {
@@ -1305,7 +1310,7 @@ export function updatePeople(t) {
           const s = randomSpotIn(area, null, p); p.tx = s.x; p.tz = s.z;
         }
       }
-      if (p.mode === 'wander' && !p.act && !frozen && !p.attack) goal = { x: p.tx, y: area.y, z: p.tz };
+      if (p.mode === 'wander' && (!p.act || p.act === 'walk') && !frozen && !p.attack) goal = { x: p.tx, y: area.y, z: p.tz };
     }
     if (p.mode === 'train') {
       goal = updateTrainRider(p, i, dt);
@@ -1328,6 +1333,8 @@ export function updatePeople(t) {
       goal = frozen ? null : p.exit;
       if (Math.hypot(p.exit.x - p.x, p.exit.z - p.z) < 0.5) p.mode = 'line';
     }
+    // walking with someone: beside them, going where they go (see "walking together" in peopleActivities.js)
+    if (p.follow) goal = frozen ? null : besideLeader(p);
     // in a plaza, walk around its fountain rather than through the pool: while the straight line to where they're going
     // passes over it, head instead for the point on its rim nearest that line — which moves round as they do
     const hangout = (p.mode === 'wander' || p.mode === 'leaving') && p.area >= 0 ? peopleNav.areas[p.area] : null;
@@ -1348,7 +1355,8 @@ export function updatePeople(t) {
     p.stepped = 0;
     if (goal) {
       const dx = goal.x - p.x, dz = goal.z - p.z, d = Math.hypot(dx, dz);
-      const step = possessed ? d : speed*dt*(p.mode === 'line' && !p.crossStage && !p.attack && !p.act ? 1 + Math.min(2, d*0.5) : 1);
+      const keepingUp = p.follow || (p.mode === 'line' && !p.crossStage && !p.attack && (!p.act || p.act === 'walk'));
+      const step = possessed ? d : speed*dt*(keepingUp ? 1 + Math.min(2, d*0.5) : 1);
       const k = d > 1e-4 ? Math.min(1, step/d) : 0, mx = dx*k, mz = dz*k;
       // (anyone just walking waits where they are until whoever it is is up: a step that would take them nearer, inside LYING_CLEARANCE, isn't taken — but not someone going after someone, or running from them)
       const blocked = !possessed && !p.attack && !fleeing && lyingDown.length > 0 && (lyingNear ? lyingNear.near(p.x + mx, p.z + mz, LYING_CLEARANCE*S.peopleSize).map(k => lyingDown[k]) : lyingDown).some(q => {

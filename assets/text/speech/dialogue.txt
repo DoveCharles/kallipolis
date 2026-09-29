@@ -5,3 +5,4 @@
 [weird] {weight = 1.5}
 [oneliners] {weight = 3}
 [places] {weight = 2}
+[walking] {weight = 3, is = walking}

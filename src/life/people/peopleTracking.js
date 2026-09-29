@@ -151,6 +151,7 @@ export function personDoing(p) {
     const what = { coffee: 'a coffee', beer: 'a pint' }[p.buy?.item] ?? 'a hot dog';
     return p.stage === 'go' ? 'Off to buy ' + what : p.stage === 'back' ? (p.snack ? 'Back on their way' : 'Giving up on ' + what) : 'Buying ' + what;
   }
+  if (p.act === 'walk') { const other = p.group?.members.find(m => m !== p) ?? p.follow; return other ? 'Walking with ' + nameOf(other) : 'Out for a walk'; }
   if (p.act === 'chat') { const other = p.group?.members.find(m => m !== p); return other ? 'Chatting with ' + nameOf(other) : 'Chatting'; }
   if (p.act) {
     if (p.stage === 'greet') return 'Waving hello';

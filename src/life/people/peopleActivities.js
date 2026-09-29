@@ -1,10 +1,10 @@
 import { App, S } from '../../core/shared.js';
-import { feel, witness, voiceOfPerson, hairColorOf, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
+import { feel, witness, voiceOfPerson, hairColorOf, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, insideFor, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { footprintBounds, roomLayoutOf } from '../../buildings/footprints.js';
 import { Y_ZONE_GROUND } from '../../core/scene.js';
 import { updateBuying } from './peopleStalls.js';
-import { joinWalkway, placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint } from './peoplePathing.js';
+import { joinWalkway, placeAtVertex, reseatPerson, updateCrossing, walkBackToWalkway, wanderInto, walkwayPoint } from './peoplePathing.js';
 import * as THREE from 'three';
 import { controls } from '../../core/camera-controls.js';
 import { profileOf, profilesVersion } from '../profiles.js';
@@ -27,7 +27,7 @@ import { RELATE, relateAll, relateBoth, introduceAll } from './peopleRelations.j
 // ---- what people get up to besides walking about.
 //
 // p.act names it: 'chat' (two people meeting, head on along a walkway or one crossing to another in a plaza or park: they
-// wave, talk a while, wave goodbye), 'bench' (a plaza bench), 'circle' (park grass, others joining to talk), 'lie' (park
+// wave, talk a while, wave goodbye), 'walk' (two who've met walking on side by side, talking: see "walking together"), 'bench' (a plaza bench), 'circle' (park grass, others joining to talk), 'lie' (park
 // grass, only with nobody else about).
 //
 // People talking are a group and take turns, looking at whoever is talking. Someone standing about for a while fidgets
@@ -77,6 +77,7 @@ function endedByLine(g) {
   if (g.kind === 'room') endRoomChat(g);
   else if (g.kind === 'bar') endBarChat(g);
   else if (g.kind === 'circle') { if (g.members.includes(ending.by)) leaveCircle(ending.by, ending.how); }
+  else if (g.kind === 'walk') partWalk(g, ending.how);
   else if (ending.how === 'bad') endChat(g, 'bad');
   else wave(g, 'bye');
   return true;
@@ -151,7 +152,7 @@ export function leaveGroup(p) {
   g.members.forEach(m => { if (m.lookAt === p) m.lookAt = null; });
   if (g.kind === 'circle') { g.members.forEach(m => relateBoth(p, m, RELATE.circle + (g.score ?? 0)*SCORE_RELATE)); introduceAll([p, ...g.members]); }
   // a conversation between two ends when either goes; a circle carries on while anyone's left in it
-  if (g.kind === 'chat') endChat(g); else if (g.kind === 'room') endRoomChat(g); else if (g.kind === 'bar') endBarChat(g);
+  if (g.kind === 'chat' || g.kind === 'walk') endChat(g); else if (g.kind === 'room') endRoomChat(g); else if (g.kind === 'bar') endBarChat(g);
   else if (!g.members.length) removeGroup(g);
 }
 
@@ -161,6 +162,7 @@ export function leaveGroup(p) {
  * @returns {void}
  */
 export function endActivity(p) {
+  if (p.follow) settleFollower(p);
   leaveGroup(p);
   endAttack(p);
   releasePunched(p);
@@ -251,6 +253,130 @@ export function talkWith(p, q) {
   p.lookAt = q; q.lookAt = p;
   p.greetTo = { who: q, until: performance.now()/1000 + GREET_WAIT };
   if (!g.speaker?.saying) { g.speaker = p; g.turnIn = GREET_WAIT; closeNow(p); }
+}
+
+// ---- walking together
+// Two who've just waved hello (see updateGroups) sometimes walk on side by side rather than stand there talking: a group
+// of kind 'walk', both act 'walk'. The leader (g.leader) goes on about their day as ever — along walkways, onto others,
+// round and out of hangouts — only not crossing roads, riding trains or stopping off anywhere; the other follows
+// (p.follow), keeping beside them (besideLeader) on one side or the other (p.walkSide), dropping back where the way's too
+// narrow for two abreast. Time up, one says a closer and they stop to wave goodbye; then they part, the follower back the
+// way they came if they turned round for it (p.walkBack). Anything else happening to either (a fright, a punch, a
+// building, falling too far behind) just ends it. Whoever's possessed, walking off mid-chat, is followed the same way
+// for as long as they're talked to (see updateGroups).
+const WALK_CHANCE = 0.3;   // the chance two who've just said hello walk on together (by how chatty they both are)
+const WALK_GAP = 0.9;      // how far apart (at people size 1) two walk side by side
+export const WALK_PACE = 0.85; // how fast two walking and talking go, as a share of the leader's own pace
+const FOLLOW_OFF = 1.6;    // how far (in CHAT_GAPs) whoever's possessed walks off before who they're talking to follows
+const WALK_LOST = 6;       // how far behind (at people size 1) the follower can fall before the walk's over
+const WALK_MODES = ['line', 'wander', 'leaving'];
+/**
+ * Whether someone's free to walk off with someone: on their feet, outside, and not caught up in anything.
+ * @param {Person} m - the person
+ * @param {boolean} [following] - to follow someone (on their way out of a hangout will do), not to set off together
+ * @returns {boolean} whether they can
+ */
+const canWalk = (m, following = false) => !isSeated(m) && !m.inRoom && (following ? WALK_MODES.includes(m.mode) : m.mode === 'line' || m.mode === 'wander')
+  && !m.fright && !m.stun && !m.please && !m.punched && !m.attack && !m.jc && !m.crossStage && !m.oneShot;
+/**
+ * Set someone walking beside someone else, on whichever side of them they're standing.
+ * @param {Person} p - who follows
+ * @param {Person} leader - who they walk with
+ * @returns {void}
+ */
+function follow(p, leader) {
+  const fx = Math.sin(leader.heading), fz = Math.cos(leader.heading);
+  Object.assign(p, { act: 'walk', follow: leader, faceTo: null, walkSide: fz*(p.x - leader.x) - fx*(p.z - leader.z) >= 0 ? 1 : -1 });
+}
+/**
+ * Turn two chatting, just done waving hello, into two walking on together, one of them leading.
+ * @param {object} g - the group
+ * @returns {void}
+ */
+function startWalk(g) {
+  const [a, b] = g.members, leader = peopleRng() < 0.5 ? a : b, other = leader === a ? b : a;
+  Object.assign(g, { kind: 'walk', stage: 'talk', leader, timer: (20 + peopleRng()*40)*(a.traits.patience + b.traits.patience)/2 });
+  other.walkBack = other.mode === 'line' && other.dir !== leader.dir; // (met head on: they've turned round to go with them)
+  follow(other, leader);
+  Object.assign(leader, { act: 'walk', faceTo: null, wait: 0 });
+  if (leader.mode === 'wander') { const s = randomSpotIn(peopleNav.areas[leader.area], leader); leader.tx = s.x; leader.tz = s.z; }
+}
+/**
+ * Where someone walking with someone (p.follow) should be: beside them — on a walkway, across it from them (behind, where
+ * it's too narrow), going the way they go. Stopped, close by, they stay put, turned to them.
+ * @param {Person} p - who follows
+ * @returns {?{x: number, y: number, z: number}} where to head (null to stay put)
+ */
+export function besideLeader(p) {
+  const L = p.follow, gap = WALK_GAP*S.peopleSize;
+  if (!L.moving && Math.hypot(L.x - p.x, L.z - p.z) < gap*2) { p.faceTo = headingTo(p, L); return null; }
+  // (going where they go: the same walkway or hangout — whoever's possessed goes anywhere, and is just kept up with)
+  if (WALK_MODES.includes(L.mode)) Object.assign(p, { mode: L.mode, li: L.li, u: L.u, seg: L.seg, dir: L.dir, area: L.area, exit: L.exit });
+  const nav = L.mode === 'line' && peopleNav.lines[L.li];
+  if (nav) {
+    const room = s => Math.max(0, Math.min(gap, nav.lateral - s*L.lat));
+    let side = p.lat >= L.lat ? 1 : -1;
+    if (room(-side) > room(side) + 0.05) side = -side;
+    const across = room(side), back = Math.sqrt(gap*gap - across*across);
+    p.lat = L.lat + side*across;
+    p.u = Math.max(0, Math.min(nav.total, L.u - L.dir*back));
+    return walkwayPoint(p);
+  }
+  const fx = Math.sin(L.heading), fz = Math.cos(L.heading), area = L.mode === 'wander' ? peopleNav.areas[L.area] : null;
+  const at = s => ({ x: L.x + fz*s*gap, y: L.y, z: L.z - fx*s*gap }), inside = q => !area || insideFor(area, p)(q.x, q.z);
+  let spot = at(p.walkSide);
+  if (!inside(spot) && inside(at(-p.walkSide))) { p.walkSide = -p.walkSide; spot = at(p.walkSide); }
+  if (!inside(spot)) spot = { x: L.x - fx*gap, y: L.y, z: L.z - fz*gap }; // (no room either side: behind them)
+  return spot;
+}
+/**
+ * Someone done walking with someone: set going on their own from where they are — along the leader's walkway (back the
+ * way they came, if they turned round to walk with them), round their hangout, or back to the nearest walkway.
+ * @param {Person} p - who followed
+ * @returns {void}
+ */
+function settleFollower(p) {
+  const L = p.follow, nav = L.mode === 'line' && peopleNav.lines[L.li];
+  p.follow = null;
+  if (nav) {
+    Object.assign(p, { mode: 'line', li: L.li, u: L.u, seg: L.seg, dir: nav.oneWay || (p.walkBack ? -L.dir : L.dir) });
+    p.lat = Math.max(-nav.lateral, Math.min(nav.lateral, p.lat));
+  } else if (L.mode === 'wander' && peopleNav.areas[L.area]) {
+    Object.assign(p, { mode: 'wander', area: L.area, tx: p.x, tz: p.z, wait: 0 });
+  } else {
+    p.mode = 'wander';
+    if (peopleNav.areas.some(a => insideFor(a, p)(p.x, p.z)) || !walkBackToWalkway(p)) reseatPerson(p);
+  }
+  p.walkBack = false;
+}
+/**
+ * Two walking together, each frame: taking turns talking, until something gets in the way or it's run its course.
+ * @param {object} g - the group
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
+function walkTogether(g, dt) {
+  const L = g.leader, other = g.members.find(m => m !== L);
+  if (g.members.some(m => !canWalk(m, true) || m.act !== 'walk') || Math.hypot(L.x - other.x, L.z - other.z) > WALK_LOST*S.peopleSize) { endChat(g); return; }
+  if (endedByLine(g)) return;
+  takeTurns(g, g.members, dt);
+  if (!L.moving) L.faceTo = headingTo(L, other); // (stood about a while in a hangout: turned to each other)
+  // time's up: someone says a closer, then they stop to wave goodbye (see chats, in updateGroups)
+  g.timer -= dt;
+  if (g.timer <= 0 && !g.wantsEnd) { g.wantsEnd = true; g.timer = CLOSE_WAIT; closeNow(g.speaker); }
+  else if (g.timer <= 0 && !g.speaker?.saying) { g.speaker = null; partWalk(g); }
+}
+/**
+ * Two walking together parting: stopping to wave goodbye, as two chatting do — or, badly, just going (see endChat).
+ * @param {object} g - the group
+ * @param {'bad'|null} [how] - how it ended
+ * @returns {void}
+ */
+function partWalk(g, how = null) {
+  g.members.forEach(m => { if (m.follow) settleFollower(m); m.act = 'chat'; });
+  g.kind = 'chat'; g.leader = null;
+  const standing = g.members.every(m => m.mode === 'line' || m.mode === 'wander'); // (not on their way out of a hangout)
+  if (how === 'bad' || !standing || !hasClip('Wave')) endChat(g, how); else wave(g, 'bye');
 }
 
 /**
@@ -412,6 +538,7 @@ export function updateGroups(dt) {
     if (g.goodbye) { goodbyes(g, dt); continue; }
     if (g.kind === 'room') { roomChat(g, dt); continue; }
     if (g.kind === 'bar') { barChat(g, dt); continue; }
+    if (g.kind === 'walk') { walkTogether(g, dt); continue; }
     if (g.kind === 'circle') {
       const seated = g.members.filter(m => m.stage === 'sit'), talkers = g.members.filter(m => m.stage === 'sit' || m.mode === 'possessed');
       if (seated.some(m => m.traits.smells)) { g.members.filter(m => !m.traits.smells && m.mode !== 'possessed').forEach(finishActivity); continue; } // (someone who smells sat down: everyone else gets up and goes)
@@ -426,10 +553,15 @@ export function updateGroups(dt) {
       if (Math.hypot(b.tx - b.x, b.tz - b.z) < 0.3) wave(g, 'greet');
       else if (g.timer <= 0) { endChat(g); continue; }
     } else if (g.stage === 'greet') {
-      if (g.timer <= 0) { g.stage = 'talk'; g.timer = (8 + peopleRng()*22)*(a.traits.patience + b.traits.patience)/2; }
+      if (g.timer > 0) { /* still waving */ }
+      else if (!g.possessed && canWalk(a) && canWalk(b) && peopleRng() < WALK_CHANCE*Math.sqrt(a.traits.chatty*b.traits.chatty)) { startWalk(g); continue; }
+      else { g.stage = 'talk'; g.timer = (8 + peopleRng()*22)*(a.traits.patience + b.traits.patience)/2; }
     } else if (g.stage === 'talk') {
       if (endedByLine(g)) continue;
       takeTurns(g, g.members, dt);
+      // (whoever's possessed walking off mid-chat: who they're talking to comes along, beside them — see follow)
+      const walker = g.possessed && g.members.find(m => m.mode === 'possessed'), other = walker && g.members.find(m => m !== walker);
+      if (other?.act === 'chat' && canWalk(other, true) && Math.hypot(walker.x - other.x, walker.z - other.z) > FOLLOW_OFF*CHAT_GAP*S.peopleSize) follow(other, walker);
       // time's up: someone says a closer (closers.txt — polite from the patient, rude from the impatient: see
       // audio/dictionary.js), which ends it; if nobody does within CLOSE_WAIT, they just wave
       if (g.timer <= 0 && !g.wantsEnd) { g.wantsEnd = true; g.timer = CLOSE_WAIT; closeNow(g.speaker); }

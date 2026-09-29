@@ -752,11 +752,12 @@ function takeLink(p, link) {
 export function walkAlong(p, dist) {
   let nav = peopleNav.lines[p.li];
   let u = p.u + p.dir*dist;
+  const together = p.act === 'walk'; // (walking with someone: no trains or road crossings — see "walking together" in peopleActivities.js)
   for (let guard=0; guard<64; guard++) {
     const last = nav.pts.length-1, ahead = p.dir > 0 ? p.seg + 1 : p.seg, at = nav.cum[ahead];
     if (p.dir > 0 ? u < at : u > at) break;
     const vertex = nav.vertices[ahead];
-    const station = p.trainCooldown <= 0 ? stationLinks().byVertex.get(p.li + ':' + ahead) : null;
+    const station = p.trainCooldown <= 0 && !together ? stationLinks().byVertex.get(p.li + ':' + ahead) : null;
     if (station != null && peopleRng() < RIDE_CHANCE) { p.u = at; goRideTrain(p, station, walkwayPoint(p)); return; }
     if (vertex.building && (hidingFromSun(p) || (mayGoIndoors(p) && peopleRng() < enterChance(p, vertex.building)))) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
     const isEnd = (!nav.loop && (ahead === 0 || ahead === last)) || !!nav.blocked?.[nextVertex(nav, ahead, p.dir)];
@@ -769,7 +770,7 @@ export function walkAlong(p, dist) {
     const offEscalator = isEnd && !!nav.oneWay;
     if (vertex.links.length && (p.linkCooldown <= 0 || offEscalator)) {
       const crossings = vertex.links.filter(l => l.cross), turns = vertex.links.filter(l => !l.cross && wayOn(l));
-      if (crossings.length && peopleRng() < 0.35) {
+      if (crossings.length && !together && peopleRng() < 0.35) {
         p.u = at;
         startZebraCrossing(p, nav, ahead, crossings[Math.floor(peopleRng()*crossings.length)]);
         return;

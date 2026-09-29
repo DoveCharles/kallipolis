@@ -50,6 +50,7 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   scared: person => person?.fright?.stage === 'flee' || ((person?.blood ?? 0) > 0 && !person?.traits?.bloodlust),
   hurt: person => !!person?.health && person.health.hp < person.health.max*HURT_BELOW,
   // (sat down: on a bench, in a circle on the grass, on a seat indoors — as isSeated in people/peopleActivities.js)
+  walking: person => person?.act === 'walk', // (walking along beside someone, talking: see "walking together" in people/peopleActivities.js)
   sitting: person => ((person?.act === 'bench' || person?.act === 'circle') && person.stage === 'sit') || (!!person?.inRoom?.seat && person.inRoom.stage === 'sit'),
 };
 const PLACES = ['park', 'plaza', 'beach', 'foodcourt', 'roadside', 'path', 'bridge', 'crossing']; // (here.<place>: see placeOf)

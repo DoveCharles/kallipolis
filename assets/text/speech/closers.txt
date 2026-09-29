@@ -32,3 +32,7 @@ Lovely chatting, [other.name]! {end, talk.score > 1}
 Well, that was unpleasant. {end = bad, talk.score < -1}
 I think we're done here. {end = bad, talk.score = -1, patience}
 Up your's, woke moralist. We'll see who cancels who. {talk.score < 0, other.conservative < 0, conservative > 0, end = bad}
+This is me, then. [farewells]! {end, is = walking}
+I'll leave you here. {end, is = walking}
+I turn off here. See you, [other.name]! {end, is = walking}
+Stop following me. {end = bad, is = walking, patience = -1, talk.score < -1}

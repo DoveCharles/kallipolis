@@ -32,6 +32,7 @@ speech/talk/musings.txt
 speech/talk/oneliners.txt
 speech/talk/places.txt
 speech/talk/smalltalk.txt
+speech/talk/walking.txt
 speech/talk/weird.txt
 speech/words/insults.txt
 speech/words/nouns.txt
