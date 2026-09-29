@@ -101,6 +101,9 @@ const WINDOW_FRAGMENT_LAYOUT = `
   float winGlass = 0.0, winLit = 0.0, winShade = 0.0, winSill = 0.0;
   vec3 winLitColor = vec3(0.0);
   {
+    // whole numbers the lit-window hashes are seeded with — rounded, since a varying that's the same at every vertex
+    // still arrives a hair off it (and differently per pixel), which the hash blows up into flickering speckle
+    float winRun = floor(vFacadeRun + 0.5), winSeed = floor(uWinLitMix.x + 0.5);
     float runLen = abs(vFacade.z);
     float pier = vFacade.z < 0.0 ? 0.0 : uWinFloor.w; // a closed loop (round tower) has no corners
     float usable = runLen - 2.0*pier;
@@ -144,15 +147,15 @@ const WINDOW_FRAGMENT_LAYOUT = `
       winSill = inRun*cols*upperRow*winBand(zf, sill - 0.12, sill, wz)*(1.0 - lod);
       // after dark: windows light in clusters of bays along each floor, and some blinds are half down
       float cluster = floor(bayIdx/4.0);
-      float clusterLit = step(winHash(vec3(uWinLitMix.x, vFacadeRun*7.0 + cluster, floorIdx)), uWinLitMix.y);
-      float pick = winHash(vec3(bayIdx + vFacadeRun*131.0, floorIdx, uWinLitMix.x));
+      float clusterLit = step(winHash(vec3(winSeed, winRun*7.0 + cluster, floorIdx)), uWinLitMix.y);
+      float pick = winHash(vec3(bayIdx + winRun*131.0, floorIdx, winSeed));
       float on = step(pick, mix(uWinLitMix.w, uWinLitMix.z, clusterLit));
       float blind = winHash(vec3(pick*91.0, floorIdx + 3.0, bayIdx)) < 0.3 ? 0.55 : 1.0;
       float upperLit = on*cols*upperRow*winBand(zf, sill, sill + (head - sill)*blind, wz);
-      float storeLit = store*step(winHash(vec3(bayIdx + vFacadeRun*131.0, 91.0, uWinLitMix.x)), 0.85);
+      float storeLit = store*step(winHash(vec3(bayIdx + winRun*131.0, 91.0, winSeed)), 0.85);
       float litAverage = coverage*mix(uWinLitMix.w, uWinLitMix.z, uWinLitMix.y);
       winLit = mix(inRun*bars*max(upperLit, storeLit), litAverage, lod)*(1.0 - 0.5*winShade);
-      winLitColor = uWinLit*(0.7 + 0.6*winHash(vec3(floorIdx, cluster + vFacadeRun*17.0, uWinLitMix.x + 5.0)));
+      winLitColor = uWinLit*(0.7 + 0.6*winHash(vec3(floorIdx, cluster + winRun*17.0, winSeed + 5.0)));
     }
   }
   diffuseColor.rgb = mix(diffuseColor.rgb, uWinGlass, winGlass)*(1.0 - 0.45*winShade + 0.18*winSill);
