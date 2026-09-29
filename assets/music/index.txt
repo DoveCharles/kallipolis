@@ -1,12 +1,12 @@
-Airbag.mid
-Boys Don't Cry.mid
-Buddy Holly.mid
-God Only Knows.mid
-Gold Soundz.mid
-Just.mid
-Nightswimming.mid
-Perfect Day.mid
-There Is a Light That Never Goes Out.mid
-There There.mid
-Undone (The Sweater Song).mid
-When You Sleep.mid
+Lou Reed - Perfect Day.mid
+My Bloody Valentine - When You Sleep.mid
+Pavement - Gold Soundz.mid
+R.E.M. - Nightswimming.mid
+Radiohead - Airbag.mid
+Radiohead - Just.mid
+Radiohead - There There.mid
+The Beach Boys - God Only Knows.mid
+The Cure - Boys Don't Cry.mid
+The Smiths - There Is a Light That Never Goes Out.mid
+Weezer - Buddy Holly.mid
+Weezer - Undone (The Sweater Song).mid
