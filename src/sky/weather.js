@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, sun, sunOffset, updateSun, skyDome } from '../core/scene.js';
+import { scene, camera, sun, sunOffset, updateSun, skyDome } from '../core/scene.js';
 import { controls } from '../core/camera-controls.js';
 import { mulberry32 } from '../core/math.js';
 import { syncSkyUI } from './day-night.js';
@@ -85,20 +85,72 @@ THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begi
   'getDirectionalLightInfo( directionalLight, directLight );',
   'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= cloudShade( geometryPosition, directLight.direction );');
 // Shadows come from a shadow map rendered from the sun, which only covers the box its shadow camera sees. Rather than a
-// fixed box around the middle of the map, the light and its shadow camera follow the view every frame — centered on what
-// the camera's looking at, and sized to how far out it's zoomed (so zoomed out, the same map covers more ground, a little
-// softer). The box moves in whole shadow-map texels, so shadows don't shimmer as the view pans.
-export function placeSunLight() {
-  const half = Math.round(THREE.MathUtils.clamp(controls.radius*1.6, 150, 1500)/10)*10, shadowCamera = sun.shadow.camera;
-  if (shadowCamera.right !== half) {
-    shadowCamera.left = -half; shadowCamera.right = half; shadowCamera.top = half; shadowCamera.bottom = -half;
+// fixed box, it's fitted every frame to the ground and rooftops actually on screen, as seen from the sun: the corners and
+// edges of the view are cast onto the ground and onto a plane at rooftop height, pulled in to `reach` of what the camera's
+// looking at (so a view toward the horizon doesn't stretch the map over the whole world), and the box is the smallest
+// that holds them. It's turned to line up with the screen, so a wide screen gets a wide box and none of the map is spent
+// behind the camera. Its size goes up and down in steps of about 9%, and its edges move in whole texels, so shadows don't
+// shimmer as the view pans or zooms (they still crawl a little while the view turns, which moves the texel grid with it).
+const SHADOW_TOP = 60;                          // high enough for the rooftops shadows fall on
+const SHADOW_CASTER_REACH = 250;                // how far sunward of what's on screen a caster can be and still be drawn
+const SHADOW_BIAS = 0.4;                        // in world units (the rooms' walls count on it: see buildings/interior.js)
+const _raycaster = new THREE.Raycaster(), _ndc = new THREE.Vector2(), _point = new THREE.Vector3();
+const _toSun = new THREE.Vector3(), _right = new THREE.Vector3(), _up = new THREE.Vector3();
+const stepUp = w => 2**(Math.ceil(Math.log2(Math.max(w, 8))*8)/8);
+export function fitSunShadow(cam, target, reach) {
+  cam.updateMatrixWorld();
+  _toSun.copy(sunOffset).normalize();
+  // the box's "up" is the screen's up, flattened across the sunlight (or the screen's right, if the sun's straight behind it)
+  _up.setFromMatrixColumn(cam.matrixWorld, 1).addScaledVector(_toSun, -_up.dot(_toSun));
+  if (_up.lengthSq() < 1e-4) _up.setFromMatrixColumn(cam.matrixWorld, 0).addScaledVector(_toSun, -_up.dot(_toSun));
+  _right.crossVectors(_up, _toSun).normalize();
+  _up.crossVectors(_toSun, _right);
+  let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity, d0 = Infinity, d1 = -Infinity;
+  const STEPS = 4;
+  for (let i = 0; i < 4*STEPS; i++) {
+    const side = Math.floor(i/STEPS), f = (i % STEPS)/STEPS*2 - 1;
+    _ndc.set([f, 1, -f, -1][side], [-1, f, 1, -f][side]);
+    _raycaster.setFromCamera(_ndc, cam);
+    const { origin, direction } = _raycaster.ray;
+    // where the ray is between the ground and rooftop height: where it goes in and where it comes out (or gives out)
+    let tIn = 0, tOut = 1e5;
+    if (Math.abs(direction.y) > 1e-6) {
+      const ta = -origin.y/direction.y, tb = (SHADOW_TOP - origin.y)/direction.y;
+      tIn = Math.max(0, Math.min(ta, tb)); tOut = Math.min(tOut, Math.max(ta, tb));
+    }
+    if (tOut < tIn) continue; // (it never comes down that low)
+    for (const t of [tIn, tOut]) {
+      _point.copy(origin).addScaledVector(direction, t);
+      _point.y = THREE.MathUtils.clamp(_point.y, 0, SHADOW_TOP);
+      const dx = _point.x - target.x, dz = _point.z - target.z, far = Math.hypot(dx, dz);
+      if (far > reach) { _point.x = target.x + dx*reach/far; _point.z = target.z + dz*reach/far; }
+      const u = _point.dot(_right), v = _point.dot(_up), d = _point.dot(_toSun);
+      u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); d0 = Math.min(d0, d); d1 = Math.max(d1, d);
+    }
+  }
+  if (u0 === Infinity) { // (looking up at the sky: keep to what's around the target)
+    u0 = u1 = target.dot(_right); v0 = v1 = target.dot(_up); d0 = d1 = target.dot(_toSun);
+  }
+  const shadow = sun.shadow, shadowCamera = shadow.camera;
+  const w = stepUp((u1 - u0)*1.03 + 2), h = stepUp((v1 - v0)*1.03 + 2);
+  const texelU = w/shadow.mapSize.x, texelV = h/shadow.mapSize.y;
+  const cu = Math.floor((u0 + u1 - w)/2/texelU)*texelU + w/2, cv = Math.floor((v0 + v1 - h)/2/texelV)*texelV + h/2;
+  // the light sits sunward of everything on screen, far enough back to take in whatever might shade it
+  const lightDepth = d1 + SHADOW_CASTER_REACH;
+  sun.position.set(0, 0, 0).addScaledVector(_right, cu).addScaledVector(_up, cv).addScaledVector(_toSun, lightDepth);
+  sun.target.position.copy(sun.position).addScaledVector(_toSun, -1);
+  sun.target.updateMatrixWorld();
+  shadowCamera.up.copy(_up);
+  const depth = lightDepth - d0 + 10;
+  if (shadowCamera.right !== w/2 || shadowCamera.top !== h/2 || shadowCamera.far !== depth) {
+    shadowCamera.left = -w/2; shadowCamera.right = w/2; shadowCamera.top = h/2; shadowCamera.bottom = -h/2;
+    shadowCamera.near = 0.5; shadowCamera.far = depth;
     shadowCamera.updateProjectionMatrix();
   }
-  const texel = 2*half/sun.shadow.mapSize.x;
-  const x = Math.round(controls.target.x/texel)*texel, z = Math.round(controls.target.z/texel)*texel;
-  sun.target.position.set(x, 0, z);
-  sun.target.updateMatrixWorld();
-  sun.position.set(x + sunOffset.x, sunOffset.y, z + sunOffset.z);
+  shadow.bias = -SHADOW_BIAS/(depth - 0.5);
+}
+export function placeSunLight() {
+  fitSunShadow(camera, controls.target, THREE.MathUtils.clamp(controls.radius*2.5, 120, 2400));
 }
 function setWeather(kind, value) {
   if (kind === 'rain') S.weatherRain = value; else if (kind === 'snow') S.weatherSnow = value; else S.weatherClouds = value;

@@ -58,7 +58,7 @@ export const renderer = new THREE.WebGLRenderer({ antialias:true, stencil:true, 
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, IS_TOUCH ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap; // (soft-edged now — PCFSoftShadowMap was folded into it)
+renderer.shadowMap.type = THREE.PCFShadowMap; // (the sun's filter radius is 0, below: one hardware-compared tap, hard but smooth)
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 wrap.appendChild(renderer.domElement);
 window.addEventListener('resize', () => {
@@ -72,11 +72,12 @@ scene.add(hemi);
 export const sun = new THREE.DirectionalLight(0xfff2df, 1.1);
 sun.position.set(150, 220, 100);
 sun.castShadow = true;
-sun.shadow.mapSize.set(IS_TOUCH ? 1024 : 2048, IS_TOUCH ? 1024 : 2048);
-sun.shadow.camera.left = -300; sun.shadow.camera.right = 300;
-sun.shadow.camera.top = 300; sun.shadow.camera.bottom = -300;
-sun.shadow.camera.far = 800;
-sun.shadow.bias = -0.0005;
+// The shadow camera's box is fitted to the view every frame (fitSunShadow, in weather.js), which sets its extents, depth
+// range and bias. A radius of 0 makes PCF a single tap of the GPU's own depth compare, which blends the four nearest
+// texels: a hard edge, but a smooth one rather than a staircase, as long as the texels are small — hence the bigger map.
+const SHADOW_MAP = IS_TOUCH ? 1024 : Math.min(4096, renderer.capabilities.maxTextureSize);
+sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+sun.shadow.radius = 0;
 scene.add(sun);
 
 // ---- procedural sky dome, driven by sun elevation/azimuth ----
