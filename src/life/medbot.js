@@ -10,6 +10,7 @@ import { setMedBoothModel } from '../objects/object-types.js';
 import { people, peopleNav, isGone, feel, witness } from './people/people.js';
 import { personHeight } from './people/peopleTracking.js';
 import { healFx } from './giblets.js';
+import { updateMedBotSounds } from '../audio/medbot.js';
 import { makeCard } from '../ui/entity-card.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
 
@@ -29,6 +30,8 @@ const MODEL_URL = 'assets/models/MedBot.glb';
 const BOT_HEIGHT = 1.75;           // m she stands, the booth sized along with her
 const SPEED = 6;                   // m/s rolling about (people walk at PERSON_WALK_SPEED, 1.4)
 const RUSH = 3;                    // × SPEED, rushing to someone hurt
+const SIREN = 'Material.009';      // her body light's material
+const FLASH = 4;                   // flashes a second, rushing
 const TURN_RATE = 16;              // rad/s she turns toward where she's going
 const PATROL_RADIUS = 140;          // m round the booth she picks places to roll to
 const SIGHT = 50;                  // m she sees someone hurt from
@@ -77,7 +80,7 @@ export async function loadMedBot() {
   const boothMesh = root.getObjectByName('MedBooth'), rig = root.getObjectByName('MedBot');
   if (!boothMesh || !rig) { console.warn('Kallipolis: MedBot.glb has no MedBooth or no MedBot'); return; }
   const clips = {};
-  gltf.animations.forEach(clip => { if (clip.duration < 0.1) clip.duration = 1; clips[clip.name] = clip; }); // (Idle and Move are single frames)
+  gltf.animations.forEach(clip => { if (clip.duration < 0.1) clip.duration = 1; clips[clip.name] = clip; }); // (Idle, Move and Speed are single frames)
 
   // measured standing (Idle), in the file's own units: her, precisely (she's skinned), and the booth
   const mixer = new THREE.AnimationMixer(root);
@@ -138,8 +141,16 @@ function makeBot(obj) {
   const root = cloneSkinned(model.template);
   let head = null;
   root.traverse(o => { if (o.isBone && o.name === 'Head') head = o; });
+  // her own body light (Material.009), black but for flashing red while she rushes
+  let siren = null;
+  root.traverse(o => {
+    if (!o.isMesh || !o.material.name?.startsWith(SIREN)) return;
+    siren ??= o.material.clone();
+    o.material = siren;
+  });
+  siren?.emissive.setRGB(0, 0, 0);
   const mixer = new THREE.AnimationMixer(root), actions = {};
-  for (const name of ['Idle', 'Move', 'HealStand', 'HealLayDown']) {
+  for (const name of ['Idle', 'Move', 'Speed', 'HealStand', 'HealLayDown']) {
     const clip = model.clips[name];
     if (!clip) continue;
     const action = actions[name] = mixer.clipAction(clip);
@@ -151,7 +162,8 @@ function makeBot(obj) {
   const bot = {
     obj, root, head, mixer, actions, number: ++botNumbers,
     x: 0, y: 0, z: 0, heading: 0, state: 'opening', timer: 0, door: 0, doorGoal: 1, doorMeshes: [], doorOf: null,
-    charge: 1, goal: null, target: null, lying: false, pose: 'Idle', weights: { Idle: 1, Move: 0, HealStand: 0, HealLayDown: 0 },
+    charge: 1, healTime: 0, goal: null, target: null, lying: false, pose: 'Idle', weights: { Idle: 1, Move: 0, Speed: 0, HealStand: 0, HealLayDown: 0 },
+    siren,
     look: 0, lookGoal: 0, lookNext: 0, lookAt: null, turn: new THREE.Quaternion(), scan: 0,
   };
   placeInside(bot);
@@ -359,9 +371,10 @@ function updateBot(bot, dt, t) {
         letGo(bot); bot.state = 'patrol'; bot.goal = patrolPoint(bot); break;
       }
       const lying = lyingDown(p), to = healSpot(bot, p, lying);
-      pose = 'Move';
+      pose = bot.actions.Speed ? 'Speed' : 'Move';
       if (rollTo(bot, to.x, to.z, SPEED*RUSH, dt, 0.12)) {
         bot.state = 'heal';
+        bot.healTime = 0;
         bot.lying = lying;
         setPose(bot, lying ? 'HealLayDown' : 'HealStand');
       }
@@ -372,6 +385,7 @@ function updateBot(bot, dt, t) {
       pose = bot.lying ? 'HealLayDown' : 'HealStand';
       if (!p || isGone(p)) { letGo(bot); bot.state = 'patrol'; bot.goal = patrolPoint(bot); pose = 'Idle'; break; }
       hold(bot, p, bot.lying);
+      bot.healTime += dt;
       turnTo(bot, Math.atan2(p.x - bot.x, p.z - bot.z), dt);
       const h = personHeight(p);
       if (bot.lying) { // (from their feet to their head, which is behind them: they fell on their back)
@@ -415,6 +429,7 @@ function updateBot(bot, dt, t) {
       break;
   }
   if (bot.state !== 'heal') setPose(bot, pose);
+  bot.siren?.emissive.setRGB(bot.state === 'rush' && (t*FLASH) % 1 < 0.5 ? 1 : 0, 0, 0);
   if (bot.state === 'patrol' || bot.state === 'rush' || bot.state === 'home') bot.y = bot.obj.group.position.y;
   lookAbout(bot, dt, t);
   moveDoor(bot, dt);
@@ -447,8 +462,17 @@ export function updateMedBots(t) {
     bot.obj = obj; // (an undo brings back the same booth as a new record)
   }
   for (const id of [...bots.keys()]) if (!seen.has(id)) removeBot(id);
-  if (!dt) return;
-  bots.forEach(bot => updateBot(bot, dt, t));
+  if (!dt) { updateMedBotSounds([]); return; }
+  const heard = [];
+  bots.forEach(bot => {
+    const x = bot.x, z = bot.z;
+    updateBot(bot, dt, t);
+    if (bot.state === 'charging' || bot.state === 'opening') return; // (shut in her booth)
+    heard.push({ bot, x: bot.x, y: bot.y, z: bot.z, speed: Math.hypot(bot.x - x, bot.z - z)/dt/(SPEED*S.peopleSpeed || 1),
+      rushing: bot.state === 'rush', healing: bot.state === 'heal',
+      healed: bot.state === 'heal' ? bot.healTime/((model.clips[bot.pose]?.duration ?? 1)*HEAL_LOOPS) : 0 });
+  });
+  updateMedBotSounds(heard);
   followMedBot();
 }
 
