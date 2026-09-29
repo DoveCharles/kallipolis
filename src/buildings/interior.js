@@ -3844,12 +3844,32 @@ function inRoom(x, y, z) {
 // behind it, a bookcase it's riding past — fades nearly out of the way, on materials of its own for as long as it's
 // faded (the model's are shared by every clone of it). Not the TV: its picture's a hole cut through to the player
 // behind the canvas (see "the TV"), and it's too low to be in the way. Only what the sightline's through and out of
-// again CLEAR short of the middle is in the way: a desk out in the middle of the room, the middle inside it or just
-// beyond it, is what's being looked at.
+// again CLEAR short of the middle is in the way (by its meshes, not just its box): a desk out in the middle of the room,
+// the middle inside it or just beyond it, is what's being looked at. Nothing fades while someone's taken over.
 const FADED = 0.15, FADE_EASE = 0.15, CLEAR = 0.75;
 const sightline = new THREE.Ray(), sightHit = new THREE.Vector3(), sightEnd = new THREE.Vector3();
+const sightRay = new THREE.Raycaster(), sightHits = [];
+sightRay.camera = camera; // (sprites need it)
+sightRay.params.Line.threshold = sightRay.params.Points.threshold = 0.02;
+// Its box first (cheap), then its own meshes: a box round an L of counter or a bed and its headboard takes in a lot of
+// air the sightline's clear through.
+function inTheWay(piece, box, reach) {
+  const hit = sightline.intersectBox(box, sightHit);
+  if (!hit || hit.distanceTo(sightline.origin) >= reach || box.containsPoint(sightEnd)) return false;
+  sightRay.ray.copy(sightline);
+  sightRay.far = reach;
+  sightHits.length = 0;
+  sightRay.intersectObject(piece, true, sightHits);
+  return sightHits.some(({ object }) => {
+    for (let o = object; o && o !== piece; o = o.parent) if (!o.visible) return false;
+    return true;
+  });
+}
+
 function fadeWhatsInTheWay() {
   if (!inside) return;
+  // (someone taken over sees from their own eyes: nothing's in the way of the room's middle, and nothing fades)
+  const possessing = possession.index >= 0;
   sightline.origin.copy(camera.position);
   const reach = sightline.direction.copy(controls.target).sub(camera.position).length() - CLEAR;
   sightline.direction.normalize();
@@ -3859,8 +3879,7 @@ function fadeWhatsInTheWay() {
     if (!piece.isGroup || piece.userData.isTV) continue;
     const u = piece.userData;
     if (u.fadeVisit !== visits) { u.fadeBox = new THREE.Box3().setFromObject(piece); u.fadeVisit = visits; u.fade ??= 1; }
-    const hit = sightline.intersectBox(u.fadeBox, sightHit);
-    const goal = hit && hit.distanceTo(sightline.origin) < reach && !u.fadeBox.containsPoint(sightEnd) ? FADED : 1;
+    const goal = !possessing && inTheWay(piece, u.fadeBox, reach) ? FADED : 1;
     if (u.fade === goal) continue;
     u.fade = Math.abs(goal - u.fade) < 0.01 ? goal : u.fade + (goal - u.fade)*FADE_EASE;
     piece.traverse(o => {
