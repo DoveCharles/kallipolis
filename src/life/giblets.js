@@ -362,9 +362,10 @@ export function haircutFx(at, size, hair, dt) {
 }
 
 // Someone being healed (by a med bot: see life/medbot.js), in the `dt` seconds since it was last called: the haircut's
-// white cloud, but over the whole body — `at` their feet, `height` how tall they are, `lying` if they're flat on the
+// cloud, but pink (the hearts' colour, a bit brighter) and over the whole body — `at` their feet, `height` how tall they are, `lying` if they're flat on the
 // ground (the cloud spread along them, `heading` the way their head is) — and little love hearts floating up off it.
 const HEAL_PUFFS_PER_SECOND = 70, HEARTS_PER_SECOND = 7, HEART_COLORS = [0xff4f7b, 0xff86a8, 0xe8264f];
+const HEAL_PUFF_COLOR = new THREE.Color(0xff6d92), WHITE = new THREE.Color(1, 1, 1);
 export function healFx(at, height, lying, heading, dt) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   const now = performance.now()/1000, count = rate => Math.floor(rate*dt + Math.random());
@@ -373,10 +374,11 @@ export function healFx(at, height, lying, heading, dt) {
   // a point on the body, `k` 0 at the feet to 1 at the head
   const along = k => lying ? { x: at.x + sx*k*height, y: at.y + 0.12*height, z: at.z + sz*k*height } : { x: at.x, y: at.y + k*height, z: at.z };
   for (let k = count(HEAL_PUFFS_PER_SECOND); k > 0; k--) {
-    const angle = Math.random()*Math.PI*2, out = Math.random()*0.12*height, white = 0.84 + Math.random()*0.16, on = along(0.05 + Math.random()*0.9);
+    const angle = Math.random()*Math.PI*2, out = Math.random()*0.12*height, on = along(0.05 + Math.random()*0.9);
     add({ kind: 'cloud', x: on.x + Math.cos(angle)*out, y: on.y, z: on.z + Math.sin(angle)*out,
       vx: Math.cos(angle)*0.1*height, vy: 0.08*height, vz: Math.sin(angle)*0.1*height,
-      size: height*(0.2 + Math.random()*0.1), growth: 0.3, life: 0.6 + Math.random()*0.4, opacity: 1, color: new THREE.Color(white, white, white) });
+      size: height*(0.2 + Math.random()*0.1), growth: 0.3, life: 0.6 + Math.random()*0.4, opacity: 1,
+      color: HEAL_PUFF_COLOR.clone().lerp(WHITE, 0.2 + Math.random()*0.25) });
   }
   for (let k = count(HEARTS_PER_SECOND); k > 0; k--) {
     const angle = Math.random()*Math.PI*2, out = (0.15 + Math.random()*0.3)*height, on = along(0.4 + Math.random()*0.6);
