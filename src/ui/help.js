@@ -14,8 +14,7 @@ const keys = rows => `<table class="w3-keys">${rows.map(([k, v]) => `<tr><td>${k
 const TOPICS = [
   { id: 'contents', title: 'Contents', html: () => `
     <p>Kallipolis is a city blockout and life sim toy. Draw paths and zones, and a city grows on them — buildings, parks,
-    water, traffic and people with lives of their own. (Kallipolis, Greek for “beautiful city”, is the ideal city
-    Plato builds in the <i>Republic</i>; yours needn't be ideal.) Pick a topic:</p>
+    water, traffic and people with lives of their own. Pick a topic:</p>
     <ul class="w3-help-list">${TOPICS.slice(1).map(t => `<li>${link(t.id, t.title)}</li>`).join('')}</ul>` },
 
   { id: 'modes', title: 'The three modes', html: () => `
