@@ -137,6 +137,7 @@ const MENUS = [
     { label:'Effects...', key:'e', run:() => openSettings('effects') },
     { label:'Game...', key:'a', run:() => openSettings('game') },
     { label:'Speech...', key:'p', run:() => openSettings('speech') },
+    { label:'Dev...', key:'v', run:() => openSettings('dev') },
   ]},
   { name:'Help', key:'h', items:[
     { label:'Contents', key:'c', shortcut:'F1', run:() => openHelp() },

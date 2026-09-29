@@ -1,14 +1,16 @@
 import { S, App } from '../core/shared.js';
 import { toUi } from './ui-scale.js';
+import { whenLoaded } from './loading.js';
+import './energy.js';
+import { revealMoney, tickUp } from './money.js';
 
 // ============================================================ morality meter
-// How good or evil the city is, in a meter at the top right: a bar growing from the middle, left (and redder) the more evil,
-// right (and greener) the more good. It's everything in the world added up — each zone, path and building worth what
+// How good or evil the city is, in a meter at the top right: spendable evil/good points, and a bar split red/green by the lifetime ratio.
+// It's everything in the world added up — each zone, path and building worth what
 // assets/text/morality.txt says (to be edited freely) — along with things that happen, like people getting killed. The
 // show/hide button lists what it's made of, and each change pops up next to the bar for a few seconds.
 const MORALITY_TEXT_URL = 'assets/text/morality.txt';
-const MORALITY_MAX = 2500, MORALITY_KNEE = 500;   // max value & value that should land at the halfway point of that half-bar;
-const MORALITY_EXP = Math.log(0.5) / Math.log(MORALITY_KNEE / MORALITY_MAX); 
+const MORALITY_MAX = 2500;   // clamp on the overall value
 const NOTICE_LIFE = 3500, NOTICES_MAX = 6;
 const NOTICE_EXIT_MS = 300;         // how long a notice takes to be gone once it's over
 const NOTICE_EXIT_SPREAD = 14;      // how far either side of its own line it can drift on the way out, in pixels
@@ -161,12 +163,14 @@ function tally() {
     add('paths', line.kind === 'train' ? 'train lines' : line.roadType === 'walkway' || line.roadType === 'raised' ? 'walkways' : line.roadType === 'river' ? 'rivers' : 'roads');
   });
   const lines = {}, groups = {};
-  let total = 0;
+  let total = 0, evil = 0, good = 0;
+  const side = score => { if (score < 0) evil -= score; else good += score; };
   GROUPS.forEach(g => {
     groups[g.id] = { count: 0, score: 0 };
     g.items.forEach(item => {
       const count = counts[g.id + '/' + item.key] || 0, score = count*scoreOf(g.id, item.key);
       lines[g.id + '/' + item.key] = { count, score };
+      side(score);
       groups[g.id].count += count; groups[g.id].score += score;
     });
     total += groups[g.id].score;
@@ -174,10 +178,11 @@ function tally() {
   EVENTS.forEach(e => {
     const count = eventCounts[e.key], score = count*scoreOf('events', e.key);
     lines['events/' + e.key] = { count, score };
+    side(score);
     total += score;
   });
   const overall = Math.max(-MORALITY_MAX, Math.min(MORALITY_MAX, total*multiplier));
-  return { lines, groups, overall };
+  return { lines, groups, overall, evil: evil*Math.abs(multiplier), good: good*Math.abs(multiplier) };
 }
 
 // ---------------------------------------------------------- the meter
@@ -185,38 +190,76 @@ function tally() {
 // can reuse this exact markup under its own container id. Its pieces are found within that one container below,
 // rather than by a global id, for the same reason — see meterWindow further down.
 const meterWindow = document.getElementById('morality-meter');
-const valueEl = meterWindow.querySelector('.meter-value');
+const evilEl = meterWindow.querySelector('.meter-evil');
+const goodEl = meterWindow.querySelector('.meter-good');
 const fillEl = meterWindow.querySelector('.meter-fill');
 const toggleEl = meterWindow.querySelector('.meter-toggle');
 const detailsEl = meterWindow.querySelector('.meter-details');
 const noticesEl = meterWindow.querySelector('.meter-notices');
 
-const NEUTRAL = [146, 150, 160], EVIL = [229, 72, 77], GOOD = [61, 220, 151];
-
-function meterColor(v) {
-  const t = meterFrac(v); // same non-linear curve as the bar fill
-  const to = v < 0 ? EVIL : GOOD;
-  return `rgb(${NEUTRAL.map((c, i) => Math.round(c + (to[i] - c) * t)).join(',')})`;
-}
 const round1 = n => Math.round(n*10)/10 || 0; // (|| 0: no "-0")
 const signed = n => { const r = round1(n); return (r > 0 ? '+' : '') + r; };
 const scoreClass = n => round1(n) > 0 ? 'pos' : round1(n) < 0 ? 'neg' : '';
 
-function meterFrac(v) {
-  const clamped = Math.min(Math.abs(v), MORALITY_MAX);
-  return Math.pow(clamped / MORALITY_MAX, MORALITY_EXP); // 0..1, non-linear
+
+// ---------------------------------------------------------- spendable points
+// Lifetime evil/good stats (the bar) and spendable points (capped at POINTS_MAX), both kept in localStorage: every rise in
+// the world's evil or good total adds to both alike. Loading (a reload, a project: see quietUntil) only moves the
+// baseline, so a city isn't counted again each session.
+const POINTS_KEY = 'kallipolis.moralityPoints', POINTS_MAX = 999;
+let pts = { evil: 0, good: 0, lifeEvil: 0, lifeGood: 0 };
+try {
+  const saved = JSON.parse(localStorage.getItem(POINTS_KEY)) || {};
+  pts = { ...pts, ...saved };
+  if (saved.lifeEvil == null) { pts.lifeEvil = saved.peakEvil || 0; pts.lifeGood = saved.peakGood || 0; } // (from before lifetime stats)
+  delete pts.peakEvil; delete pts.peakGood;
+} catch {}
+const savePoints = () => { try { localStorage.setItem(POINTS_KEY, JSON.stringify(pts)); } catch {} };
+let baseline = null; // the world's totals last counted from
+function accrue(t) {
+  // (nothing counts until BAR_DELAY after the page has loaded, while buildings are still popping in)
+  if (!baseline || !barReady || performance.now() < quietUntil) { baseline = { evil: t.evil, good: t.good }; return; }
+  let changed = false;
+  for (const [side, life] of [['evil', 'lifeEvil'], ['good', 'lifeGood']]) {
+    const gain = t[side] - baseline[side];
+    baseline[side] = t[side];
+    if (gain <= 0) continue;
+    pts[life] += gain;
+    pts[side] = Math.min(POINTS_MAX, pts[side] + gain);
+    changed = true;
+  }
+  if (changed) savePoints();
 }
+const pad3 = n => String(Math.floor(n)).padStart(3, '0');
+let pointsShown = false; // (000 until the bar's ready, then ticked up: see BAR_DELAY)
+function renderPoints() { if (pointsShown) { evilEl.textContent = pad3(pts.evil); goodEl.textContent = pad3(pts.good); } }
+/** Spendable points. @returns {{evil:number, good:number}} */
+export const moralityPoints = () => ({ evil: Math.floor(pts.evil), good: Math.floor(pts.good) });
+/** Spend points from one side if there are enough. @param {'evil'|'good'} side @param {number} k @returns {boolean} */
+export function spendMorality(side, k) {
+  if (side !== 'evil' && side !== 'good') return false;
+  if (S.devFreePurchases) return true; // (Options > Dev > Free purchases)
+  if (pts[side] < k) return false;
+  pts[side] -= k; savePoints(); renderPoints();
+  return true;
+}
+window.addEventListener('storage', e => { if (e.key !== POINTS_KEY) return; try { pts = { ...pts, ...JSON.parse(e.newValue) }; } catch {} renderPoints(); });
 
-
+// (50/50 until BAR_DELAY after loading: easing while the load stutters would go unseen)
+const BAR_DELAY = 3000;
+let barReady = false;
+whenLoaded(() => setTimeout(() => {
+  barReady = true; meterWindow.classList.remove('meter-settling'); renderMeter(tally());
+  tickUp(v => { evilEl.textContent = pad3(v); }, () => pts.evil);
+  tickUp(v => { goodEl.textContent = pad3(v); }, () => pts.good);
+  setTimeout(() => { pointsShown = true; renderPoints(); }, 800);
+  revealMoney();
+}, BAR_DELAY));
+// the bar: lifetime good's share green from the left, evil's red from the right
 function renderMeter(t) {
-  const v = t.overall, color = meterColor(v);
-  valueEl.textContent = signed(v);
-  valueEl.style.color = color;
-  fillEl.style.background = color;
-
-  const frac = meterFrac(v); // 0..1
-  fillEl.style.width = (frac * 50) + '%';
-  fillEl.style.left = v < 0 ? (50 - frac * 50) + '%' : '50%';
+  accrue(t); renderPoints();
+  const sum = pts.lifeEvil + pts.lifeGood;
+  if (barReady) fillEl.style.setProperty('--good-pct', (sum ? (pts.lifeGood / sum) * 100 : 50) + '%'); // (eases there: see src/ui/meter.css)
 
   if (detailsEl.hidden) return;
   const row = (label, count, score, sub) =>
@@ -409,9 +452,10 @@ fetch(MORALITY_TEXT_URL, { cache: 'no-cache' })
     // (the scores changing isn't the player's doing either)
     const now = tally();
     announced = previous = now;
+    baseline = null; // (nor is it the player's doing: see accrue)
     renderMeter(now);
   })
   .catch(err => console.warn('Kallipolis: assets/text/morality.txt failed to load; everything is worth 0 morality', err));
 
 tick();
-Object.assign(App, { recordMoralityEvent, hushMorality, refreshMorality: tick });
+Object.assign(App, { recordMoralityEvent, hushMorality, refreshMorality: tick, moralityPoints, spendMorality });

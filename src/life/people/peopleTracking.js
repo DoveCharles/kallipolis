@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { App, S, buildingHolders } from '../../core/shared.js';
 import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
-import { controlInput, endPossession, possession, startPossession } from '../possession.js';
+import { canTakeControl, controlInput, endPossession, possession, startPossession } from '../possession.js';
 import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
 import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, sayGoodbye, standUp, talkWith } from './peopleActivities.js';
@@ -298,6 +298,7 @@ export function possessPerson(i) {
   const room = inRoom(p) ? p.indoors : null;
   if (isGone(p) && !room) return;
   if (room && (p.inRoom.cubicle || p.inRoom.hidden)) return;
+  if (!canTakeControl()) return; // (checked before anything's undone; spent in possession.js)
   if (room) { standUp(p); p.inRoom = null; }
   // (up on a raised walkway, in a station, its lift or a carriage, they stay there: see peopleFooting.js)
   p.footing = footingAt(p.x, p.y, p.z);

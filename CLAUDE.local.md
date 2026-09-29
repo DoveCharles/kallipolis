@@ -1,0 +1,6 @@
+- Prioritise token efficiency.
+- Do not load in browser.
+- Do not generate images.
+- Use minimal testing unless required, and ask for permission first.
+- BE EXTREMELY CONCISE in speech and in code comments.
+- User verifies all visual/in-game changes; just say what to check.

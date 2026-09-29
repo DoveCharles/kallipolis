@@ -2,6 +2,8 @@ import { isFavorite, toggleFavorite, onFavoritesChanged } from './favorites.js';
 import { dragByTitle } from './w3-window.js';
 import { healthOf, healthFraction, onHealthChanged } from '../core/health.js';
 import { EFFECTS, statusLines } from '../life/statuseffects.js';
+import { App } from '../core/shared.js';
+import { discoverTrait, isTraitKnown, onTraitDiscovered } from './traits-known.js';
 
 // ============================================================ the card for whatever's being followed
 // The card at the bottom right saying what the camera's following: a person (life/person-card.js), a car
@@ -108,6 +110,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   if (thumb.title) canvas.title = thumb.title;
   if (thumb.onClick) {
     canvas.classList.add('pc-thumb-click');
+    canvas.dataset.energy = ''; // (taking control costs energy: see ui/energy.js)
     canvas.addEventListener('click', () => thumb.onClick());
   }
   const shot = document.createElement('div');
@@ -134,6 +137,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     button.title = kill.title || '';
     button.textContent = 'Smite';
     fixedText.push([button, 'Smite']);
+    button.dataset.energy = '';
     button.addEventListener('click', () => kill.onClick());
     shot.append(button);
   }
@@ -158,6 +162,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     button.style.display = 'none';
     subActionText = [button, subAction.text];
     fixedText.push(subActionText);
+    if (subAction.energy) button.dataset.energy = '';
     button.addEventListener('click', () => subAction.onClick());
     shot.append(button);
   }
@@ -401,7 +406,16 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   const dropAt = target => { const found = target?.closest?.('.pc-has-mods, .pc-mods:not(.pc-tip)'); return found ? dropByEl.get(found) : null; };
   // (a click pins a love's or hate's menu open, as it always has; a status icon's tip is the pointer's doing, and a click
   // on one changes nothing)
-  el.addEventListener('click', e => { const drop = dropAt(e.target); if (drop) { drop.pinned = !drop.pinned; layoutDrops(); } });
+  // (an unidentified love/hate — see lockEntry — is identified by the click instead, for 1 energy, and opens)
+  el.addEventListener('click', e => {
+    const locked = e.target.closest?.('.pc-locked');
+    if (locked) {
+      if (App.spendEnergy?.()) { discoverTrait(locked.dataset.traitKey); const d = dropByEl.get(locked); if (d) { d.pinned = true; layoutDrops(); } }
+      return;
+    }
+    const drop = dropAt(e.target); if (drop) { drop.pinned = !drop.pinned; layoutDrops(); }
+  });
+  onTraitDiscovered(key => el.querySelectorAll('.pc-locked').forEach(entryEl => { if (entryEl.dataset.traitKey === key) unlockEntry(entryEl); }));
   window.addEventListener('resize', () => { if (!el.hidden) layoutDrops(); });
   // A drop-down of `lines` hung on `entryEl`, until it's cleared or the card's drawn again: a menu dropping down over
   // the rows below it, so opening one never resizes the card. `row` is the row it belongs to, so its entries can be
@@ -482,18 +496,31 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   // that entry's row (its own if it's the first, else the little row below) is coloured gold or dark reddish-brown for it
   // (see the --trait-legendary-*/--trait-terrible-* rules in css/base.css). `modsValue`, likewise lined up (see
   // `<attribute>Mods` in core/type-text.js), is a list of modifier lines per entry, for its drop-down (see addDrop).
-  function set(key, value, tierValue = null, modsValue = null) {
+  // A love/hate not yet identified (see ui/traits-known.js): greyed, its tier colour held back, hovering it lights the
+  // energy (data-energy), and a click identifies it (see the click handler above).
+  function lockEntry(entryEl, key, tier) {
+    entryEl.classList.add('pc-locked');
+    entryEl.dataset.traitKey = key; entryEl.dataset.energy = ''; entryEl.dataset.tier = tier || '';
+    setTier(entryEl, null);
+  }
+  function unlockEntry(entryEl) {
+    entryEl.classList.remove('pc-locked');
+    setTier(entryEl, entryEl.dataset.tier || null);
+    delete entryEl.dataset.traitKey; delete entryEl.dataset.energy; delete entryEl.dataset.tier;
+  }
+  function set(key, value, tierValue = null, modsValue = null, keysValue = null) {
     const row = rows[key];
     if (!row) return;
     const values = Array.isArray(value) ? value : [value], tierValues = Array.isArray(tierValue) ? tierValue : [];
-    const modValues = Array.isArray(modsValue) ? modsValue : [];
-    const said = [], tiers = [], mods = [];
+    const modValues = Array.isArray(modsValue) ? modsValue : [], keyValues = Array.isArray(keysValue) ? keysValue : [];
+    const said = [], tiers = [], mods = [], keys = [];
     values.forEach((item, i) => {
       if (item == null || item === '') return;
-      said.push(String(item)); tiers.push(tierValues[i] ?? null); mods.push(modValues[i] ?? null);
+      said.push(String(item)); tiers.push(tierValues[i] ?? null); mods.push(modValues[i] ?? null); keys.push(keyValues[i] ?? null);
     });
     row.value.textContent = said[0] || '';
     row.el.hidden = !said.length;
+    if (row.el.classList.contains('pc-locked')) unlockEntry(row.el); // (the row's own element is reused)
     setTier(row.el, tiers[0]);
     clearDrops(row);
     row.extras.forEach(extra => extra.remove());
@@ -513,6 +540,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     if (said.length) [row.el, ...row.extras].forEach((entryEl, i) => {
       if (row.row.marked) entryEl.querySelector('.pc-value').dataset.mark = markOf(tiers[i], mods[i]);
       addDrop(row, entryEl, mods[i]);
+      if (row.row.marked && keys[i] && markOf(tiers[i], mods[i]) && !isTraitKnown(keys[i])) lockEntry(entryEl, keys[i], tiers[i]);
     });
     restripe();
     layoutDrops();
@@ -543,7 +571,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   // out until something sets them (a person going indoors, say, or who's aboard a train). A card is handed whatever a
   // kind's reader returns, traits included; the card has no row for those, so it ignores them.
   function show(values) {
-    Object.keys(rows).forEach(key => set(key, values[key], values[key + 'Tier'], values[key + 'Mods']));
+    Object.keys(rows).forEach(key => set(key, values[key], values[key + 'Tier'], values[key + 'Mods'], values[key + 'Keys']));
     setFavorite(null);
     el.hidden = false;
     el.dispatchEvent(new Event('card-show', { bubbles:true })); // (for the Windows 3.0 look's active window: ui/win3-menu.js)

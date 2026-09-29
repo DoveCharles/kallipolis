@@ -23,7 +23,7 @@ const raycaster = new THREE.Raycaster();
 const ENTER = ['Enter', 'Go inside'], LEAVE = ['Leave', 'Back outside'], PARTY = ['Party', 'Some people turn up and come in'];
 const card = makeCard({ id: 'building-card', title: 'Building', onClose: () => stopFollowingBuilding(),
   action: { text: ENTER[0], title: ENTER[1], onClick: () => toggleInside() },
-  subAction: { text: PARTY[0], title: PARTY[1], onClick: () => throwAParty() } });
+  subAction: { text: PARTY[0], title: PARTY[1], energy: true, onClick: () => throwAParty() } });
 // the card's Enter button: into the followed building's one room (see interior.js), and back out. Only on buildings
 // people go into (enterable in assets/text/buildings.txt): a tank farm has no inside to show.
 function toggleInside() {
@@ -37,7 +37,7 @@ function toggleInside() {
 // the card's Party button: some people turn up outside the followed building's door and come in (see startParty in
 // peopleActivities.js, which says per kind of building who does and how many)
 function throwAParty() {
-  if (followed && isInsideBuilding()) startParty(followed);
+  if (followed && isInsideBuilding() && App.hasEnergy() && startParty(followed)) App.spendEnergy(); // (1 energy)
 }
 const drawThumbnail = makeThumbnailDrawer(card.canvas);
 

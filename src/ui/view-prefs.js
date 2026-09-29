@@ -105,6 +105,9 @@ function prefToggle(id, key, field, fallback) {
   });
 }
 prefToggle('s-babblefallback', BABBLE_FALLBACK_KEY, 'babbleFallbackOnly', false);
+// Options > Dev (see ui/energy.js, ui/money.js, ui/morality.js)
+prefToggle('s-infiniteenergy', 'kallipolis.dev.infiniteEnergy', 'devInfiniteEnergy', false);
+prefToggle('s-freepurchases', 'kallipolis.dev.freePurchases', 'devFreePurchases', false);
 S.babbleBubbles = recall(BABBLE_BUBBLES_KEY, false);
 const babbleBubblesToggle = document.getElementById('s-babblebubbles');
 babbleBubblesToggle.classList.toggle('on', S.babbleBubbles);

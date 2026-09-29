@@ -38,6 +38,98 @@
 .meter-fill { position:absolute; top:0; bottom:0; left:50%; width:0; transition:left .3s, width .3s, background-color .3s; }
 /* the middle, neutral: a line through the bar that sticks out past it, so it reads as a needle's zero */
 .meter-center { position:absolute; top:-4px; bottom:-4px; left:50%; width:2px; margin-left:-1px; background:var(--text); border-radius:1px; pointer-events:none; }
+/* evil / good totals with their icons, and the energy block (src/ui/energy.js) */
+.meter .meter-value { white-space:nowrap; display:inline-flex; align-items:center; gap:3px; }
+#morality-meter { --ratio-evil:#b07470; --ratio-good:#6f9a82; }
+.meter .meter-evil { color:var(--ratio-evil); }
+.meter .meter-good { color:var(--ratio-good); }
+/* fixed widths so nothing shifts as numbers change */
+#morality-meter :is(.meter-evil, .meter-good, .energy-n, .energy-timer) { display:inline-block; flex:none; font-variant-numeric:tabular-nums; }
+#morality-meter .meter-value { width:calc(8ch + 44px); justify-content:center; }
+#morality-meter .meter-icon[alt=Evil] { position:relative; top:-1px; } /* (art sits a row lower than holy's) */
+@media (min-width: 761px) { #morality-meter { width:360px; } }
+#morality-meter .money { font-weight:700; padding:0 4px; background:#4d6b45; }
+#morality-meter .money-n { text-align:center; color:#fff; text-shadow:2px 2px 0 #1f4a1f; display:inline-block; min-width:7ch; font-variant-numeric:tabular-nums; }
+#morality-meter .energy-n { min-width:5ch; text-align:right; }
+#morality-meter .energy-timer { min-width:7ch; text-align:center; }
+/* the countdown to the next energy while in control of something (src/life/possession.js) */
+#possess-timer { position:fixed; top:calc(var(--w3-below, 16px) + 8px); left:50%; transform:translateX(-50%); z-index:25; display:flex; align-items:center; gap:4px;
+  font-family:var(--mono); font-size:11px; font-weight:700; color:var(--text); background:var(--bg-panel); border:1px solid var(--border); border-radius:5px; padding:3px 8px; pointer-events:none; }
+#possess-timer[hidden] { display:none; }
+#possess-timer .pt-time { font-variant-numeric:tabular-nums; min-width:4ch; text-align:center; }
+html.win3 #possess-timer { background:var(--w3-window); color:var(--w3-text); border:1px solid var(--w3-frame); border-radius:0; box-shadow:2px 2px 0 var(--w3-frame); }
+/* not enough energy (see flashEmpty in src/ui/energy.js) */
+#morality-meter .energy { transition:background-color .15s; }
+#morality-meter .energy.energy-hover { background:color-mix(in srgb, var(--bg-panel) 65%, #fff); }
+html.win3 #morality-meter .energy.energy-hover { background:color-mix(in srgb, var(--w3-face) 45%, #fff); }
+/* the box jitters four times as it lights, tipping a little */
+#morality-meter .energy.energy-hover { position:relative; z-index:1; animation:energy-shake .2s steps(1, end); } /* (steps: it snaps between spots rather than gliding) */
+@keyframes energy-shake {
+  0%, 100% { transform:translate(0, 0) rotate(0); }
+  20% { transform:translate(-2px, 1px) rotate(-.6deg); } 40% { transform:translate(2px, -1px) rotate(.6deg); }
+  60% { transform:translate(-2px, -1px) rotate(-.6deg); } 80% { transform:translate(2px, 1px) rotate(.6deg); }
+}
+#morality-meter .energy.energy-empty { animation:energy-empty .6s steps(2, jump-none) 2; }
+#morality-meter .energy.energy-empty :is(.energy-n, .energy-timer) { animation:energy-empty-text .6s steps(2, jump-none) 2; }
+/* an unidentified love/hate (src/ui/traits-known.js): dark grey, text and mark */
+.entity-card .pc-row.pc-locked > .pc-value { color:#555 !important; }
+.entity-card .pc-row.pc-locked > .pc-value[data-mark]::after { background:#555 !important; }
+/* hovered: green if there's energy to identify it, red if not */
+.entity-card .pc-row.pc-locked:hover > .pc-value { color:var(--meter-pos) !important; }
+.entity-card .pc-row.pc-locked:hover > .pc-value[data-mark]::after { background:var(--meter-pos) !important; }
+body.energy-out .entity-card .pc-row.pc-locked:hover > .pc-value { color:var(--meter-neg) !important; }
+body.energy-out .entity-card .pc-row.pc-locked:hover > .pc-value[data-mark]::after { background:var(--meter-neg) !important; }
+.entity-card .pc-row.pc-locked { cursor:pointer; }
+/* the identified-traits window (src/ui/traits-known.js): two columns of entries banded like a card's loves and hates */
+.tk-bar { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+.tk-bar .tk-search { flex:1; min-width:0; font-family:var(--mono); font-size:11px; }
+.tk-bar .tk-sort { width:auto; margin:0; }
+.tk-group-toggle { display:flex; align-items:center; gap:3px; white-space:nowrap; font-size:11px; }
+.tk-list { display:grid; grid-template-columns:1fr 1fr; gap:1px 4px; align-content:start; max-height:60vh; overflow-y:auto; font-family:var(--mono); font-size:11px; }
+.tk-group { grid-column:1 / -1; font-weight:700; padding:4px 2px 2px; }
+.tk-group.tk-love { color:var(--trait-loves-label); }
+.tk-group.tk-hate { color:var(--trait-hates-label); }
+.tk-cell { min-width:0; }
+.tk-cell.tk-love { background:var(--trait-loves-a); border-left:3px solid var(--trait-loves-bar); }
+.tk-cell.tk-hate { background:var(--trait-hates-a); border-left:3px solid var(--trait-hates-bar); }
+.tk-cell.tk-love.tk-alt { background:var(--trait-loves-b); }
+.tk-cell.tk-hate.tk-alt { background:var(--trait-hates-b); }
+.tk-cell.tk-tier-legendary { background:var(--trait-legendary-a); border-left-color:var(--trait-legendary-bar); }
+.tk-cell.tk-tier-terrible { background:var(--trait-terrible-a); border-left-color:var(--trait-terrible-bar); }
+.tk-head { height:23px; line-height:15px; box-sizing:border-box; display:flex; justify-content:space-between; align-items:center; gap:6px; width:100%; text-align:left; background:none; border:none; color:var(--text); font:inherit; padding:4px 6px; cursor:pointer; }
+.tk-text { flex:1; min-width:0; overflow:hidden; white-space:nowrap; }
+.tk-scroll { display:inline-block; }
+.tk-scroll.tk-marquee { animation:tk-marquee var(--tk-t, 2s) linear infinite; }
+@keyframes tk-marquee { 0%, 12% { transform:translateX(0); } 82%, 90% { transform:translateX(var(--tk-d, 0)); } 100% { transform:translateX(0); } }
+html.win3 .tk-head { color:var(--w3-text); }
+.tk-cell:hover .tk-head { color:#5aa2ff; }
+.tk-open .tk-head { font-weight:700; }
+.tk-mark { flex:0 0 auto; height:15px; background:var(--text-dim); -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; }
+.tk-mark-plus, .tk-mark-minus { width:32px; -webkit-mask-position:left, right; mask-position:left, right; }
+.tk-mark-plus { background:var(--trait-loves-label); -webkit-mask-image:url(../../assets/icons/positive.png), url(../../assets/icons/car.png); mask-image:url(../../assets/icons/positive.png), url(../../assets/icons/car.png); }
+.tk-mark-minus { background:var(--trait-hates-label); -webkit-mask-image:url(../../assets/icons/negative.png), url(../../assets/icons/car.png); mask-image:url(../../assets/icons/negative.png), url(../../assets/icons/car.png); }
+.tk-mods { padding:0 6px 4px 12px; color:var(--text-dim); line-height:16px; }
+html.win3 .tk-mods { color:#404040; }
+.tk-empty { grid-column:1 / -1; padding:4px 6px; color:var(--text-dim); }
+.tk-foot { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; font-family:var(--mono); }
+.tk-pager { display:flex; align-items:center; gap:6px; }
+.tk-pager .btn { display:inline-block; flex:none; width:auto; margin:0; padding:0 6px; min-width:0; }
+/* out of energy: whatever costs it greyed (still clickable, to flash the count) */
+body.energy-out [data-energy] { filter:grayscale(.55); opacity:.7; }
+@keyframes energy-empty { 50% { background:var(--meter-neg); } }
+@keyframes energy-empty-text { 50% { color:#fff; } }
+#morality-meter .meter-value { flex:none; }
+/* the fill always spans the bar, green to --good-pct then red: 50/50 until morality.js sets it, easing into place */
+@property --good-pct { syntax:'<percentage>'; inherits:false; initial-value:50%; }
+/* greyed until then (meter-settling, taken off by morality.js), fading in as the fill eases */
+#morality-meter .meter-readout { transition:filter .8s ease-out; }
+#morality-meter.meter-settling .meter-readout { filter:saturate(.2) opacity(.75); }
+#morality-meter .meter-fill { left:0; width:100%; --good-pct:50%; transition:--good-pct .8s ease-out;
+  background:linear-gradient(to right, var(--ratio-good) var(--good-pct), var(--ratio-evil) var(--good-pct)); }
+.meter-icon { width:auto; height:auto; flex:none; image-rendering:pixelated; vertical-align:middle; }
+.meter .energy { display:flex; align-items:center; gap:6px; margin-top:4px; color:var(--text); white-space:nowrap; }
+.energy-count { display:inline-flex; align-items:center; gap:3px; font-weight:700; }
+.meter .energy-timer { color:var(--text-dim); font-size:10px; }
 
 /* .meter-vertical: a narrow gauge that fills bottom-to-top instead of out from the middle — for something that only
    ever runs one way (0 upward), with nothing to call "neutral", so it carries no .meter-center and skips it defensively

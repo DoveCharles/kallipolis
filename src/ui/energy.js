@@ -1,0 +1,72 @@
+import { App, S } from '../core/shared.js';
+
+// Energy: ENERGY_MAX at most, one back every REGEN_MS, kept in localStorage so it carries across reloads.
+// Shown in #morality-meter's .energy: count, and a countdown to the next one (0:00:00 when full).
+const KEY = 'kallipolis.energy';
+export const ENERGY_MAX = 10;
+const REGEN_MS = 20 * 60 * 1000;
+
+let s = null; // { n: energy, t: when the current regen started }
+try { s = JSON.parse(localStorage.getItem(KEY)); } catch {}
+if (!s || !Number.isFinite(s.n) || !Number.isFinite(s.t)) s = { n: ENERGY_MAX, t: Date.now() };
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
+
+// credit whatever has regenerated since s.t
+function settle() {
+  const now = Date.now();
+  if (s.n >= ENERGY_MAX) { s.n = ENERGY_MAX; s.t = now; return; }
+  const gained = Math.floor((now - s.t) / REGEN_MS);
+  if (gained <= 0) return;
+  s.n = Math.min(ENERGY_MAX, s.n + gained);
+  s.t = s.n >= ENERGY_MAX ? now : s.t + gained * REGEN_MS;
+  save();
+}
+
+/** Energy now. @returns {number} */
+export function energy() { settle(); return s.n; }
+
+/** Spend energy if there's enough (always, with Options > Dev > Infinite energy); flashes the count if not. @param {number} [k] @returns {boolean} */
+export function spendEnergy(k = 1) {
+  if (S.devInfiniteEnergy) return true;
+  settle();
+  if (s.n < k) { flashEmpty(); return false; }
+  if (s.n >= ENERGY_MAX) s.t = Date.now(); // regen clock starts on leaving full
+  s.n -= k;
+  save(); render();
+  return true;
+}
+
+/** Whether there's `k` energy to spend (flashing the count if not), without spending it. @param {number} [k] @returns {boolean} */
+export function hasEnergy(k = 1) {
+  if (S.devInfiniteEnergy || energy() >= k) return true;
+  flashEmpty(); return false;
+}
+
+/** Give energy back, up to ENERGY_MAX. @param {number} [k] @returns {void} */
+export function addEnergy(k = 1) {
+  settle();
+  s.n = Math.min(ENERGY_MAX, s.n + k);
+  if (s.n >= ENERGY_MAX) s.t = Date.now();
+  save(); render();
+}
+
+const el = document.querySelector('#morality-meter .energy');
+// anything marked data-energy (it costs energy) lights the count up while hovered
+document.addEventListener('pointerover', e => el.classList.toggle('energy-hover', !!e.target.closest?.('[data-energy]')));
+function flashEmpty() { el.classList.remove('energy-empty'); void el.offsetWidth; el.classList.add('energy-empty'); }
+const nEl = el.querySelector('.energy-n'), timerEl = el.querySelector('.energy-timer');
+const pad = n => String(n).padStart(2, '0');
+function render() {
+  settle();
+  nEl.textContent = `${s.n}/${ENERGY_MAX}`;
+  document.body.classList.toggle('energy-out', !S.devInfiniteEnergy && s.n <= 0); // (greys out whatever costs energy)
+  if (s.n >= ENERGY_MAX) { timerEl.textContent = '0:00:00'; return; }
+  const left = Math.max(0, Math.ceil((s.t + REGEN_MS - Date.now()) / 1000));
+  timerEl.textContent = `${Math.floor(left / 3600)}:${pad(Math.floor(left / 60) % 60)}:${pad(left % 60)}`;
+}
+setInterval(render, 1000);
+render();
+// another tab changed it
+window.addEventListener('storage', e => { if (e.key !== KEY) return; try { s = JSON.parse(e.newValue) || s; } catch {} render(); });
+
+Object.assign(App, { energy, spendEnergy, hasEnergy, addEnergy });

@@ -54,9 +54,54 @@ function hideHint() {
   App.updateHint();
   hint.hidden = true;
 }
-// (whether it could: only in World mode)
+// ---------------------------------------------------------- energy
+// Taking control of anything costs 1 energy for a stretch of time (CHARGE_MS by kind), then 1 more for each stretch after,
+// with a countdown at the top of the screen (#possess-timer); out of energy, it lets go. The paid-for time runs out in real
+// time whether in control or not (even with the page closed: its end is kept in localStorage), and what's left of it is
+// used first next time — kept apart for each group (people / cars and planes / bees and pigeons), so time paid for one
+// never carries to another. Riding a train is free.
+const CHARGE_MS = { person: 5*60000, car: 60000, flying: 60000, critter: 10*60000 }; // (critter: a bee or pigeon)
+const GROUP_OF = { person: 'person', car: 'vehicle', flying: 'vehicle', critter: 'animal' };
+const PAID_KEY = 'kallipolis.possessPaidUntil';
+const timerEl = document.getElementById('possess-timer'), timerText = timerEl.querySelector('.pt-time');
+let paid = { person: 0, vehicle: 0, animal: 0 }; // group → when its paid-for time ends, by Date.now
+try { const saved = JSON.parse(localStorage.getItem(PAID_KEY)); if (saved && typeof saved === 'object') paid = { ...paid, ...saved }; } catch {}
+const savePaid = () => { try { localStorage.setItem(PAID_KEY, JSON.stringify(paid)); } catch {} };
+let chargeTick = null, chargeMs = 0, group = 'person'; // (what's being paid for now)
+/** Whether there's time paid for `kind` or energy to take control with (flashing the energy count if not). @param {keyof CHARGE_MS} [kind] @returns {boolean} */
+export const canTakeControl = (kind = 'person') => paid[GROUP_OF[kind]] > Date.now() || (App.hasEnergy ? App.hasEnergy() : true);
+const charged = () => isPossessing() || driving.active || flying.active;
+const spend = () => (App.spendEnergy ? App.spendEnergy() : true);
+function beginCharge(kind) {
+  chargeMs = CHARGE_MS[kind]; group = GROUP_OF[kind];
+  if (paid[group] <= Date.now()) {
+    if (!spend()) return false;
+    paid[group] = Date.now() + chargeMs; savePaid();
+  }
+  clearInterval(chargeTick);
+  chargeTick = setInterval(chargeStep, 250);
+  queueMicrotask(chargeStep);
+  return true;
+}
+function chargeStep() {
+  if (!charged()) { endCharge(); return; }
+  const now = Date.now();
+  if (now >= paid[group]) {
+    if (!spend()) { endCharge(); releaseControl(); return; }
+    paid[group] = now + chargeMs; savePaid();
+  }
+  const left = Math.ceil((paid[group] - now) / 1000);
+  timerText.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  timerEl.hidden = false;
+}
+function endCharge() {
+  if (chargeTick === null) return;
+  clearInterval(chargeTick); chargeTick = null; timerEl.hidden = true;
+}
+
+// (whether it could: only in World mode, with energy)
 export function startPossession(i, heading) {
-  if (!S.peopleEnabled || S.interactionMode !== 'move') return false;
+  if (!S.peopleEnabled || S.interactionMode !== 'move' || !beginCharge('person')) return false;
   possession.index = i;
   possession.yaw = heading;
   possession.pitch = -0.1;
@@ -72,13 +117,14 @@ function unlockPointer() { if (document.pointerLockElement === dom) document.exi
 export function endPossession() {
   if (possession.index < 0) return;
   possession.index = -1;
+  endCharge();
   held.clear();
   lookPointer = null; pressedAt = null;
   hideHint();
   unlockPointer();
 }
 export function startDriving() {
-  if (!S.peopleEnabled || S.interactionMode !== 'move') return false;
+  if (!S.peopleEnabled || S.interactionMode !== 'move' || !beginCharge('car')) return false;
   driving.active = true;
   driving.lookedAt = -Infinity;
   held.clear();
@@ -91,6 +137,7 @@ export function startDriving() {
 export function endDriving() {
   if (!driving.active) return;
   driving.active = false;
+  endCharge();
   held.clear();
   lookPointer = null; pressedAt = null;
   hideHint();
@@ -100,12 +147,12 @@ const FLYING_KEYS = 'W/S to dive and climb · A/D to bank · Shift for power · 
 const FLYING_TOUCH = 'Stick to fly it · Run for power · Brake to slow';
 /**
  * @param {() => void} release - called to let go of whatever is being flown, when Esc or the exit button asks
- * @param {{keys?: string, touch?: string}} [hint] - how it is flown, if not like an aeroplane (the start of the hint's line)
+ * @param {{keys?: string, touch?: string, kind?: 'flying'|'critter'}} [hint] - how it is flown, if not like an aeroplane (the start of the hint's line); kind: what energy it costs (see CHARGE_MS)
  */
-export function startFlying(release, { keys = FLYING_KEYS, touch = FLYING_TOUCH } = {}) {
+export function startFlying(release, { keys = FLYING_KEYS, touch = FLYING_TOUCH, kind = 'flying' } = {}) {
   // (no people check, unlike the two above: an aircraft flies its schedule whether or not the town has anyone in it,
   // so its card is there to be clicked either way, and "Fly it" shouldn't be a button that does nothing)
-  if (S.interactionMode !== 'move') return false;
+  if (S.interactionMode !== 'move' || !beginCharge(kind)) return false;
   flying.active = true;
   flying.release = release;
   flying.lookedAt = -Infinity;
@@ -118,6 +165,7 @@ export function startFlying(release, { keys = FLYING_KEYS, touch = FLYING_TOUCH 
 export function endFlying() {
   if (!flying.active) return;
   flying.active = false;
+  endCharge();
   held.clear();
   lookPointer = null; pressedAt = null;
   hideHint();

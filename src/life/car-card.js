@@ -21,7 +21,7 @@ const card = makeCard({
   // the thumbnail itself: behind the wheel (see "driving a car" in traffic/driving.js)
   thumb: { title: 'Drive it', onClick: () => { if (shown >= 0) App.driveCar(shown); } },
   // the Smite button, under the thumbnail: lightning strikes it and it blows up on the spot (see smiteCar in traffic/follow.js), and the card goes
-  kill: { title: 'Strike it down', onClick: () => { if (shown >= 0) App.smiteCar(shown); } },
+  kill: { title: 'Strike it down', onClick: () => { if (shown >= 0 && App.spendEnergy()) App.smiteCar(shown); } }, // (1 energy)
 });
 
 function showCarCard(i, info, car) {

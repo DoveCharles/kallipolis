@@ -29,6 +29,7 @@ const PEOPLE_FILES = [
 export const DEFAULT_TRAITS = startingTraits();
 
 let version = 0; // counts up each time the people files load, so what was worked out from it can be worked out again
+let filesLoaded = false;
 const listeners = [];
 // how many loves and hates a person gets, until about.txt says (its [distribution]) — the shared spread
 let counts = DEFAULT_COUNTS;
@@ -60,12 +61,16 @@ Promise.all(fileNames.map(readPeopleFile))
     // how many loves and hates each person gets: the file's own [distribution], or the shared spread (see DEFAULT_COUNTS)
     counts = distribution && distribution.length ? distribution : DEFAULT_COUNTS;
     Object.keys(lists).forEach(key => { const section = sections[key]; if (section && section[key] && section[key].length) lists[key] = section[key]; });
+    filesLoaded = true;
     version++;
     listeners.forEach(listener => listener());
   })
   .catch(err => console.warn('Kallipolis: the people files failed to load; people get placeholder names', err));
 
 export const profilesVersion = () => version;
+// whether the people files have loaded (not the placeholders), and their love/hate entries (see ui/traits-known.js)
+export const peopleListsLoaded = () => filesLoaded;
+export const peopleTraitEntries = () => ({ love: lists.loves, hate: lists.hates });
 // Fills an entry's [placeholders] for a card, once speech has loaded (life/speech-text.js hands it over): (entry, rng) →
 // { card, said, words }. Until then entries show as written.
 let fillEntry = null;
@@ -140,13 +145,14 @@ export function profileOf(id, isMan, moodNow = null) {
   let loveTexts = lovesFilled.map(filled => filled.card), hateTexts = hatesFilled.map(filled => filled.card);
   let loveTiers = lovesFull.map(tierOf), hateTiers = hatesFull.map(tierOf);
   let loveMods = lovesFull.map(modifiersOf), hateMods = hatesFull.map(modifiersOf);
+  let loveBase = loves.map(entry => entry.text), hateBase = hated.map(entry => entry.text); // (the file's own wording, to identify by)
   if (name.text === '(UNKNOWN)') {
     fullname = '(UNKNOWN)';
     const hidden = texts => texts.length ? texts.map(() => '(UNKNOWN)') : ['(UNKNOWN)'];
     const lovesHidden = rng() > 0.5;
     const hatesHidden = !lovesHidden || rng() > 0.5;
-    if (lovesHidden) { loveTexts = hidden(loveTexts); loveTiers = loveTexts.map(() => null); loveMods = loveTexts.map(() => []); }
-    if (hatesHidden) { hateTexts = hidden(hateTexts); hateTiers = hateTexts.map(() => null); hateMods = hateTexts.map(() => []); }
+    if (lovesHidden) { loveTexts = hidden(loveTexts); loveTiers = loveTexts.map(() => null); loveMods = loveTexts.map(() => []); loveBase = loveTexts.map(() => null); }
+    if (hatesHidden) { hateTexts = hidden(hateTexts); hateTiers = hateTexts.map(() => null); hateMods = hateTexts.map(() => []); hateBase = hateTexts.map(() => null); }
   }
 
   age = Math.round(Math.max(18, age*traits.agemult)) //no minors!
@@ -158,7 +164,7 @@ export function profileOf(id, isMan, moodNow = null) {
   // `limits`: every limit rule their name, mood, loves and hates hold (see clash in core/entries.js), for what they'll say
   return { name: fullname, age, mood: mood.text, loves: loveTexts, hates: hateTexts, limits: [...[name, mood, ...loves, ...hated].flatMap(limitsOf), ...[...lovesFilled, ...hatesFilled].flatMap(filled => filled.limits ?? [])],
     lovesSaid: lovesFilled.map(filled => filled.said), hatesSaid: hatesFilled.map(filled => filled.said),
-    lovedWords: lovesFilled.flatMap(filled => filled.words), hatedWords: hatesFilled.flatMap(filled => filled.words), lovesTier: loveTiers, hatesTier: hateTiers, lovesMods: loveMods, hatesMods: hateMods, traits: traits};
+    lovedWords: lovesFilled.flatMap(filled => filled.words), hatedWords: hatesFilled.flatMap(filled => filled.words), lovesTier: loveTiers, hatesTier: hateTiers, lovesMods: loveMods, hatesMods: hateMods, lovesBase: loveBase, hatesBase: hateBase, traits: traits};
 }
 
 // ---- cheering up

@@ -242,6 +242,10 @@ try {
       <div class="row"><label>Encourage To Watch TV</label><button class="toggle-switch" id="s-encouragetv"><span class="knob"></span></button></div>
       <div class="row"><label>Free Camera Indoors</label><button class="toggle-switch" id="s-freeroomcamera"><span class="knob"></span></button></div>
       </div>
+      <div data-settings="dev">
+      <div class="row"><label>Infinite energy</label><button class="toggle-switch" id="s-infiniteenergy"><span class="knob"></span></button></div>
+      <div class="row"><label>Free purchases</label><button class="toggle-switch" id="s-freepurchases"><span class="knob"></span></button></div>
+      </div>
       <div data-settings="speech">
       <div class="slider-row"><div class="row"><label>Chat speed</label><span class="val" id="dv-chatspeed">1</span></div>
         <input type="range" id="s-chatspeed" min="0.25" max="4" step="0.25" value="1"></div>
@@ -298,16 +302,20 @@ try {
      shared .meter-* structure below, so another meter elsewhere in the menu can reuse it by copying this shape under
      its own id (see src/ui/morality.js, which finds its pieces with #morality-meter's own querySelector rather than
      by id, for exactly that reason) -->
-<div id="morality-meter" class="meter">
+<div id="morality-meter" class="meter meter-settling">
+  <button class="canvas-tool" id="btn-identify" title="Identified traits"><img src="assets/icons/identify.png" alt="Identify"></button>
+  <div class="money" title="Money"><span class="money-n">£000000</span></div>
+  <div class="energy" title="Energy: 1 regained every 20 minutes"><div class="energy-count"><span class="energy-n">10/10</span><img class="meter-icon" src="assets/icons/energy.png" alt="Energy"></div><div class="energy-timer">0:00:00</div></div>
   <div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Morality</div><button class="win3-min" title="Minimize"></button><button class="win3-max" title="Maximize"></button></div>
   <div class="meter-head"><span class="meter-title">Morality</span><button class="meter-toggle" title="What the morality is made of">show</button></div>
-  <div class="meter-readout"><div class="meter-track"><div class="meter-bar"><div class="meter-fill"></div></div><div class="meter-center"></div></div><span class="meter-value">0</span></div>
+  <div class="meter-readout"><div class="meter-track"><div class="meter-bar"><div class="meter-fill"></div></div><div class="meter-center"></div></div><span class="meter-value"><span class="meter-good">000</span><img class="meter-icon" src="assets/icons/holy.png" alt="Good"> / <span class="meter-evil">000</span><img class="meter-icon" src="assets/icons/evil.png" alt="Evil"></span></div>
   <div class="meter-details" hidden></div>
   <div class="meter-notices"></div>
 </div>
 
 <div id="hint"></div>
 
+<div id="possess-timer" hidden title="Time until the next energy is used"><img class="meter-icon" src="assets/icons/energy.png" alt="Energy"> <span class="pt-time">1:00</span></div>
 <div id="possess-hint" hidden><button id="ph-exit" hidden>Exit</button></div>
 <!-- dialling in the seat while riding a train carriage (src/trains/trains.js): where the view sits in it, and how wide -->
 <div id="ride-tune" hidden>

@@ -12,6 +12,7 @@ import { ranked } from './people/peopleRelations.js';
 import { recentLines, onLineLogged } from './people/peopleSaid.js';
 import { GIFTS, POCKET_SLOTS, giftLines, giftsLoaded, giveGift, onGiftsLoaded, pocketsFull, takeBack } from './gifts.js';
 import { openWindow } from '../ui/w3-window.js';
+import { traitKey } from '../ui/traits-known.js';
 import { IS_TOUCH } from '../core/device.js';
 
 // ============================================================ person cards
@@ -54,7 +55,7 @@ function makePersonWindow(id) {
     // (see killPerson in people.js), and the card goes
     kill: { title: 'Strike them down', onClick: () => {
       const p = personOf(w);
-      if (!p) return;
+      if (!p || !App.spendEnergy()) return; // (1 energy: see ui/energy.js)
       strikeLightning({ x: p.x, y: p.y, z: p.z });
       App.killPerson(w.shown.index);
     } },
@@ -149,7 +150,8 @@ function fill(w, index, isMan, beside = false) {
   const name = cased(profile.name, traits); // (the same, as the card's Name row and as its title bar: see setTitle below)
   card.show({ name, age: profile.age, mood: profile.mood,
     loves: garbledEntry(profile.loves, traits, profile.age), hates: garbledEntry(profile.hates, traits, profile.age),
-    lovesTier: profile.lovesTier, hatesTier: profile.hatesTier, lovesMods: profile.lovesMods, hatesMods: profile.hatesMods });
+    lovesTier: profile.lovesTier, hatesTier: profile.hatesTier, lovesMods: profile.lovesMods, hatesMods: profile.hatesMods,
+    lovesKeys: profile.lovesBase.map(t => t && traitKey('love', t)), hatesKeys: profile.hatesBase.map(t => t && traitKey('hate', t)) });
   // the window's title bar names whoever's in it, rather than the kind of thing the card shows (which is what the cars',
   // the buildings' and the rest keep there): the same name its Name row has, cased by their traits. A garble (scramble
   // or keysmash) reaches it as it reaches the card's other headings, though never the Name row itself.
@@ -211,6 +213,7 @@ function openBeside(from, person) {
   const w = otherThan(from), wasOpen = !!w.shown;
   fill(w, index, isManAt(index));
   if (!wasOpen) { placeBeside(w.card.el, from.card.el); w.placedBeside = true; }
+  from.card.el.dispatchEvent(new Event('card-show', { bubbles: true })); // (`from` stays the active window: see win3-menu.js)
   syncOtherPoll();
 }
 // `w` slides (RESIZE-style translate, no layout per frame) into where `from` is: its dragged place, or the default one
@@ -441,6 +444,7 @@ function openGifts(w) {
         kindGifts.forEach(gift => {
           const button = document.createElement('button');
           button.className = 'btn gift-pick';
+          button.dataset.energy = '';
           button.textContent = gift.emoji;
           button.setAttribute('aria-label', gift.name);
           const show = () => tipLines(info, giftLines(gift));
@@ -460,8 +464,10 @@ function openGifts(w) {
       const q = personOf(w);
       if (!q) { giftWindow?.close(); return; }
       if (gift.kind === 'keepsake' && pocketsFull(q)) { hint(`${name}'s pockets are full: take something back first.`); return; }
+      if (!App.hasEnergy()) return; // (1 energy: see ui/energy.js)
       const { given, cheered } = giveGift(q, w.shown.index, gift);
       if (!given) return;
+      App.spendEnergy();
       hint(`${gift.emoji} Given to ${name}.` + (cheered ? ' That cheered them up!' : ''));
       w.pocketsShown = null;
       refreshPockets(w);
