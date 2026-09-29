@@ -465,6 +465,9 @@ function measureParts(pieces) {
   if (bulb) pieces.Lamp.bulb = bulb.getCenter(new THREE.Vector3());
   const hanging = part(pieces.Pendant, 'Light');
   if (hanging) pieces.Pendant.bulb = hanging.getCenter(new THREE.Vector3());
+  // (a fireplace with logs but no Fire of its own, the posh one, burns with flames: see "the fire")
+  const logs = part(pieces.Fireplace, 'Log');
+  if (logs && !part(pieces.Fireplace, 'Fire')) pieces.Fireplace.hearth = logs;
 }
 // lit like the rest of the room (see roomLit), but for the lamp's bulb (and a pub's fire, and whatever else it has that's
 // lit from within: its Glow materials), which glows anyway, the glass, and the TV's screen
@@ -1210,6 +1213,7 @@ function furnish(key) {
   stopTV();
   home.group.add(lampLight);
   lampLight.userData.there = false;
+  flames.removeFromParent();
   const rng = mulberry32(hashNameToNumber(String(key)));
   home.floor.setHex(FLOORS[Math.floor(rng()*FLOORS.length)]);
   home.floorMap = null;
@@ -1284,6 +1288,7 @@ function furnish(key) {
     object.scale.setScalar(scale);
     object.userData.isTV = name === 'TV'; // (never faded: see fadeWhatsInTheWay)
     home.group.add(object);
+    if (piece.hearth) lightFire(object, piece.hearth);
     const r = footprint(piece, x, z, angle, scale);
     if (underfoot) return r;
     taken.push({ ...r, tall });
@@ -3335,6 +3340,52 @@ function updateTV() {
   else { tell('unMute'); tell('setVolume', TV_VOLUME); }
 }
 
+// ---------------------------------------------------------------- the fire
+// A fireplace's fire (one with a hearth: see measureParts) is particles: little pyramids like the flat fire it used to
+// have, each springing up from somewhere along the logs, rising a little and flickering side to side, yellow going to
+// red as it shrinks away, then starting again. Unlit, so it glows. One set of them, moved to whichever home's fireplace.
+const FLAMES = 24, FLAME_LIFE = [0.45, 0.9], FLAME_WIDTH = [0.05, 0.08], FLAME_HEIGHT = [0.12, 0.26], FLAME_RISE = 0.08;
+const FLAME_YOUNG = new THREE.Color(0xffdd66), FLAME_OLD = new THREE.Color(0xd8280f);
+const flames = (() => {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, 0.5, -0.5, 0, 0.5, 0, 1, 0], 3));
+  geometry.setIndex([0, 4, 1, 1, 4, 2, 2, 4, 3, 3, 4, 0, 0, 1, 2, 0, 2, 3]);
+  const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshBasicMaterial({ name: 'Fire' }), FLAMES);
+  mesh.frustumCulled = false; // (its instances move about; its box would be wherever they first were)
+  mesh.userData.flames = Array.from({ length: FLAMES }, () => ({ born: -Infinity, life: 1 }));
+  const none = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (let i = 0; i < FLAMES; i++) { mesh.setMatrixAt(i, none); mesh.setColorAt(i, FLAME_YOUNG); }
+  return mesh;
+})();
+let hearth = null;
+function lightFire(fireplace, logs) {
+  hearth = logs;
+  fireplace.add(flames);
+  for (const f of flames.userData.flames) f.born = -Infinity;
+}
+const flameAt = new THREE.Matrix4(), flameTurn = new THREE.Quaternion(), flamePlace = new THREE.Vector3(), flameSize = new THREE.Vector3();
+const flameColor = new THREE.Color(), flameUp = new THREE.Vector3(0, 1, 0);
+const between = ([lo, hi]) => lo + Math.random()*(hi - lo);
+function updateFire() {
+  if (!inside || current !== LAYOUTS.home || !flames.parent || !hearth) return;
+  const now = performance.now()/1000, w = hearth.max.x - hearth.min.x, d = hearth.max.z - hearth.min.z;
+  flames.userData.flames.forEach((f, i) => {
+    let t = (now - f.born)/f.life;
+    if (t >= 1) { // (started again, anywhere from the first frame's age on, so they don't all go at once)
+      Object.assign(f, { life: between(FLAME_LIFE), w: between(FLAME_WIDTH), h: between(FLAME_HEIGHT), turn: Math.random()*Math.PI,
+        x: hearth.min.x + w*(0.15 + 0.7*Math.random()), z: hearth.min.z + d*(0.3 + 0.4*Math.random()), wobble: Math.random()*10 });
+      f.born = f.born === -Infinity ? now - Math.random()*f.life : now;
+      t = (now - f.born)/f.life;
+    }
+    const fade = 1 - t;
+    flamePlace.set(f.x + Math.sin(now*9 + f.wobble)*0.012*t, hearth.min.y + (hearth.max.y - hearth.min.y)*0.4 + FLAME_RISE*t, f.z);
+    flameSize.set(f.w*fade, f.h*Math.sqrt(fade)*(0.85 + 0.15*Math.sin(now*14 + f.wobble)), f.w*fade);
+    flames.setMatrixAt(i, flameAt.compose(flamePlace, flameTurn.setFromAxisAngle(flameUp, f.turn), flameSize));
+    flames.setColorAt(i, flameColor.lerpColors(FLAME_YOUNG, FLAME_OLD, t));
+  });
+  flames.instanceMatrix.needsUpdate = flames.instanceColor.needsUpdate = true;
+}
+
 // ---------------------------------------------------------------- the lamp
 // A home's lamp (when it has one) comes on after dark, while anyone's in (see someoneHome). Not a three.js light: one
 // of those joining or leaving the scene changes the light count, recompiling every lit material in the city (a stall of
@@ -3443,6 +3494,7 @@ async function warmUp() {
         faded.traverse(o => { if (o.isMesh && !Array.isArray(o.material)) { o.material = o.material.clone(); o.material.transparent = true; } });
         sets.add(faded);
       }
+      if (set === posh) sets.add(flames);
       await compile(`Preparing ${name} furniture...`);
     }
     const barbot = barbotWarmUp();
@@ -3883,6 +3935,7 @@ const speakerAt = new THREE.Vector3();
 export function updateInteriorCamera() {
   updateTV();
   updateLamp();
+  updateFire();
   updateFurnitureShadows();
   updateDoor();
   updateCurtains();

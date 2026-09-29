@@ -19,7 +19,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', '
 random.seed(11)
 
 # (the ones interior.js recolours for each posh home are Leather, Velvet, Walnut, Gilt, Marble, Lacquer, LampShade, Urn,
-# RugField, RugBorder, RugMotif and the paintings' Paint*; Light and Fire glow as they are)
+# RugField, RugBorder, RugMotif and the paintings' Paint*; Light glows as it is; the fire's particles, in interior.js)
 material('Leather', 0x5a1a1a, 0.55)
 material('Velvet', 0x1f6a4a, 1.0)
 material('Walnut', 0x4a2c1a, 0.5)
@@ -34,7 +34,6 @@ material('Screen', 0xcccccc, 0.5)
 material('TV', 0x101012, 0.4)
 material('LampShade', 0xece2cc, 1.0)
 material('Light', 0x000000, 1.0, glow=0xfff0d0)
-material('Fire', 0x000000, 1.0, glow=0xff8a2a)
 material('Soot', 0x141212, 1.0)
 material('Log', 0x5a3a24, 1.0)
 material('Mirror', 0xb8c6cc, 0.1)
@@ -410,11 +409,6 @@ for k in range(5):                                                             #
 p.box(0.46, 0.14, 0.02, 'Hands', 0, 0.04, 0.12, bevel=0)
 for a, dx in ((0.3, -0.05), (-0.25, 0.06), (0.05, 0.0)):                        # logs
     p.cyl(0.04, 0.34, 'Log', -0.17 + dx, 0.03 + a*0.1, 0.16 + (0.06 if dx == 0 else 0), segments=8, rot=(0, math.pi/2, a))
-for k in range(7):                                                             # and the fire
-    x = -0.15 + k*0.05
-    h = 0.1 + 0.12*math.sin(k*1.9)**2
-    p.hull([(x - 0.035, 0.0, 0.2), (x + 0.035, 0.0, 0.2), (x - 0.02, 0.07, 0.2), (x + 0.02, 0.07, 0.2),
-            (x + 0.01*(k % 3 - 1), 0.03, 0.2 + h)], 'Fire')
 p.box(0.8, 0.04, 1.06, 'Gilt', 0, 0.12, 1.12, bevel=0.012)                    # the mirror, in its frame
 p.box(0.68, 0.01, 0.9, 'Mirror', 0, 0.098, 1.2, bevel=0)
 p.ball(0.07, 'Gilt', (0, 0.11, 2.18), scale=(1.4, 0.4, 0.9))
