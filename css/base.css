@@ -563,7 +563,7 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 
 /* person card: wider, with sheet tabs, a status column and the Social tab (src/ui/entity-card.js tabs/effects,
    src/life/person-card.js) */
-@media (min-width: 761px) { :is(#person-card, #person-card-2) { width:360px; } }
+@media (min-width: 761px) { :is(#person-card, #person-card-2, #person-look) { width:360px; } }
 .pc-tabs { display:flex; }
 .pc-tab { cursor:pointer; font:inherit; }
 .pc-pane { box-sizing:border-box; min-height:120px; }

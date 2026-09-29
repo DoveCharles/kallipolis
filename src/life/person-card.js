@@ -32,6 +32,7 @@ const HEADSHOT_SIZE = 120; // pixels across (shown half that, sharp on high-dens
 const HEADSHOT_INTERVAL = 1/15, OTHER_HEADSHOT_INTERVAL = 1/4; // (the unfocused card's face is redrawn less often)
 const OTHER_POLL = 500; // ms between the unfocused card's status checks
 const BESIDE_GAP = 10; // px between the two cards
+const FACE_WAIT = 0.5; // seconds a card newly filled waits for its headshot before showing without it
 const SOCIAL_TOP = 3, SOCIAL_REFRESH = 1000;
 const clearColor = new THREE.Color();
 
@@ -72,14 +73,7 @@ function makePersonWindow(id) {
   // where their head is and which way it faces) from a camera just in front of it that sees only the people, on a clear
   // background, into a render target of its own, copied onto the card's canvas once the GPU has the pixels (read back
   // asynchronously: a plain readPixels waits for the whole frame to finish drawing)
-  w.target = new THREE.WebGLRenderTarget(HEADSHOT_SIZE, HEADSHOT_SIZE);
-  w.camera = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
-  w.camera.layers.set(HEADSHOT_LAYER);
-  w.canvas = card.canvas;
-  w.context = w.canvas.getContext('2d');
-  w.image = w.context.createImageData(HEADSHOT_SIZE, HEADSHOT_SIZE);
-  w.pixels = new Uint8Array(HEADSHOT_SIZE*HEADSHOT_SIZE*4);
-  w.drawnAt = -Infinity; w.lightsOnLayer = false; w.reading = false;
+  headshotParts(w, card);
 
   // ---- the Social tab: top friends and enemies (peopleRelations.js), re-ranked every SOCIAL_REFRESH while open, and their
   // recent lines (peopleSaid.js), newest first, updated as they're said. A name opens that person in the other card.
@@ -127,6 +121,17 @@ function makePersonWindow(id) {
   return w;
 }
 
+function headshotParts(w, card) {
+  w.target = new THREE.WebGLRenderTarget(HEADSHOT_SIZE, HEADSHOT_SIZE);
+  w.camera = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
+  w.camera.layers.set(HEADSHOT_LAYER);
+  w.canvas = card.canvas;
+  w.context = w.canvas.getContext('2d');
+  w.image = w.context.createImageData(HEADSHOT_SIZE, HEADSHOT_SIZE);
+  w.pixels = new Uint8Array(HEADSHOT_SIZE*HEADSHOT_SIZE*4);
+  w.drawnAt = -Infinity; w.lightsOnLayer = false; w.reading = false;
+}
+
 // whoever's in the window's slot, if it's still the person it opened on (see peopleIdSeq in people.js)
 function personOf(w) {
   const p = w.shown && App.people[w.shown.index];
@@ -141,7 +146,10 @@ function fill(w, index, isMan, beside = false) {
   // whoever's actually standing in that slot right now, not the slot itself — see peopleIdSeq in people.js
   const id = App.people[index]?.id ?? index, profile = profileOf(id, isMan, App.people[index]?.moodNow);
   const { traits } = profile, again = w.shown?.index === index; // (again: people/*.txt just loaded, under an open card)
-  w.shown = { index, id, isMan, traits, seed: profile.age, beside };
+  // (someone else already up in it: a still copy of them stays over it till the new face is in — see revealFace)
+  const ghost = w.ghost ?? (!again && w.shown && !card.el.hidden && card.el.style.visibility !== 'hidden' ? ghostOf(w) : null);
+  w.ghost = null;
+  w.shown ={ index, id, isMan, traits, seed: profile.age, beside };
   card.el.classList.toggle('pc-beside', beside);
   card.relabel(garbles(traits) ? text => garbled(text, traits, profile.age) : null); // (the headings too: "Loves", "Hates", the title...)
   // loves and hates are lists: one line per entry, and an empty list hides its row. The traits aren't shown: they're what
@@ -164,6 +172,12 @@ function fill(w, index, isMan, beside = false) {
   w.drawnAt = -Infinity;
   w.lightsOnLayer = false;
   if (again) setDoing(w, w.doing, w.away); else setDoing(w, null);
+  // (kept invisible, laid out, till the headshot's in — copyHeadshot — or FACE_WAIT)
+  revealFace(w);
+  if (!again && !w.canvas.hidden) {
+    card.el.style.visibility = 'hidden'; w.ghost = ghost;
+    w.faceTimer = setTimeout(() => revealFace(w), FACE_WAIT*1000);
+  } else ghost?.remove();
   if (App.people[index]) card.setFavorite(personFavorite(App.people[index].id));
   card.bindHealth(App.people[index] ?? null, 'person');
   w.socialShown = '';
@@ -172,7 +186,23 @@ function fill(w, index, isMan, beside = false) {
   refreshPockets(w);
   if (giftWindow?.w === w && giftWindow.id !== id) giftWindow.close(); // (the Gift window was for whoever was here before)
 }
+function revealFace(w) {
+  clearTimeout(w.faceTimer); w.faceTimer = null;
+  w.card.el.style.visibility = '';
+  w.ghost?.remove(); w.ghost = null;
+}
+// a still copy of the card as it is, fixed where it is, headshot and all
+function ghostOf(w) {
+  const el = w.card.el, r = el.getBoundingClientRect(), ghost = el.cloneNode(true);
+  ghost.removeAttribute('id'); ghost.classList.add('card-ghost'); // (its title bar kept as it was: see win3-menu.js setActive)
+  Object.assign(ghost.style, { position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px',
+    right: 'auto', bottom: 'auto', margin: '0', transform: 'none', translate: 'none', pointerEvents: 'none', visibility: '' });
+  ghost.querySelector('canvas.pc-thumb')?.getContext('2d').drawImage(w.canvas, 0, 0);
+  el.after(ghost);
+  return ghost;
+}
 function hideWindow(w) {
+  revealFace(w);
   if (giftWindow?.w === w) giftWindow.close();
   w.shown = null;
   w.placedBeside = false;
@@ -307,7 +337,7 @@ function pollOthers() {
 // ---- headshots (called from updatePeople in people.js with the person alone on the model): `index` defaults to the
 // followed person's; otherHeadshotIndex says which unfocused window's person is due a redraw, if any
 function drawPersonHeadshot(view, index = focused?.shown?.index) {
-  const w = windows.find(x => x.shown?.index === index);
+  const w = windows.find(x => x.shown?.index === index) ?? (look.shown?.index === index ? look : null);
   if (!w || w.canvas.hidden || w.reading) return;
   const now = performance.now()/1000;
   if (now - w.drawnAt < (w === focused ? HEADSHOT_INTERVAL : OTHER_HEADSHOT_INTERVAL)) return;
@@ -330,17 +360,18 @@ function drawPersonHeadshot(view, index = focused?.shown?.index) {
   renderer.setRenderTarget(target);
   renderer.setClearColor(clearColor, clearAlpha);
   renderer.shadowMap.autoUpdate = shadows;
-  w.reading = true;
+  w.reading = true; w.readingFor = w.shown.index;
   renderer.readRenderTargetPixelsAsync(w.target, 0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE, w.pixels)
     .then(() => copyHeadshot(w), () => {}).finally(() => { w.reading = false; });
 }
 function otherHeadshotIndex() {
   const now = performance.now()/1000;
-  const w = openWindows().find(x => x !== focused && !x.reading && !x.canvas.hidden && now - x.drawnAt >= OTHER_HEADSHOT_INTERVAL && personOf(x));
+  const w = [...openWindows(), ...(look.shown ? [look] : [])]
+    .find(x => x !== focused && !x.reading && !x.canvas.hidden && now - x.drawnAt >= OTHER_HEADSHOT_INTERVAL && (x === look || personOf(x)));
   return w ? w.shown.index : -1;
 }
 function copyHeadshot(w) {
-  if (!w.shown) return;
+  if (!w.shown || w.readingFor !== w.shown.index) return; // (a face read for whoever it showed before)
   // (an empty frame — someone off screen isn't drawn: see personOnScreen in peopleModel.js — keeps the last face)
   let seen = false;
   for (let k = 3; k < w.pixels.length && !seen; k += 4) seen = w.pixels[k] > 0;
@@ -348,7 +379,9 @@ function copyHeadshot(w) {
   // (the render target's rows run bottom to top)
   const rowBytes = HEADSHOT_SIZE*4;
   for (let y=0;y<HEADSHOT_SIZE;y++) w.image.data.set(w.pixels.subarray((HEADSHOT_SIZE - 1 - y)*rowBytes, (HEADSHOT_SIZE - y)*rowBytes), y*rowBytes);
+  if (w === look && look.index !== w.shown.index) { look.faceReady = true; return; } // (the look card's next person: shown with it)
   w.context.putImageData(w.image, 0, 0);
+  if (w.faceTimer) revealFace(w);
 }
 
 // ---- the Social tab's drawing
@@ -524,4 +557,43 @@ function personFavorite(id) {
 reviveFavoritesAs('Person', saved => Number.isInteger(saved.id) ? personFavorite(saved.id)
   : Number.isInteger(saved.index) && saved.index >= 0 ? personFavorite(saved.index) : null);
 
-Object.assign(App, { showPersonCard, hidePersonCard, drawPersonHeadshot, otherHeadshotIndex, setPersonCardDoing, refreshCardStatuses });
+// ---- the look card: possessing someone, whoever they're looking at (updatePossessedTarget in people/peopleTracking.js)
+// gets a plain card — the Overview and headshot only, no tabs or Smite — above the possessed person's own. A new person
+// waits for their headshot (look.shown: who it's drawing; look.index: who the card shows), or FACE_WAIT at most.
+
+const look = { card: makeCard({ id: 'person-look', title: 'Ped', health: true, onClose: () => { look.dismissed = look.shown?.index ?? -1; hideLook(); } }),
+  index: -1, id: null, dismissed: -1, doing: undefined, shown: null, wantId: null, wantSince: 0, faceReady: false };
+headshotParts(look, look.card);
+look.card.el.classList.add('pc-look');
+function hideLook() {
+  if (!look.shown) return;
+  look.index = -1; look.shown = null; look.faceReady = false;
+  look.card.hide(); look.card.bindHealth(null);
+}
+function showLookCard(index) {
+  const p = index >= 0 ? App.people[index] : null, anchor = focused?.card.el, now = performance.now()/1000;
+  if (look.dismissed !== index) look.dismissed = -1;
+  if (!p || index === look.dismissed || !anchor || anchor.hidden) { hideLook(); return; }
+  if (look.shown?.index !== index || look.wantId !== p.id) {
+    look.shown = { index }; look.wantId = p.id; look.wantSince = now; look.faceReady = false; look.drawnAt = -Infinity;
+  }
+  if (look.index !== index || look.id !== p.id) {
+    if (!look.faceReady && now - look.wantSince < FACE_WAIT) return;
+    const profile = profileOf(p.id, isManAt(index), p.moodNow), { traits } = profile, name = cased(profile.name, traits);
+    look.index = index; look.id = p.id; look.traits = traits; look.seed = profile.age; look.doing = undefined;
+    if (look.faceReady) look.context.putImageData(look.image, 0, 0); else look.context.clearRect(0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE);
+    look.card.relabel(garbles(traits) ? text => garbled(text, traits, profile.age) : null);
+    look.card.show({ name, age: profile.age, mood: profile.mood,
+      loves: garbledEntry(profile.loves, traits, profile.age), hates: garbledEntry(profile.hates, traits, profile.age),
+      lovesTier: profile.lovesTier, hatesTier: profile.hatesTier, lovesMods: profile.lovesMods, hatesMods: profile.hatesMods,
+      lovesKeys: profile.lovesBase.map(t => t && traitKey('love', t)), hatesKeys: profile.hatesBase.map(t => t && traitKey('hate', t)) });
+    look.card.setTitle(name);
+    look.card.bindHealth(p, 'person');
+  }
+  const doing = personDoing(p);
+  if (doing !== look.doing) { look.doing = doing; look.card.set('status', garbled(doing, look.traits, look.seed)); }
+  const a = anchor.getBoundingClientRect(), el = look.card.el;
+  Object.assign(el.style, { left: a.left + 'px', right: 'auto', top: 'auto', bottom: innerHeight - a.top + BESIDE_GAP + 'px' });
+}
+
+Object.assign(App, { showLookCard, showPersonCard,hidePersonCard, drawPersonHeadshot, otherHeadshotIndex, setPersonCardDoing, refreshCardStatuses });

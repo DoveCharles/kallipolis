@@ -621,6 +621,26 @@ function personAhead(p) {
   });
   return best;
 }
+// whoever the look card's for (person-card.js showLookCard): further off and wider than talking, anyone in sight — the
+// the best of those in reach (LOOK_REACH dead ahead, shrinking to REACH_TALK at LOOK_ANGLE off it): nearest the middle
+// of the view (where the locked cursor is), and nearest them, LOOK_NEAR_WEIGHT times as much
+const LOOK_REACH = 12, LOOK_ANGLE = Math.PI/4; // how far, at people size 1; how far off the view's middle, in radians
+const LOOK_NEAR_WEIGHT = 2; // how much nearness counts against being off the middle (each as a share of its limit)
+const lookAt = new THREE.Vector3(), lookDir = new THREE.Vector3();
+function personLooked(p) {
+  let best = null, bestScore = Infinity;
+  camera.getWorldDirection(lookDir);
+  people.forEach(q => {
+    if (q === p || q.mode === 'dead' || isGone(q) || (possessedRoom ? !inRoom(q) || q.inRoom.hidden : inRoom(q))) return;
+    lookAt.set(q.x, q.y + personHeight(q)*0.6, q.z).sub(camera.position);
+    const d = lookAt.length(), angle = d > 1e-3 ? lookAt.angleTo(lookDir) : Math.PI;
+    if (angle >= LOOK_ANGLE) return;
+    const reach = LOOK_REACH + (REACH_TALK - LOOK_REACH)*angle/LOOK_ANGLE;
+    const score = angle/LOOK_ANGLE + LOOK_NEAR_WEIGHT*d/(LOOK_REACH*S.peopleSize);
+    if (d <= reach*S.peopleSize && score < bestScore) { best = q; bestScore = score; }
+  });
+  return best;
+}
 // whoever the possessed is talking to (see talkWith in peopleActivities.js), while they're still in the conversation
 const talkingTo = p => p.group && p.chatWith && p.group.members.includes(p.chatWith) ? p.chatWith : null;
 /**
@@ -643,6 +663,8 @@ export function updatePossessedTarget() {
       if (b?.enterable) target = { building: b };
     }
   }
+  const looked = S.lookCard && p?.mode === 'possessed' && S.interactionMode === 'move' ? personLooked(p) : null; // (Options > Display > Show Profile On Look)
+  App.showLookCard?.(looked ? people.indexOf(looked) : -1); // (their card, above the possessed person's: person-card.js)
   const key = IS_TOUCH ? 'Tap <b>Use</b>' : 'Press <kbd>E</kbd>';
   if (target?.person) {
     const q = target.person, partner = talkingTo(p);

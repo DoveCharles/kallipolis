@@ -7,6 +7,8 @@
 //   the sofa, so the TV's on straight away (see aboutTheRoom in life/people/peopleActivities.js).
 // - Options > Game > Dialogue Choices (S.dialogueChoices, on): for the possessed person (whose lines go in a box low on screen, not
 //   a bubble), a reply with several options lists them to pick (see ownLine in ui/speech-bubbles.js).
+// - Options > Display > Show Profile On Look (S.lookCard, on): possessing someone, whoever they look at gets a card
+//   (showLookCard in life/person-card.js).
 // - Options > Game > Free Camera Indoors (S.freeRoomCamera, on by default): inside a building, orbit, pan and zoom freely
 //   within the room rather than riding round its walls (see freeRoom in buildings/interior.js).
 // - Options > Display > FX > Dithered See-Through (S.ditherSeeThrough, on by default): buildings near the camera fade by a
@@ -21,7 +23,7 @@ import { whenLoaded } from './loading.js';
 
 const EDIT_HINTS_KEY = 'splinetopia.editHints', GENERAL_HINTS_KEY = 'splinetopia.generalHints';
 const START_MODE_KEY = 'splinetopia.startMode', LAST_MODE_KEY = 'splinetopia.lastMode', OLD_START_EDIT_KEY = 'splinetopia.startInEdit';
-const ENCOURAGE_TV_KEY = 'splinetopia.encourageTV', DIALOGUE_CHOICES_KEY = 'splinetopia.dialogueChoices';
+const ENCOURAGE_TV_KEY = 'splinetopia.encourageTV', DIALOGUE_CHOICES_KEY = 'splinetopia.dialogueChoices', LOOK_CARD_KEY = 'splinetopia.lookCard';
 const CHAT_SPEED_KEY = 'splinetopia.chatSpeed', BUBBLE_DISTANCE_KEY = 'splinetopia.bubbleDistance';
 const HEAR_DISTANCE_KEY = 'splinetopia.hearDistance', FREE_ROOM_CAMERA_KEY = 'splinetopia.freeRoomCamera';
 const BABBLE_BUBBLES_KEY = 'splinetopia.babbleBubbles', BABBLE_FALLBACK_KEY = 'splinetopia.babbleFallbackOnly';
@@ -68,6 +70,14 @@ dialogueChoicesToggle.addEventListener('click', () => {
   S.dialogueChoices = !S.dialogueChoices;
   dialogueChoicesToggle.classList.toggle('on', S.dialogueChoices);
   remember(DIALOGUE_CHOICES_KEY, S.dialogueChoices);
+});
+S.lookCard = recall(LOOK_CARD_KEY, true);
+const lookCardToggle = document.getElementById('s-lookcard');
+lookCardToggle.classList.toggle('on', S.lookCard);
+lookCardToggle.addEventListener('click', () => {
+  S.lookCard = !S.lookCard;
+  lookCardToggle.classList.toggle('on', S.lookCard);
+  remember(LOOK_CARD_KEY, S.lookCard);
 });
 S.freeRoomCamera = recall(FREE_ROOM_CAMERA_KEY, true);
 const freeRoomCameraToggle = document.getElementById('s-freeroomcamera');

@@ -46,38 +46,6 @@ try {
 <div id="panel">
   <div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Kallipolis</div><button class="win3-min" title="Minimize"></button><button class="win3-max" title="Maximize"></button></div>
   <div id="panel-body">
-  <div class="toolbar" id="mode-toolbar" style="margin-top:0;">
-    <button class="tool-btn" data-mode="move"><svg class="world-open" width="17" height="17" viewBox="0 0 16 16"><!-- (the globe in colour, while the World window's open: css/win3.css) -->
-      <clipPath id="world-open-clip"><circle cx="8" cy="8" r="6.3"/></clipPath>
-      <circle cx="8" cy="8" r="6.3" fill="#1f6fe0"/>
-      <g clip-path="url(#world-open-clip)" fill="#35a83a">
-        <path d="M3.2 4.6 C4.5 3.6 6 3.8 6.4 5 C6.8 6.2 5.6 6.8 5.8 8 C6 9.2 7 9.6 6.6 11 C6.3 12.2 5.4 13 4.8 12.6 C4.6 11.4 4.2 10.2 3.4 9.4 C2.4 8.4 2 6 3.2 4.6 Z"/>
-        <path d="M9.2 3 C10.6 2.6 12.4 3.4 13 4.6 C12 5 11 4.8 10.6 5.8 C11.8 6.2 13.4 6.6 13.8 8.2 C13.6 9.8 12.4 10.8 11.6 12.2 C10.8 12.6 10.4 11.6 10.4 10.6 C10.4 9.6 9.4 9.2 9.2 8.2 C9 7.2 9.8 6.6 9.2 5.8 C8.6 5 8.4 3.6 9.2 3 Z"/>
-      </g>
-      <path d="M4.6 4.2 A5 5 0 0 1 7.4 2.9" fill="none" stroke="#fff" stroke-width="1" stroke-linecap="round" opacity=".7"/>
-      <circle cx="8" cy="8" r="6.3" fill="none" stroke="#000" stroke-width="1.1"/>
-    </svg><svg class="world-shut" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><circle cx="8" cy="8" r="6.3"/><ellipse cx="8" cy="8" rx="2.6" ry="6.3"/><path d="M1.8 5.7 L14.2 5.7 M1.8 10.3 L14.2 10.3"/></svg>World</button>
-    <button class="tool-btn active" data-mode="node"><svg class="node-open" width="13" height="13" viewBox="0 0 16 16"><!-- (the nodes in their own green, outlined, while Edit's down: css/win3.css) -->
-      <g fill="#000"><!-- (all the black first, then all the green over it, so the outline goes round the whole shape as one) -->
-        <path d="M3 12.5 L8 2.5 L13 12.5 Z" fill="none" stroke="#000" stroke-width="2.7" stroke-linejoin="round"/><!-- (0.7 either side of the green, -->
-        <circle cx="3" cy="12.5" r="2.6"/><circle cx="8" cy="2.5" r="2.6"/><circle cx="13" cy="12.5" r="2.6"/><!-- as round the dots) -->
-      </g>
-      <g fill="#3ddc97">
-        <path d="M3 12.5 L8 2.5 L13 12.5 Z" fill="none" stroke="#3ddc97" stroke-width="1.3" stroke-linejoin="round"/>
-        <circle cx="3" cy="12.5" r="1.9"/><circle cx="8" cy="2.5" r="1.9"/><circle cx="13" cy="12.5" r="1.9"/>
-      </g>
-    </svg><svg class="node-shut" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 12.5 L8 2.5 L13 12.5 Z"/><circle cx="3" cy="12.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="8" cy="2.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="13" cy="12.5" r="1.6" fill="currentColor" stroke="none"/></svg>Edit</button>
-    <button class="tool-btn" data-mode="maps"><svg class="maps-open" width="18" height="18" viewBox="0 0 16 16"><!-- (the picture in colour, while Maps is down: css/win3.css) -->
-      <clipPath id="maps-open-clip"><rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/></clipPath>
-      <rect x="1.5" y="2.5" width="13" height="11" rx="1.2" fill="#7cc4ff"/>
-      <g clip-path="url(#maps-open-clip)">
-        <circle cx="5.2" cy="6" r="1.5" fill="#ffd21f"/>
-        <path d="M1 14 L1 12.4 L6.3 7.6 L8.8 9.9 L11.3 6.9 L15 10.9 L15 14 Z" fill="#35a83a"/>
-        <path d="M1 14 L1 13 L8.8 9.9 L15 12 L15 14 Z" fill="#2a8a2f"/>
-      </g>
-      <rect x="1.5" y="2.5" width="13" height="11" rx="1.2" fill="none" stroke="#000" stroke-width="1.1"/>
-    </svg><svg class="maps-shut" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/><circle cx="5.2" cy="6" r="1.2" fill="currentColor" stroke="none"/><path d="M2 12.2 L6.3 8 L8.8 10.3 L11.3 7.3 L14 10.5"/></svg>Maps</button>
-  </div>
   <div class="toolbar" id="entity-toolbar" style="margin-top:6px;">
     <button class="tool-btn active" data-entity="paths">Paths</button>
     <button class="tool-btn" data-entity="zone">Zones</button>
@@ -192,6 +160,7 @@ try {
     <div class="slider-row"><div class="row"><label>UI scale</label><span class="val" id="dv-uiscale">100%</span></div>
       <input type="range" id="s-uiscale" min="100" max="200" step="25" value="100"></div>
     <div class="row"><label>Colour scheme</label><select class="select-input" id="s-colorscheme" style="width:130px; margin-bottom:0;"></select></div>
+    <div class="row"><label>Show Profile On Look</label><button class="toggle-switch" id="s-lookcard"><span class="knob"></span></button></div>
     </div>
 
     <div data-settings="display">
@@ -271,6 +240,40 @@ try {
 
 <!-- the row of buttons over the view: the panel toggle and ✛ show themselves only on touch (src/ui/mobile.js) -->
 <div id="canvas-tools">
+  <!-- World / Edit / Maps: here from the start, where the Windows 3.0 window shows them; src/ui/win3-menu.js moves them to
+       the top of the side panel on a phone -->
+  <div class="toolbar" id="mode-toolbar" style="margin-top:0;">
+    <button class="tool-btn" data-mode="move"><svg class="world-open" width="17" height="17" viewBox="0 0 16 16"><!-- (the globe in colour, while the World window's open: css/win3.css) -->
+      <clipPath id="world-open-clip"><circle cx="8" cy="8" r="6.3"/></clipPath>
+      <circle cx="8" cy="8" r="6.3" fill="#1f6fe0"/>
+      <g clip-path="url(#world-open-clip)" fill="#35a83a">
+        <path d="M3.2 4.6 C4.5 3.6 6 3.8 6.4 5 C6.8 6.2 5.6 6.8 5.8 8 C6 9.2 7 9.6 6.6 11 C6.3 12.2 5.4 13 4.8 12.6 C4.6 11.4 4.2 10.2 3.4 9.4 C2.4 8.4 2 6 3.2 4.6 Z"/>
+        <path d="M9.2 3 C10.6 2.6 12.4 3.4 13 4.6 C12 5 11 4.8 10.6 5.8 C11.8 6.2 13.4 6.6 13.8 8.2 C13.6 9.8 12.4 10.8 11.6 12.2 C10.8 12.6 10.4 11.6 10.4 10.6 C10.4 9.6 9.4 9.2 9.2 8.2 C9 7.2 9.8 6.6 9.2 5.8 C8.6 5 8.4 3.6 9.2 3 Z"/>
+      </g>
+      <path d="M4.6 4.2 A5 5 0 0 1 7.4 2.9" fill="none" stroke="#fff" stroke-width="1" stroke-linecap="round" opacity=".7"/>
+      <circle cx="8" cy="8" r="6.3" fill="none" stroke="#000" stroke-width="1.1"/>
+    </svg><svg class="world-shut" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><circle cx="8" cy="8" r="6.3"/><ellipse cx="8" cy="8" rx="2.6" ry="6.3"/><path d="M1.8 5.7 L14.2 5.7 M1.8 10.3 L14.2 10.3"/></svg>World</button>
+    <button class="tool-btn active" data-mode="node"><svg class="node-open" width="13" height="13" viewBox="0 0 16 16"><!-- (the nodes in their own green, outlined, while Edit's down: css/win3.css) -->
+      <g fill="#000"><!-- (all the black first, then all the green over it, so the outline goes round the whole shape as one) -->
+        <path d="M3 12.5 L8 2.5 L13 12.5 Z" fill="none" stroke="#000" stroke-width="2.7" stroke-linejoin="round"/><!-- (0.7 either side of the green, -->
+        <circle cx="3" cy="12.5" r="2.6"/><circle cx="8" cy="2.5" r="2.6"/><circle cx="13" cy="12.5" r="2.6"/><!-- as round the dots) -->
+      </g>
+      <g fill="#3ddc97">
+        <path d="M3 12.5 L8 2.5 L13 12.5 Z" fill="none" stroke="#3ddc97" stroke-width="1.3" stroke-linejoin="round"/>
+        <circle cx="3" cy="12.5" r="1.9"/><circle cx="8" cy="2.5" r="1.9"/><circle cx="13" cy="12.5" r="1.9"/>
+      </g>
+    </svg><svg class="node-shut" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 12.5 L8 2.5 L13 12.5 Z"/><circle cx="3" cy="12.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="8" cy="2.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="13" cy="12.5" r="1.6" fill="currentColor" stroke="none"/></svg>Edit</button>
+    <button class="tool-btn" data-mode="maps"><svg class="maps-open" width="18" height="18" viewBox="0 0 16 16"><!-- (the picture in colour, while Maps is down: css/win3.css) -->
+      <clipPath id="maps-open-clip"><rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/></clipPath>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.2" fill="#7cc4ff"/>
+      <g clip-path="url(#maps-open-clip)">
+        <circle cx="5.2" cy="6" r="1.5" fill="#ffd21f"/>
+        <path d="M1 14 L1 12.4 L6.3 7.6 L8.8 9.9 L11.3 6.9 L15 10.9 L15 14 Z" fill="#35a83a"/>
+        <path d="M1 14 L1 13 L8.8 9.9 L15 12 L15 14 Z" fill="#2a8a2f"/>
+      </g>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.2" fill="none" stroke="#000" stroke-width="1.1"/>
+    </svg><svg class="maps-shut" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/><circle cx="5.2" cy="6" r="1.2" fill="currentColor" stroke="none"/><path d="M2 12.2 L6.3 8 L8.8 10.3 L11.3 7.3 L14 10.5"/></svg>Maps</button>
+  </div>
   <button class="canvas-tool" id="btn-panel-toggle" title="Show or hide the tools"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   <div id="grid-toggle" title="Snap to grid">
     <svg width="15" height="15" viewBox="0 0 297 297" fill="currentColor"><path d="M276.289,0h-63.895c-5.557,0-10.062,4.505-10.062,10.062v149.087c0,14.549-5.714,28.181-16.089,38.384
@@ -302,7 +305,7 @@ try {
   <!-- everything grey but the people and the buildings they're in (src/ui/ped-view.js) -->
   <button class="canvas-tool" id="btn-ped-view" title="Grey out everything but the people"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path class="ped-head" d="M22.6 12.0 L17.3 21.2 L6.7 21.2 L1.4 12.0 L6.7 2.8 L17.3 2.8Z"/><path d="M7.6 10.6c.8-1.2 2.2-1.2 3 0M13.4 10.6c.8-1.2 2.2-1.2 3 0M8.7 14.6c1.8 1.7 4.8 1.7 6.6 0"/></svg></button>
   <!-- sound on or off (src/ui/sound.js), its icon drawn there -->
-  <button class="canvas-tool" id="btn-sound" title="Mute"></button>
+  <button class="canvas-tool" id="btn-sound" title="Mute"><img src="assets/icons/sound-on.png" alt=""></button><!-- (a stand-in till sound.js draws it) -->
   <button class="canvas-tool" id="btn-touch-add" title="Insert a node into a path, or branch off one"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 </div>
 

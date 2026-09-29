@@ -1,4 +1,7 @@
 Smith {choiceweight = 5}
+Speedrun
+Seaweed
+Truffles
 Rydelek
 Key
 Wallace

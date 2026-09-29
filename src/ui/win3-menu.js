@@ -238,7 +238,7 @@ window.addEventListener('blur', closeMenus);
 // back to the panel whenever the window isn't showing (on a phone). They're found by id
 // everywhere else (tools.js, favorites.js), so it doesn't matter to anything else which of the two they're in.
 const modeButtons = $('mode-toolbar');
-const panelHome = modeButtons.parentElement, panelNext = modeButtons.nextElementSibling;
+const panelHome = $('panel-body'), panelNext = $('entity-toolbar'); // (where they go on a phone: index.html has them in the toolbar)
 const wide = window.matchMedia('(min-width: 761px)');
 function placeModeButtons() {
   if (wide.matches) { if (modeButtons.parentElement !== $('canvas-tools')) $('canvas-tools').prepend(modeButtons); }
@@ -289,12 +289,12 @@ worldModeHidesPanel();
 // and keeps it while it's open, however the view's clicked about to look round or to pick someone else (they're what's
 // being followed, so the card is what you're working in). A window like Sound levels takes it while it's clicked in,
 // and the card gets it back when anything else is; only with no card open does the Kallipolis window take it back.
-const WINDOWS = '.entity-card, .w3-window'; // (the cards, and windows like Sound levels: ui/sound-levels.js)
+const WINDOWS = ':is(.entity-card, .w3-window):not(.card-ghost)'; // (the cards, and windows like Sound levels: ui/sound-levels.js; not a card's still copy, person-card.js ghostOf)
 let activeCard = null;
 let lastCard = null; // the entity card last opened or clicked
 function trackedCard() {
   if (lastCard && !lastCard.hidden) return lastCard;
-  return [...document.querySelectorAll('.entity-card')].find(c => !c.hidden) ?? null;
+  return [...document.querySelectorAll('.entity-card:not(.card-ghost)')].find(c => !c.hidden) ?? null;
 }
 function setActive(card) {
   if (card?.matches('.entity-card')) lastCard = card;
@@ -311,7 +311,7 @@ new MutationObserver(records => {
 }).observe(document.body, { subtree:true, attributes:true, attributeFilter:['hidden'] });
 document.addEventListener('card-show', e => setActive(e.target));
 document.addEventListener('pointerdown', e => {
-  if (e.target.closest('.w3-dropdown, .w3-modal')) return;
+  if (e.target.closest('.w3-dropdown, .w3-modal, .win3-sysbox, .card-close')) return; // (nor a close box: closing isn't working in it)
   setActive(e.target.closest(WINDOWS));
 }, true);
 const placed = () => { placeModeButtons(); worldModeHidesPanel(); };
