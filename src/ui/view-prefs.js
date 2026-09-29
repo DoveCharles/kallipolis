@@ -5,6 +5,8 @@
 //   opens in World instead; Last Used is whichever of the two was last pressed (index.html reads the same keys early).
 // - Options > Game > Encourage To Watch TV (S.encourageTV, off by default): on, a home shown with people in it has one of them already sat on
 //   the sofa, so the TV's on straight away (see aboutTheRoom in life/people/peopleActivities.js).
+// - Options > Game > Dialogue Choices (S.dialogueChoices, on): for the possessed person (whose lines go in a box low on screen, not
+//   a bubble), a reply with several options lists them to pick (see ownLine in ui/speech-bubbles.js).
 // - Options > Game > Free Camera Indoors (S.freeRoomCamera, on by default): inside a building, orbit, pan and zoom freely
 //   within the room rather than riding round its walls (see freeRoom in buildings/interior.js).
 // - Options > Display > FX > Dithered See-Through (S.ditherSeeThrough, on by default): buildings near the camera fade by a
@@ -19,7 +21,7 @@ import { whenLoaded } from './loading.js';
 
 const EDIT_HINTS_KEY = 'splinetopia.editHints', GENERAL_HINTS_KEY = 'splinetopia.generalHints';
 const START_MODE_KEY = 'splinetopia.startMode', LAST_MODE_KEY = 'splinetopia.lastMode', OLD_START_EDIT_KEY = 'splinetopia.startInEdit';
-const ENCOURAGE_TV_KEY = 'splinetopia.encourageTV';
+const ENCOURAGE_TV_KEY = 'splinetopia.encourageTV', DIALOGUE_CHOICES_KEY = 'splinetopia.dialogueChoices';
 const CHAT_SPEED_KEY = 'splinetopia.chatSpeed', BUBBLE_DISTANCE_KEY = 'splinetopia.bubbleDistance';
 const HEAR_DISTANCE_KEY = 'splinetopia.hearDistance', FREE_ROOM_CAMERA_KEY = 'splinetopia.freeRoomCamera';
 const BABBLE_BUBBLES_KEY = 'splinetopia.babbleBubbles', BABBLE_FALLBACK_KEY = 'splinetopia.babbleFallbackOnly';
@@ -58,6 +60,14 @@ encourageTVToggle.addEventListener('click', () => {
   S.encourageTV = !S.encourageTV;
   encourageTVToggle.classList.toggle('on', S.encourageTV);
   remember(ENCOURAGE_TV_KEY, S.encourageTV);
+});
+S.dialogueChoices = recall(DIALOGUE_CHOICES_KEY, true);
+const dialogueChoicesToggle = document.getElementById('s-dialoguechoices');
+dialogueChoicesToggle.classList.toggle('on', S.dialogueChoices);
+dialogueChoicesToggle.addEventListener('click', () => {
+  S.dialogueChoices = !S.dialogueChoices;
+  dialogueChoicesToggle.classList.toggle('on', S.dialogueChoices);
+  remember(DIALOGUE_CHOICES_KEY, S.dialogueChoices);
 });
 S.freeRoomCamera = recall(FREE_ROOM_CAMERA_KEY, true);
 const freeRoomCameraToggle = document.getElementById('s-freeroomcamera');

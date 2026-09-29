@@ -18,6 +18,10 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/", "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.9/src/index.js", "zzfx": "https://cdn.jsdelivr.net/npm/zzfx@1.3.2/ZzFX.js", "sam-js": "https://cdn.jsdelivr.net/npm/sam-js@0.3.1/dist/samjs.esm.min.js", "spessasynth_lib": "https://cdn.jsdelivr.net/npm/spessasynth_lib@4.3.14/dist/index.js", "spessasynth_core": "https://cdn.jsdelivr.net/npm/spessasynth_core@4.3.22/dist/index.js", "stb-vorbis": "https://cdn.jsdelivr.net/npm/stb-vorbis@0.0.6/dist/index.js" } }
 </script>
+<!-- every UI icon, fetched now and held (an <img> or mask using one later finds it ready): keep in step with assets/icons/ -->
+<script>
+window.KALLIPOLIS_ICONS = 'car card-heart card-heart-on edit edit-open energy evil favorites favorites-on grid-toggle grid-toggle-on holy identify map-eye map-eye-hidden maps maps-open negative panel-toggle ped-view ped-view-on positive projection-orthographic projection-perspective redo sound-off sound-on status/adderall status/asleep status/bloodlustt status/cactus status/choc status/coffeel status/cold status/confused status/deadbutnotyet status/energydrink status/glue status/heartpill status/hotaf status/hotdog status/icecream status/itburns status/jogging status/leafl status/lucky status/magicbroth status/mushroom status/painkiller status/pipe status/poppy status/powder status/relax status/scared status/sheet status/sick status/smokes status/starving status/stealth status/sweetie status/thedrink status/tired status/toad status/tranqqed status/trumpet status/willypill status/withdraw status/zombie touch-add undo world world-open'.split(' ').map(name => Object.assign(new Image(), { src: `assets/icons/${name}.png` }));
+</script>
 <script type="module" src="src/main.js"></script>
 </head>
 <body>
@@ -243,6 +247,7 @@ try {
       <div class="row"><label>Start in Mode</label><select class="select-input" id="s-startmode" style="width:130px; margin-bottom:0;"><option value="last">Last Used</option><option value="edit">Edit</option><option value="game">Game</option></select></div>
       <div class="row"><label>Blood soaking</label><button class="toggle-switch" id="s-bloodsoak"><span class="knob"></span></button></div>
       <div class="row"><label>Encourage To Watch TV</label><button class="toggle-switch" id="s-encouragetv"><span class="knob"></span></button></div>
+      <div class="row"><label>Dialogue Choices</label><button class="toggle-switch" id="s-dialoguechoices"><span class="knob"></span></button></div>
       <div class="row"><label>Free Camera Indoors</label><button class="toggle-switch" id="s-freeroomcamera"><span class="knob"></span></button></div>
       </div>
       <div data-settings="dev">

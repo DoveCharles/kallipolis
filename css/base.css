@@ -540,7 +540,19 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 .use-label[hidden] { display:none; }
 .use-label kbd { font-family:inherit; font-weight:700; padding:0 4px; border:1px solid #fff; }
 /* a thought (thoughtOf in src/life/people/people.js): dotted, in italics, with a trail of circles for its tail */
-.speech-bubble.thought { border-style:dotted; font-style:italic; }
+/* the possessed person's own line (ownLine in src/ui/speech-bubbles.js): a box like #hint, under a third up the screen */
+.own-line {
+  position:fixed; bottom:28vh; left:50%; transform:translateX(-50%); z-index:2; pointer-events:none;
+  font-family:var(--mono); font-size:12px; color:var(--text); text-align:center; line-height:1.5;
+  background:rgba(26,28,34,0.7); padding:6px 12px; border-radius:5px; border:1px solid var(--border);
+  box-sizing:border-box; width:min(90vw, 440px);
+}
+/* replies to pick from (Options > Game > Dialogue Choices): wheel or tap */
+.own-line.choosing { pointer-events:auto; text-align:left; padding:4px; }
+.own-choice { padding:3px 8px; cursor:pointer; color:var(--text-dim); }
+.own-choice.picked { color:var(--text); background:rgba(255,255,255,0.14); }
+.own-choice.picked::before { content:'▸ '; }
+.speech-bubble.thought {border-style:dotted; font-style:italic; }
 .speech-bubble.thought::before { bottom:-9px; left:calc(50% - 6px); transform:none; border:2px solid #000; border-radius:50%; width:6px; height:6px; background:#fff; }
 .speech-bubble.thought::after { bottom:-15px; left:calc(50% - 1px); transform:none; border:2px solid #000; border-radius:50%; width:2px; height:2px; background:#fff; }
 

@@ -603,8 +603,7 @@ const capitalise = text => text.charAt(0).toUpperCase() + text.slice(1)
   .replace(/([.!?]+)(\s+)([a-z])/g, (all, marks, space, letter) => /^\.{2,}$/.test(marks) ? all : marks + space + letter.toUpperCase());
 
 // A line picked from these items and filled in, with the replies it can get: { text, replies, vars } or null.
-function sayFrom(items, person, vars = {}) {
-  const tried = new Set();
+function sayFrom(items, person, vars = {}, tried = new Set()) {
   for (let i = 0; i < TRIES; i++) {
     const item = pickItem(items.filter(it => !tried.has(it)), person, { vars });
     if (!item) return null;
@@ -614,6 +613,27 @@ function sayFrom(items, person, vars = {}) {
     if (text) return { text: capitalise(text), replies: item.replies ? compileNodes(item.replies, 0, [], item.where) : [], vars: held, end: item.end, thought: item.thought, score: item.score ?? 0 };
   }
   return null;
+}
+
+/**
+ * Up to `max` different replies someone could give (Options > Game > Dialogue Choices), each as pickReply's.
+ * @param {object[]} replies
+ * @param {object} person
+ * @param {object} vars
+ * @param {?object} [other]
+ * @param {number} [max]
+ * @returns {object[]}
+ */
+export function pickReplyChoices(replies, person, vars, other = null, max = 4) {
+  if (!ready || !replies.length) return [];
+  speakingTo = other;
+  const tried = new Set(), out = [];
+  while (out.length < max) {
+    const said = sayFrom(replies, person, vars, tried);
+    if (!said) break;
+    if (!out.some(o => o.text === said.text)) out.push(said);
+  }
+  return out;
 }
 
 /**

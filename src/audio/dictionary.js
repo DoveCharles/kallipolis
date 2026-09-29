@@ -3,7 +3,7 @@ import { S } from '../core/shared.js';
 import { listener, playBufferAt, muffler, ear } from './sfx.js';
 import { speakText, SAMPLE_RATE } from './speech.js';
 import { loudnessOf, hearDistance, hearRef, edgeFade } from './voices.js';
-import { speechReady, pickCall, pickReply, pickReaction, pickCloser, pickGreeting, pickShout, hasNews } from '../life/speech-text.js';
+import { speechReady, pickCall, pickReply, pickReplyChoices, pickReaction, pickCloser, pickGreeting, pickShout, hasNews } from '../life/speech-text.js';
 
 // ============================================================ real words
 // Now and then someone talking near the camera says something real in among their babble (see audio/voices.js): a line
@@ -19,6 +19,7 @@ const LINE_START_GAP = 0.15; // seconds between any two lines starting (each is 
 const CROWD_EASY = 3;       // lines at once before each is made quieter (by the square root of how many more), so a crowd doesn't clip
 const MAX_LINES = 4;        // real lines said at once, at most (each is synthesized as it starts) — no limit with babble only as fallback
 const REPLY_WINDOW = 6;     // seconds after a line ends that a reply to it can still come
+const CHOICE_WAIT = 60;     // seconds a conversation waits for the possessed person's picked reply (Options > Game > Dialogue Choices)
 const MATCH = 1;            // how loud a real line is next to the speaker's own babble (see loudnessOf in audio/voices.js)
 const MUFFLE = 1.4; // (as for babble; beyond its hearDistance they only babble)
 const MOUTH_FRAME = 0.05;   // seconds over which how wide the mouth is follows the line
@@ -55,7 +56,20 @@ export function sayLine(at, voice, who, person) {
   else if (!said && greet) { said = pickGreeting(person, greet.who); person.greetTo = null; greeted = !!said; }
   // (a dialogue stays between the two it started with: only whoever was spoken to answers — see takeTurns)
   if (!said && talk && talk.by !== person && (!talk.to || talk.to === person) && now < talk.until) {
-    said = pickReply(talk.replies, person, talk.vars, talk.by); group.talk = null; replying = !!said;
+    // (possessed, with Options > Game > Dialogue Choices: several replies wait for the player's pick — person.choosing,
+    // shown by ui/speech-bubbles.js ownLine — the dialogue held till then)
+    if (S.dialogueChoices && person.mode === 'possessed') {
+      const choosing = person.choosing?.talk === talk ? person.choosing : null;
+      if (choosing && choosing.picked == null) return null;
+      const options = choosing ? null : pickReplyChoices(talk.replies, person, talk.vars, talk.by);
+      if (options?.length > 1) {
+        person.choosing = { talk, options, index: 0, picked: null };
+        talk.to = person; talk.until = now + CHOICE_WAIT; talk.expires = performance.now()/1000 + CHOICE_WAIT;
+        return null;
+      }
+      said = choosing ? choosing.options[choosing.picked] : options[0] ?? null;
+      person.choosing = null; group.talk = null; replying = !!said;
+    } else { said = pickReply(talk.replies, person, talk.vars, talk.by); group.talk = null; replying = !!said; }
   }
   // (a conversation whose time is up wants a closer, or someone leaving a circle does: see updateGroups and the circle's
   // 'sit' stage in life/people/peopleActivities.js)

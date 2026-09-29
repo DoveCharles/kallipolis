@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { camera, renderer } from '../core/scene.js';
-import { S } from '../core/shared.js';
+import { S, App } from '../core/shared.js';
 import { cased } from './garble.js';
 
 // ============================================================ speech bubbles
@@ -55,7 +55,77 @@ export function speechBubble(who, at, line) {
   bubble.seen = true;
 }
 
-const ONSETS = ['b', 'd', 'g', 'h', 'k', 'l', 'm', 'n', 'p', 'r', 's', 't', 'w', 'y', 'bl', 'sh', 'ch'];
+// the possessed person's own lines: no bubble, but a box low on screen (styled as #hint), lingering the same way
+// (with replies to pick from — choosing, from audio/dictionary.js sayLine — it lists them instead: the wheel moves the
+// highlight and a click says it; on touch, tap one)
+const own = { element: null, line: null, doneAt: 0, seen: false, choosing: null, index: -1 };
+/**
+ * Show what the possessed person's saying, or the replies they can pick; call each frame while possessing.
+ * @param {object} who - the possessed person
+ * @param {?object} line - the line they're saying, or null
+ * @param {?{options: object[], index: number, picked: ?number}} [choosing] - replies waiting to be picked
+ * @returns {void}
+ */
+export function ownLine(who, line, choosing = null) {
+  if (!own.element) {
+    if (!line && !choosing) return;
+    own.element = document.createElement('div');
+    own.element.className = 'own-line';
+    own.element.addEventListener('pointerdown', e => {
+      const k = [...own.element.children].indexOf(e.target.closest('.own-choice'));
+      if (k < 0 || !own.choosing) return;
+      e.stopPropagation(); own.choosing.index = k; pickChoice();
+    });
+    own.element.addEventListener('wheel', e => { if (scrollChoice(e.deltaY)) e.preventDefault(); }, { passive: false });
+    layer.appendChild(own.element);
+  }
+  if (choosing && choosing.picked == null) {
+    if (choosing !== own.choosing || choosing.index !== own.index) {
+      own.element.replaceChildren(...choosing.options.map((option, k) => {
+        const row = document.createElement('div');
+        row.className = 'own-choice' + (k === choosing.index ? ' picked' : '');
+        row.textContent = cased(option.text, who.traits ?? {});
+        return row;
+      }));
+      own.line = null; own.index = choosing.index;
+    }
+    own.choosing = choosing; own.doneAt = 0;
+  } else {
+    own.choosing = null;
+    if (line && line !== own.line) {
+      own.line = line;
+      own.element.textContent = cased(line.text, who.traits ?? {});
+    }
+    own.doneAt = line ? 0 : own.doneAt || performance.now();
+  }
+  own.element.classList.toggle('choosing', !!own.choosing);
+  own.seen = true;
+}
+// (the wheel, while replies are up: true if it moved the highlight — see possession.js)
+function scrollChoice(dir) {
+  const c = own.choosing;
+  if (!c) return false;
+  c.index = (c.index + Math.sign(dir) + c.options.length) % c.options.length;
+  return true;
+}
+// (a click: says the highlighted reply — true if there was one to say)
+function pickChoice() {
+  if (!own.choosing) return false;
+  own.choosing.picked = own.choosing.index;
+  own.choosing = null;
+  return true;
+}
+Object.assign(App, { scrollChoice, pickChoice });
+function updateOwnLine(now) {
+  if (!own.element) return;
+  if (!own.seen || (!own.line && !own.choosing) || (own.doneAt && now - own.doneAt > LINGER*1000)) {
+    own.element.remove(); own.element = own.line = own.choosing = null; own.index = -1; own.doneAt = 0; own.seen = false; return;
+  }
+  own.seen = false;
+  own.element.style.opacity = String(own.doneAt ? Math.min(1, (LINGER*1000 - (now - own.doneAt))/(FADE_OUT*1000)) : 1);
+}
+
+const ONSETS =['b', 'd', 'g', 'h', 'k', 'l', 'm', 'n', 'p', 'r', 's', 't', 'w', 'y', 'bl', 'sh', 'ch'];
 const VOWELS = ['a', 'e', 'i', 'o', 'u', 'a', 'o', 'ee', 'oo'];
 const pickFrom = list => list[Math.floor(Math.random()*list.length)];
 
@@ -81,8 +151,10 @@ export function babbleLine(phrase) {
  * @returns {void}
  */
 export function updateSpeechBubbles() {
+  updateOwnLine(performance.now());
   if (!bubbles.size) return;
   const view = renderer.domElement.getBoundingClientRect(), now = performance.now();
+  camera.updateMatrixWorld(); // (this frame's placement, not last render's)
   for (const [who, bubble] of bubbles) {
     if (!bubble.seen || (bubble.doneAt && now - bubble.doneAt > LINGER*1000)) { bubble.element.remove(); bubbles.delete(who); continue; }
     bubble.seen = false;
@@ -90,7 +162,8 @@ export function updateSpeechBubbles() {
     const ending = bubble.doneAt ? Math.min(1, (LINGER*1000 - (now - bubble.doneAt))/(FADE_OUT*1000)) : 1;
     const fade = ending*(1 - (camera.position.distanceTo(bubble.at) - fadeStart)/(fadeEnd - fadeStart));
     projected.copy(bubble.at).project(camera);
-    const onScreen = projected.z < 1 && Math.abs(projected.x) < 1.2 && Math.abs(projected.y) < 1.2;
+    // (-1..1 z: in front of the camera, past its near plane — else, e.g. the possessed person's own bubble, it flips on screen)
+    const onScreen = Math.abs(projected.z) < 1 && Math.abs(projected.x) < 1.2 && Math.abs(projected.y) < 1.2;
     bubble.element.style.opacity = onScreen ? String(Math.max(0, Math.min(1, fade))) : '0';
     if (!onScreen) continue;
     bubble.element.style.left = `${view.left + (projected.x + 1)/2*view.width}px`;

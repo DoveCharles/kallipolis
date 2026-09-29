@@ -251,7 +251,7 @@ dom.addEventListener('pointerdown', (e) => {
     return;
   }
   if (e.button !== 0) return; // (the right button is nothing in here)
-  if (document.pointerLockElement === dom) { if (isPossessing()) App.punchFromPossession(); return; }
+  if (document.pointerLockElement === dom) { if (isPossessing() && !App.pickChoice?.()) App.punchFromPossession(); return; } // (or says a picked reply: ui/speech-bubbles.js)
   pressedAt = { x: e.clientX, y: e.clientY };
   if (!riding.active) lockPointer();
 }, true);
@@ -262,7 +262,7 @@ window.addEventListener('pointerup', (e) => {
   if (!pressedAt) return;
   const moved = Math.hypot(e.clientX - pressedAt.x, e.clientY - pressedAt.y);
   pressedAt = null;
-  if (moved < CLICK_SLOP && isPossessing() && document.pointerLockElement !== dom) App.punchFromPossession();
+  if (moved < CLICK_SLOP && isPossessing() && document.pointerLockElement !== dom && !App.pickChoice?.()) App.punchFromPossession();
 });
 function look(dx, dy) {
   // behind the wheel or at the controls, the mouse swings the camera round rather than turning a head
@@ -293,7 +293,7 @@ window.addEventListener('pointercancel', endLook);
 dom.addEventListener('wheel', (e) => {
   if (!isPossessing() && !riding.active) return;
   e.preventDefault(); e.stopImmediatePropagation();
-  if (isPossessing()) possession.fov = Math.max(FOV_NARROWEST, Math.min(FOV_WIDEST, possession.fov*(1 + e.deltaY*0.001)));
+  if (isPossessing() && !App.scrollChoice?.(e.deltaY)) possession.fov = Math.max(FOV_NARROWEST, Math.min(FOV_WIDEST, possession.fov*(1 + e.deltaY*0.001)));
 }, { capture: true, passive: false });
 
 Object.assign(App, { isPossessing, isDriving: () => driving.active, isFlying: () => flying.active, isRiding: () => riding.active });

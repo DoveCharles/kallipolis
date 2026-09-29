@@ -95,22 +95,22 @@ Thrown a coin in the fountain recently? {here.plaza}
 >>>>>>>> Just down theres some. When you get to the door, show them this hand symbol, you got that? They'll let you right in. And we got corn bread too, brother.
 >>>>>>>>> Hallelujah! {score = 3}
 >> What did you wish for?
->> [concepts#1].
->>> [concepts#1]? Well [swears], I'm glad that didn't work out! {likes < 0, likes = -2, score = -1}
->>> Aw, maybe I'll wish for [concepts#1] too! {likes > 0, likes = 2}
->>>> Hm, a double wish? Maybe that could just about work... {score = 1, mood}
->>>> Shhh, don't tell me! Or it won't come true! {mood = -1}
->>>>> Hey, didn't you tell me? Maybe that's why yours didn't work.
->>>>>> Well, [swears].
->>>>>> Are you saying wishes work outside of the confines of the space-time continuum, that a wish is a cosmic force larger than our limited understanding, and thus, that my telling is the exact act of retrocausality that prevented its eminence? {nerd = 3, nerd > 0.3}
->>>>>>> Uh, yeah.
->>>>>>>> This changes everything, wow, thank you! I'll never wish the same again, or already I've been wishing different already? I'm not sure, I need to make a wish about this. {score = 2}
->>> Shit wish, man. I'm going to wish for [concepts#2]. {aggression, score = -1}
->>>> Oh yeah? Well I'm going to wish for the opposite of [concepts#2], then! So there! {aggression} {score = -1}
->>>>> I'm going to wish for the opposite of the opposite of [concepts#2]!
->>>>>> Just regular [concepts#2]?
->>>>>>> Uh, yeah. In theory.
->>>> Whatever man, I'll just save my money.
+>>> [concepts#1].
+>>>> [concepts#1]? Well [swears], I'm glad that didn't work out! {likes < 0, likes = -2, score = -1}
+>>>> Aw, maybe I'll wish for [concepts#1] too! {likes > 0, likes = 2}
+>>>>> Hm, a double wish? Maybe that could just about work... {score = 1, mood}
+>>>>> Shhh, don't tell me! Or it won't come true! {mood = -1}
+>>>>>> Hey, didn't you tell me? Maybe that's why yours didn't work.
+>>>>>>> Well, [swears].
+>>>>>>> Are you saying wishes work outside of the confines of the space-time continuum, that a wish is a cosmic force larger than our limited understanding, and thus, that my telling is the exact act of retrocausality that prevented its eminence? {nerd = 3, nerd > 0.3}
+>>>>>>>> Uh, yeah.
+>>>>>>>>> This changes everything, wow, thank you! I'll never wish the same again, or already I've been wishing different already? I'm not sure, I need to make a wish about this. {score = 2}
+>>>> Shit wish, man. I'm going to wish for [concepts#2]. {aggression, score = -1}
+>>>>> Oh yeah? Well I'm going to wish for the opposite of [concepts#2], then! So there! {aggression} {score = -1}
+>>>>>> I'm going to wish for the opposite of the opposite of [concepts#2]!
+>>>>>>> Just regular [concepts#2]?
+>>>>>>>> Uh, yeah. In theory.
+>>>>> Whatever man, I'll just save my money.
 >>> I wanted to find my [belongings#1].
 >>>> [belongings#1: a]? I think I saw one of those in the fountain...
 > Wait, are there coins in there? Like, right now? {evil, outlaw}

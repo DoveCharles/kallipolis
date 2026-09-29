@@ -31,15 +31,22 @@ def write_index(folder_name):
     with open(os.path.join(top, INDEX_NAME), 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(paths) + '\n')
 
+# ...except the UI icons: many small images the page uses over and over (as CSS masks too), which no-store had going
+# missing now and then. Kept a minute, then checked for changes, so an edited icon still shows up soon.
+ICONS = '/assets/icons/'
+ICON_CACHE = 'max-age=60, must-revalidate'
+
 class NoStoreHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
-        self.send_header('Cache-Control', 'no-store, max-age=0')
+        icon = self.path.split('?')[0].startswith(ICONS)
+        self.send_header('Cache-Control', ICON_CACHE if icon else 'no-store, max-age=0')
         super().end_headers()
 
     # a browser holding a copy from before this server took over can still ask "only if it changed",
     # and be told it hasn't; the question goes unasked instead
     def send_head(self):
-        del self.headers['If-Modified-Since']
+        if not self.path.split('?')[0].startswith(ICONS):
+            del self.headers['If-Modified-Since']
         for folder_name in INDEXED:
             if self.path.split('?')[0] == f'/assets/{folder_name}/{INDEX_NAME}':
                 write_index(folder_name)

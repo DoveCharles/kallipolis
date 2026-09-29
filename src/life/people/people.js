@@ -12,7 +12,7 @@ import { throwBodyParts, warmBodyParts } from './peopleGibs.js';
 import { babble, nextSyllable, hearDistance } from '../../audio/voices.js';
 import { sayLine, shoutLine, reactAloud, lineMouth, stopLine, linePause } from '../../audio/dictionary.js';
 import { pickThought, pickReaction } from '../speech-text.js';
-import { babbleLine, hasBubble, speechBubble } from '../../ui/speech-bubbles.js';
+import { babbleLine, hasBubble, ownLine, speechBubble } from '../../ui/speech-bubbles.js';
 import { footstep } from '../../audio/footsteps.js';
 import { ear } from '../../audio/sfx.js';
 import { keyClick } from '../../audio/typing.js';
@@ -1577,7 +1577,11 @@ export function updatePeople(t) {
       const logged = p.saying ?? p.thought; // (for the card's Social tab: see peopleSaid.js)
       if (logged && logged !== p.loggedLine) { p.loggedLine = logged; logLine(p, logged); }
       const thinking = bubbleSide && !group && !possessed ? thoughtOf(p, t) : (p.fidgetThought = false, p.thought = null);
-      if (bubbleSide && (p.saying || babbling || thinking || hasBubble(p))) speechBubble(p, bubbleAt(p), p.saying ?? babbling ?? thinking);
+      // (possessed: not a bubble but a box low on screen, listing any replies to pick from with Options > Game > Dialogue
+      // Choices — see ui/speech-bubbles.js ownLine and audio/dictionary.js sayLine)
+      if (p.choosing && (!possessed || !S.dialogueChoices || p.group?.talk !== p.choosing.talk)) p.choosing = null;
+      if (possessed) ownLine(p, p.saying ?? babbling, p.choosing);
+      else if (bubbleSide && (p.saying || babbling || thinking || hasBubble(p))) speechBubble(p, bubbleAt(p), p.saying ?? babbling ?? thinking);
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape
       else if (frozen || fleeing || scaredByBlood) p.talkTo = frozen ? 1 : scaredByBlood ? 0.3 + 0.7*fear : 0.55; // (blood, the more of it the wider)
