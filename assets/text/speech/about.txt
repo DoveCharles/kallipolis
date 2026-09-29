@@ -194,6 +194,17 @@
 #   {is = bloody}             any blood on them               {is = hurt}     under 70% health
 #   {is = sick}               the sick trait: their skin's gone a sickly green (the 🤢 mood gives it)
 #   {is = zombie}             the zombie trait: their skin's gone a dead blue-grey (the 🧟 mood gives it)
+#   {is = crying}             tears falling from their eyes, or welled up in them (😢 😭 🥺 😂 give it) — "> Hey, what's wrong? {other.is = crying}"
+#   {is = blushing}           pink cheeks (😊 🥰 😍 😳 give it) — "> You've gone all red! {other.is = blushing}"
+#   {is = fuming}             a red face, steam coming off their head or snorted from the nose (😠 😤 give it) — "> Calm down, mate. {other.is = fuming}"
+#   {is = sleepy}             eyes half shut, Zs drifting off their head (😴 gives it) — "> Late night? {other.is = sleepy}"
+#   {is = sweating}           sweat running down or flying off them (😅 😬 😱 🤯 give it) — "> You're sweating buckets. {other.is = sweating}"
+#   {is = panicking}          sweat flying off them (😱 🤯 give it) — "> Breathe! {other.is = panicking}"
+#   {is = freezing}           a blue face, breath fogging (🥶 gives it) — "> You're freezing! {other.is = freezing}"
+#   {is = starstruck}         sparkles round their head (🤩 gives it) — "> What's got you so starry-eyed? {other.is = starstruck}"
+#   {is = partying}           confetti flying off them (🥳 gives it) — "> Where's the party? {other.is = partying}"
+#   {is = singing}            music notes floating off them (🎵 gives it) — "> What are you humming? {other.is = singing}"
+#   {is = upsidedown}         their head the wrong way up (🙃 gives it) — "> Your head's on upside down! {other.is = upsidedown}"
 #   {is = sad}                looking upset (their face)      {is = happy}    looking happy
 #   {is = scared}             running from something, or blood on them (unless they like it)
 #   {is = sitting}            sat down: on a bench, in a circle, on a seat indoors   {other.is = sitting}  to someone sat

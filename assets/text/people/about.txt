@@ -49,11 +49,25 @@ which add up. Everyone starts at the value in
 #   sad         0       how sad their eyes look                                                        0 to 1
 #   angry       0       how angry their eyes look                                                      0 to 1
 #   shock       0       how shocked their eyes look                                                    0 to 1
+#   crying      0       tears running down, flung out above 0.5 — 1 a stream                           0 to 1
+#   welling     0       tears welled up under their eyes, not falling (🥺) — 1 fullest                 0 to 1
+#   blushing    0       how pink their cheeks go                                                       0 to 1
+#   lovestruck  0       love hearts floating off their head now and then — 1 often                    0 to 1
+#   fuming      0       a red face and white puffs of steam off their head — 1 redder and steamier     0 to 1
+#   huffing     0       a reddish face and steam snorted from the nose                                 0 to 1
+#   drowsy      0       eyes held that far shut, and Zs drifting up off the head                       0 to 1
+#   sweating    0       a drop of sweat running down from a temple now and then                        0 to 1
+#   panicking   0       sweat flung off the head all round                                             0 to 1
+#   freezing    0       a blue face and breath fogging in front of the mouth                           0 to 1
+#   starstruck  0       sparkles glinting round the head                                               0 to 1
+#   partying    0       confetti thrown up off the head, in bursts                                     0 to 1
+#   singing     0       music notes floating off the head                                              0 to 1
 #   evil        0       how evil they are, the reactions of others when they die                       -1 to 1
 #   weight      1       how much a car slows when it hits them, multiplying a small base (always far less than hitting a car)  0.1 to 10
 #   aggression  1       how likely they are to punch sommone                                           0 to 20
 #   bloodlust   off     covered in blood, they run twice as fast and go about punching everyone they can  on or off
 #   backwards   off     they walk backwards                                                           on or off
+#   upsidedown  off     their head the wrong way up, hair and all                                     on or off
 #   dodge       0       the chance of leaping clear of a punch, then going after whoever threw it      0 to 1
 #   blazed      off     the whites of their eyes are slightly red, like they're high                   on or off
 #   sick        off     their skin goes a sickly green — the 🤢 mood in moods.txt gives it              on or off

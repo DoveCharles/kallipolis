@@ -319,7 +319,40 @@ const heartTexture = (() => {
   return new THREE.CanvasTexture(canvas);
 })();
 const heartMesh = softMesh(THREE.NormalBlending, 'HeartFx', heartTexture);
-glowMesh.renderOrder = smokeMesh.renderOrder = sparkleMesh.renderOrder = clippingMesh.renderOrder = heartMesh.renderOrder = 2;
+// a teardrop, point up, for someone crying (tearFx)
+const tearTexture = (() => {
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.moveTo(32, 4);
+  ctx.bezierCurveTo(40, 22, 50, 32, 50, 42); ctx.arc(32, 42, 18, 0, Math.PI); ctx.bezierCurveTo(14, 32, 24, 22, 32, 4);
+  ctx.fill();
+  return new THREE.CanvasTexture(canvas);
+})();
+const tearMesh = softMesh(THREE.NormalBlending, 'TearFx', tearTexture);
+// a letter or sign, white on clear, for what drifts up off someone's head: a Z for the sleepy (zedFx), a quaver for the singing (noteFx)
+const glyphTexture = draw => {
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = ctx.strokeStyle = '#fff';
+  draw(ctx);
+  return new THREE.CanvasTexture(canvas);
+};
+const zedMesh = softMesh(THREE.NormalBlending, 'ZedFx', glyphTexture(ctx => {
+  ctx.lineWidth = 9; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(14, 12); ctx.lineTo(50, 12); ctx.lineTo(14, 52); ctx.lineTo(50, 52); ctx.stroke();
+}));
+const noteMesh = softMesh(THREE.NormalBlending, 'NoteFx', glyphTexture(ctx => {
+  ctx.save(); ctx.translate(22, 48); ctx.rotate(-0.35); ctx.beginPath(); ctx.ellipse(0, 0, 11, 8, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+  ctx.fillRect(29, 8, 6, 40);
+  ctx.beginPath(); ctx.moveTo(35, 8); ctx.bezierCurveTo(44, 16, 54, 20, 50, 34); ctx.bezierCurveTo(50, 26, 44, 22, 35, 20); ctx.fill();
+}));
+// a scrap of confetti, a plain oblong (tinted), for the partying (confettiFx)
+const confettiMesh = softMesh(THREE.NormalBlending, 'ConfettiFx', glyphTexture(ctx => ctx.fillRect(18, 26, 28, 12)));
+// a see-through round puff, a cloud's shape, for breath fogging in the cold (breathFx)
+const puffMesh = softMesh(THREE.NormalBlending, 'PuffFx', glyphTexture(ctx => { ctx.beginPath(); ctx.arc(32, 32, 30, 0, Math.PI*2); ctx.fill(); }));
+glowMesh.renderOrder = smokeMesh.renderOrder = sparkleMesh.renderOrder = clippingMesh.renderOrder = heartMesh.renderOrder = tearMesh.renderOrder
+  = zedMesh.renderOrder = noteMesh.renderOrder = confettiMesh.renderOrder = puffMesh.renderOrder = 2;
 // a haircut's cloud: solid round puffs, facing the camera, popping up and shrinking away rather than fading
 const cloudMesh = (() => {
   const material = new THREE.MeshBasicMaterial({ toneMapped: false }), geometry = new THREE.CircleGeometry(0.5, 24);
@@ -328,13 +361,17 @@ const cloudMesh = (() => {
   mesh.userData.alpha = addInstanceAlpha(geometry, material, SOFT_MESH_CAP); // (always 1: it's there to share the soft particles' drawing)
   return mesh;
 })();
-// A single sparkle glint at `at`, tinted `color`, for a legendary car's shimmer — a soft pop in and out, spinning slowly.
-export function sparkleFx(at, color, size = 0.35) {
+// A soft particle carried along by `follow` (anything with an x, y and z, such as a person) as it moves, on top of its
+// own drift — so a tear stays by the face it fell from rather than being left behind someone walking.
+const carried = (particle, follow) => follow ? Object.assign(particle, { follow, fx: follow.x, fy: follow.y, fz: follow.z }) : particle;
+// A single sparkle glint at `at`, tinted `color`, for a legendary car's shimmer — a soft pop in and out, spinning slowly;
+// carried along by `follow`, if given.
+export function sparkleFx(at, color, size = 0.35, follow = null) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
-  softParticles.push({ kind: 'sparkle', born: performance.now()/1000, still: true, x: at.x, y: at.y, z: at.z,
+  softParticles.push(carried({ kind: 'sparkle', born: performance.now()/1000, still: true, x: at.x, y: at.y, z: at.z,
     size, life: 0.5 + Math.random()*0.3, opacity: 1, color: new THREE.Color(color),
-    roll: Math.random()*Math.PI*2, spin: (Math.random() < 0.5 ? -1 : 1)*1.5, growth: 0 });
+    roll: Math.random()*Math.PI*2, spin: (Math.random() < 0.5 ? -1 : 1)*1.5, growth: 0 }, follow));
 }
 
 // A haircut going on, in the `dt` seconds since it was last called (see the salon bots, buildings/salonbot.js): a cloud of
@@ -388,6 +425,103 @@ export function healFx(at, height, lying, heading, dt) {
       color: new THREE.Color(HEART_COLORS[Math.floor(Math.random()*HEART_COLORS.length)]),
       roll: (Math.random() - 0.5)*0.6, spin: (Math.random() - 0.5)*1.2 });
   }
+}
+
+// What a mood shows (see life/people/peopleEmotes.js), one at a time, for someone `height` tall (`follow`, where it's
+// given, being them, to carry it along with them: see carried):
+// a tear welling up at `at` (the bottom of an eye), spilling out along `forward` (the way their face looks) as far as
+// `spill` (0 to 1) says and falling — with no spill at all it just runs slowly straight down, after swelling up where it
+// is for TEAR_SWELL seconds (less, the more it spills);
+const TEAR_COLOR = new THREE.Color(0x9fd8ff), TEAR_SWELL = 0.35;
+export function tearFx(at, forward, height, follow = null, spill = 1) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  if (softParticles.length >= softCap()*2) softParticles.shift();
+  const out = (0.15 + Math.random()*0.15)*height*spill, spread = (Math.random() - 0.5)*0.1*height*spill;
+  softParticles.push(carried({ kind: 'tear', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+    vx: forward.x*out + forward.z*spread, vy: 0.1*height*spill, vz: forward.z*out - forward.x*spread, fall: 0.1 + 0.25*spill, swell: TEAR_SWELL*(1 - spill),
+    size: height*(0.03 + Math.random()*0.012), growth: 0, life: TEAR_SWELL*(1 - spill) + 0.7 + Math.random()*0.3 + (1 - spill)*0.6, opacity: 0.9, color: TEAR_COLOR }, follow));
+}
+// a love heart floating up off the top of their head at `at`;
+export function heartFx(at, height) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  if (softParticles.length >= softCap()*2) softParticles.shift();
+  const angle = Math.random()*Math.PI*2, out = (0.1 + Math.random()*0.2)*height;
+  softParticles.push({ kind: 'heart', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+    vx: Math.cos(angle)*out, vy: (0.3 + Math.random()*0.25)*height, vz: Math.sin(angle)*out,
+    size: height*(0.08 + Math.random()*0.05), growth: 0.2, life: 1.3 + Math.random()*0.6, opacity: 1,
+    color: new THREE.Color(HEART_COLORS[Math.floor(Math.random()*HEART_COLORS.length)]),
+    roll: (Math.random() - 0.5)*0.6, spin: (Math.random() - 0.5)*1.2 });
+}
+// a drop of sweat at `at`, running down (`fling` 0) or flung out along `away` as fast as `fling` says (panicking);
+const SWEAT_COLOR = new THREE.Color(0xc8ecff);
+export function sweatFx(at, away, height, fling = 0, follow = null) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  if (softParticles.length >= softCap()*2) softParticles.shift();
+  const out = fling*(0.8 + Math.random()*0.8)*height;
+  softParticles.push(carried({ kind: 'tear', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+    vx: away.x*out, vy: fling ? (0.5 + Math.random()*0.5)*height : -0.05*height, vz: away.z*out,
+    size: height*(0.03 + Math.random()*0.01), growth: 0, life: fling ? 0.6 + Math.random()*0.3 : 0.9, opacity: 0.9, color: SWEAT_COLOR }, follow));
+}
+// a Z drifting up and away off their head at `at`, sleepy, and one of a trail of them;
+export function zedFx(at, height) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  if (softParticles.length >= softCap()*2) softParticles.shift();
+  const angle = Math.random()*Math.PI*2, out = 0.06*height;
+  softParticles.push({ kind: 'zed', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+    vx: Math.cos(angle)*out, vy: 0.18*height, vz: Math.sin(angle)*out,
+    size: height*0.06, growth: 1.2, life: 2.2, opacity: 0.95, color: new THREE.Color(0xeef2ff),
+    roll: (Math.random() - 0.5)*0.5, spin: (Math.random() - 0.5)*0.4 });
+}
+// a music note floating up off their head at `at`, singing to themselves;
+const NOTE_COLORS = [0x2b2b3a, 0x3a4fd8, 0x9b3ad8];
+export function noteFx(at, height) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  if (softParticles.length >= softCap()*2) softParticles.shift();
+  const angle = Math.random()*Math.PI*2, out = (0.1 + Math.random()*0.15)*height;
+  softParticles.push({ kind: 'note', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+    vx: Math.cos(angle)*out, vy: (0.25 + Math.random()*0.15)*height, vz: Math.sin(angle)*out,
+    size: height*(0.08 + Math.random()*0.03), growth: 0.1, life: 1.4 + Math.random()*0.5, opacity: 1,
+    color: new THREE.Color(NOTE_COLORS[Math.floor(Math.random()*NOTE_COLORS.length)]),
+    roll: (Math.random() - 0.5)*0.5, spin: (Math.random() < 0.5 ? -1 : 1)*(0.6 + Math.random()*0.6) });
+}
+// a glint of sparkle round their head at `at` (its middle), starstruck;
+const STAR_COLORS = [0xfff2a8, 0xffffff, 0xffd84a], starAt = new THREE.Vector3();
+export function starFx(at, height, follow = null) {
+  const angle = Math.random()*Math.PI*2, out = (0.1 + Math.random()*0.08)*height;
+  starAt.set(at.x + Math.cos(angle)*out, at.y + (Math.random() - 0.3)*0.12*height, at.z + Math.sin(angle)*out);
+  sparkleFx(starAt, STAR_COLORS[Math.floor(Math.random()*STAR_COLORS.length)], height*(0.07 + Math.random()*0.05), follow);
+}
+// a scrap of confetti blown out every which way from their head at `at` (its middle), partying — a burst of them a pop;
+const CONFETTI_COLORS = [0xff4f7b, 0xffd23f, 0x3ec1ff, 0x5ee07a, 0xb46bff, 0xff8a3d];
+export function confettiFx(at, height) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  if (softParticles.length >= softCap()*2) softParticles.shift();
+  const angle = Math.random()*Math.PI*2, up = Math.random()*2 - 1, flat = Math.sqrt(1 - up*up), out = (1.2 + Math.random()*0.8)*height;
+  softParticles.push({ kind: 'confetti', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+    vx: Math.cos(angle)*flat*out, vy: up*out, vz: Math.sin(angle)*flat*out,
+    size: height*(0.04 + Math.random()*0.02), growth: 0, life: 1.3 + Math.random()*0.6, opacity: 1,
+    color: new THREE.Color(CONFETTI_COLORS[Math.floor(Math.random()*CONFETTI_COLORS.length)]),
+    roll: Math.random()*Math.PI*2, spin: (Math.random() < 0.5 ? -1 : 1)*(5 + Math.random()*7) });
+}
+// a see-through round puff of breath at `at` (the mouth), blown out along `away`, in the cold — or, `huff`, a solid white
+// cartoon puff of steam from the nose (as fumeFx's);
+export function breathFx(at, away, height, huff = false, follow = null) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  if (softParticles.length >= softCap()*2) softParticles.shift();
+  const out = (huff ? 0.45 : 0.25 + Math.random()*0.15)*height, white = 0.9 + Math.random()*0.1;
+  softParticles.push(carried({ kind: huff ? 'cloud' : 'puff', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+    vx: away.x*out, vy: away.y*out + (huff ? -0.05 : 0.04)*height, vz: away.z*out,
+    size: height*(huff ? 0.025 + Math.random()*0.015 : 0.03 + Math.random()*0.015), growth: huff ? 1 : 1.2, life: huff ? 0.45 + Math.random()*0.2 : 0.6 + Math.random()*0.3,
+    opacity: huff ? 1 : 0.3, color: new THREE.Color(white, white, white) }, follow));
+}
+// and a puff of cartoon steam — a solid white round cloud, as a haircut's are — blowing up off the top of their head at `at`, fuming.
+export function fumeFx(at, height, follow = null) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  if (softParticles.length >= softCap()*2) softParticles.shift();
+  const angle = Math.random()*Math.PI*2, out = (0.1 + Math.random()*0.15)*height, white = 0.92 + Math.random()*0.08;
+  softParticles.push(carried({ kind: 'cloud', born: performance.now()/1000, x: at.x + Math.cos(angle)*0.04*height, y: at.y, z: at.z + Math.sin(angle)*0.04*height,
+    vx: Math.cos(angle)*out, vy: (0.45 + Math.random()*0.3)*height, vz: Math.sin(angle)*out,
+    size: height*(0.05 + Math.random()*0.035), growth: 0.8, life: 0.6 + Math.random()*0.3, opacity: 1, color: new THREE.Color(white, white, white) }, follow));
 }
 
 // What a burning car gives off in the `dt` seconds since it was last called: a soft red glow round it, red, orange and yellow puffs
@@ -625,6 +759,7 @@ export function boostWake(at, height, heading, dt) {
 }
 
 const placed = new THREE.Object3D(), spinStep = new THREE.Quaternion(), dimmed = new THREE.Color();
+const viewRight = new THREE.Vector3(), viewUp = new THREE.Vector3(); // (the screen's right and up, in the world, this frame)
 const sparkleAxis = new THREE.Vector3(0, 0, 1), sparkleRoll = new THREE.Quaternion(); // (a sparkle spins about the camera's view axis)
 const GIB_SPLASH_SPEED = 3.5; // launch speed of the single droplet flicked up where a falling gib goes under open water (updateGiblets, below) — under the same SPLASH_GRAVITY as any other spray, so it snaps back down just as heavily
 let lastTime = null;
@@ -783,27 +918,43 @@ export function updateGiblets(t) {
   });
   // soft particles: each drifts on, grows by `growth` of its size over its life, and fades in and out
   while (softParticles.length && t - softParticles[0].born > softParticles[0].life) softParticles.shift();
-  const drawnSoft = { glow: 0, smoke: 0, sparkle: 0, clipping: 0, cloud: 0, heart: 0 }, meshes = { glow: glowMesh, smoke: smokeMesh, sparkle: sparkleMesh, clipping: clippingMesh, cloud: cloudMesh, heart: heartMesh };
+  viewRight.setFromMatrixColumn(camera.matrixWorld, 0); viewUp.setFromMatrixColumn(camera.matrixWorld, 1);
+  const drawnSoft = { glow: 0, smoke: 0, sparkle: 0, clipping: 0, cloud: 0, heart: 0, tear: 0, zed: 0, note: 0, confetti: 0, puff: 0 };
+  const meshes = { glow: glowMesh, smoke: smokeMesh, sparkle: sparkleMesh, clipping: clippingMesh, cloud: cloudMesh, heart: heartMesh, tear: tearMesh,
+    zed: zedMesh, note: noteMesh, confetti: confettiMesh, puff: puffMesh };
   softParticles.forEach(p => {
     const age = t - p.born, life = age/p.life, mesh = meshes[p.kind];
     if (life > 1 || drawnSoft[p.kind] >= softCap() || !isNearFx(p)) return;
+    const swelling = age < (p.swell ?? 0); // (a tear still welling up: it holds still, growing)
+    if (p.kind === 'tear' && !swelling) { p.vy -= GRAVITY*p.fall*dt; p.vx *= 1 - Math.min(1, dt*3); p.vz *= 1 - Math.min(1, dt*3); } // (a tear: spills out, then drops)
+    if (p.kind === 'confetti') { const drag = 1 - Math.min(1, dt*4); p.vx *= drag; p.vz *= drag; p.vy = Math.max(p.vy*drag - GRAVITY*0.3*dt, -0.5); } // (confetti: bursts out, the air stops it, then it flutters down)
     if (p.kind === 'clipping') { p.vy -= GRAVITY*0.5*dt; p.vx *= 1 - Math.min(1, dt*1.5); p.vz *= 1 - Math.min(1, dt*1.5); } // (a curl of hair: falls, slowed by the air)
-    if (!p.still) { p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt; }
+    if (!p.still && !swelling) { p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt; }
+    if (p.follow) { const f = p.follow; p.x += f.x - p.fx; p.y += f.y - p.fy; p.z += f.z - p.fz; p.fx = f.x; p.fy = f.y; p.fz = f.z; } // (see carried)
     placed.position.set(p.x, p.y, p.z);
     placed.quaternion.copy(camera.quaternion);
     // a sparkle spins slowly about the view axis as it pops in and out, rather than drifting or billowing like glow/smoke
     // (and a clipping tumbles quickly as it falls)
     const scale = p.kind === 'sparkle' ? p.size*Math.sin(Math.PI*Math.min(1, life))**0.5
-      : p.kind === 'cloud' ? p.size*(1 + p.growth*life)*Math.min(1, life*6, (1 - life)*3) // (popping up, then shrinking away)
+      : p.kind === 'cloud' || p.kind === 'puff' ? p.size*(1 + p.growth*life)*Math.min(1, life*6, (1 - life)*3) // (popping up, then shrinking away)
+      : swelling ? p.size*age/p.swell
       : p.size*(1 + p.growth*(p.kind === 'glow' && !p.still ? -life : life));
-    if (p.kind === 'heart') { p.vx *= 1 - Math.min(1, dt*2); p.vz *= 1 - Math.min(1, dt*2); } // (a heart: flung off, then floats straight up)
-    if (p.kind === 'sparkle' || p.kind === 'clipping' || p.kind === 'heart') placed.quaternion.multiply(sparkleRoll.setFromAxisAngle(sparkleAxis, p.roll + age*p.spin));
+    const floats = p.kind === 'heart' || p.kind === 'note' || p.kind === 'zed', rolls = floats || p.kind === 'sparkle' || p.kind === 'clipping' || p.kind === 'confetti';
+    if (floats) { p.vx *= 1 - Math.min(1, dt*2); p.vz *= 1 - Math.min(1, dt*2); } // (a heart, note or Z: flung off, then floats straight up)
+    if (p.kind === 'zed') p.x += Math.sin(age*3 + p.roll*9)*0.1*p.size*dt*10; // (swaying as it goes)
+    // (a tear or drop of sweat points back the way it came: its round end leads, turned about the view axis to how it
+    // moves across the screen)
+    if (p.kind === 'tear') {
+      const across = p.vx*viewRight.x + p.vy*viewRight.y + p.vz*viewRight.z, up = p.vx*viewUp.x + p.vy*viewUp.y + p.vz*viewUp.z;
+      if (across*across + up*up > 1e-8) placed.quaternion.multiply(sparkleRoll.setFromAxisAngle(sparkleAxis, Math.atan2(across, -up)));
+    }
+    if (rolls) placed.quaternion.multiply(sparkleRoll.setFromAxisAngle(sparkleAxis, p.roll + age*p.spin));
     placed.scale.setScalar(scale);
     placed.updateMatrix();
     const i = drawnSoft[p.kind]++;
     mesh.setMatrixAt(i, placed.matrix);
     mesh.setColorAt(i, p.color);
-    mesh.userData.alpha.setX(i, p.kind === 'cloud' ? 1 : p.kind === 'clipping' || p.kind === 'heart' ? p.opacity*Math.min(1, (1 - life)*5) : p.opacity*Math.sin(Math.PI*Math.min(1, life))**(p.kind === 'smoke' ? 1 : 0.5));
+    mesh.userData.alpha.setX(i, p.kind === 'cloud' ? 1 : p.kind === 'puff' ? p.opacity : p.kind === 'clipping' || p.kind === 'tear' || p.kind === 'confetti' || floats ? p.opacity*Math.min(1, (1 - life)*5) : p.opacity*Math.sin(Math.PI*Math.min(1, life))**(p.kind === 'smoke' ? 1 : 0.5));
   });
   Object.entries(meshes).forEach(([kind, mesh]) => {
     mesh.count = drawnSoft[kind];

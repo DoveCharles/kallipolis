@@ -71,6 +71,8 @@ export const profilesVersion = () => version;
 // whether the people files have loaded (not the placeholders), and their love/hate entries (see ui/traits-known.js)
 export const peopleListsLoaded = () => filesLoaded;
 export const peopleTraitEntries = () => ({ love: lists.loves, hate: lists.hates });
+/** Every mood in moods.txt, as parsed (each with its text, the emoji): for the moods debug window, ui/moods-debug.js. */
+export const moodEntries = () => lists.moods;
 // Fills an entry's [placeholders] for a card, once speech has loaded (life/speech-text.js hands it over): (entry, rng) →
 // { card, said, words }. Until then entries show as written.
 let fillEntry = null;

@@ -40,6 +40,7 @@ import { updateStatusEffects, restackTraits } from '../statuseffects.js';
 import { stockPockets } from '../gifts.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { updateCrazy } from './peopleCrazy.js';
+import { beginEmotes, updateEmotes } from './peopleEmotes.js';
 import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, updatePossessedTarget, useFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
 
@@ -582,11 +583,19 @@ const VAMPIRE_SKIN_COLOR = new THREE.Color(0xd3d3d3), VAMPIRE_PALE_PER_CENTURY =
 // The sick and zombie traits (the 🤢 and 🧟 moods in people/moods.txt give each of them) take the skin MOOD_SKIN_BLEND of
 // the way to a colour of its own: a sickly green, and a dead blue-grey (see tintSkin).
 const SICK_SKIN_COLOR = new THREE.Color(0x72bb4d), ZOMBIE_SKIN_COLOR = new THREE.Color(0x609dc2), MOOD_SKIN_BLEND = 1;
+// The fuming trait (the 😠 mood) takes it up to FUMING_SKIN_BLEND of the way to red (huffing, 😤, counts HUFFING_RED as
+// much), freezing (🥶) up to FREEZING_SKIN_BLEND of the way to blue, and blushing pinks the cheeks (drawn by the person
+// shader from the Skin row's fourth number: see BLUSH_GLSL in peopleModel.js).
+const FUMING_SKIN_COLOR = new THREE.Color(0xe0442c), FUMING_SKIN_BLEND = 0.45, HUFFING_RED = 0.7;
+const FREEZING_SKIN_COLOR = new THREE.Color(0x7fb2e8), FREEZING_SKIN_BLEND = 0.5;
+const redOf = p => Math.min(1, p.traits.fuming + HUFFING_RED*p.traits.huffing);
 // The traits that have a say in the skin, as one number, for telling when one of them has changed (see tintSkin).
-const skinKeyOf = p => (p.traits.sick ? 1 : 0) + (p.traits.zombie ? 2 : 0) + (p.traits.vampire ? 4 : 0);
+const skinKeyOf = p => (p.traits.sick ? 1 : 0) + (p.traits.zombie ? 2 : 0) + (p.traits.vampire ? 4 : 0)
+  + 8*Math.round(redOf(p)*100) + 808*Math.round(p.traits.blushing*100) + 81608*Math.round(p.traits.freezing*100) + 8242408*(p.traits.upsidedown ? 1 : 0);
 /**
  * Write the skin someone's traits give them to the person model: the colour they came with, moved towards the grey a
- * vampire's age pales it to and, all the way, the colour of the sick and zombie traits (see SICK_SKIN_COLOR). Their own is
+ * vampire's age pales it to and, all the way, the colour of the sick and zombie traits (see SICK_SKIN_COLOR) or, part way, the
+ * fuming trait's red or the freezing trait's blue; how much they blush (see FUMING_SKIN_COLOR); and whether their head's upside down. Their own is
  * kept on p.skinBase the first time, so the skin they came with comes back when the trait goes — a mood cheered up out of
  * the 🤢 or 🧟 one, a keepsake handed back.
  *
@@ -606,6 +615,14 @@ function tintSkin(p, i) {
   if (p.traits.vampire) skin.lerp(VAMPIRE_SKIN_COLOR, Math.min(1, VAMPIRE_PALE_PER_CENTURY*(1 + p.age/100)));
   const moodSkin = p.traits.zombie ? ZOMBIE_SKIN_COLOR : p.traits.sick ? SICK_SKIN_COLOR : null;
   if (moodSkin) skin.lerp(moodSkin, MOOD_SKIN_BLEND);
+  else {
+    if (redOf(p)) skin.lerp(FUMING_SKIN_COLOR, FUMING_SKIN_BLEND*redOf(p));
+    if (p.traits.freezing) skin.lerp(FREEZING_SKIN_COLOR, FREEZING_SKIN_BLEND*p.traits.freezing);
+  }
+  data[o + 3] = p.traits.blushing; // (not stained by blood, so set either way)
+  // (and whether their head's upside down, 🙃, in the Eyes row's fourth number, which nothing else has: see personLook)
+  data[((2 + PERSON_TRAIT_COLORS.indexOf('Eyes'))*PEOPLE_MAX + i)*4 + 3] = p.traits.upsidedown ? 1 : 0;
+  personModel.traitTexture.needsUpdate = true;
   if (p.blood && p.bloodBase) { p.bloodBase.Skin = [skin.r, skin.g, skin.b]; return; } // (blood's to stain from: see peopleBlood.js)
   data[o] = skin.r; data[o + 1] = skin.g; data[o + 2] = skin.b;
   personModel.traitTexture.needsUpdate = true;
@@ -1198,6 +1215,7 @@ export function updatePeople(t) {
   const lyingNear = lyingDown.length > 8 ? crowdGrid(lyingDown) : null;
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   peopleFrame++;
+  beginEmotes();
   people.forEach((p, i) => {
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
@@ -1611,7 +1629,8 @@ export function updatePeople(t) {
         animArray[o] = clipRow(p, p.clipA);
         animArray[o+1] = p.clipB === p.clipA ? animArray[o] : p.rowB;
         animArray[o+2] = p.fade;
-        animArray[o+3] = p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0;
+        // (the drowsy, 😴, hold their eyes that far shut between blinks)
+        animArray[o+3] = Math.max(p.traits.drowsy, p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0);
         lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
         if (p.water?.drowned) holdDrowned(o, animArray, lookArray); // (still, face down: see peopleWater.js)
         const eyesArray = personModel.eyes.array;
@@ -1628,6 +1647,8 @@ export function updatePeople(t) {
           style.pupil.array[slot*2] = p.pupil[0]; style.pupil.array[slot*2 + 1] = p.pupil[1];
         }
       }
+      // tears, love hearts, smoke: what their mood shows, if they're near enough to see it (see peopleEmotes.js)
+      if (placed && bubbleSide && pixels >= PERSON_FACE_PIXELS) updateEmotes(p, i, dt, t);
     } else {
       if (p.moving && !riding) p.phase += dt*speed*Math.PI/S.peopleSize;
       const bob = p.moving && !riding ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;

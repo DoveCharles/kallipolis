@@ -481,7 +481,7 @@ const PERSON_LASHES = ['Eyelash1', 'Eyelash2', 'Eyelash3'];
 // which outfit they wear, 0 for none, and OutfitGreen's which column of the outfits' texture)
 // ('Top''s fourth number is 1 for a villain, 0 for anyone else — only ped view reads it: see ui/ped-view.js)
 export const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat', 'Skin', 'Blood', 'Eyes', 'Glasses', 'Skirt', 'Cuff', 'OutfitRed', 'OutfitGreen'];
-const SKIN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Skin'), BLOOD_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Blood');
+const SKIN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Skin'), EYES_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Eyes'), BLOOD_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Blood');
 const OUTFIT_RED_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitRed'), OUTFIT_GREEN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitGreen');
 const BLOOD_SCALE = 1.2; // how many splotches' worth of noise fit in a unit of the figure: bigger for smaller splotches
 export const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
@@ -518,6 +518,8 @@ export const LOOK_MAX_TURN = 50*Math.PI/180, LOOK_MAX_TILT = 15*Math.PI/180;
 export const PUPIL_MAX_X = 0.07, PUPIL_MAX_Y = 0.02;
 // the middle of a person's face, from where their head meets their neck, in the model's units
 export const HEAD_CENTER = new THREE.Vector3(0, 0.3, 0.2);
+// the blush on the cheeks of the blushing (the Skin row's fourth number is how much: see tintSkin in people.js)
+const PERSON_BLUSH_COLOR = 0xf2506e;
 
 // People too small on screen to see aren't drawn, nor their shadows once they're smaller than PERSON_SHADOW_PIXELS (in
 // drawing-buffer pixels, tall): and nobody off screen, or out of the shadow's view, is. All worked out in the vertex
@@ -588,6 +590,7 @@ const PERSON_VERTEX_PARS = `
   uniform sampler2D personTraits;
   uniform float personHeadBone;
   uniform vec3 personHeadPivot;
+  uniform vec2 personHeadMiddle;
   uniform float personChestBone;
   uniform vec3 personChestPivot;
   uniform vec2 personArmBonesR; // the right shoulder and elbow bones, for personArms
@@ -659,12 +662,17 @@ const PERSON_VERTEX_PARS = `
   // and down as the head sees it, so someone lying down rolls their head rather than twisting it round.
   //
   // Only the vertices that move with the head bone or the bones under it (personVertex.x) are affected.
+  //
+  // And upside down (the Eyes row's fourth number: the 🙃 mood's upsidedown trait, see tintSkin in people.js), the head
+  // first rolls half round about the line from the back of its middle (personHeadMiddle: y and z from the pivot) to the front.
   vec3 personLook(vec3 posed) {
     vec3 looked = posed;
-    if (personVertex.x > 0.0 && (instanceLook.x != 0.0 || instanceLook.y != 0.0)) {
+    bool flipped = personVertex.x > 0.0 && texelFetch(personTraits, ivec2(personIndex(), ${EYES_ROW}), 0).w > 0.5;
+    if (personVertex.x > 0.0 && (instanceLook.x != 0.0 || instanceLook.y != 0.0 || flipped)) {
       mat4 head = personBone(personHeadBone);
       mat3 headTurn = mat3(head);
       vec3 pivot = (head*vec4(personHeadPivot, 1.0)).xyz, p = inverse(headTurn)*(posed - pivot);
+      if (flipped) p = vec3(-p.x, 2.0*personHeadMiddle.x - p.y, p.z);
       float ct = cos(instanceLook.x), st = sin(instanceLook.x), cn = cos(instanceLook.y), sn = sin(instanceLook.y);
       p = vec3(p.x, p.y*cn - p.z*sn, p.y*sn + p.z*cn);
       p = vec3(p.x*ct + p.z*st, p.y, p.z*ct - p.x*st);
@@ -862,6 +870,12 @@ const OUTFIT_CHEST_GLSL = `
     ${OUTFITS.map((o, k) => o.boots ? `if (outfitPart > 2.5 && abs(outfitId - ${k + 1}.0) < 0.5 && vPersonRest.y < ${o.boots.toFixed(2)}) diffuseColor.rgb = vec3(0.0035);` : '').join('\n    ')}
   }`;
 
+// A blush: a rectangle of pink on each cheek (personCheeks, from where the eyes are: see buildPersonModel), on the skin at
+// the front of the face, as strong as vPersonBlush.
+const BLUSH_GLSL = `
+  if (vPersonBlush > 0.0 && vPersonRest.z > personCheekBack && abs(abs(vPersonRest.x) - personCheeks.x) < personCheeks.z
+    && abs(vPersonRest.y - personCheeks.y) < personCheeks.w) diffuseColor.rgb = mix(diffuseColor.rgb, personBlushColor, vPersonBlush);`;
+
 /**
  * Add the posing and shape keys to a material's shaders, and how it colors the figure.
  *
@@ -873,7 +887,7 @@ const OUTFIT_CHEST_GLSL = `
  * colorRow (the traits row of the clothes' color) }), and `look.outfitSlots` (the slots an outfit's texture is
  * drawn over, with `look.outfitMap` the texture: see outfits.js — and `look.outfitBands` and `look.outfitLegSlots`, the
  * bands of the sleeves and legs it's drawn over too, where they're covered, and the rest of the legs; and
- * `look.outfitBareLegSlots`, the legs' bands, where they're bare, for fishnets). `look.shadow` says it's the shadow's depth material
+ * `look.outfitBareLegSlots`, the legs' bands, where they're bare, for fishnets). `look.blushSlot` is the slot a blush goes on (see BLUSH_GLSL). `look.shadow` says it's the shadow's depth material
  * and `look.layer` that it's worn over the body, for how small a person it leaves out (see personOnScreen).
  * @param {object} shader - three.js's shader object to patch
  * @param {Object<string, {value: *}>} uniforms - the person uniforms to give it
@@ -893,7 +907,8 @@ function injectPersonShader(shader, uniforms, look) {
   const splotched = colored && (look.bloodSlots || []).length > 0;
   const outfitted = colored && (look.outfitSlots || []).length > 0;
   if (outfitted) shader.uniforms.personOutfitMap = { value: look.outfitMap };
-  const rested = splotched || outfitted;
+  const blushed = colored && look.blushSlot != null;
+  const rested = splotched || outfitted || blushed;
   const hideHead = colored ? 'if (personIndex() == personHidden && personVertex.x > 0.0) transformed = (personBone(personChestBone)*vec4(personChestPivot, 1.0)).xyz;' : '';
   const bands = (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? personTrait(${SKIN_ROW}).rgb : personTrait(${b.colorRow}).rgb) : `).join('');
   // (blood is drawn over the slots it's asked for, and over a band of clothes only where it shows skin)
@@ -912,7 +927,7 @@ function injectPersonShader(shader, uniforms, look) {
     .replace('#include <common>', '#include <common>\n' + PERSON_VERTEX_PARS
       + (colored ? `uniform vec3 personPalette[${look.palette.length}];\nvarying vec3 vPersonColor;` : '')
       + (splotched ? '\nvarying vec2 vPersonBlood;' : '') + (rested ? '\nvarying vec3 vPersonRest;' : '')
-      + (outfitted ? '\nvarying vec4 vPersonOutfit;\nvarying vec4 vPersonOutfitRed;' : ''))
+      + (outfitted ? '\nvarying vec4 vPersonOutfit;\nvarying vec4 vPersonOutfitRed;' : '') + (blushed ? '\nvarying float vPersonBlush;' : ''))
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       ${rested ? 'vPersonRest = transformed;' : ''}
       if (personRough) transformed = (personBone(personMainJoint())*vec4(transformed, 1.0)).xyz;
@@ -926,6 +941,7 @@ function injectPersonShader(shader, uniforms, look) {
       if (personOnly >= 0 && personIndex() != personOnly) transformed = vec3(0.0);
       ${color}
       ${splotched ? `vPersonBlood = vec2(${bloodOver}, float(personIndex()));` : ''}
+      ${blushed ? `vPersonBlush = personSlotIndex == ${look.blushSlot} ? personTrait(${SKIN_ROW}).w : 0.0;` : ''}
       ${outfitted ? `vPersonOutfitRed = vec4(personTrait(${OUTFIT_RED_ROW}).rgb, personTrait(${OUTFIT_GREEN_ROW}).w);
       vPersonOutfit = vec4(personTrait(${OUTFIT_GREEN_ROW}).rgb, personTrait(${OUTFIT_RED_ROW}).w > 0.5 ? personTrait(${OUTFIT_RED_ROW}).w + ${OUTFIT_PART}.0*(
         (${look.outfitSlots.map(slot => `personSlotIndex == ${slot}`).join(' || ')}) ? 0.0
@@ -934,8 +950,9 @@ function injectPersonShader(shader, uniforms, look) {
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vPersonColor;' + (rested ? '\nvarying vec3 vPersonRest;' : '')
       + (splotched ? '\nvarying vec2 vPersonBlood;\nuniform vec3 personBloodColor;' + BLOOD_GLSL : '')
-      + (outfitted ? '\nvarying vec4 vPersonOutfit;\nvarying vec4 vPersonOutfitRed;\nuniform sampler2D personOutfitMap;' : ''))
-    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vPersonColor;' + (outfitted ? OUTFIT_CHEST_GLSL : '') + (splotched ? BLOOD_SPLOTCHES : ''));
+      + (outfitted ? '\nvarying vec4 vPersonOutfit;\nvarying vec4 vPersonOutfitRed;\nuniform sampler2D personOutfitMap;' : '')
+      + (blushed ? '\nvarying float vPersonBlush;\nuniform vec4 personCheeks;\nuniform float personCheekBack;\nuniform vec3 personBlushColor;' : ''))
+    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = vPersonColor;' + (blushed ? BLUSH_GLSL : '') + (outfitted ? OUTFIT_CHEST_GLSL : '') + (splotched ? BLOOD_SPLOTCHES : ''));
 }
 
 /**
@@ -958,7 +975,7 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name 
   material.defines = { ...material.defines, ROOM_LAMP: '', ROOM_GLOW: '' };
   if (culled) { material.defines.PERSON_CULL = ''; depth.defines = { ...depth.defines, PERSON_CULL: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
-  const key = ['person', byAttribute, culled, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, look.femaleOnly.join(','), (look.lashes || []).join(',')].join('|');
+  const key = ['person', byAttribute, culled, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, look.femaleOnly.join(','), (look.lashes || []).join(','), look.blushSlot ?? ''].join('|');
   material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { ...look, layer: byAttribute });
   material.customProgramCacheKey = () => key;
   depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly, lashes: look.lashes, clearThighs: look.clearThighs, shadow: true, layer: byAttribute });
@@ -1248,6 +1265,31 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   }
   if (lipsCount) mouthRest.multiplyScalar(1/lipsCount); else mouthRest.copy(headPivot).add(HEAD_CENTER);
   const mouthLocal = headBone != null ? bones[headBone].worldToLocal(mouthRest.clone()) : mouthRest.clone();
+  // The eyes, at rest: the middle of the whites of the one on +x (the other's its mirror), how wide it is, its bottom and
+  // how far forward it comes; and the top of the head. For tears to well up from, blush to go under (see personCheeks) and
+  // what comes off the head to come from (see peopleEmotes.js) — all from the head's pivot, as HEAD_CENTER is.
+  const whiteSlot = PERSON_SLOTS.indexOf('White');
+  let eyeX = 0, eyeCount = 0, eyeMinX = Infinity, eyeMaxX = -Infinity, eyeLow = Infinity, eyeFront = -Infinity, headTop = -Infinity;
+  const noseTip = new THREE.Vector3(0, 0, -Infinity);
+  for (let i=0;i<vertexCount;i++) {
+    const x = positions[i*3], y = positions[i*3+1], z = positions[i*3+2];
+    if (headWeights[i] > 0.5 && slots[i] === 0) headTop = Math.max(headTop, y);
+    if (headWeights[i] > 0.5 && slots[i] === 0 && Math.abs(x) < 0.05 && y > mouthRest.y && z > noseTip.z) noseTip.set(x, y, z);
+    if (slots[i] !== whiteSlot || x <= 0) continue;
+    eyeX += x; eyeCount++;
+    eyeMinX = Math.min(eyeMinX, x); eyeMaxX = Math.max(eyeMaxX, x);
+    eyeLow = Math.min(eyeLow, y); eyeFront = Math.max(eyeFront, z);
+  }
+  // (and the mouth, and the tip of the nose — the frontmost skin down the face's middle above the mouth — for breath and steam)
+  const mouth = mouthRest.clone().sub(headPivot);
+  const nose = noseTip.z > -Infinity ? noseTip.clone().sub(headPivot) : mouth.clone().add(new THREE.Vector3(0, 0.15, 0.05));
+  const face = eyeCount ? { eyeX: eyeX/eyeCount, eyeHalf: (eyeMaxX - eyeMinX)/2, eyeLow: eyeLow - headPivot.y, eyeFront: eyeFront - headPivot.z,
+    top: new THREE.Vector3(0, (headTop > -Infinity ? headTop : headPivot.y + HEAD_CENTER.y*2) - headPivot.y, HEAD_CENTER.z*0.5), mouth, nose }
+    : { eyeX: 0.1, eyeHalf: 0.05, eyeLow: HEAD_CENTER.y, eyeFront: HEAD_CENTER.z, top: new THREE.Vector3(0, HEAD_CENTER.y*2, HEAD_CENTER.z*0.5), mouth, nose };
+  // (the blush: a rectangle on each cheek, just under the eye and as wide as it — x from the middle, y and half its width and
+  // height, in the model's rest pose — on the skin in front of personCheekBack)
+  const cheeks = new THREE.Vector4(face.eyeX*1.15, headPivot.y + face.eyeLow - face.eyeHalf*0.55, face.eyeHalf*0.95, face.eyeHalf*0.3);
+  const cheekBack = headPivot.z + face.eyeFront - face.eyeHalf*2.5;
   const hands = {};
   ['L', 'R'].forEach(side => {
     const hand = bones[boneByName.get('Hand' + side)], out = side === 'L' ? 1 : -1;
@@ -1742,12 +1784,13 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     personBones: { value: boneTexture }, personBonesSize: { value: new THREE.Vector2(boneWidth, boneRows) },
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
     personTraits: { value: traitTexture }, personHidden: { value: -1 }, personOnly: { value: -1 }, personBloodColor: { value: new THREE.Color(0.55, 0.05, 0.05) },
-    personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personChestBone: { value: chestBone }, personChestPivot: { value: chestPivot }, personArmBonesR: { value: armBonesR },
+    personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personHeadMiddle: { value: new THREE.Vector2(face.top.y*0.5, face.top.z) }, personChestBone: { value: chestBone }, personChestPivot: { value: chestPivot }, personArmBonesR: { value: armBonesR },
     personThighBones: { value: thighs ? new THREE.Vector4(thighBone, kneeBone, mirrorBone[thighBone], mirrorBone[kneeBone]) : new THREE.Vector4() },
     personHipRest: { value: thighs ? thighs.hip : new THREE.Vector3() }, personKneeRest: { value: thighs ? thighs.knee : new THREE.Vector3() },
     personThighRadius: { value: new THREE.Vector2(...(thighs ? thighs.rest : [0, 0])) },
     personThighGrow: { value: new THREE.Vector3(...(thighs ? thighs.grow.map(g => g[0]) : [0, 0, 0])) },
     personKneeGrow: { value: new THREE.Vector3(...(thighs ? thighs.grow.map(g => g[1]) : [0, 0, 0])) },
+    personCheeks: { value: cheeks }, personCheekBack: { value: cheekBack }, personBlushColor: { value: new THREE.Color(PERSON_BLUSH_COLOR) },
     ...personCulling,
   };
   const bodyLook = {
@@ -1758,6 +1801,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     bands: PERSON_CLOTHING.flatMap((c, cut) => Array.from({ length: c.count }, (_, k) =>
       ({ slot: PERSON_SLOTS.indexOf(c.band + (k + 1)), number: k + 1, cut, colorRow: traitRow(c.part) }))),
     outfitSlots: ['Top', 'Tummy1', 'Tummy2'].map(slot => PERSON_SLOTS.indexOf(slot)), outfitMap: buildOutfitTexture(),
+    blushSlot: PERSON_SLOTS.indexOf('Skin'),
   };
   // (a sleeve's bands and a leg's, where they're covered, take the arm's and leg's tiles; and so does the top of the legs, always covered)
   bodyLook.outfitBands = bodyLook.bands.flatMap(b => { const band = PERSON_SLOTS[b.slot]; return band.startsWith('Sleeve') ? [{ ...b, part: 1 }] : band.startsWith('Leg') ? [{ ...b, part: 2 }] : []; });
@@ -1803,7 +1847,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
   return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, wears, putOn, takeOff,
-    headBone: headBone ?? 0, headPivot, chestBone, hands, unitsPerMetre, floorY: geometry.boundingBox.min.y, gibs,
+    headBone: headBone ?? 0, headPivot, face, chestBone, hands, unitsPerMetre, floorY: geometry.boundingBox.min.y, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
 

@@ -15,6 +15,7 @@ import { closeWindows } from './w3-window.js';
 import { editHints, generalHints } from './view-prefs.js';
 import { fpsCounter } from './fps.js';
 import { openHeldDebug } from './held-debug.js';
+import { openMoodsDebug } from './moods-debug.js';
 import { openSalonBotDebug } from './salonbot-debug.js';
 import { people } from '../life/people/people.js';
 import { cars } from '../life/traffic/state.js';
@@ -126,6 +127,7 @@ const MENUS = [
     { label:'Ped Navmesh (debug)', key:'n', check:has('s-peoplenav-debug', 'on'), enabled:has('s-people', 'on'), run:press('s-peoplenav-debug') },
     { label:'FPS (debug)', key:'b', check:fpsCounter.shown, run:fpsCounter.toggle },
     { label:'Held Items (debug)', key:'l', enabled:has('s-people', 'on'), run:openHeldDebug },
+    { label:'Moods (debug)', key:'c', enabled:has('s-people', 'on'), run:openMoodsDebug },
     { label:'Salon Bot (debug)', key:'a', enabled:has('s-people', 'on'), run:openSalonBotDebug },
   ]},
   { name:'Options', key:'o', items:[

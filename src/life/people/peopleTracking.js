@@ -3,8 +3,8 @@ import { App, S, buildingHolders } from '../../core/shared.js';
 import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { canTakeControl, controlInput, endPossession, possession, startPossession, HATES_POSSESSED_SPEED, rushed } from '../possession.js';
-import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
-import { HEAD_CENTER } from './peopleModel.js';
+import { FLEE_SPEED, PEOPLE_MAX, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
+import { HEAD_CENTER, PERSON_TRAIT_COLORS } from './peopleModel.js';
 import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, sayGoodbye, standUp, talkWith } from './peopleActivities.js';
 import { placeAtVertex, reseatPerson, walkBackToWalkway } from './peoplePathing.js';
 import { carryPossessed, footingAt, nearestRaisedVertex, stepFooting } from './peopleFooting.js';
@@ -234,14 +234,26 @@ function boneAt(out, bone, i) {
  * @param {number} i - their index in people
  * @returns {THREE.Vector3} reused: copy it to keep it
  */
-function headOf(i) {
+const headOf = i => headPointOf(i, HEAD_CENTER, headAt);
+/**
+ * Where a spot on someone's head is, in the world, from their pose this frame.
+ * @param {number} i - their index in people
+ * @param {THREE.Vector3} spot - the spot, in the model's units from the head's pivot with the head at rest (as HEAD_CENTER)
+ * @param {THREE.Vector3} out - where to put it
+ * @returns {THREE.Vector3} out
+ */
+export function headPointOf(i, spot, out) {
   const look = personModel.look.array, o = i*4;
   boneAt(headMatrix, personModel.headBone, i);
   headTurn.setFromMatrix4(headMatrix);
   lookTurn.makeRotationY(look[o]).multiply(lookTilt.makeRotationX(look[o+1]));
   personModel.mesh.getMatrixAt(i, headshotInstance);
-  headOffset.copy(HEAD_CENTER).applyMatrix4(lookTurn).applyMatrix3(headTurn);
-  return headAt.copy(personModel.headPivot).applyMatrix4(headMatrix).add(headOffset).applyMatrix4(headshotInstance);
+  headOffset.copy(spot);
+  if (personModel.traitData[((2 + PERSON_TRAIT_COLORS.indexOf('Eyes'))*PEOPLE_MAX + i)*4 + 3] > 0.5) { // (upside down, 🙃: see personLook)
+    headOffset.set(-spot.x, personModel.face.top.y - spot.y, spot.z);
+  }
+  headOffset.applyMatrix4(lookTurn).applyMatrix3(headTurn);
+  return out.copy(personModel.headPivot).applyMatrix4(headMatrix).add(headOffset).applyMatrix4(headshotInstance);
 }
 
 /**

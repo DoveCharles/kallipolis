@@ -46,6 +46,17 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   bloody: person => (person?.blood ?? 0) > 0,
   sick: person => !!person?.traits?.sick, // (the traits the 🤢 and 🧟 moods give them: their skin's gone green, or a dead blue-grey)
   zombie: person => !!person?.traits?.zombie,
+  crying: person => (person?.traits?.crying ?? 0) > 0 || (person?.traits?.welling ?? 0) > 0, // (the moods that show beyond the eyes: tears, a blush, a red face and smoke — see people/peopleEmotes.js)
+  blushing: person => (person?.traits?.blushing ?? 0) > 0,
+  fuming: person => (person?.traits?.fuming ?? 0) > 0 || (person?.traits?.huffing ?? 0) > 0,
+  sleepy: person => (person?.traits?.drowsy ?? 0) > 0,
+  sweating: person => (person?.traits?.sweating ?? 0) > 0 || (person?.traits?.panicking ?? 0) > 0,
+  panicking: person => (person?.traits?.panicking ?? 0) > 0,
+  freezing: person => (person?.traits?.freezing ?? 0) > 0,
+  starstruck: person => (person?.traits?.starstruck ?? 0) > 0,
+  partying: person => (person?.traits?.partying ?? 0) > 0,
+  singing: person => (person?.traits?.singing ?? 0) > 0,
+  upsidedown: person => !!person?.traits?.upsidedown,
   sad: person => (person?.emotion ?? 0) < -MOOD_SHOWS,
   happy: person => (person?.emotion ?? 0) > MOOD_SHOWS,
   scared: person => person?.fright?.stage === 'flee' || ((person?.blood ?? 0) > 0 && !person?.traits?.bloodlust),

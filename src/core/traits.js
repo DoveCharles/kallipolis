@@ -31,7 +31,25 @@ export const TRAITS = {
   sad:       { base: 0, min: 0, max: 1, combine: 'add' },
   angry:     { base: 0, min: 0, max: 1, combine: 'add' },
   shock:     { base: 0, min: 0, max: 1, combine: 'add' },
+  // how much a mood shows beyond the eyes (see life/people/peopleEmotes.js): tears falling from them, a blush under them,
+  // love hearts floating off the head, a red face with puffs of steam off it (or snorted from the nose), eyes held half
+  // shut with Zs drifting up, sweat running down or flung off, a blue face and breath fogging, sparkles, confetti and music
+  // notes — 😢 😭 😊 🥰 😍 😠 😤 😴 😅 😱 🥶 🤩 🥳 🎵 in people/moods.txt
+  crying:    { base: 0, min: 0, max: 1, combine: 'add' },
+  welling:   { base: 0, min: 0, max: 1, combine: 'add' },
+  blushing:  { base: 0, min: 0, max: 1, combine: 'add' },
+  lovestruck:{ base: 0, min: 0, max: 1, combine: 'add' },
+  fuming:    { base: 0, min: 0, max: 1, combine: 'add' },
+  huffing:   { base: 0, min: 0, max: 1, combine: 'add' },
+  drowsy:    { base: 0, min: 0, max: 1, combine: 'add' },
+  sweating:  { base: 0, min: 0, max: 1, combine: 'add' },
+  panicking: { base: 0, min: 0, max: 1, combine: 'add' },
+  freezing:  { base: 0, min: 0, max: 1, combine: 'add' },
+  starstruck:{ base: 0, min: 0, max: 1, combine: 'add' },
+  partying:  { base: 0, min: 0, max: 1, combine: 'add' },
+  singing:   { base: 0, min: 0, max: 1, combine: 'add' },
   backwards: { base: 0, min: 0, max: 1, combine: 'on' },
+  upsidedown:{ base: 0, min: 0, max: 1, combine: 'on' }, // their head the wrong way up, hair and all (🙃: see personLook in life/people/peopleModel.js)
   evil:      { base: 0, min: -1, max: 1, combine: 'add', hidden: true },
   aggression:{ base: 1, min: 0, max: 100 },
   bloodlust: { base: 0, min: 0, max: 1, combine: 'on' }, // covered in blood, twice as fast and out to punch everyone (see life/people/peopleBlood.js); a car gets 10% of its boost back per person it kills (bloodlustBoost in life/traffic/collisions.js)
