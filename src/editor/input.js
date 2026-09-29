@@ -17,6 +17,7 @@ import { subdivideZone, subdivideZonesFrom } from '../zones/cutouts.js';
 import { selectItem, deleteRoadNode, deleteZoneVertex, renderHierarchy } from '../ui/panels.js';
 import { cancelActiveDrawing, closeActiveZone, finishActiveDrawing } from './tools.js';
 import { addObject, applyObjectTransform, cancelObjectTransform, clickObject, confirmObjectTransform, dragObjectTo, endObjectTurn, moveObjectGhost, pickObjectAt, pickObjectRing, removeObject, selectObject, startObjectDrag, startObjectTransform, startObjectTurn, turnObjectTo } from '../objects/objects.js';
+import { clickJukebox, hoverJukebox } from '../buildings/jukebox.js';
 
 // ============================================================ input controller
 const raycaster = new THREE.Raycaster();
@@ -386,7 +387,7 @@ dom.addEventListener('pointermove', (e) => {
     previewLine.visible = false;
     insertPreviewMarker.visible = false;
     setHover(null);
-    const overClickable = App.isInsideBuilding() ? App.pickPerson(e.clientX, e.clientY) >= 0 : (App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
+    const overClickable = App.isInsideBuilding() ? hoverJukebox(e.clientX, e.clientY) || App.pickPerson(e.clientX, e.clientY) >= 0 : (App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
       || !!App.pickPlane(e.clientX, e.clientY) || !!App.pickBee(e.clientX, e.clientY) || !!App.pickHive(e.clientX, e.clientY) || !!App.pickPigeon(e.clientX, e.clientY)
       || !!App.pickBuilding(e.clientX, e.clientY));
     if (overClickable !== hoveringClickable) { hoveringClickable = overClickable; dom.style.cursor = overClickable ? 'pointer' : ''; }
@@ -529,7 +530,9 @@ dom.addEventListener('pointerup', (e) => {
       letGoOfAllBut(kind);
       App['follow' + kind + 'At'](e.clientX, e.clientY);
     } else if (was.button===0 && dist<CLICK_SLOP && dt<600 && S.interactionMode==='move') {
-      // inside, a click on someone in the room brings up their card beside the building's (see followPersonInside)
+      // inside, a click on the pub's jukebox puts the next song on (see buildings/jukebox.js); on someone in the room,
+      // brings up their card beside the building's (see followPersonInside)
+      if (clickJukebox(e.clientX, e.clientY)) return;
       const i = App.pickPerson(e.clientX, e.clientY);
       if (i >= 0) App.followPersonInside(i);
     }

@@ -67,10 +67,13 @@ function orderOf(key) {
   return { order, round: order.reduce((sum, song) => sum + song.duration + SONG_GAP, 0) };
 }
 
+// how far on each pub's been put by its jukebox (skipPubSong), in seconds, by key
+const skipped = new Map();
+
 /** Where the pub is in its songs now, by the clock: the song, and how far into it (negative: the gap before it). */
 function nowPlaying(key) {
   const { order, round } = orderOf(key);
-  let into = (Date.now()/1000 + hashNameToNumber(key + ' jukebox start')) % round;
+  let into = (Date.now()/1000 + hashNameToNumber(key + ' jukebox start') + (skipped.get(key) ?? 0)) % round;
   for (const song of order) {
     if (into < SONG_GAP) return { song, into: into - SONG_GAP };
     into -= SONG_GAP;
@@ -136,3 +139,20 @@ export function stopPubMusic() {
 
 /** The name of the song the pub's playing (its file's), or null if there's no music on. */
 export const pubSong = () => player?.pub && !player.sequencer.paused ? player.song?.name ?? null : null;
+
+/** The song this pub's on (or about to be, between songs), by its title — its file's name, without any folder — or null
+ * before the songs are loaded. */
+export const pubSongTitle = key => player ? nowPlaying(key).song.name.replace(/^.*\//, '') : null;
+
+/**
+ * The pub's jukebox played: straight on to the start of its next song, the one it's on cut off.
+ * @param {string} key - the pub's building key
+ * @returns {void}
+ */
+export function skipPubSong(key) {
+  if (!player) return;
+  const { song, into } = nowPlaying(key);
+  // (from where it is — in it, or in the gap before it — to its end, then over the gap before the next, just into it)
+  skipped.set(key, (skipped.get(key) ?? 0) + song.duration - into + SONG_GAP + 0.01);
+  if (player.pub === key) hush();
+}

@@ -14,6 +14,7 @@ import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
 import { pubMusic, stopPubMusic } from '../audio/pub-music.js';
 import { loadingTask, loadingSay } from '../ui/loading.js';
 import { loadBarbot, placeBarbot, updateBarbot, barbotWarmUp } from './barbot.js';
+import { placeJukebox, updateJukebox } from './jukebox.js';
 import { loadSalonBot, placeSalonBot, salonBotReach, clearSalonBots, updateSalonBots, salonBotWarmUp } from './salonbot.js';
 
 // ============================================================ going inside a building
@@ -1912,7 +1913,7 @@ function furnishIndustrial(key, kind) {
 // windows, the counter in front of it with room to serve from between (nobody else goes back there), and bar stools along
 // it. Then booths — a table between two high-backed benches, end on to a wall — a settle or two along the walls with a
 // table and a stool in front, and tables out in the room with chairs or stools round them, until the room's full; maybe
-// a barrel to stand at, a fireplace, a fruit machine and a dartboard; pictures, mirrors, a chalkboard and lamps on the
+// a jukebox, a barrel to stand at, a fireplace, a fruit machine and a dartboard; pictures, mirrors, a chalkboard and lamps on the
 // walls, lights hung over the tables, and pints on them. Until the model's loaded, pubs are bare.
 const PUB_MODEL_URL = 'assets/models/Pub.glb';
 let pub = null;
@@ -1997,6 +1998,7 @@ Object.assign(LAYOUTS.pub, { furnished: pubGroup, panelled: true, ceiling: PUB_C
 function furnishPub(key) {
   const layout = LAYOUTS.pub, group = pubGroup;
   group.clear();
+  placeJukebox(null);
   pubLamps = [];
   layout.blocked = []; layout.solid = []; layout.seats = [];
   grid = null;
@@ -2121,6 +2123,11 @@ function furnishPub(key) {
   };
 
   const tall = [];  // (what's too tall to hang anything on the wall above)
+  // the jukebox, in every pub (see jukebox.js), with room in front to stand and choose
+  if (F.Jukebox) {
+    const spot = againstWall({ ...F.Jukebox.bounds, z1: F.Jukebox.bounds.z1 + 0.5 }, true, { tries: 80 });
+    if (spot) { placeJukebox(put('Jukebox', spot.x, spot.z, spot.angle), key); taken.push(spot.area); tall.push(spot.area); }
+  }
   // the fireplace against a wall, with the hearth in front kept clear (not in front of a window, and not under the camera)
   if (F.Fireplace && rng() < 0.7) {
     const spot = againstWall({ ...F.Fireplace.bounds, z1: F.Fireplace.bounds.z1 + 0.5 }, true);
@@ -3331,6 +3338,7 @@ export function updateInteriorCamera() {
   // (a pub's music comes from up by the ceiling, over the middle of the room)
   if (inside && current === LAYOUTS.pub && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)));
   else stopPubMusic();
+  updateJukebox();
   updateBarbot(!!inside && current === LAYOUTS.pub, performance.now() - occupiedAt < 1000);
   updateSalonBots(!!inside && current === LAYOUTS.salon);
   // (riding a train carriage sets its own: see trains.js; boosting widens it: see life/traffic/driving.js; someone taken

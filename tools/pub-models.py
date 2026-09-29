@@ -7,7 +7,7 @@
 # gantry of bottles and optics over glass-fronted fridges), and BarStools. Seating: a BoothBench (high-backed, one of a
 # pair either side of a BoothTable), a button-backed Settle to go along a wall, captain's Chairs, low Stools, a round
 # cast-iron Table and a square one (Table2), and a Barrel to stand at. And: a Fireplace, a Dartboard in its cabinet, a
-# FruitMachine, a Chalkboard, hunting prints (Picture) and a brewery mirror (Mirror) for the walls, a brass WallLamp,
+# FruitMachine, a Jukebox, a Chalkboard, hunting prints (Picture) and a brewery mirror (Mirror) for the walls, a brass WallLamp,
 # a Pendant to hang, and a Pint to stand on the tables.
 # Like Interior.glb, it's one top-level mesh per piece, at five times life size, each facing -y (the room's +z, once
 # exported). Built in metres, life size, and scaled up at the end. Wall-hung pieces (Dartboard, Chalkboard, Picture,
@@ -54,6 +54,10 @@ material('Fire', 0x000000, 1.0, glow=0xff7a20)
 material('GlowFridge', 0x2a3a40, 0.2, glow=0x8ab0c0)
 material('GlowMachine', 0x2a1a3a, 0.3, glow=0xe8a040)
 material('GlowReels', 0xe8e0d0, 0.3, glow=0xa09880)
+material('GlowTube', 0x3a1a0a, 0.3, glow=0xff8a30)
+material('GlowWindow', 0x5a4020, 0.2, glow=0xe8b060)
+material('Walnut', 0x4a2616, 0.35)
+material('Grille', 0xa8783a, 0.9)
 for i, colour in enumerate((0x2a5a2a, 0x6a3a14, 0xd8d0b0, 0xa8601a, 0x3a1a2a, 0x2a3a6a, 0xc8a040, 0x8a1a1a)):
     material('Bottle%d' % i, colour, 0.15)
 BOTTLES = ['Bottle%d' % i for i in range(8)]
@@ -322,8 +326,42 @@ for x in (-0.16, 0, 0.16):
 p.box(MW - 0.04, 0.02, 0.36, 'GlowMachine', 0, -MD/2 + 0.09, 1.46, bevel=0.004)     # the lit top
 p.box(MW + 0.02, MD - 0.16, 0.04, 'Chrome', 0, 0.06, MH - 0.02, bevel=0.008)
 
+# ------------------------------------------------------------------ the jukebox
+# A fifties one: a walnut cabinet under a round arch of lit tubes (GlowTube, its colour cycled by interior.js), a glass
+# dome with a record behind it, the title strip and buttons, and a speaker grille below. Its front's at y = -JD/2.
+p = piece('Jukebox')
+JW, JD, JR, JC = 0.8, 0.56, 0.38, 1.08                                              # width, depth, the arch's radius, its middle's height
+F = -JD/2
+p.box(JW + 0.04, JD + 0.02, 0.08, 'Black', 0, 0, 0, bevel=0.01)                      # the plinth
+p.box(JW, JD, JC - 0.08, 'Walnut', 0, 0, 0.08, bevel=0.02)                           # the cabinet
+p.cyl(JR - 0.02, JD - 0.04, 'Walnut', 0, JD/2 - 0.02, JC, segments=24, rot=(math.pi/2, 0, 0))  # its round top
+p.box(0.54, 0.02, 0.42, 'Grille', 0, F - 0.005, 0.16, bevel=0.004)                   # the speaker grille
+for k in range(7):
+    p.box(0.012, 0.02, 0.42, 'Chrome', -0.24 + k*0.08, F - 0.015, 0.16, bevel=0)
+p.box(0.6, 0.03, 0.03, 'Chrome', 0, F - 0.01, 0.6, bevel=0.006)                      # a chrome rail over it
+p.box(JW - 0.12, 0.14, 0.05, 'Chrome', 0, F + 0.04, 0.66, bevel=0.01)                # the button deck
+for k in range(10):
+    p.box(0.04, 0.03, 0.025, 'Cream' if k % 2 else 'Red', -0.27 + k*0.06, F - 0.01, 0.7, bevel=0.004)
+p.box(0.56, 0.02, 0.14, 'Cream', 0, F - 0.005, 0.74, bevel=0.004)                     # the title strip
+for k in range(4):
+    for x in (-0.14, 0.14):
+        p.box(0.22, 0.006, 0.012, 'Red', x, F - 0.016, 0.76 + k*0.028, bevel=0)
+p.cyl(JR - 0.07, 0.02, 'GlowWindow', 0, F + 0.005, JC - 0.02, segments=24, rot=(math.pi/2, 0, 0))  # the dome's lit glass
+p.cyl(0.17, 0.012, 'Black', 0, F - 0.012, JC - 0.02, segments=24, rot=(math.pi/2, 0, 0))    # the record behind it
+p.cyl(0.05, 0.004, 'Red', 0, F - 0.022, JC - 0.02, segments=16, rot=(math.pi/2, 0, 0))
+p.bar((0.2, F - 0.03, JC + 0.16), (0.08, F - 0.03, JC + 0.02), 0.012, 'Chrome')       # the tone arm
+N = 14                                                                              # the arch of lit tubes, and chrome inside it
+for k in range(N):
+    t0, t1 = k*math.pi/N, (k + 1)*math.pi/N
+    for r, s, mat, y in ((JR + 0.01, 0.075, 'GlowTube', F - 0.02), (JR - 0.05, 0.022, 'Chrome', F - 0.03)):
+        p.bar((r*math.cos(t0), y, JC + r*math.sin(t0)), (r*math.cos(t1), y, JC + r*math.sin(t1)), s, mat)
+for x in (-1, 1):                                                                   # the lit pillars down the front corners
+    p.box(0.075, 0.075, JC - 0.1, 'GlowTube', x*(JR + 0.01), F - 0.02, 0.1, bevel=0.01)
+    p.box(0.02, 0.022, JC - 0.12, 'Chrome', x*(JR - 0.05), F - 0.03, 0.1, bevel=0)
+p.ball(0.035, 'Chrome', (0, F - 0.02, JC + JR + 0.04), detail=1)                      # a chrome knob on top
+
 # ------------------------------------------------------------------ on the walls
-p = piece('Chalkboard')                                                             # the specials
+p = piece('Chalkboard')                                                            # the specials
 p.box(0.7, 0.04, 0.9, 'Oak', bevel=0.01)
 p.box(0.62, 0.02, 0.82, 'Slate', 0, -0.02, 0.04, bevel=0.002)
 for k in range(7):
