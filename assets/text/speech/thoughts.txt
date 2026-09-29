@@ -20,6 +20,12 @@ Turn it up. {here.building = pub, is = drunk}
 Turn it down. {here.building = pub, patience = -1}
 That robot's polished the same glass three times. {here.building = pub, weight = 0.5}
 Does the bar bot ever sleep? {here.building = pub, weight = 0.3}
+Eleven quid for a third? {here.building = craftpub, patience = -1}
+Why does this beer taste of grapefruit? {here.building = craftpub, weight = 0.6}
+Nobody told me it was nine percent. {here.building = craftpub, is = drunk}
+I just want a lager. {here.building = craftpub, weight = 0.5}
+Those little lights are nice. {here.building = craftpub, happy, weight = 0.5}
+Is that sign meant to say that? {here.building = craftpub, weight = 0.3}
 Just a trim. Just a trim. {here.building = salon}
 Something different this time. {here.building = salon, weight = 0.7}
 I love that smell. {here.building = salon, happy, weight = 0.5}

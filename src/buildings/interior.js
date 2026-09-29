@@ -4,7 +4,7 @@ import { S, App, buildingHolders } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
 import { possession } from '../life/possession.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { footprintBounds } from './footprints.js';
+import { footprintBounds, pubStyleOf } from './footprints.js';
 import { hashNameToNumber, mulberry32, pointInPolygon } from '../core/math.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { setCutout } from '../ui/pixelation.js';
@@ -1715,8 +1715,9 @@ async function loadIndustrial() {
   if (inside && current.industrial) furnishIndustrial(inside.key, current.kind);
 }
 modelsLoading.push(loadIndustrial());
-// Plain concrete: mottled, with a saw-cut joint every 4 m — which is how often it repeats.
-const concrete = floorTexture(1024, 4, (g, rng) => {
+// Plain concrete: mottled, with a saw-cut joint every 4 m — which is how often it repeats — or `cuts` of them across
+// those 4 m, for smaller tiles.
+const concreteFloor = (cuts = 1) => floorTexture(1024, 4, (g, rng) => {
   g.fillStyle = 'rgb(232,232,230)';
   g.fillRect(0, 0, 1024, 1024);
   const blot = (x, y, r, style) => {
@@ -1731,8 +1732,11 @@ const concrete = floorTexture(1024, 4, (g, rng) => {
   }
   for (let i = 0; i < 5; i++) blot(rng()*1024, rng()*1024, 30 + rng()*60, 'rgba(60,55,50,0.025)');  // (old stains)
   g.fillStyle = 'rgba(40,40,40,0.55)';
-  g.fillRect(0, 0, 1024, 3); g.fillRect(0, 0, 3, 1024);
+  for (let i = 0; i < cuts; i++) { const at = Math.round(i*1024/cuts); g.fillRect(at, 0, 3, 1024); g.fillRect(0, at, 1024, 3); }
 });
+const concrete = concreteFloor();
+// (a craft beer bar's: tiles two-thirds of a metre across)
+const concreteTiles = concreteFloor(6);
 LAYOUTS.warehouse.floorMap = LAYOUTS.factory.floorMap = concrete;
 // The walls painted to the sills (round the door), and a yellow line along the top of it: shown in warehouses and
 // factories (see useLayout), and coloured for each.
@@ -1930,6 +1934,23 @@ const PUB_PAINTED = {
 // the panelling to the dado rail (see `dado`), and the rail
 const PUB_PANELLING = [0x3e2414, 0x4a2c18, 0x34200f, 0x55341c], PUB_RAIL = 0x24140a;
 const pubPainted = [];
+// A craft beer bar (see pubStyleOf) is the same pieces done up loud: walls in a bright colour over a wainscot in another,
+// black beams under a dark (or white) ceiling, polished concrete or pale boards, blond or painted furniture in mustard,
+// teal and coral — then long tables to share, barrels to stand at, neon on the walls and strings of coloured bulbs
+// across the ceiling. No carpet, no fire, no fruit machine.
+const CRAFT_WALLS = [0x1f8a84, 0xe0a41e, 0xe0604a, 0x2f58c0, 0xd8508e, 0x5ec89e, 0xe8782a, 0x7a4ac0, 0xf0e6d0, 0xa8442e];
+const CRAFT_WAINSCOT = [0x1c1c20, 0x1f5a58, 0x2a2a5a, 0xf0e6d0, 0xd8b030, 0x3a6a3a, 0xc0503c];
+const CRAFT_CEILINGS = [0x26262a, 0x26262a, 0xf0ece4, 0x1e3a3a];
+const CRAFT_FLOORS = [0xd8d2c8, 0xb8b4ac, 0xe0c8a0, 0x8a8a90];
+const CRAFT_PAINTED = {
+  Oak: [0xc89a64, 0xd8b484, 0xb88450, 0x1f7a78, 0xe0a41e, 0x2a2a2e, 0xd85a48],
+  Upholstery: [0xe0a41e, 0x1f8a84, 0xe0604a, 0xd8508e, 0x5ec89e, 0x2f58c0],
+  Leather: [0xa0643a, 0xb8763e, 0x8a4a2a, 0xc88a4a],
+  Tile: [0xf2eee4, 0xe0a41e, 0x2fa0c0, 0xe05a7a, 0x60b060, 0x1c1c20],
+};
+const NEON = ['#ff3ea5', '#39f0ff', '#ffe23a', '#7cff5a', '#ff7a2a', '#b56cff'];
+const NEON_WORDS = ['HOPS', 'IPA', 'BEER', 'CHEERS', 'SOURS', 'ON TAP', 'DRINK LOCAL', 'HAZY', 'PINTS', 'BREW', 'GOOD VIBES', 'OPEN'];
+const FESTOON = [0xff5a5a, 0xffc83a, 0x5affa0, 0x5ab4ff, 0xff7ae0, 0xfff0c0];
 async function loadPub() {
   try {
     pub = await loadPieces(PUB_MODEL_URL, PUB_PAINTED, pubPainted);
@@ -1982,7 +2003,8 @@ const CARPETS = [
 ];
 
 // the pub: dark beams across the ceiling, panelled to the dado rail (see useLayout), and furnished afresh for each pub
-const pubBeam = lit(0x2e1c10, 0.8), PUB_DAYLIT = 0.4;
+const PUB_BEAM = 0x2e1c10, CRAFT_BEAM = 0x18181a;
+const pubBeam = lit(PUB_BEAM, 0.8), PUB_DAYLIT = 0.4;
 layout('pub', 0xffffff, add => {
   const beams = Math.max(2, Math.round(ROOM_W/2));
   for (let i = 0; i < beams; i++) add(0.18, 0.22, ROOM_D, pubBeam, (i - (beams - 1)/2)*ROOM_W*0.9/beams, ROOM_H - 0.11, 0);
@@ -2005,21 +2027,36 @@ function furnishPub(key) {
   const rng = mulberry32(hashNameToNumber(key + ' pub'));
   const tint = mulberry32(hashNameToNumber(key + ' pub colours'));
   const pick = list => list[Math.floor(tint()*list.length)];
-  layout.wall.setHex(pick(PUB_WALLS));
-  layout.ceiling = pick(PUB_CEILINGS);
-  if (tint() < 0.7) {
-    layout.floorMap = pick(CARPETS);
-    layout.floor.setHex(0xffffff);
+  const craft = pubStyleOf(key) === 'craft';
+  if (craft) {
+    const wall = pick(CRAFT_WALLS);
+    layout.wall.setHex(wall);
+    layout.ceiling = pick(CRAFT_CEILINGS);
+    layout.floorMap = tint() < 0.6 ? concreteTiles : boards;
+    layout.floor.setHex(pick(CRAFT_FLOORS));
+    let wainscot = pick(CRAFT_WAINSCOT);
+    if (wainscot === wall) wainscot = CRAFT_WAINSCOT[0];
+    dadoMaterial.color.setHex(wainscot);
+    lineMaterial.color.setHex(CRAFT_BEAM);
+    pubBeam.color.setHex(CRAFT_BEAM);
   } else {
-    layout.floorMap = boards;
-    layout.floor.setHex(pick(PUB_BOARDS));
+    layout.wall.setHex(pick(PUB_WALLS));
+    layout.ceiling = pick(PUB_CEILINGS);
+    if (tint() < 0.7) {
+      layout.floorMap = pick(CARPETS);
+      layout.floor.setHex(0xffffff);
+    } else {
+      layout.floorMap = boards;
+      layout.floor.setHex(pick(PUB_BOARDS));
+    }
+    dadoMaterial.color.setHex(pick(PUB_PANELLING));
+    lineMaterial.color.setHex(PUB_RAIL);
+    pubBeam.color.setHex(PUB_BEAM);
   }
-  dadoMaterial.color.setHex(pick(PUB_PANELLING));
-  lineMaterial.color.setHex(PUB_RAIL);
-  roomLit(dadoMaterial); roomLit(lineMaterial);
+  roomLit(dadoMaterial); roomLit(lineMaterial); roomLit(pubBeam);
   paintRoom();
   for (const material of pubPainted) {
-    material.color.setHex(pick(PUB_PAINTED[material.name]));
+    material.color.setHex(pick((craft ? CRAFT_PAINTED : PUB_PAINTED)[material.name]));
     roomLit(material);
   }
   const F = pub;
@@ -2122,6 +2159,22 @@ function furnishPub(key) {
     return spot;
   };
 
+  // A long table to share, two or three tables end to end, with stools (and a chair or two) down both sides.
+  const communal = () => {
+    const name = any(TABLES), t = F[name], n = 2 + Math.floor(rng()*2);
+    const len = n*t.w, side = t.d/2 + 0.3;
+    const spot = inTheOpen({ x0: -len/2 - 0.2, x1: len/2 + 0.2, z0: -side - 0.35, z1: side + 0.35 }, 0.35);
+    if (!spot) return null;
+    const parts = [];
+    for (let i = 0; i < n; i++) {
+      const x = (i - (n - 1)/2)*t.w;
+      parts.push([name, x, 0, 0]);
+      for (const s of [-1, 1]) if (rng() < 0.85) parts.push([rng() < 0.75 ? 'Stool' : any(SITS), x + (rng() - 0.5)*0.15, s*side, (s < 0 ? 0 : Math.PI) + (rng() - 0.5)*0.3]);
+    }
+    placeAll(parts.filter(([part]) => F[part]), spot);
+    return spot;
+  };
+
   const tall = [];  // (what's too tall to hang anything on the wall above)
   // the jukebox, in every pub (see jukebox.js), with room in front to stand and choose
   if (F.Jukebox) {
@@ -2129,32 +2182,33 @@ function furnishPub(key) {
     if (spot) { placeJukebox(put('Jukebox', spot.x, spot.z, spot.angle), key); taken.push(spot.area); tall.push(spot.area); }
   }
   // the fireplace against a wall, with the hearth in front kept clear (not in front of a window, and not under the camera)
-  if (F.Fireplace && rng() < 0.7) {
+  if (F.Fireplace && !craft && rng() < 0.7) {
     const spot = againstWall({ ...F.Fireplace.bounds, z1: F.Fireplace.bounds.z1 + 0.5 }, true);
     if (spot) tall.push(place('Fireplace', spot).area);
   }
-  for (let n = 1 + Math.floor(rng()*2); n > 0; n--) { const spot = booth(); if (spot) tall.push(spot.area); }
+  if (craft) for (let tries = 0, n = 1 + Math.floor(rng()*2); tries < 6 && n > 0; tries++) if (communal()) n--;
+  for (let n = (craft ? 0 : 1) + Math.floor(rng()*2); n > 0; n--) { const spot = booth(); if (spot) tall.push(spot.area); }
   for (let n = 1 + Math.floor(rng()*2); n > 0; n--) settle();
-  if (F.FruitMachine && rng() < 0.6) {
+  if (F.FruitMachine && !craft && rng() < 0.6) {
     const spot = againstWall(F.FruitMachine.bounds, true);
     if (spot) tall.push(place('FruitMachine', spot).area);
   }
   // a dartboard, with the floor in front of it (to the oche) kept clear
-  if (F.Dartboard && rng() < 0.6) {
+  if (F.Dartboard && rng() < (craft ? 0.3 : 0.6)) {
     const spot = againstWall({ ...F.Dartboard.bounds, x0: -0.6, x1: 0.6, z1: F.Dartboard.bounds.z1 + 2.2 }, true);
     if (spot) place('Dartboard', spot, { y: 1.41, small: true });
   }
-  if (F.Barrel && rng() < 0.5) {
+  for (let n = F.Barrel ? craft ? 1 + Math.floor(rng()*3) : +(rng() < 0.5) : 0; n > 0; n--) {
     const spot = inTheOpen(grown(F.Barrel.bounds, 0.5), 0.3);
     if (spot) placeAll([['Barrel', 0, 0, 0]], spot);
   }
-  for (let tries = 0, tables = 0; tries < 8 && tables < 4; tries++) if (table()) tables++;
+  for (let tries = 0, tables = 0; tries < 8 && tables < (craft ? 2 : 4); tries++) if (table()) tables++;
 
   // Things on the walls, above whatever's in front of them: not over a window or the back bar, clear of the door, and
   // clear of each other. `y` is how high up their bottoms are.
   const hung = [behind, ...tall];
-  const onWall = (name, y) => {
-    const piece = F[name];
+  // (`hang`, if given, hangs something that isn't one of the model's pieces there instead: see neonSign)
+  const onWall = (name, y, piece = F[name], hang = null) => {
     if (!piece) return;
     for (let k = 0; k < 30; k++) {
       const side = any(WALL_SIDES), half = piece.w/2;
@@ -2166,7 +2220,8 @@ function furnishPub(key) {
       if (hung.some(h => overlaps(area, h))) continue;
       const along = side.nx ? [area.z0, area.z1] : [area.x0, area.x1];
       if (y + piece.h > SILL && y < HEAD && overWindow(side, ...along)) continue;
-      put(name, x, z, side.angle, { y, small: true });
+      if (hang) hang(x, z, side.angle);
+      else put(name, x, z, side.angle, { y, small: true });
       hung.push(area);
       return;
     }
@@ -2174,8 +2229,25 @@ function furnishPub(key) {
   // (the dartboard's hung already)
   for (const o of group.children) if (o.position.y > 1) hung.push({ x0: o.position.x - 1, x1: o.position.x + 1, z0: o.position.z - 1, z1: o.position.z + 1 });
   onWall('Chalkboard', 1.2);
-  for (let n = 2 + Math.floor(rng()*3); n > 0; n--) onWall(rng() < 0.6 ? 'Picture' : 'Mirror', 1.3 + rng()*0.3);
-  for (let n = 2 + Math.floor(rng()*3); n > 0; n--) onWall('WallLamp', 1.75);
+  // (a craft bar's beer list's chalked up twice over, and it's neon, not wall lamps: see neonSign)
+  const neon = [];
+  if (craft) {
+    onWall('Chalkboard', 1.2);
+    for (let n = 2 + Math.floor(rng()*2); n > 0; n--) {
+      const sign = neonSign(any(NEON_WORDS), any(NEON)), y = 1.7 + rng()*0.3;
+      onWall(null, y, sign.userData.piece, (x, z, angle) => {
+        sign.position.set(x, y + sign.userData.piece.h/2, z);
+        sign.rotation.y = angle;
+        group.add(sign);
+        neon.push(sign);
+      });
+    }
+    for (let n = 1 + Math.floor(rng()*2); n > 0; n--) onWall('Picture', 1.3 + rng()*0.3);
+    festoon(group, rng);
+  } else {
+    for (let n = 2 + Math.floor(rng()*3); n > 0; n--) onWall(rng() < 0.6 ? 'Picture' : 'Mirror', 1.3 + rng()*0.3);
+    for (let n = 2 + Math.floor(rng()*3); n > 0; n--) onWall('WallLamp', 1.75);
+  }
 
   // lights hung over the tables (but not right under the camera), and a pint or two on each
   for (const top of tops) {
@@ -2186,8 +2258,67 @@ function furnishPub(key) {
       put(rng() < 0.75 ? 'Pint' : 'Stout', top.x + Math.cos(a)*d, top.z + Math.sin(a)*d, 0, { y: top.y, small: true });
     }
   }
-  lightPub(group, cx, cz);
+  lightPub(group, cx, cz, neon);
   seatsInWorld(layout);
+}
+// A neon sign saying `text` in `color`: tubes on a clear backing (a canvas, cached by text and colour), to hang on a
+// wall — its size as a piece's ({ w, h, bounds }, facing +z) in userData.piece. In a mirrored room it's turned back
+// the right way round, so it reads.
+const neonTextures = new Map(), neonGeometry = new THREE.PlaneGeometry(1, 1);
+function neonSign(text, color) {
+  const id = text + color;
+  let texture = neonTextures.get(id);
+  const H = 128, font = `bold italic 84px "Brush Script MT", "Segoe Script", cursive`;
+  if (!texture) {
+    const measure = document.createElement('canvas').getContext('2d');
+    measure.font = font;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(measure.measureText(text).width + 60); canvas.height = H;
+    const g = canvas.getContext('2d');
+    g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.shadowColor = color;
+    for (const [blur, width, stroke] of [[30, 8, color], [14, 6, color], [0, 2.5, '#ffffff']]) {
+      g.shadowBlur = blur; g.lineWidth = width; g.strokeStyle = stroke;
+      g.strokeText(text, canvas.width/2, H/2);
+    }
+    texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.userData = { aspect: canvas.width/H };
+    neonTextures.set(id, texture);
+  }
+  const h = 0.4, w = h*texture.userData.aspect;
+  const sign = new THREE.Mesh(neonGeometry, new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }));
+  sign.scale.set(w*(room.scale.x < 0 ? -1 : 1), h, 1);
+  sign.userData.piece = { w, h, bounds: { x0: -w/2, x1: w/2, z0: -0.02, z1: 0.02 } };
+  sign.userData.neon = new THREE.Color(color);
+  return sign;
+}
+// Strings of coloured bulbs across the ceiling, wall to wall the short way, sagging between.
+const festoonGeometry = new THREE.SphereGeometry(0.04, 8, 6);
+const festoonMaterial = new THREE.MeshBasicMaterial({ toneMapped: false });
+const festoonWire = new THREE.LineBasicMaterial({ color: 0x111111 });
+function festoon(group, rng) {
+  const along = ROOM_W >= ROOM_D, span = along ? ROOM_D : ROOM_W, across = along ? ROOM_W : ROOM_D;
+  const strands = Math.max(2, Math.round(across/2.5)), per = Math.floor(span/0.4), top = ROOM_H - 0.12, sag = 0.3 + rng()*0.15;
+  const bulbs = new THREE.InstancedMesh(festoonGeometry, festoonMaterial, strands*per);
+  const m = new THREE.Matrix4(), c = new THREE.Color();
+  let i = 0;
+  for (let s = 0; s < strands; s++) {
+    const u = (s - (strands - 1)/2)*across/strands + (rng() - 0.5)*0.3, wire = [];
+    for (let k = 0; k <= 24; k++) {
+      const t = k/24, v = (t - 0.5)*span, y = top - sag*4*t*(1 - t);
+      wire.push(along ? new THREE.Vector3(u, y, v) : new THREE.Vector3(v, y, u));
+    }
+    group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(wire), festoonWire));
+    for (let k = 0; k < per; k++) {
+      const t = (k + 0.5)/per, v = (t - 0.5)*span, y = top - sag*4*t*(1 - t) - 0.06;
+      m.makeTranslation(along ? u : v, y, along ? v : u);
+      bulbs.setMatrixAt(i, m);
+      bulbs.setColorAt(i++, c.setHex(FESTOON[Math.floor(rng()*FESTOON.length)]));
+    }
+  }
+  bulbs.frustumCulled = false;
+  group.add(bulbs);
 }
 // The pub's lamps (see "the lamp"): one at every bulb it's hung (its Light parts), one in the fire's glow (Fire), and one
 // over the bar where the gantry lights would be, in that order of who gets left out past ROOM_LAMPS. A bulb on a wall, or
@@ -2195,7 +2326,7 @@ function furnishPub(key) {
 const PUB_LAMPS = { Fire: [0xff8a3c, 3], Light: [0xffc68a, 2.2], Bar: [0xffc68a, 2.5] };
 // (and a salon's or a clothes shop's: see lightShop)
 let pubLamps = [], pubLit = 0;
-function lightPub(group, barX, barZ) {
+function lightPub(group, barX, barZ, neon = []) {
   const add = (kind, at) => {
     const [hex, power] = PUB_LAMPS[kind], c = new THREE.Color(hex);
     const lamp = new THREE.Object3D();
@@ -2217,6 +2348,15 @@ function lightPub(group, barX, barZ) {
   }
   found.Fire.forEach(at => add('Fire', at));
   add('Bar', new THREE.Vector3(barX, ROOM_H - 0.3, barZ - 0.4));
+  // (a neon sign tints the wall round it: see neonSign)
+  for (const sign of neon) {
+    const at = sign.position.clone().add(new THREE.Vector3(Math.sin(sign.rotation.y), 0, Math.cos(sign.rotation.y)).multiplyScalar(0.4));
+    const lamp = new THREE.Object3D();
+    lamp.position.copy(at);
+    lamp.userData.light = new THREE.Vector3(sign.userData.neon.r, sign.userData.neon.g, sign.userData.neon.b).multiplyScalar(1.4);
+    group.add(lamp);
+    pubLamps.push(lamp);
+  }
   found.Light.sort((a, b) => b.y - a.y).forEach(at => add('Light', at)); // (the pendants over the tables first)
 }
 
