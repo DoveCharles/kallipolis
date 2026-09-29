@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SunLight } from 'three/addons/lights/SunLight.js';
 import { setToonSky } from './toon.js';
 import { S, App } from './shared.js';
 import { IS_TOUCH } from './device.js';
@@ -58,7 +59,7 @@ export const renderer = new THREE.WebGLRenderer({ antialias:true, stencil:true, 
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, IS_TOUCH ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap; // (soft-edged now — PCFSoftShadowMap was folded into it)
+renderer.shadowMap.type = THREE.PCFShadowMap; // (the sun's filter radius is 0, below: one hardware-compared tap, hard but smooth)
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 wrap.appendChild(renderer.domElement);
 window.addEventListener('resize', () => {
@@ -69,14 +70,17 @@ window.addEventListener('resize', () => {
 
 const hemi = new THREE.HemisphereLight(0x8fa3b3, 0x23262c, 0.9);
 scene.add(hemi);
-export const sun = new THREE.DirectionalLight(0xfff2df, 1.1);
+// The sun is three.js's SunLight: a directional light whose shadow is two cascades side by side in one map, a sharp one
+// for what's near the camera and a coarser one for further off, picked between (and blended across) by how far each
+// point is from the camera. Its direction is its position, from the origin. Both cascades' boxes are fitted to the view
+// every frame (fitSunShadow, in weather.js), which also sets the bias. A radius of 0 makes PCF a single tap of the GPU's
+// own depth compare, which blends the four nearest texels: a hard edge, but a smooth one rather than a staircase.
+export const sun = new SunLight(0xfff2df, 1.1);
 sun.position.set(150, 220, 100);
 sun.castShadow = true;
-sun.shadow.mapSize.set(IS_TOUCH ? 1024 : 2048, IS_TOUCH ? 1024 : 2048);
-sun.shadow.camera.left = -300; sun.shadow.camera.right = 300;
-sun.shadow.camera.top = 300; sun.shadow.camera.bottom = -300;
-sun.shadow.camera.far = 800;
-sun.shadow.bias = -0.0005;
+const SHADOW_MAP = IS_TOUCH ? 1024 : 2048; // each cascade's
+sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+sun.shadow.radius = 0;
 scene.add(sun);
 
 // ---- procedural sky dome, driven by sun elevation/azimuth ----
@@ -317,7 +321,7 @@ function updateSkyEnvMap(sky) {
 // Weather, 0..1 each (see "weather") — here because it dims the light and greys the sky.
 S.weatherRain = 0, S.weatherSnow = 0, S.weatherClouds = 0;
 const MOON_COLOR = new THREE.Color(0x9fb4d8);
-// where the light sits relative to what it shines on — placeSunLight moves it (and its shadow camera) to follow the view
+// which way the sun (or moon) is from what it shines on — placeSunLight makes it the light's position
 export const sunOffset = new THREE.Vector3(150, 220, 100);
 // Points the light, sky and fog at the current sun position and weather. While the sun is up (or just below the horizon)
 // the light is the sun; once it's well down, the moon — opposite it, dim and cool — takes over, with the two fading

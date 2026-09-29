@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, renderer, updateSun, sun, sunOffset, ground, Y_ZONE_GROUND, Y_PATH } from '../core/scene.js';
+import { scene, renderer, updateSun, ground, Y_ZONE_GROUND, Y_PATH } from '../core/scene.js';
 import { BUILDING_GROUND_COLORS, ROAD_COLOR } from '../core/splines.js';
 import { DEFAULT_ZONE_SETTINGS, roadNodes } from '../core/state.js';
 import { createMeshBuilder, disposeObject, clipPolygons, CLIPPER_SCALE, SIDEWALK_COLOR } from '../roads/roads.js';
@@ -12,6 +12,7 @@ import { RAISED_HEIGHT } from '../roads/raised.js';
 import { stillLoading } from './loading.js';
 import { toClipperPath, subdivideZone } from '../zones/cutouts.js';
 import { updateStats } from './panels.js';
+import { fitSunShadow } from '../sky/weather.js';
 
 // ============================================================ zone type carousel
 // A zone's type is picked from a carousel of cards rather than a dropdown, each card showing what that type looks like. The
@@ -157,10 +158,8 @@ function renderZoneThumbnails() {
       camera.updateProjectionMatrix();
       camera.position.set(fx + 200, type.id === 'town' ? 120 : 230, fz + 200); // an isometric-ish view from the south-east
       camera.lookAt(fx, 2, fz);
-      // the sun's shadows only follow the main view (placeSunLight), so bring them here for the shot
-      sun.target.position.set(fx, 0, fz);
-      sun.target.updateMatrixWorld();
-      sun.position.set(fx + sunOffset.x, sunOffset.y, fz + sunOffset.z);
+      // the sun's shadows only follow the main view (placeSunLight), so fit them to this shot instead
+      fitSunShadow(new THREE.Vector3(fx, 0, fz), view*4);
       thumbnails[type.id] = snap(camera);
       scene.remove(group);
       disposeObject(group);
@@ -318,9 +317,7 @@ function renderPathThumbnails() {
         camera.updateProjectionMatrix();
         camera.position.set(cx + 120, fy + 140, cz + 160); // from the south-east, like the zones' — the path running across it
         camera.lookAt(cx, fy, cz);
-        sun.target.position.set(cx, 0, cz);
-        sun.target.updateMatrixWorld();
-        sun.position.set(cx + sunOffset.x, sunOffset.y, cz + sunOffset.z);
+        fitSunShadow(new THREE.Vector3(cx, 0, cz), view*4);
         shots[type.id] = snap(camera);
         if (river) { scene.remove(river); disposeObject(river); }
       });
