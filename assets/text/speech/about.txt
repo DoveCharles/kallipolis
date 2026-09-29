@@ -285,12 +285,15 @@
 #   the slow are who'd say they love them. That's all speech does with them — persist doesn't change it; for a hard
 #   rule on who says something, use a speech.… tag.
 #   Drawn into the other list ("Conversely, [hates]" as someone's love), its traits are turned round (×1.7 → ×0.59,
-#   +0.5 → −0.5; a switch is dropped, as loving the opposite can't switch it off), except any that persist, which stay
+#   +0.5 → −0.5, ×0 → the trait's max: "Conversely, the law" {outlaw = 0} makes a full outlaw; crazy and normal turn
+#   into each other: crazy 1 → normal ×20, crazy 0.5 → normal ×4.5, normal ×2 → crazy 0.23; a switch is dropped, as loving the opposite can't switch it off), except any that persist, which stay
 #   as written because they go with the subject whichever way you feel:
 #     Hate: Slow walkers {speed = 1.7}              haters are fast; "Conversely, slow walkers" makes someone slower
 #     Hate: Walking so fast {speed = 2, persist}    loving it makes you fast too
 #     Hate: Men {aggression = 2, persist = aggression}   only that trait persists (several: persist = a, persist = b)
 #     {…, persist, flip = mood}                     all persist but mood, which turns round (several: flip = a, flip = b)
+#     {…, noflip} / {…, noflip = speed}             dropped instead: taken the other way round, it (or that trait) does
+#                                                   nothing at all (noflip wins over persist)
 #     Hate: Other socialists {conservative = -0.3, persist = conservative, speech.conservative < 0}
 #                                                   left-wing, loved or hated; and only left-wingers say it
 #   Each entry stands alone: hating "being an alcoholic" is its own entry, and says nothing about "alcoholics".

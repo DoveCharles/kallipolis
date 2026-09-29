@@ -18,15 +18,15 @@ const RULES = ['limit'];
 export const startingTraits = (table = TRAITS) => Object.fromEntries(Object.entries(table).map(([key, trait]) => [key, trait.base]));
 
 // An entry from one line: { text, said, traits: [[name, value]], rules: [[name, value]], weight, categories, persist,
-// persists, flips, speech (its speech.… tags, as written) }. `said` is
+// persists, flips, noflip, noflips, speech (its speech.… tags, as written) }. `said` is
 // the wording after a `|` (null without one). A trait without a value is 1. `file` names the file in warnings.
 const TRAILING = /(?:\{([^{}]*)\}|<([a-z0-9_,\s]*)>)\s*$/i;
 export function entryOf(line, { traits: table = TRAITS, file }) {
   const traits = [];
   const rules = [];
   const categories = [];
-  let text = line, group, weight = 1, appeal = null, persist = false;
-  const persists = [], flips = [], speech = [];
+  let text = line, group, weight = 1, appeal = null, persist = false, noflip = false;
+  const persists = [], flips = [], noflips = [], speech = [];
   while ((group = text.match(TRAILING))) {
     text = text.slice(0, group.index).trimEnd();
     if (group[2] != null) { categories.unshift(...group[2].split(',').map(name => name.trim().toLowerCase()).filter(Boolean)); continue; }
@@ -52,6 +52,7 @@ export function entryOf(line, { traits: table = TRAITS, file }) {
       // (persist: traits that stay as written when a love's taken as a hate or a hate as a love — see speech/about.txt)
       if (key === 'persist') { if (rawValue == null) persist = true; else persists.push(rawValue.trim().toLowerCase()); return; }
       if (key === 'flip' && rawValue != null) { flips.push(rawValue.trim().toLowerCase()); return; } // (the exception to a bare persist)
+      if (key === 'noflip') { if (rawValue == null) noflip = true; else noflips.push(rawValue.trim().toLowerCase()); return; } // (dropped, taken the other way round)
       if (RULES.includes(key)) { foundRules.push([key, rawValue == null ? '' : rawValue.trim()]); return; }
       if (table[key] && Number.isFinite(value)) { found.push([key, value]); return; }
       warnOnce(`Kallipolis: in ${file}, "${part.trim()}" (after "${text}") isn't a known trait — see core/traits.js`);
@@ -61,10 +62,10 @@ export function entryOf(line, { traits: table = TRAITS, file }) {
   }
   const bar = text.indexOf('|'), said = bar < 0 ? null : text.slice(bar + 1).trim() || null;
   if (bar >= 0) text = text.slice(0, bar).trim();
-  return { text, said, traits, weight, rules, categories, appeal, persist, persists, flips, speech };
+  return { text, said, traits, weight, rules, categories, appeal, persist, persists, flips, noflip, noflips, speech };
 }
 // An entry with no traits, for placeholder text.
-export const plainEntry = text => ({ text, said: null, traits: [], weight: 1, rules: [], categories: [], appeal: null, persist: false, persists: [], flips: [], speech: [] });
+export const plainEntry = text => ({ text, said: null, traits: [], weight: 1, rules: [], categories: [], appeal: null, persist: false, persists: [], flips: [], noflip: false, noflips: [], speech: [] });
 // An entry repeated `weight` times (so a random pick favours it); none if the weight is 0.
 export const weighted = entry => Array.from({ length: entry.weight }, () => entry);
 
@@ -146,6 +147,19 @@ export function parseSections(text, { traits: table = TRAITS, file, attributes =
   return { sections, starts, distribution };
 }
 
+// The normal trait: every other trait pulled back towards where it started, by that much — a multiplier's ratio divided
+// by it (×3 with normal ×2 is ×1.5; ×0.5 is ×1, never past the start), an added amount's difference likewise (mood +0.4
+// is +0.2). Switches are left as they are.
+function towardsNormal(traits, table, start) {
+  const n = traits.normal;
+  Object.entries(table).forEach(([key, trait]) => {
+    if (key === 'normal' || trait.combine === 'on') return;
+    const from = start[key], value = traits[key];
+    if (trait.combine === 'add' || !from) { traits[key] = from + (value - from)/n; return; }
+    const ratio = value/from;
+    traits[key] = from*(ratio > 1 ? Math.max(1, ratio/n) : Math.min(1, ratio*n));
+  });
+}
 // The traits a set of entries give, combined and kept to each trait's range. `start` is the value each trait starts at.
 export function combineTraits(entries, table = TRAITS, start = startingTraits(table)) {
   const traits = { ...start };
@@ -153,6 +167,7 @@ export function combineTraits(entries, table = TRAITS, start = startingTraits(ta
     const { combine } = table[key];
     traits[key] = combine === 'add' ? traits[key] + value : combine === 'on' ? (value > 0 ? 1 : traits[key]) : traits[key]*value;
   }));
+  if (table.normal && traits.normal > 1) towardsNormal(traits, table, start);
   Object.entries(table).forEach(([key, trait]) => { traits[key] = Math.max(trait.min, Math.min(trait.max, traits[key])); });
   return traits;
 }

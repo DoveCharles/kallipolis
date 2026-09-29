@@ -69,7 +69,9 @@ export const TRAITS = {
   smoker: {base: 1, min: 0, max: 20}, //desire to smoke normal
   painkillers: {base: 1, min: 0, max: 20}, //desire for drugs that take the edge off
   nerd: {base: 1, min: 0, max: 20}, //chance to bring up deep stuff & trivia
-  conservative: {base: 0, min: -1, max: 1, combine: 'add'} //communist to fascist, -1 left, 1 right
+  conservative: {base: 0, min: -1, max: 1, combine: 'add'}, //communist to fascist, -1 left, 1 right
+  crazy: { base: 0, min: 0, max: 1, combine: 'add' }, // every so often, a few random traits pushed towards their extremes for a while (see life/people/peopleCrazy.js)
+  normal: { base: 1, min: 1, max: 20 }, // pulls every other trait back towards its start: Chatty ×3 with Normal ×2 is Chatty ×1.5; mood +0.4 is +0.2 (see combineTraits in core/entries.js)
 };
 
 // Shorthands: a trait named here counts as if the traits listed were written beside it, at the same amounts and stacking

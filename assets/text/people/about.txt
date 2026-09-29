@@ -12,10 +12,17 @@
 #     Moonwalking {backwards}
 #
 # Separate several with commas (or give each its own brackets). A trait with no value, like {backwards}, is switched on.
+# {normal = 2} pulls every other trait back towards its start by that much: Loves Talking {chatty = 3} with Being normal
+# {normal = 2} is Chatty ×1.5; mood +0.4 becomes +0.2; switches stay as they are.
+# {crazy = 0.5} (0 to 1, adds up): every 15 seconds or so, 1 to 5 random traits are pushed towards their max or min —
+# crazy ÷ how many of the way (crazy 1, one trait: Chatty ×20 or ×0) — then put back before the next lot. Switches, size,
+# agemult, health and the card-only traits are never touched; nor is what shows on their card. Crazy and normal are each
+# other's opposite, on one scale (normal = 20^crazy): taken the other way round ("Conversely, …"), one becomes the
+# other. Someone with both has both: normal settles their traits, crazy still pushes them about.
 # In loves and hates, `Card text | spoken text` gives how it's said aloud (see speech/about.txt), [placeholders] fill in
 # a word per person, and <tastes, vice> puts it in those speech categories. {persist} or {persist = trait}: traits that
 # stay as written when a love or hate is taken the other way round ("Conversely, [hates]"), {persist, flip = trait} all
-# but that one; {speech.…}: a speech tag,
+# but that one; {noflip} or {noflip = trait}: dropped instead, taken the other way round; {speech.…}: a speech tag,
 # e.g. {speech.appeal = 0.5} or {speech.conservative < 0} (see speech/about.txt).
 # Moods, enjoys, hates (even names) can all have traits, and someone's traits stack up: they multiply together — two
 # entries with speed = 2 make someone four times as fast — except mood and the eye looks (happy, sad, angry, shock),

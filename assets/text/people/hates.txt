@@ -35,7 +35,7 @@ Hold music {patience = 0.4} <media>
 "Expresso" | when people say "expresso" instead of "espresso" { agemult = 0.9, nerd = 2} <tastes>
 Hot weather {lounging = 2} <nature>
 Toes <health>
-Automatic doors (wants to bring back bell boys) <stuff>
+Automatic doors (wants to bring back bell boys) | automatic doors <stuff>
 Podcasts {talkative = 0.5, agemult = 0.8} <media>
 Wolf people <folk>
 Machines that don't do the fucking thing they're designed to do {mood = -0.4, aggression = 2} <stuff>
@@ -69,7 +69,7 @@ Eyes {blinks = 5} <health>
 People who use LinkedIn { agemult = 0.8} <folk>
 The phrase, "just what the doctor ordered" <beliefs>
 The phrase, "he's behind me, isn't he?" { agemult = 0.8} <beliefs>
-People with nut allergies { evil = 0.1} <folk>
+People with nut allergies { evil = 0.05} <folk>
 Fat people { evil = 0.1, conservative = 0.05} <folk>
 Skinny people { evil = 0.05} <folk>
 Rock climbers <folk>
@@ -77,7 +77,7 @@ New Yorkers | New Yorkers { evil = 0.01, conservative = 0.05} <folk>
 People outside of New York, and also people from Bushwick { evil = 0.05, conservative = 0.05} <folk>
 Absolutely everything else, wants to die | absolutely everything, I want to die {mood = -1, speed = 0.7, solo} <surreal>
 Nothing, enjoys everything life has to offer | nothing, I enjoy everything life has to offer (lie) {mood = 1, solo} <surreal>
-Telling the truth {talkative = 2, evil = 0.05, outlaw = 1.5} <habits>
+Telling the truth {talkative = 2, evil = 0.05, outlaw = 1.5, noflip = talkative} <habits>
 Flower people {parks = 0.4, evil = 0.05, stoner = 0.4, psychs = 0.4, conservative = 0.05} <folk>
 Dog people {parks = 0.5} <folk>
 Lycantropes {parks = 0.5} <folk>
@@ -119,7 +119,7 @@ Variations in toe size <health>
 JavaScript | JavaScript <media>
 Larry David | Larry David <folk>
 Their nemesis | my nemesis { aggression = 2} <folk>
-Practicing restraint {patience = 0.4, aggression = 2, outlaw = 2, alcoholic = 2, stoner =2, stimulants =2, painkillers = 2} <habits>
+Practicing restraint {patience = 0.4, aggression = 2, outlaw = 2, alcoholic = 2, stoner =2, stimulants =2, painkillers = 2, crazy = 0.05} <habits>
 Spending money <beliefs>
 High Treason { agemult = 1.2, outlaw = 0.6, conservative = 0.05} <vice>
 Looking in the mirror { vampire } <habits>
@@ -132,7 +132,7 @@ The inevitable <beliefs>
 The cursed mirror <surreal>
 "The app economy" <beliefs>
 Not even nightmares but, like, when the dream is... kind of nice, actually? {mood = -0.2} <surreal>
-The mentally ill { evil = 0.1, conservative = 0.2} <folk>
+The mentally ill { evil = 0.1, conservative = 0.2, normal = 1.4} <folk>
 The poor { evil = 0.1, conservative = 0.2} <folk>
 Discovering their zipper is down again | discovering my zipper is down again {fidgety = 4} <habits>
 Their style right now | my style right now {mood = -0.1} <habits>
@@ -146,8 +146,8 @@ Pestilence <health>
 When they laugh and then hear the sound play back in their head | when I laugh and then hear the sound play back in my head {mood = -0.2, chatty = 0.7} <habits>
 Peppa Pig | Peppa Pig <media>
 Being forced to Fornicate Under Charles the King <lewd>
-Seeing roadkill { evil = -0.05} <nature>
-All other forms of life {mood = -0.5, chatty = 0.6, evil = 0.3} <nature>
+Seeing roadkill { evil = -0.05, appeal = -0.05} <nature>
+All other forms of life {mood = -0.5, chatty = 0.6, evil = 0.3, appeal = -0.3} <nature>
 Going with the flow {backwards} <habits>
 Missing out {speed = 1.2, chatty = 1.5, stimulants = 3} <habits>
 Spiritual qualities { evil = 0.05, psychs = 0.2} <beliefs>
@@ -179,7 +179,7 @@ Being obliterated by unsucessful journey through Da'at {mood = -1, blinks = 0.2,
 The Curse | The Curse {mood = -1, blinks = 0.2, speed = 0.7, agemult = 1.3, smells} <surreal>
 Generational trauma {mood = -0.5} <beliefs>
 Déjà vu <surreal>
-Gangstalking { aggression = 10, stimulants = 3} <surreal>
+Gangstalking { aggression = 10, stimulants = 3, crazy = 0.05} <surreal>
 Outside forces <surreal>
 Birdsong in the morning { evil = 0.05, limit = 2b} <nature>
 Sexual dimorphism {conservative = -0.05} <beliefs>
@@ -189,7 +189,7 @@ Using a douche <health>
 Psychosomatic symptoms <health>
 Leaving work {plazas = 5} <beliefs>
 Yearning <beliefs>
-Feeling an effect <surreal>
+Feeling an effect {crazy = 0.05, persist = crazy} <surreal>
 Hemorrhaging everywhere <health>
 Anything viscous <surreal>
 That hand sanitiser that's really really sticky <stuff>
@@ -220,13 +220,13 @@ Psychoanalysis {nerd = 0.6, conservative = 0.05} <beliefs>
 Considerable burden <beliefs>
 When the microwave goes off <stuff>
 The grind {conservative = -0.05} <beliefs>
-It really depends <beliefs>
+It really depends, man <beliefs>
 Praxis { evil = 0.01, aggression = 0.3} <beliefs>
 When dogs seem depressed { evil = -0.05} <nature>
 Enduring torture <vice>
 Starving to death <health>
 The diseased { evil = 0.1, conservative = 0.2} <folk>
-Time { agemult = 1.2} <beliefs>
+Time { agemult = 1.2, persist = agemult} <beliefs>
 Glamping <hobbies>
 A tickle <health>
 Gunshot wounds <vice>
@@ -243,10 +243,10 @@ Sizzling fajitas <tastes>
 Rap { evil = 0.05, agemult = 1.1} <media>
 Intestines <health>
 The coming moon <surreal>
-The hidden effects of lead poisoning | uhhh, well, they don't let you drink out of the hose anymore { agemult = 1.2, aggression = 5, conservative = 0.1}
+The hidden effects of lead poisoning | the hidden effects of lead poisoning { agemult = 1.2, aggression = 5, conservative = 0.1}
 Hemlock water-dropwort <nature>
 Scopolamine poisoning <health>
-Being an alcoholic {speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk, alcoholic = 20, perist} <vice>
+Being an alcoholic { mood = -0.4, alcoholic = 20, persist = alcoholic } <vice>
 Lederhosen <stuff>
 Malappropriate-isms <beliefs>
 Centipedes {parks = 0.5} <nature>
@@ -259,7 +259,7 @@ Running water { vampire } <nature>
 Going bald <health>
 Their bastard son... bastard little boy... | my bastard son... bastard little boy... {agemult = 1.2, evil = 0.1} <folk>
 The Killer | The Killer <folk>
-When the entity freezes time to taunt you and then after everyone is like, "Are you okay?" Uhhhhh no I'm not ok, i just spoke to the freaking entity <surreal>
+When the entity freezes time to taunt you and then after everyone is like, "Are you okay?" Uhhhhh no I'm not ok, i just spoke to the freaking entity {crazy = 0.05, persist = crazy} <surreal>
 Getting eaten by the worms and weird fishes <surreal>
 The dead bodies fucking everywhere {roadsafety = 2, outlaw = 0.5} <vice>
 Forgetting their dog's birthday | forgetting my dog's birthday <habits>
@@ -310,7 +310,7 @@ Everything we do in the pursuit for happiness <beliefs>
 Putting the work in {patience = 0.2} <habits>
 Looking like if their parents had a baby| looking like if my parents had a baby  <surreal>
 Unfulfilled desire <beliefs>
-The bugs all over them... can't you see them? | thinking bugs are all over you {stimulants = 5, mood = -1, terrified}
+The bugs all over them... can't you see them? | thinking bugs are all over you {stimulants = 5, mood = -1, terrified, crazy = 0.05, persist = stimulants, persist = crazy}
 Desire <beliefs>
 Typos {keysmash} <beliefs>
 Shingles <health>
@@ -334,7 +334,7 @@ Being half lizard {waterwalking, persist} <surreal>
 Algospeak <habits>
 Idea guys <folk>
 What they've done in the name of love | What I've done in the name of love <surreal>
-Masking for so long you forget who you really are <habits>
+Masking for so long you forget who you really are {mood = -0.2, normal = 2, persist = normal} <habits>
 Fungible tokens <stuff>
 The Po-Po {outlaw = 4}
 [phobias] {choiceweight = 5}

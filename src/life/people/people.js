@@ -39,6 +39,7 @@ import { avoidSmells, updateFlies } from './peopleSmell.js';
 import { updateStatusEffects, restackTraits } from '../statuseffects.js';
 import { stockPockets } from '../gifts.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
+import { updateCrazy } from './peopleCrazy.js';
 import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, updatePossessedTarget, useFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
 
@@ -1184,6 +1185,7 @@ export function updatePeople(t) {
     if (p.skinKey !== skinKeyOf(p)) tintSkin(p, i); // (a keepsake or status that's just moved the skin's traits: see tintSkin)
     if (!p.pocketsStocked) stockPockets(p, i); // (the sunglasses they came in: see life/gifts.js)
     if (p.blood) updateBlood(p, dt, i);
+    if (p.traits.crazy > 0 || p.crazyShift) updateCrazy(p, dt);
     p.trainCooldown -= dt;
     p.snackCooldown -= dt;
     p.indoorsCooldown -= dt;

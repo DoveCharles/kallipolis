@@ -1,5 +1,6 @@
 Their nickname | My nickname {nickname, choiceweight = 4} <habits>
 Controversially, [hates] {choiceweight = 50}
+Stoicism | Stoicism {normal = 2, conservative = 0.05} <beliefs>
 Seed money {conservative = 0.2}
 Big noses
 Cop Dramas {outlaw = 0.9}
@@ -96,24 +97,24 @@ Whatever's on TV {agemult = 1.1, nerd = 0.5} <media>
 Being a deeply inconsistent person with no real sense of self <habits>
 Eating food too fast to even taste it <tastes>
 Trying to work out {size = 1.05, evil = -0.01} <hobbies>
-Steroids {size = 1.2, evil = 0.01 , agemult = 0.8, aggression = 5, outlaw = 1.5} <vice>
-Injecting Human Growth Hormone straight up the butt {size=1.4, evil = 0.05 , agemult = 0.8, aggression = 10, outlaw = 2} <vice>
+Steroids {size = 1.2, evil = 0.01 , agemult = 0.8, aggression = 5, outlaw = 1.5, noflip} <vice>
+Injecting Human Growth Hormone straight up the butt {size=1.4, evil = 0.05 , agemult = 0.8, aggression = 10, outlaw = 2, noflip} <vice>
 Movies <media>
 Jaywalking {patience = 0.5, evil = 0.05, roadsafety = 0.3} <vice>
 The Law { aggression = 0, outlaw = 0, conservative = 0.05} <beliefs>
 Phrenology {nerd = 3, evil = 0.3, conservative = 0.5} <beliefs>
 Heart-reacting every message {mood = 0.4, patience = 0.7} <media>
 Finding Luigi {patience = 2, agemult = 0.8} <media>
-Pathologising themself | pathologising myself {nerd = 3} <habits>
+Pathologising themself | pathologising myself {nerd = 3, normal = 1.2} <habits>
 Attempting to achieve immortality { evil = 0.05, agemult = 1.5, ageless} <surreal>
 Medieval weaponry { aggression = 3, nerd = 3} <stuff>
 Abusing nasal decongestants {speed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, aggression = 10, stimulants = 18} <vice>
 Ingesting mystery powder {speed = 3, chatty = 6, talkative = 6, patience = 0.4, blinks = 5, mood = 0.5, nosy = 6, fidgety = 12, lounging = 0, evil = 0.05, agemult = 0.8, aggression = 10, stimulants = 20} <vice>
-Their awesome antidepressants that make them never want sex | my awesome antidepressants that make me never want sex {mood = 0.3, fidgety = 3, aggression = 0.5, painkillers = 2} <health>
+Their awesome antidepressants that make them never want sex | my awesome antidepressants that make me never want sex {mood = 0.6, fidgety = 10, aggression = 0.5, painkillers = 5, normal = 3} <health>
 Mustelidae | Mustelidae {parks = 2, nerd = 3} <nature>
 Barfing after drinking but before getting to the club {agemult = 0.8, alcoholic = 8} <vice>
 Staring at the eclipse {blinks = 5, limit = 1b} <surreal>
-Taking medicine without checking the label {patience = 0.4, mood = -0.2, evil = 0.05, painkillers = 8, psychs = 2} <health>
+Taking medicine without checking the label {patience = 0.4, mood = -0.2, evil = 0.05, painkillers = 8, psychs = 2, crazy = 0.2} <health>
 Befriending house spiders { evil = -0.05, aggression = 0.5} <nature>
 Guns... like, way too much | guns, love love love guns {evil = 0.2, aggression = 10, outlaw = 2, conservative = 0.3} <vice>
 Staring at their feet | staring at my feet {chatty = 0.4, talkative =0.4} <habits>
@@ -149,7 +150,7 @@ Running reconnaissance {chatty = 3, talkative = 0.3, aggression = 0.5, nerd = 2}
 Grapefruit <tastes>
 Fonts & typefaces <hobbies>
 Being scared {speed = 1.2, persist} <surreal>
-Getting so high they get scared | getting so high i get scared {blinks = 0.6, shock = 0.7, speed = 1.2, blazed, stoner = 15} <vice>
+Getting so high they get scared | getting so high I get scared {blinks = 0.6, shock = 0.7, speed = 1.2, blazed, stoner = 15} <vice>
 Having a psychosexual fixation on their nemesis | having a psychosexual fixation on my nemesis { aggression = 2} <lewd>
 Horse racing { evil = 0.05, conservative = 0.05} <hobbies>
 Calling people "libtard" { evil = 0.05, agemult = 0.95, aggression = 5, conservative = 0.2} <beliefs>
@@ -193,7 +194,7 @@ Dwelling in obscurity {chatty = 0.1, talkative = 0.1} <surreal>
 Hypnagogic visions {lounging = 3, psychs = 3} <surreal>
 Preaching {chatty = 5, talkative = 10} <beliefs>
 Foreign cigarettes {smoker = 10} <vice>
-Suicide, as a concept {mood = 0.4} <beliefs>
+Suicide, as a concept {mood = 0.4, crazy = 0.1} <beliefs>
 Trying to kiss the dentist {evil = 0.05} <lewd>
 Getting older {mood = 0.4, evil = -0.05, agemult = 1.3} <health>
 Summary execution {evil = 0.2, aggression = 3, conservative = 0.1} <vice>
@@ -204,7 +205,7 @@ The subscription model {evil = 0.05} <beliefs>
 Looking at their guitar but never playing it, ever | looking at my guitar but never playing it, ever <habits>
 Not eating their vegetables {size = 0.84, evil = 0.05} | not eating my vegetables <tastes>
 Pots of gold {size =0.45, evil = 0.05, aggression = 10} <stuff>
-Stinky tofu {appeal = -0.2} <tastes>
+Stinky tofu {appeal = -0.2, conservative = -0.01} <tastes>
 Capitalising Every Word In A Sentence {capitalise, limit = 3b} <habits>
 Rocket boots {speed = 4} <stuff>
 Fitting it all in {speed = 1.2, chatty = 0.8, talkative = 0.8, fidgety = 0} <habits>
@@ -279,7 +280,7 @@ Sunning their holes | sunning my holes {parks = 4, limit = 1b, stoner = 2, psych
 Coffee enemas {parks = 4, speed = 1.4, stimulants = 3, stoner = 2, psychs = 3} <health>
 Yearning {lounging = 2} <beliefs>
 Turning it off in just a minute {patience = 2, agemult = 0.5, aggression = 2} <habits>
-Feeling an effect <surreal>
+Feeling an effect {crazy = 0.05, persist = crazy} <surreal>
 Greek mythology | Greek mythology {nerd = 4} <beliefs>
 Eco-fascism {evil = 0.3, parks = 8, conservative = 0.4} <beliefs>
 Ted Kaczynski | Ted Kaczynski {plazas = 0.1, parks = 5, chatty = 0.1, evil = 0.15, nerd = 3} <folk>
@@ -290,11 +291,11 @@ Home-movies <media>
 April Fool's Day | April Fool's Day <hobbies>
 Outer space <nature>
 Peanuts <tastes>
-Writhing about {speed = 0.6, mood = -0.5, aggression = 5} <habits>
+Writhing about {speed = 0.6, mood = -0.5, aggression = 5, crazy = 0.1} <habits>
 Banana bread <tastes>
 Exposed ankle <lewd>
 Modular Synthesis {patience = 2, talkative = 5, mood = -0.1, agemult = 1.2, nerd = 3} <media>
-Acting up {mood = -0.1, evil = 0.05, aggression = 10, stimulants = 4, alcoholic = 4} <habits>
+Acting up {mood = -0.1, evil = 0.05, aggression = 10, stimulants = 4, alcoholic = 4, crazy = 0.1} <habits>
 Cloth Mother | Cloth Mother <surreal>
 Cuddling Blanky {evil = -0.05} <habits>
 Personifying inanimate objects {evil = -0.05} <surreal>
@@ -309,9 +310,9 @@ Grinding and grinding and grinding on it {stimulants = 3} <lewd>
 Caffeine tablet for lunch {speed = 1.4, size = 0.9, stimulants = 10} <tastes>
 Theory {nerd = 5} <beliefs>
 Carrying around a suitcase on the weekends <habits>
-Yelling on the bus {chatty = 4,  talkative = 4, evil = 0.15, aggression = 10, alcoholic = 3, stimulants = 3} <habits>
-Seeming human { agemult = 1.3, ageless} <surreal>
-Dressing as a civilian <surreal>
+Yelling on the bus {chatty = 4,  talkative = 4, evil = 0.15, aggression = 10, alcoholic = 3, stimulants = 3, crazy = 0.1} <habits>
+Seeming human { agemult = 1.3, ageless, normal = 1.2} <surreal>
+Dressing as a civilian {normal = 1.2} <surreal>
 Light spanking <lewd>
 A cool ass cape { agemult = 1.1} <stuff>
 Wearing sunglasses indoors <habits>
@@ -341,7 +342,7 @@ Facebook marketplace | Facebook marketplace {chatty = 2, talkative = 2, plazas =
 Sowing {patience = 3, aggression = 2} <hobbies>
 Finger tattoos <health>
 Cryptic crosswords {patience = 3, lounging = 2, mood = -0.1, agemult = 1.1, nerd = 5} <hobbies>
-The new IRA {mood = -0.3, evil = 0.1, agemult = 0.6, aggression = 20} <beliefs>
+The new IRA {mood = -0.3, evil = 0.1, agemult = 0.6, aggression = 20, conservative = -0.3} <beliefs>
 82 year old korean man online. <3 | this 82 year old korean man online whomst I love deeply {mood = 0.3, agemult = 0.8} <folk>
 AAVE | AAVE <beliefs>
 Learning nothing {patience = 0.4, nerd = 0.2} <habits>
@@ -351,7 +352,7 @@ Gargoyles <stuff>
 Avoiding cracks in the pavement {speed = 0.4, evil = -0.05} <habits>
 Cancelling last minute {chatty = 0.6, talkative = 0.6, nosy = 2, evil = 0.05} <habits>
 Ancient knowledge {agemult = 1.3, ageless, evil = 0.05, nerd = 5} <beliefs>
-Being normal <habits>
+Being normal {normal = 2} <habits>
 Making sacrifices for the greater good {mood = -0.3} <beliefs>
 Harry Potter | Harry Potter { evil = 0.05, agemult = 0.8, conservative = 0.01} <media>
 Acting ominous {blinks = 0.2} <habits>
@@ -368,8 +369,8 @@ Turning evil {mood = 0.1, evil = 0.3, aggression = 10} <vice>
 Leaving their boxers unbuttoned (to feel a nice breeze) | leaving my boxers unbuttoned <vice>
 Remaining loyle to their capo | remaining loyle to my capo <habits>
 Whatever remains <surreal>
-Saying, "truth nuke" { agemult = 0.6} <habits>
-Being an alcoholic {mood = 0.4, alcoholic = 20, perist = alcoholic } <vice>
+Saying, "truth nuke" | when people say, "truth nuke" { agemult = 0.6} <habits>
+Being an alcoholic {mood = 0.4, alcoholic = 20, persist = alcoholic } <vice>
 Dichotomies {nerd = 1.2} <beliefs>
 Spellcheck <media>
 The Godfather Part III | The Godfather Part III <media>
@@ -425,11 +426,11 @@ Busting balls {aggression = 3} <habits>
 Junk food <tastes>
 Mothballs {agemult = 1.3} <stuff>
 Shag carpets <stuff>
-Order {outlaw = 0.5} <beliefs>
+Order {outlaw = 0.5, normal = 1.1} <beliefs>
 Caramelising onions {patience = 4} <tastes>
 Typing sooooo quick {keysmash} <habits>
 Headbutting shit { scramble, aggression = 5} <vice>
-Smashing mirrors with their face | smashing mirrors with my face {roadsafety = 0.3, scramble, aggression = 5, stimulants = 3} <vice>
+Smashing mirrors with their face | smashing mirrors with my face {roadsafety = 0.3, scramble, aggression = 5, stimulants = 3, crazy = 0.1} <vice>
 Streamers <media>
 Late-night gamings on discord :rolling_on_the_floor_laughing: | late-night gamings on discord, rolling on floor emoji {limit = 2b, agemult = 0.7} <media>
 Dreaming of a better world <beliefs>
@@ -446,7 +447,7 @@ Daydreaming {fidgety = 2, lounging = 2} <habits>
 Making all these plans that won't even happen <habits>
 Squidging it <surreal>
 Being a volcel {chatty = 0.6, persist} <lewd>
-Loving their wives | loving multiple wives {conservative = -0.05} <folk>
+Loving their wives | loving multiple wives <folk>
 Adding that to their bookmarks | adding things to my bookmarks {nerd = 2} <media>
 Reaction GIFs <media>
 Puzzle games they're bad at {nerd = 3} <media>
@@ -465,7 +466,7 @@ Their therapist, but only sexually | my therapist, but only sexually <lewd>
 Sensual pleasures <lewd>
 Dark romance <media>
 Kissing on the lips <lewd>
-Researching about people with two penises {nerd =2} <lewd>
+Researching about those people with two penises {nerd =2} <lewd>
 Watching a romcom to experience vicarious joy at seeing two ill-suited lovers actually make it work <media>
 Smiling more <habits>
 Getting worse <surreal>
@@ -485,6 +486,6 @@ Saying, "touché" <habits>
 Squirty cheese <tastes>
 Angry Birds | Angry Birds <media>
 Dostoevsky's Crime and Punishment | Dostoevsky's Crime and Punishment {nerd =3} <media>
-Getting sillay <habits>
+Getting sillay {mood = 0.2, crazy = 0.05} <habits>
 Performing miracles {waterwalking} <surreal>
 The quick brown fox that jumps over the lazy dog <surreal>

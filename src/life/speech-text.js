@@ -177,7 +177,7 @@ function parseFile(name, text, path = `speech/${name}.txt`) {
       tags.limits = [...limitsOf(entry), ...tags.limits];
       const side = name === 'loves' ? 1 : name === 'hates' ? -1 : 0;
       const node = { tags, replies: [], where, text: entry.said ?? (lowered ? lowerFirst(entry.text) : entry.text), categories: entry.categories,
-        side, persist: entry.persist, persists: entry.persists, flips: entry.flips, personTraits: side ? entry.traits : null };
+        side, persist: entry.persist, persists: entry.persists, flips: entry.flips, noflip: entry.noflip, noflips: entry.noflips, personTraits: side ? entry.traits : null };
       file.nodes.push(node);
       return;
     }
@@ -309,7 +309,7 @@ function compileNodes(nodes, depth, path, where) {
     const key = (node.forms ? node.forms.first : node.text).toLowerCase().trim() + (node.where?.startsWith('people/') ? `@${node.where}` : '');
     add({ key, forms: node.forms, text: node.text, replies: node.replies, weight: node.tags.weight, end: node.tags.end, thought: node.tags.thought,
       appeal: node.tags.appeal, score: node.tags.score, effects: node.tags.effects, limits: node.tags.limits,
-      side: node.side ?? 0, persist: node.persist, persists: node.persists, flips: node.flips, personTraits: node.personTraits,
+      side: node.side ?? 0, persist: node.persist, persists: node.persists, flips: node.flips, noflip: node.noflip, noflips: node.noflips, personTraits: node.personTraits,
       traits: { ...node.tags.traits }, world: node.tags.world.slice(), where: node.where });
   });
   return [...items.values()];
@@ -428,6 +428,7 @@ const likesAllow = (world, person, vars) => world.every(w => {
 // slow walkers, so the slow are who'd say they love them). persist doesn't come into it — it's only for traits a love or
 // hate brings when drawn into the other list (see fillEntry); a hard rule on who says it is a speech.… tag.
 // (persist: every trait; persist = trait: that one; flip = trait: that one turns round after all, under a bare persist)
+const inert = (item, trait) => item.noflip || !!item.noflips?.includes(trait);
 const persists = (item, trait) => !item.flips?.includes(trait) && (item.persist || !!item.persists?.includes(trait));
 const sideSign = item => (item.side ?? 0) < 0 ? -1 : 1;
 function weightOf(item, person, hated, vars = null) {
@@ -556,12 +557,17 @@ function fill(text, person, vars, depth = 0, picks = null, avoid = null) {
  * @param {object[]} [held] - the entries they hold already (loves and hates), not to be picked again
  * @returns {{card: string, said: string, words: string[], effects: Array<[string, number]>, limits: object[], failed: boolean}} (effects: what the filled words do to them; failed: nothing would fill it)
  */
-// A trait effect the other way round: added amounts negated, multipliers inverted; a switch can't be switched off, so none.
+// A trait effect the other way round: added amounts negated, multipliers inverted (×0 — none of it — to as much as it
+// goes: its max; any other kept to its range when the traits are combined); a switch can't be switched off, so none.
+// Crazy and normal are each other's reverse, on one scale: normal = NORMAL_MAX^crazy (crazy 1 ↔ normal ×20, 0.5 ↔ ×4.5).
 function reversed(trait, value) {
-  const { combine } = TRAITS[trait];
+  const normalMax = TRAITS.normal?.max ?? 20;
+  if (trait === 'crazy' && TRAITS.normal) return value > 0 ? ['normal', Math.pow(normalMax, value)] : null;
+  if (trait === 'normal' && TRAITS.crazy) return value > 1 ? ['crazy', Math.log(value)/Math.log(normalMax)] : null;
+  const { combine, base, max } = TRAITS[trait];
   if (combine === 'add') return [trait, -value];
-  if (combine === 'on' || !value) return null;
-  return [trait, 1/value];
+  if (combine === 'on') return null;
+  return [trait, value ? 1/value : max/(base || 1)];
 }
 function fillEntry(entry, rng, side = 1, held = []) {
   const said = entry.said ?? lowerFirst(entry.text);
@@ -579,7 +585,8 @@ function fillEntry(entry, rng, side = 1, held = []) {
     const effects = picked.flatMap(item => {
       if (!item.side) return item.effects ?? [];
       const across = item.side !== side;
-      return (item.personTraits ?? []).map(([trait, value]) => across && !persists(item, trait) ? reversed(trait, value) : [trait, value]);
+      // (noflip / noflip = trait: dropped altogether rather than turned round)
+      return (item.personTraits ?? []).map(([trait, value]) => !across ? [trait, value] : inert(item, trait) ? null : persists(item, trait) ? [trait, value] : reversed(trait, value));
     }).filter(Boolean);
     const limits = picked.flatMap(item => (item.side && item.side !== side ? (item.limits ?? []).map(l => ({ ...l, polarity: l.polarity === 'a' ? 'b' : 'a' })) : item.side ? item.limits ?? [] : []));
     return { card, said: entry.said ? spoken : lowerFirst(spoken), words, effects, limits, failed: filled == null };
