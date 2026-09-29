@@ -19,7 +19,7 @@ const SPEED_PITCH = 1.9, SPEED_LOUDER = 2;
 const TREAD_HZ = 9;                     // the treads' rattle a second at her rolling speed (faster when she's faster)
 const SIREN_HZ = 760, SIREN_SWING = 330, SIREN_RATE = 0.55, SIREN_VOLUME = 0.05; // centre, ± Hz, wails a second
 const CHORD = [523.25, 659.25, 783.99, 1046.5]; // C major, C5 up to C6
-const HEAL_VOLUME = 0.035;
+const HEAL_VOLUME = 0.008;
 const SCALE = [523.25, 587.33, 659.25, 698.46, 783.99, 880, 987.77, // C major, two octaves: C5 up to C7
   1046.5, 1174.7, 1318.5, 1396.9, 1568, 1760, 1975.5, 2093];
 const CHIME_VOLUME = 0.04, CHIME_RING = 0.9;
