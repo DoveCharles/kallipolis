@@ -3,7 +3,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { S, App, buildingHolders } from '../core/shared.js';
 import { scene, ground } from '../core/scene.js';
 import { downloadFile } from './save-load.js';
-import { showHiddenBuildings } from '../buildings/see-through.js';
+import { unfadeBuildings } from '../buildings/see-through.js';
 import { objectGroup } from '../objects/objects.js';
 
 // ============================================================ GLB export
@@ -80,7 +80,7 @@ function mergeExportGeometries(geos) {
 }
 function exportGLB() {
   if (!GLTFExporter) { alert('The GLB exporter didn\'t load — check your connection and reload the page.'); return; }
-  showHiddenBuildings(); // a building the camera's inside isn't drawn, and the export skips what isn't (see see-through.js)
+  unfadeBuildings(); // a building the camera's inside is faded, on materials the export shouldn't take (see see-through.js)
   scene.updateMatrixWorld(true);
   const sources = [['Ground', ground], ['Roads', S.roadMeshGroup], ['Trains', S.trainMeshGroup], ['Water', S.waterGroup], ['Bridges', S.bridgeGroup], ['Objects', objectGroup],
     ...buildingHolders().filter(z => z.buildingsGroup).map(z => [z.name + ' (' + (z.zoneType || 'buildings') + ')', z.buildingsGroup])];

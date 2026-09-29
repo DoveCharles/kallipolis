@@ -48,6 +48,7 @@ import './buildings/building-card.js';
 import './buildings/see-through.js';
 import './ui/win3.js';
 import './ui/win3-menu.js';
+import './ui/w3-select.js';
 import './ui/sound.js';
 import './ui/pixel-icons.js';
 import './ui/mobile.js';
@@ -96,7 +97,7 @@ import { loadMedBot, updateMedBots } from './life/medbot.js';
 import { loadHouseModels } from './zones/suburbs.js';
 import { updateBuildingFollow } from './buildings/building-card.js';
 import { updateInteriorCamera, isInsideBuilding } from './buildings/interior.js';
-import { hideBuildingsAroundCamera } from './buildings/see-through.js';
+import { fadeBuildingsAroundCamera } from './buildings/see-through.js';
 import { updateBuildingBatches } from './buildings/building-batches.js';
 import { updateNodeHighlight } from './editor/node-highlight.js';
 import { renderView } from './ui/pixelation.js';
@@ -183,7 +184,7 @@ function animate() {
   WATER_TIME.value = t;
   refreshSceneIndex();
   updatePedView(t);
-  hideBuildingsAroundCamera(); // (a building the camera's ended up inside isn't drawn: see see-through.js)
+  fadeBuildingsAroundCamera(); // (a building the camera's inside or right up against fades out: see see-through.js)
   updateBuildingBatches();
   updateNodeHighlight();
   blinkLights.forEach(o => { o.material.emissiveIntensity = 0.5 + Math.sin(t*3 + o.userData.blinkPhase)*0.5; });

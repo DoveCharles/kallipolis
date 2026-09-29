@@ -3186,7 +3186,13 @@ async function warmUp() {
       Industrial: industrial, Pub: pub, Salon: salon, Clothes: clothes };
     for (const [name, set] of Object.entries(named)) {
       if (!set) continue;
-      for (const piece of Object.values(set)) sets.add(piece.object.clone());
+      for (const piece of Object.values(set)) {
+        sets.add(piece.object.clone());
+        // (and faded, as fadeWhatsInTheWay does it)
+        const faded = piece.object.clone();
+        faded.traverse(o => { if (o.isMesh && !Array.isArray(o.material)) { o.material = o.material.clone(); o.material.transparent = true; } });
+        sets.add(faded);
+      }
       await compile(`Preparing ${name} furniture...`);
     }
     const barbot = barbotWarmUp();
@@ -3314,7 +3320,7 @@ function longestEdgeAngle(fp) {
 // past the building's own walls into the ones next door, which would show through inside. Any other building whose
 // footprint crosses the room's walls, and stands tall enough to reach its floor, isn't drawn while the room's up (hidden
 // the way the building gone into is, so building-batches.js draws that zone one by one meanwhile; see-through.js leaves
-// alone what's already hidden).
+// alone what's hidden).
 const NEIGHBOUR_SLACK = 0.05; // (a wall only touching the room's from outside isn't in it)
 function hideNeighbours(group) {
   const a = ROOM_W/2 + WALL - NEIGHBOUR_SLACK, b = ROOM_D/2 + WALL - NEIGHBOUR_SLACK, reach = Math.hypot(a, b);

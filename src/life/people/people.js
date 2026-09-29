@@ -8,7 +8,7 @@ import { controls } from '../../core/camera-controls.js';
 import { blastFx, explode } from '../giblets.js';
 import { blasts, PERSON_BLAST_SCALE } from '../traffic/state.js';
 import { canRespawn, PERSON_SHAKE, shake } from '../revive.js';
-import { throwBodyParts } from './peopleGibs.js';
+import { throwBodyParts, warmBodyParts } from './peopleGibs.js';
 import { babble, nextSyllable, hearDistance } from '../../audio/voices.js';
 import { sayLine, shoutLine, reactAloud, lineMouth, stopLine, linePause } from '../../audio/dictionary.js';
 import { pickThought, pickReaction } from '../speech-text.js';
@@ -355,7 +355,7 @@ export let indoorsCount = 0;
 export const buildingLabel = b => buildingLabelName(b.kind, b.number, b.height, b.key);
 
 
-export function setPersonModel(m) { personModel = m; }
+export function setPersonModel(m) { personModel = m; warmBodyParts(m); }
 export function setPeopleNav(nav) { peopleNav = nav; }
 export function setPeopleNavBuiltAt(t) { peopleNavBuiltAt = t; }
 export function setPeopleNavDebugBuiltAt(t) { peopleNavDebugBuiltAt = t; }

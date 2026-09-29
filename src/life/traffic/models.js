@@ -7,6 +7,8 @@ import { createMeshBuilder } from '../../roads/roads.js';
 import { buildCarWreck } from '../car-wrecks.js';
 import { makeCarMesh } from './materials.js';
 import { CAR_PAINTS, TRAFFIC_MAX, trafficRng } from './state.js';
+import { warmThumbnails } from '../thumbnail.js';
+import { loadingTask } from '../../ui/loading.js';
 
 // How a car is built: the box car, and the designs loaded from assets/models/Cars.glb (loadCarModels), plus its paint.
 
@@ -108,7 +110,13 @@ export async function loadCarModels() {
   }
   try {
     const designs = buildCarDesigns(gltf);
-    if (designs.length) { carMeshes = designs.map(makeCarMesh); designNumbers = designs.map(() => 0); }
+    if (designs.length) {
+      carMeshes = designs.map(makeCarMesh); designNumbers = designs.map(() => 0);
+      // (the card thumbnails' shaders compiled now, not on the first car clicked)
+      const thumbs = new THREE.Group();
+      carMeshes.forEach(cm => thumbs.add(cm.thumbMesh));
+      loadingTask('Preparing cars...', warmThumbnails(thumbs).then(() => thumbs.clear()), 0);
+    }
   } catch (err) {
     console.warn('Kallipolis: the car models failed to build; traffic uses the built-in box car', err);
     return;
