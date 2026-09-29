@@ -31,7 +31,7 @@ function serializePoint(p) {
   return withY({ x:p.x, z:p.z, type:p.type||'poly',
     handleIn: p.handleIn ? withY({x:p.handleIn.x, z:p.handleIn.z}, p.handleIn) : null,
     handleOut: p.handleOut ? withY({x:p.handleOut.x, z:p.handleOut.z}, p.handleOut) : null,
-    ...(p.ramp ? { ramp:true } : {}), ...(p.rampSide === -1 ? { rampSide:-1 } : {}) }, p); // (a raised walkway's ramps)
+    ...(p.ramp ? { ramp:true } : {}), ...(p.rampSide === -1 ? { rampSide:-1 } : {}), ...(p.foodCourt ? { foodCourt:true } : {}) }, p); // (a raised walkway's ramps; a mall's food courts)
 }
 export function serializeProject() {
   const finishedLines = S.roadLines.filter(l => !l.drawing);
@@ -77,7 +77,7 @@ export function serializeProject() {
         sidewalkColor: colorToHex(l.sidewalkColor, SIDEWALK_COLOR), networkId:l.networkId,
         ...(isTrainLine(l) ? { kind:'train', radius:l.radius } : {}), ...(isWalkwayLine(l) ? { roadType: l.roadType, walkwayColor: colorToHex(l.walkwayColor, WALKWAY_COLOR), walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: walkwayTextureScaleOf(l), walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}),
         ...(l.roadType==='raised' ? { raisedHeight: raisedHeightOf(l), raisedTrees: !!l.raisedTrees, raisedBenches: !!l.raisedBenches, raisedLights: !!l.raisedLights } : {}),
-        ...(isRiverLine(l) ? { roadType:'river' } : {}) }))
+        ...(isRiverLine(l) ? { roadType:'river' } : {}), ...(l.roadType==='mall' ? { roadType:'mall', mall: { ...l.mall } } : {}) }))
     },
     zoneSeq: S.zoneSeq,
     zones: S.zones.filter(z => !z.drawing && z.points.length>=3).map(z => ({
@@ -257,7 +257,7 @@ export async function loadProjectFromData(data, options) {
     roadNodes[id] = withY({ x:n.x, z:n.z, type:n.type||'poly',
       handleIn: n.handleIn ? withY({x:n.handleIn.x, z:n.handleIn.z}, n.handleIn) : null,
       handleOut: n.handleOut ? withY({x:n.handleOut.x, z:n.handleOut.z}, n.handleOut) : null,
-      ...(n.ramp ? { ramp:true } : {}), ...(n.rampSide === -1 ? { rampSide:-1 } : {}) }, n);
+      ...(n.ramp ? { ramp:true } : {}), ...(n.rampSide === -1 ? { rampSide:-1 } : {}), ...(n.foodCourt ? { foodCourt:true } : {}) }, n);
   });
   S.roadLines = (rd.lines||[]).map(l => ({ id:l.id, nodeIds:l.nodeIds.slice(), width:l.width,
     color: hexToColor(l.color, ROAD_COLOR), sidewalkWidth: l.sidewalkWidth!=null ? l.sidewalkWidth : S.DEFAULT_SIDEWALK_WIDTH,
@@ -267,7 +267,7 @@ export async function loadProjectFromData(data, options) {
     ...(l.roadType==='walkway' || l.roadType==='raised' ? { roadType: l.roadType, walkwayColor: hexToColor(l.walkwayColor, WALKWAY_COLOR),
       walkwayTexture: l.walkwayTexture || WALKWAY_TEXTURE, walkwayTextureScale: l.walkwayTextureScale ?? 1, walkwayTextureRotation: l.walkwayTextureRotation ?? 0 } : {}),
     ...(l.roadType==='raised' ? { raisedHeight: l.raisedHeight ?? RAISED_HEIGHT, raisedTrees: !!l.raisedTrees, raisedBenches: !!l.raisedBenches, raisedLights: !!l.raisedLights } : {}),
-    ...(l.roadType==='river' ? { roadType:'river' } : {}) }));
+    ...(l.roadType==='river' ? { roadType:'river' } : {}), ...(l.roadType==='mall' ? { roadType:'mall', mall: { ...(l.mall || {}) } } : {}) }));
   S.roadNodeSeq = rd.nodeSeq || 1; S.roadLineSeq = rd.lineSeq || 1; S.roadNetworkSeq = rd.networkSeq || 1;
   S.walkwayOrder = Array.isArray(rd.walkwayOrder) ? rd.walkwayOrder.slice() : [];
   splitMixedNetworks();
@@ -275,7 +275,8 @@ export async function loadProjectFromData(data, options) {
 
   (data.zones||[]).forEach(zd => {
     const zone = {
-      id: zd.id, name: zd.name, closed: !!zd.closed, drawing:false, zoneType: zd.zoneType||'buildings',
+      // (malls were zones once: one saved from then comes back a plain zone — malls are drawn as paths now)
+      id: zd.id, name: zd.name, closed: !!zd.closed, drawing:false, zoneType: zd.zoneType==='mall' ? 'plain' : zd.zoneType||'buildings',
       points: (zd.points||[]).map(p => ({ x:p.x, z:p.z, type:p.type||'poly',
         handleIn: p.handleIn ? {x:p.handleIn.x, z:p.handleIn.z} : null,
         handleOut: p.handleOut ? {x:p.handleOut.x, z:p.handleOut.z} : null })),

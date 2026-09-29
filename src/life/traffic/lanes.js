@@ -29,7 +29,7 @@ let carIds = 0;
 export function buildTrafficNav() {
   const lines = [];
   S.roadLines.forEach(line => {
-    if (isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
+    if (isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line) || line.roadType === 'mall') return;
     const nodes = tessellateOpenPath(line.nodeIds.map(id => roadNodes[id]).filter(Boolean));
     if (nodes.length < 2) return;
     const pts = [nodes[0]];

@@ -1,5 +1,8 @@
 import { loadTypeText } from '../core/type-text.js';
 import { TEXT_ROWS } from '../ui/entity-card.js';
+import { capitalised } from '../ui/garble.js';
+import { hashNameToNumber, mulberry32 } from '../core/math.js';
+import { pickWord, speechReady } from '../life/speech-text.js';
 import { roomLayoutOf } from './footprints.js';
 
 // ============================================================ what buildings are like
@@ -26,6 +29,8 @@ const buildings = loadTypeText('assets/text/buildings.txt', {
   placeholder: { default: { name: ['Building'], mood: ['🏢'], loves: ['Having people inside them'], hates: ['Strong winds'] } },
 });
 
+// Settles once buildings.txt has been read: anything showing a building's own name (a mall's shop signs) draws it again.
+export const buildingTypesReady = buildings.ready;
 // What kind a building is: whatever put it up said so (see the zone types in zones/), or else its zone's own type.
 export function buildingKindOf(group, zone) {
   return (group && group.userData.buildingKind) || (zone && zone.zoneType) || 'buildings';
@@ -38,20 +43,109 @@ export const buildingEnterable = kind => buildings.says(kind, 'enterable');
 // in footprints.js).
 export const buildingTypeOf = (kind, number = 1) => buildings.of(kind, number);
 
-// What a building's called: its kind's name from buildings.txt — except a city block's, which is named for what's inside
-// it so you know before going in: a home or an office (see roomLayoutOf), and a tower once it's TOWER_HEIGHT tall, about
-// eight storeys (see FLOOR_HEIGHT in interior.js). `height` is the building's own (its userData.height).
-// A block's landmark is named the same way: it's a city block like the rest, so being the tall fancy one shouldn't leave
-// it the only building on the street that won't say whether it's flats or offices. Its card text still comes from
+// What a building's called, wherever something names it (its card's Name row, the label on whoever's going into it,
+// see buildingOwnName and buildingKindName): its own name if it has one, else what it is. Only the card's title bar
+// sticks to what a building is, whatever it's called (see buildingKindName). `key` is the building's own (see
+// buildingKey in footprints.js), which is what a house's street is picked from.
+export const buildingName = (kind, number, height, key) =>
+  buildingOwnName(kind, number, key) || buildingKindName(kind, number, height);
+
+// What a building's card says it is, in its title bar (as a pub's says "Pub", see buildingTitle for its own name): a
+// city block by what's inside it, so you know before going in, and a tower once it's TOWER_HEIGHT tall, about eight
+// storeys (see FLOOR_HEIGHT in interior.js). `height` is the building's own (its userData.height). This is what
+// buildingName gives every kind of building but an office, which is named for its company instead.
+// A block's landmark is described the same way: it's a city block like the rest, so being the tall fancy one shouldn't
+// leave it the only building on the street that won't say whether it's flats or offices. Its card text still comes from
 // [landmark] in buildings.txt; only the name is by what's inside.
 const TOWER_HEIGHT = 28;
-export function buildingName(kind, number, height) {
+export function buildingKindName(kind, number, height) {
   if (kind !== 'buildings' && kind !== 'landmark') return buildingTypeOf(kind, number).name;
-  return (roomLayoutOf(kind, number) === 'office' ? 'Office ' : 'Residential ') + (height >= TOWER_HEIGHT ? 'Tower' : 'Building');
+  const office = roomLayoutOf(kind, number) === 'office', tower = height >= TOWER_HEIGHT;
+  return (office ? 'Office ' : 'Residential ') + (tower ? 'Tower' : 'Building');
+}
+// A building's own name, where it has one, for its card's Name row and for whoever's naming it: one of its kind's
+// `title` lines in buildings.txt (a pub's "The Red Lion", picked by its number the way the card's other lines are), a
+// city block's own — an office is its company's and a home its own place — a house's number and street, or an industrial
+// yard's (see pickedName, HOUSE_KINDS and INDUSTRIAL_KINDS), the card's title bar being what says what kind of building
+// it is (see buildingKindName). '' for the rest: a farm is only what it is.
+export function buildingOwnName(kind, number, key) {
+  const title = buildingTitle(kind, number);
+  if (title) return title;
+  if (kind === 'buildings' || kind === 'landmark')
+    return pickedName(roomLayoutOf(kind, number) === 'office' ? 'offices' : 'residential', number) ?? '';
+  if (HOUSE_KINDS.has(kind)) {
+    // A house is a number on a street: "No. 4213, Smith's Road". The street is a pick of the *zone's* rather than the
+    // house's — the zone half of the building's key (see buildingKey in footprints.js) is its seed — so every house in
+    // one zone is on the same street, and none of them is picked again for the next house along.
+    const street = pickedName('streets', zoneOf(key));
+    return street ? `No. ${number}, ${street}` : '';
+  }
+  return INDUSTRIAL_KINDS.has(kind) ? pickedName('industrial', number) ?? '' : '';
+}
+// the zone a building's key belongs to (buildingKey: `${zone.id}:${index}`) — everything before the last colon, so a
+// zone whose id has colons in it is still taken whole
+const zoneOf = key => (key ? String(key).slice(0, String(key).lastIndexOf(':')) : '');
+// The houses of a town or a suburb (see zones/town.js and zones/suburbs.js), named from [streets] — a house that's a
+// pub, a salon or a clothes shop is one of those kinds instead, and keeps its own name (see buildingTitle).
+const HOUSE_KINDS = new Set(['house', 'terrace']);
+// The kinds an industrial zone puts up — a warehouse, a factory, a tank farm or a container yard (see zones/industrial.js)
+// — and its own zone type, for a building in one that never said which it is: the kinds named from [industrial].
+const INDUSTRIAL_KINDS = new Set(['industrial', 'warehouse', 'factory', 'tankfarm', 'containeryard']);
+// A house's name carries its number already ("No. 12, Elm Road", see buildingOwnName above), so nothing that shows a
+// name alongside a building's number should say it twice.
+const saysNumber = (name, number) => name.includes(`No. ${number}`);
+// The name on a building's card, as its Name row shows it: its own name and its number, one a line (a pub's "The Red
+// Lion" over "#123"), or the number alone for a building with no name of its own — and a house, which says both in one.
+export function buildingCardName(kind, number, key) {
+  const own = buildingOwnName(kind, number, key);
+  if (!own) return '#' + number;
+  return saysNumber(own, number) ? own : [own, '#' + number];
+}
+// The name something on the ground calls a building by (see buildingLabel in life/people/people.js, and the Press E label
+// in peopleTracking.js): its title where it has one (a pub's "The Red Lion" — nothing else needs saying of one), else its
+// name with its number after it, unless the name says the number already (a house's, above).
+export function buildingLabelName(kind, number, height, key) {
+  const title = buildingTitle(kind, number);
+  if (title) return title;
+  const name = buildingName(kind, number, height, key);
+  return saysNumber(name, number) ? name : `${name} #${number}`;
+}
+// A building is named from the speech files' own names for what it is: an office from [offices] (a company), a home from
+// [residential] (what the place is called) and an industrial yard from [industrial] (what it's called) —
+// assets/text/speech/words/locations/buildingsPlaceNames/, each of which composes its names itself (a [corpTitle]
+// [corpType] pair, say), so what a building is called is the data's business and not this file's: only the first letter
+// is raised for it (a name's is, see capitalised in ui/garble.js), the rest left exactly as written. Seeded from the
+// building's own number, so the same building is the same name every time it's looked at, named on its card or walked
+// into (see buildingLabel in people.js), and kept once made rather than picked again per look. Null until the speech
+// files have loaded, and if that category names nothing: the Name row is just the building's number till then.
+const pickedNames = new Map(); // "category:number" → that building's name ('' once the files have said there is none)
+function pickedName(category, number) {
+  const key = `${category}:${number}`; // (the seed too: one name per building per category, and never picked again)
+  if (pickedNames.has(key)) return pickedNames.get(key) || null;
+  if (!speechReady()) return null;
+  const name = capitalised(pickWord(category, mulberry32(hashNameToNumber(key))) ?? '');
+  pickedNames.set(key, name);
+  return name || null;
 }
 // A building's own name, as a pub's "The Red Lion": one of its kind's `title` lines in buildings.txt, picked by its number
 // the way the card's other lines are; '' for a kind that has none (a house).
 export function buildingTitle(kind, number = 1) {
+  return buildingSign(kind, number).text;
+}
+// A title can say how it's lettered on a sign (a mall shop's: see signAtlas in roads/mall.js), in brackets after it:
+// `title = The Red Lion {font = Georgia, color = #f2d27a}` — `font` a typeface (with `italic`, `bold` or a weight like 900
+// before it if wanted: `font = italic Brush Script MT`), `color` the lettering's, `backcolor` the cladding it's on. Any can
+// be left out.
+// Returns { text, font, color, backcolor }, all but the first null where the title doesn't say.
+export function buildingSign(kind, number = 1) {
   const titles = buildings.listOf(kind, 'title');
-  return titles.length ? titles[(number - 1) % titles.length] : '';
+  const raw = titles.length ? titles[(number - 1) % titles.length] : '';
+  const style = raw.match(/\s*\{([^{}]*)\}\s*$/), said = {};
+  if (style) style[1].split(',').forEach(part => {
+    const [key, ...value] = part.split('=');
+    if (key && value.length) said[key.trim().toLowerCase()] = value.join('=').trim();
+  });
+  const hex = v => /^#?[0-9a-f]{6}$/i.test(v || '') ? (v.startsWith('#') ? v : '#' + v) : null;
+  return { text: (style ? raw.slice(0, style.index) : raw).trim(), font: said.font || null, color: hex(said.color ?? said.colour),
+    backcolor: hex(said.backcolor ?? said.backcolour) };
 }

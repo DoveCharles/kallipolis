@@ -31,3 +31,4 @@ I'll leave you with this: [musings] {end}
 Lovely chatting, [other.name]! {end, talk.score > 1}
 Well, that was unpleasant. {end = bad, talk.score < -1}
 I think we're done here. {end = bad, talk.score = -1, patience}
+Up your's, woke moralist. We'll see who cancels who. {talk.score < 0, other.conservative < 0, conservative > 0, end = bad}

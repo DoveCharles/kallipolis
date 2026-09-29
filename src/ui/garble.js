@@ -12,12 +12,15 @@ const SCRAMBLE_STRENGTH = 0.05, KEYSMASH_STRENGTH = 0.15;
 /** Whether these traits garble text at all. */
 export const garbles = traits => traits.scramble > 0 || traits.keysmash > 0 || traits.lowercase > 0 || traits.capitalise > 0;
 
-/** `text` with its first letter capitalised, if it starts with one — a leading number or quote is left as it is. */
-const capitalised = text => /^[a-z]/.test(text) ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+/** `text` with its first letter capitalised, if it starts with one — a leading number or quote is left as it is. (A love
+ * or hate on a card starts this way, see garbledEntry, and so does a company's name on a building's card: see officeName
+ * in buildings/building-types.js.) */
+export const capitalised = text => /^[a-z]/.test(text) ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 
 // Every word's first letter capitalised: words are split on spaces and hyphens, and an opening quote or bracket goes with
 // the word it opens — so "flat-pack" reads "Flat-Pack", "don't" stays "Don't", and `"expresso" (hot)` reads `"Expresso" (Hot)`.
-const capitalisedWords = text => text.replace(/(^|[\s(–—\-])(["'(]*)([a-z])/g,
+// (The capitalise trait's own casing, and what a `[colours: capitalise]` call asks for: see fill in life/speech-text.js.)
+export const capitalisedWords = text => text.replace(/(^|[\s(–—\-])(["'(]*)([a-z])/g,
   (all, before, opener, letter) => before + opener + letter.toUpperCase());
 
 /**

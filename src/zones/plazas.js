@@ -107,13 +107,13 @@ export async function loadFountainModel() {
   });
   fountainModel = { root: gltf.scene, radius: Math.max(size.x, size.z)/2, middle, floor: box.min.y, poolRadius,
     spray: makeFountainSpray(new THREE.Vector3(middle.x, spoutY, middle.z), poolY, poolRadius) };
-  S.zones.forEach(zone => { if (zone.zoneType === 'plaza') App.subdivideZone(zone); });
+  S.zones.forEach(zone => { if (zone.zoneType === 'plaza' || zone.zoneType === 'mall') App.subdivideZone(zone); });
 }
 // The spray: droplets thrown up from the top of the spout and falling in arcs into the pool, in the model's own units. Each
 // droplet is a point with its own heading, launch speed and flight time; the vertex shader works out where along its arc
 // it is from the water's clock, so nothing is updated per frame and every fountain draws the same geometry and material.
 const SPRAY_DROPLETS = 300, SPRAY_GRAVITY = 6;
-function makeFountainSpray(spout, poolY, poolRadius) {
+export function makeFountainSpray(spout, poolY, poolRadius) {
   const rng = mulberry32(0x5eed), launch = new Float32Array(SPRAY_DROPLETS*4), phase = new Float32Array(SPRAY_DROPLETS);
   const fall = spout.y - poolY;
   for (let i=0;i<SPRAY_DROPLETS;i++) {
@@ -145,14 +145,14 @@ function makeFountainSpray(spout, poolY, poolRadius) {
   points.userData.sharedGeometry = true; points.userData.sharedMaterial = true;
   return points;
 }
-// A round fountain of radius r centered at c ({x,z}), standing on the plaza.
-function buildFountain(c, r) {
-  if (!fountainModel) return buildBoxFountain(c, r);
+// A round fountain of radius r centered at c ({x,z}), standing on the plaza (or a mall's floor, at `base`: see mall.js).
+export function buildFountain(c, r, base = Y_PLAZA) {
+  if (!fountainModel) return buildBoxFountain(c, r, base);
   const group = new THREE.Group();
   group.name = 'Fountain';
   const model = fountainModel.root.clone(true), scale = r/fountainModel.radius;
   model.scale.setScalar(scale);
-  model.position.set(c.x - fountainModel.middle.x*scale, Y_PLAZA - fountainModel.floor*scale, c.z - fountainModel.middle.z*scale);
+  model.position.set(c.x - fountainModel.middle.x*scale, base - fountainModel.floor*scale, c.z - fountainModel.middle.z*scale);
   // the pool: the water shader, with the basin's edge as its shore
   const inner = fountainModel.poolRadius*scale, shore = [];
   for (let i=0;i<32;i++) {
@@ -173,12 +173,12 @@ function buildFountain(c, r) {
   return group;
 }
 // The built-in stone fountain, drawn until the model has loaded (or if it can't).
-function buildBoxFountain(c, r) {
+function buildBoxFountain(c, r, base) {
   const group = new THREE.Group();
   group.name = 'Fountain';
   const stone = new THREE.MeshStandardMaterial({ color: FOUNTAIN_STONE, roughness: 0.8, side: THREE.DoubleSide });
   const rimH = 0.65, rimW = 0.35, inner = r - rimW;
-  const place = (mesh, y) => { mesh.position.set(c.x, Y_PLAZA + y, c.z); mesh.castShadow = true; mesh.receiveShadow = true; group.add(mesh); return mesh; };
+  const place = (mesh, y) => { mesh.position.set(c.x, base + y, c.z); mesh.castShadow = true; mesh.receiveShadow = true; group.add(mesh); return mesh; };
   place(new THREE.Mesh(new THREE.CylinderGeometry(r, r, rimH, 48, 1, true), stone), rimH/2);
   place(new THREE.Mesh(new THREE.CylinderGeometry(inner, inner, rimH, 48, 1, true), stone), rimH/2);
   place(new THREE.Mesh(new THREE.RingGeometry(inner, r, 48).rotateX(-Math.PI/2), stone), rimH);
@@ -198,7 +198,7 @@ function buildBoxFountain(c, r) {
   place(new THREE.Mesh(new THREE.CylinderGeometry(r*0.05, r*0.08, 0.7, 12), stone), 2.1);
   const spray = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.16, 1.4, 12, 1, true),
     new THREE.MeshStandardMaterial({ color: 0xe8f6ff, transparent: true, opacity: 0.55, roughness: 0.2, depthWrite: false }));
-  spray.position.set(c.x, Y_PLAZA + 3.1, c.z);
+  spray.position.set(c.x, base + 3.1, c.z);
   group.add(spray);
   return group;
 }

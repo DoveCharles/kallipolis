@@ -1,0 +1,17 @@
+Friends
+Believe Us
+[surnames] {weight = 7}
+Holler
+Love
+Pen
+Home
+Bedlam
+Worldwide
+The Money
+Pleasing
+Electronic
+[colours] [fruit] {weight = 4}
+[colours] [surnames] {weight = 2}
+Epic
+Holy
+[surnames] & [surnames]

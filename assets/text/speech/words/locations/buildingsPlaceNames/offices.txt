@@ -1,0 +1,2 @@
+[corpoPt1][corpoPt2] [corpoShort]
+[corpTitle] [corpType]

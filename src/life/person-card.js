@@ -146,9 +146,15 @@ function fill(w, index, isMan, beside = false) {
   // the person does, not what the card says about them. The name is never scrambled, but the casing traits reach it: the
   // lowercase trait sets theirs in lower case with the rest of the card, the capitalise trait gives every word a capital —
   // on the card only, never in the profile itself.
-  card.show({ name: cased(profile.name, traits), age: profile.age, mood: profile.mood,
+  const name = cased(profile.name, traits); // (the same, as the card's Name row and as its title bar: see setTitle below)
+  card.show({ name, age: profile.age, mood: profile.mood,
     loves: garbledEntry(profile.loves, traits, profile.age), hates: garbledEntry(profile.hates, traits, profile.age),
     lovesTier: profile.lovesTier, hatesTier: profile.hatesTier, lovesMods: profile.lovesMods, hatesMods: profile.hatesMods });
+  // the window's title bar names whoever's in it, rather than the kind of thing the card shows (which is what the cars',
+  // the buildings' and the rest keep there): the same name its Name row has, cased by their traits. A garble (scramble
+  // or keysmash) reaches it as it reaches the card's other headings, though never the Name row itself.
+  // (The favorites keep "Ped" as what they call them: see the heart in ui/entity-card.js.)
+  card.setTitle(name);
   // (no headshot of a cuboid person, before the people model has loaded)
   w.context.clearRect(0, 0, HEADSHOT_SIZE, HEADSHOT_SIZE);
   w.canvas.hidden = isMan == null;
@@ -473,9 +479,10 @@ onProfilesLoaded(() => openWindows().forEach(w => fill(w, w.shown.index, w.shown
 
 // a person as a favorite: kept in the project by their id, not their place in the crowd (see peopleIdSeq in
 // life/people/people.js) — they're never killed while hearted (see ui/favorites.js), so wherever they're currently
-// standing is found again by searching for their id, not assumed to be a fixed slot
+// standing is found again by searching for their id, not assumed to be a fixed slot.
+// `kindLabel`: what the favorites list says they are — the card's own kind, since its title bar is their name (see fill).
 function personFavorite(id) {
-  return { key: personKey(id), kind: 'Person', saved: { id }, spares: true,
+  return { key: personKey(id), kind: 'Person', kindLabel: 'Ped', saved: { id }, spares: true,
     follow: () => { const i = App.people.findIndex(q => q.id === id); if (i < 0) return false; App.followPerson(i); return true; } };
 }
 // `saved.index` is a save from before people had their own persistent id, back when their place in the crowd was who

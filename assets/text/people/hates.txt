@@ -1,4 +1,6 @@
 Wet stuff <nature>
+getting trapped in a microwave {appeal = -0.5} <scary>
+The confines of their apartment | the confines of my apartment <places>
 Groinal sensation
 How caramelising onions makes them sooo smalllll... :( <tastes>
 Pooping without showering immediately after <health>
@@ -20,7 +22,7 @@ Music <media>
 Being told "no" {mood = -0.3, aggression = 2} <habits>
 Shitting <health>
 Sand {parks = 0.5} <nature>
-Themself {mood = -0.6} <habits>
+Themself | me {mood = -0.6} <habits>
 People who clap <folk>
 Garfield | Garfield <media>
 Being wet <nature>

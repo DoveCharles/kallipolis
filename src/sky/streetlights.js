@@ -145,7 +145,7 @@ function paintLampMap() {
   refreshSceneIndex();
   if (builtKeyVersion !== S.sceneIndexVersion) {
     builtKeyVersion = S.sceneIndexVersion;
-    builtKey = lampPostMeshes.map(m => m.userData.lampPosts.map(p => `${p.x.toFixed(2)},${p.z.toFixed(2)},${(p.y || 0).toFixed(2)}`).join(';')).join(';')
+    builtKey = lampPostMeshes.map(m => m.userData.lampPosts.map(p => `${p.x.toFixed(2)},${p.z.toFixed(2)},${(p.y || 0).toFixed(2)},${p.strength ?? 1}`).join(';')).join(';')
       + '|' + litLobbies.map(m => `${m.userData.lobbyLight},${m.userData.lobbyColor ? m.userData.lobbyColor.getHexString() : ''},`
         + m.userData.footprint.map(p => `${p.x.toFixed(2)},${p.z.toFixed(2)}`).join(';')).join('/');
   }
@@ -153,7 +153,8 @@ function paintLampMap() {
   const key = placed.map(o => `${o.x.toFixed(2)},${o.z.toFixed(2)},${o.scale.toFixed(2)}`).join(';') + '|' + builtKey;
   if (key === paintedAs) return anyLamps;
   paintedAs = key;
-  const lamps = [...placed, ...lampPostMeshes.flatMap(m => m.userData.lampPosts.map(p => ({ x: p.x, z: p.z, scale: 1, y: p.y || 0 })))];
+  // (a lamp can be dimmer than a street lamp: `strength`, a share of one — a mall's, packed close together indoors)
+  const lamps = [...placed, ...lampPostMeshes.flatMap(m => m.userData.lampPosts.map(p => ({ x: p.x, z: p.z, scale: 1, y: p.y || 0, strength: p.strength ?? 1 })))];
   anyLamps = lamps.length > 0 || litLobbies.length > 0;
   if (!anyLamps) return false;
   let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
@@ -179,7 +180,7 @@ function paintLampMap() {
       const dx = minX + (i + 0.5)*texel - o.x, dz = minZ + (j + 0.5)*texel - o.z;
       const d = Math.sqrt(dx*dx + dz*dz)/r;
       if (d >= 1) continue;
-      const f = 1 - d, amount = 0.6*f*f*(3 - 2*f), k = j*w + i; // a broad pool, softening to nothing at the edge
+      const f = 1 - d, amount = 0.6*f*f*(3 - 2*f)*(o.strength ?? 1), k = j*w + i; // a broad pool, softening to nothing at the edge
       addLight(light, k, LAMP_COLOR, amount);
       if (amount > brightest[k]) { brightest[k] = amount; floor[k] = o.y || 0; }
     }

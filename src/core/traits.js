@@ -38,6 +38,8 @@ export const TRAITS = {
   agemult:   { base: 1, min: 0.1, max: 1000, hidden: true }, // no upper limit in practice, for vampiric / immortal types
   dodge:     { base: 0, min: 0, max: 1, combine: 'add' }, // the chance of leaping clear of a punch, then going after whoever threw it (see dodgePunch in life/people/peopleActivities.js)
   blazed:    { base: 0, min: 0, max: 1, combine: 'on' }, // the whites of their eyes a little red (see BLAZED_EYE_RED in life/people/people.js)
+  sick:      { base: 0, min: 0, max: 1, combine: 'on' }, // their skin goes a sickly green (SICK_SKIN_COLOR in life/people/people.js) — the 🤢 mood in people/moods.txt gives it
+  zombie:    { base: 0, min: 0, max: 1, combine: 'on' }, // their skin goes a dead blue-grey (ZOMBIE_SKIN_COLOR in life/people/people.js) — the 🧟 mood in people/moods.txt gives it
   vampire:   { base: 0, min: 0, max: 1, combine: 'on', hidden: true }, // also brings everything in TRAIT_MACROS.vampire; pales the skin with age (see life/people/people.js)
   ageless:   { base: 0, min: 0, max: 1, combine: 'on' }, //hair doesn't grey with age
   nickname:  { base: 0, min: 0, max: 1, combine: 'on' },

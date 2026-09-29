@@ -123,6 +123,19 @@ Things are looking up. {felt = cheered, mood}
 I forgot how to smile for a second there. {felt = cheered, sad, thought}
 Fine. FINE. I'm happy now. {felt = cheered, aggression}
 
+# ---- turning up at a party
+Right, whose is this then? {felt = party}
+> Mine, actually. Make yourself at home. {chatty}
+Let's get this party started. {felt = party, chatty, happy}
+> Somebody get the music on. {happy}
+I don't know a single person here. {felt = party, nosy, thought}
+Where is everyone? {felt = party, thought}
+This better be worth the walk. {felt = party, patience = -1}
+Nice place. Very... beige. {felt = party, evil}
+Whose house is this? {felt = party, here.building = home}
+Somebody's already spilled something. {felt = party, mood = -1}
+I'm not staying long. {felt = party, patience = -1, thought}
+
 Oof, that last one's gone to my head. {felt = drunk}
 I feel amazing. {felt = drunk, happy}
 The world's gone all wobbly. {felt = drunk, thought}

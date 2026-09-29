@@ -61,7 +61,7 @@ Birdwatching {nosy = 5, parks = 3, speed = 0.6, evil = -0.05, aggression = 0.5, 
 Riding the glass train <hobbies>
 Pushing little buttons {fidgety = 3} <habits>
 Fixing stuff {evil = -0.1, stimulants = 2, nerd = 3} <hobbies>
-Dissembling and then reassembling car engines {stimulants = 12}
+Dissembling and then reassembling car engines {stimulants = 12, appeal = -0.05}
 Cooking {nerd = 2} <hobbies>
 Pretending they're in a Tool visual | pretending I'm in a Tool visual {speed = 0.5} <surreal>
 Squash {speed = 1.5, nerd = 0.8, conservative = 0.05} <hobbies>
@@ -70,14 +70,14 @@ Sucking clits {agemult = 0.8} <lewd>
 Truckin' {speed = 1.3, aggression = 2, alcoholic = 2, smoker = 2} <hobbies>
 Pissing about {fidgety = 3, patience = 0.4, aggression = 2, alcoholic = 2, nerd = 0.5} <habits>
 Waxing <health>
-The weirdest shit you've ever heard of. I'm not even gonna say it | The weirdest shit ever. I'm not even gonna say {evil = 0.1} <surreal>
-Debunking Christians {talkative = 4, aggression = 5} <beliefs>
+The weirdest shit you've ever heard of. I'm not even gonna say it | The weirdest shit ever. I'm not even gonna say {appeal = -0.1} <surreal>
+Debunking Christians {talkative = 4, aggression = 5, conservative = -0.05} <beliefs>
 Reddit (loser) | Reddit {chatty = 0.2, blinks = 0.3, evil = 0.05, agemult = 0.8, aggression = 5, nerd = 3} <media>
-Pimping {speed = 0.7, plazas = 3, evil = 0.3, aggression = 5, smoker = 10, outlaw = 10} <vice>
+Pimping {speed = 0.7, plazas = 3, evil = 0.3, aggression = 5, smoker = 10, outlaw = 10, appeal = -0.1} <vice>
 Driving <hobbies>
 Helping animals (will sometimes put  animals in dangerous situations in order to help them) {parks = 3} <nature>
 Lying {talkative = 2, evil = 0.05, outlaw = 3} <vice>
-Shitty fucking overpriced merchandise <stuff>
+Shitty fucking overpriced merchandise | awesome, adequately priced, merchandise <stuff>
 The milking machine <surreal>
 Skiing (lie) | skiing <hobbies>
 Laptop in bed {lounging = 3, agemult = 0.8, nerd =2} <habits>
@@ -201,7 +201,7 @@ The subscription model {evil = 0.05} <beliefs>
 Looking at their guitar but never playing it, ever | looking at my guitar but never playing it, ever <habits>
 Not eating their vegetables {size = 0.84, evil = 0.05} | not eating my vegetables <tastes>
 Pots of gold {size =0.45, evil = 0.05, aggression = 10} <stuff>
-Stinky tofu <tastes>
+Stinky tofu <tastes, appeal = -0.2>
 Capitalising Every Word In A Sentence {capitalise, limit = 3b} <habits>
 Rocket boots {speed = 4} <stuff>
 Fitting it all in {speed = 1.2, chatty = 0.8, talkative = 0.8, fidgety = 0} <habits>

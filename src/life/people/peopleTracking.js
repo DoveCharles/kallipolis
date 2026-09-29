@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { App, S } from '../../core/shared.js';
+import { App, S, buildingHolders } from '../../core/shared.js';
 import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { controlInput, endPossession, possession, startPossession } from '../possession.js';
@@ -13,7 +13,7 @@ import { profileOf } from '../profiles.js';
 import { IS_TOUCH } from '../../core/device.js';
 import { pointInPolygon } from '../../core/math.js';
 import { buildingKey, buildingNumber, distToPolygonBoundary, footprintBounds } from '../../buildings/footprints.js';
-import { buildingEnterable, buildingKindOf, buildingName, buildingTitle, buildingTypeOf } from '../../buildings/building-types.js';
+import { buildingEnterable, buildingKindOf, buildingLabelName, buildingName, buildingTitle, buildingTypeOf } from '../../buildings/building-types.js';
 import { openRoomDoor, roomBeyondDoor, roomDoorway, roomNear, roomThroughDoor, roomVisit, roomWalkable, someoneHome } from '../../buildings/interior.js';
 
 // ============== following someone with camera  ============== 
@@ -517,7 +517,7 @@ let target = null;
 // every building (anything built with a footprint) whose footprint comes within `reach` of x, z: { zone, group, index, fp, c, r }
 function buildingsNear(x, z, reach) {
   const found = [];
-  S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
+  buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
     const fp = group.userData.footprint;
     if (!fp || fp.length < 3 || !group.visible) return;
     const { c, r } = footprintBounds(group);
@@ -549,9 +549,10 @@ function buildingAhead(p) {
     const hit = list.find(b => between(b, p.y) && pointInPolygon({ x, z }, b.fp));
     if (!hit) continue;
     const key = buildingKey(hit.zone, hit.index), number = buildingNumber(key), kind = buildingKindOf(hit.group, hit.zone);
-    const title = buildingTitle(kind, number), name = buildingName(kind, number, hit.group.userData.height ?? 0);
+    const height = hit.group.userData.height ?? 0;
+    const title = buildingTitle(kind, number), name = buildingName(kind, number, height, key);
     return { ...hit, key, kind, number, at: { x, z }, enterable: buildingEnterable(kind),
-      name: title || `${name} #${number}`, type: title ? name : buildingTypeOf(kind, number).name ?? name };
+      name: buildingLabelName(kind, number, height, key), type: title ? name : buildingTypeOf(kind, number).name ?? name };
   }
   return null;
 }
@@ -699,7 +700,7 @@ function stayIndoors(p) {
   p.mode = 'indoors';
   p.onRoad = false;
   const out = building.door ?? back;
-  p.indoors = { building, stage: 'inside', back: { x: out.x, y: back.y, z: out.z }, hoursLeft: 0.5 + peopleRng()*2, shop: null, served: true };
+  p.indoors = { building, stage: 'inside', back: { x: out.x, y: back.y, z: out.z }, hoursLeft: 0.5 + peopleRng()*2, shop: null, served: true, party: false };
   p.inRoom = { visit: roomVisit(), route: null, wait: 1 + peopleRng()*3, seat: null, stage: '' };
   camera.near = roomNear();
   camera.updateProjectionMatrix();

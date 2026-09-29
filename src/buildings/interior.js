@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { camera, scene, renderer, STENCIL_ROOM_SHADOW } from '../core/scene.js';
-import { S, App } from '../core/shared.js';
+import { S, App, buildingHolders } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
 import { possession } from '../life/possession.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -3071,7 +3071,7 @@ function hideNeighbours(group) {
     return true;
   };
   const hidden = [], floor = room.position.y, box = new THREE.Box3();
-  S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach(other => {
+  buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach(other => {
     const fp = other.userData.footprint;
     if (other === group || !fp || fp.length < 3 || !other.visible) return;
     const { c, r } = footprintBounds(other);
@@ -3132,13 +3132,17 @@ function placeCamera() {
 }
 export function enterBuilding(group, key, kind = 'home') {
   if (inside) leaveBuilding();
+  // A building can say where its room goes instead (userData.room): a mall's shop has the room the shops had before rooms
+  // were sized for their buildings, always with a shopfront, set just behind its own and facing the concourse — { w, d,
+  // at: {x, z}, facing: the way out through the shopfront } (see makeUnit in roads/mall.js).
+  const fixed = group.userData.room;
   const fp = group.userData.footprint, angle = fp && fp.length >= 3 ? longestEdgeAngle(fp) : 0;
-  const size = roomSizeFor(group, key, LAYOUTS[kind] ? kind : 'home', angle);
+  const size = fixed ? { w: fixed.w, d: fixed.d, turned: false } : roomSizeFor(group, key, LAYOUTS[kind] ? kind : 'home', angle);
   shapeRoom(size.w, size.d);
   useLayout(kind);
   const glass = current === LAYOUTS.office && keyFraction(key) >= OFFICE_PUNCHED;
   // (a pub's room comes either way: windows in the far walls, or a shopfront beside the door — by its key)
-  if (current === LAYOUTS.pub) LAYOUTS.pub.shopfront = keyFraction(key, ':shopfront') < PUB_SHOPFRONT;
+  if (current === LAYOUTS.pub) LAYOUTS.pub.shopfront = fixed ? true : keyFraction(key, ':shopfront') < PUB_SHOPFRONT;
   // (a warehouse or a factory's room is on its ground floor: its roof's high over one big space, not storeys — and a pub's
   // on the street)
   const workshop = !!current.industrial, groundFloor = workshop || current === LAYOUTS.pub || !!current.shop;
@@ -3146,11 +3150,13 @@ export function enterBuilding(group, key, kind = 'home') {
   blankWalls.visible = shopfront.visible = !!current.shopfront; doorWall.visible = !current.shopfront;
   const bounds = new THREE.Box3().setFromObject(group);
   const base = bounds.min.y, height = group.userData.height ?? (bounds.max.y - base);
-  const centre = fp && fp.length >= 3 ? footprintBounds(group).c : bounds.getCenter(new THREE.Vector3());
+  const centre = fixed ? fixed.at : fp && fp.length >= 3 ? footprintBounds(group).c : bounds.getCenter(new THREE.Vector3());
   const storey = groundFloor ? 0 : Math.max(0, Math.floor((height - PLINTH - ROOM_H - 0.3)/FLOOR_HEIGHT));
   room.position.set(centre.x, base + PLINTH + storey*FLOOR_HEIGHT, centre.z);
-  room.rotation.y = angle + (size.turned ? Math.PI/2 : 0);
   room.scale.x = keyFraction(key, ':flip') < ROOM_FLIPPED ? -1 : 1;
+  // (the door's wall is the room's -x: turned to face `facing`, and round the other way when the room's mirrored, which
+  // puts that wall on its +x — so the door's at the other end of the same shopfront)
+  room.rotation.y = fixed ? Math.atan2(fixed.facing.z, -fixed.facing.x) + (room.scale.x < 0 ? Math.PI : 0) : angle + (size.turned ? Math.PI/2 : 0);
   room.visible = true;
   room.updateMatrixWorld(true);
   setRoomGlow(true);
@@ -3368,6 +3374,19 @@ export function roomSpot(rng) {
 export const roomDoorway = () => room.localToWorld(new THREE.Vector3(-ROOM_W/2 + 0.3, 0, DOOR_Z));
 /** Through the room's door, in the dark beyond it, in the world. */
 export const roomBeyondDoor = () => room.localToWorld(new THREE.Vector3(-ROOM_W/2 - RECESS + 0.2, 0, DOOR_Z));
+// Just outside the door, where the room's own thick wall and the black beyond the doorway hide whoever's standing there
+// from anyone in the room, and where the door's wall — the one wall without windows in it — puts them out of sight of
+// those, too: `out` from the mouth of the doorway (the far side of the room's wall) and `across` along it, +z for the end
+// away from the corner the camera starts in. At the room's own floor height; anyone putting someone out there on the
+// ground gives their own y (see the party in peopleActivities.js, which queues people up out here to come in).
+/**
+ * A spot just outside the room's door, in the world.
+ * @param {number} out - how far past the doorway's mouth
+ * @param {number} across - how far along the wall from the door, +z
+ * @returns {THREE.Vector3} the spot, at the room's floor height
+ */
+export const roomOutsideDoor = (out = 0.4, across = 0) =>
+  room.localToWorld(new THREE.Vector3(-ROOM_W/2 - THICK - out, 0, DOOR_Z + across));
 
 // Walked about by hand (see "walking into buildings" in life/people/peopleTracking.js): whether a point in the world is
 // somewhere to stand in the room — the walk grid's floor (BODY clear of the walls and furniture), or the doorway's recess

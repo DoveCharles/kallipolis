@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { App, S } from '../../core/shared.js';
+import { App, S, buildingHolders } from '../../core/shared.js';
 import { Y_PARK, Y_PATH, Y_ROAD, Y_SIDEWALK, Y_ZONE_GROUND } from '../../core/scene.js';
 import { centroid } from '../../core/math.js';
 import { buildingEnterable, buildingKindOf } from '../../buildings/building-types.js';
@@ -194,6 +194,15 @@ export function buildPeopleNav() {
       seats: zone.zoneType==='plaza' ? (zone.benchSeats || []).map(seat => ({ ...seat, by: null })) : [],
       trees: zone.zoneType==='park' ? zone.treeSpots || [] : [] });
   });
+  // a mall's food courts: hangouts like a plaza's, round their tables, palms and lamps, with a seat at every chair (see
+  // roads/mall.js)
+  (S.malls || []).flatMap(mall => mall.foodCourts || []).forEach(fc => {
+    if (fc.r < 3) return;
+    const inside = (x, z) => Math.hypot(x - fc.x, z - fc.z) < fc.r && fc.obstacles.every(o => Math.hypot(x - o.x, z - o.z) > o.r);
+    const box = { minX: fc.x - fc.r, maxX: fc.x + fc.r, minZ: fc.z - fc.r, maxZ: fc.z + fc.r };
+    areas.push({ kind: 'foodcourt', inside, insideWet: inside, fountain: null, ...box, wetBox: box, size: Math.PI*fc.r*fc.r, y: Y_ZONE_GROUND,
+      exits: [], seats: fc.seats.map(seat => ({ ...seat, by: null })), trees: [] });
+  });
   // the walkways' own footprint, a little proud of their edges: a path cutting through a park is part of the hangout —
   // people walk and stand on it — but nobody sits or lies down on one (see clearGround)
   const onPath = createRegionTester(S.pathFootprint.length ? offsetPaths(S.pathFootprint, 0.35, ClipperLib.JoinType.jtRound) : []);
@@ -202,7 +211,7 @@ export function buildPeopleNav() {
   const midStrokes = [], curbStrokes = [], edgeStrokes = [];
   let anySidewalk = false, widestSidewalk = 0; // (the widest, for how far a building can be off a walkway: see buildingDoors)
   S.roadLines.forEach(line => {
-    if (isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line)) return;
+    if (isTrainLine(line) || isWalkwayLine(line) || isRiverLine(line) || line.roadType === 'mall') return;
     const nodePts = line.nodeIds.map(id => roadNodes[id]).filter(Boolean);
     if (nodePts.length < 2) return;
     const { hw, cw, sw } = roadLineWidths(line);
@@ -292,10 +301,10 @@ export function buildPeopleNav() {
   // raised walkways: along each deck line up at its height, and down each ramp — which is all that joins them to anything
   // on the ground: its foot onto the sidewalk or a path nearby, its top onto the deck. Nothing else up there links to the
   // ground, to hangouts or to buildings (see byPlace and the grid below, which leave them out).
-  // (a mall's galleries, bridges and escalators are walked the same way, but indoors: see generateMallContent — their
+  // (a mall's galleries, bridges and escalators are walked the same way, but indoors: see roads/mall.js — their
   // escalators' feet join the concourse, never a pavement)
   const rampFeet = [];
-  [...(S.raisedNav || []), ...S.zones.flatMap(zone => zone.drawing ? [] : zone.mallNav || [])].forEach(net => {
+  [...(S.raisedNav || []), ...(S.malls || []).flatMap(mall => mall.mallNav || [])].forEach(net => {
     const decks = [];
     net.decks.forEach(tess => {
       const { pts } = resampleLine(tess), cum = cumulative(pts);
@@ -324,8 +333,8 @@ export function buildPeopleNav() {
   // the lanes between a suburb's hedges, walked like any other path: laid out with the plots, since they're the gaps
   // left between them (see gapLanes). They're also what brings a house in the middle of a block within reach of a door —
   // off the sidewalk, the only house anyone could walk into is one fronting the road (see buildingDoors). A mall's
-  // concourse is walked by lanes too, in at one entrance and out at the other (see generateMallContent).
-  S.zones.forEach(zone => {
+  // concourse is walked by lanes too, in at one entrance and out at the other (see roads/mall.js).
+  buildingHolders().forEach(zone => {
     if (zone.drawing || !zone.walkGaps?.length) return;
     // (how many lanes end at each point, since only a lane's loose end can have been stopped by a path)
     const placeOf = q => Math.round(q.x*2) + ',' + Math.round(q.z*2), endsAt = new Map();
@@ -490,14 +499,14 @@ const doorReach = (zone, sidewalkWidth) =>
  */
 function buildingDoors(lines, grid, CELL, onPavement, sidewalkWidth, upGrid) {
   const buildings = [];
-  S.zones.forEach(zone => {
+  buildingHolders().forEach(zone => {
     const groundReach = doorReach(zone, sidewalkWidth);
     (zone.buildingsGroup?.children || []).forEach((group, k) => {
       const fp = group.userData.footprint;
       if (!fp || fp.length < 3) return;
       const kind = buildingKindOf(group, zone);
       if (!buildingEnterable(kind)) return; // (nobody wanders into a tank farm: see enterable in buildings.txt)
-      // a building upstairs (a mall's upper units: see generateMallContent) opens onto a raised deck at its floor's height
+      // a building upstairs (a mall's upper units: see roads/mall.js) opens onto a raised deck at its floor's height
       const base = group.userData.base || 0, upstairs = base > 0.5, reach = upstairs ? UPSTAIRS_DOOR_REACH : groundReach;
       const points = upstairs ? upGrid : grid;
       const c = centroid(fp), size = Math.max(...fp.map(q => Math.hypot(q.x - c.x, q.z - c.z)));

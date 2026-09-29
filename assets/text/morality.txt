@@ -22,7 +22,6 @@ industrial = -4
 suburbs = -1
 town = 1
 airport = -2
-mall = -1
 
 # ------------------------------------------------------------------------------------------------------------------------
 # PATHS: per path of each type (roads are the ones with sidewalks)
@@ -31,6 +30,7 @@ roads = -0.5
 walkways = 0.5
 rivers = 1
 train lines = 1
+malls = -1
 
 # ------------------------------------------------------------------------------------------------------------------------
 # BUILDINGS: per building, by the zone it's in
@@ -39,7 +39,7 @@ train lines = 1
 # farmhouses: in a Farmland zone
 # houses: in a Suburbs zone
 # townhouses: in a Town zone (shops too)
-# shops: a Mall zone's units, upstairs and down
+# shops: a mall's units, upstairs and down
 [buildings]
 commercial = -0.1
 industrial = -0.5

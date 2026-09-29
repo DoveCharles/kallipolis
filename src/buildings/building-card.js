@@ -1,12 +1,13 @@
 import * as THREE from 'three';
-import { S, App } from '../core/shared.js';
+import { S, App, buildingHolders } from '../core/shared.js';
 import { camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
 import { buildingKey, buildingNumber, roomLayoutOf } from './footprints.js';
-import { buildingKindOf, buildingName, buildingTitle, buildingTypeOf, buildingEnterable } from './building-types.js';
+import { buildingKindOf, buildingKindName, buildingCardName, buildingTypeOf, buildingEnterable } from './building-types.js';
 import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
+import { startParty } from '../life/people/peopleActivities.js';
 
 // ============================================================ following a building
 // As for a car or a carriage: a click on a building in World mode keeps the view on it, with a card at the bottom right
@@ -14,25 +15,36 @@ import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 // assets/text/buildings.txt, by its kind — see building-types.js) and who's inside
 // (see "going indoors" in people.js), until a click elsewhere, a pan, leaving World mode, or its zone being rebuilt lets it go.
 // The card itself is the shared one in ui/entity-card.js. No Smite button, and nothing to be behind the wheel of.
-// followed: { zone, group, key, center, room } of the building the camera's on (room: its inside, see roomLayoutOf), or null
+// followed: { zone, group, key, number, kind, center, room } of the building the camera's on (room: its inside, see
+// roomLayoutOf), or null. `number` and `kind` are what its room's laid out as and what kind of building it is — what the
+// Party button's party is set by (see startParty in peopleActivities.js).
 let followed = null;
 const raycaster = new THREE.Raycaster();
-const ENTER = ['Enter', 'Go inside'], LEAVE = ['Leave', 'Back outside'];
+const ENTER = ['Enter', 'Go inside'], LEAVE = ['Leave', 'Back outside'], PARTY = ['Party', 'Some people turn up and come in'];
 const card = makeCard({ id: 'building-card', title: 'Building', onClose: () => stopFollowingBuilding(),
-  action: { text: ENTER[0], title: ENTER[1], onClick: () => toggleInside() } });
+  action: { text: ENTER[0], title: ENTER[1], onClick: () => toggleInside() },
+  subAction: { text: PARTY[0], title: PARTY[1], onClick: () => throwAParty() } });
 // the card's Enter button: into the followed building's one room (see interior.js), and back out. Only on buildings
 // people go into (enterable in assets/text/buildings.txt): a tank farm has no inside to show.
 function toggleInside() {
   if (!followed?.enterable) return;
   if (isInsideBuilding()) leaveBuilding(); else enterBuilding(followed.group, followed.key, followed.room);
   card.setAction(...(isInsideBuilding() ? LEAVE : ENTER));
+  // (the Party button, under Leave, only while the camera's in there: there's a door to bring people to, and the room's up
+  // to say where it is — see roomOutsideDoor)
+  card.showSubAction(isInsideBuilding());
+}
+// the card's Party button: some people turn up outside the followed building's door and come in (see startParty in
+// peopleActivities.js, which says per kind of building who does and how many)
+function throwAParty() {
+  if (followed && isInsideBuilding()) startParty(followed);
 }
 const drawThumbnail = makeThumbnailDrawer(card.canvas);
 
 // every zone's buildings (a zone's own children named 'Building': city blocks', industrial yards' and farmsteads')
 function buildingsInZones() {
   const found = [];
-  S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
+  buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
     if (group.name === 'Building' && group.visible) found.push({ zone, group, index });
   }));
   return found;
@@ -59,20 +71,22 @@ function followBuildingAt(clientX, clientY) {
 function followBuilding(picked) {
   leaveBuilding();
   card.setAction(...ENTER);
+  card.showSubAction(false);
   const box = new THREE.Box3().setFromObject(picked.group), center = box.getCenter(new THREE.Vector3());
   const radius = box.getBoundingSphere(new THREE.Sphere()).radius;
   const key = buildingKey(picked.zone, picked.index), number = buildingNumber(key);
   const kind = buildingKindOf(picked.group, picked.zone);
-  followed = { zone: picked.zone, group: picked.group, key, center, room: roomLayoutOf(kind, number),
+  followed = { zone: picked.zone, group: picked.group, key, number, kind, center, room: roomLayoutOf(kind, number),
     enterable: buildingEnterable(kind) };
   card.showAction(followed.enterable);
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(CAMERA_MIN_RADIUS, Math.min(600, radius*2.8));
   const info = buildingTypeOf(kind, number);
-  // what it is in the title bar; its own name (see buildingTitle), if it has one, then its number, as the card's name
-  const title = buildingTitle(kind, number);
-  card.setTitle(buildingName(kind, number, picked.group.userData.height ?? 0));
-  card.show({ ...info, name: title ? [title, '#' + number] : '#' + number });
+  // what it is in the title bar (an Office Tower or Office Building, a Pub — see buildingKindName); its own name, then
+  // its number, as the card's Name row: a pub's "The Red Lion", an office's company, a house's "No. 4213, Smith's Road",
+  // and for a farm — which has no name of its own — just its number (see buildingCardName)
+  card.setTitle(buildingKindName(kind, number, picked.group.userData.height ?? 0));
+  card.show({ ...info, name: buildingCardName(kind, number, key) });
   setBuildingCardInhabitants([]);
   drawThumbnail(thumbnailOf(picked.group, box, center, radius));
   card.setFavorite({ key: 'building:' + key, kind: 'Building', follow: () => {
@@ -125,7 +139,7 @@ function setBuildingCardInhabitants(names, tracked = -1, onPick = null) {
 export function updateBuildingFollow() {
   if (!followed) return;
   const { zone, group, center } = followed;
-  if (S.interactionMode !== 'move' || !S.zones.includes(zone) || group.parent !== zone.buildingsGroup) { stopFollowingBuilding(); return; }
+  if (S.interactionMode !== 'move' || !buildingHolders().includes(zone) || group.parent !== zone.buildingsGroup) { stopFollowingBuilding(); return; }
   if (!isInsideBuilding()) controls.goalTarget.copy(center); // (inside, the room holds the camera: see interior.js)
 }
 

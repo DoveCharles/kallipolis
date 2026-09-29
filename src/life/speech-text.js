@@ -1,9 +1,10 @@
-import { S } from '../core/shared.js';
+import { S, buildingHolders } from '../core/shared.js';
 import { TRAITS } from '../core/traits.js';
 import { entryOf } from '../core/entries.js';
 import { setEntryFiller } from './profiles.js';
 import { feelingFor, introduced } from './people/peopleRelations.js';
 import { moralityLevel } from '../ui/morality.js';
+import { capitalisedWords } from '../ui/garble.js';
 import { roomLayoutOf } from '../buildings/footprints.js';
 import { tessellateClosedPath } from '../core/splines.js';
 import { peopleNav } from './people/people.js';
@@ -35,13 +36,15 @@ let lastReaction = -Infinity;
 export const SEEN_TIME = 60; // seconds someone remembers what they saw or felt, for {seen} and {felt} (p.seen / p.felt: see witness, notice and feel in people/people.js)
 const DEATHS = ['killedbycar', 'beatentodeath', 'smited', 'drowned', 'exploded'];
 const SIGHTS = [...DEATHS, 'death', 'punch', 'knockedbycar', 'resurrected', 'waterwalking', 'smelly']; // ('death': any of DEATHS)
-const FEELINGS = ['punched', 'hitbycar', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes', 'gifted', 'cheered'];
+const FEELINGS = ['punched', 'hitbycar', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes', 'gifted', 'cheered', 'party'];
 const MOOD_SHOWS = 0.3;       // how far their face (p.emotion, -1 to 1) has to be from neutral for is = sad / happy
 const HURT_BELOW = 0.7;       // share of full health under which they're hurt
 const STATES = { // {is = …}: how the speaker (or other.is: who they're talking to) is right now
   drunk: person => !!person?.traits?.drunk || (person?.pints ?? 0) >= 1, // (the drunk trait, or a pint or more in them)
   bloodlusting: person => !!person?.lusting,
   bloody: person => (person?.blood ?? 0) > 0,
+  sick: person => !!person?.traits?.sick, // (the traits the 🤢 and 🧟 moods give them: their skin's gone green, or a dead blue-grey)
+  zombie: person => !!person?.traits?.zombie,
   sad: person => (person?.emotion ?? 0) < -MOOD_SHOWS,
   happy: person => (person?.emotion ?? 0) > MOOD_SHOWS,
   scared: person => person?.fright?.stage === 'flee' || ((person?.blood ?? 0) > 0 && !person?.traits?.bloodlust),
@@ -49,7 +52,7 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   // (sat down: on a bench, in a circle on the grass, on a seat indoors — as isSeated in people/peopleActivities.js)
   sitting: person => ((person?.act === 'bench' || person?.act === 'circle') && person.stage === 'sit') || (!!person?.inRoom?.seat && person.inRoom.stage === 'sit'),
 };
-const PLACES = ['park', 'plaza', 'beach', 'roadside', 'path', 'bridge', 'crossing']; // (here.<place>: see placeOf)
+const PLACES = ['park', 'plaza', 'beach', 'foodcourt', 'roadside', 'path', 'bridge', 'crossing']; // (here.<place>: see placeOf)
 // here.<zone>: standing in a zone of that type (zoneOf); city is the 'buildings' zone
 const ZONES = { plain: 'plain', park: 'park', water: 'water', beach: 'beach', farmland: 'farmland', suburbs: 'suburbs',
   town: 'town', plaza: 'plaza', city: 'buildings', buildings: 'buildings', industrial: 'industrial', airport: 'airport', mall: 'mall' };
@@ -124,6 +127,10 @@ function parseTags(text, where) {
 // people/ lists said with a small first letter ("I love energy drinks") unless given a spoken wording after a |
 const LOWERED = ['loves', 'hates'];
 const lowerFirst = text => text.charAt(0).toLowerCase() + text.slice(1);
+// What a [category: …] call can ask for besides a form, which is any other word it names (see fill): [animals: a] with
+// a/an in front, [loves: lower] with its first letter made small, [colours: capitalise] with every word's raised,
+// [interests: hated] for the negative pick.
+const CALL_OPTIONS = ['a', 'lower', 'capitalise', 'hated'];
 // An entry's {traits} (people/'s lists) as tags: each trait's effect on someone starting at its base, measured -1 to 1 as
 // for the speaker's traits (see traitLevel), softened by a square root so a small effect still leans. `sign` -1 for hates:
 // hating slow walkers makes someone fast, so it's the slow who'd like them.
@@ -329,7 +336,7 @@ function placeOf(person) {
 const outlines = new WeakMap();
 function zoneOf(person) {
   let found = null;
-  (S.zones || []).forEach(zone => {
+  buildingHolders().forEach(zone => { // (a mall's outline too: see roads/mall.js)
     if (zone.drawing || !zone.points || zone.points.length < 3) return;
     let cached = outlines.get(zone);
     if (!cached || cached.points !== zone.points || cached.count !== zone.points.length) outlines.set(zone, cached = { points: zone.points, count: zone.points.length, poly: tessellateClosedPath(zone.points) });
@@ -466,6 +473,8 @@ function personalItem(key, person) {
   return wordIndex.get(plain(entry)) ?? { text: entry, weight: 1, traits: {}, world: [] };
 }
 // A line's text with its [placeholders] filled; `vars` holds #n picks for the whole conversation. Null if one can't be.
+// A call takes a form and any of CALL_OPTIONS with it: [animals: plural], [animals: a], [loves: lower], [colours:
+// capitalise], [interests: hated].
 function fill(text, person, vars, depth = 0, picks = null) {
   let failed = false;
   const counts = {};
@@ -475,8 +484,8 @@ function fill(text, person, vars, depth = 0, picks = null) {
     const [rawName, tag] = head.split('#').map(s => s.trim());
     const name = rawName.toLowerCase(), options = rest.join(':').split(',').map(o => o.trim().toLowerCase()).filter(Boolean);
     if (NAMED.test(name)) { const said = nameIn(name, person); if (!said) failed = true; return said ?? ''; }
-    const hated = options.includes('hated'), article = options.includes('a'), lower = options.includes('lower');
-    const form = options.find(o => o !== 'hated' && o !== 'a' && o !== 'lower') || null;
+    const hated = options.includes('hated'), article = options.includes('a'), lower = options.includes('lower'), everyWord = options.includes('capitalise');
+    const form = options.find(o => !CALL_OPTIONS.includes(o)) || null;
     const held = tag ? vars[`${name}#${tag}`] : null;
     // (picks: the card's words, reused in order by the spoken wording — see fillEntry)
     const nth = counts[name] = (counts[name] ?? -1) + 1, reused = !tag && picks?.reuse ? picks.reuse[name]?.[nth] : null;
@@ -489,6 +498,7 @@ function fill(text, person, vars, depth = 0, picks = null) {
     vars.$last = item; // (for {likes} on the replies)
     if (said == null) { failed = true; return ''; }
     if (lower) said = said.charAt(0).toLowerCase() + said.slice(1); // (a list written with capitals, like people/loves.txt)
+    else if (everyWord) said = capitalisedWords(said); // (one written small, like colours.txt: a capital on every word)
     return article ? `${/^[aeiou]/i.test(said) ? 'an' : 'a'} ${said}` : said;
   });
   return failed ? null : out.replace(/\s+/g, ' ').trim();
@@ -600,6 +610,36 @@ export const pickCloser = (person, other = null) => ready ? (speakingTo = other,
 export const pickGreeting = (person, other) => ready ? (speakingTo = other, sayFrom(categoryItems('greetings'), person)) : null;
 
 export const pickShout = (person, category) => ready ? (speakingTo = null, sayFrom(categoryItems(category), person)) : null;
+
+/**
+ * A word or phrase from a category, for naming something that isn't a person — an office tower's company, from
+ * [corpTitle] and [corpType] (see officeName in buildings/building-types.js). The entry's first form, its
+ * [placeholders] filled in, and nobody's traits leaning the pick: every pick, placeholders included, comes from `rng`,
+ * so one seed always names the same thing the same. Null while the files are still loading, or if the category has
+ * nothing whose placeholders can be filled (an entry naming an empty category, say).
+ * @param {string} category - As a line writes it: [corpTitle] and "corpTitle.txt" both mean the category `corptitle`.
+ * @param {Function} rng - 0 to 1
+ * @returns {?string}
+ */
+export function pickWord(category, rng) {
+  if (!ready) return null;
+  // (categories are keyed by their file's name made small — see loadAll and nameOf — so the name is taken as it's
+  // written anywhere else, [corpTitle]'s capitals and all)
+  const name = String(category).toLowerCase();
+  const was = random, wasTo = speakingTo; // (put back afterwards: this isn't a line, and nobody's saying it)
+  random = rng; speakingTo = null;
+  try {
+    const tried = new Set();
+    for (let i = 0; i < TRIES; i++) {
+      const item = pickItem(categoryItems(name).filter(it => !tried.has(it)), null);
+      if (!item) return null;
+      tried.add(item);
+      const said = item.forms ? item.forms.first : fill(item.text, null, {});
+      if (said) return said;
+    }
+    return null;
+  } finally { random = was; speakingTo = wasTo; }
+}
 
 /**
  * Whether someone has something they've just seen or felt still to react to (see pickReaction).

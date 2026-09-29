@@ -47,6 +47,7 @@ export function navRebuildOnHold() { return S.selection.type === 'road' || S.dra
 // Half road width, curb width and sidewalk width for one line.
 export function roadLineWidths(line) {
   const w = line.width || S.DEFAULT_ROAD_WIDTH;
+  if (line.roadType === 'mall') return { hw: w/2, cw: 0, sw: line.mall?.depth ?? 14 }; // (a mall's concourse, and its shops either side)
   const cw = w >= CURB_MIN_ROAD_WIDTH ? Math.min(CURB_WIDTH, w*0.15) : 0; // proportionally thinner on narrower roads
   const sw = Math.max(line.sidewalkWidth!=null ? line.sidewalkWidth : S.DEFAULT_SIDEWALK_WIDTH, 0);
   return { hw: w/2, cw, sw };

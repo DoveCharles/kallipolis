@@ -87,11 +87,10 @@ const GROUPS = [
     { key: 'beach', label: 'Beaches' }, { key: 'water', label: 'Water' }, { key: 'plaza', label: 'Plazas' },
     { key: 'farmland', label: 'Farmland' }, { key: 'industrial', label: 'Industrial' },
     { key: 'suburbs', label: 'Suburbs' }, { key: 'town', label: 'Towns' }, { key: 'airport', label: 'Airports' },
-    { key: 'mall', label: 'Malls' },
   ] },
   { id: 'paths', label: 'Paths', items: [
     { key: 'roads', label: 'Roads' }, { key: 'walkways', label: 'Walkways' },
-    { key: 'rivers', label: 'Rivers' }, { key: 'train lines', label: 'Train lines' },
+    { key: 'rivers', label: 'Rivers' }, { key: 'train lines', label: 'Train lines' }, { key: 'malls', label: 'Malls' },
   ] },
   { id: 'buildings', label: 'Buildings', items: [
     { key: 'commercial', label: 'Commercial' }, { key: 'industrial', label: 'Industrial' }, { key: 'farmhouses', label: 'Farmhouses' },
@@ -108,7 +107,7 @@ const EVENTS = [
   { key: 'villainous peds killed by cars', label: 'Villains killed by cars' },
   { key: 'cars destroyed by player', label: 'Cars destroyed by player' },
 ];
-const BUILDING_KIND_OF_ZONE = { buildings: 'commercial', industrial: 'industrial', farmland: 'farmhouses', suburbs: 'houses', town: 'townhouses', airport: 'terminals', mall: 'shops' };
+const BUILDING_KIND_OF_ZONE = { buildings: 'commercial', industrial: 'industrial', farmland: 'farmhouses', suburbs: 'houses', town: 'townhouses', airport: 'terminals' };
 
 // scores from morality.txt, by [heading] then line — all 0 until it's loaded (or if it can't be)
 let scores = {};
@@ -155,8 +154,10 @@ function tally() {
     const kind = BUILDING_KIND_OF_ZONE[type];
     if (kind && zone.buildingsGroup) add('buildings', kind, buildingsIn(zone.buildingsGroup));
   });
+  // (a mall's a path, but counted once for each one standing, and its shops with the other buildings)
+  (S.malls || []).forEach(mall => { add('paths', 'malls'); add('buildings', 'shops', buildingsIn(mall.buildingsGroup)); });
   S.roadLines.forEach(line => {
-    if (line.drawing) return;
+    if (line.drawing || line.roadType === 'mall') return;
     add('paths', line.kind === 'train' ? 'train lines' : line.roadType === 'walkway' || line.roadType === 'raised' ? 'walkways' : line.roadType === 'river' ? 'rivers' : 'roads');
   });
   const lines = {}, groups = {};

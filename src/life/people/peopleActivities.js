@@ -1,7 +1,8 @@
 import { App, S } from '../../core/shared.js';
 import { feel, witness, voiceOfPerson, hairColorOf, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
-import { roomLayoutOf } from '../../buildings/footprints.js';
+import { footprintBounds, roomLayoutOf } from '../../buildings/footprints.js';
+import { Y_ZONE_GROUND } from '../../core/scene.js';
 import { updateBuying } from './peopleStalls.js';
 import { joinWalkway, placeAtVertex, reseatPerson, updateCrossing, wanderInto, walkwayPoint } from './peoplePathing.js';
 import * as THREE from 'three';
@@ -13,7 +14,7 @@ import { puffSmoke, haircutFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFollowingPerson } from './peopleTracking.js';
-import { drawCurtain, openRoomDoor, roomBeyondDoor, roomCubicles, roomDoorway, roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
+import { drawCurtain, openRoomDoor, roomBeyondDoor, roomCubicles, roomDoorway, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
 import { clearMeal, giveSnack, mealFinished, serveMeal } from './peopleHolding.js';
 import { BARBOT, barbotFree } from '../../buildings/barbot.js';
 import { summonSalonBot, salonBotSnipping, seatedHead } from '../../buildings/salonbot.js';
@@ -482,8 +483,8 @@ function clearGround(area, x, z, r) {
  */
 export function goSit(p, area) {
   if (!personModel) return false;
-  if (area.kind === 'plaza') {
-    // (only people about the size the benches are made for)
+  if (area.kind === 'plaza' || area.kind === 'foodcourt') {
+    // (only people about the size the benches — or a food court's chairs — are made for)
     if (!hasClip('Sit1') || !area.seats.length || Math.abs(S.peopleSize*p.traits.size - 1) > 0.3) return false;
     let seat = null, best = 40;
     for (let k=0;k<10;k++) {
@@ -1438,7 +1439,8 @@ export function showPassengers() {
 // Offices, warehouses and factories (see roomLayoutOf) are homes the other way about: by day people go in for a working day, and after dark hardly
 // anyone does — and whoever's still at work heads out within an hour or so of it getting dark, bar the odd one working late.
 //
-// p.indoors: { building, stage ('approach' → 'inside' → 'exit'), back (the walkway point they came from), hoursLeft }
+// p.indoors: { building, stage ('approach' → 'inside' → 'exit'), back (the walkway point they came from), hoursLeft,
+// shop, served, party (whether they're here for a party: see startParty) }
 /** The chance of going in, at each walkway point with a door onto it: by day, and after dark (see enterChance). */
 const ENTER_CHANCE = 0.1, ENTER_CHANCE_NIGHT = 0.7;
 /** The share of the crowd who are night owls: out and about after dark like any other time. */
@@ -1516,6 +1518,9 @@ const INDOORS_MAX_SHARE = 0.3, INDOORS_MAX_SHARE_NIGHT = 0.9;
 const indoorsMaxShare = () => isNight() ? INDOORS_MAX_SHARE_NIGHT : INDOORS_MAX_SHARE;
 /** Seconds after coming out before they'd go in anywhere again. */
 export const INDOORS_COOLDOWN = 30;
+// Seconds of real time on the day's clock, in its hours: what a visit's hoursLeft runs down by (see updateIndoors), and
+// what anything measuring a stay in real seconds — a party's least, a shop's serving — says it in.
+const clockHours = seconds => seconds*24/(Math.max(0.1, S.dayLengthMinutes)*60);
 /**
  * Whether this person may go indoors right now.
  * @param {Person} p - the person
@@ -1542,9 +1547,106 @@ export function goIndoors(p, building, from) {
     : isPub(building) ? PUB_MIN_HOURS + (PUB_MAX_HOURS - PUB_MIN_HOURS)*peopleRng()
     : shopOf(building) ? SHOP_MIN_HOURS + (SHOP_MAX_HOURS - SHOP_MIN_HOURS)*peopleRng()
     : INDOORS_MIN_HOURS + (INDOORS_MAX_HOURS - INDOORS_MIN_HOURS)*peopleRng()**2;
-  p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, line, hoursLeft: hours, shop: shopOf(building), served: false };
+  p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, line, hoursLeft: hours, shop: shopOf(building), served: false, party: false };
   p.inRoom = null;
   setIndoorsCount(indoorsCount + 1);
+}
+
+// ============== A Party ==============
+// The Party button on the followed building's card, while the camera's inside it (see building-card.js): some people turn
+// up at its door and come in — four or five of them, by default: see PARTY_RULES. They're put down just outside the door,
+// where the room's own thick wall hides them from anyone in the room — and, the door being in the one wall the room has
+// no windows in, from whoever's looking out of them — and then walk in through the door one after another, as anyone
+// coming in does (see aboutTheRoom). They stay for PARTY_MIN_SECONDS of the camera's own time at the least — a party's
+// worth watching, whatever the World panel's day length has a visit lasting — and what they do while there is what anyone
+// indoors does: wander, sit about, chat, and in a pub, get a pint in.
+//
+// A party is set per kind of building, in PARTY_RULES. A rule says:
+//   min, max   how many turn up: a whole number between them, picked at random
+//   traits     what everyone at it has to be, as { trait: { min, max } } — the range of that trait (see core/traits.js)
+//              they have to fall in, either end left off for no end to it. So a pub's `{ alcoholic: { min: 1 } }` keeps
+//              anyone teetotal out of it (alcoholic starts everyone at 1: see the trait table in people/about.txt)
+//   where      anything else about them, as a function of the person
+// A building's own kind is looked up first (as buildings.txt names it: see buildingKindOf), then the layout of its room
+// (what roomLayoutOf gives: 'home', 'office', 'warehouse', 'factory', 'pub', 'salon', 'clothes'), then `default`.
+const PARTY_RULES = {
+  default: { min: 4, max: 5 },
+  // A pub's party's a drinking one: nobody teetotal turns up.
+  pub: { min: 4, max: 5, traits: { alcoholic: { min: 1 } } },
+  // (another kind's, as an example — an office's of six to eight, and nobody undead:
+  //  office: { min: 6, max: 8, traits: { vampire: { max: 0 } } },)
+};
+/**
+ * The party rule for a building of this kind (see PARTY_RULES): its own kind's, else its room's layout's, else the default.
+ * @param {string} kind - the building's kind (see buildingKindOf)
+ * @param {number} number - the building's own number (see buildingNumber), which says what its room's laid out as
+ * @returns {object} the rule
+ */
+export function partyRuleFor(kind, number) {
+  return { ...PARTY_RULES.default, ...(PARTY_RULES[kind] ?? PARTY_RULES[roomLayoutOf(kind, number)]) };
+}
+/** Whether someone falls in every trait range a party rule asks for, and passes its `where`. */
+const welcomeAtParty = (p, rule) => Object.entries(rule.traits ?? {}).every(([trait, range]) =>
+    (range.min == null || p.traits[trait] >= range.min) && (range.max == null || p.traits[trait] <= range.max))
+  && (!rule.where || rule.where(p));
+/** Whether someone can be brought to a party at all: out and about on the ground, in no fight, panic, daze or swim. */
+const couldComeToAParty = p => (p.mode === 'line' || p.mode === 'wander' || p.mode === 'leaving')
+  && !p.punched && !p.attack && !p.fright && !p.stun && !p.please && !p.swimming;
+/** How far off a building people are picked for its party from, where enough of them are that far off: so nobody's seen to
+ * vanish from the street outside its windows. */
+const PARTY_FAR = 30;
+/** How long a party lasts at the very least, in seconds of the camera's own time (whatever the day's length is set to:
+ * see clockHours) — a party that's over in a moment, however short the day, isn't worth throwing. */
+const PARTY_MIN_SECONDS = 120;
+/** Where a party gathers: how far outside the door the first of them stands, how much further out each one after them does
+ * (so they walk in one at a time rather than all at once), and how far along the wall from the middle of the door they
+ * stand. Kept close in, and to the -z side of the door — the corner end of the wall, where a shop's shopfront (the room's
+ * only window in that wall: see buildings/interior.js) doesn't run — so there's as little of them to catch sight of from
+ * inside as there can be. */
+const PARTY_OUT = 0.25, PARTY_STAGGER = 0.4, PARTY_ALONG = 0.45;
+/**
+ * Bring a party to the building the camera's inside: `min` to `max` people turn up at its door and come in (see
+ * PARTY_RULES for who and how many). They're picked from those far enough off that their going isn't missed, out of
+ * whoever the rule lets in, and each feels 'party' as they're put down, so they've something to say about turning up
+ * (see life/speech-text.js).
+ * @param {object} building - the building the camera's inside, as building-card.js follows it: { group, key, kind, number }
+ * @returns {number} how many turned up (none if the room isn't up, or nobody could be spared)
+ */
+export function startParty({ group, key, kind, number }) {
+  if (!S.peopleEnabled || !roomHolds(key)) return 0;
+  const rule = partyRuleFor(kind, number);
+  const want = Math.max(0, Math.round(rule.min + peopleRng()*(rule.max - rule.min)));
+  if (!want) return 0;
+  // (the door itself: whoever reaches it is in: see updateIndoors' 'approach')
+  const door = roomOutsideDoor(0.15);
+  const possible = people.map(p => ({ p, d: Math.hypot(p.x - door.x, p.z - door.z) }))
+    .filter(({ p }) => p !== people[followed] && p !== people[riderFollowed] && couldComeToAParty(p) && welcomeAtParty(p, rule));
+  const away = possible.filter(c => c.d >= PARTY_FAR);
+  const pool = away.length >= want ? away : possible;
+  const base = group.userData.base || 0;
+  const ground = base > 0.5 ? base : Y_ZONE_GROUND; // (the ground they come over: a mall's gallery for an upstairs unit)
+  // (the building as everything else indoors keeps it: only its x, z and size — for the camera's sake, if it follows
+  // someone in — need a footprint, so a building without one still gets a party)
+  const fp = group.userData.footprint, bounds = fp && fp.length >= 3 ? footprintBounds(group) : null;
+  const partyBuilding = { key, kind, number, x: bounds?.c.x ?? 0, z: bounds?.c.z ?? 0, y: ground,
+    height: group.userData.height || 10, size: bounds?.r ?? 10, door: { x: door.x, z: door.z } };
+  let came = 0;
+  while (came < want && pool.length) {
+    const { p } = pool.splice(Math.floor(peopleRng()*pool.length), 1)[0];
+    // (queued out from the door, one behind another, so they come in one at a time rather than all at once)
+    const spot = roomOutsideDoor(PARTY_OUT + came*PARTY_STAGGER, came % 2 ? -PARTY_ALONG : -0.1);
+    p.x = spot.x; p.y = ground; p.z = spot.z;
+    p.heading = headingTo(p, door) + moonwalkTurn(p);
+    goIndoors(p, partyBuilding, { x: door.x, y: ground, z: door.z });
+    p.indoors.line = null; // (no walkway of their own to go back onto: they came from wherever they were)
+    p.indoors.party = true; // (so they stay for the party rather than heading off at closing time: see updateIndoors)
+    // (and for PARTY_MIN_SECONDS of the camera's own time at the least: a home's visit may be a short one, and the day's
+    // clock — which every visit's length is kept in — runs as fast as the World panel's day length has it)
+    p.indoors.hoursLeft = Math.max(p.indoors.hoursLeft, clockHours(PARTY_MIN_SECONDS));
+    feel(p, 'party');      // (so they've something to say about arriving: {felt = party} in life/speech-text.js)
+    came++;
+  }
+  return came;
 }
 
 /**
@@ -1568,8 +1670,9 @@ export function updateIndoors(p, i, dt) {
   }
   if (visit.stage === 'inside') {
     visit.hoursLeft -= dt*24/(Math.max(0.1, S.dayLengthMinutes)*60);
-    // (at work after dark, home soon — each in their own time, and not those working late, or the bench's guests)
-    if (isNight() && isWorkplace(visit.building) && !worksLate(p) && !visit.goingHome && Number.isFinite(visit.hoursLeft)) {
+    // (at work after dark, home soon — each in their own time, and not those working late, the bench's guests, or a
+    // party's: whoever's turned up to one has come to be there, not to clock off: see startParty)
+    if (isNight() && isWorkplace(visit.building) && !worksLate(p) && !visit.party && !visit.goingHome && Number.isFinite(visit.hoursLeft)) {
       visit.goingHome = true;
       visit.hoursLeft = Math.min(visit.hoursLeft, OFFICE_LEAVE_HOURS*peopleRng());
     }
@@ -1890,8 +1993,15 @@ const SNIP_EVERY = 0.9;
 const SERVED_STAY = [3, 10];
 /** How long someone waits in the room for a free chair or changing room past when they'd otherwise have gone, in seconds. */
 const SERVE_WAIT = 90;
-// seconds on the day's clock, in its hours
-const clockHours = seconds => seconds*24/(Math.max(0.1, S.dayLengthMinutes)*60);
+/**
+ * A visit cut short from here on — a shop's, once they've had what they came for — in the seconds they're given to be on
+ * their way. A party's isn't: whoever's turned up to one stays its PARTY_MIN_SECONDS at the least, haircut or no (see
+ * startParty).
+ * @param {object} visit - their p.indoors
+ * @param {number} seconds - how much longer they're to stay, in real time
+ * @returns {void}
+ */
+const leaveSoon = (visit, seconds) => { if (!visit.party) visit.hoursLeft = Math.min(visit.hoursLeft, clockHours(seconds)); };
 /**
  * Give someone what they came to the shop for, now: a haircut or new clothes (see cutHair and changeClothes in
  * peopleModel.js), felt (for what they say: see life/speech-text.js).
@@ -1961,7 +2071,7 @@ function haircut(p, seat, here, dt) {
   puffSmoke({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, 0.6*p.height*S.peopleSize, 4);
   serve(p, visit);
   here.timer = 1 + peopleRng();
-  visit.hoursLeft = Math.min(visit.hoursLeft, clockHours(SERVED_STAY[0] + peopleRng()*(SERVED_STAY[1] - SERVED_STAY[0])));
+  leaveSoon(visit, SERVED_STAY[0] + peopleRng()*(SERVED_STAY[1] - SERVED_STAY[0]));
 }
 // whether a changing room's really someone's: they're still in the room with it as theirs
 const cubicleHeld = c => !!c.by && c.by.inRoom?.cubicle === c && c.by.inRoom.visit === roomVisit();
@@ -2021,7 +2131,7 @@ function changing(p, here, visit, dt) {
       here.changing = 'out';
       here.route = [c.front];
       here.timer = 8;
-      visit.hoursLeft = Math.min(visit.hoursLeft, clockHours(SERVED_STAY[0] + 5 + peopleRng()*(SERVED_STAY[1] - SERVED_STAY[0])));
+      leaveSoon(visit, SERVED_STAY[0] + 5 + peopleRng()*(SERVED_STAY[1] - SERVED_STAY[0]));
       return null;
     case 'out': {
       const next = here.timer > 0 && here.route ? walkRoute(p, here) : null;

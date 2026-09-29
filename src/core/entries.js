@@ -123,7 +123,8 @@ export function parseSections(text, { traits: table = TRAITS, file, attributes =
     const pair = pairOf(line), pairKey = pair && pair.key;
     // an attribute line is an entry in its value alone, so `name = Train` and `loves = Shoooom {choiceweight = 2}` read
     // as "Train" and "Shoooom" with that trait; a line with no `=` (the people/*.txt lists) is the whole entry
-    const entry = entryOf(pair ? pair.value : line, { traits: table, file });
+    // (a setting's value is kept as written, {brackets} and all — a title's sign style, say — so it's not read for traits)
+    const entry = pair && settings.includes(pairKey) ? plainEntry(pair.value) : entryOf(pair ? pair.value : line, { traits: table, file });
     if (!entry.text) return;
     if (pair && attributes && !attributes.includes(pairKey) && !settings.includes(pairKey)) {
       warnOnce(`Kallipolis: in ${file}, "${line}" isn't an "attribute = value" line (${attributes.concat(settings).join(', ')}) under a [section]`);

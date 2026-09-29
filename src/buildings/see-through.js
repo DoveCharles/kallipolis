@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { S, App } from '../core/shared.js';
+import { S, App, buildingHolders } from '../core/shared.js';
 import { pointInPolygon } from '../core/math.js';
 import { distToPolygonBoundary, footprintBounds } from './footprints.js';
 
@@ -23,7 +23,7 @@ export function hideBuildingsAroundCamera() {
   showHiddenBuildings();
   if (App.isPossessing?.()) return; // (walking someone about, buildings are solid to them: nothing to see through)
   const p = camera.position;
-  S.zones.forEach(zone => (zone.buildingsGroup?.children || []).forEach(group => {
+  buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach(group => {
     const fp = group.userData.footprint;
     if (!fp || fp.length < 3 || !group.visible) return;     // (only what was built as a building keeps a footprint)
     if (p.y > (group.userData.height || 0) + CLIP_MARGIN) return; // over its roof: nothing of it to be inside of

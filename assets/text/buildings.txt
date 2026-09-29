@@ -3,6 +3,11 @@
 #
 #   name    what it's called on its card (followed by its own number, like "Warehouse #4821")
 #   title   its own name, on the line under that (a pub's "The Red Lion"): left out, there's no second line
+#           A title can say how it's lettered on a shop sign in a mall, in brackets after it:
+#             title = The Red Lion {font = Georgia, color = #f2d27a, backcolor = #1d2340}
+#           `font` is any typeface the browser has (put italic, bold or a weight like 900 in front if wanted:
+#           `font = italic Brush Script MT`); `color` is the lettering's, as a hex code; `backcolor` the cladding it's
+#           on, also a hex code. Leave any out and the sign picks its own. The brackets never show on the building's card.
 #   mood    its current mood, usually an emoji
 #   loves   what it loves
 #   hates   what it hates
@@ -178,33 +183,33 @@ hates = The neighbours (through the wall)
 [pub]
 enterable = yes
 name = Pub
-title = The Cock and Balls
-title = The Cock OR Balls
-title = The Cock and/or Balls
-title = The Royal Funk
-title = The White Bastard
-title = The King's Clit
-title = The Bald Man
-title = The Fuck
-title = The Rose and Funny Name
-title = The Bitch's Brew
-title = The Queen's Cock
-title = The Fucking Hen
-title = The Black Bastard
-title = The Stupid Shitty Bastard Dog
-title = The Weird Smell
-title = The Smells
-title = The Energetic Susan
-title = King's Fuck
-title = The Creampie
-title = The Smacked Arse
-title = Fuck McNasties
-title = Thog's
-title = The Go Away
-title = The Key of Ket
-title = The Elephant... WOMAN?
-title = Bar... -1? 🤫
-title = The Funny Reference
+title = The Cock and Balls {font = Times New Roman, color = #ffffff, backcolor = #111111}
+title = The Cock OR Balls {font = Copperplate, color = #111111, backcolor = #ffffff}
+title = The Cock and/or Balls {font = Georgia, color = #d4af37, backcolor = #111111}
+title = The Royal Funk {font = Old English Text MT, color = #ffffff, backcolor = #228b22}
+title = The White Bastard {font = italic Palatino Linotype, color = #d4af37, backcolor = #228b22}
+title = The King's Clit {font = Times New Roman, color = #111111, backcolor = #ffffff}
+title = The Bald Man {font = Copperplate, color = #d4af37, backcolor = #111111}
+title = The Fuck {font = Georgia, color = #ffffff, backcolor = #228b22}
+title = The Rose and Funny Name {font = Old English Text MT, color = #d4af37, backcolor = #228b22}
+title = The Bitch's Brew {font = italic Palatino Linotype, color = #ffffff, backcolor = #111111}
+title = The Queen's Cock {font = Times New Roman, color = #d4af37, backcolor = #111111}
+title = The Fucking Hen {font = Copperplate, color = #ffffff, backcolor = #228b22}
+title = The Black Bastard {font = Georgia, color = #d4af37, backcolor = #228b22}
+title = The Stupid Shitty Bastard Dog {font = Old English Text MT, color = #ffffff, backcolor = #111111}
+title = The Weird Smell {font = italic Palatino Linotype, color = #111111, backcolor = #ffffff}
+title = The Smells {font = Times New Roman, color = #ffffff, backcolor = #228b22}
+title = The Energetic Susan {font = Copperplate, color = #d4af37, backcolor = #228b22}
+title = King's Fuck {font = Georgia, color = #ffffff, backcolor = #111111}
+title = The Creampie {font = Old English Text MT, color = #111111, backcolor = #ffffff}
+title = The Smacked Arse {font = italic Palatino Linotype, color = #d4af37, backcolor = #111111}
+title = Fuck McNasties {font = Times New Roman, color = #d4af37, backcolor = #228b22}
+title = Thog's {font = Copperplate, color = #ffffff, backcolor = #111111}
+title = The Go Away {font = Georgia, color = #111111, backcolor = #ffffff}
+title = The Key of Ket {font = Old English Text MT, color = #d4af37, backcolor = #111111}
+title = The Elephant... WOMAN? {font = italic Palatino Linotype, color = #ffffff, backcolor = #228b22}
+title = Bar... -1? 🤫 {font = Times New Roman, color = #ffffff, backcolor = #111111}
+title = The Funny Reference {font = Copperplate, color = #111111, backcolor = #ffffff}
 mood = 🍺
 loves = Regulars
 loves = Last orders
@@ -222,16 +227,16 @@ hates = Being turned into student accommodation
 [salon]
 enterable = yes
 name = Hair Salon
-title = Curl Up & Dye
-title = Hair Today
-title = Shear Madness
-title = Fringe Benefits
-title = A Cut Above
-title = The Mane Event
-title = Blow Dry Bar
-title = Headlines
-title = Hair Force One
-title = Tress Chic
+title = Curl Up & Dye {font = italic Brush Script MT, color = #ff4fa3}
+title = Hair Today {font = italic Lucida Handwriting, color = #ffffff}
+title = Shear Madness {font = Impact, color = #ff3fa4}
+title = Fringe Benefits {font = italic Trebuchet MS, color = #8a4dd6}
+title = A Cut Above {font = Copperplate, color = #1d2340}
+title = The Mane Event {font = 900 Arial Black, color = #ffd23f}
+title = Blow Dry Bar {font = italic Brush Script MT, color = #4fd6e0}
+title = Headlines {font = Times New Roman, color = #111111}
+title = Hair Force One {font = Impact, color = #3a8ed8}
+title = Tress Chic {font = italic Didot, color = #ffffff}
 mood = 💇
 loves = Big hair
 loves = A good gossip
@@ -247,16 +252,16 @@ hates = The dryer that trips the fuse
 [clothes]
 enterable = yes
 name = Clothes Shop
-title = TK Minn
-title = Fatty
-title = Wearables
-title = Lushers 
-title = Tramp Truth
-title = Homeless Clothes
-title = Twat Factor
-title = Stop sWearing
-title = No Clothes Here
-title = Rossiniriccavichilipichini's
+title = TK Minn {font = 900 Arial Black, color = #e8202a}
+title = Fatty {font = italic Impact, color = #ffd400}
+title = Wearables {font = italic Trebuchet MS, color = #ffffff}
+title = Lushers {font = italic Brush Script MT, color = #ff6ea4}
+title = Tramp Truth {font = Courier New, color = #f2e8d0}
+title = Homeless Clothes {font = Comic Sans MS, color = #ffffff}
+title = Twat Factor {font = Impact, color = #7dff5a}
+title = Stop sWearing {font = 900 Arial Black, color = #111111}
+title = No Clothes Here {font = italic Georgia, color = #fff3d6}
+title = Rossiniriccavichilipichini's {font = italic Didot, color = #f2d27a}
 mood = 👗
 loves = Folding things just so
 loves = The changing rooms being free
@@ -298,9 +303,9 @@ hates = Teenagers loitering by the escalators
 
 [vacant]
 name = Vacant Unit
-title = TO LET
-title = Coming Soon
-title = Closing Down Sale (Closed)
+title = TO LET {font = 900 Arial Black, color = #d62828}
+title = Coming Soon {font = italic Trebuchet MS, color = #1d2340}
+title = Closing Down Sale (Closed) {font = Impact, color = #ffd400}
 mood = 🪧
 loves = Imagining what it could be
 loves = The quiet

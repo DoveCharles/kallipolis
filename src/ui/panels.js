@@ -8,6 +8,7 @@ import { WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWalkwayLine, i
 import { networkKindOf, pathTypeOf, currentPathType, PATH_TYPES, rebuildRoadMarkers, rebuildRoadHandles, cleanupOrphanRoadNodes } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
+import { MALL_THEMES, mallSettingsOf } from '../roads/mall.js';
 import { subdivideZone, subdivideZonesFrom, subdivideZonesFromIndex, moveZone } from '../zones/cutouts.js';
 import { refreshHighlights } from '../water/bridges.js';
 import { IS_TOUCH } from '../core/device.js';
@@ -567,22 +568,6 @@ function renderDetails() {
       ${toggleHtml('ds-airportfence', 'Perimeter fence', s.airportFence!==false)}
       <div class="empty" style="margin:6px 0 10px;">The longest runway that fits decides what you get &mdash; a helipad, a grass strip, a regional field or an international one. Roads can't cross a runway, so one drawn through the zone pushes the runway aside or drops it a size. Its number is its real compass heading, and the terminal turns to face the nearest road.</div>
       ${seedHtml}
-    ` : zoneType==='mall' ? `
-      <div class="slider-row"><div class="row"><label>Concourse width</label><span class="val" id="dv-mallconcourse">${(s.mallConcourse!=null?s.mallConcourse:14)}</span></div>
-        <input type="range" id="ds-mallconcourse" min="8" max="30" step="1" value="${s.mallConcourse!=null?s.mallConcourse:14}"></div>
-      <div class="slider-row"><div class="row"><label>Shop width</label><span class="val" id="dv-mallshopwidth">${(s.mallShopWidth!=null?s.mallShopWidth:10)}</span></div>
-        <input type="range" id="ds-mallshopwidth" min="6" max="24" step="1" value="${s.mallShopWidth!=null?s.mallShopWidth:10}"></div>
-      ${toggleHtml('ds-mallupper', 'Upper floor', s.mallUpper!==false)}
-      <div class="slider-row"><div class="row"><label>Clothes shops</label><span class="val" id="dv-mallclothes">${(s.mallClothes!=null?s.mallClothes:0.55).toFixed(2)}</span></div>
-        <input type="range" id="ds-mallclothes" min="0" max="1" step="0.05" value="${s.mallClothes!=null?s.mallClothes:0.55}"></div>
-      <div class="slider-row"><div class="row"><label>Salons</label><span class="val" id="dv-mallsalons">${(s.mallSalons!=null?s.mallSalons:0.25).toFixed(2)}</span></div>
-        <input type="range" id="ds-mallsalons" min="0" max="1" step="0.05" value="${s.mallSalons!=null?s.mallSalons:0.25}"></div>
-      <div class="slider-row"><div class="row"><label>Bars</label><span class="val" id="dv-mallpubs">${(s.mallPubs!=null?s.mallPubs:0.2).toFixed(2)}</span></div>
-        <input type="range" id="ds-mallpubs" min="0" max="1" step="0.05" value="${s.mallPubs!=null?s.mallPubs:0.2}"></div>
-      <div class="slider-row"><div class="row"><label>Vacant units</label><span class="val" id="dv-mallvacant">${(s.mallVacant!=null?s.mallVacant:0.1).toFixed(2)}</span></div>
-        <input type="range" id="ds-mallvacant" min="0" max="1" step="0.05" value="${s.mallVacant!=null?s.mallVacant:0.1}"></div>
-      <div class="empty" style="margin:6px 0 10px;">One building filling the zone: a glass-roofed concourse down its long axis, an entrance at each end, and shops either side on two floors, with galleries, bridges and escalators upstairs.</div>
-      ${seedHtml}
     ` : zoneType==='industrial' ? `
       <div class="slider-row"><div class="row"><label>Lot count</label><span class="val" id="dv-industriallots">${s.industrialLots!=null?s.industrialLots:10}</span></div>
         <input type="range" id="ds-industriallots" min="1" max="40" step="1" value="${s.industrialLots!=null?s.industrialLots:10}"></div>
@@ -699,14 +684,6 @@ function renderDetails() {
       wireNumber('ds-townpaint', 'dv-townpaint', 'townPaint', 2);
       wireNumber('ds-townsetback', 'dv-townsetback', 'townSetback');
       wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);
-    } else if (zoneType==='mall') {
-      wireNumber('ds-mallconcourse', 'dv-mallconcourse', 'mallConcourse');
-      wireNumber('ds-mallshopwidth', 'dv-mallshopwidth', 'mallShopWidth');
-      wireToggle('ds-mallupper', 'mallUpper');
-      wireNumber('ds-mallclothes', 'dv-mallclothes', 'mallClothes', 2);
-      wireNumber('ds-mallsalons', 'dv-mallsalons', 'mallSalons', 2);
-      wireNumber('ds-mallpubs', 'dv-mallpubs', 'mallPubs', 2);
-      wireNumber('ds-mallvacant', 'dv-mallvacant', 'mallVacant', 2);
     } else if (zoneType==='airport') {
       wireToggle('ds-airportterminal', 'airportTerminal');
       wireToggle('ds-airporttower', 'airportTower');
@@ -849,7 +826,10 @@ function renderDetails() {
     const curSidewalkColor = lines[0].sidewalkColor!=null ? lines[0].sidewalkColor : SIDEWALK_COLOR;
     const title = lines.length>1 ? netId : lines[0].id;
     const subtitle = lines.length>1 ? `${lines.length} branches · ${totalNodes} nodes` : `${totalNodes} nodes`;
-    const isWalkway = isWalkwayLine(lines[0]), isRiver = isRiverLine(lines[0]), isRaised = isRaisedWalkwayLine(lines[0]);
+    const isWalkway = isWalkwayLine(lines[0]), isRiver = isRiverLine(lines[0]), isRaised = isRaisedWalkwayLine(lines[0]), isMall = lines[0].roadType === 'mall';
+    const mall = isMall ? mallSettingsOf(lines[0]) : null;
+    const mallSlider = (id, label, value, min, max, step, text) => `<div class="slider-row"><div class="row"><label>${label}</label><span class="val" id="dv-${id}">${text ?? value}</span></div>
+        <input type="range" id="ds-${id}" min="${min}" max="${max}" step="${step}" value="${value}"></div>`;
     const curWalkwayColor = lines[0].walkwayColor!=null ? lines[0].walkwayColor : WALKWAY_COLOR;
     const curWalkwayTexture = lines[0].walkwayTexture || WALKWAY_TEXTURE;
     const curTextureScale = walkwayTextureScaleOf(lines[0]), curTextureRotation = lines[0].walkwayTextureRotation ?? 0;
@@ -858,13 +838,26 @@ function renderDetails() {
       <div class="empty" style="margin-bottom:10px;">${subtitle}</div>
       <div class="slider-row"><div class="row"><label>Path type</label></div>
         <select id="ds-roadtype" class="select-input">
-          <option value="sidewalk" ${!isWalkway&&!isRiver?'selected':''}>Road</option>
+          <option value="sidewalk" ${!isWalkway&&!isRiver&&!isMall?'selected':''}>Road</option>
           <option value="walkway" ${isWalkway&&!isRaised?'selected':''}>Walkway</option>
           <option value="raised" ${isRaised?'selected':''}>Raised walkway</option>
           <option value="river" ${isRiver?'selected':''}>River</option>
+          <option value="mall" ${isMall?'selected':''}>Mall</option>
         </select>
       </div>
-      ${isRiver ? `
+      ${isMall ? `
+      ${mallSlider('mallwidth', 'Concourse width', lines[0].width || 14, 8, 30, 1)}
+      ${mallSlider('malldepth', 'Shop depth', mall.depth, 6, 30, 1)}
+      ${mallSlider('mallshopwidth', 'Shop width', mall.shopWidth, 6, 24, 1)}
+      <div class="row" style="margin-top:11px;"><label>Upper floor</label><button class="toggle-switch ${mall.upper?'on':''}" id="ds-mallupper"><span class="knob"></span></button></div>
+      ${mallSlider('mallclothes', 'Clothes shops', mall.clothes, 0, 1, 0.05, mall.clothes.toFixed(2))}
+      ${mallSlider('mallsalons', 'Salons', mall.salons, 0, 1, 0.05, mall.salons.toFixed(2))}
+      ${mallSlider('mallpubs', 'Bars', mall.pubs, 0, 1, 0.05, mall.pubs.toFixed(2))}
+      ${mallSlider('mallvacant', 'Vacant units', mall.vacant, 0, 1, 0.05, mall.vacant.toFixed(2))}
+      ${mallSlider('malltheme', 'Colours', mall.theme, 0, MALL_THEMES.length, 1, mall.theme > 0 ? MALL_THEMES[mall.theme-1].name : 'By seed')}
+      ${mallSlider('mallseed', 'Seed', mall.seed, 1, 9999, 1)}
+      <div class="empty" style="margin:6px 0 10px;">A glass-roofed concourse with shops either side on two floors. Every end is an entrance and every junction a court; right-click a node to make it a food court. A road across it cuts it in two.</div>
+      ` : isRiver ? `
       <div class="empty" style="margin:6px 0 10px;">Water, as wide as the path's width. It joins any water zone it runs into, and roads and paths cross it on bridges.</div>
       ` : isWalkway ? `
       ${isRaised ? `
@@ -900,6 +893,22 @@ function renderDetails() {
       App.applyModeVisibility();
       rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderDetails(); renderHierarchy();
     });
+    if (isMall) {
+      // (every line of the network keeps the same settings: see mallSettingsOf)
+      const setMall = (key, v) => { lines.forEach(l => { l.mall = { ...mallSettingsOf(l), [key]: v }; }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); };
+      document.getElementById('ds-mallwidth').addEventListener('change', e => { lines.forEach(l => { l.width = parseFloat(e.target.value); }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); });
+      document.getElementById('ds-mallwidth').addEventListener('input', e => { document.getElementById('dv-mallwidth').textContent = e.target.value; });
+      [['malldepth', 'depth', 0], ['mallshopwidth', 'shopWidth', 0], ['mallclothes', 'clothes', 2], ['mallsalons', 'salons', 2], ['mallpubs', 'pubs', 2], ['mallvacant', 'vacant', 2], ['mallseed', 'seed', 0]]
+        .forEach(([id, key, dp]) => {
+          const el = document.getElementById('ds-'+id);
+          el.addEventListener('input', () => { document.getElementById('dv-'+id).textContent = dp ? parseFloat(el.value).toFixed(dp) : el.value; });
+          el.addEventListener('change', () => setMall(key, parseFloat(el.value)));
+        });
+      const theme = document.getElementById('ds-malltheme');
+      theme.addEventListener('input', () => { const v = parseInt(theme.value, 10); document.getElementById('dv-malltheme').textContent = v > 0 ? MALL_THEMES[v-1].name : 'By seed'; });
+      theme.addEventListener('change', () => setMall('theme', parseInt(theme.value, 10)));
+      document.getElementById('ds-mallupper').addEventListener('click', () => { setMall('upper', !mall.upper); renderDetails(); });
+    }
     if (isRaised) {
       const height = document.getElementById('ds-raisedheight');
       height.addEventListener('input', () => {
@@ -951,7 +960,7 @@ function renderDetails() {
         onPreview: (hex) => { lines.forEach(l => { l.walkwayColor = hex; }); refreshRoadAppearance(netId); }
       }, 'walkwaycolor', renderDetails, curWalkwayColor);
     }
-    if (!isWalkway && !isRiver) {
+    if (!isWalkway && !isRiver && !isMall) {
     wireColorSwatchEvents(panel, ROAD_COLOR_PALETTE, {
       onPick: (hex) => { lines.forEach(l => { l.color = hex; }); refreshRoadAppearance(netId); renderDetails(); },
       onCommit: (hex, mode, oldHex) => {
