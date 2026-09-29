@@ -4,8 +4,8 @@ dickwad
 fucker
 piece of [swears] | pieces of [swears]
 [swears]head
-r***** {evil, conservative = -1}
-f***** {evil, conservative = -1}
+r***** {evil, conservative = -1, evil > 0.1}
+f***** {evil, conservative = -1, evil > 0.1}
 [swears]bag
 ballsack
 [swears]sock
@@ -65,16 +65,16 @@ tyrant {other.outlaw = -1, other.evil}
 libtard {evil, conservative}
 chud {other.conservative}
 cuck {conservative}
-bourgeios {nerd, conservative = -1, conservative < -0.3, other.conservative, other.conservative > 0.3}
-lumpen {nerd, conservative = -1, conservative < -0.3, other.conservative}
+bourgeios {nerd, conservative = -1, conservative < -0.1, other.conservative, other.conservative > 0.1}
+lumpen {nerd, conservative = -1, conservative < -0.1, other.conservative}
 liberal {conservative, conservative > 0}
-commie {conservative, other.conservative = -1, other.conservative < -0.3}
-fascist {other.conservative > 0.3}
+commie {conservative, other.conservative = -1, other.conservative < -0.1}
+fascist {other.conservative > 0.1}
 gusano {other.conservative}
 luddite {other.nerd = -1}
-reactionary {conservative = -1, conservative < -0.3, other.conservative, other.conservative > 0.3}
+reactionary {conservative = -1, conservative < -0.1, other.conservative, other.conservative > 0.1}
 snowflake {conservative, other.conservative < 0}
-tankie {other.conservative = -1, other.conservative < -0.3}
-crackhead {conservative, other.stimulants, other.stimulants > 0.3}
+tankie {other.conservative = -1, other.conservative < -0.1}
+crackhead {conservative, other.stimulants, other.stimulants > 0.1}
 hippy {other.psychs > 0.1}
 dopehead {other.stoner, other.painkillers}

@@ -48,6 +48,8 @@ const HUNT_EVERY = 0.25, HUNT_RADIUS = 40;
 export const bloodlustSpeed = p => p.blood && p.traits.bloodlust ? 2 : 1;
 /** Whether they're out for blood: they've the trait, and blood on them. */
 export const isBloodlusting = p => !!p.blood && !!p.traits.bloodlust;
+/** Seconds until their blood's all gone. */
+export const bloodLeft = p => p.blood ? BLOOD_FADE_TIME*(p.blood - 1) + (p.bloodTimer ?? 0) : 0;
 /** The colour the whites of bloodlusting eyes turn, all the way. */
 const BLOODLUST_EYE_COLOR = new THREE.Color(0xe96a86); // (#ff0038 halfway to light grey, #d3d3d3)
 

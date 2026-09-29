@@ -1,7 +1,7 @@
 import { entryOf } from '../core/entries.js';
 import { TRAITS, modifierLines } from '../core/traits.js';
 import { formatTime } from '../core/math.js';
-import { EFFECTS, STATUS_SOURCES, addStatus, restackTraits, statusLines } from './statuseffects.js';
+import { EFFECTS, STATUS_SOURCES, addStatus, effectOf, restackTraits, statusLines } from './statuseffects.js';
 import { cheerierMood, profileOf } from './profiles.js';
 import { feel, lastPeopleTime, personModel } from './people/people.js';
 import { giveSnack } from './people/peopleHolding.js';
@@ -12,8 +12,8 @@ import { giveSnack } from './people/peopleHolding.js';
 //
 // A keepsake goes into their pockets (p.pockets, POCKET_SLOTS at most) and stays there, its traits stacked over theirs
 // for as long as they carry it just as a status's are (see restackTraits in statuseffects.js) — until it's taken back.
-// A consumable is had straight away: a snack from the stalls put in their hand (peopleHolding.js's giveSnack), and/or its
-// traits on them for a while, as a status effect of its own (added to EFFECTS as the file loads, its emoji for an icon).
+// A consumable is had straight away: status effects (statuseffects.js EFFECTS) named `key:level` — or, for a snack from
+// the stalls put in their hand (peopleHolding.js's giveSnack), those every mouthful (STATUS_SOURCES, filled from here).
 // A gift that `cheer`s lifts a sad or angry mood to a happier one for good (p.moodNow: see cheerierMood in profiles.js).
 // A gift they `wear` goes on them (the people model's putOn: sunglasses), and anyone already wearing it starts out
 // with one in their pockets (stockPockets).
@@ -28,7 +28,7 @@ const TIME = /^(\d*\.?\d+)(s|m|h)$/i, SECONDS = { s: 1, m: 60, h: 3600 };
 
 /**
  * Every gift there is, in the file's order: { emoji, name, kind: 'keepsake'|'consumable', traits: [[trait, value]],
- * seconds, snack, cheer, wear, status } — `status` the key of a consumable's own status effect in EFFECTS.
+ * seconds, snack, cheer, wear, statuses } — `statuses` a consumable's [{key, level}] in EFFECTS, for `seconds` (or each's default).
  * @type {object[]}
  */
 export const GIFTS = [];
@@ -48,20 +48,18 @@ function giftOf(line, kind) {
   const space = head.search(/\s/);
   if (space < 0) { warnOnce(`Kallipolis: in gifts.txt, "${line}" needs an emoji and then a name`); return null; }
   const gift = { emoji: head.slice(0, space), name: head.slice(space).trim(), kind, traits: entry.traits,
-    seconds: null, snack: null, cheer: false, wear: null, status: null };
+    seconds: null, snack: null, cheer: false, wear: null, statuses: [] };
   tail.split(/[\s,]+/).filter(Boolean).forEach(word => {
     const time = word.match(TIME), lower = word.toLowerCase();
     if (time) gift.seconds = parseFloat(time[1])*SECONDS[time[2].toLowerCase()];
     else if (SNACK_ITEMS.includes(lower)) gift.snack = lower;
     else if (lower === 'cheer') gift.cheer = true;
     else if (lower.startsWith('wear=')) gift.wear = word.slice(5);
+    else if (EFFECTS[lower.split(':')[0]]) gift.statuses.push({ key: lower.split(':')[0], level: parseInt(lower.split(':')[1]) || 1 });
     else warnOnce(`Kallipolis: in gifts.txt, "${word}" (after "${gift.name}") isn't something a gift can be — see the notes at its top`);
   });
-  // a consumable with traits and a time has them as a status effect of its own
-  if (kind === 'consumable' && gift.seconds && gift.traits.length) {
-    gift.status = 'gift: ' + gift.name.toLowerCase();
-    EFFECTS[gift.status] = { name: gift.name, emoji: gift.emoji, seconds: gift.seconds, traits: gift.traits };
-  }
+  if (gift.snack && gift.statuses.length) STATUS_SOURCES[gift.snack] = gift.statuses.map(({ key, level }) => ({ status: key, level, seconds: gift.seconds ?? EFFECTS[key].seconds }));
+  if (kind === 'consumable' && gift.traits.length) warnOnce(`Kallipolis: in gifts.txt, "${gift.name}" is a consumable: give it a status effect rather than {traits}`);
   return gift;
 }
 
@@ -90,21 +88,24 @@ fetch(GIFTS_URL)
  */
 export function giftLines(gift) {
   const traits = [], notes = [];
-  const leaves = gift.snack && STATUS_SOURCES[gift.snack];
-  if (leaves) {
-    traits.push(...statusLines(leaves.status, leaves.seconds).slice(1, -1));
-    notes.push(`${EFFECTS[leaves.status].name} for ${formatTime(leaves.seconds)}`);
-  }
-  traits.push(...modifierLines(gift.traits));
+  const each = gift.snack ? (gift.snack === 'hotdog' ? ', each bite' : ', each sip') : '';
+  gift.statuses.forEach(({ key, level }) => {
+    const seconds = gift.seconds ?? EFFECTS[key].seconds;
+    traits.push(...statusLines(key, level).slice(1));
+    notes.push(`${effectOf(key, level).name} (level ${level}) for ${formatTime(seconds)}${each}`);
+  });
+  if (gift.snack && gift.statuses.length) notes.push('Building up past its level as it goes down');
+  if (gift.kind === 'keepsake') traits.push(...modifierLines(gift.traits));
   if (gift.cheer) notes.push('Cheers up a sad or angry mood');
   if (gift.wear) notes.push('They put them on');
   if (gift.kind === 'keepsake') notes.push('Kept in their pockets');
-  else if (gift.seconds && gift.traits.length) notes.push(`Lasts ${formatTime(gift.seconds)}`);
   return { name: gift.name, traits, notes };
 }
 
+/** The snack someone's holding (it takes a pocket slot while they do), as its gift; null if none. */
+export const heldSnack = p => p?.snack && GIFTS.find(gift => gift.snack === p.snack.item) || null;
 /** Whether someone's pockets have room for another keepsake. */
-export const pocketsFull = p => (p?.pockets?.length ?? 0) >= POCKET_SLOTS;
+export const pocketsFull = p => (p?.pockets?.length ?? 0) + (heldSnack(p) ? 1 : 0) >= POCKET_SLOTS;
 
 /**
  * Give someone a gift: into their pockets, or had there and then (see the top of this file).
@@ -128,7 +129,7 @@ export function giveGift(p, i, gift) {
     restackTraits(p);
   } else {
     if (gift.snack) giveSnack(p, gift.snack);
-    if (gift.status) addStatus(p, gift.status, gift.seconds, now);
+    if (!gift.snack) gift.statuses.forEach(({ key, level }) => addStatus(p, key, gift.seconds, now, level)); // (a snack's come a mouthful at a time)
   }
   let cheered = false;
   if (gift.cheer) {

@@ -420,17 +420,25 @@ button.pc-pick:hover { text-decoration:underline; }
 .entity-card .pc-mods-hates { border-left:var(--trait-bar) solid var(--trait-hates-bar); }
 .entity-card .pc-mod { line-height:var(--mod-line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .entity-card .pc-mods[hidden] { display:none; }
-/* a status effect's tip (see the tip in src/ui/entity-card.js): the same box a love's or hate's modifiers come down in —
-   classed `pc-mods pc-mods-status` for its look and its `.pc-mod` lines — placed at the pointer with position:fixed
-   instead of by layout, so it isn't one of the card's laid-out drop-downs at all. It takes no pointer events, so the
-   pointer's own test against the icons keeps deciding whether it's up, and the tip can never steal the hover from the
-   icon it's describing. */
-.entity-card .pc-tip {
-  position:fixed; left:auto; z-index:30; box-sizing:border-box;
-  height:auto; width:max-content; max-width:220px; max-height:220px; overflow:hidden;
+/* a status effect's tip (see the tip in src/ui/entity-card.js): in <body>, not the card, so it's over every window;
+   placed at the pointer, taking no pointer events (the icons' own hover test decides whether it's up) */
+.pc-tip {
+  position:fixed; left:auto; z-index:95; box-sizing:border-box;
+  height:auto; width:max-content; min-width:140px; max-width:220px; max-height:260px; overflow:hidden;
   padding:4px 7px; white-space:normal; pointer-events:none;
+  background:var(--bg-panel); font-family:var(--mono); font-size:11px; color:var(--text-dim); border:1px solid var(--border);
 }
-.entity-card .pc-tip .pc-mod { white-space:normal; }
+.pc-tip[hidden] { display:none; }
+.pc-tip .pc-mod { line-height:16px; white-space:normal; }
+/* its meter: the status's length since its last top-up, a block per level still to run, what's gone dark grey on the right */
+.pc-status-meter { margin-top:4px; }
+.pc-status-meter[hidden] { display:none; }
+.pc-status-bar { display:flex; height:12px; background:#3a3a3a; border:1px solid var(--border); overflow:hidden; }
+.pc-status-level { flex:none; overflow:hidden; font-size:9px; line-height:12px; padding-left:2px; box-sizing:border-box; color:#1a1a1a; white-space:nowrap; }
+.pc-status-level[data-level="1"] { background:#8fa88a; }
+.pc-status-level[data-level="2"] { background:#b8a57a; }
+.pc-status-level[data-level="3"] { background:#b08580; }
+.pc-status-time { display:flex; justify-content:space-between; line-height:14px; }
 /* name, age and mood, with the headshot beside them (clear of the close button above it) */
 .pc-top { display:flex; gap:10px; align-items:flex-start; }
 .pc-rows { flex:1; min-width:0; }
@@ -568,14 +576,13 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 .pc-rel-name:not(.pc-rel-empty):hover .pc-rel-who { text-decoration:underline; }
 .pc-rel-points { flex:0 0 auto; font-variant-numeric:tabular-nums; }
 .pc-rel-name.pc-rel-empty { opacity:0.5; }
-/* a gift's status (src/life/gifts.js): its emoji in the slot where a bitmap would be */
-:is(#person-card, #person-card-2) .pc-effect.pc-effect-emoji { font-size:13px; line-height:16px; overflow:hidden; }
 /* the Pockets tab (src/life/person-card.js): a row of pocket slots, a keepsake's emoji in each (a dash in an empty one),
    what the one under the pointer does beneath them, and the Gift button */
 .pc-pane-pockets { display:flex; flex-direction:column; gap:8px; padding-top:6px; }
 .pc-pockets { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:6px; }
 :is(#person-card, #person-card-2) .pc-pocket { aspect-ratio:1; display:flex; align-items:center; justify-content:center; padding:0;
-  font-size:22px; line-height:1; background:var(--bg-input); border:1px solid var(--border); color:inherit; cursor:pointer; }
+  font-size:22px; line-height:1; background:var(--bg-input); border:1px solid var(--border); color:inherit; cursor:pointer; position:relative; }
+.pc-pocket-count { position:absolute; right:2px; bottom:1px; font-size:10px; font-weight:bold; }
 :is(#person-card, #person-card-2) .pc-pocket.pc-pocket-empty { font-size:13px; color:var(--text-dim); opacity:0.45; cursor:default; }
 .pc-pocket:not(.pc-pocket-empty):hover { outline:1px solid var(--accent); }
 /* (a set height, so nothing shifts about as what's shown changes: the Gift window's grid stays under the pointer) */

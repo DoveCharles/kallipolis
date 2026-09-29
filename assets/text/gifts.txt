@@ -7,12 +7,14 @@
 # [Keepsakes] go into their pockets (six at most) and stay there: their traits are on them for as long as they carry it.
 # Taking one back out of their pockets (click it on the Pockets tab) takes its traits with it.
 #
-# [Consumables] are eaten or drunk straight away: their traits last as long as the time after the @ (90s, 3m, 1h).
+# [Consumables] are eaten or drunk straight away, leaving status effects (life/statuseffects.js EFFECTS) on them.
 #
 # After the @:
-#   3m                a consumable's traits last that long (shown as a status beside their picture, its emoji the icon)
-#   coffee, beer, hotdog   put that snack from the stalls in their hand, to eat or drink as they go (a coffee or a pint
-#                     leaves its own status on them as it goes down: see life/statuseffects.js STATUS_SOURCES)
+#   drunk:2           puts that status effect on them at that level (1 if left out); several allowed. With a snack,
+#                     every mouthful (and one bought from a stall too)
+#   3m                how long its status effects last (else each one's default)
+#   coffee, beer, hotdog   put that snack from the stalls in their hand, to eat or drink as they go (its statuses
+#                     come every mouthful)
 #   cheer             lifts a sad or angry mood (😢, 😠, 🙄...) to a happier one from people/moods.txt, for good
 #   wear=Sunglasses   they put it on (a style's name in the people model: Sunglasses, Glasses); anyone already wearing
 #                     it starts out with one in their pockets, and taking the last one back out takes it off them
@@ -38,15 +40,15 @@
 🧨 A stick of dynamite {explosive}
 
 [Consumables]
-☕ A coffee @ coffee
-🍺 A pint @ beer
-🌭 A hot dog @ hotdog 2m {mood = 0.2, happy = 0.2}
-🍫 A bar of chocolate @ 3m cheer {sad = -0.5, mood = 0.3, happy = 0.3}
-🍦 An ice cream @ 3m cheer {happy = 0.4, mood = 0.3}
-🍵 A cup of tea @ 5m cheer {patience = 2, speed = 0.9, angry = -0.4}
-🍬 A sweet @ 1m {speed = 1.2, fidgety = 3}
-🥤 An energy drink @ 3m {speed = 2, fidgety = 4, blinks = 0.3, aggression = 2}
-🍷 A glass of wine @ 10m {drunk, chatty = 2}
-🌿 A spliff @ 10m {blazed, speed = 0.6, lounging = 5, patience = 4, chatty = 2, aggression = 0.3}
-💊 A pill @ 5m {speed = 3, chatty = 6, talkative = 6, blinks = 5, mood = 0.5, fidgety = 12, happy = 0.9, aggression = 10}
-🧪 A strange potion @ 1m {backwards}
+☕ A coffee @ coffee caffeinated:2 3m
+🍺 A pint @ beer drunk:1 10m
+🌭 A hot dog @ hotdog full 2m
+🍫 A bar of chocolate @ comforted 3m cheer
+🍦 An ice cream @ treated 3m cheer
+🍵 A cup of tea @ caffeinated:1 6m
+🍬 A sweet @ sugarrush 1m
+🥤 An energy drink @ wired 3m
+🍷 A glass of wine @ drunk:2 10m
+🌿 A spliff @ blazed 10m
+💊 A pill @ buzzing 5m
+🧪 A strange potion @ backwards 1m

@@ -53,7 +53,7 @@ export const TRAITS = {
   terrible: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as terrible
   smells: { base: 0, min: 0, max: 1, combine: 'on' }, //people keep clear and leave circles it sits in (life/people/peopleSmell.js); cars pull over to let it by (life/traffic/pullover.js)
   respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time: the body stays whole (a car still explodes), shakes, then lightning revives it (see life/revive.js)
-  drunk: {base: 0, min: 0, max: 1, combine: 'on'} ,//cars: control ×0.5 and steering swapped for 1-3s every 3-10s (see drunkSteer in life/traffic/driving.js); AI cars veer off their lane now and then (drunkVeer in life/traffic/collisions.js); people weave and fall over (life/people/peopleDrunk.js)
+  drunk: {base: 0, min: 0, max: 1, combine: 'add'} ,//0-1, added up; people at 0.5 weave and fall over as a few pints in, more at 1 (life/people/peopleDrunk.js). cars (any amount): control ×0.5 and steering swapped for 1-3s every 3-10s (see drunkSteer in life/traffic/driving.js); AI cars veer off their lane now and then (drunkVeer in life/traffic/collisions.js)
   unstable: {base: 0, min: 0, max: 1, combine: 'add'}, //chance to be hurt X5 more than usual
   terrified: {base: 0, min: 0, max: 1, combine: 'on'}, //flees forever (see updatePeople in life/people/people.js)
   explosive: {base: 0, min: 0, max: 1, combine: 'on'}, //blow up on death, killing bystanders; if already blowing up, explosion becomes much bigger (see blasts in life/traffic/state.js)

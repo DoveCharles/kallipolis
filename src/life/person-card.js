@@ -3,6 +3,7 @@ import { App } from '../core/shared.js';
 import { scene, renderer } from '../core/scene.js';
 import { HEADSHOT_LAYER, personModel, isGone, inRoom, lastPeopleTime } from './people/people.js';
 import { personDoing } from './people/peopleTracking.js';
+import { bloodLeft, isBloodlusting } from './people/peopleBlood.js';
 import { profileOf, onProfilesLoaded } from './profiles.js';
 import { strikeLightning } from './lightning.js';
 import { makeCard } from '../ui/entity-card.js';
@@ -10,7 +11,7 @@ import { personKey, reviveFavoritesAs } from '../ui/favorites.js';
 import { garbles, garbled, garbledEntry, cased } from '../ui/garble.js';
 import { ranked } from './people/peopleRelations.js';
 import { recentLines, onLineLogged } from './people/peopleSaid.js';
-import { GIFTS, POCKET_SLOTS, giftLines, giftsLoaded, giveGift, onGiftsLoaded, pocketsFull, takeBack } from './gifts.js';
+import { GIFTS, POCKET_SLOTS, giftLines, giftsLoaded, giveGift, heldSnack, onGiftsLoaded, pocketsFull, takeBack } from './gifts.js';
 import { openWindow } from '../ui/w3-window.js';
 import { IS_TOUCH } from '../core/device.js';
 
@@ -110,8 +111,8 @@ function makePersonWindow(id) {
     button.addEventListener('focus', () => showPocket(w, slot));
     button.addEventListener('pointerleave', () => showPocket(w, -1));
     button.addEventListener('click', () => {
-      const p = personOf(w);
-      if (!p || !takeBack(p, w.shown.index, slot)) return;
+      const p = personOf(w), offset = heldSnack(p) ? 1 : 0;
+      if (!p || slot < offset || !takeBack(p, w.shown.index, slot - offset)) return;
       refreshPockets(w);
       showPocket(w, -1);
     });
@@ -252,14 +253,26 @@ function setPersonCardDoing(doing, away = false) { if (focused) setDoing(focused
 // one's clock going by — so a tip that's open still has the right icon under the pointer, and not so often that an open
 // menu is rebuilt needlessly.
 const STATUS_SLOTS = 4; // how many places the column has: a slot per status, then a dash for each left over
+// a status's meter (see the tip in ui/entity-card.js): its length since its last top-up, and its stages still to run
+function meterOf(entry) {
+  let at = lastPeopleTime ?? 0;
+  const stages = (entry.stages ?? []).filter(stage => stage.until > at).map(stage => { const seconds = stage.until - at; at = stage.until; return { level: stage.level, seconds }; });
+  return { total: entry.seconds, stages };
+}
 function statusListFor(p, now) {
-  return (p?.status ?? [])
-    .map(entry => ({ status: entry.key, remaining: Math.max(0, entry.until - now), left: () => Math.max(0, entry.until - (lastPeopleTime ?? 0)) }))
+  const list = (p?.status ?? [])
+    .map(entry => ({ status: entry.key, level: entry.level ?? 1, meter: () => meterOf(entry), remaining: Math.max(0, entry.until - now), left: () => Math.max(0, entry.until - (lastPeopleTime ?? 0)) }));
+  // (bloodlust isn't a status, but shows as one while it lasts: see statuseffects.js EFFECTS.bloodlust)
+  if (p && isBloodlusting(p)) {
+    p.lustPeak = Math.max(p.lustPeak ?? 0, bloodLeft(p)); // (its bar's length: the most blood they've had on them since it began)
+    list.push({ status: 'bloodlust', level: 1, remaining: bloodLeft(p), left: () => bloodLeft(p), meter: () => ({ total: p.lustPeak, stages: [{ level: 1, seconds: bloodLeft(p) }] }) });
+  } else if (p) p.lustPeak = 0;
+  return list
     .sort((a, b) => a.remaining - b.remaining);
 }
 function refreshCardStatus(w, now) {
   const list = statusListFor(personOf(w), now);
-  const key = list.map(item => `${item.status}:${Math.round(item.remaining)}`).join(',');
+  const key = list.map(item => `${item.status}${item.level}:${Math.round(item.remaining)}`).join(',');
   if (key === w.statusShown) return;
   w.statusShown = key;
   w.card.setEffects(list, STATUS_SLOTS); // (a slot per status, then dashes for the places left over)
@@ -378,27 +391,42 @@ onLineLogged(p => windows.forEach(w => { if (socialOpen(w) && p === personOf(w))
 // ---- the Pockets tab's drawing: redrawn only when what's in them has changed (checked each frame while it's open, from
 // refreshCardStatuses — so the sunglasses someone came in turn up, and whatever's given or taken back)
 const pocketsOpen = w => !!w.shown && w.card.activeTab() === 'pockets';
+// what's in their pockets, slot by slot: the snack in their hand first ({gift, sips}), then their keepsakes ({gift})
+function pocketItems(p) {
+  const snack = heldSnack(p);
+  return [...(snack ? [{ gift: snack, sips: p.snack.mouthfuls }] : []), ...(p?.pockets ?? []).map(gift => ({ gift }))];
+}
 function refreshPockets(w) {
   if (!pocketsOpen(w)) return;
-  const carried = personOf(w)?.pockets ?? [];
-  const key = carried.map(gift => gift.name).join('|');
+  const carried = pocketItems(personOf(w));
+  const key = carried.map(item => item.gift.name + (item.sips ?? '')).join('|');
   if (key === w.pocketsShown) return;
   w.pocketsShown = key;
   w.pocketSlots.forEach((button, slot) => {
-    const gift = carried[slot];
-    button.textContent = gift ? gift.emoji : '–';
-    button.classList.toggle('pc-pocket-empty', !gift);
-    button.disabled = !gift;
-    button.title = gift ? 'Take it back' : '';
+    const item = carried[slot];
+    if (item?.sips != null) {
+      const count = document.createElement('span');
+      count.className = 'pc-pocket-count';
+      count.textContent = item.sips;
+      button.replaceChildren(item.gift.emoji, count);
+    } else button.textContent = item ? item.gift.emoji : '–';
+    button.classList.toggle('pc-pocket-empty', !item);
+    button.disabled = !item;
+    button.title = item ? (item.sips != null ? 'Having it' : 'Take it back') : '';
   });
-  if (w.pocketHover == null || !carried[w.pocketHover]) showPocket(w, -1);
+  showPocket(w, w.pocketHover != null && carried[w.pocketHover] ? w.pocketHover : -1); // (a hovered snack's sips kept current)
 }
 // what's in pocket `slot` beneath them (-1: what the tab's for)
 function showPocket(w, slot) {
-  const gift = slot >= 0 ? personOf(w)?.pockets?.[slot] : null;
-  w.pocketHover = gift ? slot : null;
-  if (gift) { tipLines(w.pocketInfo, giftLines(gift)); return; }
-  const empty = !personOf(w)?.pockets?.length;
+  const items = pocketItems(personOf(w)), item = slot >= 0 ? items[slot] : null;
+  w.pocketHover = item ? slot : null;
+  if (item) {
+    const lines = giftLines(item.gift);
+    if (item.sips != null) lines.notes = [`${item.sips} ${item.gift.snack === 'hotdog' ? 'bite' : 'sip'}${item.sips === 1 ? '' : 's'} left`, ...lines.notes];
+    tipLines(w.pocketInfo, lines);
+    return;
+  }
+  const empty = !items.length;
   w.pocketInfo.replaceChildren(empty ? 'Nothing in their pockets.' : 'Point at something to see what it does; click it to take it back.');
   w.pocketInfo.classList.add('pc-pocket-hint');
 }

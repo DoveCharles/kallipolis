@@ -1,7 +1,8 @@
 import { isFavorite, toggleFavorite, onFavoritesChanged } from './favorites.js';
 import { dragByTitle } from './w3-window.js';
 import { healthOf, healthFraction, onHealthChanged } from '../core/health.js';
-import { EFFECTS, statusLines } from '../life/statuseffects.js';
+import { effectOf, statusLines } from '../life/statuseffects.js';
+import { formatTime } from '../core/math.js';
 
 // ============================================================ the card for whatever's being followed
 // The card at the bottom right saying what the camera's following: a person (life/person-card.js), a car
@@ -269,24 +270,17 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     for (let i = 0; i < want; i++) {
       const slot = column.children[i] ?? document.createElement('div');
       const entry = list[i] ?? null;
-      const classes = 'pc-effect' + (entry ? (EFFECTS[entry.status]?.emoji ? ' pc-effect-emoji' : '') : ' pc-effect-empty');
+      const classes = 'pc-effect' + (entry ? '' : ' pc-effect-empty');
       if (slot.className !== classes) slot.className = classes;
       if (entry) {
         // (a slot that stood empty has to be emptied of its dash before its picture goes in, leaving nothing of the old
         // status behind either way — and the slot keeps its place in the column, so it's still the element the pointer is on)
-        // (a gift's status is its emoji rather than a bitmap: see life/gifts.js)
-        const emoji = EFFECTS[entry.status]?.emoji;
-        if (emoji) {
-          if (slot.querySelector('img') || slot.textContent !== emoji) slot.replaceChildren(emoji);
-        } else {
-          const icon = `assets/icons/status/${EFFECTS[entry.status]?.icon ?? 'sick'}.png`;
-          const image = slot.querySelector('img');
-          if (!image) slot.replaceChildren(statusIcon());
-          const picture = slot.querySelector('img');
-          if (picture && picture.getAttribute('src') !== icon) picture.setAttribute('src', icon);
-        }
+        const icon = `assets/icons/status/${effectOf(entry.status, entry.level)?.icon ?? 'sick'}.png`;
+        if (!slot.querySelector('img')) slot.replaceChildren(statusIcon());
+        const picture = slot.querySelector('img');
+        if (picture && picture.getAttribute('src') !== icon) picture.setAttribute('src', icon);
         const left = typeof entry.left === 'function' ? entry.left : () => entry.left;
-        statusLinesOf.set(slot, { left, lines: () => statusLines(entry.status, null, left()) });
+        statusLinesOf.set(slot, { left, lines: () => statusLines(entry.status, entry.level), meter: () => entry.meter?.() ?? { total: left(), stages: [{ level: entry.level, seconds: left() }] } });
       } else {
         if (slot.querySelector('img') || slot.textContent !== '–') slot.replaceChildren('–');
         statusLinesOf.delete(slot);
@@ -317,8 +311,30 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   const tip = document.createElement('div');
   tip.className = 'pc-mods pc-mods-status pc-tip';
   tip.hidden = true;
-  el.append(tip);
+  document.body.append(tip); // (out of the card, so it's over every window: see .pc-tip in css/base.css)
   let tipShown = null, tipSaid = '', tipAt = null, tipRead = null, tipTick = null;
+  // Its meter: a bar of fixed width for the status's length since its last top-up — each stage still to run a block of its
+  // level's colour (the lowest on the left, the one running now nearest the right), what's gone dark grey on the right —
+  // and under it the time left in all (left, with more than one level) and of the strongest (right).
+  const tipMeter = document.createElement('div');
+  tipMeter.className = 'pc-status-meter';
+  tipMeter.innerHTML = '<div class="pc-status-bar"></div><div class="pc-status-time"><span></span><span></span></div>';
+  function fillMeter(meter) {
+    if (!meter?.stages?.length) { tipMeter.hidden = true; return; }
+    tipMeter.hidden = false;
+    const total = Math.max(meter.total, meter.stages.reduce((sum, stage) => sum + stage.seconds, 0)) || 1;
+    const bar = tipMeter.firstChild, blocks = [...meter.stages].reverse();
+    while (bar.children.length < blocks.length) { const block = document.createElement('div'); block.className = 'pc-status-level'; bar.append(block); }
+    while (bar.children.length > blocks.length) bar.lastChild.remove();
+    blocks.forEach((stage, i) => {
+      const block = bar.children[i], level = String(Math.min(3, stage.level));
+      block.style.width = `${100*stage.seconds/total}%`;
+      if (block.textContent !== `lv.${stage.level}`) { block.dataset.level = level; block.textContent = `lv.${stage.level}`; }
+    });
+    const [all, strongest] = tipMeter.lastChild.children, several = meter.stages.length > 1;
+    all.textContent = several ? formatTime(meter.stages.reduce((sum, stage) => sum + stage.seconds, 0)) : '';
+    strongest.textContent = formatTime(meter.stages[0].seconds);
+  }
   // Puts the tip up over the pointer, its lines read from `read` — which asks the status how long it has left as it is
   // now, so the countdown in them is live. Nothing is written to the screen until the box is filled and measured, so it
   // comes up already in its place rather than showing at the pointer for a frame first.
@@ -346,9 +362,10 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
         line.className = 'pc-mod';
         line.textContent = text;
         return line;
-      }));
+      }), tipMeter);
       tipSaid = said;
     }
+    fillMeter(tipRead?.meter?.());
     return true;
   }
   // (measured as it is now, so the box is placed to the right of the pointer where there's room and over to its left where

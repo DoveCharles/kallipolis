@@ -2,6 +2,7 @@ Their nickname | My nickname {nickname, choiceweight = 4} <habits>
 Controversially, [hates] {choiceweight = 50}
 Stoicism | Stoicism {normal = 2, conservative = 0.05} <beliefs>
 Seed money {conservative = 0.2}
+stimulating the economy
 Big noses
 Cop Dramas {outlaw = 0.9}
 Mighty Morphin Power Rangers

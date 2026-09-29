@@ -5,6 +5,7 @@ I need to get home and feed my [pets: plural]. [farewells]! {end}
 Alright, bye then! {end}
 Well, I'd better go. [farewells]! {end}
 It was lovely talking to you! {end, happy}
+I bid you, adieu! {end}
 Catch you later, [other.name]. {end}
 Okay, [farewells]! I've got to find my [belongings: plural]. {end, fidgety}
 Anyway, I've got to gooooo. {end}

@@ -203,7 +203,7 @@ animate();
 // A handle on the app's insides, for poking at it from the browser console. `status` is there too, so a status effect can
 // be tried out without waiting for someone to happen to buy a coffee: `kallipolis.status.add('caffeinated')` puts one on
 // whoever the camera is following — the card should show its icon at once — and a second number is how long it lasts, and
-// a third says whose, their place in the crowd (`kallipolis.status.add('caffeinated', 30, 3)`).
+// a third says whose, their place in the crowd (`kallipolis.status.add('caffeinated', 30, 3)`), a fourth its level.
 import * as SceneModule from './core/scene.js';
 import * as Shared from './core/shared.js';
 import { EFFECTS, STATUS_SOURCES, addStatus, removeStatus, hasStatus } from './life/statuseffects.js';
@@ -213,7 +213,7 @@ const followedAt = () => Shared.App.followedPerson?.() ?? -1;
 const peopleClock = () => Shared.App.peopleClock?.() ?? 0;
 const status = {
   effects: EFFECTS, sources: STATUS_SOURCES, has: hasStatus, remove: removeStatus,
-  add: (key, seconds = null, who = null) => addStatus(Shared.App.people[who ?? followedAt()], key, seconds, peopleClock()),
+  add: (key, seconds = null, who = null, level = 1) => addStatus(Shared.App.people[who ?? followedAt()], key, seconds, peopleClock(), level),
   of: who => Shared.App.people[who ?? followedAt()],
   // What the followed person's card shows in its status column, and whether the pointer's tip is up — for the console:
   // `kallipolis.status.add('caffeinated', 60)`, rest the pointer on the coffee icon, then `kallipolis.status.report()`.
