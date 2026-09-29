@@ -32,7 +32,7 @@ let EXTENT;                                  // the room and any bedroom, walls 
 const ROOM_H = 3.2;                          // floor to ceiling
 // The sun's shadow is coarse (its bias lets light through anything within ~0.4 of what's casting it: see scene.js), so the
 // walls and ceiling cast from their outer faces rather than three.js's usual inner ones (shadowSide, below), and they're
-// far thicker than a real building's, with the slabs reaching out past the walls behind the camera — anything less lets
+// far thicker than a real building's, with the ceiling reaching out past the walls behind the camera — anything less lets
 // daylight bleed in along the seams where they meet. Nobody inside sees their outsides, so the ceiling and the two walls behind the camera
 // are thicker still; the far walls stay thin enough for the windows.
 const WALL = 0.5, SLAB = 0.6, THICK = 1.6, OVERHANG = 1.5;
@@ -227,10 +227,11 @@ let lowGlass, dadoGlass;
 const shopfrontGlass = high => { lowGlass.visible = !high; dadoGlass.visible = high; };
 function buildShell() {
   for (const group of [bare, farX, farZ, backWall, curtain, blankWalls, doorWall, shopfront]) clearOut(group);
-  // (the floor's slab stops under the wall into a bedroom, where the bedroom's own floor takes over: see "the bedroom")
-  const [e0, e1, e2, e3] = ['-x', '+x', '-z', '+z'].map(side => SUITE?.side === side ? WALL : WALL + OVERHANG);
-  SLAB_W = ROOM_W + e0 + e1; SLAB_D = ROOM_D + e2 + e3;
-  box(SLAB_W, SLAB, SLAB_D, floorMaterial, (e1 - e0)/2, -SLAB/2, (e3 - e2)/2, bare);
+  // (the floor's slab stops WALL past the room all round — flush with the far walls' outer faces and a shopfront's glass,
+  // so it doesn't poke out under the windows — and under the wall into a bedroom, where the bedroom's own floor takes over:
+  // see "the bedroom")
+  SLAB_W = ROOM_W + WALL*2; SLAB_D = ROOM_D + WALL*2;
+  box(SLAB_W, SLAB, SLAB_D, floorMaterial, 0, -SLAB/2, 0, bare);
   // (the ceiling stops flush with the far walls — any further and it'd shade their windows — but reaches on past the thick
   // ones behind the camera)
   // (or, with a bedroom through the wall behind the camera, stops at it, where the bedroom's own takes over)
@@ -1071,9 +1072,9 @@ function buildSuite() {
   suite.position.set(SUITE.ox, 0, SUITE.oz);
   suite.rotation.y = SUITE.angle;
   const u0 = -L/2 - t0, u1 = L/2 + t1, v1 = depth + outer, add = (w, h, d, material, u, y, v) => box(w, h, d, material, u, y, v, suite);
-  // (the floor on out past the walls, as the living room's is; the ceiling flush with those with windows in)
+  // (the floor flush with the walls' outer faces, as the living room's is; the ceiling on out past the thick ones)
   const past = t => t === THICK ? OVERHANG : 0;
-  add(u1 - u0 + OVERHANG*2, SLAB, v1 + OVERHANG, bedroomFloorMaterial, (u0 + u1)/2, -SLAB/2, (v1 + OVERHANG)/2);
+  add(u1 - u0, SLAB, v1, bedroomFloorMaterial, (u0 + u1)/2, -SLAB/2, v1/2);
   const c0 = u0 - past(t0), c1 = u1 + past(t1), cv = v1 + past(outer);
   add(c1 - c0, THICK, cv, ceilingMaterial, (c0 + c1)/2, ROOM_H + THICK/2, cv/2);
   // the wall it's through, either side of the doorway and over it
