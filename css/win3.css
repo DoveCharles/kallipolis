@@ -265,6 +265,8 @@ html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; 
   /* the menu bar: white, lined underneath; a menu's name goes navy while it's down */
   html.win3 #w3-menubar { display:flex; height:21px; padding:0 2px; background:var(--w3-menu); border-bottom:1px solid var(--w3-frame); user-select:none; }
   html.win3 .w3-menu-title { padding:0 7px; margin:0; border:none; border-radius:0; background:none; color:var(--w3-menu-text); font-weight:700; }
+  html.win3 .w3-clock { margin:0 4px 0 auto; padding:0 6px; border:none; border-radius:0; background:none; color:var(--w3-menu-text); font-weight:700; font-variant-numeric:tabular-nums; cursor:default; }
+  html.win3 .w3-clock.stopped { color:var(--w3-shadow); }
   html.win3 .w3-menu-title.open { background:var(--w3-hl); color:var(--w3-hl-text); }
   html.win3 #app-frame .win3-sysbox.open { filter:invert(1); }
   /* a menu: a white box, lined, with a drop shadow; the row under the pointer goes navy; greyed rows can't be picked */

@@ -75,6 +75,15 @@ Love this song. {here.building = pub, mood}
 > It's alright. {patience = -1}
 > Bit before my time. {weight = 0.5}
 
+Have you tried the hazy one? {here.building = craftpub}
+> Tastes like orange juice.
+> It's got oats in it, apparently. {nosy}
+> I'll stick to the stout. {patience = -1}
+
+Who sits at a long table with strangers? {here.building = craftpub, weight = 0.5}
+> Everyone, now.
+> I quite like it. {happy}
+
 Can you hear the music in here? {here.building = pub, weight = 0.5}
 > Barely. {patience = -1}
 It's cosy in here, isn't it? {here.indoors, happy}

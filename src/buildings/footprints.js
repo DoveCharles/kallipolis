@@ -112,3 +112,11 @@ export function buildingNumber(key) {
 const CITY_BLOCK_KINDS = new Set(['buildings', 'landmark']), OWN_LAYOUT_KINDS = new Set(['warehouse', 'factory', 'pub', 'salon', 'clothes']);
 export const roomLayoutOf = (kind, number) => OWN_LAYOUT_KINDS.has(kind) ? kind
   : CITY_BLOCK_KINDS.has(kind) && number % 2 === 0 ? 'office' : 'home';
+// A pub's kind of pub, by its key (see buildingKey), the same every time: a craft beer bar — bright paint, neon, festoon
+// lights, long tables (see furnishPub in interior.js) — about a third of the time, else an old British boozer.
+export const CRAFT_PUB = 0.35;
+export function pubStyleOf(key) {
+  let h = 2166136261;
+  for (const ch of String(key) + ':craft') h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return (h >>> 0)/2**32 < CRAFT_PUB ? 'craft' : 'pub';
+}

@@ -5,7 +5,7 @@ import { setEntryFiller } from './profiles.js';
 import { feelingFor, introduced } from './people/peopleRelations.js';
 import { moralityLevel } from '../ui/morality.js';
 import { capitalisedWords } from '../ui/garble.js';
-import { roomLayoutOf } from '../buildings/footprints.js';
+import { roomLayoutOf, pubStyleOf } from '../buildings/footprints.js';
 import { tessellateClosedPath } from '../core/splines.js';
 import { peopleNav } from './people/people.js';
 
@@ -382,7 +382,9 @@ const worldAllows = (world, person) => world.every(w => {
   if (w.kind === 'is') { const who = w.other ? speakingTo : person; return !!who && STATES[w.is](who) !== w.not; }
   if (w.kind === 'place') return placeOf(person) === w.is || (!!ZONES[w.is] && !buildingOf(person) && zoneOf(person) === ZONES[w.is]);
   if (w.kind === 'indoors') return !!buildingOf(person) === w.is;
-  if (w.kind === 'building') { const b = buildingOf(person); return !!b && (b.kind === w.is || roomLayoutOf(b.kind, b.number) === w.is); }
+  if (w.kind === 'building') { const b = buildingOf(person); const layout = b && roomLayoutOf(b.kind, b.number);
+    // (a craft beer bar's a pub too, and `craftpub` only one of those: see pubStyleOf)
+    return !!b && (b.kind === w.is || layout === w.is || (w.is === 'craftpub' && layout === 'pub' && pubStyleOf(b.key) === 'craft')); }
   if (w.kind === 'trait') {
     const who = w.other ? speakingTo : person;
     if (!who?.traits) return false;
