@@ -26,6 +26,11 @@ Nobody told me it was nine percent. {here.building = craftpub, is = drunk}
 I just want a lager. {here.building = craftpub, weight = 0.5}
 Those little lights are nice. {here.building = craftpub, happy, weight = 0.5}
 Is that sign meant to say that? {here.building = craftpub, weight = 0.3}
+An ensuite. Fancy. {here.building = ensuite, weight = 0.5}
+Nobody needs a glass shower. {here.building = ensuite, patience = -1, weight = 0.4}
+I could live here. The bedroom's got its own loo. {here.building = ensuite, happy, weight = 0.4}
+Should've made the bed. {here.building = ensuite, weight = 0.4}
+Can't sleep... not even in that bed. {world.hour 23-4, here.building = ensuite, weight = 0.4}
 Just a trim. Just a trim. {here.building = salon}
 Something different this time. {here.building = salon, weight = 0.7}
 I love that smell. {here.building = salon, happy, weight = 0.5}

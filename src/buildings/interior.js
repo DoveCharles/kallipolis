@@ -4,7 +4,7 @@ import { S, App, buildingHolders } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
 import { possession } from '../life/possession.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { footprintBounds, pubStyleOf } from './footprints.js';
+import { footprintBounds, pubStyleOf, homeSuiteOf } from './footprints.js';
 import { hashNameToNumber, mulberry32, pointInPolygon } from '../core/math.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { setCutout } from '../ui/pixelation.js';
@@ -27,6 +27,8 @@ import { loadSalonBot, placeSalonBot, salonBotReach, clearSalonBots, updateSalon
 // The room's sized for each building as it's gone into (see shapeRoom): about as big as the building's footprint, within
 // what its layout takes, and a little more or less by its key, so no two rooms are quite alike.
 let ROOM_W = 8, ROOM_D = 6;                  // along the room's own x and z (x the longer, or square)
+let SUITE = null;                            // a home's bedroom through one of its walls, or null (see "the bedroom")
+let EXTENT;                                  // the room and any bedroom, walls and all, as a rectangle (see shapeRoom)
 const ROOM_H = 3.2;                          // floor to ceiling
 // The sun's shadow is coarse (its bias lets light through anything within ~0.4 of what's casting it: see scene.js), so the
 // walls and ceiling cast from their outer faces rather than three.js's usual inner ones (shadowSide, below), and they're
@@ -102,7 +104,7 @@ if ( roomGlow.r > 0.0 ) {
 function setRoomGlow(on) {
   roomGlowUniforms.roomGlow.value.setScalar(on ? ROOM_GLOW*Math.PI : 0);
   if (on) roomGlowUniforms.roomFromWorld.value.copy(room.matrixWorld).invert();
-  roomGlowUniforms.roomReach.value.set(ROOM_W/2 + 0.5, ROOM_H + 0.5, ROOM_D/2 + 0.5);
+  roomGlowUniforms.roomReach.value.set(Math.max(-EXTENT.x0, EXTENT.x1), ROOM_H + 0.5, Math.max(-EXTENT.z0, EXTENT.z1));
 }
 function box(w, h, d, material, x, y, z, parent = room) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
@@ -160,6 +162,12 @@ let FAR_X, FAR_Z;
 // now and then an office) or, in most offices, glass floor to ceiling.
 const punched = new THREE.Group(), curtain = new THREE.Group();
 room.add(punched, curtain);
+// (each punched wall, and the wall behind the camera along x, in a group of its own: a bedroom's doorway wall stands in
+// for whichever one it's through — see "the bedroom")
+const farX = new THREE.Group(), farZ = new THREE.Group(), backWall = new THREE.Group();
+punched.add(farX, farZ);
+room.add(backWall);
+let SLAB_W, SLAB_D; // (the floor's slab: see buildShell)
 // (or, in a shop, blank: its window's its shopfront, in the wall with the door — see `shopfront`, below)
 const blankWalls = new THREE.Group();
 blankWalls.visible = false;
@@ -218,16 +226,21 @@ let shopfrontFrom; // (where the glass starts, along z; it runs on to the far wa
 let lowGlass, dadoGlass;
 const shopfrontGlass = high => { lowGlass.visible = !high; dadoGlass.visible = high; };
 function buildShell() {
-  for (const group of [bare, punched, curtain, blankWalls, doorWall, shopfront]) clearOut(group);
-  box(ROOM_W + (WALL + OVERHANG)*2, SLAB, ROOM_D + (WALL + OVERHANG)*2, floorMaterial, 0, -SLAB/2, 0, bare);
+  for (const group of [bare, farX, farZ, backWall, curtain, blankWalls, doorWall, shopfront]) clearOut(group);
+  // (the floor's slab stops under the wall into a bedroom, where the bedroom's own floor takes over: see "the bedroom")
+  const [e0, e1, e2, e3] = ['-x', '+x', '-z', '+z'].map(side => SUITE?.side === side ? WALL : WALL + OVERHANG);
+  SLAB_W = ROOM_W + e0 + e1; SLAB_D = ROOM_D + e2 + e3;
+  box(SLAB_W, SLAB, SLAB_D, floorMaterial, (e1 - e0)/2, -SLAB/2, (e3 - e2)/2, bare);
   // (the ceiling stops flush with the far walls — any further and it'd shade their windows — but reaches on past the thick
   // ones behind the camera)
-  const ceilW = ROOM_W/2 + WALL + ROOM_W/2 + THICK + OVERHANG, ceilD = ROOM_D/2 + WALL + ROOM_D/2 + THICK + OVERHANG;
+  // (or, with a bedroom through the wall behind the camera, stops at it, where the bedroom's own takes over)
+  const ceilW = ROOM_W/2 + WALL + ROOM_W/2 + THICK + OVERHANG;
+  const ceilD = ROOM_D/2 + WALL + ROOM_D/2 + (SUITE?.side === '-z' ? WALL : THICK + OVERHANG);
   box(ceilW, THICK, ceilD, ceilingMaterial, ROOM_W/2 + WALL - ceilW/2, ROOM_H + THICK/2, ROOM_D/2 + WALL - ceilD/2, bare);
   FAR_X = [ROOM_W + WALL*2, Math.max(1, Math.round(ROOM_W/2.4))];
   FAR_Z = [ROOM_D, Math.max(1, Math.round(ROOM_D/2.4))];
-  wall(...FAR_X, 0, ROOM_D/2 + WALL/2, 0, WALL, punched);       // far, along x
-  wall(...FAR_Z, ROOM_W/2 + WALL/2, 0, Math.PI/2, WALL, punched); // far, along z
+  wall(...FAR_X, 0, ROOM_D/2 + WALL/2, 0, WALL, farX);       // far, along x
+  wall(...FAR_Z, ROOM_W/2 + WALL/2, 0, Math.PI/2, WALL, farZ); // far, along z
   wall(FAR_X[0], 0, 0, ROOM_D/2 + WALL/2, 0, WALL, blankWalls);
   wall(FAR_Z[0], 0, ROOM_W/2 + WALL/2, 0, Math.PI/2, WALL, blankWalls);
   COLUMNS = [[ROOM_W/2, ROOM_D/2], [-ROOM_W/2 + COLUMN/2, ROOM_D/2], [ROOM_W/2, -ROOM_D/2 + COLUMN/2]];
@@ -236,7 +249,7 @@ function buildShell() {
   // z runs the other way along itself, turned as it is)
   curtainWall(ROOM_W + WALL, 0, ROOM_D/2 + WALL/2, 0, -ROOM_W/2 + COLUMN, ROOM_W/2 - COLUMN/2);
   curtainWall(ROOM_D + WALL, ROOM_W/2 + WALL/2, 0, Math.PI/2, -ROOM_D/2 + COLUMN/2, ROOM_D/2 - COLUMN);
-  wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK, bare);  // behind the camera
+  wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK, backWall);  // behind the camera
   DOOR_Z = -ROOM_D/2 + DOOR_IN;
   doorFrom = DOOR_Z - DOOR_W/2; doorTo = DOOR_Z + DOOR_W/2;
   box(RECESS, ROOM_H, doorFrom + ROOM_D/2, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorFrom - ROOM_D/2)/2, bare);
@@ -593,9 +606,13 @@ clearOut(trim);
 drapes.length = 0;
 WALL_FACES = [{ alongX: true, at: ROOM_D/2, n: -1 }, { alongX: false, at: ROOM_W/2, n: -1 },
   { alongX: true, at: -ROOM_D/2, n: 1 }, { alongX: false, at: -ROOM_W/2, n: 1 }];
+// (the wall through to any bedroom, and its doorway along it: see "the bedroom")
+const through = SUITE && WALL_FACES[{ '+z': 0, '+x': 1, '-z': 2 }[SUITE.side]];
+const [openFrom, openTo] = !SUITE ? [] : through.alongX ? [SUITE.doorway.x0, SUITE.doorway.x1] : [SUITE.doorway.z0, SUITE.doorway.z1];
 for (const face of WALL_FACES) {
   const half = face.alongX ? ROOM_W/2 : ROOM_D/2;
-  const runs = face.alongX || face.n < 0 ? [[-half, half]] : [[-half, doorFrom - 0.08], [doorTo + 0.08, half]];
+  const runs = face === through ? [[-half, openFrom - 0.08], [openTo + 0.08, half]]
+    : face.alongX || face.n < 0 ? [[-half, half]] : [[-half, doorFrom - 0.08], [doorTo + 0.08, half]];
   for (const [a, b] of runs) {
     strip(face, a, b, 0.08, 0.16, 0.025);                     // skirting
     strip(face, a, b, 0.165, 0.02, 0.035);
@@ -607,11 +624,11 @@ for (const face of WALL_FACES) {
   strip(face, -half, half, ROOM_H - 0.025, 0.05, 0.07);
   strip(face, -half, half, ROOM_H - 0.13, 0.02, 0.045);
 }
-{ // the doorway's casing
-  const face = WALL_FACES[3];
-  strip(face, doorFrom - 0.08, doorFrom, (DOOR_H + 0.08)/2, DOOR_H + 0.08, 0.03);
-  strip(face, doorTo, doorTo + 0.08, (DOOR_H + 0.08)/2, DOOR_H + 0.08, 0.03);
-  strip(face, doorFrom - 0.08, doorTo + 0.08, DOOR_H + 0.04, 0.08, 0.035);
+// the doorways' casings
+for (const [face, from, to] of [[WALL_FACES[3], doorFrom, doorTo], ...SUITE ? [[through, openFrom, openTo]] : []]) {
+  strip(face, from - 0.08, from, (DOOR_H + 0.08)/2, DOOR_H + 0.08, 0.03);
+  strip(face, to, to + 0.08, (DOOR_H + 0.08)/2, DOOR_H + 0.08, 0.03);
+  strip(face, from - 0.08, to + 0.08, DOOR_H + 0.04, 0.08, 0.035);
 }
 {
   const pleat = new THREE.CylinderGeometry(0.035, 0.035, 1, 8), pole = new THREE.CylinderGeometry(0.018, 0.018, 1, 8);
@@ -628,6 +645,7 @@ for (const face of WALL_FACES) {
     parent.add(mesh);
   };
   for (const [length, windows, face] of [[...FAR_X, WALL_FACES[0]], [...FAR_Z, WALL_FACES[1]]]) {
+    if (face === through) continue; // (no windows in it)
     const { width, gap, centres } = piers(length, windows);
     for (let i = 0; i < windows; i++) {
       // (along the wall as the room has it: the wall along z is turned, so its own x runs down the room's z)
@@ -664,8 +682,7 @@ buildTrim();
 // floor's slab (see buildShell) at their real size, however big the room: set again as it's sized (fitFloors).
 const floorTextures = [];
 function fitFloors() {
-  const slabW = ROOM_W + (WALL + OVERHANG)*2, slabD = ROOM_D + (WALL + OVERHANG)*2;
-  for (const { texture, metres } of floorTextures) texture.repeat.set(slabW/metres, slabD/metres);
+  for (const { texture, metres } of floorTextures) texture.repeat.set(SLAB_W/metres, SLAB_D/metres);
 }
 function floorTexture(size, metres, draw) {
   const canvas = document.createElement('canvas');
@@ -935,15 +952,16 @@ const kitchenFloorMaterial = new THREE.MeshStandardMaterial({ roughness: 0.45, m
   polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
 const kitchenFloor = new THREE.Mesh(new THREE.BufferGeometry(), kitchenFloorMaterial);
 kitchenFloor.receiveShadow = true;
-// the patch over the rectangle `r` of the room's floor, its tiles square to the walls from its (x0, z0) corner
-function layKitchenFloor(r) {
-  kitchenFloor.geometry.dispose();
+// the patch over the rectangle `r` of the room's floor, its tiles square to the walls from its (x0, z0) corner (or
+// `mesh`, some other patch of them: an ensuite's, see "the bedroom")
+function layKitchenFloor(r, mesh = kitchenFloor) {
+  mesh.geometry.dispose();
   const w = r.x1 - r.x0, d = r.z1 - r.z0, geometry = new THREE.PlaneGeometry(w, d);
   geometry.rotateX(-Math.PI/2);
   const uv = geometry.attributes.uv, position = geometry.attributes.position;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, (position.getX(i) + w/2)/(KITCHEN_TILE*2), (position.getZ(i) + d/2)/(KITCHEN_TILE*2));
-  kitchenFloor.geometry = geometry;
-  kitchenFloor.position.set((r.x0 + r.x1)/2, 0.004, (r.z0 + r.z1)/2);
+  mesh.geometry = geometry;
+  mesh.position.set((r.x0 + r.x1)/2, 0.004, (r.z0 + r.z1)/2);
 }
 async function loadKitchen() {
   try {
@@ -955,6 +973,230 @@ async function loadKitchen() {
   if (inside && current === LAYOUTS.home) furnish(inside.key);
 }
 modelsLoading.push(loadKitchen());
+
+// ---------------------------------------------------------- the bedroom
+// About half of homes (see homeSuiteOf in footprints.js) have a bedroom beyond one of the living room's walls but the
+// door's — a far wall (+x or +z) or the other wall behind the camera (-z) — through an open doorway in it, with an
+// ensuite at one end behind a partition, through a doorway of its own: a double bed with a bedside table either side,
+// a wardrobe or two and a dresser against its walls; a toilet, a basin and a shower in the ensuite
+// (assets/models/Bedroom.glb, built by tools/bedroom-models.py). The living room's made smaller to leave room for it, and
+// the two are centred on the building together (see enterBuilding). The bedroom's worked out in its own terms: u along
+// the wall it's through, v out from that wall's far face into it (see planSuite) — and built into `suite`, turned and
+// moved to match. It's carpeted, its ensuite tiled as the kitchen is, in colours of their own for each home, and its
+// furniture's in the room's wood.
+const BEDROOM_MODEL_URL = 'assets/models/Bedroom.glb';
+const SUITE_DOOR = 1.0;                              // the doorway through to it, wide open
+const ENSUITE = 1.8, PARTITION = 0.12;               // the ensuite's width, along the wall, and the wall between
+const ENSUITE_DOOR = [0.2, 1.05];                    // its doorway in the partition: from and to, out from the wall
+const BEDROOM_PAINTED = {
+  Wood: WOODS,
+  Duvet: [0x5a7ab0, 0xe8e4dc, 0xc8603e, 0x3e6a4e, 0xd8a8b0, 0x34466a, 0xe0c060, 0x8a8c8e, 0x7a4868],
+  Sheet: [0xf2f0ea, 0xf4f2ee, 0xe8e4dc, 0xdce4ec, 0xece2d0],
+  Headboard: [0x8a8c8e, 0x3c4a6e, 0x5a3c2a, 0xc8b8a0, 0x2f7474, 0x89666e, 0x3a3a3c],
+  Shade: SHADES,
+};
+const BEDROOM_FLOORS = [0xc8bca8, 0xa89c88, 0x8a8c90, 0xd8ccb4, 0x6a7a8a, 0x9a8a78, 0xb8a898, 0x5a6a5a];
+let bedroom = null;
+const bedroomPainted = [];
+async function loadBedroom() {
+  try {
+    bedroom = await loadPieces(BEDROOM_MODEL_URL, BEDROOM_PAINTED, bedroomPainted);
+  } catch (err) {
+    console.warn('Kallipolis: the bedroom model failed to load; bedrooms are left bare', err);
+    return;
+  }
+  // (the shower's glass, frosted: see-through, a little)
+  for (const piece of Object.values(bedroom)) piece.object.traverse(o => {
+    for (const material of o.isMesh ? [o.material].flat() : []) if (material.name === 'Frosted') {
+      Object.assign(material, { transparent: true, opacity: 0.45, depthWrite: false });
+    }
+  });
+  if (inside && current === LAYOUTS.home) furnish(inside.key);
+}
+modelsLoading.push(loadBedroom());
+// its shell (built again as the room's sized: see shapeRoom), and its floors
+const suite = new THREE.Group();
+suite.visible = false;
+room.add(suite);
+const bedroomFloorMaterial = roomLit(new THREE.MeshStandardMaterial({ color: BEDROOM_FLOORS[0], roughness: 1 }));
+const ensuiteFloor = new THREE.Mesh(new THREE.BufferGeometry(), kitchenFloorMaterial.clone());
+ensuiteFloor.receiveShadow = true;
+// A home's bedroom, as its key has it (see enterBuilding): which wall it's through, how deep it is (v), which end of it
+// (along u) the ensuite's at, and how far along the doorway is (0 to 1, of as far as it can go) — or null.
+function suiteSpec(key) {
+  const side = homeSuiteOf(key);
+  if (!side) return null;
+  // (behind the camera, the ensuite's at the camera's end, so the doorway's out along the wall from it)
+  return { side, depth: Math.round((3.4 + keyFraction(key, ':bedroom')*0.8)*10)/10,
+    end: side === '-z' || keyFraction(key, ':ensuite') < 0.5 ? 1 : -1, door: Math.round(keyFraction(key, ':doorway')*100)/100 };
+}
+// The bedroom for the room as it's now sized: its terms (u along the wall, v out from it: `at`, and `rect` for a
+// rectangle in them, in the room's), how long it is along the wall (the room's length that way), where the bedroom
+// proper, the partition and the ensuite are along it, and the doorway; how thick its walls are — windows in any facing
+// the far walls' way (+x or +z), and thick and blank as the walls behind the camera are otherwise — and how far it all
+// reaches (`bounds`, in the room's terms).
+function planSuite({ side, depth, end: e, door }) {
+  const angle = { '+x': Math.PI/2, '+z': 0, '-z': Math.PI }[side];
+  const tx = Math.round(Math.cos(angle)), tz = -Math.round(Math.sin(angle)), nx = -tz, nz = tx;
+  const ox = side === '+x' ? ROOM_W/2 + WALL : 0, oz = side === '+x' ? 0 : Math.sign(nz)*(ROOM_D/2 + WALL);
+  const L = side === '+x' ? ROOM_D : ROOM_W;
+  const at = (u, v) => ({ x: ox + tx*u + nx*v, z: oz + tz*u + nz*v });
+  const rect = (u0, u1, v0, v1) => {
+    const a = at(u0, v0), b = at(u1, v1);
+    return { x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x), z0: Math.min(a.z, b.z), z1: Math.max(a.z, b.z) };
+  };
+  const windowed = (x, z) => x > 0.5 || z > 0.5;
+  const ends = [-1, 1].map(s => windowed(s*tx, s*tz) ? WALL : THICK), outer = windowed(nx, nz) ? WALL : THICK;
+  const ensuite = e > 0 ? [L/2 - ENSUITE, L/2] : [-L/2, -L/2 + ENSUITE];
+  const partition = e > 0 ? [ensuite[0] - PARTITION, ensuite[0]] : [ensuite[1], ensuite[1] + PARTITION];
+  const bed = e > 0 ? [-L/2, partition[0]] : [partition[1], L/2];
+  // (the doorway clear of the partition, and behind the camera, of the camera's corner)
+  const lo = bed[0] + 0.8, hi = Math.min(bed[1] - 0.8, side === '-z' ? L/2 - 2.2 : Infinity);
+  const doorU = hi > lo ? Math.round((lo + door*(hi - lo))*10)/10 : (bed[0] + bed[1])/2;
+  const doorway = rect(doorU - SUITE_DOOR/2, doorU + SUITE_DOOR/2, -WALL, 0);
+  return { side, depth, e, angle, ox, oz, L, at, rect, ends, outer, ensuite, partition, bed, doorU, doorway,
+    bounds: rect(-L/2 - ends[0], L/2 + ends[1], -WALL, depth + outer) };
+}
+// its floor, ceiling and walls, and the wall through to it with the doorway (standing in for the living room's own:
+// see buildShell)
+function buildSuite() {
+  clearOut(suite);
+  suite.visible = !!SUITE;
+  farX.visible = SUITE?.side !== '+z'; farZ.visible = SUITE?.side !== '+x'; backWall.visible = SUITE?.side !== '-z';
+  if (!SUITE) return;
+  const { L, depth, ends: [t0, t1], outer, doorU, bed, partition, ensuite } = SUITE;
+  suite.position.set(SUITE.ox, 0, SUITE.oz);
+  suite.rotation.y = SUITE.angle;
+  const u0 = -L/2 - t0, u1 = L/2 + t1, v1 = depth + outer, add = (w, h, d, material, u, y, v) => box(w, h, d, material, u, y, v, suite);
+  // (the floor on out past the walls, as the living room's is; the ceiling flush with those with windows in)
+  const past = t => t === THICK ? OVERHANG : 0;
+  add(u1 - u0 + OVERHANG*2, SLAB, v1 + OVERHANG, bedroomFloorMaterial, (u0 + u1)/2, -SLAB/2, (v1 + OVERHANG)/2);
+  const c0 = u0 - past(t0), c1 = u1 + past(t1), cv = v1 + past(outer);
+  add(c1 - c0, THICK, cv, ceilingMaterial, (c0 + c1)/2, ROOM_H + THICK/2, cv/2);
+  // the wall it's through, either side of the doorway and over it
+  const a = doorU - SUITE_DOOR/2, b = doorU + SUITE_DOOR/2;
+  add(a - u0, ROOM_H, WALL, wallMaterial, (u0 + a)/2, ROOM_H/2, -WALL/2);
+  add(u1 - b, ROOM_H, WALL, wallMaterial, (b + u1)/2, ROOM_H/2, -WALL/2);
+  add(SUITE_DOOR, ROOM_H - DOOR_H, WALL, wallMaterial, doorU, (DOOR_H + ROOM_H)/2, -WALL/2);
+  // its ends, and the wall across from the doorway: windows in the bedroom's stretch of it, none in the ensuite's
+  const windows = (length, t) => t === WALL ? Math.max(1, Math.round(length/2.4)) : 0;
+  wall(depth, windows(depth, t0), -L/2 - t0/2, depth/2, Math.PI/2, t0, suite);
+  wall(depth, windows(depth, t1), L/2 + t1/2, depth/2, Math.PI/2, t1, suite);
+  const [w0, w1] = SUITE.e > 0 ? [u0, bed[0]] : [bed[1], u1], [e0, e1] = SUITE.e > 0 ? [bed[1], u1] : [u0, bed[0]];
+  wall(bed[1] - bed[0], windows(bed[1] - bed[0], outer), (bed[0] + bed[1])/2, depth + outer/2, 0, outer, suite);
+  add(w1 - w0, ROOM_H, outer, wallMaterial, (w0 + w1)/2, ROOM_H/2, depth + outer/2);
+  add(e1 - e0, ROOM_H, outer, wallMaterial, (e0 + e1)/2, ROOM_H/2, depth + outer/2);
+  // the partition, with its doorway by the wall it's through
+  const [d0, d1] = ENSUITE_DOOR, pu = (partition[0] + partition[1])/2;
+  add(PARTITION, ROOM_H, d0, wallMaterial, pu, ROOM_H/2, d0/2);
+  add(PARTITION, ROOM_H, depth - d1, wallMaterial, pu, ROOM_H/2, (d1 + depth)/2);
+  add(PARTITION, ROOM_H - DOOR_H, d1 - d0, wallMaterial, pu, (DOOR_H + ROOM_H)/2, (d0 + d1)/2);
+  // and the ensuite's tiles
+  layKitchenFloor({ x0: ensuite[0], x1: ensuite[1], z0: 0, z1: depth }, ensuiteFloor);
+  suite.add(ensuiteFloor);
+}
+// Its colours for the home with this key, the bedroom furniture in `wood` (the living room's, as the kitchen's cupboards
+// are), and its furniture into `home` (LAYOUTS.home, being furnished: see furnish) — nothing in front of either doorway.
+function furnishSuite(key, home, wood) {
+  const tint = mulberry32(hashNameToNumber(key + ' bedroom colours'));
+  const pick = list => list[Math.floor(tint()*list.length)];
+  for (const material of bedroomPainted) {
+    material.color.setHex(pick(BEDROOM_PAINTED[material.name]));
+    if (material.name === 'Wood' && wood) material.color.copy(wood.color);
+    roomLit(material);
+  }
+  bedroomFloorMaterial.color.setHex(pick(BEDROOM_FLOORS)); roomLit(bedroomFloorMaterial);
+  ensuiteFloor.material.color.setHex(pick(KITCHEN_FLOORS)); roomLit(ensuiteFloor.material);
+  if (!SUITE || !bedroom) return;
+  const { e, depth, bed: [b0, b1], ensuite, partition, doorU } = SUITE, rng = mulberry32(hashNameToNumber(key + ' bedroom'));
+  // (rectangles in the bedroom's own terms here: x for u, z for v)
+  const footprint = (piece, u, v, turn) => {
+    const across = Math.abs(Math.sin(turn)) > 0.5, hu = (across ? piece.d : piece.w)/2, hv = (across ? piece.w : piece.d)/2;
+    return { x0: u - hu, x1: u + hu, z0: v - hv, z1: v + hv };
+  };
+  const overlaps = (a, b, gap) => a.x0 < b.x1 + gap && b.x0 < a.x1 + gap && a.z0 < b.z1 + gap && b.z0 < a.z1 + gap;
+  const taken = [
+    { x0: doorU - SUITE_DOOR/2 - 0.3, x1: doorU + SUITE_DOOR/2 + 0.3, z0: 0, z1: 1.1 },
+    e > 0 ? { x0: partition[0] - 0.9, x1: partition[0], z0: 0, z1: ENSUITE_DOOR[1] + 0.15 }
+      : { x0: partition[1], x1: partition[1] + 0.9, z0: 0, z1: ENSUITE_DOOR[1] + 0.15 },
+  ];
+  // (against a wall's 0.02 off it: a little less, so rounding doesn't turn it down)
+  const fits = (r, gap) => r.x0 >= b0 + 0.015 && r.x1 <= b1 - 0.015 && r.z0 >= 0.015 && r.z1 <= depth - 0.015
+    && taken.every(o => !overlaps(o, r, gap));
+  const put = (name, u, v, turn, flip = false) => {
+    const piece = bedroom[name], object = piece.object.clone(), p = SUITE.at(u, v), f = footprint(piece, u, v, turn);
+    object.position.set(p.x, 0, p.z);
+    object.rotation.y = SUITE.angle + turn;
+    if (flip) object.scale.x = -1;
+    home.group.add(object);
+    taken.push(f);
+    const r = SUITE.rect(f.x0, f.x1, f.z0, f.z1);
+    home.solid.push(r);
+    home.blocked.push(around(r.x0, r.x1, r.z0, r.z1, 0.35));
+  };
+  // The bedroom's walls, each facing into it: the one across from the doorway, its end away from the ensuite, the one
+  // it's through, and the partition — the spot out from it for something `d` deep, and how far along it runs
+  const walls = [
+    { alongU: true, turn: Math.PI, out: d => depth - d/2 - 0.02, from: b0, to: b1 },
+    { alongU: false, turn: e*Math.PI/2, out: d => e > 0 ? b0 + d/2 + 0.02 : b1 - d/2 - 0.02, from: 0, to: depth },
+    { alongU: true, turn: 0, out: d => d/2 + 0.02, from: b0, to: b1 },
+    { alongU: false, turn: -e*Math.PI/2, out: d => e > 0 ? b1 - d/2 - 0.02 : b0 + d/2 + 0.02, from: 0, to: depth },
+  ];
+  const spotOn = (wall, piece, s) => wall.alongU ? [s, wall.out(piece.d)] : [wall.out(piece.d), s];
+  // somewhere along one of `choices` there's room for `name`, with `spare` more along the wall either side (or first at
+  // `first`, along the first of them)
+  const room = (name, choices, spare = 0, first = null) => {
+    const piece = bedroom[name];
+    for (let tries = 0; tries < 30; tries++) {
+      const wall = tries === 0 && first !== null ? choices[0] : choices[Math.floor(rng()*choices.length)];
+      const half = piece.w/2 + spare, span = wall.to - wall.from - half*2;
+      if (span < 0) continue;
+      const s = tries === 0 && first !== null ? first : wall.from + half + rng()*span;
+      const [u, v] = spotOn(wall, piece, s), r = footprint(piece, u, v, wall.turn);
+      const grown = wall.alongU ? { ...r, x0: r.x0 - spare, x1: r.x1 + spare } : { ...r, z0: r.z0 - spare, z1: r.z1 + spare };
+      if (fits(grown, 0.05)) return { wall, s };
+    }
+    return null;
+  };
+  // the bed, its head against the wall across from the doorway (about the middle of it) or else the end wall, with a
+  // bedside table either side
+  const bedPiece = bedroom.Bed, side = bedroom.Bedside;
+  if (bedPiece) {
+    const spare = side ? side.w + 0.04 : 0;
+    const spot = room('Bed', [walls[0]], spare, (b0 + b1)/2 + (rng() - 0.5)*0.5) ?? room('Bed', [walls[1]], spare);
+    if (spot) {
+      put('Bed', ...spotOn(spot.wall, bedPiece, spot.s), spot.wall.turn);
+      if (side) for (const k of [-1, 1]) {
+        const [u, v] = spotOn(spot.wall, side, spot.s + k*(bedPiece.w/2 + side.w/2 + 0.02));
+        if (fits(footprint(side, u, v, spot.wall.turn), 0)) put('Bedside', u, v, spot.wall.turn);
+      }
+    }
+  }
+  // a wardrobe, or two side by side, and a dresser
+  const wardrobe = bedroom.Wardrobe;
+  if (wardrobe) {
+    const two = rng() < 0.45, spot = (two && room('Wardrobe', walls, wardrobe.w/2 + 0.01)) || room('Wardrobe', walls);
+    if (spot) {
+      const pair = two && spot.wall.to - spot.wall.from > 0 && fits(grownAlong(spot, wardrobe), 0.05);
+      for (const k of pair ? [-1, 1] : [0]) put('Wardrobe', ...spotOn(spot.wall, wardrobe, spot.s + k*(wardrobe.w/2 + 0.01)), spot.wall.turn);
+    }
+  }
+  function grownAlong(spot, piece) {
+    const [u, v] = spotOn(spot.wall, piece, spot.s), r = footprint(piece, u, v, spot.wall.turn), by = piece.w/2 + 0.01;
+    return spot.wall.alongU ? { ...r, x0: r.x0 - by, x1: r.x1 + by } : { ...r, z0: r.z0 - by, z1: r.z1 + by };
+  }
+  if (bedroom.Dresser) {
+    const spot = room('Dresser', walls);
+    if (spot) put('Dresser', ...spotOn(spot.wall, bedroom.Dresser, spot.s), spot.wall.turn);
+  }
+  // and in the ensuite, the shower in the corner at its far end (its glass out into the ensuite), the toilet against
+  // its end wall and the basin by the doorway
+  const end = e > 0 ? ensuite[1] : ensuite[0], { Shower: shower, Toilet: toilet, Basin: basin } = bedroom;
+  const facing = -e*Math.PI/2;
+  if (shower) put('Shower', end - e*(shower.w/2 + 0.01), depth - shower.d/2 - 0.01, Math.PI, e < 0);
+  if (toilet) put('Toilet', end - e*(toilet.d/2 + 0.02), depth - (shower ? shower.d : 0) - 0.25 - toilet.w/2, facing);
+  if (basin) put('Basin', end - e*(basin.d/2 + 0.02), ENSUITE_DOOR[0] + 0.1 + basin.w/2, facing);
+}
 
 // Lays out the home for the building with this key (see buildingKey): `LAYOUTS.home`'s furniture, where nobody stands or
 // walks, and its seats, in the room as it's now placed.
@@ -1019,6 +1261,7 @@ function furnish(key) {
   }
   kitchenFloorMaterial.color.setHex(KITCHEN_FLOORS[Math.floor(kitchenTint()*KITCHEN_FLOORS.length)]);
   roomLit(kitchenFloorMaterial);
+  furnishSuite(key, home, roomWood);
   if (!furniture) return;
   // (the posh, student, mid-century or bohemian set's in place of the interior model's pieces it has, and has some of its own)
   const F = fancy ? { ...furniture, ...posh } : scruffy ? { ...furniture, ...student } : sixties ? { ...furniture, ...retro }
@@ -1055,7 +1298,8 @@ function furnish(key) {
 
   // The TV and sofa, in terms of the wall the TV's against: u along it, v out from it into the room. Either far wall is
   // in full view of the camera.
-  const onSide = rng() < 0.4;                                          // the +x wall, facing -x, or else the +z wall
+  // (not the wall through to a bedroom)
+  const onSide = (r => SUITE?.side === '+x' ? false : SUITE?.side === '+z' ? true : r)(rng() < 0.4); // the +x wall, facing -x, or else the +z wall
   const wallLength = onSide ? ROOM_D : ROOM_W, depth = onSide ? ROOM_W : ROOM_D;
   const at = (u, v) => onSide ? { x: ROOM_W/2 - v, z: u } : { x: u, z: ROOM_D/2 - v };
   const toWall = onSide ? Math.PI/2 : 0, fromWall = toWall + Math.PI;
@@ -1077,8 +1321,14 @@ function furnish(key) {
     if (fancy && drape.visible) { taken.push(area); home.solid.push(area); home.blocked.push(around(area.x0, area.x1, area.z0, area.z1, 0.2)); }
   }
   // the sofa, facing it a comfortable way off, with its back to the room behind
-  const sofaV = Math.min(tv.d + 2.3 + rng()*0.7 + sofa.d/2, depth - sofa.d/2 - 0.05);
-  const sofaU = THREE.MathUtils.clamp(tvU + (rng() - 0.5)*0.6, -wallLength/2 + sofa.w/2 + 0.1, wallLength/2 - sofa.w/2 - 0.1);
+  // (and with a bedroom through the wall behind the camera, clear of the way through to it)
+  const behind = SUITE?.side === '-z' ? 1.2 : 0;
+  const sofaV = Math.min(tv.d + 2.3 + rng()*0.7 + sofa.d/2, depth - sofa.d/2 - 0.05 - (onSide ? 0 : behind));
+  const sofaU = THREE.MathUtils.clamp(tvU + (rng() - 0.5)*0.6, -wallLength/2 + sofa.w/2 + 0.1 + (onSide ? behind : 0), wallLength/2 - sofa.w/2 - 0.1);
+  // (the way through to any bedroom kept clear; its wall's got no windows, for anything that goes by them)
+  if (SUITE) taken.push(SUITE.rect(SUITE.doorU - SUITE_DOOR/2 - 0.4, SUITE.doorU + SUITE_DOOR/2 + 0.4, -WALL - 1.2, -WALL));
+  const suiteWall = { '+z': FAR_X, '+x': FAR_Z }[SUITE?.side], windowed = ([wall]) => wall !== suiteWall;
+  const byDoorway = (u, w) => SUITE?.side === '-z' && Math.abs(u - (SUITE.doorway.x0 + SUITE.doorway.x1)/2) < w/2 + SUITE_DOOR/2 + 0.2;
   spot = at(sofaU, sofaV);
   const sofaArea = put('Sofa', spot.x, spot.z, toWall);
   // the coffee table between them, far enough from the sofa to get to it, on a rug
@@ -1329,7 +1579,7 @@ function furnish(key) {
   if (leafy && F.SillPlants) {
     const hanging = F.HangingPlant;
     for (const [[length, windows], wallAt] of [[FAR_X, (u, v) => ({ x: u, z: ROOM_D/2 + v, angle: Math.PI })],
-      [FAR_Z, (u, v) => ({ x: ROOM_W/2 + v, z: -u, angle: -Math.PI/2 })]]) {
+      [FAR_Z, (u, v) => ({ x: ROOM_W/2 + v, z: -u, angle: -Math.PI/2 })]].filter(windowed)) {
       const p = piers(length, windows);
       for (let i = 0; i < windows; i++) {
         const u = p.centres[i] + p.width/2 + p.gap/2, inside = (length === FAR_X[0] ? ROOM_W : ROOM_D)/2;
@@ -1370,7 +1620,7 @@ function furnish(key) {
       object.rotateZ((rng() - 0.5)*0.08);
     };
     for (const [[length, windows], wallAt] of [[FAR_X, u => ({ x: u, z: ROOM_D/2 - 0.012, angle: Math.PI })],
-      [FAR_Z, u => ({ x: ROOM_W/2 - 0.012, z: -u, angle: -Math.PI/2 })]]) {
+      [FAR_Z, u => ({ x: ROOM_W/2 - 0.012, z: -u, angle: -Math.PI/2 })]].filter(windowed)) {
       const inside = (length === FAR_X[0] ? ROOM_W : ROOM_D)/2, p = piers(length, windows);
       for (const u of p.centres) {
         const name = posters[Math.floor(rng()*posters.length)], w = F[name].w;
@@ -1386,7 +1636,7 @@ function furnish(key) {
       const name = posters[Math.floor(rng()*posters.length)], w = F[name].w, back = rng() < 0.5;
       const [lo, hi] = back ? [-ROOM_W/2 + 1.6 + w/2, ROOM_W/2 - 0.5 - w/2] : [doorTo + 0.4 + w/2, ROOM_D/2 - 1 - w/2];
       const u = lo + rng()*(hi - lo);
-      if (hi < lo || hung.some(h => h.back === back && Math.abs(h.u - u) < (h.w + w)/2 + 0.3)) continue;
+      if (hi < lo || hung.some(h => h.back === back && Math.abs(h.u - u) < (h.w + w)/2 + 0.3) || back && byDoorway(u, w)) continue;
       if (back) hang(name, u, -ROOM_D/2 + 0.012, 0, 1.55 + rng()*0.2);
       else hang(name, -ROOM_W/2 + 0.012, u, Math.PI/2, 1.55 + rng()*0.2);
       hung.push({ back, u, w });
@@ -1421,7 +1671,7 @@ function furnish(key) {
       const name = F[gallery[1]] && rng() < 0.4 && !hung.some(h => h.name === gallery[1] && sixties) ? gallery[1] : gallery[0], art = F[name], back = rng() < 0.5;
       const [lo, hi] = back ? [-ROOM_W/2 + 1.6 + art.w/2, ROOM_W/2 - 0.5 - art.w/2] : [doorTo + 0.4 + art.w/2, ROOM_D/2 - 1 - art.w/2];
       const u = lo + rng()*(hi - lo);
-      if (hi < lo || hung.some(h => h.back === back && Math.abs(h.u - u) < (h.w + art.w)/2 + 0.4)) continue;
+      if (hi < lo || hung.some(h => h.back === back && Math.abs(h.u - u) < (h.w + art.w)/2 + 0.4) || back && byDoorway(u, art.w)) continue;
       const out = art.d/2 + 0.03;
       if (back) put(name, u, -ROOM_D/2 + out, 0, { underfoot: true });
       else put(name, -ROOM_W/2 + out, u, Math.PI/2, { underfoot: true });
@@ -3183,7 +3433,7 @@ async function warmUp() {
     await compile('Preparing floors...');
     // one set at a time, so the label follows along
     const named = { Interior: furniture, Posh: posh, Student: student, MidCentury: retro, Boho: boho, Office: officeFurniture,
-      Industrial: industrial, Pub: pub, Salon: salon, Clothes: clothes };
+      Industrial: industrial, Pub: pub, Salon: salon, Clothes: clothes, Bedroom: bedroom };
     for (const [name, set] of Object.entries(named)) {
       if (!set) continue;
       for (const piece of Object.values(set)) {
@@ -3238,8 +3488,22 @@ const hugWalls = {
 // panning and zooming as outside, but kept in the room — the look-at point held FREE_TARGET in from the walls, floor and
 // ceiling (keep), and the camera drawn in along its line to it wherever that would take it within FREE_WALL of one
 // (place), so it slides along the walls rather than through them. Zooming sets how far back it'd like to be (reach, eased
-// there in updateInteriorCamera), but not further back while a wall's already holding it in.
+// there in updateInteriorCamera), but not further back while a wall's already holding it in. With a bedroom (see "the
+// bedroom"), both go through into it and its ensuite by the doorways (freeSpaces).
 const FREE_WALL = 0.25, FREE_TARGET = 0.5, FREE_NEAREST = 0.4, FREE_FURTHEST = 9;
+// The room's spaces as boxes in its terms ({ lo: [x, y, z], hi }), each `inset` in from its walls, floor and ceiling — and
+// the doorways between them, `side` in from theirs and under their heads, reaching `inset` and a little more into the
+// rooms either side, so the boxes overlap there.
+function freeSpaces(inset, side) {
+  return floorRects().map(r => {
+    if (r.room) return { lo: [r.x0 + inset, inset, r.z0 + inset], hi: [r.x1 - inset, ROOM_H - inset, r.z1 - inset] };
+    const alongX = (r.across === 'u') === (SUITE.side !== '+x'), on = inset + 0.05, top = DOOR_H - Math.min(side, inset);
+    return alongX ? { lo: [r.x0 + side, inset, r.z0 - on], hi: [r.x1 - side, top, r.z1 + on] }
+      : { lo: [r.x0 - on, inset, r.z0 + side], hi: [r.x1 + on, top, r.z1 - side] };
+  });
+}
+const inSpace = (b, p) => [0, 1, 2].every(k => p.getComponent(k) >= b.lo[k] - 1e-6 && p.getComponent(k) <= b.hi[k] + 1e-6);
+const freeProbe = new THREE.Vector3();
 // how far a pan moves the look-at point for each pixel dragged (outside it goes with the radius, which is tiny in here)
 const FREE_PAN = 0.0085;
 let reach = 3, reachGoal = 3;
@@ -3251,21 +3515,23 @@ const freeRoom = {
     room.worldToLocal(freeAt.copy(target));
     freeWay.set(Math.sin(phi)*Math.sin(theta), Math.cos(phi), Math.sin(phi)*Math.cos(theta)).applyAxisAngle(UP, -room.rotation.y);
     freeWay.x *= room.scale.x; // (a flipped room's x runs the other way)
-    const lo = [-ROOM_W/2 + FREE_WALL, FREE_WALL, -ROOM_D/2 + FREE_WALL], hi = [ROOM_W/2 - FREE_WALL, ROOM_H - FREE_WALL, ROOM_D/2 - FREE_WALL];
-    let out = reach;
-    for (let k = 0; k < 3; k++) {
-      const d = freeWay.getComponent(k), p = freeAt.getComponent(k);
-      if (d > 1e-6) out = Math.min(out, (hi[k] - p)/d);
-      else if (d < -1e-6) out = Math.min(out, (lo[k] - p)/d);
-    }
+    // (as far out along it as it stays in the spaces: stepped out, then narrowed down to where it leaves them)
+    const spaces = freeSpaces(FREE_WALL, 0.15), within = t => spaces.some(b => inSpace(b, freeProbe.copy(freeAt).addScaledVector(freeWay, t)));
+    let out = 0, step = 0.1;
+    while (out < reach && within(Math.min(out + step, reach))) out = Math.min(out + step, reach);
+    if (out < reach) for (let k = 0; k < 6; k++) { step /= 2; if (within(out + step)) out += step; }
     return { radius: Math.max(0, out), phi };
   },
   keep(target) {
     room.worldToLocal(freeAt.copy(target));
-    freeAt.x = THREE.MathUtils.clamp(freeAt.x, -ROOM_W/2 + FREE_TARGET, ROOM_W/2 - FREE_TARGET);
-    freeAt.y = THREE.MathUtils.clamp(freeAt.y, FREE_TARGET, ROOM_H - FREE_TARGET);
-    freeAt.z = THREE.MathUtils.clamp(freeAt.z, -ROOM_D/2 + FREE_TARGET, ROOM_D/2 - FREE_TARGET);
-    target.copy(room.localToWorld(freeAt));
+    // (into the nearest of the spaces, if it's in none of them)
+    let best = null, nearest = Infinity;
+    for (const b of freeSpaces(FREE_TARGET, 0.3)) {
+      for (let k = 0; k < 3; k++) freeProbe.setComponent(k, THREE.MathUtils.clamp(freeAt.getComponent(k), b.lo[k], b.hi[k]));
+      const d = freeProbe.distanceToSquared(freeAt);
+      if (d < nearest) { nearest = d; best = freeProbe.clone(); }
+    }
+    target.copy(room.localToWorld(freeAt.copy(best)));
   },
   zoom(factor) {
     if (factor > 1 && controls.radius < reach - 0.05) return; // (up against a wall already)
@@ -3323,8 +3589,11 @@ function longestEdgeAngle(fp) {
 // alone what's hidden).
 const NEIGHBOUR_SLACK = 0.05; // (a wall only touching the room's from outside isn't in it)
 function hideNeighbours(group) {
-  const a = ROOM_W/2 + WALL - NEIGHBOUR_SLACK, b = ROOM_D/2 + WALL - NEIGHBOUR_SLACK, reach = Math.hypot(a, b);
-  const local = p => { room.worldToLocal(probe.set(p.x, 0, p.z)); return { x: probe.x, z: probe.z }; };
+  // (the room and any bedroom, as a rectangle about its own middle)
+  const cx = (EXTENT.x0 + EXTENT.x1)/2, cz = (EXTENT.z0 + EXTENT.z1)/2;
+  const a = (EXTENT.x1 - EXTENT.x0)/2 - NEIGHBOUR_SLACK, b = (EXTENT.z1 - EXTENT.z0)/2 - NEIGHBOUR_SLACK;
+  const reach = Math.hypot(a, b) + Math.hypot(cx, cz);
+  const local = p => { room.worldToLocal(probe.set(p.x, 0, p.z)); return { x: probe.x - cx, z: probe.z - cz }; };
   // whether the segment p–q passes through the room's rectangle (Liang–Barsky)
   const crosses = (p, q) => {
     let t0 = 0, t1 = 1;
@@ -3383,18 +3652,38 @@ function roomSizeFor(group, key, kind, angle) {
   d = Math.min(d, w);
   return { w: Math.round(w*10)/10, d: Math.round(d*10)/10, turned };
 }
-// The room made `w` by `d`: its shell, trim, dado, each layout's fixtures and floors built again to fit, and everything
-// kept in the room's terms (where the camera starts, the walk grid) moved to match.
-function shapeRoom(w, d) {
-  if (w === ROOM_W && d === ROOM_D) return;
-  ROOM_W = w; ROOM_D = d;
-  buildShell(); buildTrim(); buildDado(); fitFloors();
+// The room made `w` by `d`, with a bedroom as `spec` has it (see suiteSpec) or none: its shell, trim, dado, each layout's
+// fixtures and floors built again to fit, and everything kept in the room's terms (where the camera starts, the walk
+// grid, how far it all reaches) moved to match.
+let shapedSuite = 'null';
+function shapeRoom(w, d, spec = null) {
+  const suited = JSON.stringify(spec);
+  if (w === ROOM_W && d === ROOM_D && suited === shapedSuite) return;
+  ROOM_W = w; ROOM_D = d; shapedSuite = suited;
+  SUITE = spec && planSuite(spec);
+  buildShell(); buildSuite(); buildTrim(); buildDado(); fitFloors();
   for (const layout of Object.values(LAYOUTS)) layout.refit();
   placeCamera();
 }
+// The floors there are to walk on, in the room's terms: the room's, and any bedroom's — its bedroom proper and ensuite,
+// and the doorways through to them (see walkGrid)
+function floorRects() {
+  const floors = [{ x0: -ROOM_W/2, x1: ROOM_W/2, z0: -ROOM_D/2, z1: ROOM_D/2, room: true }];
+  if (!SUITE) return floors;
+  const { rect, depth, bed, ensuite, partition, doorU } = SUITE;
+  floors.push({ ...rect(bed[0], bed[1], 0, depth), room: true }, { ...rect(ensuite[0], ensuite[1], 0, depth), room: true },
+    { ...rect(doorU - SUITE_DOOR/2, doorU + SUITE_DOOR/2, -WALL, 0), across: 'u' },
+    { ...rect(partition[0], partition[1], ...ENSUITE_DOOR), across: 'v' });
+  return floors;
+}
 function placeCamera() {
   CAMERA_AT.set(-ROOM_W/2 + CAMERA_INSET, CAMERA_HEIGHT, -ROOM_D/2 + CAMERA_INSET);
-  GRID_X = Math.round(ROOM_W/CELL); GRID_Z = Math.round(ROOM_D/CELL);
+  const main = { x0: -ROOM_W/2 - WALL, x1: ROOM_W/2 + WALL, z0: -ROOM_D/2 - WALL, z1: ROOM_D/2 + WALL }, b = SUITE?.bounds ?? main;
+  EXTENT = { x0: Math.min(main.x0, b.x0), x1: Math.max(main.x1, b.x1), z0: Math.min(main.z0, b.z0), z1: Math.max(main.z1, b.z1) };
+  const floors = floorRects();
+  GX0 = Math.min(...floors.map(r => r.x0)); GZ0 = Math.min(...floors.map(r => r.z0));
+  GRID_X = Math.ceil((Math.max(...floors.map(r => r.x1)) - GX0)/CELL - 1e-6);
+  GRID_Z = Math.ceil((Math.max(...floors.map(r => r.z1)) - GZ0)/CELL - 1e-6);
   grid = null;
 }
 export function enterBuilding(group, key, kind = 'home') {
@@ -3405,7 +3694,12 @@ export function enterBuilding(group, key, kind = 'home') {
   const fixed = group.userData.room;
   const fp = group.userData.footprint, angle = fp && fp.length >= 3 ? longestEdgeAngle(fp) : 0;
   const size = fixed ? { w: fixed.w, d: fixed.d, turned: false } : roomSizeFor(group, key, LAYOUTS[kind] ? kind : 'home', angle);
-  shapeRoom(size.w, size.d);
+  // (a home with a bedroom has a smaller living room, to leave room for it: see "the bedroom")
+  const spec = !fixed && (!LAYOUTS[kind] || kind === 'home') ? suiteSpec(key) : null;
+  if (spec?.side === '+x') size.w = Math.max(6, size.w - WALL - spec.depth);
+  else if (spec) size.d = Math.max(5, size.d - WALL - spec.depth);
+  size.d = Math.min(size.d, size.w);
+  shapeRoom(Math.round(size.w*10)/10, Math.round(size.d*10)/10, spec);
   useLayout(kind);
   const glass = current === LAYOUTS.office && keyFraction(key) >= OFFICE_PUNCHED;
   // (a pub's room comes either way: windows in the far walls, or a shopfront beside the door — by its key)
@@ -3425,6 +3719,10 @@ export function enterBuilding(group, key, kind = 'home') {
   // puts that wall on its +x — so the door's at the other end of the same shopfront)
   room.rotation.y = fixed ? Math.atan2(fixed.facing.z, -fixed.facing.x) + (room.scale.x < 0 ? Math.PI : 0) : angle + (size.turned ? Math.PI/2 : 0);
   room.visible = true;
+  room.updateMatrixWorld(true);
+  // (the living room and its bedroom centred on the building together)
+  const mid = room.localToWorld(new THREE.Vector3((EXTENT.x0 + EXTENT.x1)/2, 0, (EXTENT.z0 + EXTENT.z1)/2)).sub(room.position);
+  room.position.x -= mid.x; room.position.z -= mid.z;
   room.updateMatrixWorld(true);
   setRoomGlow(true);
   group.visible = false;
@@ -3486,7 +3784,8 @@ export function leaveBuilding() {
 const probe = new THREE.Vector3();
 function inRoom(x, y, z) {
   room.worldToLocal(probe.set(x, y, z));
-  return Math.abs(probe.x) <= ROOM_W/2 + WALL && Math.abs(probe.z) <= ROOM_D/2 + WALL && probe.y >= -SLAB && probe.y <= ROOM_H + SLAB;
+  return probe.x >= EXTENT.x0 && probe.x <= EXTENT.x1 && probe.z >= EXTENT.z0 && probe.z <= EXTENT.z1
+    && probe.y >= -SLAB && probe.y <= ROOM_H + SLAB;
 }
 
 // Whatever's between the camera and the middle of the room — the light hanging over a table as the camera comes round
@@ -3664,7 +3963,7 @@ export function roomWalkable(x, z) {
   if (!inside) return false;
   room.worldToLocal(probeWalk.set(x, room.position.y, z));
   if (probeWalk.x < -ROOM_W/2 + BODY) return probeWalk.x > -ROOM_W/2 - RECESS && probeWalk.z > doorFrom + BODY && probeWalk.z < doorTo - BODY;
-  const i = Math.floor((probeWalk.x + ROOM_W/2)/CELL), k = Math.floor((probeWalk.z + ROOM_D/2)/CELL);
+  const i = Math.floor((probeWalk.x - GX0)/CELL), k = Math.floor((probeWalk.z - GZ0)/CELL);
   return i >= 0 && k >= 0 && i < GRID_X && k < GRID_Z && walkGrid()[k*GRID_X + i] === 1;
 }
 export function roomThroughDoor(x, z) {
@@ -3680,21 +3979,30 @@ export const roomKind = () => inside ? current.name : null;
 /** Where anyone can sit in the room, in the world: { x, y, z } on the seat, { nx, nz } the way it faces, and who's `by` it. */
 export const roomSeats = () => current.seats;
 
-// Walking about the room: a grid over its floor, CELL square, of where there's room to walk — BODY clear of the walls and
-// the furniture — built for the room as it's laid out the first time anyone needs it. Near where they start and where
-// they're going, though, anywhere in the room will do: someone getting up off the sofa, or going to sit on it, is well
-// within BODY of it and the coffee table in front.
+// Walking about the room: a grid over its floor (and any bedroom's: see floorRects), CELL square, of where there's room to
+// walk — BODY clear of the walls and the furniture (1) — or only floor (2), built for the room as it's laid out the
+// first time anyone needs it. Near where they start and where they're going, though, any floor will do: someone getting
+// up off the sofa, or going to sit on it, is well within BODY of it and the coffee table in front.
 const CELL = 0.1;
-let GRID_X, GRID_Z; // (set as the room's sized: see shapeRoom)
+let GRID_X, GRID_Z, GX0, GZ0; // (its size, and its (-x, -z) corner: set as the room's sized, see shapeRoom)
 placeCamera();
 const BODY = 0.2, LEEWAY = 0.45;
 function walkGrid() {
   if (grid) return grid;
   grid = new Uint8Array(GRID_X*GRID_Z);
+  // (rooms BODY in from their walls; doorways BODY in from their sides, and on BODY either way into the rooms they join)
+  const floors = floorRects(), walks = floors.map(r => {
+    if (r.room) return { x0: r.x0 + BODY, x1: r.x1 - BODY, z0: r.z0 + BODY, z1: r.z1 - BODY };
+    const alongX = (r.across === 'u') === (SUITE.side !== '+x'), along = BODY + CELL;
+    return alongX ? { x0: r.x0 + BODY, x1: r.x1 - BODY, z0: r.z0 - along, z1: r.z1 + along }
+      : { x0: r.x0 - along, x1: r.x1 + along, z0: r.z0 + BODY, z1: r.z1 - BODY };
+  });
+  const within = (list, x, z) => list.some(r => x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1);
   for (let k = 0; k < GRID_Z; k++) for (let i = 0; i < GRID_X; i++) {
-    const x = -ROOM_W/2 + (i + 0.5)*CELL, z = -ROOM_D/2 + (k + 0.5)*CELL;
-    grid[k*GRID_X + i] = Math.abs(x) < ROOM_W/2 - BODY && Math.abs(z) < ROOM_D/2 - BODY
-      && current.solid.every(r => x < r.x0 - BODY || x > r.x1 + BODY || z < r.z0 - BODY || z > r.z1 + BODY) ? 1 : 0;
+    const x = GX0 + (i + 0.5)*CELL, z = GZ0 + (k + 0.5)*CELL;
+    grid[k*GRID_X + i] = within(walks, x, z)
+      && current.solid.every(r => x < r.x0 - BODY || x > r.x1 + BODY || z < r.z0 - BODY || z > r.z1 + BODY) ? 1
+      : within(floors, x, z) ? 2 : 0;
   }
   return grid;
 }
@@ -3706,20 +4014,20 @@ export function roomRoute(from, to) {
   const open = walkGrid();
   const a = room.worldToLocal(new THREE.Vector3(from.x, from.y, from.z)), b = room.worldToLocal(new THREE.Vector3(to.x, to.y, to.z));
   const cellOf = (x, z) => {
-    const i = Math.floor((x + ROOM_W/2)/CELL), k = Math.floor((z + ROOM_D/2)/CELL);
+    const i = Math.floor((x - GX0)/CELL), k = Math.floor((z - GZ0)/CELL);
     return i < 0 || k < 0 || i >= GRID_X || k >= GRID_Z ? -1 : k*GRID_X + i;
   };
   const walkable = (x, z) => {
     const c = cellOf(x, z);
-    return c >= 0 && (open[c] === 1 || Math.hypot(x - a.x, z - a.z) < LEEWAY || Math.hypot(x - b.x, z - b.z) < LEEWAY);
+    return c >= 0 && (open[c] === 1 || open[c] === 2 && (Math.hypot(x - a.x, z - a.z) < LEEWAY || Math.hypot(x - b.x, z - b.z) < LEEWAY));
   };
   const start = cellOf(a.x, a.z), goal = cellOf(b.x, b.z);
   if (start < 0 || goal < 0) return null;
   // breadth first over the grid, diagonals only where neither corner's cut
   const came = new Int32Array(GRID_X*GRID_Z).fill(-1), queue = [start];
   came[start] = start;
-  const centre = c => ({ x: -ROOM_W/2 + (c % GRID_X + 0.5)*CELL, z: -ROOM_D/2 + (Math.floor(c/GRID_X) + 0.5)*CELL });
-  const free = (i, k) => i >= 0 && k >= 0 && i < GRID_X && k < GRID_Z && walkable(-ROOM_W/2 + (i + 0.5)*CELL, -ROOM_D/2 + (k + 0.5)*CELL);
+  const centre = c => ({ x: GX0 + (c % GRID_X + 0.5)*CELL, z: GZ0 + (Math.floor(c/GRID_X) + 0.5)*CELL });
+  const free = (i, k) => i >= 0 && k >= 0 && i < GRID_X && k < GRID_Z && walkable(GX0 + (i + 0.5)*CELL, GZ0 + (k + 0.5)*CELL);
   for (let q = 0; q < queue.length && came[goal] < 0; q++) {
     const c = queue[q], i = c % GRID_X, k = Math.floor(c/GRID_X);
     for (let di = -1; di <= 1; di++) for (let dk = -1; dk <= 1; dk++) {
