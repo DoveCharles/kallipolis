@@ -247,10 +247,10 @@ window.addEventListener('storage', e => { if (e.key !== POINTS_KEY) return; try 
 
 // (50/50 until BAR_DELAY after loading: easing while the load stutters would go unseen)
 const BAR_DELAY = 1000;
-let barReady = false;
+let barReady = false, noticesReady = false; // (noticesReady: the fade-in's over, so the world's changes are announced)
 whenLoaded(() => setTimeout(() => {
   barReady = true; meterWindow.classList.remove('meter-settling'); document.body.classList.remove('ui-settling'); renderMeter(tally());
-  setTimeout(() => document.body.classList.remove('ui-locked'), 800); // (once the fade's done)
+  setTimeout(() => { document.body.classList.remove('ui-locked'); noticesReady = true; }, 800); // (once the fade's done)
   tickUp(v => { evilEl.textContent = pad3(v); }, () => pts.evil);
   tickUp(v => { goodEl.textContent = pad3(v); }, () => pts.good);
   setTimeout(() => { pointsShown = true; renderPoints(); }, 800);
@@ -414,7 +414,7 @@ function tick() {
   const now = tally();
   overallNow = now.overall;
   renderMeter(now);
-  if (!announced || performance.now() < quietUntil) { announced = previous = now; return; } // (loading: take it all as it is)
+  if (!announced || !noticesReady || performance.now() < quietUntil) { announced = previous = now; return; } // (loading: take it all as it is)
   stillTicks = previous && sameLines(now, previous) ? stillTicks + 1 : 0;
   previous = now;
   if (stillTicks < QUIET_TICKS_TO_SETTLE || sameLines(now, announced)) return;

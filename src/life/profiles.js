@@ -81,6 +81,13 @@ export function setEntryFiller(fill) {
 }
 // `listener` is called whenever the people files have loaded
 export function onProfilesLoaded(listener) { listeners.push(listener); }
+/** One way an entry with [placeholders] could read on a card, filled from `rng` (as written until speech has loaded).
+ * @param {object} entry @param {1|-1} side - a love or a hate @param {() => number} [rng] @returns {string} */
+export function sampleCardText(entry, side, rng = Math.random) {
+  if (!fillEntry) return entry.text;
+  const filled = fillEntry(entry, rng, side, [entry]);
+  return filled && !filled.failed ? filled.card : entry.text;
+}
 
 // Someone's name, age, mood, loves and hates (lists; from people/loves.txt and hates.txt), and the traits those give them — a man's name from the boy names and
 // a woman's from the girl names (either, for the cuboid people, who have no sex). `id` is their person id (see peopleIdSeq

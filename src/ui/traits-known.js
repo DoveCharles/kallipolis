@@ -1,6 +1,7 @@
 import { modifiersOf, tierOf } from '../core/entries.js';
-import { onProfilesLoaded, peopleListsLoaded, peopleTraitEntries } from '../life/profiles.js';
+import { onProfilesLoaded, peopleListsLoaded, peopleTraitEntries, sampleCardText } from '../life/profiles.js';
 import { openWindow } from './w3-window.js';
+import { mulberry32 } from '../core/math.js';
 
 // Identified love/hate traits (1 energy each: see set in entity-card.js). Per trait, not per person: identifying one on
 // anybody reveals it on everyone. Kept in localStorage as lowercase 'love:<text>' / 'hate:<text>' keys; any no longer in
@@ -15,6 +16,21 @@ try {
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(Object.fromEntries(known))); } catch {} };
 const listeners = [];
 let win = null; // (the window's parts, while it's open)
+// entries with a [category] in them ("Conversely, [hates]"): shown cycling through VARY_COUNT fillings, one every VARY_MS
+// — the same few each time (seeded by the trait), so it hints without giving the whole list away — their effects
+// "Variable" (they hang on the fill); sorted by the raw text all the same
+const VARY_MS = 3000, VARY_COUNT = 5, isVariable = entry => /\[[^\]]+\]/.test(entry.text);
+let varying = [], varyTimer = null, varyStep = 0;
+const fillings = new Map(); // key → its VARY_COUNT fillings (worked out once speech has loaded: see sampleCardText)
+function fillingsOf(key, entry, side) {
+  if (fillings.has(key)) return fillings.get(key);
+  let seed = 0;
+  for (const c of key) seed = (seed*31 + c.charCodeAt(0)) | 0;
+  const rng = mulberry32(seed), list = [];
+  for (let i = 0; i < VARY_COUNT*4 && list.length < VARY_COUNT; i++) { const t = sampleCardText(entry, side, rng); if (!list.includes(t)) list.push(t); }
+  if (list[0] !== entry.text) fillings.set(key, list); // (not cached until it's really filled)
+  return list;
+}
 
 /** @param {'love'|'hate'} side @param {string} text @returns {string} */
 export const traitKey = (side, text) => `${side}:${String(text).toLowerCase()}`;
@@ -69,6 +85,7 @@ function refreshWindow() {
   win.prev.disabled = view.page <= 0; win.next.disabled = view.page >= pages - 1;
   win.count.textContent = `${found.length} identified`;
   if (!shown.length) { win.list.innerHTML = `<div class="tk-empty">${known.size ? 'No matches.' : 'Nothing identified yet.'}</div>`; return; }
+  varying = [];
   const cells = [];
   let side = null;
   shown.forEach(({ key, side: s, entry }, i) => {
@@ -79,7 +96,7 @@ function refreshWindow() {
       cells.push(h);
     }
     side = s;
-    const tier = tierOf(entry), lines = modifiersOf(entry);
+    const tier = tierOf(entry), variable = isVariable(entry), lines = variable ? ['Variable'] : modifiersOf(entry);
     const cell = document.createElement('div');
     cell.className = `tk-cell tk-${s}${Math.floor(i / 2) % 2 ? ' tk-alt' : ''}${tier ? ' tk-tier-' + tier : ''}${opened.has(key) ? ' tk-open' : ''}`;
     const head = document.createElement('button');
@@ -87,7 +104,9 @@ function refreshWindow() {
     // (text too long for its cell scrolls along while hovered, snapping back and going again)
     const text = document.createElement('span'), inner = document.createElement('span');
     text.className = 'tk-text'; inner.className = 'tk-scroll';
-    inner.textContent = entry.text;
+    const texts = variable ? fillingsOf(key, entry, s === 'love' ? 1 : -1) : [entry.text];
+    inner.textContent = texts[varyStep % texts.length];
+    if (variable) varying.push({ inner, key, entry, side: s === 'love' ? 1 : -1 });
     text.append(inner);
     head.addEventListener('pointerenter', () => {
       const d = inner.scrollWidth - text.clientWidth;
@@ -136,6 +155,7 @@ export function openTraitsKnown() {
       win.next.addEventListener('click', () => { view.page++; refreshWindow(); });
       refreshWindow();
     },
-    onClose: () => { win = null; } });
+    onClose: () => { win = null; clearInterval(varyTimer); varyTimer = null; varying = []; } });
+  if (!varyTimer) varyTimer = setInterval(() => { varyStep++; varying.forEach(v => { const t = fillingsOf(v.key, v.entry, v.side); v.inner.textContent = t[varyStep % t.length]; }); }, VARY_MS);
 }
 document.getElementById('btn-identify')?.addEventListener('click', openTraitsKnown);
