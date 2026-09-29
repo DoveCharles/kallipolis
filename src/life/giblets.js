@@ -307,7 +307,19 @@ const clippingTexture = (() => {
   return new THREE.CanvasTexture(canvas);
 })();
 const clippingMesh = softMesh(THREE.NormalBlending, 'ClippingFx', clippingTexture);
-glowMesh.renderOrder = smokeMesh.renderOrder = sparkleMesh.renderOrder = clippingMesh.renderOrder = 2;
+// a little love heart, tinted pink or red, for the med bot's healing (healFx)
+const heartTexture = (() => {
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.moveTo(32, 56);
+  ctx.bezierCurveTo(4, 36, 4, 10, 20, 10); ctx.bezierCurveTo(28, 10, 32, 18, 32, 22);
+  ctx.bezierCurveTo(32, 18, 36, 10, 44, 10); ctx.bezierCurveTo(60, 10, 60, 36, 32, 56);
+  ctx.fill();
+  return new THREE.CanvasTexture(canvas);
+})();
+const heartMesh = softMesh(THREE.NormalBlending, 'HeartFx', heartTexture);
+glowMesh.renderOrder = smokeMesh.renderOrder = sparkleMesh.renderOrder = clippingMesh.renderOrder = heartMesh.renderOrder = 2;
 // a haircut's cloud: solid round puffs, facing the camera, popping up and shrinking away rather than fading
 const cloudMesh = (() => {
   const material = new THREE.MeshBasicMaterial({ toneMapped: false }), geometry = new THREE.CircleGeometry(0.5, 24);
@@ -346,6 +358,33 @@ export function haircutFx(at, size, hair, dt) {
       vx: Math.cos(angle)*out, vy: (0.8 + Math.random()*1.4)*size, vz: Math.sin(angle)*out,
       size: size*(0.06 + Math.random()*0.04), growth: 0, life: 0.9 + Math.random()*0.5, opacity: 1, color: new THREE.Color(hair),
       roll: Math.random()*Math.PI*2, spin: (Math.random() < 0.5 ? -1 : 1)*(4 + Math.random()*6) });
+  }
+}
+
+// Someone being healed (by a med bot: see life/medbot.js), in the `dt` seconds since it was last called: the haircut's
+// white cloud, but over the whole body — `at` their feet, `height` how tall they are, `lying` if they're flat on the
+// ground (the cloud spread along them, `heading` the way their head is) — and little love hearts floating up off it.
+const HEAL_PUFFS_PER_SECOND = 70, HEARTS_PER_SECOND = 7, HEART_COLORS = [0xff4f7b, 0xff86a8, 0xe8264f];
+export function healFx(at, height, lying, heading, dt) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  const now = performance.now()/1000, count = rate => Math.floor(rate*dt + Math.random());
+  const add = particle => { if (softParticles.length >= softCap()*2) softParticles.shift(); softParticles.push({ born: now, ...particle }); };
+  const sx = Math.sin(heading ?? 0), sz = Math.cos(heading ?? 0);
+  // a point on the body, `k` 0 at the feet to 1 at the head
+  const along = k => lying ? { x: at.x + sx*k*height, y: at.y + 0.12*height, z: at.z + sz*k*height } : { x: at.x, y: at.y + k*height, z: at.z };
+  for (let k = count(HEAL_PUFFS_PER_SECOND); k > 0; k--) {
+    const angle = Math.random()*Math.PI*2, out = Math.random()*0.12*height, white = 0.84 + Math.random()*0.16, on = along(0.05 + Math.random()*0.9);
+    add({ kind: 'cloud', x: on.x + Math.cos(angle)*out, y: on.y, z: on.z + Math.sin(angle)*out,
+      vx: Math.cos(angle)*0.1*height, vy: 0.08*height, vz: Math.sin(angle)*0.1*height,
+      size: height*(0.2 + Math.random()*0.1), growth: 0.3, life: 0.6 + Math.random()*0.4, opacity: 1, color: new THREE.Color(white, white, white) });
+  }
+  for (let k = count(HEARTS_PER_SECOND); k > 0; k--) {
+    const angle = Math.random()*Math.PI*2, out = (0.15 + Math.random()*0.3)*height, on = along(0.4 + Math.random()*0.6);
+    add({ kind: 'heart', x: on.x + Math.cos(angle)*0.15*height, y: on.y + 0.1*height, z: on.z + Math.sin(angle)*0.15*height,
+      vx: Math.cos(angle)*out, vy: (0.35 + Math.random()*0.35)*height, vz: Math.sin(angle)*out,
+      size: height*(0.1 + Math.random()*0.06), growth: 0.2, life: 1.1 + Math.random()*0.6, opacity: 1,
+      color: new THREE.Color(HEART_COLORS[Math.floor(Math.random()*HEART_COLORS.length)]),
+      roll: (Math.random() - 0.5)*0.6, spin: (Math.random() - 0.5)*1.2 });
   }
 }
 
@@ -742,7 +781,7 @@ export function updateGiblets(t) {
   });
   // soft particles: each drifts on, grows by `growth` of its size over its life, and fades in and out
   while (softParticles.length && t - softParticles[0].born > softParticles[0].life) softParticles.shift();
-  const drawnSoft = { glow: 0, smoke: 0, sparkle: 0, clipping: 0, cloud: 0 }, meshes = { glow: glowMesh, smoke: smokeMesh, sparkle: sparkleMesh, clipping: clippingMesh, cloud: cloudMesh };
+  const drawnSoft = { glow: 0, smoke: 0, sparkle: 0, clipping: 0, cloud: 0, heart: 0 }, meshes = { glow: glowMesh, smoke: smokeMesh, sparkle: sparkleMesh, clipping: clippingMesh, cloud: cloudMesh, heart: heartMesh };
   softParticles.forEach(p => {
     const age = t - p.born, life = age/p.life, mesh = meshes[p.kind];
     if (life > 1 || drawnSoft[p.kind] >= softCap() || !isNearFx(p)) return;
@@ -755,13 +794,14 @@ export function updateGiblets(t) {
     const scale = p.kind === 'sparkle' ? p.size*Math.sin(Math.PI*Math.min(1, life))**0.5
       : p.kind === 'cloud' ? p.size*(1 + p.growth*life)*Math.min(1, life*6, (1 - life)*3) // (popping up, then shrinking away)
       : p.size*(1 + p.growth*(p.kind === 'glow' && !p.still ? -life : life));
-    if (p.kind === 'sparkle' || p.kind === 'clipping') placed.quaternion.multiply(sparkleRoll.setFromAxisAngle(sparkleAxis, p.roll + age*p.spin));
+    if (p.kind === 'heart') { p.vx *= 1 - Math.min(1, dt*2); p.vz *= 1 - Math.min(1, dt*2); } // (a heart: flung off, then floats straight up)
+    if (p.kind === 'sparkle' || p.kind === 'clipping' || p.kind === 'heart') placed.quaternion.multiply(sparkleRoll.setFromAxisAngle(sparkleAxis, p.roll + age*p.spin));
     placed.scale.setScalar(scale);
     placed.updateMatrix();
     const i = drawnSoft[p.kind]++;
     mesh.setMatrixAt(i, placed.matrix);
     mesh.setColorAt(i, p.color);
-    mesh.userData.alpha.setX(i, p.kind === 'cloud' ? 1 : p.kind === 'clipping' ? p.opacity*Math.min(1, (1 - life)*5) : p.opacity*Math.sin(Math.PI*Math.min(1, life))**(p.kind === 'smoke' ? 1 : 0.5));
+    mesh.userData.alpha.setX(i, p.kind === 'cloud' ? 1 : p.kind === 'clipping' || p.kind === 'heart' ? p.opacity*Math.min(1, (1 - life)*5) : p.opacity*Math.sin(Math.PI*Math.min(1, life))**(p.kind === 'smoke' ? 1 : 0.5));
   });
   Object.entries(meshes).forEach(([kind, mesh]) => {
     mesh.count = drawnSoft[kind];

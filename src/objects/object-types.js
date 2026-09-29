@@ -107,6 +107,15 @@ export async function loadBeerStallModel() {
   App.rebuildObjectsOfType('beer');
 }
 
+// The med booth: the MedBooth mesh out of assets/models/MedBot.glb, handed over by life/medbot.js once it's loaded the
+// file (the MedBot herself comes from the same one), already sized to her. Its door is the Open shape key, which each
+// booth's MedBot works on its own clone of (see "the booth's door" in medbot.js).
+let medBoothModel = null; // { root, middle, floor }
+export function setMedBoothModel(root) {
+  medBoothModel = propModel(root);
+  App.rebuildObjectsOfType('medbooth');
+}
+
 // The round shapes props are built out of, made once and merged wherever they're wanted (addGeometry copies them in, so
 // one of each is enough however many props use it). Cylinders and cones stand up on their own, which is the way they're
 // always wanted here.
@@ -336,6 +345,19 @@ export const OBJECT_TYPES = [
         kit.post(MAT.beer, side*1.45 + 0.08, 0.95, 0.95, 0.04, 0.12, 8);
         kit.post(MAT.cream, side*1.45 + 0.08, 1.07, 0.95, 0.04, 0.025, 8);
       }
+      return kit.build();
+    },
+  },
+  {
+    // home to a MedBot, who comes out of it to heal people round about and goes back in to charge (see life/medbot.js)
+    id:'medbooth', label:'Med booth', color:'#e8e8e8', facing:'street', radius:1.3, turnJitter:0, sizeJitter:0,
+    build() {
+      if (medBoothModel) return placeModel(medBoothModel);
+      const kit = propKit(), h = 2.3;
+      kit.box(MAT.cream, 0, 0, 0, 1.9, h, 1.6);
+      kit.box(MAT.dark, 0, 0.1, 0.8, 1.1, 1.9, 0.04); // the door
+      kit.box(MAT.red, 0, h - 0.45, 0.82, 0.3, 0.1, 0.02); // a red cross over it
+      kit.box(MAT.red, 0, h - 0.55, 0.82, 0.1, 0.3, 0.02);
       return kit.build();
     },
   },

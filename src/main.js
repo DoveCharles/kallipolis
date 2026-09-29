@@ -92,6 +92,7 @@ import { updateAmbience } from './audio/ambience.js';
 import { loadBeeModel, updateBees } from './life/bees.js';
 import { updateAirports, loadPlaneModel } from './zones/airport.js';
 import { loadPigeonModel, updatePigeons } from './life/pigeons.js';
+import { loadMedBot, updateMedBots } from './life/medbot.js';
 import { loadHouseModels } from './zones/suburbs.js';
 import { updateBuildingFollow } from './buildings/building-card.js';
 import { updateInteriorCamera, isInsideBuilding } from './buildings/interior.js';
@@ -110,7 +111,7 @@ renderHierarchy();
 renderMapsList();
 renderWorldTintPanel();
 waitForModels([loadCarriageModel(), loadPersonModel(), loadCarModels(), loadBeeModel(), loadPigeonModel(), loadHouseModels(), loadPlaneModel(),
-  loadFountainModel(), loadStatueModel(), loadBeerStallModel()]);
+  loadFountainModel(), loadStatueModel(), loadBeerStallModel(), loadMedBot()]);
 // Roads, zones and water are thrown away and rebuilt wholesale on every edit, and three.js deletes a shader program as soon
 // as the last material using it is disposed — so a rebuild that replaces every material of one kind (every water tile,
 // every road surface…) would compile that shader again from scratch: a hitch of up to a third of a second. One
@@ -168,6 +169,7 @@ function animate() {
   updateLightning(t);
   updateBees(t);
   updateAirports(t);
+  updateMedBots(t);
   updatePigeons(t); // (before updateTraffic, which sets off the blasts that scatter them)
   updateTraffic(t);
   updateAmbience(t);

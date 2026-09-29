@@ -18,6 +18,7 @@ export const ROWS = [
   { key: 'age',       label: 'Age',                            top: true },
   { key: 'mood',      label: 'Current mood', cls: 'pc-mood',   top: true },
   { key: 'status',    label: 'Status',       cls: 'pc-status', top: true },
+  { key: 'charge',    label: 'Charge',                         top: true },
   { key: 'loves',     label: 'Loves',     gap: true, marked: true },
   { key: 'hates',     label: 'Hates',                marked: true },
   { key: 'occupants', label: 'Inhabitants', gap: true, list: true },

@@ -48,6 +48,10 @@ That car just hit [seen.name]! {seen = knockedbycar}
 > That's not natural. {mood = -0.5}
 > Praise be! {happy}
 I watched [seen.name] die, I swear I did. {seen = resurrected, thought}
+That robot just fixed [seen.name] right up! {seen = healed}
+> Where do I sign up? {happy}
+> I don't trust it. {mood = -0.5}
+Was that robot hugging [seen.name]? {seen = healed, thought}
 Is that... [seen.name] walking on the water? {seen = waterwalking}
 > It's a miracle! {happy}
 > It's a trick. {patience = -1}
@@ -95,6 +99,14 @@ Do I look like Rachel from Friends? {felt = haircut, woman, weight = 0.5}
 > A bit. {happy}
 > Not really. {patience = -1}
 Cold head. {felt = haircut, man, world.weather = snow}
+
+I feel brand new! {felt = healed, happy}
+Did a robot just heal me? {felt = healed, shock}
+> Looked like it. {happy}
+Those were hearts. Actual hearts. {felt = healed, thought}
+Nothing hurts. Nothing at all. {felt = healed}
+I didn't ask for that. {felt = healed, patience = -1, thought}
+Thank you, little robot! {felt = healed, mood}
 
 Fits like a glove. {felt = newclothes, happy}
 Does this make me look fat? {felt = newclothes, thought}
