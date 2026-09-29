@@ -891,6 +891,71 @@ async function loadBoho() {
 }
 modelsLoading.push(loadBoho());
 
+// ---------------------------------------------------------- the kitchen
+// Every home with room for it has a fitted kitchen in a corner (assets/models/Kitchen.glb, built by tools/kitchen-models.py:
+// one piece, an L of units with the fridge, oven, hob, microwave, sink, toaster and kettle). Its long leg, with the
+// fridge and the wall cupboards, goes against a wall behind the camera; its short leg, low all along, out along the far
+// wall at that one's end, under its windows: in the (+x, -z) corner as it's built, or mirrored into the (-x, +z) corner,
+// its long leg along the door's wall. Recoloured for each home, as the rest of the furniture is, its cupboards in the
+// room's own wood.
+const KITCHEN_MODEL_URL = 'assets/models/Kitchen.glb';
+const KITCHEN_LEG = 0.66;   // how deep the units are (the fridge, the deepest), from the wall
+const KITCHEN_PAINTED = {
+  Cabinet: [0xece8de, 0xf4f2ee, 0x3a4a5a, 0x7a8a6a, 0xb8c4c8, 0xc8a878, 0x2a2a2c, 0x9a3a2e, 0xd8ccb4],
+  Worktop: [0x3a3632, 0x1c1c1e, 0xc89a5a, 0xe8e4dc, 0x8a8a88, 0x5a4a3a],
+  Tiles: [0xf2f0ea, 0xd8e4e8, 0x2a4a6a, 0x5a8a7a, 0xe8d8b0, 0x3a3a3c, 0xc8a8a0],
+  Appliance: [0xf2f2f0, 0xf2f2f0, 0xa8acb0, 0x2a2a2c],
+  Kettle: [0xd83a2a, 0xf2f0ea, 0x2a2a2c, 0xa8acb0, 0x3a7ac8, 0xe8c040],
+  Toaster: [0xe8e4dc, 0xa8acb0, 0xd83a2a, 0x2a2a2c, 0xa8d0c0],
+};
+let kitchen = null;
+const kitchenPainted = [];
+// Its floor's tiled, over the whole of the L's footprint (inside the L too): 30 cm squares, each a slightly different
+// shade, tinted per home; a patch laid just over the room's floor (under the furniture's shadows, at SHADOW_Y).
+const KITCHEN_TILE = 0.3;
+const KITCHEN_FLOORS = [0xf2f0ea, 0xd8d4cc, 0x9a9a98, 0xc87a5a, 0x3a3a3c, 0xe8dcc0, 0xa8b8b8];
+const kitchenTiles = (() => {
+  const canvas = document.createElement('canvas'), size = 512, tile = size/2, rng = mulberry32(11);
+  canvas.width = canvas.height = size;
+  const g = canvas.getContext('2d');
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+    const shade = 228 + rng()*24;
+    g.fillStyle = `rgb(${shade},${shade},${shade})`;
+    g.fillRect(i*tile, j*tile, tile, tile);
+  }
+  g.fillStyle = 'rgba(70,65,60,0.45)';
+  for (let k = 0; k <= 2; k++) { g.fillRect(k*tile - 2, 0, 4, size); g.fillRect(0, k*tile - 2, size, 4); }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+})();
+const kitchenFloorMaterial = new THREE.MeshStandardMaterial({ roughness: 0.45, map: kitchenTiles, emissiveMap: kitchenTiles,
+  polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+const kitchenFloor = new THREE.Mesh(new THREE.BufferGeometry(), kitchenFloorMaterial);
+kitchenFloor.receiveShadow = true;
+// the patch over the rectangle `r` of the room's floor, its tiles square to the walls from its (x0, z0) corner
+function layKitchenFloor(r) {
+  kitchenFloor.geometry.dispose();
+  const w = r.x1 - r.x0, d = r.z1 - r.z0, geometry = new THREE.PlaneGeometry(w, d);
+  geometry.rotateX(-Math.PI/2);
+  const uv = geometry.attributes.uv, position = geometry.attributes.position;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, (position.getX(i) + w/2)/(KITCHEN_TILE*2), (position.getZ(i) + d/2)/(KITCHEN_TILE*2));
+  kitchenFloor.geometry = geometry;
+  kitchenFloor.position.set((r.x0 + r.x1)/2, 0.004, (r.z0 + r.z1)/2);
+}
+async function loadKitchen() {
+  try {
+    kitchen = await loadPieces(KITCHEN_MODEL_URL, KITCHEN_PAINTED, kitchenPainted);
+  } catch (err) {
+    console.warn('Kallipolis: the kitchen model failed to load; homes have no kitchens', err);
+    return;
+  }
+  if (inside && current === LAYOUTS.home) furnish(inside.key);
+}
+modelsLoading.push(loadKitchen());
+
 // Lays out the home for the building with this key (see buildingKey): `LAYOUTS.home`'s furniture, where nobody stands or
 // walks, and its seats, in the room as it's now placed.
 function furnish(key) {
@@ -940,6 +1005,20 @@ function furnish(key) {
     material.color.setHex(pick(palettes[material.name]));
     roomLit(material);
   }
+  // (the kitchen's from a generator of its own too, so the rest keeps its colours — but for its cupboards, in the same
+  // wood as the rest of the room's furniture)
+  const kitchenTint = mulberry32(hashNameToNumber(key + ' kitchen colours'));
+  const [woods, wood] = fancy ? [poshPainted, 'Walnut'] : scruffy ? [studentPainted, 'Pine'] : sixties ? [retroPainted, 'Teak']
+    : leafy ? [bohoPainted, 'Wood'] : [painted, 'Wood'];
+  const roomWood = woods.find(material => material.name === wood);
+  for (const material of kitchenPainted) {
+    const list = KITCHEN_PAINTED[material.name];
+    material.color.setHex(list[Math.floor(kitchenTint()*list.length)]);
+    if (material.name === 'Cabinet' && roomWood) material.color.copy(roomWood.color);
+    roomLit(material);
+  }
+  kitchenFloorMaterial.color.setHex(KITCHEN_FLOORS[Math.floor(kitchenTint()*KITCHEN_FLOORS.length)]);
+  roomLit(kitchenFloorMaterial);
   if (!furniture) return;
   // (the posh, student, mid-century or bohemian set's in place of the interior model's pieces it has, and has some of its own)
   const F = fancy ? { ...furniture, ...posh } : scruffy ? { ...furniture, ...student } : sixties ? { ...furniture, ...retro }
@@ -1018,6 +1097,41 @@ function furnish(key) {
     }
     return false;
   };
+
+  // the kitchen, in whichever of its two corners it fits (see "the kitchen"): its legs kept apart, so the floor inside
+  // the L's still free (and from a generator of its own, so the rest of the room's laid out as it was)
+  if (kitchen?.Kitchen) {
+    const piece = kitchen.Kitchen, b = piece.bounds, gap = 0.03, pick = mulberry32(hashNameToNumber(key + ' kitchen'));
+    // its legs in its own terms: the long one along its back (z0), the short one along its side (x1)
+    const legs = [{ ...b, z1: b.z0 + KITCHEN_LEG }, { ...b, x0: b.x1 - KITCHEN_LEG }];
+    const corners = [
+      { x: ROOM_W/2 - gap - b.x1, z: -ROOM_D/2 + gap - b.z0, angle: 0, flip: false,
+        room: (r, c) => ({ x0: r.x0 + c.x, x1: r.x1 + c.x, z0: r.z0 + c.z, z1: r.z1 + c.z }) },
+      // (mirrored and turned a quarter: its x is the room's z, its z the room's x)
+      { x: -ROOM_W/2 + gap - b.z0, z: ROOM_D/2 - gap - b.x1, angle: Math.PI/2, flip: true,
+        room: (r, c) => ({ x0: r.z0 + c.x, x1: r.z1 + c.x, z0: r.x0 + c.z, z1: r.x1 + c.z }) },
+    ];
+    if (pick() < 0.5) corners.reverse();
+    for (const c of corners) {
+      const areas = legs.map(r => c.room(r, c));
+      // (clear of the door's swing, too)
+      if (c.flip && areas[0].z0 < doorTo + 0.6) continue;
+      if (!areas.every(r => fits(r, 0.1)) || areas.some(hidesScreen)) continue;
+      const object = piece.object.clone();
+      object.position.set(c.x, 0, c.z);
+      object.rotation.y = c.angle;
+      if (c.flip) object.scale.x = -1;
+      home.group.add(object);
+      layKitchenFloor(c.room(b, c));
+      home.group.add(kitchenFloor);
+      for (const r of areas) {
+        taken.push({ ...r, tall: true });
+        home.solid.push(r);
+        home.blocked.push(around(r.x0, r.x1, r.z0, r.z1, 0.35));
+      }
+      break;
+    }
+  }
 
   // in a posh home, an armchair or two at the coffee table's ends, turned to it
   const armchair = F.Armchair;
