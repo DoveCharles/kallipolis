@@ -290,6 +290,7 @@ const snackGap = kind => kind.gap[0] + peopleRng()*(kind.gap[1] - kind.gap[0]);
 export function giveSnack(p, item) {
   const kind = SNACKS[item];
   if (!kind) return;
+  if (p.snack?.mouthfuls > 0 && p.holding?.includes(p.snack.held)) dropToFloor(p, p.snack.held); // (one not finished falls)
   dropSnack(p);
   const held = hold(p, item, { hand: 'R' });
   if (item === 'beer') held.stout = p.likesStout ??= peopleRng() < STOUT_SHARE;
@@ -317,7 +318,11 @@ export function snackClip(p, clip, dt) {
   const snack = p.snack;
   if (!snack) return clip;
   // knocked down, dead or gone indoors (but for into the room you're in, as a pint in a pub is: see aboutTheRoom): it's gone
-  if (p.punched || p.mode === 'dead' || (p.mode === 'indoors' && !p.inRoom) || !p.holding?.includes(snack.held)) { dropSnack(p); return clip; }
+  if (p.punched || p.mode === 'dead' || (p.mode === 'indoors' && !p.inRoom) || !p.holding?.includes(snack.held)) {
+    if ((p.punched || p.mode === 'dead') && snack.mouthfuls > 0 && p.holding?.includes(snack.held)) dropToFloor(p, snack.held); // (knocked from their hand)
+    dropSnack(p);
+    return clip;
+  }
   const kind = SNACKS[snack.item], clips = personModel.clips;
   const carried = clips[clip.name + kind.clip], raised = clips[clip.name + kind.clip + 'Bite'];
   if (!carried || carried.missing || !raised) return clip; // (lying down or on the grass, it waits)
@@ -328,11 +333,9 @@ export function snackClip(p, clip, dt) {
       snack.mouthfuls--;
       if (snack.item === 'hotdog') snack.held.left = snack.mouthfuls/kind.mouthfuls;
       if (snack.item === 'beer') p.pints = (p.pints ?? 0) + 1/kind.mouthfuls; // (going to their head: see peopleDrunk.js)
-      // and what a sip leaves on them, for a while: a coffee keeps them caffeinated, a pint gets them drunk — each
-      // mouthful setting the clock to that source's length again (see STATUS_SOURCES and addStatus in
-      // life/statuseffects.js: a cup is three minutes, a pint ten, sipped over about that long either way)
+      // and what it leaves on them, every mouthful stacking (STATUS_SOURCES, addStatus in life/statuseffects.js)
       const leaves = STATUS_SOURCES[snack.item];
-      if (leaves) addStatus(p, leaves.status, leaves.seconds, lastPeopleTime ?? 0);
+      leaves?.forEach(leave => addStatus(p, leave.status, leave.seconds, lastPeopleTime ?? 0, leave.level));
       eatingSound({ x: p.x, y: p.y + (clip.pose ? 1.05 : 1.5)*p.height*S.peopleSize, z: p.z }, kind.sound);
     }
     if (snack.up <= 0) {
@@ -384,6 +387,81 @@ function armShift(out, p, i, hand) {
  * have been placed.
  * @returns {void}
  */
+// ============== DROPPED ==============
+// A snack not finished when another's handed over, or they're punched or killed, falls from their hand (dropToFloor) and
+// tumbles as a box on the flat ground at their feet — gravity, bouncing off its corners, friction — so a cup or a pint can
+// land upright or fall over; it lies there DROPPED_TIME seconds.
+// BODIES: each one's box, half its size in metres (as ITEMS' are) once turned by `turn` from how it's held to how it stands.
+const DROPPED_TIME = 30, DROPPED_MAX = 64, DROP_FROM = [0, 1, -0.25]; // (where it leaves them: metres, their frame)
+const BODIES = {
+  hotdog: { half: [0.03, 0.025, 0.0875], turn: [Math.PI/2, 0, 0] },
+  coffee: { half: [0.055, 0.083, 0.055] },
+  beer: { half: [0.045, 0.1, 0.045] },
+};
+const DROP_GRAVITY = 9.8, BOUNCE = 0.25, GRIP = 0.4, SETTLE = 0.05, DROP_STEPS = 4;
+const dropped = []; // {shape, left, light, until, scale, ground, half, pos, vel, spin, turn, rest: Quaternion}, oldest first
+let droppedAt = null;
+const yAxis = new THREE.Vector3(0, 1, 0), corner = new THREE.Vector3(), arm = new THREE.Vector3(), pointVel = new THREE.Vector3(), push = new THREE.Vector3();
+const spinTurn = new THREE.Quaternion();
+function dropToFloor(p, held) {
+  const i = people.indexOf(p), body = BODIES[held.item], item = ITEMS[held.item];
+  if (!personModel || i < 0 || !body || !item) return;
+  personModel.mesh.getMatrixAt(i, instance);
+  const u = personModel.unitsPerMetre; // (from their feet: the model's lowest point)
+  world.multiplyMatrices(instance, anchor.makeTranslation(0, personModel.floorY ?? 0, 0).scale(size.setScalar(u)));
+  const scale = place.setFromMatrixColumn(world, 0).length(), ground = place.setFromMatrixPosition(world).y;
+  const facing = new THREE.Quaternion().setFromRotationMatrix(part.extractRotation(world));
+  const left = item.parts[0].eaten ? held.left : 1, r = () => peopleRng() - 0.5;
+  dropped.push({
+    shape: item.parts[0].shape === 'beer' && held.stout ? 'stout' : item.parts[0].shape, left, light: inRoom(p) ? 'lit' : 'plain',
+    until: (lastPeopleTime ?? 0) + DROPPED_TIME, scale, ground, size: item.parts[0].size,
+    half: new THREE.Vector3(...body.half).multiplyScalar(scale).multiply(new THREE.Vector3(1, 1, body.turn ? Math.max(0.2, left) : 1)),
+    pos: new THREE.Vector3(...DROP_FROM).applyMatrix4(world),
+    vel: new THREE.Vector3(r(), 0.5 + r(), -0.6 + r()).applyQuaternion(facing).multiplyScalar(scale),
+    spin: new THREE.Vector3(r()*10, r()*6, r()*10),
+    turn: facing.clone().multiply(spinTurn.setFromAxisAngle(yAxis, peopleRng()*Math.PI*2)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(r()*0.8, 0, r()*0.8))),
+    rest: new THREE.Quaternion().setFromEuler(new THREE.Euler(...(body.turn ?? [0, 0, 0]))),
+  });
+  if (dropped.length > DROPPED_MAX) dropped.shift();
+}
+// One step of a dropped thing: falling and turning, then pushed back up out of the ground at each corner under it (an
+// impulse at that corner, which is what tips it over), sliding to a stop.
+function stepDropped(d, dt) {
+  d.vel.y -= DROP_GRAVITY*d.scale*dt;
+  d.pos.addScaledVector(d.vel, dt);
+  const angle = d.spin.length()*dt;
+  if (angle > 1e-6) d.turn.premultiply(spinTurn.setFromAxisAngle(arm.copy(d.spin).normalize(), angle)).normalize();
+  const inertia = d.half.lengthSq()/3; // (a box's, near enough, for a mass of 1)
+  let deepest = 0;
+  for (let c = 0; c < 8; c++) {
+    corner.set(c & 1 ? d.half.x : -d.half.x, c & 2 ? d.half.y : -d.half.y, c & 4 ? d.half.z : -d.half.z).applyQuaternion(d.turn);
+    const depth = d.ground - (d.pos.y + corner.y);
+    if (depth <= 0) continue;
+    deepest = Math.max(deepest, depth);
+    arm.copy(corner);
+    pointVel.crossVectors(d.spin, arm).add(d.vel);
+    if (pointVel.y >= 0) continue;
+    const across = push.set(arm.z, 0, -arm.x).lengthSq(); // (|arm × up|²)
+    const j = -(1 + BOUNCE)*pointVel.y/(1 + across/inertia);
+    d.vel.y += j;
+    d.spin.add(push.set(-arm.z, 0, arm.x).multiplyScalar(j/inertia)); // (arm × up, times the impulse)
+    d.vel.x -= pointVel.x*GRIP/4; d.vel.z -= pointVel.z*GRIP/4;
+    d.spin.multiplyScalar(1 - GRIP/8);
+  }
+  if (deepest > 0) d.pos.y += deepest;
+  if (deepest > 0 && d.vel.lengthSq() < (SETTLE*d.scale)**2 && d.spin.lengthSq() < SETTLE) { d.vel.set(0, 0, 0); d.spin.set(0, 0, 0); d.still = true; }
+}
+function updateDropped() {
+  const now = lastPeopleTime ?? 0, dt = Math.min(0.05, Math.max(0, now - (droppedAt ?? now)));
+  droppedAt = now;
+  while (dropped.length && dropped[0].until <= now) dropped.shift();
+  for (const d of dropped) {
+    if (!d.still && dt > 0) for (let n = 0; n < DROP_STEPS; n++) stepDropped(d, dt/DROP_STEPS);
+    part.compose(d.pos, turn.copy(d.turn).multiply(d.rest), size.set(...d.size).multiplyScalar(d.scale));
+    draw(d.shape, d.light, part, color.setHex(0xffffff), d.left);
+  }
+}
+
 export function updateHeld(only = -1) {
   for (const key of Object.keys(meshes)) counts[key] = 0;
   if (personModel) people.forEach((p, i) => {
@@ -424,6 +502,7 @@ export function updateHeld(only = -1) {
       }
     }
   });
+  if (only < 0) updateDropped();
   for (const [key, mesh] of Object.entries(meshes)) {
     mesh.count = counts[key];
     mesh.instanceMatrix.needsUpdate = true;

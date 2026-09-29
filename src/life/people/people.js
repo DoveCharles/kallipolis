@@ -1445,6 +1445,7 @@ export function updatePeople(t) {
       }
       if (!p.clipA) { p.clipA = p.clipB = clipSet.Idle; p.fade = 1; }
       // (and with a hot dog or a coffee in hand, a version of it holding that: see peopleHolding.js)
+      if (p.oneShot && p.snack && (p.punched || p.mode === 'dead')) snackClip(p, clipSet.Idle, 0); // (knocked from their hand at once, mid-fall)
       setClip(p, p.oneShot || snackClip(p, p.moving && !riding ? clipSet.Walk : clipSet[p.pose] || clipSet.Idle, dt));
       p.fade = Math.min(1, p.fade + dt/p.fadeTime);
       // whatever the clip has happening as it comes round: a key struck (see audio/typing.js), or a moment of a meal

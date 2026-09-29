@@ -1,5 +1,6 @@
 Wet stuff <nature>
 Conversely, [loves] {choiceweight = 50}
+bacteria {appeal = -0.1}
 forgetting an idea (it makes you suicidal) | forgetting an idea {appeal = -0.3}
 getting trapped in a microwave {appeal = -0.5} <scary>
 The confines of their apartment | the confines of my apartment <places>
@@ -234,7 +235,7 @@ Double denim <stuff>
 Caring {mood = -0.2, evil = 0.05} <beliefs>
 Whatever they can think of next | whatever I can think of next {mood = -0.2} <surreal>
 Acts of God <surreal>
-Sudden arrhythmic death syndrome <health>
+Sudden arrhythmic death syndrome {stimulants =0.3} <health>
 Fruit flies <nature>
 Reaping { evil = 0.01, aggression = 0.4} <surreal>
 Mixing and mastering <media>

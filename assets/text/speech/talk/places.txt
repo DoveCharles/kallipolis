@@ -31,7 +31,7 @@ Thrown a coin in the fountain recently? {here.plaza}
 >>>>>> Woah, you're like, dead-on right on the mondo, man. Consider my mind, like, expanding. Do you know what we should do? WE should get in the fountain, let ourselves drift away. {psychs = 3}
 >>>>>>> Already there man, already there. {score = 2}
 >>>>> Deep bro. Kill yourself. {evil, aggression, score = -2}
->>>> 'Wishing' is a concept invented by the bourgeiosie to hold back the proletariat. It's counter-revolutionary, immaterial. It deprives the workers from their hard-earned wages, yet another way fascist spiritually exploits the masses. {conservative = -3}
+>>>> 'Wishing' is a concept invented by the bourgeiosie to hold back the proletariat. It's counter-revolutionary, immaterial. It deprives the workers from their hard-earned wages, yet another way fascist spiritually exploits the masses. {conservative = -3, conservative < -0.1}
 >>>>> What the [swears] are you talking about? {score = -1}
 >>>>> Ack, communism!? Uhhh, human nature, innovation, The Holodomor, bread-lines, the stock market, censorship, North Korea, corruption, gulags, the iPhone??? {score = -2, conservative < 0.1, conservative = 2, nerd = 3}
 >>>>>> Communist countries have all of those things, or, wait... I mean, they have the good ones. {nerd = -2}
@@ -42,7 +42,7 @@ Thrown a coin in the fountain recently? {here.plaza}
 >>>>> What the [swears]? Are you some kind of commie libtard? {score = -2, conservative < 0.1, conservative = 2}
 >>>>>> What..? No, ahah. No... {aggression = -1}
 >>>>>> Oh, here we go, another conservative bootlic- Wait, did you just call me a liberal? {aggression, score = -2}
->>>>> Too right, comrade. Instead of wasting my resources on reactionary ideologism, I will let it accumulate, building toward our struggle. {conservative = -2}
+>>>>> Too right, comrade. Instead of wasting my resources on reactionary ideologism, I will let it accumulate, building toward our struggle. {conservative = -2, conservative < -0.1}
 >>>>>> Yes, so we can financially seize the means of production, and use it to sell papers.
 >>>>>>> Selling papers, yes.
 >>>>>>>> Yes! {score = 1}
@@ -62,14 +62,14 @@ Thrown a coin in the fountain recently? {here.plaza}
 >>>>>>>>>> Sir! Yes, sir! {outlaw = -1, score = 1}
 >>>>>>>>>> So like, naked, but not? As in, like, dialectics? {nerd}
 >>>>>>>>>>> That's EXACTLY what it means. Strip yourself, but dialectically; be naked, but retain your seed. {score = 2}
->>>>>> I'm sorry comrade, but there is NOTHING more revolutionary than money. Did Engels not fund the development of our ideology through his capital gains; did The USSR not fund foreign revolutions across the globe; did Mao not deliver the heads of landlords on a silver platter? {nerd = 3}
+>>>>>> I'm sorry comrade, but there is NOTHING more revolutionary than money. Did Engels not fund the development of our ideology through his capital gains; did The USSR not fund foreign revolutions across the globe; did Mao not deliver the heads of landlords on a silver platter? {nerd = 3, conservative < -0.1}
 >>>>>>> A silver platter? No. A wooden one, maybe. Modest, but chic. Nothing more. {score = -1}
 >>>>>>> What the fuck!! No! Agree with me, agree with me! {score = -1, aggression}
 >>>>>>> Um. Actually, I don't really know. {nerd = -1, score = -1}
 >>>>>>> Revisionist propoganda, communism was born in France! By pious and ascetic intellectuals, much more Marxist than Marx! Do you really know nothing?
 >>>>>>>> [insults#1], [insults#2], [insults#3]! {score = -2}
 >>>>>>>>> [insults#4], [insults#5], [insults#6]! {score = -2}
->>>>> Why should that be true? Is the fountain not the property of the state? What could be more powerful than giving up my money to the literal embodiment of our nation, to our world? {nerd, psychs}
+>>>>> Why should that be true? Is the fountain not the property of the state? What could be more powerful than giving up my money to the literal embodiment of our nation, to our world? {nerd, psychs, conservative < -0.1}
 >>>>>> The state? There is no state under communism.
 >>>>>>> Is too! {score = -1}
 >>>>>>>> Is not! {score = -1}
@@ -79,7 +79,7 @@ Thrown a coin in the fountain recently? {here.plaza}
 >>>>>>>> Aren't you tired, comrade? Shall we end this petty squabbling, and consolidate our struggle over a bottle of champaigne? {aggression = -2}
 >>>>>>>>> Oh, I know just the bar! Perhaps we could order it with a side of onion rings?
 >>>>>>>>>> Now, THAT is praxis! {score = 3}
->>>> Big government trying to steal your money for the welfare state, using their (((fountains))). Don't fucking fall for it. {conservative > 0, conservative = 2}
+>>>> Big government trying to steal your money for the welfare state, using their (((fountains))). Don't fucking fall for it. {conservative > 0.1, conservative = 2}
 >>>>> What the [swears] are you talking about? {score = -1}
 >>>>> Uh, did you just say triple brackets out loud?
 >>>>>> Got a problem with that, snowflake?
@@ -89,7 +89,7 @@ Thrown a coin in the fountain recently? {here.plaza}
 >>>>>>>> Oh, brother, fountains are as Jewish as Barrack Obama and Hilary Clinton. You got a whole world you don't even know a [swears] about. {score = -1}
 >>>>> I love the welfare state, and I love fountains! {conservative = -2, evil = -1}
 >>>>>> Maybe I put a bullet in your fountain, what then, liberal? {aggression = 2, end=bad, score = -2}
->>>>> Ah, good to see there's fellow truth-seekers out there who know allll about the dark fountain magic the cabalists are pulling on us. {conservative > 0, conservative = 2}
+>>>>> Ah, good to see there's fellow truth-seekers out there who know allll about the dark fountain magic the cabalists are pulling on us. {conservative > 0.1, conservative = 2}
 >>>>>> Brother, I've been researching this shit since before I was born. It's sinister. Come to my church meeting, we'll tell you all about it.
 >>>>>>> Too right, I'll be there. Where is it?
 >>>>>>>> Just down theres some. When you get to the door, show them this hand symbol, you got that? They'll let you right in. And we got corn bread too, brother.

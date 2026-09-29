@@ -227,6 +227,7 @@ html.win3 .fav-row:hover { background:var(--w3-hl); color:var(--w3-hl-text); bor
 html.win3 .fav-row:hover .fav-kind { color:var(--w3-hl-text); opacity:0.8; }
 html.win3 :is(.pc-row.pc-gap, .entity-card .pc-body > .pc-lead) { border-top:1px solid var(--w3-frame); }
 html.win3 .pc-name { padding-right:0; }
+html.win3 .pc-tip { background:var(--w3-menu); color:var(--w3-menu-text); border:none; box-shadow:0 0 0 1px var(--w3-frame), 2px 2px 0 1px var(--w3-frame); }
 html.win3 .entity-card .pc-mods { background:var(--w3-menu); color:var(--w3-menu-text); box-shadow:0 0 0 1px var(--w3-frame), 2px 2px 0 1px var(--w3-frame); } /* (a menu dropped down over the rows) */
 html.win3 .pc-tracked { background:var(--w3-hl); color:var(--w3-hl-text); }
 html.win3 button.pc-line { color:var(--w3-text); }
@@ -458,7 +459,6 @@ html.win3 .pc-effects { margin-top:0; }
 html.win3 .pc-rel-friends, html.win3 .pc-rel-enemies { outline:1px solid var(--w3-frame); }
 html.win3 .pc-said-list { background:var(--w3-window); box-shadow:inset 1px 1px 0 var(--w3-shadow); }
 html.win3 #person-card .pc-effect { font-size:16px; line-height:20px; }
-html.win3 :is(#person-card, #person-card-2) .pc-effect.pc-effect-emoji { font-size:13px; line-height:16px; }
 html.win3 :is(#person-card, #person-card-2) .pc-pocket { font-size:22px; }
 html.win3 :is(#person-card, #person-card-2) .pc-pocket.pc-pocket-empty { font-size:13px; }
 html.win3 .pc-pocket { border-radius:0; border-color:var(--w3-frame); background:var(--w3-window); box-shadow:inset 1px 1px 0 var(--w3-shadow); }
