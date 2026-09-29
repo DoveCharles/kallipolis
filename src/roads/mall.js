@@ -327,7 +327,7 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs, cladding,
   const fronts = fp.map((p, i) => {
     const q = fp[(i+1) % fp.length], side = outsideOf(p, q, (x, z) => !inC(x, z), 0.6);
     // (a front: the concourse just off it, the unit itself just the other side)
-    return side && inC(side.out.x, side.out.z) && side.len > 0.8 ? side : null;
+    return side && inC(side.out.x, side.out.z) && side.len > 0.05 ? side : null;
   });
   fp.forEach((p, i) => {
     const q = fp[(i+1) % fp.length], side = fronts[i];
@@ -344,7 +344,7 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs, cladding,
         for (let k = 1; k < bays; k++) frameBox(brass, F, -side.len/2 + k*side.len/bays, out*0.03, 0.035, 0.04, y0 + RISER, top - 1.1);
       }
       wallQuad(walls, p, q, top - 1.1, y0 + MALL_LEVEL);
-      frameBox(fascia, F, 0, out*0.08, side.len/2 - 0.1, 0.1, top - 1.0, top - 0.2);
+      if (side.len > 0.3) frameBox(fascia, F, 0, out*0.08, side.len/2 - 0.1, 0.1, top - 1.0, top - 0.2);
       if (!widest || side.len > widest.len) widest = { ...side, F, out };
       // a pier where the front meets a party wall (see the piers in generateMall)
       [[p, fronts[(i + fp.length - 1) % fp.length], 1], [q, fronts[(i+1) % fp.length], -1]].forEach(([c, neighbour, into]) => {
@@ -418,16 +418,103 @@ function segmentsOf(spine) {
   });
   return segs;
 }
-// A quad from segment points p0, p1 out along the angles a0, a1 (R long) — or, if those cross first, the triangle to
-// where they cross.
-function wedge(p0, p1, a0, a1, R) {
-  const d0 = { x: Math.cos(a0), z: Math.sin(a0) }, d1 = { x: Math.cos(a1), z: Math.sin(a1) };
-  const den = d0.x*d1.z - d0.z*d1.x;
-  if (Math.abs(den) > 1e-9) {
-    const wx = p1.x - p0.x, wz = p1.z - p0.z, s = (wx*d1.z - wz*d1.x)/den, t = (wx*d0.z - wz*d0.x)/den;
-    if (s > 0 && t > 0 && s < R && t < R) return [p0, p1, { x: p0.x + d0.x*s, z: p0.z + d0.z*s }];
-  }
-  return [p0, p1, { x: p1.x + d1.x*R, z: p1.z + d1.z*R }, { x: p0.x + d0.x*R, z: p0.z + d0.z*R }];
+// The shops' lots, cut from the concourse's own edge (Clipper paths `C`) rather than from the spine, so they meet it at
+// its corners: each ring of it split into runs of shopfront at every sharp corner (and wherever it stops fronting shops,
+// `inShops` — an entrance), a run too short for a shop joined onto its neighbour, and each run cut into lots about `W`
+// wide, each reaching back from its front along the edge's normals (a corner's bisector, shared by the lots either side)
+// `R` deep, or halfway to the concourse beyond from wherever along it that's nearest. Returns the runs, each a list of lots ({x, z}[]).
+function lotsAlong(C, inShops, W, R) {
+  const CORNER = 0.5, SHORT = 3;
+  const rings = C.map(fromClipperPath).map(r => r.filter((p, i) => dist(p, r[(i + r.length - 1) % r.length]) > 0.05)).filter(r => r.length >= 3);
+  const allEdges = rings.flatMap(r => r.map((p, i) => [p, r[(i+1) % r.length]]));
+  // how far along d from o the concourse's edge is next (past where o itself is on it)
+  const reach = (o, d) => {
+    let best = R*2;
+    allEdges.forEach(([a, b]) => {
+      const ex = b.x - a.x, ez = b.z - a.z, den = d.x*ez - d.z*ex;
+      if (Math.abs(den) < 1e-9) return;
+      const wx = a.x - o.x, wz = a.z - o.z, t = (wx*ez - wz*ex)/den, u = (wx*d.z - wz*d.x)/den;
+      if (t > 0.05 && u >= 0 && u <= 1 && t < best) best = t;
+    });
+    return Math.min(R, best/2);
+  };
+  const unit = v => { const l = Math.hypot(v.x, v.z); return l > 1e-6 ? { x: v.x/l, z: v.z/l } : null; };
+  const runs = [];
+  rings.forEach(ring => {
+    const m = ring.length;
+    // each edge's normal towards the shops, or null if there are none that side (an entrance, the outer wall)
+    const normals = ring.map((p, i) => {
+      const q = ring[(i+1) % m], l = dist(p, q), n = { x: -(q.z - p.z)/l, z: (q.x - p.x)/l }, mid = { x: (p.x + q.x)/2, z: (p.z + q.z)/2 };
+      return inShops(mid.x + n.x*0.3, mid.z + n.z*0.3) ? n : inShops(mid.x - n.x*0.3, mid.z - n.z*0.3) ? { x: -n.x, z: -n.z } : null;
+    });
+    const dirOf = i => unit({ x: ring[(i+1) % m].x - ring[i].x, z: ring[(i+1) % m].z - ring[i].z });
+    // a break at vertex i (between edges i-1 and i): a sharp corner, or a front starting or stopping
+    const breaks = ring.map((p, i) => {
+      const a = normals[(i + m - 1) % m], b = normals[i];
+      if (!a || !b) return true;
+      const da = dirOf((i + m - 1) % m), db = dirOf(i);
+      return Math.acos(Math.max(-1, Math.min(1, da.x*db.x + da.z*db.z))) > CORNER || a.x*b.x + a.z*b.z < 0;
+    });
+    let start = breaks.indexOf(true);
+    if (start < 0) start = 0;
+    const ringRuns = [];
+    let cur = null;
+    for (let k = 0; k < m; k++) {
+      const i = (start + k) % m;
+      if (breaks[i] && cur) { ringRuns.push(cur); cur = null; }
+      if (!normals[i]) continue;
+      if (!cur) cur = { edges: [] };
+      cur.edges.push(i);
+    }
+    if (cur) ringRuns.push(cur);
+    // (a short run joined onto the one before it round the corner, or else the one after)
+    const len = r => r.edges.reduce((sum, i) => sum + dist(ring[i], ring[(i+1) % m]), 0);
+    const joined = (a, b) => (a.edges[a.edges.length - 1] + 1) % m === b.edges[0];
+    for (let k = 0; k < ringRuns.length && ringRuns.length > 1; k++) {
+      const r = ringRuns[k];
+      if (len(r) >= SHORT) continue;
+      const prev = ringRuns[(k + ringRuns.length - 1) % ringRuns.length], next = ringRuns[(k+1) % ringRuns.length];
+      if (prev !== r && joined(prev, r)) { prev.edges.push(...r.edges); ringRuns.splice(k--, 1); }
+      else if (next !== r && joined(r, next)) { next.edges.unshift(...r.edges); ringRuns.splice(k--, 1); }
+    }
+    ringRuns.forEach(r => {
+      const e = r.edges, pts = [ring[e[0]], ...e.map(i => ring[(i+1) % m])];
+      // the way back from each vertex: between its edges' normals — at the run's ends too, where the next run round the
+      // corner shares it
+      const rays = pts.map((p, j) => {
+        const before = j > 0 ? normals[e[j-1]] : normals[(e[0] + m - 1) % m], after = j < e.length ? normals[e[j]] : normals[(e[e.length-1] + 1) % m];
+        const own = j > 0 ? normals[e[j-1]] : normals[e[0]];
+        return (before && after && unit({ x: before.x + after.x, z: before.z + after.z })) || own;
+      });
+      // cut into lots at even distances along it
+      const total = len(r), n = Math.max(1, Math.round(total/W)), lots = [];
+      let lot = [{ p: pts[0], d: rays[0] }], acc = 0, next = total/n;
+      for (let j = 0; j < e.length; j++) {
+        const a = pts[j], b = pts[j+1], l = dist(a, b), en = normals[e[j]];
+        while (lots.length < n - 1 && next < acc + l - 0.05 && next > acc + 0.05) {
+          const t = (next - acc)/l, c = { p: { x: a.x + (b.x - a.x)*t, z: a.z + (b.z - a.z)*t }, d: en };
+          lot.push(c); lots.push(lot); lot = [c]; next += total/n;
+        }
+        if (lots.length < n - 1 && Math.abs(next - acc - l) <= 0.05) { lot.push({ p: b, d: rays[j+1] }); lots.push(lot); lot = [{ p: b, d: rays[j+1] }]; next += total/n; }
+        else lot.push({ p: b, d: rays[j+1] });
+        acc += l;
+      }
+      lots.push(lot);
+      runs.push(lots.map(front => {
+        // (as deep all along as it can be anywhere along: one side reaching far into a point it'd leave a spike)
+        const f0 = front[0], f1 = front[front.length - 1], r0 = Math.min(...front.map(c => reach(c.p, c.d))), r1 = r0;
+        // (where its two sides close in, as at a point between two branches, the lot's a triangle to where they meet)
+        const den = f0.d.x*f1.d.z - f0.d.z*f1.d.x;
+        if (Math.abs(den) > 1e-9) {
+          const wx = f1.p.x - f0.p.x, wz = f1.p.z - f0.p.z, s = (wx*f1.d.z - wz*f1.d.x)/den, t = (wx*f0.d.z - wz*f0.d.x)/den;
+          if (s > 0 && t > 0 && s < r0 && t < r1) return [...front.map(c => c.p), { x: f0.p.x + f0.d.x*s, z: f0.p.z + f0.d.z*s }];
+        }
+        const back = front.map(c => ({ x: c.p.x + c.d.x*r0, z: c.p.z + c.d.z*r0 }));
+        return [...front.map(c => c.p), ...back.reverse()];
+      }));
+    });
+  });
+  return runs;
 }
 
 // ---------------------------------------------------------- the shops' names
@@ -728,37 +815,44 @@ function generateMall(zone, outline, spine, CW) {
   const upper = s.mallUpper !== false && bridges.length > 0 && VH >= 0.8;
   const levels = upper ? 2 : 1, HW = levels*MALL_LEVEL + PARAPET, ROOF = HW - 0.2, GLASS_TOP = ROOF + CLERESTORY;
 
-  // ---- the units: either side of every segment of the spine, cut across every shop width, out to the walls
+  // ---- the units: all along the concourse's edge, cut across every shop width, out to the walls (see lotsAlong)
   const segs = segmentsOf(spine), W = Math.max(5, s.mallShopWidth ?? 10), R = spine.halfWidth*1.6 + 10;
   const band = minus(within(outlinePath, insetPolygonExact(outline, UNIT_GAP).map(toClipperPath)), C);
-  let claimed = [], index = 0;
-  const piers = [], signs = [], lastCladding = [];
-  segs.forEach(seg => [1, -1].forEach(side => {
-    const n = Math.max(1, Math.round(seg.len/W)), P = t => ({ x: seg.a.x + (seg.b.x - seg.a.x)*t/n, z: seg.a.z + (seg.b.z - seg.a.z)*t/n });
-    const cutAt = k => k === 0 ? seg.cut.a[side] : k === n ? seg.cut.b[side] : seg.ang + side*Math.PI/2;
-    for (let k = 0; k < n; k++, index++) {
-      const shape = [wedge(P(k), P(k+1), cutAt(k), cutAt(k+1), R).map(clip)];
-      const pieces = piecesOf(minus(within(band, shape), claimed));
-      claimed = union(claimed, shape);
-      pieces.forEach((fp, pi) => {
-        if (Math.abs(polygonArea(fp)) < 25) return;
-        const front = fp.some((p, i) => { const o = outsideOf(p, fp[(i+1) % fp.length], (x, z) => !inC(x, z), 0.6); return o && inC(o.out.x, o.out.z) && o.len > 2; });
-        const gallery = fp.some((p, i) => {
-          const o = outsideOf(p, fp[(i+1) % fp.length], (x, z) => !inC(x, z), 1.2);
-          return o && o.len > 2 && inDeck0(o.out.x, o.out.z);
-        });
-        for (let level = 0; level < levels; level++) {
-          // each unit on its own stream, as in a town, so one slider never reshuffles the rest
-          const rng = mulberry32(((s.seed>>>0) ^ Math.imul(index+1, 0x9E3779B1) ^ Math.imul(pi+1, 0x85EBCA6B) ^ Math.imul(level+1, 0xC2B2AE35)) >>> 0);
-          const kind = !front || (level > 0 && !gallery) ? 'vacant' : kindOf(rng, s);
-          let cladding = CLADDINGS[Math.floor(rng()*CLADDINGS.length)];
-          if (cladding === lastCladding[level]) cladding = CLADDINGS[(CLADDINGS.indexOf(cladding) + 1 + Math.floor(rng()*(CLADDINGS.length - 1))) % CLADDINGS.length];
-          lastCladding[level] = cladding;
-          zone.buildingsGroup.add(makeUnit(fp, inC, level*MALL_LEVEL, kind, rng, level, theme, piers, signs, cladding, buildingKey(zone, zone.buildingsGroup.children.length)));
+  let claimed = [];
+  const piers = [], signs = [], lastCladding = [], lots = [];
+  lotsAlong(C, createRegionTester(band), W, R).forEach(run => {
+    const kept = [];
+    run.forEach(shape => {
+      const path = [shape.map(clip)], pieces = piecesOf(minus(within(band, path), claimed));
+      claimed = union(claimed, path);
+      pieces.forEach(fp => {
+        // (a sliver goes to the lot before it along the run, if they touch — never a hole in the row)
+        if (Math.abs(polygonArea(fp)) < 25) {
+          const prev = kept[kept.length - 1], merged = prev && piecesOf(union([toClipperPath(prev.fp)], [toClipperPath(fp)]));
+          if (merged && merged.length === 1) prev.fp = merged[0];
+          return;
         }
+        kept.push({ fp });
       });
+    });
+    lots.push(...kept);
+  });
+  lots.forEach(({ fp }, index) => {
+    const front = fp.some((p, i) => { const o = outsideOf(p, fp[(i+1) % fp.length], (x, z) => !inC(x, z), 0.6); return o && inC(o.out.x, o.out.z) && o.len > 2; });
+    const gallery = fp.some((p, i) => {
+      const o = outsideOf(p, fp[(i+1) % fp.length], (x, z) => !inC(x, z), 1.2);
+      return o && o.len > 2 && inDeck0(o.out.x, o.out.z);
+    });
+    for (let level = 0; level < levels; level++) {
+      // each unit on its own stream, as in a town, so one slider never reshuffles the rest
+      const rng = mulberry32(((s.seed>>>0) ^ Math.imul(index+1, 0x9E3779B1) ^ Math.imul(level+1, 0xC2B2AE35)) >>> 0);
+      const kind = !front || (level > 0 && !gallery) ? 'vacant' : kindOf(rng, s);
+      let cladding = CLADDINGS[Math.floor(rng()*CLADDINGS.length)];
+      if (cladding === lastCladding[level]) cladding = CLADDINGS[(CLADDINGS.indexOf(cladding) + 1 + Math.floor(rng()*(CLADDINGS.length - 1))) % CLADDINGS.length];
+      lastCladding[level] = cladding;
+      zone.buildingsGroup.add(makeUnit(fp, inC, level*MALL_LEVEL, kind, rng, level, theme, piers, signs, cladding, buildingKey(zone, zone.buildingsGroup.children.length)));
     }
-  }));
+  });
 
   // ---- the shell: outer walls (glass doors at the entrances), the roof over the units, the glass over the concourse
   const shell = new THREE.Group();
@@ -1169,10 +1263,17 @@ function generateMall(zone, outline, spine, CW) {
   // ---- the piers between the shops: thick, standing proud of the fronts, on a plinth in the accent colour with a stripe
   // of the inlay's up the face, a capital at the fascia and a cornice at the ceiling (one to a corner, however many units
   // share it)
+  // (neighbours share a corner, near enough: one pier there, square to the fronts either side of it on average — across
+  // the corner, where the fronts turn)
   const placedPiers = [];
   piers.forEach(pr => {
-    if (placedPiers.some(o => o.y0 === pr.y0 && dist(o, pr) < 1.3)) return; // (neighbours share a corner, near enough)
-    placedPiers.push(pr);
+    const o = placedPiers.find(o => o.y0 === pr.y0 && dist(o, pr) < 1.3);
+    if (o) { o.n = { x: o.n.x + pr.n.x, z: o.n.z + pr.n.z }; return; }
+    placedPiers.push({ ...pr });
+  });
+  placedPiers.forEach(pr => {
+    const nl = Math.hypot(pr.n.x, pr.n.z);
+    if (nl > 1e-3) { pr.n = { x: pr.n.x/nl, z: pr.n.z/nl }; pr.dx = -pr.n.z; pr.dz = pr.n.x; }
     let F = frameOf(pr, pr.dx, pr.dz);
     const out = Math.sign(F.uv({ x: pr.x + pr.n.x, z: pr.z + pr.n.z }).v) || 1;
     // (one at the end of a row, against the outer wall, slides along the fronts till it is clear of the wall)
