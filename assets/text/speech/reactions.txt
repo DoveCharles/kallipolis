@@ -85,6 +85,9 @@ I asked for a trim. {felt = haircut, patience = -1}
 > It suits you, honestly.
 > What did you ask for? {nosy}
 Feels so light! {felt = haircut}
+That robot came out of the floor. The floor! {felt = haircut, shock}
+Never seen scissors move that fast. {felt = haircut, thought}
+I didn't even get to say what I wanted. The robot just went for it. {felt = haircut, patience = -1}
 Nobody look at me. {felt = haircut, shock, thought}
 Worth every penny. {felt = haircut, mood}
 My mum's going to hate it. {felt = haircut, weight = 0.5}

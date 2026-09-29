@@ -56,7 +56,6 @@ speech/words/living/roeanimals.txt
 speech/words/things/belongings.txt
 speech/words/things/bodyparts.txt
 speech/words/things/objects.txt
-speech/words/things/physical.txt
 speech/words/things/utensils.txt
 speech/words/things/food/chillis.txt
 speech/words/things/food/foods.txt

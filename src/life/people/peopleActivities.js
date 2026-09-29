@@ -1,5 +1,5 @@
 import { App, S } from '../../core/shared.js';
-import { feel, witness, voiceOfPerson, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
+import { feel, witness, voiceOfPerson, hairColorOf, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { roomLayoutOf } from '../../buildings/footprints.js';
 import { updateBuying } from './peopleStalls.js';
@@ -9,13 +9,14 @@ import { controls } from '../../core/camera-controls.js';
 import { profileOf, profilesVersion } from '../profiles.js';
 import { carriageSpot, getTrainShuttles, holdTrain, getTrainStations, trainStationsVersion } from '../../trains/trains.js';
 import { isBloodlusting, punchSpill } from './peopleBlood.js';
-import { puffSmoke } from '../giblets.js';
+import { puffSmoke, haircutFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFollowingPerson } from './peopleTracking.js';
 import { drawCurtain, openRoomDoor, roomBeyondDoor, roomCubicles, roomDoorway, roomHolds, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
 import { clearMeal, giveSnack, mealFinished, serveMeal } from './peopleHolding.js';
 import { BARBOT, barbotFree } from '../../buildings/barbot.js';
+import { summonSalonBot, salonBotSnipping, seatedHead } from '../../buildings/salonbot.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
 import { REVIVE_SHAKE_TIME } from '../revive.js';
 import { strikeLightning } from '../lightning.js';
@@ -1855,7 +1856,7 @@ function sitting(p, here, dt) {
         p.pose = 'Sit1';
         here.timer = Math.min(here.timer, SAT_AFTER_MEAL*p.traits.patience);
       }
-      if (seat.kind === 'cut') haircut(p, here, dt);
+      if (seat.kind === 'cut') haircut(p, seat, here, dt);
       // (waiting for a haircut: up as soon as a chair's free)
       else if (p.indoors?.shop === 'salon' && !p.indoors.served && freeSeat(p, 'cut')) here.timer = 0;
       if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); clearMeal(p); here.stage = 'rise'; p.pose = 'Idle'; }
@@ -1875,11 +1876,12 @@ function sitting(p, here, dt) {
 //
 // A salon: whoever goes in is there for a haircut. With the camera in there too, they go and sit in one of the styling
 // chairs in front of the mirrors (a seat of kind 'cut') as soon as one's free — waiting on the bench, or under a dryer,
-// or standing about till then — and after HAIRCUT_TIME there, snipped at, their hair's a new style (personModel's
+// or standing about till then — and the chair's salon bot comes up out of the floor behind them and cuts their hair
+// (buildings/salonbot.js; without one, HAIRCUT_TIME there, snipped at): then it's a new style (personModel's
 // cutHair); a moment later they're up, and soon gone. A clothes shop: whoever goes in looks round a while, then goes
 // into a changing room that's free (see roomCubicles), draws its curtain across and, CHANGING_TIME later, comes out in
 // new clothes (changeClothes). Either way, with nobody watching, they come out with it anyway (see updateIndoors).
-/** Seconds in the chair for a haircut; seconds behind the curtain changing, [shortest, longest]. */
+/** Seconds in the chair for a haircut (with no salon bot); seconds behind the curtain changing, [shortest, longest]. */
 const HAIRCUT_TIME = 5, CHANGING_TIME = [3.5, 6];
 /** Seconds between snips of the scissors, about. */
 const SNIP_EVERY = 0.9;
@@ -1934,21 +1936,28 @@ function goForHaircut(p, here) {
   return route[0];
 }
 /**
- * Sat in a styling chair: snipped at a while, then a new haircut (a puff, as when someone vanishes), and up soon after.
+ * Sat in a styling chair: the chair's salon bot called up out of the floor to cut their hair (see buildings/salonbot.js),
+ * snipping as it does, and once it's done (or, with no bot, after HAIRCUT_TIME) a new haircut (a puff, as when someone
+ * vanishes), and up soon after.
  * @param {Person} p - the person
+ * @param {object} seat - the styling chair's seat
  * @param {object} here - their p.inRoom
  * @param {number} dt - seconds since the last frame
  * @returns {void}
  */
-function haircut(p, here, dt) {
+function haircut(p, seat, here, dt) {
   const visit = p.indoors;
   if (!visit || visit.served) return;
+  const bot = summonSalonBot(seat, p);
   here.cutting = (here.cutting ?? 0) + dt;
-  if ((here.snipIn = (here.snipIn ?? 0.3) - dt) <= 0) {
+  const snipping = bot ? salonBotSnipping(seat) : true;
+  // (a cloud over their hair while it's cut, and curls of it flying off)
+  if (snipping) haircutFx(seatedHead(seat, p.height*S.peopleSize), p.height*S.peopleSize, (here.hairColor ??= hairColorOf(p)), dt);
+  if (snipping && (here.snipIn = (here.snipIn ?? 0.3) - dt) <= 0) {
     here.snipIn = SNIP_EVERY*(0.5 + peopleRng());
     playSound('snip', { x: p.x, y: p.y + 1.4*modelScale(p), z: p.z });
   }
-  if (here.cutting < HAIRCUT_TIME) { here.timer = Math.max(here.timer, 1); return; }
+  if (bot ? bot !== 'done' : here.cutting < HAIRCUT_TIME) { here.timer = Math.max(here.timer, 1); return; }
   puffSmoke({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, 0.6*p.height*S.peopleSize, 4);
   serve(p, visit);
   here.timer = 1 + peopleRng();

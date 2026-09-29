@@ -14,6 +14,7 @@ import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
 import { pubMusic, stopPubMusic } from '../audio/pub-music.js';
 import { loadingTask, loadingSay } from '../ui/loading.js';
 import { loadBarbot, placeBarbot, updateBarbot, barbotWarmUp } from './barbot.js';
+import { loadSalonBot, placeSalonBot, salonBotReach, clearSalonBots, updateSalonBots, salonBotWarmUp } from './salonbot.js';
 
 // ============================================================ going inside a building
 // Every building has the same inside: one room (furnished one of a few ways), built once and moved to whichever building's
@@ -1482,7 +1483,8 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
 function seatsInWorld(layout) {
   layout.seats = layout.seats.map(seat => {
     const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z)), n = roomWay(seat.nx, seat.nz);
-    return { x: w.x, y: w.y, z: w.z, nx: n.x, nz: n.z, sofa: false, desk: seat.desk, bar: seat.bar, kind: seat.kind ?? null, by: null };
+    return { x: w.x, y: w.y, z: w.z, nx: n.x, nz: n.z, sofa: false, desk: seat.desk, bar: seat.bar, kind: seat.kind ?? null, by: null,
+      salonBot: seat.salonBot ?? null }; // (a styling chair's: see salonbot.js)
   });
 }
 
@@ -2325,7 +2327,7 @@ async function loadSalon() {
   if (salon.DryerChair) salon.DryerChair.seats = measureSeatsUnder(salon.DryerChair, ['Hood', 'HoodGlass', 'Chrome']);
   if (inside && current === LAYOUTS.salon) furnishSalon(inside.key);
 }
-modelsLoading.push(loadSalon());
+modelsLoading.push(loadSalon(), loadSalonBot().then(() => { if (salon && inside && current === LAYOUTS.salon) furnishSalon(inside.key); }));
 // Vinyl tiles 0.3 m square, laid chequerboard: black and white, or (`grey`) every other dark one grey, a little worn.
 const vinylTiles = grey => floorTexture(512, 1.2, (g, rng) => {
   const t = 128;
@@ -2351,6 +2353,7 @@ Object.assign(LAYOUTS.salon, { furnished: salonGroup, panelled: true, shopfront:
 // its seats, in the room as it's now placed.
 function furnishSalon(key) {
   const layout = LAYOUTS.salon, group = salonGroup;
+  clearSalonBots();
   const rng = mulberry32(hashNameToNumber(key + ' salon'));
   const tint = mulberry32(hashNameToNumber(key + ' salon colours'));
   const pick = openShop(layout, tint, { walls: SALON_WALLS, floors: SALON_FLOORS, painted: salonPainted, palette: SALON_PAINTED });
@@ -2377,12 +2380,18 @@ function furnishSalon(key) {
   const station = F.StylingStation, chair = F.StylingChair;
   const reach = station.bounds.z1 + 0.28 + chair.bounds.z1; // (from the station's middle to the chair's)
   const r = { x0: station.bounds.x0 - 0.05, x1: station.bounds.x1 + 0.05, z0: station.bounds.z0, z1: reach + chair.bounds.z1 + 0.45 };
+  // (and room for the salon bot's hatch behind the chair: see salonbot.js)
+  const chairSeat = chair.seats[0];
+  if (chairSeat) r.z1 = Math.max(r.z1, reach - chairSeat.z + salonBotReach(chairSeat) + 0.1);
   const stationAt = (side, u) => {
     const spot = atWall(side, u, r);
     if (!spot) return false;
     put('StylingStation', spot.x, spot.z, spot.angle);
     const at = turned(0, reach, spot.angle, spot.x, spot.z);
     put('StylingChair', at.x, at.z, spot.angle + Math.PI, { seatKind: 'cut' });
+    // (and its salon bot behind it, under the floor, its hatch not stood on: see salonbot.js)
+    const hatch = placeSalonBot(group, layout.seats[layout.seats.length - 1]);
+    if (hatch) layout.solid.push({ x0: hatch.x - hatch.radius, x1: hatch.x + hatch.radius, z0: hatch.z - hatch.radius, z1: hatch.z + hatch.radius });
     taken.push(spot.area);
     tall.push(spot.area);
     return true;
@@ -2921,6 +2930,8 @@ async function warmUp() {
     }
     const barbot = barbotWarmUp();
     if (barbot) { sets.add(barbot); await compile('Preparing the bar bot...'); }
+    const salonBot = salonBotWarmUp();
+    if (salonBot) { sets.add(salonBot); await compile('Preparing the salon bots...'); }
   } finally {
     floorMaterial.map = floorMaterial.emissiveMap = floorMap;
     floorMaterial.needsUpdate = true;
@@ -3315,6 +3326,7 @@ export function updateInteriorCamera() {
   if (inside && current === LAYOUTS.pub && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)));
   else stopPubMusic();
   updateBarbot(!!inside && current === LAYOUTS.pub, performance.now() - occupiedAt < 1000);
+  updateSalonBots(!!inside && current === LAYOUTS.salon);
   // (riding a train carriage sets its own: see trains.js; boosting widens it: see life/traffic/driving.js; someone taken
   // over sees as wide as the wheel's set, in a room or out, so going through a door doesn't change the view: see possession.js)
   const goal = possession.index >= 0 ? possession.fov : inside ? viewFov() : (App.ridingFov?.() ?? BASE_FOV*(App.boostFovScale?.() ?? 1));

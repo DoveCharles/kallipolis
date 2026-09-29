@@ -298,7 +298,24 @@ const sparkleTexture = (() => {
   return new THREE.CanvasTexture(canvas);
 })();
 const sparkleMesh = softMesh(THREE.AdditiveBlending, 'SparkleFx', sparkleTexture);
-glowMesh.renderOrder = smokeMesh.renderOrder = sparkleMesh.renderOrder = 2;
+// a snipped-off curl of hair, a "(" (tinted the hair's colour), for a haircut's clippings
+const clippingTexture = (() => {
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(52, 32, 26, Math.PI*0.72, Math.PI*1.28); ctx.stroke();
+  return new THREE.CanvasTexture(canvas);
+})();
+const clippingMesh = softMesh(THREE.NormalBlending, 'ClippingFx', clippingTexture);
+glowMesh.renderOrder = smokeMesh.renderOrder = sparkleMesh.renderOrder = clippingMesh.renderOrder = 2;
+// a haircut's cloud: solid round puffs, facing the camera, popping up and shrinking away rather than fading
+const cloudMesh = (() => {
+  const material = new THREE.MeshBasicMaterial({ toneMapped: false }), geometry = new THREE.CircleGeometry(0.5, 24);
+  const mesh = instancedMesh(geometry, material, SOFT_MESH_CAP, 'CloudFx');
+  mesh.setColorAt(0, new THREE.Color());
+  mesh.userData.alpha = addInstanceAlpha(geometry, material, SOFT_MESH_CAP); // (always 1: it's there to share the soft particles' drawing)
+  return mesh;
+})();
 // A single sparkle glint at `at`, tinted `color`, for a legendary car's shimmer — a soft pop in and out, spinning slowly.
 export function sparkleFx(at, color, size = 0.35) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
@@ -306,6 +323,30 @@ export function sparkleFx(at, color, size = 0.35) {
   softParticles.push({ kind: 'sparkle', born: performance.now()/1000, still: true, x: at.x, y: at.y, z: at.z,
     size, life: 0.5 + Math.random()*0.3, opacity: 1, color: new THREE.Color(color),
     roll: Math.random()*Math.PI*2, spin: (Math.random() < 0.5 ? -1 : 1)*1.5, growth: 0 });
+}
+
+// A haircut going on, in the `dt` seconds since it was last called (see the salon bots, buildings/salonbot.js): a cloud of
+// white puffs over the head at `at` (its middle), covering the hair, and curls of it in `hair` (its colour, or null for
+// none) flying off and falling; `size` the person's size (1 for someone of middling height at full size).
+const CUT_PUFFS_PER_SECOND = 36, CLIPPINGS_PER_SECOND = 9;
+export function haircutFx(at, size, hair, dt) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  const now = performance.now()/1000, count = rate => Math.floor(rate*dt + Math.random());
+  const add = particle => { if (softParticles.length >= softCap()*2) softParticles.shift(); softParticles.push({ born: now, ...particle }); };
+  for (let k = count(CUT_PUFFS_PER_SECOND); k > 0; k--) {
+    const angle = Math.random()*Math.PI*2, out = Math.random()*0.1*size, white = 0.82 + Math.random()*0.18;
+    add({ kind: 'cloud', x: at.x + Math.cos(angle)*out, y: at.y + (0.18 + Math.random()*0.12)*size, z: at.z + Math.sin(angle)*out,
+      vx: Math.cos(angle)*0.12*size, vy: 0.1*size, vz: Math.sin(angle)*0.12*size,
+      size: size*(0.34 + Math.random()*0.16), growth: 0.3, life: 0.6 + Math.random()*0.4, opacity: 1, color: new THREE.Color(white, white, white) });
+  }
+  if (!hair) return;
+  for (let k = count(CLIPPINGS_PER_SECOND); k > 0; k--) {
+    const angle = Math.random()*Math.PI*2, out = (0.6 + Math.random()*1.2)*size;
+    add({ kind: 'clipping', x: at.x + Math.cos(angle)*0.1*size, y: at.y, z: at.z + Math.sin(angle)*0.1*size,
+      vx: Math.cos(angle)*out, vy: (0.8 + Math.random()*1.4)*size, vz: Math.sin(angle)*out,
+      size: size*(0.06 + Math.random()*0.04), growth: 0, life: 0.9 + Math.random()*0.5, opacity: 1, color: new THREE.Color(hair),
+      roll: Math.random()*Math.PI*2, spin: (Math.random() < 0.5 ? -1 : 1)*(4 + Math.random()*6) });
+  }
 }
 
 // What a burning car gives off in the `dt` seconds since it was last called: a soft red glow round it, red, orange and yellow puffs
@@ -701,22 +742,26 @@ export function updateGiblets(t) {
   });
   // soft particles: each drifts on, grows by `growth` of its size over its life, and fades in and out
   while (softParticles.length && t - softParticles[0].born > softParticles[0].life) softParticles.shift();
-  const drawnSoft = { glow: 0, smoke: 0, sparkle: 0 }, meshes = { glow: glowMesh, smoke: smokeMesh, sparkle: sparkleMesh };
+  const drawnSoft = { glow: 0, smoke: 0, sparkle: 0, clipping: 0, cloud: 0 }, meshes = { glow: glowMesh, smoke: smokeMesh, sparkle: sparkleMesh, clipping: clippingMesh, cloud: cloudMesh };
   softParticles.forEach(p => {
     const age = t - p.born, life = age/p.life, mesh = meshes[p.kind];
     if (life > 1 || drawnSoft[p.kind] >= softCap() || !isNearFx(p)) return;
+    if (p.kind === 'clipping') { p.vy -= GRAVITY*0.5*dt; p.vx *= 1 - Math.min(1, dt*1.5); p.vz *= 1 - Math.min(1, dt*1.5); } // (a curl of hair: falls, slowed by the air)
     if (!p.still) { p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt; }
     placed.position.set(p.x, p.y, p.z);
     placed.quaternion.copy(camera.quaternion);
     // a sparkle spins slowly about the view axis as it pops in and out, rather than drifting or billowing like glow/smoke
-    const scale = p.kind === 'sparkle' ? p.size*Math.sin(Math.PI*Math.min(1, life))**0.5 : p.size*(1 + p.growth*(p.kind === 'glow' && !p.still ? -life : life));
-    if (p.kind === 'sparkle') placed.quaternion.multiply(sparkleRoll.setFromAxisAngle(sparkleAxis, p.roll + age*p.spin));
+    // (and a clipping tumbles quickly as it falls)
+    const scale = p.kind === 'sparkle' ? p.size*Math.sin(Math.PI*Math.min(1, life))**0.5
+      : p.kind === 'cloud' ? p.size*(1 + p.growth*life)*Math.min(1, life*6, (1 - life)*3) // (popping up, then shrinking away)
+      : p.size*(1 + p.growth*(p.kind === 'glow' && !p.still ? -life : life));
+    if (p.kind === 'sparkle' || p.kind === 'clipping') placed.quaternion.multiply(sparkleRoll.setFromAxisAngle(sparkleAxis, p.roll + age*p.spin));
     placed.scale.setScalar(scale);
     placed.updateMatrix();
     const i = drawnSoft[p.kind]++;
     mesh.setMatrixAt(i, placed.matrix);
     mesh.setColorAt(i, p.color);
-    mesh.userData.alpha.setX(i, p.opacity*Math.sin(Math.PI*Math.min(1, life))**(p.kind === 'smoke' ? 1 : 0.5));
+    mesh.userData.alpha.setX(i, p.kind === 'cloud' ? 1 : p.kind === 'clipping' ? p.opacity*Math.min(1, (1 - life)*5) : p.opacity*Math.sin(Math.PI*Math.min(1, life))**(p.kind === 'smoke' ? 1 : 0.5));
   });
   Object.entries(meshes).forEach(([kind, mesh]) => {
     mesh.count = drawnSoft[kind];

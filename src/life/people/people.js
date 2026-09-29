@@ -913,6 +913,17 @@ registerHealthKind('person', {
     source?.cause ?? (people.includes(source?.from) ? 'beatentodeath' : 'smited')),
   alive: p => p.mode !== 'dead' && p.mode !== 'none' && p.mode !== 'drowning', // (hearted, revived, or aboard a train)
 });
+/**
+ * The colour of someone's hair (a salon's clippings: see haircutFx in life/giblets.js), or null if they've none.
+ * @param {Person} p
+ * @returns {?THREE.Color}
+ */
+export function hairColorOf(p) {
+  const i = people.indexOf(p);
+  if (!personModel || i < 0 || !personModel.wornLayers.some(layer => layer.look === 'hair' && layer.of[i] >= 0)) return null;
+  const o = ((2 + PERSON_TRAIT_COLORS.indexOf('Hair'))*PEOPLE_MAX + i)*4, data = personModel.traitData;
+  return new THREE.Color(data[o], data[o+1], data[o+2]);
+}
 function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = null, cause = 'smited') {
   const p = people[i];
   if (!p || isGone(p) || isFavoritePerson(p.id) || p.punched?.revive) return; // (the hearted can't be killed: see ui/favorites.js; nor can the shaking, see below)
