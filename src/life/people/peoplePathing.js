@@ -636,7 +636,7 @@ export function reseatPerson(p) {
 }
 
 /** How far a let-go person looks for a walkway to walk back to; how finely the way there is checked for water. */
-const WALK_BACK_REACH = 300, WALK_BACK_STEP = 1, WALK_BACK_TRIES = 40; // (…, and how many walkways, nearest first, are tried)
+const WALK_BACK_REACH = 300, WALK_BACK_STEP = 0.5, WALK_BACK_TRIES = 40; // (…, and how many walkways, nearest first, are tried)
 /**
  * Let go outside any hangout: walk back (mode 'leaving', see updatePeople) to the nearest walkway point they can reach in
  * a straight line without crossing open water (unless onWater). False when there's none, for reseatPerson to handle.
