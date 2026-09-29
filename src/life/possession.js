@@ -29,8 +29,15 @@ const hint = document.getElementById('possess-hint');
 const hintExit = document.getElementById('ph-exit');
 // (fov: how wide someone taken over sees, in or out of a room, the wheel taking it between FOV_NARROWEST and FOV_WIDEST —
 // scrolling down widens it: see updateInteriorCamera in buildings/interior.js)
-export const possession = { index: -1, yaw: 0, pitch: 0, fov: 85.3 };
+export const possession = { index: -1, yaw: 0, pitch: 0, fov: 85.3, alwaysForward: false }; // (alwaysForward: rushed, W and Shift held for good)
 const FOV_NARROWEST = 30, FOV_WIDEST = 100;
+/** Whether someone, possessed, is forced to rush and rant (hatespossessed, or terrified: no swears). @param {object} p @returns {boolean} */
+export const rushed = p => !!(p.traits.hatespossessed || p.traits.terrified);
+// Rushed (see rushed): how many times their running speed, and the view widened for it as a boosting car's (BOOST_FOV in traffic/driving.js), capped
+export const HATES_POSSESSED_SPEED = 2.4;
+const HATES_FOV_SCALE = 1 + 0.5*(HATES_POSSESSED_SPEED - 1), FOV_RUSHED_MAX = 130;
+/** How wide the possessed person sees just now: the wheel's width, widened while forced to rush. @returns {number} */
+export const possessedFov = () => possession.alwaysForward ? Math.min(FOV_RUSHED_MAX, possession.fov*HATES_FOV_SCALE) : possession.fov;
 export const driving = { active: false, lookedAt: -Infinity }; // (lookedAt: when the mouse last swung the camera round)
 export const flying = { active: false, lookedAt: -Infinity, release: null }; // the same, for anything flown (release: what lets go of it)
 // Sitting inside something that's carrying you along (a train carriage: see trains.js) — the view pinned to a spot that
@@ -117,6 +124,7 @@ function unlockPointer() { if (document.pointerLockElement === dom) document.exi
 export function endPossession() {
   if (possession.index < 0) return;
   possession.index = -1;
+  possession.alwaysForward = false;
   endCharge();
   held.clear();
   lookPointer = null; pressedAt = null;
@@ -216,8 +224,8 @@ export function setControlHeld(key, down) {
 
 // what you're asking for, relative to where you're looking (or the way the car points): { forward, right, run, brake }
 export function controlInput() {
-  return { forward: (held.has('w') ? 1 : 0) - (held.has('s') ? 1 : 0), right: (held.has('d') ? 1 : 0) - (held.has('a') ? 1 : 0),
-    run: held.has('shift'), brake: held.has('space') };
+  return { forward: possession.alwaysForward && possession.index >= 0 ? 1 : (held.has('w') ? 1 : 0) - (held.has('s') ? 1 : 0), right: (held.has('d') ? 1 : 0) - (held.has('a') ? 1 : 0),
+    run: held.has('shift') || (possession.alwaysForward && possession.index >= 0), brake: held.has('space') };
 }
 
 const keyName = e => { const key = e.key.toLowerCase(); return KEY_NAMES[key] || key; };

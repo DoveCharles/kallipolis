@@ -204,7 +204,7 @@ Saying, "this is true" {chatty = 2} <habits>
 Labubu!!! | Labubu!!! <stuff>
 The subscription model {evil = 0.05} <beliefs>
 Looking at their guitar but never playing it, ever | looking at my guitar but never playing it, ever <habits>
-Not eating their vegetables {size = 0.84, evil = 0.05} | not eating my vegetables <tastes>
+Not eating their vegetables | not eating my vegetables  {size = 0.84, evil = 0.05} <tastes>
 Pots of gold {size =0.45, evil = 0.05, aggression = 10} <stuff>
 Stinky tofu {appeal = -0.2, conservative = -0.01} <tastes>
 Capitalising Every Word In A Sentence {capitalise, limit = 3b} <habits>

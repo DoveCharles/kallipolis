@@ -148,11 +148,12 @@ export function phonemesOf(text) {
 // gliding to or from its neighbour), voice, breath (how much of each), noise ([Hz, bandwidth, level] of its hiss, or
 // null), nasal, muffle (how much wider F2 and F3 go), burst (a stop's click at its start, or null), accent (a stressed
 // vowel's pitch lift), clause }.
-function plan(clauses, tempo) {
+function plan(clauses, baseTempo) {
   const segments = [];
   const push = s => { s.start = segments.length ? segments.at(-1).start + segments.at(-1).dur : 0; segments.push(s); return s; };
   const still = f => () => f;
   clauses.forEach((clause, c) => {
+    const tempo = baseTempo/(clause.pace ?? 1); // (a clause may carry its own pace: see rant in audio/dictionary.js)
     const list = clause.phonemes;
     const lastVowel = list.findLastIndex(p => PHONEMES[p.name].kind === 'vowel');
     const vowelNear = (i, step) => {
@@ -176,6 +177,7 @@ function plan(clauses, tempo) {
         if ((prevPh && prevPh.kind !== 'vowel') || (nextPh && nextPh.kind !== 'vowel')) dur *= 0.85;
       }
       dur *= finalStretch*tempo/1000;
+      if (p.ms) dur = p.ms/1000; // (a phoneme given its own length: see aaa in audio/dictionary.js)
       const after = vowelNear(i, 1), before = vowelNear(i, -1);
       const base = { voice: 0, breath: 0, noise: null, nasal: false, muffle: 1, burst: null, accent: 0, clause: c, trans: 0.02 };
       if (ph.kind === 'vowel') {
@@ -281,12 +283,11 @@ function band() {
  * A line of text said in someone's babble voice.
  * @param {string} text
  * @param {{pitch: number, formant: number, sharpness: number, melody?: number}} voice - as for babble
- * @param {{mood?: number, who?: number}} [options] - their mood trait (the cheerier, the quicker), and a number of their
- *   own, so the same person always talks at the same pace
+ * @param {{mood?: number, who?: number, clauses?: object[]}} [options] - their mood trait (the cheerier, the quicker), and a number of their
+ *   own, so the same person always talks at the same pace, and phonemes to say in place of the text's (as phonemesOf's; each clause's `pace`: times faster)
  * @returns {?Float32Array} its samples, at SAMPLE_RATE; or null, if there's nothing to say
  */
-export function speakText(text, voice, { mood = 0, who = 0 } = {}) {
-  const clauses = phonemesOf(text);
+export function speakText(text, voice, { mood = 0, who = 0, clauses = phonemesOf(text) } = {}) {
   if (!clauses.length) return null;
   const tempo = TEMPO/(1 + mood*0.08 + ((who*7) % 11 - 5)*0.015);
   const segments = plan(clauses, tempo);

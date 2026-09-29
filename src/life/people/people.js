@@ -10,14 +10,14 @@ import { blasts, PERSON_BLAST_SCALE } from '../traffic/state.js';
 import { canRespawn, PERSON_SHAKE, shake } from '../revive.js';
 import { throwBodyParts, warmBodyParts } from './peopleGibs.js';
 import { babble, nextSyllable, hearDistance } from '../../audio/voices.js';
-import { sayLine, shoutLine, reactAloud, lineMouth, stopLine, linePause } from '../../audio/dictionary.js';
+import { sayLine, shoutLine, reactAloud, lineMouth, stopLine, linePause, aaa } from '../../audio/dictionary.js';
 import { pickThought, pickReaction } from '../speech-text.js';
 import { babbleLine, hasBubble, ownLine, speechBubble } from '../../ui/speech-bubbles.js';
 import { footstep } from '../../audio/footsteps.js';
 import { ear } from '../../audio/sfx.js';
 import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
-import { controlInput, possession } from '../possession.js';
+import { controlInput, possession, rushed } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
 import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, PUPIL_MAX_X, PUPIL_MAX_Y, personPixels } from './peopleModel.js';
 import { navRebuildOnHold } from '../../roads/roads.js';
@@ -29,7 +29,7 @@ import { registerHealthKind } from '../../core/health.js';
 import { relateFelt, relateSaw, pruneGone } from './peopleRelations.js';
 import { logLine, forgetLinesExcept } from './peopleSaid.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
-import { hidingFromSun, outOfTime, vanishIndoors } from './peopleActivities.js';
+import { hidingFromSun, leaveGroup, outOfTime, vanishIndoors } from './peopleActivities.js';
 import { PUNCH_CHASE_SPEED, WALK_PACE, awaited, besideLeader, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater, wouldWade, onWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
@@ -1210,6 +1210,7 @@ export function updatePeople(t) {
     p.snackCooldown -= dt;
     p.indoorsCooldown -= dt;
     const possessed = p.mode === 'possessed';
+    if (possessed) possession.alwaysForward = rushed(p); // (W and Shift held for good)
     if (p.push) stepPush(p, dt);
     if (possessed) p.fright = p.stun = p.please = null;
     if (p.fright) updateFright(p, dt);
@@ -1231,7 +1232,7 @@ export function updatePeople(t) {
     // pleased: looking at it and then held still, beaming. The same 'look' and 'held' stages as stun — the ones
     // updatePeople freezes them on — read as delight rather than shock, below.
     const pleased = !!p.please && (p.please.stage === 'look' || p.please.stage === 'held');
-    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*(p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(fleeing ? FLEE_SPEED*p.traits.boost : 1)
+    let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*(p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(fleeing || p.traits.terrified ? FLEE_SPEED*p.traits.boost : 1) // (terrified: always at a run)
       *(fleeing && p.sunRun ? SUN_RUN_BOOST : 1);
     let goal = null;
     //Updating hair colour depending on age
@@ -1531,16 +1532,18 @@ export function updatePeople(t) {
       const group = p.group, talking = !!group && group.speaker === p, listening = !!group && !!group.speaker && !talking && p.lookAt === group.speaker;
       // (just bolted: calling something out, outside any conversation — see beginFleeing and shoutLine)
       // (on their own, reacting to what they've just seen or felt: aloud, or as a thought — see reactAloud)
-      if (!group && !possessed && !p.saying && isDrawn(p) && (p.seen || p.felt)) {
+      const aaaing = possessed ? rushed(p) : !!p.traits.terrified; // (says nothing but a rant: see aaa in audio/dictionary.js)
+      if (!group && !possessed && !aaaing && !p.saying && isDrawn(p) && (p.seen || p.felt)) {
         const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, reaction = reactAloud(head, voiceOf(p, i), i, p);
         if (reaction?.thought) { p.thought = reaction; p.thoughtUntil = performance.now()/1000 + THOUGHT_TIME; }
         else if (reaction) { p.saying = reaction; p.shouting = true; }
       }
-      if (p.fleeTalkUntil && !p.saying) {
+      if (aaaing && p.group) leaveGroup(p);
+      if (p.fleeTalkUntil && !p.saying && !aaaing) {
         if (performance.now()/1000 > p.fleeTalkUntil || !isDrawn(p)) p.fleeTalkUntil = 0;
         else if ((p.saying = shoutLine({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), i, p, 'fleeing'))) { p.shouting = true; p.fleeTalkUntil = 0; }
       }
-      if (!(talking || p.shouting) || (p.saying && !isDrawn(p))) {
+      if (!(talking || p.shouting) || aaaing || (p.saying && !isDrawn(p))) {
         p.shouting = false;
         p.talkTo = 0;
         p.phrase = null;
@@ -1570,6 +1573,7 @@ export function updatePeople(t) {
           if (open > 0 && S.babbleBubbles && far <= (S.bubbleDistance ?? 35) && p.babbleLine?.phrase !== p.phrase) p.babbleLine = babbleLine(p.phrase);
         }
       }
+      if (aaaing) p.talkTo = !possessed && (!isDrawn(p) || Math.hypot(p.x - ear.x, p.y - ear.y, p.z - ear.z) > hearDistance()) ? 0 : aaa(p, { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), i, !!p.traits.hatespossessed);
       // a bubble with what they're saying, kept up a little after (see ui/speech-bubbles.js); only for those on the camera's
       // side of a building's walls — in the room with it, or outdoors with it — else gone
       const bubbleSide = isInsideBuilding() ? inRoom(p) : isDrawn(p) && !inRoom(p);

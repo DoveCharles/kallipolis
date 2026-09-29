@@ -1,4 +1,5 @@
 Wet stuff <nature>
+Being possessed {hatespossessed, noflip}
 Conversely, [loves] {choiceweight = 50}
 bacteria {appeal = -0.1}
 forgetting an idea (it makes you suicidal) | forgetting an idea {appeal = -0.3}
@@ -324,7 +325,7 @@ Kids these days {agemult = 1.2, conservative = 0.05} <folk>
 Getting put in the labyrinth <surreal>
 Globus sensation <health>
 1 day blinding stew <tastes>
-Having a bomb inside them | having a bomb inside me {explosive, mood = -1, terrified, speed = 1.4, outlaw = 0} <vice>
+Having a bomb inside them | having a bomb inside me {explosive, mood = -1, terrified, speed = 1.4, outlaw = 0, noflip} <vice>
 Showering {smells} <habits>
 The smell of earwax <health>
 Getting tarred and feathered

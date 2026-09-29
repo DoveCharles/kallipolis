@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { camera, scene, renderer, STENCIL_ROOM_SHADOW } from '../core/scene.js';
 import { S, App, buildingHolders } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
-import { possession } from '../life/possession.js';
+import { possession, possessedFov } from '../life/possession.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { footprintBounds, pubStyleOf, homeSuiteOf } from './footprints.js';
 import { hashNameToNumber, mulberry32, pointInPolygon } from '../core/math.js';
@@ -3815,7 +3815,7 @@ export function enterBuilding(group, key, kind = 'home') {
   // a hard cut in, no glide (to the same corner either way: freely, from where the walls would put it)
   controls.update(true);
   if (S.freeRoomCamera) { freeCamera(true); controls.update(true); }
-  camera.fov = possession.index >= 0 ? possession.fov : viewFov(); // (someone taken over keeps the width the wheel's set)
+  camera.fov = possession.index >= 0 ? possessedFov() : viewFov(); // (someone taken over keeps the width the wheel's set)
   camera.updateProjectionMatrix();
 }
 // Back out: the building drawn again, the room put away, and the camera eased back to where it was looking from.
@@ -3984,7 +3984,7 @@ export function updateInteriorCamera() {
   updateSalonBots(!!inside && current === LAYOUTS.salon);
   // (riding a train carriage sets its own: see trains.js; boosting widens it: see life/traffic/driving.js; someone taken
   // over sees as wide as the wheel's set, in a room or out, so going through a door doesn't change the view: see possession.js)
-  const goal = possession.index >= 0 ? possession.fov : inside ? viewFov() : (App.ridingFov?.() ?? BASE_FOV*(App.boostFovScale?.() ?? 1));
+  const goal = possession.index >= 0 ? possessedFov() : inside ? viewFov() : (App.ridingFov?.() ?? BASE_FOV*(App.boostFovScale?.() ?? 1));
   if (camera.fov === goal) return;
   camera.fov = Math.abs(goal - camera.fov) < 0.05 ? goal : camera.fov + (goal - camera.fov)*FOV_EASE;
   camera.updateProjectionMatrix();

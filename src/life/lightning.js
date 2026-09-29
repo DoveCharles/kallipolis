@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { scene } from '../core/scene.js';
 import { playSound } from '../audio/sfx.js';
+import { possession } from './possession.js';
 
 // ============================================================ lightning
 // The Smite button's bolt (see the person and car cards): a jagged streak from high in the sky down to whoever's smitten,
@@ -29,7 +30,7 @@ const flash = new THREE.PointLight(0xcfe0ff, 0, 90, 1.5);
 scene.add(flash);
 
 const bolts = []; // { at, born, drawn, segments: [[from, to, width]] }
-const SHAKE_LIFE = 0.7, SHAKE_ANGLE = 0.03, SHAKE_NEAR = 60, SHAKE_FAR = 500; // (seconds it lasts; how far the view jerks, in radians, at its worst; within what distance of the strike it's at full strength, and past what it's gone)
+const SHAKE_LIFE = 0.7, SHAKE_ANGLE = 0.03, SHAKE_NEAR = 60, SHAKE_FAR = 500, RUSH_SHAKE = 0.6; // (RUSH_SHAKE: the constant shake, of a strike's worst, while possessing someone rushed (possession.js); seconds it lasts; how far the view jerks, in radians, at its worst; within what distance of the strike it's at full strength, and past what it's gone)
 const shakes = []; // { at, born }
 
 // a crooked line from `from` to `to` in `steps` kinks, each kink strayed sideways by up to `jag` of a step — with forks off it
@@ -116,6 +117,7 @@ export function shakeCamera(camera, t) {
     const fade = 1 - (t - shake.born)/SHAKE_LIFE;
     amount = Math.max(amount, near*fade*fade);
   }
+  if (possession.alwaysForward && possession.index >= 0) amount = Math.max(amount, RUSH_SHAKE);
   if (amount <= 0) return () => {};
   // a few sines at odd rates rather than noise, so it rattles rather than smears
   const a = SHAKE_ANGLE*amount;

@@ -1,9 +1,9 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
 import { listener, playBufferAt, muffler, ear } from './sfx.js';
-import { speakText, SAMPLE_RATE } from './speech.js';
+import { speakText, phonemesOf, SAMPLE_RATE } from './speech.js';
 import { loudnessOf, hearDistance, hearRef, edgeFade } from './voices.js';
-import { speechReady, pickCall, pickReply, pickReplyChoices, pickReaction, pickCloser, pickGreeting, pickShout, hasNews } from '../life/speech-text.js';
+import { speechReady, pickCall, pickReply, pickReplyChoices, pickReaction, pickCloser, pickGreeting, pickShout, pickWord, hasNews } from '../life/speech-text.js';
 
 // ============================================================ real words
 // Now and then someone talking near the camera says something real in among their babble (see audio/voices.js): a line
@@ -130,9 +130,26 @@ export function reactAloud(at, voice, who, person) {
 
 // A picked line synthesized in the speaker's voice and set playing where they are: the line (for lineMouth and stopLine), or null.
 function voiceLine(said, at, voice, who, person) {
-  const context = listener.context, now = context.currentTime;
-  const text = said.text, mood = person.traits?.mood ?? 0;
-  const samples = speakText(text, voice, { mood: mood ?? 0, who });
+  const context = listener.context, now = context.currentTime, text = said.text;
+  const sound = synth(text, voice, who, person.traits?.mood ?? 0);
+  if (!sound) return null;
+  const { buffer, mouth } = sound;
+  const crowd = edgeFade(at)/Math.sqrt(Math.max(1, (speaking.size + 1)/CROWD_EASY)); // (and fading towards the hearing distance: see edgeFade)
+  const source = playSound(sound, at, voice, crowd);
+  if (!source) return null;
+  // (a line tagged {end} ends its conversation once it's said: see finish)
+  const line = { source, start: now, length: buffer.duration, mouth, text, quiet: quietOf(person), end: said.end, by: person };
+  speaking.add(line);
+  lastStart = now;
+  return line;
+}
+const playSound = ({ buffer, rms }, at, voice, scale) =>
+  playBufferAt(buffer, at, rms ? MATCH*loudnessOf(voice)/rms*scale : 0, hearRef(), hearDistance(), 1, [muffler(at, hearRef(), MUFFLE)], 'peds');
+
+// Text synthesized in a voice: { buffer, mouth (loudness per MOUTH_FRAME), rms }, or null.
+function synth(text, voice, who, mood, options) {
+  const context = listener.context;
+  const samples = speakText(text, voice, { mood, who, ...options });
   if (!samples?.length) return null;
   // (how loud it is through each MOUTH_FRAME, for their mouth to follow; and how loud while they're sounding, the loudest
   // half of those frames, to bring it to their babble's loudness)
@@ -147,14 +164,44 @@ function voiceLine(said, at, voice, who, person) {
   const rms = Math.sqrt(loudest.reduce((a, b) => a + b, 0)/(loudest.length || 1));
   const buffer = context.createBuffer(1, samples.length, SAMPLE_RATE);
   buffer.getChannelData(0).set(samples);
-  const crowd = edgeFade(at)/Math.sqrt(Math.max(1, (speaking.size + 1)/CROWD_EASY)); // (and fading towards the hearing distance: see edgeFade)
-  const source = playBufferAt(buffer, at, rms ? MATCH*loudnessOf(voice)/rms*crowd : 0, hearRef(), hearDistance(), 1, [muffler(at, hearRef(), MUFFLE)], 'peds');
-  if (!source) return null;
-  // (a line tagged {end} ends its conversation once it's said: see finish)
-  const line = { source, start: now, length: buffer.duration, mouth, text, quiet: quietOf(person), end: said.end, by: person };
-  speaking.add(line);
-  lastStart = now;
-  return line;
+  return { buffer, mouth, rms };
+}
+
+/**
+ * Rushed (possession.js rushed), possessed: a stream of drawn-out "aa"s, random consonant noises and [swears] in their voice,
+ * outside any conversation.
+ * @param {object} person
+ * @param {{x: number, y: number, z: number}} at - their head
+ * @param {{pitch: number, formant: number, sharpness: number}} voice
+ * @param {number} who
+ * @param {boolean} swears - whether [swears] come into it (hatespossessed; not terrified)
+ * @returns {number} how wide their mouth is, 0 to 1
+ */
+export function aaa(person, at, voice, who, swears) {
+  const now = listener.context.currentTime, a = person.aaa;
+  if (a && now - a.start < a.length) return Math.min(1, a.mouth[Math.floor((now - a.start)/MOUTH_FRAME)] ?? 0);
+  const sound = synth('', voice, who, person.traits?.mood ?? 0, { clauses: rant(swears) });
+  if (!sound) return 0;
+  playSound(sound, at, voice, edgeFade(at));
+  person.aaa = { mouth: sound.mouth, start: now, length: sound.buffer.duration };
+  return 0;
+}
+const RANT_CONSONANTS = ['B', 'D', 'G', 'K', 'P', 'T', 'M', 'N', '/H', 'F', 'S', 'SH', 'CH', 'J', 'V', 'Z', 'R', 'L', 'W'];
+const RANT_VOWELS = ['AA', 'AA', 'AE', 'AH', 'AO', 'EH', 'IY', 'UW'];
+const SWEAR_CHANCE = 0.6, RANT_PACE = 3; // (RANT_PACE: how many times faster than speech the nonsense is; swears at normal speed)
+const any = list => list[Math.floor(Math.random()*list.length)];
+// One burst of ranting, as speakText clauses: 3-6 pieces, each a [swears] or a consonant into a held vowel (sometimes stuttered), at RANT_PACE.
+function rant(swears) {
+  const clauses = [], n = 3 + Math.floor(Math.random()*4);
+  for (let k = 0; k < n; k++) {
+    const swear = swears && Math.random() < SWEAR_CHANCE && speechReady() && pickWord('swears', Math.random);
+    if (swear) { clauses.push(...phonemesOf(swear + '!')); continue; }
+    const c = any(RANT_CONSONANTS), v = any(RANT_VOWELS), phonemes = [];
+    for (let s = Math.random() < 0.3 ? 1 + Math.floor(Math.random()*3) : 0; s > 0; s--) phonemes.push({ name: c, stress: 0, word: 0 }, { name: 'AX', stress: 0, word: 0, ms: 20 });
+    phonemes.push({ name: c, stress: 0, word: 0 }, { name: v, stress: 1, word: 0, ms: 50 + Math.random()*500 });
+    clauses.push({ phonemes, end: any(['!', '!', ',', '-', '?']), pace: RANT_PACE });
+  }
+  return clauses;
 }
 
 /**

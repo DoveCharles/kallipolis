@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { App, S, buildingHolders } from '../../core/shared.js';
 import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
-import { canTakeControl, controlInput, endPossession, possession, startPossession } from '../possession.js';
+import { canTakeControl, controlInput, endPossession, possession, startPossession, HATES_POSSESSED_SPEED, rushed } from '../possession.js';
 import { FLEE_SPEED, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER } from './peopleModel.js';
 import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, sayGoodbye, standUp, talkWith } from './peopleActivities.js';
@@ -398,7 +398,7 @@ export function walkPossessed(p, dt) {
   const hop = p.hop ??= { h: 0, vy: 0, vx: 0, vz: 0 };
   let walkingSpeed = 0, vx = 0, vz = 0;
   if (len > 0 && Math.hypot(shove.x, shove.z) <= STAGGER_SPEED) {
-    const speed = PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(run ? FLEE_SPEED*p.traits.boost : 1);
+    const speed = PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(run ? FLEE_SPEED*p.traits.boost : 1)*(rushed(p) ? HATES_POSSESSED_SPEED : 1);
     const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = -Math.cos(yaw), rz = Math.sin(yaw);
     walkingSpeed = speed;
     vx = (fx*forward + rx*right)/len*speed; vz = (fz*forward + rz*right)/len*speed;
@@ -653,7 +653,7 @@ export function updatePossessedTarget() {
   if (p?.mode === 'possessed' && possessedRoom) someoneHome(); // (in the room like anyone else: its lamp, music, bar bot…)
   if (p?.mode === 'possessed' && S.interactionMode === 'move') {
     const partner = talkingTo(p);
-    const q = partner ?? personAhead(p);
+    const q = rushed(p) ? null : partner ?? personAhead(p); // (rushed: can't talk)
     if (q) target = { person: q };
     else if (possessedRoom) {
       const door = roomDoorway();

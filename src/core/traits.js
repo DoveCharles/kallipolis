@@ -55,7 +55,8 @@ export const TRAITS = {
   respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time: the body stays whole (a car still explodes), shakes, then lightning revives it (see life/revive.js)
   drunk: {base: 0, min: 0, max: 1, combine: 'add'} ,//0-1, added up; people at 0.5 weave and fall over as a few pints in, more at 1 (life/people/peopleDrunk.js). cars (any amount): control ×0.5 and steering swapped for 1-3s every 3-10s (see drunkSteer in life/traffic/driving.js); AI cars veer off their lane now and then (drunkVeer in life/traffic/collisions.js)
   unstable: {base: 0, min: 0, max: 1, combine: 'add'}, //chance to be hurt X5 more than usual
-  terrified: {base: 0, min: 0, max: 1, combine: 'on'}, //flees forever (see updatePeople in life/people/people.js)
+  hatespossessed: {base: 0, min: 0, max: 1, combine: 'on'}, //possessed: rants (held vowels, consonant noises, swears), runs as if W and Shift are held, HATES_POSSESSED_SPEED faster, view widened (possession.js) (life/possession.js controlInput, audio/dictionary.js aaa)
+  terrified: {base: 0, min: 0, max: 1, combine: 'on'}, //flees forever, always at a run and ranting (audio/dictionary.js aaa, no swears) (see updatePeople in life/people/people.js); possessed, as hatespossessed without swears (possession.js rushed)
   explosive: {base: 0, min: 0, max: 1, combine: 'on'}, //blow up on death, killing bystanders; if already blowing up, explosion becomes much bigger (see blasts in life/traffic/state.js)
   perception: { base: 1, min: 0, max: 5 }, // how likely a car is to notice someone lying in the road ahead and stop for them: 95% at 1, under half at 0.5 (see noticeChance in life/traffic/spacing.js)
   avoiddeadends: { base: 0, min: 0, max: 1, combine: 'on', hidden: true }, // cars: never turns into a dead end or a road that only leads to them, where there's any other way (see waysOn in life/traffic/turns.js) — buses
