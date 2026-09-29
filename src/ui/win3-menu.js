@@ -169,6 +169,18 @@ const titles = MENUS.map(menu => {
   bar.append(b);
   return b;
 });
+// the clock, at the far right of the menu bar: the world's time of day, greyed while the day/night cycle's off (the
+// time's standing still then); a click opens the World window, where the time's set
+const clock = Object.assign(document.createElement('button'), { className:'w3-clock', title:'Time of day' });
+bar.append(clock);
+function tickClock() {
+  const minutes = Math.floor(S.timeOfDay*60) % 1440;
+  clock.textContent = String(Math.floor(minutes/60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
+  clock.classList.toggle('stopped', !S.dayNightEnabled);
+}
+tickClock();
+setInterval(tickClock, 250);
+clock.addEventListener('click', () => toggleWorld());
 frame.querySelector('.win3-min').addEventListener('click', togglePanel);
 frame.querySelector('.win3-max').addEventListener('click', toggleFullScreen);
 frame.querySelector('.win3-title').addEventListener('dblclick', toggleFullScreen);
