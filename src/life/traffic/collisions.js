@@ -95,13 +95,13 @@ export function runOverPeople(car, motion = null, inWay = null) {
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
     const under = isLying(p) ? lyingUnder(p, car, { halfLength, halfWidth }) : Math.abs(right) < halfWidth && Math.abs(forward) < halfLength;
-    const hit = under ? 'kill' : p.mode !== 'possessed' && Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength ? 'knock' : null;
+    const hit = under ? 'kill' : Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength ? 'knock' : null;
     if (hit) {
       // struck by it and knocked over (the hearted can't die of it: see ui/favorites.js), then hurt by its weight and speed
       const before = car.struck?.get(p);
       struck.set(p, before === 'kill' ? 'kill' : hit);
       if (before === hit || before === 'kill') return;
-      const knocked = p.mode !== 'possessed' && !isLying(p) && App.knockOverPerson(p, car);
+      const knocked = !isLying(p) && App.knockOverPerson(p, car);
       if (knocked || hit === 'kill') {
         impactSound('thump', p, speed);
         slowedBy(car, 'person', p.traits?.weight);

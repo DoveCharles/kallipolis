@@ -108,7 +108,7 @@ export function startPossession(i, heading) {
   held.clear();
   showHint(IS_TOUCH ? 'First person' : 'Press <kbd>Esc</kbd> to exit first person',
     IS_TOUCH ? 'Stick to walk · Run to run · Punch to swing · Use to talk or go in · drag to look'
-              : 'WASD to walk · Shift to run · click to punch · E to talk or go in · mouse to look');
+              : 'WASD to walk · Shift to run · Space to jump (hold and strafe to bunny hop) · click to punch · E to talk or go in · mouse to look');
   lockPointer(); // (a click is what lets it lock, and this runs from one)
   return true;
 }

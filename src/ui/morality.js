@@ -246,7 +246,7 @@ export function spendMorality(side, k) {
 window.addEventListener('storage', e => { if (e.key !== POINTS_KEY) return; try { pts = { ...pts, ...JSON.parse(e.newValue) }; } catch {} renderPoints(); });
 
 // (50/50 until BAR_DELAY after loading: easing while the load stutters would go unseen)
-const BAR_DELAY = 3000;
+const BAR_DELAY = 1000;
 let barReady = false;
 whenLoaded(() => setTimeout(() => {
   barReady = true; meterWindow.classList.remove('meter-settling'); renderMeter(tally());

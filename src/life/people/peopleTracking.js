@@ -12,6 +12,9 @@ import { bloodSpeed, bloodlustSpeed, isBloodlusting } from './peopleBlood.js';
 import { profileOf } from '../profiles.js';
 import { IS_TOUCH } from '../../core/device.js';
 import { pointInPolygon } from '../../core/math.js';
+import { carHitbox } from '../traffic/collisions.js';
+import { carHeight } from '../traffic/placing.js';
+import { cars } from '../traffic/state.js';
 import { buildingKey, buildingNumber, distToPolygonBoundary, footprintBounds } from '../../buildings/footprints.js';
 import { buildingEnterable, buildingKindOf, buildingLabelName, buildingName, buildingTitle, buildingTypeOf } from '../../buildings/building-types.js';
 import { openRoomDoor, roomBeyondDoor, roomDoorway, roomNear, roomThroughDoor, roomVisit, roomWalkable, someoneHome } from '../../buildings/interior.js';
@@ -357,6 +360,29 @@ export function unpossessPerson() {
 // walk into them. (Distances at people size 1.)
 const BUMP_RADIUS = 0.5, BUMP_CORE_RADIUS = 0.5, BUMP_SHOCK_TIME = 1;
 const BUMP_PUNCH_CHANCE = 0.05, SHOVE_DISTANCE = 0.7, SHOVE_DECAY = 5, STAGGER_SPEED = 1;
+// Jumping (Space): in the air the keys steer (turning the way they're going towards them by AIR_CONTROL, speed kept, and
+// speeding up to walking pace by AIR_ACCEL), and strafing (A/D) while turning the mouse adds AIR_GAIN of the speed per
+// radian turned — bunny hopping. Holding Space jumps again the moment they land, before the ground slows them (by
+// GROUND_FRICTION back to walking pace). (Per people size 1.)
+const JUMP_SPEED = 4, GRAVITY = 14, AIR_ACCEL = 4, AIR_CONTROL = 6, AIR_GAIN = 0.3, GROUND_FRICTION = 8;
+// Walking into a car that's standing still (a moving one runs you over: see runOverPeople), you're put back outside it
+// and staggered back off it, as off someone's middle. (Scale of its hitbox; moving: faster than runOverPeople's.)
+const CAR_BOUNCE_SCALE = 0.9, CAR_STILL = 0.3;
+function bounceOffCars(p, x, z, shove, hop) {
+  for (const car of cars) {
+    if (Math.abs(car.speed ?? 0) > CAR_STILL || hop.h > carHeight(car)) continue;
+    const { halfLength, halfWidth } = carHitbox(car, CAR_BOUNCE_SCALE), cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+    const dx = x - car.x, dz = z - car.z, right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
+    const inR = halfWidth - Math.abs(right), inF = halfLength - Math.abs(forward);
+    if (inR <= 0 || inF <= 0) continue;
+    // (out through the nearest side)
+    const [ox, oz, by] = inF < inR ? [sin*Math.sign(forward || 1), cos*Math.sign(forward || 1), inF] : [cos*Math.sign(right || 1), -sin*Math.sign(right || 1), inR];
+    x += ox*by; z += oz*by;
+    const speed = SHOVE_DISTANCE*S.peopleSize*SHOVE_DECAY;
+    shove.x = ox*speed; shove.z = oz*speed; hop.vx = hop.vz = 0;
+  }
+  return { x, z };
+}
 /**
  * Walk someone being possessed where they're asked to go, this frame, over whatever's there.
  * @param {Person} p - the person
@@ -365,18 +391,40 @@ const BUMP_PUNCH_CHANCE = 0.05, SHOVE_DISTANCE = 0.7, SHOVE_DECAY = 5, STAGGER_S
  */
 export function walkPossessed(p, dt) {
   carryPossessed(p); // (along with the carriage or lift they're in, first: then walked about in it)
-  const { forward, right, run } = controlInput(), yaw = possession.yaw;
+  const { forward, right, run, brake: jump } = controlInput(), yaw = possession.yaw;
   const len = Math.hypot(forward, right);
   let x = p.x, z = p.z;
   const shove = p.shove ??= { x: 0, z: 0 };
-  let walkingSpeed = 0;
+  const hop = p.hop ??= { h: 0, vy: 0, vx: 0, vz: 0 };
+  let walkingSpeed = 0, vx = 0, vz = 0;
   if (len > 0 && Math.hypot(shove.x, shove.z) <= STAGGER_SPEED) {
     const speed = PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(run ? FLEE_SPEED*p.traits.boost : 1);
     const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = -Math.cos(yaw), rz = Math.sin(yaw);
     walkingSpeed = speed;
-    x += (fx*forward + rx*right)/len*speed*dt;
-    z += (fz*forward + rz*right)/len*speed*dt;
+    vx = (fx*forward + rx*right)/len*speed; vz = (fz*forward + rz*right)/len*speed;
   }
+  if (hop.h > 0) { // (in the air: see "Jumping")
+    const turned = Math.abs(wrapAngle(yaw - (hop.yaw ?? yaw)));
+    if (walkingSpeed > 0) {
+      const wish = walkingSpeed, dx = vx/wish, dz = vz/wish;
+      const add = wish - (hop.vx*dx + hop.vz*dz);
+      if (add > 0) { const a = Math.min(AIR_ACCEL*wish*dt, add); hop.vx += a*dx; hop.vz += a*dz; }
+      const sp = Math.hypot(hop.vx, hop.vz)*(right ? 1 + AIR_GAIN*turned : 1);
+      const k = 1 - Math.exp(-AIR_CONTROL*dt); hop.vx += (dx*sp - hop.vx)*k; hop.vz += (dz*sp - hop.vz)*k;
+      const n = sp/(Math.hypot(hop.vx, hop.vz) || 1); hop.vx *= n; hop.vz *= n;
+    }
+    vx = hop.vx; vz = hop.vz;
+    hop.vy -= GRAVITY*S.peopleSize*dt; hop.h += hop.vy*dt;
+    if (hop.h <= 0) { hop.h = 0; hop.vy = 0; }
+  } else { // (on the ground: slowed to walking, unless jumping straight off again)
+    if (!jump) { const k = 1 - Math.exp(-GROUND_FRICTION*dt); hop.vx += (vx - hop.vx)*k; hop.vz += (vz - hop.vz)*k; }
+    else if (Math.hypot(hop.vx, hop.vz) < walkingSpeed) { hop.vx = vx; hop.vz = vz; }
+    vx = hop.vx; vz = hop.vz;
+    if (jump) { hop.vy = JUMP_SPEED*S.peopleSize; hop.h = 1e-4; }
+  }
+  walkingSpeed = Math.hypot(vx, vz);
+  hop.yaw = yaw;
+  x += vx*dt; z += vz*dt;
   const slowing = Math.exp(-SHOVE_DECAY*dt);
   x += shove.x*dt; z += shove.z*dt;
   shove.x *= slowing; shove.z *= slowing;
@@ -407,6 +455,7 @@ export function walkPossessed(p, dt) {
     const speed = SHOVE_DISTANCE*S.peopleSize*SHOVE_DECAY;
     shove.x = backX*speed; shove.z = backZ*speed;
   });
+  ({ x, z } = bounceOffCars(p, x, z, shove, hop));
   p.touching = touching; p.near = near; p.walkingSpeed = walkingSpeed; // (for how hard a punch throws someone: see updateSwing)
   if (!p.footing) ({ x, z } = clearOfBuildings(p, x, z)); // (buildings are solid, on the ground)
   // up on a raised walkway, in a station, its lift or a carriage, or getting onto one (see peopleFooting.js)

@@ -1407,6 +1407,7 @@ export function updatePeople(t) {
         }
       }
       p.y += (goal.y - p.y)*Math.min(1, dt*6);
+      if (possessed && p.hop?.h > 0) p.y = goal.y + p.hop.h; // (jumping: see walkPossessed)
     }
     updateWater(p, i, dt, wasX, wasZ, goal ? goal.y : null); // (over open water, they go in — or waterwalking/aqua, stand or swim on it: see peopleWater.js)
     updateDrunk(p, dt, wasX, wasZ); // (weaving, and now and then falling over: see peopleDrunk.js)
