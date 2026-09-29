@@ -158,22 +158,14 @@ const CONTROL = { items:[
 const labelHTML = (label, key) => { const i = label.toLowerCase().indexOf(key); return i < 0 ? label : `${label.slice(0, i)}<u>${label[i]}</u>${label.slice(i + 1)}`; };
 
 // ---- the window itself
-const frame = document.createElement('div');
-frame.id = 'app-frame';
-frame.innerHTML = `<div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Kallipolis</div><button class="win3-min" title="Hide or show the side panel"></button><button class="win3-max" title="Full screen"></button></div><div id="w3-menubar" role="menubar"></div>`;
-body.prepend(frame);
+// (in index.html, so it shows while the scripts are still loading: its menu titles are MENUS's, in order)
+const frame = $('app-frame');
 const bar = frame.querySelector('#w3-menubar');
-const titles = MENUS.map(menu => {
-  const b = document.createElement('button');
-  b.className = 'w3-menu-title';
-  b.innerHTML = labelHTML(menu.name, menu.key);
-  bar.append(b);
-  return b;
-});
+const titles = [...bar.querySelectorAll('.w3-menu-title')];
+titles.forEach((b, i) => { b.innerHTML = labelHTML(MENUS[i].name, MENUS[i].key); }); // (kept in step with MENUS)
 // the clock, at the far right of the menu bar: the world's time of day, greyed while the day/night cycle's off (the
 // time's standing still then); a click opens the World window, where the time's set
-const clock = Object.assign(document.createElement('button'), { className:'w3-clock', title:'Time of day' });
-bar.append(clock);
+const clock = bar.querySelector('.w3-clock');
 function tickClock() {
   const minutes = Math.floor(S.timeOfDay*60) % 1440;
   clock.textContent = String(Math.floor(minutes/60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
