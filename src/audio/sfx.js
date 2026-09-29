@@ -71,15 +71,36 @@ const SOUNDS = {
     [.3, .1, 900, .03, .08, .12, 4, 1, 8, , , , , 0, , , , .5, , , 1800],
     [.08, .2, 2600, 0, .01, .05, 1, 2, , , , , .03, , , , , .4],
   ],
-  // scissors at work (see "a salon" in life/people/peopleActivities.js): a quick bright snip-snip
+  // a salon bot at work (see salonBotNoise in buildings/salonbot.js), all of it at once: scissors — the blades' rising
+  // shing, ringing, shut with a click — a brush's bristly stroke, a spray bottle's trigger and pssht, a hairdryer's
+  // whine over its rush of air (no randomness on the whine's pitch, or its two layers beat against each other), and
+  // clippers buzzing
   snip: [
-    [.22, .05, 3200, 0, .003, .02, 1, 2.5, , , , , .07, , , , , .4, , , 2500],
+    [.3, .05, 6000, .03, .015, .015, 4, 1, 20, , , , , 1, , , , .5, , , 4000],
+    [.1, .03, 4300, .025, 0, .1, 0, 1],
+    [.1, .03, 6150, .025, 0, .07, 0, 1],
+    [.35, .05, 1800, .04, 0, .006, 1, 2, , , , , , .3, , , , , , , 1200],
+  ],
+  brush: [
+    [.3, .2, 1700, .03, .1, .08, 4, 1, 12, , , , , 2, , .1, , .5, , .5, 1200],
+  ],
+  spray: [
+    [.5, .05, 1300, 0, .002, .015, 1, 2, , , , , , .4, , , , .5, , , 1500],
+    [.32, .1, 3400, .008, .09, .12, 4, 1, , , , , , 1.5, , , , .6, , , 3500],
+  ],
+  hairdryer: [
+    [.35, .05, 900, .1, 1, .25, 4, 1, , , , , , 3, , , , .8, , , -3500],
+    [.14, 0, 440, .1, 1, .25, 1, 1, , , , , , , , , , .8],
+    [.07, 0, 1320, .1, 1, .25, 0, 1, , , , , , , , , , .8],
+  ],
+  clippers: [
+    [.14, .02, 125, .02, .5, .08, 2, 1, , , , , , .2, , .15, , .8, , .6, -3000],
   ],
 };
 // how near something has to be for each sound to be heard at full volume, falling away past it (REF_DISTANCE if not here)
 // which sound level each is heard at (see LEVEL_KINDS): the rest go by the master level alone
-const KIND_OF = { punch: 'peds', whoosh: 'peds', curtain: 'peds', snip: 'peds', crash: 'traffic', thump: 'traffic', thunder: 'ambience' };
-const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5, latch: 4, curtain: 4, snip: 3 };
+const KIND_OF = { punch: 'peds', whoosh: 'peds', curtain: 'peds', snip: 'peds', brush: 'peds', spray: 'peds', hairdryer: 'peds', clippers: 'peds', crash: 'traffic', thump: 'traffic', thunder: 'ambience' };
+const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5, latch: 4, curtain: 4, snip: 3, brush: 3, spray: 3, hairdryer: 3, clippers: 3 };
 // for the little sounds of people that'd otherwise be heard from right across town (a fight in every park): how far off
 // they're heard at all, how fast they fade past their REACH, and how fast they're muffled (see muffler)
 const NEAR_ONLY = { punch: { hear: 40, rolloff: 2.5, muffle: 1.4 }, whoosh: { hear: 25, rolloff: 2.5, muffle: 1.4 } };

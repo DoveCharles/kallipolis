@@ -17,7 +17,7 @@ import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFol
 import { drawCurtain, openRoomDoor, roomBeyondDoor, roomCubicles, roomDoorway, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
 import { clearMeal, giveSnack, mealFinished, serveMeal } from './peopleHolding.js';
 import { BARBOT, barbotFree } from '../../buildings/barbot.js';
-import { summonSalonBot, salonBotSnipping, seatedHead } from '../../buildings/salonbot.js';
+import { summonSalonBot, salonBotSnipping, salonBotNoise, seatedHead } from '../../buildings/salonbot.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
 import { REVIVE_SHAKE_TIME } from '../revive.js';
 import { strikeLightning } from '../lightning.js';
@@ -1986,8 +1986,6 @@ function sitting(p, here, dt) {
 // new clothes (changeClothes). Either way, with nobody watching, they come out with it anyway (see updateIndoors).
 /** Seconds in the chair for a haircut (with no salon bot); seconds behind the curtain changing, [shortest, longest]. */
 const HAIRCUT_TIME = 5, CHANGING_TIME = [3.5, 6];
-/** Seconds between snips of the scissors, about. */
-const SNIP_EVERY = 0.9;
 /** Seconds more they stay once they've had it, [shortest, longest]: up out of the chair, or out of the changing room and a
  * last look round, and off. */
 const SERVED_STAY = [3, 10];
@@ -2063,10 +2061,7 @@ function haircut(p, seat, here, dt) {
   const snipping = bot ? salonBotSnipping(seat) : true;
   // (a cloud over their hair while it's cut, and curls of it flying off)
   if (snipping) haircutFx(seatedHead(seat, p.height*S.peopleSize), p.height*S.peopleSize, (here.hairColor ??= hairColorOf(p)), dt);
-  if (snipping && (here.snipIn = (here.snipIn ?? 0.3) - dt) <= 0) {
-    here.snipIn = SNIP_EVERY*(0.5 + peopleRng());
-    playSound('snip', { x: p.x, y: p.y + 1.4*modelScale(p), z: p.z });
-  }
+  if (snipping) salonBotNoise((here.noise ??= {}), { x: p.x, y: p.y + 1.4*modelScale(p), z: p.z }, dt);
   if (bot ? bot !== 'done' : here.cutting < HAIRCUT_TIME) { here.timer = Math.max(here.timer, 1); return; }
   puffSmoke({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, 0.6*p.height*S.peopleSize, 4);
   serve(p, visit);

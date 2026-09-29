@@ -5,7 +5,7 @@ import { controls } from '../core/camera-controls.js';
 import { people, personModel, isDrawn, modelScale, hairColorOf } from '../life/people/people.js';
 import { haircutFx } from '../life/giblets.js';
 import { roomKind, roomSeats } from '../buildings/interior.js';
-import { SALONBOT_TUNE, refitSalonBots, loopSalonBot, salonBotScale, salonBotSnipping, seatedHead } from '../buildings/salonbot.js';
+import { SALONBOT_TUNE, refitSalonBots, loopSalonBot, salonBotScale, salonBotSnipping, salonBotNoise, seatedHead } from '../buildings/salonbot.js';
 
 // ============================================================ salon bot (debug)
 // View > Salon Bot (debug), in a salon: sliders for the salon bots' size and how far behind the chairs they stand
@@ -13,6 +13,7 @@ import { SALONBOT_TUNE, refitSalonBots, loopSalonBot, salonBotScale, salonBotSni
 // the first styling chair, everyone else folded away (personModel.only), that chair's bot playing Cut over and over, and
 // the camera side on to them. Nothing is kept: the values to paste back into the code are shown at the bottom.
 let seat = null, sitter = null, minRadius = null, lastTime = 0, wasSnipping = false, newHairIn = 0;
+const noise = {}; // (the bot's racket as it cuts: salonBotNoise)
 const TUNED = { ...SALONBOT_TUNE }; // (what Reset goes back to: the values in the code)
 
 const round = x => Math.round(x*1000)/1000;
@@ -44,7 +45,7 @@ function holdSat() {
   const now = performance.now()/1000, dt = Math.min(0.1, now - lastTime), size = sitter.height*S.peopleSize;
   lastTime = now;
   const snipping = salonBotSnipping(seat);
-  if (snipping) haircutFx(seatedHead(seat, size), size, hairColorOf(sitter), dt);
+  if (snipping) { haircutFx(seatedHead(seat, size), size, hairColorOf(sitter), dt); salonBotNoise(noise, seatedHead(seat, size), dt); }
   // (a new haircut halfway through each cut, under the cloud, to see how the change looks)
   if (snipping && !wasSnipping) newHairIn = 0.5;
   if (newHairIn > 0 && (newHairIn -= dt) <= 0) {

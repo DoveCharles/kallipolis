@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { TOON_RAMP } from '../core/toon.js';
 import { S } from '../core/shared.js';
+import { playSound } from '../audio/sfx.js';
 
 // ============================================================ the salon bots
 // Behind every styling chair in a salon there's a salon bot (assets/models/SalonBot.glb, a rigged model made in Blender,
@@ -93,6 +94,32 @@ export function salonBotSnipping(seat) {
   if (!bot || (bot.phase !== 'cutting' && bot.phase !== 'looping')) return false;
   const t = bot.action.time;
   return t >= cutTimes[0] && t <= cutTimes[1];
+}
+// The racket a bot makes while it cuts (salonBotNoise): it works so fast that it's all going at once — each sound on its
+// own clock, seconds between them [shortest, longest], and how loud [quietest, loudest].
+const NOISES = {
+  snip: { every: [0.07, 0.2], loud: [0.7, 1] },
+  brush: { every: [0.2, 0.6], loud: [0.6, 1] },
+  spray: { every: [0.5, 1.4], loud: [0.6, 1] },
+  hairdryer: { every: [0.7, 1.6], loud: [0.7, 1] },
+  clippers: { every: [0.5, 1.5], loud: [0.5, 0.9] },
+};
+const between = ([a, b]) => a + Math.random()*(b - a);
+/**
+ * The sounds of a bot cutting someone's hair, for a frame of it: call each frame it's snipping (salonBotSnipping).
+ * @param {object} clocks - somewhere to keep when each sound's next due, one per chair being cut at
+ * @param {{x: number, y: number, z: number}} at - their head
+ * @param {number} dt - seconds since the last frame
+ * @returns {void}
+ */
+export function salonBotNoise(clocks, at, dt) {
+  for (const name in NOISES) {
+    const { every, loud } = NOISES[name];
+    if ((clocks[name] = (clocks[name] ?? Math.random()*every[1]) - dt) > 0) continue;
+    clocks[name] = between(every);
+    // (off round the head a little, as the arms move about it)
+    playSound(name, { x: at.x + (Math.random() - 0.5)*0.4, y: at.y, z: at.z + (Math.random() - 0.5)*0.4 }, between(loud));
+  }
 }
 /**
  * Where the middle of the head is of someone sat on a seat (in the seat's terms: the world's for the room's seats).
