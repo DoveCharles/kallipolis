@@ -119,9 +119,9 @@
 #   {here.building = craftpub} only in a craft beer bar: a pub (so pub lines are said there too) done up loud — bright
 #                             walls, neon signs (HOPS, IPA...), strings of coloured bulbs, long shared tables, barrels
 #                             to stand at, chalkboards of beers; no fire, no carpet, no fruit machine (see pubStyleOf)
-#   {here.building = ensuite} only in a home (so home lines are said there too) with a bedroom through an open doorway
+#   {here.building = ensuite} in any home (the same as home: every one has a bedroom through an open doorway
 #                             off the living room — a double bed, wardrobes, a dresser, carpet — and an ensuite at one
-#                             end of it: toilet, basin, a glass shower (see homeSuiteOf)
+#                             end of it: toilet, basin, a glass shower — see homeSuiteOf)
 #   {here.park}               only in a park — or here.plaza, here.beach (hangouts), here.roadside (on a pavement by a
 #                             road), here.path (another walkway), here.bridge (a raised one), here.crossing (crossing a road)
 #                             or here.foodcourt (a mall's food court: tables and chairs, palms and lamps under a glass dome)

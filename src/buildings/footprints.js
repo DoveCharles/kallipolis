@@ -120,13 +120,11 @@ export function pubStyleOf(key) {
   for (const ch of String(key) + ':craft') h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
   return (h >>> 0)/2**32 < CRAFT_PUB ? 'craft' : 'pub';
 }
-// A home's bedroom with its ensuite (see "the bedroom" in interior.js), by its key, the same every time: about half of
-// homes have one, through an open doorway in one of the living room's walls but the door's — '+x' or '+z' (a far wall)
-// or '-z' (the other wall behind the camera) — else null.
-export const HOME_SUITE = 0.5;
+// A home's bedroom with its ensuite (see "the bedroom" in interior.js), by its key, the same every time: every home has
+// one, through an open doorway in one of the living room's walls but the door's — '+x' or '+z' (a far wall) or '-z' (the
+// other wall behind the camera).
 export function homeSuiteOf(key) {
   let h = 2166136261;
   for (const ch of String(key) + ':suite') h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
-  const f = (h >>> 0)/2**32;
-  return f < HOME_SUITE ? ['+x', '+z', '-z'][Math.floor(f/HOME_SUITE*3)] : null;
+  return ['+x', '+z', '-z'][Math.floor((h >>> 0)/2**32*3)];
 }

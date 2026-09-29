@@ -913,12 +913,12 @@ async function loadBoho() {
 modelsLoading.push(loadBoho());
 
 // ---------------------------------------------------------- the kitchen
-// Every home with room for it has a fitted kitchen in a corner (assets/models/Kitchen.glb, built by tools/kitchen-models.py:
-// one piece, an L of units with the fridge, oven, hob, microwave, sink, toaster and kettle). Its long leg, with the
-// fridge and the wall cupboards, goes against a wall behind the camera; its short leg, low all along, out along the far
-// wall at that one's end, under its windows: in the (+x, -z) corner as it's built, or mirrored into the (-x, +z) corner,
-// its long leg along the door's wall. Recoloured for each home, as the rest of the furniture is, its cupboards in the
-// room's own wood.
+// Every home has a fitted kitchen in a corner (assets/models/Kitchen.glb, built by tools/kitchen-models.py: one piece,
+// an L of units with the fridge, oven, hob, microwave, sink, toaster and kettle). Its long leg, with the fridge and the
+// wall cupboards, goes against a wall behind the camera; its short leg, low all along, out along the far wall at that
+// one's end, under its windows (a posh home's curtains come down for it): in the (+x, -z) corner as it's built, or
+// mirrored into the (-x, +z) corner, its long leg along the door's wall. Recoloured for each home, as the rest of the
+// furniture is, its cupboards in the room's own wood.
 const KITCHEN_MODEL_URL = 'assets/models/Kitchen.glb';
 const KITCHEN_LEG = 0.66;   // how deep the units are (the fridge, the deepest), from the wall
 const KITCHEN_PAINTED = {
@@ -979,15 +979,15 @@ async function loadKitchen() {
 modelsLoading.push(loadKitchen());
 
 // ---------------------------------------------------------- the bedroom
-// About half of homes (see homeSuiteOf in footprints.js) have a bedroom beyond one of the living room's walls but the
+// Every home (see homeSuiteOf in footprints.js) has a bedroom beyond one of the living room's walls but the
 // door's — a far wall (+x or +z) or the other wall behind the camera (-z) — through an open doorway in it, with an
 // ensuite at one end behind a partition, through a doorway of its own: a double bed with a bedside table either side,
 // a wardrobe or two and a dresser against its walls; a toilet, a basin and a shower in the ensuite
-// (assets/models/Bedroom.glb, built by tools/bedroom-models.py). The living room's made smaller to leave room for it, and
-// the two are centred on the building together (see enterBuilding). The bedroom's worked out in its own terms: u along
-// the wall it's through, v out from that wall's far face into it (see planSuite) — and built into `suite`, turned and
-// moved to match. It's carpeted, its ensuite tiled as the kitchen is, in colours of their own for each home, and its
-// furniture's in the room's wood.
+// (assets/models/Bedroom.glb, built by tools/bedroom-models.py). It's built on beyond the living room (which keeps the
+// size it'd have without it), the two centred on the building together (see enterBuilding). The bedroom's worked out in
+// its own terms: u along the wall it's through, v out from that wall's far face into it (see planSuite) — and built
+// into `suite`, turned and moved to match. It's carpeted, its ensuite tiled as the kitchen is, in colours of their own
+// for each home, and its furniture's in the room's wood.
 const BEDROOM_MODEL_URL = 'assets/models/Bedroom.glb';
 const SUITE_DOOR = 1.0;                              // the doorway through to it, wide open
 const ENSUITE = 1.8, PARTITION = 0.12;               // the ensuite's width, along the wall, and the wall between
@@ -1029,7 +1029,6 @@ ensuiteFloor.receiveShadow = true;
 // (along u) the ensuite's at, and how far along the doorway is (0 to 1, of as far as it can go) — or null.
 function suiteSpec(key) {
   const side = homeSuiteOf(key);
-  if (!side) return null;
   // (behind the camera, the ensuite's at the camera's end, so the doorway's out along the wall from it)
   return { side, depth: Math.round((3.4 + keyFraction(key, ':bedroom')*0.8)*10)/10,
     end: side === '-z' || keyFraction(key, ':ensuite') < 0.5 ? 1 : -1, door: Math.round(keyFraction(key, ':doorway')*100)/100 };
@@ -1320,12 +1319,21 @@ function furnish(key) {
   put('TV', spot.x, spot.z, fromWall);
   const screen = { ...spot }, tvObject = home.tvObject = home.group.children.at(-1);
   // (a posh home's curtains, but for any the TV's in front of)
-  const tvArea = taken[0];
+  const tvArea = taken[0], hung = [];
   for (const drape of drapes) {
     const area = drape.userData.area;
     drape.visible = !overlaps(area, tvArea, 0.05);
-    if (fancy && drape.visible) { taken.push(area); home.solid.push(area); home.blocked.push(around(area.x0, area.x1, area.z0, area.z1, 0.2)); }
+    if (fancy && drape.visible) {
+      const clear = around(area.x0, area.x1, area.z0, area.z1, 0.2);
+      taken.push(area); home.solid.push(area); home.blocked.push(clear);
+      hung.push({ drape, area, clear });
+    }
   }
+  // (and taken down again, for the kitchen: see below)
+  const unhang = ({ drape, area, clear }) => {
+    drape.visible = false;
+    for (const [list, item] of [[taken, area], [home.solid, area], [home.blocked, clear]]) list.splice(list.indexOf(item), 1);
+  };
   // the sofa, facing it a comfortable way off, with its back to the room behind
   // (and with a bedroom through the wall behind the camera, clear of the way through to it)
   const behind = SUITE?.side === '-z' ? 1.2 : 0;
@@ -1372,7 +1380,11 @@ function furnish(key) {
       const areas = legs.map(r => c.room(r, c));
       // (clear of the door's swing, too)
       if (c.flip && areas[0].z0 < doorTo + 0.6) continue;
-      if (!areas.every(r => fits(r, 0.1)) || areas.some(hidesScreen)) continue;
+      // (a posh home's curtains come down for it: it's a kitchen or a window dressed up, not neither)
+      const inWay = hung.filter(h => areas.some(r => overlaps(r, h.area, 0.1)));
+      const clear = r => inRoom(r, 0.02) && taken.every(o => inWay.some(h => h.area === o) || !overlaps(r, o, 0.1));
+      if (!areas.every(clear) || areas.some(hidesScreen)) continue;
+      inWay.forEach(unhang);
       const object = piece.object.clone();
       object.position.set(c.x, 0, c.z);
       object.rotation.y = c.angle;
@@ -3747,12 +3759,9 @@ export function enterBuilding(group, key, kind = 'home') {
   const fixed = group.userData.room;
   const fp = group.userData.footprint, angle = fp && fp.length >= 3 ? longestEdgeAngle(fp) : 0;
   const size = fixed ? { w: fixed.w, d: fixed.d, turned: false } : roomSizeFor(group, key, LAYOUTS[kind] ? kind : 'home', angle);
-  // (a home with a bedroom has a smaller living room, to leave room for it: see "the bedroom")
+  // (a home's bedroom's built on beyond its living room, which is as big as it'd be without one: see "the bedroom")
   const spec = !fixed && (!LAYOUTS[kind] || kind === 'home') ? suiteSpec(key) : null;
-  if (spec?.side === '+x') size.w = Math.max(6, size.w - WALL - spec.depth);
-  else if (spec) size.d = Math.max(5, size.d - WALL - spec.depth);
-  size.d = Math.min(size.d, size.w);
-  shapeRoom(Math.round(size.w*10)/10, Math.round(size.d*10)/10, spec);
+  shapeRoom(size.w, size.d, spec);
   useLayout(kind);
   const glass = current === LAYOUTS.office && keyFraction(key) >= OFFICE_PUNCHED;
   // (a pub's room comes either way: windows in the far walls, or a shopfront beside the door — by its key)
