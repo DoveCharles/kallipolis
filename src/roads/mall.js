@@ -698,7 +698,10 @@ export function mallFootprints() {
     const spine = spineOfNetwork(lines);
     if (!spine.edges.length) return;
     const foods = spine.nodes.filter(n => n.food && n.deg >= 2).map(n => circlePath(n, FOOD_COURT*CW + Math.min(s.depth, 10)));
-    const band = union(bandOf(spine.edges.map(e => e.pts), half), foods);
+    // (a disc where branches meet: their bands end square there, and any bend between them leaves a sliver open to
+    // the node itself, which would then count as outside the mall)
+    const joins = spine.nodes.filter(n => n.deg >= 2).map(n => circlePath(n, half));
+    const band = union(bandOf(spine.edges.map(e => e.pts), half), [...foods, ...joins]);
     const paths = minus(band, roadsBack);
     const key = JSON.stringify([lines.map(l => [l.width, l.mall, l.nodeIds.map(id => { const n = roadNodes[id]; return [n.x, n.z, n.type, n.handleIn, n.handleOut, !!n.foodCourt]; })]),
       Math.round(pathsArea(paths)*10)]);
