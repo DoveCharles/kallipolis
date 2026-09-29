@@ -159,7 +159,7 @@ function renderZoneThumbnails() {
       camera.position.set(fx + 200, type.id === 'town' ? 120 : 230, fz + 200); // an isometric-ish view from the south-east
       camera.lookAt(fx, 2, fz);
       // the sun's shadows only follow the main view (placeSunLight), so fit them to this shot instead
-      fitSunShadow(camera, new THREE.Vector3(fx, 0, fz), view*4);
+      fitSunShadow(new THREE.Vector3(fx, 0, fz), view*4);
       thumbnails[type.id] = snap(camera);
       scene.remove(group);
       disposeObject(group);
@@ -317,7 +317,7 @@ function renderPathThumbnails() {
         camera.updateProjectionMatrix();
         camera.position.set(cx + 120, fy + 140, cz + 160); // from the south-east, like the zones' — the path running across it
         camera.lookAt(cx, fy, cz);
-        fitSunShadow(camera, new THREE.Vector3(cx, 0, cz), view*4);
+        fitSunShadow(new THREE.Vector3(cx, 0, cz), view*4);
         shots[type.id] = snap(camera);
         if (river) { scene.remove(river); disposeObject(river); }
       });
