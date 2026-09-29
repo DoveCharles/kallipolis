@@ -87,6 +87,7 @@ export function pickWeighted(items, weightOf) {
  * Work out how far along the straight walk from `from` to (x, z) someone gets while staying in the hangout, and whether
  * that's all the way. Water is no part of a hangout (see buildPeopleNav), and people walk straight at where they're
  * going, so this is what keeps them out of a pond: they stop at the bank and set off again from there.
+ * Setting off from off it (strayed down a beach's slope, say), the first BACK_ON_REACH back onto it is walkable.
  * @param {Hangout} area - the hangout they're walking in
  * @param {{x: number, z: number}} from - where they're setting off
  * @param {number} x - where they're heading
@@ -96,13 +97,15 @@ export function pickWeighted(items, weightOf) {
 /** The hangout's ground for someone: waterwalking/aqua people walk its water too (area.insideWet, see buildPeopleNav). */
 export const insideFor = (area, who) => who?.traits && onWater(who) ? area.insideWet : area.inside;
 
+/** How far someone who's strayed off their hangout's ground (down a beach's slope, say) may walk to get back onto it. */
+const BACK_ON_REACH = 6;
 export function walkableUpTo(area, from, x, z) {
   const inside = insideFor(area, from), dx = x - from.x, dz = z - from.z, len = Math.hypot(dx, dz), steps = Math.max(1, Math.ceil(len/1.5));
-  let last = 0;
+  let last = 0, off = !inside(from.x, from.z); // (off it, the first stretch back onto it doesn't count against them: else nowhere is ever clear, and they stand there for good)
   for (let k=1;k<=steps;k++) {
     const frac = k/steps;
-    if (!inside(from.x + dx*frac, from.z + dz*frac)) return { x: from.x + dx*last, z: from.z + dz*last, d: len*last, clear: false };
-    last = frac;
+    if (inside(from.x + dx*frac, from.z + dz*frac)) { off = false; last = frac; }
+    else if (!off || len*frac > BACK_ON_REACH) return { x: from.x + dx*last, z: from.z + dz*last, d: len*last, clear: false };
   }
   return { x, z, d: len, clear: true };
 }
