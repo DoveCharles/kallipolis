@@ -1232,6 +1232,10 @@ export function updatePeople(t) {
       p.eyeBase = [eyes.r, eyes.g, eyes.b]; // (what bloodlust's eyes go back to: see stain in peopleBlood.js)
       // (the skin their traits give them is written by tintSkin, above)
     }
+    // (on an escalator, they stand and are carried at its pace: see roads/mall.js)
+    const onLine = p.mode === 'line' && !possessed && !p.jc && !p.act && peopleNav.lines[p.li];
+    const riding = onLine?.escalator && p.seg < onLine.beltEnd ? onLine.escalator : 0; // (off its foot, they walk on)
+    if (riding) speed = riding*S.peopleSpeed;
     // (stopped to talk, or frozen in shock, someone on a walkway stays put)
     if (p.mode === 'line' && p.act !== 'chat' && !frozen && !p.attack) {
       if (!p.jc && !p.act) maybeBuyOnWalkway(p, dt); // (stepping off to a hot dog or coffee stall: see peopleStalls.js)
@@ -1242,7 +1246,7 @@ export function updatePeople(t) {
         goal = updateCrossing(p, dt, speed); // (null while waiting for a gap in traffic)
         if (isPedInDanger(p)) speed *= CROSS_SPEED_MULT; // an increased pace, crossing
       } else {
-        walkAlong(p, speed*dt);
+        walkAlong(p, (riding ? riding*S.peopleSpeed : speed)*dt);
         if (p.mode === 'line') goal = walkwayPoint(p);
       }
     }
@@ -1368,7 +1372,7 @@ export function updatePeople(t) {
           const facing = Math.atan2(mx, mz) + moonwalkTurn(p); // (or away from it, walking backwards)
           p.heading += Math.atan2(Math.sin(facing - p.heading), Math.cos(facing - p.heading))*Math.min(1, dt*8);
           p.moving = true;
-          p.stepped = Math.hypot(mx, mz);
+          p.stepped = riding ? 0 : Math.hypot(mx, mz); // (carried, they take no steps)
         }
       }
       p.y += (goal.y - p.y)*Math.min(1, dt*6);
@@ -1410,7 +1414,7 @@ export function updatePeople(t) {
       }
       if (!p.clipA) { p.clipA = p.clipB = clipSet.Idle; p.fade = 1; }
       // (and with a hot dog or a coffee in hand, a version of it holding that: see peopleHolding.js)
-      setClip(p, p.oneShot || snackClip(p, p.moving ? clipSet.Walk : clipSet[p.pose] || clipSet.Idle, dt));
+      setClip(p, p.oneShot || snackClip(p, p.moving && !riding ? clipSet.Walk : clipSet[p.pose] || clipSet.Idle, dt));
       p.fade = Math.min(1, p.fade + dt/p.fadeTime);
       // whatever the clip has happening as it comes round: a key struck (see audio/typing.js), or a moment of a meal
       // (see peopleHolding.js)
@@ -1584,8 +1588,8 @@ export function updatePeople(t) {
         }
       }
     } else {
-      if (p.moving) p.phase += dt*speed*Math.PI/S.peopleSize;
-      const bob = p.moving ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;
+      if (p.moving && !riding) p.phase += dt*speed*Math.PI/S.peopleSize;
+      const bob = p.moving && !riding ? Math.abs(Math.sin(p.phase))*0.08*S.peopleSize : 0;
       rotation.setFromAxisAngle(up, p.heading);
       turnInWater(p, rotation); turnCrawling(p, rotation);
       if (!isDrawn(p)) scale.set(0, 0, 0); else scale.set(0.5*S.peopleSize, 1.7*p.height*S.peopleSize, 0.34*S.peopleSize);

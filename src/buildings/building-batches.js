@@ -46,7 +46,11 @@ function plainMaterial(flat, side, baseShade) {
   return mat;
 }
 function materialFor(key, kind) {
-  if (!materials.has(key)) materials.set(key, kind.window ? createBatchedWindowMaterial(kind.specular, kind.side) : plainMaterial(kind.flat, kind.side, kind.baseShade));
+  if (!materials.has(key)) {
+    const mat = kind.window ? createBatchedWindowMaterial(kind.specular, kind.side) : plainMaterial(kind.flat, kind.side, kind.baseShade);
+    if (kind.shadowSide != null) mat.shadowSide = kind.shadowSide; // (a closed shell casting from its far faces: see roads/mall.js)
+    materials.set(key, mat);
+  }
   const mat = materials.get(key);
   if (kind.window) mat.emissiveIntensity = computeWindowGlowFactor(S.sunElevation); // (in case it's been a while since this class was last used)
   return mat;
@@ -67,8 +71,8 @@ function kindOf(mesh) {
   }
   const baseShade = !!m.userData.baseShade;
   if ((!baseShade && m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) || MAPS.some(k => m[k])) return null;
-  return { window: false, flat: !!m.flatShading, side: m.side, baseShade,
-    key: ['plain', !!m.flatShading, m.side, baseShade, mesh.castShadow, mesh.receiveShadow].join() };
+  return { window: false, flat: !!m.flatShading, side: m.side, shadowSide: m.shadowSide, baseShade,
+    key: ['plain', !!m.flatShading, m.side, m.shadowSide, baseShade, mesh.castShadow, mesh.receiveShadow].join() };
 }
 
 const tmpV = new THREE.Vector3(), normalMatrix = new THREE.Matrix3(), color = new THREE.Color();

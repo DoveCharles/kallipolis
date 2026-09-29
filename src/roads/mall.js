@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S, App } from '../core/shared.js';
-import { scene, Y_ZONE_GROUND, computeWindowGlowFactor } from '../core/scene.js';
+import { scene, Y_ZONE_GROUND, computeWindowGlowFactor, SKY_ENV_MAP } from '../core/scene.js';
 import { mulberry32, polygonArea } from '../core/math.js';
 import { tessellateOpenPath } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
@@ -37,11 +37,13 @@ import { insetPolygonExact, toClipperPath, fromClipperPath, createRegionTester, 
 
 export const MALL_LEVEL = 5;          // floor to floor
 const EDGE = 0.4;                     // the mall's walls stand this far back from a road's pavement
-const UNIT_GAP = 0.35;                // between the units' backs and the outer walls
+const WALL_T = 0.4;                   // the outer walls' thickness
+const UNIT_GAP = WALL_T + 0.05;       // from the outside in to the units' backs
 const ROOM = { w: 8, d: 6 };           // a shop's room, deep by wide (see makeUnit)
 const WALL_IN = 0.1;                  // a unit's walls, in from its lot (so neighbours' walls never meet in one place)
 const PARAPET = 0.8;                  // outer walls above the units' roofs
 const CLERESTORY = 1.3;               // the walls round the concourse, up from the units' roof to the glass roof
+const RIDGE_RISE = 0.5;               // the glass roof's ridge, above its eaves, in the concourse's half-widths
 const DOOR_H = 4.2;                   // the entrances' glass, and the lintel over it
 const LANE_IN = 1.8;                  // the ground lanes, in from the shopfronts
 const COURT = 1.5;                    // a court's radius, in the concourse's half-widths
@@ -54,6 +56,7 @@ export const MALL_DEFAULTS = { depth: 14, shopWidth: 10, upper: true, clothes: 0
 export const isMallLine = line => line.roadType === 'mall';
 export const mallSettingsOf = line => ({ ...MALL_DEFAULTS, ...(line.mall || {}) });
 const ESCALATOR_SLOPE = Math.tan(Math.PI/6), ESCALATOR_W = 1.1, BRIDGE_HALF = 1.5, BRIDGE_EVERY = 32;
+const ESCALATOR_SPEED = 0.6, BELT_STEP = 0.4; // (how fast the steps carry anyone on them, over the ground; and one step's depth)
 const GLASS = 0xbfd9e6;
 // Every mall's in a nineties colour scheme — its own by its seed, or the one picked in its settings (mallTheme, 1 on):
 // the floor's two tiles (laid in a diagonal chequer), the piers between the shops with their inlaid stripe, and the
@@ -66,8 +69,8 @@ export const MALL_THEMES = [
   { name: 'Lemon', neon: [0xff3f6c, 0x3fb6ff], tiles: [0xfff7d1, 0xd8edfb], pier: 0xfffdf3, inlay: 0xf3c232, accent: 0x3a8ed8, frame: 0xfbfbfb, rail: 0xd3ae3a, column: 0xf6d35a, walls: 0xf8f0d5, flowers: [0xff6a6a, 0x4f8cff, 0xffd23f, 0xffffff] },
 ];
 // polished tiles, in world space: a diagonal chequer of the theme's two colours, each tile a touch lighter or darker than
-// the next, set in cream mortar
-const MORTAR = 0xf1e6cc;
+// the next, set in warm grey mortar
+const MORTAR = 0x8a8378;
 function applyTiles(mat, theme, size = 0.6) {
   const hex = c => { const v = new THREE.Color(c); return `vec3(${v.r.toFixed(4)}, ${v.g.toFixed(4)}, ${v.b.toFixed(4)})`; };
   mat.onBeforeCompile = shader => {
@@ -116,8 +119,42 @@ const plain = (color, extra) => new THREE.MeshStandardMaterial({ color, roughnes
 const glassMaterial = () => new THREE.MeshStandardMaterial({ color: GLASS, roughness: 0.08, metalness: 0.3, transparent: true, opacity: 0.28,
   side: THREE.DoubleSide, depthWrite: false });
 // a shop window: tinted, and mostly what's reflected in it — the shop's still there behind it, just not laid bare
-const shopGlass = () => new THREE.MeshStandardMaterial({ color: 0x8fb4c2, roughness: 0.05, metalness: 0.55, transparent: true, opacity: 0.6,
-  side: THREE.DoubleSide, depthWrite: false });
+// (the sky's reflection map for the sheen: see SKY_ENV_MAP in core/scene.js)
+const shopGlass = () => new THREE.MeshStandardMaterial({ color: 0x8fb4c2, roughness: 0.04, metalness: 0.75, transparent: true, opacity: 0.78,
+  envMap: SKY_ENV_MAP, envMapIntensity: 1.6, side: THREE.DoubleSide, depthWrite: false });
+// The escalators' steps, as one mesh: dark treads with a bright nosing, grooved along their length, the texture moving
+// up each belt at the pace that carries people (ESCALATOR_SPEED, over the ground, so faster along the slope) — as fast
+// as the people go (S.peopleSpeed).
+function beltMesh(positions, uvs) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 16; canvas.height = 32;
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#44484e'; g.fillRect(0, 0, 16, 32);
+  g.fillStyle = '#2a2d31'; for (let x = 1; x < 16; x += 2) g.fillRect(x, 0, 1, 32); // (grooves)
+  g.fillStyle = '#c9ced4'; g.fillRect(0, 0, 16, 3);                              // (each step's nosing)
+  g.fillStyle = '#e0b43a'; g.fillRect(0, 0, 1, 32); g.fillRect(15, 0, 1, 32);     // (yellow along the edges)
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.ClampToEdgeWrapping; texture.wrapT = THREE.RepeatWrapping;
+  texture.magFilter = THREE.NearestFilter; texture.anisotropy = 4;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.5, metalness: 0.4, side: THREE.DoubleSide });
+  mat.addEventListener('dispose', () => texture.dispose());
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'MallEscalatorSteps'; mesh.receiveShadow = true;
+  const alongSlope = Math.sqrt(1 + ESCALATOR_SLOPE**2); // (the belt's length for every metre over the ground)
+  let last = performance.now();
+  mesh.onBeforeRender = () => {
+    const now = performance.now(), dt = Math.min(0.1, (now - last)/1000);
+    last = now;
+    texture.offset.y = (texture.offset.y - dt*ESCALATOR_SPEED*alongSlope*(S.peopleSpeed ?? 1)/BELT_STEP) % 1;
+  };
+  return mesh;
+}
+
 function meshOf(geo, mat, name, shadows = true) {
   if (!geo) return null;
   const mesh = new THREE.Mesh(geo, mat);
@@ -496,7 +533,11 @@ function spineOfNetwork(lines) {
       const pts = tess.slice(at[start], at[i] + 1).map(p => ({ x: p.x, z: p.z }));
       pts[0] = { x: roadNodes[ids[start]].x, z: roadNodes[ids[start]].z };
       pts[pts.length - 1] = { x: roadNodes[ids[i]].x, z: roadNodes[ids[i]].z };
-      if (pts.length >= 2 && lengthOf(pts) > 0.5) {
+      // (a line drawn again over one already there, between the same two nodes, is the same stretch of mall: kept once)
+      const len = lengthOf(pts), mid = pointAlong(pts, len/2);
+      const twin = edges.some(e => (e.a === ids[start] && e.b === ids[i] || e.a === ids[i] && e.b === ids[start])
+        && Math.abs(lengthOf(e.pts) - len) < 1 && dist(pointAlong(e.pts, lengthOf(e.pts)/2), mid) < 1);
+      if (pts.length >= 2 && len > 0.5 && !twin) {
         edges.push({ a: ids[start], b: ids[i], pts });
         nodeOf(ids[start]).deg++; nodeOf(ids[i]).deg++;
       }
@@ -648,7 +689,10 @@ function generateMall(zone, outline, spine, CW) {
   const C = within(union(bandOf(lines, CW), courtPaths(0)), outlinePath), inC = createRegionTester(C);
   const decks = spine.edges.map(e => trimmed(e.pts, spine.byId.get(e.a).entrance ? CW + 1 : 0, spine.byId.get(e.b).entrance ? CW + 1 : 0));
   const upperC = within(union(bandOf(decks.filter(Boolean), CW), courtPaths(0)), outlinePath);
-  const voidPaths = union(bandOf(decks.filter(Boolean), VH), courtPaths(-G)), inVoid = createRegionTester(voidPaths);
+  // (the void runs a metre past the decks' ends at the entrances, so the floor there is open-ended, not a sliver round
+  // it that the triangulation drops the hole from)
+  const voidLines = spine.edges.map((e, ei) => decks[ei] && trimmed(e.pts, spine.byId.get(e.a).entrance ? CW : 0, spine.byId.get(e.b).entrance ? CW : 0));
+  const voidPaths = union(bandOf(voidLines.filter(Boolean), VH), courtPaths(-G)), inVoid = createRegionTester(voidPaths);
   const deck0 = minus(upperC, voidPaths), inDeck0 = createRegionTester(deck0);
 
   // ---- the bridges across the void, each with a pair of escalators up to it: along the straight stretches clear of the
@@ -749,25 +793,49 @@ function generateMall(zone, outline, spine, CW) {
   };
   const EH = Math.min(4, CW - 0.5), entrances = spine.nodes.filter(n => n.entrance).map(n => n.entrance);
   const doorway = p => entrances.some(E => { const dx = p.x - E.x, dz = p.z - E.z; return Math.abs(dx*E.dx + dz*E.dz) < 2.5 && Math.abs(-dx*E.dz + dz*E.dx) < EH; });
-  outline.forEach((p, i) => {
-    const q = outline[(i+1) % outline.length], len = dist(p, q), steps = Math.max(1, Math.ceil(len/0.5));
+  // (the outer walls are WALL_T thick: their faces outside, their faces in, capped along the top, and the doorways
+  // through them lined — a reveal each side and a soffit over the glass)
+  const innerOutline = insetPolygonExact(outline, WALL_T), inWalls = createRegionTester(innerOutline.map(toClipperPath));
+  const faceRuns = (poly, flush) => poly.forEach((p, i) => {
+    const q = poly[(i+1) % poly.length], len = dist(p, q), steps = Math.max(1, Math.ceil(len/0.5));
     let runStart = 0, runDoor = null;
-    const flush = (t0, t1, door) => {
-      if (t1 - t0 < 1e-6) return;
-      const a = { x: p.x + (q.x - p.x)*t0, z: p.z + (q.z - p.z)*t0 }, b = { x: p.x + (q.x - p.x)*t1, z: p.z + (q.z - p.z)*t1 };
-      if (door) { wallQuad(glass, a, b, 0, DOOR_H); wallQuad(walls, a, b, DOOR_H, HW - 1.1); }
-      else wallQuad(walls, a, b, 0, HW - 1.1);
-      wallQuad(stripe, a, b, HW - 1.1, HW - 0.85); // (a stripe of the inlay's colour under the band)
-      wallQuad(walls, a, b, HW - 0.85, HW - 0.6);
-      wallQuad(trim, a, b, HW - 0.6, HW);
-    };
+    const at = t => ({ x: p.x + (q.x - p.x)*t, z: p.z + (q.z - p.z)*t });
     for (let k = 0; k < steps; k++) {
-      const t = (k + 0.5)/steps, door = doorway({ x: p.x + (q.x - p.x)*t, z: p.z + (q.z - p.z)*t });
+      const door = doorway(at((k + 0.5)/steps));
       if (runDoor === null) runDoor = door;
-      if (door !== runDoor) { flush(runStart, k/steps, runDoor); runStart = k/steps; runDoor = door; }
+      if (door !== runDoor) { if (k/steps > runStart) flush(at(runStart), at(k/steps), runDoor); runStart = k/steps; runDoor = door; }
     }
-    flush(runStart, 1, runDoor);
+    flush(at(runStart), q, runDoor);
   });
+  // (each face turned the way it looks — out, or in to the mall — whichever way round its outline runs: lit from behind,
+  // a face catches its own shadow in a moiré)
+  const outerWalls = createMeshBuilder(), outerStripe = createMeshBuilder(), outerTrim = createMeshBuilder();
+  const facing = (a, b, looksOut) => {
+    const len = dist(a, b) || 1, m = { x: (a.x + b.x)/2 - (b.z - a.z)/len*0.05, z: (a.z + b.z)/2 + (b.x - a.x)/len*0.05 };
+    return looksOut(m) ? [a, b] : [b, a];
+  };
+  faceRuns(outline, (a0, b0, door) => {
+    const [a, b] = facing(a0, b0, m => !inOutline(m.x, m.z));
+    if (door) {
+      wallQuad(glass, a, b, 0, DOOR_H); wallQuad(outerWalls, a, b, DOOR_H, HW - 1.1);
+      const len = dist(a, b) || 1;
+      let n = { x: -(b.z - a.z)/len, z: (b.x - a.x)/len };
+      if (!inOutline(a.x/2 + b.x/2 + n.x*0.1, a.z/2 + b.z/2 + n.z*0.1)) n = { x: -n.x, z: -n.z };
+      const ai = { x: a.x + n.x*WALL_T, z: a.z + n.z*WALL_T }, bi = { x: b.x + n.x*WALL_T, z: b.z + n.z*WALL_T };
+      // (each reveal facing into the doorway)
+      [[a, ai, b], [b, bi, a]].forEach(([e, ei, other]) => {
+        const edge = { x: (e.x + ei.x)/2, z: (e.z + ei.z)/2 };
+        wallQuad(outerWalls, ...facing(e, ei, m => dist(m, other) < dist(edge, other)), 0, DOOR_H);
+      });
+      outerWalls.addQuad({ ...a, y: DOOR_H }, { ...b, y: DOOR_H }, { ...bi, y: DOOR_H }, { ...ai, y: DOOR_H }, { x: 0, y: -1, z: 0 });
+    }
+    else wallQuad(outerWalls, a, b, 0, HW - 1.1);
+    wallQuad(outerStripe, a, b, HW - 1.1, HW - 0.85); // (a stripe of the inlay's colour under the band)
+    wallQuad(outerWalls, a, b, HW - 0.85, HW - 0.6);
+    wallQuad(outerTrim, a, b, HW - 0.6, HW);
+  });
+  innerOutline.forEach(poly => faceRuns(poly, (a0, b0, door) => wallQuad(outerWalls, ...facing(a0, b0, m => inWalls(m.x, m.z)), door ? DOOR_H : 0, HW)));
+  tops(outerTrim, minus(outlinePath, innerOutline.map(toClipperPath)), HW);
   // a canopy out over each entrance, on posts
   entrances.forEach(E => {
     const F = frameOf(E, E.dx, E.dz);
@@ -776,34 +844,115 @@ function generateMall(zone, outline, spine, CW) {
     tube(theme.neon[0], F.at(3.45, -EH - 0.8, DOOR_H + 0.37), F.at(3.45, EH + 0.8, DOOR_H + 0.37), 0.08); // (neon along its front)
     tube(theme.neon[1], F.at(-0.15, -EH, DOOR_H + 0.1), F.at(-0.15, EH, DOOR_H + 0.1), 0.07);            // (and over the doors inside)
   });
-  // the flat roof over the units; over the concourse, a glass roof on walls up from the tops of the shops, and a dome
-  // over each court
+  // the flat roof over the units; over the concourse, a glass roof on walls up from the tops of the shops — pitched, from
+  // its edges up to a ridge down the middle — and a dome over each court, the two meeting wherever the dome comes down
+  // below the roof (the roof stops there, and so does the dome)
   tops(roof, minus(outlinePath, C), ROOF);
-  tops(glass, minus(C, courtPaths(0)), GLASS_TOP);
   edgesOf(C).forEach(([p, q]) => {
-    wallQuad(walls, p, q, levels*MALL_LEVEL, GLASS_TOP - 0.3);
-    wallQuad(trim, p, q, GLASS_TOP - 0.3, GLASS_TOP);
+    // (where the concourse comes to the outer wall, at an entrance, the wall's own face is there up to HW: from its top)
+    const onOutline = !inWalls((p.x + q.x)/2, (p.z + q.z)/2);
+    if (onOutline) {
+      // (and there it's as thick as the wall under it, a closed box: a lone sheet in the sun shades itself in a moiré)
+      const [a, b] = facing(p, q, m => !inOutline(m.x, m.z)), len = dist(a, b) || 1;
+      const ai = { x: a.x + (b.z - a.z)/len*WALL_T, z: a.z - (b.x - a.x)/len*WALL_T }, bi = { x: b.x + (b.z - a.z)/len*WALL_T, z: b.z - (b.x - a.x)/len*WALL_T };
+      [[outerWalls, HW, GLASS_TOP - 0.3], [outerTrim, GLASS_TOP - 0.3, GLASS_TOP]].forEach(([mb, y0, y1]) => {
+        wallQuad(mb, a, b, y0, y1); wallQuad(mb, bi, ai, y0, y1); wallQuad(mb, ai, a, y0, y1); wallQuad(mb, b, bi, y0, y1);
+      });
+      outerTrim.addQuad({ ...a, y: GLASS_TOP }, { ...b, y: GLASS_TOP }, { ...bi, y: GLASS_TOP }, { ...ai, y: GLASS_TOP }, { x: 0, y: 1, z: 0 });
+    } else {
+      wallQuad(walls, p, q, levels*MALL_LEVEL, GLASS_TOP - 0.3);
+      wallQuad(trim, p, q, GLASS_TOP - 0.3, GLASS_TOP);
+    }
     bars.push(bar({ ...p, y: GLASS_TOP }, { ...q, y: GLASS_TOP }, 0.14));
   });
+  const RIDGE = CW*RIDGE_RISE, riseOf = c => c.r*(c.food ? 0.6 : 0.45);
+  const roofAt = p => GLASS_TOP + RIDGE*Math.max(0, 1 - Math.min(...lines.map(l => distToLine(p, l)))/CW);
+  const domeAt = (c, p) => GLASS_TOP + riseOf(c)*Math.sqrt(Math.max(0, 1 - (dist(p, c)/c.r)**2));
+  const glassAt = p => Math.max(roofAt(p), ...courts.map(c => domeAt(c, p)));
+  // (how far out from a court's middle, at angle a, its dome stays above the roof: out to its foot, but for where a branch
+  // comes in, whose roof it meets on the way down)
+  const reach = (c, a) => {
+    const at = d => ({ x: c.x + Math.cos(a)*d, z: c.z + Math.sin(a)*d }), over = d => domeAt(c, at(d)) > roofAt(at(d));
+    let lo = 0, hi = c.r;
+    for (let d = 0.25; d < c.r; d += 0.25) if (!over(d)) { hi = d; break; } else lo = d;
+    for (let k = 0; k < 20; k++) { const m = (lo + hi)/2; if (over(m)) lo = m; else hi = m; }
+    return hi;
+  };
+  const DOME_SIDES = 96, reaches = courts.map(c => Array.from({ length: DOME_SIDES }, (_, k) => reach(c, k/DOME_SIDES*Math.PI*2)));
+  const domed = courts.length ? union(courts.map((c, i) => reaches[i].map((d, k) => clip({ x: c.x + Math.cos(k/DOME_SIDES*Math.PI*2)*d, z: c.z + Math.sin(k/DOME_SIDES*Math.PI*2)*d })))) : [];
+  const underDome = createRegionTester(domed), roofed = minus(C, domed);
+  // the roof: a plane either side of each stretch of each line, from the ridge over it down to the eaves CW off
+  const roofTris = [];
+  lines.forEach(line => [1, -1].forEach(side => {
+    const eave = offsetLine(line, side*CW);
+    for (let i = 0; i + 1 < line.length; i++) {
+      const a = line[i], b = line[i+1], len = dist(a, b);
+      if (len < 1e-3) continue;
+      const height = p => GLASS_TOP + RIDGE*(1 - Math.min(CW, Math.abs((b.x - a.x)*(p.z - a.z) - (b.z - a.z)*(p.x - a.x))/len)/CW);
+      piecesOf(within([[a, b, eave[i+1], eave[i]].map(clip)], roofed)).forEach(poly => {
+        const tris = THREE.ShapeUtils.triangulateShape(poly.map(p => new THREE.Vector2(p.x, p.z)), []);
+        tris.forEach(t => roofTris.push(...t.map(j => ({ x: poly[j].x, y: height(poly[j]), z: poly[j].z }))));
+      });
+    }
+  }));
+  if (roofTris.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(roofTris.flatMap(p => [p.x, p.y, p.z]), 3));
+    geo.computeVertexNormals();
+    glass.addGeometry(geo, 0, 0, 0);
+  }
+  // glass gable ends, wherever the roof comes to the concourse's edge above the walls (at an entrance, or a road across)
+  edgesOf(roofed).forEach(([p, q]) => {
+    const n = Math.max(1, Math.ceil(dist(p, q)/0.5)), at = t => ({ x: p.x + (q.x - p.x)*t/n, z: p.z + (q.z - p.z)*t/n });
+    for (let k = 0; k < n; k++) {
+      const a = at(k), b = at(k + 1), ya = roofAt(a), yb = roofAt(b);
+      if (Math.max(ya, yb) > GLASS_TOP + 0.02 && !underDome((a.x + b.x)/2, (a.z + b.z)/2))
+        glass.addQuad({ ...a, y: GLASS_TOP }, { ...b, y: GLASS_TOP }, { ...b, y: yb }, { ...a, y: ya }, { x: -(b.z - a.z), y: 0, z: b.x - a.x });
+    }
+  });
+  // its frame: a ridge beam, and rafters every 3 m from eave to ridge to eave
+  lines.forEach(line => line.forEach((p, i) => {
+    if (!i) return;
+    const q = line[i-1], n = Math.max(1, Math.ceil(dist(p, q)/0.5)), at = t => ({ x: q.x + (p.x - q.x)*t/n, z: q.z + (p.z - q.z)*t/n });
+    let from = null;
+    for (let k = 0; k <= n; k++) {
+      const c = at(k), open = inC(c.x, c.z) && !underDome(c.x, c.z);
+      if (open && from == null) from = c;
+      if ((!open || k === n) && from) { const to = open ? c : at(k - 1); if (dist(from, to) > 0.05) bars.push(bar({ ...from, y: GLASS_TOP + RIDGE }, { ...to, y: GLASS_TOP + RIDGE }, 0.12)); from = null; }
+    }
+  }));
   segs.forEach(seg => {
     const dx = (seg.b.x - seg.a.x)/seg.len, dz = (seg.b.z - seg.a.z)/seg.len;
     for (let t = 1.5; t < seg.len; t += 3) {
-      const m = { x: seg.a.x + dx*t, z: seg.a.z + dz*t }, p = { x: m.x - dz*CW, y: GLASS_TOP, z: m.z + dx*CW }, q = { x: m.x + dz*CW, y: GLASS_TOP, z: m.z - dx*CW };
-      if (!nearCourt(m, 0.5) && inOutline(p.x, p.z) && inOutline(q.x, q.z)) bars.push(bar(p, q, 0.1));
+      const m = { x: seg.a.x + dx*t, y: GLASS_TOP + RIDGE, z: seg.a.z + dz*t }, p = { x: m.x - dz*CW, y: GLASS_TOP, z: m.z + dx*CW }, q = { x: m.x + dz*CW, y: GLASS_TOP, z: m.z - dx*CW };
+      if ([m, p, q].every(o => inOutline(o.x, o.z) && !underDome(o.x, o.z))) bars.push(bar(p, m, 0.1), bar(m, q, 0.1));
     }
   });
-  courts.forEach(c => {
+  courts.forEach((c, ci) => {
     for (let k = 0; k < 48; k++) { // (a neon ring round the dome's foot)
       const a0 = k/48*Math.PI*2, a1 = (k+1)/48*Math.PI*2, r = c.r - 0.2;
       tube(theme.neon[1], { x: c.x + Math.cos(a0)*r, y: GLASS_TOP - 0.1, z: c.z + Math.sin(a0)*r }, { x: c.x + Math.cos(a1)*r, y: GLASS_TOP - 0.1, z: c.z + Math.sin(a1)*r }, 0.09);
     }
-    const rise = c.r*(c.food ? 0.6 : 0.45);
-    const dome = new THREE.SphereGeometry(c.r, 32, 8, 0, Math.PI*2, 0, Math.PI/2);
-    dome.scale(1, rise/c.r, 1);
-    glass.addGeometry(dome, c.x, GLASS_TOP, c.z);
+    // (the dome, rings from where it stops at each angle — its foot, or the roof — up to its crown)
+    const rise = riseOf(c), RINGS = 8, foot = d => Math.acos(Math.min(1, d/c.r));
+    const at = (a, d, j, J) => { const f = foot(d) + (Math.PI/2 - foot(d))*j/J; return { x: c.x + Math.cos(a)*c.r*Math.cos(f), y: GLASS_TOP + rise*Math.sin(f), z: c.z + Math.sin(a)*c.r*Math.cos(f) }; };
+    const pos = [], idx = [];
+    for (let k = 0; k <= DOME_SIDES; k++) for (let j = 0; j <= RINGS; j++) {
+      const p = at(k/DOME_SIDES*Math.PI*2, reaches[ci][k % DOME_SIDES], j, RINGS);
+      pos.push(p.x, p.y, p.z);
+    }
+    for (let k = 0; k < DOME_SIDES; k++) for (let j = 0; j < RINGS; j++) {
+      const a = k*(RINGS + 1) + j, b = a + RINGS + 1;
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+    const dome = new THREE.BufferGeometry();
+    dome.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    dome.setIndex(idx);
+    dome.computeVertexNormals();
+    glass.addGeometry(dome, 0, 0, 0);
     for (let k = 0; k < 12; k++) {
-      const a = k/12*Math.PI*2, at = f => ({ x: c.x + Math.cos(a)*c.r*Math.cos(f), y: GLASS_TOP + rise*Math.sin(f), z: c.z + Math.sin(a)*c.r*Math.cos(f) });
-      for (let j = 0; j < 6; j++) bars.push(bar(at(j/6*Math.PI/2), at((j+1)/6*Math.PI/2), 0.1));
+      const a = k/12*Math.PI*2, d = reach(c, a);
+      for (let j = 0; j < 6; j++) bars.push(bar(at(a, d, j, 6), at(a, d, j + 1, 6), 0.1));
     }
   });
 
@@ -861,16 +1010,31 @@ function generateMall(zone, outline, spine, CW) {
 
   // ---- upstairs: the galleries' decks, bridges and escalators, glass balustrades round the void, and columns under it
   const nets = [];
+  // the escalators' steps: a belt of grooved treads on each, its texture scrolled the way it runs (see beltMesh)
+  const beltPos = [], beltUV = [];
+  const belt = (F, uTop, uFoot, v, hw, deckTop, oneWay) => {
+    const slope = Math.hypot(uFoot - uTop, deckTop - Y_ZONE_GROUND), steps = slope/BELT_STEP, lift = 0.05;
+    // (v along the texture runs the way the belt goes, so every belt scrolls the same way)
+    const vTop = oneWay < 0 ? steps : 0, vFoot = steps - vTop;
+    const c = [[uTop, v - hw, deckTop, 0, vTop], [uFoot, v - hw, Y_ZONE_GROUND, 0, vFoot], [uFoot, v + hw, Y_ZONE_GROUND, 1, vFoot], [uTop, v + hw, deckTop, 1, vTop]]
+      .map(([u, w, y, s, t]) => ({ ...F.at(u, w, y + lift), s, t }));
+    [0, 1, 2, 0, 2, 3].forEach(k => { beltPos.push(c[k].x, c[k].y, c[k].z); beltUV.push(c[k].s, c[k].t); });
+  };
   if (upper) {
     const deckTop = MALL_LEVEL, deckBottom = MALL_LEVEL - 0.35, escalators = [], ramps = [];
     const bridgeRects = bridges.map(b => { const F = frameOf(b.at, b.dx, b.dz); return [[-BH, -VH - 0.3], [BH, -VH - 0.3], [BH, VH + 0.3], [-BH, VH + 0.3]].map(([u, v]) => clip(F.at(u, v))); });
     const lanesV = VH >= 1.4 ? [-0.65, 0.65] : [0];
-    bridges.forEach(b => {
+    bridges.forEach((b, bi) => {
       const F = frameOf(b.at, b.dx, b.dz), uTop = b.dir*BH, uFoot = uTop + b.dir*L;
       // (the landing at the top of each pair, kept clear of the balustrade)
-      escalators.push([[uTop, -1.3], [uTop + b.dir*1.2, -1.3], [uTop + b.dir*1.2, 1.3], [uTop, 1.3]].map(([u, v]) => clip(F.at(u, v))));
-      lanesV.forEach(v => {
+      const vl = Math.max(...lanesV) + ESCALATOR_W/2; // (as wide as the escalators, so the balustrade meets their glass)
+      escalators.push([[uTop, -vl], [uTop + b.dir*1.2, -vl], [uTop + b.dir*1.2, vl], [uTop, vl]].map(([u, v]) => clip(F.at(u, v))));
+      lanesV.forEach((v, li) => {
         const top = F.at(uTop, v, deckTop), foot = F.at(uFoot, v, Y_ZONE_GROUND), hw = ESCALATOR_W/2;
+        // (one of a pair up and the other down — a lone one either, bridge by bridge; oneWay is the way along its points,
+        // top to foot, that it carries people)
+        const oneWay = lanesV.length > 1 ? (li ? 1 : -1) : (bi % 2 ? 1 : -1);
+        belt(F, uTop, uFoot, v, hw - 0.08, deckTop, oneWay);
         const along = new THREE.Vector3(top.x - foot.x, top.y - foot.y, top.z - foot.z).normalize();
         const across = new THREE.Vector3(-F.dz, 0, F.dx), up = new THREE.Vector3().crossVectors(across, along);
         const truss = new THREE.BoxGeometry(Math.hypot(L, MALL_LEVEL) + 0.6, 0.6, ESCALATOR_W);
@@ -880,11 +1044,34 @@ function generateMall(zone, outline, spine, CW) {
           const a = F.at(uTop, v + sv*hw), c = F.at(uFoot, v + sv*hw);
           glass.addQuad({ ...a, y: deckTop }, { ...c, y: Y_ZONE_GROUND }, { ...c, y: Y_ZONE_GROUND + 0.95 }, { ...a, y: deckTop + 0.95 }, { x: -F.dz, y: 0, z: F.dx });
           bars.push(bar({ ...a, y: deckTop + 1 }, { ...c, y: Y_ZONE_GROUND + 1 }, 0.08));
+          // (and at either end the rail runs on level a little way, then down to the floor)
+          const a2 = F.at(uTop - b.dir*0.9, v + sv*hw), c2 = F.at(uFoot + b.dir*0.9, v + sv*hw);
+          [[a, a2, deckTop], [c, c2, Y_ZONE_GROUND]].forEach(([e, e2, y]) => {
+            glass.addQuad({ ...e, y }, { ...e2, y }, { ...e2, y: y + 0.95 }, { ...e, y: y + 0.95 }, { x: -F.dz, y: 0, z: F.dx });
+            bars.push(bar({ ...e, y: y + 1 }, { ...e2, y: y + 1 }, 0.08), bar({ ...e2, y: y + 1.04 }, { ...e2, y }, 0.08));
+          });
         });
         // for people: from the top (on the bridge's edge) down to the foot
         const steps = Math.ceil(L/0.5), pts = [], ys = [];
         for (let i = 0; i <= steps; i++) { const t = i/steps, p = F.at(uTop + (uFoot - uTop)*t, v); pts.push({ x: p.x, z: p.z }); ys.push(deckTop + (Y_ZONE_GROUND - deckTop)*t); }
-        ramps.push({ pts, ys, top: pts[0], foot: pts[pts.length-1], end: false, lateral: 0.15, walk: hw - 0.2 });
+        // (and on from the foot, off the landing and across the floor to the nearest lane by the shopfronts — a point
+        // spliced into it there, for its end to join: see rampFeet in peoplePathing.js; the belt ends at `beltEnd`)
+        const beltEnd = pts.length - 1, off = F.at(uFoot + b.dir*1.5, v);
+        let near = null;
+        lanes.forEach(lane => { for (let i = 0; i + 1 < lane.length; i++) {
+          const a = lane[i], c = lane[i+1], len2 = (c.x - a.x)**2 + (c.z - a.z)**2 || 1;
+          const t = Math.max(0, Math.min(1, ((off.x - a.x)*(c.x - a.x) + (off.z - a.z)*(c.z - a.z))/len2));
+          const q = { x: a.x + (c.x - a.x)*t, z: a.z + (c.z - a.z)*t }, d = dist(off, q);
+          if (!near || d < near.d) near = { lane, i, t, q, d };
+        } });
+        if (near && near.d < CW*1.5) {
+          if (near.t > 1e-3 && near.t < 1 - 1e-3) near.lane.splice(near.i + 1, 0, near.q);
+          [off, near.q].forEach(q => {
+            const from = pts[pts.length-1], k = Math.max(1, Math.ceil(dist(from, q)/0.5));
+            for (let j = 1; j <= k; j++) { pts.push({ x: from.x + (q.x - from.x)*j/k, z: from.z + (q.z - from.z)*j/k }); ys.push(Y_ZONE_GROUND); }
+          });
+        }
+        ramps.push({ pts, ys, top: pts[0], foot: pts[pts.length-1], end: false, lateral: 0.15, walk: hw - 0.2, escalator: ESCALATOR_SPEED, beltEnd, oneWay });
       });
     });
     const deck = union(deck0, bridgeRects), inDeck = createRegionTester(deck), onLanding = createRegionTester(escalators), inUpperC = createRegionTester(upperC);
@@ -895,12 +1082,21 @@ function generateMall(zone, outline, spine, CW) {
       // a balustrade wherever the deck's edge looks out over the void or the open concourse (not onto a shopfront, nor
       // off the top of an escalator)
       const o = outsideOf(p, q, inDeck, 0.3);
-      if (!o || !inUpperC(o.out.x, o.out.z) && !inC(o.out.x, o.out.z) || onLanding(o.out.x, o.out.z)) return;
-      wallQuad(glass, p, q, deckTop, deckTop + 1.05);
-      railBars.push(bar({ ...p, y: deckTop + 1.1 }, { ...q, y: deckTop + 1.1 }, 0.08));
+      if (!o || !inUpperC(o.out.x, o.out.z) && !inC(o.out.x, o.out.z)) return;
       // (and a neon tube along its edge, under the balustrade)
       const off = { x: o.n.x*0.05, z: o.n.z*0.05 };
       tube(theme.neon[0], { x: p.x + off.x, y: deckBottom + 0.14, z: p.z + off.z }, { x: q.x + off.x, y: deckBottom + 0.14, z: q.z + off.z });
+      // (the glass in runs, broken only where an escalator's top meets it — a bridge's edge is one long edge)
+      const at = t => ({ x: p.x + (q.x - p.x)*t, z: p.z + (q.z - p.z)*t }), n = Math.max(1, Math.ceil(o.len/0.1));
+      const open = k => { const m = at((k + 0.5)/n); return onLanding(m.x + o.n.x*0.3, m.z + o.n.z*0.3); };
+      for (let k = 0; k < n;) {
+        if (open(k)) { k++; continue; }
+        let j = k; while (j < n && !open(j)) j++;
+        const a = at(k/n), b = at(j/n);
+        wallQuad(glass, a, b, deckTop, deckTop + 1.05);
+        railBars.push(bar({ ...a, y: deckTop + 1.1 }, { ...b, y: deckTop + 1.1 }, 0.08));
+        k = j;
+      }
     });
     // columns just back from the void's edge, every 9 m or so, clear of the lanes
     edgesOf(voidPaths).forEach(([p, q]) => {
@@ -952,7 +1148,8 @@ function generateMall(zone, outline, spine, CW) {
         const n = Math.max(2, Math.ceil(span*rg/3)), arc = [a.p];
         for (let k = 1; k < n; k++) arc.push({ x: c.x + Math.cos(a.ang + span*k/n)*rg, z: c.z + Math.sin(a.ang + span*k/n)*rg });
         arc.push(b.p);
-        galleries.push(arc);
+        // (never across a void: only where the ring's deck is under it all the way)
+        if (arc.slice(1, -1).every(p => inDeck0(p.x, p.z))) galleries.push(arc);
       });
     });
     nets.push({ H: deckTop, lateral: Math.max(0.3, G/2 - 0.9), walk: Math.max(0.4, G/2 - 0.3), decks: galleries, ramps: [], indoor: true });
@@ -976,7 +1173,14 @@ function generateMall(zone, outline, spine, CW) {
   piers.forEach(pr => {
     if (placedPiers.some(o => o.y0 === pr.y0 && dist(o, pr) < 1.3)) return; // (neighbours share a corner, near enough)
     placedPiers.push(pr);
-    const F = frameOf(pr, pr.dx, pr.dz), out = Math.sign(F.uv({ x: pr.x + pr.n.x, z: pr.z + pr.n.z }).v) || 1;
+    let F = frameOf(pr, pr.dx, pr.dz);
+    const out = Math.sign(F.uv({ x: pr.x + pr.n.x, z: pr.z + pr.n.z }).v) || 1;
+    // (one at the end of a row, against the outer wall, slides along the fronts till it is clear of the wall)
+    const clearOfWalls = G => [-0.66, 0.66].every(u => [-out*WALL_IN/2, 0.64*out].every(v => { const q = G.at(u, v); return inWalls(q.x, q.z); }));
+    if (!clearOfWalls(F)) for (let k = 1; k <= 20; k++) {
+      const G = [k*0.05, -k*0.05].map(du => frameOf(F.at(du, 0), pr.dx, pr.dz)).find(clearOfWalls);
+      if (G) { F = G; break; }
+    }
     const box = (b, hu, v0, v1, y0, y1) => frameBox(b, F, 0, out*(v0 + v1)/2, hu, (v1 - v0)/2, y0, y1);
     // (their backs between the lot's front and the shop's, WALL_IN behind it, so no face is drawn where another is)
     const back = -WALL_IN/2;
@@ -1048,14 +1252,22 @@ function generateMall(zone, outline, spine, CW) {
       jet(p, y0 + 1.5, y0 + H - 0.12, Math.min(0.6, iv - 0.1));
     }
   };
+  // (nothing down here stands on a bridge's footprint, in an escalator's way or on the landing at its foot)
+  const LANDING = 4;
+  const underEscalator = (p, pad) => upper && bridges.some(b => {
+    const { u, v } = frameOf(b.at, b.dx, b.dz).uv(p), uFoot = b.dir*(BH + L + LANDING);
+    return u > Math.min(-BH, uFoot) - pad && u < Math.max(BH, uFoot) + pad && Math.abs(v) < VH + 0.3 + pad;
+  });
   const bedW = Math.min(1.8, 2*(lv - 0.9) - 1.2);
   if (bedW >= 0.8) spine.edges.forEach((e, ei) => {
     const len = lengthOf(e.pts), na = spine.byId.get(e.a), nb = spine.byId.get(e.b), from = na.entrance ? CW + 1 : 0;
-    const busy = bridges.filter(b => b.edge === ei).map(b => b.d + from), reserve = BH + L + 2.5;
     let k = Math.floor(deco()*3);
     for (let t = (na.entrance ? CW + 12 : 7); t < len - (nb.entrance ? CW + 12 : 7) + 1e-6; t += 12) {
       const at = pointAlong(e.pts, t), hu = 2.6, F = frameOf(at, at.dx, at.dz), ends = [F.at(-hu - 0.3, 0), F.at(hu + 0.3, 0)];
-      if (nearCourt(at, 3) || busy.some(d => Math.abs(d - t) < reserve)) continue;
+      if (nearCourt(at, 3)) continue;
+      const foot = [];
+      for (let u = -hu - 0.3; u <= hu + 0.8 + 1e-6; u += 0.5) [-bedW/2, 0, bedW/2].forEach(v => foot.push(F.at(u, v)));
+      if (foot.some(p => underEscalator(p, 0.5))) continue;
       if (!ends.every(p => inC(p.x, p.z)) || [at, ...ends].some(p => nearLane(p, bedW/2 + 0.8))) continue;
       const which = k++ % 3;
       if (which === 2) pool(F, hu, bedW/2 + 0.2); else planter(F, hu, bedW/2, which === 0);
@@ -1068,11 +1280,11 @@ function generateMall(zone, outline, spine, CW) {
     zone.buildingsGroup.add(buildFountain({ x: c.x, z: c.z }, c.fountain, Y_ZONE_GROUND));
     for (let k = 0; k < 4; k++) {
       const a = k*Math.PI/2, p = { x: c.x + Math.cos(a)*(c.fountain + 1.4), z: c.z + Math.sin(a)*(c.fountain + 1.4) };
-      if (!nearLane(p, 1) && inC(p.x, p.z)) lampPost(p);
+      if (!nearLane(p, 1) && inC(p.x, p.z) && !underEscalator(p, 0.5)) lampPost(p);
     }
     for (let k = 0; k < 4; k++) {
       const a = Math.PI/4 + k*Math.PI/2, p = { x: c.x + Math.cos(a)*(c.fountain + 1.5), z: c.z + Math.sin(a)*(c.fountain + 1.5) };
-      if (nearLane(p, 1.2) || !inC(p.x, p.z)) continue;
+      if (nearLane(p, 1.2) || !inC(p.x, p.z) || underEscalator(p, 0.8)) continue;
       pierMain.addGeometry(new THREE.CylinderGeometry(0.5, 0.36, 0.6, 14), p.x, Y_ZONE_GROUND + 0.3, p.z);
       soil.addGeometry(new THREE.CylinderGeometry(0.44, 0.44, 0.04, 14), p.x, Y_ZONE_GROUND + 0.6, p.z);
       palm(p, Y_ZONE_GROUND + 0.6);
@@ -1104,10 +1316,10 @@ function generateMall(zone, outline, spine, CW) {
     }
     for (let k = 0; k < 8; k++) {
       const a = (k + 0.5)/8*Math.PI*2, p = { x: food.x + Math.cos(a)*inner*0.62, z: food.z + Math.sin(a)*inner*0.62 };
-      pendant(p, GLASS_TOP + food.r*0.6*Math.sqrt(Math.max(0, 1 - 0.62*0.62*inner*inner/(food.r*food.r))), upper ? MALL_LEVEL + 2.5 : 5.5);
+      pendant(p, glassAt(p), upper ? MALL_LEVEL + 2.5 : 5.5);
     }
     // round tables in rows, four chairs each, clear of the lanes and the middle where they meet
-    const step = 3.4;
+    const step = 3.9; // (about three tables for every four a 3.4 m grid would hold)
     for (let x = -inner; x <= inner; x += step) for (let z = -inner; z <= inner; z += step) {
       const t = { x: food.x + x + (Math.round(z/step) % 2 ? step/2 : 0), z: food.z + z };
       if (dist(t, food) > inner - 1.2 || nearLane(t, 2) || dist(t, food) < 2.5 || !inOutline(t.x, t.z) || obstacles.some(o => dist(t, o) < o.r + 1.2)) continue;
@@ -1136,6 +1348,10 @@ function generateMall(zone, outline, spine, CW) {
   if (railBars.length) rails.addGeometry(mergeGeometryList(railBars), 0, 0, 0);
   [
     meshOf(built(walls), plain(theme.walls, { roughness: 0.9 }), 'Building'),
+    // (the outer walls are closed, so they cast from their far faces: the near ones, in the sun, don't shadow themselves)
+    meshOf(built(outerWalls), plain(theme.walls, { roughness: 0.9, shadowSide: THREE.BackSide }), 'Building'),
+    meshOf(built(outerStripe), plain(theme.inlay, { roughness: 0.45, shadowSide: THREE.BackSide }), 'Building'),
+    meshOf(built(outerTrim), plain(theme.accent, { roughness: 0.45, shadowSide: THREE.BackSide }), 'Building'),
     meshOf(built(trim), plain(theme.accent, { roughness: 0.45 }), 'Building'),
     meshOf(built(stripe), plain(theme.inlay, { roughness: 0.45 }), 'Building'),
     meshOf(built(roof), plain(0x9aa3a6, { roughness: 0.95 }), 'Building'),
@@ -1165,6 +1381,7 @@ function generateMall(zone, outline, spine, CW) {
   if (posts) lights.add(posts);
   const names = signAtlas(signs);
   if (names) lights.add(names);
+  if (beltPos.length) lights.add(beltMesh(beltPos, beltUV));
   zone.buildingsGroup.add(lights);
 }
 

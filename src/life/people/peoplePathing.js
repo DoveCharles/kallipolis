@@ -315,8 +315,10 @@ export function buildPeopleNav() {
     });
     net.ramps.forEach(ramp => {
       const pts = ramp.pts, cum = cumulative(pts), li = lines.length;
+      // (an escalator carries people at its own pace, only ever one way: see roads/mall.js, and riding in people.js)
       lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, ramp: true, indoor: !!net.indoor, y: net.H, ys: ramp.ys,
-        lateral: ramp.lateral, walk: ramp.walk, blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
+        lateral: ramp.lateral, walk: ramp.walk, escalator: ramp.escalator || 0, beltEnd: ramp.beltEnd ?? pts.length - 1, oneWay: ramp.oneWay || 0,
+        blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
       let top = null;
       decks.forEach(dl => lines[dl].pts.forEach((q, vi) => {
         const d = Math.hypot(q.x - ramp.top.x, q.z - ramp.top.z);
@@ -713,11 +715,19 @@ const segFrom = (nav, vi, dir) => dir > 0 ? Math.min(vi, nav.pts.length-2) : nav
 export function placeAtVertex(p, li, vi, dir) {
   const nav = peopleNav.lines[li];
   if (!nav.loop) { if (vi === 0) dir = 1; else if (vi === nav.pts.length-1) dir = -1; }
+  if (nav.oneWay) dir = nav.oneWay;
   if (nav.blocked?.[nextVertex(nav, vi, dir)]) dir = -dir;
   joinWalkway(p, li, nav.cum[vi], dir);
   if (nav.loop && vi === 0 && dir < 0) p.u = nav.total;
   p.seg = segFrom(nav, vi, dir);
 }
+
+/**
+ * Whether a link can be taken: not onto an escalator from the end it carries people to.
+ * @param {{li: number, vi: number}} link - the link
+ * @returns {boolean} whether it can
+ */
+const wayOn = link => { const to = peopleNav.lines[link.li]; return !to.oneWay || (link.vi === 0 ? 1 : -1) === to.oneWay; };
 
 /**
  * Put a person onto the walkway a (non-crossing) link leads to, either way along it.
@@ -755,14 +765,16 @@ export function walkAlong(p, dist) {
     if (entrance && peopleRng() < 0.12*drawn) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
     // linkCooldown stops them turning off again immediately after a turn, which would otherwise let a junction with
     // several close-together links send them zigzagging back the way they came
-    if (vertex.links.length && p.linkCooldown <= 0) {
-      const crossings = vertex.links.filter(l => l.cross), turns = vertex.links.filter(l => !l.cross);
+    // (off the end of an escalator, straight off it, whenever they got on; and never onto one the wrong way)
+    const offEscalator = isEnd && !!nav.oneWay;
+    if (vertex.links.length && (p.linkCooldown <= 0 || offEscalator)) {
+      const crossings = vertex.links.filter(l => l.cross), turns = vertex.links.filter(l => !l.cross && wayOn(l));
       if (crossings.length && peopleRng() < 0.35) {
         p.u = at;
         startZebraCrossing(p, nav, ahead, crossings[Math.floor(peopleRng()*crossings.length)]);
         return;
       }
-      if (turns.length && (peopleRng() < (isEnd ? 0.85 : 0.3) || (hidingFromSun(p) && !hasDoor(nav)))) {
+      if (turns.length && (offEscalator || peopleRng() < (isEnd ? 0.85 : 0.3) || (hidingFromSun(p) && !hasDoor(nav)))) {
         const remaining = Math.abs(u - at);
         nav = takeLink(p, turns[Math.floor(peopleRng()*turns.length)]);
         u = p.u + p.dir*remaining;
