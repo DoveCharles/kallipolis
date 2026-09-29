@@ -3,6 +3,7 @@ import { S } from '../../core/shared.js';
 import { groundBelow } from '../../core/ground-probe.js';
 import { NO_GROUND_FALLBACK, fallStep, gibGone, gibSink, isNear, landingGround } from '../giblets.js';
 import { gibPartCentre } from './peopleModel.js';
+import { stillLoading } from '../../ui/loading.js';
 
 // A dead person's own body parts, thrown apart: the parts personModel.gibs holds (see buildGibMeshes in
 // peopleModel.js), each starting exactly where it was on them, in the pose they died in, then tumbling and falling
@@ -90,6 +91,23 @@ export function throwBodyParts(personModel, i, at, momentum = null) {
   return true;
 }
 
+// Every part mesh drawn empty (instances scaled to nothing) while loading and for WARM_FRAMES after, under the loading
+// screen: shaders, shadow shaders and buffers all ready before the first death.
+const WARM_FRAMES = 3;
+let warmFrames = 0;
+export function warmBodyParts(personModel) {
+  if (!personModel?.gibs) return;
+  model = personModel;
+  const all = [...model.gibs.parts];
+  model.wornLayers.forEach(layer => layer.styles.forEach(style => { if (style.gib) all.push(style.gib); }));
+  all.forEach(target => {
+    for (let c=0;c<model.gibs.capacity;c++) target.mesh.setMatrixAt(c, HIDDEN);
+    target.dirty = true;
+    targets.add(target);
+  });
+  warmFrames = WARM_FRAMES;
+}
+
 /**
  * Move and draw every body part. Call once a frame.
  * @param {number} t - the time, in seconds
@@ -113,9 +131,11 @@ export function updateBodyParts(t) {
       piece.target.dirty = piece.shown = true;
     }
   });
+  const warming = warmFrames > 0;
+  if (warming && !stillLoading()) warmFrames--;
   targets.forEach(target => {
-    target.mesh.count = highestColumn + 1;
-    target.mesh.visible = bodies.length > 0;
+    target.mesh.count = Math.max(highestColumn + 1, warming ? 1 : 0);
+    target.mesh.visible = bodies.length > 0 || warming;
     if (target.dirty) { target.mesh.instanceMatrix.needsUpdate = true; target.dirty = false; }
   });
 }

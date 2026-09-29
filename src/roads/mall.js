@@ -162,6 +162,43 @@ function meshOf(geo, mat, name, shadows = true) {
   mesh.castShadow = shadows; mesh.receiveShadow = true;
   return mesh;
 }
+// A shell mesh split at y: triangles wholly above it go into `tiles` (cell key -> group), by which ROOF_TILE square
+// their middle's in, as meshes of their own (sharing its attributes) tagged to fade with the camera near
+// (buildings/see-through.js) — tile by tile, so only the roof near the camera fades. Returns what's left below.
+const ROOF_TILE = 12;
+function splitRoof(mesh, y, tiles) {
+  if (!mesh) return [];
+  const geo = mesh.geometry, pos = geo.attributes.position, idx = geo.index;
+  const at = k => idx ? idx.getX(k) : k, low = [], high = new Map();
+  for (let k = 0, n = idx ? idx.count : pos.count; k + 2 < n; k += 3) {
+    const a = at(k), b = at(k + 1), c = at(k + 2);
+    if (Math.min(pos.getY(a), pos.getY(b), pos.getY(c)) < y) { low.push(a, b, c); continue; }
+    const key = Math.floor((pos.getX(a) + pos.getX(b) + pos.getX(c))/3/ROOF_TILE) + ',' + Math.floor((pos.getZ(a) + pos.getZ(b) + pos.getZ(c))/3/ROOF_TILE);
+    if (!high.has(key)) high.set(key, []);
+    high.get(key).push(a, b, c);
+  }
+  if (!high.size) return [mesh];
+  const part = list => {
+    const g = new THREE.BufferGeometry();
+    Object.entries(geo.attributes).forEach(([name, attr]) => g.setAttribute(name, attr));
+    g.setIndex(list);
+    const m = new THREE.Mesh(g, mesh.material);
+    m.name = mesh.name; m.castShadow = mesh.castShadow; m.receiveShadow = mesh.receiveShadow;
+    return m;
+  };
+  high.forEach((list, key) => {
+    if (!tiles.has(key)) {
+      const tile = new THREE.Group();
+      tile.name = 'MallRoof';
+      tile.userData.batchable = true;
+      tiles.set(key, tile);
+    }
+    const top = part(list);
+    top.userData.fadesNear = true;
+    tiles.get(key).add(top);
+  });
+  return low.length ? [part(low)] : [];
+}
 // A builder's geometry, or null when nothing went into it.
 const built = b => b.vertexCount() ? b.build() : null;
 
@@ -860,6 +897,7 @@ function generateMall(zone, outline, spine, CW) {
   // ---- the shell: outer walls (glass doors at the entrances), the roof over the units, the glass over the concourse
   const shell = new THREE.Group();
   shell.name = 'MallShell';
+  const roofTiles = new Map(); // (the shell's parts above the shops, in squares: see splitRoof)
   shell.userData.batchable = true;
   const walls = createMeshBuilder(), trim = createMeshBuilder(), glass = createMeshBuilder(), frame = createMeshBuilder(), roof = createMeshBuilder();
   const stripe = createMeshBuilder(), pierMain = createMeshBuilder(), pierInlay = createMeshBuilder(), columns = createMeshBuilder();
@@ -1473,8 +1511,9 @@ function generateMall(zone, outline, spine, CW) {
     meshOf(built(trunks), plain(0x8a6a45, { roughness: 0.9 }), 'MallPlanter'),
     ...flowers.map((b, i) => meshOf(built(b), plain(theme.flowers[i], { roughness: 0.6, emissive: theme.flowers[i], emissiveIntensity: 0.12 }), 'MallPlanter')),
     meshOf(built(glass), glassMaterial(), 'MallGlass', false),
-  ].forEach(m => m && shell.add(m));
+  ].flatMap(m => splitRoof(m, levels*MALL_LEVEL - 0.01, roofTiles)).forEach(m => shell.add(m)); // (from the shops' tops up: see splitRoof)
   zone.buildingsGroup.add(shell);
+  roofTiles.forEach(tile => zone.buildingsGroup.add(tile));
   // (the lights on their own, left out of the merged meshes, since they glow more or less by the time of day)
   const lights = new THREE.Group();
   lights.name = 'MallLights';

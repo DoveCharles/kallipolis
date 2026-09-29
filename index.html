@@ -22,10 +22,14 @@
 </head>
 <body>
 <!-- the side panel and hints start hidden (ui-loading); src/ui/view-prefs.js slides them in once the page has loaded.
-     start-edit keeps the Edit button pressed meanwhile when Options > Game > Start in Edit mode is on. -->
+     start-edit keeps the Edit button pressed meanwhile when Options > Game > Start in Mode comes to Edit (see view-prefs.js). -->
 <script>
 document.body.classList.add('w3-no-panel', 'ui-loading');
-try { if (localStorage.getItem('splinetopia.startInEdit') !== '0') document.body.classList.add('start-edit'); } catch (err) { document.body.classList.add('start-edit'); }
+try {
+  const start = localStorage.getItem('splinetopia.startMode') || 'last';
+  const last = localStorage.getItem('splinetopia.lastMode') || (localStorage.getItem('splinetopia.startInEdit') === '0' ? 'game' : 'edit');
+  if ((start === 'last' ? last : start) !== 'game') document.body.classList.add('start-edit');
+} catch (err) { document.body.classList.add('start-edit'); }
 </script>
 
 <div id="canvas-wrap"></div>
@@ -199,6 +203,7 @@ try { if (localStorage.getItem('splinetopia.startInEdit') !== '0') document.body
       <input type="range" id="s-pixelation" min="1" max="12" step="1" value="1"></div>
     <div class="row"><label>Flat shading</label><button class="toggle-switch" id="s-flatshade"><span class="knob"></span></button></div>
     <div class="row"><label>Toon characters</label><button class="toggle-switch" id="s-toonpeople"><span class="knob"></span></button></div>
+    <div class="row"><label>Dithered See-Through</label><button class="toggle-switch" id="s-ditherseethrough"><span class="knob"></span></button></div>
     <div class="row"><label>16-colour palette</label><button class="toggle-switch" id="s-palette16"><span class="knob"></span></button></div>
     <div class="row" id="palette-row" style="display:none;"><label>Palette</label><select class="select-input" id="s-palette" style="width:130px; margin-bottom:0;"></select></div>
     <div class="row" id="dither-row" style="display:none;"><label>Dithering</label><select class="select-input" id="s-dither" style="width:130px; margin-bottom:0;"></select></div>
@@ -232,7 +237,7 @@ try { if (localStorage.getItem('splinetopia.startInEdit') !== '0') document.body
       <div class="slider-row"><div class="row"><label>Car spawn distance from camera</label><span class="val" id="dv-carspawn">2000</span></div>
         <input type="range" id="s-carspawn" min="0" max="3000" step="50" value="2000"></div>
       <div class="row"><label>Hide own head in first person</label><button class="toggle-switch" id="s-hideownhead"><span class="knob"></span></button></div>
-      <div class="row"><label>Start in Edit mode</label><button class="toggle-switch" id="s-starteditmode"><span class="knob"></span></button></div>
+      <div class="row"><label>Start in Mode</label><select class="select-input" id="s-startmode" style="width:130px; margin-bottom:0;"><option value="last">Last Used</option><option value="edit">Edit</option><option value="game">Game</option></select></div>
       <div class="row"><label>Blood soaking</label><button class="toggle-switch" id="s-bloodsoak"><span class="knob"></span></button></div>
       <div class="row"><label>Encourage To Watch TV</label><button class="toggle-switch" id="s-encouragetv"><span class="knob"></span></button></div>
       <div class="row"><label>Free Camera Indoors</label><button class="toggle-switch" id="s-freeroomcamera"><span class="knob"></span></button></div>

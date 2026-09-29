@@ -174,6 +174,25 @@ html.win3 .select-input {
              linear-gradient(var(--w3-face), var(--w3-face)) right / 17px 100% no-repeat, var(--w3-window);
 }
 html.win3 :is(.swatch, .swatch:hover) { border:1px solid var(--w3-frame); border-radius:0; }
+/* a drop-down list (src/ui/w3-select.js, standing in for a hidden .select-input): a white field, the arrow on a raised grey
+   button (pressed while the list's down), the text highlighted navy while it has focus; the list a lined white box */
+select.select-input.w3-enhanced { display:none !important; }
+.w3-select {
+  display:flex; align-items:stretch; width:100%; height:20px; box-sizing:border-box; margin-bottom:2px;
+  background:var(--w3-window); color:var(--w3-text); border:1px solid var(--w3-frame); outline:none; cursor:default; user-select:none;
+}
+.w3-select, .w3-select-list { font:11px var(--sans); letter-spacing:0; -webkit-font-smoothing:none; }
+.w3-select-text { flex:1; min-width:0; margin:1px; padding:0 3px; line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.w3-select:focus .w3-select-text { background:var(--w3-hl); color:var(--w3-hl-text); }
+.w3-select-arrow {
+  flex:none; width:17px; border-left:1px solid var(--w3-frame); box-shadow:var(--w3-raised);
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 0h7L3.5 4z'/%3E%3C/svg%3E") center no-repeat, var(--w3-face);
+}
+.w3-select.down .w3-select-arrow { box-shadow:var(--w3-pressed); background-position:calc(50% + 1px) calc(50% + 1px), 0 0; }
+.w3-select.disabled { color:var(--w3-shadow); }
+.w3-select-list { position:fixed; z-index:90; box-sizing:border-box; overflow-y:auto; background:var(--w3-window); border:1px solid var(--w3-frame); user-select:none; }
+.w3-select-item { padding:1px 4px; line-height:14px; white-space:nowrap; color:var(--w3-text); cursor:default; }
+.w3-select-item.hot { background:var(--w3-hl); color:var(--w3-hl-text); }
 html.win3 .swatch.active { outline:2px solid var(--w3-frame); outline-offset:1px; }
 html.win3 .swatch-add { background:var(--w3-window); color:var(--w3-text); }
 html.win3 input[type=color].color-input, html.win3 input[type=color].color-input:hover { border:1px solid var(--w3-frame); border-radius:0; }

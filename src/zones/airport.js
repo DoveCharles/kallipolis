@@ -868,7 +868,7 @@ function buildTerminal(frame, box, tier, rng) {
     if (mesh) group.add(mesh);
   });
   // its corners and its height, kept on it so people can find a door on its wall and go in (see buildingDoors in
-  // people.js) and so it stops being drawn when the camera's inside it (see see-through.js)
+  // people.js) and so it fades out when the camera's inside it (see see-through.js)
   group.userData.footprint = frameRect(frame, box);
   group.userData.height = height;
   return group;

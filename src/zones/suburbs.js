@@ -468,7 +468,7 @@ export function generateSuburbsContent(zone, poly, cutouts, blockers) {
         group.position.set(spot.at.x, Y_PARK, spot.at.z);
         group.rotation.y = spot.yaw;
         // its own corners and its height, kept on it so people can find a door on its wall and go in (see
-        // buildingDoors in people.js) and so it stops being drawn when the camera's inside it (see see-through.js)
+        // buildingDoors in people.js) and so it fades out when the camera's inside it (see see-through.js)
         group.userData.footprint = houseOutline(spot.at, spot.yaw, design.half).slice(0, 4);
         group.userData.height = design.height;
         zone.buildingsGroup.add(group);

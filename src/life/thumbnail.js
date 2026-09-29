@@ -30,13 +30,33 @@ const thumbPixels = new Uint8Array(THUMB_SIZE*THUMB_SIZE*4), clearColor = new TH
  * @returns {(view: { mesh: THREE.Object3D, camera: THREE.Camera }|null) => void} Draws `view.mesh`
  *   through `view.camera`; pass `null` to clear the canvas to blank.
  */
-export function makeThumbnailDrawer(canvas) {
+function makeThumbScene() {
   const thumbScene = new THREE.Scene();
   thumbScene.add(new THREE.AmbientLight(0xffffff, 0.9));
   // One key light, brighter than the world's, so the mesh reads clearly at 120px.
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
   keyLight.position.set(3, 6, 4);
   thumbScene.add(keyLight);
+  return thumbScene;
+}
+
+/**
+ * Compile `object`'s shaders as a thumbnail would draw them (these lights, into thumbTarget), so a card's first
+ * thumbnail doesn't stall.
+ * @param {THREE.Object3D} object
+ * @returns {Promise<void>}
+ */
+const warmScene = makeThumbScene(), warmCamera = new THREE.OrthographicCamera();
+export function warmThumbnails(object) {
+  const previousTarget = renderer.getRenderTarget();
+  renderer.setRenderTarget(thumbTarget); // (programs depend on the target: colour space, tone mapping)
+  const done = renderer.compileAsync(object, warmCamera, warmScene).catch(err => console.warn('Kallipolis: thumbnail warm-up failed', err));
+  renderer.setRenderTarget(previousTarget);
+  return done;
+}
+
+export function makeThumbnailDrawer(canvas) {
+  const thumbScene = makeThumbScene();
   const context = canvas.getContext('2d'), image = context.createImageData(THUMB_SIZE, THUMB_SIZE);
   let meshInScene = null;
   return function drawThumbnail(view) {

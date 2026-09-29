@@ -14,8 +14,11 @@ import { pedViewOn } from '../ui/ped-view.js';
 //
 // The buildings themselves stay where they were, only not drawn (visible = false, userData.batched): picking, following,
 // the card's thumbnail, exports, people's pathing all still find them as before (a raycast doesn't care whether a mesh is
-// drawn). Anything that shows buildings one by one hands them back for as long as it lasts, for that zone: a building
-// the camera's inside (see-through.js) or has gone into (interior.js), and ped view, which tints them per building.
+// drawn). A building that has to be drawn on its own — one the camera's inside and has faded (see-through.js), or one
+// hidden (a building gone into, and its neighbours: interior.js) — is cut out of its zone's merged meshes (each building
+// is one run of each merged mesh's triangles, left out through the geometry's draw groups) and its own parts drawn
+// instead, for as long as it lasts; the rest of the zone stays merged. Ped view, which tints every building its own way,
+// hands the whole zone back.
 //
 // Left out, and drawn as they were: see-through surfaces (glass domes, balcony rails — they're sorted back to front one
 // by one), blinking lights (animated), and anything not built with a plain MeshStandardMaterial.
@@ -60,7 +63,7 @@ const MAPS = ['map', 'lightMap', 'aoMap', 'emissiveMap', 'bumpMap', 'normalMap',
 // which merged mesh a building part joins, or null to leave it drawn as it is
 function kindOf(mesh) {
   if (!mesh.isMesh || mesh.isInstancedMesh || mesh.isSkinnedMesh || mesh.userData.isBlinkLight) return null;
-  const m = mesh.material, geo = mesh.geometry;
+  const m = mesh.userData.ownMaterial ?? mesh.material, geo = mesh.geometry;
   if (!m || Array.isArray(m) || m.type !== 'MeshStandardMaterial' || m.transparent || m.alphaTest > 0 || !m.visible || m.polygonOffset || m.depthWrite === false || m.wireframe) return null;
   if (!geo?.attributes.position || !geo.attributes.normal || geo.morphAttributes.position) return null;
   const windows = m.userData.windowUniforms;
@@ -84,7 +87,7 @@ function collector(window) {
     glass: window ? [] : null, lit: window ? [] : null, litMix: window ? [] : null };
 }
 function append(c, mesh) {
-  const geo = mesh.geometry, m = mesh.material, pos = geo.attributes.position, nor = geo.attributes.normal;
+  const geo = mesh.geometry, m = mesh.userData.ownMaterial ?? mesh.material, pos = geo.attributes.position, nor = geo.attributes.normal;
   const col = m.vertexColors ? geo.attributes.color : null;
   const n = pos.count, base = c.count;
   normalMatrix.getNormalMatrix(mesh.matrixWorld);
@@ -143,19 +146,28 @@ function batchZone(zone) {
   const source = zone.buildingsGroup;
   source.updateMatrixWorld(true);
   const byKind = new Map(), originals = [];
+  const parts = new Map(); // building -> { originals: its parts merged, runs: { class key -> [first index, end] } }
   source.children.forEach(group => {
     if (!group.userData.batchable) return;
+    const part = { originals: [], runs: {} };
     group.traverse(o => {
       const kind = kindOf(o);
       if (!kind) return;
       if (!byKind.has(kind.key)) byKind.set(kind.key, { kind, c: collector(kind.window) });
-      append(byKind.get(kind.key).c, o);
+      const c = byKind.get(kind.key).c, start = c.index.length;
+      append(c, o);
+      const run = part.runs[kind.key] ??= [start, start]; // (a building's parts of one class go in one after another)
+      run[1] = c.index.length;
       originals.push(o);
+      part.originals.push(o);
     });
+    parts.set(group, part);
   });
-  const meshes = [];
+  const meshes = [], meshOf = {};
   byKind.forEach(({ kind, c }, key) => {
     const mesh = new THREE.Mesh(geometryOf(c), materialFor(key, kind));
+    mesh.userData.batchMaterial = mesh.material;
+    meshOf[key] = mesh;
     const [castShadow, receiveShadow] = key.split(',').slice(-2).map(s => s === 'true');
     mesh.castShadow = castShadow; mesh.receiveShadow = receiveShadow;
     mesh.name = 'Building';
@@ -172,19 +184,41 @@ function batchZone(zone) {
   source.children.forEach(group => { if (group.userData.batchable) group.traverse(o => frozen.push(o)); });
   const wasAuto = frozen.map(o => o.matrixAutoUpdate);
   frozen.forEach(o => { o.matrixAutoUpdate = false; });
-  return { source, count: source.children.length, meshes, originals, frozen, wasAuto, shown: false };
+  // (a building's runs by merged mesh rather than class)
+  parts.forEach(part => { part.runs = Object.entries(part.runs).map(([key, run]) => [meshOf[key], ...run]); });
+  return { source, count: source.children.length, meshes, originals, parts, frozen, wasAuto, shown: null };
 }
 function unbatchZone(entry) {
   entry.meshes.forEach(mesh => { batchesGroup.remove(mesh); mesh.geometry.dispose(); });
   entry.originals.forEach(o => { o.visible = true; delete o.userData.batched; });
   entry.frozen.forEach((o, k) => { o.matrixAutoUpdate = entry.wasAuto[k]; });
 }
-// the originals drawn instead of the merged meshes (true), or the other way round
-function showOriginals(entry, on) {
-  if (entry.shown === on) return;
-  entry.shown = on;
-  entry.meshes.forEach(mesh => { mesh.visible = !on; });
-  entry.originals.forEach(o => { o.visible = on; });
+// the originals drawn instead of the merged meshes (all), or the merged meshes with the buildings `apart` cut out of them
+// and drawn by their own parts instead
+function showOriginals(entry, all, apart) {
+  const shown = all ? 'all' : apart.map(g => g.id).join();
+  if (entry.shown === shown) return;
+  entry.shown = shown;
+  entry.originals.forEach(o => { o.visible = all; });
+  const cuts = new Map(); // merged mesh -> the runs left out of it
+  if (!all) apart.forEach(group => {
+    const part = entry.parts.get(group);
+    if (!part) return;
+    part.originals.forEach(o => { o.visible = true; });
+    part.runs.forEach(([mesh, start, end]) => { if (!cuts.has(mesh)) cuts.set(mesh, []); cuts.get(mesh).push([start, end]); });
+  });
+  entry.meshes.forEach(mesh => {
+    mesh.visible = !all;
+    const geo = mesh.geometry, cut = cuts.get(mesh);
+    geo.clearGroups();
+    if (!cut) { mesh.material = mesh.userData.batchMaterial; return; }
+    // what's left between the runs cut out, drawn as groups of one material (a mesh with an array of materials draws
+    // its geometry's groups only)
+    let at = 0;
+    cut.sort((a, b) => a[0] - b[0]).forEach(([start, end]) => { if (start > at) geo.addGroup(at, start - at, 0); at = end; });
+    if (geo.index.count > at) geo.addGroup(at, geo.index.count - at, 0);
+    mesh.material = [mesh.userData.batchMaterial];
+  });
 }
 
 // a zone's merged meshes, the same array until it's merged again (see node-highlight.js)
@@ -201,7 +235,7 @@ export function updateBuildingBatches() {
     let entry = zoneBatches.get(zone);
     if (entry && (entry.source !== source || entry.count !== source.children.length)) { unbatchZone(entry); entry = null; }
     if (!entry) { entry = batchZone(zone); zoneBatches.set(zone, entry); }
-    showOriginals(entry, pedViewOn() || source.children.some(g => g.userData.batchable && !g.visible));
+    showOriginals(entry, pedViewOn(), source.children.filter(g => g.userData.batchable && (!g.visible || g.userData.seeThrough != null)));
   }
   zoneBatches.forEach((entry, zone) => { if (!live.has(zone)) { unbatchZone(entry); zoneBatches.delete(zone); } });
 }
