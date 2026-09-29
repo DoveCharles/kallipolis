@@ -32,20 +32,20 @@ do-gooder {evil, other.evil = -1}
 loser {evil = -1}
 party pooper {stimulants, other.stimulants = -1}
 downer {stimulants, other.stimulants = -1}
-baba yaga {agemult = -1, other.agemult > 0}
-biddy | biddies {agemult = -1, other.agemult > 0}
-boomer {agemult = -1, other.agemult > 0}
-coot {agemult = -1, other.agemult > 0}
-curmudgeon {agemult = -1, other.agemult > 0, nerd}
-dinosaur {agemult = -1, other.agemult > 0}
-fossil {agemult = -1, other.agemult > 0}
-old bag {agemult = -1, other.agemult > 0}
-little baby | little babies {other.agemult < 0}
-brat {agemult, other.agemult = -1}
-hipster {agemult, other.agemult = -1}
-man-child {other.agemult > 0}
-whippersnapper {agemult > 0, other.agemult <0}
-zoomer {other.agemult <0}
+baba yaga {age = -1, other.age > 60, other.woman}
+biddy | biddies {age = -1, other.age > 60, other.woman = 1}
+boomer {age = -1, other.age > 60}
+coot {age = -1, other.age > 60}
+curmudgeon {age = -1, other.age > 60, nerd}
+dinosaur {age = -1, other.age > 60}
+fossil {age = -1, other.age > 60}
+old bag {age = -1, other.age > 60}
+little baby | little babies {age, other.age < 24}
+brat {age, other.age = -1, other.age < 35}
+hipster {age, other.age = -1}
+man-child {other.age > 30, other.man}
+whippersnapper {age > 60, other.age < 40}
+zoomer {age, other.age < 30}
 addict {conservative = -1, other.stimulants, other.alcoholic, other.psychs, other.painkillers}
 drunkard {other.alcoholic}
 boring fuck {other.alcoholic = -1, other.stimulants = -1}
@@ -65,16 +65,16 @@ tyrant {other.outlaw = -1, other.evil}
 libtard {evil, conservative}
 chud {other.conservative}
 cuck {conservative}
-bourgeios {nerd, conservative = -1}
-lumpen {nerd, conservative = -1}
-liberal {conservative}
-commie {conservative, other.conservative = -1}
-fascist {other.conservative}
+bourgeios {nerd, conservative = -1, conservative < -0.3, other.conservative, other.conservative > 0.3}
+lumpen {nerd, conservative = -1, conservative < -0.3, other.conservative}
+liberal {conservative, conservative > 0}
+commie {conservative, other.conservative = -1, other.conservative < -0.3}
+fascist {other.conservative > 0.3}
 gusano {other.conservative}
 luddite {other.nerd = -1}
-reactionary {conservative = -1, other.conservative}
-snowflake {conservative}
-tankie {other.conservative = -1}
-crackhead {conservative, other.stimulants}
-hippy {other.psychs}
+reactionary {conservative = -1, conservative < -0.3, other.conservative, other.conservative > 0.3}
+snowflake {conservative, other.conservative < 0}
+tankie {other.conservative = -1, other.conservative < -0.3}
+crackhead {conservative, other.stimulants, other.stimulants > 0.3}
+hippy {other.psychs > 0.1}
 dopehead {other.stoner, other.painkillers}

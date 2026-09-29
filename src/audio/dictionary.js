@@ -18,7 +18,7 @@ const LINE_GAP = 3;         // seconds after a line ends before its conversation
 const LINE_START_GAP = 0.15; // seconds between any two lines starting (each is synthesized on the spot: a burst of them stalls the audio)
 const CROWD_EASY = 3;       // lines at once before each is made quieter (by the square root of how many more), so a crowd doesn't clip
 const MAX_LINES = 4;        // real lines said at once, at most (each is synthesized as it starts) — no limit with babble only as fallback
-const REPLY_WINDOW = 4;     // seconds after a line ends that a reply to it can still come
+const REPLY_WINDOW = 6;     // seconds after a line ends that a reply to it can still come
 const MATCH = 1;            // how loud a real line is next to the speaker's own babble (see loudnessOf in audio/voices.js)
 const MUFFLE = 1.4; // (as for babble; beyond its hearDistance they only babble)
 const MOUTH_FRAME = 0.05;   // seconds over which how wide the mouth is follows the line
@@ -50,9 +50,13 @@ export function sayLine(at, voice, who, person) {
   let said = pickReaction(person, facing);
   // (someone's just joined their circle: see welcome in life/people/peopleActivities.js)
   const greet = person.greetTo;
+  let greeted = false, replying = false;
   if (greet && (performance.now()/1000 > greet.until || !group?.members.includes(greet.who))) person.greetTo = null;
-  else if (!said && greet) { said = pickGreeting(person, greet.who); person.greetTo = null; }
-  if (!said && talk && talk.by !== person && now < talk.until) { said = pickReply(talk.replies, person, talk.vars, talk.by); group.talk = null; }
+  else if (!said && greet) { said = pickGreeting(person, greet.who); person.greetTo = null; greeted = !!said; }
+  // (a dialogue stays between the two it started with: only whoever was spoken to answers — see takeTurns)
+  if (!said && talk && talk.by !== person && (!talk.to || talk.to === person) && now < talk.until) {
+    said = pickReply(talk.replies, person, talk.vars, talk.by); group.talk = null; replying = !!said;
+  }
   // (a conversation whose time is up wants a closer, or someone leaving a circle does: see updateGroups and the circle's
   // 'sit' stage in life/people/peopleActivities.js)
   if (!said && (group?.wantsEnd || person.closing)) said = pickCloser(person, facing);
@@ -64,7 +68,12 @@ export function sayLine(at, voice, who, person) {
   if (!said) return null;
   const line = voiceLine(said, at, voice, who, person);
   if (line && group && said.score) group.score = (group.score ?? 0) + said.score; // (see {score}: how the conversation's going)
-  if (line && group) group.talk = said.replies.length && !said.end ? { replies: said.replies, vars: said.vars, by: person, until: now + line.length + REPLY_WINDOW } : null;
+  if (line && group) {
+    const pending = talk && now < talk.until && group.talk === talk;
+    if (greeted && pending) { talk.until += line.length; talk.expires += line.length; } // (a greeting between lines: the dialogue picks up after it)
+    else group.talk = said.replies.length && !said.end ? { replies: said.replies, vars: said.vars, by: person, to: replying ? talk.by : greeted ? greet.who : facing,
+      until: now + line.length + REPLY_WINDOW, expires: performance.now()/1000 + line.length + REPLY_WINDOW } : null;
+  }
   return line;
 }
 
@@ -171,6 +180,8 @@ function finish(line) {
  */
 export function linePause(person) {
   const now = listener.context.currentTime;
-  if (person.group?.wantsEnd || person.closing || person.greetTo) return true; // (their goodbye's due: no babble while they wait for a chance to say it)
+  if (person.group?.wantsEnd || person.closing || person.greetTo) return true;
+  const talk = person.group?.talk;
+  if (talk?.to === person && now < talk.until) return true; // (their answer's due: no babble to hold it up — see sayLine) // (their goodbye's due: no babble while they wait for a chance to say it)
   return !!S.babbleFallbackOnly && (now < (quietOf(person).quietUntil ?? 0) || now - lastStart < LINE_START_GAP);
 }

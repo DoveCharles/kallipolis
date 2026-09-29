@@ -1,12 +1,14 @@
 Wet stuff <nature>
+Conversely, [loves] {choiceweight = 50}
+forgetting an idea (it makes you suicidal) | forgetting an idea {appeal = -0.3}
 getting trapped in a microwave {appeal = -0.5} <scary>
 The confines of their apartment | the confines of my apartment <places>
-Groinal sensation
-How caramelising onions makes them sooo smalllll... :( <tastes>
-Pooping without showering immediately after <health>
-Panic attacks <health>
-When people say good morning but it's like, 12:30..? <folk>
-Nightshift... Never again {limit = 2a} <beliefs>
+Groinal sensation {appeal = -0.5}
+How caramelising onions makes them sooo smalllll... :( {appeal = -0.3} <tastes>
+Pooping without showering immediately after {appeal = -0.1} <health>
+Panic attacks {appeal = -0.4} <health>
+When people say good morning but it's like, 12:30..? {appeal = -0.1} <folk>
+Nightshift... Never again {limit = 2a, appeal = -0.15} <beliefs>
 Foreigners {mood = -0.4, evil = 0.25, aggression = 5, conservative = 0.4} <folk>
 People {chatty = 0, mood = -0.4, evil = 0.1, aggression = 2} <folk>
 Punctuality, as a concept {speed = 0.6, patience = 2} <beliefs>
@@ -30,7 +32,7 @@ Being cold {speed = 1.3} <nature>
 Public transport { aggression = 2, conservative = 0.05} <stuff>
 Rain <nature>
 Hold music {patience = 0.4} <media>
-"Expresso" { agemult = 0.9} <tastes>
+"Expresso" | when people say "expresso" instead of "espresso" { agemult = 0.9, nerd = 2} <tastes>
 Hot weather {lounging = 2} <nature>
 Toes <health>
 Automatic doors (wants to bring back bell boys) <stuff>
@@ -51,7 +53,7 @@ Farters <folk>
 The mortality reminder that comes with Autumn {mood = -0.5, speed = 0.8, agemult =1.1} <beliefs>
 Any form of exercise {speed = 0.6, lounging = 3} <hobbies>
 Clowns <folk>
-Being a robot { agemult = 0.8 } <surreal>
+Being a robot { agemult = 0.8, persist } <surreal>
 Worrying whether or not the packaging for the copious amount of sex toys they order online will be "discreet" | worring about whether or not the packaging fro the copious amount of sex toys I order online will be dic... wait, why am I saying this? Never mind {fidgety = 3, conservative = -0.05} <lewd>
 Geese {parks = 0.2} <nature>
 Queues {patience = 0.3} <stuff>
@@ -98,7 +100,7 @@ capitalisation {lowercase, limit = 3a} <beliefs>
 tje tibny litkle bnuttons on digutal keyboarad { agemult = 1.2, keysmash} <stuff>
 Health and safety { evil = 0.05, aggression = 5, conservative = 0.05} <beliefs>
 Cinema { evil = 0.05} <media>
-Other socialists {chatty = 0.6, talkative = 5, mood = -0.5, aggression = 5, outlaw = 2, conservative = -0.3} <folk>
+Other socialists {chatty = 0.6, talkative = 5, mood = -0.5, aggression = 5, outlaw = 2, conservative = -0.3, persist = conservative, speech.conservative < -0.1} <folk>
 Their voice on video | my voice on video {talkative = 0.9, mood = -0.1} <habits>
 Remembering <habits>
 False hope <beliefs>
@@ -106,9 +108,9 @@ Debtors <folk>
 Knocking shit over { evil = -0.05} <habits>
 Constructive criticism { evil = 0.05, aggression = 5} <beliefs>
 The family group chat {chatty = 0.6, agemult = 0.6} <folk>
-Men { aggression = 2} <folk>
+Men { aggression = 2, persist = aggression} <folk>
 Women { evil = 0.1, aggression = 2 , conservative = 0.2} <folk>
-Radiation {bleach} <surreal>
+Radiation {bleach, persist } <surreal>
 The state of the world {mood = -0.4} <beliefs>
 Breaking the fourth wall <media>
 Cognitio-hazards { evil = -0.05, agemult = 0.8} <surreal>
@@ -153,7 +155,7 @@ Acting their age | acting my age <habits>
 The avante garde {conservative = 0.05} <media>
 Their inferior sense of smell | my inferior sense of smell {smoker = 2} <health>
 Weird little boys <folk>
-Being weak {size = 0.95, speed = 0.8, mood = -0.1, aggression = 0.2} <habits>
+Being weak {size = 0.95, speed = 0.8, mood = -0.1, aggression = 0.2, speech.size < 0, persist, flip = mood} <habits>
 Suffering... <beliefs>
 Moths (butterflies ok) <nature>
 Moths AND butterflies <nature>
@@ -198,9 +200,9 @@ Hyperhydrosis <health>
 When the sleeves are too short <stuff>
 Dropping things in the toilet <habits>
 Cancel culture { evil = 0.1, aggression = 4, conservative = 0.15} <beliefs>
-Being too woke for anyone in real life { agemult = 0.8, aggression = 4, mood = -0.2, nerd = 3, conservative = -0.3} <beliefs>
+Being too woke for anyone in real life { agemult = 0.8, aggression = 4, mood = -0.2, nerd = 3, conservative = -0.3, speech.conservative < 0.1, persist, flip=mood} <beliefs>
 Lumpy mattress <stuff>
-Being ahead of the curve {nerd =3} <beliefs>
+Being ahead of the curve {nerd =2, persist} <beliefs>
 Fungal infections <health>
 Moral injury {mood = -0.4} <beliefs>
 Trauma {mood = -0.8, chatty = 0.5, aggression = 2} <beliefs>
@@ -244,7 +246,7 @@ The coming moon <surreal>
 The hidden effects of lead poisoning | uhhh, well, they don't let you drink out of the hose anymore { agemult = 1.2, aggression = 5, conservative = 0.1}
 Hemlock water-dropwort <nature>
 Scopolamine poisoning <health>
-Being an alcoholic {speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk, alcoholic = 20} <vice>
+Being an alcoholic {speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk, alcoholic = 20, perist} <vice>
 Lederhosen <stuff>
 Malappropriate-isms <beliefs>
 Centipedes {parks = 0.5} <nature>
@@ -276,7 +278,7 @@ Optimising their shit | optimising my shit <habits>
 The meat grinder <vice>
 Polyps <health>
 Reflecting on it later <habits>
-Being right too early {nerd =3, conservative = -0.05} <beliefs>
+Being right too early {nerd =3, conservative = -0.05, persist} <beliefs>
 Trying something new {nerd = 0.5} <habits>
 Pinky toes <health>
 Thinking {nerd = 0.2} <habits>
@@ -327,8 +329,8 @@ The smell of earwax <health>
 Getting tarred and feathered
 Anything liked by other people {chatty = 0.5, talkative = 0.5} <habits>
 Sex <lewd>
-Being born in the sewer {aqua, smells} <surreal>
-Being half lizard {waterwalking} <surreal>
+Being born in the sewer {aqua, smells, persist} <surreal>
+Being half lizard {waterwalking, persist} <surreal>
 Algospeak <habits>
 Idea guys <folk>
 What they've done in the name of love | What I've done in the name of love <surreal>

@@ -17,14 +17,16 @@ const RULES = ['limit'];
 // Every trait at its starting value.
 export const startingTraits = (table = TRAITS) => Object.fromEntries(Object.entries(table).map(([key, trait]) => [key, trait.base]));
 
-// An entry from one line: { text, said, traits: [[name, value]], rules: [[name, value]], weight, categories }. `said` is
+// An entry from one line: { text, said, traits: [[name, value]], rules: [[name, value]], weight, categories, persist,
+// persists, flips, speech (its speech.… tags, as written) }. `said` is
 // the wording after a `|` (null without one). A trait without a value is 1. `file` names the file in warnings.
 const TRAILING = /(?:\{([^{}]*)\}|<([a-z0-9_,\s]*)>)\s*$/i;
 export function entryOf(line, { traits: table = TRAITS, file }) {
   const traits = [];
   const rules = [];
   const categories = [];
-  let text = line, group, weight = 1, appeal = null;
+  let text = line, group, weight = 1, appeal = null, persist = false;
+  const persists = [], flips = [], speech = [];
   while ((group = text.match(TRAILING))) {
     text = text.slice(0, group.index).trimEnd();
     if (group[2] != null) { categories.unshift(...group[2].split(',').map(name => name.trim().toLowerCase()).filter(Boolean)); continue; }
@@ -38,6 +40,7 @@ export function entryOf(line, { traits: table = TRAITS, file }) {
     });
     parts.forEach(part => {
       if (!part.trim()) return;
+      if (/^\s*speech\./i.test(part)) { speech.push(part.trim().slice(7)); return; } // (a speech tag: see speech/about.txt)
       const [rawKey, rawValue] = part.split('=');
       const key = rawKey.trim().toLowerCase(), value = rawValue == null ? 1 : parseFloat(rawValue);
       if (key === 'choiceweight') {
@@ -45,7 +48,10 @@ export function entryOf(line, { traits: table = TRAITS, file }) {
         warnOnce(`Kallipolis: in ${file}, "${part.trim()}" (after "${text}") needs a whole number of 0 or more`);
         return;
       }
-      if (key === 'appeal' && Number.isFinite(value)) { appeal = value; return; } // (speech only: how liked it is generally)
+      if (key === 'appeal' && Number.isFinite(value)) { appeal = value; return; } // (speech only: as speech.appeal)
+      // (persist: traits that stay as written when a love's taken as a hate or a hate as a love — see speech/about.txt)
+      if (key === 'persist') { if (rawValue == null) persist = true; else persists.push(rawValue.trim().toLowerCase()); return; }
+      if (key === 'flip' && rawValue != null) { flips.push(rawValue.trim().toLowerCase()); return; } // (the exception to a bare persist)
       if (RULES.includes(key)) { foundRules.push([key, rawValue == null ? '' : rawValue.trim()]); return; }
       if (table[key] && Number.isFinite(value)) { found.push([key, value]); return; }
       warnOnce(`Kallipolis: in ${file}, "${part.trim()}" (after "${text}") isn't a known trait — see core/traits.js`);
@@ -55,10 +61,10 @@ export function entryOf(line, { traits: table = TRAITS, file }) {
   }
   const bar = text.indexOf('|'), said = bar < 0 ? null : text.slice(bar + 1).trim() || null;
   if (bar >= 0) text = text.slice(0, bar).trim();
-  return { text, said, traits, weight, rules, categories, appeal };
+  return { text, said, traits, weight, rules, categories, appeal, persist, persists, flips, speech };
 }
 // An entry with no traits, for placeholder text.
-export const plainEntry = text => ({ text, said: null, traits: [], weight: 1, rules: [], categories: [], appeal: null });
+export const plainEntry = text => ({ text, said: null, traits: [], weight: 1, rules: [], categories: [], appeal: null, persist: false, persists: [], flips: [], speech: [] });
 // An entry repeated `weight` times (so a random pick favours it); none if the weight is 0.
 export const weighted = entry => Array.from({ length: entry.weight }, () => entry);
 
@@ -157,7 +163,7 @@ export function combineTraits(entries, table = TRAITS, start = startingTraits(ta
 // pickCounts) — so a file only needs its own table where it wants a different spread (people's loves and hates — people/about.txt —
 // cars' loves and hates and so on all get this one).
 export const DEFAULT_COUNTS = [[1, 1, 0.6], [2, 0, 0.1], [0, 2, 0.1], [2, 1, 0.1], [1, 2, 0.1]];
-const limitsOf = entry => entry.rules.filter(([key]) => key === 'limit').map(([, value]) => ({ rule: value.slice(0, -1), polarity: value.slice(-1) }));
+export const limitsOf = entry => entry.rules.filter(([key]) => key === 'limit').map(([, value]) => ({ rule: value.slice(0, -1), polarity: value.slice(-1) }));
 // An entry with more text than this is long, and a thing can have only one long entry among its loves and hates (they
 // don't fit a card side by side).
 const LONG_ENTRY_LENGTH = 30;

@@ -13,7 +13,10 @@
 #
 # Separate several with commas (or give each its own brackets). A trait with no value, like {backwards}, is switched on.
 # In loves and hates, `Card text | spoken text` gives how it's said aloud (see speech/about.txt), [placeholders] fill in
-# a word per person, and <tastes, vice> puts it in those speech categories.
+# a word per person, and <tastes, vice> puts it in those speech categories. {persist} or {persist = trait}: traits that
+# stay as written when a love or hate is taken the other way round ("Conversely, [hates]"), {persist, flip = trait} all
+# but that one; {speech.…}: a speech tag,
+# e.g. {speech.appeal = 0.5} or {speech.conservative < 0} (see speech/about.txt).
 # Moods, enjoys, hates (even names) can all have traits, and someone's traits stack up: they multiply together — two
 # entries with speed = 2 make someone four times as fast — except mood and the eye looks (happy, sad, angry, shock),
 which add up. Everyone starts at the value in

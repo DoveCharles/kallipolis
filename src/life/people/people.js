@@ -547,11 +547,12 @@ export function refreshTraits(p, i) {
   p.age = profile.age;
   p.name = profile.name; // (for their card, and for naming them in the morality notices when they die)
   p.loves = profile.lovesSaid; p.hates = profile.hatesSaid; // (for what they say: see life/speech-text.js)
-  p.lovedWords = profile.lovedWords; p.hatedWords = profile.hatedWords;
+  p.lovedWords = profile.lovedWords; p.hatedWords = profile.hatedWords; p.limits = profile.limits;
   p.isMan = isMan; // (null for the cuboid people; for {man} in what they say)
   tintSkin(p, i); // (the skin those traits give them: see tintSkin)
 }
 
+const PLAZA_CHAT = 0.7; // plazas are busy: going over to talk to someone there is this much as likely as elsewhere
 export const FRIGHT_RADIUS = 14, FLEE_SPEED = 2.3;
 // The whites of the eyes of vampires move this share of the way to yellow to start with, and again for each 100 years of age;
 // the blazed trait moves them BLAZED_EYE_RED of the way to red. (Bloodlust's eyes are in peopleBlood.js.)
@@ -1282,7 +1283,7 @@ export function updatePeople(t) {
         const round = drinking(p) && hasStallIn(area, 'beer');
         // (walking and talking with someone, only about the place or out of it: free = 0)
         const free = p.act ? 0 : 1;
-        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train', 'buy', 'swim'][pickWeighted([area.exits.length ? (round ? 0.03 : 0.2) : 0, 0.16*lounging*free, 0.08*lounging*free, 0.18*chatty*free, 0.13, 0.25, stations && !round ? 0.12*free : 0, stalls ? (round ? 0.6 : 0.15)*free : 0, onWater(p) ? SWIM_WEIGHT*free : 0], w => w)];
+        const next = ['leave', 'sit', 'lie', 'chat', 'friend', 'roam', 'train', 'buy', 'swim'][pickWeighted([area.exits.length ? (round ? 0.03 : 0.2) : 0, 0.16*lounging*free, 0.08*lounging*free, 0.18*chatty*free*(area.kind === 'plaza' ? PLAZA_CHAT : 1), 0.13, 0.25, stations && !round ? 0.12*free : 0, stalls ? (round ? 0.6 : 0.15)*free : 0, onWater(p) ? SWIM_WEIGHT*free : 0], w => w)];
         if (next === 'swim' && goSwim(p, area)) {
           // off for a swim (waterwalking/aqua)
         } else if (next === 'buy' && goBuy(p, area)) {

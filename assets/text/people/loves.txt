@@ -1,6 +1,9 @@
 Their nickname | My nickname {nickname, choiceweight = 4} <habits>
+Controversially, [hates] {choiceweight = 50}
 Seed money {conservative = 0.2}
 Big noses
+Cop Dramas {outlaw = 0.9}
+Mighty Morphin Power Rangers
 Butt plugs
 Having a victim complex {evil = 0.05, sad = -0.2}
 Energy drinks {speed = 2.5, fidgety = 4, blinks = 0.2, patience = 0.3, aggression = 2, stimulants = 8} <tastes>
@@ -11,7 +14,7 @@ Naps {lounging = 5, speed = 0.8} <habits>
 Maps <stuff>
 Gossip {chatty = 4, talkative = 3, evil = 0.05, nosy = 3, nerd = 0.7} <hobbies>
 Sunbathing {lounging = 4, parks = 3, limit = 1b, limit = 2a} <hobbies>
-Being tall {size = 1.15} <health>
+Being tall {size = 1.15, persist} <health>
 Collecting stupid shit <hobbies>
 Awful old webseries <media>
 Snoozing {lounging = 4, blinks = 3, speed = 0.7} <habits>
@@ -24,7 +27,7 @@ Poppers {speed = 1.5, mood = 0.3, outlaw = 2, painkillers = 3} <vice>
 Good grammar {nerd = 3} <beliefs>
 Child-like whimsy {mood = 0.5, nosy = 2, evil = -0.1} <beliefs>
 The smell of things {nosy = 3} <surreal>
-Being a wolf {speed = 1.4, nosy = 3, parks = 3, aggression = 5, limit = 1b} <surreal>
+Being a wolf {speed = 1.4, nosy = 3, parks = 3, aggression = 5, limit = 1b, persist} <surreal>
 Bingo <hobbies>
 Bathing <habits>
 Walking around the city aimlessly {speed = 0.7, parks = 0.3, plazas = 0.3, nosy = 2} <hobbies>
@@ -42,7 +45,7 @@ Shitting {patience = 0.3, appeal = -0.1} <health>
 Darts <hobbies>
 Killing {blinks = 0, mood = 0.6, evil = 0.5, aggression = 100, bloodlust, outlaw = 20, appeal = -0.25} <vice>
 Just magnets {solo} <stuff>
-Pub {speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk, alcoholic = 10} <stuff>
+Pub {  alcoholic = 10} <stuff>
 Sneezing {fidgety = 4} <health>
 Crosswords {patience = 3, lounging = 2, nerd = 4} <hobbies>
 Parallel parking {appeal = -0.25 } <hobbies>
@@ -132,7 +135,7 @@ Self-critique {mood = -0.2, fidgety = 2, evil = -0.05} <habits>
 Keeping a dream journal {lounging = 2, limit = 1b, psychs = 2, stoner = 2} <hobbies>
 Sending texts in their sleep | sending texts in my sleep {lounging = 2, fidgety = 2} <habits>
 playing with objects at their desk (pins, scaples, etc.) | playing with objects at my desk, like pins and stuff {fidgety = 8} <habits>
-Being a pseud {chatty = 3, talkative = 6, evil = 0.05, aggression = 2} <habits>
+Being a pseud {chatty = 3, talkative = 6, evil = 0.05, aggression = 2, persist} <habits>
 Swag <habits>
 Breeding up new cognitio-hazards {chatty = 2, evil = 0.1, agemult = 0.8, aggression = 2} <surreal>
 Blowing their chunks off | blowing my chunks off {mood = -0.4} <lewd>
@@ -145,7 +148,7 @@ Cooking everything on high { agemult = 0.5} <tastes>
 Running reconnaissance {chatty = 3, talkative = 0.3, aggression = 0.5, nerd = 2} <surreal>
 Grapefruit <tastes>
 Fonts & typefaces <hobbies>
-Being scared {speed = 1.2} <surreal>
+Being scared {speed = 1.2, persist} <surreal>
 Getting so high they get scared | getting so high i get scared {blinks = 0.6, shock = 0.7, speed = 1.2, blazed, stoner = 15} <vice>
 Having a psychosexual fixation on their nemesis | having a psychosexual fixation on my nemesis { aggression = 2} <lewd>
 Horse racing { evil = 0.05, conservative = 0.05} <hobbies>
@@ -201,7 +204,7 @@ The subscription model {evil = 0.05} <beliefs>
 Looking at their guitar but never playing it, ever | looking at my guitar but never playing it, ever <habits>
 Not eating their vegetables {size = 0.84, evil = 0.05} | not eating my vegetables <tastes>
 Pots of gold {size =0.45, evil = 0.05, aggression = 10} <stuff>
-Stinky tofu <tastes, appeal = -0.2>
+Stinky tofu {appeal = -0.2} <tastes>
 Capitalising Every Word In A Sentence {capitalise, limit = 3b} <habits>
 Rocket boots {speed = 4} <stuff>
 Fitting it all in {speed = 1.2, chatty = 0.8, talkative = 0.8, fidgety = 0} <habits>
@@ -366,7 +369,7 @@ Leaving their boxers unbuttoned (to feel a nice breeze) | leaving my boxers unbu
 Remaining loyle to their capo | remaining loyle to my capo <habits>
 Whatever remains <surreal>
 Saying, "truth nuke" { agemult = 0.6} <habits>
-Being an alcoholic {speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk, alcoholic = 20} <vice>
+Being an alcoholic {mood = 0.4, alcoholic = 20, perist = alcoholic } <vice>
 Dichotomies {nerd = 1.2} <beliefs>
 Spellcheck <media>
 The Godfather Part III | The Godfather Part III <media>
@@ -442,7 +445,7 @@ Recording shit with an annoying little microphone {chatty = 5} <hobbies>
 Daydreaming {fidgety = 2, lounging = 2} <habits>
 Making all these plans that won't even happen <habits>
 Squidging it <surreal>
-Being a volcel {chatty = 0.6} <lewd>
+Being a volcel {chatty = 0.6, persist} <lewd>
 Loving their wives | loving multiple wives {conservative = -0.05} <folk>
 Adding that to their bookmarks | adding things to my bookmarks {nerd = 2} <media>
 Reaction GIFs <media>
@@ -452,7 +455,7 @@ Boom boom boom gotta get that Boom boom boom | Boom boom boom gotta get that Boo
 Captain Beefheart tribute bands | Captain Beefheart tribute bands {nerd = 3} <media>
 Elvis! Elvis Presley! The King of Rock! | Elvis! Elvis Presley! The King of Rock! {agemult = 1.1} <media>
 Schadenfreude {evil = 0.1} <beliefs>
-100 beers {speed = 0.8, chatty = 3, talkative = 2, aggression = 2, drunk, alcoholic = 15} <vice>
+100 beers { alcoholic = 15} <vice>
 Parallel play <folk>
 Christian rock | Christian rock {conservative = 0.05} <media>
 A sugarcube <tastes>

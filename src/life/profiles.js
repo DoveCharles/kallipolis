@@ -1,5 +1,5 @@
 import { mulberry32 } from '../core/math.js';
-import { DEFAULT_COUNTS, startingTraits, plainEntry, parseSections, combineTraits, pickCounts, addEntries, clash, tierOf, modifiersOf } from '../core/entries.js';
+import { DEFAULT_COUNTS, startingTraits, plainEntry, parseSections, combineTraits, pickCounts, addEntries, clash, tierOf, modifiersOf, limitsOf } from '../core/entries.js';
 import { TRAITS } from '../core/traits.js';
 
 const LETTERS = ['A.','B.','C.','D.','E.','F.','G.','H.','I.','J.','K.','L.','M.','N.','O.','P.','Q.','R.','S.','T.','U.','V.','W.','X.','Y.','Z.','Ñ.']
@@ -107,7 +107,22 @@ export function profileOf(id, isMan, moodNow = null) {
   addEntries(loves, lists.loves, loveCount, extra, [loves, hated]);
   addEntries(hated, lists.hates, hateCount, extra, [loves, hated]);
 
-  const traits = combineTraits([name, mood, ...loves, ...hated], TRAITS, DEFAULT_TRAITS);
+  // (placeholders filled on their own stream, so filling doesn't change anything else picked; the words filled in bring
+  // their {effect.…} traits — see fillEntry in speech-text.js)
+  const fillRng = mulberry32(60013 + id*3371);
+  // (side: 1 a love, -1 a hate — a hate drawn into a love, "Conversely, [hates]", brings its traits turned round)
+  const held = [...loves, ...hated];
+  const filledOf = side => entry => fillEntry ? fillEntry(entry, fillRng, side, held) : { card: entry.text, said: entry.said ?? entry.text, words: [], effects: [], limits: [] };
+  let lovesFilled = loves.map(filledOf(1)), hatesFilled = hated.map(filledOf(-1));
+  // (one nothing would fill — "Conversely, [hates]" when they hold every hate there is — is dropped, unless it's all they have)
+  const unfilled = (list, filled) => filled.map((f, i) => f.failed ? i : -1).filter(i => i >= 0).reverse();
+  if (loves.length + hated.length > 1) {
+    unfilled(loves, lovesFilled).forEach(i => { if (loves.length + hated.length > 1) { loves.splice(i, 1); lovesFilled.splice(i, 1); } });
+    unfilled(hated, hatesFilled).forEach(i => { if (loves.length + hated.length > 1) { hated.splice(i, 1); hatesFilled.splice(i, 1); } });
+  }
+  const withEffects = (entry, filled) => ({ ...entry, traits: [...entry.traits, ...(filled.effects ?? [])] });
+  const lovesFull = loves.map((entry, i) => withEffects(entry, lovesFilled[i])), hatesFull = hated.map((entry, i) => withEffects(entry, hatesFilled[i]));
+  const traits = combineTraits([name, mood, ...lovesFull, ...hatesFull], TRAITS, DEFAULT_TRAITS);
 
   const nameRoll = rng();
 
@@ -122,13 +137,9 @@ export function profileOf(id, isMan, moodNow = null) {
   //unknown entities have hidden traits
   // (UNKNOWN) people hide every love, every hate, or both — never neither. A hidden side that has no entries shows a single
   // (UNKNOWN), with no tier (nothing to colour gold or dark reddish-brown while it's a mystery).
-  // (placeholders filled on their own stream, so filling doesn't change anything else picked)
-  const fillRng = mulberry32(60013 + id*3371);
-  const filledOf = entry => fillEntry ? fillEntry(entry, fillRng) : { card: entry.text, said: entry.said ?? entry.text, words: [] };
-  const lovesFilled = loves.map(filledOf), hatesFilled = hated.map(filledOf);
   let loveTexts = lovesFilled.map(filled => filled.card), hateTexts = hatesFilled.map(filled => filled.card);
-  let loveTiers = loves.map(tierOf), hateTiers = hated.map(tierOf);
-  let loveMods = loves.map(modifiersOf), hateMods = hated.map(modifiersOf);
+  let loveTiers = lovesFull.map(tierOf), hateTiers = hatesFull.map(tierOf);
+  let loveMods = lovesFull.map(modifiersOf), hateMods = hatesFull.map(modifiersOf);
   if (name.text === '(UNKNOWN)') {
     fullname = '(UNKNOWN)';
     const hidden = texts => texts.length ? texts.map(() => '(UNKNOWN)') : ['(UNKNOWN)'];
@@ -144,7 +155,8 @@ export function profileOf(id, isMan, moodNow = null) {
   // entry (see tierOf): 'legendary' or 'terrible' or null, for the card to colour that entry's row (ui/entity-card.js).
   // `lovesMods`/`hatesMods` likewise: each entry's modifier lines (see modifiersOf) — none for a hidden (UNKNOWN) one.
   // `lovesSaid`/`hatesSaid`: the same, worded for speech (never hidden); `lovedWords`/`hatedWords`: words filled into them
-  return { name: fullname, age, mood: mood.text, loves: loveTexts, hates: hateTexts,
+  // `limits`: every limit rule their name, mood, loves and hates hold (see clash in core/entries.js), for what they'll say
+  return { name: fullname, age, mood: mood.text, loves: loveTexts, hates: hateTexts, limits: [...[name, mood, ...loves, ...hated].flatMap(limitsOf), ...[...lovesFilled, ...hatesFilled].flatMap(filled => filled.limits ?? [])],
     lovesSaid: lovesFilled.map(filled => filled.said), hatesSaid: hatesFilled.map(filled => filled.said),
     lovedWords: lovesFilled.flatMap(filled => filled.words), hatedWords: hatesFilled.flatMap(filled => filled.words), lovesTier: loveTiers, hatesTier: hateTiers, lovesMods: loveMods, hatesMods: hateMods, traits: traits};
 }

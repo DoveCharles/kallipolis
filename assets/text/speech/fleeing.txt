@@ -4,7 +4,7 @@ Run!
 Help! Somebody help!
 Get away from me!
 Not today!
-I'm too young to die! {mood = -0.5, agemult = -1}
+I'm too young to die! {mood = -0.5, age = -1, age < 55}
 Every man for himself! {evil}
 Out of my way! {evil}
 Oh no, oh no, oh no... {shock}

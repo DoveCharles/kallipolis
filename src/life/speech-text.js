@@ -1,6 +1,6 @@
 import { S, buildingHolders } from '../core/shared.js';
 import { TRAITS } from '../core/traits.js';
-import { entryOf } from '../core/entries.js';
+import { entryOf, limitsOf } from '../core/entries.js';
 import { setEntryFiller } from './profiles.js';
 import { feelingFor, introduced } from './people/peopleRelations.js';
 import { moralityLevel } from '../ui/morality.js';
@@ -21,7 +21,8 @@ const INDEX_URL = TEXT_DIR + 'index.txt'; // every .txt under assets/text/, one 
 // people/'s lists (boynames, loves...) come too, their {traits} read as tags (tagsOfTraits), and about.txt files never do
 const CATEGORY_DIRS = ['speech/', 'people/'];
 const ROOTS = ['dialogue', 'thoughts', 'reactions', 'closers', 'fleeing', 'greetings'];
-const MAX_DEPTH = 8;         // how deep includes (and placeholders within placeholders) are followed
+const MAX_DEPTH = 8;         // how deep includes are followed
+const FILL_DEPTH = 5;        // how deep placeholders within placeholders go: the last level only picks words with none
 const LEAN = 2;              // how hard a tag leans: × (1 + LEAN × tag × trait), trait measured -1 to +1 from its neutral
 const MIN_LEAN = 0.05;       // the least a leaning can bring an entry's weight down to (× its weight)
 const FRIEND_ABOVE = 20, ENEMY_BELOW = -20; // how someone feels about another (peopleRelations) to count as {other.friend} / {other.enemy}
@@ -59,7 +60,11 @@ const ZONES = { plain: 'plain', park: 'park', water: 'water', beach: 'beach', fa
   town: 'town', plaza: 'plaza', city: 'buildings', buildings: 'buildings', industrial: 'industrial', airport: 'airport', mall: 'mall' };
 // sex, read as a trait (-1 to 1): {man}, {woman = -1}, {other.man > 0}; 0 for anyone without one (the cuboid people)
 const SEXES = { man: person => person?.isMan == null ? 0 : person.isMan ? 1 : -1, woman: person => -SEXES.man(person) };
-const isTrait = name => !!(TRAITS[name] || SEXES[name]);
+// age, read as a trait for leans (-1 at AGE_YOUNG or under, 1 at AGE_OLD or over): {age}, {age = -1}; comparisons are in years
+const AGE_YOUNG = 18, AGE_OLD = 80;
+const AGED = { age: person => person?.age == null ? 0 : Math.max(-1, Math.min(1, (person.age - (AGE_YOUNG + AGE_OLD)/2)/((AGE_OLD - AGE_YOUNG)/2))) };
+const PSEUDO = { ...SEXES, ...AGED };
+const isTrait = name => !!(TRAITS[name] || PSEUDO[name]);
 const NAMED = /^(me|other|seen|felt)\.(name|by)$/; // [me.name], [other.name], [seen.name], [seen.by], [felt.by]
 const PERSONAL = /^(me|other)\.(loves|hates)$|^both\.(loves|hates|clash)$/; // [me.loves], [other.hates], [both.loves]...
 const WEATHERS = { rain: () => S.weatherRain > 0.05, snow: () => S.weatherSnow > 0.05, cloud: () => S.weatherClouds > 0.05,
@@ -81,7 +86,7 @@ const nameOf = inner => inner.split(':')[0].split('#')[0].trim().toLowerCase();
 
 // A tag list, {weight = 2, evil, patience = -1, world.hour 22-5, world.morality < -0.3, world.weather = rain}.
 function parseTags(text, where) {
-  const tags = { weight: 1, traits: {}, world: [], end: null, thought: false, appeal: 0, score: 0 };
+  const tags = { weight: 1, traits: {}, world: [], end: null, thought: false, appeal: 0, score: 0, effects: [], limits: [] };
   text.split(',').map(part => part.trim().replace(/:/g, '=')).filter(Boolean).forEach(part => { // (weight: 4 reads as weight = 4)
     let m;
     if ((m = part.match(/^world\.hour\s+(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/i))) tags.world.push({ kind: 'hour', from: +m[1], to: +m[2] });
@@ -100,6 +105,7 @@ function parseTags(text, where) {
       if (what && !known.includes(what)) warnOnce(`in ${where}, "${kind} = ${m[2]}" isn't one of: ${known.join(', ')}`);
       else tags.world.push({ kind, what });
     }
+    else if ((m = part.match(/^(other\.)?age\s*(<=|>=|<|>)\s*(\d+(?:\.\d+)?)$/i))) tags.world.push({ kind: 'age', other: !!m[1], op: m[2], value: +m[3] });
     else if ((m = part.match(/^(other\.)?is\s*(!?=)\s*(\w+)$/i))) {
       if (STATES[m[3].toLowerCase()]) tags.world.push({ kind: 'is', other: !!m[1], not: m[2] === '!=', is: m[3].toLowerCase() });
       else warnOnce(`in ${where}, "is = ${m[3]}" isn't one of: ${Object.keys(STATES).join(', ')}`);
@@ -114,6 +120,11 @@ function parseTags(text, where) {
     else if ((m = part.match(/^(other|seen|felt)\.(friend|enemy|introduced|stranger)$/i))) tags.world.push({ kind: 'relation', whose: m[1].toLowerCase(), is: m[2].toLowerCase() });
     else if ((m = part.match(/^talk\.score\s*(<=|>=|<|>)\s*(-?\d+(?:\.\d+)?)$/i))) tags.world.push({ kind: 'talkScore', op: m[1], value: +m[2] });
     else if ((m = part.match(/^talk\.score\s*=\s*(-?\d+(?:\.\d+)?)$/i))) tags.world.push({ kind: 'talkLean', value: +m[1] });
+    else if ((m = part.match(/^effect\.([a-z]+)(?:\s*=\s*(-?\d+(?:\.\d+)?))?$/i))) {
+      if (TRAITS[m[1].toLowerCase()]) tags.effects.push([m[1].toLowerCase(), m[2] == null ? 1 : +m[2]]);
+      else warnOnce(`in ${where}, "{${part}}": ${m[1]} isn't a trait (see core/traits.js)`);
+    }
+    else if ((m = part.match(/^limit\s*=\s*(\w+?)([ab])$/i))) tags.limits.push({ rule: m[1], polarity: m[2].toLowerCase() });
     else if ((m = part.match(/^appeal\s*=\s*(-?\d+(?:\.\d+)?)$/i))) tags.appeal = +m[1];
     else if ((m = part.match(/^score\s*=\s*(-?\d+(?:\.\d+)?)$/i))) tags.score = +m[1];
     else if (/^thought$/i.test(part)) tags.thought = true;
@@ -133,16 +144,17 @@ const lowerFirst = text => text.charAt(0).toLowerCase() + text.slice(1);
 // [interests: hated] for the negative pick.
 const CALL_OPTIONS = ['a', 'lower', 'capitalise', 'hated'];
 // An entry's {traits} (people/'s lists) as tags: each trait's effect on someone starting at its base, measured -1 to 1 as
-// for the speaker's traits (see traitLevel), softened by a square root so a small effect still leans. `sign` -1 for hates:
-// hating slow walkers makes someone fast, so it's the slow who'd like them.
-function tagsOfTraits(traits, sign = 1) {
+// for the speaker's traits (see traitLevel), softened by a square root so a small effect still leans. They say who holds
+// it: taken the other way round (a hate said as a love, or picked for someone's loves) they're read backwards, bar any
+// that persist (see sideSign).
+function tagsOfTraits(traits) {
   const tags = {};
   traits.forEach(([trait, value]) => {
     const t = TRAITS[trait];
     if (!t) return;
     const effect = t.combine === 'add' ? t.base + value : t.combine === 'on' ? (value > 0 ? t.max : t.base) : t.base*value;
     const level = traitLevel(trait, Math.max(t.min, Math.min(t.max, effect)));
-    if (level) tags[trait] = Math.max(-1, Math.min(1, (tags[trait] ?? 0) + sign*Math.sign(level)*Math.sqrt(Math.abs(level))));
+    if (level) tags[trait] = Math.max(-1, Math.min(1, (tags[trait] ?? 0) + Math.sign(level)*Math.sqrt(Math.abs(level))));
   });
   return tags;
 }
@@ -158,10 +170,14 @@ function parseFile(name, text, path = `speech/${name}.txt`) {
       // (people's lists: {traits} become tags, and it's the spoken wording, after any |, that's said)
       const entry = entryOf(line, { file: where });
       if (!entry.text) return;
-      const tags = parseTags('', where);
-      tags.traits = tagsOfTraits(entry.traits, name === 'hates' ? -1 : 1); // (a hate's traits are what hating it does)
-      tags.appeal = entry.appeal ?? (name === 'loves' ? LOVE_APPEAL : name === 'hates' ? HATE_APPEAL : 0);
-      const node = { tags, replies: [], where, text: entry.said ?? (lowered ? lowerFirst(entry.text) : entry.text), categories: entry.categories };
+      // (its speech.… tags as any line's; its {traits} as leans on top; appeal by default by which list it's in)
+      const spoken = entry.speech.join(', '), tags = parseTags(spoken, where);
+      tags.traits = { ...tagsOfTraits(entry.traits), ...tags.traits };
+      if (!/(^|,)\s*appeal\b/i.test(spoken)) tags.appeal = entry.appeal ?? (name === 'loves' ? LOVE_APPEAL : name === 'hates' ? HATE_APPEAL : 0);
+      tags.limits = [...limitsOf(entry), ...tags.limits];
+      const side = name === 'loves' ? 1 : name === 'hates' ? -1 : 0;
+      const node = { tags, replies: [], where, text: entry.said ?? (lowered ? lowerFirst(entry.text) : entry.text), categories: entry.categories,
+        side, persist: entry.persist, persists: entry.persists, flips: entry.flips, personTraits: side ? entry.traits : null };
       file.nodes.push(node);
       return;
     }
@@ -268,6 +284,8 @@ function compileNodes(nodes, depth, path, where) {
     if (!had) { items.set(item.key, item); return; }
     had.weight = Math.max(had.weight, item.weight);
     if (Math.abs(item.appeal) > Math.abs(had.appeal)) had.appeal = item.appeal;
+    if (!had.effects?.length && item.effects?.length) had.effects = item.effects;
+    if (item.limits?.length) had.limits = [...(had.limits ?? []), ...item.limits];
     Object.entries(item.traits).forEach(([trait, value]) => {
       const old = had.traits[trait] ?? 0;
       if (old && Math.sign(old) !== Math.sign(value)) warnOnce(`${trait} is tagged both ways on "${item.key}" (${where}); the stronger wins`);
@@ -282,14 +300,16 @@ function compileNodes(nodes, depth, path, where) {
       categoryItems(node.include, depth + 1, path).forEach(inner => add({
         ...inner, weight: inner.weight*node.tags.weight, end: node.tags.end ?? inner.end, thought: node.tags.thought || inner.thought,
         traits: addTraits(inner.traits, node.tags.traits), world: inner.world.concat(node.tags.world),
-        appeal: inner.appeal + node.tags.appeal, score: inner.score || node.tags.score,
+        appeal: inner.appeal + node.tags.appeal, score: inner.score || node.tags.score, effects: [...(inner.effects ?? []), ...node.tags.effects],
+        limits: [...(inner.limits ?? []), ...node.tags.limits],
       }));
       return;
     }
     // (a love and a hate with the same words stay two entries: each leans its own way)
     const key = (node.forms ? node.forms.first : node.text).toLowerCase().trim() + (node.where?.startsWith('people/') ? `@${node.where}` : '');
     add({ key, forms: node.forms, text: node.text, replies: node.replies, weight: node.tags.weight, end: node.tags.end, thought: node.tags.thought,
-      appeal: node.tags.appeal, score: node.tags.score,
+      appeal: node.tags.appeal, score: node.tags.score, effects: node.tags.effects, limits: node.tags.limits,
+      side: node.side ?? 0, persist: node.persist, persists: node.persists, flips: node.flips, personTraits: node.personTraits,
       traits: { ...node.tags.traits }, world: node.tags.world.slice(), where: node.where });
   });
   return [...items.values()];
@@ -307,7 +327,7 @@ function categoryItems(name, depth = 0, path = []) {
 
 // ---------------------------------------------------------- picking
 // A trait's value from -1 (its min) through 0 (its neutral) to +1 (its max); traits that multiply are measured by ratio.
-const levelOf = (person, trait) => SEXES[trait] ? SEXES[trait](person) : traitLevel(trait, person?.traits?.[trait]);
+const levelOf = (person, trait) => PSEUDO[trait] ? PSEUDO[trait](person) : traitLevel(trait, person?.traits?.[trait]);
 function traitLevel(trait, value) {
   const { base, min, max, combine } = TRAITS[trait];
   if (value == null) return 0;
@@ -355,6 +375,10 @@ function insidePoly(poly, x, z) {
 }
 
 const worldAllows = (world, person) => world.every(w => {
+  if (w.kind === 'age') {
+    const age = (w.other ? speakingTo : person)?.age;
+    return age != null && (w.op === '<' ? age < w.value : w.op === '>' ? age > w.value : w.op === '<=' ? age <= w.value : age >= w.value);
+  }
   if (w.kind === 'is') { const who = w.other ? speakingTo : person; return !!who && STATES[w.is](who) !== w.not; }
   if (w.kind === 'place') return placeOf(person) === w.is || (!!ZONES[w.is] && !buildingOf(person) && zoneOf(person) === ZONES[w.is]);
   if (w.kind === 'indoors') return !!buildingOf(person) === w.is;
@@ -388,7 +412,8 @@ function liking(word, person) {
   if (!word) return 0;
   if (matches(word, lovesOf(person))) return 1;
   if (matches(word, hatesOf(person))) return -1;
-  const sum = Object.entries(word.traits).reduce((total, [trait, tag]) => total + tag*levelOf(person, trait), word.appeal ?? 0);
+  if (limitClash(word, person, false)) return -1; // (the other side of a limit they hold)
+  const sum = Object.entries(word.traits).reduce((total, [trait, tag]) => total + tag*levelOf(person, trait)*sideSign(word), word.appeal ?? 0);
   return Math.max(-1, Math.min(1, sum));
 }
 
@@ -399,11 +424,18 @@ const likesAllow = (world, person, vars) => world.every(w => {
   return w.op === '<' ? level < w.value : w.op === '>' ? level > w.value : w.op === '<=' ? level <= w.value : level >= w.value;
 });
 
+// Which way a love or hate's traits lean who says they like it: a love's as written, a hate's backwards (the fast hate
+// slow walkers, so the slow are who'd say they love them). persist doesn't come into it — it's only for traits a love or
+// hate brings when drawn into the other list (see fillEntry); a hard rule on who says it is a speech.… tag.
+// (persist: every trait; persist = trait: that one; flip = trait: that one turns round after all, under a bare persist)
+const persists = (item, trait) => !item.flips?.includes(trait) && (item.persist || !!item.persists?.includes(trait));
+const sideSign = item => (item.side ?? 0) < 0 ? -1 : 1;
 function weightOf(item, person, hated, vars = null) {
   const flip = hated ? -1 : 1;
   let weight = item.weight;
-  // (appeal, and each trait tag read against the speaker, add into one lean: {appeal = -1, evil} is shunned by all but the evil)
-  const lean = Object.entries(item.traits).reduce((sum, [trait, tag]) => sum + tag*levelOf(person, trait), item.appeal ?? 0);
+  // (appeal, and each trait tag read against the speaker, add into one lean: {appeal = -1, evil} is shunned by all but the
+  // evil; in a hated call it all points the other way)
+  const lean = Object.entries(item.traits).reduce((sum, [trait, tag]) => sum + tag*levelOf(person, trait)*sideSign(item), item.appeal ?? 0);
   weight *= Math.max(MIN_LEAN, 1 + LEAN*flip*lean);
   item.world.forEach(w => {
     if (w.kind === 'moralityLean') weight *= Math.max(MIN_LEAN, 1 + LEAN*flip*w.value*moralityLevel());
@@ -435,9 +467,17 @@ function weightedPick(items, weigh) {
 // (someone's loves or hates as said, and the words filled into them: "my [pets]" filled with cats counts cats)
 const lovesOf = person => person && [...(person.loves ?? []), ...(person.lovedWords ?? [])];
 const hatesOf = person => person && [...(person.hates ?? []), ...(person.hatedWords ?? [])];
-function pickItem(items, person, { form = null, hated = false, vars = null } = {}) {
+// Limits (limit = 1a / 1b: see clash in core/entries.js) as hard limits on what someone says: nobody says they like
+// something on the other side of a limit they hold (a vampire, 1a, never loves the sun, 1b); in a hated call it's the
+// other way round — nothing on their own side (they'd never say they hate what makes them what they are).
+const limitClash = (item, person, hated) => !!person?.limits?.length && !!item.limits?.length
+  && item.limits.some(l => person.limits.some(x => x.rule === l.rule && (x.polarity === l.polarity) === hated));
+function pickItem(items, person, { form = null, hated = false, vars = null, plainOnly = false, avoid = null } = {}) {
+  if (plainOnly) items = items.filter(item => item.forms || !HAS_PLACEHOLDER.test(item.text));
+  if (avoid?.length) items = items.filter(item => !matches(item, avoid));
   const liked = hated ? hatesOf(person) : lovesOf(person), disliked = hated ? lovesOf(person) : hatesOf(person);
-  const open = items.filter(item => worldAllows(item.world, person) && likesAllow(item.world, person, vars) && (!form || !item.forms || item.forms[form]) && !matches(item, disliked));
+  const open = items.filter(item => worldAllows(item.world, person) && likesAllow(item.world, person, vars) && (!form || !item.forms || item.forms[form])
+    && !matches(item, disliked) && !limitClash(item, person, hated));
   const favourites = open.filter(item => matches(item, liked));
   const from = favourites.length && random() < LOVED_CHANCE ? favourites : open;
   return weightedPick(from, item => weightOf(item, person, hated, vars));
@@ -476,7 +516,7 @@ function personalItem(key, person) {
 // A line's text with its [placeholders] filled; `vars` holds #n picks for the whole conversation. Null if one can't be.
 // A call takes a form and any of CALL_OPTIONS with it: [animals: plural], [animals: a], [loves: lower], [colours:
 // capitalise], [interests: hated].
-function fill(text, person, vars, depth = 0, picks = null) {
+function fill(text, person, vars, depth = 0, picks = null, avoid = null) {
   let failed = false;
   const counts = {};
   const out = text.replace(PLACEHOLDER, (_, inner) => {
@@ -490,12 +530,14 @@ function fill(text, person, vars, depth = 0, picks = null) {
     const held = tag ? vars[`${name}#${tag}`] : null;
     // (picks: the card's words, reused in order by the spoken wording — see fillEntry)
     const nth = counts[name] = (counts[name] ?? -1) + 1, reused = !tag && picks?.reuse ? picks.reuse[name]?.[nth] : null;
-    const item = held || reused || (PERSONAL.test(name) ? personalItem(name, person) : pickItem(categoryItems(name), person, { form, hated }));
+    // (FILL_DEPTH down, only a word with no placeholders of its own will do, so nothing recurses for ever)
+    const item = held || reused || (PERSONAL.test(name) ? personalItem(name, person)
+      : pickItem(categoryItems(name), person, { form, hated, plainOnly: depth >= FILL_DEPTH - 1, avoid }));
     if (picks?.record && !tag && !PERSONAL.test(name)) (picks.record[name] ??= []).push(item);
     if (!item) { failed = true; return ''; }
     if (tag) vars[`${name}#${tag}`] = item;
     let said = item.forms ? (form && item.forms[form]) || item.forms.first : item.text;
-    if (!item.forms && depth < MAX_DEPTH) said = fill(said, person, vars, depth + 1);
+    if (!item.forms && depth < FILL_DEPTH - 1) said = fill(said, person, vars, depth + 1, null, avoid);
     vars.$last = item; // (for {likes} on the replies)
     if (said == null) { failed = true; return ''; }
     if (lower) said = said.charAt(0).toLowerCase() + said.slice(1); // (a list written with capitals, like people/loves.txt)
@@ -510,19 +552,37 @@ function fill(text, person, vars, depth = 0, picks = null) {
  * order, and #n picks shared), and the words filled in, so speech knows them as loved or hated too.
  * @param {{text: string, said: ?string}} entry
  * @param {Function} rng - 0 to 1
- * @returns {{card: string, said: string, words: string[]}}
+ * @param {number} [side] - 1 filling a love, -1 a hate
+ * @param {object[]} [held] - the entries they hold already (loves and hates), not to be picked again
+ * @returns {{card: string, said: string, words: string[], effects: Array<[string, number]>, limits: object[], failed: boolean}} (effects: what the filled words do to them; failed: nothing would fill it)
  */
-function fillEntry(entry, rng) {
+// A trait effect the other way round: added amounts negated, multipliers inverted; a switch can't be switched off, so none.
+function reversed(trait, value) {
+  const { combine } = TRAITS[trait];
+  if (combine === 'add') return [trait, -value];
+  if (combine === 'on' || !value) return null;
+  return [trait, 1/value];
+}
+function fillEntry(entry, rng, side = 1, held = []) {
   const said = entry.said ?? lowerFirst(entry.text);
-  if (!HAS_PLACEHOLDER.test(entry.text) && !HAS_PLACEHOLDER.test(said)) return { card: entry.text, said, words: [] };
+  if (!HAS_PLACEHOLDER.test(entry.text) && !HAS_PLACEHOLDER.test(said)) return { card: entry.text, said, words: [], effects: [], limits: [] };
   random = rng;
   try {
-    const vars = {}, record = {};
-    const card = fill(entry.text, null, vars, 0, { record }) ?? entry.text;
-    const spoken = fill(said, null, vars, 0, { reuse: record }) ?? card;
-    const words = [...Object.values(record).flat(), ...Object.entries(vars).filter(([key]) => key !== '$last').map(([, item]) => item)]
-      .filter(Boolean).map(item => item.forms ? item.forms.first : item.text);
-    return { card, said: entry.said ? spoken : lowerFirst(spoken), words };
+    // (never a word they already hold, either way: nobody loves and hates slow walkers — held, from profileOf)
+    const vars = {}, record = {}, avoid = held.map(e => e.said ?? e.text);
+    const filled = fill(entry.text, null, vars, 0, { record }, avoid), card = filled ?? entry.text;
+    const spoken = fill(said, null, vars, 0, { reuse: record }, avoid) ?? card;
+    const picked = [...new Set([...Object.values(record).flat(), ...Object.entries(vars).filter(([key]) => key !== '$last').map(([, item]) => item)])].filter(Boolean);
+    const words = picked.map(item => item.forms ? item.forms.first : item.text);
+    // (what the words bring: a speech word its {effect.…} traits, as written; a love or hate — "Conversely, [hates]" —
+    // its own {traits}, turned round if it's from the other list, bar any that persist; its limits likewise)
+    const effects = picked.flatMap(item => {
+      if (!item.side) return item.effects ?? [];
+      const across = item.side !== side;
+      return (item.personTraits ?? []).map(([trait, value]) => across && !persists(item, trait) ? reversed(trait, value) : [trait, value]);
+    }).filter(Boolean);
+    const limits = picked.flatMap(item => (item.side && item.side !== side ? (item.limits ?? []).map(l => ({ ...l, polarity: l.polarity === 'a' ? 'b' : 'a' })) : item.side ? item.limits ?? [] : []));
+    return { card, said: entry.said ? spoken : lowerFirst(spoken), words, effects, limits, failed: filled == null };
   } finally { random = Math.random; }
 }
 

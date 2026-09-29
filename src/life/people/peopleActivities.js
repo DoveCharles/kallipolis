@@ -22,7 +22,7 @@ import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
 import { REVIVE_SHAKE_TIME } from '../revive.js';
 import { strikeLightning } from '../lightning.js';
 import { damage, heal } from '../../core/health.js';
-import { RELATE, relateAll, relateBoth, introduceAll } from './peopleRelations.js';
+import { RELATE, relateAll, relateBoth, introduceAll, feelingFor } from './peopleRelations.js';
 
 // ---- what people get up to besides walking about.
 //
@@ -56,7 +56,9 @@ function endChat(g, how = null) {
   removeGroup(g);
   if (how === 'bad') talked(g, RELATE.badChat); else if (g.stage !== 'gather') talked(g, RELATE.chat);
   const chatGroup = g.members.splice(0);
-  chatGroup.forEach(m => { m.group = null; m.closing = false; if (isSeated(m)) settleBack(m); else finishActivity(m); });
+  // (a bench chat ended rudely: both up off the bench, so the punch roll below can play out as for any two)
+  const standUp = m => how === 'bad' && g.sat && m.act === 'bench';
+  chatGroup.forEach(m => { m.group = null; m.closing = false; if (isSeated(m) && !standUp(m)) settleBack(m); else finishActivity(m); });
   if (how !== 'bad' || chatGroup.length !== 2 || !hasClip('Punch') || !hasClip('Fall')) return;
   chatGroup.forEach((m, i) => {
     const other = chatGroup[1 - i];
@@ -89,7 +91,7 @@ function endedByLine(g) {
  * @param {Person} p - who's joining
  * @returns {void}
  */
-const GREET_WAIT = 5; // seconds a greeting can wait for its turn before it's dropped
+const GREET_WAIT = 10; // seconds a greeting can wait for its turn (between lines) before it's dropped
 function welcome(p) {
   const g = p.group, seated = g.members.filter(m => m !== p && m.stage === 'sit');
   seated.forEach(m => { if (!m.saying) m.lookAt = p; });
@@ -121,18 +123,40 @@ function leaveCircle(p, how) {
  */
 // (still sat in the circle counts: they're got up when the punch comes — see updateAttack)
 const inReach = m => isFairGame(m) || (m.act === 'circle' && m.stage === 'sit' && !m.punched);
-function brawl(p, others) {
+// (only at those they already felt badly about — before this parting's own sourness is counted)
+const dislikes = (a, b) => (feelingFor(a, b) ?? 0) < 0;
+function brawl(p, others, circle) {
   p.leftBadly = false;
+  const canFight = hasClip('Punch') && hasClip('Fall');
+  const targets = canFight ? others.filter(m => inReach(m) && dislikes(p, m) && peopleRng() < BAD_END_PUNCH*p.traits.aggression) : [];
+  const avengers = canFight ? others.filter(m => !m.attack && dislikes(m, p) && peopleRng() < BAD_END_PUNCH*m.traits.aggression) : [];
   others.forEach(m => relateBoth(p, m, RELATE.badChat));
-  if (!hasClip('Punch') || !hasClip('Fall')) return;
-  const targets = others.filter(m => inReach(m) && peopleRng() < BAD_END_PUNCH*p.traits.aggression);
   for (let i = targets.length - 1; i > 0; i--) { const j = Math.floor(peopleRng()*(i + 1)); [targets[i], targets[j]] = [targets[j], targets[i]]; }
   if (targets.length && !p.attack) { goAfter(p, targets.shift(), false, true); p.attackQueue = targets; }
-  others.forEach(m => {
-    if (m.attack || !isFairGame(p) || peopleRng() >= BAD_END_PUNCH*m.traits.aggression) return;
+  avengers.forEach(m => {
+    if (!isFairGame(p)) return;
     finishActivity(m); // (up off the grass to go for them)
     goAfter(m, p, false, true);
   });
+  // (whoever the fight gets up, bar the one who left, goes back to the circle once it's over: see rejoinCircles)
+  const now = performance.now()/1000;
+  [...targets, ...(p.attackQueue ?? []), ...avengers].forEach(m => { if (!rejoiners.some(r => r.p === m)) rejoiners.push({ p: m, circle, until: now + REJOIN_WITHIN }); });
+  if (p.attack?.target && !rejoiners.some(r => r.p === p.attack.target)) rejoiners.push({ p: p.attack.target, circle, until: now + REJOIN_WITHIN });
+}
+const REJOIN_WITHIN = 60; // seconds after a circle's brawl its members can still go back to it
+const rejoiners = []; // { p, circle, until }
+const settled = q => isFairGame(q) && !q.attack && !q.punched && !q.attackQueue?.length;
+// Each frame: anyone got up by a brawl who's calmed down (not fighting, hit, or running) goes back to their circle, if
+// it's still there with room and they're still in its hangout.
+function rejoinCircles() {
+  const now = performance.now()/1000;
+  for (let k = rejoiners.length - 1; k >= 0; k--) {
+    const { p, circle, until } = rejoiners[k];
+    if (now > until || isGone(p) || !groups.includes(circle)) { rejoiners.splice(k, 1); continue; }
+    if (p.group || !settled(p)) continue; // (still sat there waiting their turn to be hit, or not calmed down yet)
+    rejoiners.splice(k, 1);
+    if (p.mode === 'wander' && peopleNav.areas[p.area] === circle.area) goSit(p, circle.area, circle);
+  }
 }
 
 /**
@@ -255,6 +279,23 @@ export function talkWith(p, q) {
   if (!g.speaker?.saying) { g.speaker = p; g.turnIn = GREET_WAIT; closeNow(p); }
 }
 
+// ---- talking on a bench
+// Someone sat on a bench now and then turns to whoever's sat beside them and they talk: a chat (see updateGroups) with
+// g.sat, so neither turns or waves, and both stay sat till it's done (see the 'sit' stage) and then just carry on sitting.
+const BENCH_CHAT_EVERY = 8, BENCH_CHAT_CHANCE = 0.35; // seconds between tries, and the chance each time (× chatty)
+const BENCH_CHAT_REACH = 1.4; // how near (at people size 1) counts as beside them
+function chatOnBench(p) {
+  if (p.chatCooldown > 0 || p.traits.smells) return;
+  const q = people.find(q => q !== p && q.act === 'bench' && q.stage === 'sit' && !q.group && !(q.chatCooldown > 0) && !q.traits.smells
+    && q.traits.chatty > 0 && Math.hypot(q.x - p.x, q.z - p.z) < BENCH_CHAT_REACH*S.peopleSize);
+  if (!q) return;
+  const g = { kind: 'chat', sat: true, members: [p, q], stage: 'talk', speaker: null, turnIn: 0,
+    timer: (8 + peopleRng()*22)*(p.traits.patience + q.traits.patience)/2 };
+  groups.push(g);
+  p.group = q.group = g;
+  p.lookAt = q; q.lookAt = p;
+}
+
 // ---- walking together
 // Two who've just waved hello (see updateGroups) sometimes walk on side by side rather than stand there talking: a group
 // of kind 'walk', both act 'walk'. The leader (g.leader) goes on about their day as ever — along walkways, onto others,
@@ -363,7 +404,8 @@ function walkTogether(g, dt) {
   if (!L.moving) L.faceTo = headingTo(L, other); // (stood about a while in a hangout: turned to each other)
   // time's up: someone says a closer, then they stop to wave goodbye (see chats, in updateGroups)
   g.timer -= dt;
-  if (g.timer <= 0 && !g.wantsEnd) { g.wantsEnd = true; g.timer = CLOSE_WAIT; closeNow(g.speaker); }
+  if (g.timer <= 0 && !g.wantsEnd && dialogueOn(g)) g.timer = 0; // (not mid-dialogue)
+  else if (g.timer <= 0 && !g.wantsEnd) { g.wantsEnd = true; g.timer = CLOSE_WAIT; closeNow(g.speaker); }
   else if (g.timer <= 0 && !g.speaker?.saying) { g.speaker = null; partWalk(g); }
 }
 /**
@@ -469,17 +511,28 @@ export function meetOnWalkways(dt) {
  * @param {number} dt - seconds since the last frame
  * @returns {void}
  */
+// A dialogue under way (g.talk: a line waiting for its reply from whoever it was said to — see audio/dictionary.js)
+const dialogueOn = g => !!g?.talk && performance.now()/1000 < g.talk.expires;
+const inDialogue = p => dialogueOn(p.group) && (p.group.talk.by === p || p.group.talk.to === p);
 function takeTurns(g, talkers, dt) {
+  const pending = dialogueOn(g) ? g.talk : null;
+  if (pending?.to && !talkers.includes(pending.to)) g.talk = null; // (whoever was asked has gone: that dialogue's over)
   g.turnIn -= dt;
+  if (pending?.to === g.speaker && talkers.includes(g.speaker)) g.turnIn = Math.max(g.turnIn, 0.1); // (their answer's due: they keep the turn)
   // (a real line isn't cut off: the turn waits for it; one waiting for a reply hands the turn on soon after — see audio/dictionary.js)
   if (g.speaker?.saying && talkers.includes(g.speaker)) g.turnIn = Math.max(g.turnIn, 0.1);
   else if (g.talk && g.talk.by === g.speaker) g.turnIn = Math.min(g.turnIn, 0.4);
   if (!talkers.includes(g.speaker) || g.turnIn <= 0) {
     // the more talkative someone is, the more of the turns they take, and the longer they go on
     const others = talkers.filter(m => m !== g.speaker);
-    g.speaker = others.find(m => m.closing || (m.greetTo && performance.now()/1000 < m.greetTo.until)) ?? others[pickWeighted(others, m => m.traits.talkative)]; // (someone leaving a circle gets to say goodbye)
+    // (a greeting for a newcomer goes in between lines; then the dialogue's answer, from whoever was spoken to — never a
+    // third person, who'd answer as if asked; then a goodbye, once it's not in the middle of one; else whoever's talkative)
+    const now = performance.now()/1000, answer = g.talk && dialogueOn(g) ? g.talk.to : null;
+    g.speaker = others.find(m => m.greetTo && now < m.greetTo.until) ?? (others.includes(answer) ? answer : null)
+      ?? others.find(m => m.closing && !inDialogue(m)) ?? others[pickWeighted(others, m => m.traits.talkative)];
     g.turnIn = (1.5 + peopleRng()*4)*Math.sqrt(g.speaker.traits.talkative);
-    g.speaker.lookAt = pickFrom(talkers.filter(m => m !== g.speaker));
+    g.speaker.lookAt = g.speaker === answer ? g.talk.by : pickFrom(talkers.filter(m => m !== g.speaker));
+    if (g.speaker === answer) closeNow(answer); // (answering at once, not after whatever babble they'd started)
   }
   talkers.forEach(m => { if (m !== g.speaker) m.lookAt = g.speaker; });
 }
@@ -533,6 +586,7 @@ function goodbyes(g, dt) {
   else wave(g, 'bye');
 }
 export function updateGroups(dt) {
+  if (rejoiners.length) rejoinCircles();
   for (let gi = groups.length - 1; gi >= 0; gi--) {
     const g = groups[gi];
     if (g.goodbye) { goodbyes(g, dt); continue; }
@@ -564,7 +618,9 @@ export function updateGroups(dt) {
       if (other?.act === 'chat' && canWalk(other, true) && Math.hypot(walker.x - other.x, walker.z - other.z) > FOLLOW_OFF*CHAT_GAP*S.peopleSize) follow(other, walker);
       // time's up: someone says a closer (closers.txt — polite from the patient, rude from the impatient: see
       // audio/dictionary.js), which ends it; if nobody does within CLOSE_WAIT, they just wave
-      if (g.timer <= 0 && !g.wantsEnd) { g.wantsEnd = true; g.timer = CLOSE_WAIT; closeNow(g.speaker); }
+      // (never mid-dialogue: a line waiting on its answer gets it first — see dialogueOn)
+      if (g.timer <= 0 && !g.wantsEnd && dialogueOn(g)) g.timer = 0;
+      else if (g.timer <= 0 && !g.wantsEnd) { g.wantsEnd = true; g.timer = CLOSE_WAIT; closeNow(g.speaker); }
       else if (g.timer <= 0 && !g.speaker?.saying) { g.speaker = null; wave(g, 'bye'); }
     } else if (g.timer <= 0) {
       endChat(g);
@@ -572,7 +628,7 @@ export function updateGroups(dt) {
     }
     // (keeping face to face — but not with whoever's possessed: they stay put as they walk round them, turning only
     // their head, as far as it goes — see lookAt in people.js)
-    if (g.stage !== 'gather' && !g.possessed) { a.faceTo = headingTo(a, b); b.faceTo = headingTo(b, a); }
+    if (g.stage !== 'gather' && !g.possessed && !g.sat) { a.faceTo = headingTo(a, b); b.faceTo = headingTo(b, a); }
   }
 }
 
@@ -613,7 +669,7 @@ function clearGround(area, x, z, r) {
  * @param {Hangout} area - the hangout they're in
  * @returns {boolean} whether somewhere was found
  */
-export function goSit(p, area) {
+export function goSit(p, area, into = null) {
   if (!personModel) return false;
   if (area.kind === 'plaza' || area.kind === 'foodcourt') {
     // (only people about the size the benches — or a food court's chairs — are made for)
@@ -631,10 +687,12 @@ export function goSit(p, area) {
   const sits = GRASS_SITS.filter(hasClip);
   if (!isOpenGround(area) || !sits.length) return false;
   const radius = CIRCLE_RADIUS*S.peopleSize;
-  const circle = groups.find(g => g.kind === 'circle' && g.area === area && g.members.length < CIRCLE_MAX && Math.hypot(g.cx - p.x, g.cz - p.z) < 30
+  // (into: a circle to go back to — see rejoinCircles)
+  const circle = into ? (into.members.length < CIRCLE_MAX ? into : null) : groups.find(g => g.kind === 'circle' && g.area === area && g.members.length < CIRCLE_MAX && Math.hypot(g.cx - p.x, g.cz - p.z) < 30
     && (p.traits.smells || !g.members.some(m => m.traits.smells))); // (nobody joins a circle with someone who smells in it)
+  if (into && !circle) return false;
   let spot = null;
-  if (circle && peopleRng() < 0.85) {
+  if (circle && (into || peopleRng() < 0.85)) {
     // the place round the circle furthest from anyone already there
     for (let k=0;k<12;k++) {
       const angle = (k + peopleRng()*0.5)/12*Math.PI*2, x = circle.cx + Math.sin(angle)*radius, z = circle.cz + Math.cos(angle)*radius;
@@ -733,7 +791,15 @@ export function updateActivity(p, area, dt) {
     case 'sit':
       p.timer -= dt;
       if (p.closing && p.saying) p.timer = Math.max(p.timer, 0.5); // (their goodbye isn't cut short)
+      if (p.act === 'circle' && p.timer <= 0 && inDialogue(p)) p.timer = 0.5; // (nor do they leave mid-dialogue)
       if (talkedToByPossessed(p)) p.timer = Math.max(p.timer, 0.5); // (not getting up while someone possessed is talking to them)
+      if (p.act === 'bench') {
+        if (p.group) p.timer = Math.max(p.timer, 0.5); // (not up off the bench till the chat's done)
+        else if ((p.benchChatIn = (p.benchChatIn ?? BENCH_CHAT_EVERY*peopleRng()) - dt) <= 0) {
+          p.benchChatIn = BENCH_CHAT_EVERY*(0.5 + peopleRng());
+          if (peopleRng() < BENCH_CHAT_CHANCE*p.traits.chatty) chatOnBench(p);
+        }
+      }
       // (time up in a circle with others to talk to: first a turn to say a closer — closers.txt, see audio/dictionary.js,
       // which leaves through endedByLine — for up to CLOSE_WAIT; then they just get up)
       if (p.timer <= 0 && p.act === 'circle' && !p.closing && p.group?.members.filter(m => m.stage === 'sit').length >= 2) {
@@ -746,9 +812,9 @@ export function updateActivity(p, area, dt) {
       if (weightOf(p, clipNamed('Idle')) < 1) break;
       if (p.act === 'circle' && !p.leftBadly && hasClip('Wave') && p.group.members.some(m => m !== p && m.stage === 'sit')) { playOnce(p, 'Wave'); p.stage = 'bye'; break; }
       {
-        const leftBehind = p.act === 'circle' && p.leftBadly ? p.group.members.filter(m => m !== p) : null;
+        const circle = p.group, leftBehind = p.act === 'circle' && p.leftBadly ? circle.members.filter(m => m !== p) : null;
         finishActivity(p);
-        if (leftBehind) brawl(p, leftBehind);
+        if (leftBehind) brawl(p, leftBehind, circle);
       }
       return null;
     case 'bye':

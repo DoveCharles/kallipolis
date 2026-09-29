@@ -30,6 +30,8 @@
 #   [pets]                    a line that's only a [category] includes all of that category's entries
 #
 # Includes nest as deep as MAX_DEPTH; a category that includes itself (even via others) is skipped with a warning.
+# Placeholders within placeholders go 5 deep (FILL_DEPTH): at the fifth, only a word with no placeholders of its own is
+# picked, so a category that names itself ("more [rec]") always ends.
 # The same entry reached twice in one category (knife in both [weapons] and [utensils]) is kept once: the highest
 # weight, and for each tag the strongest value (furthest from 0).
 #
@@ -69,6 +71,16 @@
 #   {patience = -1}           leans toward speakers low in it
 #   {nosy, chatty = 0.5}      several at once: leans toward the nosy, and a little toward the chatty
 #   {aggression = -0.5, happy} a little toward the gentle, and toward the happy
+#   {effect.speed = 2}        what the word does to someone whose love or hate it fills ("Taking [drugs]" filled with
+#                             "ayahuasca {effect.blazed, effect.speed = 0.8}" gives them those): the same values as
+#                             {traits} in people/ files (a multiplier, an amount to add, or on). Only counts there —
+#                             said anywhere else it does nothing, and it's always as written. Leans never become
+#                             effects. (A love or hate filled into another brings its own {traits}: see NOTES.)
+#   {limit = 1b}              a hard limit, the same rules as in people/ files (their limits count here too): nobody
+#                             holding the other side (1a) — through their name, mood, loves or hates, a vampire's 1a
+#                             say — says a line or picks a word marked 1b, so a vampire never says they love the sun.
+#                             In a [x: hated] call it's checked the other way: nobody picks what's on their own side
+#                             (they won't say they hate the night). {likes} counts the other side as disliked (-1).
 #   {evil = 2}                tags can go past 1: twice as hard a lean (the speaker's own level is always -1 to 1)
 #   {appeal = -1}             how liked it is generally, whoever's speaking: -1 shunned by everyone, 1 liked by all.
 #                             It adds into the same lean as the trait tags, so a tag can override it for some:
@@ -119,6 +131,10 @@
 #   {patience < 0}            only the impatient
 #   {speed < 0}               only the slow                   {vampire > 0}   only vampires
 #   {evil > 0.5, aggression}  only the very evil, leaning toward the aggressive of them
+# AGE: their age in years (not agemult, which only scales how old someone turns out)
+#   {age > 60}                only speakers over 60          {age < 30}   only under 30
+#   {other.age > 70}          only to someone over 70        {other.age < 25, nosy}
+#   {age}  {age = -1}         a lean toward the old / the young (18 counts as -1, 80 or more as 1)
 #
 # OTHER: the person they're talking to (whoever said the line being replied to, else whoever they're facing)
 #   {other.fidgety}           leans toward talking to fidgety people (other.trait = n, as for the speaker's own traits)
@@ -227,12 +243,22 @@
 #   {talk.score = -1}         leans toward a conversation that's going badly (score -3 counts fully)
 # WALKING TOGETHER: two who've just waved hello sometimes walk on side by side instead, talking as they go ({is = walking}),
 # then stop to wave goodbye and part; whoever's possessed walking off mid-chat is followed the same way.
-# IN A CIRCLE (people sat on the grass): anyone can reply to anyone. When someone joins, one of those sat there who isn't
-# mid-line greets them with a line from greetings.txt (other. is the newcomer; its replies are theirs), at once if
-# nobody's talking, else next turn; the rest look round at them. Whoever's possessed going up to someone (E) greets them
+# ON A BENCH: someone sat on a bench now and then talks with whoever's sat beside them — the same as any two chatting,
+# only neither turns or waves, and neither gets up till it's finished. Ended rudely ({end = bad}), both stand up off
+# the bench and the usual punch chance plays out.
+# DIALOGUES: a line with replies is said to one person (whoever the speaker's facing), and only they answer it; the
+# answer's replies go back to the first, and so on — a third person never joins in (they'd answer as if asked). Nobody
+# leaves, or says a closer, while a dialogue's waiting on its next line: it runs until no reply fits (or nobody answers
+# within a few seconds).
+# IN A CIRCLE (people sat on the grass): calls go to whoever the speaker's facing (see DIALOGUES). When someone joins, one of those sat there who isn't
+# mid-line greets them with a line from greetings.txt (other. is the newcomer), in the gap after the line being said —
+# never cutting in — and then any dialogue picks up where it was (a greeting's own replies only come when none is going
+# on); the rest look round at them. Whoever's possessed going up to someone (E) greets them
 # the same way (standing, so a circle-only greeting takes {is = sitting}), and they reply — sat down, they stay sat. Someone whose time's up there gets the next turn to
 # say a closer before getting up: {end} and they wave to the rest; {end = bad} and they walk off, rolling the punch chance
-# against everyone still sat there (going for each they rolled, one after another) while each rolls against them.
+# only against those in the circle they already felt
+# badly about (going for each they rolled, one after another), while each of those who dislikes them rolls against
+# them. Anyone the fight got up (not the leaver) goes back to the circle once they've calmed down, if it's still there.
 # Punches from a conversation gone bad (either kind) don't send bystanders running or joining in: they just see it
 # ({seen = punch}) and talk about it — "What was that about?". Other punches still scatter people.
 #   Put them on replies to cut a conversation short ("> Mind your own business. {aggression, end = bad}") — an ending
@@ -254,9 +280,24 @@
 # - A line that's only [category] in people/loves.txt or hates.txt is read as a section heading and cuts off every entry
 #   below it — put a placeholder inside words instead ("Their [pets: plural]").
 # - In people/ files { } are traits and [ ] placeholders (whole-line [Headings] aside), as everywhere else now.
-# - A hate's {traits} are what hating it does to someone, so speech reads them backwards: "Slow walkers {speed = 1.7}"
-#   in hates.txt leans the slow toward liking slow walkers, and the fast toward hating them. This is by file name
-#   (hates), so a new people/ list meant as dislikes wouldn't be flipped.
+# - A love or hate's {traits} are what holding that opinion does to someone.
+#   In speech, a hate said as the opposite ("I love slow walkers") leans the other way: the fast hate slow walkers, so
+#   the slow are who'd say they love them. That's all speech does with them — persist doesn't change it; for a hard
+#   rule on who says something, use a speech.… tag.
+#   Drawn into the other list ("Conversely, [hates]" as someone's love), its traits are turned round (×1.7 → ×0.59,
+#   +0.5 → −0.5; a switch is dropped, as loving the opposite can't switch it off), except any that persist, which stay
+#   as written because they go with the subject whichever way you feel:
+#     Hate: Slow walkers {speed = 1.7}              haters are fast; "Conversely, slow walkers" makes someone slower
+#     Hate: Walking so fast {speed = 2, persist}    loving it makes you fast too
+#     Hate: Men {aggression = 2, persist = aggression}   only that trait persists (several: persist = a, persist = b)
+#     {…, persist, flip = mood}                     all persist but mood, which turns round (several: flip = a, flip = b)
+#     Hate: Other socialists {conservative = -0.3, persist = conservative, speech.conservative < 0}
+#                                                   left-wing, loved or hated; and only left-wingers say it
+#   Each entry stands alone: hating "being an alcoholic" is its own entry, and says nothing about "alcoholics".
+# - speech.… in a people/ entry's { } is a speech tag, as in any speech file ({speech.appeal = 0.5}, {speech.evil},
+#   {speech.conservative < 0}); everything else there is a trait. It's the mirror of effect.… on a speech word.
+# - A love or hate drawn into the other ("Conversely, [hates]") is never one the person already holds either way; if
+#   there's nothing left to draw, that entry's dropped from them (unless it's all they have).
 # - The same words in loves and hates stay two entries, each leaning its own way.
 # - A filled-in love or hate ("Their [pets]" → cats) gives the person only the entry's own {traits}, whatever word
 #   filled it; the word counts as loved (or hated) in speech, and the card and spoken wordings use the same pick.
@@ -279,4 +320,5 @@
 #   so their {weight}s, [placeholders] and nesting work as everywhere else. The name is said as the line reads but for
 #   its first letter, which is raised ("splort!" reads "Splort!"); any capital further in has to be written in the file.
 #   One of corpTitle's lines names nothing as the files stand: there's no fruits.txt — the list is [fruit].
-
+# - A new opener (a one-liner or anything else) never cuts into a conversation tree: while a line waits on its answer,
+#   the one it was said to answers it (straight away, dropping their babble) and nobody else starts anything.
