@@ -13,7 +13,7 @@ html.win3 {
   /* the colour scheme's elements, as Control Panel > Color named them; Options > Display > Colour scheme swaps them
      (src/ui/color-schemes.js sets them on <html>) — these are Windows Default */
   --w3-window:#ffffff; --w3-text:#000000; --w3-menu:#ffffff; --w3-menu-text:#000000;
-  --w3-title:#000080; --w3-title-text:#ffffff; --w3-inactive:#ffffff; --w3-inactive-text:#000000;
+  --w3-title:#000080; --w3-title-text:#ffffff; --w3-inactive:#8080c0; --w3-inactive-text:#000000;
   --w3-hl:#000080; --w3-hl-text:#ffffff; --w3-face:#c0c0c0; --w3-shadow:#808080; --w3-btn-text:#000000;
   --w3-border:#c0c0c0; --w3-border-inactive:#c0c0c0; --w3-frame:#000000;
   --w3-edge:var(--w3-border); /* (the frame a window's drawn with: its Inactive Border while it's not the active one, below) */

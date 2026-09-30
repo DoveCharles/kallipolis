@@ -45,10 +45,22 @@ const css = ref => {
   return '#' + [n & 255, (n >> 8) & 255, (n >> 16) & 255].map(c => c.toString(16).padStart(2, '0')).join('');
 };
 
+// grey stays grey; halfway between two colours
+const grey = c => c.slice(1, 3) === c.slice(3, 5) && c.slice(3, 5) === c.slice(5, 7);
+const mix = (a, b) => '#' + [1, 3, 5].map(i => ((parseInt(a.substr(i, 2), 16) + parseInt(b.substr(i, 2), 16)) >> 1).toString(16).padStart(2, '0')).join('');
+// inactive title/border: tinted halfway to the active one when grey, as Emerald City already is (skipped for grey schemes)
+const tint = (colors, active, inactive) => {
+  const a = ELEMENTS.indexOf(active), i = ELEMENTS.indexOf(inactive);
+  if (grey(colors[i]) && !grey(colors[a])) colors[i] = mix(colors[a], colors[i]);
+};
+
 export const SCHEMES = [{ id: 'default', name: 'Windows Default', colors: null }];
 for (const line of INI.trim().split('\n')) {
   const [name, list] = line.split('=');
-  SCHEMES.push({ id: name.toLowerCase().replace(/[^a-z]+/g, '-'), name, colors: list.split(',').map(css) });
+  const colors = list.split(',').map(css);
+  tint(colors, '--w3-title', '--w3-inactive');
+  tint(colors, '--w3-border', '--w3-border-inactive');
+  SCHEMES.push({ id: name.toLowerCase().replace(/[^a-z]+/g, '-'), name, colors });
 }
 
 const root = document.documentElement;
