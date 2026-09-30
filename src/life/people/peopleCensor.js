@@ -43,7 +43,7 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
       uniform float censorWidth, censorNear;
       varying vec2 vCensorBlock;
       varying vec3 vCensorSkin;
-      varying float vCensorPerson;
+      flat varying int vCensorPerson; // (flat: interpolated, its tiny errors turn the hash to noise)
       void main() {
         if (personTrait(${nudeRow}).w < 0.5 || (personOnly >= 0 && personIndex() != personOnly)) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
         mat4 placed = modelMatrix*instanceMatrix;
@@ -75,16 +75,19 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
         float block = censorWidth*scale/${CENSOR_BLOCKS.toFixed(1)};
         vCensorBlock = vec2((position.x + 0.5)*censorWidth*scale, (position.y + 0.5)*tall)/block;
         vCensorSkin = personTrait(${skinRow}).rgb;
-        vCensorPerson = float(personIndex());
+        vCensorPerson = personIndex();
       }`,
     fragmentShader: `
       uniform float censorTime;
       varying vec2 vCensorBlock;
       varying vec3 vCensorSkin;
-      varying float vCensorPerson;
+      flat varying int vCensorPerson; // (flat: interpolated, its tiny errors turn the hash to noise)
       void main() {
-        vec3 cell = vec3(floor(vCensorBlock), floor(censorTime*${CENSOR_SHIMMER.toFixed(1)}) + vCensorPerson*17.0);
-        float h = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719)))*43758.5453);
+        // (an integer hash of the block, the tick and the person: the same for every pixel of a block on any GPU)
+        uvec2 block = uvec2(ivec2(floor(max(vCensorBlock, 0.0))));
+        uint k = block.x*73856093u ^ block.y*19349663u ^ uint(censorTime*${CENSOR_SHIMMER.toFixed(1)})*83492791u ^ uint(vCensorPerson)*2654435761u;
+        k ^= k >> 13; k *= 0x5bd1e995u; k ^= k >> 15;
+        float h = float(k & 0xffffu)/65535.0;
         // (mostly near their skin, a third of blocks much darker)
         float shade = h < 0.33 ? 0.35 + 0.6*h : 0.8 + 0.35*(h - 0.33);
         gl_FragColor = vec4(vCensorSkin*shade, 1.0);
