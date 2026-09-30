@@ -1793,7 +1793,7 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
   const fits = (r, gap = 0, margin = 0.02) => inRoom(r, margin) && taken.every(o => !overlaps(r, o, gap));
   // `name` stood at (x, z) turned by `angle`, in `parent` (the room's furniture, or on a desk, in the desk's terms),
   // and unless it's something small nobody could walk into, solid (or `solid` of it, in its own terms)
-  const put = (name, x, z, angle, { parent = group, y = 0, small = false, solid = null, seatKind = null, diner = false, table = null } = {}) => {
+  const put = (name, x, z, angle, { parent = group, y = 0, small = false, solid = null, seatKind = null, diner = false, table = null, open = null, sideways = false } = {}) => {
     const piece = F[name], object = piece.object.clone();
     object.position.set(x, y, z);
     object.rotation.y = angle;
@@ -1805,7 +1805,7 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
     for (const seat of piece.seats) {
       const at = turned(seat.x, seat.z, angle, x, z);
       layout.seats.push({ x: at.x, z: at.z, y: seat.y, nx: Math.sin(angle), nz: Math.cos(angle), sofa: false, desk: deskSeats.includes(name),
-        bar: name === 'BarStool', booth: name === 'Booth', kind: seatKind, diner, table }); // (sat at the bar, with the bar bot to talk to: see barbot.js)
+        bar: name === 'BarStool', open, sideways, kind: seatKind, diner, table }); // (sat at the bar, with the bar bot to talk to: see barbot.js)
     }
     return object;
   };
@@ -1867,7 +1867,7 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
 function seatsInWorld(layout) {
   layout.seats = layout.seats.map(seat => {
     const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z)), n = roomWay(seat.nx, seat.nz);
-    return { x: w.x, y: w.y, z: w.z, nx: n.x, nz: n.z, sofa: false, desk: seat.desk, bar: seat.bar, booth: !!seat.booth, kind: seat.kind ?? null, by: null,
+    return { x: w.x, y: w.y, z: w.z, nx: n.x, nz: n.z, sofa: false, desk: seat.desk, bar: seat.bar, open: seat.open ? roomWay(seat.open.x, seat.open.z) : null, sideways: !!seat.sideways, kind: seat.kind ?? null, by: null,
       salonBot: seat.salonBot ?? null, // (a styling chair's: see salonbot.js)
       diner: seat.diner ? { top: room.localToWorld(new THREE.Vector3(seat.x, seat.diner, seat.z)).y } : false, // (a restaurant's)
       table: seat.table ?? null }; // (which of its tables: see peopleWaiter.js)
@@ -2487,7 +2487,9 @@ function furnishPub(key) {
   const placeAll = (parts, spot) => {
     for (const [name, x, z, angle] of parts) {
       const at = turned(x, z, spot.angle, spot.x, spot.z);
-      put(name, at.x, at.z, spot.angle + angle);
+      // (chairs and booth benches sat on from the side: see sideOf in peopleActivities.js)
+      put(name, at.x, at.z, spot.angle + angle, { sideways: name === 'Chair' || name === 'BoothBench',
+        open: name === 'BoothBench' ? { x: Math.sin(spot.angle), z: Math.cos(spot.angle) } : null });
       if (F[name].tabletop) tops.push({ ...at, y: F[name].h, big: name === 'BoothTable' });
     }
     taken.push(spot.area);
@@ -3319,7 +3321,7 @@ function furnishRestaurant(key) {
     const plate = surfaceAt(t, 0, 0.28, 0.2), table = tops.push({ x: spot.x, z: spot.z }) - 1;
     for (const [x, angle] of [[-off, Math.PI/2], [off, -Math.PI/2]]) {
       const at = turned(x, 0, spot.angle, spot.x, spot.z);
-      put('Booth', at.x, at.z, spot.angle + angle, { diner: plate, table });
+      put('Booth', at.x, at.z, spot.angle + angle, { diner: plate, table, open: { x: Math.sin(spot.angle), z: Math.cos(spot.angle) } }); // (its open end: see sideOf)
     }
     put('BoothTable', spot.x, spot.z, spot.angle + Math.PI/2);
     taken.push(spot.area);
