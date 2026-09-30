@@ -273,14 +273,14 @@ export function walkwayTextureChangeNeedsRebuild(from, to) { return (from === 'd
 export function pavingFringeWidth(halfWidth) { return Math.min(0.6, halfWidth*0.2); }
 // Sidewalk slabs: joints laid off the nearest centerline segment — rows across the sidewalk's width, cross joints
 // dividing each segment evenly — on the top only (walls are below Y_SIDEWALK)
-const SLAB = 0.9;
+const SLAB = 1.8, SLAB_ACROSS = 3; // along, and the widest a row gets across
 function applySlabShader(mat, segments, inner, width) {
   if (!segments.length || width <= 0) return;
   const uniforms = {
     uSlabSegments: { value: App.segmentUniformArray(segments, PATH_MAX_SEGMENTS) },
     uSlabSegmentCount: { value: segments.length },
     uSlabInner: { value: inner },
-    uSlabRow: { value: width/Math.max(1, Math.round(width/SLAB)) },
+    uSlabRow: { value: width/Math.max(1, Math.ceil(width/SLAB_ACROSS - 0.01)) },
   };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
