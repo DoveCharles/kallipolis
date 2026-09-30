@@ -246,6 +246,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `clothes-models.py` (14K) Built assets/models/Clothes.glb (since reworked by hand in Blender — rerunning it would undo that): a clothes shop's rails, round rails, wall shelves, display table, shoe stand, mannequin, counter, changing room and its curtain, floor mirror, plant, sale sign and spotlight track (furnished by furnishClothes in buildings/interior.js).
 - `industrial-models.py` (32K) Builds assets/models/Industrial.glb:
 - `interior.html` (7K) Standalone "Interior view bench" test page.
+- `ped-maker.html` (9K) Standalone "Ped maker": the app on an empty unsaved scene (index.html?blank, see project/autosave.js), one ped (slot 0) held still by S.peopleFrozen, sliders writing its body, face, colours, worn styles, outfit, clothing bands, clip and mood straight into personModel. Nothing is kept.
 - `kitchen-models.py` (9K) Builds assets/models/Kitchen.glb: one piece, Kitchen — an L of fitted units (fridge freezer, oven and hob under an extractor, wall cupboards, microwave, sink, toaster, kettle) that furnish in buildings/interior.js stands in a corner of every home (a posh one's curtains taken down for it), on a tiled patch of floor, its cupboards in the room's wood ("the kitchen").
 - `midcentury-models.py` (18K) Builds assets/models/MidCentury.glb:
 - `office-models.py` (23K) Builds assets/models/Office.glb:

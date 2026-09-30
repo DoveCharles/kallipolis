@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ped maker</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  #panel { position: fixed; right: 12px; top: 12px; bottom: 12px; z-index: 1; width: 300px; padding: 10px 12px; border-radius: 8px; overflow-y: auto;
+    background: rgba(255,255,255,0.92); color: #111; font: 12px system-ui, sans-serif; box-shadow: 0 2px 12px rgba(0,0,0,0.4); }
+  h3 { margin: 10px 0 4px; font-size: 13px; }
+  h3:first-child { margin-top: 0; }
+  .row { display: grid; grid-template-columns: 70px 1fr 40px; align-items: center; gap: 6px; margin: 2px 0; }
+  .row span { text-align: right; font-variant-numeric: tabular-nums; }
+  .row input[type=range], .row select { width: 100%; margin: 0; min-width: 0; }
+  .row input[type=color] { width: 100%; height: 20px; padding: 0; border: 0; }
+  button { font: inherit; margin: 4px 4px 0 0; padding: 3px 10px; }
+  #status { color: #555; }
+</style>
+</head>
+<body>
+<iframe id="app" src="../index.html?blank"></iframe>
+<div id="panel"><div id="status">Loading…</div><div id="controls"></div></div>
+<script type="module">
+// Loads the app in the frame on an empty, unsaved scene (index.html?blank: see project/autosave.js), holds the crowd still
+// (S.peopleFrozen) and draws only slot 0 (personModel.only), posed and faced from the sliders, which write its look
+// straight into the traits texture (see assignAppearance in peopleModel.js). Nothing is kept.
+const $ = id => document.getElementById(id);
+const frame = $('app');
+const inApp = path => frame.contentWindow.eval(`import(${JSON.stringify(path.startsWith('three') ? path : new URL(path, location.href).href)})`);
+const I = 0; // (the slot)
+let win, S, pm, peopleMod, controls, THREE, M, p;
+const ped = { clip: 'Idle', spin: false, heading: 0, time: 0, height: 1, talk: 0, emotion: 0, blink: 0, turn: 0, tilt: 0, eyes: [0, 0, 0, 0] };
+
+const texel = row => (row*peopleMod.PEOPLE_MAX + I)*4;
+const traits = () => M.traitData;
+const dirty = () => { M.traitTexture.needsUpdate = true; };
+const BODY = [['Breast', 0, 0], ['Waist', 0, 1], ['Hips', 0, 2], ['Weight', 0, 3], ['Butt', 1, 0], ['Shoulders', 1, 3]];
+const FACE = () => [['Key 1', pm.PERSON_FACE_ROW, 0], ['Key 2', pm.PERSON_FACE_ROW, 1], ['Shape1', pm.PERSON_FACE_ROW, 2], ['Shape2', pm.PERSON_FACE_ROW, 3], ['Shape3', 1, 2]];
+const LAYERS = ['Hair / hat', 'Facial hair', 'Glasses', 'Skirt', 'Jeans'];
+const BANDS = [['Sleeves', 3], ['Tummy', 2], ['Legs', 2]];
+
+// one frame of slot 0: placed at the origin, in its clip, with its face — and everything it wears with it
+function draw() {
+  const clip = M.clips[ped.clip] ?? M.clips.Idle, dt = 1/60;
+  ped.time += dt;
+  if (ped.spin) ped.heading += dt*0.6;
+  p.height = ped.height;
+  const s = peopleMod.modelScale(p), sin = Math.sin(ped.heading), cos = Math.cos(ped.heading);
+  const offX = (clip.pelvisX ?? 0)*s, offZ = (clip.pelvisZ ?? 0)*s;
+  const matrix = new THREE.Matrix4().compose(new THREE.Vector3(-offX*cos - offZ*sin, -M.minY*s, offX*sin - offZ*cos),
+    new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ped.heading), new THREE.Vector3(s, s, s));
+  M.mesh.setMatrixAt(I, matrix);
+  M.mesh.count = Math.max(M.mesh.count, 1);
+  const o = I*4, row = clip.start + (ped.time*pm.PERSON_BAKE_FPS) % clip.frames;
+  M.anim.array.set([row, row, 1, ped.blink], o);
+  M.look.array.set([ped.turn, ped.tilt, ped.talk, ped.emotion], o);
+  M.eyes.array.set(ped.eyes, o);
+  M.pupil.array.set([0, 0], I*2);
+  for (const layer of M.wornLayers) {
+    layer.styles.forEach(style => { if (style.mesh) style.mesh.count = peopleMod.countBelow(style.members, peopleMod.people.length); });
+    const style = layer.of[I] >= 0 ? layer.styles[layer.of[I]] : null;
+    if (!style?.mesh) continue;
+    const slot = layer.slot[I];
+    matrix.toArray(style.mesh.instanceMatrix.array, slot*16);
+    style.anim.array.set(M.anim.array.subarray(o, o + 4), slot*4);
+    style.look.array.set(M.look.array.subarray(o, o + 4), slot*4);
+    style.eyes.array.set(M.eyes.array.subarray(o, o + 4), slot*4);
+  }
+  [M, ...M.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = part.anim.needsUpdate = part.look.needsUpdate = part.eyes.needsUpdate = part.pupil.needsUpdate = true; });
+  M.only.value = I;
+}
+
+// ---- controls: [label, min, max, step, get, set]
+const html = [];
+let n = 0;
+const handlers = [];
+const head = t => html.push(`<h3>${t}</h3>`);
+function slider(label, min, max, step, get, set) {
+  const id = 'c' + n++;
+  html.push(`<label class="row">${label}<input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${get()}"><span id="${id}v">${(+get()).toFixed(2)}</span></label>`);
+  handlers.push(() => $(id).addEventListener('input', e => { set(+e.target.value); $(id + 'v').textContent = (+e.target.value).toFixed(2); }));
+}
+function picker(label, options, get, set) {
+  const id = 'c' + n++;
+  html.push(`<label class="row">${label}<select id="${id}">${options.map(([v, t]) => `<option value="${v}"${v == get() ? ' selected' : ''}>${t}</option>`).join('')}</select><span></span></label>`);
+  handlers.push(() => $(id).addEventListener('change', e => set(e.target.value)));
+}
+function colour(label, row) {
+  const id = 'c' + n++, t = texel(row), c = new THREE.Color(traits()[t], traits()[t+1], traits()[t+2]);
+  html.push(`<label class="row">${label}<input type="color" id="${id}" value="#${c.getHexString()}"><span></span></label>`);
+  handlers.push(() => $(id).addEventListener('input', e => { const c = new THREE.Color(e.target.value); traits().set([c.r, c.g, c.b], t); dirty(); }));
+}
+const traitSlider = (label, row, k, min = -1, max = 1) => slider(label, min, max, 0.01, () => traits()[texel(row) + k], v => { traits()[texel(row) + k] = v; dirty(); });
+
+function build() {
+  html.length = 0; handlers.length = 0; n = 0;
+  html.push(`<button id="random">Random</button><label><input type="checkbox" id="spin"${ped.spin ? ' checked' : ''}> turntable</label>`);
+  head('Body');
+  picker('Sex', [[1, 'Man'], [0, 'Woman']], () => M.isMan[I], v => { M.isMan[I] = +v; traits()[texel(1) + 1] = +v; dirty(); });
+  slider('Height', 0.5, 1.6, 0.01, () => ped.height, v => { ped.height = v; });
+  BODY.forEach(([name, row, k]) => traitSlider(name, row, k));
+  slider('Facing', -3.14, 3.14, 0.01, () => ped.heading, v => { ped.heading = v; });
+  head('Face');
+  FACE().forEach(([name, row, k]) => traitSlider(name, row, k));
+  head('Colours');
+  pm.PERSON_TRAIT_COLORS.forEach((part, k) => { if (part !== 'Blood') colour(part, 2 + k); });
+  head('Worn');
+  M.wornLayers.forEach((layer, l) => picker(LAYERS[l] ?? 'Layer ' + l, [[-1, '(none)'], ...layer.styles.map((st, k) => [k, st.name])], () => layer.of[I], v => {
+    const was = layer.of[I];
+    if (+v >= 0) { if (M.putOn(I, layer.styles[+v].name) === undefined) $('status').textContent = 'No room for ' + layer.styles[+v].name; }
+    else if (was >= 0) M.takeOff(I, layer.styles[was].name);
+  }));
+  picker('Outfit', [[0, '(none)'], ...outfits.OUTFITS.map((o, k) => [k + 1, o.name])], () => traits()[texel(pm.PERSON_TRAIT_COLORS.indexOf('OutfitRed') + 2) + 3], v => {
+    traits()[texel(pm.PERSON_TRAIT_COLORS.indexOf('OutfitRed') + 2) + 3] = +v;
+    traits()[texel(pm.PERSON_TRAIT_COLORS.indexOf('OutfitGreen') + 2) + 3] = +v ? outfits.OUTFIT_COLUMNS[+v - 1] : 0;
+    dirty();
+  });
+  BANDS.forEach(([name, count], k) => slider(name, 1, count + 1, 1, () => traits()[texel(pm.PERSON_CLOTHING_ROW) + k], v => { traits()[texel(pm.PERSON_CLOTHING_ROW) + k] = v; dirty(); }));
+  head('Pose');
+  picker('Clip', Object.values(M.clips).filter(c => !c.missing).map(c => [c.name, c.name]), () => ped.clip, v => { ped.clip = v; ped.time = 0; });
+  head('Mood');
+  slider('Emotion', -1, 1, 0.01, () => ped.emotion, v => { ped.emotion = v; });
+  ['Shock', 'Happy', 'Angry', 'Sad'].forEach((name, k) => slider(name, 0, 1, 0.01, () => ped.eyes[k], v => { ped.eyes[k] = v; }));
+  slider('Mouth', 0, 1, 0.01, () => ped.talk, v => { ped.talk = v; });
+  slider('Blink', 0, 1, 0.01, () => ped.blink, v => { ped.blink = v; });
+  slider('Look turn', -0.87, 0.87, 0.01, () => ped.turn, v => { ped.turn = v; });
+  slider('Look tilt', -0.26, 0.26, 0.01, () => ped.tilt, v => { ped.tilt = v; });
+  $('controls').innerHTML = html.join('');
+  handlers.forEach(h => h());
+  $('random').onclick = () => { M.assignAppearance(I, Math.floor(Math.random()*1e9)); build(); };
+  $('spin').onchange = e => { ped.spin = e.target.checked; };
+}
+let outfits;
+
+frame.addEventListener('load', async () => {
+  win = frame.contentWindow;
+  // (the app's own UI hidden: only the scene)
+  const style = win.document.createElement('style');
+  style.textContent = 'body * { visibility: hidden !important; } canvas { visibility: visible !important; }';
+  win.document.head.appendChild(style);
+  while (!win.kallipolis) await new Promise(r => setTimeout(r, 200));
+  S = win.kallipolis.S;
+  [peopleMod, pm, outfits, { controls }, THREE] = await Promise.all(['../src/life/people/people.js', '../src/life/people/peopleModel.js',
+    '../src/life/people/outfits.js', '../src/core/camera-controls.js', 'three'].map(inApp));
+  S.peopleAmount = 1;
+  S.peopleEnabled = true;
+  $('status').textContent = 'Loading the person model…';
+  while (!peopleMod.personModel || !peopleMod.people.length) await new Promise(r => setTimeout(r, 200));
+  M = peopleMod.personModel;
+  p = peopleMod.people[I];
+  S.peopleFrozen = draw;
+  controls.minRadius = 0.3;
+  controls.goalTarget.set(0, 0.9, 0);
+  controls.goalRadius = 3.2;
+  controls.goalPhi = 1.4;
+  controls.goalTheta = 0;
+  $('status').textContent = 'Drag the scene to orbit.';
+  build();
+});
+</script>
+</body>
+</html>

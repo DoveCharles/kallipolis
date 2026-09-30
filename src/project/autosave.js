@@ -11,6 +11,8 @@ import { modelsLoaded, loadingTask } from '../ui/loading.js';
 // still read and write files.
 const DB_NAME = 'splinetopia', STORE_NAME = 'autosave', RECORD_KEY = 'current';
 let ready = false, restoring = false, saveTimer = null, warned = false;
+// (index.html?blank: an empty scene, never saved — for tools/ped-maker.html)
+const BLANK = new URLSearchParams(location.search).has('blank');
 
 const database = new Promise((resolve, reject) => {
   const request = indexedDB.open(DB_NAME, 1);
@@ -59,6 +61,7 @@ window.addEventListener('pagehide', save);
 // it's built with them the first time (see ui/loading.js)
 loadingTask('Building the city...', (async () => {
   let restoredCleanly = false;
+  if (BLANK) return;
   try {
     const record = await inStore('readonly', store => store.get(RECORD_KEY));
     if (record && record.project && record.project.roads && record.project.zones) {
