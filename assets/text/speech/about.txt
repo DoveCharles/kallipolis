@@ -175,7 +175,8 @@
 # SEEN: something the speaker saw happen to someone else in the last 60 seconds (hard limits)
 #   {seen}                    anything                        {seen = drowned}  that one thing
 #   {seen = death}            any death                       {seen = punch, evil}   a punch, leaning toward the evil
-#   Deaths: killedbycar, beatentodeath, smited, drowned, exploded ({seen = death} is any of them). Others: punch (someone
+#   Deaths: killedbycar, beatentodeath, smited, drowned, exploded, crashedinto (a car smashed into the building they were in)
+#   ({seen = death} is any of them). Others: punch (someone
 #   punched), knockedbycar (hit, not killed), resurrected, healed (a MedBot patched them up), waterwalking, smelly (a smelly person near). Anyone near
 #   enough (or in the same building) sees it; a death isn't replaced by something lesser while it's fresh.
 # FELT: something that happened to the speaker in the last 60 seconds (hard limits)
@@ -190,6 +191,7 @@
 #   {felt = gifted}           was just given something (the Gift button on their card: see assets/text/gifts.txt)
 #   {felt = cheered}          was just given something that cheered them up out of a sad or angry mood
 #   {felt = dined}            just finished a meal at a restaurant
+#   {felt = carcrash}         was inside when a car smashed through the wall; ran out as the building came down
 #   {felt = healed}          a MedBot just healed them back to full health (see src/life/medbot.js)
 #   {felt = party}            just turned up at a party (the Party button on a building's card, while you're inside it:
 #                             see the party in src/life/people/peopleActivities.js)

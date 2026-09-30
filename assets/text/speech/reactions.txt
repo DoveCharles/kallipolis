@@ -23,6 +23,9 @@ Oh God, [seen.name] drowned... {seen = drowned}
 > They should've learnt to swim. {evil}
 I didn't know how to help them. {seen = drowned, evil = -1, mood = -1, thought}
 They just exploded! {seen = exploded}
+That car came straight through the wall! {seen = crashedinto}
+They were just sitting there... {seen = crashedinto, shock}
+Who builds right up against a road like that? {seen = crashedinto, aggression}
 > My ears are ringing...
 > Was that [scary: a]? {nosy}
 There's [objects: plural] everywhere... {seen = exploded, shock}
@@ -68,6 +71,10 @@ That's for earlier, [felt.by]! {felt = revenge}
 Not so tough now, are you, [felt.by]? {felt = revenge, evil}
 Revenge is sweet. {felt = revenge, thought}
 Did that car just hit me?! {felt = hitbycar}
+A car! Through the window! {felt = carcrash}
+The whole place is coming down! {felt = carcrash, shock}
+I could have died in there. {felt = carcrash, thought}
+I knew that corner was dangerous. {felt = carcrash, mood = -1}
 My legs... I can't feel my legs. {felt = hitbycar, shock}
 Learn to drive! {felt = hitbycar, aggression}
 What a show. {felt = watchedtv, happy}

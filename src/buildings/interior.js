@@ -4028,6 +4028,7 @@ export function enterBuilding(group, key, kind = 'home') {
     target: controls.goalTarget.clone(), radius: controls.goalRadius, theta: controls.goalTheta, phi: controls.goalPhi,
     minRadius: controls.minRadius, near: camera.near,
   } };
+  clash = makeClash();
   camera.near = ROOM_NEAR;
   camera.updateProjectionMatrix();
   controls.goalTarget.copy(lookAt());
@@ -4049,6 +4050,8 @@ export function leaveBuilding() {
   if (!inside) return;
   const { group, neighbours, before } = inside;
   inside = null;
+  clash = null;
+  mendWalls();
   setIndoors(null);
   tvClickedOn = false;
   cards.forEach(card => card.resetPlace()); // (any dragged about in the room back where they belong)
@@ -4075,6 +4078,55 @@ function inRoom(x, y, z) {
   return probe.x >= EXTENT.x0 && probe.x <= EXTENT.x1 && probe.z >= EXTENT.z0 && probe.z <= EXTENT.z1
     && probe.y >= -SLAB && probe.y <= ROOM_H + SLAB;
 }
+
+// ---------------------------------------------------------- the street through the room
+// The room often reaches past its building into the street (see hideNeighbours), so people and cars would pass through it.
+// `clash` is the room as the street sees it (see life/room-crash.js): the world to the room's x/z (e: its inverse matrix),
+// its box (EXTENT, SLAB below the floor to SLAB over the ceiling), its middle in the world and its windowed walls — the far two, but for one a
+// bedroom's built onto, or a shop's shopfront — as { axis, at, sign: which way is out }.
+let clash = null;
+function makeClash() {
+  const e = Float64Array.from(room.matrixWorld.clone().invert().elements), y0 = room.position.y;
+  const sides = current.shopfront ? [{ axis: 'x', at: EXTENT.x0, sign: -1, side: '-x' }]
+    : [{ axis: 'z', at: EXTENT.z1, sign: 1, side: '+z' }, { axis: 'x', at: EXTENT.x1, sign: 1, side: '+x' }].filter(s => s.side !== SUITE?.side);
+  // (each wall's middle, in the world: where it blows out from)
+  sides.forEach(w => { const m = room.localToWorld(w.axis === 'x' ? new THREE.Vector3(w.at, 0, (EXTENT.z0 + EXTENT.z1)/2) : new THREE.Vector3((EXTENT.x0 + EXTENT.x1)/2, 0, w.at)); w.mid = { x: m.x, z: m.z }; });
+  const centre = room.localToWorld(new THREE.Vector3((EXTENT.x0 + EXTENT.x1)/2, 0, (EXTENT.z0 + EXTENT.z1)/2));
+  return { e, ...EXTENT, y0: y0 - SLAB, y1: y0 + ROOM_H + SLAB, windows: sides, centre: { x: centre.x, z: centre.z }, key: inside.key, group: inside.group };
+}
+/** The room as the street sees it while it's up (see `clash`), else null. */
+export const roomClash = () => clash;
+/** Whether a point in the world is in the room's box, `pad` out all round. */
+export function roomCovers(x, y, z, pad = 0) {
+  const c = clash;
+  if (!c || y < c.y0 || y > c.y1) return false;
+  const lx = c.e[0]*x + c.e[8]*z + c.e[12], lz = c.e[2]*x + c.e[10]*z + c.e[14];
+  return lx > c.x0 - pad && lx < c.x1 + pad && lz > c.z0 - pad && lz < c.z1 + pad;
+}
+// A car through a windowed wall (see life/room-crash.js): every mesh of the room lying in that wall's slab (the wall, its
+// glass, frames, trim) hidden till the room's left, when they're put back — the room's the same one for every building.
+const blown = [];
+export function blowOutWall(side) {
+  const w = clash?.windows.find(s => s.side === side);
+  if (!w) return;
+  // (the wall's own group first: a far wall's punched one, or the shopfront and the wall with the door)
+  const own = { '+z': [farX], '+x': [farZ], '-x': [shopfront, doorWall] }[side] ?? [];
+  own.forEach(g => g.traverse(o => { if (o.isMesh && o.visible) { o.visible = false; blown.push(o); } }));
+  // (then anything else lying in its slab: glass curtain walls, trim, a dado rail)
+  const box = new THREE.Box3(), mid = new THREE.Vector3(), size = new THREE.Vector3();
+  room.updateMatrixWorld(true);
+  const fromWorld = new THREE.Matrix4().copy(room.matrixWorld).invert();
+  room.traverse(o => {
+    if (!o.isMesh || !o.visible || !o.geometry) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    box.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld).applyMatrix4(fromWorld);
+    box.getCenter(mid); box.getSize(size);
+    const across = w.axis === 'x' ? size.x : size.z, at = w.axis === 'x' ? mid.x : mid.z;
+    if (across < WALL*2 + 0.3 && Math.abs(at - w.at) < WALL + 0.3) { o.visible = false; blown.push(o); }
+  });
+  if (!blown.length) console.warn('blowOutWall: nothing found in the', side, 'wall');
+}
+const mendWalls = () => { blown.forEach(o => { o.visible = true; }); blown.length = 0; };
 
 // Whatever's between the camera and the middle of the room — the light hanging over a table as the camera comes round
 // behind it, a bookcase it's riding past — fades nearly out of the way, on materials of its own for as long as it's

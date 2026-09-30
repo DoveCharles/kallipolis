@@ -22,6 +22,9 @@ import { waitToTurn } from './turns.js';
 import { sway, unsway } from './offroute.js';
 import { smellyCars, updatePull } from './pullover.js';
 import { junctionGate, updateJunctionGates } from './junctions.js';
+import { crashingIn } from './room-veer.js';
+import { crashIntoRoom, updateRoomCrash } from '../room-crash.js';
+const crashes = []; // [car, windowed side] this frame
 const PUSHED_REVERSE_SPEED = 3; // (units a second a car backs up at while pushed)
 const STOP_LINE = 3.2; // (how far out from a junction's edge a car stops its front bumper: just short of the painted line, past the crossing — see roads/markings.js)
 export { loadCarModels } from './models.js';
@@ -143,7 +146,9 @@ export function updateTraffic(t) {
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
     let target = cruise;
-    const ahead = junctionAhead(car, 8);
+    // (far enough in points that a curved road's many don't hide a junction till the car's inside its turn's curve: the
+    // turn's picked within 30, before its curve starts — see routePoint — or the car snaps onto the curve partway)
+    const ahead = junctionAhead(car, 64);
     if (!car.traits?.smells) { updatePull(car, smelly, dt, ahead); target *= 1 - (car.pull ?? 0); } // (giving way to a smelly car: see pullover.js)
     // (not for a car ahead it's clipped into, unless it's the one to yield — overlapYield — else both could hold still for good)
     if (car.ahead && !(car.traits?.smells && car.ahead.pull > 0.3) && !(carsOverlap(car, car.ahead) && !overlapYield(car, car.ahead)) && !car.ahead.kick) { // (a knocked car ahead is off its route: gapAhead minds it only if it's really in the way)
@@ -212,6 +217,8 @@ export function updateTraffic(t) {
       car.z = front.z - back*Math.cos(car.heading);
     }
     sway(car, dt);
+    const smash = crashingIn(car);
+    if (smash) crashes.push([car, smash]); // (through a room's window: see room-veer.js, dealt with after the loop)
     if (car.sway?.drunk && car.speed > 0.3) swayCrash(car); // (weaved into a car or a wall)
     if (car.kick || car.floatDrop > 0) knockedIntoWater(car, knocked, dt);
     if (car.sinking?.rising) riseCar(car, dt);
@@ -226,6 +233,8 @@ export function updateTraffic(t) {
   // (each car that has burnt out blows up, hurting whatever's near it — blastDamageAt, less further out — as does each
   // blast explosive cars, people and bees left as they died, and smitten cars, since the last update. Hits are gathered
   // first and dealt after, since a car or person dying mid-loop changes the arrays being walked.)
+  crashes.splice(0).forEach(([car, side]) => crashIntoRoom(car, side));
+  updateRoomCrash(dt);
   const burntOut = wreckedCars.splice(0);
   const going = [...blasts.splice(0), ...burntOut.map(car => ({ x: car.x, y: Y_ROAD, z: car.z, scale: 1 }))];
   const hits = []; // [entity, damage, source]
@@ -241,7 +250,7 @@ export function updateTraffic(t) {
       if (d <= reach && !burntOut.includes(other)) hits.push([other, blastDamageAt(blast.scale, d, reach), null]);
     });
   });
-  burntOut.forEach(car => { const i = cars.indexOf(car); if (i >= 0) killCar(i); });
+  burntOut.forEach(car => { const i = cars.indexOf(car); if (i >= 0) killCar(i, !car.roomRoll?.smashing); }); // (one that crashed into a building isn't the player's doing: see room-crash.js)
   hits.forEach(([entity, amount, source]) => damage(entity, amount, source)); // (a car it finishes off is set burning: see the car's die in follow.js)
   for (let i = cars.length - 1; i >= 0; i--) if (cars[i] !== drivenCar && cars[i].sinking?.under && !respawnFromWater(cars[i])) drownCar(i); // (knocked in and gone under; a respawn puts it back on land)
   if (drivenCar?.sinking?.under && !respawnFromWater(drivenCar)) { const driven = drivenCar, at = { x: driven.x, z: driven.z }; stopDriving(); Object.assign(driven, at); drownCar(cars.indexOf(driven)); } // (gone under: it sinks away quietly, with a splash, rather than blowing up)

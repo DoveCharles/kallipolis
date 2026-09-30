@@ -1,7 +1,7 @@
 import { App, S } from '../../core/shared.js';
 import { crowdGrid, mulberry32 } from '../../core/math.js';
 import { buildingLabelName } from '../../buildings/building-types.js';
-import { isInsideBuilding, roomHolds, roomVisit } from '../../buildings/interior.js';
+import { isInsideBuilding, roomCovers, roomHolds, roomVisit } from '../../buildings/interior.js';
 import * as THREE from 'three';
 import { scene, camera } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
@@ -36,6 +36,7 @@ import { turnCrawling } from './peopleRoad.js';
 import { drinking, goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './peopleStalls.js';
 import { sway, updateDrunk } from './peopleDrunk.js';
 import { avoidSmells, updateFlies } from './peopleSmell.js';
+import { keepOutOfWindows } from './peopleWindows.js';
 import { updateStatusEffects, restackTraits } from '../statuseffects.js';
 import { stockPockets } from '../gifts.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
@@ -334,7 +335,8 @@ export const aboard = p => p.mode === 'train' && p.train.stage === 'ride';
  * @param {Person} p - the person
  * @returns {boolean} whether they're drawn
  */
-export const isDrawn = p => !isGone(p) || (inRoom(p) && !p.inRoom.hidden) || aboard(p);
+// (not someone on the street passing through the room the view's in, which reaches into it: see buildings/interior.js roomClash)
+export const isDrawn = p => (!isGone(p) && (p.mode === 'possessed' || !roomCovers(p.x, p.y + 0.5, p.z))) || (inRoom(p) && !p.inRoom.hidden) || aboard(p);
 /**
  * Whether this person is inside the building the camera's gone into, and so drawn in its room (see buildings/interior.js)
  * though they count as gone for everything else.
@@ -722,7 +724,7 @@ export function standingOf(p) {
 // about once, straight away. A lesser sight doesn't replace a greater one still fresh (SEEN_RANK); the same sight of the
 // same person isn't seen again while it's fresh, so something that goes on (walking on water, a smell) counts once.
 const WITNESS_RADIUS = 20; // how near (× people size) someone has to be to see something happen
-const SEEN_RANK = { killedbycar: 3, beatentodeath: 3, smited: 3, drowned: 3, exploded: 3, resurrected: 2, punch: 1, knockedbycar: 1, healed: 0, waterwalking: 0, smelly: 0 };
+const SEEN_RANK = { killedbycar: 3, crashedinto: 3, beatentodeath: 3, smited: 3, drowned: 3, exploded: 3, resurrected: 2, punch: 1, knockedbycar: 1, healed: 0, waterwalking: 0, smelly: 0 };
 const NOTICED_FOR = 60; // seconds a sight stays fresh (as SEEN_TIME in life/speech-text.js)
 const MAX_WITNESSES = 5;  // how many of the nearest see something happen (not a whole park at once)
 const REACT_SPREAD = 2.5; // seconds over which those who saw it get round to reacting, each at a random moment
@@ -1000,7 +1002,7 @@ export function hairColorOf(p) {
 }
 function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = null, cause = 'smited') {
   const p = people[i];
-  if (!p || isGone(p) || isFavoritePerson(p.id) || p.punched?.revive) return; // (the hearted can't be killed: see ui/favorites.js; nor can the shaking, see below)
+  if (!p || (isGone(p) && !inRoom(p)) || isFavoritePerson(p.id) || p.punched?.revive) return; // (the hearted can't be killed: see ui/favorites.js; nor can the shaking, see below)
   if (canRespawn(p) && reviveInstead(p, source ?? (momentum ? { x: p.x - momentum.x, z: p.z - momentum.z } : null))) return;
   // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
   App.recordMoralityEvent?.(`${standingOf(p)} peds killed by ${by === 'car' ? 'cars' : 'player'}`, p.name);
@@ -1207,6 +1209,7 @@ export function updatePeople(t) {
     pickFights(dt);
   }
   avoidSmells(dt); // (everyone keeps clear of anyone who smells: see peopleSmell.js)
+  keepOutOfWindows(); // (nor walks through the windows of the room the view's in: see peopleWindows.js)
   updateFlies(dt);
   // whoever's been knocked down and is still on the ground (or getting up): nobody walks into them
   updateArrivingBlood(dt);

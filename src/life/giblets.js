@@ -687,6 +687,12 @@ export function blastFx(at, height, scale = 1) {
   explodeFx(at, height, scale);
   playSound('explosion', at);
 }
+// A wall blown in by a car (see life/room-crash.js): a fireball, chunks of `color` and glass thrown far, and the bang.
+export function wallDebris(at, height, color) {
+  const parts = [[color, 40, 0.16], [color.clone().multiplyScalar(0.7), 24, 0.12], [new THREE.Color(CAR_GLASS_COLOR), 30, 0.05]];
+  spawnParts(at, height, parts, 2.4, (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK));
+  blastFx(at, height, 1.6);
+}
 // Blows a car up: `at` where its wheels were, `height` how tall it was, `colors.paint` its own color — chunks of it, bigger
 // and thrown much further than a person's (see spawnParts' `power`), in its paint and (standing in for glass, trim and
 // tires) CAR_TRIM_COLORS, sooty flecks, a big scorch mark rather than blood, and a fireball with smoke (see explodeFx) — `scale`

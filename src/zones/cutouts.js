@@ -10,6 +10,7 @@ import { generatePlazaContent } from './plazas.js';
 import { generateFarmlandContent } from './farmland.js';
 import { generateSuburbsContent } from './suburbs.js';
 import { generateAirportContent } from './airport.js';
+import { wreckDestroyed } from '../buildings/rubble.js';
 
 // ---------------------------------------------------------- zone cut-outs
 // Zones give way to whatever takes priority over them: zone ground, park floors, lots, buildings and trees all leave out
@@ -293,6 +294,7 @@ export function subdivideZone(zone) {
       });
     }
   }
+  wreckDestroyed(zone); // (any a car's smashed into: see buildings/rubble.js)
   scene.add(zone.buildingsGroup);
   App.updateStats();
 }

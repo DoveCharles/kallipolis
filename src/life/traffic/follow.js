@@ -156,12 +156,12 @@ registerHealthKind('car', { max: 800, die: car => {
  * @param {number} i - index in cars
  * @returns {void}
  */
-export function killCar(i) {
+export function killCar(i, byPlayer = true) { // (byPlayer false: a car crashing into a building, see life/room-crash.js)
   const car = cars[i];
   if (!car || car.li < 0 || car.reviving) return;
   const survives = canRespawn(car); // (it still blows up, but stays whole: see startCarRevive)
   if (!survives) {
-    App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
+    if (byPlayer) App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
     if (followedCar === i) stopFollowingCar();
   }
   const paint = new THREE.Color(...(carModelOf(car)?.bodyColor ?? car.paint));

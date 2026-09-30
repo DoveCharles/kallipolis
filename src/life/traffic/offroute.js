@@ -1,11 +1,12 @@
 import { S } from '../../core/shared.js';
 import { weave } from './drunk.js';
 import { pullOf } from './pullover.js';
+import { holdVeer, veerOf } from './room-veer.js';
 import { carsOverlap, forCarsNear } from './spacing.js';
 import { carLength } from './placing.js';
 
 // An AI car drawn off its route this frame: a drunk one's weave (drunk.js) plus pulling over for a smelly one
-// (pullover.js), sideways and turned. Put on after the car's placed on its route and taken off again before its next step
+// (pullover.js) or veering round a room reaching into the street (room-veer.js), sideways and turned. Put on after the car's placed on its route and taken off again before its next step
 // (unsway), so the route itself is untouched. `car.sway` holds it: { x, z, turn, off (right of route), drunk }.
 // A knock (kickCar in collisions.js) takes the offset into car.kick, so the car's knocked from where it's drawn; once it's
 // back on its route the offset eases in from nothing over OFF_EASE_TIME (car.offEase), so it never jumps.
@@ -42,10 +43,12 @@ export function sway(car, dt) {
   const drunk = weave(car, dt);
   let pulled = pullOf(car);
   if (!pulled) car.pullDrawn = 0;
-  if (!drunk && !pulled) return;
+  const veer = pulled ? null : veerOf(car, dt); // (pull-over has the car to itself)
+  if (pulled) car.veer = car.veerVel = car.veerYaw = 0;
+  if (!drunk && !pulled && !veer) return;
   const ease = car.offEase*car.offEase*(3 - 2*car.offEase);
   const offsetOf = () => {
-    const off = ((drunk?.off ?? 0) + (pulled?.off ?? 0))*ease, turn = ((drunk?.turn ?? 0) + (pulled?.turn ?? 0))*ease;
+    const off = ((drunk?.off ?? 0) + (pulled?.off ?? 0) + (veer?.off ?? 0))*ease, turn = ((drunk?.turn ?? 0) + (pulled?.turn ?? 0) + (veer?.turn ?? 0))*ease;
     return { off, turn, x: Math.cos(car.heading)*off, z: -Math.sin(car.heading)*off };
   };
   let { off, turn, x, z } = offsetOf();
@@ -54,6 +57,11 @@ export function sway(car, dt) {
   if (pulled && !drunk) {
     if (pullsIntoCar(car, x, z, turn)) { car.pull = car.pullDrawn ?? 0; pulled = pullOf(car); if (!pulled) return; ({ off, turn, x, z } = offsetOf()); }
     else car.pullDrawn = car.pull;
+  }
+  // (veering likewise: held where it was while it'd veer into a car)
+  if (veer && !drunk && !pulled && veer.off !== veer.was && pullsIntoCar(car, x, z, turn)) {
+    veer.off = veer.was; veer.turn = holdVeer(car, veer.was);
+    ({ off, turn, x, z } = offsetOf());
   }
   car.x += x; car.z += z; car.heading += turn;
   car.sway = { x, z, turn, off, drunk: !!drunk };

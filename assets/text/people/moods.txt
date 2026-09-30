@@ -24,7 +24,7 @@
 😶 {talkative = 0.1}
 🙄 {mood = -0.3, angry = 0.3, nosy = 2}
 😬 {mood = -0.2, shock = 0.4, fidgety = 2, sweating = 0.5}
-😴 {sad = 0.6, lounging = 3, blinks = 4, speed = 0.8, drowsy = 0.85}
+😴 {sad = 0.6, lounging = 3, blinks = 4, speed = 0, drowsy = 0.85}
 🤤 {sad = 0.4, lounging = 2, drooling = 1}
 😌 {mood = 0.3, happy = 0.5, patience = 2}
 😔 {mood = -0.5, sad = 0.8, speed = 0.8}

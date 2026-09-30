@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { S } from '../../core/shared.js';
 import { camera, Y_ROAD } from '../../core/scene.js';
 import { carHitbox } from './collisions.js';
+import { hiddenByRoom } from './room-veer.js';
 import { drivenCar, goingUnder } from './driving.js';
 import { BOX_CAR_LENGTH, BOX_CAR_WIDTH, carMeshes, carParts } from './models.js';
 import { DEFAULT_HOLO, DEFAULT_RUST } from './special.js';
@@ -85,11 +86,12 @@ export function placeCar(car, i, designCounts) {
   // (floatDrop: an aqua car settled into water — see updateFloating; bumpY: a terrible car hopping — see updateSpecialTraits)
   position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0) + (car.hopY ?? 0), car.z);
   if (car.reviving) shake(position, rotation, CAR_SHAKE*carScale(car)); // (blown up, before the bolt: see startCarRevive in follow.js)
+  const hidden = !!hiddenByRoom(car); // (in or been in a room reaching into the street: see room-veer.js)
   if (car.design != null && carMeshes[car.design]) {
     const cm = carMeshes[car.design], idx = designCounts[car.design]++;
     const holo = car.holo ?? DEFAULT_HOLO; // (a legendary car's foil/polychrome sheen, drawn by the shader itself — see carHoloOf)
     const rust = car.rust ?? DEFAULT_RUST; // (a terrible car's rust spots, likewise — see carRustOf)
-    scale.setScalar(carScale(car));
+    scale.setScalar(hidden ? 0 : carScale(car));
     matrix.compose(position, rotation, scale);
     cm.mesh.setMatrixAt(idx, matrix);
     cm.paint.setXYZ(idx, car.paint[0], car.paint[1], car.paint[2]);
@@ -104,7 +106,7 @@ export function placeCar(car, i, designCounts) {
     matrix.makeScale(0, 0, 0);
     carParts.body.setMatrixAt(i, matrix);
   } else {
-    scale.set(car.width*carScale(car), car.height*carScale(car), car.length*carScale(car));
+    scale.set(car.width*carScale(car), car.height*carScale(car), car.length*carScale(car)).multiplyScalar(hidden ? 0 : 1);
     matrix.compose(position, rotation, scale);
     carParts.body.setMatrixAt(i, matrix);
   }
@@ -146,7 +148,7 @@ export const engineOf = car => ({ y: Y_ROAD + carHeight(car)/2, size: carLength(
 // Each car on the road, for the light its headlights throw (see streetlights.js): where it is, which way it faces and how
 // long it is. (A car going under the water has its lights put out.)
 export function forEachHeadlight(fn) {
-  cars.forEach(car => { if ((car.li >= 0 || car === drivenCar) && !goingUnder(car)) fn(car.x, car.z, car.heading, carLength(car)); });
+  cars.forEach(car => { if ((car.li >= 0 || car === drivenCar) && !goingUnder(car) && !car.roomHid) fn(car.x, car.z, car.heading, carLength(car)); });
 }
 export function carLength(car) { const cm = carModelOf(car); return (cm ? cm.length : car.length)*BOX_CAR_LENGTH*carScale(car); }
 /**

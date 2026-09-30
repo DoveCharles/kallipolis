@@ -1916,6 +1916,31 @@ export function updateIndoors(p, i, dt) {
 }
 
 /**
+ * A car's smashed into a building (see life/room-crash.js): everyone in it, or on their way in or out, straight out at its
+ * door and running from `from` — those who were inside shaken ('carcrash').
+ * @param {string} key - the building's key
+ * @param {{x: number, z: number}} from - where it hit
+ * @returns {void}
+ */
+export function evacuateBuilding(key, from) {
+  people.forEach(p => {
+    const visit = p.mode === 'indoors' ? p.indoors : null;
+    if (!visit || visit.building.key !== key) return;
+    const wasIn = visit.stage === 'inside';
+    if (wasIn) { if (p.group) leaveGroup(p); standUp(p); p.x = visit.building.door.x; p.z = visit.building.door.z; p.y = visit.building.y; }
+    p.inRoom = null; p.faceTo = null; p.lookAt = null;
+    p.indoors = null;
+    p.indoorsCooldown = INDOORS_COOLDOWN;
+    p.mode = 'line';
+    p.dir = peopleRng() < 0.5 ? -1 : 1;
+    if (visit.line && visit.line.builtAt === peopleNavBuiltAt && peopleNav.lines[visit.line.li]) joinWalkway(p, visit.line.li, visit.line.u, p.dir);
+    else reseatPerson(p);
+    if (wasIn) feel(p, 'carcrash');
+    p.fright = { stage: 'notice', timer: 0.2 + peopleRng()*0.5, from: { x: from.x, z: from.z } };
+  });
+}
+
+/**
  * Someone whose visit's over, in the room with the camera: up off their seat if they're on one, then across the room to
  * its doorway (roomDoorway) and out through its door, which opens for them as they get to it and shuts behind them.
  * @param {Person} p - the person

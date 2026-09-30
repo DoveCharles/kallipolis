@@ -74,7 +74,7 @@ const CAR_LATER_FIELDS = Object.fromEntries([
   'health', 'number', 'plate', 'traitsKey', 'traits', 'baseTraits', 'legendaryCount', 'terribleCount', 'holo', 'holoAttrs',
   'sparkleTimer', 'rust', 'rustAttrs', 'terribleTimer',
   // on its route: turning, holding back, drawn off it (offroute.js), junction gates, what it's seen
-  'turned', 'stillFor', 'ignoreSmells', 'pullHold', 'pull', 'pullDrawn', 'offEase', 'reverseFor', 'sway', 'swayPhase', 'swayDist',
+  'turned', 'stillFor', 'ignoreSmells', 'pullHold', 'pull', 'pullDrawn', 'offEase', 'veer', 'veerVel', 'veerYaw', 'veerHold', 'roomRoll', 'roomHid', 'reverseFor', 'sway', 'swayPhase', 'swayDist',
   'entryPass', 'entryHeld', 'gate', 'lyingSeen', 'shocked', 'struck', 'struckByAircraft',
   // knocked about, bumping and scraping (collisions.js)
   'kick', 'bumpY', 'bumpShake', 'bumping', 'clearOfWalls', 'scrapeSparks', 'fuse', 'fuseSparks', 'revived', 'reviving',
