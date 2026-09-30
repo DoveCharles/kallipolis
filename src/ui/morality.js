@@ -1,7 +1,8 @@
 import { S, App } from '../core/shared.js';
 import { toUi } from './ui-scale.js';
 import { whenLoaded } from './loading.js';
-import './energy.js';
+import { revealEnergy } from './energy.js';
+import './daily-gift.js';
 import { revealMoney, tickUp } from './money.js';
 
 // ============================================================ morality meter
@@ -255,6 +256,7 @@ whenLoaded(() => setTimeout(() => {
   tickUp(v => { goodEl.textContent = pad3(v); }, () => pts.good);
   setTimeout(() => { pointsShown = true; renderPoints(); }, 800);
   revealMoney();
+  revealEnergy();
 }, BAR_DELAY));
 // the bar: lifetime good's share green from the left, evil's red from the right
 function renderMeter(t) {

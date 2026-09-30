@@ -10,12 +10,12 @@ const open = {}; // id -> the window's element, while it's open
 
 /**
  * Open a window, or bring it to the front if it's open already.
- * @param {{id: string, title: string, fill: function(HTMLElement): void, onClose?: function(): void, width?: number, resizable?: boolean}} spec -
+ * @param {{id: string, title: string, fill: function(HTMLElement): void, onClose?: function(): void, width?: number, resizable?: boolean, noOk?: boolean}} spec -
  *   fill puts the window's content into the element it's handed; onClose runs as it closes; resizable lets its border be
- *   dragged to size it, its content scrolling to fit
+ *   dragged to size it, its content scrolling to fit; noOk leaves out the OK button (its close box does the same)
  * @returns {HTMLElement} the window
  */
-export function openWindow({ id, title, fill, onClose, width, resizable }) {
+export function openWindow({ id, title, fill, onClose, width, resizable, noOk }) {
   if (open[id]) { activate(open[id]); return open[id]; }
   const win = document.createElement('div');
   win.className = 'w3-dialog w3-window';
@@ -25,7 +25,7 @@ export function openWindow({ id, title, fill, onClose, width, resizable }) {
   win.setAttribute('aria-label', title);
   win.innerHTML = `<div class="win3-titlebar"><button class="win3-sysbox" title="Close"></button><div class="win3-title">${title}</div></div>
     <div class="w3-dialog-body"></div>
-    <div class="w3-dialog-buttons"><button class="btn w3-default">OK</button></div>`;
+    ${noOk ? '' : '<div class="w3-dialog-buttons"><button class="btn w3-default">OK</button></div>'}`;
   fill(win.querySelector('.w3-dialog-body'));
   win.close = () => {
     onClose?.();
@@ -34,7 +34,7 @@ export function openWindow({ id, title, fill, onClose, width, resizable }) {
     delete open[id];
   };
   win.querySelector('.win3-sysbox').addEventListener('click', win.close);
-  win.querySelector('.w3-default').addEventListener('click', win.close);
+  win.querySelector('.w3-default')?.addEventListener('click', win.close);
   win.addEventListener('keydown', e => {
     if (e.key === 'Escape' || (e.key === 'Enter' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON')) { e.preventDefault(); win.close(); }
   });

@@ -119,7 +119,10 @@ export function startPossession(i, heading) {
   lockPointer(); // (a click is what lets it lock, and this runs from one)
   return true;
 }
-function lockPointer() { if (document.pointerLockElement !== dom) dom.requestPointerLock?.()?.catch?.(() => {}); }
+function lockPointer() {
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) document.activeElement.blur(); // (else the keydown check below ignores every key)
+  if (document.pointerLockElement !== dom) dom.requestPointerLock?.()?.catch?.(() => {});
+}
 function unlockPointer() { if (document.pointerLockElement === dom) document.exitPointerLock(); }
 export function endPossession() {
   if (possession.index < 0) return;

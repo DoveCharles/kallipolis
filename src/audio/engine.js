@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener, outdoorsOf, ear, loopPanning } from './sfx.js';
+import { listener, outdoorsOf, ear, loopPanning, handOver, handingOver, placePanner, makePanner } from './sfx.js';
 import { makeEngineVoice, setEngineKind, setEngineVoice, kindOfDesign } from './engine-voice.js';
 
 // ============================================================ engines
@@ -33,12 +33,11 @@ let traffic = 0;
 export const trafficNearby = () => traffic;
 
 function makeEngine() {
-  const panner = listener.context.createPanner();
-  panner.panningModel = loopPanning();
+  const panner = makePanner(listener.context, loopPanning());
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
   panner.connect(outdoorsOf('traffic'));
-  return { voice: makeEngineVoice(listener.context, panner), panner, car: null, revs: 0, lastSpeed: 0, gear: 0, shift: 0, boost: 0 };
+  return { voice: makeEngineVoice(listener.context, panner), panner, car: null, revs: 0, lastSpeed: 0, gear: 0, shift: 0, boost: 0, movesAt: 0, nextKind: null };
 }
 
 /**
@@ -72,9 +71,13 @@ export function updateEngines(cars, driven, about, dt) {
     free.gear = 0;
     free.shift = 0;
     free.boost = 0;
-    setEngineKind(free.voice, kindOfDesign(about(car).design));
+    // (one that's been heard fades out first, then takes up the new car's kind of engine: see handOver)
+    if (free.voice.kind) { handOver(free, free.voice.out.gain, now); free.nextKind = kindOfDesign(about(car).design); }
+    else setEngineKind(free.voice, kindOfDesign(about(car).design));
   });
   for (const e of engines) {
+    if (handingOver(e, now)) continue;
+    if (e.nextKind) { setEngineKind(e.voice, e.nextKind); e.nextKind = null; }
     if (!e.car) { e.voice.kind && setEngineVoice(e.voice, { revs: e.revs, throttle: 0, volume: 0, dt }); continue; }
     const car = e.car, { y, size, running } = about(car), s = Math.abs(car.speed);
     // (anyone else's throttle: some just to keep moving, more the harder they're speeding up)
@@ -94,6 +97,6 @@ export function updateEngines(cars, driven, about, dt) {
     if (!voiceOf.has(car)) voiceOf.set(car, 0.9 + Math.random()*0.2);
     const volume = (car === driven ? VOLUME : VOLUME*TRAFFIC_VOLUME)*(0.6 + 0.4*throttle);
     setEngineVoice(e.voice, { revs: e.revs, throttle, volume: running ? volume : 0, pitch: voiceOf.get(car)*(1 + (BOOST_PITCH - 1)*e.boost), size, dt });
-    e.panner.positionX.value = car.x; e.panner.positionY.value = y; e.panner.positionZ.value = car.z;
+    placePanner(e.panner, car.x, y, car.z);
   }
 }

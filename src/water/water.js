@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { S, App, SAND_TINT } from '../core/shared.js';
-import { scene, SKY_ENV_MAP, GROUND_HALF_SIZE, ground, makeStencilMask, STENCIL_WATER, Y_MAP } from '../core/scene.js';
+import { scene, SKY_ENV_MAP, GROUND_HALF_SIZE, ground, makeStencilMask, STENCIL_WATER, Y_MAP, Y_PARK } from '../core/scene.js';
 import { distPointSegment } from '../buildings/footprints.js';
 import { tessellateClosedPath } from '../core/splines.js';
 import { CLIPPER_SCALE, clipPolygons, createMeshBuilder, disposeObject } from '../roads/roads.js';
@@ -230,7 +230,7 @@ export function getVisibleWaterRegion() {
   return sinkCache.region;
 }
 // Whether a point is over open water: in the visible water (getVisibleWaterRegion) and on none of `decks` — the
-// footprints that carry things across it, such as S.roadFootprint for cars, plus S.pathFootprint for people. Each
+// footprints that carry things across it, such as S.roadFootprint for cars, plus S.walkDeck for people. Each
 // region's point tester is kept until that region is replaced.
 const regionTesters = new WeakMap();
 const testerOf = region => { let test = regionTesters.get(region); if (!test) regionTesters.set(region, test = App.createRegionTester(region)); return test; };
@@ -364,9 +364,11 @@ function buildWaterBody(region, parkArea) {
         const bx = nx*BEACH_SLOPE_SHADING_TILT, by = ny*BEACH_SLOPE_SHADING_TILT + (1 - BEACH_SLOPE_SHADING_TILT), bz = nz*BEACH_SLOPE_SHADING_TILT;
         const bl = Math.hypot(bx, by, bz);
         const slopeNormal = { x: bx/bl, y: by/bl, z: bz/bl };
-        const topA = { x:e.a.x, y:WATER_BANK_TOP, z:e.a.z }, topB = { x:e.b.x, y:WATER_BANK_TOP, z:e.b.z };
+        // top at the sand's own height, lit straight up there like it, so no step or crease where they meet
+        const topA = { x:e.a.x, y:Y_PARK, z:e.a.z }, topB = { x:e.b.x, y:Y_PARK, z:e.b.z };
         const lowA = { x:e.a.x + ra.x*W, y:WATER_BANK_BOTTOM, z:e.a.z + ra.z*W }, lowB = { x:e.b.x + rb.x*W, y:WATER_BANK_BOTTOM, z:e.b.z + rb.z*W };
-        beaches.addQuad(topA, topB, lowB, lowA, slopeNormal);
+        const up = { x:0, y:1, z:0 };
+        beaches.addQuad(topA, topB, lowB, lowA, [up, up, slopeNormal, slopeNormal]);
         // close off the side of the slope where the beach gives way to a wall
         const prev = edges[(i-1+count)%count];
         if (!prev.beach) beaches.addQuad(topA, lowA, { x:e.a.x, y:WATER_BANK_BOTTOM, z:e.a.z }, topA, { x:-e.dir.x, y:0, z:-e.dir.z });

@@ -30,6 +30,7 @@ S.roadSurfaceOutline = [];
 // Paths' footprint (the track itself, not its fade), cached alongside by rebuildRoadMeshes — zones keep lots, buildings
 // and trees off it without cutting their ground (see "paths").
 S.pathFootprint = [];
+S.walkDeck = []; // S.pathFootprint plus malls (see paths.js): what people walk over water on
 // Rivers' footprint (see "water"), and roads and rivers together — what cuts into every zone except water.
 S.riverFootprint = [], S.riverFootprintKey = '', S.riverSeq = 0;
 S.landCutFootprint = [];
@@ -100,10 +101,12 @@ export function createMeshBuilder() {
     // every polygon (with its holes) in a Clipper PolyTree, as flat faces at height y — facing up, or down if `facingDown`
     addTops(tree, y, facingDown) {
       const up = { x:0, y:facingDown ? -1 : 1, z:0 };
-      const toVecs = path => path.map(p => new THREE.Vector2(p.X/CLIPPER_SCALE, p.Y/CLIPPER_SCALE));
+      // near-collinear points (Clipper's integer rounding) can make the triangulation drop sliver triangles: gaps
+      const toVecs = path => ClipperLib.Clipper.CleanPolygon(path, 2).map(p => new THREE.Vector2(p.X/CLIPPER_SCALE, p.Y/CLIPPER_SCALE));
       const addOutline = node => {
         const contour = toVecs(node.Contour());
-        const holes = node.Childs().map(hole => toVecs(hole.Contour()));
+        if (contour.length < 3) return;
+        const holes = node.Childs().map(hole => toVecs(hole.Contour())).filter(h => h.length >= 3);
         const tris = THREE.ShapeUtils.triangulateShape(contour, holes); // indexes the contour's points, then each hole's
         const base = positions.length/3;
         contour.concat(...holes).forEach(v => vertex(v.x, y, v.y, up));
@@ -118,9 +121,10 @@ export function createMeshBuilder() {
       const a=vertex(px,y0,pz,outward), b=vertex(qx,y0,qz,outward), c=vertex(qx,y1,qz,outward), d=vertex(px,y1,pz,outward);
       triangle(a, b, c); triangle(a, c, d);
     },
-    // a flat-shaded quad through four world-space corners ({x,y,z}, in order around it), facing `normal`
+    // a flat-shaded quad through four world-space corners ({x,y,z}, in order around it), facing `normal` (or an array of one per corner)
     addQuad(p0, p1, p2, p3, normal) {
-      const a=vertex(p0.x,p0.y,p0.z,normal), b=vertex(p1.x,p1.y,p1.z,normal), c=vertex(p2.x,p2.y,p2.z,normal), d=vertex(p3.x,p3.y,p3.z,normal);
+      const n = i => Array.isArray(normal) ? normal[i] : normal;
+      const a=vertex(p0.x,p0.y,p0.z,n(0)), b=vertex(p1.x,p1.y,p1.z,n(1)), c=vertex(p2.x,p2.y,p2.z,n(2)), d=vertex(p3.x,p3.y,p3.z,n(3));
       triangle(a, b, c); triangle(a, c, d);
     },
     // an upright box from y0 to y1 centered on (cx, cz), `halfLen` along the horizontal unit direction (dx, dz) and

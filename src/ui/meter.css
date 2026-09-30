@@ -44,14 +44,60 @@
 .meter .meter-evil { color:var(--ratio-evil); }
 .meter .meter-good { color:var(--ratio-good); }
 /* fixed widths so nothing shifts as numbers change */
-#morality-meter :is(.meter-evil, .meter-good, .energy-n, .energy-timer) { display:inline-block; flex:none; font-variant-numeric:tabular-nums; }
+#morality-meter :is(.meter-evil, .meter-good, .energy-n) { display:inline-block; flex:none; font-variant-numeric:tabular-nums; }
 #morality-meter .meter-value { width:calc(8ch + 44px); justify-content:center; }
 #morality-meter .meter-icon[alt=Evil] { position:relative; top:-1px; } /* (art sits a row lower than holy's) */
 @media (min-width: 761px) { #morality-meter { width:360px; } }
 #morality-meter .money { font-weight:700; padding:0 4px; background:#4d6b45; }
 #morality-meter .money-n { text-align:center; color:#fff; text-shadow:2px 2px 0 #1f4a1f; display:inline-block; min-width:7ch; font-variant-numeric:tabular-nums; }
-#morality-meter .energy-n { min-width:5ch; text-align:right; }
-#morality-meter .energy-timer { min-width:7ch; text-align:center; }
+/* energy: a muted gold, the count and icon white over a dark gold shadow like the money */
+#morality-meter .energy { background:#95834b; font-weight:700; }
+#morality-meter .energy-n { color:#fff; text-shadow:2px 2px 0 #4a4028; }
+#morality-meter .energy .meter-icon { filter:brightness(0) invert(1) drop-shadow(2px 2px 0 #4a4028); } /* (white, shadowed like the count) */
+/* the count and icon centred together, in a box that doesn't change size with the count */
+#morality-meter .energy, html.win3 #morality-meter .energy { justify-content:center; min-width:calc(3ch + 50px); padding:0 12px; }
+/* the daily gift button (src/ui/daily-gift.js): pressed in and greyed once used; refused, it shakes and flashes red */
+#btn-daily-gift.dg-used { box-shadow:var(--w3-pressed, inset 1px 1px 0 #000); filter:grayscale(1) opacity(.6); }
+#btn-daily-gift.dg-refused { animation:dg-refused .3s steps(1, end); }
+@keyframes dg-refused {
+  0%, 100% { transform:translate(0, 0); background:var(--meter-neg); }
+  25% { transform:translate(-2px, 0); } 50% { transform:translate(2px, 0); background:inherit; } 75% { transform:translate(-2px, 0); background:var(--meter-neg); }
+}
+.dg-tip { position:fixed; z-index:100; transform:translateX(-50%); white-space:nowrap; pointer-events:none;
+  font-family:var(--mono); font-size:11px; padding:2px 6px; background:var(--bg-panel); color:var(--text); border:1px solid var(--border); }
+html.win3 .dg-tip { background:#ffffe1; color:#000; border-color:#000; }
+.dg-tip[hidden] { display:none; }
+/* the Daily Gift reel (src/ui/daily-gift.js): rows banded like a card's loves and hates, a bar and stripes by rarity */
+.dg-reel { position:relative; overflow:hidden; margin:0 14px; font-family:var(--mono); font-size:11px; border:1px solid var(--border); }
+html.win3 .dg-reel { border-color:var(--w3-frame); background:var(--w3-window); }
+.dg-row { position:absolute; left:0; right:0; top:0; height:22px; display:grid; grid-template-columns:76px 1fr; align-items:center;
+  padding:0 8px; border-left:3px solid var(--dg-bar); background:var(--dg-a); color:var(--text); will-change:transform; }
+html.win3 .dg-row { color:var(--w3-text); }
+.dg-row.dg-alt { background:var(--dg-b); }
+.dg-row .dg-label { font-weight:700; color:var(--dg-label); }
+.dg-row .dg-value { display:flex; align-items:center; gap:3px; }
+.dg-row.dg-win { outline:2px solid var(--dg-bar); outline-offset:-2px; animation:dg-win .5s steps(2, jump-none) 4; }
+@keyframes dg-win { 50% { background:var(--dg-bar); } }
+.dg-crap      { --dg-bar:#8b5a2b; --dg-label:#c49060; --dg-a:#3a2a1c; --dg-b:#35261a; }
+.dg-common    { --dg-bar:#5aa2ff; --dg-label:#8fbfff; --dg-a:#2f3a4d; --dg-b:#2b3547; }
+.dg-rare      { --dg-bar:#ed7f82; --dg-label:#d09a9c; --dg-a:#4d3333; --dg-b:#463333; }
+.dg-epic      { --dg-bar:#b77cf0; --dg-label:#c9a2f2; --dg-a:#3f334d; --dg-b:#3a2f47; }
+.dg-legendary { --dg-bar:#ffc30b; --dg-label:#ffc30b; --dg-a:#4a3c18; --dg-b:#443716; }
+html.win3 .dg-crap      { --dg-label:#6b4220; --dg-a:#f6efe8; --dg-b:#efe5da; }
+html.win3 .dg-common    { --dg-label:#1f4a8a; --dg-a:#eef4fb; --dg-b:#e4edf8; }
+html.win3 .dg-rare      { --dg-label:#8a1f22; --dg-a:#fbf0f0; --dg-b:#f5e5e5; }
+html.win3 .dg-epic      { --dg-label:#5a2a8a; --dg-a:#f5eefb; --dg-b:#ece2f7; }
+html.win3 .dg-legendary { --dg-label:#8a6a00; --dg-a:#fbf6e3; --dg-b:#f5ecd0; }
+/* the arrows either side of the middle row */
+.dg-arrow { position:absolute; z-index:1; top:calc(4*22px + 5px); width:0; height:0; border:6px solid transparent; }
+.dg-arrow-l { left:0; border-left-color:var(--text); }
+.dg-arrow-r { right:0; border-right-color:var(--text); }
+html.win3 .dg-arrow-l { border-left-color:#000; }
+html.win3 .dg-arrow-r { border-right-color:#000; }
+.dg-result { min-height:18px; margin-top:6px; text-align:center; font-family:var(--mono); font-size:11px; font-weight:700; }
+.dg-result [class$="-text"] { font-weight:700; }
+.dg-crap-text { color:#8b5a2b; } .dg-common-text { color:#3a7bd5; } .dg-rare-text { color:#c0393d; } .dg-epic-text { color:#8a4fd0; } .dg-legendary-text { color:#c89600; }
+.dg-confetti { position:fixed; z-index:200; width:6px; height:9px; margin:-4px 0 0 -3px; pointer-events:none; }
 /* the countdown to the next energy while in control of something (src/life/possession.js) */
 #possess-timer { position:fixed; top:calc(var(--w3-below, 16px) + 8px); left:50%; transform:translateX(-50%); z-index:25; display:flex; align-items:center; gap:4px;
   font-family:var(--mono); font-size:11px; font-weight:700; color:var(--text); background:var(--bg-panel); border:1px solid var(--border); border-radius:5px; padding:3px 8px; pointer-events:none; }
@@ -60,8 +106,7 @@
 html.win3 #possess-timer { background:var(--w3-window); color:var(--w3-text); border:1px solid var(--w3-frame); border-radius:0; box-shadow:2px 2px 0 var(--w3-frame); }
 /* not enough energy (see flashEmpty in src/ui/energy.js) */
 #morality-meter .energy { transition:background-color .15s; }
-#morality-meter .energy.energy-hover { background:color-mix(in srgb, var(--bg-panel) 65%, #fff); }
-html.win3 #morality-meter .energy.energy-hover { background:color-mix(in srgb, var(--w3-face) 45%, #fff); }
+#morality-meter .energy.energy-hover, html.win3 #morality-meter .energy.energy-hover { background:#b0a06a; } /* (lit: the gold a shade lighter) */
 /* the box jitters four times as it lights, tipping a little */
 #morality-meter .energy.energy-hover { position:relative; z-index:1; animation:energy-shake .2s steps(1, end); } /* (steps: it snaps between spots rather than gliding) */
 @keyframes energy-shake {
@@ -70,7 +115,7 @@ html.win3 #morality-meter .energy.energy-hover { background:color-mix(in srgb, v
   60% { transform:translate(-2px, -1px) rotate(-.6deg); } 80% { transform:translate(2px, 1px) rotate(.6deg); }
 }
 #morality-meter .energy.energy-empty { animation:energy-empty .6s steps(2, jump-none) 2; }
-#morality-meter .energy.energy-empty :is(.energy-n, .energy-timer) { animation:energy-empty-text .6s steps(2, jump-none) 2; }
+#morality-meter .energy.energy-empty .energy-n { animation:energy-empty-text .6s steps(2, jump-none) 2; }
 /* an unidentified love/hate (src/ui/traits-known.js): dark grey, text and mark */
 .entity-card .pc-row.pc-locked > .pc-value { color:#555 !important; }
 .entity-card .pc-row.pc-locked > .pc-value[data-mark]::after { background:#555 !important; }
@@ -112,6 +157,11 @@ html.win3 .tk-head { color:var(--w3-text); }
 html.win3 .tk-mods { color:#404040; }
 .tk-empty { grid-column:1 / -1; padding:4px 6px; color:var(--text-dim); }
 .tk-foot { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; font-family:var(--mono); }
+.tk-hint { display:flex; align-items:center; justify-content:center; gap:3px; margin-top:4px; font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+html.win3 .tk-hint { color:#404040; }
+.tk-nobody { position:fixed; z-index:100; transform:translate(-50%, -130%); pointer-events:none; white-space:nowrap;
+  font-family:var(--mono); font-size:11px; font-weight:700; color:var(--meter-neg); animation:tk-nobody 1.2s ease-out forwards; }
+@keyframes tk-nobody { 0% { opacity:1; } 70% { opacity:1; } 100% { opacity:0; transform:translate(-50%, -230%); } }
 .tk-pager { display:flex; align-items:center; gap:6px; }
 .tk-pager .btn { display:inline-block; flex:none; width:auto; margin:0; padding:0 6px; min-width:0; }
 /* out of energy: whatever costs it greyed (still clickable, to flash the count) */
@@ -134,7 +184,6 @@ body.ui-locked :is(#canvas-tools, #w3-menubar, #morality-meter, #app-frame .win3
 .meter-icon { width:auto; height:auto; flex:none; image-rendering:pixelated; vertical-align:middle; }
 .meter .energy { display:flex; align-items:center; gap:6px; margin-top:4px; color:var(--text); white-space:nowrap; }
 .energy-count { display:inline-flex; align-items:center; gap:3px; font-weight:700; }
-.meter .energy-timer { color:var(--text-dim); font-size:10px; }
 
 /* .meter-vertical: a narrow gauge that fills bottom-to-top instead of out from the middle — for something that only
    ever runs one way (0 upward), with nothing to call "neutral", so it carries no .meter-center and skips it defensively

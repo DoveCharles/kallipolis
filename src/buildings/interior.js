@@ -9,7 +9,7 @@ import { hashNameToNumber, mulberry32, pointInPolygon } from '../core/math.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { setCutout } from '../ui/pixelation.js';
 import { cards } from '../ui/entity-card.js';
-import { isMuted, playSound, setIndoors } from '../audio/sfx.js';
+import { isMuted, playSound, setIndoors, listener, inside as heardInside } from '../audio/sfx.js';
 import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
 import { pubMusic, stopPubMusic } from '../audio/pub-music.js';
 import { loadingTask, loadingSay } from '../ui/loading.js';
@@ -3898,6 +3898,40 @@ let channels = [];      // { youtube: id } or { file: url }
 fetch(TV_LIST_URL).then(r => r.ok ? r.text() : '').then(text => {
   channels = text.split('\n').map(channelOf).filter(Boolean);
 }).catch(() => {});
+// Every video's made about as loud as any other. A YouTube video's loudness (dB from YouTube's reference; serve.py looks
+// it up into TV_LOUDNESS_URL) turns its volume up if it's quiet — YouTube turns loud ones down itself — as far as 100 goes.
+// A video file's sound comes through the page's audio instead (its host allows it: crossOrigin), its loudness followed
+// over TV_LEVEL_TIME (not while near silent: under TV_QUIET) and brought to TV_FILE_LOUDNESS, within TV_LEVEL_RANGE —
+// measured as loudness is (K-weighted, as LUFS: deep bass counted less, the upper mids more), not raw level, which a
+// bass-heavy video has lots of without sounding loud.
+const TV_LOUDNESS_URL = 'assets/tv-loudness.json';
+const TV_FILE_LOUDNESS = 0.2*TV_VOLUME/100, TV_LEVEL_TIME = 3, TV_LEVEL_RANGE = [0.25, 4], TV_QUIET = 0.005;
+let loudnessOf = {};    // YouTube id → dB
+fetch(TV_LOUDNESS_URL).then(r => r.ok ? r.json() : {}).then(json => { loudnessOf = json; }).catch(() => {});
+const youtubeVolume = id => Math.round(Math.min(100, TV_VOLUME*10**(-Math.min(0, loudnessOf[id] ?? 0)/20)));
+function levelFile(video) {
+  const context = listener.context, source = context.createMediaElementSource(video);
+  const analyser = context.createAnalyser(), level = context.createGain();
+  const shelf = Object.assign(context.createBiquadFilter(), { type: 'highshelf' }), low = Object.assign(context.createBiquadFilter(), { type: 'highpass' });
+  shelf.frequency.value = 1681; shelf.gain.value = 4;
+  low.frequency.value = 38; low.Q.value = 0.5;
+  analyser.fftSize = 2048;
+  source.connect(shelf).connect(low).connect(analyser);
+  source.connect(level).connect(heardInside());
+  return { source, level, analyser, samples: new Float32Array(analyser.fftSize), loudness: 0, at: 0 };
+}
+function levelTV() {
+  const lv = tv.leveller, now = performance.now()/1000, dt = Math.min(0.1, now - (lv.at || now));
+  lv.at = now;
+  lv.analyser.getFloatTimeDomainData(lv.samples);
+  let sum = 0;
+  for (const v of lv.samples) sum += v*v;
+  const rms = Math.sqrt(sum/lv.samples.length);
+  if (rms < TV_QUIET) return; // (held through quiet: not turned up to bring up hiss)
+  lv.loudness = lv.loudness ? lv.loudness + (rms*rms - lv.loudness)*Math.min(1, dt/TV_LEVEL_TIME) : rms*rms; // (mean square: power, as loudness is)
+  const gain = Math.max(TV_LEVEL_RANGE[0], Math.min(TV_LEVEL_RANGE[1], TV_FILE_LOUDNESS/Math.sqrt(lv.loudness)));
+  lv.level.gain.setTargetAtTime(gain, listener.context.currentTime, 0.5);
+}
 const VIDEO_FILE = /^https?:\/\/\S+\.(?:mp4|webm|ogv|ogg|mov|m4v)(?:[?#]\S*)?$/i;
 // what a line of tv.txt links to (any of YouTube's link shapes or a bare id, or a video file's address), or null;
 // anything after whitespace and # is a comment
@@ -3906,7 +3940,11 @@ function channelOf(line) {
   if (!line || line.startsWith('#')) return null;
   if (VIDEO_FILE.test(line)) return { file: line };
   const id = (line.match(/(?:[?&]v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/) ?? line.match(/^([\w-]{11})$/))?.[1];
-  return id ? { youtube: id } : null;
+  if (!id) return null;
+  // start time: t=/start= as seconds or 1h2m3s
+  const t = line.match(/[?&#](?:t|start)=(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?(?:[&#\s]|$)/);
+  const start = t ? (+t[1] || 0)*3600 + (+t[2] || 0)*60 + (+t[3] || 0) : 0;
+  return start ? { youtube: id, start } : { youtube: id };
 }
 let tvLayer = null;       // the CSS3DRenderer and its scene, made the first time there's a TV on
 // what's on: { object (its CSS3DObject), element (its iframe), player (a file's <video>), youtube, muted, video, startedAt, playingAt, heard,
@@ -3920,11 +3958,14 @@ const tvHole = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMat
   blending: THREE.NoBlending, depthWrite: false,
 }));
 tvHoles.add(tvHole);
-function youtubePlayer(id) {
+function youtubePlayer(id, start = 0) {
   const iframe = document.createElement('iframe');
+  iframe.dataset.id = id;
   iframe.allow = 'autoplay; encrypted-media';
-  iframe.src = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0`
+  iframe.src = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0${start ? `&start=${start}` : ''}`
     + `&playsinline=1&rel=0&iv_load_policy=3&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`;
+  // (not told anything till loaded: before then it's about:blank, and posting to YouTube's origin errors)
+  iframe.addEventListener('load', () => { if (tv?.element === iframe) { tv.loaded = true; tv.toldAt = -Infinity; } }, { once: true });
   return iframe;
 }
 // A video file plays in a <video> inside its own blank iframe that sends no Referer: Tumblr (and other hosts) refuse
@@ -3946,11 +3987,24 @@ function filePlayer(url) {
       console.warn(`TV: couldn't play ${url}`);
       videoOver();
     });
+    video.crossOrigin = 'anonymous';
     video.src = url;
     tv.player = video;
+    try { tv.leveller = levelFile(video); } catch (err) { console.warn('TV: not levelled', err); }
     tv.toldAt = -Infinity; // (sound set on the next frame)
   }, { once: true });
   return iframe;
+}
+// Videos come in a shuffled order, each once, then the list's shuffled again (not the last one first, if it can help it).
+let lineup = [], lastChannel = null;
+function nextChannel() {
+  if (!lineup.length) {
+    lineup = channels.slice();
+    for (let i = lineup.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i + 1)); [lineup[i], lineup[j]] = [lineup[j], lineup[i]]; }
+    const end = lineup.length - 1; // (popped from the end: the first up)
+    if (end > 0 && lineup[end] === lastChannel) [lineup[0], lineup[end]] = [lineup[end], lineup[0]];
+  }
+  return lastChannel = lineup.pop();
 }
 // (sameSitting: the video number and follow-on count carried over from a short video, so its watcher stays sat)
 function startTV(sameSitting = null) {
@@ -3966,12 +4020,18 @@ function startTV(sameSitting = null) {
     window.addEventListener('resize', () => css.setSize(window.innerWidth, window.innerHeight));
     tvLayer = { css, scene: new THREE.Scene() };
   }
-  const channel = channels[Math.floor(Math.random()*channels.length)];
+  const channel = nextChannel();
   const youtube = !!channel.youtube;
-  const element = youtube ? youtubePlayer(channel.youtube) : filePlayer(channel.file);
+  const element = youtube ? youtubePlayer(channel.youtube, channel.start) : filePlayer(channel.file);
   const width = TV_PIXELS, height = Math.round(TV_PIXELS*screen.h/screen.w);
-  element.style.cssText += `;width:${width}px;height:${height}px;border:0;background:#000`;
-  const object = new CSS3DObject(element);
+  element.style.cssText += ';width:100%;height:100%;border:0;background:#000;display:block';  // (a pulsing cover over the player till the video's playing)
+  const box = document.createElement('div'), cover = document.createElement('div');
+  box.style.cssText = `position:relative;width:${width}px;height:${height}px`;
+  cover.style.cssText = 'position:absolute;inset:0;pointer-events:none;background:#000';
+  cover.animate([{ background: '#000' }, { background: '#2a2a2a' }],
+    { duration: 1100, direction: 'alternate', iterations: Infinity, easing: 'ease-in-out' });
+  box.append(element, cover);
+  const object = new CSS3DObject(box);
   object.position.copy(screen.centre);
   object.quaternion.copy(screen.turn);
   object.scale.setScalar(screen.w/width);
@@ -3980,12 +4040,14 @@ function startTV(sameSitting = null) {
   tvHole.quaternion.copy(screen.turn);
   tvHole.scale.set(screen.w, screen.h, 1);
   setCutout(tvHoles);
-  tv = { object, element, player: null, youtube, muted: true, toldAt: -Infinity, video: sameSitting?.video ?? ++videos,
+  tv = { object, element, cover, player: null, leveller: null, youtube, muted: true, toldAt: -Infinity, video: sameSitting?.video ?? ++videos,
     followOns: sameSitting?.followOns ?? 0, startedAt: performance.now(), playingAt: null, heard: !youtube, endedAt: null };
 }
 function stopTV() {
   if (!tv) return;
   tv.player?.pause();
+  tv.leveller?.source.disconnect();
+  tv.leveller?.level.disconnect();
   tvLayer.scene.remove(tv.object); // (which takes its player out of the page)
   tv = null;
   setCutout(null);
@@ -4051,7 +4113,13 @@ function updateTV() {
   // (whoever sat through it has got up; anyone still watching, sat down since, gets something new)
   else if (tv && tv.endedAt !== null && performance.now() - tv.endedAt > 1500) { stopTV(); startTV(); }
   if (!tv) return;
+  // (uncovered anyway after a while, should the player never say it's playing)
+  if (tv.cover && (tv.playingAt !== null || performance.now() - tv.startedAt > TV_SILENT_AFTER)) {
+    tv.cover.remove();
+    tv.cover = null;
+  }
   tvLayer.css.render(tvLayer.scene, camera);
+  if (tv.leveller) levelTV();  if (tv.youtube && !tv.loaded) return;
   // (told again every so often: the player misses anything it's told before it's ready, and there's no knowing when that is
   // without its API script)
   const muted = isMuted() || !navigator.userActivation?.hasBeenActive, now = performance.now();
@@ -4061,7 +4129,7 @@ function updateTV() {
   if (!tv.youtube) {
     if (tv.player) {
       tv.player.muted = muted;
-      tv.player.volume = TV_VOLUME/100;
+      tv.player.volume = tv.leveller ? 1 : TV_VOLUME/100; // (levelled: see levelTV)
     }
     return;
   }
@@ -4071,7 +4139,7 @@ function updateTV() {
     tell('addEventListener', 'onError');
   }
   if (muted) tell('mute');
-  else { tell('unMute'); tell('setVolume', TV_VOLUME); }
+  else { tell('unMute'); tell('setVolume', youtubeVolume(tv.element.dataset.id)); }
 }
 
 // ---------------------------------------------------------------- the fire
@@ -4222,7 +4290,7 @@ async function warmUp() {
     for (const [name, set] of Object.entries(named)) {
       if (!set) continue;
       for (const piece of Object.values(set)) {
-        if (!piece.object) continue; // (F.clutter)
+        if (!piece?.object) continue; // (extras such as the office's clutter materials)
         sets.add(piece.object.clone());
         // (and faded, as fadeWhatsInTheWay does it)
         const faded = piece.object.clone();

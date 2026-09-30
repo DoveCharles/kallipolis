@@ -50,13 +50,16 @@ Shitty speakers {nerd = 3} <stuff>
 Shampooing the hair <habits>
 Radiohead | Radiohead {nerd = 0.8} <media>
 Polystyrene <stuff>
+Clothes {nude} <stuff>
+Having a tiny head {headsize = 0.6, persist, limit = 4a} <health>
+Having a giant head {headsize = 1.4, persist, limit = 4b} <health>
 Cars <stuff>
 Farters <folk>
 The mortality reminder that comes with Autumn {mood = -0.5, speed = 0.8, agemult =1.1} <beliefs>
 Any form of exercise {speed = 0.6, lounging = 3} <hobbies>
 Clowns <folk>
 Being a robot { agemult = 0.8, persist } <surreal>
-Worrying whether or not the packaging for the copious amount of sex toys they order online will be "discreet" | worring about whether or not the packaging fro the copious amount of sex toys I order online will be dic... wait, why am I saying this? Never mind {fidgety = 3, conservative = -0.05} <lewd>
+Worrying whether or not the packaging for the copious amount of sex toys they order online will be "discreet" | worring about whether or not the packaging fro the copious amount of sex toys I order online will be discreetly... wait, why am I saying this? Never mind {fidgety = 3, conservative = -0.05} <lewd>
 Geese {parks = 0.2} <nature>
 Queues {patience = 0.3} <stuff>
 Smells <health>
@@ -90,7 +93,7 @@ Drunks {alcoholic = 0.4} <folk>
 Junkies { stimulants = 0.2, psychs = 0.2, stoner = 0.2, painkillers = 0.2, outlaw = 0.8, conservative = 0.05} <folk>
 Anime <media>
 Deadly Nuerotoxin <vice>
-People with the same name as them { aggression = 2} <folk>
+People with the same name as them | people with the same name as me { aggression = 2} <folk>
 Trends <media>
 Cheap fast fashion (expensive fast fashion ok) | cheap fast fashion { agemult = 0.8} <stuff>
 The current zoning laws {outlaw = 0.8} <beliefs>
@@ -163,7 +166,6 @@ Moths (butterflies ok) <nature>
 Moths AND butterflies <nature>
 AI restaurant menu art {agemult = 0.8, conservative = -0.05} <media>
 Having a good time {mood = -0.4, chatty = 0.7} <hobbies>
-Swearing out loud { evil = -0.05, agemult =1.1} <habits>
 Having an accident { agemult = 1.2} <health>
 Hyperpop {stimulants = 0.5} <media>
 Not being niche enough { evil = 0.01} <habits>
@@ -325,7 +327,7 @@ Kids these days {agemult = 1.2, conservative = 0.05} <folk>
 Getting put in the labyrinth <surreal>
 Globus sensation <health>
 1 day blinding stew <tastes>
-Having a bomb inside them | having a bomb inside me {explosive, mood = -1, terrified, speed = 1.4, outlaw = 0, noflip, flip=explosive} <vice>
+Having a bomb inside them | having a bomb inside me {explosive, mood = -1, terrified, speed = 1.4, outlaw = 0, noflip, flip=explosive, unstable = 0.5} <vice>
 Showering {smells} <habits>
 The smell of earwax <health>
 Getting tarred and feathered

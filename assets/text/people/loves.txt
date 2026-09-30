@@ -1,4 +1,5 @@
 Their nickname | My nickname {nickname, choiceweight = 4} <habits>
+Swearing {swears, choiceweight = 2} <habits>
 Controversially, [hates] {choiceweight = 50}
 Stoicism | Stoicism {normal = 2, conservative = 0.05} <beliefs>
 Seed money {conservative = 0.2}
@@ -232,7 +233,6 @@ Running their fingers through their hair | running my fingers through my hair {f
 Biting their nails | biting my nails {fidgety = 5} <habits>
 Eating the skin on the inside of their lip | eating the skin on the inside of my lip {fidgety = 5} <habits>
 Thinking about everything, all of it {fidgety = 3, speed = 0.8, lounging = 3, nerd = 3} <habits>
-Swearing in their head | swearing my head {evil = 0.01} <habits>
 Feeling like a bad bitch { agemult = 0.8, aggression = 2} <habits>
 E-mail <media>
 Salad <tastes>
@@ -477,7 +477,8 @@ Choosing not to care <habits>
 Oral fixation <lewd>
 Having webbed feet {aqua} <health>
 Half-price swimming lessons {aqua} <hobbies>
-Skinny-dipping {aqua} <hobbies>
+Skinny-dipping {aqua, nude} <hobbies>
+Full frontal {nude} <lewd>
 Holding their breath underwater | holding my breath under water {aqua} <hobbies>
 Swimming in the Thames {aqua, smells} <hobbies>
 Wriggling across the ground like a slug <surreal>

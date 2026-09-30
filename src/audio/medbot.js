@@ -1,4 +1,4 @@
-import { listener, outdoorsOf, ear, loopPanning } from './sfx.js';
+import { listener, outdoorsOf, ear, loopPanning, placePanner, makePanner } from './sfx.js';
 
 // ============================================================ the MedBot's noises
 // The MedBots near the camera (see life/medbot.js), each a set of loops synthesized live like the bees' buzz (buzz.js):
@@ -38,8 +38,7 @@ function noiseBuffer(context) {
   return buffer;
 }
 function panner(context, ref, max) {
-  const p = context.createPanner();
-  p.panningModel = loopPanning();
+  const p = makePanner(context, loopPanning());
   p.distanceModel = 'linear';
   p.refDistance = ref;
   p.maxDistance = max;
@@ -186,7 +185,7 @@ export function updateMedBotSounds(bots) {
   for (const v of voices) {
     const b = v.bot && near.find(n => n.bot === v.bot);
     if (!b) { [v.motor, v.siren, v.healing].forEach(g => g.gain.setTargetAtTime(0, now, 0.15)); continue; }
-    for (const p of [v.near, v.far]) { p.positionX.value = b.x; p.positionY.value = b.y + 0.8; p.positionZ.value = b.z; }
+    for (const p of [v.near, v.far]) placePanner(p, b.x, b.y + 0.8, b.z);
     // (her boots: the faster, the higher and louder, rushing most of all)
     const fast = b.rushing ? 1 : 0, pitch = MOTOR_HZ*(0.8 + 0.2*Math.min(1, b.speed))*(fast ? SPEED_PITCH : 1);
     v.saw.frequency.setTargetAtTime(pitch, now, 0.12);

@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, outdoorsOf, isMuted, playBufferAt, prewarm, zzfxBuffer, loopPanning } from './sfx.js';
+import { listener, outdoorsOf, isMuted, playBufferAt, prewarm, zzfxBuffer, loopPanning, placePanner, makePanner } from './sfx.js';
 import { pointInPolygon } from '../core/math.js';
 import { trafficNearby } from './engine.js';
 import { isInsideBuilding } from '../buildings/interior.js';
@@ -87,11 +87,10 @@ function makeRain() {
 // one drop landing near the camera: a tick of noise and, sometimes, a little falling plink as it hits a puddle
 function patter(when) {
   const context = listener.context, at = somewhereAround(2, 12, 0, 1);
-  const panner = context.createPanner();
-  panner.panningModel = loopPanning();
+  const panner = makePanner(context, loopPanning());
   panner.distanceModel = 'inverse';
   panner.refDistance = 3;
-  panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
+  placePanner(panner, at.x, at.y, at.z, 2);
   panner.connect(outdoorsOf('ambience'));
   const volume = DROP_VOLUME*(0.4 + Math.random()*0.6);
   const source = context.createBufferSource(), band = context.createBiquadFilter(), tick = context.createGain();
@@ -140,11 +139,10 @@ function makeHum() {
 // A tone played through a panner at `at`: `notes` is [[start, length, from Hz, to Hz]], seconds after `when`.
 function whistle(at, when, notes, volume, refDistance = SONG_REF_DISTANCE) {
   const context = listener.context;
-  const panner = context.createPanner();
-  panner.panningModel = loopPanning();
+  const panner = makePanner(context, loopPanning());
   panner.distanceModel = 'inverse';
   panner.refDistance = refDistance;
-  panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
+  placePanner(panner, at.x, at.y, at.z, 15);
   panner.connect(outdoorsOf('ambience'));
   const oscillator = context.createOscillator(), gain = context.createGain();
   oscillator.type = 'sine';

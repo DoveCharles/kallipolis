@@ -139,6 +139,8 @@
  * @property {number} talk - how open their mouth is
  * @property {number} talkTo - how open it's heading
  * @property {number} talkIn - seconds until that changes again
+ * @property {number} talkNext - a syllable's openness picked ahead (-1 none), taken up once talkIn is down to talkNextAt
+ * @property {number} talkNextAt
  * @property {number} emotion - how their expression reads, -1 to 1
  * @property {number} emotionTo
  * @property {number} emotionIn
@@ -190,6 +192,8 @@
  *   clothing into the traits texture, from their id (see people.js)
  * @property {function(number, number, function(): number): void} cutHair - a new haircut for someone (slot, id, rng)
  * @property {function(number, number, function(): number): void} changeClothes - new clothes for someone (slot, id, rng)
+ * @property {function(number, number, boolean): void} setNude - the nude trait on or off for someone (slot, id, on)
+ * @property {import('three').InstancedMesh} censor - the nude's mosaic censors (see peopleCensor.js)
  * @property {number} headBone
  * @property {import('three').Vector3} headPivot
  * @property {number} height - the model's height, in its own units

@@ -9,7 +9,7 @@
 // - Keeping freezes short: models are unpacked one at a time, a frame apart (GLTFLoader's parse queued),
 //   each counted as a step ("Unpacking X (3/11)"), and nothing's drawn while loading — the scene's shaders are compiled in the background instead (`compileWhileLoading`, called by main.js).
 // - `whenLoaded(run)`: runs once the page has loaded, nothing's been pending for a couple of frames and the scene's
-//   compiled, or after GIVE_UP_AFTER regardless (view-prefs.js takes the screen away then).
+//   compiled, or after GIVE_UP_AFTER of the tab being shown regardless (view-prefs.js takes the screen away then).
 // - A hint from assets/text/speech/talk/hints.txt shows every HINT_EVERY, fading between (`.ls-hint`, css/base.css).
 // - Once done, the console lists how long the page was frozen under each step: what to speed up.
 const screen = document.getElementById('loading-screen');
@@ -20,6 +20,18 @@ const GIVE_UP_AFTER = 60000, UNREAD_AFTER = 20000; // ms
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const IDLE_TEXT = 'Starting...';
+// Time counted only while the tab's shown, so the give-ups can't run out while it's hidden (models stall then: see
+// nextFrame) and leave the city built with stand-ins behind a lifted screen.
+let hiddenFor = 0, hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) hiddenAt = performance.now(); else hiddenFor += performance.now() - hiddenAt;
+});
+const shownTime = () => performance.now() - hiddenFor - (document.hidden ? performance.now() - hiddenAt : 0);
+function afterShown(run, ms) {
+  const end = shownTime() + ms;
+  const wait = () => { const left = end - shownTime(); if (left <= 0) run(); else setTimeout(wait, left); };
+  setTimeout(wait, ms);
+}
 const isModel = name => /\.(glb|gltf)$/i.test(name);
 let started = 0, finished = 0, shownShare = 0, loaded = false;
 const fetches = new Set(), tasks = new Set();
@@ -89,7 +101,8 @@ function nextHint() {
 // ---------------------------------------------------------------- fetches
 // A fetch is "Loading" till its body's all in (read whole, or streamed to the end as three's FileLoader does), then
 // "Unpacking" till the tick after. A model's buffer is remembered by name for its unpacking (below).
-const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+// (no frames come while hidden: carry on by timer then)
+const nextFrame = () => new Promise(resolve => document.hidden ? setTimeout(resolve, 0) : requestAnimationFrame(() => setTimeout(resolve, 0)));
 const bufferNames = new WeakMap();
 
 const fileName = url => decodeURIComponent(String(url).split(/[?#]/)[0].split('/').pop() || String(url));
@@ -128,7 +141,7 @@ window.fetch = (input, init) => {
   const arrived = () => { item.text = `Unpacking ${name}...`; showLabel(); setTimeout(finish, 0); };
   const fetched = realFetch(input, init);
   fetched.then(response => { if (response.ok) watchBody(response, model, arrived, name); else finish(); }, finish);
-  setTimeout(finish, UNREAD_AFTER); // (a body nobody reads)
+  afterShown(finish, UNREAD_AFTER); // (a body nobody reads)
   track(fetches, item, settled);
   return fetched;
 };
@@ -157,7 +170,7 @@ GLTFLoader.prototype.parse = function (data, path, onLoad, onError) {
   unpacks = unpacks.then(nextFrame).then(() => {
     item.text = `Unpacking ${name} (${++unpacksStarted}/${unpacksQueued})...`; showLabel();
     try { realParse.call(this, data, path, settle(onLoad), settle(onError)); } catch (err) { settle(onError)(err); }
-    setTimeout(done, UNREAD_AFTER); // (a parse that never ends can't hold up the rest)
+    afterShown(done, UNREAD_AFTER); // (a parse that never ends can't hold up the rest)
     return finished;
   });
 };
@@ -169,7 +182,7 @@ GLTFLoader.prototype.parse = function (data, path, onLoad, onError) {
 const MODELS_WAIT = 30000; // ms
 let modelsIn;
 export const modelsLoaded = new Promise(resolve => { modelsIn = resolve; });
-setTimeout(() => modelsIn(), MODELS_WAIT);
+afterShown(() => modelsIn(), MODELS_WAIT);
 export function waitForModels(loads) {
   loadingTask('Setting up models...', Promise.allSettled(loads).then(() => modelsIn()), 0);
 }
@@ -210,11 +223,12 @@ function mostlyDoing(from, to) {
 // gap is every module being set up and main.js starting things off; later ones go to the step under way longest.
 const FRAME_MS = 1000/60, FROZEN_AFTER = 50; // ms: a gap longer than this counts, less one frame
 const scriptsIn = performance.now(); // (how long the page and its scripts took to arrive)
-let lastFrame = scriptsIn, measuring = true;
+let lastFrame = scriptsIn, lastHidden = 0, measuring = true;
 function countFrame(now) {
   if (!measuring) return;
   const gap = now - lastFrame;
-  if (gap > FROZEN_AFTER) {
+  const wasHidden = hiddenFor !== lastHidden; lastHidden = hiddenFor;
+  if (gap > FROZEN_AFTER && !wasHidden) {
     const text = lastFrame === scriptsIn ? 'Setting up scripts' : mostlyDoing(lastFrame, now);
     frozenBy.set(text, (frozenBy.get(text) ?? 0) + gap - FRAME_MS);
   }
@@ -251,8 +265,8 @@ export function whenLoaded(run) {
   };
   const check = () => {
     quietFrames = fetches.size === 0 && tasks.size === 0 ? quietFrames + 1 : 0;
-    if (quietFrames < 2 && performance.now() < GIVE_UP_AFTER) { requestAnimationFrame(check); return; }
-    if (!compileScene || performance.now() >= GIVE_UP_AFTER) { finish(); return; }
+    if (quietFrames < 2 && shownTime() < GIVE_UP_AFTER) { requestAnimationFrame(check); return; }
+    if (!compileScene || shownTime() >= GIVE_UP_AFTER) { finish(); return; }
     // (one last pass, for whatever's come in since the last)
     loadingTask('Preparing the city...', (compiling ?? Promise.resolve()).then(timedCompile)).then(finish);
   };

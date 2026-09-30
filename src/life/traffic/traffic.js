@@ -24,6 +24,7 @@ import { smellyCars, updatePull } from './pullover.js';
 import { junctionGate, updateJunctionGates } from './junctions.js';
 import { crashingIn } from './room-veer.js';
 import { crashIntoRoom, updateRoomCrash } from '../room-crash.js';
+import { smashFences } from '../fence-smash.js';
 const crashes = []; // [car, windowed side] this frame
 const PUSHED_REVERSE_SPEED = 3; // (units a second a car backs up at while pushed)
 const STOP_LINE = 3.2; // (how far out from a junction's edge a car stops its front bumper: just short of the painted line, past the crossing — see roads/markings.js)
@@ -217,6 +218,7 @@ export function updateTraffic(t) {
       car.z = front.z - back*Math.cos(car.heading);
     }
     sway(car, dt);
+    smashFences(car, knocked);
     const smash = crashingIn(car);
     if (smash) crashes.push([car, smash]); // (through a room's window: see room-veer.js, dealt with after the loop)
     if (car.sway?.drunk && car.speed > 0.3) swayCrash(car); // (weaved into a car or a wall)

@@ -126,7 +126,91 @@ const REF_DISTANCE = 25;         // how near something has to be to be heard at 
 const VOICES_MAX = 32;           // sounds playing at once, past which new ones are dropped
 const SAME_SOUND_GAP = 0.06, SAME_SOUND_NEAR = 30; // the same sound again this soon and this close (a bus's two ends) plays once
 
+// (a 'playback' context's bigger buffer rides out CPU spikes — a stall, the pub music's synth — rather than crackling)
+try { THREE.AudioContext.setContext(new AudioContext({ latencyHint: 'playback' })); } catch { /* the default, then */ }
 export const listener = new THREE.AudioListener();
+// The listener never moves: it stays at the origin, facing down -z as a camera does, and every panner's placed relative to
+// the ear instead (placePanner), glided there each frame. Firefox can only move a listener in jumps (it has no AudioParams),
+// each one re-panning every sound at once — a step in every loud sound's level a frame, crackling as the camera swoops.
+// And where you hear from eases after the ear, EAR_EASE (seconds) behind, turning as a turn (slerp), so a refocus that
+// flings the camera across the city is a quick glide, not a leap. (Every panner is placed this way: a panner given a
+// world position of its own would be heard wrong.)
+const EAR_EASE = 0.1, PAN_GLIDE = 0.05;
+const earAt = new THREE.Vector3(), earTurn = new THREE.Quaternion(), earScale = new THREE.Vector3();
+const heardAt = new THREE.Vector3(), heardTurn = new THREE.Quaternion(), unturn = new THREE.Quaternion(), relative = new THREE.Vector3();
+let heardSince = 0;
+const placed = new Map(); // panner → { x, y, z (in the world), until (context time it's let go, for a one-off) }
+const relativeTo = (x, y, z) => relative.set(x, y, z).sub(heardAt).applyQuaternion(unturn);
+/**
+ * Put a panner at a place in the world (kept there, relative to the ear, as it moves: see above). Call it again to move it.
+ * @param {PannerNode} panner
+ * @param {number} x
+ * @param {number} y
+ * @param {number} z
+ * @param {number} [lasts=Infinity] - seconds to keep placing it, for a one-off that's gone by then
+ * @returns {void}
+ */
+export function placePanner(panner, x, y, z, lasts = Infinity) {
+  const p = placed.get(panner);
+  if (p) { p.x = x; p.y = y; p.z = z; return; }
+  placed.set(panner, { x, y, z, until: panner.context.currentTime + lasts });
+  steer(panner, x, y, z, 0);
+}
+// A panner: a real PannerNode for HRTF; otherwise a stand-in — a gain for the distance and a stereo panner for the side,
+// worked out here each frame with the same sums (the Web Audio spec's equal-power panning and distance models) and
+// glided — because Firefox's PannerNode steps its level and pan every 128 samples, and a loud, long sound (thunder) moved
+// quickly (a refocus) tears. It takes the same settings (distanceModel, refDistance, maxDistance, rolloffFactor), and
+// connects and disconnects as a panner would; place it with placePanner.
+export function makePanner(context, panningModel = 'equalpower') {
+  if (panningModel === 'HRTF') return Object.assign(context.createPanner(), { panningModel });
+  const level = context.createGain(), pan = context.createStereoPanner();
+  AudioNode.prototype.connect.call(level, pan);
+  level.connect = (...to) => pan.connect(...to);
+  level.disconnect = (...to) => pan.disconnect(...to);
+  return Object.assign(level, { panningModel, distanceModel: 'inverse', refDistance: 1, maxDistance: 10000, rolloffFactor: 1, pan, standIn: true });
+}
+function distanceGain({ distanceModel, refDistance: ref, maxDistance: max, rolloffFactor: rolloff }, d) {
+  if (distanceModel === 'linear') {
+    const r = Math.max(0, Math.min(1, rolloff));
+    return 1 - r*(Math.max(ref, Math.min(max, d)) - ref)/Math.max(1e-6, max - ref);
+  }
+  if (distanceModel === 'exponential') return Math.pow(Math.max(d, ref)/ref, -rolloff);
+  return ref/(ref + rolloff*(Math.max(d, ref) - ref));
+}
+// (to where it is relative to the ear: at once, or gliding there by `end`)
+function steer(panner, x, y, z, end) {
+  relativeTo(x, y, z);
+  if (!panner.standIn) {
+    if (!end) { panner.positionX.value = relative.x; panner.positionY.value = relative.y; panner.positionZ.value = relative.z; return; }
+    panner.positionX.linearRampToValueAtTime(relative.x, end);
+    panner.positionY.linearRampToValueAtTime(relative.y, end);
+    panner.positionZ.linearRampToValueAtTime(relative.z, end);
+    return;
+  }
+  const across = Math.hypot(relative.x, relative.z), gain = distanceGain(panner, relative.length());
+  const side = across > 1e-6 ? Math.asin(Math.max(-1, Math.min(1, relative.x/across)))/(Math.PI/2) : 0; // (the azimuth, folded to the front, as equal-power panning has it)
+  if (!end) { panner.gain.value = gain; panner.pan.pan.value = side; return; }
+  panner.gain.linearRampToValueAtTime(gain, end);
+  panner.pan.pan.linearRampToValueAtTime(side, end);
+}
+/** Stop placing a panner (its sound's over). @param {PannerNode} panner */
+export const letGoPanner = panner => { placed.delete(panner); };
+listener.updateMatrixWorld = function (force) {
+  THREE.Object3D.prototype.updateMatrixWorld.call(this, force);
+  const now = performance.now()/1000, dt = heardSince ? Math.min(0.2, now - heardSince) : 0;
+  this.matrixWorld.decompose(earAt, earTurn, earScale);
+  const ease = heardSince ? 1 - Math.exp(-Math.min(0.1, dt)/EAR_EASE) : 1;
+  heardSince = now;
+  heardAt.lerp(earAt, ease);
+  heardTurn.slerp(earTurn, ease);
+  unturn.copy(heardTurn).invert();
+  // (glided over a frame or so, overlapping the next, so it's never held still and then stepped)
+  const time = this.context.currentTime, end = time + Math.max(PAN_GLIDE, dt*1.2);
+  for (const [panner, p] of placed) {
+    if (time > p.until) { placed.delete(panner); continue; }
+    steer(panner, p.x, p.y, p.z, end);
+  }
+};
 // Where you hear from — the ear — is the camera, until it's zoomed in close on something (following someone, say, when it's
 // usually right over somebody else): then what it's centred on, drawn over from the camera between EAR_FAR and EAR_NEAR
 // of zoom. Every sound's distance goes from here (import `ear`); the listener's placed on it each frame (placeEar),
@@ -147,10 +231,35 @@ export function placeEar() {
 }
 placeEar();
 const context = listener.context;
-// a limiter after everything, so a pile-up of blasts close by squashes rather than clips
-const limiter = context.createDynamicsCompressor();
-limiter.threshold.value = -12; limiter.knee.value = 3; limiter.ratio.value = 20; limiter.attack.value = 0.005; limiter.release.value = 0.25; // (near a brick wall: crowds of voices too)
+// A gentle compressor over everything, holding a crowd of sounds together (not a brick wall: at 20:1 from -12dB it
+// was, and every new sound ducked all the others, the lot swelling back a quarter-second later — sounds dropping in and
+// out); HEADROOM in front of it, as its own make-up gain lifts everything back. Peaks are the limiter's, below.
+const HEADROOM = 0.6;
+const limiter = context.createDynamicsCompressor(), headroom = context.createGain();
+limiter.threshold.value = -20; limiter.knee.value = 12; limiter.ratio.value = 3; limiter.attack.value = 0.01; limiter.release.value = 0.4;
+headroom.gain.value = HEADROOM;
 listener.setFilter(limiter);
+listener.gain.disconnect();
+listener.gain.connect(headroom).connect(limiter);
+// (a compressor isn't a brick wall — a blast's first milliseconds get through before it clamps down, and its own make-up
+// gain lifts the tail back up as it lets go — so after it, a lookahead limiter (limiter-processor.js) holding everything
+// under LIMIT_CEILING; till that's loaded, or if it can't be, a soft clipper: untouched up to CLIP_KNEE, easing into the ceiling)
+const LIMIT_CEILING = 0.9, LIMIT_RELEASE = 0.2;
+const CLIP_KNEE = 0.8, CLIP_RANGE = 2; // (CLIP_RANGE: the loudest input shaped, past which it's held at the ceiling)
+const clipIn = context.createGain(), clipper = context.createWaveShaper(), clipCurve = new Float32Array(4096);
+for (let k = 0; k < clipCurve.length; k++) {
+  const x = (k/(clipCurve.length - 1)*2 - 1)*CLIP_RANGE, over = Math.abs(x) - CLIP_KNEE, room = LIMIT_CEILING - CLIP_KNEE;
+  clipCurve[k] = over <= 0 ? x : Math.sign(x)*(CLIP_KNEE + room*Math.tanh(over/room));
+}
+clipIn.gain.value = 1/CLIP_RANGE;
+Object.assign(clipper, { curve: clipCurve, oversample: '4x' });
+limiter.disconnect();
+limiter.connect(clipIn).connect(clipper).connect(context.destination);
+context.audioWorklet?.addModule(new URL('./limiter-processor.js', import.meta.url)).then(() => {
+  const brickwall = new AudioWorkletNode(context, 'limiter', { outputChannelCount: [2], parameterData: { ceiling: LIMIT_CEILING, release: LIMIT_RELEASE } });
+  limiter.disconnect();
+  limiter.connect(brickwall).connect(context.destination);
+}).catch(err => console.warn('Kallipolis: limiter failed, soft clipping instead', err));
 
 // Inside a building (see buildings/interior.js), whatever's outside it is heard through the walls: everything out there —
 // traffic, weather, the city — goes by way of `outdoors`, a lowpass and a drop in level that stand wide open until the
@@ -242,6 +351,14 @@ export function setMuted(on) {
 }
 export const isMuted = () => muted;
 
+// A looping voice (an engine, a buzz…) handed from one thing to another fades out over HAND_OVER before it moves and
+// takes up its new one's sound, rather than jumping there mid-note (a click; a burst of them as the camera swoops about).
+const HAND_OVER = 0.03;
+/** Start handing `voice` over: `gain` (its output) fades out, and handingOver holds it till then. */
+export function handOver(voice, gain, now) { gain.setTargetAtTime(0, now, HAND_OVER/4); voice.movesAt = now + HAND_OVER; }
+/** Whether `voice` is still fading out to be handed over (leave it be till then). */
+export const handingOver = (voice, now) => now < (voice.movesAt ?? 0);
+
 // ZzFX's own master volume would scale every sample down: the listener's gain sets the level instead.
 ZZFX.volume = 1;
 const buffers = {}; // name -> [variant -> [layer -> AudioBuffer]]
@@ -272,15 +389,15 @@ const isSelf = at => self?.mode === 'possessed' && Math.hypot(at.x - self.x, at.
  */
 export function oneShotPanner(at, source, { refDistance, maxDistance, rolloff = 1 }) {
   if (isSelf(at)) return context.createGain();
-  const panner = context.createPanner();
   const { x, y, z } = ear, hybrid = directional === 'hybrid' && hrtfVoices < HRTF_SLOTS && Math.hypot(at.x - x, at.y - y, at.z - z) < HRTF_NEAR;
-  panner.panningModel = hybrid || directional === 'full' ? 'HRTF' : 'equalpower';
+  const panner = makePanner(context, hybrid || directional === 'full' ? 'HRTF' : 'equalpower');
   if (hybrid) { hrtfVoices++; source.addEventListener('ended', () => hrtfVoices--); }
   panner.distanceModel = maxDistance ? 'linear' : 'inverse';
   panner.refDistance = refDistance;
   panner.rolloffFactor = rolloff;
   if (maxDistance) panner.maxDistance = maxDistance;
-  panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
+  placePanner(panner, at.x, at.y, at.z);
+  source.addEventListener('ended', () => letGoPanner(panner));
   return panner;
 }
 
@@ -322,9 +439,39 @@ function startVoice(buffer, at, volume, refDistance, maxDistance, rate = 1, thro
 export function zzfxBuffer(layer) {
   const made = prewarmed.get(layer);
   if (made?.length) return made.shift();
-  return bufferOf(ZZFX.buildSamples(...layer));
+  return bufferOf(ZZFX.buildSamples(...layer), layer);
 }
-function bufferOf(samples) {
+// ZzFX's bit crush holds each value for a while, and a layer's lowpass only runs once per hold: the steps put back the highs
+// it was meant to take out (static), and the filter, run that slowly, holds a blast's rumble at full roar through its
+// release, heaving far below hearing. So such a layer's lowpassed again here (a biquad at its own cutoff) and faded out
+// over its release and echo as ZzFX meant (squared, so it tails off); every layer's highpassed at SUBSONIC_HZ twice over —
+// what's under it isn't heard, but it drives speakers into distortion and the limiter into pumping everything else
+// (tearing); and every end's faded over FADE_OUT, as some stop short (a pop).
+const FADE_OUT = 0.01, SUBSONIC_HZ = 35;
+function biquad(samples, type, hz, rate) {
+  const w = 2*Math.PI*hz/rate, alpha = Math.sin(w)/(2*Math.SQRT1_2), cos = Math.cos(w), a0 = 1 + alpha;
+  const b1 = (type === 'lowpass' ? 1 - cos : -(1 + cos))/a0, b0 = b1/2*(type === 'lowpass' ? 1 : -1), a1 = -2*cos/a0, a2 = (1 - alpha)/a0;
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const x = samples[i], y = b0*x + b1*x1 + b0*x2 - a1*y1 - a2*y2;
+    x2 = x1; x1 = x; y2 = y1; y1 = y;
+    samples[i] = y;
+  }
+}
+function tidy(samples, layer) {
+  const crush = layer[15], cutoff = -(layer[20] ?? 0), rate = ZZFX.sampleRate;
+  if (crush && cutoff > 0) {
+    biquad(samples, 'lowpass', cutoff, rate);
+    const tail = Math.min(samples.length, Math.round(((layer[5] ?? 0) + (layer[16] ?? 0))*rate));
+    for (let k = 0; k < tail; k++) samples[samples.length - tail + k] *= (1 - k/tail)**2;
+  }
+  biquad(samples, 'highpass', SUBSONIC_HZ, rate);
+  biquad(samples, 'highpass', SUBSONIC_HZ, rate);
+  const fade = Math.min(samples.length, Math.round(FADE_OUT*rate));
+  for (let k = 1; k <= fade; k++) samples[samples.length - k] *= (k - 1)/fade;
+}
+function bufferOf(samples, layer) {
+  tidy(samples, layer);
   const buffer = context.createBuffer(1, samples.length, ZZFX.sampleRate);
   buffer.getChannelData(0).set(samples);
   return buffer;
@@ -351,7 +498,7 @@ export function prewarm(layers, count) {
         const layer = waiting.get(id);
         waiting.delete(id);
         if (!prewarmed.has(layer)) prewarmed.set(layer, []);
-        prewarmed.get(layer).push(bufferOf(samples));
+        prewarmed.get(layer).push(bufferOf(samples, layer));
       },
       onerror: () => { workerFailed = true; }, // (no worker: each sound's made when it's first heard, as it would be anyway)
     });

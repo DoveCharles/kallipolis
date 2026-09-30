@@ -4,12 +4,15 @@ import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { canTakeControl, controlInput, endPossession, possession, startPossession, HATES_POSSESSED_SPEED, rushed } from '../possession.js';
 import { FLEE_SPEED, PEOPLE_MAX, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
-import { HEAD_CENTER, PERSON_TRAIT_COLORS } from './peopleModel.js';
+import { HAIR_ROW, HEAD_CENTER, PERSON_TRAIT_COLORS } from './peopleModel.js';
+
+/** Their headsize trait as drawn (the Hair row's fourth number, 0 read as 1: see personLook). */
+export const headSizeOf = i => personModel.traitData[(HAIR_ROW*PEOPLE_MAX + i)*4 + 3] || 1;
 import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, sayGoodbye, standUp, talkWith } from './peopleActivities.js';
 import { awaitsWatcher, endPrayerView, watchPrayer } from './peoplePrayer.js';
 import { placeAtVertex, reseatPerson, walkBackToWalkway } from './peoplePathing.js';
 import { carryPossessed, footingAt, nearestRaisedVertex, stepFooting } from './peopleFooting.js';
-import { bloodSpeed, bloodlustSpeed, isBloodlusting } from './peopleBlood.js';
+import { bloodSpeed, bloodlustSpeed, fallSpill, isBloodlusting } from './peopleBlood.js';
 import { profileOf } from '../profiles.js';
 import { IS_TOUCH } from '../../core/device.js';
 import { setSelf } from '../../audio/sfx.js';
@@ -17,7 +20,10 @@ import { pointInPolygon } from '../../core/math.js';
 import { carHitbox } from '../traffic/collisions.js';
 import { carHeight } from '../traffic/placing.js';
 import { cars } from '../traffic/state.js';
-import { buildingKey, buildingNumber, distToPolygonBoundary, footprintBounds } from '../../buildings/footprints.js';
+import { holdAtFences } from '../../zones/fences.js';
+import { punchFence } from '../fence-smash.js';
+import { damage } from '../../core/health.js';
+import { buildingKey, buildingNumber, distToPolygonBoundary, footprintBounds, wallsOf } from '../../buildings/footprints.js';
 import { buildingEnterable, buildingKindOf, buildingLabelName, buildingName, buildingTitle, buildingTypeOf } from '../../buildings/building-types.js';
 import { openRoomDoor, roomBeyondDoor, roomDoorway, roomNear, roomThroughDoor, roomVisit, roomWalkable, someoneHome } from '../../buildings/interior.js';
 
@@ -257,7 +263,7 @@ export function headPointOf(i, spot, out) {
   if (personModel.traitData[((2 + PERSON_TRAIT_COLORS.indexOf('Eyes'))*PEOPLE_MAX + i)*4 + 3] > 0.5) { // (upside down, 🙃: see personLook)
     headOffset.set(-spot.x, personModel.face.top.y - spot.y, spot.z);
   }
-  headOffset.applyMatrix4(lookTurn).applyMatrix3(headTurn);
+  headOffset.multiplyScalar(headSizeOf(i)).applyMatrix4(lookTurn).applyMatrix3(headTurn); // (scaled about the neck, as personLook)
   return out.copy(personModel.headPivot).applyMatrix4(headMatrix).add(headOffset).applyMatrix4(headshotInstance);
 }
 
@@ -271,10 +277,11 @@ export function headshotOf(i) {
   boneAt(chestMatrix, personModel.chestBone, i);
   chestTurn.setFromMatrix4(chestMatrix);
   personModel.mesh.getMatrixAt(i, headshotInstance);
-  headshot.head.copy(personModel.headPivot).add(HEAD_CENTER).applyMatrix4(chestMatrix).applyMatrix4(headshotInstance);
+  const size = headSizeOf(i);
+  headshot.head.copy(HEAD_CENTER).multiplyScalar(size).add(personModel.headPivot).applyMatrix4(chestMatrix).applyMatrix4(headshotInstance);
   headshot.forward.set(0, 0, 1).applyMatrix3(chestTurn).transformDirection(headshotInstance);
   headshot.up.set(0, 1, 0).applyMatrix3(chestTurn).transformDirection(headshotInstance);
-  headshot.distance = 4.6*modelScale(people[i]);
+  headshot.distance = 4.6*modelScale(people[i])*size;
   return headshot;
 }
 
@@ -477,6 +484,7 @@ export function walkPossessed(p, dt) {
   });
   ({ x, z } = bounceOffCars(p, x, z, shove, hop));
   p.touching = touching; p.near = near; p.walkingSpeed = walkingSpeed; // (for how hard a punch throws someone: see updateSwing)
+  if (!p.footing && !(hop.h > 0)) ({ x, z } = holdAtFences(p.x, p.z, x, z, p.y, 0.25*S.peopleSize)); // (fences are solid, but jumped through)
   if (!p.footing) ({ x, z } = clearOfBuildings(p, x, z)); // (buildings are solid, on the ground)
   // up on a raised walkway, in a station, its lift or a carriage, or getting onto one (see peopleFooting.js)
   const up = stepFooting(p, x, z);
@@ -513,6 +521,9 @@ export function placePossessedCamera(i) {
 /** Who a swing can reach: how far ahead of them (at a standstill, and how much further for each unit of speed they're moving at), and how near dead ahead they have to be — the same whatever anyone's size. */
 const SWING_REACH = 3.4, SWING_REACH_PER_SPEED = 0.5;
 const SWING_ARC = Math.cos(Math.PI*4/9);
+// Punching a fence (with nobody nearer to hit) breaks the piece in reach (FENCE_PUNCH_REACH, at people size 1), and
+// cuts the hand: they bleed (fallSpill) and lose FENCE_PUNCH_DAMAGE.
+const FENCE_PUNCH_REACH = 1.2, FENCE_PUNCH_DAMAGE = 8;
 /** How far a punch throws someone back, per unit of the puncher's speed, and the least it does however slowly they're moving. */
 const PUNCH_PUSH_PER_SPEED = 0.5;
 export const PUNCH_MIN_PUSH = 1; // the least a punch knocks someone back; an NPC's is scaled by their speed trait, since they slow to a stop to punch
@@ -553,7 +564,10 @@ export function updateSwing(p, dt) {
   // a bee nearer than anyone takes it instead, and its colony comes for the puncher
   const bee = App.beeInPunch?.({ x: p.x, y: p.y, z: p.z, heading: p.heading, reach: nearest, arcCos: SWING_ARC, height: personHeight(p) });
   if (bee) { App.punchBee?.(bee, p); return; }
-  if (!hit) return;
+  if (!hit) {
+    if (punchFence(p, Math.min(nearest, FENCE_PUNCH_REACH*S.peopleSize*Math.max(1, p.traits.size)), SWING_ARC)) { fallSpill(p); damage(p, FENCE_PUNCH_DAMAGE, { cause: 'punchedfence' }); }
+    return;
+  }
   if (dodgePunch(hit, p)) return; // (a vampire leaps clear)
   if (knockOver(hit, p)) App.pushPerson?.(hit, hit.x - p.x, hit.z - p.z, Math.max(PUNCH_MIN_PUSH, (p.walkingSpeed ?? 0)*PUNCH_PUSH_PER_SPEED)*p.traits.size); // (the faster they're running and the bigger they are, the further)
 }
@@ -589,16 +603,16 @@ let target = null;
 function buildingsNear(x, z, reach) {
   const found = [];
   buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
-    const fp = group.userData.footprint;
-    if (!fp || fp.length < 3 || !group.visible) return;
+    const walls = wallsOf(group);
+    if (!walls.length || !group.visible) return;
     const { c, r } = footprintBounds(group);
-    if (Math.hypot(x - c.x, z - c.z) <= r + reach) found.push({ zone, group, index, fp, c, r });
+    if (Math.hypot(x - c.x, z - c.z) <= r + reach) walls.forEach(w => found.push({ zone, group, index, fp: w.poly, top: w.top, prop: w.prop, c, r }));
   }));
   return found;
 }
 // whether a building's in the way at x, z for someone at height y (not over its roof, nor under it: a mall's upper units
 // stand on its lower ones)
-const between = (b, y) => y < (b.group.userData.height || 0) && y > (b.group.userData.base || 0) - 0.5;
+const between = (b, y) => y < b.top && y > (b.group.userData.base || 0) - 0.5;
 const solidAt = (list, x, z, y) => list.some(b => between(b, y)
   && (pointInPolygon({ x, z }, b.fp) || distToPolygonBoundary({ x, z }, b.fp) < WALL_PAD));
 // x, z, or as near it as they can get along one axis or the other without walking into a building; anyone already in
@@ -617,7 +631,7 @@ function buildingAhead(p) {
   if (!list.length) return null;
   for (let t = 0.25; t <= REACH_BUILDING; t += 0.25) {
     const x = p.x + fx*t, z = p.z + fz*t;
-    const hit = list.find(b => between(b, p.y) && pointInPolygon({ x, z }, b.fp));
+    const hit = list.find(b => !b.prop && between(b, p.y) && pointInPolygon({ x, z }, b.fp)); // (a yard's tanks and containers aren't gone into)
     if (!hit) continue;
     const key = buildingKey(hit.zone, hit.index), number = buildingNumber(key), kind = buildingKindOf(hit.group, hit.zone);
     const height = hit.group.userData.height ?? 0;

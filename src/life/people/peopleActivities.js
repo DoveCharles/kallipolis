@@ -20,6 +20,7 @@ import { BARBOT, barbotFree } from '../../buildings/barbot.js';
 import { awaitWaiter, leavePlate, queueForTable, runWaiter, servedMeal, waitForTable, waiterOn } from './peopleWaiter.js';
 import { summonSalonBot, salonBotSnipping, salonBotNoise, seatedHead } from '../../buildings/salonbot.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
+import { blockedBehind } from './peopleFall.js';
 import { REVIVE_SHAKE_TIME } from '../revive.js';
 import { strikeLightning } from '../lightning.js';
 import { damage, heal } from '../../core/health.js';
@@ -1053,6 +1054,7 @@ export function knockDown(t, p) {
   exclaim(head, voiceOfPerson(t));
   t.punched.stage = 'fall';
   t.heading = headingTo(t, p);
+  if (blockedBehind(t)) t.heading += Math.PI; // (not back through a railing or wall: the other way, see peopleFall.js)
   t.faceTo = null; t.lookAt = null;
   playOnce(t, 'Fall');
   t.pose = 'Fallen';
@@ -1168,6 +1170,21 @@ export function holdDown(p) {
   p.punched.timer = REVIVE_SHAKE_TIME;
 }
 /**
+ * Knock someone already on the ground down again (hit by a car as they lie there): still falling, they fall on; otherwise
+ * flat in the Fallen pose, their time down starting over.
+ * @param {Person} p - the person
+ * @param {{x: number, z: number}} from - what hit them
+ * @returns {boolean} whether they were knocked down again
+ */
+export function knockAgain(p, from) {
+  if (isGone(p) || !p.punched || p.water) return false;
+  p.punched.by = from;
+  if (p.punched.stage === 'fall') return true;
+  holdDown(p);
+  if (!p.punched.revive) p.punched.timer = (3 + peopleRng()*4)*DOWN_TIME_SCALE;
+  return true;
+}
+/**
  * Move someone who's been punched on, each frame: lying there a while, then getting up.
  * @param {Person} p - the person
  * @param {number} dt - seconds since the last frame
@@ -1193,6 +1210,12 @@ export function updatePunched(p, dt) {
  * @returns {void}
  */
 function reactToPunch(p, by) {
+  if (by?.bee) { // (a bee: swatted at if it's still about and they've the nerve, else run from)
+    if (!(p.mode === 'line' || p.mode === 'wander') || !App.beeAt?.(by.bee)) return;
+    if (peopleRng() < Math.min(1, BEE_REVENGE_CHANCE*(0.5 + p.traits.aggression))) swatBee(p, by.bee);
+    else beginFleeing(p, { x: by.x, z: by.z });
+    return;
+  }
   if (!by?.traits || isGone(by)) return;
   const canFight = (p.mode === 'line' || p.mode === 'wander') && (!by.punched || by.punched.stage === 'marked') && ['line', 'wander', 'leaving', 'possessed'].includes(by.mode);
   if (canFight && !hidingFromSun(p) && (p.traits.vampire || peopleRng() < RETALIATE_CHANCE*p.traits.aggression)) {
@@ -1200,6 +1223,33 @@ function reactToPunch(p, by) {
   } else {
     beginFleeing(p, { x: by.x, z: by.z });
   }
+}
+
+// ---- revenge on a bee: after it (at SWAT_TIME × patience at most), and a swing once it's in reach — which, if it's still
+// there as it lands, kills it (and sets its colony on them: see punchBee in life/bees.js)
+const BEE_REVENGE_CHANCE = 0.6, SWAT_TIME = 8, SWAT_REACH = 1.1;
+function swatBee(p, bee) {
+  endActivity(p);
+  p.swat = { bee, timer: SWAT_TIME*p.traits.patience, swing: 0 };
+}
+/**
+ * Move someone after a bee on, each frame.
+ * @param {Person} p
+ * @param {number} dt
+ * @returns {?{x: number, y: number, z: number}} where they walk to (null: stand)
+ */
+export function updateSwat(p, dt) {
+  const s = p.swat, at = App.beeAt?.(s.bee), reach = SWAT_REACH*S.peopleSize;
+  if (!at || (s.timer -= dt) <= 0) { p.swat = undefined; p.faceTo = null; return null; }
+  p.faceTo = headingTo(p, at);
+  if (s.swing > 0) {
+    if ((s.swing -= dt) > 0) return null;
+    if (Math.hypot(at.x - p.x, at.z - p.z) < reach*1.5 && at.y < p.y + personHeight(p) + 0.5) App.punchBee?.(s.bee, p);
+    p.swat = undefined; p.faceTo = null;
+    return null;
+  }
+  if (Math.hypot(at.x - p.x, at.z - p.z) < reach && at.y < p.y + personHeight(p) + 0.5) { s.swing = PUNCH_HIT_TIME; playOnce(p, 'Punch'); swingSound(p); return null; }
+  return { x: at.x, y: p.y, z: at.z };
 }
 
 export const RIDE_CHANCE = 0.05;
@@ -1710,7 +1760,7 @@ const PUB_ROUND_MIN = 15, PUB_ROUND_MAX = 60;
  * @param {object} building - the building (see buildingDoors)
  * @returns {number} the chance
  */
-export const enterChance = (p, building) => shopOf(building) ? (isNight() ? 0 : ENTER_CHANCE) : isWorkplace(building)
+export const enterChance = (p, building) => shopOf(building) ? (isNight() || (p.traits.nude && shopOf(building) === 'clothes') ? 0 : ENTER_CHANCE) : isWorkplace(building)
   ? (isNight() ? OFFICE_ENTER_CHANCE_NIGHT : OFFICE_ENTER_CHANCE)
   : isNight() && !nightOwl(p) ? ENTER_CHANCE_NIGHT : ENTER_CHANCE;
 /** How long a visit lasts, in hours of the day's clock. */

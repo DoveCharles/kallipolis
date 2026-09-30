@@ -645,7 +645,7 @@ const WALK_BACK_REACH = 300, WALK_BACK_STEP = 0.5, WALK_BACK_TRIES = 40; // (…
  */
 export function walkBackToWalkway(p) {
   const { lines, grid, CELL } = peopleNav, cells = Math.ceil(WALK_BACK_REACH/CELL), cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
-  const found = [], decks = [S.roadFootprint, S.pathFootprint], swims = onWater(p);
+  const found = [], decks = [S.roadFootprint, S.walkDeck], swims = onWater(p);
   for (let ox=-cells;ox<=cells;ox++) for (let oz=-cells;oz<=cells;oz++) (grid.get((cx+ox) + ',' + (cz+oz)) || []).forEach(({ li, vi }) => {
     const q = lines[li].pts[vi], d = Math.hypot(q.x - p.x, q.z - p.z);
     if (d <= WALK_BACK_REACH) found.push({ li, vi, d, q });

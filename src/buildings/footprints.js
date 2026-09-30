@@ -1,4 +1,5 @@
-import { centroid } from '../core/math.js';
+import { centroid, pointInPolygon } from '../core/math.js';
+import { buildingHolders } from '../core/shared.js';
 
 // ---------------------------------------------------------- footprint archetypes (Y2K variety)
 function roundPolygonCorners(poly, radius, segs) {
@@ -89,10 +90,62 @@ export function distToPolygonBoundary(p, poly) {
 export function footprintBounds(group) {
   let bounds = group.userData.clipBounds;
   if (!bounds) {
-    const fp = group.userData.footprint, c = centroid(fp);
-    bounds = group.userData.clipBounds = { c, r: Math.max(...fp.map(p => Math.hypot(p.x - c.x, p.z - c.z))) };
+    const fp = group.userData.solidFootprint ?? group.userData.footprint; // (the wider of the two)
+    const pts = wallsOf(group).flatMap(w => w.poly); // (and any solid props: see wallsOf)
+    let c = fp ? centroid(fp) : null;
+    if (!c) { const xs = pts.map(p => p.x), zs = pts.map(p => p.z); c = { x: (Math.min(...xs) + Math.max(...xs))/2, z: (Math.min(...zs) + Math.max(...zs))/2 }; }
+    bounds = group.userData.clipBounds = { c, r: Math.max(...pts.map(p => Math.hypot(p.x - c.x, p.z - c.z))) };
   }
   return bounds;
+}
+/**
+ * Everything of a building that's a wall: its footprint (a podium's, wider, if it has one) up to its height, and any solid
+ * props it holds (userData.solids: { poly, top } — an industrial yard's tanks and containers, see zones/industrial.js).
+ * @returns {Array<{poly: Array<{x: number, z: number}>, top: number, prop?: boolean}>}
+ */
+export function wallsOf(group) {
+  let walls = group.userData.walls;
+  if (!walls) {
+    const fp = group.userData.solidFootprint ?? group.userData.footprint;
+    walls = group.userData.walls = (fp?.length >= 3 ? [{ poly: fp, top: group.userData.height || 0 }] : [])
+      .concat((group.userData.solids || []).map(s => ({ ...s, prop: true })));
+  }
+  return walls;
+}
+// ---- what flies: every building's walls, bucketed by SOLID_CELL, for anything in the air to test a point against. Built
+// again whenever the buildings held change (checked at most every SOLID_CHECK ms: a new zone group, or a different count).
+const SOLID_CELL = 16, SOLID_CHECK = 500;
+let solidGrid = null, solidKey = null, solidCheckedAt = -Infinity;
+function solidGridNow() {
+  const now = performance.now();
+  if (solidGrid && now - solidCheckedAt < SOLID_CHECK) return solidGrid;
+  solidCheckedAt = now;
+  const holders = buildingHolders(), key = holders.map(z => z.buildingsGroup ? z.buildingsGroup.children.length : 0).join(',');
+  if (solidGrid && key === solidKey && holders.every((z, i) => z.buildingsGroup === solidGrid.groups[i])) return solidGrid;
+  solidKey = key;
+  solidGrid = { cells: new Map(), groups: holders.map(z => z.buildingsGroup) };
+  holders.forEach(zone => (zone.buildingsGroup?.children || []).forEach(group => {
+    const walls = wallsOf(group);
+    if (!walls.length) return;
+    const { c, r } = footprintBounds(group), base = group.userData.base || 0;
+    for (let cx = Math.floor((c.x - r)/SOLID_CELL); cx <= Math.floor((c.x + r)/SOLID_CELL); cx++)
+      for (let cz = Math.floor((c.z - r)/SOLID_CELL); cz <= Math.floor((c.z + r)/SOLID_CELL); cz++) {
+        const k = cx + ',' + cz;
+        if (!solidGrid.cells.has(k)) solidGrid.cells.set(k, []);
+        walls.forEach(w => solidGrid.cells.get(k).push({ group, poly: w.poly, base, top: w.top }));
+      }
+  }));
+  return solidGrid;
+}
+/**
+ * The wall (of a building or a solid prop) standing at (x, y, z), if any — for birds, bees and aircraft to fly into.
+ * @returns {?{group: object, poly: Array<{x: number, z: number}>, base: number, top: number}}
+ */
+export function solidAt(x, y, z) {
+  const list = solidGridNow().cells.get(Math.floor(x/SOLID_CELL) + ',' + Math.floor(z/SOLID_CELL));
+  if (!list) return null;
+  for (const w of list) if (y < w.top && y >= w.base - 0.5 && pointInPolygon({ x, z }, w.poly)) return w;
+  return null;
 }
 
 // ---------------------------------------------------------- building identity

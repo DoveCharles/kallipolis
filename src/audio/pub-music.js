@@ -1,4 +1,4 @@
-import { listener, heardFrom, loopPanning } from './sfx.js';
+import { listener, heardFrom, loopPanning, placePanner, makePanner } from './sfx.js';
 import { hashNameToNumber, mulberry32 } from '../core/math.js';
 
 // ============================================================ pub music
@@ -48,10 +48,9 @@ function load() {
     await synth.isReady;
     const sequencer = new Sequencer(synth, { skipToFirstNoteOn: false, initialPlaybackRate: 1 });
     sequencer.loopCount = 0;
-    const out = context.createGain(), tone = context.createBiquadFilter(), panner = context.createPanner();
+    const out = context.createGain(), tone = context.createBiquadFilter(), panner = makePanner(context, loopPanning());
     out.gain.value = 0;
     tone.type = 'lowpass'; tone.frequency.value = TONE_HZ; tone.Q.value = 0.5;
-    panner.panningModel = loopPanning();
     panner.distanceModel = 'linear';
     panner.refDistance = REF_DISTANCE; panner.maxDistance = MAX_DISTANCE;
     synth.connect(out);
@@ -112,7 +111,7 @@ export function pubMusic(key, at, set = 'pub') {
     out.gain.setValueAtTime(out.gain.value, now);
     out.gain.linearRampToValueAtTime(VOLUME[set], now + FADE);
   }
-  panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
+  placePanner(panner, at.x, at.y, at.z);
 
   const { song, into } = nowPlaying(key, set);
   if (!song) return;

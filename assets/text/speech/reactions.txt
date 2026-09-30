@@ -28,6 +28,28 @@ They were just sitting there... {seen = crashedinto, shock}
 Who builds right up against a road like that? {seen = crashedinto, aggression}
 > My ears are ringing...
 > Was that [scary: a]? {nosy}
+They went right over the railing! {seen = fell}
+That was a long way down... {seen = fell, mood = -1}
+Should've held on tighter. {seen = fell, evil}
+They punched a fence to death. Their own. {seen = punchedfence}
+Why would anyone fight a fence? {seen = punchedfence, shock}
+Is this a terrorist attack!? {seen = planecrash, shock}
+Oh my god, this is awful! {seen = planecrash}
+A plane just went down! Someone call someone! {seen = planecrash}
+Was anyone on board? {seen = planecrash, mood = -1}
+I'm never flying again. {seen = planecrash, thought}
+That was spectacular. {seen = planecrash, evil}
+> How can you say that?!
+A bee just stung [seen.name]! {seen = beeattack}
+Bees are stinging people! {seen = beeattack, shock}
+Someone swat that bee! {seen = beeattack}
+Get it off them! {seen = beeattack, shock}
+I'm not getting stung, I'm out of here! {seen = beeattack, aggression = -1}
+Stay away from the flowers... {seen = beeattack, thought}
+Ha! Stung and floored. {seen = beeattack, evil}
+Ow! It stung me! {felt = stung}
+That bee is going down. {felt = stung, aggression}
+I think I'm allergic... {felt = stung, mood = -1, thought}
 There's [objects: plural] everywhere... {seen = exploded, shock}
 I still can't believe [seen.name]'s gone. {seen = death, mood = -1, thought}
 
@@ -62,6 +84,13 @@ Ugh, what's that smell? {seen = smelly}
 > Don't look now, but I think it's [seen.name].
 [seen.name] needs a bath. {seen = smelly, evil}
 I'm going to be sick. {seen = smelly, mood = -1}
+Is [seen.name] naked?! {seen = nude}
+Put it away! {seen = nude, mood = -1}
+My eyes! {seen = nude, shock}
+Oh my. {seen = nude, blushing}
+Nice. {seen = nude, evil, thought}
+Someone call the police. {seen = nude, conservative}
+Free the nipple! {seen = nude, conservative = -1}
 
 # ---- things that happened to the speaker
 Ow! What was that for, [felt.by]? {felt = punched}

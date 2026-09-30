@@ -9,6 +9,7 @@ import { followedCar } from './follow.js';
 import { spawnCar } from './lanes.js';
 import { carHeight, carLength, carModelOf, carScale, carWidth, turnCar } from './placing.js';
 import { cars } from './state.js';
+import { smashFences } from '../fence-smash.js';
 
 // ============================================================ DRIVING ============================================================
 // (possession.js): the followed car is taken off its line and steered by hand anywhere, with the camera
@@ -54,6 +55,7 @@ export function driveCar(i) {
   App.setCarBoostShown(true);
   car.yieldFor = null;
   car.throttle = 0;
+  car.stall = 0; car.bumping = false; // (a stall left from last drive otherwise holds it; stall only counts down while driven)
   controls.goalRadius = Math.max(controls.minRadius, carLength(car)*2.2);
 }
 /**
@@ -137,6 +139,7 @@ export function driveByHand(car, dt) {
   car.z += Math.cos(car.heading)*car.speed*dt;
   bumpIntoCars(car, was);
   hitBuildings(car, was, dt);
+  smashFences(car);
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
   if (car.traits?.aqua) updateFloating(car, dt);
   else if (overOpenWater(car.x, car.z)) startSinking(car);

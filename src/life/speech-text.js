@@ -35,9 +35,9 @@ const REACTION_GAP = 0.5;    // seconds between any two reactions starting, city
 const REACTION_KEEP = 8;     // seconds a reaction can wait its turn before it's dropped (it'd be stale)
 let lastReaction = -Infinity;
 export const SEEN_TIME = 60; // seconds someone remembers what they saw or felt, for {seen} and {felt} (p.seen / p.felt: see witness, notice and feel in people/people.js)
-const DEATHS = ['killedbycar', 'beatentodeath', 'smited', 'drowned', 'exploded', 'crashedinto'];
-const SIGHTS = [...DEATHS, 'death', 'punch', 'knockedbycar', 'resurrected', 'healed', 'waterwalking', 'smelly']; // ('death': any of DEATHS)
-const FEELINGS = ['punched', 'hitbycar', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes', 'gifted', 'cheered', 'party', 'healed', 'dined', 'carcrash'];
+const DEATHS = ['killedbycar', 'beatentodeath', 'smited', 'drowned', 'exploded', 'crashedinto', 'fell', 'punchedfence'];
+const SIGHTS = [...DEATHS, 'death', 'punch', 'knockedbycar', 'planecrash', 'beeattack', 'resurrected', 'healed', 'waterwalking', 'smelly', 'nude']; // ('death': any of DEATHS)
+const FEELINGS = ['punched', 'hitbycar', 'stung', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes', 'gifted', 'cheered', 'party', 'healed', 'dined', 'carcrash'];
 const MOOD_SHOWS = 0.3;       // how far their face (p.emotion, -1 to 1) has to be from neutral for is = sad / happy
 const HURT_BELOW = 0.7;       // share of full health under which they're hurt
 const STATES = { // {is = …}: how the speaker (or other.is: who they're talking to) is right now
@@ -57,6 +57,7 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   partying: person => (person?.traits?.partying ?? 0) > 0,
   singing: person => (person?.traits?.singing ?? 0) > 0,
   upsidedown: person => !!person?.traits?.upsidedown,
+  nude: person => !!person?.traits?.nude, // (no clothes, a censor over them)
   drooling: person => (person?.traits?.drooling ?? 0) > 0,
   skeptical: person => (person?.traits?.skeptical ?? 0) > 0,
   goofy: person => (person?.traits?.goofy ?? 0) > 0,
@@ -568,6 +569,10 @@ function fill(text, person, vars, depth = 0, picks = null, avoid = null) {
   });
   return failed ? null : out.replace(/\s+/g, ' ').trim();
 }
+// The swears trait: SWEAR_CHANCE of "fucking" between each two words said aloud
+const SWEAR_CHANCE = 0.2;
+const sworn = text => text.split(' ').map((word, i) => i && random() < SWEAR_CHANCE ? 'fucking ' + word : word).join(' ');
+
 /**
  * An entry's [placeholders] filled for one person's card (see profileOf in profiles.js), with `rng` so the same person
  * always gets the same: the card wording, the spoken one (after a |, its own placeholders taking the card's picks in
@@ -626,7 +631,8 @@ function sayFrom(items, person, vars = {}, tried = new Set()) {
     if (!item) return null;
     tried.add(item);
     const held = { ...vars, $last: null };
-    const text = item.forms ? item.forms.first : fill(item.text, person, held);
+    let text = item.forms ? item.forms.first : fill(item.text, person, held);
+    if (text && person?.traits?.swears && !item.thought) text = sworn(text);
     if (text) return { text: capitalise(text), replies: item.replies ? compileNodes(item.replies, 0, [], item.where) : [], vars: held, end: item.end, thought: item.thought, score: item.score ?? 0 };
   }
   return null;

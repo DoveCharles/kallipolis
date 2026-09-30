@@ -1,4 +1,5 @@
-import SamJs from 'sam-js';
+// (by URL, not the import map's 'sam-js', so speech-worker.js can load this too: keep the two the same)
+import SamJs from 'https://cdn.jsdelivr.net/npm/sam-js@0.3.1/dist/samjs.esm.min.js';
 import { melodyOf } from './melodies.js';
 
 // ============================================================ speech
@@ -289,8 +290,7 @@ function band() {
  */
 export function speakText(text, voice, { mood = 0, who = 0, clauses = phonemesOf(text) } = {}) {
   if (!clauses.length) return null;
-  const tempo = TEMPO/(1 + mood*0.08 + ((who*7) % 11 - 5)*0.015);
-  const segments = plan(clauses, tempo);
+  const segments = plan(clauses, tempoOf(mood, who));
   const end = segments.at(-1).start + segments.at(-1).dur;
   const samples = new Float32Array(Math.ceil(end*SAMPLE_RATE));
   const { pitch, formant = 1, sharpness = 6 } = voice;
@@ -359,6 +359,41 @@ export function speakText(text, voice, { mood = 0, who = 0, clauses = phonemesOf
     samples[n] = Math.tanh(samples[n]*gain*1.2)/Math.tanh(1.2)*Math.min(1, n/fade, (samples.length - n)/fade);
   }
   return samples;
+}
+
+const tempoOf = (mood, who) => TEMPO/(1 + mood*0.08 + ((who*7) % 11 - 5)*0.015);
+/**
+ * How long speakText's line of these clauses lasts, without making it.
+ * @param {object[]} clauses - as phonemesOf's
+ * @param {{mood?: number, who?: number}} [options] - as speakText's
+ * @returns {number} seconds
+ */
+export function lineLength(clauses, { mood = 0, who = 0 } = {}) {
+  if (!clauses.length) return 0;
+  const last = plan(clauses, tempoOf(mood, who)).at(-1);
+  return Math.ceil((last.start + last.dur)*SAMPLE_RATE)/SAMPLE_RATE;
+}
+export const MOUTH_FRAME = 0.05; // seconds over which how wide the mouth is follows a line
+/**
+ * A line made (speakText's samples), with how loud it is through each MOUTH_FRAME, for a mouth to follow, and how loud
+ * while sounding (the loudest half of those frames' RMS), to bring it to the speaker's babble's loudness.
+ * @param {{pitch: number, formant: number, sharpness: number}} voice
+ * @param {{mood?: number, who?: number, clauses: object[]}} options - as speakText's
+ * @returns {?{samples: Float32Array, mouth: Float32Array, rms: number}}
+ */
+export function lineSound(voice, options) {
+  const samples = speakText('', voice, options);
+  if (!samples?.length) return null;
+  const frame = Math.round(MOUTH_FRAME*SAMPLE_RATE), mouth = new Float32Array(Math.ceil(samples.length/frame));
+  const power = new Float32Array(mouth.length);
+  for (let i = 0; i < samples.length; i++) {
+    const k = Math.floor(i/frame);
+    mouth[k] = Math.max(mouth[k], Math.abs(samples[i])*1.2);
+    power[k] += samples[i]*samples[i]/frame;
+  }
+  const loudest = power.filter(e => e > 1e-5).sort().slice(-Math.ceil(power.length/2));
+  const rms = Math.sqrt(loudest.reduce((a, b) => a + b, 0)/(loudest.length || 1));
+  return { samples, mouth, rms };
 }
 
 // The pitch through the line, as babble's through a phrase: each clause in the speaker's melody, lifted on stressed

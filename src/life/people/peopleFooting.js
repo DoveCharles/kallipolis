@@ -2,6 +2,8 @@ import { Y_PATH, Y_SIDEWALK } from '../../core/scene.js';
 import { carriageSpot, getTrainShuttles, getTrainStations, holdTrain } from '../../trains/trains.js';
 import { possession } from '../possession.js';
 import { peopleNav, wrapAngle } from './people.js';
+import { S } from '../../core/shared.js';
+import { startFall } from './peopleFall.js';
 
 // ============================================================ where someone possessed is standing
 // Walked about by hand (see walkPossessed in peopleTracking.js), someone is on the ground — a hangout's, the road's or
@@ -84,10 +86,25 @@ export function nearestRaisedVertex(x, z, y) {
   }));
   return best;
 }
-// Up on one: at its height there, held at the ledge — or, walking off a ramp's foot, back on the ground.
+/** How far past a raised walkway's walkable edge its balustrade or ledge is: any further out, there's nothing underfoot. */
+const EDGE_OVER = 0.35;
+/** Whether (x, z) is out past the edge of the raised walkway at height y (see peopleFall.js). */
+export function offRaisedEdge(x, z, y) {
+  const s = raisedSurfaceAt(x, z, y);
+  return !s || s.over > EDGE_OVER;
+}
+// Up on one: at its height there, held at the ledge — or, walking off a ramp's foot, back on the ground; or, jumping,
+// over the ledge and falling (see peopleFall.js).
 function onRaised(p, f, x, z) {
   const s = raisedSurfaceAt(x, z, f.y), atFoot = f.y <= Y_PATH + RAISED_STEP*0.5;
   if (!s || (s.over > 0 && atFoot)) { p.footing = null; return null; }
+  if (s.over > 0 && p.hop?.h > 0) {
+    f.y = s.y;
+    if (s.over <= EDGE_OVER) return { x, y: s.y, z };
+    p.footing = null; p.y = s.y + p.hop.h;
+    startFall(p, p.hop.vy/S.peopleSize);
+    return null;
+  }
   f.y = s.y;
   return { x: s.x, y: s.y, z: s.z }; // (held at the ledge, if they'd walk past it)
 }

@@ -31,14 +31,14 @@ const SWIM_SINK_SHARE = 0.75; // (aqua people swim: sunk this share of their hei
 const STEP_IN_VOLUME = 0.15; // (the splash sound stepping onto the water, as a share of a car going in)
 const FX_SHARE = 0.5, LAND_SMOKE_PUFFS = 3, PERSON_WIDTH = 0.5;
 
-const decks = () => [S.roadFootprint, S.pathFootprint];
+const decks = () => [S.roadFootprint, S.walkDeck];
 const overOpenWater = (x, z) => isOpenWater(x, z, decks());
 const onDecks = (x, z) => onAnyDeck(x, z, decks());
 // The same questions asked of someone at the very spot they were asked last — anyone standing about, frame after frame —
 // get the answers they had then, kept on them (p.waterHere) along with the water and footprints they came from: each of
 // those is a new array whenever it changes, and then everything's asked again.
 function waterHere(p) {
-  const visible = getVisibleWaterRegion(), region = getWaterRegion(), roads = S.roadFootprint, paths = S.pathFootprint;
+  const visible = getVisibleWaterRegion(), region = getWaterRegion(), roads = S.roadFootprint, paths = S.walkDeck;
   const h = p.waterHere ??= { x: NaN, z: NaN, visible: null, region: null, roads: null, paths: null, open: null, top: undefined, deck: null };
   if (h.x !== p.x || h.z !== p.z || h.visible !== visible || h.region !== region || h.roads !== roads || h.paths !== paths) {
     h.x = p.x; h.z = p.z; h.visible = visible; h.region = region; h.roads = roads; h.paths = paths;

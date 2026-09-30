@@ -6,3 +6,4 @@
 [oneliners] {weight = 1}
 [places] {weight = 2}
 [walking] {weight = 3, is = walking}
+I'm not talking to you until you put some clothes on. {other.is = nude, is != nude, weight = 1500, end}

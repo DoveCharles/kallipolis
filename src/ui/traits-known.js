@@ -1,5 +1,7 @@
 import { modifiersOf, tierOf } from '../core/entries.js';
-import { onProfilesLoaded, peopleListsLoaded, peopleTraitEntries, sampleCardText } from '../life/profiles.js';
+import { App } from '../core/shared.js';
+import { onProfilesLoaded, peopleListsLoaded, peopleTraitEntries, profileOf, sampleCardText } from '../life/profiles.js';
+import { toUi } from './ui-scale.js';
 import { openWindow } from './w3-window.js';
 import { mulberry32 } from '../core/math.js';
 
@@ -130,20 +132,55 @@ function refreshWindow() {
       if (opened.has(key)) opened.delete(key); else opened.add(key);
       mods.hidden = !opened.has(key); cell.classList.toggle('tk-open', opened.has(key));
     });
+    head.dataset.energy = ''; // (a right click searches, for 1 energy: see findHolder)
+    head.addEventListener('contextmenu', e => { e.preventDefault(); findHolder(key, e); });
     cell.append(head, mods);
     cells.push(cell);
   });
   win.list.replaceChildren(...cells);
 }
+// ---- right click: someone out and about holding the trait, the camera snapped to them for 1 energy — or "Nobody found!"
+// by the pointer, for nothing; someone already found for that trait this session is free (a hidden (UNKNOWN) love or hate doesn't count: their card wouldn't show it). They're
+// gone through in order of person id, each trait remembering who it was on last: right click the next, shift the one before.
+const lastFound = new Map(); // key → the person id it last snapped to
+const paidFor = new Set(); // 'key|id': found already this session, so going back to them is free
+function findHolder(key, e) {
+  const [side, ...rest] = key.split(':'), text = rest.join(':');
+  const found = [];
+  (App.people || []).forEach((p, i) => {
+    if (!p || p.mode === 'none' || p.mode === 'dead' || p.indoors || p.train) return;
+    const base = profileOf(p.id, p.isMan ?? null, p.moodNow)[side === 'love' ? 'lovesBase' : 'hatesBase'];
+    if (base.some(t => t && t.toLowerCase() === text)) found.push({ i, id: p.id });
+  });
+  if (!found.length) { sayAt('Nobody found!', e); return; }
+  found.sort((a, b) => a.id - b.id);
+  const last = lastFound.get(key) ?? -Infinity;
+  const pick = e.shiftKey
+    ? [...found].reverse().find(f => f.id < last) ?? found[found.length - 1] // (the one before, round to the last)
+    : found.find(f => f.id > last) ?? found[0];                              // (the next, round to the first)
+  const paid = key + '|' + pick.id;
+  if (!paidFor.has(paid)) { if (!App.spendEnergy?.()) return; paidFor.add(paid); } // (no energy: flashes it)
+  lastFound.set(key, pick.id);
+  App.followPerson(pick.i);
+}
+function sayAt(text, e) {
+  const el = document.createElement('div');
+  el.className = 'tk-nobody';
+  el.textContent = text;
+  el.style.left = toUi(e.clientX) + 'px'; el.style.top = toUi(e.clientY) + 'px';
+  document.body.append(el);
+  el.addEventListener('animationend', () => el.remove());
+}
 /** Open the list of identified traits. @returns {void} */
 export function openTraitsKnown() {
-  openWindow({ id: 'traits-known', title: 'Identified Traits', width: 580, resizable: true,
+  openWindow({ id: 'traits-known', title: 'Identified Traits', width: 580, resizable: true, noOk: true,
     fill: body => {
       body.innerHTML = `<div class="tk-bar"><input type="search" class="tk-search" placeholder="Search">
         <select class="select-input tk-sort"><option value="alpha">A–Z</option><option value="recent">Recent</option></select>
         <label class="tk-group-toggle"><input type="checkbox"> Group</label></div>
         <div class="tk-list"></div>
-        <div class="tk-foot"><span class="tk-count"></span><span class="tk-pager"><button class="btn tk-prev">&lt;</button> <span class="tk-page"></span> <button class="btn tk-next">&gt;</button></span></div>`;
+        <div class="tk-foot"><span class="tk-count"></span><span class="tk-pager"><button class="btn tk-prev">&lt;</button> <span class="tk-page"></span> <button class="btn tk-next">&gt;</button></span></div>
+        <div class="tk-hint">Right click to search, shift for previous (1 <img class="meter-icon" src="assets/icons/energy.png" alt="energy">)</div>`;
       const $ = sel => body.querySelector(sel);
       win = { list: $('.tk-list'), pageText: $('.tk-page'), prev: $('.tk-prev'), next: $('.tk-next'), count: $('.tk-count') };
       const search = $('.tk-search'), sort = $('.tk-sort'), group = $('.tk-group-toggle input');

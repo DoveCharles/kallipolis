@@ -8,6 +8,7 @@ import { splitBody } from './bodySplit.js';
 import { fitSkirt } from './skirtFit.js';
 import { fitJeans } from './jeansFit.js';
 import { OUTFITS, OUTFIT_ARM, OUTFIT_CHEST, OUTFIT_COLUMNS, OUTFIT_COLUMN_COUNT, OUTFIT_LEG, OUTFIT_TILES, buildOutfitTexture, pickOutfit } from './outfits.js';
+import { makeCensorMesh } from './peopleCensor.js';
 import { HEADSHOT_LAYER, PEOPLE_MAX, people, peopleMesh, setPersonModel } from './people.js';
 
 // =========================================== PEOPLE MODEL ===========================================
@@ -479,6 +480,7 @@ const PERSON_LASHES = ['Eyelash1', 'Eyelash2', 'Eyelash3'];
 // ('Cuff' is a jeans' cuff, a lighter shade of their trousers)
 // ('OutfitRed' and 'OutfitGreen' are only for an outfit's texture — see outfits.js — OutfitRed's fourth number being
 // which outfit they wear, 0 for none, and OutfitGreen's which column of the outfits' texture)
+// ('Cuff''s fourth number is 1 for someone nude: see setNude)
 // ('Top''s fourth number is 1 for a villain, 0 for anyone else — only ped view reads it: see ui/ped-view.js)
 export const PERSON_TRAIT_COLORS = ['Top', 'Pants', 'Shoes', 'Hair', 'Hat', 'Skin', 'Blood', 'Eyes', 'Glasses', 'Skirt', 'Cuff', 'OutfitRed', 'OutfitGreen'];
 // Faces pulled by moving the eye and lip bones' vertices in the rest pose (see personShape): how skeptical someone is in the
@@ -499,7 +501,12 @@ const FACE_PULLS = {
   LipTop: [[0.08, 0.03, 0], 0], LipBottom: [[0.07, -0.23, 0], 0],
 };
 const FACE_PULL_EYES = 12, FACE_PULL_COUNT = Object.keys(FACE_PULLS).length;
+export const HAIR_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Hair'); // (its fourth number the headsize trait)
 const SKIN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Skin'), EYES_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Eyes'), BLOOD_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Blood');
+const NUDE_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Cuff');
+// the censor's ends (see peopleCensor.js): down the thigh from the hip, × hip-to-knee; a man's up to the stomach, × hip-to-shoulder;
+// a woman's to below the shoulder, down from it × hip-to-shoulder
+const CENSOR_THIGH = 0.3, CENSOR_STOMACH = 0.45, CENSOR_SHOULDER = 0.1;
 const OUTFIT_RED_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitRed'), OUTFIT_GREEN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitGreen');
 const BLOOD_SCALE = 1.2; // how many splotches' worth of noise fit in a unit of the figure: bigger for smaller splotches
 export const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
@@ -697,6 +704,12 @@ const PERSON_VERTEX_PARS = `
       p = vec3(p.x, p.y*cn - p.z*sn, p.y*sn + p.z*cn);
       p = vec3(p.x*ct + p.z*st, p.y, p.z*ct - p.x*st);
       looked = mix(posed, pivot + headTurn*p, personVertex.x);
+    }
+    // the headsize trait (the Hair row's fourth number, 0 read as 1: see people.js): scaled about the neck, so it stays on it
+    float headSize = personVertex.x > 0.0 ? texelFetch(personTraits, ivec2(personIndex(), ${HAIR_ROW}), 0).w : 0.0;
+    if (headSize > 0.0 && headSize != 1.0) {
+      vec3 neck = (personBone(personHeadBone)*vec4(personHeadPivot, 1.0)).xyz;
+      looked = mix(looked, neck + (looked - neck)*headSize, personVertex.x);
     }
     return looked;
   }
@@ -950,13 +963,16 @@ function injectPersonShader(shader, uniforms, look) {
   const blushed = colored && look.blushSlot != null, glinted = colored && look.pupilSlot != null;
   const rested = splotched || outfitted || blushed || glinted;
   const hideHead = colored ? 'if (personIndex() == personHidden && personVertex.x > 0.0) transformed = (personBone(personChestBone)*vec4(personChestPivot, 1.0)).xyz;' : '';
+  // (nude: the clothes' slots take their skin)
+  const nudeIf = (look.nudeSlots || []).length ? `personTrait(${NUDE_ROW}).w > 0.5 && (${look.nudeSlots.map(slot => `personSlotIndex == ${slot}`).join(' || ')})` : '';
+  const nude = nudeIf ? `${nudeIf} ? personTrait(${SKIN_ROW}).rgb : ` : '';
   const bands = (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? personTrait(${SKIN_ROW}).rgb : personTrait(${b.colorRow}).rgb) : `).join('');
   // (blood is drawn over the slots it's asked for, and over a band of clothes only where it shows skin)
   const bloodAmount = `personTrait(${BLOOD_ROW}).w`;
-  const bloodOver = !splotched ? '' : (look.bloodOnBands ? (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? ${bloodAmount} : 0.0) : `).join('') : '')
+  const bloodOver = !splotched ? '' : (nudeIf && look.bloodOnBands ? `${nudeIf} ? ${bloodAmount} : ` : '') + (look.bloodOnBands ? (look.bands || []).map(b => `personSlotIndex == ${b.slot} ? (${b.number}.0 >= personTrait(${PERSON_CLOTHING_ROW})[${b.cut}] ? ${bloodAmount} : 0.0) : `).join('') : '')
     + `(${look.bloodSlots.map(slot => `personSlotIndex == ${slot}`).join(' || ')}) ? ${bloodAmount} : 0.0`;
   const color = colored
-    ? 'vPersonColor = ' + bands + Object.entries(look.traitColors).map(([slot, row]) => `personSlotIndex == ${slot} ? personTrait(${row}).rgb : `).join('') + 'personPalette[personSlotIndex];' : '';
+    ? 'vPersonColor = ' + nude + bands + Object.entries(look.traitColors).map(([slot, row]) => `personSlotIndex == ${slot} ? personTrait(${row}).rgb : `).join('') + 'personPalette[personSlotIndex];' : '';
   shader.vertexShader = shader.vertexShader
     .replace('void main() {', `void main() {
       #ifdef PERSON_CULL
@@ -1017,7 +1033,7 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name 
   material.defines = { ...material.defines, ROOM_LAMP: '', ROOM_GLOW: '' };
   if (culled) { material.defines.PERSON_CULL = ''; depth.defines = { ...depth.defines, PERSON_CULL: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
-  const key = ['person', byAttribute, culled, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, look.femaleOnly.join(','), (look.lashes || []).join(','), look.blushSlot ?? '', look.pupilSlot ?? ''].join('|');
+  const key = ['person', byAttribute, culled, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, look.femaleOnly.join(','), (look.lashes || []).join(','), look.blushSlot ?? '', look.pupilSlot ?? '', (look.nudeSlots || []).join(',')].join('|');
   material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { ...look, layer: byAttribute });
   material.customProgramCacheKey = () => key;
   depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly, lashes: look.lashes, clearThighs: look.clearThighs, shadow: true, layer: byAttribute });
@@ -1120,6 +1136,15 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const inArm = bones.map(bone => isArmBone.test(bone.name));
   const chestBone = boneIndex.get(bones[boneByName.get('ShoulderL') ?? 0].parent) ?? 0;
   const chestPivot = bones[chestBone].getWorldPosition(new THREE.Vector3());
+  // the censor's bones and ends at rest (see peopleCensor.js): the thigh's parent and the chest; along the body's middle
+  const censorRest = (() => {
+    const at = name => bones[boneByName.get(name)].getWorldPosition(new THREE.Vector3());
+    const hip = at('ThighL'), knee = at('KneeL'), shoulder = at('ShoulderL');
+    const middle = y => new THREE.Vector3(0, y, lerp(hip.z, chestPivot.z, (y - hip.y)/Math.max(1e-6, chestPivot.y - hip.y)));
+    return { pelvis: boneIndex.get(bones[boneByName.get('ThighL')].parent) ?? chestBone, chest: chestBone,
+      low: middle(hip.y - CENSOR_THIGH*(hip.y - knee.y)), highMan: middle(hip.y + CENSOR_STOMACH*(shoulder.y - hip.y)),
+      highWoman: middle(shoulder.y - CENSOR_SHOULDER*(shoulder.y - hip.y)) };
+  })();
   const armBonesR = new THREE.Vector2(boneByName.get('ShoulderR') ?? -1, boneByName.get('ElbowR') ?? -1);
 
   // ============== BODY POSE ============== 
@@ -1670,6 +1695,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     PERSON_TRAIT_COLORS.forEach((part, k) => { colorFor[part](); traits.set([color.r, color.g, color.b], texel(2 + k)); });
     traits[texel(BLOOD_ROW) + 3] = 0; // (no splotches: whoever had this slot before may have died covered in blood)
     wardrobe[i] = 0; // (in the clothes they came in)
+    traits[texel(NUDE_ROW) + 3] = 0; // (dressed, till people.js says otherwise: see setNude)
     dressOutfit(i, id, mulberry32(5151 + id*7919), mulberry32(5152 + id*7919));
   }
   /**
@@ -1783,6 +1809,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
    * @returns {void}
    */
   function changeClothes(i, id, rng) {
+    if (traits[(NUDE_ROW*PEOPLE_MAX + i)*4 + 3] > 0.5) return; // (the nude never change)
     const man = isMan[i] === 1, seed = wardrobe[i] = 1 + Math.floor(rng()*2**31);
     if (!man) wear(skirtLayer, i, rng() < SKIRT_CHANCE ? otherStyle(skirtLayer, skirtLayer.girls, i, rng, true) : -1);
     if (skirtLayer.of[i] >= 0) wear(jeansLayer, i, -1);
@@ -1794,6 +1821,24 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     }
     // (and any outfit that goes with those over them, as in assignAppearance)
     dressOutfit(i, id, mulberry32(seed + 4), mulberry32(seed + 5));
+  }
+  /**
+   * The nude trait: skin for clothes (see nudeSlots), no skirt, jeans or outfit, and the censor over them; or dressed
+   * again in new clothes.
+   * @param {number} i - their slot
+   * @param {number} id - their person id
+   * @param {boolean} on - nude or not
+   * @returns {void}
+   */
+  function setNude(i, id, on) {
+    const texel = row => (row*PEOPLE_MAX + i)*4;
+    traits[texel(NUDE_ROW) + 3] = on ? 1 : 0;
+    if (on) {
+      wear(skirtLayer, i, -1); wear(jeansLayer, i, -1);
+      traits[texel(OUTFIT_RED_ROW) + 3] = traits[texel(OUTFIT_GREEN_ROW) + 3] = 0;
+      traits.set(PERSON_CLOTHING.map(() => 1), texel(PERSON_CLOTHING_ROW)); // (every band bare; .w, the lashes, kept)
+    } else changeClothes(i, id, mulberry32(9191 + id*7919));
+    traitTexture.needsUpdate = true;
   }
   // ---- worn gifts (see life/gifts.js): a style by its name in any layer (the glasses' Sunglasses), whether slot `i` wears
   // it, putting it on them (handing back the name of what it replaced in that layer, null for nothing, or undefined if it
@@ -1821,7 +1866,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   // a woman's clothes depend on her age, which comes from people/*.txt: whenever that (re)loads, work out everyone's
   // clothing again, without touching the rest of how they look
   onProfilesLoaded(() => {
-    people.forEach((p, i) => { traits.set(clothingRowFor(p.id, i), (PERSON_CLOTHING_ROW*PEOPLE_MAX + i)*4); });
+    people.forEach((p, i) => { if (traits[(NUDE_ROW*PEOPLE_MAX + i)*4 + 3] < 0.5) traits.set(clothingRowFor(p.id, i), (PERSON_CLOTHING_ROW*PEOPLE_MAX + i)*4); });
     traitTexture.needsUpdate = true;
   });
 
@@ -1848,6 +1893,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
       ({ slot: PERSON_SLOTS.indexOf(c.band + (k + 1)), number: k + 1, cut, colorRow: traitRow(c.part) }))),
     outfitSlots: ['Top', 'Tummy1', 'Tummy2'].map(slot => PERSON_SLOTS.indexOf(slot)), outfitMap: buildOutfitTexture(),
     blushSlot: PERSON_SLOTS.indexOf('Skin'), pupilSlot: PERSON_SLOTS.indexOf('Black'),
+    nudeSlots: ['Top', 'Pants', 'Shoes', ...PERSON_CLOTHING.flatMap(c => Array.from({ length: c.count }, (_, k) => c.band + (k + 1)))].map(slot => PERSON_SLOTS.indexOf(slot)),
   };
   // (a sleeve's bands and a leg's, where they're covered, take the arm's and leg's tiles; and so does the top of the legs, always covered)
   bodyLook.outfitBands = bodyLook.bands.flatMap(b => { const band = PERSON_SLOTS[b.slot]; return band.startsWith('Sleeve') ? [{ ...b, part: 1 }] : band.startsWith('Leg') ? [{ ...b, part: 2 }] : []; });
@@ -1860,6 +1906,9 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   geometry.setAttribute('instanceEyes', eyes);
   geometry.setAttribute('instancePupil', pupil);
   const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
+  // (the nude trait's censor, pelvis to chest: see peopleCensor.js)
+  const censor = makeCensorMesh({ vertexPars: PERSON_VERTEX_PARS, uniforms, anim, body: mesh, nudeRow: NUDE_ROW, skinRow: SKIN_ROW, headshotLayer: HEADSHOT_LAYER,
+    rest: { ...censorRest, tall: geometry.boundingBox.max.y - geometry.boundingBox.min.y } });
   const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair'), 1: traitRow('Hat') }, femaleOnly: [] };
   const glassesLook = { palette: hairPalette, traitColors: { 0: traitRow('Glasses') }, femaleOnly: [] };
   const looks = { hair: hairLook, glasses: glassesLook, skirt: { palette: [new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Skirt') }, femaleOnly: [], clearThighs: !!thighs },
@@ -1892,7 +1941,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   personCulling.personTall.value = box.max.y - box.min.y;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, wears, putOn, takeOff,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, wears, putOn, takeOff,
     headBone: headBone ?? 0, headPivot, face, chestBone, hands, unitsPerMetre, floorY: geometry.boundingBox.min.y, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

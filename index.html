@@ -20,7 +20,7 @@
 </script>
 <!-- every UI icon, fetched now and held (an <img> or mask using one later finds it ready): keep in step with assets/icons/ -->
 <script>
-window.KALLIPOLIS_ICONS = 'car card-heart card-heart-on edit edit-open energy evil favorites favorites-on grid-toggle grid-toggle-on holy identify map-eye map-eye-hidden maps maps-open negative panel-toggle ped-view ped-view-on positive projection-orthographic projection-perspective redo sound-off sound-on status/adderall status/asleep status/bloodlustt status/cactus status/choc status/coffeel status/cold status/confused status/deadbutnotyet status/energydrink status/glue status/heartpill status/hotaf status/hotdog status/icecream status/itburns status/jogging status/leafl status/lucky status/magicbroth status/mushroom status/painkiller status/pipe status/poppy status/powder status/relax status/scared status/sheet status/sick status/smokes status/starving status/stealth status/sweetie status/thedrink status/tired status/toad status/tranqqed status/trumpet status/willypill status/withdraw status/zombie touch-add undo world world-open'.split(' ').map(name => Object.assign(new Image(), { src: `assets/icons/${name}.png` }));
+window.KALLIPOLIS_ICONS = 'car card-heart card-heart-on edit edit-open energy evil favorites favorites-on grid-toggle grid-toggle-on holy identify map-eye map-eye-hidden maps maps-open negative panel-toggle ped-view ped-view-on positive projection-orthographic projection-perspective redo sound-off sound-on status/adderall status/asleep status/bloodlustt status/cactus status/choc status/coffeel status/cold status/confused status/deadbutnotyet status/energydrink status/glue status/heartpill status/hotaf status/hotdog status/icecream status/itburns status/jogging status/leafl status/lucky status/magicbroth status/mushroom status/painkiller status/pipe status/poppy status/powder status/gift status/relax status/scared status/sheet status/sick status/smokes status/starving status/stealth status/sweetie status/thedrink status/tired status/toad status/tranqqed status/trumpet status/willypill status/withdraw status/zombie touch-add undo world world-open'.split(' ').map(name => Object.assign(new Image(), { src: `assets/icons/${name}.png` }));
 </script>
 <script type="module" src="src/main.js"></script>
 </head>
@@ -222,6 +222,7 @@ try {
       <div data-settings="dev">
       <div class="row"><label>Infinite energy</label><button class="toggle-switch" id="s-infiniteenergy"><span class="knob"></span></button></div>
       <div class="row"><label>Free purchases</label><button class="toggle-switch" id="s-freepurchases"><span class="knob"></span></button></div>
+      <div class="row"><label>Infinite daily gifts</label><button class="toggle-switch" id="s-infinitegifts"><span class="knob"></span></button></div>
       </div>
       <div data-settings="speech">
       <div class="slider-row"><div class="row"><label>Chat speed</label><span class="val" id="dv-chatspeed">1</span></div>
@@ -314,9 +315,10 @@ try {
      its own id (see src/ui/morality.js, which finds its pieces with #morality-meter's own querySelector rather than
      by id, for exactly that reason) -->
 <div id="morality-meter" class="meter meter-settling">
+  <button class="canvas-tool" id="btn-daily-gift" title="Daily gift"><img src="assets/icons/status/gift.png" alt="Daily gift"></button>
   <button class="canvas-tool" id="btn-identify" title="Identified traits"><img src="assets/icons/identify.png" alt="Identify"></button>
   <div class="money" title="Money"><span class="money-n">£000000</span></div>
-  <div class="energy" title="Energy: 1 regained every 20 minutes"><div class="energy-count"><span class="energy-n">10/10</span><img class="meter-icon" src="assets/icons/energy.png" alt="Energy"></div><div class="energy-timer">0:00:00</div></div>
+  <div class="energy" title="Energy: 1 regained every 20 minutes"><div class="energy-count"><span class="energy-n">000</span><img class="meter-icon" src="assets/icons/energy.png" alt="Energy"></div></div>
   <div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Morality</div><button class="win3-min" title="Minimize"></button><button class="win3-max" title="Maximize"></button></div>
   <div class="meter-head"><span class="meter-title">Morality</span><button class="meter-toggle" title="What the morality is made of">show</button></div>
   <div class="meter-readout"><div class="meter-track"><div class="meter-bar"><div class="meter-fill"></div></div><div class="meter-center"></div></div><span class="meter-value"><span class="meter-good">000</span><img class="meter-icon" src="assets/icons/holy.png" alt="Good"> / <span class="meter-evil">000</span><img class="meter-icon" src="assets/icons/evil.png" alt="Evil"></span></div>
