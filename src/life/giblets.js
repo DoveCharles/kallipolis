@@ -350,9 +350,10 @@ const noteMesh = softMesh(THREE.NormalBlending, 'NoteFx', glyphTexture(ctx => {
 // a scrap of confetti, a plain oblong (tinted), for the partying (confettiFx)
 const confettiMesh = softMesh(THREE.NormalBlending, 'ConfettiFx', glyphTexture(ctx => ctx.fillRect(18, 26, 28, 12)));
 // a see-through round puff, a cloud's shape, for breath fogging in the cold (breathFx)
+const droolMesh = softMesh(THREE.NormalBlending, 'DroolFx', glyphTexture(ctx => ctx.fillRect(0, 0, 64, 64)));
 const puffMesh = softMesh(THREE.NormalBlending, 'PuffFx', glyphTexture(ctx => { ctx.beginPath(); ctx.arc(32, 32, 30, 0, Math.PI*2); ctx.fill(); }));
 glowMesh.renderOrder = smokeMesh.renderOrder = sparkleMesh.renderOrder = clippingMesh.renderOrder = heartMesh.renderOrder = tearMesh.renderOrder
-  = zedMesh.renderOrder = noteMesh.renderOrder = confettiMesh.renderOrder = puffMesh.renderOrder = 2;
+  = zedMesh.renderOrder = noteMesh.renderOrder = confettiMesh.renderOrder = puffMesh.renderOrder = droolMesh.renderOrder = 2;
 // a haircut's cloud: solid round puffs, facing the camera, popping up and shrinking away rather than fading
 const cloudMesh = (() => {
   const material = new THREE.MeshBasicMaterial({ toneMapped: false }), geometry = new THREE.CircleGeometry(0.5, 24);
@@ -409,12 +410,12 @@ export function healFx(at, height, lying, heading, dt) {
   const add = particle => { if (softParticles.length >= softCap()*2) softParticles.shift(); softParticles.push({ born: now, ...particle }); };
   const sx = Math.sin(heading ?? 0), sz = Math.cos(heading ?? 0);
   // a point on the body, `k` 0 at the feet to 1 at the head
-  const along = k => lying ? { x: at.x + sx*k*height, y: at.y + 0.22*height, z: at.z + sz*k*height } : { x: at.x, y: at.y + k*height, z: at.z };
+  const along = k => lying ? { x: at.x + sx*k*height, y: at.y + 0.12*height, z: at.z + sz*k*height } : { x: at.x, y: at.y + k*height, z: at.z };
   for (let k = count(HEAL_PUFFS_PER_SECOND); k > 0; k--) {
-    const angle = Math.random()*Math.PI*2, out = Math.random()*(lying ? 0.2 : 0.12)*height, on = along(0.05 + Math.random()*0.9);
+    const angle = Math.random()*Math.PI*2, out = Math.random()*0.12*height, on = along(0.05 + Math.random()*0.9);
     add({ kind: 'cloud', x: on.x + Math.cos(angle)*out, y: on.y, z: on.z + Math.sin(angle)*out,
       vx: Math.cos(angle)*0.1*height, vy: 0.08*height, vz: Math.sin(angle)*0.1*height,
-      size: height*(0.2 + Math.random()*0.1)*(lying ? 1.4 : 1), growth: 0.3, life: 0.6 + Math.random()*0.4, opacity: 1,
+      size: height*(0.2 + Math.random()*0.1), growth: 0.3, life: 0.6 + Math.random()*0.4, opacity: 1,
       color: HEAL_PUFF_COLOR.clone().lerp(WHITE, 0.2 + Math.random()*0.25) });
   }
   for (let k = count(HEARTS_PER_SECOND); k > 0; k--) {
@@ -462,14 +463,14 @@ export function sweatFx(at, away, height, fling = 0, follow = null) {
     vx: away.x*out, vy: fling ? (0.5 + Math.random()*0.5)*height : -0.05*height, vz: away.z*out,
     size: height*(0.03 + Math.random()*0.01), growth: 0, life: fling ? 0.6 + Math.random()*0.3 : 0.9, opacity: 0.9, color: SWEAT_COLOR }, follow));
 }
-// a drop of drool swelling at `at` (a corner of the mouth), then dripping slowly off;
-const DROOL_COLOR = new THREE.Color(0xe8f6ff);
+// a square of drool stretching down from `at` (a corner of the mouth), then dropping off;
+const DROOL_COLOR = new THREE.Color(0xe8f6ff), DROOL_STRETCH = 3;
 export function droolFx(at, height, follow = null) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
-  const swell = TEAR_SWELL*2;
-  softParticles.push(carried({ kind: 'tear', born: performance.now()/1000, x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, fall: 0.08, swell,
-    size: height*(0.022 + Math.random()*0.008), growth: 0, life: swell + 1.1 + Math.random()*0.4, opacity: 0.8, color: DROOL_COLOR }, follow));
+  const swell = 0.8 + Math.random()*0.4;
+  softParticles.push(carried({ kind: 'drool', born: performance.now()/1000, x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, swell,
+    size: height*(0.014 + Math.random()*0.004), growth: 0, life: swell + 0.6, opacity: 0.85, color: DROOL_COLOR }, follow));
 }
 // a Z drifting up and away off their head at `at`, sleepy, and one of a trail of them;
 export function zedFx(at, height) {
@@ -928,13 +929,14 @@ export function updateGiblets(t) {
   // soft particles: each drifts on, grows by `growth` of its size over its life, and fades in and out
   while (softParticles.length && t - softParticles[0].born > softParticles[0].life) softParticles.shift();
   viewRight.setFromMatrixColumn(camera.matrixWorld, 0); viewUp.setFromMatrixColumn(camera.matrixWorld, 1);
-  const drawnSoft = { glow: 0, smoke: 0, sparkle: 0, clipping: 0, cloud: 0, heart: 0, tear: 0, zed: 0, note: 0, confetti: 0, puff: 0 };
+  const drawnSoft = { glow: 0, smoke: 0, sparkle: 0, clipping: 0, cloud: 0, heart: 0, tear: 0, zed: 0, note: 0, confetti: 0, puff: 0, drool: 0 };
   const meshes = { glow: glowMesh, smoke: smokeMesh, sparkle: sparkleMesh, clipping: clippingMesh, cloud: cloudMesh, heart: heartMesh, tear: tearMesh,
-    zed: zedMesh, note: noteMesh, confetti: confettiMesh, puff: puffMesh };
+    zed: zedMesh, note: noteMesh, confetti: confettiMesh, puff: puffMesh, drool: droolMesh };
   softParticles.forEach(p => {
     const age = t - p.born, life = age/p.life, mesh = meshes[p.kind];
     if (life > 1 || drawnSoft[p.kind] >= softCap() || !isNearFx(p)) return;
     const swelling = age < (p.swell ?? 0); // (a tear still welling up: it holds still, growing)
+    if (p.kind === 'drool' && !swelling) p.vy -= GRAVITY*0.5*dt;
     if (p.kind === 'tear' && !swelling) { p.vy -= GRAVITY*(p.fall ?? 0.35)*dt; p.vx *= 1 - Math.min(1, dt*3); p.vz *= 1 - Math.min(1, dt*3); } // (a tear: spills out, then drops)
     if (p.kind === 'confetti') { const drag = 1 - Math.min(1, dt*4); p.vx *= drag; p.vz *= drag; p.vy = Math.max(p.vy*drag - GRAVITY*0.3*dt, -0.5); } // (confetti: bursts out, the air stops it, then it flutters down)
     if (p.kind === 'clipping') { p.vy -= GRAVITY*0.5*dt; p.vx *= 1 - Math.min(1, dt*1.5); p.vz *= 1 - Math.min(1, dt*1.5); } // (a curl of hair: falls, slowed by the air)
@@ -958,12 +960,15 @@ export function updateGiblets(t) {
       if (across*across + up*up > 1e-8) placed.quaternion.multiply(sparkleRoll.setFromAxisAngle(sparkleAxis, Math.atan2(across, -up)));
     }
     if (rolls) placed.quaternion.multiply(sparkleRoll.setFromAxisAngle(sparkleAxis, p.roll + age*p.spin));
-    placed.scale.setScalar(scale);
+    if (p.kind === 'drool') { // (hangs from its top, stretching down, then drops as it is)
+      const long = p.size*(1 + DROOL_STRETCH*Math.min(1, age/p.swell));
+      placed.position.y -= long/2; placed.scale.set(p.size*0.45, long, 1);
+    } else placed.scale.setScalar(scale);
     placed.updateMatrix();
     const i = drawnSoft[p.kind]++;
     mesh.setMatrixAt(i, placed.matrix);
     mesh.setColorAt(i, p.color);
-    mesh.userData.alpha.setX(i, p.kind === 'cloud' ? 1 : p.kind === 'puff' ? p.opacity : p.kind === 'clipping' || p.kind === 'tear' || p.kind === 'confetti' || floats ? p.opacity*Math.min(1, (1 - life)*5) : p.opacity*Math.sin(Math.PI*Math.min(1, life))**(p.kind === 'smoke' ? 1 : 0.5));
+    mesh.userData.alpha.setX(i, p.kind === 'cloud' ? 1 : p.kind === 'puff' ? p.opacity : p.kind === 'clipping' || p.kind === 'tear' || p.kind === 'drool' || p.kind === 'confetti' || floats ? p.opacity*Math.min(1, (1 - life)*5) : p.opacity*Math.sin(Math.PI*Math.min(1, life))**(p.kind === 'smoke' ? 1 : 0.5));
   });
   Object.entries(meshes).forEach(([kind, mesh]) => {
     mesh.count = drawnSoft[kind];
