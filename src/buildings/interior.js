@@ -4,7 +4,7 @@ import { S, App, buildingHolders } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
 import { possession, possessedFov } from '../life/possession.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { footprintBounds, pubStyleOf, homeSuiteOf } from './footprints.js';
+import { footprintBounds, pubStyleOf, restaurantStyleOf, homeSuiteOf, officeStyleOf } from './footprints.js';
 import { hashNameToNumber, mulberry32, pointInPolygon } from '../core/math.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { setCutout } from '../ui/pixelation.js';
@@ -371,6 +371,11 @@ function paintRoom() {
   ceilingMaterial.color.setHex(current.ceiling ?? CEILING);
   roomLit(floorMaterial); roomLit(wallMaterial); roomLit(ceilingMaterial);
   // (and a posh home's parquet or marble)
+  const wallMap = current.wallMap ?? null;
+  if (wallMaterial.map !== wallMap) {
+    wallMaterial.map = wallMaterial.emissiveMap = wallMap;
+    wallMaterial.needsUpdate = true;
+  }
   const map = current.floorMap ?? null;
   if (floorMaterial.map !== map) {
     floorMaterial.map = floorMaterial.emissiveMap = map;
@@ -1723,8 +1728,11 @@ function furnish(key) {
 // its own way (from its building's key): a bank or two of cubicles, side by side in a row or back to back, out in the
 // room or against a wall, each with its chair and its own clutter, then filing cabinets, a printer and a water cooler
 // against the walls and plants about the place. Until the model's loaded, offices are bare.
-const OFFICE_MODEL_URL = 'assets/models/Office.glb';
-let officeFurniture = null;
+// Or, by officeStyleOf, a startup's open plan: the same pieces by name from OfficeStartup.glb
+// (tools/startup-office-models.py), in STARTUP_* colours, mostly pods out in the room, and a lounge (Rug, Beanbags) and
+// PingPong table if there's room.
+const OFFICE_MODEL_URL = 'assets/models/Office.glb', STARTUP_MODEL_URL = 'assets/models/OfficeStartup.glb';
+let officeFurniture = null, startupFurniture = null;
 // Where things are on the Desk, in its own terms (life size, from its origin, x across, y up and z out of its front):
 // the top's height, its front edge, the faces of its back and left-hand panels, how far apart the desks stand in a row,
 // what's where on its top (the monitor's face and span, and the two clear patches either side), and where its right-hand
@@ -1744,28 +1752,43 @@ const LAMINATES = [0xe2ddd2, 0xf0efea, 0xc8b08a, 0xa8a8a4, 0xd8c4a0, 0x8a6a4a];
 const STEELS = [0x9a9ea3, 0xc8c4b8, 0x5a5e64, 0x8a96a0, 0xd8d6d0];
 const POTS = [0xece8e0, 0x3a3a3c, 0xb8603e, 0x8a9a8a, 0xd8ccb4];
 const OFFICE_PAINTED = { Fabric: FABRICS, Upholstery: UPHOLSTERY, Laminate: LAMINATES, Steel: STEELS, Pot: POTS };
-const officePainted = [];
-// sticky notes and mugs come in all colours, office to office and desk to desk: a material for each
+const STARTUP_FLOORS = [0xc8a878, 0xb89868, 0xa8a8a0, 0xd8c8a8, 0x8a9a8a, 0xe0d4c0];
+const STARTUP_WALLS = [0xf4f1ea, 0xf4f1ea, 0xa8c8a8, 0xf0c8c0, 0xf2d890, 0xb8d8e0, 0xd8c8e8, 0xe89a78];
+const STARTUP_PAINTED = {
+  Fabric: [0xe8735a, 0x2a9a8a, 0xf2c230, 0x9a7ad8, 0x6ac0e8, 0xf4a0c0, 0x5ab86a],
+  Upholstery: [0x2a9a8a, 0xe8735a, 0xf2c230, 0x3a6ac8, 0xe8508a, 0x26282c],
+  Laminate: [0xf4f1ea, 0xf4f1ea, 0xd8bc8a, 0xe8e0d0],
+  Steel: [0xf2c230, 0xe8735a, 0x8ae0b0, 0x26282c, 0xf4f1ea, 0x3a6ac8],
+  Pot: [0xe8a0a0, 0xd07a52, 0x6ac0e8, 0xf4f1ea, 0xf2c230, 0x9a7ad8],
+  Beanbag: [0x7a5ac8, 0xe8735a, 0xf2c230, 0x2a9a8a, 0xe8508a],
+};
+const officePainted = [], startupPainted = [];
+// sticky notes and mugs come in all colours, office to office and desk to desk: a material for each (F.clutter)
 const STICKIES = [0xf6e36a, 0xf6a6c0, 0x9ae0a0, 0x8cc8f0, 0xf8b060];
 const MUGS = [0xd84a3a, 0xf2f0ea, 0x2c4ec8, 0x3a3a3c, 0xe8c040, 0x4a9a6a];
-const clutterMaterials = { Sticky: [], Mug: [] };
+const KEEP_CUPS = [0x3ad0c0, 0xe8735a, 0xf2c230, 0x9a7ad8, 0xe8508a, 0x26282c];
 
-async function loadOfficeFurniture() {
+async function loadOfficeFurniture(url, paint, painted, mugs, set) {
+  let F;
   try {
-    officeFurniture = await loadPieces(OFFICE_MODEL_URL, OFFICE_PAINTED, officePainted, false);
+    F = await loadPieces(url, paint, painted, false);
   } catch (err) {
-    console.warn('Kallipolis: the office model failed to load; offices are left bare', err);
+    console.warn('Kallipolis: an office model failed to load; those offices are left bare', url, err);
     return;
   }
-  for (const [name, colours] of [['Sticky', STICKIES], ['Mug', MUGS]]) {
+  F.clutter = { Sticky: [], Mug: [] };
+  for (const [name, colours] of [['Sticky', STICKIES], ['Mug', mugs]]) {
     let base = null;
-    officeFurniture[name]?.object.traverse(o => { if (o.isMesh && o.material.name === name) base = o.material; });
-    if (base) clutterMaterials[name] = colours.map(c => { const m = base.clone(); m.color.setHex(c); return roomLit(m); });
+    F[name]?.object.traverse(o => { if (o.isMesh && o.material.name === name) base = o.material; });
+    if (base) F.clutter[name] = colours.map(c => { const m = base.clone(); m.color.setHex(c); return roomLit(m); });
   }
-  if (officeFurniture.OfficeChair) officeFurniture.OfficeChair.seats = measureSeats(officeFurniture.OfficeChair);
+  if (F.OfficeChair) F.OfficeChair.seats = measureSeats(F.OfficeChair);
+  if (F.Beanbag) F.Beanbag.seats = measureSeats(F.Beanbag);
+  set(F);
   if (inside && current === LAYOUTS.office) furnishOffice(inside.key, curtain.visible);
 }
-modelsLoading.push(loadOfficeFurniture());
+modelsLoading.push(loadOfficeFurniture(OFFICE_MODEL_URL, OFFICE_PAINTED, officePainted, MUGS, F => officeFurniture = F));
+modelsLoading.push(loadOfficeFurniture(STARTUP_MODEL_URL, STARTUP_PAINTED, startupPainted, KEEP_CUPS, F => startupFurniture = F));
 
 // (x, z) turned by `angle` about y (as three.js turns an object: +z towards (sin, cos)) and moved to (ox, oz)
 const turned = (x, z, angle, ox = 0, oz = 0) => {
@@ -1884,14 +1907,16 @@ function furnishOffice(key, glass) {
   const rng = mulberry32(hashNameToNumber(key + ' office'));
   const tint = mulberry32(hashNameToNumber(key + ' office colours'));
   const pick = list => list[Math.floor(tint()*list.length)];
-  office.floor.setHex(pick(OFFICE_FLOORS));
-  office.wall.setHex(pick(OFFICE_WALLS));
+  const startup = officeStyleOf(key) === 'startup';
+  office.floor.setHex(pick(startup ? STARTUP_FLOORS : OFFICE_FLOORS));
+  office.wall.setHex(pick(startup ? STARTUP_WALLS : OFFICE_WALLS));
   paintRoom();
-  for (const material of officePainted) {
-    material.color.setHex(pick(OFFICE_PAINTED[material.name]));
+  const palette = startup ? STARTUP_PAINTED : OFFICE_PAINTED;
+  for (const material of startup ? startupPainted : officePainted) {
+    material.color.setHex(pick(palette[material.name]));
     roomLit(material);
   }
-  const F = officeFurniture;
+  const F = startup ? startupFurniture : officeFurniture;
   if (!F?.Desk || !F.OfficeChair) return;
 
   const { taken, overlaps, fits, put, underCamera, againstWall, any } = planRoom(office, F, officeGroup, rng, glass, ['OfficeChair']);
@@ -1927,10 +1952,11 @@ function furnishOffice(key, glass) {
   for (let b = 0, placed = true; b < 3 && placed; b++) {
     placed = false;
     for (let tries = 0; tries < 160 && !placed; tries++) {
-      const count = 4 - Math.floor(tries/40), double = rng() < (b ? 0.4 : 0.7);
+      // (a startup's mostly pods, out in the room)
+      const count = 4 - Math.floor(tries/40), double = rng() < (startup ? 0.85 : b ? 0.4 : 0.7);
       const plan = bank(count, double);
       let spot;
-      if (!double && rng() < 0.6) {
+      if (!double && rng() < (startup ? 0.3 : 0.6)) {
         spot = againstWall(plan.area, true, { tries: 1, under: true });
         if (!spot) continue;
       } else {
@@ -1997,7 +2023,7 @@ function furnishOffice(key, glass) {
   }
   function paintClutter(object) {
     object.traverse(o => {
-      const set = o.isMesh && clutterMaterials[o.material.name];
+      const set = o.isMesh && F.clutter[o.material.name];
       if (set?.length) o.material = any(set);
     });
   }
@@ -2030,6 +2056,30 @@ function furnishOffice(key, glass) {
     if (name === 'LowCabinet' && F.Cactus && rng() < 0.5) {
       const at = turned((rng() - 0.5)*(count - 0.5)*w, 0, spot.angle, spot.x, spot.z);
       put(rng() < 0.5 ? 'Cactus' : 'Pens', at.x, at.z, rng()*Math.PI*2, { y: piece.h, small: true });
+    }
+  }
+  // (a startup's) somewhere out in the room: a table tennis table, and a rug with beanbags round it
+  const outInRoom = (r, tries = 60) => {
+    for (let k = 0; k < tries; k++) {
+      const x = (rng()*2 - 1)*(ROOM_W/2 - 1), z = (rng()*2 - 1)*(ROOM_D/2 - 1), angle = rng() < 0.5 ? 0 : Math.PI/2;
+      const area = turnedRect(r, angle, x, z);
+      if (fits(area, 0.6, 0.4) && !overlaps(area, underCamera)) return { x, z, angle, area };
+    }
+    return null;
+  };
+  if (startup && F.PingPong && rng() < 0.6) {
+    const b = F.PingPong.bounds, spot = outInRoom({ x0: b.x0 - 0.6, x1: b.x1 + 0.6, z0: b.z0, z1: b.z1 });
+    if (spot) { put('PingPong', spot.x, spot.z, spot.angle); taken.push(spot.area); }
+  }
+  if (startup && F.Rug && F.Beanbag) {
+    const b = F.Rug.bounds, spot = outInRoom(b);
+    if (spot) {
+      put('Rug', spot.x, spot.z, rng()*Math.PI*2, { small: true });
+      for (let n = 2 + Math.floor(rng()*3), a0 = rng()*Math.PI*2, k = 0; k < n; k++) {
+        const a = a0 + k*Math.PI*2/n, at = { x: spot.x + Math.sin(a)*0.7, z: spot.z + Math.cos(a)*0.7 };
+        put('Beanbag', at.x, at.z, a + Math.PI + (rng() - 0.5)*0.4);
+      }
+      taken.push(spot.area);
     }
   }
   // and plants: in the corners (not the camera's) if there's room, or else along the walls
@@ -3149,8 +3199,10 @@ function furnishClothes(key) {
 // bar along the near wall, swinging kitchen doors, booths, tables for two, four and six under checked or white cloths
 // with bentwood chairs (sat at to eat: see `diner` in planRoom), a host stand by the door, a wine rack, a dessert cart,
 // a coat stand, plants; a mural, photos and lamps on the walls; Tiffany pendants and strings of Chiantis overhead.
-const RESTAURANT_MODEL_URL = 'assets/models/Restaurant.glb';
-let restaurant = null;
+// Or, by restaurantStyleOf, a Greek taverna: the same pieces by name from RestaurantGreek.glb (tools/greek-restaurant-models.py),
+// whitewashed and blue, in GREEK_* colours.
+const RESTAURANT_MODEL_URL = 'assets/models/Restaurant.glb', GREEK_MODEL_URL = 'assets/models/RestaurantGreek.glb';
+let restaurant = null, greekRestaurant = null;
 const RESTAURANT_WALLS = [0x7a1e1a, 0xe8dcc0, 0x2a4a32, 0xd8b878, 0x5a1a22, 0xf0e6cc, 0xc8a878];
 const RESTAURANT_FLOORS = [chequer, chequer, terrazzo, 0x5a3a22, 0x7a5030];
 const RESTAURANT_PAINTED = {
@@ -3159,22 +3211,78 @@ const RESTAURANT_PAINTED = {
   Check: [0xb81e1e, 0xb81e1e, 0xa01818, 0x1e5a2a, 0x2a3a7a],
 };
 const RESTAURANT_DADOS = [0x3e2014, 0x2a160c, 0x4a2a18], RESTAURANT_RAILS = [0x1a0e08, 0xb8923a];
-const restaurantPainted = [];
-async function loadRestaurant() {
+const GREEK_WALLS = [0xffffff, 0xfaf6ee, 0xf4eee2]; // (over the stone)
+const GREEK_FLOORS = [terrazzo, 0xb8704a, 0xa85e3a, 0xc8b8a0, 0x8a6a4a];
+const GREEK_PAINTED = {
+  Wood: [0x1e5a9a, 0x2a6ab8, 0x1e4a8a, 0x2a8a9a, 0x3a7ab8],
+  Upholstery: [0x2a5aa0, 0x1e4a8a, 0x2a6ab8, 0x1e5a9a],
+  Check: [0x1e5aa8, 0x1e5aa8, 0x2a6ab8, 0x1e4a8a],
+};
+const GREEK_DADOS = [0x1e5a9a, 0x2a6ab8, 0xe8e4d8], GREEK_RAILS = [0x1e4a8a, 0xf4f0e6];
+const restaurantPainted = [], greekPainted = [];
+async function loadRestaurant(url, paint, painted, set) {
+  let F;
   try {
-    restaurant = await loadPieces(RESTAURANT_MODEL_URL, RESTAURANT_PAINTED, restaurantPainted);
+    F = await loadPieces(url, paint, painted);
   } catch (err) {
-    console.warn('Kallipolis: the restaurant model failed to load; restaurants are left bare', err);
+    console.warn('Kallipolis: a restaurant model failed to load; those restaurants are left bare', url, err);
     return;
   }
-  for (const name of ['Chair', 'Booth']) if (restaurant[name]) restaurant[name].seats = measureSeats(restaurant[name]);
+  for (const name of ['Chair', 'Booth']) if (F[name]) F[name].seats = measureSeats(F[name]);
+  set(F);
   if (inside && current === LAYOUTS.restaurant) furnishRestaurant(inside.key);
 }
-modelsLoading.push(loadRestaurant());
+modelsLoading.push(loadRestaurant(RESTAURANT_MODEL_URL, RESTAURANT_PAINTED, restaurantPainted, F => { restaurant = F; }),
+  loadRestaurant(GREEK_MODEL_URL, GREEK_PAINTED, greekPainted, F => { greekRestaurant = F; }));
 layout('restaurant', 0xffffff, () => []);
 const restaurantGroup = new THREE.Group();
 LAYOUTS.restaurant.group.add(restaurantGroup);
 Object.assign(LAYOUTS.restaurant, { furnished: restaurantGroup, panelled: true, shopfront: true, shop: true, ceiling: 0xe8dcc0, lamps: true, daylit: 0.5 });
+
+// A taverna's big beige stone blocks, STONE_M metres a tile, on walls given UVs in metres (stoneUVs).
+const STONE_M = 1.2;
+const stoneWalls = (() => {
+  const S = 512, canvas = document.createElement('canvas');
+  canvas.width = canvas.height = S;
+  const g = canvas.getContext('2d'), rng = mulberry32(11), row = S/4, joint = 5;
+  g.fillStyle = '#d8ccb4'; g.fillRect(0, 0, S, S);
+  for (let r = 0; r < 4; r++) {
+    for (let x = rng()*S, end = x + S; x < end;) {
+      const w = Math.min(end - x, S*(0.28 + rng()*0.3)), l = 222 + rng()*22;
+      g.fillStyle = `rgb(${l},${l - 12 - rng()*6},${l - 34 - rng()*10})`;
+      for (const dx of [0, -S]) g.fillRect(x + dx + joint/2, r*row + joint/2, w - joint, row - joint);
+      for (let n = 0; n < 60; n++) {
+        g.fillStyle = `rgba(${rng() < 0.5 ? '255,250,240' : '150,130,100'},${0.05 + rng()*0.08})`;
+        const px = x + rng()*(w - joint), py = r*row + joint/2 + rng()*(row - joint - 6), sz = 3 + rng()*14;
+        for (const dx of [0, -S]) g.fillRect(px + dx, py, sz, 2 + rng()*5);
+      }
+      x += w;
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+})();
+const toRoom = new THREE.Matrix4(), uvPoint = new THREE.Vector3(), uvNormal = new THREE.Vector3();
+function stoneUVs() {
+  room.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(room.matrixWorld).invert();
+  room.traverse(o => {
+    if (o.material !== wallMaterial) return;
+    toRoom.multiplyMatrices(inv, o.matrixWorld);
+    const pos = o.geometry.attributes.position, nor = o.geometry.attributes.normal, uv = o.geometry.attributes.uv;
+    for (let i = 0; i < pos.count; i++) {
+      uvPoint.fromBufferAttribute(pos, i).applyMatrix4(toRoom);
+      uvNormal.fromBufferAttribute(nor, i).transformDirection(toRoom);
+      const ax = Math.abs(uvNormal.x), ay = Math.abs(uvNormal.y), az = Math.abs(uvNormal.z);
+      const u = ax > az && ax > ay ? uvPoint.z : uvPoint.x, v = ay > ax && ay > az ? uvPoint.z : uvPoint.y;
+      uv.setXY(i, u/STONE_M, v/STONE_M);
+    }
+    uv.needsUpdate = true;
+  });
+}
 
 // Fits out the restaurant for the building with this key (see buildingKey): its furniture, where nobody stands or
 // walks, and its seats, in the room as it's now placed.
@@ -3204,13 +3312,16 @@ function furnishRestaurant(key) {
   const layout = LAYOUTS.restaurant, group = restaurantGroup;
   const rng = mulberry32(hashNameToNumber(key + ' restaurant'));
   const tint = mulberry32(hashNameToNumber(key + ' restaurant colours'));
-  const pick = openShop(layout, tint, { walls: RESTAURANT_WALLS, floors: RESTAURANT_FLOORS, painted: restaurantPainted, palette: RESTAURANT_PAINTED });
-  layout.ceiling = pick([0xe8dcc0, 0xf0e6cc, 0xd8c8a0]);
-  dadoMaterial.color.setHex(pick(RESTAURANT_DADOS));
-  lineMaterial.color.setHex(pick(RESTAURANT_RAILS));
+  const greek = restaurantStyleOf(key) === 'greek';
+  const pick = openShop(layout, tint, greek ? { walls: GREEK_WALLS, floors: GREEK_FLOORS, painted: greekPainted, palette: GREEK_PAINTED }
+    : { walls: RESTAURANT_WALLS, floors: RESTAURANT_FLOORS, painted: restaurantPainted, palette: RESTAURANT_PAINTED });
+  layout.ceiling = pick(greek ? [0xf8f6f0, 0xf4f0e6] : [0xe8dcc0, 0xf0e6cc, 0xd8c8a0]);
+  dadoMaterial.color.setHex(pick(greek ? GREEK_DADOS : RESTAURANT_DADOS));
+  lineMaterial.color.setHex(pick(greek ? GREEK_RAILS : RESTAURANT_RAILS));
   roomLit(dadoMaterial); roomLit(lineMaterial);
+  layout.wallMap = greek ? stoneWalls : null;
   paintRoom();
-  const F = restaurant;
+  const F = greek ? greekRestaurant : restaurant;
   if (!F?.Bar || !F.BackBar || !F.Chair) return;
   const plan = planRoom(layout, F, group, rng, false, []);
   const { taken, overlaps, fits, put, underCamera, WALL_SIDES, againstWall, atWall, any } = plan;
@@ -3354,15 +3465,28 @@ function furnishRestaurant(key) {
   onWall('Mural', 1.2);
   for (let n = 2 + Math.floor(rng()*3); n > 0; n--) onWall('Photos', 1.3 + rng()*0.2);
   for (let n = 3 + Math.floor(rng()*3); n > 0; n--) onWall('WallLamp', 1.75);
-  // a pendant over every other table (not right under the camera)
+  // a taverna's hanging greenery down the middle, past the camera's corner
+  const greenery = [];
+  if (F.Greenery) {
+    const z = Math.max(0, -ROOM_D/2 + 3.55);
+    for (let x = -ROOM_W/2 + 1.6; x <= ROOM_W/2 - 1.5; x += 3.3) {
+      const r = { x0: x - 1.6, x1: x + 1.6, z0: z - 0.8, z1: z + 0.8 };
+      if (overlaps(r, underCamera)) continue;
+      greenery.push(r);
+      put('Greenery', x, z, 0, { y: ROOM_H - F.Greenery.h, small: true });
+    }
+  }
+  // a pendant over every other table (not right under the camera, or the greenery)
   for (const top of tops.filter((_, k) => k % 2 === 0)) {
-    if (F.Pendant && !overlaps({ x0: top.x - 0.3, x1: top.x + 0.3, z0: top.z - 0.3, z1: top.z + 0.3 }, underCamera))
+    const r = { x0: top.x - 0.3, x1: top.x + 0.3, z0: top.z - 0.3, z1: top.z + 0.3 };
+    if (F.Pendant && !overlaps(r, underCamera) && !greenery.some(g => overlaps(r, g)))
       put('Pendant', top.x, top.z, 0, { y: ROOM_H - F.Pendant.h, small: true });
   }
   lightShop(group, 0xffd8a8, 1.0);
   seatsInWorld(layout);
+  if (greek) stoneUVs();
   // the waiter behind the host stand (see waiterbot.js)
-  if (host) placeWaiterbot(group, host, kitchen);
+  if (host) placeWaiterbot(group, host, kitchen, !greek);
 }
 /** The clothes shop's changing rooms, as the room's laid out now: where to stand in front of one (`front`) and inside it
  * (`inside`), in the world; `facing`, the heading out of it; `by`, whoever's using it; and `closed`, its curtain drawn. */
@@ -4259,7 +4383,7 @@ export function updateInteriorCamera() {
   // (a pub's music comes from up by the ceiling, over the middle of the room)
   // (a restaurant's, quietly, its own songs: assets/music/restaurant/)
   if (inside && current === LAYOUTS.pub && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)));
-  else if (inside && current === LAYOUTS.restaurant && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)), 'restaurant');
+  else if (inside && current === LAYOUTS.restaurant && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)), restaurantStyleOf(inside.key) === 'greek' ? 'greek' : 'restaurant');
   else stopPubMusic();
   updateJukebox();
   updateBarbot(!!inside && current === LAYOUTS.pub, performance.now() - occupiedAt < 1000);

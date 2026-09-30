@@ -41,18 +41,34 @@ I can't believe it's already this late. {world.hour 20-3}
 Another day at the office. {here.building = office}
 > Don't remind me. {mood = -1}
 
+Did you see the new vision board? {here.building = startup}
+> Manifesting a pay rise. {mood = -1}
+> Love the energy in here! {mood = 1}
+
 Going anywhere nice on your holidays? {here.building = salon}
 > Benidorm, same as always.
 > Can't afford it this year. {mood = -1}
 > Mind your own business. {aggression}
 
-What are you having? {here.building = restaurant}
+What are you having? {here.building = italian}
 > The veal parm. Always the veal parm.
 > Spaghetti and meatballs. {happy}
 > Whatever's cheapest. {mood = -1}
 
-Should we get a bottle? {here.building = restaurant}
+What are you having? {here.building = greek}
+> The lamb kleftiko. Always the kleftiko.
+> Souvlaki. Can't go wrong. {happy}
+> The moussaka, obviously.
+> Meze for the table. {happy}
+> Whatever's cheapest. {mood = -1}
+
+Should we get a bottle? {here.building = italian}
 > The Chianti. {happy}
+> Just water for me. {alcoholic = -1}
+
+Should we get a bottle? {here.building = greek}
+> A kilo of the house red. {happy}
+> Ouzo. Lots of ouzo. {alcoholic}
 > Just water for me. {alcoholic = -1}
 
 What are you having done? {here.building = salon}

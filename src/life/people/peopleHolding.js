@@ -7,6 +7,7 @@ import { PERSON_ARM_SPREAD } from './peopleModel.js';
 import { eatingSound } from '../../audio/eating.js';
 import { STATUS_SOURCES, addStatus } from '../statuseffects.js';
 import { S } from '../../core/shared.js';
+import { restaurantStyleOf } from '../../buildings/footprints.js';
 
 // ============================================================ holding things
 // Anything a person carries: a fork and a plate of dinner for now, a mug or a hotdog when something wants one. A thing
@@ -55,6 +56,16 @@ export const ITEMS = {
   pizza: { parts: [
     { shape: 'cylinder', size: [0.36, 0.008, 0.36], at: [0, 0.004, 0], color: 0xb0b4b8 },
   ] },
+  // (a Greek one's: moussaka, as the spaghetti; souvlaki on a platter, as the pizza, a skewer at a time)
+  moussaka: { parts: [
+    { shape: 'moussaka', size: [0.26, 0.26, 0.26], at: [0, 0, 0], sits: true, eaten: true },
+  ] },
+  souvlaki: { parts: [
+    { shape: 'cylinder', size: [0.36, 0.008, 0.36], at: [0, 0.004, 0], color: 0xf4f2ee },
+  ] },
+  skewer: { parts: [
+    { shape: 'skewer', size: [0.17, 0.17, 0.17], at: [0.046, 0.028, 0.013], turn: [-0.022, 0.968, 0], eaten: true },
+  ] },
   slice: { parts: [
     { shape: 'slice', size: [0.17, 0.17, 0.17], at: [0.046, 0.028, 0.013], turn: [-0.022, 0.968, 0], eaten: true },
   ] },
@@ -69,6 +80,7 @@ const MEAL_FOOD = [3, 6];        // how many things are on a plate
 const FOOD_SIZE = 0.028, FOOD_SPREAD = 0.075; // a ball of food, and how far about the middle of the plate they lie, in metres
 const FOOD_COLORS = [0x6f9a3e, 0xd8762a, 0xe8dcb0, 0x8a4b2a, 0xb83a2a, 0xdcc98a, 0x4f7a3a];
 const SPAGHETTI_COLORS = [0xe8c870, 0xe8c870, 0xa81e10, 0x6a3a22]; // (what's on the fork)
+const MOUSSAKA_COLORS = [0xe8c878, 0x7a3a22, 0x3a1a34, 0xc8281e];
 const SPAGHETTI_LEFT = 0.3;      // how much of its height is left when the pasta's gone (the plate)
 const PIZZA_SLICES = 8, PIZZA_EATEN = [3, 5]; // slices it's cut into, and how many one person eats
 
@@ -92,7 +104,13 @@ const MODELS = {
   // (the restaurants', from Restaurant.glb — see tools/restaurant-models.py: the slice's tip up, cheese out of the palm)
   spaghetti: { node: 'Spaghetti', url: 'assets/models/Restaurant.glb' },
   slice: { node: 'PizzaSlice', url: 'assets/models/Restaurant.glb', turn: [Math.PI/2, Math.PI, 0] },
+  moussaka: { node: 'Moussaka', url: 'assets/models/RestaurantGreek.glb' },
+  skewer: { node: 'Souvlaki', url: 'assets/models/RestaurantGreek.glb', turn: [Math.PI/2, Math.PI, 0] },
 };
+// a restaurant's dishes: what's on a tray, and what's taken off it into the hand
+export const TRAYS = { pizza: 'slice', souvlaki: 'skewer' };
+/** A restaurant's two dishes, the tray one first: Greek (see footprints.js restaurantStyleOf) or Italian. */
+export const menuOf = building => restaurantStyleOf(building?.key) === 'greek' ? ['souvlaki', 'moussaka'] : ['pizza', 'spaghetti'];
 // A pint is of stout, drawn in place of the beer, for the share of people who'd rather (as the pubs' tables have it)
 const STOUT_SHARE = 0.25;
 const HELD_MAX = 512;
@@ -236,13 +254,14 @@ export function serveMeal(p, tableTop = null, dish = 'plate') {
   dropSnack(p); // (the right hand is wanted for the fork)
   const plate = hold(p, dish, { at: PLATE_AT, onY: tableTop });
   if (!plate) return;
-  if (dish === 'pizza') { // (no fork: see feedPizza)
+  if (TRAYS[dish]) { // (no fork: see feedPizza)
     plate.slices = PIZZA_SLICES;
+    plate.slice = TRAYS[dish];
     plate.toEat = PIZZA_EATEN[0] + Math.floor(peopleRng()*(PIZZA_EATEN[1] + 1 - PIZZA_EATEN[0]));
     return;
   }
   const count = MEAL_FOOD[0] + Math.floor(peopleRng()*(MEAL_FOOD[1] + 1 - MEAL_FOOD[0]));
-  const colors = dish === 'spaghetti' ? SPAGHETTI_COLORS : FOOD_COLORS;
+  const colors = dish === 'spaghetti' ? SPAGHETTI_COLORS : dish === 'moussaka' ? MOUSSAKA_COLORS : FOOD_COLORS;
   plate.food = Array.from({ length: count }, () => {
     const angle = peopleRng()*Math.PI*2, out = Math.sqrt(peopleRng())*FOOD_SPREAD;
     return { x: Math.cos(angle)*out, z: Math.sin(angle)*out, color: colors[Math.floor(peopleRng()*colors.length)] };
@@ -258,13 +277,13 @@ export function serveMeal(p, tableTop = null, dish = 'plate') {
  * @returns {boolean} whether they're still eating it
  */
 export function feedPizza(p) {
-  const pizza = holding(p, 'pizza');
+  const pizza = holding(p, 'pizza') ?? holding(p, 'souvlaki');
   if (!pizza) return false;
-  if (p.snack?.item === 'slice') return true;
+  if (p.snack?.item === pizza.slice) return true;
   if (pizza.toEat <= 0 || pizza.slices <= 0) return false;
   pizza.toEat--;
   pizza.slices--;
-  giveSnack(p, 'slice');
+  giveSnack(p, pizza.slice);
   return true;
 }
 
@@ -279,8 +298,8 @@ export function plateSpot(p) {
   return new THREE.Vector3().copy(PLATE_AT).applyMatrix4(instance);
 }
 export function clearMeal(p) {
-  for (const item of ['plate', 'spaghetti', 'pizza', 'fork']) letGo(p, item);
-  if (p.snack?.item === 'slice') dropSnack(p);
+  for (const item of ['plate', 'spaghetti', 'pizza', 'moussaka', 'souvlaki', 'fork']) letGo(p, item);
+  if (p.snack?.item === 'slice' || p.snack?.item === 'skewer') dropSnack(p);
 }
 
 /**
@@ -289,9 +308,8 @@ export function clearMeal(p) {
  * @returns {boolean}
  */
 export function mealFinished(p) {
-  const pizza = holding(p, 'pizza');
-  if (pizza) return !feedPizza(p);
-  const plate = holding(p, 'plate') ?? holding(p, 'spaghetti');
+  if (holding(p, 'pizza') ?? holding(p, 'souvlaki')) return !feedPizza(p);
+  const plate = holding(p, 'plate') ?? holding(p, 'spaghetti') ?? holding(p, 'moussaka');
   return !!plate && !plate.food.length;
 }
 
@@ -303,7 +321,7 @@ export function mealFinished(p) {
  * @returns {void}
  */
 export function mealCue(p, cue) {
-  const fork = holding(p, 'fork'), plate = holding(p, 'plate') ?? holding(p, 'spaghetti');
+  const fork = holding(p, 'fork'), plate = holding(p, 'plate') ?? holding(p, 'spaghetti') ?? holding(p, 'moussaka');
   const at = { x: p.x, y: p.y + 1.05*p.height, z: p.z };
   if (cue === 'forkful') {
     if (!plate || !fork || !plate.food.length) return;
@@ -325,6 +343,7 @@ const SNACKS = {
   coffee: { clip: 'Coffee', mouthfuls: 7, up: 1.5, gap: [3, 8], sound: 'sip' },
   beer: { clip: 'Beer', mouthfuls: 9, up: 1.7, gap: [4, 10], sound: 'sip' },
   slice: { clip: 'Hotdog', mouthfuls: 3, up: 1.1, gap: [2, 4], sound: 'bite' }, // (a pizza's: see feedPizza)
+  skewer: { clip: 'Hotdog', mouthfuls: 3, up: 1.1, gap: [2, 4], sound: 'bite' }, // (souvlaki's)
 };
 /** What someone's snack adds to a clip's name, for the version of it with that in hand ('Beer': WalkBeer, WaveLeftBeer…), or ''. */
 export const snackClipName = p => SNACKS[p.snack?.item]?.clip ?? '';
@@ -448,6 +467,7 @@ const BODIES = {
   coffee: { half: [0.055, 0.083, 0.055] },
   beer: { half: [0.045, 0.1, 0.045] },
   slice: { half: [0.06, 0.008, 0.085], turn: [-Math.PI/2, 0, 0] },
+  skewer: { half: [0.016, 0.014, 0.085], turn: [-Math.PI/2, 0, 0] },
 };
 const DROP_GRAVITY = 9.8, BOUNCE = 0.25, GRIP = 0.4, SETTLE = 0.05, DROP_STEPS = 4;
 const dropped = []; // {shape, left, light, until, scale, ground, half, pos, vel, spin, turn, rest: Quaternion}, oldest first
@@ -550,11 +570,11 @@ export function updateHeld(only = -1) {
       }
       // and the slices left of a pizza, flat round the middle of its tray, tips in
       if (held.slices) for (let k = 0; k < held.slices; k++) {
-        const s = ITEMS.slice.parts[0].size[1];
+        const s = ITEMS[held.slice].parts[0].size[1];
         turn.setFromAxisAngle(yAxis, k*Math.PI*2/PIZZA_SLICES);
         place.set(0, PIZZA_SLICE_Y, s/2).applyQuaternion(turn);
         part.compose(place, turn.multiply(layFlat), size.setScalar(s));
-        draw('slice', light, part.premultiply(world), color.setHex(0xffffff));
+        draw(held.slice, light, part.premultiply(world), color.setHex(0xffffff));
       }
       // and what's left on the plate
       if (held.food && !held.served) for (const food of held.food) {

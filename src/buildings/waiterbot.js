@@ -91,9 +91,15 @@ function bone(name, side) {
   w.rig.traverse(o => { if (o.isBone && (o.name === name + side || o.name === `${name}.${side}`)) found = o; });
   return found;
 }
-// spaghetti, and a pizza (a tray and eight slices), from the restaurant's model, for each hand
+// spaghetti and a pizza (a tray and eight slices) from the restaurant's model, and moussaka and souvlaki (a platter and
+// eight skewers) from the Greek one, for each hand
 function loadDishes() {
-  dishesLoading ??= new GLTFLoader().loadAsync('assets/models/Restaurant.glb').then(gltf => {
+  dishesLoading ??= Promise.all([['assets/models/Restaurant.glb', 'Spaghetti', 'spaghetti', 'PizzaSlice', 'pizza', 0xb0b4b8],
+    ['assets/models/RestaurantGreek.glb', 'Moussaka', 'moussaka', 'Souvlaki', 'souvlaki', 0xf4f2ee]].map(dishesFrom))
+    .catch(err => console.warn('Kallipolis: the waiter\'s dishes failed to load', err));
+}
+function dishesFrom([url, plated, platedName, slices, trayName, trayColor]) {
+  return new GLTFLoader().loadAsync(url).then(gltf => {
     const node = name => {
       const o = gltf.scene.getObjectByName(name);
       if (!o) return null;
@@ -101,21 +107,21 @@ function loadDishes() {
       o.traverse(m => { if (m.isMesh) { m.material = toon(m.material); m.castShadow = true; } });
       return o;
     };
-    const pasta = node('Spaghetti'), slice = node('PizzaSlice');
+    const pasta = node(plated), slice = node(slices);
     const made = {};
     if (pasta) {
       const box = new THREE.Box3().setFromObject(pasta), size = box.getSize(v), k = DISH.spaghetti/Math.max(size.x, size.z);
       pasta.scale.multiplyScalar(k);
       const mid = box.getCenter(new THREE.Vector3());
       pasta.position.set(-mid.x*k, -box.min.y*k, -mid.z*k);
-      made.spaghetti = new THREE.Group().add(pasta);
+      made[platedName] = new THREE.Group().add(pasta);
     }
     if (slice) {
       // (its tip at its origin: turned round it, eight make a pizza)
       const size = new THREE.Box3().setFromObject(slice).getSize(v), k = DISH.slice/Math.max(size.x, size.z);
       slice.scale.multiplyScalar(k);
       const pizza = new THREE.Group();
-      pizza.add(new THREE.Mesh(new THREE.CylinderGeometry(DISH.tray/2, DISH.tray/2, 0.008, 20), toon({ name: 'Tray', color: new THREE.Color(0xb0b4b8) })));
+      pizza.add(new THREE.Mesh(new THREE.CylinderGeometry(DISH.tray/2, DISH.tray/2, 0.008, 20), toon({ name: 'Tray', color: new THREE.Color(trayColor) })));
       pizza.children[0].position.y = 0.004;
       for (let n = 0; n < 8; n++) {
         const piece = slice.clone();
@@ -123,7 +129,7 @@ function loadDishes() {
         piece.position.y = 0.008;
         pizza.add(piece);
       }
-      made.pizza = pizza;
+      made[trayName] = pizza;
     }
     for (const side of ['L', 'R']) for (const [name, dish] of Object.entries(made)) {
       const copy = side === 'L' ? dish : dish.clone();
@@ -131,9 +137,8 @@ function loadDishes() {
       copy.visible = false;
       w.dishes[side].add(copy);
     }
-  }).catch(err => console.warn('Kallipolis: the waiter\'s dishes failed to load', err));
+  });
 }
-
 /**
  * Put the waiter behind this restaurant's host stand, in `group` (its furniture, in the room's terms).
  * @param {THREE.Group} into
@@ -141,8 +146,9 @@ function loadDishes() {
  * @param {?{x: number, z: number, angle: number, leaves: ?THREE.Group[]}} door - the kitchen doors, facing into the room, and
  *   their leaves' pivots (userData.side: 1 right, -1 left)
  */
-export function placeWaiterbot(into, stand, door) {
+export function placeWaiterbot(into, stand, door, apron = true) {
   if (!rig()) return;
+  w.aprons.forEach(o => { o.visible = apron; }); // (none in a Greek taverna)
   group = into;
   const f = { x: Math.sin(stand.angle), z: Math.cos(stand.angle) };
   local = { stand: { x: stand.x - f.x*BEHIND, z: stand.z - f.z*BEHIND, angle: stand.angle }, stand0: stand, door };
@@ -191,7 +197,7 @@ export function waiterLook(at) { s.target = at; }
 export function waiterTalk(on) { s.talking = on; }
 export function waiterHide(on) { s.hidden = on; }
 export function waiterSleep(on) { s.asleep = on; }
-/** Carry a dish ('spaghetti' or 'pizza') in either hand, or nothing. */
+/** Carry a dish ('spaghetti', 'pizza', 'moussaka' or 'souvlaki') in either hand, or nothing. */
 export function waiterCarry(L, R) { s.carry = { L, R }; }
 /**
  * Set down what's in one hand (`side`: 'L' or 'R'), `drop` called as it's on the table; or, with `pick` (a dish), pick

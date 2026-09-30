@@ -1,7 +1,7 @@
 import { playSound } from '../../audio/sfx.js';
 import { people, peopleRng, pickFrom } from './people.js';
 import { freeSeat, leaveGroup, standingSpot, takeSeat } from './peopleActivities.js';
-import { plateSpot, serveMeal } from './peopleHolding.js';
+import { TRAYS, menuOf, plateSpot, serveMeal } from './peopleHolding.js';
 import { roomRoute, roomSeats, roomVisit, roomWalkable } from '../../buildings/interior.js';
 import { WAITER, waiterAt, waiterBusy, waiterCarry, waiterClear, waiterDoor, waiterDoorWay, waiterLeave, waiterSay, waiterGo, waiterHide, waiterLook, waiterMoving, waiterPace, waiterPose, waiterReach,
   waiterServe, waiterServing, waiterSleep, waiterStand, waiterTalk, waiterTurn, waiterUp } from '../../buildings/waiterbot.js';
@@ -95,13 +95,13 @@ export function awaitWaiter(p, seat) {
   p.inRoom.mealBy = MEAL_GIVE_UP;
   diners.push({ p, seat, table: seat.table, state: 'wait', orderAt: clock + between(ORDER_AFTER), dish: null, readyAt: 0 });
 }
-/** A diner's food set down in front of them: spaghetti (with a fork), or a pizza eaten a slice at a time. */
-export function servedMeal(p, dish = peopleRng() < 0.5 ? 'pizza' : 'spaghetti') {
+/** A diner's food set down in front of them: spaghetti or moussaka (with a fork), or a pizza or souvlaki eaten a slice or skewer at a time. */
+export function servedMeal(p, dish = menuOf(p.indoors?.building)[peopleRng() < 0.5 ? 0 : 1]) {
   const here = p.inRoom;
   if (!here?.seat?.diner) return;
   here.meal = null;
   here.dined = dish; here.ate = false;
-  p.pose = dish === 'pizza' ? 'Sit1' : 'Eating';
+  p.pose = TRAYS[dish] ? 'Sit1' : 'Eating';
   serveMeal(p, here.seat.diner.top, dish);
   here.timer = (20 + peopleRng()*60)*p.traits.patience;
 }
@@ -113,7 +113,7 @@ export function leavePlate(p) {
   here.dined = null;
   const at = plateSpot(p);
   at.y = here.seat.diner.top;
-  const plate = dish === 'pizza' ? 'tray' : 'plate';
+  const plate = TRAYS[dish] ? 'tray' : 'plate';
   dirty.push({ at, dish: plate, thing: waiterLeave(plate, at), table: here.seat.table, from: clock + CLEAR_AFTER });
 }
 
@@ -260,7 +260,7 @@ function* order(table) {
     for (const m of [...g.members]) if (g.members.includes(m)) yield* say(g, m, between([1.2, 3]));
     yield* say(g, WAITER, between([0.8, 1.5]));
     endChat(g);
-    for (const d of ds) Object.assign(d, { state: 'ordered', dish: peopleRng() < 0.5 ? 'pizza' : 'spaghetti', readyAt: clock + between(COOK) });
+    for (const d of ds) Object.assign(d, { state: 'ordered', dish: menuOf(d.p.indoors?.building)[peopleRng() < 0.5 ? 0 : 1], readyAt: clock + between(COOK) });
   }
   waiterLook(null);
   waiterPose('DefaultPose');
