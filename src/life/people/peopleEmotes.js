@@ -1,18 +1,18 @@
 import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
 import { S } from '../../core/shared.js';
-import { breathFx, confettiFx, fumeFx, heartFx, noteFx, starFx, sweatFx, tearFx, zedFx } from '../giblets.js';
+import { breathFx, confettiFx, droolFx, fumeFx, heartFx, noteFx, starFx, sweatFx, tearFx, zedFx } from '../giblets.js';
 import { personModel } from './people.js';
 import { headPointOf } from './peopleTracking.js';
 
 // ============================================================ moods on show
 // What some moods (people/moods.txt) show beyond the eyes, by the traits they give: tears welling up under both eyes and
-// falling (crying) or welled up under them and staying put (welling: see beginEmotes), love hearts floating off the top of the head now and then (lovestruck), white puffs of steam blowing
+// falling (crying) or welled up under them and staying put, with a glint in the eyes (welling: see beginEmotes, and GLINT_GLSL in peopleModel.js), love hearts floating off the top of the head now and then (lovestruck), white puffs of steam blowing
 // off it in bursts (fuming) or snorted out of the nose (huffing), Zs drifting up (drowsy — whose eyes are held half shut:
 // see updatePeople), a drop of sweat running down from the temple (sweating) or sweat flung off all round from the middle of the head (panicking),
-// breath fogging in front of the mouth (freezing), sparkles round the head (starstruck), confetti bursting out all round (partying) and
-// music notes floating off (singing). The blush (blushing) and a red or blue face are the skin's: see tintSkin in people.js.
-// Tears, angry steam (fuming's and huffing's) and cold breath are carried along as they walk; the rest drifts off behind them. Each is as much as the trait (0 to 1) says. Only for someone drawn and near enough to make out their face (updatePeople).
+// breath fogging in front of the mouth (freezing), sparkles round the head (starstruck), confetti bursting out all round (partying),
+// music notes floating off (singing) and drool dripping from a corner of the mouth (drooling). One raised eyelid (skeptical) and a goofy face (goofy) are personShape's in peopleModel.js. The blush (blushing) and a red or blue face are the skin's: see tintSkin in people.js.
+// Tears, drool, angry steam (fuming's and huffing's) and cold breath are carried along as they walk; the rest drifts off behind them. Each is as much as the trait (0 to 1) says. Only for someone drawn and near enough to make out their face (updatePeople).
 
 const TEARS_PER_SECOND = 6;   // from each eye, crying 1 (😭): a stream, flung out (see spill below)
 const TEAR_OUT = 0.5, TEAR_DOWN = 0.6; // how far in front of the eye a running tear wells up (so it doesn't sink into it), and below its bottom edge, in eye half-widths (a flung one leaves from the eye)
@@ -29,7 +29,8 @@ const BREATH_PUFFS_PER_SECOND = 16, BREATH_EVERY = 2.4, BREATH_OUT = 0.7;
 const STARS_PER_SECOND = 5;          // starstruck 1 (🤩)
 const CONFETTI_EVERY = 3, CONFETTI_POP = 30; // partying 1 (🥳): a pop of CONFETTI_POP scraps every CONFETTI_EVERY seconds
 const NOTES_PER_SECOND = 0.9;        // singing 1 (🎵)
-const EMOTE_TRAITS = ['crying', 'welling', 'lovestruck', 'fuming', 'huffing', 'drowsy', 'sweating', 'panicking', 'freezing', 'starstruck', 'partying', 'singing'];
+const DROOL_PER_SECOND = 0.6;        // drooling 1 (🤤): from one corner of the mouth
+const EMOTE_TRAITS = ['crying', 'welling', 'lovestruck', 'fuming', 'huffing', 'drowsy', 'sweating', 'panicking', 'freezing', 'starstruck', 'partying', 'singing', 'drooling'];
 
 const spot = new THREE.Vector3(), eye = new THREE.Vector3(), at = new THREE.Vector3(), ahead = new THREE.Vector3(), forward = new THREE.Vector3();
 const count = (rate, dt) => Math.floor(rate*dt + Math.random());
@@ -129,6 +130,9 @@ export function updateEmotes(p, i, dt, t) {
   if (tr.partying > 0 && passed(CONFETTI_EVERY, dt, t)) {
     headPointOf(i, eye.set(0, face.top.y*0.5, face.top.z), at);
     for (let k = Math.round(CONFETTI_POP*tr.partying); k > 0; k--) confettiFx(at, height);
+  }
+  if (tr.drooling > 0 && count(DROOL_PER_SECOND*tr.drooling, dt) > 0) {
+    droolFx(headPointOf(i, eye.copy(face.mouth).setX(face.mouth.x + face.eyeHalf*0.7).setZ(face.mouth.z + face.eyeHalf*0.3), at), height, p);
   }
   if (tr.singing > 0 && count(NOTES_PER_SECOND*tr.singing, dt) > 0) {
     noteFx(headPointOf(i, face.top, at), height);

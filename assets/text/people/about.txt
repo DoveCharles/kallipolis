@@ -51,6 +51,9 @@ which add up. Everyone starts at the value in
 #   shock       0       how shocked their eyes look                                                    0 to 1
 #   crying      0       tears running down, flung out above 0.5 — 1 a stream                           0 to 1
 #   welling     0       tears welled up under their eyes, not falling (🥺) — 1 fullest                 0 to 1
+#   drooling    0       drool dripping from a corner of the mouth (🤤) — 1 steadiest                   0 to 1
+#   skeptical   0       one eyelid raised (🤔) — 1 highest                                              0 to 1
+#   goofy       0       a goofy face: one eye drooping, one wide, mouth wonky (🥴) — 1 goofiest          0 to 1
 #   blushing    0       how pink their cheeks go                                                       0 to 1
 #   lovestruck  0       love hearts floating off their head now and then — 1 often                    0 to 1
 #   fuming      0       a red face and white puffs of steam off their head — 1 redder and steamier     0 to 1

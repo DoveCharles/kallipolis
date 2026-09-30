@@ -205,6 +205,9 @@
 #   {is = partying}           confetti flying off them (🥳 gives it) — "> Where's the party? {other.is = partying}"
 #   {is = singing}            music notes floating off them (🎵 gives it) — "> What are you humming? {other.is = singing}"
 #   {is = upsidedown}         their head the wrong way up (🙃 gives it) — "> Your head's on upside down! {other.is = upsidedown}"
+#   {is = drooling}           drool dripping from their mouth (🤤 gives it) — "> You're drooling. {other.is = drooling}"
+#   {is = skeptical}          one eyelid raised at you (🤔 gives it) — "> What's that look for? {other.is = skeptical}"
+#   {is = goofy}              pulling a goofy face (🥴 gives it) — "> What's up with your face? {other.is = goofy}"
 #   {is = sad}                looking upset (their face)      {is = happy}    looking happy
 #   {is = scared}             running from something, or blood on them (unless they like it)
 #   {is = sitting}            sat down: on a bench, in a circle, on a seat indoors   {other.is = sitting}  to someone sat

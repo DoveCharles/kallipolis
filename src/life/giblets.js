@@ -462,6 +462,15 @@ export function sweatFx(at, away, height, fling = 0, follow = null) {
     vx: away.x*out, vy: fling ? (0.5 + Math.random()*0.5)*height : -0.05*height, vz: away.z*out,
     size: height*(0.03 + Math.random()*0.01), growth: 0, life: fling ? 0.6 + Math.random()*0.3 : 0.9, opacity: 0.9, color: SWEAT_COLOR }, follow));
 }
+// a drop of drool swelling at `at` (a corner of the mouth), then dripping slowly off;
+const DROOL_COLOR = new THREE.Color(0xe8f6ff);
+export function droolFx(at, height, follow = null) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  if (softParticles.length >= softCap()*2) softParticles.shift();
+  const swell = TEAR_SWELL*2;
+  softParticles.push(carried({ kind: 'tear', born: performance.now()/1000, x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, fall: 0.08, swell,
+    size: height*(0.022 + Math.random()*0.008), growth: 0, life: swell + 1.1 + Math.random()*0.4, opacity: 0.8, color: DROOL_COLOR }, follow));
+}
 // a Z drifting up and away off their head at `at`, sleepy, and one of a trail of them;
 export function zedFx(at, height) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
@@ -926,7 +935,7 @@ export function updateGiblets(t) {
     const age = t - p.born, life = age/p.life, mesh = meshes[p.kind];
     if (life > 1 || drawnSoft[p.kind] >= softCap() || !isNearFx(p)) return;
     const swelling = age < (p.swell ?? 0); // (a tear still welling up: it holds still, growing)
-    if (p.kind === 'tear' && !swelling) { p.vy -= GRAVITY*p.fall*dt; p.vx *= 1 - Math.min(1, dt*3); p.vz *= 1 - Math.min(1, dt*3); } // (a tear: spills out, then drops)
+    if (p.kind === 'tear' && !swelling) { p.vy -= GRAVITY*(p.fall ?? 0.35)*dt; p.vx *= 1 - Math.min(1, dt*3); p.vz *= 1 - Math.min(1, dt*3); } // (a tear: spills out, then drops)
     if (p.kind === 'confetti') { const drag = 1 - Math.min(1, dt*4); p.vx *= drag; p.vz *= drag; p.vy = Math.max(p.vy*drag - GRAVITY*0.3*dt, -0.5); } // (confetti: bursts out, the air stops it, then it flutters down)
     if (p.kind === 'clipping') { p.vy -= GRAVITY*0.5*dt; p.vx *= 1 - Math.min(1, dt*1.5); p.vz *= 1 - Math.min(1, dt*1.5); } // (a curl of hair: falls, slowed by the air)
     if (!p.still && !swelling) { p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt; }

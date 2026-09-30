@@ -25,7 +25,7 @@
 🙄 {mood = -0.3, angry = 0.3, nosy = 2}
 😬 {mood = -0.2, shock = 0.4, fidgety = 2, sweating = 0.5}
 😴 {sad = 0.6, lounging = 3, blinks = 4, speed = 0.8, drowsy = 0.85}
-🤤 {sad = 0.4, lounging = 2}
+🤤 {sad = 0.4, lounging = 2, drooling = 1}
 😌 {mood = 0.3, happy = 0.5, patience = 2}
 😔 {mood = -0.5, sad = 0.8, speed = 0.8}
 🙁 {mood = -0.5, sad = 0.6}
@@ -40,8 +40,8 @@
 😱 {shock = 1, speed = 1.8, blinks = 0, panicking = 1}
 🥳 {mood = 0.8, happy = 1, chatty = 3, partying = 1, aggression = 0.5}
 🤠 {mood = 0.5, happy = 0.5, speed = 0.9}
-🥴 {sad = 0.4, speed = 0.6}
-🤔 {angry = 0.2, fidgety = 3, patience = 1.5}
+🥴 {sad = 0.4, speed = 0.6, goofy = 1}
+🤔 {angry = 0.2, fidgety = 3, patience = 1.5, skeptical = 1}
 🫠 {happy = 0.3, sad = 0.5, lounging = 3, speed = 0.7}
 🤗 {mood = 0.6, happy = 0.9, chatty = 3}
 🤢 {sick, mood = -0.6, patience = 0.2, speed = 0.4, chatty = 0.3, nosy = 0.4}

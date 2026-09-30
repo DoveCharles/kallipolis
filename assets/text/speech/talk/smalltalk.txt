@@ -166,6 +166,21 @@ Um. Your head's on upside down. {other.is = upsidedown}
 > No, YOURS is. {is = upsidedown}
 >> ...Is it? {shock}
 
+You're drooling, [other.name]. {other.is = drooling}
+> Am I? {shock}
+> I was thinking about [tastes]. {is = drooling}
+>> Fair enough.
+
+What's that look for? {other.is = skeptical}
+> What look? {is = skeptical}
+> I'm thinking. {patience}
+>> Well, stop it. {aggression}
+
+What's up with your face? {other.is = goofy}
+> Whuh? {is = goofy}
+> Nothing's up with my face. {aggression}
+>> If you say so.
+
 Is that blood on you?! {other.is = bloody}
 > It's not mine. {evil}
 > Long story.

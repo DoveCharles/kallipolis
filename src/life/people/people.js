@@ -19,7 +19,7 @@ import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
 import { controlInput, possession, rushed } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
-import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, PUPIL_MAX_X, PUPIL_MAX_Y, personPixels } from './peopleModel.js';
+import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GOOFY_ROW, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, SKEPTICAL_ROW, WELLING_ROW, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, PUPIL_MAX_X, PUPIL_MAX_Y, personPixels } from './peopleModel.js';
 import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
@@ -591,7 +591,8 @@ const FREEZING_SKIN_COLOR = new THREE.Color(0x7fb2e8), FREEZING_SKIN_BLEND = 0.5
 const redOf = p => Math.min(1, p.traits.fuming + HUFFING_RED*p.traits.huffing);
 // The traits that have a say in the skin, as one number, for telling when one of them has changed (see tintSkin).
 const skinKeyOf = p => (p.traits.sick ? 1 : 0) + (p.traits.zombie ? 2 : 0) + (p.traits.vampire ? 4 : 0)
-  + 8*Math.round(redOf(p)*100) + 808*Math.round(p.traits.blushing*100) + 81608*Math.round(p.traits.freezing*100) + 8242408*(p.traits.upsidedown ? 1 : 0);
+  + 8*Math.round(redOf(p)*100) + 808*Math.round(p.traits.blushing*100) + 81608*Math.round(p.traits.freezing*100) + 8242408*(p.traits.upsidedown ? 1 : 0)
+  + 16484816*Math.round(p.traits.skeptical*100) + 1664966416*Math.round(p.traits.goofy*100) + 17e12*Math.round(p.traits.welling*100);
 /**
  * Write the skin someone's traits give them to the person model: the colour they came with, moved towards the grey a
  * vampire's age pales it to and, all the way, the colour of the sick and zombie traits (see SICK_SKIN_COLOR) or, part way, the
@@ -622,6 +623,9 @@ function tintSkin(p, i) {
   data[o + 3] = p.traits.blushing; // (not stained by blood, so set either way)
   // (and whether their head's upside down, 🙃, in the Eyes row's fourth number, which nothing else has: see personLook)
   data[((2 + PERSON_TRAIT_COLORS.indexOf('Eyes'))*PEOPLE_MAX + i)*4 + 3] = p.traits.upsidedown ? 1 : 0;
+  data[(SKEPTICAL_ROW*PEOPLE_MAX + i)*4 + 3] = p.traits.skeptical; // (and their face pulled, 🤔 🥴: see FACE_PULLS)
+  data[(GOOFY_ROW*PEOPLE_MAX + i)*4 + 3] = p.traits.goofy;
+  data[(WELLING_ROW*PEOPLE_MAX + i)*4 + 3] = p.traits.welling; // (and the glint in their eyes, 🥺: see GLINT_GLSL)
   personModel.traitTexture.needsUpdate = true;
   if (p.blood && p.bloodBase) { p.bloodBase.Skin = [skin.r, skin.g, skin.b]; return; } // (blood's to stain from: see peopleBlood.js)
   data[o] = skin.r; data[o + 1] = skin.g; data[o + 2] = skin.b;

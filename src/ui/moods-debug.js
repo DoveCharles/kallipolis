@@ -8,7 +8,7 @@ import { moodEntries } from '../life/profiles.js';
 // follows) in any mood from people/moods.txt, with ◀ ▶ to step through them, so what each shows (tears, a blush, steam,
 // an upside-down head…: see life/people/peopleEmotes.js) can be looked at. Only the moods that show something beyond the
 // eyes are listed unless "all" is ticked. Closing the window gives them back the mood they had.
-const EMOTE_TRAITS = ['crying', 'welling', 'blushing', 'lovestruck', 'fuming', 'huffing', 'drowsy', 'sweating', 'panicking', 'freezing',
+const EMOTE_TRAITS = ['crying', 'welling', 'drooling', 'skeptical', 'goofy', 'blushing', 'lovestruck', 'fuming', 'huffing', 'drowsy', 'sweating', 'panicking', 'freezing',
   'starstruck', 'partying', 'singing', 'upsidedown'];
 let target = null, theirOwn, all = false, at = 0;
 
