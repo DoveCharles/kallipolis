@@ -23,7 +23,7 @@ const FADE = 0.35;          // s, between poses
 const HEAD_REACH = 1.1;     // rad, the most its head swivels either way
 const HEAD_EASE = 5;        // the head's swivel, eased per second
 const DROP_AT = 20/24;      // s into PlateLeft/Right: the plate's on the table
-const PLATE_UP = 0.13;      // m, the plate above its hand
+const PLATE_UP = 0.17;      // m, the plate above its hand
 const BEHIND = 0.6;         // m behind the host stand
 const DOOR_OUT = 0.8, DOOR_IN = 2.3; // m in front of the kitchen doors, and through them
 const DISH = { spaghetti: 0.26, slice: 0.17, tray: 0.36, plate: 0.24 }; // m, as the diners' (see peopleHolding.js)

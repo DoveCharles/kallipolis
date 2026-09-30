@@ -77,9 +77,9 @@ const SOUNDS = {
   // the service bell rung in the kitchen once a table's food is up (see deliver in life/people/peopleWaiter.js): a
   // bright strike, ringing on with a fainter overtone
   service: [
-    [.45, 0, 2650, 0, 0, 1.2, 0, 1, , , , , , , , , , , , , -3000],
-    [.05, 0, 7300, 0, 0, .4, 0, 1, , , , , , , , , , , , , -3000],
-    [.08, 0, 5200, 0, .002, .01, 1, 2, , , , , , , , , , , , , -3000],
+    [.25, 0, 2650, 0, 0, 1.2, 0, 1, , , , , , , , , , , , , -1800],
+    [.02, 0, 7300, 0, 0, .4, 0, 1, , , , , , , , , , , , , -1800],
+    [.04, 0, 5200, 0, .002, .01, 1, 2, , , , , , , , , , , , , -1800],
   ],
   // a changing room's curtain drawn across or back (see drawCurtain in buildings/interior.js): a swish of cloth, the
   // rings rattling along the rail over it
