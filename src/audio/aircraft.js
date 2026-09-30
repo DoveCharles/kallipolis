@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { camera } from '../core/scene.js';
-import { listener, outdoorsOf, inside, ear } from './sfx.js';
+import { listener, outdoorsOf, inside, ear, loopPanning } from './sfx.js';
 
 // ============================================================ aircraft
 // The aircraft about the airfields (see updateAirports in zones/airport.js): loops synthesized live like the engines (see
@@ -77,7 +77,7 @@ function makeVoice() {
   lfo.connect(chopDepth).connect(chop.gain);
   lfo.start();
   const panner = context.createPanner();
-  panner.panningModel = 'equalpower';
+  panner.panningModel = loopPanning(true);
   panner.distanceModel = 'inverse';
   // (then the air: the rumble's roll, the bass lifted and the top taken off with distance, and the ground's echo)
   const roll = context.createGain(), rollSource = context.createBufferSource(), rollDepth = context.createGain();
@@ -221,7 +221,7 @@ export function tyreChirp(at, size) {
   if (context.state !== 'running' || Math.hypot(at.x - ear.x, at.y - ear.y, at.z - ear.z) > HEAR_DISTANCE) return;
   const now = context.currentTime, hz = CHIRP_HZ/Math.sqrt(Math.max(0.5, size/20));
   const panner = context.createPanner();
-  panner.panningModel = 'equalpower';
+  panner.panningModel = loopPanning(true);
   panner.distanceModel = 'inverse';
   panner.refDistance = CHIRP_NEAR;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;

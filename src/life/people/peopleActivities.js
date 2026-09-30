@@ -15,7 +15,7 @@ import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFollowingPerson } from './peopleTracking.js';
 import { drawCurtain, openRoomDoor, roomBeyondDoor, roomBuilding, roomCubicles, roomDoorway, roomKind, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
-import { clearMeal, feedPizza, giveSnack, letGo, mealFinished, serveMeal } from './peopleHolding.js';
+import { TRAYS, clearMeal, feedPizza, giveSnack, letGo, mealFinished, menuOf, serveMeal } from './peopleHolding.js';
 import { BARBOT, barbotFree } from '../../buildings/barbot.js';
 import { awaitWaiter, leavePlate, queueForTable, runWaiter, servedMeal, waitForTable, waiterOn } from './peopleWaiter.js';
 import { summonSalonBot, salonBotSnipping, salonBotNoise, seatedHead } from '../../buildings/salonbot.js';
@@ -2198,9 +2198,9 @@ function sitting(p, here, dt) {
       // (a plate on the table and a fork in hand; at a restaurant, spaghetti, or a pizza eaten a slice at a time from the hand)
       if (p.pose === 'Eating' && here.led) { p.pose = 'Sit1'; awaitWaiter(p, seat); } // (shown here by the waiter: it takes the order)
       else if (p.pose === 'Eating') {
-        const dish = p.indoors && isRestaurant(p.indoors.building) ? (peopleRng() < 0.5 ? 'pizza' : 'spaghetti') : 'plate';
+        const dish = p.indoors && isRestaurant(p.indoors.building) ? menuOf(p.indoors.building)[peopleRng() < 0.5 ? 0 : 1] : 'plate';
         serveMeal(p, seat.diner.top, dish);
-        if (dish === 'pizza') p.pose = 'Sit1';
+        if (TRAYS[dish]) p.pose = 'Sit1';
       }
       here.timer = (20 + peopleRng()*60)*p.traits.patience;
       here.spell = spellAt(p.pose);

@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, outdoorsOf, isMuted, ear } from './sfx.js';
+import { listener, outdoorsOf, isMuted, ear, loopPanning } from './sfx.js';
 
 // ============================================================ the shuttles
 // The shuttles gliding through their solenoid tubes (see updateTrainShuttles in trains/trains.js), which ought to sound
@@ -37,7 +37,7 @@ function makeShuttle() {
   lfo.connect(depth).connect(throb.gain);
   lfo.start();
   const panner = context.createPanner();
-  panner.panningModel = 'equalpower';
+  panner.panningModel = loopPanning();
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
   throb.connect(out).connect(panner).connect(outdoorsOf('traffic'));
@@ -59,7 +59,7 @@ function oneShot(at, seconds, build, refDistance = REF_DISTANCE) {
   const context = listener.context;
   if (context.state !== 'running') return;
   const panner = context.createPanner(), gain = context.createGain();
-  panner.panningModel = 'equalpower';
+  panner.panningModel = loopPanning();
   panner.distanceModel = 'inverse';
   panner.refDistance = refDistance;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;

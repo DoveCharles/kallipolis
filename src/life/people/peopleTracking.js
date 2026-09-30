@@ -12,6 +12,7 @@ import { carryPossessed, footingAt, nearestRaisedVertex, stepFooting } from './p
 import { bloodSpeed, bloodlustSpeed, isBloodlusting } from './peopleBlood.js';
 import { profileOf } from '../profiles.js';
 import { IS_TOUCH } from '../../core/device.js';
+import { setSelf } from '../../audio/sfx.js';
 import { pointInPolygon } from '../../core/math.js';
 import { carHitbox } from '../traffic/collisions.js';
 import { carHeight } from '../traffic/placing.js';
@@ -330,6 +331,7 @@ export function possessPerson(i) {
   p.onRoad = false;
   swing = null;
   if (!startPossession(i, p.heading + moonwalkTurn(p))) { p.mode = 'wander'; reseatPerson(p); return; }
+  setSelf(p);
   if (room) { possessedRoom = { key: room.building.key, building: room.building, back: room.back, floor: p.y }; p.footing = null; p.area = -1; }
   cameraNear = camera.near;
   camera.near = S.hideOwnHead ? EYE_NEAR_HEADLESS : EYE_NEAR;
@@ -344,6 +346,7 @@ export function unpossessPerson() {
   if (possession.index < 0) return;
   const i = possession.index, p = people[i];
   endPossession();
+  setSelf(null);
   swing = null;
   camera.near = cameraNear;
   camera.updateProjectionMatrix();

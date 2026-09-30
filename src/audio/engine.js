@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener, outdoorsOf, ear } from './sfx.js';
+import { listener, outdoorsOf, ear, loopPanning } from './sfx.js';
 import { makeEngineVoice, setEngineKind, setEngineVoice, kindOfDesign } from './engine-voice.js';
 
 // ============================================================ engines
@@ -34,7 +34,7 @@ export const trafficNearby = () => traffic;
 
 function makeEngine() {
   const panner = listener.context.createPanner();
-  panner.panningModel = 'equalpower';
+  panner.panningModel = loopPanning();
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
   panner.connect(outdoorsOf('traffic'));

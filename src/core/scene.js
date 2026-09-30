@@ -244,8 +244,7 @@ S.sceneIndexDirty = true;
 // well before its group is hung off the scene, and anything indexed in between would be missed. Every add and remove
 // goes through these two, detached ones included — marking stale more often than strictly needed, which costs one
 // walk on the next frame and never a wrong answer. Nothing is added or taken out while the city just sits there, so
-// an idle frame does no walking at all. (Nor a sound coming and going — a THREE.PositionalAudio is hung off the scene for
-// each one played, and nothing the index keeps is ever one of them: see playSound in audio/sfx.js.)
+// an idle frame does no walking at all. (Nor a sound coming and going: a THREE.Audio added is never indexed.)
 const isSound = o => o?.type === 'PositionalAudio' || o?.type === 'Audio';
 ['add', 'remove'].forEach(method => {
   const inner = THREE.Object3D.prototype[method];

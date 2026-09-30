@@ -1,4 +1,4 @@
-import { listener, heardFrom } from './sfx.js';
+import { listener, heardFrom, loopPanning } from './sfx.js';
 import { hashNameToNumber, mulberry32 } from '../core/math.js';
 
 // ============================================================ pub music
@@ -18,8 +18,8 @@ const MUSIC_DIR = 'assets/music/';
 const SOUND_BANK = MUSIC_DIR + 'TimGM6mb.sf2';
 const PROCESSOR = 'https://cdn.jsdelivr.net/npm/spessasynth_lib@4.3.14/dist/spessasynth_processor.min.js'; // (as in index.html's import map)
 const SONG_GAP = 6;             // seconds between songs
-const VOLUME = { pub: 0.11, restaurant: 0.04 }; // (restaurants: quiet, in the background)
-const SET_OF = path => path.startsWith('restaurant/') ? 'restaurant' : 'pub'; // (assets/music/restaurant/: theirs only)
+const VOLUME = { pub: 0.11, restaurant: 0.04, greek: 0.04 }; // (restaurants: quiet, in the background)
+const SET_OF = path => path.startsWith('restaurant/') ? 'restaurant' : path.startsWith('restaurant-greek/') ? 'greek' : 'pub'; // (assets/music/restaurant/, restaurant-greek/: theirs only)
 const TONE_HZ = 6500;           // the speaker's top end
 const REF_DISTANCE = 4, MAX_DISTANCE = 30;
 const DRIFT = 1;                // seconds off the clock before it's set back
@@ -51,7 +51,7 @@ function load() {
     const out = context.createGain(), tone = context.createBiquadFilter(), panner = context.createPanner();
     out.gain.value = 0;
     tone.type = 'lowpass'; tone.frequency.value = TONE_HZ; tone.Q.value = 0.5;
-    panner.panningModel = 'equalpower';
+    panner.panningModel = loopPanning();
     panner.distanceModel = 'linear';
     panner.refDistance = REF_DISTANCE; panner.maxDistance = MAX_DISTANCE;
     synth.connect(out);
@@ -96,7 +96,7 @@ function hush() {
  * pub is in its songs.
  * @param {string} key - the pub's building key (see buildingKey)
  * @param {{x: number, y: number, z: number}} at - where it's heard from
- * @param {'pub'|'restaurant'} [set] - which songs
+ * @param {'pub'|'restaurant'|'greek'} [set] - which songs
  * @returns {void}
  */
 export function pubMusic(key, at, set = 'pub') {

@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, isMuted, heardFrom, muffler, ear } from './sfx.js';
+import { listener, isMuted, heardFrom, muffler, ear, oneShotPanner } from './sfx.js';
 import { melodyOf } from './melodies.js';
 
 // ============================================================ voices
@@ -234,12 +234,7 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant 
     bandLevel.gain.value = level*3*Math.sqrt(6/sharpness); // (a sharper band lets less through: made up for)
     oscillator.connect(band).connect(bandLevel).connect(gain);
   });
-  const panner = context.createPanner();
-  panner.panningModel = 'equalpower';
-  panner.distanceModel = 'inverse';
-  panner.refDistance = hearRef();
-  panner.rolloffFactor = ROLLOFF;
-  panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
+  const panner = oneShotPanner(at, oscillator, { refDistance: hearRef(), rolloff: ROLLOFF });
   const muffle = muffler(at, hearRef(), MUFFLE);
   muffle.connect(panner);
   let ring = null;

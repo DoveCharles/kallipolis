@@ -120,6 +120,22 @@ export function pubStyleOf(key) {
   for (const ch of String(key) + ':craft') h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
   return (h >>> 0)/2**32 < CRAFT_PUB ? 'craft' : 'pub';
 }
+// A restaurant's kind, by its key, the same every time: a Greek taverna (RestaurantGreek.glb: see furnishRestaurant in
+// interior.js) GREEK_RESTAURANT of the time, else an old New York Italian.
+export const GREEK_RESTAURANT = 0.4;
+export function restaurantStyleOf(key) {
+  let h = 2166136261;
+  for (const ch of String(key) + ':greek') h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return (h >>> 0)/2**32 < GREEK_RESTAURANT ? 'greek' : 'italian';
+}
+// An office's kind, by its key, the same every time: a startup's open plan (OfficeStartup.glb: see furnishOffice in
+// interior.js) STARTUP_OFFICE of the time, else a corporate one of cubicles.
+export const STARTUP_OFFICE = 0.35;
+export function officeStyleOf(key) {
+  let h = 2166136261;
+  for (const ch of String(key) + ':startup') h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return (h >>> 0)/2**32 < STARTUP_OFFICE ? 'startup' : 'corporate';
+}
 // A home's bedroom with its ensuite (see "the bedroom" in interior.js), by its key, the same every time: every home has
 // one, through an open doorway in one of the living room's walls but the door's — '+x' or '+z' (a far wall) or '-z' (the
 // other wall behind the camera).

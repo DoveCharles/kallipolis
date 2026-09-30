@@ -95,7 +95,7 @@ export const waiterBody = () => waiter;
 // interior.js) but for its screen and glass, which are its own.
 function makeBot(rig, animations) {
   let head = null, face = null, zzz = null, pint = null, moustache = null;
-  const shaped = [], screens = [], tux = [], toon = new Map();
+  const shaped = [], screens = [], tux = [], aprons = [], toon = new Map();
   rig.traverse(o => {
     if (o.isBone && o.name === 'Head') head = o;
     if (o.name === 'Face' && !o.isBone) face = o;
@@ -106,6 +106,7 @@ function makeBot(rig, animations) {
     o.frustumCulled = false; // (skinned: its bounds are the rest pose's)
     o.castShadow = o.receiveShadow = !o.material.transparent;
     const m = o.material;
+    if (m.name === 'Apron') aprons.push(o);
     if (m.name === 'Face' || m.name === 'FaceBacklight') { o.material = m.clone(); screens.push(o); }
     else if (!m.transparent) {
       if (!toon.has(m)) toon.set(m, Object.assign(new THREE.MeshToonMaterial({ name: m.name, color: m.color, map: m.map, gradientMap: TOON_RAMP, side: THREE.DoubleSide, flatShading: true }),
@@ -140,7 +141,7 @@ function makeBot(rig, animations) {
     }
     actions[clip.name] = action;
   }
-  return { root, rig, head, mixer, actions, shaped, screens, face, zzz, pint, moustache, tux, height: size.y };
+  return { root, rig, head, mixer, actions, shaped, screens, face, zzz, pint, moustache, tux, aprons, height: size.y };
 }
 // the bar bot (a pint in hand) or the waiter (a tux and a moustache, and no pint)
 function dressBot(b, waiter) {

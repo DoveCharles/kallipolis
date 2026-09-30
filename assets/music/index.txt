@@ -25,3 +25,8 @@ restaurant/De Curtis - Torna a Surriento.mid
 restaurant/Tosti - Marechiare.mid
 restaurant/Verdi - La donna è mobile.mid
 restaurant/Vivaldi - La Stravaganza, Concerto No. 4, I.mid
+restaurant-greek/Theodorakis - Zorba's Dance.mid
+restaurant-greek/Traditional - Alta es la Luna.mid
+restaurant-greek/Traditional - Psaropoula.mid
+restaurant-greek/Traditional - Syrtos Pylaias.mid
+restaurant-greek/Traditional - Tai Tai.mid
