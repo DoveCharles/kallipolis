@@ -59,7 +59,7 @@ The mortality reminder that comes with Autumn {mood = -0.5, speed = 0.8, agemult
 Any form of exercise {speed = 0.6, lounging = 3} <hobbies>
 Clowns <folk>
 Being a robot { agemult = 0.8, persist } <surreal>
-Worrying whether or not the packaging for the copious amount of sex toys they order online will be "discreet" | worring about whether or not the packaging fro the copious amount of sex toys I order online will be dic... wait, why am I saying this? Never mind {fidgety = 3, conservative = -0.05} <lewd>
+Worrying whether or not the packaging for the copious amount of sex toys they order online will be "discreet" | worring about whether or not the packaging fro the copious amount of sex toys I order online will be discreetly... wait, why am I saying this? Never mind {fidgety = 3, conservative = -0.05} <lewd>
 Geese {parks = 0.2} <nature>
 Queues {patience = 0.3} <stuff>
 Smells <health>

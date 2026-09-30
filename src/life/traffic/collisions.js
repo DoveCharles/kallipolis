@@ -101,7 +101,7 @@ export function runOverPeople(car, motion = null, inWay = null) {
       const before = car.struck?.get(p);
       struck.set(p, before === 'kill' ? 'kill' : hit);
       if (before === hit || before === 'kill') return;
-      const knocked = !isLying(p) && App.knockOverPerson(p, car);
+      const knocked = isLying(p) ? hit === 'knock' && App.knockAgainPerson(p, car) : App.knockOverPerson(p, car); // (already down: knocked down again)
       if (knocked || hit === 'kill') {
         impactSound('thump', p, speed);
         slowedBy(car, 'person', p.traits?.weight);
@@ -197,7 +197,7 @@ export function buildingHit(car) {
     const zoneReach = zoneBounds(zone);
     if (!zoneReach || Math.hypot(car.x - zoneReach.c.x, car.z - zoneReach.c.z) > zoneReach.r + reach) continue;
     for (const group of zone.buildingsGroup.children) {
-    const fp = group.userData.footprint;
+    const fp = group.userData.solidFootprint ?? group.userData.footprint; // (a podium's, wider, if it has one)
     if (!fp || fp.length < 3) continue;
     const { c, r } = footprintBounds(group);
     if (Math.hypot(car.x - c.x, car.z - c.z) > r + reach) continue;
@@ -206,6 +206,56 @@ export function buildingHit(car) {
   }
   return null;
 }
+const STILL_CAR_SPEED = 0.5; // (the fastest a car still counts as stationary, for bouncePerson)
+/**
+ * Someone knocked flat and sliding (see stepPush in people.js), moving to `to`: if their head, middle or legs are in (or
+ * within a body's width of) a building, or have just gone into a stationary car, the way out (unit) and how far in. A thump
+ * if newly hit hard enough.
+ * @param {object} p - the person (at where they were)
+ * @param {{x: number, z: number}} to
+ * @param {number} speed
+ * @returns {?{n: {x: number, z: number}, depth: number}}
+ */
+export function bouncePerson(p, to, speed) {
+  const r = 0.2*S.peopleSize, size = p.height*S.peopleSize, fx = Math.sin(p.heading), fz = Math.cos(p.heading);
+  const along = [0, -LYING_HEAD*size, LYING_LEGS*size];
+  const at = along.map(a => ({ x: to.x + fx*a, z: to.z + fz*a })), was = along.map(a => ({ x: p.x + fx*a, z: p.z + fz*a }));
+  const reach = LYING_HEAD*size + r;
+  let best = null;
+  const take = (n, depth) => { if (depth > 0 && (!best || depth > best.depth)) best = { n, depth }; };
+  for (const zone of buildingHolders()) {
+    const zoneReach = zoneBounds(zone);
+    if (!zoneReach || Math.hypot(to.x - zoneReach.c.x, to.z - zoneReach.c.z) > zoneReach.r + reach) continue;
+    for (const group of zone.buildingsGroup.children) {
+      const fp = group.userData.solidFootprint ?? group.userData.footprint; // (a podium's, wider, if it has one)
+      if (!fp || fp.length < 3) continue;
+      const { c, r: fr } = footprintBounds(group);
+      if (Math.hypot(to.x - c.x, to.z - c.z) > fr + reach) continue;
+      at.forEach(q => {
+        const wall = nearestWall(fp, q), inside = pointInPolygon(q, fp);
+        if (!inside && wall.d >= r) return;
+        take(inside ? { x: -wall.n.x, z: -wall.n.z } : wall.n, inside ? wall.d + r : r - wall.d); // (nearestWall's n points towards q)
+      });
+    }
+  }
+  forCarsNear(to.x, to.z, 6, car => {
+    if (car.li < 0 || car.kick || Math.abs(car.speed) > STILL_CAR_SPEED) return;
+    const sin = Math.sin(car.heading), cos = Math.cos(car.heading), hl = carLength(car)/2 + r, hw = carWidth(car)/2 + r;
+    at.forEach((q, k) => {
+      const dx = q.x - car.x, dz = q.z - car.z, f = dx*sin + dz*cos, s = dx*cos - dz*sin;
+      if (Math.abs(f) >= hl || Math.abs(s) >= hw) return;
+      const wx = was[k].x - car.x, wz = was[k].z - car.z;
+      if (Math.abs(wx*sin + wz*cos) < hl && Math.abs(wx*cos - wz*sin) < hw) return; // (already in it: e.g. the car that hit them)
+      // (out through the side they're least far into)
+      const byF = hl - Math.abs(f) < hw - Math.abs(s);
+      take(byF ? { x: sin*Math.sign(f), z: cos*Math.sign(f) } : { x: cos*Math.sign(s), z: -sin*Math.sign(s) }, byF ? hl - Math.abs(f) : hw - Math.abs(s));
+    });
+  });
+  if (best && !p.bounced) impactSound('thump', to, speed);
+  p.bounced = !!best;
+  return best;
+}
+App.bouncePerson = bouncePerson;
 // A circle round all of a zone's buildings (see footprintBounds), so buildingHit can pass over whole zones out of reach:
 // kept on its buildingsGroup, which is replaced whenever the zone is rebuilt, and worked out again if buildings are added.
 function zoneBounds(zone) {

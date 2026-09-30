@@ -24,7 +24,7 @@ function buildBridges(region) {
   scene.remove(S.bridgeGroup); disposeObject(S.bridgeGroup);
   S.bridgeGroup = new THREE.Group(); S.bridgeGroup.name = 'Bridges';
   if (region.length && (S.roadBridgeSources.length || S.pathBridgeSources.length)) {
-    const { ctIntersection, ctDifference } = ClipperLib.ClipType;
+    const { ctIntersection, ctDifference, ctUnion } = ClipperLib.ClipType;
     const inWater = createRegionTester(region);
     const pointAt = (p, q, t) => ({ X: p.X+(q.X-p.X)*t, Y: p.Y+(q.Y-p.Y)*t });
     // a railing along the stretch p→q (Clipper points) of a deck edge, set in from it by the style's inset
@@ -35,7 +35,8 @@ function buildBridges(region) {
     const deck = createMeshBuilder(), rails = createMeshBuilder();
     const outerEdges = S.roadBridgeSources.length ? createEdgeIndex(S.roadFootprint) : null;
     // road railings open where a path meets them, between where its footbridge's railings stand
-    const railGaps = S.pathFootprint.length ? offsetPaths(S.pathFootprint, -WOOD_RAILING_STYLE.inset, ClipperLib.JoinType.jtMiter) : [];
+    const walked = S.pathBridgeSources.filter(src => src.outline).reduce((all, src) => clipPolygons(ctUnion, all, src.outline), S.pathFootprint);
+    const railGaps = walked.length ? offsetPaths(walked, -WOOD_RAILING_STYLE.inset, ClipperLib.JoinType.jtMiter) : [];
     S.roadBridgeSources.forEach(({ territory, strokes }) => {
       const over = clipPolygons(ctIntersection, territory, region, true);
       if (!over.Childs().length) return;
@@ -71,19 +72,19 @@ function buildBridges(region) {
     });
     const wood = createMeshBuilder(), woodRails = createMeshBuilder();
     const roadRailArea = S.pathBridgeSources.length && S.roadFootprint.length ? offsetPaths(S.roadFootprint, -ROAD_RAILING_STYLE.inset, ClipperLib.JoinType.jtMiter) : [];
-    S.pathBridgeSources.forEach(({ strokes }) => {
-      const outline = unionRoadStrokes(strokes);
+    S.pathBridgeSources.forEach(({ strokes, outline = unionRoadStrokes(strokes), cut = [] }) => {
       const overWater = clipPolygons(ctIntersection, outline, region);
       // wherever a road already crosses this same stretch of water it carries its own bridge, so the walkway
       // is just cut off there (as it already is anywhere else it meets a road) instead of also getting one
-      const over = clipPolygons(ctDifference, overWater, S.roadFootprint, true);
+      const off = cut.length ? clipPolygons(ctUnion, S.roadFootprint, cut) : S.roadFootprint;
+      const over = clipPolygons(ctDifference, overWater, off, true);
       if (!over.Childs().length) return;
       wood.addTops(over, FOOTBRIDGE_TOP);
       wood.addTops(over, FOOTBRIDGE_TOP - FOOTBRIDGE_THICKNESS, true);
       const trackEdges = createEdgeIndex(outline), state = {};
       forEachPolyTreeEdge(over, (p, q, outward) => wood.addWall(p, q, FOOTBRIDGE_TOP - FOOTBRIDGE_THICKNESS, FOOTBRIDGE_TOP, outward));
       // railings run on over the road bridge's sidewalk as far as its railing
-      const railed = clipPolygons(ctDifference, overWater, roadRailArea, true);
+      const railed = clipPolygons(ctDifference, overWater, cut.length ? clipPolygons(ctUnion, roadRailArea, cut) : roadRailArea, true);
       forEachPolyTreeEdge(railed, (p, q, outward) => {
         trackEdges.coverage(p, q).forEach(([t0, t1]) => railAlong(woodRails, pointAt(p, q, t0), pointAt(p, q, t1), outward, FOOTBRIDGE_TOP, WOOD_RAILING_STYLE, state));
       });

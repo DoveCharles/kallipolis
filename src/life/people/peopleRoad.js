@@ -19,7 +19,7 @@ const CRAWL_WOBBLE = 0.08, CRAWL_WOBBLES_PER_SECOND = 1.2; // (how far they swin
 const ROAD_WARY_TIME = 45, ROAD_WARY_RADIUS = 2; // (seconds wary after a car knocks them down; how many times the usual berth they want before crossing)
 
 const onRoad = (x, z) => !!peopleNav?.onPavement(x, z);
-const offRoad = (x, z) => !onRoad(x, z) && !isOpenWater(x, z, [S.roadFootprint, S.pathFootprint]);
+const offRoad = (x, z) => !onRoad(x, z) && !isOpenWater(x, z, [S.roadFootprint, S.walkDeck]);
 
 /**
  * Start someone who's lain their while crawling off the road, if they're on it and there's somewhere off it in reach.

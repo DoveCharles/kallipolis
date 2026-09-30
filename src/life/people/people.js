@@ -30,7 +30,7 @@ import { relateFelt, relateSaw, pruneGone } from './peopleRelations.js';
 import { logLine, forgetLinesExcept } from './peopleSaid.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { hidingFromSun, leaveGroup, outOfTime, vanishIndoors } from './peopleActivities.js';
-import { PUNCH_CHASE_SPEED, WALK_PACE, awaited, besideLeader, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
+import { PUNCH_CHASE_SPEED, WALK_PACE, awaited, besideLeader, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, knockAgain, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater, wouldWade, onWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
 import { drinking, goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './peopleStalls.js';
@@ -1130,19 +1130,28 @@ function pushPerson(p, dirX, dirZ, distance) {
   const speed = distance*PUSH_DECAY/len; // (the distance covered is the starting speed over the decay rate)
   p.push = { x: (p.push?.x ?? 0) + dirX*speed, z: (p.push?.z ?? 0) + dirZ*speed };
 }
+const PUSH_BOUNCE = 0.5; // (the share of speed into a wall or stationary car someone knocked flat bounces back with)
 function stepPush(p, dt) {
-  p.x += p.push.x*dt; p.z += p.push.z*dt;
+  const to = { x: p.x + p.push.x*dt, z: p.z + p.push.z*dt };
+  const lying = p.punched && p.punched.stage !== 'marked' && p.punched.stage !== 'brace'; // (see isLying in traffic/collisions.js)
+  const hit = lying ? App.bouncePerson?.(p, to, Math.hypot(p.push.x, p.push.z)) : null;
+  p.x = to.x; p.z = to.z;
+  if (hit) {
+    const { n, depth } = hit, into = p.push.x*n.x + p.push.z*n.z;
+    if (into < 0) { p.push.x -= (1 + PUSH_BOUNCE)*into*n.x; p.push.z -= (1 + PUSH_BOUNCE)*into*n.z; }
+    p.x += n.x*depth; p.z += n.z*depth; // (back out of it)
+  }
   const slowing = Math.exp(-PUSH_DECAY*dt);
   p.push.x *= slowing; p.push.z *= slowing;
   if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; }
-  if (Math.hypot(p.push.x, p.push.z) < 0.05) p.push = null;
+  if (Math.hypot(p.push.x, p.push.z) < 0.05) p.push = p.bounced = null;
 }
 
 /**
  * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
  * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
  */
-Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, useFromPossession, killPerson, knockOverPerson: knockOver, personHeight, people, peopleGroups: groups, followedPerson: () => followed, peopleClock: () => lastPeopleTime });
+Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, useFromPossession, killPerson, knockOverPerson: knockOver, knockAgainPerson: knockAgain, personHeight, people, peopleGroups: groups, followedPerson: () => followed, peopleClock: () => lastPeopleTime });
 
 /**
  * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone

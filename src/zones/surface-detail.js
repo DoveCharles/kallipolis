@@ -806,6 +806,7 @@ export function makeBuildingMesh(poly,h,isLandmark,rng,windowsEnabled,colorVaria
     const podiumH = Math.min(h*0.22, 2+rng()*2);
     const podiumFootprint = insetPolygon(poly, -(0.6+rng()*0.9));
     addSegment(podiumFootprint, podiumH, 0, true);
+    group.userData.solidFootprint = podiumFootprint; // (what bumps into it hits: see life/traffic/collisions.js)
   }
   if (rng() < 0.32) addVerticalRibs(group, poly, 0, baseWallHeight, rng, accentColorFrom(color, buildingHue, rng), win);
   if (!isLandmark && avgR > 2.5 && rng() < 0.22) addBalconies(group, poly, 0, detailZHeight, rng, color.clone().multiplyScalar(0.92).getHex(), win);

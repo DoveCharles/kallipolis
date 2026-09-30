@@ -737,6 +737,8 @@ export function mallFootprints() {
   });
   const roads = S.riverFootprint?.length ? union(S.roadFootprint, S.riverFootprint) : S.roadFootprint;
   const roadsBack = roads.length ? offsetPaths(roads, EDGE, ClipperLib.JoinType.jtRound) : [];
+  const onRoad = createRegionTester(S.roadFootprint);
+  const prev = footprints;
   footprints = new Map();
   networks.forEach((lines, netId) => {
     const s = mallSettingsOf(lines[0]), CW = (lines[0].width || MALL_WIDTH)/2, half = CW + s.depth;
@@ -750,9 +752,21 @@ export function mallFootprints() {
     const paths = minus(band, roadsBack);
     const key = JSON.stringify([lines.map(l => [l.width, l.mall, l.nodeIds.map(id => { const n = roadNodes[id]; return [n.x, n.z, n.type, n.handleIn, n.handleOut, !!n.foodCourt]; })]),
       Math.round(pathsArea(paths)*10)]);
-    footprints.set(netId, { lines, spine, paths, key, s, CW });
+    const old = prev.get(netId);
+    const bridges = old?.key === key ? old.bridges : entranceBridges(spine, paths, CW, onRoad);
+    footprints.set(netId, { lines, spine, paths, key, s, CW, bridges });
+    // (built over water by buildBridges like a path's footbridge, less the mall itself)
+    if (bridges.length) S.pathBridgeSources.push({ networkId: netId, outline: bridges, cut: paths });
   });
   return [...footprints.values()].flatMap(f => f.paths);
+}
+// a concourse-wide strip out of each entrance facing a road, across the gap to its pavement (see EDGE)
+function entranceBridges(spine, paths, CW, onRoad) {
+  const toC = (x, z) => ({ X: Math.round(x*CLIPPER_SCALE), Y: Math.round(z*CLIPPER_SCALE) });
+  const strips = spineWithin(spine, createRegionTester(paths)).nodes.filter(n => String(n.id).startsWith('cut'))
+    .map(n => n.entrance).filter(e => onRoad(e.x + e.dx*(EDGE + 0.5), e.z + e.dz*(EDGE + 0.5)))
+    .map(e => [[-0.3, -CW], [EDGE + 1.5, -CW], [EDGE + 1.5, CW], [-0.3, CW]].map(([a, w]) => toC(e.x + e.dx*a - e.dz*w, e.z + e.dz*a + e.dx*w)));
+  return strips.length ? union(strips) : [];
 }
 // The malls, built (or built again) wherever what they're built from has changed — but not while a node's being dragged,
 // which would build one over and over: they're left as they were till it's let go of, then built once.

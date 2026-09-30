@@ -1168,6 +1168,21 @@ export function holdDown(p) {
   p.punched.timer = REVIVE_SHAKE_TIME;
 }
 /**
+ * Knock someone already on the ground down again (hit by a car as they lie there): still falling, they fall on; otherwise
+ * flat in the Fallen pose, their time down starting over.
+ * @param {Person} p - the person
+ * @param {{x: number, z: number}} from - what hit them
+ * @returns {boolean} whether they were knocked down again
+ */
+export function knockAgain(p, from) {
+  if (isGone(p) || !p.punched || p.water) return false;
+  p.punched.by = from;
+  if (p.punched.stage === 'fall') return true;
+  holdDown(p);
+  if (!p.punched.revive) p.punched.timer = (3 + peopleRng()*4)*DOWN_TIME_SCALE;
+  return true;
+}
+/**
  * Move someone who's been punched on, each frame: lying there a while, then getting up.
  * @param {Person} p - the person
  * @param {number} dt - seconds since the last frame

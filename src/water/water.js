@@ -230,7 +230,7 @@ export function getVisibleWaterRegion() {
   return sinkCache.region;
 }
 // Whether a point is over open water: in the visible water (getVisibleWaterRegion) and on none of `decks` — the
-// footprints that carry things across it, such as S.roadFootprint for cars, plus S.pathFootprint for people. Each
+// footprints that carry things across it, such as S.roadFootprint for cars, plus S.walkDeck for people. Each
 // region's point tester is kept until that region is replaced.
 const regionTesters = new WeakMap();
 const testerOf = region => { let test = regionTesters.get(region); if (!test) regionTesters.set(region, test = App.createRegionTester(region)); return test; };

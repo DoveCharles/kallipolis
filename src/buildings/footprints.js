@@ -89,7 +89,7 @@ export function distToPolygonBoundary(p, poly) {
 export function footprintBounds(group) {
   let bounds = group.userData.clipBounds;
   if (!bounds) {
-    const fp = group.userData.footprint, c = centroid(fp);
+    const fp = group.userData.solidFootprint ?? group.userData.footprint, c = centroid(fp); // (the wider of the two)
     bounds = group.userData.clipBounds = { c, r: Math.max(...fp.map(p => Math.hypot(p.x - c.x, p.z - c.z))) };
   }
   return bounds;

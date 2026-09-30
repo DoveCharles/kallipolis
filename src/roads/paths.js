@@ -574,6 +574,8 @@ export function rebuildRoadMeshes() {
   // (or not, while a node's dragged) by rebuildMalls
   const malls = App.mallFootprints?.() || [];
   if (malls.length) S.landCutFootprint = clipPolygons(ctUnion, S.landCutFootprint, malls);
+  // what people can walk over water on: paths, malls and their entrance bridges
+  S.walkDeck = malls.length ? clipPolygons(ctUnion, S.pathFootprint, malls.concat(S.pathBridgeSources.flatMap(src => src.outline || []))) : S.pathFootprint;
   App.rebuildMalls?.();
   const layoutKey = roadLayoutKey();
   if (layoutKey !== lastLayoutKey) {
