@@ -7,8 +7,8 @@ import { listener, outdoorsOf, ear } from './sfx.js';
 //    rushing it's SPEED_PITCH times that and SPEED_LOUDER times as loud. Still, she's quiet.
 //  - her siren while she rushes to someone hurt: a slow wail, woooo-woooo, rising and falling around SIREN_HZ; heard much
 //    further off than the rest (SIREN_HEAR).
-//  - healing: a soft major-seventh chord swelling in and shimmering, with bell-like chimes strummed up the C lydian scale
-//    over it, slowly, the one strum lasting the whole heal, and high twinkles sprinkled about (TWINKLE_EVERY), all
+//  - healing: a soft major-seventh chord swelling in and shimmering, with bubbly notes (each a sine blooping up to pitch)
+//    strummed up the C major pentatonic, four octaves, over it, slowly, the one strum lasting the whole heal, and high twinkles sprinkled about (TWINKLE_EVERY), all
 //    through an echo (ECHO) — as the hearts fly off; and under it, every RUSTLE_EVERY or so, the noises of
 //    dressings going on: a rustle of gauze, a swish of a bandage wrapped round, a rip of tape or velcro (rustle).
 // There are VOICES_MAX of these, handed each frame to the nearest bots, as the buzzes are to bees.
@@ -21,8 +21,8 @@ const TREAD_HZ = 9;                     // the treads' rattle a second at her ro
 const SIREN_HZ = 760, SIREN_SWING = 330, SIREN_RATE = 0.55, SIREN_VOLUME = 0.05; // centre, ± Hz, wails a second
 const CHORD = [523.25, 659.25, 783.99, 987.77, 1318.5]; // Cmaj7 and a high E
 const HEAL_VOLUME = 0.008;
-const SCALE = [523.25, 587.33, 659.25, 739.99, 783.99, 880, 987.77, // C lydian (F#), two octaves: C5 up to C7
-  1046.5, 1174.7, 1318.5, 1480, 1568, 1760, 1975.5, 2093];
+const SCALE = [0, 1, 2, 3].flatMap(o => [0, 2, 4, 7, 9].map(n => 261.63*2**(o + n/12))).concat(4186); // C major pentatonic, C4 up to C8
+const BUBBLE = { from: 0.55, over: 0.05, ring: 0.35 }; // a strummed note: blooping up from `from` × its pitch in `over` s
 const BELL = [[1, 1], [2.76, 0.35], [5.4, 0.12]]; // a chime's partials: × pitch, loudness
 const TWINKLE_EVERY = [0.08, 0.3], TWINKLE_VOLUME = 0.012;
 const ECHO = { time: 0.23, feedback: 0.45, wet: 0.5 };
@@ -147,6 +147,23 @@ function chime(v, hz, now, volume = CHIME_VOLUME, ring = CHIME_RING) {
   }
 }
 
+// a bubble: a sine sliding quickly up to its pitch, and a fainter one an octave up, popping off short
+function bubble(v, hz, now) {
+  const context = listener.context;
+  for (const [times, loud] of [[1, 1], [2, 0.2]]) {
+    const o = context.createOscillator(), g = context.createGain(), f = hz*times;
+    o.type = 'sine';
+    o.frequency.setValueAtTime(f*BUBBLE.from, now);
+    o.frequency.exponentialRampToValueAtTime(f, now + BUBBLE.over);
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(CHIME_VOLUME*loud, now + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + BUBBLE.ring);
+    o.connect(g).connect(v.sparkle);
+    o.start(now); o.stop(now + BUBBLE.ring + 0.05);
+    o.onended = () => g.disconnect();
+  }
+}
+
 /**
  * One frame of the MedBots' noises: hand the voices to the nearest bots, and set what each is making.
  * @param {{bot: object, x: number, y: number, z: number, speed: number, rushing: boolean, healing: boolean, healed: number}[]}
@@ -184,9 +201,9 @@ export function updateMedBotSounds(bots) {
     // (one strum up the scale over the whole heal: each note as the heal gets that far through)
     const notes = b.healing ? Math.min(SCALE.length, Math.floor(b.healed*SCALE.length) + 1) : 0;
     if (notes < v.notes) v.notes = 0;
-    while (v.notes < notes) chime(v, SCALE[v.notes++], now);
-    if (b.healing && now >= v.nextTwinkle) { // (a high twinkle, anywhere up the top octave or the one above)
-      chime(v, SCALE[7 + Math.floor(Math.random()*8)]*(Math.random() < 0.5 ? 2 : 1), now, TWINKLE_VOLUME, 0.35);
+    while (v.notes < notes) bubble(v, SCALE[v.notes++], now);
+    if (b.healing && now >= v.nextTwinkle) { // (a high twinkle, anywhere up the top two octaves)
+      chime(v, SCALE[10 + Math.floor(Math.random()*11)], now, TWINKLE_VOLUME, 0.35);
       v.nextTwinkle = now + TWINKLE_EVERY[0] + Math.random()*(TWINKLE_EVERY[1] - TWINKLE_EVERY[0]);
     }
     if (b.healing && now >= v.nextRustle) {
