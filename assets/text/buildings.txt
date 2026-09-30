@@ -25,7 +25,7 @@
 #   industrial   warehouse, factory, tankfarm, containeryard
 #   farmland     farmstead
 #   suburbs      house
-#   town         terrace, pub, salon, clothes, restaurant (any other shopfront is a terrace)
+#   town         terrace, pub, salon, clothes, restaurant (titles for Greek and sushi ones under [restaurant-greek] / [restaurant-sushi]; any other shopfront is a terrace)
 #   airport      terminal, hangar, controltower
 #   mall         clothes, salon, pub, restaurant (the same kinds as a town's, each a unit off the concourse), vacant
 #
@@ -271,6 +271,49 @@ hates = Snapping the spaghetti
 hates = Cappuccino after noon
 hates = Asking for ketchup
 hates = No-shows on a Saturday
+
+# a Greek or sushi restaurant (see restaurantStyleOf in src/buildings/footprints.js): anything not said here is [restaurant]'s
+[restaurant-greek]
+title = The Olive Tree {font = italic Georgia, color = #ffffff, backcolor = #1f4a8a}
+title = Zorba's {font = 900 Arial Black, color = #1f4a8a, backcolor = #f4f1ea}
+title = Taverna Mykonos {font = Copperplate, color = #ffffff, backcolor = #2a5a9a}
+title = Santorini {font = italic Didot, color = #1f4a8a}
+title = Opa! {font = italic Impact, color = #ffffff, backcolor = #3a7ac8}
+title = The Acropolis {font = Times New Roman, color = #c8a040, backcolor = #1a2a4a}
+title = Nikos {font = italic Brush Script MT, color = #ffffff}
+title = Little Athens {font = italic Georgia, color = #3a6a2a, backcolor = #f4f1ea}
+mood = 🫒
+loves = Smashing plates (ceremonially)
+loves = Ouzo on the house
+loves = The owner's cousin's olive oil
+loves = Dancing between the tables
+loves = A proper charcoal grill
+hates = Calling it a kebab
+hates = Feta that isn't feta
+hates = Tzatziki with no garlic
+hates = Customers who skip the meze
+hates = The Parthenon marbles being in London
+
+[restaurant-sushi]
+title = Sakura {font = italic Georgia, color = #ffb7c5, backcolor = #1a1a1c}
+title = Kaiten Kitchen {font = 900 Arial Black, color = #ffffff, backcolor = #8a1e1e}
+title = Belt Up! {font = italic Impact, color = #ffd23f, backcolor = #1a1a1c}
+title = Maneki {font = Copperplate, color = #c8a040, backcolor = #2a1a14}
+title = Umi {font = Didot, color = #ffffff, backcolor = #22305a}
+title = Round & Roll {font = italic Trebuchet MS, color = #ff6a4a}
+title = Wasabi House {font = Arial Black, color = #7ac83a, backcolor = #1a1a1c}
+title = Koi {font = italic Brush Script MT, color = #ff8a3a, backcolor = #1e2230}
+mood = 🍣
+loves = The belt going round
+loves = A tall stack of empty plates
+loves = Fresh salmon at 6am
+loves = The lucky cat by the till
+loves = Perfectly cooked rice
+hates = Wasabi in the soy sauce
+hates = Plates put back on the belt
+hates = Soggy nori
+hates = Rubbing chopsticks together
+hates = The belt jamming
 
 [clothes]
 enterable = yes

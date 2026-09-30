@@ -635,9 +635,9 @@ function buildingAhead(p) {
     if (!hit) continue;
     const key = buildingKey(hit.zone, hit.index), number = buildingNumber(key), kind = buildingKindOf(hit.group, hit.zone);
     const height = hit.group.userData.height ?? 0;
-    const title = buildingTitle(kind, number), name = buildingName(kind, number, height, key);
+    const title = buildingTitle(kind, number, key), name = buildingName(kind, number, height, key);
     return { ...hit, key, kind, number, at: { x, z }, enterable: buildingEnterable(kind),
-      name: buildingLabelName(kind, number, height, key), type: title ? name : buildingTypeOf(kind, number).name ?? name };
+      name: buildingLabelName(kind, number, height, key), type: title ? name : buildingTypeOf(kind, number, key).name ?? name };
   }
   return null;
 }

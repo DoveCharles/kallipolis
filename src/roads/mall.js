@@ -351,7 +351,7 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs, cladding,
   group.name = 'Building';
   const top = y0 + MALL_LEVEL - 0.35;
   // (its fascia the colour its title asks for, if it does: see buildingSign)
-  const backcolor = kind === 'vacant' ? null : buildingSign(kind, buildingNumber(key)).backcolor;
+  const backcolor = kind === 'vacant' ? null : buildingSign(kind, buildingNumber(key), key).backcolor;
   if (backcolor) cladding = new THREE.Color(backcolor).getHex();
   Object.assign(group.userData, { footprint: lot, height: y0 + MALL_LEVEL, base: y0, buildingKind: kind, mallLevel: level, batchable: true });
   // (lit, its light spilling out onto the concourse after dark: see streetlights.js)
@@ -580,7 +580,7 @@ function signAtlas(signs) {
   if (!signs.length || typeof document === 'undefined') return null;
   const cells = signs.map(sg => {
     const number = buildingNumber(sg.key), w = Math.min(sg.len - 0.7, 6);
-    const sign = buildingSign(sg.kind, number), text = sign.text || buildingName(sg.kind, number, 0);
+    const sign = buildingSign(sg.kind, number, sg.key), text = sign.text || buildingName(sg.kind, number, 0);
     return { ...sg, number, w, text, sign, px: Math.max(SIGN_PX, Math.min(ATLAS_W, Math.round(SIGN_PX*w/SIGN_H))) };
   }).filter(c => c.w > 0.8 && c.text);
   // shelf packing: left to right, a new row whenever one's full

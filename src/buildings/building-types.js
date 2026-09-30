@@ -3,7 +3,7 @@ import { TEXT_ROWS } from '../ui/entity-card.js';
 import { capitalised } from '../ui/garble.js';
 import { hashNameToNumber, mulberry32 } from '../core/math.js';
 import { pickWord, speechReady } from '../life/speech-text.js';
-import { roomLayoutOf } from './footprints.js';
+import { roomLayoutOf, restaurantStyleOf } from './footprints.js';
 
 // ============================================================ what buildings are like
 // Each kind of building's name, mood, and what it loves and hates, for its card (building-card.js) — from
@@ -18,6 +18,7 @@ const ZONE_OF_KIND = {
   terrace: 'town', pub: 'town', salon: 'town', clothes: 'town', restaurant: 'town',
   terminal: 'airport', hangar: 'airport', controltower: 'airport',
   vacant: 'mall',
+  'restaurant-greek': 'restaurant', 'restaurant-sushi': 'restaurant',
 };
 const buildings = loadTypeText('assets/text/buildings.txt', {
   attributes: TEXT_ROWS,
@@ -41,7 +42,12 @@ export function buildingKindOf(group, zone) {
 export const buildingEnterable = kind => buildings.says(kind, 'enterable');
 // A building's card details: `kind` is what it is (see buildingKindOf) and `number` its own number (see buildingNumber
 // in footprints.js).
-export const buildingTypeOf = (kind, number = 1) => buildings.of(kind, number);
+// A Greek or sushi restaurant (restaurantStyleOf, by `key`) reads [restaurant-greek] / [restaurant-sushi], falling back to [restaurant].
+const cuisineKind = (kind, key) => {
+  const style = kind === 'restaurant' && key != null ? restaurantStyleOf(key) : 'italian';
+  return style === 'italian' ? kind : 'restaurant-' + style;
+};
+export const buildingTypeOf = (kind, number = 1, key) => buildings.of(cuisineKind(kind, key), number);
 
 // What a building's called, wherever something names it (its card's Name row, the label on whoever's going into it,
 // see buildingOwnName and buildingKindName): its own name if it has one, else what it is. Only the card's title bar
@@ -69,7 +75,7 @@ export function buildingKindName(kind, number, height) {
 // yard's (see pickedName, HOUSE_KINDS and INDUSTRIAL_KINDS), the card's title bar being what says what kind of building
 // it is (see buildingKindName). '' for the rest: a farm is only what it is.
 export function buildingOwnName(kind, number, key) {
-  const title = buildingTitle(kind, number);
+  const title = buildingTitle(kind, number, key);
   if (title) return title;
   if (kind === 'buildings' || kind === 'landmark')
     return pickedName(roomLayoutOf(kind, number) === 'office' ? 'offices' : 'residential', number) ?? '';
@@ -105,7 +111,7 @@ export function buildingCardName(kind, number, key) {
 // in peopleTracking.js): its title where it has one (a pub's "The Red Lion" — nothing else needs saying of one), else its
 // name with its number after it, unless the name says the number already (a house's, above).
 export function buildingLabelName(kind, number, height, key) {
-  const title = buildingTitle(kind, number);
+  const title = buildingTitle(kind, number, key);
   if (title) return title;
   const name = buildingName(kind, number, height, key);
   return saysNumber(name, number) ? name : `${name} #${number}`;
@@ -129,16 +135,16 @@ function pickedName(category, number) {
 }
 // A building's own name, as a pub's "The Red Lion": one of its kind's `title` lines in buildings.txt, picked by its number
 // the way the card's other lines are; '' for a kind that has none (a house).
-export function buildingTitle(kind, number = 1) {
-  return buildingSign(kind, number).text;
+export function buildingTitle(kind, number = 1, key) {
+  return buildingSign(kind, number, key).text;
 }
 // A title can say how it's lettered on a sign (a mall shop's: see signAtlas in roads/mall.js), in brackets after it:
 // `title = The Red Lion {font = Georgia, color = #f2d27a}` — `font` a typeface (with `italic`, `bold` or a weight like 900
 // before it if wanted: `font = italic Brush Script MT`), `color` the lettering's, `backcolor` the cladding it's on. Any can
 // be left out.
 // Returns { text, font, color, backcolor }, all but the first null where the title doesn't say.
-export function buildingSign(kind, number = 1) {
-  const titles = buildings.listOf(kind, 'title');
+export function buildingSign(kind, number = 1, key) {
+  const titles = buildings.listOf(cuisineKind(kind, key), 'title');
   const raw = titles.length ? titles[(number - 1) % titles.length] : '';
   const style = raw.match(/\s*\{([^{}]*)\}\s*$/), said = {};
   if (style) style[1].split(',').forEach(part => {
