@@ -1908,7 +1908,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
   // (the nude trait's censor, pelvis to chest: see peopleCensor.js)
   const censor = makeCensorMesh({ vertexPars: PERSON_VERTEX_PARS, uniforms, anim, body: mesh, nudeRow: NUDE_ROW, skinRow: SKIN_ROW, headshotLayer: HEADSHOT_LAYER,
-    rest: { ...censorRest, tall: geometry.boundingBox.max.y - geometry.boundingBox.min.y, floor: geometry.boundingBox.min.y } });
+    rest: { ...censorRest, tall: geometry.boundingBox.max.y - geometry.boundingBox.min.y } });
   const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair'), 1: traitRow('Hat') }, femaleOnly: [] };
   const glassesLook = { palette: hairPalette, traitColors: { 0: traitRow('Glasses') }, femaleOnly: [] };
   const looks = { hair: hairLook, glasses: glassesLook, skirt: { palette: [new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Skirt') }, femaleOnly: [], clearThighs: !!thighs },

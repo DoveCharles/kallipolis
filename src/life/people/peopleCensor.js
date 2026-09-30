@@ -3,13 +3,14 @@ import { scene } from '../../core/scene.js';
 
 // The nude trait's censor: a Sims-style mosaic rectangle over each nude person, from upper thigh to stomach (a man) or
 // to below the shoulders (a woman). It faces the camera, upright along the body's own up (pelvis to chest, as posed), so
-// it falls over with them; seen along the body it hangs from just under the head (from above) or sits on their feet (below). One instanced quad per
+// it falls over with them; seen along the body it hangs from just under the head (from above) or comes nearer the camera (below). One instanced quad per
 // slot, sharing the body mesh's matrices and pose attribute.
 
 const CENSOR_WIDTH = 0.26;   // × the model's height
 const CENSOR_NEAR = 0.3;     // how far towards the camera it's pushed, × the model's height (clear of the body)
 const CENSOR_BLOCKS = 3;     // mosaic blocks across
 const CENSOR_MIN_TALL = 0.8;  // the least it's ever as tall as it's wide, seen from above
+const CENSOR_BELOW_NEAR = 2;  // seen from straight below, this many times CENSOR_NEAR more towards the camera
 const CENSOR_SHIMMER = 6;    // times a second the blocks' shades re-roll
 
 /**
@@ -29,7 +30,7 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
   geometry.setAttribute('instanceAnim', anim);
   const own = {
     censorBones: { value: new THREE.Vector2(rest.pelvis, rest.chest) },
-    censorLow: { value: rest.low }, censorHighMan: { value: rest.highMan }, censorHighWoman: { value: rest.highWoman }, censorFeet: { value: new THREE.Vector3(0, rest.floor, 0) },
+    censorLow: { value: rest.low }, censorHighMan: { value: rest.highMan }, censorHighWoman: { value: rest.highWoman },
     censorWidth: { value: CENSOR_WIDTH*rest.tall }, censorNear: { value: CENSOR_NEAR*rest.tall },
     censorTime: { value: 0 },
   };
@@ -38,7 +39,7 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
     side: THREE.DoubleSide,
     vertexShader: `${vertexPars}
       uniform vec2 censorBones;
-      uniform vec3 censorLow, censorHighMan, censorHighWoman, censorFeet;
+      uniform vec3 censorLow, censorHighMan, censorHighWoman;
       uniform float censorWidth, censorNear;
       varying vec2 vCensorBlock;
       varying vec3 vCensorSkin;
@@ -61,14 +62,15 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
         if (dot(side, side) < 1e-8) side = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
         side = normalize(side);
         vec3 onScreen = cross(facing, side); // (the body's up, as the camera sees it)
-        // looked at along the body it shortens (no less than MIN_TALL × its width): from above, its top moves to just under
-        // the head; from below, its bottom to their feet
-        float along = dot(up, facing), a = abs(along);
-        tall = max(tall*sqrt(1.0 - a*a), ${CENSOR_MIN_TALL.toFixed(2)}*censorWidth*scale);
-        vec3 middle;
-        if (along >= 0.0) middle = mix(top, (placed*(personBone(censorBones.y)*vec4(censorHighWoman, 1.0))).xyz, a) - onScreen*0.5*tall;
-        else middle = mix(low, (placed*vec4(censorFeet, 1.0)).xyz, a) + onScreen*0.5*tall;
-        vec3 world = middle + side*position.x*censorWidth*scale + onScreen*position.y*tall + facing*censorNear*scale;
+        // from above (along the body) it shortens, no less than MIN_TALL × its width, its top moving to just under the head;
+        // from below it keeps its place and size, only coming nearer the camera (by up to BELOW_NEAR more)
+        float along = dot(up, facing), above = max(along, 0.0), below = max(-along, 0.0);
+        vec3 middle = 0.5*(low + top);
+        if (above > 0.0) {
+          tall = max(tall*sqrt(1.0 - above*above), ${CENSOR_MIN_TALL.toFixed(2)}*censorWidth*scale);
+          middle = mix(top, (placed*(personBone(censorBones.y)*vec4(censorHighWoman, 1.0))).xyz, above) - onScreen*0.5*tall;
+        }
+        vec3 world = middle + side*position.x*censorWidth*scale + onScreen*position.y*tall + facing*censorNear*scale*(1.0 + ${CENSOR_BELOW_NEAR.toFixed(2)}*below);
         gl_Position = projectionMatrix*viewMatrix*vec4(world, 1.0);
         float block = censorWidth*scale/${CENSOR_BLOCKS.toFixed(1)};
         vCensorBlock = vec2((position.x + 0.5)*censorWidth*scale, (position.y + 0.5)*tall)/block;
