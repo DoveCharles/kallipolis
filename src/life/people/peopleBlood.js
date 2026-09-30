@@ -211,6 +211,17 @@ export function punchSpill(victim, puncher) {
 }
 
 /**
+ * Someone landing hard from a fall (see peopleFall.js) or cut punching a fence (updateSwing in peopleTracking.js): always
+ * the burst and chunks of a critical punch, thrown up.
+ * @param {Person} victim
+ * @returns {void}
+ */
+export function fallSpill(victim) {
+  spillBlood({ x: victim.x, y: victim.y, z: victim.z }, 1.7*victim.height*S.peopleSize, PUNCH_SPILL_CHUNKS_MAX, { x: 0, y: PUNCH_SPILL_THROW, z: 0 });
+  bloodBurst(victim, null, { scale: PUNCH_SPILL_SCALE, includeVictim: true });
+}
+
+/**
  * Land the blood from bloodBurst on each person as it reaches them.
  * @param {number} dt - seconds since the last frame
  * @returns {void}

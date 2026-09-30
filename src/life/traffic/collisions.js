@@ -1,7 +1,7 @@
 import { S, App, buildingHolders } from '../../core/shared.js';
 import { Y_ROAD } from '../../core/scene.js';
 import { pointInPolygon } from '../../core/math.js';
-import { footprintBounds } from '../../buildings/footprints.js';
+import { footprintBounds, wallsOf } from '../../buildings/footprints.js';
 import { isPedInDanger, voiceOfPerson } from '../people/people.js';
 import { exclaim } from '../../audio/voices.js';
 import { puffSmoke, sparks, burnFx, igniteFx } from '../giblets.js';
@@ -197,19 +197,23 @@ export function buildingHit(car) {
     const zoneReach = zoneBounds(zone);
     if (!zoneReach || Math.hypot(car.x - zoneReach.c.x, car.z - zoneReach.c.z) > zoneReach.r + reach) continue;
     for (const group of zone.buildingsGroup.children) {
-    const fp = group.userData.solidFootprint ?? group.userData.footprint; // (a podium's, wider, if it has one)
-    if (!fp || fp.length < 3) continue;
+    const walls = wallsOf(group); // (a podium's footprint, wider, if it has one; and solid props)
+    if (!walls.length) continue;
     const { c, r } = footprintBounds(group);
     if (Math.hypot(car.x - c.x, car.z - c.z) > r + reach) continue;
-    if (corners.some(q => pointInPolygon(q, fp)) || fp.some(inCar)) return fp;
+    for (const { poly: fp } of walls) if (corners.some(q => pointInPolygon(q, fp)) || fp.some(inCar)) return fp;
     }
   }
   return null;
 }
-const STILL_CAR_SPEED = 0.5; // (the fastest a car still counts as stationary, for bouncePerson)
+// (points along someone knocked flat that bouncePerson checks, + ahead of where they are, at people size and height 1:
+// lying, from their legs through their middle to their head; falling, from their feet back to where their head's going)
+const FALLING_REACH = 1.4;
+const LYING_ALONG = [LYING_LEGS, LYING_LEGS/2, 0, -LYING_HEAD/2, -LYING_HEAD];
+const FALLING_ALONG = [0, -FALLING_REACH/3, -FALLING_REACH*2/3, -FALLING_REACH];
 /**
  * Someone knocked flat and sliding (see stepPush in people.js), moving to `to`: if their head, middle or legs are in (or
- * within a body's width of) a building, or have just gone into a stationary car, the way out (unit) and how far in. A thump
+ * within a body's width of) a building, or have just gone into a car (any: parked, driven or moving), the way out (unit) and how far in. A thump
  * if newly hit hard enough.
  * @param {object} p - the person (at where they were)
  * @param {{x: number, z: number}} to
@@ -218,28 +222,30 @@ const STILL_CAR_SPEED = 0.5; // (the fastest a car still counts as stationary, f
  */
 export function bouncePerson(p, to, speed) {
   const r = 0.2*S.peopleSize, size = p.height*S.peopleSize, fx = Math.sin(p.heading), fz = Math.cos(p.heading);
-  const along = [0, -LYING_HEAD*size, LYING_LEGS*size];
+  // (the length of them, head to foot: still falling, they stand where their feet are and go over backwards, so their
+  // body reaches FALLING_REACH behind; down, they're at their middle — see landFall in peopleActivities.js)
+  const along = (p.punched?.stage === 'fall' ? FALLING_ALONG : LYING_ALONG).map(a => a*size);
   const at = along.map(a => ({ x: to.x + fx*a, z: to.z + fz*a })), was = along.map(a => ({ x: p.x + fx*a, z: p.z + fz*a }));
-  const reach = LYING_HEAD*size + r;
+  const reach = Math.max(...along.map(Math.abs)) + r;
   let best = null;
   const take = (n, depth) => { if (depth > 0 && (!best || depth > best.depth)) best = { n, depth }; };
   for (const zone of buildingHolders()) {
     const zoneReach = zoneBounds(zone);
     if (!zoneReach || Math.hypot(to.x - zoneReach.c.x, to.z - zoneReach.c.z) > zoneReach.r + reach) continue;
     for (const group of zone.buildingsGroup.children) {
-      const fp = group.userData.solidFootprint ?? group.userData.footprint; // (a podium's, wider, if it has one)
-      if (!fp || fp.length < 3) continue;
+      const walls = wallsOf(group); // (a podium's footprint, wider, if it has one; and solid props)
+      if (!walls.length) continue;
       const { c, r: fr } = footprintBounds(group);
       if (Math.hypot(to.x - c.x, to.z - c.z) > fr + reach) continue;
-      at.forEach(q => {
+      for (const { poly: fp } of walls) at.forEach(q => {
         const wall = nearestWall(fp, q), inside = pointInPolygon(q, fp);
         if (!inside && wall.d >= r) return;
         take(inside ? { x: -wall.n.x, z: -wall.n.z } : wall.n, inside ? wall.d + r : r - wall.d); // (nearestWall's n points towards q)
       });
     }
   }
-  forCarsNear(to.x, to.z, 6, car => {
-    if (car.li < 0 || car.kick || Math.abs(car.speed) > STILL_CAR_SPEED) return;
+  for (const car of cars) { // (every car, not just those on lanes that forCarsNear holds: a driven or parked one too)
+    if (Math.abs(car.x - to.x) > 6 + reach || Math.abs(car.z - to.z) > 6 + reach) continue;
     const sin = Math.sin(car.heading), cos = Math.cos(car.heading), hl = carLength(car)/2 + r, hw = carWidth(car)/2 + r;
     at.forEach((q, k) => {
       const dx = q.x - car.x, dz = q.z - car.z, f = dx*sin + dz*cos, s = dx*cos - dz*sin;
@@ -250,7 +256,7 @@ export function bouncePerson(p, to, speed) {
       const byF = hl - Math.abs(f) < hw - Math.abs(s);
       take(byF ? { x: sin*Math.sign(f), z: cos*Math.sign(f) } : { x: cos*Math.sign(s), z: -sin*Math.sign(s) }, byF ? hl - Math.abs(f) : hw - Math.abs(s));
     });
-  });
+  }
   if (best && !p.bounced) impactSound('thump', to, speed);
   p.bounced = !!best;
   return best;
@@ -263,7 +269,7 @@ function zoneBounds(zone) {
   if (!group?.children.length) return null;
   let bounds = group.userData.hitBounds;
   if (!bounds || bounds.count !== group.children.length) {
-    const circles = group.children.filter(b => b.userData.footprint?.length >= 3).map(footprintBounds);
+    const circles = group.children.filter(b => wallsOf(b).length).map(footprintBounds);
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
     circles.forEach(({ c, r }) => { minX = Math.min(minX, c.x - r); maxX = Math.max(maxX, c.x + r); minZ = Math.min(minZ, c.z - r); maxZ = Math.max(maxZ, c.z + r); });
     const c = { x: (minX + maxX)/2, z: (minZ + maxZ)/2 };
@@ -356,7 +362,7 @@ const CAR_SLOWDOWN = 0.5, CAR_MIN_SLOWDOWN = 0.1, CAR_MAX_SLOWDOWN = 0.95, PERSO
  * @param {number} [weight] - the weight trait of what it hit
  * @returns {void}
  */
-function slowedBy(car, kind, weight = 1) {
+export function slowedBy(car, kind, weight = 1) {
   const ratio = weight/(car.traits?.weight ?? 1);
   const loss = kind === 'person' ? Math.min(PERSON_MAX_SLOWDOWN, PERSON_SLOWDOWN*ratio) : Math.min(CAR_MAX_SLOWDOWN, slowdownShare(car, weight));
   if (kind === 'car' && Math.abs(car.speed) >= BOUNCE_MIN_SPEED && Math.abs(car.speed)*(1 - loss) < BOUNCE_BELOW_SPEED) { const hitSpeed = car.speed; car.speed = -Math.sign(car.speed || 1)*Math.abs(car.speed)*Math.min(1, BUMP_BOUNCE*ratio); stallEngine(car, weight, hitSpeed); } // (the knock back too grows with the ratio, up to its whole speed)

@@ -327,7 +327,7 @@ Kids these days {agemult = 1.2, conservative = 0.05} <folk>
 Getting put in the labyrinth <surreal>
 Globus sensation <health>
 1 day blinding stew <tastes>
-Having a bomb inside them | having a bomb inside me {explosive, mood = -1, terrified, speed = 1.4, outlaw = 0, noflip, flip=explosive} <vice>
+Having a bomb inside them | having a bomb inside me {explosive, mood = -1, terrified, speed = 1.4, outlaw = 0, noflip, flip=explosive, unstable = 0.5} <vice>
 Showering {smells} <habits>
 The smell of earwax <health>
 Getting tarred and feathered

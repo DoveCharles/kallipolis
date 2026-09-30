@@ -89,10 +89,27 @@ export function distToPolygonBoundary(p, poly) {
 export function footprintBounds(group) {
   let bounds = group.userData.clipBounds;
   if (!bounds) {
-    const fp = group.userData.solidFootprint ?? group.userData.footprint, c = centroid(fp); // (the wider of the two)
-    bounds = group.userData.clipBounds = { c, r: Math.max(...fp.map(p => Math.hypot(p.x - c.x, p.z - c.z))) };
+    const fp = group.userData.solidFootprint ?? group.userData.footprint; // (the wider of the two)
+    const pts = wallsOf(group).flatMap(w => w.poly); // (and any solid props: see wallsOf)
+    let c = fp ? centroid(fp) : null;
+    if (!c) { const xs = pts.map(p => p.x), zs = pts.map(p => p.z); c = { x: (Math.min(...xs) + Math.max(...xs))/2, z: (Math.min(...zs) + Math.max(...zs))/2 }; }
+    bounds = group.userData.clipBounds = { c, r: Math.max(...pts.map(p => Math.hypot(p.x - c.x, p.z - c.z))) };
   }
   return bounds;
+}
+/**
+ * Everything of a building that's a wall: its footprint (a podium's, wider, if it has one) up to its height, and any solid
+ * props it holds (userData.solids: { poly, top } — an industrial yard's tanks and containers, see zones/industrial.js).
+ * @returns {Array<{poly: Array<{x: number, z: number}>, top: number, prop?: boolean}>}
+ */
+export function wallsOf(group) {
+  let walls = group.userData.walls;
+  if (!walls) {
+    const fp = group.userData.solidFootprint ?? group.userData.footprint;
+    walls = group.userData.walls = (fp?.length >= 3 ? [{ poly: fp, top: group.userData.height || 0 }] : [])
+      .concat((group.userData.solids || []).map(s => ({ ...s, prop: true })));
+  }
+  return walls;
 }
 
 // ---------------------------------------------------------- building identity

@@ -86,6 +86,7 @@ import { loadPersonModel, syncPeopleUI, updatePeople } from './life/people/peopl
 import { aimPersonCulling } from './life/people/peopleModel.js';
 import { updateTraffic, loadCarModels } from './life/traffic/traffic.js';
 import { updateGiblets } from './life/giblets.js';
+import { updateFences } from './life/fence-smash.js';
 import { updateBodyParts } from './life/people/peopleGibs.js';
 import { updateCarWrecks } from './life/car-wrecks.js';
 import { shakeCamera, updateLightning } from './life/lightning.js';
@@ -173,6 +174,7 @@ function animate() {
   updateMedBots(t);
   updatePigeons(t); // (before updateTraffic, which sets off the blasts that scatter them)
   updateTraffic(t);
+  updateFences(t); // (smashed fences put back once long out of view)
   updateAmbience(t);
   updateBuildingFollow();
   updateInteriorCamera();

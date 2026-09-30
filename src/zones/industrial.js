@@ -182,6 +182,7 @@ function buildTankFarm(group, site, rng, h) {
   const tankMat = new THREE.MeshStandardMaterial({ color: 0xdfe2e4, roughness: 0.45, metalness: 0.35 });
   const baseMat = new THREE.MeshStandardMaterial({ color: 0x70757b, roughness: 0.7 });
   let placed = 0;
+  const solids = group.userData.solids = []; // (each tank a wall: see wallsOf in buildings/footprints.js)
   for (let i=-Math.floor(halfLong/step); i<=Math.floor(halfLong/step) && placed < 8; i++) {
     for (let j=-Math.floor(halfShort/step); j<=Math.floor(halfShort/step) && placed < 8; j++) {
       const x = rect.center.x + dx*i*step + nx*j*step, z = rect.center.z + dz*i*step + nz*j*step;
@@ -197,6 +198,7 @@ function buildTankFarm(group, site, rng, h) {
       const base = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.15, r + 0.15, 0.6, 28), baseMat);
       base.position.set(x, Y_YARD + 0.3, z);
       [body, lid, base].forEach(m => { m.castShadow = true; m.receiveShadow = true; m.name = 'Tank'; group.add(m); });
+      solids.push({ poly: Array.from({ length: 12 }, (_, k) => ({ x: x + Math.cos(k/12*Math.PI*2)*(r + 0.15), z: z + Math.sin(k/12*Math.PI*2)*(r + 0.15) })), top: Y_YARD + tankH });
     }
   }
 }
@@ -206,12 +208,14 @@ function buildContainerYard(group, site, rng) {
   const builders = new Map();
   const builderFor = color => { if (!builders.has(color)) builders.set(color, createMeshBuilder()); return builders.get(color); };
   const rowPitch = CW + 0.3;
+  const solids = group.userData.solids = []; // (each stack a wall: see wallsOf in buildings/footprints.js)
   for (let row=0, w=-halfShort + CW/2 + 0.5; w <= halfShort - CW/2 - 0.5; row++, w += rowPitch + (row % 2 === 0 ? 2.5 : 0)) {
     for (let s = -halfLong + CL/2 + 0.5; s <= halfLong - CL/2 - 0.5; s += CL + 0.4) {
       const x = rect.center.x + dx*s + nx*w, z = rect.center.z + dz*s + nz*w;
       const corners = [[1,1], [1,-1], [-1,1], [-1,-1]].map(([a, b]) => ({ x: x + dx*a*CL/2 + nx*b*CW/2, z: z + dz*a*CL/2 + nz*b*CW/2 }));
       if (!corners.every(p => pointInPolygon(p, site)) || rng() < 0.15) continue;
       const stack = 1 + Math.floor(rng()*3);
+      solids.push({ poly: [corners[0], corners[1], corners[3], corners[2]], top: Y_YARD + stack*CH });
       for (let k=0;k<stack;k++) {
         builderFor(CONTAINER_COLORS[Math.floor(rng()*CONTAINER_COLORS.length)]).addBox(x, z, dx, dz, CL/2 - 0.02, CW/2 - 0.02, Y_YARD + k*CH, Y_YARD + (k+1)*CH - 0.04);
       }

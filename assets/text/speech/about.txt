@@ -181,7 +181,7 @@
 # SEEN: something the speaker saw happen to someone else in the last 60 seconds (hard limits)
 #   {seen}                    anything                        {seen = drowned}  that one thing
 #   {seen = death}            any death                       {seen = punch, evil}   a punch, leaning toward the evil
-#   Deaths: killedbycar, beatentodeath, smited, drowned, exploded, crashedinto (a car smashed into the building they were in)
+#   Deaths: killedbycar, beatentodeath, smited, drowned, exploded, crashedinto (a car smashed into the building they were in), fell (a fall from high up), punchedfence (bled out punching a fence)
 #   ({seen = death} is any of them). Others: punch (someone
 #   punched), knockedbycar (hit, not killed), resurrected, healed (a MedBot patched them up), waterwalking, smelly (a smelly person near), nude (a nude person near). Anyone near
 #   enough (or in the same building) sees it; a death isn't replaced by something lesser while it's fresh.

@@ -693,6 +693,12 @@ export function wallDebris(at, height, color) {
   spawnParts(at, height, parts, 2.4, (x, z) => groundBelow(x, at.y, z, NO_GROUND_FALLBACK));
   blastFx(at, height, 1.6);
 }
+// A fence piece smashed by a car (see life/fence-smash.js): splinters of `color` thrown along with it, and smoke.
+export function fenceDebris(at, height, color, momentum) {
+  const c = new THREE.Color(color);
+  spawnParts(at, height, [[c, 10, 0.1], [c.clone().multiplyScalar(0.7), 8, 0.07]], 1.2, (x, z) => groundBelow(x, at.y + 1, z, at.y), momentum);
+  puffSmoke(at, height, 5);
+}
 // Blows a car up: `at` where its wheels were, `height` how tall it was, `colors.paint` its own color — chunks of it, bigger
 // and thrown much further than a person's (see spawnParts' `power`), in its paint and (standing in for glass, trim and
 // tires) CAR_TRIM_COLORS, sooty flecks, a big scorch mark rather than blood, and a fireball with smoke (see explodeFx) — `scale`

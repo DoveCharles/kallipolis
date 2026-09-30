@@ -40,6 +40,7 @@ import { keepOutOfWindows } from './peopleWindows.js';
 import { updateStatusEffects, restackTraits } from '../statuseffects.js';
 import { stockPockets } from '../gifts.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
+import { slideOff, stepFall } from './peopleFall.js';
 import { updateCrazy } from './peopleCrazy.js';
 import { aimPrayerView, prayerDue, prayerViewing, sweepPrayers, updatePrayer } from './peoplePrayer.js';
 import { beginEmotes, updateEmotes } from './peopleEmotes.js';
@@ -482,7 +483,7 @@ const PERSON_LATER_FIELDS = Object.fromEntries([
   'water', 'waterHere', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
   'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'smellCheck',
   // walked about by hand (peopleTracking.js)
-  'footing', 'onRoad', 'shove', 'touching', 'near', 'walkingSpeed', 'chatWith',
+  'footing', 'onRoad', 'shove', 'fall', 'fellOff', 'touching', 'near', 'walkingSpeed', 'chatWith',
 ].map(key => [key, undefined]));
 /**
  * Make a person with their traits and state at their starting values.
@@ -726,7 +727,7 @@ export function standingOf(p) {
 // about once, straight away. A lesser sight doesn't replace a greater one still fresh (SEEN_RANK); the same sight of the
 // same person isn't seen again while it's fresh, so something that goes on (walking on water, a smell) counts once.
 const WITNESS_RADIUS = 20; // how near (× people size) someone has to be to see something happen
-const SEEN_RANK = { killedbycar: 3, crashedinto: 3, beatentodeath: 3, smited: 3, drowned: 3, exploded: 3, resurrected: 2, punch: 1, knockedbycar: 1, healed: 0, waterwalking: 0, smelly: 0, nude: 0 };
+const SEEN_RANK = { killedbycar: 3, crashedinto: 3, fell: 3, punchedfence: 3, beatentodeath: 3, smited: 3, drowned: 3, exploded: 3, resurrected: 2, punch: 1, knockedbycar: 1, healed: 0, waterwalking: 0, smelly: 0, nude: 0 };
 const NUDE_SEEN_EVERY = 4; // seconds between someone nude being noticed by whoever's near
 const NOTICED_FOR = 60; // seconds a sight stays fresh (as SEEN_TIME in life/speech-text.js)
 const MAX_WITNESSES = 5;  // how many of the nearest see something happen (not a whole park at once)
@@ -1130,12 +1131,14 @@ function pushPerson(p, dirX, dirZ, distance) {
   const speed = distance*PUSH_DECAY/len; // (the distance covered is the starting speed over the decay rate)
   p.push = { x: (p.push?.x ?? 0) + dirX*speed, z: (p.push?.z ?? 0) + dirZ*speed };
 }
-const PUSH_BOUNCE = 0.5; // (the share of speed into a wall or stationary car someone knocked flat bounces back with)
+const PUSH_BOUNCE = 0.5; // (the share of speed into a wall or car someone knocked flat bounces back with)
 function stepPush(p, dt) {
   const to = { x: p.x + p.push.x*dt, z: p.z + p.push.z*dt };
   const lying = p.punched && p.punched.stage !== 'marked' && p.punched.stage !== 'brace'; // (see isLying in traffic/collisions.js)
   const hit = lying ? App.bouncePerson?.(p, to, Math.hypot(p.push.x, p.push.z)) : null;
+  const x0 = p.x, z0 = p.z;
   p.x = to.x; p.z = to.z;
+  if (lying) slideOff(p, x0, z0); // (over a fence, or off a raised edge: see peopleFall.js)
   if (hit) {
     const { n, depth } = hit, into = p.push.x*n.x + p.push.z*n.z;
     if (into < 0) { p.push.x -= (1 + PUSH_BOUNCE)*into*n.x; p.push.z -= (1 + PUSH_BOUNCE)*into*n.z; }
@@ -1265,6 +1268,7 @@ export function updatePeople(t) {
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
     if (p.please) updatePlease(p, dt); // (the same hold as stun, read as delight: see pleased below)
     if (p.punched) updatePunched(p, dt);
+    if (p.fellOff && !p.punched && !p.fall) { p.fellOff = undefined; reseatPerson(p); } // (up again below where they fell from)
     updatePrayer(p, i, dt, possessed); // (standing still, glowing: see peoplePrayer.js)
     const prays = !!p.pray;
     // frozen in place: fright's 'look' stage, or stun/please's 'held' stage. only fright ever flees.
@@ -1456,6 +1460,7 @@ export function updatePeople(t) {
       p.y += (goal.y - p.y)*Math.min(1, dt*6);
       if (possessed && p.hop?.h > 0) p.y = goal.y + p.hop.h; // (jumping: see walkPossessed)
     }
+    if (p.fall) stepFall(p, dt); // (see peopleFall.js)
     updateWater(p, i, dt, wasX, wasZ, goal ? goal.y : null); // (over open water, they go in — or waterwalking/aqua, stand or swim on it: see peopleWater.js)
     updateDrunk(p, dt, wasX, wasZ); // (weaving, and now and then falling over: see peopleDrunk.js)
     // possessed, they face the way they're looking — the walk played backwards, stepping backwards

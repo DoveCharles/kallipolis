@@ -3,7 +3,7 @@ import { S, App } from '../core/shared.js';
 import { scene, Y_SIDEWALK } from '../core/scene.js';
 import { ROAD_COLOR } from '../core/splines.js';
 import { CLIPPER_SCALE, unionRoadStrokes, clipPolygons, createMeshBuilder, forEachPolyTreeEdge, createEdgeIndex, disposeObject } from '../roads/roads.js';
-import { addRailingSegment, addRailingLine, cutLines } from '../zones/fences.js';
+import { addRailingSegment, addRailingLine, cutLines, registerFence } from '../zones/fences.js';
 import { WATER_BANK_BOTTOM } from './water.js';
 import { createRegionTester, offsetPaths } from '../zones/cutouts.js';
 
@@ -32,7 +32,7 @@ function buildBridges(region) {
       const off = { x: -outward.x*style.inset, z: -outward.z*style.inset };
       addRailingSegment(builder, { x: p.X/CLIPPER_SCALE + off.x, z: p.Y/CLIPPER_SCALE + off.z }, { x: q.X/CLIPPER_SCALE + off.x, z: q.Y/CLIPPER_SCALE + off.z }, baseY, style, state);
     };
-    const deck = createMeshBuilder(), rails = createMeshBuilder();
+    const deck = createMeshBuilder(), rails = createMeshBuilder(), railPieces = [];
     const outerEdges = S.roadBridgeSources.length ? createEdgeIndex(S.roadFootprint) : null;
     // road railings open where a path meets them, between where its footbridge's railings stand
     const walked = S.pathBridgeSources.filter(src => src.outline).reduce((all, src) => clipPolygons(ctUnion, all, src.outline), S.pathFootprint);
@@ -51,7 +51,7 @@ function buildBridges(region) {
           if (end && Math.abs(end.X-ia.X) + Math.abs(end.Y-ia.Y) < 1) last.push(ib); else lines.push([ia, ib]);
         });
       });
-      cutLines(lines, railGaps).forEach(line => addRailingLine(rails, line.map(p => ({ x: p.X/CLIPPER_SCALE, z: p.Y/CLIPPER_SCALE })), Y_SIDEWALK, ROAD_RAILING_STYLE));
+      cutLines(lines, railGaps).forEach(line => addRailingLine(rails, line.map(p => ({ x: p.X/CLIPPER_SCALE, z: p.Y/CLIPPER_SCALE })), Y_SIDEWALK, ROAD_RAILING_STYLE, railPieces));
       // piers: a slab across the road every so often along its centerline, wherever that's well out over the water
       strokes.forEach(({ path, hw }) => {
         const pts = path.map(p => ({ x: p.X/CLIPPER_SCALE, z: p.Y/CLIPPER_SCALE }));
@@ -70,7 +70,7 @@ function buildBridges(region) {
         }
       });
     });
-    const wood = createMeshBuilder(), woodRails = createMeshBuilder();
+    const wood = createMeshBuilder(), woodRails = createMeshBuilder(), woodPieces = [];
     const roadRailArea = S.pathBridgeSources.length && S.roadFootprint.length ? offsetPaths(S.roadFootprint, -ROAD_RAILING_STYLE.inset, ClipperLib.JoinType.jtMiter) : [];
     S.pathBridgeSources.forEach(({ strokes, outline = unionRoadStrokes(strokes), cut = [] }) => {
       const overWater = clipPolygons(ctIntersection, outline, region);
@@ -81,7 +81,7 @@ function buildBridges(region) {
       if (!over.Childs().length) return;
       wood.addTops(over, FOOTBRIDGE_TOP);
       wood.addTops(over, FOOTBRIDGE_TOP - FOOTBRIDGE_THICKNESS, true);
-      const trackEdges = createEdgeIndex(outline), state = {};
+      const trackEdges = createEdgeIndex(outline), state = { pieces: woodPieces };
       forEachPolyTreeEdge(over, (p, q, outward) => wood.addWall(p, q, FOOTBRIDGE_TOP - FOOTBRIDGE_THICKNESS, FOOTBRIDGE_TOP, outward));
       // railings run on over the road bridge's sidewalk as far as its railing
       const railed = clipPolygons(ctDifference, overWater, cut.length ? clipPolygons(ctUnion, roadRailArea, cut) : roadRailArea, true);
@@ -89,14 +89,15 @@ function buildBridges(region) {
         trackEdges.coverage(p, q).forEach(([t0, t1]) => railAlong(woodRails, pointAt(p, q, t0), pointAt(p, q, t1), outward, FOOTBRIDGE_TOP, WOOD_RAILING_STYLE, state));
       });
     });
-    [[deck, BRIDGE_COLOR, 0.9, 0, 'Bridge'], [rails, ROAD_RAILING_STYLE.color, 0.45, 0.6, 'BridgeRailing'],
-     [wood, FOOTBRIDGE_COLOR, 0.9, 0, 'Footbridge'], [woodRails, WOOD_RAILING_STYLE.color, 0.9, 0, 'FootbridgeRailing']].forEach(([builder, color, roughness, metalness, name]) => {
+    [[deck, BRIDGE_COLOR, 0.9, 0, 'Bridge'], [rails, ROAD_RAILING_STYLE.color, 0.45, 0.6, 'BridgeRailing', railPieces],
+     [wood, FOOTBRIDGE_COLOR, 0.9, 0, 'Footbridge'], [woodRails, WOOD_RAILING_STYLE.color, 0.9, 0, 'FootbridgeRailing', woodPieces]].forEach(([builder, color, roughness, metalness, name, pieces]) => {
       const geo = builder.build();
       if (!geo) return;
       const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness, metalness }));
       mesh.castShadow = true; mesh.receiveShadow = true;
       mesh.name = name;
       S.bridgeGroup.add(mesh);
+      if (pieces) registerFence(mesh, pieces);
     });
   }
   scene.add(S.bridgeGroup);

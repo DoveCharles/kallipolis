@@ -20,6 +20,7 @@ import { BARBOT, barbotFree } from '../../buildings/barbot.js';
 import { awaitWaiter, leavePlate, queueForTable, runWaiter, servedMeal, waitForTable, waiterOn } from './peopleWaiter.js';
 import { summonSalonBot, salonBotSnipping, salonBotNoise, seatedHead } from '../../buildings/salonbot.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
+import { blockedBehind } from './peopleFall.js';
 import { REVIVE_SHAKE_TIME } from '../revive.js';
 import { strikeLightning } from '../lightning.js';
 import { damage, heal } from '../../core/health.js';
@@ -1053,6 +1054,7 @@ export function knockDown(t, p) {
   exclaim(head, voiceOfPerson(t));
   t.punched.stage = 'fall';
   t.heading = headingTo(t, p);
+  if (blockedBehind(t)) t.heading += Math.PI; // (not back through a railing or wall: the other way, see peopleFall.js)
   t.faceTo = null; t.lookAt = null;
   playOnce(t, 'Fall');
   t.pose = 'Fallen';
