@@ -10,8 +10,8 @@ import { personHeight } from './peopleTracking.js';
 // Now and then someone stands still and glows for a while. Clicked (peopleTracking.js followPersonAt), the camera locks
 // on their face (no card) and they say a prayer (speech/prayers.txt, said from people.js); once said, 1 energy (past the
 // cap: ui/energy.js addEnergy) and their card comes up.
-const PRAY_CHANCE = 1/1800;    // per eligible person per second
-const MAX_PRAYING = 2;
+const PRAY_CHANCE = 1/8000;    // per eligible person per second
+const MAX_PRAYING = 3;
 const PRAY_TIME = [25, 40];   // seconds, unwatched
 const WAIT_LINE = 8;          // seconds watched without a line (none to be had) before it ends anyway
 const AFTER_LINE = 1.5;       // seconds held after the prayer's said
@@ -132,7 +132,7 @@ export function endPrayerView() {
 export const prayerViewing = i => viewing >= 0 && viewing === i;
 
 /** Whether this watched person's prayer is due to be said (people.js calls shoutLine 'prayers'). @param {Person} p @returns {boolean} */
-export const prayerDue = p => !!p.pray?.watched && !p.pray.said;
+export const prayerDue = p => !!p.pray?.watched && !p.pray.said && Math.abs(controls.radius - controls.goalRadius) < 0.3; // (once the camera's in on their face)
 
 /** Aim the camera at a watched praying person's face, from in front. @param {Person} p @returns {void} */
 export function aimPrayerView(p) {

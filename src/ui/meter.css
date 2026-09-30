@@ -112,6 +112,11 @@ html.win3 .tk-head { color:var(--w3-text); }
 html.win3 .tk-mods { color:#404040; }
 .tk-empty { grid-column:1 / -1; padding:4px 6px; color:var(--text-dim); }
 .tk-foot { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; font-family:var(--mono); }
+.tk-hint { display:flex; align-items:center; justify-content:center; gap:3px; margin-top:4px; font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+html.win3 .tk-hint { color:#404040; }
+.tk-nobody { position:fixed; z-index:100; transform:translate(-50%, -130%); pointer-events:none; white-space:nowrap;
+  font-family:var(--mono); font-size:11px; font-weight:700; color:var(--meter-neg); animation:tk-nobody 1.2s ease-out forwards; }
+@keyframes tk-nobody { 0% { opacity:1; } 70% { opacity:1; } 100% { opacity:0; transform:translate(-50%, -230%); } }
 .tk-pager { display:flex; align-items:center; gap:6px; }
 .tk-pager .btn { display:inline-block; flex:none; width:auto; margin:0; padding:0 6px; min-width:0; }
 /* out of energy: whatever costs it greyed (still clickable, to flash the count) */

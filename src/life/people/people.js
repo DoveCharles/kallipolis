@@ -1574,7 +1574,7 @@ export function updatePeople(t) {
         else if ((p.saying = shoutLine({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), i, p, 'fleeing'))) { p.shouting = true; p.fleeTalkUntil = 0; }
       }
       // (praying, watched: the prayer — see peoplePrayer.js)
-      if (prayerDue(p) && !p.saying && !aaaing && (p.saying = shoutLine({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), i, p, 'prayers'))) { p.shouting = true; p.pray.said = true; }
+      if (prayerDue(p) && !p.saying && !aaaing && (p.saying = shoutLine({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), i, p, 'prayers', true))) { p.shouting = true; p.pray.said = true; }
       if (!(talking || p.shouting) || aaaing || (p.saying && !isDrawn(p))) {
         p.shouting = false;
         p.talkTo = 0;

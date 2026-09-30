@@ -99,14 +99,15 @@ export function sayLine(at, voice, who, person) {
  * @param {number} who - a number of their own
  * @param {object} person - the speaker
  * @param {string} category - the speech category to call out from
+ * @param {boolean} [full] - at full volume, past the line limit (a watched prayer: see life/people/peoplePrayer.js)
  * @returns {?object} the line being said, as sayLine's; or null if one can't be had just now
  */
-export function shoutLine(at, voice, who, person, category) {
+export function shoutLine(at, voice, who, person, category, full = false) {
   const now = listener.context.currentTime;
-  if ((!S.babbleFallbackOnly && speaking.size >= MAX_LINES) || !speechReady() || now - lastStart < LINE_START_GAP) return null;
+  if (!speechReady() || (!full && ((!S.babbleFallbackOnly && speaking.size >= MAX_LINES) || now - lastStart < LINE_START_GAP))) return null;
   if (Math.hypot(at.x - ear.x, at.y - ear.y, at.z - ear.z) > hearDistance()) return null;
   const said = pickShout(person, category);
-  return said ? voiceLine(said, at, voice, who, person) : null;
+  return said ? voiceLine(said, at, voice, who, person, full) : null;
 }
 
 /**
@@ -129,12 +130,12 @@ export function reactAloud(at, voice, who, person) {
 }
 
 // A picked line synthesized in the speaker's voice and set playing where they are: the line (for lineMouth and stopLine), or null.
-function voiceLine(said, at, voice, who, person) {
+function voiceLine(said, at, voice, who, person, full = false) {
   const context = listener.context, now = context.currentTime, text = said.text;
   const sound = synth(text, voice, who, person.traits?.mood ?? 0);
   if (!sound) return null;
   const { buffer, mouth } = sound;
-  const crowd = edgeFade(at)/Math.sqrt(Math.max(1, (speaking.size + 1)/CROWD_EASY)); // (and fading towards the hearing distance: see edgeFade)
+  const crowd = full ? 1 : edgeFade(at)/Math.sqrt(Math.max(1, (speaking.size + 1)/CROWD_EASY)); // (and fading towards the hearing distance: see edgeFade)
   const source = playSound(sound, at, voice, crowd);
   if (!source) return null;
   // (a line tagged {end} ends its conversation once it's said: see finish)
