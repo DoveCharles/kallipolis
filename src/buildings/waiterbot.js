@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { HEIGHT, HEAD_UP, botFace, newFace, waiterBody } from './barbot.js';
 import { TOON_RAMP } from '../core/toon.js';
+import { playSound } from '../audio/sfx.js';
 import { hasBubble, speechBubble } from '../ui/speech-bubbles.js';
 
 // ============================================================ the waiter bot
@@ -26,6 +27,7 @@ const BEHIND = 0.6;         // m behind the host stand
 const DOOR_OUT = 0.8, DOOR_IN = 2.3; // m in front of the kitchen doors, and through them
 const DISH = { spaghetti: 0.26, slice: 0.17, tray: 0.36, plate: 0.24 }; // m, as the diners' (see peopleHolding.js)
 const SWING = 1.4, SWING_K = 90, SWING_DAMP = 7; // the kitchen doors: rad open at most, and their spring
+const FLAP_SPEED = 1, FLAP_LOUD = 4; // how fast a leaf swings back past shut to be heard, and at full volume
 const SAY_TIME = 1.8;       // s a line's said for
 
 /** The waiter as the people it talks to see it: where its head is (see BARBOT in barbot.js). */
@@ -196,7 +198,11 @@ export function waiterCarry(L, R) { s.carry = { L, R }; }
  */
 export function waiterServe(side, drop, pick = null) { s.serve = { side, t: 0, drop, dropped: false, pick }; }
 /** Swing the kitchen doors open towards the kitchen (1), out into the room (-1), or let them swing shut (0). */
-export function waiterDoorWay(k) { s.doorWay = k; }
+export function waiterDoorWay(k) {
+  if (k && !s.doorWay && local?.door?.leaves) playSound('swingdoor', doorAt());
+  s.doorWay = k;
+}
+const doorAt = () => { const at = toWorld(local.door.x, local.door.z); return { x: at.x, y: at.y + 1, z: at.z }; };
 /** Say a line (in a bubble, babbling), looking at `to`. */
 export function waiterSay(text, to = null) { s.say = { line: { text }, to, until: performance.now()/1000 + SAY_TIME }; }
 /** Leave an empty dish ('plate' or 'tray') on a table, at `at` (in the world); returns it, for waiterClear. */
@@ -334,7 +340,9 @@ export function updateWaiterbot(inRestaurant, occupied) {
   // the kitchen doors, swung by it going through, and swinging to and fro a while after
   if (local.door?.leaves) {
     s.swingV += ((s.doorWay - s.swing)*SWING_K - s.swingV*SWING_DAMP)*dt;
+    const was = s.swing;
     s.swing += s.swingV*dt;
+    if (!s.doorWay && was*s.swing < 0 && Math.abs(s.swingV) > FLAP_SPEED) playSound('flap', doorAt(), Math.min(1, Math.abs(s.swingV)/FLAP_LOUD));
     for (const pivot of local.door.leaves) pivot.rotation.y = -pivot.userData.side*s.swing*SWING;
   }
 }
