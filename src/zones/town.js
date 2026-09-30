@@ -249,11 +249,15 @@ function makeTownBuilding(fp, front, rng, s) {
     });
     if (sills.length) part(group, mergeGeometryList(sills), plain(brick ? STONE : TRIM));
   }
-  // A share of the shops (the "pubs" setting) are pubs: a sign hung out over the pavement from an iron bracket above the
+  // Pubs: a sign hung out over the pavement from an iron bracket above the
   // fascia, a painted board in a gilt frame. (Drawn last, so every other building's rolls are as they were.) A pub's
   // ground floor is always painted black: its fascia and door frame, and the wall round the windows on every side — the
   // piers between them, a stallriser below and a band above, stood just off the wall where the window shader draws them.
-  if (shop && rng() < (s.townPubs ?? 0.25)) {
+  // Each shop is one of the kinds switched on for the town (the Shop kinds toggles), evenly; none on: plain.
+  const kinds = shop ? [['plain', s.shopPlain], ['pub', s.shopPub], ['salon', s.shopSalon], ['clothes', s.shopClothes], ['restaurant', s.shopRestaurant],
+    ['convenience', s.shopConvenience]].filter(([, on]) => on !== false).map(([kind]) => kind) : [];
+  const shopKind = kinds.length ? kinds[Math.floor(rng()*kinds.length)] : null;
+  if (shopKind === 'pub') {
     group.userData.buildingKind = 'pub';
     fascia.material.color.setHex(PUB_BLACK);
     streetFront.filter(m => m.material.metalness === 0.2).forEach(m => m.material.color.setHex(PUB_BLACK)); // (the door frame, not its glass or the awnings)
@@ -282,20 +286,15 @@ function makeTownBuilding(fp, front, rng, s) {
     if (black.length) part(group, mergeGeometryList(black), plain(PUB_BLACK, { roughness: 0.4 }));
     const t = Math.min(0.9, len/2), board = FASCIAS[Math.floor(rng()*FASCIAS.length)];
     hangingSign('pub', board).forEach(([geo, mat]) => part(group, place(geo, t, 0, SHOP + 0.9), mat));
-  } else if (shop) {
-    // Of the other shops, a share are hair salons, clothes shops, restaurants and convenience stores (the settings of those names),
-    // each with its fascia in colours of its own. (Rolled after everything else, as the pubs are.)
-    const roll = rng(), salons = s.townSalons ?? 0.2, clothes = s.townClothes ?? 0.25, eats = s.townRestaurants ?? 0.2, corner = s.townConvenience ?? 0.15;
-    const kind = roll < salons ? 'salon' : roll < salons + clothes ? 'clothes' : roll < salons + clothes + eats ? 'restaurant'
-      : roll < salons + clothes + eats + corner ? 'convenience' : null;
-    if (kind) {
-      group.userData.buildingKind = kind;
-      const colours = kind === 'salon' ? SALON_FASCIAS : kind === 'clothes' ? CLOTHES_FASCIAS
-        : kind === 'convenience' ? CONVENIENCE_FASCIAS : RESTAURANT_FASCIAS;
-      const board = colours[Math.floor(rng()*colours.length)];
-      fascia.material.color.setHex(board);
-      hangingSign(kind, board).forEach(([geo, mat]) => part(group, place(geo, Math.min(0.9, len/2), 0, SHOP + 0.9), mat));
-    }
+  } else if (shopKind && shopKind !== 'plain') {
+    // Hair salons, clothes shops, restaurants and convenience stores: each with its fascia in colours of its own.
+    const kind = shopKind;
+    group.userData.buildingKind = kind;
+    const colours = kind === 'salon' ? SALON_FASCIAS : kind === 'clothes' ? CLOTHES_FASCIAS
+      : kind === 'convenience' ? CONVENIENCE_FASCIAS : RESTAURANT_FASCIAS;
+    const board = colours[Math.floor(rng()*colours.length)];
+    fascia.material.color.setHex(board);
+    hangingSign(kind, board).forEach(([geo, mat]) => part(group, place(geo, Math.min(0.9, len/2), 0, SHOP + 0.9), mat));
   }
   group.rotation.x = -Math.PI/2;
   group.userData.batchable = true;
