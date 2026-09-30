@@ -3306,7 +3306,7 @@ function furnishRestaurant(key) {
   const table = (name, x, z, angle = 0) => {
     const t = F[name];
     if (!t) return null;
-    const pad = F.Chair.d + 0.1, round = name === 'TableRound';
+    const pad = F.Chair.d + 0.05, round = name === 'TableRound';
     const r = { x0: t.bounds.x0 - (round ? pad : 0.15), x1: t.bounds.x1 + (round ? pad : 0.15), z0: t.bounds.z0 - pad, z1: t.bounds.z1 + pad };
     const area = turnedRect(r, angle, x, z);
     if (!fits(area, 0.1, 0.1)) return null;
@@ -3335,7 +3335,7 @@ function furnishRestaurant(key) {
   if (F.CoatStand && P.coat != null) { const spot = atWall(WALL_SIDES[2], P.coat, grown(F.CoatStand.bounds, 0.1), 0.05); if (spot) place('CoatStand', spot); }
   // tables for two against the walls, a chair either end
   if (F.Table2) {
-    const t = F.Table2, pad = F.Chair.d + 0.1, r = { x0: -t.d/2 - pad, x1: t.d/2 + pad, z0: -t.w/2 - 0.05, z1: t.w/2 };
+    const t = F.Table2, pad = F.Chair.d + 0.05, r = { x0: -t.d/2 - pad, x1: t.d/2 + pad, z0: -t.w/2 - 0.05, z1: t.w/2 };
     for (const [side, u] of P.wall) {
       const spot = atWall(WALL_SIDES[side], u, r, 0.1);
       if (spot) seatsRound('Table2', LAYS.Table2(t), { x: spot.x, z: spot.z, angle: spot.angle + Math.PI/2, area: spot.area });
