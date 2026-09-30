@@ -390,7 +390,7 @@ function updateBot(bot, dt, t) {
       if (!bot.lying && Math.hypot(p.x - bot.x, p.z - bot.z) > model.reach + 0.6*S.peopleSize) { bot.state = 'rush'; break; } // (drifted off: after them)
       bot.healTime += dt;
       turnTo(bot, Math.atan2(p.x - bot.x, p.z - bot.z), dt);
-      const h = personHeight(p);
+      const h = bot.lying ? 1.7*p.height*S.peopleSize : personHeight(p); // (lying: their standing height, not their pose's — see heightScale)
       if (bot.lying) { // (from their feet to their head, which is behind them: they fell on their back)
         const back = p.heading + Math.PI;
         healFx({ x: p.x - Math.sin(back)*0.45*h, y: p.y, z: p.z - Math.cos(back)*0.45*h }, h, true, back, dt);

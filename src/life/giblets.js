@@ -352,9 +352,12 @@ const confettiMesh = softMesh(THREE.NormalBlending, 'ConfettiFx', glyphTexture(c
 // a see-through round puff, a cloud's shape, for breath fogging in the cold (breathFx)
 const droolMesh = softMesh(THREE.NormalBlending, 'DroolFx', glyphTexture(ctx => ctx.fillRect(0, 0, 64, 64)));
 const puffMesh = softMesh(THREE.NormalBlending, 'PuffFx', glyphTexture(ctx => { ctx.beginPath(); ctx.arc(32, 32, 30, 0, Math.PI*2); ctx.fill(); }));
+// a first-aid plus (tinted), floating up off someone being healed (healFx)
+const plusMesh = softMesh(THREE.NormalBlending, 'PlusFx', glyphTexture(ctx => { ctx.fillRect(24, 8, 16, 48); ctx.fillRect(8, 24, 48, 16); }));
 glowMesh.renderOrder = smokeMesh.renderOrder = sparkleMesh.renderOrder = clippingMesh.renderOrder = heartMesh.renderOrder = tearMesh.renderOrder
-  = zedMesh.renderOrder = noteMesh.renderOrder = confettiMesh.renderOrder = puffMesh.renderOrder = droolMesh.renderOrder = 2;
+  = zedMesh.renderOrder = noteMesh.renderOrder = confettiMesh.renderOrder = puffMesh.renderOrder = droolMesh.renderOrder = plusMesh.renderOrder = 2;
 // a haircut's cloud: solid round puffs, facing the camera, popping up and shrinking away rather than fading
+const toCamera = new THREE.Vector3();
 const cloudMesh = (() => {
   const material = new THREE.MeshBasicMaterial({ toneMapped: false }), geometry = new THREE.CircleGeometry(0.5, 24);
   const mesh = instancedMesh(geometry, material, SOFT_MESH_CAP, 'CloudFx');
@@ -401,8 +404,8 @@ export function haircutFx(at, size, hair, dt) {
 
 // Someone being healed (by a med bot: see life/medbot.js), in the `dt` seconds since it was last called: the haircut's
 // cloud, but pink (the hearts' colour, a bit brighter) and over the whole body — `at` their feet, `height` how tall they are, `lying` if they're flat on the
-// ground (the cloud spread along them, `heading` the way their head is) — and little love hearts floating up off it.
-const HEAL_PUFFS_PER_SECOND = 70, HEARTS_PER_SECOND = 7, HEART_COLORS = [0xff4f7b, 0xff86a8, 0xe8264f];
+// ground (the cloud spread along them, `heading` the way their head is) — and red first-aid pluses and the odd love heart floating up off it.
+const HEAL_PUFFS_PER_SECOND = 70, HEARTS_PER_SECOND = 1.75, PLUSES_PER_SECOND = 4.5, PLUS_COLOR = new THREE.Color(0xe8202a), HEART_COLORS = [0xff4f7b, 0xff86a8, 0xe8264f];
 const HEAL_PUFF_COLOR = new THREE.Color(0xff6d92), WHITE = new THREE.Color(1, 1, 1);
 export function healFx(at, height, lying, heading, dt) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
@@ -425,6 +428,12 @@ export function healFx(at, height, lying, heading, dt) {
       size: height*(0.1 + Math.random()*0.06), growth: 0.2, life: 1.1 + Math.random()*0.6, opacity: 1,
       color: new THREE.Color(HEART_COLORS[Math.floor(Math.random()*HEART_COLORS.length)]),
       roll: (Math.random() - 0.5)*0.6, spin: (Math.random() - 0.5)*1.2 });
+  }
+  for (let k = count(PLUSES_PER_SECOND); k > 0; k--) { // (red first-aid pluses among the puffs, popping up and shrinking away as they do)
+    const angle = Math.random()*Math.PI*2, out = Math.random()*0.12*height, on = along(0.05 + Math.random()*0.9);
+    add({ kind: 'plus', x: on.x + Math.cos(angle)*out, y: on.y, z: on.z + Math.sin(angle)*out,
+      vx: Math.cos(angle)*0.1*height, vy: 0.08*height, vz: Math.sin(angle)*0.1*height,
+      size: height*(0.08 + Math.random()*0.04), growth: 0.3, life: 0.6 + Math.random()*0.4, opacity: 1, color: PLUS_COLOR, roll: 0, spin: 0, forward: 0.3*height });
   }
 }
 
@@ -929,9 +938,9 @@ export function updateGiblets(t) {
   // soft particles: each drifts on, grows by `growth` of its size over its life, and fades in and out
   while (softParticles.length && t - softParticles[0].born > softParticles[0].life) softParticles.shift();
   viewRight.setFromMatrixColumn(camera.matrixWorld, 0); viewUp.setFromMatrixColumn(camera.matrixWorld, 1);
-  const drawnSoft = { glow: 0, smoke: 0, sparkle: 0, clipping: 0, cloud: 0, heart: 0, tear: 0, zed: 0, note: 0, confetti: 0, puff: 0, drool: 0 };
+  const drawnSoft = { glow: 0, smoke: 0, sparkle: 0, clipping: 0, cloud: 0, heart: 0, tear: 0, zed: 0, note: 0, confetti: 0, puff: 0, drool: 0, plus: 0 };
   const meshes = { glow: glowMesh, smoke: smokeMesh, sparkle: sparkleMesh, clipping: clippingMesh, cloud: cloudMesh, heart: heartMesh, tear: tearMesh,
-    zed: zedMesh, note: noteMesh, confetti: confettiMesh, puff: puffMesh, drool: droolMesh };
+    zed: zedMesh, note: noteMesh, confetti: confettiMesh, puff: puffMesh, drool: droolMesh, plus: plusMesh };
   softParticles.forEach(p => {
     const age = t - p.born, life = age/p.life, mesh = meshes[p.kind];
     if (life > 1 || drawnSoft[p.kind] >= softCap() || !isNearFx(p)) return;
@@ -943,11 +952,12 @@ export function updateGiblets(t) {
     if (!p.still && !swelling) { p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt; }
     if (p.follow) { const f = p.follow; p.x += f.x - p.fx; p.y += f.y - p.fy; p.z += f.z - p.fz; p.fx = f.x; p.fy = f.y; p.fz = f.z; } // (see carried)
     placed.position.set(p.x, p.y, p.z);
+    if (p.forward) placed.position.addScaledVector(toCamera.subVectors(camera.position, placed.position).normalize(), p.forward); // (drawn that much nearer the camera: a plus in front of the cloud it's in)
     placed.quaternion.copy(camera.quaternion);
     // a sparkle spins slowly about the view axis as it pops in and out, rather than drifting or billowing like glow/smoke
     // (and a clipping tumbles quickly as it falls)
     const scale = p.kind === 'sparkle' ? p.size*Math.sin(Math.PI*Math.min(1, life))**0.5
-      : p.kind === 'cloud' || p.kind === 'puff' ? p.size*(1 + p.growth*life)*Math.min(1, life*6, (1 - life)*3) // (popping up, then shrinking away)
+      : p.kind === 'cloud' || p.kind === 'puff' || p.kind === 'plus' ? p.size*(1 + p.growth*life)*Math.min(1, life*6, (1 - life)*3) // (popping up, then shrinking away)
       : swelling ? p.size*age/p.swell
       : p.size*(1 + p.growth*(p.kind === 'glow' && !p.still ? -life : life));
     const floats = p.kind === 'heart' || p.kind === 'note' || p.kind === 'zed', rolls = floats || p.kind === 'sparkle' || p.kind === 'clipping' || p.kind === 'confetti';
@@ -968,7 +978,7 @@ export function updateGiblets(t) {
     const i = drawnSoft[p.kind]++;
     mesh.setMatrixAt(i, placed.matrix);
     mesh.setColorAt(i, p.color);
-    mesh.userData.alpha.setX(i, p.kind === 'cloud' ? 1 : p.kind === 'puff' ? p.opacity : p.kind === 'clipping' || p.kind === 'tear' || p.kind === 'drool' || p.kind === 'confetti' || floats ? p.opacity*Math.min(1, (1 - life)*5) : p.opacity*Math.sin(Math.PI*Math.min(1, life))**(p.kind === 'smoke' ? 1 : 0.5));
+    mesh.userData.alpha.setX(i, p.kind === 'cloud' || p.kind === 'plus' ? 1 : p.kind === 'puff' ? p.opacity : p.kind === 'clipping' || p.kind === 'tear' || p.kind === 'drool' || p.kind === 'confetti' || floats ? p.opacity*Math.min(1, (1 - life)*5) : p.opacity*Math.sin(Math.PI*Math.min(1, life))**(p.kind === 'smoke' ? 1 : 0.5));
   });
   Object.entries(meshes).forEach(([kind, mesh]) => {
     mesh.count = drawnSoft[kind];
