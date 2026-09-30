@@ -4,11 +4,10 @@
 // - `loadingTask(text, promise, weight)`: named work of its own (see interior.js's warm-up), waited for like a fetch;
 //   `weight` is how many fetches' worth of the bar it's given. `loadingSay(text)`: what the newest task's doing now.
 // - The label is the newest pending model, else the newest pending task. While nothing new's come up for a moment it
-//   flicks through the other models ("Unpacking X") — a little faked, but they're all being set up around then (see
-//   flick) — and the bar creeps toward the next step. Neither can move while the page is frozen.
+//   flicks through the pending models, and the bar creeps toward the next step. Neither can move while the page is frozen.
 // - Models load before the city's built (`waitForModels`, `modelsLoaded`), so it's built once.
-// - Keeping freezes short: models are handed over to be unpacked one a frame (`takeTurn`), and nothing's drawn while
-//   loading — the scene's shaders are compiled in the background instead (`compileWhileLoading`, called by main.js).
+// - Keeping freezes short: models are unpacked one at a time, a frame apart (GLTFLoader's parse queued),
+//   each counted as a step ("Unpacking X (3/11)"), and nothing's drawn while loading — the scene's shaders are compiled in the background instead (`compileWhileLoading`, called by main.js).
 // - `whenLoaded(run)`: runs once the page has loaded, nothing's been pending for a couple of frames and the scene's
 //   compiled, or after GIVE_UP_AFTER regardless (view-prefs.js takes the screen away then).
 // - Once done, the console lists how long the page was frozen under each step: what to speed up.
@@ -17,6 +16,8 @@ const label = screen.querySelector('.ls-text');
 const fill = screen.querySelector('.ls-fill');
 
 const GIVE_UP_AFTER = 60000, UNREAD_AFTER = 20000; // ms
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
 const IDLE_TEXT = 'Starting...';
 const isModel = name => /\.(glb|gltf)$/i.test(name);
 let started = 0, finished = 0, shownShare = 0, loaded = false;
@@ -37,17 +38,15 @@ export function loadingSay(text) {
   if (task) { task.text = text; showLabel(); }
 }
 
-// Flicking through names, while fetching: pending models and every model in so far. And the bar creeps on between real
+// Flicking through pending models' names. And the bar creeps on between real
 // steps, up to just short of the next one.
 const FLICK_EVERY = 30, FLICK_AFTER = 60; // ms
 const CREEP = 0.04;                       // of the way to the next step, each flick
-const models = [];
 let flicks = 0;
 const flick = setInterval(() => {
   creep();
   if (performance.now() - labelAt < FLICK_AFTER) return;
   const pool = [...fetches].filter(item => item.model).map(item => item.text);
-  if (fetches.size) pool.push(...models.map(name => `Unpacking ${name}...`));
   if (tasks.size && !fetches.size) pool.push(newest(tasks).text);
   if (pool.length < 2) return;
   label.textContent = pool[flicks++ % pool.length];
@@ -75,17 +74,15 @@ function track(set, item, settled, weight = 1) {
 
 // ---------------------------------------------------------------- fetches
 // A fetch is "Loading" till its body's all in (read whole, or streamed to the end as three's FileLoader does), then
-// "Unpacking" till the tick after, so whatever parses it straight away is counted under its name. A model's body is
-// only handed over on its turn: one a frame, so their unpacking's spread out rather than all in one long freeze.
-let turns = Promise.resolve();
+// "Unpacking" till the tick after. A model's buffer is remembered by name for its unpacking (below).
 const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
-const takeTurn = () => (turns = turns.then(nextFrame));
+const bufferNames = new WeakMap();
 
 const fileName = url => decodeURIComponent(String(url).split(/[?#]/)[0].split('/').pop() || String(url));
 const realFetch = window.fetch.bind(window);
 const bodyOf = Object.getOwnPropertyDescriptor(Response.prototype, 'body').get;
-function watchBody(response, model, arrived) {
-  const handOver = value => (model ? takeTurn() : Promise.resolve()).then(() => { arrived(); return value; });
+function watchBody(response, model, arrived, name) {
+  const handOver = value => { if (model && value instanceof ArrayBuffer) bufferNames.set(value, name); arrived(); return value; };
   for (const read of ['arrayBuffer', 'text', 'json', 'blob']) {
     const real = response[read].bind(response);
     response[read] = () => real().then(handOver, err => { arrived(); throw err; });
@@ -97,7 +94,7 @@ function watchBody(response, model, arrived) {
       const getReader = body.getReader.bind(body);
       body.getReader = (...args) => {
         const reader = getReader(...args), readNext = reader.read.bind(reader);
-        reader.read = () => readNext().then(chunk => chunk.done ? handOver(chunk) : chunk);
+        reader.read = () => readNext().then(chunk => chunk.done ? (arrived(), chunk) : chunk);
         return reader;
       };
     }
@@ -106,13 +103,12 @@ function watchBody(response, model, arrived) {
 }
 window.fetch = (input, init) => {
   const name = fileName(input?.url ?? input), model = isModel(name);
-  if (model) models.push(name);
   const item = { text: `Loading ${name}...`, model };
   let finish;
   const settled = new Promise(resolve => { finish = resolve; });
   const arrived = () => { item.text = `Unpacking ${name}...`; showLabel(); setTimeout(finish, 0); };
   const fetched = realFetch(input, init);
-  fetched.then(response => { if (response.ok) watchBody(response, model, arrived); else finish(); }, finish);
+  fetched.then(response => { if (response.ok) watchBody(response, model, arrived, name); else finish(); }, finish);
   setTimeout(finish, UNREAD_AFTER); // (a body nobody reads)
   track(fetches, item, settled);
   return fetched;
@@ -122,6 +118,30 @@ export function loadingTask(text, promise, weight = 1) {
   track(tasks, { text }, promise, weight);
   return promise;
 }
+
+// ---------------------------------------------------------------- models unpacked one at a time
+// Downloads finish together, and unpacked as they come their parsing and setup all landed in one long freeze. So while
+// loading, each GLTFLoader parse waits its turn: a frame after the last model's parse and whatever its loader did
+// straight after (its callback, or what awaited it) — so the bar moves between models. Named by file where known.
+let unpacks = Promise.resolve(), unpacksQueued = 0, unpacksStarted = 0;
+const realLoad = GLTFLoader.prototype.load, realParse = GLTFLoader.prototype.parse;
+GLTFLoader.prototype.load = function (url, ...rest) { this.loadingName = fileName(url); return realLoad.call(this, url, ...rest); };
+GLTFLoader.prototype.parse = function (data, path, onLoad, onError) {
+  if (loaded) return realParse.call(this, data, path, onLoad, onError);
+  const name = bufferNames.get(data) ?? this.loadingName ?? 'model';
+  const item = { text: `Waiting to unpack ${name}...` };
+  let done;
+  const finished = new Promise(resolve => { done = resolve; });
+  const settle = run => arg => { try { run?.(arg); } finally { done(); } };
+  unpacksQueued++;
+  track(tasks, item, finished);
+  unpacks = unpacks.then(nextFrame).then(() => {
+    item.text = `Unpacking ${name} (${++unpacksStarted}/${unpacksQueued})...`; showLabel();
+    try { realParse.call(this, data, path, settle(onLoad), settle(onError)); } catch (err) { settle(onError)(err); }
+    setTimeout(done, UNREAD_AFTER); // (a parse that never ends can't hold up the rest)
+    return finished;
+  });
+};
 
 // ---------------------------------------------------------------- models before the city
 // main.js hands over its model loads (`waitForModels`); autosave.js waits on `modelsLoaded` before building the city,
