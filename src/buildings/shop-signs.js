@@ -20,11 +20,14 @@ const SYMBOLS = {
   ],
   // scissors, open: two blades crossing, a ring handle on each
   salon: () => {
-    const blade = sign => {
-      const s = poly([[-0.035, -0.12], [0.035, -0.12], [0.012, 0.52], [-0.01, 0.52]]), m = new THREE.Matrix3().makeRotation(sign*0.3);
-      return poly(s.getPoints().map(p => p.applyMatrix3(m)).map(p => [p.x, p.y]));
+    // (each half drawn upright, pivot at the origin, then leant over: its ring low on one side, its point high on the other)
+    const half = sign => {
+      const m = new THREE.Matrix3().makeRotation(-sign*0.45), at = (x, y) => new THREE.Vector2(sign*x, y).applyMatrix3(m);
+      const blade = [[0.025, -0.22], [0.025, -0.02], [0.045, 0.06], [0.03, 0.4], [-0.005, 0.52], [-0.05, 0.06], [-0.025, -0.02], [-0.025, -0.22]];
+      const c = at(0, -0.34);
+      return [new THREE.Shape(blade.map(([x, y]) => at(x, y))), ring(c.x, c.y, 0.13, 0.085)];
     };
-    return [blade(1), blade(-1), ring(0.1, -0.33, 0.14, 0.08), ring(-0.1, -0.33, 0.14, 0.08)];
+    return [...half(1), ...half(-1)];
   },
   // a T-shirt
   clothes: () => {
