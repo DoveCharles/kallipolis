@@ -4,7 +4,10 @@ import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { canTakeControl, controlInput, endPossession, possession, startPossession, HATES_POSSESSED_SPEED, rushed } from '../possession.js';
 import { FLEE_SPEED, PEOPLE_MAX, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
-import { HEAD_CENTER, PERSON_TRAIT_COLORS } from './peopleModel.js';
+import { HAIR_ROW, HEAD_CENTER, PERSON_TRAIT_COLORS } from './peopleModel.js';
+
+/** Their headsize trait as drawn (the Hair row's fourth number, 0 read as 1: see personLook). */
+export const headSizeOf = i => personModel.traitData[(HAIR_ROW*PEOPLE_MAX + i)*4 + 3] || 1;
 import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, sayGoodbye, standUp, talkWith } from './peopleActivities.js';
 import { awaitsWatcher, endPrayerView, watchPrayer } from './peoplePrayer.js';
 import { placeAtVertex, reseatPerson, walkBackToWalkway } from './peoplePathing.js';
@@ -257,7 +260,7 @@ export function headPointOf(i, spot, out) {
   if (personModel.traitData[((2 + PERSON_TRAIT_COLORS.indexOf('Eyes'))*PEOPLE_MAX + i)*4 + 3] > 0.5) { // (upside down, 🙃: see personLook)
     headOffset.set(-spot.x, personModel.face.top.y - spot.y, spot.z);
   }
-  headOffset.applyMatrix4(lookTurn).applyMatrix3(headTurn);
+  headOffset.multiplyScalar(headSizeOf(i)).applyMatrix4(lookTurn).applyMatrix3(headTurn); // (scaled about the neck, as personLook)
   return out.copy(personModel.headPivot).applyMatrix4(headMatrix).add(headOffset).applyMatrix4(headshotInstance);
 }
 
@@ -271,10 +274,11 @@ export function headshotOf(i) {
   boneAt(chestMatrix, personModel.chestBone, i);
   chestTurn.setFromMatrix4(chestMatrix);
   personModel.mesh.getMatrixAt(i, headshotInstance);
-  headshot.head.copy(personModel.headPivot).add(HEAD_CENTER).applyMatrix4(chestMatrix).applyMatrix4(headshotInstance);
+  const size = headSizeOf(i);
+  headshot.head.copy(HEAD_CENTER).multiplyScalar(size).add(personModel.headPivot).applyMatrix4(chestMatrix).applyMatrix4(headshotInstance);
   headshot.forward.set(0, 0, 1).applyMatrix3(chestTurn).transformDirection(headshotInstance);
   headshot.up.set(0, 1, 0).applyMatrix3(chestTurn).transformDirection(headshotInstance);
-  headshot.distance = 4.6*modelScale(people[i]);
+  headshot.distance = 4.6*modelScale(people[i])*size;
   return headshot;
 }
 

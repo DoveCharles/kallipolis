@@ -183,7 +183,7 @@
 #   {seen = death}            any death                       {seen = punch, evil}   a punch, leaning toward the evil
 #   Deaths: killedbycar, beatentodeath, smited, drowned, exploded, crashedinto (a car smashed into the building they were in)
 #   ({seen = death} is any of them). Others: punch (someone
-#   punched), knockedbycar (hit, not killed), resurrected, healed (a MedBot patched them up), waterwalking, smelly (a smelly person near). Anyone near
+#   punched), knockedbycar (hit, not killed), resurrected, healed (a MedBot patched them up), waterwalking, smelly (a smelly person near), nude (a nude person near). Anyone near
 #   enough (or in the same building) sees it; a death isn't replaced by something lesser while it's fresh.
 # FELT: something that happened to the speaker in the last 60 seconds (hard limits)
 #   {felt = punched}          someone punched them            {felt = hitbycar}  a car knocked them down
@@ -218,6 +218,7 @@
 #   {is = partying}           confetti flying off them (🥳 gives it) — "> Where's the party? {other.is = partying}"
 #   {is = singing}            music notes floating off them (🎵 gives it) — "> What are you humming? {other.is = singing}"
 #   {is = upsidedown}         their head the wrong way up (🙃 gives it) — "> Your head's on upside down! {other.is = upsidedown}"
+#   {is = nude}               the nude trait: no clothes, a censor over them — "> Put some clothes on! {other.is = nude}"
 #   {is = drooling}           drool dripping from their mouth (🤤 gives it) — "> You're drooling. {other.is = drooling}"
 #   {is = skeptical}          one eyelid raised at you (🤔 gives it) — "> What's that look for? {other.is = skeptical}"
 #   {is = goofy}              pulling a goofy face (🥴 gives it) — "> What's up with your face? {other.is = goofy}"

@@ -53,6 +53,7 @@ function draw() {
     new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ped.heading), new THREE.Vector3(s, s, s));
   M.mesh.setMatrixAt(I, matrix);
   M.mesh.count = Math.max(M.mesh.count, 1);
+  M.censor.count = Math.max(M.censor.count, 1);
   const o = I*4, row = clip.start + (ped.time*pm.PERSON_BAKE_FPS) % clip.frames;
   M.anim.array.set([row, row, 1, ped.blink], o);
   M.look.array.set([ped.turn, ped.tilt, ped.talk, ped.emotion], o);
@@ -117,6 +118,7 @@ function build() {
     traits()[texel(pm.PERSON_TRAIT_COLORS.indexOf('OutfitGreen') + 2) + 3] = +v ? outfits.OUTFIT_COLUMNS[+v - 1] : 0;
     dirty();
   });
+  picker('Nude', [[0, 'No'], [1, 'Yes']], () => traits()[texel(pm.PERSON_TRAIT_COLORS.indexOf('Cuff') + 2) + 3] > 0.5 ? 1 : 0, v => { M.setNude(I, p.id, +v === 1); });
   BANDS.forEach(([name, count], k) => slider(name, 1, count + 1, 1, () => traits()[texel(pm.PERSON_CLOTHING_ROW) + k], v => { traits()[texel(pm.PERSON_CLOTHING_ROW) + k] = v; dirty(); }));
   head('Pose');
   picker('Clip', Object.values(M.clips).filter(c => !c.missing).map(c => [c.name, c.name]), () => ped.clip, v => { ped.clip = v; ped.time = 0; });

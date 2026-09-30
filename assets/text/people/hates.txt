@@ -50,6 +50,9 @@ Shitty speakers {nerd = 3} <stuff>
 Shampooing the hair <habits>
 Radiohead | Radiohead {nerd = 0.8} <media>
 Polystyrene <stuff>
+Clothes {nude} <stuff>
+Having a tiny head {headsize = 0.8, persist} <health>
+Having a giant head {headsize = 1.25, persist} <health>
 Cars <stuff>
 Farters <folk>
 The mortality reminder that comes with Autumn {mood = -0.5, speed = 0.8, agemult =1.1} <beliefs>

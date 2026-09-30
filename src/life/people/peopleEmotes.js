@@ -3,7 +3,7 @@ import { scene } from '../../core/scene.js';
 import { S } from '../../core/shared.js';
 import { breathFx, confettiFx, droolFx, fumeFx, heartFx, noteFx, starFx, sweatFx, tearFx, zedFx } from '../giblets.js';
 import { personModel } from './people.js';
-import { headPointOf } from './peopleTracking.js';
+import { headPointOf, headSizeOf } from './peopleTracking.js';
 
 // ============================================================ moods on show
 // What some moods (people/moods.txt) show beyond the eyes, by the traits they give: tears welling up under both eyes and
@@ -63,7 +63,7 @@ export function beginEmotes() {
 export function updateEmotes(p, i, dt, t) {
   const tr = p.traits;
   if (!EMOTE_TRAITS.some(name => tr[name] > 0) || !personModel || p.mode === 'dead' || p.water?.drowned) return;
-  const face = personModel.face, height = 1.7*p.height*S.peopleSize;
+  const face = personModel.face, height = 1.7*p.height*S.peopleSize*headSizeOf(i); // (effects sized to the head: see headsize)
   // (bursts at a time of their own for each person, so a crowd don't all puff together)
   const during = (every, burst, shift = 0) => (t/every + p.id*0.37 + shift) % 1 < burst/every;
   // (whether one of their beats `every` seconds apart has just come, in the `dt` since the last frame)

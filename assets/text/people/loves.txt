@@ -477,7 +477,8 @@ Choosing not to care <habits>
 Oral fixation <lewd>
 Having webbed feet {aqua} <health>
 Half-price swimming lessons {aqua} <hobbies>
-Skinny-dipping {aqua} <hobbies>
+Skinny-dipping {aqua, nude} <hobbies>
+Full frontal {nude} <lewd>
 Holding their breath underwater | holding my breath under water {aqua} <hobbies>
 Swimming in the Thames {aqua, smells} <hobbies>
 Wriggling across the ground like a slug <surreal>

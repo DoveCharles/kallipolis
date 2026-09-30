@@ -1710,7 +1710,7 @@ const PUB_ROUND_MIN = 15, PUB_ROUND_MAX = 60;
  * @param {object} building - the building (see buildingDoors)
  * @returns {number} the chance
  */
-export const enterChance = (p, building) => shopOf(building) ? (isNight() ? 0 : ENTER_CHANCE) : isWorkplace(building)
+export const enterChance = (p, building) => shopOf(building) ? (isNight() || (p.traits.nude && shopOf(building) === 'clothes') ? 0 : ENTER_CHANCE) : isWorkplace(building)
   ? (isNight() ? OFFICE_ENTER_CHANCE_NIGHT : OFFICE_ENTER_CHANCE)
   : isNight() && !nightOwl(p) ? ENTER_CHANCE_NIGHT : ENTER_CHANCE;
 /** How long a visit lasts, in hours of the day's clock. */
