@@ -14,7 +14,7 @@ import { puffSmoke, haircutFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFollowingPerson } from './peopleTracking.js';
-import { drawCurtain, openRoomDoor, roomBeyondDoor, roomBuilding, roomCubicles, roomDoorway, roomKind, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, sushiGrab, sushiOrder, sushiPut, watchingTV } from '../../buildings/interior.js';
+import { drawCurtain, openRoomDoor, roomBeyondDoor, roomBuilding, roomCubicles, roomDoorway, roomKind, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomTill, roomVisit, someoneHome, sushiGrab, sushiOrder, sushiPut, watchingTV } from '../../buildings/interior.js';
 import { TRAYS, clearMeal, feedPizza, giveSnack, hold, holding, letGo, mealFinished, menuOf, plateSpot, serveMeal } from './peopleHolding.js';
 import { BARBOT, barbotFree } from '../../buildings/barbot.js';
 import { awaitWaiter, leavePlate, queueForTable, runWaiter, servedMeal, waitForTable, waiterOn } from './peopleWaiter.js';
@@ -1739,7 +1739,7 @@ const OFFICE_MIN_HOURS = 4, OFFICE_MAX_HOURS = 10, OFFICE_LEAVE_HOURS = 1.5;
 /** The share of the crowd who work late: in an office after dark, they stay the rest of their day. */
 const WORKS_LATE = 0.04;
 const worksLate = p => ((Math.imul(p.id + 7, 2246822519) >>> 0)/2**32) < WORKS_LATE;
-const isWorkplace = building => !['home', 'pub', 'salon', 'clothes', 'restaurant'].includes(roomLayoutOf(building.kind, building.number));
+const isWorkplace = building => !['home', 'pub', 'salon', 'clothes', 'restaurant', 'convenience'].includes(roomLayoutOf(building.kind, building.number));
 // (a pub's a visit like a home's, but a shorter one — an hour or four — and nobody's in it long without a pint in hand:
 // see aboutTheRoom)
 const isPub = building => roomLayoutOf(building.kind, building.number) === 'pub';
@@ -1747,9 +1747,10 @@ const PUB_MIN_HOURS = 1, PUB_MAX_HOURS = 4;
 // (a restaurant's for a meal: most sit straight down at a table, and once they've eaten they're off: see aboutTheRoom)
 const isRestaurant = building => roomLayoutOf(building.kind, building.number) === 'restaurant';
 const RESTAURANT_MIN_HOURS = 1, RESTAURANT_MAX_HOURS = 2.5, RESTAURANT_SIT = 0.9;
-// (a shop — a hair salon or a clothes shop — is a quick visit, for what it's there for: a haircut or new clothes; and
-// shut after dark: see "a salon" and "a clothes shop" below)
-const shopOf = building => { const layout = roomLayoutOf(building.kind, building.number); return layout === 'salon' || layout === 'clothes' ? layout : null; };
+// (a shop — a hair salon, a clothes shop or a convenience store — is a quick visit, for what it's there for: a haircut,
+// new clothes or a bit of shopping; and shut after dark, bar the convenience store: see "a salon" and the rest below)
+const SHOPS = new Set(['salon', 'clothes', 'convenience']);
+const shopOf = building => { const layout = roomLayoutOf(building.kind, building.number); return SHOPS.has(layout) ? layout : null; };
 const SHOP_MIN_HOURS = 0.4, SHOP_MAX_HOURS = 1.2;
 /** Seconds between one pint finished and the next got in, in a pub. */
 const PUB_ROUND_MIN = 15, PUB_ROUND_MAX = 60;
@@ -1760,7 +1761,7 @@ const PUB_ROUND_MIN = 15, PUB_ROUND_MAX = 60;
  * @param {object} building - the building (see buildingDoors)
  * @returns {number} the chance
  */
-export const enterChance = (p, building) => shopOf(building) ? (isNight() || (p.traits.nude && shopOf(building) === 'clothes') ? 0 : ENTER_CHANCE) : isWorkplace(building)
+export const enterChance = (p, building) => shopOf(building) ? ((isNight() && shopOf(building) !== 'convenience') || (p.traits.nude && shopOf(building) === 'clothes') ? 0 : ENTER_CHANCE) : isWorkplace(building)
   ? (isNight() ? OFFICE_ENTER_CHANCE_NIGHT : OFFICE_ENTER_CHANCE)
   : isNight() && !nightOwl(p) ? ENTER_CHANCE_NIGHT : ENTER_CHANCE;
 /** How long a visit lasts, in hours of the day's clock. */
@@ -1822,7 +1823,7 @@ export function goIndoors(p, building, from) {
 //              anyone teetotal out of it (alcoholic starts everyone at 1: see the trait table in people/about.txt)
 //   where      anything else about them, as a function of the person
 // A building's own kind is looked up first (as buildings.txt names it: see buildingKindOf), then the layout of its room
-// (what roomLayoutOf gives: 'home', 'office', 'warehouse', 'factory', 'pub', 'salon', 'clothes', 'restaurant'), then `default`.
+// (what roomLayoutOf gives: 'home', 'office', 'warehouse', 'factory', 'pub', 'salon', 'clothes', 'convenience', 'restaurant'), then `default`.
 const PARTY_RULES = {
   default: { min: 4, max: 5 },
   // A pub's party's a drinking one: nobody teetotal turns up.
@@ -2078,12 +2079,13 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
   }
   if (p.group?.kind === 'chat') return null; // (stopped to talk with whoever's possessed: see talkWith)
   if (here.cubicle) return changing(p, here, visit, dt);
+  if (here.paying) return paying(p, here, visit, dt);
   if (here.host) return waitForTable(p, here, dt);
   if (here.seat) return sitting(p, here, dt);
   if (p.group?.kind === 'room') return here.route ? walkRoute(p, here) : null;
   if (visit.shop && !visit.served && !here.route && !p.oneShot && p.mode !== 'possessed' && (here.shopIn = (here.shopIn ?? 1 + peopleRng()*4) - dt) <= 0) {
     here.shopIn = 2 + peopleRng()*4;
-    const next = visit.shop === 'salon' ? goForHaircut(p, here) : goTryOn(p, here);
+    const next = visit.shop === 'salon' ? goForHaircut(p, here) : visit.shop === 'clothes' ? goTryOn(p, here) : goPay(p, here);
     if (next) return next;
   }
   if (here.route) {
@@ -2347,7 +2349,8 @@ function serve(p, visit) {
   const i = people.indexOf(p);
   if (!personModel || i < 0) return;
   if (visit.shop === 'salon') { personModel.cutHair(i, p.id, peopleRng); feel(p, 'haircut'); }
-  else { personModel.changeClothes(i, p.id, peopleRng); feel(p, 'newclothes'); }
+  else if (visit.shop === 'clothes') { personModel.changeClothes(i, p.id, peopleRng); feel(p, 'newclothes'); }
+  else feel(p, 'shopped');
 }
 /**
  * Whether someone whose time's up in a shop stays on anyway: they're in the chair or the changing room, or waiting for
@@ -2359,7 +2362,7 @@ function serve(p, visit) {
  */
 function beingServed(p, visit, dt) {
   if (!visit.shop || !roomHolds(visit.building.key) || p.inRoom?.visit !== roomVisit()) return false;
-  if (p.inRoom.cubicle || (p.inRoom.seat?.kind === 'cut' && !visit.served)) return true;
+  if (p.inRoom.cubicle || p.inRoom.paying || (p.inRoom.seat?.kind === 'cut' && !visit.served)) return true;
   return !visit.served && (visit.waited = (visit.waited ?? 0) + dt) < SERVE_WAIT;
 }
 /**
@@ -2402,6 +2405,50 @@ function haircut(p, seat, here, dt) {
   serve(p, visit);
   here.timer = 1 + peopleRng();
   leaveSoon(visit, SERVED_STAY[0] + peopleRng()*(SERVED_STAY[1] - SERVED_STAY[0]));
+}
+// A convenience store: whoever goes in looks round a while, then goes up to the till (roomTill), stands there PAY_TIME
+// paying, and is off with what they came for.
+/** Seconds at the till, [shortest, longest]. */
+const PAY_TIME = [2, 4];
+/**
+ * In a convenience store, over to the till.
+ * @param {Person} p - the person
+ * @param {object} here - their p.inRoom
+ * @returns {?{x: number, y: number, z: number}} where to walk to first, or null if there's no till (or no way to it)
+ */
+function goPay(p, here) {
+  if (!here.browsed) { here.browsed = peopleRng() < 0.5; return null; } // (a look round first, or two)
+  const till = roomTill(), route = till && roomRoute(p, till.at);
+  if (!route) return null;
+  if (p.group?.kind === 'room') leaveGroup(p);
+  Object.assign(here, { paying: true, route, timer: 25, payFor: PAY_TIME[0] + peopleRng()*(PAY_TIME[1] - PAY_TIME[0]) });
+  p.faceTo = null;
+  return route[0];
+}
+/**
+ * Someone paying at a convenience store's till: there, facing the counter, a moment, then served and soon gone.
+ * @param {Person} p - the person
+ * @param {object} here - their p.inRoom
+ * @param {object} visit - their p.indoors
+ * @param {number} dt - seconds since the last frame
+ * @returns {?{x: number, y: number, z: number}} where they should walk to, or null
+ */
+function paying(p, here, visit, dt) {
+  here.timer -= dt;
+  const next = here.route ? walkRoute(p, here) : null;
+  if (next) {
+    if (here.timer > 0) return next;
+    here.route = null; // (can't get there)
+  } else {
+    const till = roomTill();
+    if (till) p.faceTo = till.facing;
+    if ((here.payFor -= dt) > 0) return null;
+    serve(p, visit);
+    leaveSoon(visit, SERVED_STAY[0] + peopleRng()*(SERVED_STAY[1] - SERVED_STAY[0]));
+  }
+  here.paying = false;
+  here.wait = 1 + peopleRng()*2;
+  return null;
 }
 // whether a changing room's really someone's: they're still in the room with it as theirs
 const cubicleHeld = c => !!c.by && c.by.inRoom?.cubicle === c && c.by.inRoom.visit === roomVisit();

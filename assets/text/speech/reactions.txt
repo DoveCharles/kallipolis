@@ -156,6 +156,10 @@ Does this make me look fat? {felt = newclothes, thought}
 I'm never taking this off. {felt = newclothes, mood}
 Should've got the other one. {felt = newclothes, mood = -1, thought}
 How do I look? {felt = newclothes}
+Cheers, mate. {felt = shopped}
+How much?! {felt = shopped, patience = -1}
+Forgot the thing I came in for. {felt = shopped, thought}
+Snacks secured. {felt = shopped, happy}
 > Like a million quid. {happy}
 > Like you've spent too much. {patience = -1}
 > Very... you. {weight = 0.5}

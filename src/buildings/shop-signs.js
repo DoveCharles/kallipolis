@@ -36,6 +36,16 @@ const SYMBOLS = {
     s.quadraticCurveTo(0, 0.3, -0.12, 0.45);
     return [s];
   },
+  // a shopping basket: a tapered tub with slots, its handle arched over
+  convenience: () => {
+    const tub = poly([[-0.45, 0.05], [0.45, 0.05], [0.34, -0.45], [-0.34, -0.45]]);
+    for (let k = 0; k < 4; k++) {
+      const x = -0.27 + k*0.18;
+      tub.holes.push(new THREE.Path([[x - 0.04, -0.03], [x + 0.04, -0.03], [x + 0.03, -0.35], [x - 0.03, -0.35]].map(([a, b]) => new THREE.Vector2(a, b))));
+    }
+    const arc = r => Array.from({ length: 13 }, (_, k) => [Math.cos(k*Math.PI/12)*r, 0.05 + Math.sin(k*Math.PI/12)*r*1.2]);
+    return [tub, poly([...arc(0.36), ...arc(0.29).reverse()])];
+  },
   // a fork and a knife
   restaurant: () => {
     const fork = [poly([[-0.27, -0.5], [-0.19, -0.5], [-0.19, 0.08], [-0.27, 0.08]]), poly([[-0.33, 0.08], [-0.13, 0.08], [-0.15, 0.2], [-0.31, 0.2]])];

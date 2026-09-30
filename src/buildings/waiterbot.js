@@ -150,6 +150,7 @@ export function placeWaiterbot(into, stand, door, apron = true) {
   if (!rig()) return;
   chef = null;
   dressBot(w, true);
+  paintBody(null);
   w.aprons.forEach(o => { o.visible = apron; }); // (none in a Greek taverna)
   group = into;
   const f = { x: Math.sin(stand.angle), z: Math.cos(stand.angle) };
@@ -378,6 +379,7 @@ let chef = null;
 export function placeChefbot(into, spot, dish) {
   if (!rig()) return;
   dressBot(w, true, true);
+  paintBody(null);
   group = into; local = null;
   group.add(w.root);
   chef = { ...spot, lx: spot.x, goal: null, dish, orders: [], doing: null, t: 0, wait: 1, plate: null };
@@ -386,10 +388,55 @@ export function placeChefbot(into, spot, dish) {
 }
 /** Have the chef hand a plate over the counter at `at` (the room's terms: x, y, z); `done(plate)` once it's down. */
 export function chefOrder(at, done) { chef?.orders.push({ at, done }); }
-export const chefUp = () => !!chef && !!w?.hand && s.up && w.root.parent === group;
+export const chefUp = () => !!chef && !chef.clerk && !!w?.hand && s.up && w.root.parent === group;
 
+// A convenience store's clerk: the same body stood still behind the counter (`spot`, facing out over it), awake, bare
+// — no bowtie, moustache, headband, pint, robe or knife — its body's Chrome2 in the store's `colour`, looking about now and then.
+export function placeClerkbot(into, spot, colour) {
+  if (!rig()) return;
+  dressBot(w, false);
+  for (const o of [w.bowtie, w.moustache, w.headband, w.pint, w.robe, w.knife]) if (o) o.visible = false;
+  paintBody(colour);
+  group = into; local = null;
+  group.add(w.root);
+  chef = { ...spot, lx: spot.x, clerk: true, look: 0, lookNext: 0 };
+  Object.assign(s, { route: [], face: null, hidden: false, snap: true, target: null, talking: false, carry: { L: null, R: null }, serve: null, say: null, head: 0 });
+  w.dishes.L.visible = w.dishes.R.visible = false;
+}
+// the body's own Chrome2 (the part beside its Apron: see black in barbot.js), in `colour`, or back to its own with null
+function paintBody(colour) {
+  w.rig.traverse(o => {
+    if (!o.isMesh || !(o.userData.chrome2 ?? o.material).name?.startsWith('Chrome2') || !o.parent?.children.some(c => c.material?.name === 'Apron')) return;
+    o.userData.chrome2 ??= o.material;
+    if (colour == null) { o.material = o.userData.chrome2; return; }
+    o.userData.painted ??= Object.assign(o.userData.chrome2.clone(), { name: 'Chrome2 painted' });
+    o.userData.painted.color.setHex(colour);
+    o.material = o.userData.painted;
+  });
+}
+function updateClerk(dt, now, snap) {
+  const c = chef;
+  s.asleep = false;
+  if (now > c.lookNext) { c.look = Math.random() < 0.3 ? 0 : (Math.random()*2 - 1)*0.9; c.lookNext = now + 2 + Math.random()*4; }
+  s.head += (c.look - s.head)*Math.min(1, HEAD_EASE*0.4*dt);
+  const at = toWorld(c.lx, c.z);
+  Object.assign(s, { x: at.x, z: at.z, yaw: yawToWorld(c.angle) });
+  poses([['DefaultPose', 'loop']], snap ? 0 : FADE);
+  w.root.position.set(c.lx, 0, c.z);
+  w.rig.rotation.y = c.angle;
+  w.root.visible = true;
+  w.mixer.update(dt);
+  if (w.head) w.head.quaternion.premultiply(headTurn.setFromAxisAngle(UP, mirrored() ? -s.head : s.head));
+  w.root.updateMatrixWorld(true);
+  if (w.head) { w.head.getWorldPosition(v); WAITER.x = v.x; WAITER.y = v.y + HEAD_UP; WAITER.z = v.z; }
+  if (w.face) w.face.visible = true;
+  if (w.zzz) w.zzz.visible = false;
+  botWhir('waiter', null, 0);
+  botFace(w, s, WAITER, dt, now, { asleep: false, working: false, still: true, talking: false, snap });
+}
 function updateChef(dt, now, snap) {
   const c = chef;
+  if (c.clerk) { updateClerk(dt, now, snap); return; }
   s.asleep = !s.occupied && !c.doing && !c.orders.length;
   if (!s.asleep) {
     const order = c.orders[0];

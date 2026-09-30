@@ -19,6 +19,12 @@ The Smiths - This Charming Man.mid
 The Verve - Bitter Sweet Symphony.mid
 Weezer - Buddy Holly.mid
 Weezer - Undone (The Sweater Song).mid
+convenience/B. J. Thomas - Raindrops Keep Fallin' on My Head.mid
+convenience/Burt Bacharach - I'll Never Fall in Love Again.mid
+convenience/The 5th Dimension - Up, Up and Away.mid
+convenience/The Association - Never My Love.mid
+convenience/The Association - Windy.mid
+convenience/The Mamas & the Papas - I Saw Her Again.mid
 restaurant/Cardillo - Core 'ngrato.mid
 restaurant/Cottrau - Santa Lucia.mid
 restaurant/De Curtis - Torna a Surriento.mid

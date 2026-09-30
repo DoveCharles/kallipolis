@@ -39,6 +39,14 @@ Those dryers look like space helmets. {here.building = salon, weight = 0.4}
 Not those posters again. {here.building = salon, patience = -1, weight = 0.4}
 Maybe I'll go blonde. {here.building = salon, weight = 0.4}
 Where's my size? {here.building = clothes}
+I only came in for milk. {here.building = convenience}
+How long have those hot dogs been going round? {here.building = convenience}
+Blue or red slushie. Big decision. {here.building = convenience, weight = 0.5}
+Meal deal. Obviously. {here.building = convenience}
+Why is the milk always at the back? {here.building = convenience, patience = -1}
+Scratchcard. Just the one. {here.building = convenience, weight = 0.4}
+It's three in the morning and I want crisps. {here.building = convenience, world.hour 1-5}
+Should've brought an umbrella. {here.building = convenience, world.weather = rain, weight = 0.6}
 Do I need this? No. Do I want it? Yes. {here.building = clothes}
 The changing rooms are always full. {here.building = clothes, patience = -1}
 That mannequin's giving me a look. {here.building = clothes, weight = 0.4}

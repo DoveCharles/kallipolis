@@ -162,7 +162,7 @@ export function buildingNumber(key) {
 // restaurant as one of those; everything else is a home. A city block's
 // landmark is one of those blocks too — taller and fancier, but still somewhere people live or work, and named for it
 // (see buildingName) — so it splits the same way.
-const CITY_BLOCK_KINDS = new Set(['buildings', 'landmark']), OWN_LAYOUT_KINDS = new Set(['warehouse', 'factory', 'pub', 'salon', 'clothes', 'restaurant']);
+const CITY_BLOCK_KINDS = new Set(['buildings', 'landmark']), OWN_LAYOUT_KINDS = new Set(['warehouse', 'factory', 'pub', 'salon', 'clothes', 'restaurant', 'convenience']);
 export const roomLayoutOf = (kind, number) => OWN_LAYOUT_KINDS.has(kind) ? kind
   : CITY_BLOCK_KINDS.has(kind) && number % 2 === 0 ? 'office' : 'home';
 // A pub's kind of pub, by its key (see buildingKey), the same every time: a craft beer bar — bright paint, neon, festoon

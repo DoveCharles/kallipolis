@@ -338,6 +338,27 @@ hates = Everything unfolded again
 hates = Returns without a receipt
 hates = Online shopping
 
+[convenience]
+enterable = yes
+name = Convenience Store
+title = 7-Leven {font = 900 Arial Black, color = #ffffff}
+title = Kwik-E-Nuff {font = italic Impact, color = #ffd400}
+title = Open All Hours {font = Georgia, color = #f2e8d0}
+title = Spar Change {font = 900 Arial Black, color = #e8202a}
+title = Late Shop {font = italic Trebuchet MS, color = #7dff5a}
+title = Nearly Everything {font = Comic Sans MS, color = #ffffff}
+title = Meal Deal Kings {font = Impact, color = #ff8a1a}
+title = Circle J {font = 900 Arial Black, color = #e8202a}
+mood = 🏪
+loves = Being open when nobody else is
+loves = Rain (umbrella money)
+loves = The meal deal
+loves = The hot dogs going round
+hates = Shoplifters
+hates = The slushie machine breaking
+hates = People paying for gum with a card
+hates = Loitering by the door
+
 [house]
 enterable = yes
 name = House

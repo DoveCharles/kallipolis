@@ -15,7 +15,7 @@ const ZONE_OF_KIND = {
   warehouse: 'industrial', factory: 'industrial', tankfarm: 'industrial', containeryard: 'industrial',
   farmstead: 'farmland',
   house: 'suburbs',
-  terrace: 'town', pub: 'town', salon: 'town', clothes: 'town', restaurant: 'town',
+  terrace: 'town', pub: 'town', salon: 'town', clothes: 'town', restaurant: 'town', convenience: 'town',
   terminal: 'airport', hangar: 'airport', controltower: 'airport',
   vacant: 'mall',
   'restaurant-greek': 'restaurant', 'restaurant-sushi': 'restaurant',
