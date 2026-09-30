@@ -5,6 +5,8 @@ import { babble, nextSyllable } from '../audio/voices.js';
 import { TOON_RAMP } from '../core/toon.js';
 
 // ============================================================ the bar bot
+// (The same model, dressed as a waiter — Pint hidden, Moustache shown, Tux shape on — is every restaurant's waiter: waiterBody,
+// dressBot, botFace; see waiterbot.js.)
 // Every pub has a bar bot (assets/models/Barbot.glb) behind its bar, between the back bar and the counter, and it never
 // leaves: it only slides along the bar (the room's x), its body (Body) turning on its yaw to face the way it's going
 // and back round to face the bar when it stops. (Body's the root bone, at the model's origin and never moved by its
@@ -23,7 +25,7 @@ import { TOON_RAMP } from '../core/toon.js';
 // audio/voices.js), its mouth (Talk) snapping open and shut.
 const BARBOT_MODEL_URL = 'assets/models/Barbot.glb';
 const BEHIND = 0.38;        // m, stood behind the counter's back edge
-const HEIGHT = 1.85;        // m tall
+export const HEIGHT = 1.85;      // m tall
 
 const SPEED = 0.5;          // m/s along the bar
 const TURN = 5;             // rad/s, the body's yaw
@@ -40,7 +42,7 @@ const SHAPES = ['Look Left/Right', 'Raised Eyebrow', 'LookDown', 'Blink', 'Talk'
 const BLINK = 0.12;         // s, the eyes shut
 const CHAT_STALE = 2;       // s without word from its chat (see BARBOT.chat) before it's taken to be over
 const MOUTH_SNAP = [0.05, 0.14]; // s, how long its mouth stays open or shut, talking
-const HEAD_UP = 0.2;        // m above its Head bone: its face, where its voice comes from and it's looked at
+export const HEAD_UP = 0.2;      // m above its Head bone: its face, where its voice comes from and it's looked at
 // its voice: the peds' babble (a pitch, where its formants sit, how sharp they ring: see audio/voices.js), made a robot's —
 // flat notes on a square wave, buzzing at `robot` Hz
 const ROBOT_VOICE = { pitch: 240, formant: 1.1, sharpness: 7, melody: 0, robot: 90 };
@@ -76,25 +78,41 @@ export async function loadBarbot() {
     console.warn('Kallipolis: the bar bot model failed to load; pubs have no bar bot', err);
     return;
   }
-  const rig = gltf.scene;
-  let head = null, face = null, zzz = null;
-  const shaped = [], screens = [], meshes = [], toon = new Map();
+  const spare = cloneSkinned(gltf.scene); // (before any materials are swapped: the waiter's own, see waiterbot.js)
+  bot = makeBot(gltf.scene, gltf.animations);
+  dressBot(bot, false);
+  bot.mixer.addEventListener('finished', e => { if (e.action === bot.actions[state.doing]) settle(); });
+  waiter = makeBot(spare, gltf.animations);
+  dressBot(waiter, true);
+  sizeBarbot();
+}
+let waiter = null;
+/** The second body, dressed as a waiter (see waiterbot.js), or null. */
+export const waiterBody = () => waiter;
+
+// A body from the model: toon-shaded like the people (and lit like them indoors: the room's lamps and glow, see
+// interior.js) but for its screen and glass, which are its own.
+function makeBot(rig, animations) {
+  let head = null, face = null, zzz = null, pint = null, moustache = null;
+  const shaped = [], screens = [], tux = [], toon = new Map();
   rig.traverse(o => {
     if (o.isBone && o.name === 'Head') head = o;
     if (o.name === 'Face' && !o.isBone) face = o;
     if (o.name === 'Zzz' && !o.isBone) zzz = o;
+    if (o.name === 'Pint' && !o.isBone) pint = o;
+    if (o.name === 'Moustache' && !o.isBone) moustache = o;
     if (!o.isMesh) return;
-    meshes.push(o);
     o.frustumCulled = false; // (skinned: its bounds are the rest pose's)
     o.castShadow = o.receiveShadow = !o.material.transparent;
     const m = o.material;
-    if (m.name === 'Face' || m.name === 'FaceBacklight') screens.push(o);
+    if (m.name === 'Face' || m.name === 'FaceBacklight') { o.material = m.clone(); screens.push(o); }
     else if (!m.transparent) {
       if (!toon.has(m)) toon.set(m, Object.assign(new THREE.MeshToonMaterial({ name: m.name, color: m.color, map: m.map, gradientMap: TOON_RAMP, side: THREE.DoubleSide, flatShading: true }),
         { defines: { ROOM_LAMP: '', ROOM_GLOW: '' } }));
       o.material = toon.get(m);
     }
     if (o.morphTargetDictionary && SHAPES.some(s => s in o.morphTargetDictionary)) shaped.push(o);
+    if (o.morphTargetDictionary && 'Tux' in o.morphTargetDictionary) tux.push(o);
   });
   // (each screen's awake glow, and its asleep one: the backlight's dimmed, the Face material's ink lit up to the
   // backlight's colour)
@@ -111,7 +129,7 @@ export async function loadBarbot() {
   root.name = 'BarBot';
   root.add(rig);
   const mixer = new THREE.AnimationMixer(rig), actions = {};
-  for (const clip of gltf.animations) {
+  for (const clip of animations) {
     // (a pose is a single frame: given a length, so looping it doesn't divide by nothing)
     if (clip.duration < 0.1) clip.duration = 1;
     const action = mixer.clipAction(clip);
@@ -121,9 +139,13 @@ export async function loadBarbot() {
     }
     actions[clip.name] = action;
   }
-  mixer.addEventListener('finished', e => { if (e.action === actions[state.doing]) settle(); });
-  bot = { root, rig, head, mixer, actions, shaped, screens, face, zzz, height: size.y };
-  sizeBarbot();
+  return { root, rig, head, mixer, actions, shaped, screens, face, zzz, pint, moustache, tux, height: size.y };
+}
+// the bar bot (a pint in hand) or the waiter (a tux and a moustache, and no pint)
+function dressBot(b, waiter) {
+  if (b.pint) b.pint.visible = !waiter;
+  if (b.moustache) b.moustache.visible = waiter;
+  for (const o of b.tux) o.morphTargetInfluences[o.morphTargetDictionary.Tux] = waiter ? 1 : 0;
 }
 
 /** BARBOT if the bot's up in the pub the view's in, awake and not talking to anyone already, else null. */
@@ -268,16 +290,31 @@ export function updateBarbot(inPub, occupied) {
     BARBOT.x = headAt.x; BARBOT.y = headAt.y + HEAD_UP; BARBOT.z = headAt.z;
   }
 
+  const working = state.doing === 'PolishGlass' || state.doing === 'CleanBar';
+  botFace(bot, state, BARBOT, dt, now, { asleep: state.asleep, working, still: !!chat, talking: chat?.speaker === BARBOT, snap });
+}
+
+/**
+ * A bot's face and voice for a frame: the bar bot's, or the waiter's (see waiterbot.js).
+ * @param {object} b - its body (see makeBot)
+ * @param {object} state - its face's state (see newFace)
+ * @param {object} talker - who it is to those it talks to (BARBOT, or WAITER)
+ * @param {number} dt
+ * @param {number} now - seconds
+ * @param {{asleep: boolean, working: boolean, still: boolean, talking: boolean, snap: boolean}} how - looking down at its
+ *   work, its eyes kept still (talking to someone), its turn to talk
+ */
+export function botFace(b, state, talker, dt, now, { asleep, working, still, talking, snap }) {
   // its turn to talk: babble in its robot's voice a syllable at a time (as people do: see "talking" in
   // life/people/people.js), its mouth snapping open and shut through each one
-  if (chat?.speaker === BARBOT) {
+  if (talking) {
     if ((state.talkIn -= dt) <= 0) {
-      const { open, length, intonation } = nextSyllable(BARBOT, Math.random);
+      const { open, length, intonation } = nextSyllable(talker, Math.random);
       state.talkIn = length;
       state.syllable = open > 0;
-      if (open > 0) babble(BARBOT, ROBOT_VOICE, length, open, 0, intonation);
+      if (open > 0) babble(talker, ROBOT_VOICE, length, open, 0, intonation);
     }
-  } else { BARBOT.phrase = null; state.talkIn = 0; state.syllable = false; }
+  } else { talker.phrase = null; state.talkIn = 0; state.syllable = false; }
   if (!state.syllable) state.mouth = 0;
   else if (now > state.mouthNext) {
     state.mouth = state.mouth ? 0 : 1;
@@ -285,27 +322,29 @@ export function updateBarbot(inPub, occupied) {
   }
 
   // the face: looking down at the work, or the eyes flicking about and the eyebrow going up now and then
-  const working = state.doing === 'PolishGlass' || state.doing === 'CleanBar';
   if (now > state.lookNext) { state.look = Math.random()*2 - 1; state.lookNext = now + 0.4 + Math.random()*2.5; }
   if (now > state.browNext) { state.browUntil = now + 0.6 + Math.random()*1.2; state.browNext = state.browUntil + 3 + Math.random()*8; }
   if (now > state.blinkNext) { state.blinkUntil = now + BLINK; state.blinkNext = state.blinkUntil + 2 + Math.random()*5; }
   // (talking to someone, its eyes left still on them, but for blinking)
-  const goals = working || state.asleep || chat ? [0, 0, working ? 1 : 0] : [state.look, now < state.browUntil ? 1 : 0, 0];
+  const goals = working || asleep || still ? [0, 0, working ? 1 : 0] : [state.look, now < state.browUntil ? 1 : 0, 0];
   const ease = Math.min(1, SHAPE_EASE*dt);
-  goals.forEach((g, i) => { state.shape[i] = i === 0 && !working && !chat ? g : state.shape[i] + (g - state.shape[i])*ease; });
-  state.shape[3] = !state.asleep && now < state.blinkUntil ? 1 : 0; // (a blink's all or nothing)
-  state.shape[4] = state.asleep ? 0 : state.mouth;                   // (and so's its mouth)
-  for (const mesh of bot.shaped) SHAPES.forEach((name, i) => {
+  goals.forEach((g, i) => { state.shape[i] = i === 0 && !working && !still ? g : state.shape[i] + (g - state.shape[i])*ease; });
+  state.shape[3] = !asleep && now < state.blinkUntil ? 1 : 0; // (a blink's all or nothing)
+  state.shape[4] = asleep ? 0 : state.mouth;                   // (and so's its mouth)
+  for (const mesh of b.shaped) SHAPES.forEach((name, i) => {
     const k = mesh.morphTargetDictionary[name];
     if (k != null) mesh.morphTargetInfluences[k] = state.shape[i];
   });
 
   // its screen dimmed while it sleeps, the Zzz nearly as bright as the face (set on whatever material the mesh has now:
   // see fadeWhatsInTheWay in interior.js)
-  const sleepy = state.asleep ? 1 : 0;
+  const sleepy = asleep ? 1 : 0;
   state.sleepy = snap ? sleepy : state.sleepy + (sleepy - state.sleepy)*Math.min(1, 3*dt);
-  for (const o of bot.screens) {
+  for (const o of b.screens) {
     o.material.emissive.lerpColors(o.userData.awake, o.userData.asleep, state.sleepy);
     o.material.emissiveIntensity = 1;
   }
 }
+/** A bot's face's state, as botFace keeps it. */
+export const newFace = () => ({ look: 0, lookNext: 0, browUntil: 0, browNext: 0, blinkUntil: 0, blinkNext: 0, shape: [0, 0, 0, 0, 0],
+  sleepy: 0, talkIn: 0, syllable: false, mouth: 0, mouthNext: 0 });

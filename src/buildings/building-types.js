@@ -15,7 +15,7 @@ const ZONE_OF_KIND = {
   warehouse: 'industrial', factory: 'industrial', tankfarm: 'industrial', containeryard: 'industrial',
   farmstead: 'farmland',
   house: 'suburbs',
-  terrace: 'town', pub: 'town', salon: 'town', clothes: 'town',
+  terrace: 'town', pub: 'town', salon: 'town', clothes: 'town', restaurant: 'town',
   terminal: 'airport', hangar: 'airport', controltower: 'airport',
   vacant: 'mall',
 };
@@ -86,7 +86,7 @@ export function buildingOwnName(kind, number, key) {
 // zone whose id has colons in it is still taken whole
 const zoneOf = key => (key ? String(key).slice(0, String(key).lastIndexOf(':')) : '');
 // The houses of a town or a suburb (see zones/town.js and zones/suburbs.js), named from [streets] — a house that's a
-// pub, a salon or a clothes shop is one of those kinds instead, and keeps its own name (see buildingTitle).
+// pub, a salon, a clothes shop or a restaurant is one of those kinds instead, and keeps its own name (see buildingTitle).
 const HOUSE_KINDS = new Set(['house', 'terrace']);
 // The kinds an industrial zone puts up — a warehouse, a factory, a tank farm or a container yard (see zones/industrial.js)
 // — and its own zone type, for a building in one that never said which it is: the kinds named from [industrial].

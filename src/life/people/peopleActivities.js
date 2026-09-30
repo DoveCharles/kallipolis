@@ -1,7 +1,7 @@
 import { App, S } from '../../core/shared.js';
 import { feel, witness, voiceOfPerson, hairColorOf, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, insideFor, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
-import { footprintBounds, roomLayoutOf } from '../../buildings/footprints.js';
+import { buildingNumber, footprintBounds, roomLayoutOf } from '../../buildings/footprints.js';
 import { Y_ZONE_GROUND } from '../../core/scene.js';
 import { updateBuying } from './peopleStalls.js';
 import { joinWalkway, placeAtVertex, reseatPerson, updateCrossing, walkBackToWalkway, wanderInto, walkwayPoint } from './peoplePathing.js';
@@ -14,9 +14,10 @@ import { puffSmoke, haircutFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFollowingPerson } from './peopleTracking.js';
-import { drawCurtain, openRoomDoor, roomBeyondDoor, roomCubicles, roomDoorway, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
-import { clearMeal, giveSnack, mealFinished, serveMeal } from './peopleHolding.js';
+import { drawCurtain, openRoomDoor, roomBeyondDoor, roomBuilding, roomCubicles, roomDoorway, roomKind, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
+import { clearMeal, feedPizza, giveSnack, letGo, mealFinished, serveMeal } from './peopleHolding.js';
 import { BARBOT, barbotFree } from '../../buildings/barbot.js';
+import { awaitWaiter, leavePlate, queueForTable, runWaiter, servedMeal, waitForTable, waiterOn } from './peopleWaiter.js';
 import { summonSalonBot, salonBotSnipping, salonBotNoise, seatedHead } from '../../buildings/salonbot.js';
 import { crawlOffRoad, updateCrawl } from './peopleRoad.js';
 import { REVIVE_SHAKE_TIME } from '../revive.js';
@@ -586,6 +587,7 @@ function goodbyes(g, dt) {
   else wave(g, 'bye');
 }
 export function updateGroups(dt) {
+  runWaiter(dt);
   if (rejoiners.length) rejoinCircles();
   for (let gi = groups.length - 1; gi >= 0; gi--) {
     const g = groups[gi];
@@ -1687,11 +1689,14 @@ const OFFICE_MIN_HOURS = 4, OFFICE_MAX_HOURS = 10, OFFICE_LEAVE_HOURS = 1.5;
 /** The share of the crowd who work late: in an office after dark, they stay the rest of their day. */
 const WORKS_LATE = 0.04;
 const worksLate = p => ((Math.imul(p.id + 7, 2246822519) >>> 0)/2**32) < WORKS_LATE;
-const isWorkplace = building => !['home', 'pub', 'salon', 'clothes'].includes(roomLayoutOf(building.kind, building.number));
+const isWorkplace = building => !['home', 'pub', 'salon', 'clothes', 'restaurant'].includes(roomLayoutOf(building.kind, building.number));
 // (a pub's a visit like a home's, but a shorter one — an hour or four — and nobody's in it long without a pint in hand:
 // see aboutTheRoom)
 const isPub = building => roomLayoutOf(building.kind, building.number) === 'pub';
 const PUB_MIN_HOURS = 1, PUB_MAX_HOURS = 4;
+// (a restaurant's for a meal: most sit straight down at a table, and once they've eaten they're off: see aboutTheRoom)
+const isRestaurant = building => roomLayoutOf(building.kind, building.number) === 'restaurant';
+const RESTAURANT_MIN_HOURS = 1, RESTAURANT_MAX_HOURS = 2.5, RESTAURANT_SIT = 0.9;
 // (a shop — a hair salon or a clothes shop — is a quick visit, for what it's there for: a haircut or new clothes; and
 // shut after dark: see "a salon" and "a clothes shop" below)
 const shopOf = building => { const layout = roomLayoutOf(building.kind, building.number); return layout === 'salon' || layout === 'clothes' ? layout : null; };
@@ -1743,6 +1748,7 @@ export function goIndoors(p, building, from) {
   // mostly a quick visit, now and then most of the day — or at work, a working day
   const hours = isWorkplace(building) ? OFFICE_MIN_HOURS + (OFFICE_MAX_HOURS - OFFICE_MIN_HOURS)*peopleRng()
     : isPub(building) ? PUB_MIN_HOURS + (PUB_MAX_HOURS - PUB_MIN_HOURS)*peopleRng()
+    : isRestaurant(building) ? RESTAURANT_MIN_HOURS + (RESTAURANT_MAX_HOURS - RESTAURANT_MIN_HOURS)*peopleRng()
     : shopOf(building) ? SHOP_MIN_HOURS + (SHOP_MAX_HOURS - SHOP_MIN_HOURS)*peopleRng()
     : INDOORS_MIN_HOURS + (INDOORS_MAX_HOURS - INDOORS_MIN_HOURS)*peopleRng()**2;
   p.indoors = { building, stage: 'approach', back: { x: from.x, y: from.y, z: from.z }, line, hoursLeft: hours, shop: shopOf(building), served: false, party: false };
@@ -1766,7 +1772,7 @@ export function goIndoors(p, building, from) {
 //              anyone teetotal out of it (alcoholic starts everyone at 1: see the trait table in people/about.txt)
 //   where      anything else about them, as a function of the person
 // A building's own kind is looked up first (as buildings.txt names it: see buildingKindOf), then the layout of its room
-// (what roomLayoutOf gives: 'home', 'office', 'warehouse', 'factory', 'pub', 'salon', 'clothes'), then `default`.
+// (what roomLayoutOf gives: 'home', 'office', 'warehouse', 'factory', 'pub', 'salon', 'clothes', 'restaurant'), then `default`.
 const PARTY_RULES = {
   default: { min: 4, max: 5 },
   // A pub's party's a drinking one: nobody teetotal turns up.
@@ -1810,10 +1816,15 @@ const PARTY_OUT = 0.25, PARTY_STAGGER = 0.4, PARTY_ALONG = 0.45;
  * @param {object} building - the building the camera's inside, as building-card.js follows it: { group, key, kind, number }
  * @returns {number} how many turned up (none if the room isn't up, or nobody could be spared)
  */
-export function startParty({ group, key, kind, number }) {
+/** View > Fetch a Diner (debug): someone comes into the restaurant the view's in, to eat. */
+export function sendDiner() {
+  const b = roomBuilding();
+  return b && roomKind() === 'restaurant' ? startParty({ ...b, kind: 'restaurant', number: buildingNumber(b.key) }, { want: 1, diner: true }) : 0;
+}
+export function startParty({ group, key, kind, number }, { want: only = 0, diner = false } = {}) {
   if (!S.peopleEnabled || !roomHolds(key)) return 0;
   const rule = partyRuleFor(kind, number);
-  const want = Math.max(0, Math.round(rule.min + peopleRng()*(rule.max - rule.min)));
+  const want = only || Math.max(0, Math.round(rule.min + peopleRng()*(rule.max - rule.min)));
   if (!want) return 0;
   // (the door itself: whoever reaches it is in: see updateIndoors' 'approach')
   const door = roomOutsideDoor(0.15);
@@ -1837,7 +1848,8 @@ export function startParty({ group, key, kind, number }) {
     p.heading = headingTo(p, door) + moonwalkTurn(p);
     goIndoors(p, partyBuilding, { x: door.x, y: ground, z: door.z });
     p.indoors.line = null; // (no walkway of their own to go back onto: they came from wherever they were)
-    p.indoors.party = true; // (so they stay for the party rather than heading off at closing time: see updateIndoors)
+    if (diner) p.indoors.diner = true; // (straight to the queue for a table: see aboutTheRoom)
+    else p.indoors.party = true; // (so they stay for the party rather than heading off at closing time: see updateIndoors)
     // (and for PARTY_MIN_SECONDS of the camera's own time at the least: a home's visit may be a short one, and the day's
     // clock — which every visit's length is kept in — runs as fast as the World panel's day length has it)
     p.indoors.hoursLeft = Math.max(p.indoors.hoursLeft, clockHours(PARTY_MIN_SECONDS));
@@ -1962,6 +1974,8 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
     if (!route) { p.x = spot.x; p.y = spot.y; p.z = spot.z; } // (no way in from there past the furniture: just there)
     p.inRoom = { visit: roomVisit(), route, wait: peopleRng()*4, seat: null, stage: '' };
     p.heading = route ? headingTo(p, route[0]) : peopleRng()*Math.PI*2;
+    // (at a restaurant with its waiter up, queueing by the host stand to be shown to a table: see peopleWaiter.js)
+    if (isRestaurant(visit.building) && (visit.diner || peopleRng() < RESTAURANT_SIT)) queueForTable(p, door);
   } else if (p.inRoom?.visit !== roomVisit()) {
     standUp(p);
     const at = roomSpot(peopleRng);
@@ -1969,7 +1983,7 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
     p.heading = peopleRng()*Math.PI*2;
     p.inRoom = { visit: roomVisit(), route: null, wait: peopleRng()*4, seat: null, stage: '' };
     // (some already sat down: straight onto the seat, as if they'd been there a while)
-    const seat = peopleRng() < ROOM_SIT_ALREADY ? freeSeat(p) : null;
+    const seat = peopleRng() < (isRestaurant(visit.building) ? RESTAURANT_SIT : ROOM_SIT_ALREADY) ? freeSeat(p) : null;
     if (seat) {
       takeSeat(p, seat);
       const stand = standingSpot(p, seat);
@@ -1987,6 +2001,7 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
   }
   if (p.group?.kind === 'chat') return null; // (stopped to talk with whoever's possessed: see talkWith)
   if (here.cubicle) return changing(p, here, visit, dt);
+  if (here.host) return waitForTable(p, here, dt);
   if (here.seat) return sitting(p, here, dt);
   if (p.group?.kind === 'room') return here.route ? walkRoute(p, here) : null;
   if (visit.shop && !visit.served && !here.route && !p.oneShot && p.mode !== 'possessed' && (here.shopIn = (here.shopIn ?? 1 + peopleRng()*4) - dt) <= 0) {
@@ -2005,7 +2020,9 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
   } else if ((here.wait -= dt) <= 0 && !p.oneShot) {
     here.wait = 1 + peopleRng()*2; // (tried again in a moment, if there's no getting there)
     if (peopleRng() < ROOM_CHAT_CHANCE*p.traits.chatty && goChatInRoom(p)) return here.route[0];
-    const seat = peopleRng() < ROOM_SIT_CHANCE ? freeSeat(p) : null;
+    const sit = visit.diner || peopleRng() < (isRestaurant(visit.building) ? RESTAURANT_SIT : ROOM_SIT_CHANCE);
+    if (sit && isRestaurant(visit.building) && queueForTable(p)) return waitForTable(p, here, dt);
+    const seat = sit ? freeSeat(p) : null;
     if (seat) {
       const route = roomRoute(p, standingSpot(p, seat));
       if (route) { takeSeat(p, seat); here.route = route; here.stage = 'go'; here.timer = 25; p.faceTo = null; return route[0]; }
@@ -2064,7 +2081,7 @@ let sofaFilled = null, noSofaFor = null;
  *   other), else any they'd sit on
  * @returns {?object} the seat (see roomSeats)
  */
-function freeSeat(p, kind = undefined) {
+export function freeSeat(p, kind = undefined) {
   const size = S.peopleSize*p.traits.size;
   if (!personModel || !hasClip('Sit1') || size < SEAT_SIZE_MIN || size > SEAT_SIZE_MAX) return null;
   // (a salon's chairs are for haircuts, and only for those who've not had one; any other seat, anyone)
@@ -2072,7 +2089,7 @@ function freeSeat(p, kind = undefined) {
   const free = roomSeats().filter(seat => !seatHeld(seat) && (kind === undefined ? seat.kind !== 'cut' || cut : seat.kind === kind));
   return free.length ? free[Math.floor(peopleRng()*free.length)] : null;
 }
-function takeSeat(p, seat) {
+export function takeSeat(p, seat) {
   seat.by = p;
   p.inRoom.seat = seat;
 }
@@ -2083,7 +2100,7 @@ function takeSeat(p, seat) {
  * @param {object} seat - the seat (see roomSeats)
  * @returns {{x: number, y: number, z: number}} the spot, in the world
  */
-function standingSpot(p, seat) {
+export function standingSpot(p, seat) {
   const reach = -clipNamed('Sit1').pelvisZ*modelScale(p);
   return { x: seat.x + seat.nx*reach, y: p.y, z: seat.z + seat.nz*reach };
 }
@@ -2096,6 +2113,7 @@ export function standUp(p) {
   const seat = p.inRoom?.seat;
   if (p.group?.kind === 'room' || p.group?.kind === 'bar') leaveGroup(p);
   if (seat && seat.by === p) seat.by = null;
+  leavePlate(p);
   clearMeal(p);
   if (p.inRoom) {
     if (seat?.sofa) p.inRoom.leftSofaAt = performance.now();
@@ -2131,7 +2149,13 @@ function sitting(p, here, dt) {
       if (Math.abs(wrapAngle(facing - p.heading)) > 0.15 || p.oneShot) break;
       here.stage = 'sit';
       p.pose = deskPose(seat);
-      if (p.pose === 'Eating') serveMeal(p, seat.diner.top);                 // (a plate on the table and a fork in hand)
+      // (a plate on the table and a fork in hand; at a restaurant, spaghetti, or a pizza eaten a slice at a time from the hand)
+      if (p.pose === 'Eating' && here.led) { p.pose = 'Sit1'; awaitWaiter(p, seat); } // (shown here by the waiter: it takes the order)
+      else if (p.pose === 'Eating') {
+        const dish = p.indoors && isRestaurant(p.indoors.building) ? (peopleRng() < 0.5 ? 'pizza' : 'spaghetti') : 'plate';
+        serveMeal(p, seat.diner.top, dish);
+        if (dish === 'pizza') p.pose = 'Sit1';
+      }
       here.timer = (20 + peopleRng()*60)*p.traits.patience;
       here.spell = spellAt(p.pose);
       p.seatLift = seat.y - p.y - clipNamed('Sit1').seatY*modelScale(p);
@@ -2152,15 +2176,20 @@ function sitting(p, here, dt) {
       // (at a desk, typing a while, then sat back a moment, then at it again)
       if (seat.desk && !p.group && (here.spell -= dt) <= 0) { p.pose = p.pose === 'Typing' ? 'Sit1' : deskPose(seat); here.spell = spellAt(p.pose); }
       // (dinner over: the plate cleared away, and a little while sat at the table after)
-      if (p.pose.startsWith('Eating') && mealFinished(p)) {
-        clearMeal(p);
+      // (waiting on the waiter: not getting up, and the food brought anyway if it's gone or taking far too long)
+      if (here.meal) { here.timer = Math.max(here.timer, 1); if (!waiterOn() || (here.mealBy -= dt) <= 0) servedMeal(p); }
+      if (feedPizza(p)) here.timer = Math.max(here.timer, 1);
+      if ((p.pose.startsWith('Eating') || seat.diner) && !here.ate && mealFinished(p)) {
+        // (the waiter's: the empty plate left there till they get up, for it to clear)
+        if (here.dined) { here.ate = true; letGo(p, 'fork'); } else clearMeal(p);
         p.pose = 'Sit1';
         here.timer = Math.min(here.timer, SAT_AFTER_MEAL*p.traits.patience);
+        if (p.indoors && isRestaurant(p.indoors.building)) { feel(p, 'dined'); leaveSoon(p.indoors, SAT_AFTER_MEAL + 20); }
       }
       if (seat.kind === 'cut') haircut(p, seat, here, dt);
       // (waiting for a haircut: up as soon as a chair's free)
       else if (p.indoors?.shop === 'salon' && !p.indoors.served && freeSeat(p, 'cut')) here.timer = 0;
-      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); clearMeal(p); here.stage = 'rise'; p.pose = 'Idle'; }
+      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); leavePlate(p); clearMeal(p); here.stage = 'rise'; p.pose = 'Idle'; }
       break;
     }
     case 'rise':

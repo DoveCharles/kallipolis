@@ -108,6 +108,13 @@ Nothing hurts. Nothing at all. {felt = healed}
 I didn't ask for that. {felt = healed, patience = -1, thought}
 Thank you, little robot! {felt = healed, mood}
 
+I couldn't eat another bite. {felt = dined, happy}
+Best meatballs in town. {felt = dined}
+> Don't tell my mother. {happy}
+I'll need a nap after that. {felt = dined, thought}
+Too much garlic. There's no such thing. {felt = dined, thought}
+The portions were tiny. {felt = dined, patience = -1}
+
 Fits like a glove. {felt = newclothes, happy}
 Does this make me look fat? {felt = newclothes, thought}
 I'm never taking this off. {felt = newclothes, mood}

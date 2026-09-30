@@ -11,7 +11,7 @@ import { ITEMS, giveSnack, updateHeld } from '../life/people/peopleHolding.js';
 // held still (S.peopleFrozen) and one person stands in the first frame of IdleHotdog, IdleCoffeeBite… with the camera
 // on them, everyone else folded away (personModel.only); a hand slider bakes that one clip again (personModel.rebakeClip). Nothing is kept: the values to paste back
 // into the code are shown at the bottom.
-const KINDS = { hotdog: 'Hotdog', coffee: 'Coffee', beer: 'Beer' };
+const KINDS = { hotdog: 'Hotdog', slice: 'Hotdog', coffee: 'Coffee', beer: 'Beer' };
 let item = 'hotdog', biting = false, pinned = null, minRadius = null;
 
 const clipName = () => 'Idle' + KINDS[item] + (biting ? 'Bite' : '');

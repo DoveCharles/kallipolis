@@ -14,6 +14,7 @@ import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
 import { pubMusic, stopPubMusic } from '../audio/pub-music.js';
 import { loadingTask, loadingSay } from '../ui/loading.js';
 import { loadBarbot, placeBarbot, updateBarbot, barbotWarmUp } from './barbot.js';
+import { placeWaiterbot, updateWaiterbot } from './waiterbot.js';
 import { placeJukebox, updateJukebox } from './jukebox.js';
 import { loadSalonBot, placeSalonBot, salonBotReach, clearSalonBots, updateSalonBots, salonBotWarmUp } from './salonbot.js';
 
@@ -1792,7 +1793,7 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
   const fits = (r, gap = 0, margin = 0.02) => inRoom(r, margin) && taken.every(o => !overlaps(r, o, gap));
   // `name` stood at (x, z) turned by `angle`, in `parent` (the room's furniture, or on a desk, in the desk's terms),
   // and unless it's something small nobody could walk into, solid (or `solid` of it, in its own terms)
-  const put = (name, x, z, angle, { parent = group, y = 0, small = false, solid = null, seatKind = null } = {}) => {
+  const put = (name, x, z, angle, { parent = group, y = 0, small = false, solid = null, seatKind = null, diner = false, table = null } = {}) => {
     const piece = F[name], object = piece.object.clone();
     object.position.set(x, y, z);
     object.rotation.y = angle;
@@ -1804,7 +1805,7 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
     for (const seat of piece.seats) {
       const at = turned(seat.x, seat.z, angle, x, z);
       layout.seats.push({ x: at.x, z: at.z, y: seat.y, nx: Math.sin(angle), nz: Math.cos(angle), sofa: false, desk: deskSeats.includes(name),
-        bar: name === 'BarStool', kind: seatKind }); // (sat at the bar, with the bar bot to talk to: see barbot.js)
+        bar: name === 'BarStool', kind: seatKind, diner, table }); // (sat at the bar, with the bar bot to talk to: see barbot.js)
     }
     return object;
   };
@@ -1867,7 +1868,9 @@ function seatsInWorld(layout) {
   layout.seats = layout.seats.map(seat => {
     const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z)), n = roomWay(seat.nx, seat.nz);
     return { x: w.x, y: w.y, z: w.z, nx: n.x, nz: n.z, sofa: false, desk: seat.desk, bar: seat.bar, kind: seat.kind ?? null, by: null,
-      salonBot: seat.salonBot ?? null }; // (a styling chair's: see salonbot.js)
+      salonBot: seat.salonBot ?? null, // (a styling chair's: see salonbot.js)
+      diner: seat.diner ? { top: room.localToWorld(new THREE.Vector3(seat.x, seat.diner, seat.z)).y } : false, // (a restaurant's)
+      table: seat.table ?? null }; // (which of its tables: see peopleWaiter.js)
   });
 }
 
@@ -3138,6 +3141,227 @@ function furnishClothes(key) {
   lightShop(group, 0xfff2dc, 1.2);
   seatsInWorld(layout);
 }
+// ---------------------------------------------------------- a restaurant
+// A restaurant (see roomLayoutOf): an old New York Italian joint, bigger than the other shops (see ROOM_SIZES), panelled
+// below a dado rail. Its pieces are in assets/models/Restaurant.glb (built by tools/restaurant-models.py): a bar and back
+// bar along the near wall, swinging kitchen doors, booths, tables for two, four and six under checked or white cloths
+// with bentwood chairs (sat at to eat: see `diner` in planRoom), a host stand by the door, a wine rack, a dessert cart,
+// a coat stand, plants; a mural, photos and lamps on the walls; Tiffany pendants and strings of Chiantis overhead.
+const RESTAURANT_MODEL_URL = 'assets/models/Restaurant.glb';
+let restaurant = null;
+const RESTAURANT_WALLS = [0x7a1e1a, 0xe8dcc0, 0x2a4a32, 0xd8b878, 0x5a1a22, 0xf0e6cc, 0xc8a878];
+const RESTAURANT_FLOORS = [chequer, chequer, terrazzo, 0x5a3a22, 0x7a5030];
+const RESTAURANT_PAINTED = {
+  Wood: [0x3e2014, 0x2a160c, 0x4a2a18, 0x1a1210, 0x5a3420],
+  Upholstery: [0x7e1616, 0x6a1020, 0x1e4a2a, 0x5a1a22, 0x8a5a2a],
+  Check: [0xb81e1e, 0xb81e1e, 0xa01818, 0x1e5a2a, 0x2a3a7a],
+};
+const RESTAURANT_DADOS = [0x3e2014, 0x2a160c, 0x4a2a18], RESTAURANT_RAILS = [0x1a0e08, 0xb8923a];
+const restaurantPainted = [];
+async function loadRestaurant() {
+  try {
+    restaurant = await loadPieces(RESTAURANT_MODEL_URL, RESTAURANT_PAINTED, restaurantPainted);
+  } catch (err) {
+    console.warn('Kallipolis: the restaurant model failed to load; restaurants are left bare', err);
+    return;
+  }
+  for (const name of ['Chair', 'Booth']) if (restaurant[name]) restaurant[name].seats = measureSeats(restaurant[name]);
+  if (inside && current === LAYOUTS.restaurant) furnishRestaurant(inside.key);
+}
+modelsLoading.push(loadRestaurant());
+layout('restaurant', 0xffffff, () => []);
+const restaurantGroup = new THREE.Group();
+LAYOUTS.restaurant.group.add(restaurantGroup);
+Object.assign(LAYOUTS.restaurant, { furnished: restaurantGroup, panelled: true, shopfront: true, shop: true, ceiling: 0xe8dcc0, lamps: true, daylit: 0.5 });
+
+// Fits out the restaurant for the building with this key (see buildingKey): its furniture, where nobody stands or
+// walks, and its seats, in the room as it's now placed.
+// The way through to the kitchen, behind its doors at x in the far wall along x: a hole through the wall (and its dado),
+// and a passage beyond, glowing white, that the waiter walks through and out of the back of (see waiterbot.js).
+const KITCHEN_HOLE = 0.78, KITCHEN_H = 2.25, KITCHEN_DEEP = 0.8;
+const kitchenGlow = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+function kitchenWay(group, cx) {
+  const x0 = cx - KITCHEN_HOLE, x1 = cx + KITCHEN_HOLE;
+  // (the wall pieces along it hidden, and built again either side of the hole and over it)
+  for (const o of [blankWalls.children[0], dado.children[0], dado.children[1]]) {
+    if (!o) continue;
+    const { width: w, height: h, depth: d } = o.geometry.parameters, p = o.position, a = p.x - w/2, b = p.x + w/2;
+    const top = p.y + h/2, bottom = Math.max(KITCHEN_H, p.y - h/2);
+    o.visible = false;
+    if (x0 > a) box(x0 - a, h, d, o.material, (a + x0)/2, p.y, p.z, group);
+    if (b > x1) box(b - x1, h, d, o.material, (x1 + b)/2, p.y, p.z, group);
+    if (top > bottom) box(x1 - x0, top - bottom, d, o.material, cx, (top + bottom)/2, p.z, group);
+  }
+  const z0 = ROOM_D/2, z1 = ROOM_D/2 + WALL + KITCHEN_DEEP, zm = (z0 + z1)/2, long = z1 - z0;
+  for (const [w, h, d, x, y, z] of [[0.02, KITCHEN_H, long, x0 + 0.01, KITCHEN_H/2, zm], [0.02, KITCHEN_H, long, x1 - 0.01, KITCHEN_H/2, zm],
+    [x1 - x0, 0.02, long, cx, KITCHEN_H - 0.01, zm], [x1 - x0, 0.006, long, cx, 0.003, zm], [x1 - x0, KITCHEN_H, 0.02, cx, KITCHEN_H/2, z1]]) {
+    box(w, h, d, kitchenGlow, x, y, z, group).castShadow = false;
+  }
+}
+function furnishRestaurant(key) {
+  const layout = LAYOUTS.restaurant, group = restaurantGroup;
+  const rng = mulberry32(hashNameToNumber(key + ' restaurant'));
+  const tint = mulberry32(hashNameToNumber(key + ' restaurant colours'));
+  const pick = openShop(layout, tint, { walls: RESTAURANT_WALLS, floors: RESTAURANT_FLOORS, painted: restaurantPainted, palette: RESTAURANT_PAINTED });
+  layout.ceiling = pick([0xe8dcc0, 0xf0e6cc, 0xd8c8a0]);
+  dadoMaterial.color.setHex(pick(RESTAURANT_DADOS));
+  lineMaterial.color.setHex(pick(RESTAURANT_RAILS));
+  roomLit(dadoMaterial); roomLit(lineMaterial);
+  paintRoom();
+  const F = restaurant;
+  if (!F?.Bar || !F.BackBar || !F.Chair) return;
+  const plan = planRoom(layout, F, group, rng, false, []);
+  const { taken, overlaps, fits, put, underCamera, WALL_SIDES, againstWall, atWall, any } = plan;
+  taken.push(doorClear());
+  const tall = [], tops = [];
+  const place = (name, spot, options) => {
+    put(name, spot.x, spot.z, spot.angle, options);
+    taken.push(spot.area);
+    if (F[name].h > 1.2) tall.push(spot.area);
+    return spot;
+  };
+
+  // The bar along the near wall from the far corner, as a pub's: the back bar, room to serve from, then the counter.
+  const back = F.BackBar, counter = F.Bar;
+  const bx = ROOM_W/2 - back.w/2 - 0.02, bz = -ROOM_D/2 - back.bounds.z0 + 0.02;
+  put('BackBar', bx, bz, 0);
+  const cz = -ROOM_D/2 + back.d + 0.9 - counter.bounds.z0;
+  put('Bar', bx, cz, 0);
+  const behind = { x0: bx - back.w/2 - 0.1, x1: ROOM_W/2, z0: -ROOM_D/2, z1: cz + counter.bounds.z1 };
+  taken.push(behind, { ...behind, z0: behind.z1, z1: behind.z1 + 0.8 });
+  layout.solid.push(behind);
+  layout.blocked.push(behind);
+  tall.push(behind);
+  // (strings of Chiantis over the counter)
+  if (F.Chiantis) for (const s of [-1, 1]) put('Chiantis', bx + s*counter.w/4, cz, 0, { y: ROOM_H - F.Chiantis.h, small: true });
+
+  // Hand-drawn plans for the one size of room (see ROOM_SIZES), and a smaller one for a mall's unit: the kitchen doors
+  // along the far wall at `kitchen` (x), the wine rack there at `rack`, booths end on to the right-hand wall at `booths`
+  // (z), tables for two against the walls at `wall` ([side, u]), the rest out in the room at `tables`, the coat stand
+  // against the near wall at `coat` (x), the dessert trolley at `cart`. Anything that doesn't fit is left out.
+  const RESTAURANT_PLANS = ROOM_W >= 11 ? [
+    { kitchen: 3.5, rack: 1.75, booths: [3.3, 1.45, -0.4], coat: -3.2, cart: [1.8, -2.6],
+      wall: [[0, -4], [0, -0.3], [3, -1.35], [3, 0.7], [3, 2.75], [2, -1.4], [2, 0.65]],
+      tables: [['TableRound', -3.1, 0.2], ['TableRound', -0.3, 0.2], ['TableRound', 2.5, 0.2], ['Table4', -1.7, 2.38, Math.PI/2], ['Table4', 1.1, 2.38, Math.PI/2]] },
+    { kitchen: 3.5, rack: 1.75, booths: [3.3, 1.45, -0.4], coat: -3.2, cart: [1.8, -2.6],
+      wall: [[0, -4], [0, -1.95], [0, 0.1], [3, -1.35], [3, 0.7], [3, 2.75], [2, -1.4], [2, 0.65]],
+      tables: [['Table4', -3.3, -0.7], ['Table4', -0.75, -0.7], ['Table4', 1.8, -0.7], ['TableRound', -2.6, 1.75], ['TableRound', 0.6, 1.75]] },
+    { kitchen: 3.5, rack: 1.75, booths: [3.3, 1.45, -0.4], coat: -3.2, cart: [1.8, -2.6],
+      wall: [[0, -4], [0, -1.95], [0, 0.1], [3, -1.35], [3, 0.7], [3, 2.75], [2, -1.4], [2, 0.65]],
+      tables: [['TableRound', -3.1, 1.65], ['TableRound', 2.3, 1.65], ['TableRound', -0.4, -0.9], ['Table4', -0.35, 1.65], ['Table4', -2.9, -0.7, Math.PI/2]] },
+  ] : [
+    { kitchen: 1.5, booths: [2.05], coat: -3.3,
+      wall: [[0, -3], [0, -0.95], [3, 0.6], [2, -0.5]],
+      tables: [['Table4', -0.2, 0.3]] },
+  ];
+  const P = RESTAURANT_PLANS[Math.floor(rng()*RESTAURANT_PLANS.length)];
+  let kitchen = null, host = null;
+  if (F.KitchenDoors && P.kitchen != null) {
+    const spot = atWall(WALL_SIDES[0], P.kitchen, { ...F.KitchenDoors.bounds, z1: F.KitchenDoors.bounds.z1 + 1 }, 0.1);
+    if (spot) {
+      place('KitchenDoors', spot); tall.push(spot.area); kitchen = { ...spot };
+      // (its two leaves, each on a pivot at its hinge, swung by the waiter: see waiterbot.js; the left one the right mirrored)
+      const doors = group.children[group.children.length - 1];
+      if (F.KitchenDoor) kitchen.leaves = [1, -1].map(s => {
+        const pivot = new THREE.Group(), leaf = F.KitchenDoor.object.clone();
+        pivot.position.set(s*0.75, 0, 0.02);
+        leaf.position.set(-s*0.37, 0.04, 0.01);
+        leaf.scale.x = s;
+        pivot.add(leaf);
+        pivot.userData.side = s;
+        doors.add(pivot);
+        return pivot;
+      });
+      kitchenWay(group, spot.x);
+    }
+  }
+  // the host stand inside the door, to one side of the way in, facing whoever comes in
+  if (F.HostStand) for (const s of [1, -1]) {
+    const x = -ROOM_W/2 + 2.4, z = DOOR_Z + s*1.1, area = turnedRect(F.HostStand.bounds, -Math.PI/2, x, z);
+    if (fits(area, 0.1)) { host = place('HostStand', { x, z, angle: -Math.PI/2, area }); taken.push({ x0: x, x1: x + 0.9, z0: z - 0.4, z1: z + 0.4 }); break; }
+  }
+
+  // A table `name` with chairs round it, each facing it (dx, dz) from its middle and `off` along its edge, at `spot`.
+  // Each chair knows how high the cloth is where its plate goes (see serveMeal in peopleHolding.js).
+  const seatsRound = (name, places, spot) => {
+    const t = F[name];
+    put(name, spot.x, spot.z, spot.angle);
+    tops.push({ x: spot.x, z: spot.z });
+    const table = tops.length - 1;
+    for (const { dx, dz, edge, off = 0 } of places) {
+      const reach = edge + F.Chair.d/2 - 0.08, sx = -dz, sz = dx;   // (sideways along the edge)
+      const plate = surfaceAt(t, 0, dx*(edge - DINER_PLATE_IN) + sx*off, dz*(edge - DINER_PLATE_IN) + sz*off);
+      const at = turned(dx*reach + sx*off, dz*reach + sz*off, spot.angle, spot.x, spot.z);
+      put('Chair', at.x, at.z, spot.angle + Math.atan2(-dx, -dz) + (rng() - 0.5)*0.15, { diner: plate, table });
+    }
+    taken.push(spot.area);
+  };
+  const rectPlaces = (t, xs) => xs.flatMap(off => [{ dx: 0, dz: -1, edge: t.d/2, off: -off }, { dx: 0, dz: 1, edge: t.d/2, off }]);
+  const LAYS = {
+    Table2: t => rectPlaces(t, [0]),
+    Table4: t => rectPlaces(t, [0.3, -0.3]),
+    TableRound: t => Array.from({ length: 6 }, (_, k) => { const a = (k*60 + 30)*Math.PI/180; return { dx: Math.cos(a), dz: -Math.sin(a), edge: t.w/2 }; }),
+  };
+  // `name` with its chairs at (x, z), square to the room, if it fits there
+  const table = (name, x, z, angle = 0) => {
+    const t = F[name];
+    if (!t) return null;
+    const pad = F.Chair.d + 0.1, round = name === 'TableRound';
+    const r = { x0: t.bounds.x0 - (round ? pad : 0.15), x1: t.bounds.x1 + (round ? pad : 0.15), z0: t.bounds.z0 - pad, z1: t.bounds.z1 + pad };
+    const area = turnedRect(r, angle, x, z);
+    if (!fits(area, 0.1, 0.1)) return null;
+    seatsRound(name, LAYS[name](t), { x, z, angle, area });
+    return area;
+  };
+  // A booth: two benches facing each other across a table, end on to the wall (`spot`, as atWall finds it), as a pub's.
+  const booth = spot => {
+    const bench = F.Booth, t = F.BoothTable, off = t.d/2 + bench.d/2 - 0.08;
+    const plate = surfaceAt(t, 0, 0.28, 0.2), table = tops.push({ x: spot.x, z: spot.z }) - 1;
+    for (const [x, angle] of [[-off, Math.PI/2], [off, -Math.PI/2]]) {
+      const at = turned(x, 0, spot.angle, spot.x, spot.z);
+      put('Booth', at.x, at.z, spot.angle + angle, { diner: plate, table });
+    }
+    put('BoothTable', spot.x, spot.z, spot.angle + Math.PI/2);
+    taken.push(spot.area);
+    tall.push(spot.area);
+  };
+
+  if (F.Booth && F.BoothTable) {
+    const bench = F.Booth, off = F.BoothTable.d/2 + bench.d/2 - 0.08;
+    const r = { x0: -off - bench.d/2, x1: off + bench.d/2, z0: -bench.w/2, z1: bench.w/2 };
+    for (const u of P.booths) { const spot = atWall(WALL_SIDES[1], u, r, 0.05); if (spot) booth(spot); }
+  }
+  if (F.WineRack && P.rack != null) { const spot = atWall(WALL_SIDES[0], P.rack, F.WineRack.bounds, 0.1); if (spot) place('WineRack', spot); }
+  if (F.CoatStand && P.coat != null) { const spot = atWall(WALL_SIDES[2], P.coat, grown(F.CoatStand.bounds, 0.1), 0.05); if (spot) place('CoatStand', spot); }
+  // tables for two against the walls, a chair either end
+  if (F.Table2) {
+    const t = F.Table2, pad = F.Chair.d + 0.1, r = { x0: -t.d/2 - pad, x1: t.d/2 + pad, z0: -t.w/2 - 0.05, z1: t.w/2 };
+    for (const [side, u] of P.wall) {
+      const spot = atWall(WALL_SIDES[side], u, r, 0.1);
+      if (spot) seatsRound('Table2', LAYS.Table2(t), { x: spot.x, z: spot.z, angle: spot.angle + Math.PI/2, area: spot.area });
+    }
+  }
+  for (const [name, x, z, angle] of P.tables) table(name, x, z, angle);
+  if (F.DessertCart && P.cart && rng() < 0.7) {
+    const [x, z] = P.cart, area = turnedRect(F.DessertCart.bounds, 0, x, z);
+    if (fits(area, 0.3)) place('DessertCart', { x, z, angle: 0, area });
+  }
+  for (let n = 1 + Math.floor(rng()*2); n > 0 && F.Plant; n--) { const spot = againstWall(F.Plant.bounds, true); if (spot) place('Plant', spot); }
+
+  const onWall = wallHanger(F, plan, rng, [...tall, doorClear()]);
+  onWall('Mural', 1.2);
+  for (let n = 2 + Math.floor(rng()*3); n > 0; n--) onWall('Photos', 1.3 + rng()*0.2);
+  for (let n = 3 + Math.floor(rng()*3); n > 0; n--) onWall('WallLamp', 1.75);
+  // a pendant over every other table (not right under the camera)
+  for (const top of tops.filter((_, k) => k % 2 === 0)) {
+    if (F.Pendant && !overlaps({ x0: top.x - 0.3, x1: top.x + 0.3, z0: top.z - 0.3, z1: top.z + 0.3 }, underCamera))
+      put('Pendant', top.x, top.z, 0, { y: ROOM_H - F.Pendant.h, small: true });
+  }
+  lightShop(group, 0xffd8a8, 1.0);
+  seatsInWorld(layout);
+  // the waiter behind the host stand (see waiterbot.js)
+  if (host) placeWaiterbot(group, host, kitchen);
+}
 /** The clothes shop's changing rooms, as the room's laid out now: where to stand in front of one (`front`) and inside it
  * (`inside`), in the world; `facing`, the heading out of it; `by`, whoever's using it; and `closed`, its curtain drawn. */
 export const roomCubicles = () => inside ? current.cubicles ?? [] : [];
@@ -3497,7 +3721,7 @@ async function warmUp() {
     await compile('Preparing floors...');
     // one set at a time, so the label follows along
     const named = { Interior: furniture, Posh: posh, Student: student, MidCentury: retro, Boho: boho, Office: officeFurniture,
-      Industrial: industrial, Pub: pub, Salon: salon, Clothes: clothes, Bedroom: bedroom };
+      Industrial: industrial, Pub: pub, Salon: salon, Clothes: clothes, Restaurant: restaurant, Bedroom: bedroom };
     for (const [name, set] of Object.entries(named)) {
       if (!set) continue;
       for (const piece of Object.values(set)) {
@@ -3688,12 +3912,12 @@ function hideNeighbours(group) {
 
 // Goes into `group` (a building, as building-card.js follows it, with its key): the room onto its top floor (a warehouse
 // or factory's, or a pub's or a shop's, ground floor), laid out as `kind` of room (one of LAYOUTS: 'home', 'office',
-// 'warehouse', 'factory', 'pub', 'salon' or 'clothes'),
+// 'warehouse', 'factory', 'pub', 'salon', 'clothes' or 'restaurant'),
 // the building hidden, and the camera cut straight to the corner, to go round the walls from there.
 // How big each layout's room can be, width (x) and depth (z): [narrowest, widest, shallowest, deepest].
 const ROOM_SIZES = {
   home: [6, 9.5, 5, 7.5], office: [7, 12, 5.5, 9], warehouse: [9, 14, 7, 11], factory: [9, 14, 7, 11],
-  pub: [7.5, 11, 6, 8.5], salon: [7, 10, 5.5, 8], clothes: [7, 10, 5.5, 8],
+  pub: [7.5, 11, 6, 8.5], salon: [7, 10, 5.5, 8], clothes: [7, 10, 5.5, 8], restaurant: [12, 12, 8.5, 8.5],
 };
 /** The chance a room's as deep as it's wide (or as near as its layout lets it). */
 const ROOM_SQUARE = 0.25;
@@ -3713,7 +3937,7 @@ function roomSizeFor(group, key, kind, angle) {
   if (turned) [along, across] = [across, along];
   const jitter = salt => 0.85 + keyFraction(key, salt)*0.3;
   let w = THREE.MathUtils.clamp(along*jitter(':width'), w0, w1), d = THREE.MathUtils.clamp(across*jitter(':depth'), d0, d1);
-  if (keyFraction(key, ':square') < ROOM_SQUARE) w = d = THREE.MathUtils.clamp(Math.min(w, d1), Math.max(w0, d0), d1);
+  if (w0 < w1 && keyFraction(key, ':square') < ROOM_SQUARE) w = d = THREE.MathUtils.clamp(Math.min(w, d1), Math.max(w0, d0), d1);
   d = Math.min(d, w);
   return { w: Math.round(w*10)/10, d: Math.round(d*10)/10, turned };
 }
@@ -3771,6 +3995,7 @@ export function enterBuilding(group, key, kind = 'home') {
   const workshop = !!current.industrial, groundFloor = workshop || current === LAYOUTS.pub || !!current.shop;
   curtain.visible = glass; punched.visible = !glass && !current.shopfront;
   blankWalls.visible = shopfront.visible = !!current.shopfront; doorWall.visible = !current.shopfront;
+  for (const o of [blankWalls.children[0], dado.children[0], dado.children[1]]) if (o) o.visible = true; // (see kitchenWay)
   const bounds = new THREE.Box3().setFromObject(group);
   const base = bounds.min.y, height = group.userData.height ?? (bounds.max.y - base);
   const centre = fixed ? fixed.at : fp && fp.length >= 3 ? footprintBounds(group).c : bounds.getCenter(new THREE.Vector3());
@@ -3795,6 +4020,7 @@ export function enterBuilding(group, key, kind = 'home') {
   else if (current === LAYOUTS.pub) furnishPub(key);
   else if (current === LAYOUTS.salon) furnishSalon(key);
   else if (current === LAYOUTS.clothes) furnishClothes(key);
+  else if (current === LAYOUTS.restaurant) furnishRestaurant(key);
 
   visits++;
   resetOfficeAmbience();
@@ -3977,11 +4203,14 @@ export function updateInteriorCamera() {
     officeAmbience({ printer: current.printer, desks: current.desks, centre: room.localToWorld(new THREE.Vector3(0, 1, 0)), people: occupants });
   }
   // (a pub's music comes from up by the ceiling, over the middle of the room)
+  // (a restaurant's, quietly, its own songs: assets/music/restaurant/)
   if (inside && current === LAYOUTS.pub && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)));
+  else if (inside && current === LAYOUTS.restaurant && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)), 'restaurant');
   else stopPubMusic();
   updateJukebox();
   updateBarbot(!!inside && current === LAYOUTS.pub, performance.now() - occupiedAt < 1000);
   updateSalonBots(!!inside && current === LAYOUTS.salon);
+  updateWaiterbot(!!inside && current === LAYOUTS.restaurant, performance.now() - occupiedAt < 1000);
   // (riding a train carriage sets its own: see trains.js; boosting widens it: see life/traffic/driving.js; someone taken
   // over sees as wide as the wheel's set, in a room or out, so going through a door doesn't change the view: see possession.js)
   const goal = possession.index >= 0 ? possessedFov() : inside ? viewFov() : (App.ridingFov?.() ?? BASE_FOV*(App.boostFovScale?.() ?? 1));
@@ -4056,8 +4285,10 @@ export function roomThroughDoor(x, z) {
 /** The near plane the room's view uses (see enterBuilding). */
 export const roomNear = () => ROOM_NEAR;
 
-/** Which of the layouts the room's laid out as ('home', 'office', 'warehouse', 'factory', 'pub', 'salon' or 'clothes'), or null if nobody's inside. */
+/** Which of the layouts the room's laid out as ('home', 'office', 'warehouse', 'factory', 'pub', 'salon', 'clothes' or 'restaurant'), or null if nobody's inside. */
 export const roomKind = () => inside ? current.name : null;
+/** The building the view's in ({ group, key }), or null. */
+export const roomBuilding = () => inside && { group: inside.group, key: inside.key };
 /** Where anyone can sit in the room, in the world: { x, y, z } on the seat, { nx, nz } the way it faces, and who's `by` it. */
 export const roomSeats = () => current.seats;
 

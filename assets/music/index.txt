@@ -19,3 +19,9 @@ The Smiths - This Charming Man.mid
 The Verve - Bitter Sweet Symphony.mid
 Weezer - Buddy Holly.mid
 Weezer - Undone (The Sweater Song).mid
+restaurant/Cardillo - Core 'ngrato.mid
+restaurant/Cottrau - Santa Lucia.mid
+restaurant/De Curtis - Torna a Surriento.mid
+restaurant/Tosti - Marechiare.mid
+restaurant/Verdi - La donna è mobile.mid
+restaurant/Vivaldi - La Stravaganza, Concerto No. 4, I.mid

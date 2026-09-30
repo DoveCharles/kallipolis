@@ -18,7 +18,8 @@ const MUSIC_DIR = 'assets/music/';
 const SOUND_BANK = MUSIC_DIR + 'TimGM6mb.sf2';
 const PROCESSOR = 'https://cdn.jsdelivr.net/npm/spessasynth_lib@4.3.14/dist/spessasynth_processor.min.js'; // (as in index.html's import map)
 const SONG_GAP = 6;             // seconds between songs
-const VOLUME = 0.5;
+const VOLUME = { pub: 0.5, restaurant: 0.04 }; // (restaurants: quiet, in the background)
+const SET_OF = path => path.startsWith('restaurant/') ? 'restaurant' : 'pub'; // (assets/music/restaurant/: theirs only)
 const TONE_HZ = 6500;           // the speaker's top end
 const REF_DISTANCE = 4, MAX_DISTANCE = 30;
 const DRIFT = 1;                // seconds off the clock before it's set back
@@ -37,7 +38,7 @@ function load() {
       try {
         const binary = await fetch(MUSIC_DIR + encodeURI(path)).then(r => r.arrayBuffer());
         const { duration } = BasicMIDI.fromArrayBuffer(binary.slice(0), path);
-        return duration > 0 ? { name: path.replace(/\.midi?$/i, ''), binary, duration } : null;
+        return duration > 0 ? { name: path.replace(/\.midi?$/i, ''), set: SET_OF(path), binary, duration } : null;
       } catch (err) { console.warn(`pub music: couldn't read ${path}`, err); return null; }
     }))).filter(Boolean);
     if (!songs.length) return;
@@ -60,10 +61,10 @@ function load() {
   return player;
 }
 
-/** Every song, in this pub's order, and how long it takes to go round them all. */
-function orderOf(key) {
+/** Every song (of the set), in this pub's order, and how long it takes to go round them all. */
+function orderOf(key, set) {
   const rng = mulberry32(hashNameToNumber(key + ' jukebox'));
-  const order = player.songs.map(song => ({ song, sort: rng() })).sort((a, b) => a.sort - b.sort).map(({ song }) => song);
+  const order = player.songs.filter(song => song.set === set).map(song => ({ song, sort: rng() })).sort((a, b) => a.sort - b.sort).map(({ song }) => song);
   return { order, round: order.reduce((sum, song) => sum + song.duration + SONG_GAP, 0) };
 }
 
@@ -71,8 +72,9 @@ function orderOf(key) {
 const skipped = new Map();
 
 /** Where the pub is in its songs now, by the clock: the song, and how far into it (negative: the gap before it). */
-function nowPlaying(key) {
-  const { order, round } = orderOf(key);
+function nowPlaying(key, set = 'pub') {
+  const { order, round } = orderOf(key, set);
+  if (!order.length) return { song: null, into: 0 };
   let into = (Date.now()/1000 + hashNameToNumber(key + ' jukebox start') + (skipped.get(key) ?? 0)) % round;
   for (const song of order) {
     if (into < SONG_GAP) return { song, into: into - SONG_GAP };
@@ -94,9 +96,10 @@ function hush() {
  * pub is in its songs.
  * @param {string} key - the pub's building key (see buildingKey)
  * @param {{x: number, y: number, z: number}} at - where it's heard from
+ * @param {'pub'|'restaurant'} [set] - which songs
  * @returns {void}
  */
-export function pubMusic(key, at) {
+export function pubMusic(key, at, set = 'pub') {
   if (!load() || context.state !== 'running') return;
   const { sequencer, out, panner } = player;
   if (player.pub !== key) {
@@ -107,11 +110,12 @@ export function pubMusic(key, at) {
     const now = context.currentTime;
     out.gain.cancelScheduledValues(now);
     out.gain.setValueAtTime(out.gain.value, now);
-    out.gain.linearRampToValueAtTime(VOLUME, now + FADE);
+    out.gain.linearRampToValueAtTime(VOLUME[set], now + FADE);
   }
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
 
-  const { song, into } = nowPlaying(key);
+  const { song, into } = nowPlaying(key, set);
+  if (!song) return;
   if (player.song !== song) {
     hush();
     player.song = song;
@@ -142,7 +146,7 @@ export const pubSong = () => player?.pub && !player.sequencer.paused ? player.so
 
 /** The song this pub's on (or about to be, between songs), by its title — its file's name, without any folder — or null
  * before the songs are loaded. */
-export const pubSongTitle = key => player ? nowPlaying(key).song.name.replace(/^.*\//, '') : null;
+export const pubSongTitle = key => player ? nowPlaying(key).song?.name.replace(/^.*\//, '') : null;
 
 /**
  * The pub's jukebox played: straight on to the start of its next song, the one it's on cut off.
@@ -152,6 +156,7 @@ export const pubSongTitle = key => player ? nowPlaying(key).song.name.replace(/^
 export function skipPubSong(key) {
   if (!player) return;
   const { song, into } = nowPlaying(key);
+  if (!song) return;
   // (from where it is — in it, or in the gap before it — to its end, then over the gap before the next, just into it)
   skipped.set(key, (skipped.get(key) ?? 0) + song.duration - into + SONG_GAP + 0.01);
   if (player.pub === key) hush();

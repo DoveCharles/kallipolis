@@ -46,6 +46,15 @@ Going anywhere nice on your holidays? {here.building = salon}
 > Can't afford it this year. {mood = -1}
 > Mind your own business. {aggression}
 
+What are you having? {here.building = restaurant}
+> The veal parm. Always the veal parm.
+> Spaghetti and meatballs. {happy}
+> Whatever's cheapest. {mood = -1}
+
+Should we get a bottle? {here.building = restaurant}
+> The Chianti. {happy}
+> Just water for me. {alcoholic = -1}
+
 What are you having done? {here.building = salon}
 > Just a trim.
 > Everything. {happy}

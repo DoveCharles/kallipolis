@@ -25,9 +25,9 @@
 #   industrial   warehouse, factory, tankfarm, containeryard
 #   farmland     farmstead
 #   suburbs      house
-#   town         terrace, pub, salon, clothes (any other shopfront is a terrace)
+#   town         terrace, pub, salon, clothes, restaurant (any other shopfront is a terrace)
 #   airport      terminal, hangar, controltower
-#   mall         clothes, salon, pub (the same kinds as a town's, each a unit off the concourse), vacant
+#   mall         clothes, salon, pub, restaurant (the same kinds as a town's, each a unit off the concourse), vacant
 #
 
 [distribution]
@@ -249,7 +249,29 @@ hates = Asking for a trim and wanting a whole new head
 hates = DIY fringes
 hates = The dryer that trips the fuse
 
-[clothes]
+[restaurant]
+enterable = yes
+name = Restaurant
+title = Mamma Rosa's {font = italic Brush Script MT, color = #f2e6c8, backcolor = #7a1a1a}
+title = Luigi's {font = italic Georgia, color = #ffffff, backcolor = #1f4a2a}
+title = Trattoria Napoli {font = Copperplate, color = #b02a1e, backcolor = #efe6cc}
+title = Il Forno {font = 900 Arial Black, color = #f2d27a}
+title = Sal's Place {font = italic Lucida Handwriting, color = #ffffff}
+title = Villa Capri {font = Didot, color = #c8a040, backcolor = #1a1a1c}
+title = Little Sicily {font = italic Brush Script MT, color = #3a8a3a}
+title = Vincenzo's {font = Times New Roman, color = #f2e6c8, backcolor = #9a2a1e}
+mood = 🍝
+loves = Sunday gravy
+loves = The regulars' usual table
+loves = Candles in Chianti bottles
+loves = Mamma's recipe
+loves = Birthday singalongs
+hates = Pineapple on anything
+hates = Snapping the spaghetti
+hates = Cappuccino after noon
+hates = Asking for ketchup
+hates = No-shows on a Saturday
+
 enterable = yes
 name = Clothes Shop
 title = TK Minn {font = 900 Arial Black, color = #e8202a}

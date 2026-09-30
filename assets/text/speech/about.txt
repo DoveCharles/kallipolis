@@ -106,13 +106,17 @@
 # HERE: where the speaker is (hard limits)
 #   {here.indoors}            only inside a building          {here.outdoors}   only outside
 #   {here.building = pub}     only inside that kind of building (a kind from buildings.txt: house, shop, pub, salon,
-#                             clothes, terrace...) or room (home, office, pub, salon, clothes, warehouse, factory)
+#                             clothes, restaurant, terrace...) or room (home, office, pub, salon, clothes, restaurant,
+#                             warehouse, factory)
 #                             (a salon's a nineties hair salon: mirrors, hood dryers, a fish tank, posters of big hair;
 #                             everyone in one's there for a haircut, sat in a chair in front of a mirror; the cutting's
 #                             done by a salon bot that pops up out of a hatch in the floor behind the chair, cuts their
 #                             hair, and sinks back down — buildings/salonbot.js)
 #                             (a clothes shop has rails of clothes, a till and changing rooms with curtains, and
 #                             everyone in one's there to try something on)
+#                             (a restaurant's an old New York Italian joint: checked tablecloths, candles in Chianti
+#                             bottles, red leather booths, a bar, a mural of Naples, signed photos; most sit down and
+#                             are served a plate of food, and leave once they've eaten)
 #                             (a pub always has music on — audio/pub-music.js — so pub lines can talk about it)
 #                             (and a bar bot behind the bar — buildings/barbot.js — polishing glasses, wiping the bar,
 #                             and asleep when nobody's in; anyone sat at the bar may talk to it, and it babbles back)
@@ -128,7 +132,7 @@
 #   {here.town}               only standing in a zone of that type — plain, park, water, beach, farmland, suburbs, town,
 #                             plaza, city, industrial, airport, mall (outdoors; on its roads and pavements too — a
 #                             mall, drawn as a path, counts as outdoors: its glass-roofed concourse, galleries, bridges and escalators,
-#                             but not the shops off them, which are here.building = clothes, salon or pub)
+#                             but not the shops off them, which are here.building = clothes, salon, pub or restaurant)
 #   {here.building = home, world.hour 23-4}   at home, late        {here.bridge}   on a bridge
 #   {here.crossing}           crossing a road                 {here.city, world.hour 22-4}   in the city at night
 #
@@ -185,6 +189,7 @@
 #   {felt = newclothes}       just came out of a clothes shop's changing room in new clothes
 #   {felt = gifted}           was just given something (the Gift button on their card: see assets/text/gifts.txt)
 #   {felt = cheered}          was just given something that cheered them up out of a sad or angry mood
+#   {felt = dined}            just finished a meal at a restaurant
 #   {felt = healed}          a MedBot just healed them back to full health (see src/life/medbot.js)
 #   {felt = party}            just turned up at a party (the Party button on a building's card, while you're inside it:
 #                             see the party in src/life/people/peopleActivities.js)

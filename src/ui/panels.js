@@ -551,6 +551,8 @@ function renderDetails() {
         <input type="range" id="ds-townsalons" min="0" max="1" step="0.05" value="${s.townSalons!=null?s.townSalons:0.2}"></div>
       <div class="slider-row"><div class="row"><label>Clothes shops</label><span class="val" id="dv-townclothes">${(s.townClothes!=null?s.townClothes:0.25).toFixed(2)}</span></div>
         <input type="range" id="ds-townclothes" min="0" max="1" step="0.05" value="${s.townClothes!=null?s.townClothes:0.25}"></div>
+      <div class="slider-row"><div class="row"><label>Restaurants</label><span class="val" id="dv-townrestaurants">${(s.townRestaurants!=null?s.townRestaurants:0.2).toFixed(2)}</span></div>
+        <input type="range" id="ds-townrestaurants" min="0" max="1" step="0.05" value="${s.townRestaurants!=null?s.townRestaurants:0.2}"></div>
       <div class="slider-row"><div class="row"><label>Paint</label><span class="val" id="dv-townpaint">${(s.townPaint!=null?s.townPaint:0.3).toFixed(2)}</span></div>
         <input type="range" id="ds-townpaint" min="0" max="1" step="0.05" value="${s.townPaint!=null?s.townPaint:0.3}"></div>
       <div class="slider-row"><div class="row"><label>Lot setback</label><span class="val" id="dv-townsetback">${s.townSetback!=null?s.townSetback:0}</span></div>
@@ -681,6 +683,7 @@ function renderDetails() {
       wireNumber('ds-townpubs', 'dv-townpubs', 'townPubs', 2);
       wireNumber('ds-townsalons', 'dv-townsalons', 'townSalons', 2);
       wireNumber('ds-townclothes', 'dv-townclothes', 'townClothes', 2);
+      wireNumber('ds-townrestaurants', 'dv-townrestaurants', 'townRestaurants', 2);
       wireNumber('ds-townpaint', 'dv-townpaint', 'townPaint', 2);
       wireNumber('ds-townsetback', 'dv-townsetback', 'townSetback');
       wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);
@@ -853,6 +856,7 @@ function renderDetails() {
       ${mallSlider('mallclothes', 'Clothes shops', mall.clothes, 0, 1, 0.05, mall.clothes.toFixed(2))}
       ${mallSlider('mallsalons', 'Salons', mall.salons, 0, 1, 0.05, mall.salons.toFixed(2))}
       ${mallSlider('mallpubs', 'Bars', mall.pubs, 0, 1, 0.05, mall.pubs.toFixed(2))}
+      ${mallSlider('mallrestaurants', 'Restaurants', mall.restaurants ?? 0.15, 0, 1, 0.05, (mall.restaurants ?? 0.15).toFixed(2))}
       ${mallSlider('mallvacant', 'Vacant units', mall.vacant, 0, 1, 0.05, mall.vacant.toFixed(2))}
       ${mallSlider('malltheme', 'Colours', mall.theme, 0, MALL_THEMES.length, 1, mall.theme > 0 ? MALL_THEMES[mall.theme-1].name : 'By seed')}
       ${mallSlider('mallseed', 'Seed', mall.seed, 1, 9999, 1)}
@@ -898,7 +902,7 @@ function renderDetails() {
       const setMall = (key, v) => { lines.forEach(l => { l.mall = { ...mallSettingsOf(l), [key]: v }; }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); };
       document.getElementById('ds-mallwidth').addEventListener('change', e => { lines.forEach(l => { l.width = parseFloat(e.target.value); }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); });
       document.getElementById('ds-mallwidth').addEventListener('input', e => { document.getElementById('dv-mallwidth').textContent = e.target.value; });
-      [['malldepth', 'depth', 0], ['mallshopwidth', 'shopWidth', 0], ['mallclothes', 'clothes', 2], ['mallsalons', 'salons', 2], ['mallpubs', 'pubs', 2], ['mallvacant', 'vacant', 2], ['mallseed', 'seed', 0]]
+      [['malldepth', 'depth', 0], ['mallshopwidth', 'shopWidth', 0], ['mallclothes', 'clothes', 2], ['mallsalons', 'salons', 2], ['mallpubs', 'pubs', 2], ['mallrestaurants', 'restaurants', 2], ['mallvacant', 'vacant', 2], ['mallseed', 'seed', 0]]
         .forEach(([id, key, dp]) => {
           const el = document.getElementById('ds-'+id);
           el.addEventListener('input', () => { document.getElementById('dv-'+id).textContent = dp ? parseFloat(el.value).toFixed(dp) : el.value; });

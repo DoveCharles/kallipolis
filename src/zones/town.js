@@ -37,6 +37,7 @@ const DOORS = [0x1b1b1b, 0x8a1c1c, 0x1d3557, 0x2d5a3d, 0xd8c35a, 0x5b8a9a];
 const PUB_BLACK = 0x121212; // a pub's ground floor, all the way round (see the end of makeTownBuilding)
 const SALON_FASCIAS = [0xe890b0, 0x8ec8d8, 0xb0a0d8, 0x1a1a1c, 0xf2f0ea, 0x60b0a0]; // (a salon's is loud, a clothes shop's smart)
 const CLOTHES_FASCIAS = [0x1a1a1c, 0xf2f0ea, 0xa82a2a, 0x2a3a5a, 0x3a3a3c];
+const RESTAURANT_FASCIAS = [0x7a1a1a, 0x1f4a2a, 0xefe6cc, 0x1a1a1c, 0x9a2a1e];
 const FASCIAS = [0x1f3d2b, 0x1b2a4a, 0x5a1a22, 0x151515, 0xe8e2d2, 0x2c5f6b];
 const CHIMNEY_BRICK = 0x8e4a36, POT = 0xa0583a, TRIM = 0xefece4, STONE = 0xd6cdb8;
 
@@ -137,7 +138,7 @@ function makeTownBuilding(fp, front, rng, s) {
   const group = new THREE.Group();
   group.name = 'Building';
   Object.assign(group.userData, { footprint: fp, height: h, buildingKind: 'terrace' }); // (see building-types.js)
-  // a shopfront's a house too until something below makes it a pub, a salon or a clothes shop: there's no plain shop yet
+  // a shopfront's a house too until something below makes it a pub, a salon, a clothes shop or a restaurant: there's no plain shop yet
   if (shop && lit) Object.assign(group.userData, { lobbyLight: litIntensity, lobbyColor: windowMat.userData.litColor });
 
   part(group, buildWallGeometry(fp, h, { c0: [0.9, 0.9, 0.9], c1: [1.03, 1.03, 1.03] }, WINDOW_TILE_WORLD_SIZE, 0), windowMat);
@@ -287,13 +288,13 @@ function makeTownBuilding(fp, front, rng, s) {
     part(group, place(new THREE.BoxGeometry(0.08, 0.86, 1.06), t, out, top - 0.75), plain(0xc8a040, { roughness: 0.35, metalness: 0.5 }));
     part(group, place(new THREE.BoxGeometry(0.1, 0.72, 0.92), t, out, top - 0.75), plain(FASCIAS[Math.floor(rng()*FASCIAS.length)], { roughness: 0.6 }));
   } else if (shop) {
-    // Of the other shops, a share are hair salons and a share clothes shops (the "salons" and "clothes shops" settings),
+    // Of the other shops, a share are hair salons, clothes shops and restaurants (the settings of those names),
     // each with its fascia in colours of its own. (Rolled after everything else, as the pubs are.)
-    const roll = rng(), salons = s.townSalons ?? 0.2, clothes = s.townClothes ?? 0.25;
-    const kind = roll < salons ? 'salon' : roll < salons + clothes ? 'clothes' : null;
+    const roll = rng(), salons = s.townSalons ?? 0.2, clothes = s.townClothes ?? 0.25, eats = s.townRestaurants ?? 0.2;
+    const kind = roll < salons ? 'salon' : roll < salons + clothes ? 'clothes' : roll < salons + clothes + eats ? 'restaurant' : null;
     if (kind) {
       group.userData.buildingKind = kind;
-      const colours = kind === 'salon' ? SALON_FASCIAS : CLOTHES_FASCIAS;
+      const colours = kind === 'salon' ? SALON_FASCIAS : kind === 'clothes' ? CLOTHES_FASCIAS : RESTAURANT_FASCIAS;
       fascia.material.color.setHex(colours[Math.floor(rng()*colours.length)]);
     }
   }

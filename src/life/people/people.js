@@ -1583,8 +1583,8 @@ export function updatePeople(t) {
         const far = Math.hypot(head.x - ear.x, head.y - ear.y, head.z - ear.z); // (from where you hear: see ear in audio/sfx.js)
         // (with Options > Speech > Babble only as fallback, anyone out of hearing keeps quiet: nothing real to say there)
         if (S.babbleFallbackOnly && far > hearDistance()) { p.talkTo = 0; p.talkIn = 0.5; p.phrase = null; }
-        else if (heard && phraseStart && (p.saying = sayLine(head, voiceOf(p, i), i, p))) p.phrase = null;
-        else if (heard && phraseStart && linePause(p)) { p.talkTo = 0; p.talkIn = 0.25; } // (waiting quietly for the next line)
+        else if (heard && phraseStart && !group?.babble && (p.saying = sayLine(head, voiceOf(p, i), i, p))) p.phrase = null;
+        else if (heard && phraseStart && !group?.babble && linePause(p)) { p.talkTo = 0; p.talkIn = 0.25; } // (waiting quietly for the next line)
         else {
           // in phrases, with a breath between (see nextSyllable in audio/voices.js)
           const { open, length, intonation } = nextSyllable(p, peopleRng);
