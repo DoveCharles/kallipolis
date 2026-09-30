@@ -20,7 +20,7 @@
 # Only files in speech/ and people/ are categories: the rest of assets/text/ (bees.txt, cars.txt, tv.txt...) is never
 # read for speech, so [bees] or [cars] won't work. about.txt files are never categories either.
 # Every category file is loaded at start. Speech starts from dialogue.txt (conversations), thoughts.txt (alone, as they fidget; no replies, shown but not said) and reactions.txt
-# (straight after seeing a death), plus closers.txt (ending a conversation) and fleeing.txt (called out as people run). Blank lines and # lines are skipped.
+# (straight after seeing a death), plus closers.txt (ending a conversation) fleeing.txt (called out as people run) and prayers.txt (said by someone praying, once clicked on). Blank lines and # lines are skipped.
 #
 # ------------------------------------------------------------------------------------------------------------------------
 # LINES

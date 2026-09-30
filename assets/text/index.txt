@@ -22,6 +22,7 @@ speech/dialogue.txt
 speech/farewells.txt
 speech/fleeing.txt
 speech/greetings.txt
+speech/prayers.txt
 speech/reactions.txt
 speech/thoughts.txt
 speech/talk/complaints.txt

@@ -1,0 +1,10 @@
+# What someone says when they pray and are watched (see about.txt): said on its own, no replies.
+# Pattern: "Dear God / Oh God / Hear me Lord... [comment, wish, gripe]... Amen."
+Dear God, let today be a good one. Amen.
+Oh God, give me the strength to get through this week. Amen.
+Hear me Lord, I'm not asking for much. Just a little more money. Amen.
+Dear God, why is everything so expensive? Amen.
+Oh God, forgive me for what I said earlier. Amen. {mood = -0.3}
+Hear me Lord, smite my enemies. Amen. {evil}
+Dear God, I'm sorry for the last few days. Amen. {is = drunk}
+Oh God, this city has lost its way. Amen. {world.morality < -0.3}

@@ -20,7 +20,7 @@ const INDEX_URL = TEXT_DIR + 'index.txt'; // every .txt under assets/text/, one 
 // the folders whose files are categories, at any depth, named by file (so a file can move between subfolders freely);
 // people/'s lists (boynames, loves...) come too, their {traits} read as tags (tagsOfTraits), and about.txt files never do
 const CATEGORY_DIRS = ['speech/', 'people/'];
-const ROOTS = ['dialogue', 'thoughts', 'reactions', 'closers', 'fleeing', 'greetings'];
+const ROOTS = ['dialogue', 'thoughts', 'reactions', 'closers', 'fleeing', 'greetings', 'prayers'];
 const MAX_DEPTH = 8;         // how deep includes are followed
 const FILL_DEPTH = 5;        // how deep placeholders within placeholders go: the last level only picks words with none
 const LEAN = 2;              // how hard a tag leans: × (1 + LEAN × tag × trait), trait measured -1 to +1 from its neutral

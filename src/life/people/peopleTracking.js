@@ -6,6 +6,7 @@ import { canTakeControl, controlInput, endPossession, possession, startPossessio
 import { FLEE_SPEED, PEOPLE_MAX, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
 import { HEAD_CENTER, PERSON_TRAIT_COLORS } from './peopleModel.js';
 import { INDOORS_COOLDOWN, PUNCH_HIT_TIME, resumeTrainRide, setAwaited, swingSound, canBeKnockedOver, dodgePunch, endActivity, goAfter, knockOver, leaveGroup, sayGoodbye, standUp, talkWith } from './peopleActivities.js';
+import { awaitsWatcher, endPrayerView, watchPrayer } from './peoplePrayer.js';
 import { placeAtVertex, reseatPerson, walkBackToWalkway } from './peoplePathing.js';
 import { carryPossessed, footingAt, nearestRaisedVertex, stepFooting } from './peopleFooting.js';
 import { bloodSpeed, bloodlustSpeed, isBloodlusting } from './peopleBlood.js';
@@ -70,6 +71,7 @@ export function pickPerson(clientX, clientY, out) {
 export function followPersonAt(clientX, clientY) {
   const i = pickPerson(clientX, clientY);
   if (i < 0) { stopFollowingPerson(); return; }
+  if (awaitsWatcher(people[i])) { stopFollowingPerson(); setFollowed(i); setRiderFollowed(-1); followedInside = false; watchPrayer(i); return; } // (praying: face first, card after — see peoplePrayer.js)
   followPerson(i);
 }
 
@@ -79,6 +81,7 @@ export function followPersonAt(clientX, clientY) {
  * @returns {void}
  */
 export function followPerson(i) {
+  endPrayerView();
   followedInside = false;
   setFollowed(i);
   setRiderFollowed(-1);
@@ -122,6 +125,7 @@ export function personDoing(p) {
   if (p.mode === 'dead') return 'Dead';
   if (p.water) return p.mode === 'drowning' ? 'Drowned' : p.water.stage === 'rising' ? 'Climbing out of the water' : 'Falling into the water';
   if (p.mode === 'possessed') return 'Possessed';
+  if (p.pray) return 'Praying';
   const k = p.punched;
   if (k && k.stage === 'brace') return 'Bracing for a punch';
   if (k && k.stage === 'crawl') return 'Crawling off the road';
@@ -281,6 +285,7 @@ export function headshotOf(i) {
  */
 export function stopFollowingPerson() {
   if (followed < 0) return;
+  endPrayerView();
   if (possession.index === followed) unpossessPerson();
   setFollowed(-1);
   if (followedInside) followedInside = false; // (the room had the camera all along)

@@ -1,6 +1,6 @@
 import { App, S } from '../core/shared.js';
 
-// Energy: ENERGY_MAX at most, one back every REGEN_MS, kept in localStorage so it carries across reloads.
+// Energy: regenerates to ENERGY_MAX (addEnergy's `over` can pass it), one back every REGEN_MS, kept in localStorage so it carries across reloads.
 // Shown in #morality-meter's .energy: count, and a countdown to the next one (0:00:00 when full).
 const KEY = 'kallipolis.energy';
 export const ENERGY_MAX = 10;
@@ -14,7 +14,7 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch
 // credit whatever has regenerated since s.t
 function settle() {
   const now = Date.now();
-  if (s.n >= ENERGY_MAX) { s.n = ENERGY_MAX; s.t = now; return; }
+  if (s.n >= ENERGY_MAX) { s.t = now; return; } // (over the cap is kept: see addEnergy)
   const gained = Math.floor((now - s.t) / REGEN_MS);
   if (gained <= 0) return;
   s.n = Math.min(ENERGY_MAX, s.n + gained);
@@ -42,10 +42,10 @@ export function hasEnergy(k = 1) {
   flashEmpty(); return false;
 }
 
-/** Give energy back, up to ENERGY_MAX. @param {number} [k] @returns {void} */
-export function addEnergy(k = 1) {
+/** Give energy back, up to ENERGY_MAX (past it with `over`: a prayer, see life/people/peoplePrayer.js). @param {number} [k] @param {boolean} [over] @returns {void} */
+export function addEnergy(k = 1, over = false) {
   settle();
-  s.n = Math.min(ENERGY_MAX, s.n + k);
+  s.n = over ? s.n + k : Math.max(s.n, Math.min(ENERGY_MAX, s.n + k));
   if (s.n >= ENERGY_MAX) s.t = Date.now();
   save(); render();
 }

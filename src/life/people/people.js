@@ -41,6 +41,7 @@ import { updateStatusEffects, restackTraits } from '../statuseffects.js';
 import { stockPockets } from '../gifts.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { updateCrazy } from './peopleCrazy.js';
+import { aimPrayerView, prayerDue, prayerViewing, sweepPrayers, updatePrayer } from './peoplePrayer.js';
 import { beginEmotes, updateEmotes } from './peopleEmotes.js';
 import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, updatePossessedTarget, useFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
@@ -475,7 +476,7 @@ const PERSON_LATER_FIELDS = Object.fromEntries([
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
   'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
   // fleeing, fighting, blood
-  'sunRun', 'fleeArea', 'fleeInArea', 'fleeStarts', 'fledTalkAt', 'fleeTalkUntil', 'attackQueue', 'push', 'revived', 'medbot',
+  'sunRun', 'fleeArea', 'fleeInArea', 'fleeStarts', 'fledTalkAt', 'fleeTalkUntil', 'pray', 'attackQueue', 'push', 'revived', 'medbot',
   'blood', 'bloodBase', 'bloodFrom', 'bloodTimer', 'huntIn', 'roadWaryUntil', 'benched', 'bankHeld',
   // water, drink, smell
   'water', 'waterHere', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
@@ -1223,6 +1224,7 @@ export function updatePeople(t) {
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   peopleFrame++;
   beginEmotes();
+  sweepPrayers();
   people.forEach((p, i) => {
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
@@ -1247,12 +1249,15 @@ export function updatePeople(t) {
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
     if (p.please) updatePlease(p, dt); // (the same hold as stun, read as delight: see pleased below)
     if (p.punched) updatePunched(p, dt);
+    updatePrayer(p, i, dt, possessed); // (standing still, glowing: see peoplePrayer.js)
+    const prays = !!p.pray;
     // frozen in place: fright's 'look' stage, or stun/please's 'held' stage. only fright ever flees.
     const frozen = (!!p.fright && p.fright.stage === 'look')
                 || (!!p.stun && p.stun.stage === 'held')
                 || (!!p.please && p.please.stage === 'held')
                 || (!!p.punched && p.punched.stage !== 'marked') // (braced for a punch, knocked down, or getting up)
-                || inWater(p); // (going into the water, or drowned: see peopleWater.js)
+                || inWater(p) // (going into the water, or drowned: see peopleWater.js)
+                || prays;
     const fleeing = !!p.fright && p.fright.stage === 'flee';
     // pleased: looking at it and then held still, beaming. The same 'look' and 'held' stages as stun — the ones
     // updatePeople freezes them on — read as delight rather than shock, below.
@@ -1568,6 +1573,8 @@ export function updatePeople(t) {
         if (performance.now()/1000 > p.fleeTalkUntil || !isDrawn(p)) p.fleeTalkUntil = 0;
         else if ((p.saying = shoutLine({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), i, p, 'fleeing'))) { p.shouting = true; p.fleeTalkUntil = 0; }
       }
+      // (praying, watched: the prayer — see peoplePrayer.js)
+      if (prayerDue(p) && !p.saying && !aaaing && (p.saying = shoutLine({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), i, p, 'prayers'))) { p.shouting = true; p.pray.said = true; }
       if (!(talking || p.shouting) || aaaing || (p.saying && !isDrawn(p))) {
         p.shouting = false;
         p.talkTo = 0;
@@ -1613,7 +1620,7 @@ export function updatePeople(t) {
       else if (bubbleSide && (p.saying || babbling || thinking || hasBubble(p))) speechBubble(p, bubbleAt(p), p.saying ?? babbling ?? thinking);
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape
-      else if (frozen || fleeing || scaredByBlood) p.talkTo = frozen ? 1 : scaredByBlood ? 0.3 + 0.7*fear : 0.55; // (blood, the more of it the wider)
+      else if ((frozen && !prays) || fleeing || scaredByBlood) p.talkTo = frozen && !prays ? 1 : scaredByBlood ? 0.3 + 0.7*fear : 0.55; // (blood, the more of it the wider)
       if (faced) {
         p.talk += (p.talkTo - p.talk)*Math.min(1, fdt*20);
         if (listening) {
@@ -1622,11 +1629,11 @@ export function updatePeople(t) {
           p.emotionTo = p.traits.mood; // (their resting face)
         }
         if (delighted) p.emotionTo = 1;                      // beaming, where fright and stun go flat
-        else if (frozen || fleeing || scaredByBlood) p.emotionTo = -1;
+        else if ((frozen && !prays) || fleeing || scaredByBlood) p.emotionTo = -1;
         p.emotion += (p.emotionTo - p.emotion)*Math.min(1, fdt*5);
         // their eyes: the look their traits give them (from their mood, say), brighter or sadder as their expression swings
         // above or below where it rests, and wide with shock when frightened
-        const { happy, sad, angry, shock } = p.traits, swing = p.emotion - p.traits.mood, shocked = (frozen || fleeing || scaredByBlood) && !delighted; // (they look scared for as long as they've blood on them)
+        const { happy, sad, angry, shock } = p.traits, swing = p.emotion - p.traits.mood, shocked = ((frozen && !prays) || fleeing || scaredByBlood) && !delighted; // (they look scared for as long as they've blood on them)
         const eyesTo = [shocked ? (scaredByBlood ? 0.4 + 0.6*fear : 1) : shock, delighted ? 1 : shocked ? 0 : happy + Math.max(0, swing)*0.8, scaredByBlood ? 0 : p.attack || lusting ? 1 : angry, sad + Math.max(0, -swing)*0.8];
         for (let k=0;k<4;k++) p.eyes[k] += (Math.min(1, eyesTo[k]) - p.eyes[k])*Math.min(1, fdt*6);
       }
@@ -1637,7 +1644,7 @@ export function updatePeople(t) {
         animArray[o+1] = p.clipB === p.clipA ? animArray[o] : p.rowB;
         animArray[o+2] = p.fade;
         // (the drowsy, 😴, hold their eyes that far shut between blinks)
-        animArray[o+3] = Math.max(p.traits.drowsy, p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0);
+        animArray[o+3] = Math.max(p.traits.drowsy, p.pray && !p.saying ? 0.85 : 0, p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0);
         lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
         if (p.water?.drowned) holdDrowned(o, animArray, lookArray); // (still, face down: see peopleWater.js)
         const eyesArray = personModel.eyes.array;
@@ -1707,6 +1714,7 @@ export function updatePeople(t) {
   const inside = followed >= 0 && isGone(people[followed]) && people[followed].indoors?.building;
   if (followedInside) { /* (the room's camera) */ }
   else if (inside) controls.goalTarget.set(inside.x, inside.y + inside.height*0.5, inside.z);
+  else if (prayerViewing(followed)) aimPrayerView(people[followed]);
   else if (followed >= 0) { const p = people[followed]; controls.goalTarget.set(p.x, p.y + personHeight(p)*0.8, p.z); }
   // and the card's headshot of them (kept as it was while they can't be seen), which draws them whole
   if (personModel?.hidden) personModel.hidden.value = -1;

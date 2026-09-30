@@ -319,7 +319,7 @@ const WALK_MODES = ['line', 'wander', 'leaving'];
  * @returns {boolean} whether they can
  */
 const canWalk = (m, following = false) => !isSeated(m) && !m.inRoom && (following ? WALK_MODES.includes(m.mode) : m.mode === 'line' || m.mode === 'wander')
-  && !m.fright && !m.stun && !m.please && !m.punched && !m.attack && !m.jc && !m.crossStage && !m.oneShot;
+  && !m.fright && !m.stun && !m.please && !m.pray && !m.punched && !m.attack && !m.jc && !m.crossStage && !m.oneShot;
 /**
  * Set someone walking beside someone else, on whichever side of them they're standing.
  * @param {Person} p - who follows
@@ -453,7 +453,7 @@ export function goChat(p, area) {
   const here = [];
   for (let i = 0; i < people.length; i++) {
     const q = people[i];
-    if (q === p || q.mode !== 'wander' || q.area !== p.area || q.act || q.fright || q.stun || q.please || q.oneShot || q.attack || q.punched || q.swimming || q.chatCooldown > 0 || q.traits.smells || q.traits.chatty <= 0) continue;
+    if (q === p || q.mode !== 'wander' || q.area !== p.area || q.act || q.fright || q.stun || q.please || q.pray || q.oneShot || q.attack || q.punched || q.swimming || q.chatCooldown > 0 || q.traits.smells || q.traits.chatty <= 0) continue;
     const d = Math.hypot(q.x - p.x, q.z - p.z);
     if (d < CHAT_REACH) here.push({ q, d, standing: !q.moving });
   }
@@ -491,11 +491,11 @@ export function meetOnWalkways(dt) {
   if (!hasClip('Wave') || talking > people.length*0.15) return;
   const reach = 1.6*S.peopleSize;
   people.forEach(p => {
-    if (p.mode !== 'line' || p.act || p.fright || p.crossStage || p.attack || p.punched || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
+    if (p.mode !== 'line' || p.act || p.pray || p.fright || p.crossStage || p.attack || p.punched || p.chatCooldown > 0 || (p.chatCheckIn -= dt) > 0) return;
     p.chatCheckIn = 0.4 + peopleRng()*0.8;
     const cx = Math.floor(p.x/CELL), cz = Math.floor(p.z/CELL);
     for (let ox=-1;ox<=1;ox++) for (let oz=-1;oz<=1;oz++) for (const q of cells.get((cx+ox) + ',' + (cz+oz)) || []) {
-      if (q === p || q.act || q.fright || q.crossStage || q.attack || q.punched || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || p.traits.smells || q.traits.smells) continue;
+      if (q === p || q.act || q.pray || q.fright || q.crossStage || q.attack || q.punched || q.chatCooldown > 0 || q.li !== p.li || q.dir === p.dir || p.traits.smells || q.traits.smells) continue;
       // still coming towards each other, and close
       if ((q.u - p.u)*p.dir < 0 || Math.hypot(q.x - p.x, q.z - p.z) > reach) continue;
       if (peopleRng() < 0.35*p.traits.chatty*q.traits.chatty) startChat(p, q, false); else p.chatCooldown = q.chatCooldown = 10;
