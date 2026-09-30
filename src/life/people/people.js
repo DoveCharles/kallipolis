@@ -471,7 +471,7 @@ export function syncPeopleUI() {
 // (see the end of newPerson)
 const PERSON_LATER_FIELDS = Object.fromEntries([
   // who they are (refreshTraits), how they look (updatePeople)
-  'health', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'faceDt', 'placedOut',
+  'health', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'faceDt', 'placedOut',
   // what they say and think
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
   'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
@@ -725,7 +725,8 @@ export function standingOf(p) {
 // about once, straight away. A lesser sight doesn't replace a greater one still fresh (SEEN_RANK); the same sight of the
 // same person isn't seen again while it's fresh, so something that goes on (walking on water, a smell) counts once.
 const WITNESS_RADIUS = 20; // how near (× people size) someone has to be to see something happen
-const SEEN_RANK = { killedbycar: 3, crashedinto: 3, beatentodeath: 3, smited: 3, drowned: 3, exploded: 3, resurrected: 2, punch: 1, knockedbycar: 1, healed: 0, waterwalking: 0, smelly: 0 };
+const SEEN_RANK = { killedbycar: 3, crashedinto: 3, beatentodeath: 3, smited: 3, drowned: 3, exploded: 3, resurrected: 2, punch: 1, knockedbycar: 1, healed: 0, waterwalking: 0, smelly: 0, nude: 0 };
+const NUDE_SEEN_EVERY = 4; // seconds between someone nude being noticed by whoever's near
 const NOTICED_FOR = 60; // seconds a sight stays fresh (as SEEN_TIME in life/speech-text.js)
 const MAX_WITNESSES = 5;  // how many of the nearest see something happen (not a whole park at once)
 const REACT_SPREAD = 2.5; // seconds over which those who saw it get round to reacting, each at a random moment
@@ -1155,7 +1156,7 @@ export function updatePeople(t) {
   if (followed >= 0 && (!S.peopleEnabled || S.interactionMode !== 'move')) stopFollowingPerson();
   if (followedInside && !App.isInsideBuilding()) stopFollowingPerson(); // (picked in a room since left)
   peopleMesh.visible = S.peopleEnabled && !personModel;
-  if (personModel) [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; });
+  if (personModel) { [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; }); personModel.censor.visible = S.peopleEnabled; }
   peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
   if (!S.peopleEnabled) { showPassengers(); showInhabitants(); updateFlies(0); return; }
   pruneGone(people, t, forgetLinesExcept); // (relations and recent lines of the gone)
@@ -1203,7 +1204,7 @@ export function updatePeople(t) {
   if (S.showRoadsafetyDebug) roadsafetyDebugMesh.count = roadsafetyHalfDebugMesh.count = pedHitboxDebugMesh.count = people.length;
   setIndoorsCount(people.reduce((n, p) => n + (p.mode === 'indoors' ? 1 : 0), 0));
   if (personModel) {
-    personModel.mesh.count = people.length;
+    personModel.mesh.count = personModel.censor.count = people.length;
     personModel.hair.forEach(style => { style.mesh.count = countBelow(style.members, people.length); });
     updateGroups(dt);
     meetOnWalkways(dt);
@@ -1230,6 +1231,8 @@ export function updatePeople(t) {
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
     if (p.skinKey !== skinKeyOf(p)) tintSkin(p, i); // (a keepsake or status that's just moved the skin's traits: see tintSkin)
+    if (personModel && !!p.traits.nude !== !!p.nudeDressed) { p.nudeDressed = !!p.traits.nude; personModel.setNude(i, p.id, p.nudeDressed); } // (see peopleCensor.js)
+    if (p.traits.nude && (p.mode === 'line' || p.mode === 'wander') && (p.nudeSeenIn = (p.nudeSeenIn ?? 0) - dt) <= 0) { witness(p, 'nude'); p.nudeSeenIn = NUDE_SEEN_EVERY; }
     if (!p.pocketsStocked) stockPockets(p, i); // (the sunglasses they came in: see life/gifts.js)
     if (p.blood) updateBlood(p, dt, i);
     if (p.traits.crazy > 0 || p.crazyShift) updateCrazy(p, dt);

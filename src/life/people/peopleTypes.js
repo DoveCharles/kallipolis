@@ -190,6 +190,8 @@
  *   clothing into the traits texture, from their id (see people.js)
  * @property {function(number, number, function(): number): void} cutHair - a new haircut for someone (slot, id, rng)
  * @property {function(number, number, function(): number): void} changeClothes - new clothes for someone (slot, id, rng)
+ * @property {function(number, number, boolean): void} setNude - the nude trait on or off for someone (slot, id, on)
+ * @property {import('three').InstancedMesh} censor - the nude's mosaic censors (see peopleCensor.js)
  * @property {number} headBone
  * @property {import('three').Vector3} headPivot
  * @property {number} height - the model's height, in its own units

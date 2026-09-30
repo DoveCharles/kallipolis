@@ -72,6 +72,7 @@ export const TRAITS = {
   capitalise: {base: 0, min: 0, max: 1, combine: 'on'}, //capitalise the first letter in every word
   legendary: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as legendary
   terrible: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as terrible
+  nude: { base: 0, min: 0, max: 1, combine: 'on' }, // no clothes, never changes into any; a mosaic censor over them (life/people/peopleCensor.js)
   smells: { base: 0, min: 0, max: 1, combine: 'on' }, //people keep clear and leave circles it sits in (life/people/peopleSmell.js); cars pull over to let it by (life/traffic/pullover.js)
   respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time: the body stays whole (a car still explodes), shakes, then lightning revives it (see life/revive.js)
   drunk: {base: 0, min: 0, max: 1, combine: 'add'} ,//0-1, added up; people at 0.5 weave and fall over as a few pints in, more at 1 (life/people/peopleDrunk.js). cars (any amount): control ×0.5 and steering swapped for 1-3s every 3-10s (see drunkSteer in life/traffic/driving.js); AI cars veer off their lane now and then (drunkVeer in life/traffic/collisions.js)

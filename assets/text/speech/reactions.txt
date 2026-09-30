@@ -62,6 +62,13 @@ Ugh, what's that smell? {seen = smelly}
 > Don't look now, but I think it's [seen.name].
 [seen.name] needs a bath. {seen = smelly, evil}
 I'm going to be sick. {seen = smelly, mood = -1}
+Is [seen.name] naked?! {seen = nude}
+Put it away! {seen = nude, mood = -1}
+My eyes! {seen = nude, shock}
+Oh my. {seen = nude, blushing}
+Nice. {seen = nude, evil, thought}
+Someone call the police. {seen = nude, conservative}
+Free the nipple! {seen = nude, conservative = -1}
 
 # ---- things that happened to the speaker
 Ow! What was that for, [felt.by]? {felt = punched}

@@ -70,6 +70,7 @@ which add up. Everyone starts at the value in
 #   aggression  1       how likely they are to punch sommone                                           0 to 20
 #   bloodlust   off     covered in blood, they run twice as fast and go about punching everyone they can  on or off
 #   backwards   off     they walk backwards                                                           on or off
+#   nude        off     no clothes, never changes into any: a mosaic censor covers them                on or off
 #   upsidedown  off     their head the wrong way up, hair and all                                     on or off
 #   dodge       0       the chance of leaping clear of a punch, then going after whoever threw it      0 to 1
 #   blazed      off     the whites of their eyes are slightly red, like they're high                   on or off
