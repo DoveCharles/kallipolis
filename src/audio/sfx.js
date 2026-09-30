@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { ZZFX } from 'zzfx';
-import { scene, camera } from '../core/scene.js';
+import { camera } from '../core/scene.js';
 import { controls } from '../core/camera-controls.js';
 
 // ============================================================ sound effects
 // Every sound is synthesized (but for the pubs' music: audio/pub-music.js): ZzFX (https://killedbyapixel.github.io/ZzFX/ has a designer, whose parameter lists paste
-// straight into SOUNDS below) builds the samples, and each play is a THREE.PositionalAudio set down where it happened, so
+// straight into SOUNDS below) builds the samples, and each play goes through a panner set down where it happened, so
 // it's quieter far off and comes from the right side. The listener sits at the ear (placeEar, below). Sound travels at SPEED_OF_SOUND, so
 // a far-off blast is seen before it's heard, like the thunder after the lightning.
 //
@@ -149,7 +149,7 @@ placeEar();
 const context = listener.context;
 // a limiter after everything, so a pile-up of blasts close by squashes rather than clips
 const limiter = context.createDynamicsCompressor();
-limiter.threshold.value = -12; limiter.knee.value = 3; limiter.ratio.value = 20; limiter.attack.value = 0.002; limiter.release.value = 0.25; // (near a brick wall: crowds of voices too)
+limiter.threshold.value = -12; limiter.knee.value = 3; limiter.ratio.value = 20; limiter.attack.value = 0.005; limiter.release.value = 0.25; // (near a brick wall: crowds of voices too)
 listener.setFilter(limiter);
 
 // Inside a building (see buildings/interior.js), whatever's outside it is heard through the walls: everything out there —
@@ -266,6 +266,10 @@ function variantsOf(name) {
  */
 export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate = 1, through = [], kind) {
   if (muted || context.state !== 'running' || voices >= VOICES_MAX) return null;
+  return startVoice(buffer, at, volume, refDistance, maxDistance, rate, through, kind);
+}
+// (a bare equalpower panner: HRTF, THREE.PositionalAudio's default, is costly per voice and glitched with many at once)
+function startVoice(buffer, at, volume, refDistance, maxDistance, rate = 1, through = [], kind, rolloff = 1, delay = 0) {
   const source = context.createBufferSource(), gain = context.createGain(), panner = context.createPanner();
   source.buffer = buffer;
   source.playbackRate.value = rate;
@@ -273,12 +277,13 @@ export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate 
   panner.panningModel = 'equalpower';
   panner.distanceModel = maxDistance ? 'linear' : 'inverse';
   panner.refDistance = refDistance;
+  panner.rolloffFactor = rolloff;
   if (maxDistance) panner.maxDistance = maxDistance;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
   [...through, gain].reduce((from, to) => from.connect(to), source).connect(panner).connect(heardFrom(at, kind));
   voices++;
   source.onended = () => { voices--; panner.disconnect(); };
-  source.start();
+  source.start(context.currentTime + delay);
   return source;
 }
 /**
@@ -369,20 +374,6 @@ export function playSound(name, at, volume = 1, after = 0) {
   const distance = ear.distanceTo(source.set(at.x, at.y, at.z)), near = NEAR_ONLY[name];
   if (near && distance > near.hear) return;
   const delay = distance/SPEED_OF_SOUND;
-  for (const buffer of layers) {
-    const sound = new THREE.PositionalAudio(listener);
-    sound.setBuffer(buffer);
-    sound.setRefDistance(REACH[name] ?? REF_DISTANCE);
-    sound.setRolloffFactor(near?.rolloff ?? 1);
-    if (near) sound.setFilter(muffler(at, REACH[name], near.muffle));
-    sound.setVolume(volume);
-    sound.position.set(at.x, at.y, at.z);
-    scene.add(sound);
-    sound.updateMatrixWorld();
-    sound.gain.disconnect();
-    sound.gain.connect(heardFrom(at, KIND_OF[name]));
-    sound.onEnded = () => { voices--; sound.isPlaying = false; scene.remove(sound); sound.disconnect(); };
-    voices++;
-    sound.play(delay + after);
-  }
+  const through = near ? [muffler(at, REACH[name], near.muffle)] : [];
+  for (const buffer of layers) startVoice(buffer, at, volume, REACH[name] ?? REF_DISTANCE, 0, 1, through, KIND_OF[name], near?.rolloff ?? 1, delay + after);
 }
