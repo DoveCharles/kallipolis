@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { HEIGHT, HEAD_UP, botFace, newFace, waiterBody } from './barbot.js';
 import { TOON_RAMP } from '../core/toon.js';
 import { playSound } from '../audio/sfx.js';
+import { botWhir } from '../audio/whir.js';
 import { hasBubble, speechBubble } from '../ui/speech-bubbles.js';
 
 // ============================================================ the waiter bot
@@ -267,7 +268,7 @@ export function updateWaiterbot(inRestaurant, occupied) {
   const now = performance.now()/1000, dt = Math.min(0.1, now - lastTime);
   lastTime = now;
   s.up = inRestaurant; s.occupied = occupied;
-  if (!w?.hand || !group || !inRestaurant || w.root.parent !== group) return;
+  if (!w?.hand || !group || !inRestaurant || w.root.parent !== group) { botWhir('waiter', null, 0); return; }
   if (w.head) w.head.quaternion.premultiply(q.copy(headTurn).invert()); // (last frame's swivel off first: see barbot.js)
   const snap = s.snap;
   s.snap = false;
@@ -277,6 +278,7 @@ export function updateWaiterbot(inRestaurant, occupied) {
   }
 
   // along its route, turning to face the way it's going, then whichever way it's to face
+  const x0 = s.x, z0 = s.z, yaw0 = s.yaw;
   let goal = s.face ?? s.yaw;
   if (s.route.length) {
     const next = s.route[0], dx = next.x - s.x, dz = next.z - s.z, far = Math.hypot(dx, dz);
@@ -293,6 +295,8 @@ export function updateWaiterbot(inRestaurant, occupied) {
   const turn = wrap(goal - s.yaw);
   s.yaw = wrap(s.yaw + Math.sign(turn)*Math.min(Math.abs(turn), TURN*dt));
   if (!s.route.length && s.face != null && Math.abs(turn) < 0.05) s.face = null;
+  const moved = dt ? Math.max(Math.hypot(s.x - x0, s.z - z0)/(SPEED*dt), 0.6*Math.abs(wrap(s.yaw - yaw0))/(TURN*dt)) : 0;
+  botWhir('waiter', s.hidden ? null : { x: s.x, y: toWorld(0, 0).y, z: s.z }, moved);
 
   // setting a plate down: onto the table DROP_AT in, and done at the clip's end
   const serve = s.serve;

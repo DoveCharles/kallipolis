@@ -1,3 +1,4 @@
+import { playSound } from '../../audio/sfx.js';
 import { people, peopleRng, pickFrom } from './people.js';
 import { freeSeat, leaveGroup, standingSpot, takeSeat } from './peopleActivities.js';
 import { plateSpot, serveMeal } from './peopleHolding.js';
@@ -17,6 +18,7 @@ import { WAITER, waiterAt, waiterBusy, waiterCarry, waiterClear, waiterDoor, wai
 const ORDER_AFTER = [6, 14];   // s after sitting down before it comes for the order
 const COOK = [14, 28];         // s the kitchen takes
 const KITCHEN_STAY = 2.5;      // s it's out of sight through the doors
+const BELL_GAP = 0.28;         // s between the service bell's two dings
 const MEAL_GIVE_UP = 240;      // s a diner waits before the food just comes (see sitting in peopleActivities.js)
 const FOLLOW_GAP = 1.1;        // m behind the waiter someone it's showing to a table keeps
 const CLEAR_AFTER = 4;         // s after someone's got up before it clears their plate
@@ -269,6 +271,8 @@ function* deliver(table) {
   const take = diners.filter(d => d.table === table && d.state === 'ordered' && clock >= d.readyAt).slice(0, 2);
   take.forEach(d => { d.state = 'fetching'; });
   waiterLook(null);
+  const door = waiterDoor(); // ding ding: service
+  if (door) { const bell = { x: door.at.x, y: door.at.y + 1.2, z: door.at.z }; playSound('service', bell); yield* wait(BELL_GAP); playSound('service', bell, 0.8); }
   yield* kitchen(() => waiterCarry(take[0].dish, take[1]?.dish ?? null));
   for (const [k, d] of take.entries()) {
     const side = k ? 'R' : 'L';

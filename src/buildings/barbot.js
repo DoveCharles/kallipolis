@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { babble, nextSyllable } from '../audio/voices.js';
+import { botWhir } from '../audio/whir.js';
 import { TOON_RAMP } from '../core/toon.js';
 
 // ============================================================ the bar bot
@@ -229,7 +230,7 @@ export function updateBarbot(inPub, occupied) {
   const now = performance.now()/1000, dt = Math.min(0.1, now - lastTime);
   lastTime = now;
   state.inPub = inPub;
-  if (!bot || !place || !inPub || bot.root.parent == null) return;
+  if (!bot || !place || !inPub || bot.root.parent == null) { botWhir('bar', null, 0); return; }
 
   // Last frame's head swivel taken off first, before anything else touches the pose: the mixer only writes a bone when
   // its value changes, and the poses mostly hold Head still, so otherwise the swivels pile up. And first, before any
@@ -253,6 +254,7 @@ export function updateBarbot(inPub, occupied) {
   state.chatting = !!chat;
 
   // along the bar, turning to face the way it's going, and back to the bar once it's there
+  const x0 = state.x, yaw0 = state.yaw;
   let yawGoal = 0;
   if (them) {
     bot.root.parent.worldToLocal(towards.set(them.x, 0, them.z));
@@ -271,6 +273,8 @@ export function updateBarbot(inPub, occupied) {
   const turn = yawGoal - state.yaw;
   state.yaw += Math.sign(turn)*Math.min(Math.abs(turn), TURN*dt);
   bot.root.position.x = state.x;
+  const moved = dt ? Math.max(Math.abs(state.x - x0)/(SPEED*dt), 0.6*Math.abs(state.yaw - yaw0)/(TURN*dt)) : 0;
+  botWhir('bar', bot.root.getWorldPosition(towards), moved);
 
   // its head swivelling to look round the room while it stands about or goes along the bar, and straight again while it
   // works or sleeps
