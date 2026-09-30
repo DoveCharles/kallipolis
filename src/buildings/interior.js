@@ -1805,7 +1805,7 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
     for (const seat of piece.seats) {
       const at = turned(seat.x, seat.z, angle, x, z);
       layout.seats.push({ x: at.x, z: at.z, y: seat.y, nx: Math.sin(angle), nz: Math.cos(angle), sofa: false, desk: deskSeats.includes(name),
-        bar: name === 'BarStool', kind: seatKind, diner, table }); // (sat at the bar, with the bar bot to talk to: see barbot.js)
+        bar: name === 'BarStool', booth: name === 'Booth', kind: seatKind, diner, table }); // (sat at the bar, with the bar bot to talk to: see barbot.js)
     }
     return object;
   };
@@ -1867,7 +1867,7 @@ function planRoom(layout, F, group, rng, glass, deskSeats) {
 function seatsInWorld(layout) {
   layout.seats = layout.seats.map(seat => {
     const w = room.localToWorld(new THREE.Vector3(seat.x, seat.y, seat.z)), n = roomWay(seat.nx, seat.nz);
-    return { x: w.x, y: w.y, z: w.z, nx: n.x, nz: n.z, sofa: false, desk: seat.desk, bar: seat.bar, kind: seat.kind ?? null, by: null,
+    return { x: w.x, y: w.y, z: w.z, nx: n.x, nz: n.z, sofa: false, desk: seat.desk, bar: seat.bar, booth: !!seat.booth, kind: seat.kind ?? null, by: null,
       salonBot: seat.salonBot ?? null, // (a styling chair's: see salonbot.js)
       diner: seat.diner ? { top: room.localToWorld(new THREE.Vector3(seat.x, seat.diner, seat.z)).y } : false, // (a restaurant's)
       table: seat.table ?? null }; // (which of its tables: see peopleWaiter.js)

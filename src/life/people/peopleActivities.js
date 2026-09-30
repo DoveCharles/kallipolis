@@ -1988,7 +1988,7 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
       takeSeat(p, seat);
       const stand = standingSpot(p, seat);
       p.x = stand.x; p.z = stand.z;
-      p.heading = Math.atan2(seat.nx, seat.nz);
+      p.heading = sitHeading(seat);
       p.inRoom.stage = 'turn';
     }
   }
@@ -2063,7 +2063,7 @@ function sendToSofa(p) {
   takeSeat(p, seat);
   const stand = standingSpot(p, seat);
   p.x = stand.x; p.z = stand.z;
-  p.heading = Math.atan2(seat.nx, seat.nz);
+  p.heading = sitHeading(seat);
   Object.assign(p.inRoom, { stage: 'turn', route: null });
 }
 /** The sizes (People size slider included) that sit on the furniture by choice; the sofa's filled whatever the size. */
@@ -2101,8 +2101,28 @@ export function takeSeat(p, seat) {
  * @returns {{x: number, y: number, z: number}} the spot, in the world
  */
 export function standingSpot(p, seat) {
-  const reach = -clipNamed('Sit1').pelvisZ*modelScale(p);
-  return { x: seat.x + seat.nx*reach, y: p.y, z: seat.z + seat.nz*reach };
+  const reach = -clipNamed('Sit1').pelvisZ*modelScale(p), side = sideOf(seat);
+  const nx = side ? seat.nz*side : seat.nx, nz = side ? -seat.nx*side : seat.nz;
+  return { x: seat.x + nx*reach, y: p.y, z: seat.z + nz*reach };
+}
+/**
+ * A table's chair (not a booth) is sat on from the side, so legs miss the table, then turned to it once down: which
+ * side (±1, whichever's further from the other seats), or 0 for any other seat.
+ * @param {object} seat - the seat (see roomSeats)
+ * @returns {number}
+ */
+function sideOf(seat) {
+  if (!seat.diner || seat.booth) return 0;
+  if (seat.side == null) {
+    const clear = s => Math.min(Infinity, ...roomSeats().filter(o => o !== seat).map(o => Math.hypot(seat.x + seat.nz*s*0.5 - o.x, seat.z - seat.nx*s*0.5 - o.z)));
+    seat.side = clear(1) >= clear(-1) ? 1 : -1;
+  }
+  return seat.side;
+}
+/** Which way to face to sit down on a seat (back to it; sideways on a table's chair: see sideOf). */
+function sitHeading(seat) {
+  const side = sideOf(seat);
+  return side ? Math.atan2(seat.nz*side, -seat.nx*side) : Math.atan2(seat.nx, seat.nz);
 }
 /**
  * Up off wherever they're sitting in the room, if they are, and the seat let go of.
@@ -2131,7 +2151,7 @@ export function standUp(p) {
  * @returns {?{x: number, y: number, z: number}} where they should walk to, or null
  */
 function sitting(p, here, dt) {
-  const seat = here.seat, stand = standingSpot(p, seat), facing = Math.atan2(seat.nx, seat.nz);
+  const seat = here.seat, stand = standingSpot(p, seat), facing = Math.atan2(seat.nx, seat.nz), down = sitHeading(seat);
   switch (here.stage) {
     case 'go':
       if ((here.timer -= dt) <= 0) { standUp(p); here.route = null; here.wait = 2; return null; } // can't get there
@@ -2145,8 +2165,8 @@ function sitting(p, here, dt) {
       here.stage = 'turn';
       // falls through
     case 'turn':
-      p.faceTo = facing;
-      if (Math.abs(wrapAngle(facing - p.heading)) > 0.15 || p.oneShot) break;
+      p.faceTo = down;
+      if (Math.abs(wrapAngle(down - p.heading)) > 0.15 || p.oneShot) break;
       here.stage = 'sit';
       p.pose = deskPose(seat);
       // (a plate on the table and a fork in hand; at a restaurant, spaghetti, or a pizza eaten a slice at a time from the hand)
@@ -2162,6 +2182,7 @@ function sitting(p, here, dt) {
       // falls through
     case 'sit': {
       // (on the sofa, with a video on: up once it's over, however long that is — or, if the player won't say, as anywhere else)
+      if (down !== facing && sitWeight(p) > 0.9) p.faceTo = facing; // (sat sideways on a table's chair: turned to the table)
       const on = seat.sofa ? watchingTV() : null;
       if (on > 0 && here.watched == null) here.watched = on;
       here.timer -= dt;
@@ -2189,10 +2210,16 @@ function sitting(p, here, dt) {
       if (seat.kind === 'cut') haircut(p, seat, here, dt);
       // (waiting for a haircut: up as soon as a chair's free)
       else if (p.indoors?.shop === 'salon' && !p.indoors.served && freeSeat(p, 'cut')) here.timer = 0;
-      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); leavePlate(p); clearMeal(p); here.stage = 'rise'; p.pose = 'Idle'; }
+      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); leavePlate(p); clearMeal(p); here.stage = 'rise'; p.pose = down !== facing ? 'Sit1' : 'Idle'; }
       break;
     }
     case 'rise':
+      // (off a table's chair: turned sideways again first)
+      if (down !== facing && p.pose !== 'Idle') {
+        p.faceTo = down;
+        if (Math.abs(wrapAngle(down - p.heading)) > 0.15) break;
+        p.pose = 'Idle';
+      }
       if (weightOf(p, clipNamed('Idle')) < 1) break;
       standUp(p);
       here.wait = (2 + peopleRng()*6)*p.traits.patience;
