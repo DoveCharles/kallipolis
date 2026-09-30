@@ -118,9 +118,10 @@ export function createMeshBuilder() {
       const a=vertex(px,y0,pz,outward), b=vertex(qx,y0,qz,outward), c=vertex(qx,y1,qz,outward), d=vertex(px,y1,pz,outward);
       triangle(a, b, c); triangle(a, c, d);
     },
-    // a flat-shaded quad through four world-space corners ({x,y,z}, in order around it), facing `normal`
+    // a flat-shaded quad through four world-space corners ({x,y,z}, in order around it), facing `normal` (or an array of one per corner)
     addQuad(p0, p1, p2, p3, normal) {
-      const a=vertex(p0.x,p0.y,p0.z,normal), b=vertex(p1.x,p1.y,p1.z,normal), c=vertex(p2.x,p2.y,p2.z,normal), d=vertex(p3.x,p3.y,p3.z,normal);
+      const n = i => Array.isArray(normal) ? normal[i] : normal;
+      const a=vertex(p0.x,p0.y,p0.z,n(0)), b=vertex(p1.x,p1.y,p1.z,n(1)), c=vertex(p2.x,p2.y,p2.z,n(2)), d=vertex(p3.x,p3.y,p3.z,n(3));
       triangle(a, b, c); triangle(a, c, d);
     },
     // an upright box from y0 to y1 centered on (cx, cz), `halfLen` along the horizontal unit direction (dx, dz) and
