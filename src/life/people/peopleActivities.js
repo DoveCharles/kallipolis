@@ -2106,13 +2106,14 @@ export function standingSpot(p, seat) {
   return { x: seat.x + nx*reach, y: p.y, z: seat.z + nz*reach };
 }
 /**
- * A table's chair (not a booth) is sat on from the side, so legs miss the table, then turned to it once down: which
- * side (±1, whichever's further from the other seats), or 0 for any other seat.
+ * A table's chair or booth is sat on from the side, so legs miss the table, then turned to it once down: which side
+ * (±1: a booth's open end, else whichever's further from the other seats), or 0 for any other seat.
  * @param {object} seat - the seat (see roomSeats)
  * @returns {number}
  */
 function sideOf(seat) {
-  if (!seat.diner || seat.booth) return 0;
+  if (!seat.diner) return 0;
+  if (seat.side == null && seat.open) seat.side = seat.nz*seat.open.x - seat.nx*seat.open.z >= 0 ? 1 : -1;
   if (seat.side == null) {
     const clear = s => Math.min(Infinity, ...roomSeats().filter(o => o !== seat).map(o => Math.hypot(seat.x + seat.nz*s*0.5 - o.x, seat.z - seat.nx*s*0.5 - o.z)));
     seat.side = clear(1) >= clear(-1) ? 1 : -1;
