@@ -409,12 +409,12 @@ export function healFx(at, height, lying, heading, dt) {
   const add = particle => { if (softParticles.length >= softCap()*2) softParticles.shift(); softParticles.push({ born: now, ...particle }); };
   const sx = Math.sin(heading ?? 0), sz = Math.cos(heading ?? 0);
   // a point on the body, `k` 0 at the feet to 1 at the head
-  const along = k => lying ? { x: at.x + sx*k*height, y: at.y + 0.12*height, z: at.z + sz*k*height } : { x: at.x, y: at.y + k*height, z: at.z };
+  const along = k => lying ? { x: at.x + sx*k*height, y: at.y + 0.22*height, z: at.z + sz*k*height } : { x: at.x, y: at.y + k*height, z: at.z };
   for (let k = count(HEAL_PUFFS_PER_SECOND); k > 0; k--) {
-    const angle = Math.random()*Math.PI*2, out = Math.random()*0.12*height, on = along(0.05 + Math.random()*0.9);
+    const angle = Math.random()*Math.PI*2, out = Math.random()*(lying ? 0.2 : 0.12)*height, on = along(0.05 + Math.random()*0.9);
     add({ kind: 'cloud', x: on.x + Math.cos(angle)*out, y: on.y, z: on.z + Math.sin(angle)*out,
       vx: Math.cos(angle)*0.1*height, vy: 0.08*height, vz: Math.sin(angle)*0.1*height,
-      size: height*(0.2 + Math.random()*0.1), growth: 0.3, life: 0.6 + Math.random()*0.4, opacity: 1,
+      size: height*(0.2 + Math.random()*0.1)*(lying ? 1.4 : 1), growth: 0.3, life: 0.6 + Math.random()*0.4, opacity: 1,
       color: HEAL_PUFF_COLOR.clone().lerp(WHITE, 0.2 + Math.random()*0.25) });
   }
   for (let k = count(HEARTS_PER_SECOND); k > 0; k--) {

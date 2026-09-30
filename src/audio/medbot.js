@@ -7,8 +7,9 @@ import { listener, outdoorsOf, ear } from './sfx.js';
 //    rushing it's SPEED_PITCH times that and SPEED_LOUDER times as loud. Still, she's quiet.
 //  - her siren while she rushes to someone hurt: a slow wail, woooo-woooo, rising and falling around SIREN_HZ; heard much
 //    further off than the rest (SIREN_HEAR).
-//  - healing: a soft major chord swelling in and shimmering, with chimes strummed up the C major scale over it, slowly,
-//    the one strum lasting the whole heal, as the hearts fly off; and under it, every RUSTLE_EVERY or so, the noises of
+//  - healing: a soft major-seventh chord swelling in and shimmering, with bell-like chimes strummed up the C lydian scale
+//    over it, slowly, the one strum lasting the whole heal, and high twinkles sprinkled about (TWINKLE_EVERY), all
+//    through an echo (ECHO) — as the hearts fly off; and under it, every RUSTLE_EVERY or so, the noises of
 //    dressings going on: a rustle of gauze, a swish of a bandage wrapped round, a rip of tape or velcro (rustle).
 // There are VOICES_MAX of these, handed each frame to the nearest bots, as the buzzes are to bees.
 const HEAR = 22, REF = 1.5;             // her boots and the healing: heard close up
@@ -18,10 +19,13 @@ const MOTOR_HZ = 165, MOTOR_VOLUME = 0.05;
 const SPEED_PITCH = 1.9, SPEED_LOUDER = 2;
 const TREAD_HZ = 9;                     // the treads' rattle a second at her rolling speed (faster when she's faster)
 const SIREN_HZ = 760, SIREN_SWING = 330, SIREN_RATE = 0.55, SIREN_VOLUME = 0.05; // centre, ± Hz, wails a second
-const CHORD = [523.25, 659.25, 783.99, 1046.5]; // C major, C5 up to C6
+const CHORD = [523.25, 659.25, 783.99, 987.77, 1318.5]; // Cmaj7 and a high E
 const HEAL_VOLUME = 0.008;
-const SCALE = [523.25, 587.33, 659.25, 698.46, 783.99, 880, 987.77, // C major, two octaves: C5 up to C7
-  1046.5, 1174.7, 1318.5, 1396.9, 1568, 1760, 1975.5, 2093];
+const SCALE = [523.25, 587.33, 659.25, 739.99, 783.99, 880, 987.77, // C lydian (F#), two octaves: C5 up to C7
+  1046.5, 1174.7, 1318.5, 1480, 1568, 1760, 1975.5, 2093];
+const BELL = [[1, 1], [2.76, 0.35], [5.4, 0.12]]; // a chime's partials: × pitch, loudness
+const TWINKLE_EVERY = [0.08, 0.3], TWINKLE_VOLUME = 0.012;
+const ECHO = { time: 0.23, feedback: 0.45, wet: 0.5 };
 const CHIME_VOLUME = 0.04, CHIME_RING = 0.9;
 const RUSTLE_EVERY = [0.12, 0.45], RUSTLE_VOLUME = 0.055;
 
@@ -74,14 +78,23 @@ function makeVoice() {
   const siren = gain(0);
   wail.connect(sirenTone).connect(siren).connect(far);
 
-  // the healing chord, shimmering (a quick wobble on its loudness)
+  // the echo the healing sounds ring through
+  const sparkle = gain(1), echo = context.createDelay(1), feedback = gain(ECHO.feedback), wet = gain(ECHO.wet);
+  echo.delayTime.value = ECHO.time;
+  sparkle.connect(near); sparkle.connect(echo).connect(feedback).connect(echo); echo.connect(wet).connect(near);
+
+  // the healing chord, shimmering (a quick wobble on its loudness, and each note drifting, chorused, with its twin)
   const healing = gain(0), shimmer = gain(0.75), wobble = osc('sine', 5.5), wobbleDepth = gain(0.25);
   wobble.connect(wobbleDepth).connect(shimmer.gain);
-  CHORD.forEach((hz, i) => osc('sine', hz*(1 + (i - 1.5)*0.002)).connect(gain(1/CHORD.length)).connect(shimmer));
-  shimmer.connect(healing).connect(near);
+  CHORD.forEach((hz, i) => [-1, 1].forEach(side => {
+    const o = osc('sine', hz*(1 + side*0.003)), drift = osc('sine', 0.3 + i*0.07), driftDepth = gain(hz*0.002);
+    drift.connect(driftDepth).connect(o.frequency);
+    o.connect(gain(0.5/CHORD.length)).connect(shimmer);
+  }));
+  shimmer.connect(healing).connect(sparkle);
 
   started.forEach(o => o.start());
-  return { bot: null, near, far, motor, saw, square, lowpass, hiss, tread, siren, healing, notes: 0, nextRustle: 0 };
+  return { bot: null, near, far, sparkle, nextTwinkle: 0, motor, saw, square, lowpass, hiss, tread, siren, healing, notes: 0, nextRustle: 0 };
 }
 
 // A noise of dressings going on, one of three at random: all noise, shaped by its filter and loudness.
@@ -118,16 +131,20 @@ function rustle(v, now) {
   source.onended = () => g.disconnect();
 }
 
-function chime(v, hz, now) {
-  const context = listener.context, o = context.createOscillator(), g = context.createGain();
-  o.type = 'sine';
-  o.frequency.value = hz;
-  g.gain.setValueAtTime(0, now);
-  g.gain.linearRampToValueAtTime(CHIME_VOLUME, now + 0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001, now + CHIME_RING);
-  o.connect(g).connect(v.near);
-  o.start(now); o.stop(now + CHIME_RING + 0.05);
-  o.onended = () => g.disconnect();
+// a bell: its partials rung together, the higher dying sooner
+function chime(v, hz, now, volume = CHIME_VOLUME, ring = CHIME_RING) {
+  const context = listener.context;
+  for (const [times, loud] of BELL) {
+    const o = context.createOscillator(), g = context.createGain(), dies = ring/Math.sqrt(times);
+    o.type = 'sine';
+    o.frequency.value = hz*times;
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(volume*loud, now + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dies);
+    o.connect(g).connect(v.sparkle);
+    o.start(now); o.stop(now + dies + 0.05);
+    o.onended = () => g.disconnect();
+  }
 }
 
 /**
@@ -168,6 +185,10 @@ export function updateMedBotSounds(bots) {
     const notes = b.healing ? Math.min(SCALE.length, Math.floor(b.healed*SCALE.length) + 1) : 0;
     if (notes < v.notes) v.notes = 0;
     while (v.notes < notes) chime(v, SCALE[v.notes++], now);
+    if (b.healing && now >= v.nextTwinkle) { // (a high twinkle, anywhere up the top octave or the one above)
+      chime(v, SCALE[7 + Math.floor(Math.random()*8)]*(Math.random() < 0.5 ? 2 : 1), now, TWINKLE_VOLUME, 0.35);
+      v.nextTwinkle = now + TWINKLE_EVERY[0] + Math.random()*(TWINKLE_EVERY[1] - TWINKLE_EVERY[0]);
+    }
     if (b.healing && now >= v.nextRustle) {
       rustle(v, now);
       v.nextRustle = now + RUSTLE_EVERY[0] + Math.random()*(RUSTLE_EVERY[1] - RUSTLE_EVERY[0]);
