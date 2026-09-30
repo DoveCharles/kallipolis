@@ -6,7 +6,7 @@ import { blasts } from './traffic/state.js';
 import { coo, flutter } from '../audio/pigeons.js';
 import { camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
-import { buildingNumber as numberFor } from '../buildings/footprints.js';
+import { buildingNumber as numberFor, solidAt } from '../buildings/footprints.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
@@ -273,7 +273,7 @@ export function plantPigeons(zone, { area, park = false, ground, spot, clear }) 
       const at = standingSpot(flock.home, clear) || home;
       const bird = { number: numberFor(zone.id + ':pigeon:' + index++), flock, x: at.x, y: ground, z: at.z, yaw: Math.random()*Math.PI*2, pitch: 0, bank: 0,
         state: 'ground', doing: 'stand', until: between(0, 2), tx: at.x, tz: at.z, hurry: false,
-        clip: REST[0], time: 0, from: null, fade: 1, spookAt: null, threat: null, land: null, aloft: 0, cruise: 0,
+        clip: REST[0], time: 0, from: null, fade: 1, spookAt: null, threat: null, land: null, aloft: 0, cruise: 0, over: null,
         cooAt: between(3, COO_EVERY*2), tint: pickTint(), turn: 0,
         look: -1, lookFrom: -1, lookK: 1, lookAt: between(0, 1), lookOn: 1, tuck: 0, watch: 0 };
       flock.birds.push(bird);
@@ -557,7 +557,8 @@ function stepAir(colony, bird, t, dt) {
     bird.turn = turnToward(bird, Math.atan2(dx, dz), turnRate, dt);
     bird.x += Math.sin(bird.yaw)*speed*dt; bird.z += Math.cos(bird.yaw)*speed*dt;
     // up to its cruising height, then down again on a glide as it comes in
-    const want = g + Math.min(bird.cruise, 0.25 + Math.max(0, d - LAND_FROM)*0.5);
+    let want = g + Math.min(bird.cruise, 0.25 + Math.max(0, d - LAND_FROM)*0.5);
+    if (bird.over && t < bird.over.until) want = Math.max(want, bird.over.y); // (up over a wall it's flown into)
     const vy = Math.max(-2.2, Math.min(1.8, (want - bird.y)*2.2));
     bird.y += vy*dt;
     bird.pitch += ((-vy/FLY_SPEED)*0.5 - bird.pitch)*Math.min(1, dt*5);
@@ -716,11 +717,15 @@ export function updatePigeons(t) {
       first.spookAt = t;
     });
     colony.birds.forEach((bird, k) => {
+      const wasX = bird.x, wasZ = bird.z;
       if (bird.hand) flyByHand(colony, bird, dt);
       else if (bird.state === 'ground') {
         stepGround(colony, bird, t, dt, roosting);
         if (!roosting && t >= bird.cooAt) { bird.cooAt = t + between(COO_EVERY*0.4, COO_EVERY*1.6); coo(bird); }
       } else stepAir(colony, bird, t, dt);
+      // (walls are solid: back where it was — and, flying itself, up over the top of it, see stepAir)
+      const wall = solidAt(bird.x, bird.y + 0.1, bird.z);
+      if (wall) { bird.x = wasX; bird.z = wasZ; if (!bird.hand) bird.over = { y: wall.top + 0.5, until: t + 2 }; }
       stepHead(bird, t, dt, roosting);
       if (bird.from) { bird.fade = Math.min(1, bird.fade + dt/FADE); bird.from.time += dt; if (bird.fade >= 1) bird.from = null; }
       held.position.set(bird.x, bird.y, bird.z);

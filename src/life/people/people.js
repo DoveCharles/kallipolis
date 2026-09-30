@@ -30,7 +30,7 @@ import { relateFelt, relateSaw, pruneGone } from './peopleRelations.js';
 import { logLine, forgetLinesExcept } from './peopleSaid.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
 import { hidingFromSun, leaveGroup, outOfTime, vanishIndoors } from './peopleActivities.js';
-import { PUNCH_CHASE_SPEED, WALK_PACE, awaited, besideLeader, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, knockAgain, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
+import { PUNCH_CHASE_SPEED, WALK_PACE, awaited, besideLeader, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, knockAgain, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateSwat, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater, wouldWade, onWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
 import { drinking, goBuy, hasStallIn, maybeBuyOnWalkway, updateBuying } from './peopleStalls.js';
@@ -483,7 +483,7 @@ const PERSON_LATER_FIELDS = Object.fromEntries([
   'water', 'waterHere', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
   'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'smellCheck',
   // walked about by hand (peopleTracking.js)
-  'footing', 'onRoad', 'shove', 'fall', 'fellOff', 'touching', 'near', 'walkingSpeed', 'chatWith',
+  'footing', 'onRoad', 'shove', 'fall', 'fellOff', 'swat', 'touching', 'near', 'walkingSpeed', 'chatWith',
 ].map(key => [key, undefined]));
 /**
  * Make a person with their traits and state at their starting values.
@@ -727,7 +727,7 @@ export function standingOf(p) {
 // about once, straight away. A lesser sight doesn't replace a greater one still fresh (SEEN_RANK); the same sight of the
 // same person isn't seen again while it's fresh, so something that goes on (walking on water, a smell) counts once.
 const WITNESS_RADIUS = 20; // how near (× people size) someone has to be to see something happen
-const SEEN_RANK = { killedbycar: 3, crashedinto: 3, fell: 3, punchedfence: 3, beatentodeath: 3, smited: 3, drowned: 3, exploded: 3, resurrected: 2, punch: 1, knockedbycar: 1, healed: 0, waterwalking: 0, smelly: 0, nude: 0 };
+const SEEN_RANK = { killedbycar: 3, crashedinto: 3, fell: 3, punchedfence: 3, planecrash: 3, beeattack: 1, beatentodeath: 3, smited: 3, drowned: 3, exploded: 3, resurrected: 2, punch: 1, knockedbycar: 1, healed: 0, waterwalking: 0, smelly: 0, nude: 0 };
 const NUDE_SEEN_EVERY = 4; // seconds between someone nude being noticed by whoever's near
 const NOTICED_FOR = 60; // seconds a sight stays fresh (as SEEN_TIME in life/speech-text.js)
 const MAX_WITNESSES = 5;  // how many of the nearest see something happen (not a whole park at once)
@@ -747,7 +747,7 @@ export function notice(q, who, what, by = null) {
   if (fresh && (SEEN_RANK[old.what] > SEEN_RANK[what] || (old.what === what && old.who === who))) return;
   // (no more than MAX_WITNESSES notice the same thing about the same person while it's fresh — a smell, walking on water)
   const tally = who.noticed?.what === what && at - who.noticed.since < NOTICED_FOR ? who.noticed : (who.noticed = { what, since: at, count: 0 });
-  if (tally.count >= MAX_WITNESSES) return;
+  if (tally.count >= MAX_WITNESSES && !who.event) return; // (an event's own witness count: see witnessAt)
   tally.count++;
   q.seen = { what, at, who, by, after: at + Math.random()*REACT_SPREAD };
 }
@@ -758,16 +758,25 @@ export function notice(q, who, what, by = null) {
  * @param {?Person} [by] - who did it, if a person (who doesn't count as seeing it)
  * @returns {void}
  */
-export function witness(who, what, by = null) {
-  const reach = WITNESS_RADIUS*S.peopleSize, building = insideOf(who), near = [];
+export function witness(who, what, by = null, { reachScale = 1, most = MAX_WITNESSES } = {}) {
+  const reach = WITNESS_RADIUS*S.peopleSize*reachScale, building = insideOf(who), near = [];
   people.forEach(q => {
     if (q === who || q === by || q.mode === 'dead' || q.mode === 'drowning' || q.mode === 'none' || aboard(q)) return;
     if (insideOf(q) !== building) return;
     const d = Math.hypot(q.x - who.x, q.z - who.z);
     if (building || d <= reach) near.push({ q, d });
   });
-  near.sort((a, b) => a.d - b.d).slice(0, MAX_WITNESSES).forEach(({ q }) => notice(q, who, what, by));
+  near.sort((a, b) => a.d - b.d).slice(0, most).forEach(({ q }) => notice(q, who, what, by));
 }
+const EVENT_REACH = 4, EVENT_WITNESSES = 15; // (how many times further off than WITNESS_RADIUS, and how many, see something happen at a place)
+/**
+ * Something happening at a place rather than to someone (an aircraft blowing up: see crashAircraft in zones/airport.js),
+ * seen from further off, by more.
+ * @param {{x: number, z: number}} at
+ * @param {string} what - a key of SEEN_RANK
+ * @returns {void}
+ */
+export function witnessAt(at, what) { witness({ x: at.x, z: at.z, name: null, noticed: null, event: true }, what, null, { reachScale: EVENT_REACH, most: EVENT_WITNESSES }); }
 /**
  * Something happening to someone: punched, hitbycar, or revenge (they punched back whoever last punched them).
  * @param {Person} p
@@ -1154,7 +1163,7 @@ function stepPush(p, dt) {
  * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
  * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
  */
-Object.assign(App, { witnessPerson: witness, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, useFromPossession, killPerson, knockOverPerson: knockOver, knockAgainPerson: knockAgain, personHeight, people, peopleGroups: groups, followedPerson: () => followed, peopleClock: () => lastPeopleTime });
+Object.assign(App, { witnessPerson: witness, witnessAt, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, useFromPossession, killPerson, knockOverPerson: knockOver, knockAgainPerson: knockAgain, personHeight, people, peopleGroups: groups, followedPerson: () => followed, peopleClock: () => lastPeopleTime });
 
 /**
  * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone
@@ -1312,7 +1321,7 @@ export function updatePeople(t) {
     const riding = onLine?.escalator && p.seg < onLine.beltEnd ? onLine.escalator : 0; // (off its foot, they walk on)
     if (riding) speed = riding*S.peopleSpeed;
     // (stopped to talk, or frozen in shock, someone on a walkway stays put; walking with someone, they keep beside them: below)
-    if (p.mode === 'line' && p.act !== 'chat' && !p.follow && !frozen && !p.attack) {
+    if (p.mode === 'line' && p.act !== 'chat' && !p.follow && !frozen && !p.attack && !p.swat) {
       if (!p.jc && !p.act) maybeBuyOnWalkway(p, dt); // (stepping off to a hot dog or coffee stall: see peopleStalls.js)
       if (!p.jc && !p.act) maybeCrossRoad(p, peopleNav.lines[p.li], dt);
       if (p.act === 'buy') {
@@ -1331,7 +1340,7 @@ export function updatePeople(t) {
         goal = updateActivity(p, area, dt);
       } else if (p.follow) {
         // (walking with someone: beside them, below)
-      } else if (p.fright || p.stun || p.please || p.attack || frozen) {
+      } else if (p.fright || p.stun || p.please || p.attack || p.swat || frozen) {
         // Frightened, stunned or pleased. Fright runs off further each time they reach where they were running to;
         // stun and please hold position through the `frozen` guard below, with no movement of their own.
         if (fleeing) {
@@ -1394,6 +1403,7 @@ export function updatePeople(t) {
       goal = updateIndoors(p, i, dt);
       if (frozen) goal = null;
     }
+    if (p.swat && !p.attack) goal = frozen || p.punched ? null : updateSwat(p, dt); // (after a bee: see peopleActivities.js)
     if (p.attack) {
       goal = updateAttack(p, dt);
       if (p.attack?.stage === 'chase') speed *= PUNCH_CHASE_SPEED;

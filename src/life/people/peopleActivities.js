@@ -1210,6 +1210,12 @@ export function updatePunched(p, dt) {
  * @returns {void}
  */
 function reactToPunch(p, by) {
+  if (by?.bee) { // (a bee: swatted at if it's still about and they've the nerve, else run from)
+    if (!(p.mode === 'line' || p.mode === 'wander') || !App.beeAt?.(by.bee)) return;
+    if (peopleRng() < Math.min(1, BEE_REVENGE_CHANCE*(0.5 + p.traits.aggression))) swatBee(p, by.bee);
+    else beginFleeing(p, { x: by.x, z: by.z });
+    return;
+  }
   if (!by?.traits || isGone(by)) return;
   const canFight = (p.mode === 'line' || p.mode === 'wander') && (!by.punched || by.punched.stage === 'marked') && ['line', 'wander', 'leaving', 'possessed'].includes(by.mode);
   if (canFight && !hidingFromSun(p) && (p.traits.vampire || peopleRng() < RETALIATE_CHANCE*p.traits.aggression)) {
@@ -1217,6 +1223,33 @@ function reactToPunch(p, by) {
   } else {
     beginFleeing(p, { x: by.x, z: by.z });
   }
+}
+
+// ---- revenge on a bee: after it (at SWAT_TIME × patience at most), and a swing once it's in reach — which, if it's still
+// there as it lands, kills it (and sets its colony on them: see punchBee in life/bees.js)
+const BEE_REVENGE_CHANCE = 0.6, SWAT_TIME = 8, SWAT_REACH = 1.1;
+function swatBee(p, bee) {
+  endActivity(p);
+  p.swat = { bee, timer: SWAT_TIME*p.traits.patience, swing: 0 };
+}
+/**
+ * Move someone after a bee on, each frame.
+ * @param {Person} p
+ * @param {number} dt
+ * @returns {?{x: number, y: number, z: number}} where they walk to (null: stand)
+ */
+export function updateSwat(p, dt) {
+  const s = p.swat, at = App.beeAt?.(s.bee), reach = SWAT_REACH*S.peopleSize;
+  if (!at || (s.timer -= dt) <= 0) { p.swat = undefined; p.faceTo = null; return null; }
+  p.faceTo = headingTo(p, at);
+  if (s.swing > 0) {
+    if ((s.swing -= dt) > 0) return null;
+    if (Math.hypot(at.x - p.x, at.z - p.z) < reach*1.5 && at.y < p.y + personHeight(p) + 0.5) App.punchBee?.(s.bee, p);
+    p.swat = undefined; p.faceTo = null;
+    return null;
+  }
+  if (Math.hypot(at.x - p.x, at.z - p.z) < reach && at.y < p.y + personHeight(p) + 0.5) { s.swing = PUNCH_HIT_TIME; playOnce(p, 'Punch'); swingSound(p); return null; }
+  return { x: at.x, y: p.y, z: at.z };
 }
 
 export const RIDE_CHANCE = 0.05;

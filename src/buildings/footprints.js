@@ -1,4 +1,5 @@
-import { centroid } from '../core/math.js';
+import { centroid, pointInPolygon } from '../core/math.js';
+import { buildingHolders } from '../core/shared.js';
 
 // ---------------------------------------------------------- footprint archetypes (Y2K variety)
 function roundPolygonCorners(poly, radius, segs) {
@@ -110,6 +111,41 @@ export function wallsOf(group) {
       .concat((group.userData.solids || []).map(s => ({ ...s, prop: true })));
   }
   return walls;
+}
+// ---- what flies: every building's walls, bucketed by SOLID_CELL, for anything in the air to test a point against. Built
+// again whenever the buildings held change (checked at most every SOLID_CHECK ms: a new zone group, or a different count).
+const SOLID_CELL = 16, SOLID_CHECK = 500;
+let solidGrid = null, solidKey = null, solidCheckedAt = -Infinity;
+function solidGridNow() {
+  const now = performance.now();
+  if (solidGrid && now - solidCheckedAt < SOLID_CHECK) return solidGrid;
+  solidCheckedAt = now;
+  const holders = buildingHolders(), key = holders.map(z => z.buildingsGroup ? z.buildingsGroup.children.length : 0).join(',');
+  if (solidGrid && key === solidKey && holders.every((z, i) => z.buildingsGroup === solidGrid.groups[i])) return solidGrid;
+  solidKey = key;
+  solidGrid = { cells: new Map(), groups: holders.map(z => z.buildingsGroup) };
+  holders.forEach(zone => (zone.buildingsGroup?.children || []).forEach(group => {
+    const walls = wallsOf(group);
+    if (!walls.length) return;
+    const { c, r } = footprintBounds(group), base = group.userData.base || 0;
+    for (let cx = Math.floor((c.x - r)/SOLID_CELL); cx <= Math.floor((c.x + r)/SOLID_CELL); cx++)
+      for (let cz = Math.floor((c.z - r)/SOLID_CELL); cz <= Math.floor((c.z + r)/SOLID_CELL); cz++) {
+        const k = cx + ',' + cz;
+        if (!solidGrid.cells.has(k)) solidGrid.cells.set(k, []);
+        walls.forEach(w => solidGrid.cells.get(k).push({ group, poly: w.poly, base, top: w.top }));
+      }
+  }));
+  return solidGrid;
+}
+/**
+ * The wall (of a building or a solid prop) standing at (x, y, z), if any — for birds, bees and aircraft to fly into.
+ * @returns {?{group: object, poly: Array<{x: number, z: number}>, base: number, top: number}}
+ */
+export function solidAt(x, y, z) {
+  const list = solidGridNow().cells.get(Math.floor(x/SOLID_CELL) + ',' + Math.floor(z/SOLID_CELL));
+  if (!list) return null;
+  for (const w of list) if (y < w.top && y >= w.base - 0.5 && pointInPolygon({ x, z }, w.poly)) return w;
+  return null;
 }
 
 // ---------------------------------------------------------- building identity

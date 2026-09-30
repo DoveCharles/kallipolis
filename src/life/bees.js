@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
 import { camera, Y_PARK, Y_ROAD } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
-import { buildingNumber as numberFor } from '../buildings/footprints.js';
+import { buildingNumber as numberFor, solidAt } from '../buildings/footprints.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
 import { makeCard, TEXT_ROWS } from '../ui/entity-card.js';
 import { loadTypeText } from '../core/type-text.js';
@@ -668,6 +668,10 @@ function flyToward(bee, t, dt, speedScale = 1) {
   toward.addScaledVector(wander, bee.state === 'travel' ? 0.5 : 0.18);
   bee.v.lerp(toward, 1 - Math.exp(-BEE_TURN*dt));
   bee.at.addScaledVector(bee.v, dt);
+  if (solidAt(bee.at.x, bee.at.y, bee.at.z)) { // (flown into a wall: back off it, and up — over it, in the end)
+    bee.at.x -= bee.v.x*dt; bee.at.z -= bee.v.z*dt;
+    bee.v.x *= -0.3; bee.v.z *= -0.3; bee.v.y = Math.max(bee.v.y, BEE_SPEED*bee.traits.speed);
+  }
   beatWings(bee, t);
   lookAt(bee, bee.state === 'circle' ? 1 : 0, dt); // head down onto the flower it's coming onto, and up again after
   if (bee.v.lengthSq() > 0.04) bee.yaw = Math.atan2(bee.v.x, bee.v.z);
@@ -696,6 +700,7 @@ function flyByHand(bee, t, dt) {
   hand.z += hand.vz*dt;
   const floor = Y_PARK + 0.05, ceiling = Y_PARK + BEE_CEILING;
   hand.y = Math.max(floor, Math.min(ceiling, hand.y + hand.vy*dt));
+  if (solidAt(hand.x, hand.y, hand.z)) { hand.x -= hand.vx*dt; hand.z -= hand.vz*dt; hand.along = 0; } // (walls are solid)
   if ((hand.y === floor && hand.vy < 0) || (hand.y === ceiling && hand.vy > 0)) hand.vy = 0;
   bee.at.set(hand.x, hand.y, hand.z);
   bee.v.set(hand.vx, hand.vy, hand.vz);
@@ -712,16 +717,21 @@ function isTouching(bee, person) {
   return Math.abs(person.x - bee.at.x) <= reach && Math.abs(person.z - bee.at.z) <= reach
     && bee.at.y >= person.y && bee.at.y <= person.y + App.personHeight(person);
 }
+// someone knocked down by a bee: seen (for what people say), and remembered, for revenge (see reactToPunch in
+// people/peopleActivities.js)
+function beeKnocks(bee, p) {
+  if (App.knockOverPerson?.(p, { x: bee.at.x, z: bee.at.z, bee })) { App.witnessPerson?.(p, 'beeattack'); App.feelPerson?.(p, 'stung'); }
+}
 // whoever a bee flown by hand has flown into goes down, as if punched
 function knockOverWhoIsHit(bee) {
-  App.people?.forEach(p => { if (p.mode !== 'possessed' && isTouching(bee, p)) App.knockOverPerson?.(p, bee.at); });
+  App.people?.forEach(p => { if (p.mode !== 'possessed' && isTouching(bee, p)) beeKnocks(bee, p); });
 }
 // a bee out after someone, at their chest: whenever it reaches them they go down (again, once they're up)
 function chase(bee, t, dt, person) {
   bee.state = 'travel'; bee.perch = null; bee.plan.length = 0;
   bee.aim.set(person.x, person.y + App.personHeight(person)*0.6, person.z);
   flyToward(bee, t, dt, BEE_RAGE_SPEED);
-  if (isTouching(bee, person)) App.knockOverPerson?.(person, bee.at);
+  if (isTouching(bee, person)) beeKnocks(bee, person);
 }
 // the rage over, whatever bees are out make for home
 function calmColony(colony) {
@@ -1030,4 +1040,4 @@ export function updateBees(t) {
 }
 
 // (the bee and hive cards are handed over too, for whoever else wants to put something on them or open one)
-Object.assign(App, { blastBees, strikeBees, beeInPunch, punchBee, pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive, flyBee, showBeeCard, setBeeCardDoing, hideBeeCard, showHiveCard, setHiveCardBees, hideHiveCard });
+Object.assign(App, { blastBees, strikeBees, beeInPunch, punchBee, beeAt: bee => isHome(bee) ? null : bee.at, pickBee, followBeeAt, stopFollowingBee, pickHive, followHiveAt, stopFollowingHive, flyBee, showBeeCard, setBeeCardDoing, hideBeeCard, showHiveCard, setHiveCardBees, hideHiveCard });

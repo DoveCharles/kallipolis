@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
+import { solidAt } from '../buildings/footprints.js';
 import { Y_ZONE_GROUND, Y_PARK, camera, SKY_ENV_MAP } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { startFlying, endFlying } from '../life/possession.js';
@@ -1231,11 +1232,21 @@ function makeTrackedFlight(zone, plane, fly, tier, index) {
       resetHealth(flight, 'plane');
       fly.descendFrom?.(t); // a new one, coming in from the top of its descent
     }
-    if (flight.hand) { flyByHand(flight, dt); return; }
+    if (flight.hand) { flyByHand(flight, dt); if (!flight.wreckedUntil) hitBuildings(flight); return; }
     fly(t);
     if (flight.handback) handBack(flight, t);
+    if (plane.visible && plane.userData.aloft) hitBuildings(flight);
   };
   return flight;
+}
+
+// An aircraft whose middle or nose is in a building blows up (see crashAircraft). One flying its own round only over
+// other zones' buildings: its own airport's stand beside its path.
+function hitBuildings(flight) {
+  const plane = flight.plane, { x, y, z } = plane.position, fx = Math.sin(plane.rotation.y), fz = Math.cos(plane.rotation.y);
+  const h = y + flight.size*0.1, nose = flight.size*0.4;
+  const wall = solidAt(x, h, z) ?? solidAt(x + fx*nose, h, z + fz*nose);
+  if (wall && (flight.hand || wall.group.parent !== flight.zone.buildingsGroup)) crashAircraft(flight);
 }
 
 // ---- the flying itself (the model is in life/flight.js; this poses the aircraft from it)
@@ -1281,7 +1292,8 @@ function crashAircraft(flight) {
     const [paint, trim] = plane.userData.livery;
     throwWreck(planeModel.wreck, plane.userData.model.matrixWorld, paint, { trim, power: CRAFT_WRECK_POWER, groundFrom: Y_TARMAC });
   }
-  [-1, 0, 1].forEach(k => explodeCar({ x: at.x + along.x*k, y: Y_TARMAC, z: at.z + along.z*k }, flight.size*0.15, { paint: WRECK_COLOR, wrecked: true }));
+  [-1, 0, 1].forEach(k => explodeCar({ x: at.x + along.x*k, y: Math.max(Y_TARMAC, at.y), z: at.z + along.z*k }, flight.size*0.15, { paint: WRECK_COLOR, wrecked: true }));
+  App.witnessAt?.(at, 'planecrash'); // (for what people say: see life/speech-text.js)
   App.strikeWithAircraft?.({ x: at.x, y: Y_TARMAC, z: at.z, heading: 0, halfLength: radius, halfWidth: radius, below: radius, above: radius, speed: Infinity });
   if (flown === flight) { flown = null; endFlying(); }
   // a camera on it stays where it blew up, following nothing
