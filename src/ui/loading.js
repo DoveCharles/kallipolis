@@ -10,6 +10,7 @@
 //   each counted as a step ("Unpacking X (3/11)"), and nothing's drawn while loading — the scene's shaders are compiled in the background instead (`compileWhileLoading`, called by main.js).
 // - `whenLoaded(run)`: runs once the page has loaded, nothing's been pending for a couple of frames and the scene's
 //   compiled, or after GIVE_UP_AFTER regardless (view-prefs.js takes the screen away then).
+// - A hint from assets/text/speech/talk/hints.txt shows every HINT_EVERY, fading between (`.ls-hint`, css/base.css).
 // - Once done, the console lists how long the page was frozen under each step: what to speed up.
 const screen = document.getElementById('loading-screen');
 const label = screen.querySelector('.ls-text');
@@ -72,6 +73,19 @@ function track(set, item, settled, weight = 1) {
   settled.then(done, done);
 }
 
+// ---------------------------------------------------------------- hints
+// Shuffled, none twice till all have shown. Tags ({…}, <…>) stripped. Fetched unwatched: not a step of the bar.
+const HINTS_URL = 'assets/text/speech/talk/hints.txt', HINT_EVERY = 3000, HINT_FADE = 400; // ms
+const hintEl = screen.querySelector('.ls-hint');
+let hints = [], hintAt = 0, hintTimer = 0;
+function nextHint() {
+  if (!hints.length) return;
+  if (hintAt % hints.length === 0) for (let i = hints.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i + 1)); [hints[i], hints[j]] = [hints[j], hints[i]]; }
+  const text = hints[hintAt++ % hints.length];
+  hintEl.classList.remove('shown');
+  setTimeout(() => { hintEl.textContent = text; hintEl.classList.add('shown'); }, hintEl.textContent ? HINT_FADE : 0);
+}
+
 // ---------------------------------------------------------------- fetches
 // A fetch is "Loading" till its body's all in (read whole, or streamed to the end as three's FileLoader does), then
 // "Unpacking" till the tick after. A model's buffer is remembered by name for its unpacking (below).
@@ -80,6 +94,11 @@ const bufferNames = new WeakMap();
 
 const fileName = url => decodeURIComponent(String(url).split(/[?#]/)[0].split('/').pop() || String(url));
 const realFetch = window.fetch.bind(window);
+realFetch(HINTS_URL).then(r => r.ok ? r.text() : '').then(text => {
+  hints = text.split('\n').map(line => line.replace(/\{[^}]*\}|<[^>]*>/g, '').trim()).filter(line => line && !line.startsWith('#'));
+  if (loaded || !hints.length) return;
+  nextHint(); hintTimer = setInterval(nextHint, HINT_EVERY);
+}, () => {});
 const bodyOf = Object.getOwnPropertyDescriptor(Response.prototype, 'body').get;
 function watchBody(response, model, arrived, name) {
   const handOver = value => { if (model && value instanceof ArrayBuffer) bufferNames.set(value, name); arrived(); return value; };
@@ -219,7 +238,7 @@ export function whenLoaded(run) {
   const finish = () => {
     loaded = true;
     window.fetch = realFetch;
-    clearInterval(flick);
+    clearInterval(flick); clearInterval(hintTimer);
     setBar(1); label.textContent = 'Ready';
     let frames = 0;
     const lift = () => {
