@@ -1731,7 +1731,9 @@ function furnish(key) {
 // Or, by officeStyleOf, a startup's open plan: the same pieces by name from OfficeStartup.glb
 // (tools/startup-office-models.py), in STARTUP_* colours, mostly pods out in the room, and a lounge (Rug, Beanbags) and
 // PingPong table if there's room.
+// Either's walls get OfficeWall.glb's pieces (tools/office-wall-models.py): a Whiteboard.
 const OFFICE_MODEL_URL = 'assets/models/Office.glb', STARTUP_MODEL_URL = 'assets/models/OfficeStartup.glb';
+const OFFICE_WALL_URL = 'assets/models/OfficeWall.glb';
 let officeFurniture = null, startupFurniture = null;
 // Where things are on the Desk, in its own terms (life size, from its origin, x across, y up and z out of its front):
 // the top's height, its front edge, the faces of its back and left-hand panels, how far apart the desks stand in a row,
@@ -1762,12 +1764,18 @@ const STARTUP_PAINTED = {
   Pot: [0xe8a0a0, 0xd07a52, 0x6ac0e8, 0xf4f1ea, 0xf2c230, 0x9a7ad8],
   Beanbag: [0x7a5ac8, 0xe8735a, 0xf2c230, 0x2a9a8a, 0xe8508a],
 };
+const STARTUP_NEON = ['GOOD VIBES', 'HUSTLE', 'DREAM BIG', 'BE KIND', 'MAKE IT HAPPEN', 'DO WHAT YOU LOVE', 'BREATHE',
+  'MANIFEST', 'STAY HUMBLE', 'DISRUPT', 'BUT FIRST, COFFEE', 'GRATEFUL'];
 const officePainted = [], startupPainted = [];
 // sticky notes and mugs come in all colours, office to office and desk to desk: a material for each (F.clutter)
 const STICKIES = [0xf6e36a, 0xf6a6c0, 0x9ae0a0, 0x8cc8f0, 0xf8b060];
 const MUGS = [0xd84a3a, 0xf2f0ea, 0x2c4ec8, 0x3a3a3c, 0xe8c040, 0x4a9a6a];
 const KEEP_CUPS = [0x3ad0c0, 0xe8735a, 0xf2c230, 0x9a7ad8, 0xe8508a, 0x26282c];
 
+const officeWall = loadPieces(OFFICE_WALL_URL, {}, []).catch(err => {
+  console.warn('Kallipolis: the office wall model failed to load; office walls are left bare', err);
+  return {};
+});
 async function loadOfficeFurniture(url, paint, painted, mugs, set) {
   let F;
   try {
@@ -1776,6 +1784,7 @@ async function loadOfficeFurniture(url, paint, painted, mugs, set) {
     console.warn('Kallipolis: an office model failed to load; those offices are left bare', url, err);
     return;
   }
+  Object.assign(F, await officeWall);
   F.clutter = { Sticky: [], Mug: [] };
   for (const [name, colours] of [['Sticky', STICKIES], ['Mug', mugs]]) {
     let base = null;
@@ -1919,7 +1928,10 @@ function furnishOffice(key, glass) {
   const F = startup ? startupFurniture : officeFurniture;
   if (!F?.Desk || !F.OfficeChair) return;
 
-  const { taken, overlaps, fits, put, underCamera, againstWall, any } = planRoom(office, F, officeGroup, rng, glass, ['OfficeChair']);
+  const plan = planRoom(office, F, officeGroup, rng, glass, ['OfficeChair']);
+  const { taken, overlaps, fits, put, underCamera, againstWall, any } = plan;
+  // (a startup's desk screens are low: things pinned to them only up to screenTop)
+  const screenTop = startup ? 1.04 : DESK.panelTop;
 
   // The cubicles: banks of them, a row side by side or two rows back to back, out in the room or with their backs to a
   // wall. A bank's laid out in its own terms — u along it, v out from the line down its middle (its back, for a row) —
@@ -1994,7 +2006,7 @@ function furnishOffice(key, glass) {
     const onBack = (x, y) => ({ x, y, z: DESK.back + 0.004, angle: 0 });
     const onLeft = (z, y) => ({ x: DESK.left + 0.004, y, z, angle: Math.PI/2 });
     let calendar = null;
-    if (F.Calendar && rng() < 0.35) {
+    if (F.Calendar && !startup && rng() < 0.35) {
       calendar = rng() < 0.5 ? 'back' : 'left';
       const at = calendar === 'back' ? onBack(-0.52 + rng()*0.04, 0.78) : onLeft(-0.15 + rng()*0.25, 0.78);
       const pinned = put('Calendar', at.x, at.z, at.angle, { parent: desk, y: at.y, small: true });
@@ -2010,11 +2022,11 @@ function furnishOffice(key, glass) {
         at = { x: side*(DESK.monitor.x1 - 0.03), y: DESK.monitor.top - 0.12 - rng()*0.15, z: DESK.monitor.face + 0.003, angle: 0 };
       } else if (where < 0.65 && calendar !== 'back') {
         const x = rng() < 0.5 ? -0.65 + rng()*0.3 : 0.34 + rng()*0.3;
-        at = onBack(x, 0.82 + rng()*0.32);
+        at = onBack(x, 0.82 + rng()*(screenTop - 0.93));
       } else if (where < 0.65) {
-        at = onBack(0.34 + rng()*0.3, 0.82 + rng()*0.32);
+        at = onBack(0.34 + rng()*0.3, 0.82 + rng()*(screenTop - 0.93));
       } else if (calendar !== 'left') {
-        at = onLeft(-0.3 + rng()*0.6, 0.82 + rng()*0.32);
+        at = onLeft((startup ? -0.1 : -0.3) + rng()*(startup ? 0.4 : 0.6), 0.82 + rng()*(screenTop - 0.93));
       } else continue;
       const note = put('Sticky', at.x, at.z, at.angle, { parent: desk, y: at.y, small: true });
       note.rotation.z = (rng() - 0.5)*0.3;
@@ -2105,6 +2117,25 @@ function furnishOffice(key, glass) {
   }
 
   seatsInWorld(office);
+  // on the walls (a glass office's solid ones only): a whiteboard or two, a clock, a noticeboard, and a startup's vision
+  // boards and neon signs (see neonSign)
+  const onWall = wallHanger(F, glass ? { ...plan, WALL_SIDES: plan.WALL_SIDES.filter(side => !side.far) } : plan, rng,
+    [...taken, doorClear()]);
+  for (let k = rng() < 0.3 ? 2 : 1; k > 0; k--) onWall('Whiteboard', 0.9 + rng()*0.1);
+  if (rng() < 0.8) onWall('Clock', 2.05);
+  if (rng() < 0.6) onWall('Noticeboard', 1.2 + rng()*0.15);
+  if (startup) {
+    for (let k = Math.floor(rng()*3); k > 0; k--) onWall('Calendar', 1.2 + rng()*0.2);
+    for (let k = 1 + Math.floor(rng()*2); k > 0; k--) {
+      const sign = neonSign(any(STARTUP_NEON), any(NEON)), y = 1.7 + rng()*0.3;
+      onWall(null, y, sign.userData.piece, (x, z, angle) => {
+        sign.position.set(x, y + sign.userData.piece.h/2, z);
+        sign.rotation.y = angle;
+        officeGroup.add(sign);
+      });
+    }
+  }
+
   // and the desks, for the phones and computers on them to be heard from (see audio/office.js): in front of each desk chair
   office.desks = office.seats.filter(seat => seat.desk)
     .map(seat => ({ x: seat.x + seat.nx*0.55, y: room.position.y + 0.85, z: seat.z + seat.nz*0.55 }));
@@ -2842,11 +2873,11 @@ function openShop(layout, tint, { walls, floors, painted, palette }) {
 }
 // Things hung on a shop's walls (from its model `F`, with planRoom's helpers `plan`): above whatever's in front of them,
 // not over a window, clear of the door and of each other and of `hung` (areas already taken up the wall). `y` is how high
-// up their bottoms are.
+// up their bottoms are. (`hang`, if given, hangs something that isn't one of the model's pieces, `piece`-sized, there
+// instead: see neonSign)
 function wallHanger(F, plan, rng, hung) {
   const { any, put, WALL_SIDES, overlaps, overWindow } = plan;
-  return (name, y) => {
-    const piece = F[name];
+  return (name, y, piece = F[name], hang = null) => {
     if (!piece) return;
     for (let k = 0; k < 30; k++) {
       const side = any(WALL_SIDES), half = piece.w/2;
@@ -2858,7 +2889,8 @@ function wallHanger(F, plan, rng, hung) {
       if (hung.some(h => overlaps(area, h))) continue;
       const along = side.nx ? [area.z0, area.z1] : [area.x0, area.x1];
       if (y + piece.h > SILL && y < HEAD && overWindow(side, ...along)) continue;
-      put(name, x, z, side.angle, { y, small: true });
+      if (hang) hang(x, z, side.angle);
+      else put(name, x, z, side.angle, { y, small: true });
       hung.push(area);
       return;
     }

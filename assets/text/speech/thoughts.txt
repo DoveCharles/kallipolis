@@ -60,6 +60,8 @@ Nobody told me there'd be beanbags. {here.building = startup, happy, weight = 0.
 We're a family here, apparently. {here.building = startup, mood = -1}
 That crystal's not doing anything for me. {here.building = startup, weight = 0.5}
 Somebody's cancelled standup again. {here.building = corporate, weight = 0.5}
+Is that clock broken? It's always ten to two. {here.building = office, weight = 0.4}
+Who needs a neon sign telling them how to feel? {here.building = startup, weight = 0.4}
 Is anyone going to smash a plate? {here.building = greek, weight = 0.4}
 Everything's in the sale except what I want. {here.building = clothes, mood = -1, weight = 0.5}
 Is that in my colour? {here.building = clothes, weight = 0.6}

@@ -3,9 +3,9 @@
 #
 #   "/Applications/Blender 2.app/Contents/MacOS/Blender" -b --python tools/startup-office-models.py
 #
-# Desk: an open bench desk on coloured trestles, felt screens clipped on behind and to the left (faces where Office.glb's
-# panels are: interior.js's DESK), a thin monitor on an arm, a white keyboard. Panel: the trestle and felt screen closing
-# a row. OfficeChair: a mesh-backed task chair. WaterCooler: kombucha on tap. Printer: a 3D printer on a trolley.
+# Desk: an open bench desk on coloured trestles, low felt screens clipped on behind and to the left (their faces where
+# Office.glb's panels are, but only up to SCREEN_TOP: interior.js's DESK), a thin monitor on an arm, a white keyboard.
+# Panel: the trestle and felt screen closing a row. OfficeChair: a mesh-backed task chair. WaterCooler: kombucha on tap. Printer: a 3D printer on a trolley.
 # Cabinet: tall open shelving with plants and books; LowCabinet: a credenza with coloured doors. SnakePlant: a monstera
 # in a woven basket; Ficus: a fiddle-leaf fig; Bush: a pothos trailing off a plinth. On desks: Sticky, Calendar (a vision
 # board), Mug (a keep cup), Frame (a salt lamp), Pens, Cactus (a succulent in a faceted pot), Papers (a laptop), Duck (an
@@ -65,9 +65,11 @@ material('Net', 0x26282c, 0.9)
 RAINBOW = ['Coral', 'Sun', 'Mint', 'Sky', 'Lilac', 'Pink']
 
 # ------------------------------------------------------------------ the desk (as Office.glb's: see DESK in interior.js)
-# Top 1.4 by 0.75, 0.74 up, x -0.7..0.7, y -0.375 (front)..0.375; back screen's front face at y 0.375, left one's at
-# x -0.7, up to 1.25; monitor centred, face at y 0.13, 0.84..1.18 up.
-DESK_W, DESK_D, DESK_H, SCREEN_H, SCREEN_T = 1.4, 0.75, 0.74, 1.25, 0.03
+# Top 1.4 by 0.75, 0.74 up, x -0.7..0.7, y -0.375 (front)..0.375; monitor centred, face at y 0.13, 0.84..1.18 up.
+DESK_W, DESK_D, DESK_H, SCREEN_TOP, SCREEN_T = 1.4, 0.75, 0.74, 1.04, 0.03
+
+def felt(p, w, d, x, y):
+    p.box(w, d, SCREEN_TOP - DESK_H - 0.01, 'Fabric', x, y, DESK_H + 0.01, bevel=0.012, segments=2)
 
 def trestle(p, x):
     # an A-ish leg frame at x: two uprights, a foot and a top rail, across the desk's depth
@@ -76,17 +78,13 @@ def trestle(p, x):
     p.box(0.05, 0.7, 0.04, 'Steel', x, 0, 0, bevel=0.01)
     p.box(0.05, 0.66, 0.03, 'Steel', x, 0, DESK_H - 0.06, bevel=0.008)
 
-def felt(p, w, d, x, y, z0, h):
-    p.box(w, d, h, 'Fabric', x, y, z0, bevel=0.012, segments=2)
-
 p = piece('Desk')
 p.box(DESK_W, DESK_D, 0.025, 'Laminate', z0=DESK_H - 0.025, bevel=0.006)
 p.box(DESK_W + 0.004, DESK_D + 0.004, 0.012, 'Birch', z0=DESK_H - 0.03, bevel=0.002)   # the ply edge
 trestle(p, -0.62)
 p.box(1.2, 0.03, 0.06, 'Steel', 0, 0.3, 0.1, bevel=0.008)                              # the stretcher
-# the felt screens, clipped to the top
-felt(p, DESK_W, SCREEN_T, 0, DESK_D/2 + SCREEN_T/2, DESK_H + 0.01, SCREEN_H - DESK_H - 0.01)
-felt(p, SCREEN_T, DESK_D*0.7, -DESK_W/2 - SCREEN_T/2, 0.375 - DESK_D*0.35, DESK_H + 0.01, 0.4)
+felt(p, DESK_W, SCREEN_T, 0, DESK_D/2 + SCREEN_T/2)                                     # low felt screens
+felt(p, SCREEN_T, DESK_D*0.7, -DESK_W/2 - SCREEN_T/2, 0.375 - DESK_D*0.35)
 for x in (-0.5, 0.5):
     p.box(0.04, 0.05, 0.05, 'Dark', x, DESK_D/2 + 0.01, DESK_H - 0.02, bevel=0.006)   # clamps
 # a cable tray and a slim monitor on an arm
@@ -104,7 +102,7 @@ p.ball(0.03, 'White', (0.32, -0.16, DESK_H + 0.012), scale=(1, 1.7, 0.55))
 # the end of a row: a trestle with the felt screen's end on it
 p = piece('Panel')
 trestle(p, 0)
-felt(p, SCREEN_T, DESK_D*0.7, 0, 0.375 - DESK_D*0.35 - 0.025, DESK_H + 0.01, 0.4)
+felt(p, SCREEN_T, DESK_D*0.7, 0, 0.375 - DESK_D*0.35 - 0.025)
 
 # ------------------------------------------------------------------ the chair: mesh back, coloured seat
 p = piece('OfficeChair')
