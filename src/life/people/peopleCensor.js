@@ -6,8 +6,8 @@ import { scene } from '../../core/scene.js';
 // falls over with them. One instanced quad per slot, sharing the body mesh's matrices and pose attribute.
 
 const CENSOR_WIDTH = 0.26;   // × the model's height
-const CENSOR_NEAR = 0.12;    // how far towards the camera it's pushed, × the model's height (clear of the body)
-const CENSOR_BLOCKS = 4;     // mosaic blocks across
+const CENSOR_NEAR = 0.3;     // how far towards the camera it's pushed, × the model's height (clear of the body)
+const CENSOR_BLOCKS = 3;     // mosaic blocks across
 const CENSOR_SHIMMER = 6;    // times a second the blocks' shades re-roll
 
 /**
