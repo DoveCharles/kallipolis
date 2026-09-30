@@ -10,6 +10,7 @@ import { makeFlatZoneMesh } from '../zones/surface-detail.js';
 import { buildFountain, makeFountainSpray } from '../zones/plazas.js';
 import { buildingKey, buildingNumber } from '../buildings/footprints.js';
 import { buildingName, buildingSign, buildingTypesReady } from '../buildings/building-types.js';
+import { hangingSign } from '../buildings/shop-signs.js';
 import { insetPolygonExact, toClipperPath, fromClipperPath, createRegionTester, offsetPaths, pathsArea } from '../zones/cutouts.js';
 
 // ---------------------------------------------------------- shopping centre
@@ -397,6 +398,13 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs, cladding,
   }
   // its name, on its widest front's fascia (see signAtlas)
   if (widest && widest.len > 2) signs.push({ key, kind, m: widest.m, n: widest.n, len: widest.len, y: top - 0.6, cladding });
+  // and its symbol on a sign hung out from the fascia near one end (see shop-signs.js)
+  if (widest && !vacant && widest.len > 1.5) {
+    const { m, n, F, len } = widest, u = -len/2 + 0.6;
+    const place = new THREE.Matrix4().makeBasis(new THREE.Vector3(F.dx, 0, F.dz), new THREE.Vector3(n.x, 0, n.z), new THREE.Vector3(0, 1, 0))
+      .setPosition(m.x + F.dx*u + n.x*0.18, top - 0.3, m.z + F.dz*u + n.z*0.18);
+    hangingSign(kind, cladding).forEach(([geo, mat]) => group.add(meshOf(geo.applyMatrix4(place), mat, 'Building')));
+  }
   const path = [toClipperPath(fp)];
   tops(walls, path, top, true);       // the ceiling (and from above, the roof: the floor over it is the next unit's)
   if (level > 0) tops(walls, path, y0 + 0.02);

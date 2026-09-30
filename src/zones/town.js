@@ -10,6 +10,7 @@ import { makeFlatZoneMesh, makeParkMesh, addStreetFront } from './surface-detail
 import { extrudeFootprintGeo } from './zone-visuals.js';
 import { cutLotByCutouts, insetPolygonExact } from './cutouts.js';
 import { streetSegmentsNear, streetFor } from './suburbs.js';
+import { hangingSign } from '../buildings/shop-signs.js';
 
 // ---------------------------------------------------------- town
 // A British town: the zone is cut into lots like a City zone, but each lot is a two-to-four storey terrace house
@@ -278,15 +279,8 @@ function makeTownBuilding(fp, front, rng, s) {
       slab(t, el, low, high);
     });
     if (black.length) part(group, mergeGeometryList(black), plain(PUB_BLACK, { roughness: 0.4 }));
-    const t = Math.min(0.9, len/2), top = SHOP + 0.9, out = 0.75;
-    part(group, mergeGeometryList([
-      place(new THREE.BoxGeometry(0.06, 1.35, 0.06), t, 0.68, top),                    // the bracket, out from the wall
-      place(new THREE.BoxGeometry(0.05, 0.05, 0.55), t, 0.05, top - 0.25),             // its plate on the wall
-      place(new THREE.BoxGeometry(0.04, 0.04, 0.2), t, out - 0.3, top - 0.12),         // and what it hangs from
-      place(new THREE.BoxGeometry(0.04, 0.04, 0.2), t, out + 0.3, top - 0.12),
-    ]), plain(0x1a1a1a, { roughness: 0.6 }));
-    part(group, place(new THREE.BoxGeometry(0.08, 0.86, 1.06), t, out, top - 0.75), plain(0xc8a040, { roughness: 0.35, metalness: 0.5 }));
-    part(group, place(new THREE.BoxGeometry(0.1, 0.72, 0.92), t, out, top - 0.75), plain(FASCIAS[Math.floor(rng()*FASCIAS.length)], { roughness: 0.6 }));
+    const t = Math.min(0.9, len/2), board = FASCIAS[Math.floor(rng()*FASCIAS.length)];
+    hangingSign('pub', board).forEach(([geo, mat]) => part(group, place(geo, t, 0, SHOP + 0.9), mat));
   } else if (shop) {
     // Of the other shops, a share are hair salons, clothes shops and restaurants (the settings of those names),
     // each with its fascia in colours of its own. (Rolled after everything else, as the pubs are.)
