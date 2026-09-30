@@ -77,9 +77,9 @@ const SOUNDS = {
   // the service bell rung in the kitchen once a table's food is up (see deliver in life/people/peopleWaiter.js): a
   // bright strike, ringing on with a fainter overtone
   service: [
-    [.25, 0, 2650, 0, 0, 1.2, 0, 1, , , , , , , , , , , , , -1800],
-    [.02, 0, 7300, 0, 0, .4, 0, 1, , , , , , , , , , , , , -1800],
-    [.04, 0, 5200, 0, .002, .01, 1, 2, , , , , , , , , , , , , -1800],
+    [.12, 0, 1760, 0, 0, 1, 0, 1, , , , , , , , , , , , , -1200],
+    [.01, 0, 4860, 0, 0, .3, 0, 1, , , , , , , , , , , , , -1200],
+    [.02, 0, 3500, 0, .002, .01, 1, 2, , , , , , , , , , , , , -1200],
   ],
   // a changing room's curtain drawn across or back (see drawCurtain in buildings/interior.js): a swish of cloth, the
   // rings rattling along the rail over it
@@ -116,7 +116,7 @@ const SOUNDS = {
 // how near something has to be for each sound to be heard at full volume, falling away past it (REF_DISTANCE if not here)
 // which sound level each is heard at (see LEVEL_KINDS): the rest go by the master level alone
 const KIND_OF = { punch: 'peds', whoosh: 'peds', curtain: 'peds', swingdoor: 'peds', flap: 'peds', service: 'peds', snip: 'peds', brush: 'peds', spray: 'peds', hairdryer: 'peds', clippers: 'peds', crash: 'traffic', thump: 'traffic', thunder: 'ambience' };
-const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5, latch: 4, curtain: 4, swingdoor: 5, flap: 4, service: 6, snip: 3, brush: 3, spray: 3, hairdryer: 3, clippers: 3 };
+const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5, latch: 4, curtain: 4, swingdoor: 5, flap: 4, service: 3, snip: 3, brush: 3, spray: 3, hairdryer: 3, clippers: 3 };
 // for the little sounds of people that'd otherwise be heard from right across town (a fight in every park): how far off
 // they're heard at all, how fast they fade past their REACH, and how fast they're muffled (see muffler)
 const NEAR_ONLY = { punch: { hear: 40, rolloff: 2.5, muffle: 1.4 }, whoosh: { hear: 25, rolloff: 2.5, muffle: 1.4 } };
