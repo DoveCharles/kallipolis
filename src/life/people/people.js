@@ -950,7 +950,7 @@ export function updatePlease(p, dt) {
     // the same hold as stun, but beaming: see pleased in updatePeople
     please.stage = 'held';
     please.timer = 2 + peopleRng()*2;
-    if (hasClip('Wave')) playOnce(p, 'Wave'); // a wave at whatever pleased them
+    if (hasClip('Wave') && !please.medbot) playOnce(p, 'Wave'); // a wave at whatever pleased them (not the MedBot: held still)
   });
 }
 /**

@@ -293,8 +293,9 @@ function healSpot(bot, p, lying) {
 // down, kept down.
 function hold(bot, p, lying) {
   if (lying) { if (p.punched?.stage === 'down') p.punched.timer = Math.max(p.punched.timer, 0.5); return; }
-  if (!p.please) p.please = { stage: 'notice', timer: 0.05, from: { x: bot.x, z: bot.z }, medbot: true };
-  else if (p.please.stage === 'held') p.please.timer = Math.max(p.please.timer, 0.5);
+  if (!p.please) p.please = { stage: 'held', timer: 0.5, from: { x: bot.x, z: bot.z }, medbot: true }; // (straight to still)
+  p.please.stage = 'held';
+  p.please.timer = Math.max(p.please.timer, 0.5);
   p.please.medbot = true;
 }
 
@@ -372,7 +373,8 @@ function updateBot(bot, dt, t) {
       }
       const lying = lyingDown(p), to = healSpot(bot, p, lying);
       pose = bot.actions.Speed ? 'Speed' : 'Move';
-      if (rollTo(bot, to.x, to.z, SPEED*RUSH, dt, 0.12)) {
+      const still = lying || p.please?.stage === 'held'; // (on their feet: not till they've stopped walking)
+      if (rollTo(bot, to.x, to.z, SPEED*RUSH, dt, 0.12) && still) {
         bot.state = 'heal';
         bot.healTime = 0;
         bot.lying = lying;
@@ -385,6 +387,7 @@ function updateBot(bot, dt, t) {
       pose = bot.lying ? 'HealLayDown' : 'HealStand';
       if (!p || isGone(p)) { letGo(bot); bot.state = 'patrol'; bot.goal = patrolPoint(bot); pose = 'Idle'; break; }
       hold(bot, p, bot.lying);
+      if (!bot.lying && Math.hypot(p.x - bot.x, p.z - bot.z) > model.reach + 0.6*S.peopleSize) { bot.state = 'rush'; break; } // (drifted off: after them)
       bot.healTime += dt;
       turnTo(bot, Math.atan2(p.x - bot.x, p.z - bot.z), dt);
       const h = personHeight(p);
