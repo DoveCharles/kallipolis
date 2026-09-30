@@ -1,4 +1,4 @@
-import { setLevel, levelOf } from '../audio/sfx.js';
+import { setLevel, levelOf, setDirectional, directionalMode, DIRECTIONAL } from '../audio/sfx.js';
 import { openWindow } from './w3-window.js';
 
 // ============================================================ sound levels
@@ -18,8 +18,9 @@ const SLIDERS = [
 let remembered = {};
 try { remembered = JSON.parse(localStorage.getItem(STORAGE_KEY)) ?? {}; } catch (err) { /* storage blocked or garbled: every level full */ }
 for (const { kind } of SLIDERS) if (typeof remembered[kind] === 'number') setLevel(kind, Math.min(1, Math.max(0, remembered[kind])));
+setDirectional(remembered.directional);
 function remember() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.fromEntries(SLIDERS.map(({ kind }) => [kind, levelOf(kind)])))); }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...Object.fromEntries(SLIDERS.map(({ kind }) => [kind, levelOf(kind)])), directional: directionalMode() })); }
   catch (err) { /* storage blocked: it just isn't remembered */ }
 }
 
@@ -28,7 +29,13 @@ export function openSoundLevels() {
   openWindow({ id: 'sound-levels', title: 'Sound Levels', width: 280, onClose: remember, fill: body => {
     body.innerHTML = SLIDERS.map(({ kind, label }) => `<div class="slider-row">
       <div class="row"><label for="level-${kind}">${label}</label><span class="val" id="level-${kind}-val"></span></div>
-      <input type="range" id="level-${kind}" min="0" max="100" step="1"></div>`).join('');
+      <input type="range" id="level-${kind}" min="0" max="100" step="1"></div>`).join('') +
+      `<div class="row" title="3D sound: Hybrid gives the nearest few sounds full 3D; Full gives every sound it (costly)">
+      <label for="level-directional">Directional</label><select id="level-directional" class="select-input">${
+        DIRECTIONAL.map(mode => `<option value="${mode}">${mode[0].toUpperCase() + mode.slice(1)}</option>`).join('')}</select></div>`;
+    const select = body.querySelector('#level-directional');
+    select.value = directionalMode();
+    select.addEventListener('change', () => { setDirectional(select.value); remember(); });
     for (const { kind } of SLIDERS) {
       const input = body.querySelector(`#level-${kind}`), val = body.querySelector(`#level-${kind}-val`);
       input.value = Math.round(levelOf(kind)*100);

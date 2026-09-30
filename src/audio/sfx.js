@@ -250,6 +250,40 @@ function variantsOf(name) {
   return buffers[name];
 }
 
+// Directional sound (Options > Sound levels > Directional): 'off' pans left/right only (equalpower); 'hybrid' gives the
+// HRTF_SLOTS nearest one-shots within HRTF_NEAR full 3D (HRTF) too; 'full' gives every sound HRTF (costly with many at once).
+// The possessed person's own sounds are never panned (setSelf): they'd be left behind as they run.
+export const DIRECTIONAL = ['off', 'hybrid', 'full'];
+const HRTF_SLOTS = 6, HRTF_NEAR = 40, SELF_NEAR = 1.2;
+let directional = 'hybrid', hrtfVoices = 0, self = null;
+export const setDirectional = mode => { if (DIRECTIONAL.includes(mode)) directional = mode; };
+export const directionalMode = () => directional;
+/** The panning model for a sound that plays on (a loop): HRTF only on 'full'. */
+export const loopPanning = () => directional === 'full' ? 'HRTF' : 'equalpower';
+/** The possessed person (null when nobody is): sounds right by them are heard unpanned. */
+export const setSelf = p => { self = p; };
+const isSelf = at => self?.mode === 'possessed' && Math.hypot(at.x - self.x, at.z - self.z) < SELF_NEAR;
+/**
+ * A panner for a one-shot at `at` (by the directional setting), or a plain gain if it's the possessed person's own.
+ * @param {{x: number, y: number, z: number}} at
+ * @param {AudioScheduledSourceNode} source - what plays it, to free its HRTF slot when it ends
+ * @param {{refDistance: number, maxDistance?: number, rolloff?: number}} options
+ * @returns {AudioNode}
+ */
+export function oneShotPanner(at, source, { refDistance, maxDistance, rolloff = 1 }) {
+  if (isSelf(at)) return context.createGain();
+  const panner = context.createPanner();
+  const { x, y, z } = ear, hybrid = directional === 'hybrid' && hrtfVoices < HRTF_SLOTS && Math.hypot(at.x - x, at.y - y, at.z - z) < HRTF_NEAR;
+  panner.panningModel = hybrid || directional === 'full' ? 'HRTF' : 'equalpower';
+  if (hybrid) { hrtfVoices++; source.addEventListener('ended', () => hrtfVoices--); }
+  panner.distanceModel = maxDistance ? 'linear' : 'inverse';
+  panner.refDistance = refDistance;
+  panner.rolloffFactor = rolloff;
+  if (maxDistance) panner.maxDistance = maxDistance;
+  panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
+  return panner;
+}
+
 /**
  * Plays an AudioBuffer once at `at`, through a bare panner rather than a THREE.PositionalAudio — for sounds as small and
  * frequent as footsteps, where an Object3D apiece would be too much. Counts toward VOICES_MAX like any other sound.
@@ -268,18 +302,12 @@ export function playBufferAt(buffer, at, volume, refDistance, maxDistance, rate 
   if (muted || context.state !== 'running' || voices >= VOICES_MAX) return null;
   return startVoice(buffer, at, volume, refDistance, maxDistance, rate, through, kind);
 }
-// (a bare equalpower panner: HRTF, THREE.PositionalAudio's default, is costly per voice and glitched with many at once)
 function startVoice(buffer, at, volume, refDistance, maxDistance, rate = 1, through = [], kind, rolloff = 1, delay = 0) {
-  const source = context.createBufferSource(), gain = context.createGain(), panner = context.createPanner();
+  const source = context.createBufferSource(), gain = context.createGain();
+  const panner = oneShotPanner(at, source, { refDistance, maxDistance, rolloff });
   source.buffer = buffer;
   source.playbackRate.value = rate;
   gain.gain.value = volume;
-  panner.panningModel = 'equalpower';
-  panner.distanceModel = maxDistance ? 'linear' : 'inverse';
-  panner.refDistance = refDistance;
-  panner.rolloffFactor = rolloff;
-  if (maxDistance) panner.maxDistance = maxDistance;
-  panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
   [...through, gain].reduce((from, to) => from.connect(to), source).connect(panner).connect(heardFrom(at, kind));
   voices++;
   source.onended = () => { voices--; panner.disconnect(); };

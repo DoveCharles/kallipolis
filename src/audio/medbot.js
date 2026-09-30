@@ -1,4 +1,4 @@
-import { listener, outdoorsOf, ear } from './sfx.js';
+import { listener, outdoorsOf, ear, loopPanning } from './sfx.js';
 
 // ============================================================ the MedBot's noises
 // The MedBots near the camera (see life/medbot.js), each a set of loops synthesized live like the bees' buzz (buzz.js):
@@ -39,7 +39,7 @@ function noiseBuffer(context) {
 }
 function panner(context, ref, max) {
   const p = context.createPanner();
-  p.panningModel = 'equalpower';
+  p.panningModel = loopPanning();
   p.distanceModel = 'linear';
   p.refDistance = ref;
   p.maxDistance = max;

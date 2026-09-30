@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, outdoorsOf, isMuted, playBufferAt, prewarm, zzfxBuffer } from './sfx.js';
+import { listener, outdoorsOf, isMuted, playBufferAt, prewarm, zzfxBuffer, loopPanning } from './sfx.js';
 import { pointInPolygon } from '../core/math.js';
 import { trafficNearby } from './engine.js';
 import { isInsideBuilding } from '../buildings/interior.js';
@@ -88,7 +88,7 @@ function makeRain() {
 function patter(when) {
   const context = listener.context, at = somewhereAround(2, 12, 0, 1);
   const panner = context.createPanner();
-  panner.panningModel = 'equalpower';
+  panner.panningModel = loopPanning();
   panner.distanceModel = 'inverse';
   panner.refDistance = 3;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
@@ -141,7 +141,7 @@ function makeHum() {
 function whistle(at, when, notes, volume, refDistance = SONG_REF_DISTANCE) {
   const context = listener.context;
   const panner = context.createPanner();
-  panner.panningModel = 'equalpower';
+  panner.panningModel = loopPanning();
   panner.distanceModel = 'inverse';
   panner.refDistance = refDistance;
   panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;

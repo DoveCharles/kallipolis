@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener, outdoorsOf, ear } from './sfx.js';
+import { listener, outdoorsOf, ear, loopPanning } from './sfx.js';
 
 // ============================================================ buzzing
 // The buzz of the bees flying near the camera (see updateBees in life/bees.js), a loop synthesized live like the engines
@@ -36,7 +36,7 @@ function makeBuzz() {
   level.gain.value = 0.75;
   flutter.connect(flutterDepth).connect(level.gain);
   const panner = context.createPanner();
-  panner.panningModel = 'equalpower';
+  panner.panningModel = loopPanning();
   panner.distanceModel = 'linear';
   panner.refDistance = REF_DISTANCE;
   panner.maxDistance = HEAR_DISTANCE;

@@ -1,4 +1,4 @@
-import { listener, heardFrom, isMuted } from './sfx.js';
+import { listener, heardFrom, isMuted, loopPanning } from './sfx.js';
 
 // ============================================================ the bots' whir
 // The bar bot's and the waiter bot's wheels (see buildings/barbot.js, buildings/waiterbot.js), a loop synthesized live
@@ -20,7 +20,7 @@ function makeVoice() {
     for (let i = 0; i < data.length; i++) data[i] = Math.random()*2 - 1;
   }
   const panner = context.createPanner();
-  Object.assign(panner, { panningModel: 'equalpower', distanceModel: 'linear', refDistance: REF, maxDistance: HEAR });
+  Object.assign(panner, { panningModel: loopPanning(), distanceModel: 'linear', refDistance: REF, maxDistance: HEAR });
   const out = context.createGain();
   out.gain.value = 0;
   out.connect(panner);

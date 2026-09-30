@@ -1,4 +1,4 @@
-import { listener, heardFrom } from './sfx.js';
+import { listener, heardFrom, loopPanning } from './sfx.js';
 import { hashNameToNumber, mulberry32 } from '../core/math.js';
 
 // ============================================================ pub music
@@ -51,7 +51,7 @@ function load() {
     const out = context.createGain(), tone = context.createBiquadFilter(), panner = context.createPanner();
     out.gain.value = 0;
     tone.type = 'lowpass'; tone.frequency.value = TONE_HZ; tone.Q.value = 0.5;
-    panner.panningModel = 'equalpower';
+    panner.panningModel = loopPanning();
     panner.distanceModel = 'linear';
     panner.refDistance = REF_DISTANCE; panner.maxDistance = MAX_DISTANCE;
     synth.connect(out);
