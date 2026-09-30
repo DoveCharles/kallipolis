@@ -121,12 +121,14 @@ export function pubStyleOf(key) {
   return (h >>> 0)/2**32 < CRAFT_PUB ? 'craft' : 'pub';
 }
 // A restaurant's kind, by its key, the same every time: a Greek taverna (RestaurantGreek.glb: see furnishRestaurant in
-// interior.js) GREEK_RESTAURANT of the time, else an old New York Italian.
-export const GREEK_RESTAURANT = 0.4;
+// interior.js) GREEK_RESTAURANT of the time, a kaiten sushi bar (RestaurantSushi.glb: see furnishSushi) SUSHI_RESTAURANT,
+// else an old New York Italian.
+export const GREEK_RESTAURANT = 0.35, SUSHI_RESTAURANT = 0.3;
 export function restaurantStyleOf(key) {
   let h = 2166136261;
   for (const ch of String(key) + ':greek') h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
-  return (h >>> 0)/2**32 < GREEK_RESTAURANT ? 'greek' : 'italian';
+  const u = (h >>> 0)/2**32;
+  return u < GREEK_RESTAURANT ? 'greek' : u < GREEK_RESTAURANT + SUSHI_RESTAURANT ? 'sushi' : 'italian';
 }
 // An office's kind, by its key, the same every time: a startup's open plan (OfficeStartup.glb: see furnishOffice in
 // interior.js) STARTUP_OFFICE of the time, else a corporate one of cubicles.

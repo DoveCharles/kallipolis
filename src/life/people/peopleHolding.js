@@ -30,6 +30,11 @@ export const ITEMS = {
     { shape: 'box', size: [0.034, 0.038, 0.005], at: [0, 0.135, 0], color: 0xc8ccd3 },
     { shape: 'sphere', size: [0.028, 0.028, 0.028], at: [0, 0.155, 0], tint: true, loaded: true },
   ] },
+  // (a sushi diner's: see sushiDiner in peopleActivities.js)
+  chopsticks: { parts: [
+    { shape: 'box', size: [0.008, 0.21, 0.008], at: [-0.006, 0.055, 0], color: 0x3a2418 },
+    { shape: 'box', size: [0.008, 0.21, 0.008], at: [0.006, 0.055, 0.004], color: 0x3a2418 },
+  ] },
   mug: { parts: [
     { shape: 'cylinder', size: [0.075, 0.09, 0.075], at: [0, 0.035, 0], color: 0xf2f0ea },
     { shape: 'box', size: [0.012, 0.045, 0.012], at: [0.048, 0.035, 0], color: 0xf2f0ea },
@@ -298,7 +303,7 @@ export function plateSpot(p) {
   return new THREE.Vector3().copy(PLATE_AT).applyMatrix4(instance);
 }
 export function clearMeal(p) {
-  for (const item of ['plate', 'spaghetti', 'pizza', 'moussaka', 'souvlaki', 'fork']) letGo(p, item);
+  for (const item of ['plate', 'spaghetti', 'pizza', 'moussaka', 'souvlaki', 'fork', 'chopsticks']) letGo(p, item);
   if (p.snack?.item === 'slice' || p.snack?.item === 'skewer') dropSnack(p);
 }
 
@@ -330,6 +335,7 @@ export function mealCue(p, cue) {
     return;
   }
   if (cue === 'bite' && fork) fork.loaded = null;
+  if (cue === 'clink' && holding(p, 'chopsticks')) return; // (sushi: no fork on china)
   eatingSound(at, cue);
 }
 

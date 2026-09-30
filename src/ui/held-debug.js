@@ -3,7 +3,7 @@ import { openWindow } from './w3-window.js';
 import { controls } from '../core/camera-controls.js';
 import { people, personModel, isDrawn, followed } from '../life/people/people.js';
 import { SNACK_HOLD, SNACK_BEND } from '../life/people/peopleModel.js';
-import { ITEMS, giveSnack, updateHeld } from '../life/people/peopleHolding.js';
+import { ITEMS, dropSnack, giveSnack, hold, letGo, updateHeld } from '../life/people/peopleHolding.js';
 
 // ============================================================ held items (debug)
 // View > Held Items (debug): sliders for where a hot dog, a coffee or a pint sits in the hand (ITEMS in peopleHolding.js) and
@@ -12,9 +12,16 @@ import { ITEMS, giveSnack, updateHeld } from '../life/people/peopleHolding.js';
 // on them, everyone else folded away (personModel.only); a hand slider bakes that one clip again (personModel.rebakeClip). Nothing is kept: the values to paste back
 // into the code are shown at the bottom.
 const KINDS = { hotdog: 'Hotdog', slice: 'Hotdog', skewer: 'Hotdog', coffee: 'Coffee', beer: 'Beer' };
-let item = 'hotdog', biting = false, pinned = null, minRadius = null;
+// (held in the hand through another clip, not a snack: its parts' own sliders, a frame of the clip to pose in)
+const TOOLS = { chopsticks: 'Eating' };
+let item = 'hotdog', biting = false, pinned = null, minRadius = null, frame = 0;
 
-const clipName = () => 'Idle' + KINDS[item] + (biting ? 'Bite' : '');
+const clipName = () => TOOLS[item] ?? 'Idle' + KINDS[item] + (biting ? 'Bite' : '');
+// what they're given: a snack, or a tool into the right hand
+function give() {
+  for (const t of Object.keys(TOOLS)) letGo(pinned, t);
+  if (TOOLS[item]) { dropSnack(pinned); hold(pinned, item, { hand: 'R' }); } else giveSnack(pinned, item);
+}
 const round = x => Math.round(x*1000)/1000;
 
 /** Hold the pinned person in the first frame of the clip, everything they wear with them, and draw what they hold. */
@@ -26,7 +33,7 @@ function holdStill() {
   pinned.oneShot = null;
   if (pinned.snack) pinned.snack.next = 1e9; // (no bites while it's being looked at)
   const o = i*4, anim = personModel.anim.array;
-  anim[o] = anim[o+1] = clip.start; anim[o+2] = 1; anim[o+3] = 0;
+  anim[o] = anim[o+1] = clip.start + (TOOLS[item] ? Math.round(frame*clip.frames) : 0); anim[o+2] = 1; anim[o+3] = 0;
   personModel.wornLayers.forEach(layer => {
     const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null;
     if (style?.mesh) style.anim.array.set(anim.subarray(o, o + 4), layer.slot[i]*4);
@@ -40,7 +47,7 @@ function pin() {
   const standing = p => isDrawn(p) && !p.act && p.pose === 'Idle';
   pinned = people[followed] ?? people.find(standing) ?? people.find(isDrawn) ?? null;
   if (!pinned) return;
-  giveSnack(pinned, item);
+  give();
   S.peopleFrozen = holdStill;
   // (the target sits half a metre to the camera's right, so they stand clear of the window at the right edge)
   const t = pinned.heading;
@@ -57,12 +64,18 @@ function unpin() {
   S.peopleFrozen = null;
   if (personModel) personModel.only.value = -1;
   if (minRadius != null) { controls.minRadius = minRadius; minRadius = null; }
+  if (pinned) for (const t of Object.keys(TOOLS)) letGo(pinned, t);
   if (pinned?.snack) pinned.snack.next = 2;
   pinned = null;
 }
 
 // a slider: [label, get, set, min, max, step]
 function sliders() {
+  if (TOOLS[item]) return [['Pose'], ['frame', () => frame, v => { frame = v; }, 0, 1, 0.01],
+    ...ITEMS[item].parts.flatMap((part, k) => [[`Part ${k + 1}`],
+      ...['x', 'y', 'z'].map((a, i) => ['at ' + a, () => part.at[i], v => { part.at[i] = v; }, -0.2, 0.3, 0.001]),
+      ...['x', 'y', 'z'].map((a, i) => ['turn ' + a, () => (part.turn ??= [0, 0, 0])[i], v => { part.turn[i] = v; }, -3.14, 3.14, 0.01]),
+      ...['x', 'y', 'z'].map((a, i) => ['size ' + a, () => part.size[i], v => { part.size[i] = v; }, 0.002, 0.4, 0.001])])];
   const part = ITEMS[item].parts[0], hold = () => SNACK_HOLD[KINDS[item]][biting ? 'bite' : 'carry'];
   const vec = (label, get, i, min, max, step, then) => [label, () => get()[i], v => { get()[i] = v; then?.(); }, min, max, step];
   const rebake = () => personModel?.rebakeClip(clipName());
@@ -84,6 +97,11 @@ function sliders() {
 }
 
 function values() {
+  if (TOOLS[item]) {
+    const list = a => `[${a.map(round).join(', ')}]`;
+    return `// ITEMS.${item} (peopleHolding.js)\n` + ITEMS[item].parts.map(p =>
+      `{ shape: '${p.shape}', size: ${list(p.size)}, at: ${list(p.at)}${p.turn ? `, turn: ${list(p.turn)}` : ''}${p.color != null ? `, color: 0x${p.color.toString(16).padStart(6, '0')}` : ''} },`).join('\n');
+  }
   const part = ITEMS[item].parts[0], hold = SNACK_HOLD[KINDS[item]], list = a => `[${a.map(round).join(', ')}]`;
   const side = h => `{ at: ${list(h.at)}, ${h.reach != null ? `reach: ${round(h.reach)}, ` : ''}dir: ${list(h.dir)}, palm: ${list(h.palm)}${h.bend ? `, bend: ${list(h.bend)}` : ''}${h.swing ? `, swing: ${round(h.swing)}` : ''}${h.twist ? `, twist: ${round(h.twist)}` : ''} }`;
   return `// ITEMS.${item} (peopleHolding.js)\n{ shape: '${part.shape}', size: ${list(part.size)}, at: ${list(part.at)}${part.turn ? `, turn: ${list(part.turn)}` : ''}${part.eaten ? ', eaten: true' : ''} },\n`
@@ -91,8 +109,8 @@ function values() {
 }
 
 function fill(body) {
-  body.innerHTML = `<div class="row"><label>Item</label><select id="hd-item">${Object.keys(KINDS).map(k => `<option value="${k}"${k === item ? ' selected' : ''}>${k}</option>`).join('')}</select>
-    <label><input type="checkbox" id="hd-bite"${biting ? ' checked' : ''}> at the mouth</label></div>
+  body.innerHTML = `<div class="row"><label>Item</label><select id="hd-item">${[...Object.keys(KINDS), ...Object.keys(TOOLS)].map(k => `<option value="${k}"${k === item ? ' selected' : ''}>${k}</option>`).join('')}</select>
+    ${TOOLS[item] ? '' : `<label><input type="checkbox" id="hd-bite"${biting ? ' checked' : ''}> at the mouth</label>`}</div>
     <div id="hd-sliders" style="max-height:45vh;overflow-y:auto"></div>
     <textarea id="hd-out" readonly rows="5" style="width:100%;box-sizing:border-box;font:11px monospace;margin-top:6px"></textarea>
     <button id="hd-copy">Copy</button>${pinned ? '' : ' <span>No one to pose: turn people on first.</span>'}`;
@@ -109,8 +127,8 @@ function fill(body) {
     if (!input) return;
     input.addEventListener('input', () => { set(+input.value); list.querySelector(`#hd-${n}-val`).textContent = round(+input.value); show(); });
   });
-  body.querySelector('#hd-item').addEventListener('change', e => { item = e.target.value; if (pinned) giveSnack(pinned, item); fill(body); });
-  body.querySelector('#hd-bite').addEventListener('change', e => { biting = e.target.checked; fill(body); });
+  body.querySelector('#hd-item').addEventListener('change', e => { item = e.target.value; if (pinned) give(); fill(body); });
+  body.querySelector('#hd-bite')?.addEventListener('change', e => { biting = e.target.checked; fill(body); });
   body.querySelector('#hd-copy').addEventListener('click', () => navigator.clipboard?.writeText(out.value));
   show();
 }

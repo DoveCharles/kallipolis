@@ -42,7 +42,7 @@ function throwAParty() {
 const drawThumbnail = makeThumbnailDrawer(card.canvas);
 
 // every zone's buildings (a zone's own children named 'Building': city blocks', industrial yards' and farmsteads')
-function buildingsInZones() {
+export function buildingsInZones() {
   const found = [];
   buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
     if (group.name === 'Building' && group.visible) found.push({ zone, group, index });

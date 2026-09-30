@@ -14,8 +14,8 @@ import { puffSmoke, haircutFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFollowingPerson } from './peopleTracking.js';
-import { drawCurtain, openRoomDoor, roomBeyondDoor, roomBuilding, roomCubicles, roomDoorway, roomKind, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
-import { TRAYS, clearMeal, feedPizza, giveSnack, letGo, mealFinished, menuOf, serveMeal } from './peopleHolding.js';
+import { drawCurtain, openRoomDoor, roomBeyondDoor, roomBuilding, roomCubicles, roomDoorway, roomKind, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, sushiGrab, sushiOrder, sushiPut, watchingTV } from '../../buildings/interior.js';
+import { TRAYS, clearMeal, feedPizza, giveSnack, hold, holding, letGo, mealFinished, menuOf, plateSpot, serveMeal } from './peopleHolding.js';
 import { BARBOT, barbotFree } from '../../buildings/barbot.js';
 import { awaitWaiter, leavePlate, queueForTable, runWaiter, servedMeal, waitForTable, waiterOn } from './peopleWaiter.js';
 import { summonSalonBot, salonBotSnipping, salonBotNoise, seatedHead } from '../../buildings/salonbot.js';
@@ -1828,8 +1828,10 @@ export function startParty({ group, key, kind, number }, { want: only = 0, diner
   if (!want) return 0;
   // (the door itself: whoever reaches it is in: see updateIndoors' 'approach')
   const door = roomOutsideDoor(0.15);
-  const possible = people.map(p => ({ p, d: Math.hypot(p.x - door.x, p.z - door.z) }))
+  let possible = people.map(p => ({ p, d: Math.hypot(p.x - door.x, p.z - door.z) }))
     .filter(({ p }) => p !== people[followed] && p !== people[riderFollowed] && couldComeToAParty(p) && welcomeAtParty(p, rule));
+  // (Fetch a Diner with nobody out, e.g. a town without walkways: anyone not spawned)
+  if (diner && !possible.length) possible = people.filter(p => p.mode === 'none').map(p => ({ p, d: 0 }));
   const away = possible.filter(c => c.d >= PARTY_FAR);
   const pool = away.length >= want ? away : possible;
   const base = group.userData.base || 0;
@@ -2161,6 +2163,7 @@ export function standUp(p) {
   if (seat && seat.by === p) seat.by = null;
   leavePlate(p);
   clearMeal(p);
+  if (p.inRoom) sushiClear(p.inRoom);
   if (p.inRoom) {
     if (seat?.sofa) p.inRoom.leftSofaAt = performance.now();
     if (seat?.sofa && p.inRoom.watched != null) feel(p, 'watchedtv'); // (for what they say: see life/speech-text.js)
@@ -2196,7 +2199,8 @@ function sitting(p, here, dt) {
       here.stage = 'sit';
       p.pose = deskPose(seat);
       // (a plate on the table and a fork in hand; at a restaurant, spaghetti, or a pizza eaten a slice at a time from the hand)
-      if (p.pose === 'Eating' && here.led) { p.pose = 'Sit1'; awaitWaiter(p, seat); } // (shown here by the waiter: it takes the order)
+      if (p.pose === 'Eating' && seat.sushi) { p.pose = 'Sit1'; here.sushi = { want: SUSHI_PLATES[0] + Math.floor(peopleRng()*(SUSHI_PLATES[1] + 1 - SUSHI_PLATES[0])), next: 1 + peopleRng()*3, plate: null, left: [] }; }
+      else if (p.pose === 'Eating' && here.led) { p.pose = 'Sit1'; awaitWaiter(p, seat); } // (shown here by the waiter: it takes the order)
       else if (p.pose === 'Eating') {
         const dish = p.indoors && isRestaurant(p.indoors.building) ? menuOf(p.indoors.building)[peopleRng() < 0.5 ? 0 : 1] : 'plate';
         serveMeal(p, seat.diner.top, dish);
@@ -2225,6 +2229,7 @@ function sitting(p, here, dt) {
       // (dinner over: the plate cleared away, and a little while sat at the table after)
       // (waiting on the waiter: not getting up, and the food brought anyway if it's gone or taking far too long)
       if (here.meal) { here.timer = Math.max(here.timer, 1); if (!waiterOn() || (here.mealBy -= dt) <= 0) servedMeal(p); }
+      if (here.sushi) sushiDiner(p, here, seat, dt);
       if (feedPizza(p)) here.timer = Math.max(here.timer, 1);
       if ((p.pose.startsWith('Eating') || seat.diner) && !here.ate && mealFinished(p)) {
         // (the waiter's: the empty plate left there till they get up, for it to clear)
@@ -2236,7 +2241,7 @@ function sitting(p, here, dt) {
       if (seat.kind === 'cut') haircut(p, seat, here, dt);
       // (waiting for a haircut: up as soon as a chair's free)
       else if (p.indoors?.shop === 'salon' && !p.indoors.served && freeSeat(p, 'cut')) here.timer = 0;
-      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); leavePlate(p); clearMeal(p); here.stage = 'rise'; p.pose = down !== facing ? 'Sit1' : 'Idle'; }
+      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); leavePlate(p); clearMeal(p); sushiClear(here); here.stage = 'rise'; p.pose = down !== facing ? 'Sit1' : 'Idle'; }
       break;
     }
     case 'rise':
@@ -2422,6 +2427,56 @@ function changing(p, here, visit, dt) {
 const TYPING_SPELL = [8, 40], SAT_BACK_SPELL = [3, 12];
 /** How long someone lingers at the table once their dinner's gone, in seconds. */
 const SAT_AFTER_MEAL = 12;
+// A sushi diner: plates taken off the belt as they pass, or at the chef's bar ordered from the chef, one at a time, each eaten, its empty stacked beside them
+// by colour (the price); the stacks gone when they get up.
+const SUSHI_PLATES = [1, 4];  // plates each has
+const SUSHI_EAT = [10, 20];   // s a plate takes
+const SUSHI_PAUSE = [2, 8];   // s between plates
+const SUSHI_STACK = [0.2, 0.16, 0.02]; // m to the side of the first stack, between stacks, a plate's height
+function sushiDiner(p, here, seat, dt) {
+  const su = here.sushi;
+  if (!su.want && !su.plate) return;
+  here.timer = Math.max(here.timer, 1);
+  if (su.ordered || (su.next -= dt) > 0) return;
+  const at = plateSpot(p); at.y = seat.diner.top;
+  const eat = (plate, dish) => {
+    su.plate = plate; su.dish = dish;
+    su.next = SUSHI_EAT[0] + peopleRng()*(SUSHI_EAT[1] - SUSHI_EAT[0]);
+    p.pose = 'Eating';
+    if (!holding(p, 'chopsticks')) hold(p, 'chopsticks', { hand: 'R' });
+  };
+  if (!su.plate) {
+    if (seat.sushi.chef) {
+      su.ordered = sushiOrder(seat, o => { su.ordered = false; if (here.sushi === su) eat(o, o.userData.dish ?? 'Dish0'); else o.removeFromParent(); });
+      if (!su.ordered) su.next = 1;
+      return;
+    }
+    const dish = sushiGrab(seat.sushi.belt);
+    if (dish) eat(sushiPut(dish, at, p.heading), dish); else su.next = 0.2;
+    return;
+  }
+  // (eaten: onto its colour's stack, beside them)
+  su.plate.removeFromParent();
+  su.plate = null;
+  const colour = su.dish.slice(4), stacks = [...new Set(su.left.map(e => e.colour))];
+  let k = stacks.indexOf(colour); if (k < 0) k = stacks.length;
+  const side = k % 2 ? -1 : 1, off = side*(SUSHI_STACK[0] + (k >> 1)*SUSHI_STACK[1]), high = su.left.filter(e => e.colour === colour).length;
+  at.x += Math.cos(p.heading)*off; at.z -= Math.sin(p.heading)*off; at.y += high*SUSHI_STACK[2];
+  const o = sushiPut('Empty' + colour, at, p.heading);
+  if (o) su.left.push({ colour, o });
+  p.pose = 'Sit1';
+  su.next = SUSHI_PAUSE[0] + peopleRng()*(SUSHI_PAUSE[1] - SUSHI_PAUSE[0]);
+  if (--su.want > 0) return;
+  letGo(p, 'chopsticks');
+  here.timer = Math.min(here.timer, SAT_AFTER_MEAL*p.traits.patience);
+  if (p.indoors && isRestaurant(p.indoors.building)) { feel(p, 'dined'); leaveSoon(p.indoors, SAT_AFTER_MEAL + 20); }
+}
+function sushiClear(here) {
+  if (!here.sushi) return;
+  here.sushi.plate?.removeFromParent();
+  here.sushi.left.forEach(e => e.o.removeFromParent());
+  here.sushi = null;
+}
 /** How someone sits on a seat: typing, at a desk (if the model can), eating, at a dining table, else sat back. */
 const deskPose = seat => seat.desk && hasClip('Typing') ? 'Typing'
   : seat.diner && hasClip('Eating') ? 'Eating' : 'Sit1';

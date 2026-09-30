@@ -14,7 +14,7 @@ import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
 import { pubMusic, stopPubMusic } from '../audio/pub-music.js';
 import { loadingTask, loadingSay } from '../ui/loading.js';
 import { loadBarbot, placeBarbot, updateBarbot, barbotWarmUp } from './barbot.js';
-import { placeWaiterbot, updateWaiterbot } from './waiterbot.js';
+import { placeWaiterbot, placeChefbot, chefOrder, chefUp, updateWaiterbot } from './waiterbot.js';
 import { placeJukebox, updateJukebox } from './jukebox.js';
 import { loadSalonBot, placeSalonBot, salonBotReach, clearSalonBots, updateSalonBots, salonBotWarmUp } from './salonbot.js';
 
@@ -1902,7 +1902,8 @@ function seatsInWorld(layout) {
     return { x: w.x, y: w.y, z: w.z, nx: n.x, nz: n.z, sofa: false, desk: seat.desk, bar: seat.bar, open: seat.open ? roomWay(seat.open.x, seat.open.z) : null, sideways: !!seat.sideways, kind: seat.kind ?? null, by: null,
       salonBot: seat.salonBot ?? null, // (a styling chair's: see salonbot.js)
       diner: seat.diner ? { top: room.localToWorld(new THREE.Vector3(seat.x, seat.diner, seat.z)).y } : false, // (a restaurant's)
-      table: seat.table ?? null }; // (which of its tables: see peopleWaiter.js)
+      table: seat.table ?? null, // (which of its tables: see peopleWaiter.js)
+      sushi: seat.sushi ?? null }; // (a sushi bar's: at the belt, { belt } how far round it, or the chef's bar, { chef })
   });
 }
 
@@ -2116,7 +2117,6 @@ function furnishOffice(key, glass) {
     }
   }
 
-  seatsInWorld(office);
   // on the walls (a glass office's solid ones only): a whiteboard or two, a clock, a noticeboard, and a startup's vision
   // boards and neon signs (see neonSign)
   const onWall = wallHanger(F, glass ? { ...plan, WALL_SIDES: plan.WALL_SIDES.filter(side => !side.far) } : plan, rng,
@@ -2136,6 +2136,7 @@ function furnishOffice(key, glass) {
     }
   }
 
+  seatsInWorld(office);
   // and the desks, for the phones and computers on them to be heard from (see audio/office.js): in front of each desk chair
   office.desks = office.seats.filter(seat => seat.desk)
     .map(seat => ({ x: seat.x + seat.nx*0.55, y: room.position.y + 0.85, z: seat.z + seat.nz*0.55 }));
@@ -3251,7 +3252,20 @@ const GREEK_PAINTED = {
   Check: [0x1e5aa8, 0x1e5aa8, 0x2a6ab8, 0x1e4a8a],
 };
 const GREEK_DADOS = [0x1e5a9a, 0x2a6ab8, 0xe8e4d8], GREEK_RAILS = [0x1e4a8a, 0xf4f0e6];
-const restaurantPainted = [], greekPainted = [];
+// Or a kaiten sushi bar: RestaurantSushi.glb (tools/sushi-restaurant-models.py), laid out its own way (see furnishSushi).
+const SUSHI_MODEL_URL = 'assets/models/RestaurantSushi.glb';
+let sushiRestaurant = null;
+// whole looks, one per restaurant (picked by hand from what z2:8, 9, 10 and 12 rolled)
+const SUSHI_LOOKS = [
+  { wall: 0x3a2a20, floor: 0x3a3c3e, Wood: 0x1e1a18, Upholstery: 0x8a1e1e, Noren: 0x2a2a2e, ceiling: 0xf0e8d8, dado: 0x1e1a18, rail: 0x8a2a1e },
+  { wall: 0x2a2e2a, floor: 0x5a4030, Wood: 0x3a2a1e, Upholstery: 0x8a1e1e, Noren: 0x2a2a2e, ceiling: 0xe8dcc4, dado: 0xc8a878, rail: 0x8a2a1e },
+  { wall: 0x2e2a28, floor: 0x3a3c3e, Wood: 0x1e1a18, Upholstery: 0x8a1e1e, Noren: 0x22305a, ceiling: 0xf0e8d8, dado: 0xc8a878, rail: 0x8a2a1e },
+  { wall: 0x3a2224, floor: 0x3a3c3e, Wood: 0x3a2a1e, Upholstery: 0x3a5a3a, Noren: 0x22305a, ceiling: 0xe8dcc4, dado: 0xc8a878, rail: 0x1a1410 },
+];
+const SUSHI_PAINTED = { Wood: [0x1e1a18], Upholstery: [0x8a1e1e], Noren: [0x22305a] }; // (only which materials; colours come from the look)
+const sushiRafter = lit(0x2a1c14), unitBox = new THREE.BoxGeometry(1, 1, 1);
+const SUSHI_STOOL = 0.48; // (its seat's height)
+const restaurantPainted = [], greekPainted = [], sushiPainted = [];
 async function loadRestaurant(url, paint, painted, set) {
   let F;
   try {
@@ -3265,7 +3279,8 @@ async function loadRestaurant(url, paint, painted, set) {
   if (inside && current === LAYOUTS.restaurant) furnishRestaurant(inside.key);
 }
 modelsLoading.push(loadRestaurant(RESTAURANT_MODEL_URL, RESTAURANT_PAINTED, restaurantPainted, F => { restaurant = F; }),
-  loadRestaurant(GREEK_MODEL_URL, GREEK_PAINTED, greekPainted, F => { greekRestaurant = F; }));
+  loadRestaurant(GREEK_MODEL_URL, GREEK_PAINTED, greekPainted, F => { greekRestaurant = F; }),
+  loadRestaurant(SUSHI_MODEL_URL, SUSHI_PAINTED, sushiPainted, F => { if (F.Stool) F.Stool.seats = [{ x: 0, z: 0.02, y: SUSHI_STOOL }]; sushiRestaurant = F; }));
 layout('restaurant', 0xffffff, () => []);
 const restaurantGroup = new THREE.Group();
 LAYOUTS.restaurant.group.add(restaurantGroup);
@@ -3322,26 +3337,31 @@ function stoneUVs() {
 // and a passage beyond, glowing white, that the waiter walks through and out of the back of (see waiterbot.js).
 const KITCHEN_HOLE = 0.78, KITCHEN_H = 2.25, KITCHEN_DEEP = 0.8;
 const kitchenGlow = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
-function kitchenWay(group, cx) {
-  const x0 = cx - KITCHEN_HOLE, x1 = cx + KITCHEN_HOLE;
-  // (the wall pieces along it hidden, and built again either side of the hole and over it)
+const kitchenWay = (group, cx) => wallHole(group, cx - KITCHEN_HOLE, cx + KITCHEN_HOLE, 0, KITCHEN_H, KITCHEN_DEEP);
+// A hole through the far wall along x (and its dado) from x0 to x1, y0 to y1, and a glowing passage `deep` beyond it.
+function wallHole(group, x0, x1, y0, y1, deep) {
+  const cx = (x0 + x1)/2;
+  // (the wall pieces along it hidden, and built again either side of the hole, over it and under it)
   for (const o of [blankWalls.children[0], dado.children[0], dado.children[1]]) {
     if (!o) continue;
     const { width: w, height: h, depth: d } = o.geometry.parameters, p = o.position, a = p.x - w/2, b = p.x + w/2;
-    const top = p.y + h/2, bottom = Math.max(KITCHEN_H, p.y - h/2);
+    const top = p.y + h/2, bottom = p.y - h/2, over = Math.max(y1, bottom), under = Math.min(y0, top);
     o.visible = false;
     if (x0 > a) box(x0 - a, h, d, o.material, (a + x0)/2, p.y, p.z, group);
     if (b > x1) box(b - x1, h, d, o.material, (x1 + b)/2, p.y, p.z, group);
-    if (top > bottom) box(x1 - x0, top - bottom, d, o.material, cx, (top + bottom)/2, p.z, group);
+    if (top > over) box(x1 - x0, top - over, d, o.material, cx, (top + over)/2, p.z, group);
+    if (under > bottom) box(x1 - x0, under - bottom, d, o.material, cx, (under + bottom)/2, p.z, group);
   }
-  const z0 = ROOM_D/2, z1 = ROOM_D/2 + WALL + KITCHEN_DEEP, zm = (z0 + z1)/2, long = z1 - z0;
-  for (const [w, h, d, x, y, z] of [[0.02, KITCHEN_H, long, x0 + 0.01, KITCHEN_H/2, zm], [0.02, KITCHEN_H, long, x1 - 0.01, KITCHEN_H/2, zm],
-    [x1 - x0, 0.02, long, cx, KITCHEN_H - 0.01, zm], [x1 - x0, 0.006, long, cx, 0.003, zm], [x1 - x0, KITCHEN_H, 0.02, cx, KITCHEN_H/2, z1]]) {
-    box(w, h, d, kitchenGlow, x, y, z, group).castShadow = false;
+  const z0 = ROOM_D/2, z1 = ROOM_D/2 + WALL + deep, zm = (z0 + z1)/2, long = z1 - z0, h = y1 - y0, ym = (y0 + y1)/2;
+  for (const [w, hh, d, x, y, z] of [[0.02, h, long, x0 + 0.01, ym, zm], [0.02, h, long, x1 - 0.01, ym, zm],
+    [x1 - x0, 0.02, long, cx, y1 - 0.01, zm], [x1 - x0, 0.006, long, cx, y0 + 0.003, zm], [x1 - x0, h, 0.02, cx, ym, z1]]) {
+    box(w, hh, d, kitchenGlow, x, y, z, group).castShadow = false;
   }
 }
 function furnishRestaurant(key) {
   const layout = LAYOUTS.restaurant, group = restaurantGroup;
+  layout.belt = layout.chef = null;
+  if (restaurantStyleOf(key) === 'sushi') return furnishSushi(key);
   const rng = mulberry32(hashNameToNumber(key + ' restaurant'));
   const tint = mulberry32(hashNameToNumber(key + ' restaurant colours'));
   const greek = restaurantStyleOf(key) === 'greek';
@@ -3519,6 +3539,325 @@ function furnishRestaurant(key) {
   if (greek) stoneUVs();
   // the waiter behind the host stand (see waiterbot.js)
   if (host) placeWaiterbot(group, host, kitchen, !greek);
+}
+// ---------------------------------------------------------- a sushi bar
+// A kaiten sushi bar: an island counter snaking out of a hatch in the far wall, a belt of plates round its rim (out
+// along one side, back along the other, round through the kitchen behind the wall), stools round it; the chef's bar
+// along the far wall, stools in front; booths butted onto the island (boothAt).
+const ISLAND = 0.82, ISLAND_H = 0.74, BELT_IN = 0.36, BELT_OUT = 0.6, BELT_TOP = 0.8, SHELF = 0.3, SHELF_H = 0.86;
+const ISLAND_BEND = 1.1, HATCH_H = 1.25, HATCH_DEEP = 0.6, STOOL_OUT = 1.1, STOOL_GAP = 0.62;
+const BELT_SPEED = 0.08, BELT_GAP = 0.5, BELT_FULL = 0.85; // (m/s; m between plates; how many slots have one)
+const beltMaterial = roomLit(new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.6 }));
+// points along `points` (x, z) every `step`, the corners rounded to radius r: { x, z, tx, tz (its heading), bend }
+function roundedPath(points, r, step = 0.05) {
+  const out = [];
+  let [px, pz] = points[0];
+  for (let i = 1; i < points.length; i++) {
+    const [ax, az] = points[i - 1], [bx, bz] = points[i], next = points[i + 1];
+    let dx = bx - ax, dz = bz - az;
+    const len = Math.hypot(dx, dz); dx /= len; dz /= len;
+    let cut = 0, ex = 0, ez = 0, turn = 0;
+    if (next) {
+      ex = next[0] - bx; ez = next[1] - bz;
+      const l = Math.hypot(ex, ez); ex /= l; ez /= l;
+      turn = Math.acos(Math.max(-1, Math.min(1, dx*ex + dz*ez)));
+      cut = r*Math.tan(turn/2);
+    }
+    const endX = bx - dx*cut, endZ = bz - dz*cut, run = Math.hypot(endX - px, endZ - pz);
+    for (let s = 0; s < run; s += step) out.push({ x: px + dx*s, z: pz + dz*s, tx: dx, tz: dz, bend: false, leg: i });
+    if (!next) { out.push({ x: bx, z: bz, tx: dx, tz: dz, bend: false, leg: i }); break; }
+    // (the arc: its centre off towards where it turns)
+    let nx = ex - dx*(dx*ex + dz*ez), nz = ez - dz*(dx*ex + dz*ez);
+    const nl = Math.hypot(nx, nz); nx /= nl; nz /= nl;
+    const cx = endX + nx*r, cz = endZ + nz*r, n = Math.max(2, Math.ceil(r*turn/step));
+    for (let k = 0; k < n; k++) {
+      const t = k/n*turn, c = Math.cos(t), s = Math.sin(t);
+      out.push({ x: cx + (-nx*c + dx*s)*r, z: cz + (-nz*c + dz*s)*r, tx: nx*s + dx*c, tz: nz*s + dz*c, bend: true });
+    }
+    px = cx + (-nx*Math.cos(turn) + dx*Math.sin(turn))*r; pz = cz + (-nz*Math.cos(turn) + dz*Math.sin(turn))*r;
+  }
+  return out;
+}
+// the outline `d` out from a path: along its left, round its end, back along its right
+function rimOf(path, d, capSteps = 16) {
+  const end = path[path.length - 1], left = path.map(c => [c.x - c.tz*d, c.z + c.tx*d]);
+  const cap = [];
+  for (let k = 1; k < capSteps; k++) {
+    const f = k/capSteps*Math.PI;
+    cap.push([end.x + d*(-end.tz*Math.cos(f) + end.tx*Math.sin(f)), end.z + d*(end.tx*Math.cos(f) + end.tz*Math.sin(f))]);
+  }
+  return [...left, ...cap, ...path.map(c => [c.x + c.tz*d, c.z - c.tx*d]).reverse()];
+}
+// an outline (and a hole in it) stood up from y0 to y1
+function slab(outline, y0, y1, material, parent, hole = null) {
+  const shape = new THREE.Shape(outline.map(([x, z]) => new THREE.Vector2(x, -z)));
+  if (hole) shape.holes.push(new THREE.Path(hole.map(([x, z]) => new THREE.Vector2(x, -z))));
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: y1 - y0, bevelEnabled: false, curveSegments: 1 });
+  geometry.rotateX(-Math.PI/2).translate(0, y0, 0);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = mesh.receiveShadow = true;
+  parent.add(mesh);
+  return mesh;
+}
+// A material of `F`'s by name.
+function materialOf(F, name) {
+  for (const piece of Object.values(F)) {
+    let found = null;
+    piece.object.traverse(o => { if (!found && o.isMesh && o.material.name === name) found = o.material; });
+    if (found) return found;
+  }
+  return null;
+}
+
+// Hand-drawn plans: the island's line from the hatch (x along the far wall) out into the room ([x, z]...), where along
+// the far wall the chef's bar goes (bar, x), and which legs' sides get booths butted on (booths, [leg, side]; side 1 is
+// the leg's left, looking along it); stools elsewhere.
+const BOOTH_PITCH = 1.7;
+const SUSHI_PLANS = () => ROOM_W >= 11 ? [
+  { island: [[-0.6, -ROOM_D/2 + 1.4]], bar: ROOM_W/2 - 1.9, booths: [[1, 1]] },
+  { island: [[ROOM_W/2 - 0.92, -0.4], [0.2, -0.4]], bar: -1.6, booths: [[1, -1], [2, 1]] },
+] : [
+  { island: [[-ROOM_W/2 + 3, -ROOM_D/2 + 1.5]], bar: ROOM_W/2 - 1.9, booths: [[1, 1]] },
+];
+function furnishSushi(key) {
+  const layout = LAYOUTS.restaurant, group = restaurantGroup;
+  const rng = mulberry32(hashNameToNumber(key + ' restaurant'));
+  const tint = mulberry32(hashNameToNumber(key + ' restaurant colours'));
+  const look = SUSHI_LOOKS[Math.floor(tint()*SUSHI_LOOKS.length)];
+  openShop(layout, tint, { walls: [look.wall], floors: [look.floor], painted: sushiPainted, palette: Object.fromEntries(sushiPainted.map(m => [m.name, [look[m.name]]])) });
+  layout.ceiling = look.ceiling;
+  dadoMaterial.color.setHex(look.dado);
+  lineMaterial.color.setHex(look.rail);
+  roomLit(dadoMaterial); roomLit(lineMaterial);
+  layout.wallMap = null;
+  paintRoom();
+  // rafters: dark timber beams across, thin battens along above them
+  const timber = (w, h, d, x, y, z) => { const m = new THREE.Mesh(unitBox, sushiRafter); m.scale.set(w, h, d); m.position.set(x, y, z); group.add(m); };
+  const beams = Math.max(2, Math.round(ROOM_W/1.4)), battens = Math.floor(ROOM_D/0.45);
+  for (let i = 0; i < beams; i++) timber(0.14, 0.18, ROOM_D, (i - (beams - 1)/2)*ROOM_W/beams, ROOM_H - 0.13, 0);
+  for (let i = 0; i < battens; i++) timber(ROOM_W, 0.04, 0.04, 0, ROOM_H - 0.02, (i - (battens - 1)/2)*ROOM_D/battens);
+  const F = sushiRestaurant;
+  if (!F?.SushiBar || !F.Stool || !F.Dish0) return;
+  const plan = planRoom(layout, F, group, rng, false, []);
+  const { taken, overlaps, fits, put, underCamera, WALL_SIDES, againstWall, atWall } = plan;
+  taken.push(doorClear());
+  const P = SUSHI_PLANS()[Math.floor(rng()*SUSHI_PLANS().length)];
+  const tall = [], tops = [];
+  const stool = (x, z, angle, sushi, diner) => {
+    const area = { x0: x - 0.22, x1: x + 0.22, z0: z - 0.22, z1: z + 0.22 };
+    if (!fits(area, 0.04)) return false;
+    put('Stool', x, z, angle, { solid: { x0: -0.18, x1: 0.18, z0: -0.18, z1: 0.18 }, diner });
+    layout.seats[layout.seats.length - 1].sushi = sushi;
+    taken.push(area);
+    return true;
+  };
+
+  // the chef's bar: the back counter against the far wall, room to work, the bar, stools in front
+  if (F.BackCounter) {
+    const back = F.BackCounter, bar = F.SushiBar;
+    const spot = atWall(WALL_SIDES[0], P.bar, back.bounds, 0.05);
+    if (spot) {
+      const bz = ROOM_D/2 - back.d - 0.95 - bar.d/2, area = turnedRect(bar.bounds, Math.PI, spot.x, bz);
+      if (fits(area, 0.05)) {
+        const cats = [];
+        put('BackCounter', spot.x, spot.z, spot.angle).traverse(o => { const k = o.morphTargetDictionary?.Cat; if (k !== undefined) cats.push([o, k]); });
+        layout.cats = cats;
+        put('SushiBar', spot.x, bz, Math.PI);
+        const behind = { x0: area.x0, x1: area.x1, z0: area.z1, z1: ROOM_D/2 };
+        taken.push(spot.area, area, behind);
+        layout.solid.push(behind); layout.blocked.push(behind);
+        tall.push({ ...behind, z0: area.z0 });
+        layout.chef = { x: spot.x, z: (area.z1 + spot.area.z0)/2, angle: Math.PI, x0: area.x0 + 0.3, x1: area.x1 - 0.3 }; // (see waiterbot.js)
+        const plate = surfaceAt(bar, 0, 0, bar.bounds.z1 - 0.12);
+        const n = Math.floor((bar.w - 0.2)/STOOL_GAP);
+        layout.chef.plates = [];
+        for (let k = 0; k < n; k++) {
+          const x = spot.x + (k - (n - 1)/2)*STOOL_GAP;
+          if (stool(x, area.z0 - 0.3, 0, { chef: true }, plate)) layout.chef.plates.push({ x, y: ISLAND_H, z: area.z0 + 0.22 }); // (on the worktop in front)
+        }
+        if (F.MenuTags) put('MenuTags', spot.x, ROOM_D/2 + F.MenuTags.bounds.z0 - 0.01, Math.PI, { y: 1.45, small: true });
+        if (F.Lantern) for (const s of [-1, 1]) put('Lantern', spot.x + s*bar.w/4, area.z0 + 0.1, 0, { y: ROOM_H - F.Lantern.h, small: true });
+      }
+    }
+  }
+
+  // the island, out of its hatch: from the back of the passage beyond it
+  const x0 = P.island[0][0], zBack = ROOM_D/2 + WALL + HATCH_DEEP;
+  const line = [[x0, zBack], ...P.island];
+  const path = roundedPath(line, ISLAND_BEND);
+  wallHole(group, x0 - ISLAND - 0.05, x0 + ISLAND + 0.05, ISLAND_H - 0.04, HATCH_H, HATCH_DEEP);
+  const island = new THREE.Group();
+  group.add(island);
+  const wood = materialOf(F, 'Wood'), hinoki = materialOf(F, 'Hinoki'), chrome = materialOf(F, 'Chrome');
+  slab(rimOf(path, ISLAND - 0.08), 0, ISLAND_H - 0.04, wood, island);
+  slab(rimOf(path, ISLAND), ISLAND_H - 0.04, ISLAND_H, hinoki, island);
+  slab(rimOf(path, BELT_OUT), ISLAND_H, BELT_TOP - 0.006, chrome, island, rimOf(path, BELT_IN));
+  slab(rimOf(path, BELT_OUT - 0.02), BELT_TOP - 0.006, BELT_TOP, beltMaterial, island, rimOf(path, BELT_IN + 0.02));
+  slab(rimOf(path, SHELF), ISLAND_H, SHELF_H - 0.02, wood, island);
+  slab(rimOf(path, SHELF), SHELF_H - 0.02, SHELF_H, hinoki, island);
+  // (solid along each leg, to its end)
+  for (let i = 1; i < line.length; i++) {
+    const [ax, az] = line[i - 1], [bx, bz] = line[i], end = i === line.length - 1 ? ISLAND : 0;
+    const dx = Math.sign(bx - ax), dz = Math.sign(bz - az);
+    const r = { x0: Math.min(ax, bx + dx*end) - ISLAND, x1: Math.max(ax, bx + dx*end) + ISLAND,
+      z0: Math.min(az, bz + dz*end) - ISLAND, z1: Math.max(az, bz + dz*end) + ISLAND };
+    taken.push(r); layout.solid.push(r); layout.blocked.push(around(r.x0, r.x1, r.z0, r.z1, 0.35));
+  }
+  if (F.Noren) put('Noren', x0, ROOM_D/2 - 0.04, Math.PI, { y: HATCH_H + 0.05 - F.Noren.h, small: true });
+
+  // the belt: round the rim, then back through the kitchen; its length along the way (s) at every point
+  const lane = (BELT_IN + BELT_OUT)/2, way = rimOf(path, lane).map(([x, z]) => ({ x, z, s: 0 }));
+  way.push({ ...way[0], s: 0 });
+  for (let i = 1; i < way.length; i++) way[i].s = way[i - 1].s + Math.hypot(way[i].x - way[i - 1].x, way[i].z - way[i - 1].z);
+  const length = way[way.length - 1].s, capSteps = 16, back = path.length + capSteps - 1;
+  // a booth end on to the island at c, on its `side`, open to the room; its diners reach the belt s along it
+  const boothAt = (c, side, s) => {
+    if (!F.Booth || !F.BoothTable) return;
+    const bench = F.Booth, t = F.BoothTable, off = t.d/2 + bench.d/2 - 0.08;
+    const nx = -c.tz*side, nz = c.tx*side, angle = Math.atan2(nx, nz), out = ISLAND + bench.w/2 + 0.03;
+    const x = c.x + nx*out, z = c.z + nz*out;
+    const area = turnedRect({ x0: -off - bench.d/2, x1: off + bench.d/2, z0: -bench.w/2, z1: bench.w/2 }, angle, x, z);
+    if (!fits(area, 0.02)) return;
+    const plate = surfaceAt(t, 0, 0.28, 0.2), table = tops.push({ x, z }) - 1, first = layout.seats.length;
+    for (const [bx, turn] of [[-off, Math.PI/2], [off, -Math.PI/2]]) {
+      const at = turned(bx, 0, angle, x, z);
+      put('Booth', at.x, at.z, angle + turn, { diner: plate, table, open: { x: nx, z: nz } });
+    }
+    for (let k = first; k < layout.seats.length; k++) layout.seats[k].sushi = { belt: s, booth: true };
+    put('BoothTable', x, z, angle + Math.PI/2);
+    taken.push(area); tall.push(area);
+    if (F.Pendant && !overlaps(area, underCamera)) put('Pendant', x, z, 0, { y: ROOM_H - F.Pendant.h, small: true });
+  };
+  // stools round it, along its straight runs, either side, facing in; each knows how far round the belt's in front
+  const inRoom = c => c.z < ROOM_D/2 - 0.5;
+  for (const side of [1, -1]) {
+    let run = [];
+    const flush = () => {
+      const from = run[0], to = run[run.length - 1];
+      const booths = run.length > 1 && P.booths.some(([leg, s]) => leg === from.c.leg && s === side);
+      if (booths) {
+        const long = Math.hypot(to.c.x - from.c.x, to.c.z - from.c.z), n = Math.floor((long + 0.2)/BOOTH_PITCH);
+        const lead = (long - (n - 1)*BOOTH_PITCH)/2;
+        for (let k = 0; k < n; k++) {
+          const { c, i } = run[Math.min(run.length - 1, Math.round((lead + k*BOOTH_PITCH)/0.05))];
+          boothAt(c, side, way[side > 0 ? i : back + (path.length - 1 - i)].s);
+        }
+      } else if (run.length > 1) {
+        const long = Math.hypot(to.c.x - from.c.x, to.c.z - from.c.z), n = Math.floor((long - 0.3)/STOOL_GAP) + 1;
+        const lead = (long - (n - 1)*STOOL_GAP)/2;
+        for (let k = 0; k < n; k++) {
+          const { c, i } = run[Math.min(run.length - 1, Math.round((lead + k*STOOL_GAP)/0.05))];
+          const nx = -c.tz*side, nz = c.tx*side;
+          const s = way[side > 0 ? i : back + (path.length - 1 - i)].s;
+          stool(c.x + nx*STOOL_OUT, c.z + nz*STOOL_OUT, Math.atan2(-nx, -nz), { belt: s }, ISLAND_H);
+        }
+      }
+      run = [];
+    };
+    path.forEach((c, i) => { if (!c.bend && inRoom(c)) run.push({ c, i }); else flush(); });
+    flush();
+    // (and round its end)
+    if (side > 0) {
+      const end = path[path.length - 1];
+      for (const f of [0.5]) {
+        const a = f*Math.PI, nx = -end.tz*Math.cos(a) + end.tx*Math.sin(a), nz = end.tx*Math.cos(a) + end.tz*Math.sin(a);
+        stool(end.x + nx*STOOL_OUT, end.z + nz*STOOL_OUT, Math.atan2(-nx, -nz), { belt: way[path.length - 1 + Math.round(f*capSteps)].s }, ISLAND_H);
+      }
+    }
+  }
+  // condiments down the middle, lanterns over it
+  path.forEach((c, i) => {
+    if (c.bend || !inRoom(c) || i % 26 !== 13) return;
+    if (F.Condiments) put('Condiments', c.x, c.z, Math.atan2(-c.tz, c.tx), { y: SHELF_H, small: true });
+    const r = { x0: c.x - 0.3, x1: c.x + 0.3, z0: c.z - 0.3, z1: c.z + 0.3 };
+    if (F.Lantern && i % 52 === 13 && !overlaps(r, underCamera)) put('Lantern', c.x, c.z, 0, { y: ROOM_H - F.Lantern.h, small: true });
+  });
+  // plates on it, spaced along it, most slots filled
+  const n = Math.floor(length/BELT_GAP), dishes = Object.keys(F).filter(name => /^Dish\d$/.test(name));
+  const plates = Array.from({ length: n }, (_, k) => ({ s: k*length/n, dish: null, object: null }));
+  const beltGroup = new THREE.Group();
+  island.add(beltGroup);
+  const fill = plate => {
+    plate.object?.removeFromParent();
+    plate.dish = rng() < BELT_FULL ? dishes[Math.floor(rng()*dishes.length)] : null;
+    plate.object = plate.dish ? F[plate.dish].object.clone() : null;
+    if (plate.object) beltGroup.add(plate.object);
+  };
+  plates.forEach(fill);
+  layout.belt = { way, length, plates, shift: 0, fill, hideZ: zBack - 0.12 };
+
+  for (let n = 1 + Math.floor(rng()*2); n > 0 && F.Plant; n--) { const spot = againstWall(F.Plant.bounds, true); if (spot) { put('Plant', spot.x, spot.z, spot.angle); taken.push(spot.area); tall.push(spot.area); } }
+  const onWall = wallHanger(F, plan, rng, [...tall, doorClear(), { x0: x0 - 1, x1: x0 + 1, z0: ROOM_D/2 - 1, z1: ROOM_D/2 }]);
+  onWall('WavePrint', 1.3);
+  onWall('MenuTags', 1.5);
+  lightShop(group, 0xffe0c0, 1.0);
+  seatsInWorld(layout);
+  if (layout.chef) placeChefbot(group, layout.chef, () => { const d = dishes[Math.floor(Math.random()*dishes.length)], o = F[d].object.clone(); o.userData.dish = d; return o; });
+}
+/** The sushi chef's bar, in the room the view's in (plates: in front of each stool, the room's terms), or null. */
+export const sushiChef = () => inside && current === LAYOUTS.restaurant ? current.chef : null;
+// Each frame: the belt's plates moved on round it (hidden through the kitchen, and any taken refilled there).
+let beltAt = 0;
+const CAT_SPEED = 6; // rad/s
+function updateBelt() {
+  const now = performance.now(), dt = Math.min(0.1, (now - beltAt)/1000);
+  beltAt = now;
+  if (inside && current === LAYOUTS.restaurant) for (const [o, k] of current.cats ?? []) o.morphTargetInfluences[k] = 0.5 - 0.5*Math.cos(now/1000*CAT_SPEED); // (the counter's cat, 0-1-0)
+  const b = inside && current === LAYOUTS.restaurant && current.belt;
+  if (!b) return;
+  b.shift = (b.shift + dt*BELT_SPEED) % b.length;
+  for (const plate of b.plates) {
+    const at = beltPoint(b, (plate.s + b.shift) % b.length);
+    const hidden = at.z > b.hideZ;
+    if (hidden && plate.taken) { plate.taken = false; b.fill(plate); }
+    if (!plate.object) continue;
+    plate.object.visible = !hidden && !plate.taken;
+    plate.object.position.set(at.x, BELT_TOP, at.z);
+    plate.object.rotation.y = at.yaw;
+  }
+}
+const beltSpot = { x: 0, z: 0, yaw: 0 };
+// where on the belt `s` along it is, and which way it's going
+function beltPoint(b, s) {
+  const w = b.way;
+  let lo = 0, hi = w.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (w[mid].s <= s) lo = mid; else hi = mid; }
+  const a = w[lo], c = w[hi], f = (s - a.s)/Math.max(1e-6, c.s - a.s);
+  beltSpot.x = a.x + (c.x - a.x)*f; beltSpot.z = a.z + (c.z - a.z)*f;
+  beltSpot.yaw = Math.atan2(c.x - a.x, c.z - a.z);
+  return beltSpot;
+}
+const SUSHI_REACH = 0.1; // m either side of a diner's belt spot a plate can be taken from
+/** A plate of sushi off the belt at `s` along it (a sushi diner's reach), if one's passing: its dish ('Dish0'..), else null. */
+export function sushiGrab(s) {
+  const b = inside && current === LAYOUTS.restaurant && current.belt;
+  if (!b) return null;
+  for (const plate of b.plates) {
+    if (!plate.dish || plate.taken) continue;
+    const d = (((plate.s + b.shift - s) % b.length) + b.length) % b.length;
+    if (d < SUSHI_REACH || d > b.length - SUSHI_REACH) { plate.taken = true; return plate.dish; }
+  }
+  return null;
+}
+/** A plate ordered from the chef for whoever's on `seat` (world) at its bar: `done(plate)` once it's handed over (its dish in userData.dish). */
+export function sushiOrder(seat, done) {
+  const c = sushiChef();
+  if (!c?.plates?.length || !chefUp()) return false;
+  restaurantGroup.updateWorldMatrix(true, false);
+  const l = restaurantGroup.worldToLocal(new THREE.Vector3(seat.x, 0, seat.z)), d = a => Math.hypot(a.x - l.x, a.z - l.z);
+  chefOrder(c.plates.reduce((a, b) => d(b) < d(a) ? b : a), done);
+  return true;
+}
+/** A sushi bar piece ('Dish2', 'Empty2'...) set down in the room at `at` (world), turned `yaw`; removed with removeFromParent. */
+export function sushiPut(name, at, yaw = 0) {
+  const piece = sushiRestaurant?.[name];
+  if (!piece?.object || !restaurantGroup) return null;
+  const o = piece.object.clone();
+  restaurantGroup.updateWorldMatrix(true, false);
+  o.position.copy(restaurantGroup.worldToLocal(at.clone()));
+  o.rotation.y = yaw;
+  restaurantGroup.add(o);
+  return o;
 }
 /** The clothes shop's changing rooms, as the room's laid out now: where to stand in front of one (`front`) and inside it
  * (`inside`), in the world; `facing`, the heading out of it; `by`, whoever's using it; and `closed`, its curtain drawn. */
@@ -3879,10 +4218,11 @@ async function warmUp() {
     await compile('Preparing floors...');
     // one set at a time, so the label follows along
     const named = { Interior: furniture, Posh: posh, Student: student, MidCentury: retro, Boho: boho, Office: officeFurniture,
-      Industrial: industrial, Pub: pub, Salon: salon, Clothes: clothes, Restaurant: restaurant, Bedroom: bedroom };
+      Industrial: industrial, Pub: pub, Salon: salon, Clothes: clothes, Restaurant: restaurant, Sushi: sushiRestaurant, Bedroom: bedroom };
     for (const [name, set] of Object.entries(named)) {
       if (!set) continue;
       for (const piece of Object.values(set)) {
+        if (!piece.object) continue; // (F.clutter)
         sets.add(piece.object.clone());
         // (and faded, as fadeWhatsInTheWay does it)
         const faded = piece.object.clone();
@@ -4404,6 +4744,7 @@ export function updateInteriorCamera() {
   updateFurnitureShadows();
   updateDoor();
   updateCurtains();
+  updateBelt();
   if (inside && (controls.hug === freeRoom) !== !!S.freeRoomCamera) freeCamera(!!S.freeRoomCamera);
   if (inside && reach !== reachGoal) reach = Math.abs(reachGoal - reach) < 0.002 ? reachGoal : reach + (reachGoal - reach)*RISE_EASE;
   if (inside && eyeHeight !== eyeGoal) eyeHeight = Math.abs(eyeGoal - eyeHeight) < 0.002 ? eyeGoal : eyeHeight + (eyeGoal - eyeHeight)*RISE_EASE;
@@ -4415,7 +4756,7 @@ export function updateInteriorCamera() {
   // (a pub's music comes from up by the ceiling, over the middle of the room)
   // (a restaurant's, quietly, its own songs: assets/music/restaurant/)
   if (inside && current === LAYOUTS.pub && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)));
-  else if (inside && current === LAYOUTS.restaurant && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)), restaurantStyleOf(inside.key) === 'greek' ? 'greek' : 'restaurant');
+  else if (inside && current === LAYOUTS.restaurant && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)), { greek: 'greek', sushi: 'sushi' }[restaurantStyleOf(inside.key)] ?? 'restaurant');
   else stopPubMusic();
   updateJukebox();
   updateBarbot(!!inside && current === LAYOUTS.pub, performance.now() - occupiedAt < 1000);

@@ -18,8 +18,8 @@ const MUSIC_DIR = 'assets/music/';
 const SOUND_BANK = MUSIC_DIR + 'TimGM6mb.sf2';
 const PROCESSOR = 'https://cdn.jsdelivr.net/npm/spessasynth_lib@4.3.14/dist/spessasynth_processor.min.js'; // (as in index.html's import map)
 const SONG_GAP = 6;             // seconds between songs
-const VOLUME = { pub: 0.11, restaurant: 0.04, greek: 0.04 }; // (restaurants: quiet, in the background)
-const SET_OF = path => path.startsWith('restaurant/') ? 'restaurant' : path.startsWith('restaurant-greek/') ? 'greek' : 'pub'; // (assets/music/restaurant/, restaurant-greek/: theirs only)
+const VOLUME = { pub: 0.11, restaurant: 0.04, greek: 0.04, sushi: 0.04 }; // (restaurants: quiet, in the background)
+const SET_OF = path => path.startsWith('restaurant/') ? 'restaurant' : path.startsWith('restaurant-greek/') ? 'greek' : path.startsWith('restaurant-sushi/') ? 'sushi' : 'pub'; // (assets/music/restaurant/, restaurant-greek/, restaurant-sushi/: theirs only)
 const TONE_HZ = 6500;           // the speaker's top end
 const REF_DISTANCE = 4, MAX_DISTANCE = 30;
 const DRIFT = 1;                // seconds off the clock before it's set back
@@ -96,7 +96,7 @@ function hush() {
  * pub is in its songs.
  * @param {string} key - the pub's building key (see buildingKey)
  * @param {{x: number, y: number, z: number}} at - where it's heard from
- * @param {'pub'|'restaurant'|'greek'} [set] - which songs
+ * @param {'pub'|'restaurant'|'greek'|'sushi'} [set] - which songs
  * @returns {void}
  */
 export function pubMusic(key, at, set = 'pub') {

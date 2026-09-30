@@ -398,10 +398,10 @@ const worldAllows = (world, person) => world.every(w => {
   if (w.kind === 'indoors') return !!buildingOf(person) === w.is;
   if (w.kind === 'building') { const b = buildingOf(person); const layout = b && roomLayoutOf(b.kind, b.number);
     // (a craft beer bar's a pub too, and `craftpub` only one of those: see pubStyleOf; and every home has a
-    // bedroom and `ensuite` through the living room: see homeSuiteOf; a restaurant's `greek` or `italian`: restaurantStyleOf;
+    // bedroom and `ensuite` through the living room: see homeSuiteOf; a restaurant's `greek`, `sushi` or `italian`: restaurantStyleOf;
     // an office's `startup` or `corporate`: officeStyleOf)
     return !!b && (b.kind === w.is || layout === w.is || (w.is === 'craftpub' && layout === 'pub' && pubStyleOf(b.key) === 'craft')
-      || ((w.is === 'greek' || w.is === 'italian') && layout === 'restaurant' && restaurantStyleOf(b.key) === w.is)
+      || ((w.is === 'greek' || w.is === 'sushi' || w.is === 'italian') && layout === 'restaurant' && restaurantStyleOf(b.key) === w.is)
       || ((w.is === 'startup' || w.is === 'corporate') && layout === 'office' && officeStyleOf(b.key) === w.is)
       || (w.is === 'ensuite' && layout === 'home')); }
   if (w.kind === 'trait') {

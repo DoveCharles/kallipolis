@@ -118,8 +118,9 @@
 #                             bottles, red leather booths, a bar, a mural of Naples, signed photos — here.building =
 #                             italian for only those — or a Greek taverna, here.building = greek: whitewash and blue,
 #                             blue-checked cloths, rush-seated chairs, ouzo, a mural of Santorini, painted plates,
-#                             grapevines overhead; in either most sit down and are served a plate of food, and leave
-#                             once they've eaten)
+#                             grapevines overhead — or a kaiten sushi bar, here.building = sushi: plates going round on
+#                             a belt (the plate's colour its price), stools round it, a chef at a bar, paper lanterns;
+#                             in any most sit down and eat, and leave once they've eaten)
 #                             (an office's corporate cubicles, here.building = corporate, or a startup's open plan,
 #                             here.building = startup: bench desks, felt screens, kombucha on tap, beanbags, table
 #                             tennis, salt lamps and crystals)

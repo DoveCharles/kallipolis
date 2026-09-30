@@ -16,6 +16,7 @@ import { editHints, generalHints } from './view-prefs.js';
 import { fpsCounter } from './fps.js';
 import { openHeldDebug } from './held-debug.js';
 import { openMoodsDebug } from './moods-debug.js';
+import { openRestaurantsDebug } from './restaurants-debug.js';
 import { openSalonBotDebug } from './salonbot-debug.js';
 import { people } from '../life/people/people.js';
 import { sendDiner } from '../life/people/peopleActivities.js';
@@ -131,6 +132,7 @@ const MENUS = [
     { label:'Held Items (debug)', key:'l', enabled:has('s-people', 'on'), run:openHeldDebug },
     { label:'Moods (debug)', key:'c', enabled:has('s-people', 'on'), run:openMoodsDebug },
     { label:'Salon Bot (debug)', key:'a', enabled:has('s-people', 'on'), run:openSalonBotDebug },
+    { label:'Restaurants (debug)', key:'k', run:openRestaurantsDebug },
     { label:'Fetch a Diner (debug)', key:'f', enabled:() => $('s-people').classList.contains('on') && roomKind() === 'restaurant', run:sendDiner },
   ]},
   { name:'Options', key:'o', items:[

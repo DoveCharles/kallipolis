@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { HEIGHT, HEAD_UP, botFace, newFace, waiterBody } from './barbot.js';
+import { HEIGHT, HEAD_UP, botFace, newFace, waiterBody, dressBot } from './barbot.js';
 import { TOON_RAMP } from '../core/toon.js';
 import { playSound } from '../audio/sfx.js';
 import { botWhir } from '../audio/whir.js';
@@ -148,6 +148,8 @@ function dishesFrom([url, plated, platedName, slices, trayName, trayColor]) {
  */
 export function placeWaiterbot(into, stand, door, apron = true) {
   if (!rig()) return;
+  chef = null;
+  dressBot(w, true);
   w.aprons.forEach(o => { o.visible = apron; }); // (none in a Greek taverna)
   group = into;
   const f = { x: Math.sin(stand.angle), z: Math.cos(stand.angle) };
@@ -166,7 +168,7 @@ const yawToLocal = a => { group.updateMatrixWorld(); v.set(Math.sin(a), 0, Math.
 const mirrored = () => group.matrixWorld.determinant() < 0;
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 /** Whether the waiter's up, in the restaurant the view's in. */
-export const waiterUp = () => !!w?.hand && s.up && !!group && w.root.parent === group;
+export const waiterUp = () => !chef && !!w?.hand && s.up && !!group && w.root.parent === group;
 /** Anyone's in the restaurant. */
 export const waiterBusy = () => s.occupied;
 /** Where it is, in the world, and which way it faces. */
@@ -278,6 +280,7 @@ export function updateWaiterbot(inRestaurant, occupied) {
   if (w.head) w.head.quaternion.premultiply(q.copy(headTurn).invert()); // (last frame's swivel off first: see barbot.js)
   const snap = s.snap;
   s.snap = false;
+  if (chef) { updateChef(dt, now, snap); return; }
   if (!s.placed) {
     const stand = waiterStand();
     Object.assign(s, { x: stand.x, z: stand.z, yaw: stand.yaw, placed: true, route: [], face: null });
@@ -355,4 +358,87 @@ export function updateWaiterbot(inRestaurant, occupied) {
     if (!s.doorWay && was*s.swing < 0 && Math.abs(s.swingV) > FLAP_SPEED) playSound('flap', doorAt(), Math.min(1, Math.abs(s.swingV)/FLAP_LOUD));
     for (const pivot of local.door.leaves) pivot.rotation.y = -pivot.userData.side*s.swing*SWING;
   }
+}
+
+// ---------------------------------------------------------- the sushi chef
+// In a sushi bar the same body's the chef (a robe and headband: dressBot), behind the chef's bar (see furnishSushi in
+// interior.js): sliding along it, now and then SushiCut (its Yanagiba out) or SushiBuild, looking down; asleep with no one
+// in. An order (chefOrder) has it slide over, build, then SushiPlate: a plate on its right hand (ArmIK.R) till PLATE_OFF,
+// then left on the counter.
+const CHEF_SPEED = 1.2;     // m/s along the bar
+const PLATE_OFF = 43/24;    // s into SushiPlate: the plate's let go
+const CHEF_IDLE = [3, 8];   // s stood about between jobs
+let chef = null;
+
+/**
+ * The chef behind a sushi bar's counter, in `group` (the room's terms).
+ * @param {{x: number, z: number, angle: number, x0: number, x1: number}} spot - where it stands, facing the counter, and how far along it goes
+ * @param {() => THREE.Object3D} dish - a plate of sushi, made fresh
+ */
+export function placeChefbot(into, spot, dish) {
+  if (!rig()) return;
+  dressBot(w, true, true);
+  group = into; local = null;
+  group.add(w.root);
+  chef = { ...spot, lx: spot.x, goal: null, dish, orders: [], doing: null, t: 0, wait: 1, plate: null };
+  Object.assign(s, { route: [], face: null, hidden: false, snap: true, target: null, talking: false, carry: { L: null, R: null }, serve: null, say: null, head: 0 });
+  w.dishes.L.visible = w.dishes.R.visible = false;
+}
+/** Have the chef hand a plate over the counter at `at` (the room's terms: x, y, z); `done(plate)` once it's down. */
+export function chefOrder(at, done) { chef?.orders.push({ at, done }); }
+export const chefUp = () => !!chef && !!w?.hand && s.up && w.root.parent === group;
+
+function updateChef(dt, now, snap) {
+  const c = chef;
+  s.asleep = !s.occupied && !c.doing && !c.orders.length;
+  if (!s.asleep) {
+    const order = c.orders[0];
+    if (!c.doing) {
+      if (order && c.goal == null) c.goal = Math.max(c.x0, Math.min(c.x1, order.at.x));
+      if (!order && c.goal == null && (c.wait -= dt) <= 0) c.goal = c.x0 + Math.random()*(c.x1 - c.x0);
+      if (c.goal != null) {
+        const d = c.goal - c.lx;
+        c.lx += Math.sign(d)*Math.min(Math.abs(d), CHEF_SPEED*dt);
+        if (Math.abs(d) < 0.01) { c.goal = null; c.doing = order ? 'SushiBuild' : Math.random() < 0.5 ? 'SushiCut' : 'SushiBuild'; c.t = 0; c.serving = !!order; }
+      }
+    } else {
+      c.t += dt;
+      const length = w.actions[c.doing]?.getClip().duration ?? 2;
+      if (c.doing === 'SushiPlate' && c.plate && c.t >= PLATE_OFF) {
+        const o = c.plate, at = order.at;
+        c.plate = null;
+        o.position.y = at.y;
+        c.orders.shift();
+        order.done?.(o);
+      }
+      if (c.t >= length) {
+        if (c.serving && c.doing === 'SushiBuild') {
+          c.doing = 'SushiPlate'; c.t = 0;
+          c.plate = c.dish(); group.add(c.plate);
+        } else { c.doing = null; c.serving = false; c.wait = CHEF_IDLE[0] + Math.random()*(CHEF_IDLE[1] - CHEF_IDLE[0]); }
+      }
+    }
+  }
+  const at = toWorld(c.lx, c.z), x0 = s.x;
+  Object.assign(s, { x: at.x, z: at.z, yaw: yawToWorld(c.angle) });
+  botWhir('waiter', { x: s.x, y: at.y, z: s.z }, dt && !snap ? Math.abs(s.x - x0)/(SPEED*dt) : 0);
+  poses(s.asleep ? [['Sleep', 'loop']] : c.doing ? [[c.doing, 'once']] : [['SushiIdle', 'loop']], snap ? 0 : FADE);
+  w.root.position.set(c.lx, 0, c.z);
+  w.rig.rotation.y = c.angle;
+  w.root.visible = true;
+  w.mixer.update(dt);
+  headTurn.identity();
+  w.root.updateMatrixWorld(true);
+  if (w.head) { w.head.getWorldPosition(v); WAITER.x = v.x; WAITER.y = v.y + HEAD_UP; WAITER.z = v.z; }
+  if (c.plate) { // (on its right hand till let go)
+    group.worldToLocal(w.hand.R.getWorldPosition(v));
+    c.plate.position.set(v.x, v.y, v.z);
+    c.plate.rotation.y = c.angle;
+  }
+  if (w.knife) w.knife.visible = c.doing === 'SushiCut' && !s.asleep;
+  if (w.face) w.face.visible = !s.asleep;
+  if (w.zzz) w.zzz.visible = s.asleep;
+  if (w.moustache) w.moustache.visible = false;
+  const working = c.doing === 'SushiCut' || c.doing === 'SushiBuild';
+  botFace(w, s, WAITER, dt, now, { asleep: s.asleep, working, still: false, talking: false, snap });
 }

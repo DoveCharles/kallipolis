@@ -62,6 +62,17 @@ What are you having? {here.building = greek}
 > Meze for the table. {happy}
 > Whatever's cheapest. {mood = -1}
 
+What are you having? {here.building = sushi}
+> Whatever comes round next.
+> Salmon. Only salmon. {happy}
+> Nothing off the black plates. {mood = -1}
+> The chef's choice. {happy}
+
+How many plates is that? {here.building = sushi}
+> Don't count. {happy}
+> Enough for the week. {mood = -1}
+> Only six!
+
 Should we get a bottle? {here.building = italian}
 > The Chianti. {happy}
 > Just water for me. {alcoholic = -1}

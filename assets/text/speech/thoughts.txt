@@ -63,6 +63,12 @@ Somebody's cancelled standup again. {here.building = corporate, weight = 0.5}
 Is that clock broken? It's always ten to two. {here.building = office, weight = 0.4}
 Who needs a neon sign telling them how to feel? {here.building = startup, weight = 0.4}
 Is anyone going to smash a plate? {here.building = greek, weight = 0.4}
+That one's been round three times. Nobody wants it. {here.building = sushi}
+Gold plate. Treat yourself. {here.building = sushi, happy, weight = 0.6}
+I've lost count of my plates. {here.building = sushi, weight = 0.6}
+Grab it before it's gone! {here.building = sushi, weight = 0.5}
+Tuna's coming round. Tuna's coming round. {here.building = sushi, weight = 0.5}
+Too much wasabi. Way too much wasabi. {here.building = sushi, weight = 0.4}
 Everything's in the sale except what I want. {here.building = clothes, mood = -1, weight = 0.5}
 Is that in my colour? {here.building = clothes, weight = 0.6}
 I still can't stop thinking about it. {seen, weight = 3}
