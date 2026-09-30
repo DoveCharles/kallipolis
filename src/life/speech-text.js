@@ -569,6 +569,10 @@ function fill(text, person, vars, depth = 0, picks = null, avoid = null) {
   });
   return failed ? null : out.replace(/\s+/g, ' ').trim();
 }
+// The swears trait: SWEAR_CHANCE of "fucking" between each two words said aloud
+const SWEAR_CHANCE = 0.2;
+const sworn = text => text.split(' ').map((word, i) => i && random() < SWEAR_CHANCE ? 'fucking ' + word : word).join(' ');
+
 /**
  * An entry's [placeholders] filled for one person's card (see profileOf in profiles.js), with `rng` so the same person
  * always gets the same: the card wording, the spoken one (after a |, its own placeholders taking the card's picks in
@@ -627,7 +631,8 @@ function sayFrom(items, person, vars = {}, tried = new Set()) {
     if (!item) return null;
     tried.add(item);
     const held = { ...vars, $last: null };
-    const text = item.forms ? item.forms.first : fill(item.text, person, held);
+    let text = item.forms ? item.forms.first : fill(item.text, person, held);
+    if (text && person?.traits?.swears && !item.thought) text = sworn(text);
     if (text) return { text: capitalise(text), replies: item.replies ? compileNodes(item.replies, 0, [], item.where) : [], vars: held, end: item.end, thought: item.thought, score: item.score ?? 0 };
   }
   return null;

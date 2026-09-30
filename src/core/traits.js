@@ -79,6 +79,7 @@ export const TRAITS = {
   drunk: {base: 0, min: 0, max: 1, combine: 'add'} ,//0-1, added up; people at 0.5 weave and fall over as a few pints in, more at 1 (life/people/peopleDrunk.js). cars (any amount): control ×0.5 and steering swapped for 1-3s every 3-10s (see drunkSteer in life/traffic/driving.js); AI cars veer off their lane now and then (drunkVeer in life/traffic/collisions.js)
   unstable: {base: 0, min: 0, max: 1, combine: 'add'}, //chance to be hurt X5 more than usual
   hatespossessed: {base: 0, min: 0, max: 1, combine: 'on'}, //possessed: rants (held vowels, consonant noises, swears), runs as if W and Shift are held, HATES_POSSESSED_SPEED faster, view widened (possession.js) (life/possession.js controlInput, audio/dictionary.js aaa)
+  swears: {base: 0, min: 0, max: 1, combine: 'on'}, //1 in 5 chance of "fucking" between each two words they say (life/speech-text.js sworn)
   terrified: {base: 0, min: 0, max: 1, combine: 'on'}, //flees forever, always at a run and ranting (audio/dictionary.js aaa, no swears) (see updatePeople in life/people/people.js); possessed, as hatespossessed without swears (possession.js rushed)
   explosive: {base: 0, min: 0, max: 1, combine: 'on'}, //blow up on death, killing bystanders; if already blowing up, explosion becomes much bigger (see blasts in life/traffic/state.js)
   perception: { base: 1, min: 0, max: 5 }, // how likely a car is to notice someone lying in the road ahead and stop for them: 95% at 1, under half at 0.5 (see noticeChance in life/traffic/spacing.js)

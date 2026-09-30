@@ -166,7 +166,6 @@ Moths (butterflies ok) <nature>
 Moths AND butterflies <nature>
 AI restaurant menu art {agemult = 0.8, conservative = -0.05} <media>
 Having a good time {mood = -0.4, chatty = 0.7} <hobbies>
-Swearing out loud { evil = -0.05, agemult =1.1} <habits>
 Having an accident { agemult = 1.2} <health>
 Hyperpop {stimulants = 0.5} <media>
 Not being niche enough { evil = 0.01} <habits>
