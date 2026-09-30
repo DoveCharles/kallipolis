@@ -15,7 +15,7 @@ export const TRAITS = {
   health:    { base: 1, min: 0.01, max: 10}, //health multiplier
   maxboost:  { base: 1, min: 0.01, max: 10 }, // how many seconds of boost a car holds: multiplies BOOST_MAX_BASE (see boostMax in life/traffic/driving.js)
   recharge:  { base: 1, min: 0, max: 10 }, // how fast a car's boost refills: multiplies BOOST_RECHARGE_RATE (see rechargeBoost in life/traffic/driving.js)
-  size:      { base: 1, min: 0.3, max: 3 }, // scales how big something's drawn: a person's height (see people.js) or a car's whole body, engine note and wheels (see carScale in life/traffic/placing.js)
+  size:      { base: 1, min: 0.1, max: 3 }, // scales how big something's drawn: a person's height (see people.js) or a car's whole body, engine note and wheels (see carScale in life/traffic/placing.js)
   chatty:    { base: 1, min: 0, max: 10 },
   talkative: { base: 1, min: 0.05, max: 20 },
   lounging:  { base: 1, min: 0, max: 10 },
@@ -26,6 +26,8 @@ export const TRAITS = {
   parks:     { base: 1, min: 0, max: 8 },
   plazas:    { base: 1, min: 0, max: 8 },
   roadsafety:{ base: 1, min: 0.2, max: 3 },
+  shopping:  { base: 1, min: 0, max: 20 }, // how drawn to buying (stalls, shops, pub rounds) and to malls (life/shop-money.js spendWill, mallWill)
+  capital:   { base: 1, min: 0, max: 20 }, // multiplies their starting money, rounded (refreshTraits in life/people/people.js)
   mood:      { base: 0, min: -1, max: 1, combine: 'add' },
   happy:     { base: 0, min: 0, max: 1, combine: 'add' },
   sad:       { base: 0, min: 0, max: 1, combine: 'add' },
@@ -72,7 +74,7 @@ export const TRAITS = {
   capitalise: {base: 0, min: 0, max: 1, combine: 'on'}, //capitalise the first letter in every word
   legendary: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as legendary
   terrible: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as terrible
-  headsize: { base: 1, min: 0.2, max: 4 }, // multiplies the head (hair and all), scaled about the neck (see personLook in life/people/peopleModel.js)
+  headsize: { base: 1, min: 0.01, max: 20 }, // multiplies the head (hair and all), scaled about the neck (see personLook in life/people/peopleModel.js)
   nude: { base: 0, min: 0, max: 1, combine: 'on' }, // no clothes, never changes into any; a mosaic censor over them (life/people/peopleCensor.js)
   smells: { base: 0, min: 0, max: 1, combine: 'on' }, //people keep clear and leave circles it sits in (life/people/peopleSmell.js); cars pull over to let it by (life/traffic/pullover.js)
   respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time: the body stays whole (a car still explodes), shakes, then lightning revives it (see life/revive.js)

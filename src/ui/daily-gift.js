@@ -82,19 +82,30 @@ let spun = null; // { day, slot }: today's spin, if there's been one
 try { spun = JSON.parse(localStorage.getItem(SPIN_KEY)); } catch {}
 const spunToday = () => spun && spun.day === dayOf(new Date()) && REWARDS[spun.slot] ? spun : null;
 
-// the tick as each reward passes (quiet, short, a little random in pitch), through the master volume
-let lastTick = 0;
+// the tick as each reward passes: a click of filtered noise with a little knock under it, through the master volume
+let lastTick = 0, clickBuffer = null;
 function tick() {
-  const context = listener.context, now = context.currentTime;
-  if (isMuted() || context.state !== 'running' || now - lastTick < 0.03) return;
+  const context = listener.context;
+  if (context.state === 'suspended') context.resume();
+  const now = context.currentTime;
+  if (isMuted() || now - lastTick < 0.03) return;
   lastTick = now;
-  const osc = context.createOscillator(), gain = context.createGain();
-  osc.type = 'square';
-  osc.frequency.value = 1500 + Math.random()*300;
-  gain.gain.setValueAtTime(0.08, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
-  osc.connect(gain).connect(listener.getInput());
-  osc.start(now); osc.stop(now + 0.04);
+  if (!clickBuffer) { // (4ms of noise, dying away fast)
+    clickBuffer = context.createBuffer(1, Math.ceil(context.sampleRate*0.004), context.sampleRate);
+    const data = clickBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random()*2 - 1)*Math.pow(1 - i/data.length, 2);
+  }
+  const click = context.createBufferSource(), band = context.createBiquadFilter(), gain = context.createGain();
+  click.buffer = clickBuffer;
+  band.type = 'bandpass'; band.frequency.value = 2500 + Math.random()*600; band.Q.value = 1.5;
+  gain.gain.value = 0.8;
+  click.connect(band).connect(gain).connect(listener.getInput());
+  const knock = context.createOscillator(), knockGain = context.createGain();
+  knock.frequency.value = 900 + Math.random()*100;
+  knockGain.gain.setValueAtTime(0.175, now);
+  knockGain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
+  knock.connect(knockGain).connect(listener.getInput());
+  click.start(now); knock.start(now); knock.stop(now + 0.03);
 }
 
 // confetti, bursting from the middle of `box`

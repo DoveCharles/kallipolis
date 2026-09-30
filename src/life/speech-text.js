@@ -37,7 +37,7 @@ let lastReaction = -Infinity;
 export const SEEN_TIME = 60; // seconds someone remembers what they saw or felt, for {seen} and {felt} (p.seen / p.felt: see witness, notice and feel in people/people.js)
 const DEATHS = ['killedbycar', 'beatentodeath', 'smited', 'drowned', 'exploded', 'crashedinto', 'fell', 'punchedfence'];
 const SIGHTS = [...DEATHS, 'death', 'punch', 'knockedbycar', 'planecrash', 'beeattack', 'resurrected', 'healed', 'waterwalking', 'smelly', 'nude']; // ('death': any of DEATHS)
-const FEELINGS = ['punched', 'hitbycar', 'stung', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes', 'gifted', 'cheered', 'party', 'healed', 'dined', 'carcrash'];
+const FEELINGS = ['punched', 'hitbycar', 'stung', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes', 'gifted', 'cheered', 'party', 'healed', 'dined', 'carcrash', 'broke'];
 const MOOD_SHOWS = 0.3;       // how far their face (p.emotion, -1 to 1) has to be from neutral for is = sad / happy
 const HURT_BELOW = 0.7;       // share of full health under which they're hurt
 const STATES = { // {is = …}: how the speaker (or other.is: who they're talking to) is right now

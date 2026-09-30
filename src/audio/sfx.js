@@ -26,6 +26,14 @@ const SOUNDS = {
   gib: [
     [.9, .15, 130, 0, .04, .3, 4, 2, -20, , , , , 1.2, , .1, , .5, .05, , -1400],
   ],
+  // a dropped coin picked up (see life/coins.js): a bright two-note ding
+  coin: [
+    [.5, .05, 1675, , .06, .24, 1, 1.82, , , 837, .06],
+  ],
+  // a dropped coin spinning on the ground (see life/coins.js): a faint high tink
+  coinspin: [
+    [.3, .15, 2400, , .005, .06, 0, 2, , , , , , , , , , .4],
+  ],
   // a bee bursting (see explodeBee in life/giblets.js): a tiny pop
   pop: [
     [.8, .2, 500, 0, .01, .07, 4, 2, 60, , , , , .5],
@@ -116,10 +124,10 @@ const SOUNDS = {
 // how near something has to be for each sound to be heard at full volume, falling away past it (REF_DISTANCE if not here)
 // which sound level each is heard at (see LEVEL_KINDS): the rest go by the master level alone
 const KIND_OF = { punch: 'peds', whoosh: 'peds', curtain: 'peds', swingdoor: 'peds', flap: 'peds', service: 'peds', snip: 'peds', brush: 'peds', spray: 'peds', hairdryer: 'peds', clippers: 'peds', crash: 'traffic', thump: 'traffic', thunder: 'ambience' };
-const REACH = { crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5, latch: 4, curtain: 4, swingdoor: 5, flap: 4, service: 3, snip: 3, brush: 3, spray: 3, hairdryer: 3, clippers: 3 };
+const REACH = { coinspin: 2, crash: 12, thump: 6, punch: 4, whoosh: 2, door: 5, latch: 4, curtain: 4, swingdoor: 5, flap: 4, service: 3, snip: 3, brush: 3, spray: 3, hairdryer: 3, clippers: 3 };
 // for the little sounds of people that'd otherwise be heard from right across town (a fight in every park): how far off
 // they're heard at all, how fast they fade past their REACH, and how fast they're muffled (see muffler)
-const NEAR_ONLY = { punch: { hear: 40, rolloff: 2.5, muffle: 1.4 }, whoosh: { hear: 25, rolloff: 2.5, muffle: 1.4 } };
+const NEAR_ONLY = { coinspin: { hear: 10, rolloff: 3, muffle: 1.4 }, punch: { hear: 40, rolloff: 2.5, muffle: 1.4 }, whoosh: { hear: 25, rolloff: 2.5, muffle: 1.4 } };
 const VARIANTS = 3;
 const SPEED_OF_SOUND = 343;      // units (metres) a second
 const REF_DISTANCE = 25;         // how near something has to be to be heard at full volume, falling away past it

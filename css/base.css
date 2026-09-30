@@ -593,6 +593,7 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 /* the Pockets tab (src/life/person-card.js): a row of pocket slots, a keepsake's emoji in each (a dash in an empty one),
    what the one under the pointer does beneath them, and the Gift button */
 .pc-pane-pockets { display:flex; flex-direction:column; gap:8px; padding-top:6px; }
+.pc-wallet { margin-bottom:6px; font-weight:700; }
 .pc-pockets { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:6px; }
 :is(#person-card, #person-card-2) .pc-pocket { aspect-ratio:1; display:flex; align-items:center; justify-content:center; padding:0;
   font-size:22px; line-height:1; background:var(--bg-input); border:1px solid var(--border); color:inherit; cursor:pointer; position:relative; }

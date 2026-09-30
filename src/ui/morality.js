@@ -3,7 +3,7 @@ import { toUi } from './ui-scale.js';
 import { whenLoaded } from './loading.js';
 import { revealEnergy } from './energy.js';
 import './daily-gift.js';
-import { revealMoney, tickUp } from './money.js';
+import { gainPop, revealMoney, tickUp } from './money.js';
 
 // ============================================================ morality meter
 // How good or evil the city is, in a meter at the top right: spendable evil/good points, and a bar split red/green by the lifetime ratio.
@@ -233,7 +233,17 @@ function accrue(t) {
 }
 const pad3 = n => String(Math.floor(n)).padStart(3, '0');
 let pointsShown = false; // (000 until the bar's ready, then ticked up: see BAR_DELAY)
-function renderPoints() { if (pointsShown) { evilEl.textContent = pad3(pts.evil); goodEl.textContent = pad3(pts.good); } }
+let shownPts = null; // (what the counts last read, to see them go up)
+function renderPoints() {
+  if (!pointsShown) return;
+  const now = { evil: Math.floor(pts.evil), good: Math.floor(pts.good) };
+  if (shownPts) {
+    if (now.good > shownPts.good) gainPop(goodEl, now.good - shownPts.good, 'var(--ratio-good)');
+    if (now.evil > shownPts.evil) gainPop(evilEl, now.evil - shownPts.evil, 'var(--ratio-evil)');
+  }
+  shownPts = now;
+  evilEl.textContent = pad3(now.evil); goodEl.textContent = pad3(now.good);
+}
 /** Spendable points. @returns {{evil:number, good:number}} */
 export const moralityPoints = () => ({ evil: Math.floor(pts.evil), good: Math.floor(pts.good) });
 /** Spend points from one side if there are enough. @param {'evil'|'good'} side @param {number} k @returns {boolean} */

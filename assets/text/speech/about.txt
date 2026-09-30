@@ -198,6 +198,8 @@
 #   {felt = gifted}           was just given something (the Gift button on their card: see assets/text/gifts.txt)
 #   {felt = cheered}          was just given something that cheered them up out of a sad or angry mood
 #   {felt = dined}            just finished a meal at a restaurant
+#   {felt = broke}            couldn't pay (£4) at a stall, pub, salon, clothes shop or restaurant (see src/life/shop-money.js);
+#                             here.building says which shop, none at a stall (coffee, hot dog or beer, outdoors)
 #   {felt = carcrash}         was inside when a car smashed through the wall; ran out as the building came down
 #   {felt = healed}          a MedBot just healed them back to full health (see src/life/medbot.js)
 #   {felt = party}            just turned up at a party (the Party button on a building's card, while you're inside it:

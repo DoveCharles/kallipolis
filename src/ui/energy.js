@@ -1,5 +1,5 @@
 import { App, S } from '../core/shared.js';
-import { tickUp } from './money.js';
+import { gainPop, tickUp } from './money.js';
 
 // Energy: regenerates to ENERGY_MAX (addEnergy's `over` can pass it), one back every REGEN_MS, kept in localStorage so it carries across reloads.
 // Shown in #morality-meter's .energy: the count.
@@ -59,15 +59,18 @@ const nEl = el.querySelector('.energy-n');
 const pad3 = n => String(Math.floor(n)).padStart(3, '0'); // (shown as 007, like the morality points)
 function render() {
   settle();
-  if (revealed) nEl.textContent = pad3(s.n);
+  if (revealed) {
+    if (shownN !== null && s.n > shownN) gainPop(el, s.n - shownN, '#d8c070');
+    shownN = s.n; nEl.textContent = pad3(s.n);
+  }
   document.body.classList.toggle('energy-out', !S.devInfiniteEnergy && s.n <= 0); // (greys out whatever costs energy)
 }
 // (0 until revealEnergy, then ticked up with the money and morality points: see morality.js)
-let revealed = false;
+let revealed = false, shownN = null; // (shownN: what the count last read, to see it go up)
 /** Show the real count, ticking up to it. @returns {void} */
 export function revealEnergy() {
   tickUp(v => { nEl.textContent = pad3(v); }, () => energy());
-  setTimeout(() => { revealed = true; render(); }, 800);
+  setTimeout(() => { revealed = true; shownN = energy(); render(); }, 800);
 }
 setInterval(render, 1000);
 render();

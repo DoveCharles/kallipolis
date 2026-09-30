@@ -1,8 +1,9 @@
 import { S } from '../../core/shared.js';
-import { headingTo, people, peopleNav, peopleRng, walkableUpTo, wrapAngle } from './people.js';
+import { feel, headingTo, people, peopleNav, peopleRng, walkableUpTo, wrapAngle } from './people.js';
 import { endActivity } from './peopleActivities.js';
 import { walkwayPoint } from './peoplePathing.js';
 import { giveSnack } from './peopleHolding.js';
+import { canAfford, pay, spendWill, tooPoor } from '../shop-money.js';
 
 // ============================================================ buying from a stall
 // A hot dog stand, a coffee stall or a beer stall put down among the objects (see objects/object-types.js) sells to whoever is passing:
@@ -69,10 +70,16 @@ function nearestOf(p, reach, canWalk, only) {
   return best;
 }
 function startBuying(p, { o, slot }) {
+  if (!canAfford(p)) { // (too poor: grumbles, and doesn't try again for a while)
+    tooPoor(p, feel);
+    p.snackCooldown = SNACK_COOLDOWN[0] + peopleRng()*(SNACK_COOLDOWN[1] - SNACK_COOLDOWN[0]);
+    return false;
+  }
   p.act = 'buy';
   p.stage = 'go';
   p.timer = GIVE_UP;
   p.buy = { stall: o.id, slot, item: STALLS[o.type].item };
+  return true;
 }
 
 /**
@@ -82,11 +89,10 @@ function startBuying(p, { o, slot }) {
  * @returns {boolean} whether they're off to one
  */
 export function goBuy(p, area) {
-  if (!wantsOne(p)) return false;
+  if (!wantsOne(p) || peopleRng() > spendWill(p)) return false;
   const stall = nearestStall(p, HANGOUT_REACH, at => walkableUpTo(area, p, at.x, at.z).clear);
   if (!stall) return false;
-  startBuying(p, stall);
-  return true;
+  return startBuying(p, stall);
 }
 /** Whether there's a stall in a hangout at all, for weighing up going to one. */
 export const hasStallIn = (area, type = null) => S.objects.some(o => STALLS[o.type] && (!type || o.type === type) && area.inside(o.x, o.z));
@@ -99,15 +105,14 @@ export const hasStallIn = (area, type = null) => S.objects.some(o => STALLS[o.ty
  * @returns {boolean} whether they're off to one
  */
 export function maybeBuyOnWalkway(p, dt) {
-  if (peopleRng() > dt*WALKWAY_RATE || !wantsOne(p) || p.jc || p.crossStage) return false;
+  if (peopleRng() > dt*WALKWAY_RATE*spendWill(p) || !wantsOne(p) || p.jc || p.crossStage) return false;
   const stall = nearestStall(p, WALKWAY_REACH, at => {
     const steps = Math.max(2, Math.ceil(Math.hypot(at.x - p.x, at.z - p.z)/0.5));
     for (let k=1;k<=steps;k++) if (peopleNav.onPavement(p.x + (at.x - p.x)*k/steps, p.z + (at.z - p.z)*k/steps)) return false;
     return true;
   });
   if (!stall) return false;
-  startBuying(p, stall);
-  return true;
+  return startBuying(p, stall);
 }
 
 /**
@@ -139,6 +144,7 @@ export function updateBuying(p, dt, y) {
       p.faceTo = at.facing;
       p.timer -= dt;
       if (p.timer > 0) return null;
+      if (!pay(p)) { tooPoor(p, feel); return doneBuying(p); }
       giveSnack(p, buy.item);
       const cooldown = buy.item === 'beer' ? PINT_COOLDOWN : SNACK_COOLDOWN;
       p.snackCooldown = cooldown[0] + peopleRng()*(cooldown[1] - cooldown[0]);

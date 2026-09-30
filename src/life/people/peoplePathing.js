@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { App, S, buildingHolders } from '../../core/shared.js';
+import { canAfford, mallWill } from '../shop-money.js';
 import { Y_PARK, Y_PATH, Y_ROAD, Y_SIDEWALK, Y_ZONE_GROUND } from '../../core/scene.js';
 import { centroid } from '../../core/math.js';
 import { buildingEnterable, buildingKindOf } from '../../buildings/building-types.js';
@@ -304,19 +305,20 @@ export function buildPeopleNav() {
   // (a mall's galleries, bridges and escalators are walked the same way, but indoors: see roads/mall.js — their
   // escalators' feet join the concourse, never a pavement)
   const rampFeet = [];
-  [...(S.raisedNav || []), ...(S.malls || []).flatMap(mall => mall.mallNav || [])].forEach(net => {
+  const mallNets = new Set((S.malls || []).flatMap(mall => mall.mallNav || [])); // (a mall's: `mall` on its lines, for mallWill)
+  [...(S.raisedNav || []), ...mallNets].forEach(net => {
     const decks = [];
     net.decks.forEach(tess => {
       const { pts } = resampleLine(tess), cum = cumulative(pts);
       if (cum[cum.length-1] < 1) return;
       decks.push(lines.length);
-      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, indoor: !!net.indoor, y: net.H, lateral: net.lateral, walk: net.walk,
+      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, indoor: !!net.indoor, mall: mallNets.has(net), y: net.H, lateral: net.lateral, walk: net.walk,
         blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
     });
     net.ramps.forEach(ramp => {
       const pts = ramp.pts, cum = cumulative(pts), li = lines.length;
       // (an escalator carries people at its own pace, only ever one way: see roads/mall.js, and riding in people.js)
-      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, ramp: true, indoor: !!net.indoor, y: net.H, ys: ramp.ys,
+      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, raised: true, ramp: true, indoor: !!net.indoor, mall: mallNets.has(net), y: net.H, ys: ramp.ys,
         lateral: ramp.lateral, walk: ramp.walk, escalator: ramp.escalator || 0, beltEnd: ramp.beltEnd ?? pts.length - 1, oneWay: ramp.oneWay || 0,
         blocked: pts.map(() => false), overWater: null, vertices: pts.map(() => ({ links: [], entrances: [] })) });
       let top = null;
@@ -359,7 +361,7 @@ export function buildPeopleNav() {
       const blocked = pts.map(p => inMid(p.x, p.z));
       if (blocked.every(Boolean)) return;
       const li = lines.length;
-      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, y: Y_ZONE_GROUND, lateral: LANE_LATERAL,
+      lines.push({ pts, cum, total: cum[cum.length-1], loop: false, ring: false, path: true, y: Y_ZONE_GROUND, lateral: LANE_LATERAL, mall: !!S.malls?.includes(zone),
         blocked, overWater: pts.map(p => inWater(p.x, p.z)), vertices: pts.map(() => ({ links: [], entrances: [] })) });
       // a lane that comes out at the pavement joins the sidewalk there, the way a drawn path's end does. The others meet
       // the lanes they run into, which byPlace picks up from the point they share.
@@ -741,6 +743,19 @@ function takeLink(p, link) {
   return peopleNav.lines[link.li];
 }
 
+// A way to turn: weighed by mallWill into a mall from outside it, out of one for anyone who can't afford anything
+function pickTurn(p, nav, turns) {
+  const weights = turns.map(l => {
+    const into = peopleNav.lines[l.li].mall;
+    return into && !nav.mall ? mallWill(p) : !into && nav.mall && !canAfford(p) ? 10 : 1;
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return turns[Math.floor(peopleRng()*turns.length)];
+  let roll = peopleRng()*total;
+  for (let k = 0; k < turns.length; k++) if ((roll -= weights[k]) < 0) return turns[k];
+  return turns[turns.length - 1];
+}
+
 /**
  * Move a person `dist` along their walkway, dealing with each point they pass: maybe wandering into a hangout, maybe
  * turning off onto another walkway or heading over a zebra crossing, and turning back at a dead end (or where a path
@@ -762,7 +777,8 @@ export function walkAlong(p, dist) {
     if (vertex.building && (hidingFromSun(p) || (mayGoIndoors(p) && peopleRng() < enterChance(p, vertex.building)))) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
     const isEnd = (!nav.loop && (ahead === 0 || ahead === last)) || !!nav.blocked?.[nextVertex(nav, ahead, p.dir)];
     const entrance = vertex.entrances.length ? vertex.entrances[Math.floor(peopleRng()*vertex.entrances.length)] : null;
-    const drawn = entrance ? (isOpenGround(peopleNav.areas[entrance.area]) ? p.traits.parks : p.traits.plazas) : 0;
+    const area = entrance ? peopleNav.areas[entrance.area] : null;
+    const drawn = !area ? 0 : area.kind === 'foodcourt' ? mallWill(p) : isOpenGround(area) ? p.traits.parks : p.traits.plazas;
     if (entrance && peopleRng() < 0.12*drawn) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
     // linkCooldown stops them turning off again immediately after a turn, which would otherwise let a junction with
     // several close-together links send them zigzagging back the way they came
@@ -775,9 +791,11 @@ export function walkAlong(p, dist) {
         startZebraCrossing(p, nav, ahead, crossings[Math.floor(peopleRng()*crossings.length)]);
         return;
       }
-      if (turns.length && (offEscalator || peopleRng() < (isEnd ? 0.85 : 0.3) || (hidingFromSun(p) && !hasDoor(nav)))) {
+      // (into a mall by their mallWill; the skint, in one, take any way out)
+      const leaving = nav.mall && !canAfford(p) && turns.some(l => !peopleNav.lines[l.li].mall);
+      if (turns.length && (leaving || offEscalator || peopleRng() < (isEnd ? 0.85 : 0.3) || (hidingFromSun(p) && !hasDoor(nav)))) {
         const remaining = Math.abs(u - at);
-        nav = takeLink(p, turns[Math.floor(peopleRng()*turns.length)]);
+        nav = takeLink(p, pickTurn(p, nav, turns));
         u = p.u + p.dir*remaining;
         continue;
       }

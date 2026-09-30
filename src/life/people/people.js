@@ -39,6 +39,7 @@ import { avoidSmells, updateFlies } from './peopleSmell.js';
 import { keepOutOfWindows } from './peopleWindows.js';
 import { updateStatusEffects, restackTraits } from '../statuseffects.js';
 import { stockPockets } from '../gifts.js';
+import { dropCoins } from '../coins.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { slideOff, stepFall } from './peopleFall.js';
 import { updateCrazy } from './peopleCrazy.js';
@@ -472,7 +473,7 @@ export function syncPeopleUI() {
 // (see the end of newPerson)
 const PERSON_LATER_FIELDS = Object.fromEntries([
   // who they are (refreshTraits), how they look (updatePeople)
-  'health', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
+  'health', 'walletSet', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
   // what they say and think
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
   'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
@@ -493,6 +494,7 @@ const PERSON_LATER_FIELDS = Object.fromEntries([
  */
 export function newPerson(id = S.peopleIdSeq++) {
   const baseHeight = 0.85 + peopleRng()*0.27; // (their height, before their size trait)
+  const wallet = Math.floor(Math.random()*10) + 5*Math.floor(Math.random()*6) + 10*Math.floor(Math.random()*6) + 20*Math.floor(Math.random()*6);
   return { id, x:0, y:0, z:0, heading: peopleRng()*Math.PI*2, stride: 0.8 + peopleRng()*0.4, baseHeight, height: baseHeight, phase: peopleRng()*10,
     mode: 'none', li: 0, u: 0, dir: 1, seg: 0, lat: 0, area: -1, tx: 0, tz: 0, wait: 0, exit: null, moving: false, stepped: 0,
     // the model's animation: how far through the walk (in whole cycles) and the looping ones (in seconds) they are; the
@@ -531,6 +533,8 @@ export function newPerson(id = S.peopleIdSeq++) {
     crossStage: null, jc: null, crossCheckIn: peopleRng()*5, linkCooldown: 0,
     // riding the trains (see "riding the trains"): where they are in it (null if they aren't), and how long until they
     // consider riding again
+    // their wallet (£; dropped as coins when they die: see life/coins.js), before and after their capital trait (refreshTraits)
+    walletBase: wallet, wallet,
     train: null, trainCooldown: 20 + peopleRng()*40, snack: null, buy: null, snackCooldown: peopleRng()*30,
     // going into a building (see "going indoors"): where they are in it (null if they aren't), and how long until they
     // consider going into one again
@@ -568,6 +572,8 @@ export function refreshTraits(p, i) {
   // (who they are, with what's in their pockets and what they're under stacked over it: see life/statuseffects.js)
   p.baseTraits = profile.traits;
   restackTraits(p);
+  // (their starting money times their capital, kept up with their traits until they've spent any)
+  if (p.walletSet === undefined || p.wallet === p.walletSet) p.wallet = p.walletSet = Math.round(p.walletBase*p.baseTraits.capital);
   p.height = p.baseHeight*p.traits.size;
   p.age = profile.age;
   p.name = profile.name; // (for their card, and for naming them in the morality notices when they die)
@@ -1046,6 +1052,7 @@ function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = 
   }
   Object.values(colors).forEach(color => color?.isColor && color.lerp(new THREE.Color(0x550000), 0.4)); //make gibs darker, less saturated
   explode(at, 1.7*p.height*S.peopleSize, colors, thrown);
+  if (p.wallet > 0) { dropCoins(at, p.wallet); p.wallet = 0; }
   bystandersReactToDeath(p, source);
   witness(p, cause);
   p.mode = 'dead';

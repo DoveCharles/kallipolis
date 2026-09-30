@@ -1,4 +1,5 @@
 import { App, S } from '../core/shared.js';
+import { toUi } from './ui-scale.js';
 
 // Money: a count kept in localStorage, shown in #morality-meter's .money.
 const KEY = 'kallipolis.money';
@@ -19,7 +20,30 @@ function moneyText(v) {
 // (held at £000000 until revealMoney, then ticked up: see tickUp)
 let revealed = false;
 const show = v => { el.textContent = '£' + moneyText(v); };
-const render = () => { if (revealed) show(n); };
+let shownN = null; // (what the count last read, to see it go up)
+const render = () => {
+  if (!revealed) return;
+  if (shownN !== null && n > shownN) gainPop(el.parentElement, n - shownN, '#6f9a5f');
+  shownN = n; show(n);
+};
+
+/**
+ * A count going up: `el` (its indicator) shakes, and "+n" in `color` rises from just under it and fades.
+ * @param {HTMLElement} el @param {number} amount @param {string} color
+ */
+export function gainPop(el, amount, color) {
+  el.animate([{ transform: 'translate(0, 0)' }, { transform: 'translate(-2px, 1px)' }, { transform: 'translate(2px, -1px)' },
+    { transform: 'translate(-2px, -1px)' }, { transform: 'translate(2px, 1px)' }, { transform: 'translate(0, 0)' }], { duration: 250, easing: 'steps(1, end)' });
+  const box = el.getBoundingClientRect(), pop = document.createElement('div');
+  pop.className = 'gain-pop';
+  pop.textContent = '+' + Math.round(amount);
+  pop.style.color = color;
+  pop.style.left = toUi(box.left + box.width/2 + 6) + 'px';
+  pop.style.top = toUi(box.bottom + 2) + 'px';
+  document.body.append(pop);
+  pop.animate([{ transform: 'translate(-50%, 0)', opacity: 1 }, { transform: 'translate(-50%, 0)', opacity: 1, offset: 0.3 },
+    { transform: 'translate(-50%, -18px)', opacity: 0 }], { duration: 1800, easing: 'ease-out' }).onfinish = () => pop.remove();
+}
 
 // A count ticking up from 0 to `target()` in uneven steps (0, 8, 20, 50, 70, 82, 90 of 90), the last step reading the
 // target again in case it moved meanwhile. @param {(v: number) => void} set @param {() => number} target
@@ -29,7 +53,7 @@ export function tickUp(set, target) {
   TICK_STEPS.forEach((f, i) => setTimeout(() => set(f === 1 ? target() : Math.floor(to*f)), i*TICK_MS));
 }
 /** Show the real money, ticking up to it. @returns {void} */
-export function revealMoney() { tickUp(show, () => n); setTimeout(() => { revealed = true; render(); }, TICK_STEPS.length*TICK_MS); }
+export function revealMoney() { tickUp(show, () => n); setTimeout(() => { revealed = true; shownN = n; render(); }, TICK_STEPS.length*TICK_MS); }
 
 /** Money now. @returns {number} */
 export const money = () => n;

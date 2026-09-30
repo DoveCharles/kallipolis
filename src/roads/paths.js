@@ -384,6 +384,7 @@ export function attachWalkwayFringes(force) {
     fringe.renderOrder = -1;
     fringe.name = 'WalkwayFringe';
     fringe.raycast = () => {}; // picking a walkway means its paving, not the dust beside it
+    fringe.userData.ground = true; // (but things still land on it: see core/ground-probe.js)
     mesh.add(fringe);
   });
 }

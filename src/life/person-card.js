@@ -97,7 +97,7 @@ function makePersonWindow(id) {
   // pointer does beneath them, and the Gift button, which opens the Gift window (see gifts.js). Clicking a keepsake takes
   // it back.
   const pockets = card.tabPane('pockets');
-  pockets.innerHTML = '<div class="pc-pockets"></div><div class="pc-pocket-info"></div>'
+  pockets.innerHTML = '<div class="pc-wallet"></div><div class="pc-pockets"></div><div class="pc-pocket-info"></div>'
     + '<div class="pc-pocket-foot"><button class="btn pc-gift" title="Give them something">Gift…</button></div>';
   w.pocketSlots = Array.from({ length: POCKET_SLOTS }, (_, slot) => {
     const button = document.createElement('button');
@@ -114,6 +114,7 @@ function makePersonWindow(id) {
     pockets.querySelector('.pc-pockets').append(button);
     return button;
   });
+  w.walletEl = pockets.querySelector('.pc-wallet');
   w.pocketInfo = pockets.querySelector('.pc-pocket-info');
   pockets.querySelector('.pc-gift').addEventListener('click', () => openGifts(w));
   w.pocketsShown = null;
@@ -435,9 +436,11 @@ function pocketItems(p) {
 function refreshPockets(w) {
   if (!pocketsOpen(w)) return;
   const carried = pocketItems(personOf(w));
-  const key = carried.map(item => item.gift.name + (item.sips ?? '')).join('|');
+  const wallet = personOf(w)?.wallet ?? 0;
+  const key = wallet + ':' + carried.map(item => item.gift.name + (item.sips ?? '')).join('|');
   if (key === w.pocketsShown) return;
   w.pocketsShown = key;
+  w.walletEl.textContent = `👛 Wallet: £${wallet}`;
   w.pocketSlots.forEach((button, slot) => {
     const item = carried[slot];
     if (item?.sips != null) {

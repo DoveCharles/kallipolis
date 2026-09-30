@@ -85,6 +85,7 @@
  *   stacked over them (see life/statuseffects.js)
  * @property {object} [baseTraits] - those traits as they were picked, before any status moved them: what p.traits is put
  *   back to when the last of them runs out
+ * @property {number} wallet - £ carried, dropped as coins on death (life/coins.js)
  * @property {object[]} [pockets] - the keepsakes they carry, each one of GIFTS (see life/gifts.js): their traits are
  *   stacked over p.baseTraits with the statuses'
  * @property {string} [moodNow] - a mood they've been cheered up to by a gift, worn in place of the one they were picked

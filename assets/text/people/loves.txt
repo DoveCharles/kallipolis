@@ -2,8 +2,8 @@ Their nickname | My nickname {nickname, choiceweight = 4} <habits>
 Swearing {swears, choiceweight = 2} <habits>
 Controversially, [hates] {choiceweight = 50}
 Stoicism | Stoicism {normal = 2, conservative = 0.05} <beliefs>
-Seed money {conservative = 0.2}
-stimulating the economy
+Seed money {conservative = 0.2, capital = 5}
+stimulating the economy {shopping = 10, capital = 4}
 Big noses
 Cop Dramas {outlaw = 0.9}
 Mighty Morphin Power Rangers
@@ -206,7 +206,7 @@ Labubu!!! | Labubu!!! <stuff>
 The subscription model {evil = 0.05} <beliefs>
 Looking at their guitar but never playing it, ever | looking at my guitar but never playing it, ever <habits>
 Not eating their vegetables | not eating my vegetables  {size = 0.84, evil = 0.05} <tastes>
-Pots of gold {size =0.45, evil = 0.05, aggression = 10} <stuff>
+Pots of gold {size =0.3, evil = 0.05, aggression = 10, capital = 5, headsize = 3, limit = 4b} <stuff>
 Stinky tofu {appeal = -0.2, conservative = -0.01} <tastes>
 Capitalising Every Word In A Sentence {capitalise, limit = 3b} <habits>
 Rocket boots {speed = 4} <stuff>
@@ -263,7 +263,7 @@ Whipped cream <tastes>
 The right to protest {evil = -0.05, aggression = 3, conservative = -0.05} <beliefs>
 Bleach {bleach} <stuff>
 Ugly phone covers <stuff>
-Estate sales { agemult = 1.1} <hobbies>
+Estate sales { agemult = 1.1, capital = 1.5, shopping = 1.5} <hobbies>
 Corporate Memphis | Corporate Memphis <media>
 Jerking it imagination only {evil = -0.05} <lewd>
 Coconut yoghurt <tastes>
@@ -331,7 +331,7 @@ Debating at university campuses {talkative = 3, chatty = 6, evil = 0.1, aggressi
 Being a subject <beliefs>
 Suggesting increasingly bizarre "would you rather"s {chatty = 4, patience = 0.9, evil = 0.05} <hobbies>
 Juice <tastes>
-Retail therapy <hobbies>
+Retail therapy {shopping = 10} <hobbies>
 Ripping their shirt off like a werewolf | ripping my shirt off like a werewolf { aggression = 2} <surreal>
 Trying to blow people up with their mind | trying to blow people up with my mind {chatty = 0.5, evil = 0.05} <surreal>
 Apologising needlessly {chatty = 2, mood = -0.3, evil = -0.05, aggression = 0.1} <habits>
@@ -476,7 +476,7 @@ Using the em dash — which is very normal to use — by copy and pasting it fro
 Choosing not to care <habits>
 Oral fixation <lewd>
 Having webbed feet {aqua} <health>
-Half-price swimming lessons {aqua} <hobbies>
+Half-price swimming lessons {aqua, shopping = 0.5} <hobbies>
 Skinny-dipping {aqua, nude} <hobbies>
 Full frontal {nude} <lewd>
 Holding their breath underwater | holding my breath under water {aqua} <hobbies>
@@ -487,7 +487,7 @@ Lapping up water like a dog <surreal>
 Saying, "touché" <habits>
 Squirty cheese <tastes>
 Angry Birds | Angry Birds <media>
-Dostoevsky's Crime and Punishment | Dostoevsky's Crime and Punishment {nerd =3} <media>
+Dostoevsky's Crime and Punishment | Dostoevsky's Crime and Punishment {nerd =3, patience = 3} <media>
 Getting sillay {mood = 0.2, crazy = 0.05} <habits>
 Performing miracles {waterwalking} <surreal>
 The quick brown fox that jumps over the lazy dog <surreal>

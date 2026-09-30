@@ -151,6 +151,27 @@ I'll need a nap after that. {felt = dined, thought}
 Too much garlic. There's no such thing. {felt = dined, thought}
 The portions were tiny. {felt = dined, patience = -1}
 
+Skint again. {felt = broke}
+Four quid? For that? {felt = broke, patience = -1}
+I'm sure I had a fiver on me. {felt = broke, thought}
+Can I pay you next week? {felt = broke}
+Payday can't come soon enough. {felt = broke, mood = -1}
+My wallet's crying. {felt = broke, mood = -1, thought}
+Cheaper to stay home. {felt = broke, thought}
+Money doesn't grow on trees, apparently. {felt = broke}
+I only wanted a coffee. {felt = broke, is = sleepy, thought}
+Not even enough for a hot dog. {felt = broke, thought}
+Guess I'm not drinking tonight. {felt = broke, is = drunk, mood = -1}
+Can't even afford a pint. {felt = broke, here.building = pub}
+Put it on my tab? No? {felt = broke, here.building = pub}
+One pint. Just one. Please. {felt = broke, here.building = pub, patience = -1}
+I'll just cut it myself, then. {felt = broke, here.building = salon}
+Bad hair day it is, then. {felt = broke, here.building = salon, mood = -1}
+Just looking. Just... looking. {felt = broke, here.building = clothes}
+I'll wear what I've got. {felt = broke, here.building = clothes, thought}
+I'll just smell the food, then. {felt = broke, here.building = restaurant}
+Is the bread free, at least? {felt = broke, here.building = restaurant}
+
 Fits like a glove. {felt = newclothes, happy}
 Does this make me look fat? {felt = newclothes, thought}
 I'm never taking this off. {felt = newclothes, mood}
