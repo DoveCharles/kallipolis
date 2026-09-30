@@ -272,6 +272,7 @@ hates = Cappuccino after noon
 hates = Asking for ketchup
 hates = No-shows on a Saturday
 
+[clothes]
 enterable = yes
 name = Clothes Shop
 title = TK Minn {font = 900 Arial Black, color = #e8202a}
