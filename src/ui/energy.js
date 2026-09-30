@@ -2,7 +2,7 @@ import { App, S } from '../core/shared.js';
 import { tickUp } from './money.js';
 
 // Energy: regenerates to ENERGY_MAX (addEnergy's `over` can pass it), one back every REGEN_MS, kept in localStorage so it carries across reloads.
-// Shown in #morality-meter's .energy: count, and a countdown to the next one (0:00:00 when full).
+// Shown in #morality-meter's .energy: the count.
 const KEY = 'kallipolis.energy';
 export const ENERGY_MAX = 10;
 const REGEN_MS = 20 * 60 * 1000;
@@ -55,21 +55,18 @@ const el = document.querySelector('#morality-meter .energy');
 // anything marked data-energy (it costs energy) lights the count up while hovered
 document.addEventListener('pointerover', e => el.classList.toggle('energy-hover', !!e.target.closest?.('[data-energy]')));
 function flashEmpty() { el.classList.remove('energy-empty'); void el.offsetWidth; el.classList.add('energy-empty'); }
-const nEl = el.querySelector('.energy-n'), timerEl = el.querySelector('.energy-timer');
-const pad = n => String(n).padStart(2, '0');
+const nEl = el.querySelector('.energy-n');
+const pad3 = n => String(Math.floor(n)).padStart(3, '0'); // (shown as 007, like the morality points)
 function render() {
   settle();
-  if (revealed) nEl.textContent = `${s.n}/${ENERGY_MAX}`;
+  if (revealed) nEl.textContent = pad3(s.n);
   document.body.classList.toggle('energy-out', !S.devInfiniteEnergy && s.n <= 0); // (greys out whatever costs energy)
-  if (s.n >= ENERGY_MAX) { timerEl.textContent = '0:00:00'; return; }
-  const left = Math.max(0, Math.ceil((s.t + REGEN_MS - Date.now()) / 1000));
-  timerEl.textContent = `${Math.floor(left / 3600)}:${pad(Math.floor(left / 60) % 60)}:${pad(left % 60)}`;
 }
 // (0 until revealEnergy, then ticked up with the money and morality points: see morality.js)
 let revealed = false;
 /** Show the real count, ticking up to it. @returns {void} */
 export function revealEnergy() {
-  tickUp(v => { nEl.textContent = `${v}/${ENERGY_MAX}`; }, () => energy());
+  tickUp(v => { nEl.textContent = pad3(v); }, () => energy());
   setTimeout(() => { revealed = true; render(); }, 800);
 }
 setInterval(render, 1000);

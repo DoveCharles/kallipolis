@@ -2,6 +2,7 @@ import { S, App } from '../core/shared.js';
 import { toUi } from './ui-scale.js';
 import { whenLoaded } from './loading.js';
 import { revealEnergy } from './energy.js';
+import './daily-gift.js';
 import { revealMoney, tickUp } from './money.js';
 
 // ============================================================ morality meter
