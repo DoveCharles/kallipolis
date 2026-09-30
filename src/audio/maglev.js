@@ -1,6 +1,6 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, outdoorsOf, isMuted, ear, loopPanning } from './sfx.js';
+import { listener, outdoorsOf, isMuted, ear, loopPanning, handOver, handingOver, placePanner, makePanner } from './sfx.js';
 
 // ============================================================ the shuttles
 // The shuttles gliding through their solenoid tubes (see updateTrainShuttles in trains/trains.js), which ought to sound
@@ -36,8 +36,7 @@ function makeShuttle() {
   depth.gain.value = 0;
   lfo.connect(depth).connect(throb.gain);
   lfo.start();
-  const panner = context.createPanner();
-  panner.panningModel = loopPanning();
+  const panner = makePanner(context, loopPanning());
   panner.distanceModel = 'inverse';
   panner.refDistance = REF_DISTANCE;
   throb.connect(out).connect(panner).connect(outdoorsOf('traffic'));
@@ -58,11 +57,10 @@ function makeShuttle() {
 function oneShot(at, seconds, build, refDistance = REF_DISTANCE) {
   const context = listener.context;
   if (context.state !== 'running') return;
-  const panner = context.createPanner(), gain = context.createGain();
-  panner.panningModel = loopPanning();
+  const panner = makePanner(context, loopPanning()), gain = context.createGain();
   panner.distanceModel = 'inverse';
   panner.refDistance = refDistance;
-  panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
+  placePanner(panner, at.x, at.y, at.z, seconds + 1);
   gain.connect(panner).connect(outdoorsOf('traffic'));
   const sources = build(gain, context.currentTime);
   sources[sources.length - 1].onended = () => panner.disconnect();
@@ -194,10 +192,11 @@ export function updateShuttleSounds(carriages, dt) {
   while (shuttles.length < Math.min(SHUTTLES_MAX, near.length)) shuttles.push(makeShuttle());
   const now = listener.context.currentTime;
   shuttles.forEach(e => { if (e.lineId && !near.some(n => n.s.lineId === e.lineId)) e.lineId = null; });
-  near.forEach(n => { if (!shuttles.some(e => e.lineId === n.s.lineId)) shuttles.find(e => !e.lineId).lineId = n.s.lineId; });
+  near.forEach(n => { if (!shuttles.some(e => e.lineId === n.s.lineId)) { const e = shuttles.find(e => !e.lineId); e.lineId = n.s.lineId; handOver(e, e.out.gain, now); } });
   for (const e of shuttles) {
     const n = e.lineId && near.find(m => m.s.lineId === e.lineId);
     if (!n) { e.out.gain.setTargetAtTime(0, now, 0.2); continue; }
+    if (handingOver(e, now)) continue;
     const v = Math.min(1.2, n.speed/TOP_SPEED), hz = HUM_HZ + (TOP_HZ - HUM_HZ)*v;
     e.oscillators.forEach(({ oscillator, ratio }) => oscillator.frequency.setTargetAtTime(hz*ratio, now, 0.05));
     e.whine.forEach(({ oscillator, gain, ratio }, k) => {
@@ -211,6 +210,6 @@ export function updateShuttleSounds(carriages, dt) {
     e.throb.gain.setTargetAtTime(1 - deep, now, 0.1);
     e.out.gain.setTargetAtTime(VOLUME*(IDLE + (1 - IDLE)*Math.min(1, v)), now, 0.1);
     const at = n.s.object.position;
-    e.panner.positionX.value = at.x; e.panner.positionY.value = at.y; e.panner.positionZ.value = at.z;
+    placePanner(e.panner, at.x, at.y, at.z);
   }
 }

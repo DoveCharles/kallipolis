@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { camera } from '../core/scene.js';
-import { listener, outdoorsOf, inside, ear, loopPanning } from './sfx.js';
+import { listener, outdoorsOf, inside, ear, loopPanning, handOver, handingOver, placePanner, makePanner } from './sfx.js';
 
 // ============================================================ aircraft
 // The aircraft about the airfields (see updateAirports in zones/airport.js): loops synthesized live like the engines (see
@@ -76,8 +76,7 @@ function makeVoice() {
   chopDepth.gain.value = 0;
   lfo.connect(chopDepth).connect(chop.gain);
   lfo.start();
-  const panner = context.createPanner();
-  panner.panningModel = loopPanning(true);
+  const panner = makePanner(context, loopPanning(true));
   panner.distanceModel = 'inverse';
   // (then the air: the rumble's roll, the bass lifted and the top taken off with distance, and the ground's echo)
   const roll = context.createGain(), rollSource = context.createBufferSource(), rollDepth = context.createGain();
@@ -139,12 +138,12 @@ export function updateAircraftSounds(flying) {
     if (voices.some(v => v.object === n.object)) return;
     const free = voices.find(v => !v.object);
     free.object = n.object;
-    free.out.gain.cancelScheduledValues(now);
-    free.out.gain.setValueAtTime(0, now); // (a voice taken over starts from silence rather than the last one's roar)
+    handOver(free, free.out.gain, now); // (a voice taken over starts from silence rather than the last one's roar)
   });
   for (const v of voices) {
     const n = v.object && near.find(m => m.object === v.object);
     if (!n) { v.out.gain.setTargetAtTime(0, now, 0.3); continue; }
+    if (handingOver(v, now)) continue;
     const kind = KINDS[n.kind] ?? KINDS.jet, p = Math.max(0, Math.min(1, n.thrust));
     const span = ([level, idle, full]) => [level, idle + (full - idle)*p];
     const [roar, cutoff] = span(kind.roar), [whine, whineHz] = span(kind.whine), [buzz, buzzHz] = span(kind.buzz);
@@ -171,7 +170,7 @@ export function updateAircraftSounds(flying) {
     const bounce = Math.hypot(n.at.x - ear.x, n.at.z - ear.z, height + earHeight) - n.d;
     v.echo.delayTime.setTargetAtTime(Math.min(0.09, Math.max(0.0003, bounce/SOUND_SPEED)), now, 0.1);
     v.echoGain.gain.setTargetAtTime(0.8*far, now, 0.3);
-    v.panner.positionX.value = n.at.x; v.panner.positionY.value = n.at.y; v.panner.positionZ.value = n.at.z;
+    placePanner(v.panner, n.at.x, n.at.y, n.at.z);
   }
 }
 
@@ -220,11 +219,10 @@ export function tyreChirp(at, size) {
   const context = listener.context;
   if (context.state !== 'running' || Math.hypot(at.x - ear.x, at.y - ear.y, at.z - ear.z) > HEAR_DISTANCE) return;
   const now = context.currentTime, hz = CHIRP_HZ/Math.sqrt(Math.max(0.5, size/20));
-  const panner = context.createPanner();
-  panner.panningModel = loopPanning(true);
+  const panner = makePanner(context, loopPanning(true));
   panner.distanceModel = 'inverse';
   panner.refDistance = CHIRP_NEAR;
-  panner.positionX.value = at.x; panner.positionY.value = at.y; panner.positionZ.value = at.z;
+  placePanner(panner, at.x, at.y, at.z, 3);
   panner.connect(outdoorsOf('traffic'));
   const sources = CHIRPS.flatMap(([after, level]) => {
     const start = now + after, end = start + CHIRP_TIME*(0.8 + Math.random()*0.4);

@@ -114,9 +114,10 @@ function noiseBuffer(context) {
  * @param {?{through: number, k: number, stressed: boolean, last: boolean, question: boolean}} [intonation] - how the
  *   syllable sits in its phrase (see nextSyllable): how far through it, 0 to 1, and which syllable; whether it's stressed; whether it's the last, and if so
  *   whether the phrase is a question
+ * @param {number} [delay=0] - seconds from now it starts (picked ahead, so a stalled frame doesn't gap it)
  * @returns {void}
  */
-export function babble(at, voice, length, loudness = 1, mood = 0, intonation = null) {
+export function babble(at, voice, length, loudness = 1, mood = 0, intonation = null, delay = 0) {
   if (blips >= BLIPS_MAX) return;
   const { pitch } = voice;
   const { through = 0.5, k = 0, stressed = false, last = false, question = false } = intonation ?? {};
@@ -129,12 +130,12 @@ export function babble(at, voice, length, loudness = 1, mood = 0, intonation = n
   // (a robot's on flat notes: see ROBOT_NOTES)
   if (voice.robot) {
     const note = stressed ? ROBOT_NOTES.length - 1 : last ? 0 : Math.floor(Math.random()*ROBOT_NOTES.length);
-    speak(at, voice, { f: pitch*ROBOT_NOTES[note], slide: 1, length: length*0.85, level: VOLUME*ROBOT_LEVEL*(0.5 + 0.5*loudness),
+    speak(at, voice, { f: pitch*ROBOT_NOTES[note], slide: 1, length: length*0.85, level: VOLUME*ROBOT_LEVEL*(0.5 + 0.5*loudness), delay,
       vowel: VOWELS[Math.floor(Math.random()*VOWELS.length)], consonant: CONSONANTS[Math.floor(Math.random()*CONSONANTS.length)] });
     return;
   }
   // a random vowel, and a random consonant before it
-  speak(at, voice, { f, slide, length: length*0.85, level: VOLUME*(0.5 + 0.5*loudness),
+  speak(at, voice, { f, slide, length: length*0.85, level: VOLUME*(0.5 + 0.5*loudness), delay,
     vowel: VOWELS[Math.floor(Math.random()*VOWELS.length)], consonant: CONSONANTS[Math.floor(Math.random()*CONSONANTS.length)] });
 }
 
@@ -196,14 +197,14 @@ export function exclaim(at, voice) {
 
 // One sound of a voice: a sawtooth at `f`, rising by `rise` over the first third and then sliding to `slide` of where it
 // started by the end, through `vowel`'s formants (moved by the voice's own), after `consonant` (taking up to 40% of it).
-function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant }) {
+function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant, delay = 0 }) {
   const { formant, sharpness } = voice;
   const context = listener.context;
   if (isMuted() || context.state !== 'running') return;
   const { x, y, z } = ear;
   if (Math.hypot(at.x - x, at.y - y, at.z - z) > hearDistance()) return;
   level *= edgeFade(at);
-  const now = context.currentTime, end = now + Math.max(0.05, length);
+  const now = context.currentTime + delay, end = now + Math.max(0.05, length);
   const oscillator = context.createOscillator();
   oscillator.type = voice.robot ? 'square' : 'sawtooth';
   oscillator.frequency.setValueAtTime(f, now);

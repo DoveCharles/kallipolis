@@ -100,10 +100,12 @@ export function createMeshBuilder() {
     // every polygon (with its holes) in a Clipper PolyTree, as flat faces at height y — facing up, or down if `facingDown`
     addTops(tree, y, facingDown) {
       const up = { x:0, y:facingDown ? -1 : 1, z:0 };
-      const toVecs = path => path.map(p => new THREE.Vector2(p.X/CLIPPER_SCALE, p.Y/CLIPPER_SCALE));
+      // near-collinear points (Clipper's integer rounding) can make the triangulation drop sliver triangles: gaps
+      const toVecs = path => ClipperLib.Clipper.CleanPolygon(path, 2).map(p => new THREE.Vector2(p.X/CLIPPER_SCALE, p.Y/CLIPPER_SCALE));
       const addOutline = node => {
         const contour = toVecs(node.Contour());
-        const holes = node.Childs().map(hole => toVecs(hole.Contour()));
+        if (contour.length < 3) return;
+        const holes = node.Childs().map(hole => toVecs(hole.Contour())).filter(h => h.length >= 3);
         const tris = THREE.ShapeUtils.triangulateShape(contour, holes); // indexes the contour's points, then each hole's
         const base = positions.length/3;
         contour.concat(...holes).forEach(v => vertex(v.x, y, v.y, up));

@@ -1,31 +1,31 @@
 import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
-import { listener, playBufferAt, muffler, ear } from './sfx.js';
-import { speakText, phonemesOf, SAMPLE_RATE } from './speech.js';
+import { listener, playBufferAt, muffler, ear, isMuted } from './sfx.js';
+import { lineSound, lineLength, phonemesOf, SAMPLE_RATE, MOUTH_FRAME } from './speech.js';
 import { loudnessOf, hearDistance, hearRef, edgeFade } from './voices.js';
 import { speechReady, pickCall, pickReply, pickReplyChoices, pickReaction, pickCloser, pickGreeting, pickShout, pickWord, hasNews } from '../life/speech-text.js';
 
 // ============================================================ real words
 // Now and then someone talking near the camera says something real in among their babble (see audio/voices.js): a line
 // from the speech files (see life/speech-text.js and assets/text/speech/), picked to suit them. It's said in their own
-// babble voice, worked out into its sounds and synthesized on the spot (see audio/speech.js), set down where they stand
+// babble voice, worked out into its sounds and synthesized off the page (see audio/speech.js, speech-worker.js), set down where they stand
 // and heard from that side, and quieter the further off, and as loud as they babble. Up to MAX_LINES are said at
 // once (any number with Options > Speech > Babble only as fallback), and each conversation waits LINE_GAP after a line before opening another. While they're saying it, their mouth opens as wide as the line's loud.
 // A line with replies waits for one: the next in their group to speak (within REPLY_WINDOW) says a reply, picked for
 // them, and so on down the conversation (group.talk). Someone who's just seen a death says something about it first.
 const LINE_CHANCE = 0.15;   // at the start of each phrase of babble (× chat speed, Options > Speech: S.chatSpeed)
 const LINE_GAP = 3;         // seconds after a line ends before its conversation opens another (÷ chat speed)
-const LINE_START_GAP = 0.15; // seconds between any two lines starting (each is synthesized on the spot: a burst of them stalls the audio)
+const LINE_START_GAP = 0.15; // seconds between any two lines starting (a burst of them to synthesize at once)
 const CROWD_EASY = 3;       // lines at once before each is made quieter (by the square root of how many more), so a crowd doesn't clip
 const MAX_LINES = 4;        // real lines said at once, at most (each is synthesized as it starts) — no limit with babble only as fallback
 const REPLY_WINDOW = 6;     // seconds after a line ends that a reply to it can still come
 const CHOICE_WAIT = 60;     // seconds a conversation waits for the possessed person's picked reply (Options > Game > Dialogue Choices)
 const MATCH = 1;            // how loud a real line is next to the speaker's own babble (see loudnessOf in audio/voices.js)
 const MUFFLE = 1.4; // (as for babble; beyond its hearDistance they only babble)
-const MOUTH_FRAME = 0.05;   // seconds over which how wide the mouth is follows the line
+const MAKING_MAX = 2;       // seconds a line waits to be made before it's given up on
 
 let lastStart = -Infinity;
-const speaking = new Set(); // { source, start, length, mouth: Float32Array, text, quiet } for each line being said
+const speaking = new Set(); // { source, start, length, mouth: Float32Array, text, quiet } for each line being said (source and mouth null while it's made)
 // (a conversation's gap is kept on its group — or on the speaker, with none — as quietUntil)
 const quietOf = person => person.group ?? person;
 
@@ -129,43 +129,50 @@ export function reactAloud(at, voice, who, person) {
   return voiceLine(said, at, voice, who, person) ?? { text: said.text, thought: true };
 }
 
-// A picked line synthesized in the speaker's voice and set playing where they are: the line (for lineMouth and stopLine), or null.
+// A picked line set making in the speaker's voice, to play where they are once it's made: the line (for lineMouth and
+// stopLine; its length known now, its sound and start once made), or null.
 function voiceLine(said, at, voice, who, person, full = false) {
-  const context = listener.context, now = context.currentTime, text = said.text;
-  const sound = synth(text, voice, who, person.traits?.mood ?? 0);
-  if (!sound) return null;
-  const { buffer, mouth } = sound;
+  const context = listener.context, now = context.currentTime, text = said.text, mood = person.traits?.mood ?? 0;
+  if (isMuted() || context.state !== 'running') return null;
+  const clauses = phonemesOf(text), length = lineLength(clauses, { mood, who });
+  if (!length) return null;
   const crowd = full ? 1 : edgeFade(at)/Math.sqrt(Math.max(1, (speaking.size + 1)/CROWD_EASY)); // (and fading towards the hearing distance: see edgeFade)
-  const source = playSound(sound, at, voice, crowd);
-  if (!source) return null;
   // (a line tagged {end} ends its conversation once it's said: see finish)
-  const line = { source, start: now, length: buffer.duration, mouth, text, quiet: quietOf(person), end: said.end, by: person };
+  const line = { source: null, start: now, length, mouth: null, text, quiet: quietOf(person), end: said.end, by: person };
   speaking.add(line);
   lastStart = now;
+  synth(voice, { mood, who, clauses }, sound => {
+    if (!speaking.has(line)) return; // (stopped while it was made)
+    if (!sound || !(line.source = playSound(sound, at, voice, crowd))) { finish(line); return; }
+    line.mouth = sound.mouth;
+    line.start = context.currentTime;
+  });
   return line;
 }
 const playSound = ({ buffer, rms }, at, voice, scale) =>
   playBufferAt(buffer, at, rms ? MATCH*loudnessOf(voice)/rms*scale : 0, hearRef(), hearDistance(), 1, [muffler(at, hearRef(), MUFFLE)], 'peds');
 
-// Text synthesized in a voice: { buffer, mouth (loudness per MOUTH_FRAME), rms }, or null.
-function synth(text, voice, who, mood, options) {
-  const context = listener.context;
-  const samples = speakText(text, voice, { mood, who, ...options });
-  if (!samples?.length) return null;
-  // (how loud it is through each MOUTH_FRAME, for their mouth to follow; and how loud while they're sounding, the loudest
-  // half of those frames, to bring it to their babble's loudness)
-  const frame = Math.round(MOUTH_FRAME*SAMPLE_RATE), mouth = new Float32Array(Math.ceil(samples.length/frame));
-  const power = new Float32Array(mouth.length);
-  for (let i = 0; i < samples.length; i++) {
-    const k = Math.floor(i/frame);
-    mouth[k] = Math.max(mouth[k], Math.abs(samples[i])*1.2);
-    power[k] += samples[i]*samples[i]/frame;
-  }
-  const loudest = power.filter(e => e > 1e-5).sort().slice(-Math.ceil(power.length/2));
-  const rms = Math.sqrt(loudest.reduce((a, b) => a + b, 0)/(loudest.length || 1));
-  const buffer = context.createBuffer(1, samples.length, SAMPLE_RATE);
-  buffer.getChannelData(0).set(samples);
-  return { buffer, mouth, rms };
+// A line made in a voice (speech.js lineSound) in speech-worker.js, handed to `done` as { buffer, mouth, rms }, or null.
+// (Made here, all at once, if there's no worker: a stall of a few to tens of milliseconds a line.)
+let worker = null, workerFailed = false, jobs = 0;
+const waiting = new Map(); // job id → its done, and what it was for (to make here if the worker fails)
+function synth(voice, options, done) {
+  if (!workerFailed) try {
+    worker ??= Object.assign(new Worker(new URL('./speech-worker.js', import.meta.url), { type: 'module' }), {
+      onmessage: ({ data: { id, sound } }) => { const job = waiting.get(id); waiting.delete(id); job?.done(bufferOf(sound)); },
+      onerror: () => { workerFailed = true; waiting.forEach(job => job.done(bufferOf(lineSound(job.voice, job.options)))); waiting.clear(); },
+    });
+    waiting.set(++jobs, { done, voice, options });
+    worker.postMessage({ id: jobs, voice, options });
+    return;
+  } catch { workerFailed = true; }
+  done(bufferOf(lineSound(voice, options)));
+}
+function bufferOf(sound) {
+  if (!sound) return null;
+  const buffer = listener.context.createBuffer(1, sound.samples.length, SAMPLE_RATE);
+  buffer.getChannelData(0).set(sound.samples);
+  return { buffer, mouth: sound.mouth, rms: sound.rms };
 }
 
 /**
@@ -180,11 +187,16 @@ function synth(text, voice, who, mood, options) {
  */
 export function aaa(person, at, voice, who, swears) {
   const now = listener.context.currentTime, a = person.aaa;
-  if (a && now - a.start < a.length) return Math.min(1, a.mouth[Math.floor((now - a.start)/MOUTH_FRAME)] ?? 0);
-  const sound = synth('', voice, who, person.traits?.mood ?? 0, { clauses: rant(swears) });
-  if (!sound) return 0;
-  playSound(sound, at, voice, edgeFade(at));
-  person.aaa = { mouth: sound.mouth, start: now, length: sound.buffer.duration };
+  if (a && !a.mouth && now - a.start < MAKING_MAX) return 0; // (still being made)
+  if (a?.mouth && now - a.start < a.length) return Math.min(1, a.mouth[Math.floor((now - a.start)/MOUTH_FRAME)] ?? 0);
+  if (isMuted() || listener.context.state !== 'running') return 0;
+  const made = person.aaa = { mouth: null, start: now, length: 0 };
+  synth(voice, { mood: person.traits?.mood ?? 0, who, clauses: rant(swears) }, sound => {
+    if (person.aaa !== made) return;
+    if (!sound) { person.aaa = null; return; }
+    playSound(sound, at, voice, edgeFade(at));
+    Object.assign(made, { mouth: sound.mouth, start: listener.context.currentTime, length: sound.buffer.duration });
+  });
   return 0;
 }
 const RANT_CONSONANTS = ['B', 'D', 'G', 'K', 'P', 'T', 'M', 'N', '/H', 'F', 'S', 'SH', 'CH', 'J', 'V', 'Z', 'R', 'L', 'W'];
@@ -212,7 +224,8 @@ function rant(swears) {
  */
 export function lineMouth(line) {
   const t = listener.context.currentTime - line.start;
-  if (!speaking.has(line) || t >= line.length) { finish(line); return -1; }
+  if (!speaking.has(line) || t >= (line.mouth ? line.length : MAKING_MAX)) { finish(line); return -1; }
+  if (!line.mouth) return 0; // (still being made)
   return Math.min(1, line.mouth[Math.floor(t/MOUTH_FRAME)] ?? 0);
 }
 
@@ -223,7 +236,7 @@ export function lineMouth(line) {
  */
 export function stopLine(line) {
   if (!line || !speaking.has(line)) return;
-  try { line.source.stop(); } catch { /* (already ended) */ }
+  try { line.source?.stop(); } catch { /* (already ended) */ }
   finish(line);
 }
 

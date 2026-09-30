@@ -510,10 +510,11 @@ export function newPerson(id = S.peopleIdSeq++) {
     // looking at; how far up onto a bench seat they sit; walking with someone, who they keep beside (follow), on which side
     // (walkSide), and whether they turned round to (walkBack);
     //
-    // and their mouth — how open it's going to (talkTo, until talkIn) and their expression (emotionTo, until emotionIn)
+    // and their mouth — how open it's going to (talkTo, until talkIn; a syllable picked ahead, talkNext, once talkIn's down
+    // to talkNextAt) and their expression (emotionTo, until emotionIn)
     act: null, stage: '', timer: 0, spot: null, seat: null, sitClip: null, lieClip: null, circleAngle: 0, group: null,
     faceTo: null, lookAt: null, seatLift: 0, follow: null, walkSide: 1, walkBack: false, chatCheckIn: peopleRng(), chatCooldown: peopleRng()*20,
-    talk: 0, talkTo: 0, talkIn: 0, emotion: 0, emotionTo: 0, emotionIn: 0,
+    talk: 0, talkTo: 0, talkIn: 0, talkNext: -1, talkNextAt: 0, emotion: 0, emotionTo: 0, emotionIn: 0,
     // and their eyes: how shocked, happy, angry and sad they look
     eyes: [0, 0, 0, 0],
     // and where their pupils have wandered to (left/right, up/down), where they're darting to next and when
@@ -839,6 +840,8 @@ const wantsOut = p => (p.fleeStarts?.length ?? 0) >= FLEE_REPEAT_COUNT || (p.fle
  * @param {{x: number, z: number}} from - what they're running from
  * @returns {void}
  */
+// (babble's next syllable is picked this many seconds ahead and scheduled then, so a stalled frame doesn't gap it)
+const SAY_AHEAD = 0.1;
 const FLEE_TALK_AGAIN = 12, FLEE_TALK_WITHIN = 2; // seconds before someone who's fled calls out again as they start another
 // flight, and how long after bolting they'll still call out (waiting for a turn to speak: see shoutLine)
 export function beginFleeing(p, from) {
@@ -1578,33 +1581,37 @@ export function updatePeople(t) {
       if (!(talking || p.shouting) || aaaing || (p.saying && !isDrawn(p))) {
         p.shouting = false;
         p.talkTo = 0;
+        p.talkNext = -1;
         p.phrase = null;
         stopLine(p.saying);
         p.saying = null;
       } else if (p.saying) {
+        p.talkNext = -1;
         // saying a real line (see audio/dictionary.js): the mouth opening as wide as it's loud, and a breath once it's done
         const mouth = lineMouth(p.saying);
         if (mouth < 0) { p.saying = null; p.shouting = false; p.talkTo = 0; p.talkIn = 0.3 + peopleRng()*0.3; }
         else p.talkTo = mouth;
-      } else if ((p.talkIn -= dt) <= 0) {
-        const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, heard = isDrawn(p);
+      } else if ((p.talkIn -= dt) <= SAY_AHEAD) {
+        const early = Math.max(0, p.talkIn), head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, heard = isDrawn(p);
         // at the start of a phrase, now and then something real instead
         const phraseStart = !p.phrase || p.phrase.said >= p.phrase.length;
         const far = Math.hypot(head.x - ear.x, head.y - ear.y, head.z - ear.z); // (from where you hear: see ear in audio/sfx.js)
         // (with Options > Speech > Babble only as fallback, anyone out of hearing keeps quiet: nothing real to say there)
-        if (S.babbleFallbackOnly && far > hearDistance()) { p.talkTo = 0; p.talkIn = 0.5; p.phrase = null; }
+        if (early > 0 && phraseStart) { /* (a phrase's start waits its time: it may be a real line) */ }
+        else if (S.babbleFallbackOnly && far > hearDistance()) { p.talkTo = 0; p.talkIn = 0.5; p.phrase = null; }
         else if (heard && phraseStart && !group?.babble && (p.saying = sayLine(head, voiceOf(p, i), i, p))) p.phrase = null;
         else if (heard && phraseStart && !group?.babble && linePause(p)) { p.talkTo = 0; p.talkIn = 0.25; } // (waiting quietly for the next line)
         else {
           // in phrases, with a breath between (see nextSyllable in audio/voices.js)
           const { open, length, intonation } = nextSyllable(p, peopleRng);
-          p.talkTo = open;
-          p.talkIn = length;
-          // and each syllable they say is heard
-          if (open > 0 && heard) babble(head, voiceOf(p, i), length, open, p.traits.mood, intonation);
+          if (early > 0) { p.talkNext = open; p.talkNextAt = length; } else p.talkTo = open;
+          p.talkIn = early + length;
+          // and each syllable they say is heard, from when the last ends
+          if (open > 0 && heard) babble(head, voiceOf(p, i), length, open, p.traits.mood, intonation, early);
           if (open > 0 && S.babbleBubbles && far <= (S.bubbleDistance ?? 35) && p.babbleLine?.phrase !== p.phrase) p.babbleLine = babbleLine(p.phrase);
         }
       }
+      if (p.talkNext >= 0 && p.talkIn <= p.talkNextAt) { p.talkTo = p.talkNext; p.talkNext = -1; }
       if (aaaing) p.talkTo = !possessed && (!isDrawn(p) || Math.hypot(p.x - ear.x, p.y - ear.y, p.z - ear.z) > hearDistance()) ? 0 : aaa(p, { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), i, !!p.traits.hatespossessed);
       // a bubble with what they're saying, kept up a little after (see ui/speech-bubbles.js); only for those on the camera's
       // side of a building's walls — in the room with it, or outdoors with it — else gone

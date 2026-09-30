@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { listener, outdoorsOf, ear, loopPanning } from './sfx.js';
+import { listener, outdoorsOf, ear, loopPanning, handOver, handingOver, placePanner, makePanner } from './sfx.js';
 
 // ============================================================ buzzing
 // The buzz of the bees flying near the camera (see updateBees in life/bees.js), a loop synthesized live like the engines
@@ -35,8 +35,7 @@ function makeBuzz() {
   flutterDepth.gain.value = 0.25;
   level.gain.value = 0.75;
   flutter.connect(flutterDepth).connect(level.gain);
-  const panner = context.createPanner();
-  panner.panningModel = loopPanning();
+  const panner = makePanner(context, loopPanning());
   panner.distanceModel = 'linear';
   panner.refDistance = REF_DISTANCE;
   panner.maxDistance = HEAR_DISTANCE;
@@ -63,14 +62,15 @@ export function updateBuzzes(flying) {
   const now = listener.context.currentTime;
   // (as with the engines: a bee that had a buzz keeps it, and those new to one take over the ones let go)
   buzzes.forEach(b => { if (b.bee && !near.some(f => f.bee === b.bee)) b.bee = null; });
-  near.forEach(f => { if (!buzzes.some(b => b.bee === f.bee)) buzzes.find(b => !b.bee).bee = f.bee; });
+  near.forEach(f => { if (!buzzes.some(b => b.bee === f.bee)) { const b = buzzes.find(b => !b.bee); b.bee = f.bee; handOver(b, b.out.gain, now); } });
   for (const b of buzzes) {
     const f = b.bee && near.find(n => n.bee === b.bee);
     if (!f) { b.out.gain.setTargetAtTime(0, now, 0.1); continue; }
+    if (handingOver(b, now)) continue;
     const hz = BUZZ_HZ*(0.85 + 0.3*Math.min(1.5, f.speed))*(f.angry ? 1.25 : 1)/Math.sqrt(Math.max(0.5, f.size));
     b.oscillator.frequency.setTargetAtTime(hz, now, 0.05);
     b.filter.frequency.setTargetAtTime(hz*4, now, 0.05);
     b.out.gain.setTargetAtTime(VOLUME*(f.angry ? 1.5 : 1), now, 0.08);
-    b.panner.positionX.value = f.x; b.panner.positionY.value = f.y; b.panner.positionZ.value = f.z;
+    placePanner(b.panner, f.x, f.y, f.z);
   }
 }

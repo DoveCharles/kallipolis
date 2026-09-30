@@ -1,4 +1,4 @@
-import { listener, heardFrom, isMuted, loopPanning } from './sfx.js';
+import { listener, heardFrom, isMuted, loopPanning, placePanner, makePanner } from './sfx.js';
 
 // ============================================================ the bots' whir
 // The bar bot's and the waiter bot's wheels (see buildings/barbot.js, buildings/waiterbot.js), a loop synthesized live
@@ -19,8 +19,8 @@ function makeVoice() {
     const data = noise.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random()*2 - 1;
   }
-  const panner = context.createPanner();
-  Object.assign(panner, { panningModel: loopPanning(), distanceModel: 'linear', refDistance: REF, maxDistance: HEAR });
+  const panner = makePanner(context, loopPanning());
+  Object.assign(panner, { distanceModel: 'linear', refDistance: REF, maxDistance: HEAR });
   const out = context.createGain();
   out.gain.value = 0;
   out.connect(panner);
@@ -57,7 +57,7 @@ export function botWhir(key, at, k) {
   if (!at) { v.out.gain.setTargetAtTime(0, now, 0.1); return; }
   const to = heardFrom(at, 'peds');
   if (to !== v.to) { if (v.to) v.panner.disconnect(); v.panner.connect(to); v.to = to; }
-  v.panner.positionX.value = at.x; v.panner.positionY.value = at.y + 0.3; v.panner.positionZ.value = at.z;
+  placePanner(v.panner, at.x, at.y + 0.3, at.z);
   k = Math.min(1, k);
   const hz = WHINE_HZ + WHINE_RISE*k;
   v.a.frequency.setTargetAtTime(hz, now, 0.15);

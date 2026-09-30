@@ -54,6 +54,7 @@ export function driveCar(i) {
   App.setCarBoostShown(true);
   car.yieldFor = null;
   car.throttle = 0;
+  car.stall = 0; car.bumping = false; // (a stall left from last drive otherwise holds it; stall only counts down while driven)
   controls.goalRadius = Math.max(controls.minRadius, carLength(car)*2.2);
 }
 /**

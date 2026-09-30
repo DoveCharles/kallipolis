@@ -90,7 +90,7 @@ Drunks {alcoholic = 0.4} <folk>
 Junkies { stimulants = 0.2, psychs = 0.2, stoner = 0.2, painkillers = 0.2, outlaw = 0.8, conservative = 0.05} <folk>
 Anime <media>
 Deadly Nuerotoxin <vice>
-People with the same name as them { aggression = 2} <folk>
+People with the same name as them | people with the same name as me { aggression = 2} <folk>
 Trends <media>
 Cheap fast fashion (expensive fast fashion ok) | cheap fast fashion { agemult = 0.8} <stuff>
 The current zoning laws {outlaw = 0.8} <beliefs>

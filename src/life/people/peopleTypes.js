@@ -139,6 +139,8 @@
  * @property {number} talk - how open their mouth is
  * @property {number} talkTo - how open it's heading
  * @property {number} talkIn - seconds until that changes again
+ * @property {number} talkNext - a syllable's openness picked ahead (-1 none), taken up once talkIn is down to talkNextAt
+ * @property {number} talkNextAt
  * @property {number} emotion - how their expression reads, -1 to 1
  * @property {number} emotionTo
  * @property {number} emotionIn
