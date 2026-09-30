@@ -145,16 +145,37 @@ for x in (-0.25, 0.25):
         p.ball(0.03, 'Dark', (x, y, 0.03))
 for z in (0.12, 0.7):
     p.box(0.56, 0.5, 0.025, 'Birch', z0=z, bevel=0.006)
-for k in range(4):                                                              # spools below
-    p.cyl(0.09, 0.06, RAINBOW[k], -0.18 + k*0.12, 0, 0.145, segments=12, rot=(0, math.pi/2, 0))
-p.box(0.46, 0.44, 0.06, 'Dark', 0, 0, 0.725, bevel=0.01)                       # the printer's base
-for x in (-0.21, 0.21):
-    p.box(0.03, 0.03, 0.44, 'Dark', x, 0.18, 0.785, bevel=0.006)
-p.box(0.45, 0.04, 0.04, 'Dark', 0, 0.18, 1.22, bevel=0.008)
-p.box(0.08, 0.06, 0.08, 'Filament', 0.05, 0.13, 1.0, bevel=0.01)               # the head
-p.box(0.34, 0.3, 0.012, 'White', 0, -0.02, 0.8, bevel=0.003)                   # the bed
-p.cyl(0.05, 0.1, 'Filament', 0, -0.02, 0.81, r2=0.02, segments=6)              # a half-printed thing
-p.cyl(0.09, 0.05, 'Pink', 0, 0.26, 1.02, segments=12, rot=(0, math.pi/2, 0))   # its spool
+def spool(x, y, z, colour, axis):
+    # a reel of filament centred on (x, y, z), turned about its axis ('x' or 'y'), with a dark hub and rims
+    rot, off = ((0, math.pi/2, 0), (1, 0, 0)) if axis == 'x' else ((math.pi/2, 0, 0), (0, -1, 0))
+    at = lambda d: (x - off[0]*d, y - off[1]*d, z)
+    for d, r, w, c in ((0.035, 0.09, 0.07, 'Dark'), (0.03, 0.085, 0.06, colour), (0.036, 0.03, 0.072, 'White')):
+        bx, by, bz = at(d)
+        p.cyl(r, w, c, bx, by, bz, segments=14, rot=rot)
+for k in range(4):                                                              # spools on the shelf below
+    spool(-0.18 + k*0.12, 0, 0.145 + 0.09, RAINBOW[k], 'x')
+# an open-frame printer: base, bed, two uprights and a top bar, the gantry across with its head, a spool on top
+p.box(0.46, 0.44, 0.06, 'Dark', 0, 0, 0.725, bevel=0.01)                       # the base
+p.box(0.12, 0.012, 0.04, 'Screen', 0.12, -0.221, 0.735, bevel=0.003)           # its screen
+p.ball(0.012, 'White', (0.21, -0.225, 0.755))                                  # and knob
+p.box(0.06, 0.4, 0.02, 'White', 0, -0.02, 0.785, bevel=0.004)                  # the bed's carriage
+p.box(0.32, 0.3, 0.012, 'Filament', 0, -0.03, 0.805, bevel=0.003)              # the bed
+UP, TOP, GANTRY = 0.2, 1.22, 0.99
+for x in (-UP, UP):
+    p.box(0.035, 0.035, TOP - 0.785, 'Dark', x, 0.06, 0.785, bevel=0.006)       # uprights
+    p.box(0.05, 0.05, 0.06, 'White', x, 0.06, GANTRY - 0.03, bevel=0.008)       # the gantry's carriages
+    p.cyl(0.006, TOP - 0.8, 'White', x + 0.035*(1 if x > 0 else -1), 0.06, 0.8, segments=6)   # lead screws
+p.box(2*UP + 0.035, 0.035, 0.035, 'Dark', 0, 0.06, TOP, bevel=0.006)            # the top bar
+p.box(2*UP, 0.025, 0.025, 'White', 0, 0.06, GANTRY, bevel=0.004)                # the gantry rail
+HX = 0.04
+p.box(0.07, 0.05, 0.07, 'Dark', HX, 0.03, GANTRY - 0.025, bevel=0.01)           # the head
+p.box(0.05, 0.004, 0.04, 'Sky', HX, 0.004, GANTRY - 0.01, bevel=0.002)          # its fan
+p.cyl(0.006, 0.03, 'Copper', HX, 0.03, GANTRY - 0.055, r2=0.002, segments=6)    # its nozzle
+p.cyl(0.035, 0.1, 'Pink', HX, 0.03, 0.817, r2=0.028, segments=8)                # what it's printing: a vase
+p.box(0.03, 0.03, 0.06, 'Dark', 0, 0.06, TOP + 0.035, bevel=0.006)              # the spool holder
+spool(0, 0.06 + 0.035, TOP + 0.035 + 0.09, 'Pink', 'y')
+fil = [(0.0, 0.06, TOP + 0.13), (0.03, 0.04, TOP + 0.05), (0.045, 0.035, GANTRY + 0.1), (HX, 0.03, GANTRY + 0.01)]
+for a, b in zip(fil, fil[1:]): p.bar(a, b, 0.004, 'Pink')                     # the filament into the head
 
 # ------------------------------------------------------------------ open shelving, tall (Cabinet), and a credenza (LowCabinet)
 p = piece('Cabinet')
