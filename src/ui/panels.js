@@ -299,17 +299,20 @@ function wireRangeSlider(id, min, max, decimals, onChange) {
   const hiInput = document.getElementById(`rs-${id}-hi`);
   const dv = document.getElementById(`dv-${id}`);
   const fmt = v => decimals!=null ? Number(v).toFixed(decimals) : v;
-  function apply(movedLo) {
+  // labels follow the drag; the rebuild waits for release
+  function apply(movedLo, commit) {
     let lo = parseFloat(loInput.value), hi = parseFloat(hiInput.value);
     if (lo > hi) {
       if (movedLo) { hi = lo; hiInput.value = hi; } else { lo = hi; loInput.value = lo; }
     }
     dv.textContent = `${fmt(lo)}–${fmt(hi)}`;
     updateRangeFillVisual(id, min, max);
-    onChange(lo, hi);
+    if (commit) onChange(lo, hi);
   }
   loInput.addEventListener('input', () => apply(true));
   hiInput.addEventListener('input', () => apply(false));
+  loInput.addEventListener('change', () => apply(true, true));
+  hiInput.addEventListener('change', () => apply(false, true));
   updateRangeFillVisual(id, min, max);
 }
 
@@ -636,11 +639,12 @@ function renderDetails() {
     });
     // an on/off setting (unset counts as on)
     const wireToggle = (id, key) => document.getElementById(id).addEventListener('click', () => { s[key] = s[key]===false; subdivideZone(zone); renderDetails(); });
-    const wireNumber = (sliderId, valId, key, decimals) => document.getElementById(sliderId).addEventListener('input', (e) => {
-      s[key] = parseFloat(e.target.value);
-      document.getElementById(valId).textContent = decimals!=null ? s[key].toFixed(decimals) : s[key];
-      subdivideZone(zone);
-    });
+    // label on drag, rebuild on release
+    const wireNumber = (sliderId, valId, key, decimals) => {
+      const el = document.getElementById(sliderId);
+      el.addEventListener('input', () => { const v = parseFloat(el.value); document.getElementById(valId).textContent = decimals!=null ? v.toFixed(decimals) : v; });
+      el.addEventListener('change', () => { s[key] = parseFloat(el.value); subdivideZone(zone); });
+    };
     const wireSwatches = (palette, key, swatchKey, fallback) => wireColorSwatchEvents(panel, palette, {
       onPick: (hex) => { s[key] = hex; subdivideZone(zone); renderDetails(); },
       onCommit: (hex, mode, oldHex) => {
@@ -694,14 +698,7 @@ function renderDetails() {
       wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);
     } else if (zoneType==='park') {
       wireToggle('ds-fence', 'fence');
-      const bindP = (sliderId,valId,key,decimals) => {
-        document.getElementById(sliderId).addEventListener('input', (e)=>{
-          const v = parseFloat(e.target.value);
-          s[key]=v;
-          document.getElementById(valId).textContent = decimals!=null ? v.toFixed(decimals) : v;
-          subdivideZone(zone);
-        });
-      };
+      const bindP = wireNumber;
       bindP('ds-treedensity','dv-treedensity','treeDensity',2);
       wireRangeSlider('treesize', 0.4, 5, 1, (lo,hi) => { s.treeSizeMin=lo; s.treeSizeMax=hi; subdivideZone(zone); });
       bindP('ds-treesetback','dv-treesetback','treeSetback');
@@ -758,22 +755,13 @@ function renderDetails() {
         onPreview: (hex) => { s.groundColor = hex; subdivideZone(zone); }
       }, 'groundcolor', renderDetails, s.groundColor!=null?s.groundColor:BUILDING_GROUND_COLORS[0]);
     } else {
-      const bind = (sliderId,valId,key,decimals) => {
-        document.getElementById(sliderId).addEventListener('input', (e)=>{
-          const v = parseFloat(e.target.value);
-          s[key]=v;
-          document.getElementById(valId).textContent = decimals!=null ? v.toFixed(decimals) : v;
-          subdivideZone(zone);
-        });
-      };
+      const bind = wireNumber;
       bind('ds-density','dv-density','density',2);
       wireRangeSlider('height', 1, 180, null, (lo,hi) => { s.heightMin=lo; s.heightMax=hi; subdivideZone(zone); });
       bind('ds-landmark','dv-landmark','landmarkChance',2);
-      document.getElementById('ds-minlot').addEventListener('input', (e) => {
-        s.lotCount = parseFloat(e.target.value);
-        document.getElementById('dv-minlot').textContent = s.lotCount<=1 ? 'Whole zone' : s.lotCount;
-        subdivideZone(zone);
-      });
+      const minlot = document.getElementById('ds-minlot');
+      minlot.addEventListener('input', () => { const v = parseFloat(minlot.value); document.getElementById('dv-minlot').textContent = v<=1 ? 'Whole zone' : v; });
+      minlot.addEventListener('change', () => { s.lotCount = parseFloat(minlot.value); subdivideZone(zone); });
       bind('ds-setback','dv-setback','setback');
       bind('ds-bordersetback','dv-bordersetback','borderSetback');
       wireRangeSlider('colorvar', 0, 1, 2, (lo,hi) => { s.colorVariationMin=lo; s.colorVariationMax=hi; subdivideZone(zone); });
@@ -910,8 +898,8 @@ function renderDetails() {
     }
     if (isRaised) {
       const height = document.getElementById('ds-raisedheight');
-      height.addEventListener('input', () => {
-        document.getElementById('dv-raisedheight').textContent = height.value + ' m';
+      height.addEventListener('input', () => { document.getElementById('dv-raisedheight').textContent = height.value + ' m'; });
+      height.addEventListener('change', () => {
         lines.forEach(l => { l.raisedHeight = parseFloat(height.value); });
         rebuildRoadMeshes();
       });
