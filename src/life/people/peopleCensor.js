@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
 
 // The nude trait's censor: a Sims-style mosaic rectangle over each nude person, from upper thigh to stomach (a man) or
-// to below the shoulders (a woman). It turns about the body's own up (pelvis to chest, as posed) to face the camera, so it
-// falls over with them. One instanced quad per slot, sharing the body mesh's matrices and pose attribute.
+// to below the shoulders (a woman). It faces the camera, upright along the body's own up (pelvis to chest, as posed), so
+// it falls over with them; seen along the body (from above) it hangs from just under the head. One instanced quad per
+// slot, sharing the body mesh's matrices and pose attribute.
 
 const CENSOR_WIDTH = 0.26;   // × the model's height
 const CENSOR_NEAR = 0.3;     // how far towards the camera it's pushed, × the model's height (clear of the body)
 const CENSOR_BLOCKS = 3;     // mosaic blocks across
+const CENSOR_MIN_TALL = 0.8;  // the least it's ever as tall as it's wide, seen from above
 const CENSOR_SHIMMER = 6;    // times a second the blocks' shades re-roll
 
 /**
@@ -52,15 +54,21 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
         vec3 up = top - low;
         float tall = length(up);
         up /= max(tall, 1e-6);
-        vec3 middle = 0.5*(low + top);
         // (towards the camera: its position in perspective, back along its view when orthographic)
         vec3 back = vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]);
-        vec3 toCamera = projectionMatrix[2][3] == 0.0 ? back : cameraPosition - middle;
-        vec3 side = cross(up, toCamera);
+        vec3 facing = normalize(projectionMatrix[2][3] == 0.0 ? back : cameraPosition - 0.5*(low + top));
+        vec3 side = cross(up, facing);
         if (dot(side, side) < 1e-8) side = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
         side = normalize(side);
-        vec3 facing = cross(side, up);
-        vec3 world = middle + side*position.x*censorWidth*scale + up*position.y*tall + facing*censorNear*scale;
+        vec3 onScreen = cross(facing, side); // (the body's up, as the camera sees it)
+        // looked at along the body (from above, standing), its top moves to just under the head and it shortens (no less
+        // than MIN_TALL × its width)
+        float along = abs(dot(up, facing));
+        vec3 neck = (placed*(personBone(censorBones.y)*vec4(censorHighWoman, 1.0))).xyz;
+        vec3 edge = mix(top, neck, along);
+        tall = max(tall*sqrt(1.0 - along*along), ${CENSOR_MIN_TALL.toFixed(2)}*censorWidth*scale);
+        vec3 middle = edge - onScreen*0.5*tall;
+        vec3 world = middle + side*position.x*censorWidth*scale + onScreen*position.y*tall + facing*censorNear*scale;
         gl_Position = projectionMatrix*viewMatrix*vec4(world, 1.0);
         float block = censorWidth*scale/${CENSOR_BLOCKS.toFixed(1)};
         vCensorBlock = vec2((position.x + 0.5)*censorWidth*scale, (position.y + 0.5)*tall)/block;
