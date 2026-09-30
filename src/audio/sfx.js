@@ -258,8 +258,8 @@ const HRTF_SLOTS = 6, HRTF_NEAR = 40, SELF_NEAR = 1.2;
 let directional = 'hybrid', hrtfVoices = 0, self = null;
 export const setDirectional = mode => { if (DIRECTIONAL.includes(mode)) directional = mode; };
 export const directionalMode = () => directional;
-/** The panning model for a sound that plays on (a loop): HRTF only on 'full'. */
-export const loopPanning = () => directional === 'full' ? 'HRTF' : 'equalpower';
+/** The panning model for a sound that plays on (a loop): HRTF on 'full', and on 'hybrid' too if `few` (aircraft). */
+export const loopPanning = (few = false) => directional === 'full' || (few && directional === 'hybrid') ? 'HRTF' : 'equalpower';
 /** The possessed person (null when nobody is): sounds right by them are heard unpanned. */
 export const setSelf = p => { self = p; };
 const isSelf = at => self?.mode === 'possessed' && Math.hypot(at.x - self.x, at.z - self.z) < SELF_NEAR;
