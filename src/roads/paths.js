@@ -271,6 +271,49 @@ function setWalkwayLook(mat, texture, scale, rotationDegrees) {
 export function walkwayTextureChangeNeedsRebuild(from, to) { return (from === 'dirt') !== (to === 'dirt'); }
 // how far past its nominal edge paving's dust fades out
 export function pavingFringeWidth(halfWidth) { return Math.min(0.6, halfWidth*0.2); }
+// Sidewalk slabs: joints laid off the nearest centerline segment — rows across the sidewalk's width, cross joints
+// dividing each segment evenly — on the top only (walls are below Y_SIDEWALK)
+const SLAB = 0.9;
+function applySlabShader(mat, segments, inner, width) {
+  if (!segments.length || width <= 0) return;
+  const uniforms = {
+    uSlabSegments: { value: App.segmentUniformArray(segments, PATH_MAX_SEGMENTS) },
+    uSlabSegmentCount: { value: segments.length },
+    uSlabInner: { value: inner },
+    uSlabRow: { value: width/Math.max(1, Math.round(width/SLAB)) },
+  };
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSlabPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSlabPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vSlabPos;
+uniform vec4 uSlabSegments[${PATH_MAX_SEGMENTS}];
+uniform int uSlabSegmentCount;
+uniform float uSlabInner, uSlabRow;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+if (vSlabPos.y > ${Y_SIDEWALK.toFixed(4)} - 0.01) {
+  vec2 w = vSlabPos.xz;
+  float d = 1e9, along = 0.0, pieceLen = 1.0, h = 0.5;
+  for (int i=0; i<${PATH_MAX_SEGMENTS}; i++) {
+    if (i >= uSlabSegmentCount) break;
+    vec4 s = uSlabSegments[i];
+    vec2 pa = w - s.xy, ba = s.zw - s.xy;
+    float len = max(length(ba), 1e-4);
+    float hi = clamp(dot(pa, ba)/(len*len), 0.0, 1.0);
+    float di = length(pa - ba*hi);
+    if (di < d) { d = di; h = hi; along = hi*len; pieceLen = len/max(1.0, floor(len/${SLAB.toFixed(2)} + 0.5)); }
+  }
+  float fr = fract(max(d - uSlabInner, 0.0)/uSlabRow);
+  float joint = min(fr, 1.0 - fr)*uSlabRow;
+  if (h > 0.0 && h < 1.0) { float fa = fract(along/pieceLen); joint = min(joint, min(fa, 1.0 - fa)*pieceLen); } // not round a segment's end
+  float aa = max(fwidth(joint), 1e-4);
+  diffuseColor.rgb *= mix(0.72, 1.0, smoothstep(0.012, 0.012 + aa, joint));
+}`);
+  };
+}
 // A walkway's material, fading out across `fade` beyond `halfWidth` from `segments`: dirt, or paving (or plain) with an
 // edging course (see applyWalkwayShader) — or, with no fade, paving that just stops at its edge
 export function makeWalkwayMaterial({ texture, color, scale, rotation, segments, halfWidth, fade }) {
@@ -457,6 +500,8 @@ export function rebuildRoadMeshes() {
     addRoadLayerMesh(road.build(), line.color!=null ? line.color : ROAD_COLOR, 0.95, 'Road', netId);
     addRoadLayerMesh(curb.build(), CURB_COLOR, 0.85, 'Curb', netId);
     addRoadLayerMesh(sidewalk.build(), line.sidewalkColor!=null ? line.sidewalkColor : SIDEWALK_COLOR, 0.9, 'Sidewalk', netId);
+    const sidewalkMesh = S.roadMeshGroup.children[S.roadMeshGroup.children.length-1];
+    if (sidewalkMesh?.name === 'Sidewalk') applySlabShader(sidewalkMesh.material, pathSegmentsOf(strokes.map(s => s.line)), strokes[0].hw+strokes[0].cw, strokes[0].sw);
   });
   const pathStrokes = [];
   S.pathBridgeSources = [];
