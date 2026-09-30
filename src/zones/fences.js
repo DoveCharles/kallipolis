@@ -17,16 +17,28 @@ export function addRailingSegment(builder, a, b, baseY, style, state) {
   for (; s <= len; s += style.postSpacing) builder.addBox(a.x+dx*s, a.z+dz*s, dx, dz, style.postSize/2, style.postSize/2, baseY, baseY+style.height);
   state.carry = len - (s - style.postSpacing);
 }
+// a railing along a polyline ({x,z}[]), ending in a post
+export function addRailingLine(builder, line, baseY, style) {
+  const state = {};
+  for (let i=0;i<line.length-1;i++) addRailingSegment(builder, line[i], line[i+1], baseY, style, state);
+  const end = line[line.length-1], prev = line[line.length-2];
+  const len = Math.hypot(end.x-prev.x, end.z-prev.z) || 1;
+  if (state.carry > style.postSpacing*0.25) builder.addBox(end.x, end.z, (end.x-prev.x)/len, (end.z-prev.z)/len, style.postSize/2, style.postSize/2, baseY, baseY+style.height);
+}
+// open Clipper paths with the parts inside `gaps` (Clipper polygons) cut out
+export function cutLines(lines, gaps) {
+  if (!gaps.length) return lines;
+  const clipper = new ClipperLib.Clipper();
+  clipper.AddPaths(lines, ClipperLib.PolyType.ptSubject, false);
+  clipper.AddPaths(gaps, ClipperLib.PolyType.ptClip, true);
+  const tree = new ClipperLib.PolyTree();
+  clipper.Execute(ClipperLib.ClipType.ctDifference, tree, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+  return ClipperLib.Clipper.OpenPathsFromPolyTree(tree).filter(line => line.length >= 2);
+}
 // a mesh of railings along polylines ({x,z}[]), each ending in a post
 export function buildRailingMesh(lines, baseY, style, name) {
   const builder = createMeshBuilder();
-  lines.forEach(line => {
-    const state = {};
-    for (let i=0;i<line.length-1;i++) addRailingSegment(builder, line[i], line[i+1], baseY, style, state);
-    const end = line[line.length-1], prev = line[line.length-2];
-    const len = Math.hypot(end.x-prev.x, end.z-prev.z) || 1;
-    if (state.carry > style.postSpacing*0.25) builder.addBox(end.x, end.z, (end.x-prev.x)/len, (end.z-prev.z)/len, style.postSize/2, style.postSize/2, baseY, baseY+style.height);
-  });
+  lines.forEach(line => addRailingLine(builder, line, baseY, style));
   const geo = builder.build();
   if (!geo) return null;
   const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: style.color, roughness: style.roughness!=null ? style.roughness : 0.8, metalness: style.metalness || 0 }));
@@ -47,13 +59,7 @@ function zoneFenceLines(zone, poly, inset) {
   const water = clipPolygons(ctIntersection, clipPolygons(ctUnion, App.getWaterRegion(), App.getBeachZoneArea()), reach);
   const gaps = clipPolygons(ctUnion, crossings.length ? App.offsetPaths(crossings, 0.6, ClipperLib.JoinType.jtRound) : [],
     water.length ? App.offsetPaths(water, inset + 0.6, ClipperLib.JoinType.jtRound) : []);
-  if (!gaps.length) return loops.map(App.fromClipperPath);
-  const clipper = new ClipperLib.Clipper();
-  clipper.AddPaths(loops, ClipperLib.PolyType.ptSubject, false);
-  clipper.AddPaths(gaps, ClipperLib.PolyType.ptClip, true);
-  const tree = new ClipperLib.PolyTree();
-  clipper.Execute(ctDifference, tree, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
-  return ClipperLib.Clipper.OpenPathsFromPolyTree(tree).map(App.fromClipperPath).filter(line => line.length >= 2);
+  return cutLines(loops, gaps).map(App.fromClipperPath);
 }
 
 Object.assign(App, { PARK_FENCE_STYLE, buildRailingMesh, zoneFenceLines });

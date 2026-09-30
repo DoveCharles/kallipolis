@@ -249,7 +249,7 @@ loves = Texting with one hand {keysmash, perception = 0.7}
 loves = Roll cage {legendary, health = 2, recovery = 1.2}
 loves = Shock absorbers {legendary, recovery = 3, health = 1.2}
 loves = Turbo-boosted { legendary, boost = 2}
-loves = Liquid Cooling {legendary, recovery = 4, maxboost = 1.5, unstable = 0.05}
+loves = Liquid Cooling {legendary, recovery = 2, recharge = 2.5, unstable = 0.1}
 loves = Atomic Engine {legendary, speed = 2, boost = 2, recharge = 3, explosive, unstable = 0.3}
 loves = Fine-tuned {legendary, control = 2, maxboost = 1.4}
 loves = Racing wheels {legendary, speed = 1.1, braking = 1.7}
