@@ -403,10 +403,10 @@ export function haircutFx(at, size, hair, dt) {
 }
 
 // Someone being healed (by a med bot: see life/medbot.js), in the `dt` seconds since it was last called: the haircut's
-// cloud, but pink (the hearts' colour, a bit brighter) and over the whole body — `at` their feet, `height` how tall they are, `lying` if they're flat on the
+// cloud, but a very faint cyan and over the whole body — `at` their feet, `height` how tall they are, `lying` if they're flat on the
 // ground (the cloud spread along them, `heading` the way their head is) — and red first-aid pluses and the odd love heart floating up off it.
 const HEAL_PUFFS_PER_SECOND = 70, HEARTS_PER_SECOND = 1.75, PLUSES_PER_SECOND = 4.5, PLUS_COLOR = new THREE.Color(0xe8202a), HEART_COLORS = [0xff4f7b, 0xff86a8, 0xe8264f];
-const HEAL_PUFF_COLOR = new THREE.Color(0xff6d92), WHITE = new THREE.Color(1, 1, 1);
+const HEAL_PUFF_COLOR = new THREE.Color(0xc8f4f4), WHITE = new THREE.Color(1, 1, 1);
 export function healFx(at, height, lying, heading, dt) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   const now = performance.now()/1000, count = rate => Math.floor(rate*dt + Math.random());
