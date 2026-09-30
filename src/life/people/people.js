@@ -19,7 +19,7 @@ import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
 import { controlInput, possession, rushed } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
-import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GOOFY_ROW, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, SKEPTICAL_ROW, WELLING_ROW, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, PUPIL_MAX_X, PUPIL_MAX_Y, personPixels } from './peopleModel.js';
+import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GOOFY_ROW, HAIR_ROW, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, SKEPTICAL_ROW, WELLING_ROW, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, PUPIL_MAX_X, PUPIL_MAX_Y, personPixels } from './peopleModel.js';
 import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
@@ -471,7 +471,7 @@ export function syncPeopleUI() {
 // (see the end of newPerson)
 const PERSON_LATER_FIELDS = Object.fromEntries([
   // who they are (refreshTraits), how they look (updatePeople)
-  'health', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'faceDt', 'placedOut',
+  'health', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
   // what they say and think
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
   'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
@@ -1232,6 +1232,7 @@ export function updatePeople(t) {
     refreshTraits(p, i);
     if (p.skinKey !== skinKeyOf(p)) tintSkin(p, i); // (a keepsake or status that's just moved the skin's traits: see tintSkin)
     if (personModel && !!p.traits.nude !== !!p.nudeDressed) { p.nudeDressed = !!p.traits.nude; personModel.setNude(i, p.id, p.nudeDressed); } // (see peopleCensor.js)
+    if (personModel && p.headDrawn !== p.traits.headsize) { p.headDrawn = p.traits.headsize; personModel.traitData[(HAIR_ROW*PEOPLE_MAX + i)*4 + 3] = p.headDrawn; personModel.traitTexture.needsUpdate = true; } // (see personLook)
     if (p.traits.nude && (p.mode === 'line' || p.mode === 'wander') && (p.nudeSeenIn = (p.nudeSeenIn ?? 0) - dt) <= 0) { witness(p, 'nude'); p.nudeSeenIn = NUDE_SEEN_EVERY; }
     if (!p.pocketsStocked) stockPockets(p, i); // (the sunglasses they came in: see life/gifts.js)
     if (p.blood) updateBlood(p, dt, i);

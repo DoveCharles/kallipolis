@@ -501,6 +501,7 @@ const FACE_PULLS = {
   LipTop: [[0.08, 0.03, 0], 0], LipBottom: [[0.07, -0.23, 0], 0],
 };
 const FACE_PULL_EYES = 12, FACE_PULL_COUNT = Object.keys(FACE_PULLS).length;
+export const HAIR_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Hair'); // (its fourth number the headsize trait)
 const SKIN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Skin'), EYES_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Eyes'), BLOOD_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Blood');
 const NUDE_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Cuff');
 // the censor's ends (see peopleCensor.js): down the thigh from the hip, × hip-to-knee; a man's up to the stomach, × hip-to-shoulder;
@@ -703,6 +704,12 @@ const PERSON_VERTEX_PARS = `
       p = vec3(p.x, p.y*cn - p.z*sn, p.y*sn + p.z*cn);
       p = vec3(p.x*ct + p.z*st, p.y, p.z*ct - p.x*st);
       looked = mix(posed, pivot + headTurn*p, personVertex.x);
+    }
+    // the headsize trait (the Hair row's fourth number, 0 read as 1: see people.js): scaled about the neck, so it stays on it
+    float headSize = personVertex.x > 0.0 ? texelFetch(personTraits, ivec2(personIndex(), ${HAIR_ROW}), 0).w : 0.0;
+    if (headSize > 0.0 && headSize != 1.0) {
+      vec3 neck = (personBone(personHeadBone)*vec4(personHeadPivot, 1.0)).xyz;
+      looked = mix(looked, neck + (looked - neck)*headSize, personVertex.x);
     }
     return looked;
   }

@@ -72,6 +72,7 @@ export const TRAITS = {
   capitalise: {base: 0, min: 0, max: 1, combine: 'on'}, //capitalise the first letter in every word
   legendary: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as legendary
   terrible: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as terrible
+  headsize: { base: 1, min: 0.2, max: 4 }, // multiplies the head (hair and all), scaled about the neck (see personLook in life/people/peopleModel.js)
   nude: { base: 0, min: 0, max: 1, combine: 'on' }, // no clothes, never changes into any; a mosaic censor over them (life/people/peopleCensor.js)
   smells: { base: 0, min: 0, max: 1, combine: 'on' }, //people keep clear and leave circles it sits in (life/people/peopleSmell.js); cars pull over to let it by (life/traffic/pullover.js)
   respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time: the body stays whole (a car still explodes), shakes, then lightning revives it (see life/revive.js)
