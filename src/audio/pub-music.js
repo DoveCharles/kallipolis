@@ -18,7 +18,7 @@ const MUSIC_DIR = 'assets/music/';
 const SOUND_BANK = MUSIC_DIR + 'TimGM6mb.sf2';
 const PROCESSOR = 'https://cdn.jsdelivr.net/npm/spessasynth_lib@4.3.14/dist/spessasynth_processor.min.js'; // (as in index.html's import map)
 const SONG_GAP = 6;             // seconds between songs
-const VOLUME = { pub: 0.2, restaurant: 0.04 }; // (restaurants: quiet, in the background)
+const VOLUME = { pub: 0.11, restaurant: 0.04 }; // (restaurants: quiet, in the background)
 const SET_OF = path => path.startsWith('restaurant/') ? 'restaurant' : 'pub'; // (assets/music/restaurant/: theirs only)
 const TONE_HZ = 6500;           // the speaker's top end
 const REF_DISTANCE = 4, MAX_DISTANCE = 30;
