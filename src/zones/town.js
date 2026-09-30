@@ -289,7 +289,9 @@ function makeTownBuilding(fp, front, rng, s) {
     if (kind) {
       group.userData.buildingKind = kind;
       const colours = kind === 'salon' ? SALON_FASCIAS : kind === 'clothes' ? CLOTHES_FASCIAS : RESTAURANT_FASCIAS;
-      fascia.material.color.setHex(colours[Math.floor(rng()*colours.length)]);
+      const board = colours[Math.floor(rng()*colours.length)];
+      fascia.material.color.setHex(board);
+      hangingSign(kind, board).forEach(([geo, mat]) => part(group, place(geo, Math.min(0.9, len/2), 0, SHOP + 0.9), mat));
     }
   }
   group.rotation.x = -Math.PI/2;
