@@ -42,13 +42,25 @@ Where's my size? {here.building = clothes}
 Do I need this? No. Do I want it? Yes. {here.building = clothes}
 The changing rooms are always full. {here.building = clothes, patience = -1}
 That mannequin's giving me a look. {here.building = clothes, weight = 0.4}
-Smells like Sunday at Nonna's. {here.building = restaurant}
-Garlic bread. I need garlic bread. {here.building = restaurant}
-How long does a meatball take? {here.building = restaurant, patience = -1}
-Is that Sinatra on the wall? {here.building = restaurant, weight = 0.5}
-One more breadstick. Just one. {here.building = restaurant, weight = 0.5}
+Smells like Sunday at Nonna's. {here.building = italian}
+Garlic bread. I need garlic bread. {here.building = italian}
+How long does a meatball take? {here.building = italian, patience = -1}
+Is that Sinatra on the wall? {here.building = italian, weight = 0.5}
+One more breadstick. Just one. {here.building = italian, weight = 0.5}
 That robot waiter's got a better moustache than me. {here.building = restaurant, weight = 0.5}
 Where's that waiter got to? {here.building = restaurant, patience = -1}
+Is it too early for ouzo? {here.building = greek}
+I could live on halloumi. {here.building = greek}
+How long does moussaka take? {here.building = greek, patience = -1}
+Those blue domes. I need a holiday. {here.building = greek, weight = 0.5}
+Just one more bit of pitta. {here.building = greek, weight = 0.5}
+Who's hogging the ping pong table? {here.building = startup, patience = -1}
+Is kombucha meant to fizz like that? {here.building = startup, weight = 0.6}
+Nobody told me there'd be beanbags. {here.building = startup, happy, weight = 0.5}
+We're a family here, apparently. {here.building = startup, mood = -1}
+That crystal's not doing anything for me. {here.building = startup, weight = 0.5}
+Somebody's cancelled standup again. {here.building = corporate, weight = 0.5}
+Is anyone going to smash a plate? {here.building = greek, weight = 0.4}
 Everything's in the sale except what I want. {here.building = clothes, mood = -1, weight = 0.5}
 Is that in my colour? {here.building = clothes, weight = 0.6}
 I still can't stop thinking about it. {seen, weight = 3}

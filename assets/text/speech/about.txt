@@ -115,8 +115,14 @@
 #                             (a clothes shop has rails of clothes, a till and changing rooms with curtains, and
 #                             everyone in one's there to try something on)
 #                             (a restaurant's an old New York Italian joint: checked tablecloths, candles in Chianti
-#                             bottles, red leather booths, a bar, a mural of Naples, signed photos; most sit down and
-#                             are served a plate of food, and leave once they've eaten)
+#                             bottles, red leather booths, a bar, a mural of Naples, signed photos — here.building =
+#                             italian for only those — or a Greek taverna, here.building = greek: whitewash and blue,
+#                             blue-checked cloths, rush-seated chairs, ouzo, a mural of Santorini, painted plates,
+#                             grapevines overhead; in either most sit down and are served a plate of food, and leave
+#                             once they've eaten)
+#                             (an office's corporate cubicles, here.building = corporate, or a startup's open plan,
+#                             here.building = startup: bench desks, felt screens, kombucha on tap, beanbags, table
+#                             tennis, salt lamps and crystals)
 #                             (a pub always has music on — audio/pub-music.js — so pub lines can talk about it)
 #                             (and a bar bot behind the bar — buildings/barbot.js — polishing glasses, wiping the bar,
 #                             and asleep when nobody's in; anyone sat at the bar may talk to it, and it babbles back)
