@@ -162,7 +162,7 @@ export function buildingNumber(key) {
 // restaurant as one of those; everything else is a home. A city block's
 // landmark is one of those blocks too — taller and fancier, but still somewhere people live or work, and named for it
 // (see buildingName) — so it splits the same way.
-const CITY_BLOCK_KINDS = new Set(['buildings', 'landmark']), OWN_LAYOUT_KINDS = new Set(['warehouse', 'factory', 'pub', 'salon', 'clothes', 'restaurant']);
+const CITY_BLOCK_KINDS = new Set(['buildings', 'landmark']), OWN_LAYOUT_KINDS = new Set(['warehouse', 'factory', 'pub', 'salon', 'clothes', 'restaurant', 'convenience']);
 export const roomLayoutOf = (kind, number) => OWN_LAYOUT_KINDS.has(kind) ? kind
   : CITY_BLOCK_KINDS.has(kind) && number % 2 === 0 ? 'office' : 'home';
 // A pub's kind of pub, by its key (see buildingKey), the same every time: a craft beer bar — bright paint, neon, festoon
@@ -174,12 +174,14 @@ export function pubStyleOf(key) {
   return (h >>> 0)/2**32 < CRAFT_PUB ? 'craft' : 'pub';
 }
 // A restaurant's kind, by its key, the same every time: a Greek taverna (RestaurantGreek.glb: see furnishRestaurant in
-// interior.js) GREEK_RESTAURANT of the time, else an old New York Italian.
-export const GREEK_RESTAURANT = 0.4;
+// interior.js) GREEK_RESTAURANT of the time, a kaiten sushi bar (RestaurantSushi.glb: see furnishSushi) SUSHI_RESTAURANT,
+// else an old New York Italian.
+export const GREEK_RESTAURANT = 0.35, SUSHI_RESTAURANT = 0.3;
 export function restaurantStyleOf(key) {
   let h = 2166136261;
   for (const ch of String(key) + ':greek') h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
-  return (h >>> 0)/2**32 < GREEK_RESTAURANT ? 'greek' : 'italian';
+  const u = (h >>> 0)/2**32;
+  return u < GREEK_RESTAURANT ? 'greek' : u < GREEK_RESTAURANT + SUSHI_RESTAURANT ? 'sushi' : 'italian';
 }
 // An office's kind, by its key, the same every time: a startup's open plan (OfficeStartup.glb: see furnishOffice in
 // interior.js) STARTUP_OFFICE of the time, else a corporate one of cubicles.

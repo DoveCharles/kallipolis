@@ -94,14 +94,18 @@ export const waiterBody = () => waiter;
 // A body from the model: toon-shaded like the people (and lit like them indoors: the room's lamps and glow, see
 // interior.js) but for its screen and glass, which are its own.
 function makeBot(rig, animations) {
-  let head = null, face = null, zzz = null, pint = null, moustache = null;
-  const shaped = [], screens = [], tux = [], aprons = [], toon = new Map();
+  let head = null, face = null, zzz = null, pint = null, moustache = null, robe = null, headband = null, knife = null, bowtie = null;
+  const shaped = [], screens = [], tux = [], aprons = [], black = [], toon = new Map();
   rig.traverse(o => {
     if (o.isBone && o.name === 'Head') head = o;
     if (o.name === 'Face' && !o.isBone) face = o;
     if (o.name === 'Zzz' && !o.isBone) zzz = o;
     if (o.name === 'Pint' && !o.isBone) pint = o;
     if (o.name === 'Moustache' && !o.isBone) moustache = o;
+    if (o.name === 'Robe' && !o.isBone) robe = o;
+    if (o.name.startsWith('Headband') && !o.isBone) headband = o;
+    if (o.name === 'Yanagiba' && !o.isBone) knife = o;
+    if (o.name === 'Bowtie' && !o.isBone) bowtie = o;
     if (!o.isMesh) return;
     o.frustumCulled = false; // (skinned: its bounds are the rest pose's)
     o.castShadow = o.receiveShadow = !o.material.transparent;
@@ -126,6 +130,8 @@ function makeBot(rig, animations) {
       : o.userData.awake.clone().multiplyScalar(ink ? ASLEEP_FACE : ASLEEP_GLOW);
   }
   if (zzz) zzz.visible = false;
+  // (the body's Black part: the one beside its Apron; the Body node's name clashes with the Body bone's, so not by name)
+  rig.traverse(o => { if (o.isMesh && o.material.name === 'Black' && o.parent?.children.some(c => c.material?.name === 'Apron')) black.push(o); });
   const size = new THREE.Box3().setFromObject(rig).getSize(new THREE.Vector3());
   const root = new THREE.Group();
   root.name = 'BarBot';
@@ -141,13 +147,21 @@ function makeBot(rig, animations) {
     }
     actions[clip.name] = action;
   }
-  return { root, rig, head, mixer, actions, shaped, screens, face, zzz, pint, moustache, tux, aprons, height: size.y };
+  return { root, rig, head, mixer, actions, shaped, screens, face, zzz, pint, moustache, robe, headband, knife, bowtie, tux, aprons,
+    black, chrome: [...toon.values()].find(m => m.name === 'Chrome2'), height: size.y };
 }
-// the bar bot (a pint in hand) or the waiter (a tux and a moustache, and no pint)
-function dressBot(b, waiter) {
-  if (b.pint) b.pint.visible = !waiter;
-  if (b.moustache) b.moustache.visible = waiter;
-  for (const o of b.tux) o.morphTargetInfluences[o.morphTargetDictionary.Tux] = waiter ? 1 : 0;
+// the bar bot (a pint in hand), the waiter (a tux and a moustache, and no pint) or the sushi chef (a robe and headband,
+// no apron: see waiterbot.js)
+export function dressBot(b, waiter, chef = false) {
+  if (b.pint) b.pint.visible = !waiter && !chef;
+  if (b.moustache) b.moustache.visible = waiter && !chef;
+  if (b.robe) b.robe.visible = chef;
+  if (b.headband) b.headband.visible = chef;
+  if (b.knife) b.knife.visible = false;
+  if (b.bowtie) b.bowtie.visible = !chef;
+  if (chef) b.aprons.forEach(o => { o.visible = false; });
+  for (const o of b.black) { o.userData.black ??= o.material; o.material = chef && b.chrome ? b.chrome : o.userData.black; } // (Black → Chrome2 on the chef)
+  for (const o of b.tux) o.morphTargetInfluences[o.morphTargetDictionary.Tux] = waiter && !chef ? 1 : 0;
 }
 
 /** BARBOT if the bot's up in the pub the view's in, awake and not talking to anyone already, else null. */

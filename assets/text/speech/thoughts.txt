@@ -39,6 +39,14 @@ Those dryers look like space helmets. {here.building = salon, weight = 0.4}
 Not those posters again. {here.building = salon, patience = -1, weight = 0.4}
 Maybe I'll go blonde. {here.building = salon, weight = 0.4}
 Where's my size? {here.building = clothes}
+I only came in for milk. {here.building = convenience}
+How long have those hot dogs been going round? {here.building = convenience}
+Blue or red slushie. Big decision. {here.building = convenience, weight = 0.5}
+Meal deal. Obviously. {here.building = convenience}
+Why is the milk always at the back? {here.building = convenience, patience = -1}
+Scratchcard. Just the one. {here.building = convenience, weight = 0.4}
+It's three in the morning and I want crisps. {here.building = convenience, world.hour 1-5}
+Should've brought an umbrella. {here.building = convenience, world.weather = rain, weight = 0.6}
 Do I need this? No. Do I want it? Yes. {here.building = clothes}
 The changing rooms are always full. {here.building = clothes, patience = -1}
 That mannequin's giving me a look. {here.building = clothes, weight = 0.4}
@@ -63,6 +71,12 @@ Somebody's cancelled standup again. {here.building = corporate, weight = 0.5}
 Is that clock broken? It's always ten to two. {here.building = office, weight = 0.4}
 Who needs a neon sign telling them how to feel? {here.building = startup, weight = 0.4}
 Is anyone going to smash a plate? {here.building = greek, weight = 0.4}
+That one's been round three times. Nobody wants it. {here.building = sushi}
+Gold plate. Treat yourself. {here.building = sushi, happy, weight = 0.6}
+I've lost count of my plates. {here.building = sushi, weight = 0.6}
+Grab it before it's gone! {here.building = sushi, weight = 0.5}
+Tuna's coming round. Tuna's coming round. {here.building = sushi, weight = 0.5}
+Too much wasabi. Way too much wasabi. {here.building = sushi, weight = 0.4}
 Everything's in the sale except what I want. {here.building = clothes, mood = -1, weight = 0.5}
 Is that in my colour? {here.building = clothes, weight = 0.6}
 I still can't stop thinking about it. {seen, weight = 3}

@@ -14,9 +14,9 @@ import { puffSmoke, haircutFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
 import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFollowingPerson } from './peopleTracking.js';
-import { drawCurtain, openRoomDoor, roomBeyondDoor, roomBuilding, roomCubicles, roomDoorway, roomKind, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomVisit, someoneHome, watchingTV } from '../../buildings/interior.js';
+import { drawCurtain, openRoomDoor, roomBeyondDoor, roomBuilding, roomCubicles, roomDoorway, roomKind, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomTill, roomVisit, someoneHome, sushiGrab, sushiOrder, sushiPut, watchingTV } from '../../buildings/interior.js';
 import { canAfford, pay, spendWill, tooPoor } from '../shop-money.js';
-import { TRAYS, clearMeal, feedPizza, giveSnack, letGo, mealFinished, menuOf, serveMeal } from './peopleHolding.js';
+import { TRAYS, clearMeal, feedPizza, giveSnack, hold, holding, letGo, mealFinished, menuOf, plateSpot, serveMeal } from './peopleHolding.js';
 import { BARBOT, barbotFree } from '../../buildings/barbot.js';
 import { awaitWaiter, leavePlate, queueForTable, runWaiter, servedMeal, waitForTable, waiterOn } from './peopleWaiter.js';
 import { summonSalonBot, salonBotSnipping, salonBotNoise, seatedHead } from '../../buildings/salonbot.js';
@@ -1740,7 +1740,7 @@ const OFFICE_MIN_HOURS = 4, OFFICE_MAX_HOURS = 10, OFFICE_LEAVE_HOURS = 1.5;
 /** The share of the crowd who work late: in an office after dark, they stay the rest of their day. */
 const WORKS_LATE = 0.04;
 const worksLate = p => ((Math.imul(p.id + 7, 2246822519) >>> 0)/2**32) < WORKS_LATE;
-const isWorkplace = building => !['home', 'pub', 'salon', 'clothes', 'restaurant'].includes(roomLayoutOf(building.kind, building.number));
+const isWorkplace = building => !['home', 'pub', 'salon', 'clothes', 'restaurant', 'convenience'].includes(roomLayoutOf(building.kind, building.number));
 // (a pub's a visit like a home's, but a shorter one — an hour or four — and nobody's in it long without a pint in hand:
 // see aboutTheRoom)
 const isPub = building => roomLayoutOf(building.kind, building.number) === 'pub';
@@ -1748,9 +1748,10 @@ const PUB_MIN_HOURS = 1, PUB_MAX_HOURS = 4;
 // (a restaurant's for a meal: most sit straight down at a table, and once they've eaten they're off: see aboutTheRoom)
 const isRestaurant = building => roomLayoutOf(building.kind, building.number) === 'restaurant';
 const RESTAURANT_MIN_HOURS = 1, RESTAURANT_MAX_HOURS = 2.5, RESTAURANT_SIT = 0.9;
-// (a shop — a hair salon or a clothes shop — is a quick visit, for what it's there for: a haircut or new clothes; and
-// shut after dark: see "a salon" and "a clothes shop" below)
-const shopOf = building => { const layout = roomLayoutOf(building.kind, building.number); return layout === 'salon' || layout === 'clothes' ? layout : null; };
+// (a shop — a hair salon, a clothes shop or a convenience store — is a quick visit, for what it's there for: a haircut,
+// new clothes or a bit of shopping; and shut after dark, bar the convenience store: see "a salon" and the rest below)
+const SHOPS = new Set(['salon', 'clothes', 'convenience']);
+const shopOf = building => { const layout = roomLayoutOf(building.kind, building.number); return SHOPS.has(layout) ? layout : null; };
 const SHOP_MIN_HOURS = 0.4, SHOP_MAX_HOURS = 1.2;
 /** Seconds between one pint finished and the next got in, in a pub. */
 const PUB_ROUND_MIN = 15, PUB_ROUND_MAX = 60;
@@ -1761,7 +1762,7 @@ const PUB_ROUND_MIN = 15, PUB_ROUND_MAX = 60;
  * @param {object} building - the building (see buildingDoors)
  * @returns {number} the chance
  */
-export const enterChance = (p, building) => shopOf(building) ? (isNight() || (p.traits.nude && shopOf(building) === 'clothes') ? 0 : ENTER_CHANCE*spendWill(p))
+export const enterChance = (p, building) => shopOf(building) ? ((isNight() && shopOf(building) !== 'convenience') || (p.traits.nude && shopOf(building) === 'clothes') ? 0 : ENTER_CHANCE*spendWill(p))
   : isRestaurant(building) || isPub(building) ? (isNight() && !nightOwl(p) ? ENTER_CHANCE_NIGHT : ENTER_CHANCE)*spendWill(p) : isWorkplace(building)
   ? (isNight() ? OFFICE_ENTER_CHANCE_NIGHT : OFFICE_ENTER_CHANCE)
   : isNight() && !nightOwl(p) ? ENTER_CHANCE_NIGHT : ENTER_CHANCE;
@@ -1824,7 +1825,7 @@ export function goIndoors(p, building, from) {
 //              anyone teetotal out of it (alcoholic starts everyone at 1: see the trait table in people/about.txt)
 //   where      anything else about them, as a function of the person
 // A building's own kind is looked up first (as buildings.txt names it: see buildingKindOf), then the layout of its room
-// (what roomLayoutOf gives: 'home', 'office', 'warehouse', 'factory', 'pub', 'salon', 'clothes', 'restaurant'), then `default`.
+// (what roomLayoutOf gives: 'home', 'office', 'warehouse', 'factory', 'pub', 'salon', 'clothes', 'convenience', 'restaurant'), then `default`.
 const PARTY_RULES = {
   default: { min: 4, max: 5 },
   // A pub's party's a drinking one: nobody teetotal turns up.
@@ -1880,8 +1881,10 @@ export function startParty({ group, key, kind, number }, { want: only = 0, diner
   if (!want) return 0;
   // (the door itself: whoever reaches it is in: see updateIndoors' 'approach')
   const door = roomOutsideDoor(0.15);
-  const possible = people.map(p => ({ p, d: Math.hypot(p.x - door.x, p.z - door.z) }))
+  let possible = people.map(p => ({ p, d: Math.hypot(p.x - door.x, p.z - door.z) }))
     .filter(({ p }) => p !== people[followed] && p !== people[riderFollowed] && couldComeToAParty(p) && welcomeAtParty(p, rule));
+  // (Fetch a Diner with nobody out, e.g. a town without walkways: anyone not spawned)
+  if (diner && !possible.length) possible = people.filter(p => p.mode === 'none').map(p => ({ p, d: 0 }));
   const away = possible.filter(c => c.d >= PARTY_FAR);
   const pool = away.length >= want ? away : possible;
   const base = group.userData.base || 0;
@@ -2078,13 +2081,14 @@ function aboutTheRoom(p, visit, dt, arriving = false) {
   }
   if (p.group?.kind === 'chat') return null; // (stopped to talk with whoever's possessed: see talkWith)
   if (here.cubicle) return changing(p, here, visit, dt);
+  if (here.paying) return paying(p, here, visit, dt);
   if (here.host) return waitForTable(p, here, dt);
   if (here.seat) return sitting(p, here, dt);
   if (p.group?.kind === 'room') return here.route ? walkRoute(p, here) : null;
   if (visit.shop && !visit.served && !here.route && !p.oneShot && p.mode !== 'possessed' && (here.shopIn = (here.shopIn ?? 1 + peopleRng()*4) - dt) <= 0) {
     here.shopIn = 2 + peopleRng()*4;
     if (!canAfford(p)) { visit.served = true; tooPoor(p, feel); leaveSoon(visit, 20); return null; } // (too poor: grumbles and goes)
-    const next = visit.shop === 'salon' ? goForHaircut(p, here) : goTryOn(p, here);
+    const next = visit.shop === 'salon' ? goForHaircut(p, here) : visit.shop === 'clothes' ? goTryOn(p, here) : goPay(p, here);
     if (next) return next;
   }
   if (here.route) {
@@ -2214,6 +2218,7 @@ export function standUp(p) {
   if (seat && seat.by === p) seat.by = null;
   leavePlate(p);
   clearMeal(p);
+  if (p.inRoom) sushiClear(p.inRoom);
   if (p.inRoom) {
     if (seat?.sofa) p.inRoom.leftSofaAt = performance.now();
     if (seat?.sofa && p.inRoom.watched != null) feel(p, 'watchedtv'); // (for what they say: see life/speech-text.js)
@@ -2252,6 +2257,7 @@ function sitting(p, here, dt) {
       // (at a restaurant, paid for up front; too poor, and they sit a moment, grumble and go)
       const dining = p.pose === 'Eating' && p.indoors && isRestaurant(p.indoors.building);
       if (dining && !pay(p)) { p.pose = 'Sit1'; here.ate = true; tooPoor(p, feel); leaveSoon(p.indoors, 20); }
+      else if (p.pose === 'Eating' && seat.sushi) { p.pose = 'Sit1'; here.sushi = { want: SUSHI_PLATES[0] + Math.floor(peopleRng()*(SUSHI_PLATES[1] + 1 - SUSHI_PLATES[0])), next: 1 + peopleRng()*3, plate: null, left: [] }; }
       else if (p.pose === 'Eating' && here.led) { p.pose = 'Sit1'; awaitWaiter(p, seat); } // (shown here by the waiter: it takes the order)
       else if (p.pose === 'Eating') {
         const dish = p.indoors && isRestaurant(p.indoors.building) ? menuOf(p.indoors.building)[peopleRng() < 0.5 ? 0 : 1] : 'plate';
@@ -2281,6 +2287,7 @@ function sitting(p, here, dt) {
       // (dinner over: the plate cleared away, and a little while sat at the table after)
       // (waiting on the waiter: not getting up, and the food brought anyway if it's gone or taking far too long)
       if (here.meal) { here.timer = Math.max(here.timer, 1); if (!waiterOn() || (here.mealBy -= dt) <= 0) servedMeal(p); }
+      if (here.sushi) sushiDiner(p, here, seat, dt);
       if (feedPizza(p)) here.timer = Math.max(here.timer, 1);
       if ((p.pose.startsWith('Eating') || seat.diner) && !here.ate && mealFinished(p)) {
         // (the waiter's: the empty plate left there till they get up, for it to clear)
@@ -2292,7 +2299,7 @@ function sitting(p, here, dt) {
       if (seat.kind === 'cut') haircut(p, seat, here, dt);
       // (waiting for a haircut: up as soon as a chair's free)
       else if (p.indoors?.shop === 'salon' && !p.indoors.served && freeSeat(p, 'cut')) here.timer = 0;
-      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); leavePlate(p); clearMeal(p); here.stage = 'rise'; p.pose = down !== facing ? 'Sit1' : 'Idle'; }
+      if (here.watched != null && on !== -1 ? on !== here.watched : here.timer <= 0) { leaveGroup(p); leavePlate(p); clearMeal(p); sushiClear(here); here.stage = 'rise'; p.pose = down !== facing ? 'Sit1' : 'Idle'; }
       break;
     }
     case 'rise':
@@ -2349,7 +2356,8 @@ function serve(p, visit) {
   const i = people.indexOf(p);
   if (!personModel || i < 0) return;
   if (visit.shop === 'salon') { personModel.cutHair(i, p.id, peopleRng); feel(p, 'haircut'); }
-  else { personModel.changeClothes(i, p.id, peopleRng); feel(p, 'newclothes'); }
+  else if (visit.shop === 'clothes') { personModel.changeClothes(i, p.id, peopleRng); feel(p, 'newclothes'); }
+  else feel(p, 'shopped');
 }
 /**
  * Whether someone whose time's up in a shop stays on anyway: they're in the chair or the changing room, or waiting for
@@ -2361,7 +2369,7 @@ function serve(p, visit) {
  */
 function beingServed(p, visit, dt) {
   if (!visit.shop || !roomHolds(visit.building.key) || p.inRoom?.visit !== roomVisit()) return false;
-  if (p.inRoom.cubicle || (p.inRoom.seat?.kind === 'cut' && !visit.served)) return true;
+  if (p.inRoom.cubicle || p.inRoom.paying || (p.inRoom.seat?.kind === 'cut' && !visit.served)) return true;
   return !visit.served && (visit.waited = (visit.waited ?? 0) + dt) < SERVE_WAIT;
 }
 /**
@@ -2404,6 +2412,50 @@ function haircut(p, seat, here, dt) {
   serve(p, visit);
   here.timer = 1 + peopleRng();
   leaveSoon(visit, SERVED_STAY[0] + peopleRng()*(SERVED_STAY[1] - SERVED_STAY[0]));
+}
+// A convenience store: whoever goes in looks round a while, then goes up to the till (roomTill), stands there PAY_TIME
+// paying, and is off with what they came for.
+/** Seconds at the till, [shortest, longest]. */
+const PAY_TIME = [2, 4];
+/**
+ * In a convenience store, over to the till.
+ * @param {Person} p - the person
+ * @param {object} here - their p.inRoom
+ * @returns {?{x: number, y: number, z: number}} where to walk to first, or null if there's no till (or no way to it)
+ */
+function goPay(p, here) {
+  if (!here.browsed) { here.browsed = peopleRng() < 0.5; return null; } // (a look round first, or two)
+  const till = roomTill(), route = till && roomRoute(p, till.at);
+  if (!route) return null;
+  if (p.group?.kind === 'room') leaveGroup(p);
+  Object.assign(here, { paying: true, route, timer: 25, payFor: PAY_TIME[0] + peopleRng()*(PAY_TIME[1] - PAY_TIME[0]) });
+  p.faceTo = null;
+  return route[0];
+}
+/**
+ * Someone paying at a convenience store's till: there, facing the counter, a moment, then served and soon gone.
+ * @param {Person} p - the person
+ * @param {object} here - their p.inRoom
+ * @param {object} visit - their p.indoors
+ * @param {number} dt - seconds since the last frame
+ * @returns {?{x: number, y: number, z: number}} where they should walk to, or null
+ */
+function paying(p, here, visit, dt) {
+  here.timer -= dt;
+  const next = here.route ? walkRoute(p, here) : null;
+  if (next) {
+    if (here.timer > 0) return next;
+    here.route = null; // (can't get there)
+  } else {
+    const till = roomTill();
+    if (till) p.faceTo = till.facing;
+    if ((here.payFor -= dt) > 0) return null;
+    serve(p, visit);
+    leaveSoon(visit, SERVED_STAY[0] + peopleRng()*(SERVED_STAY[1] - SERVED_STAY[0]));
+  }
+  here.paying = false;
+  here.wait = 1 + peopleRng()*2;
+  return null;
 }
 // whether a changing room's really someone's: they're still in the room with it as theirs
 const cubicleHeld = c => !!c.by && c.by.inRoom?.cubicle === c && c.by.inRoom.visit === roomVisit();
@@ -2479,6 +2531,56 @@ function changing(p, here, visit, dt) {
 const TYPING_SPELL = [8, 40], SAT_BACK_SPELL = [3, 12];
 /** How long someone lingers at the table once their dinner's gone, in seconds. */
 const SAT_AFTER_MEAL = 12;
+// A sushi diner: plates taken off the belt as they pass, or at the chef's bar ordered from the chef, one at a time, each eaten, its empty stacked beside them
+// by colour (the price); the stacks gone when they get up.
+const SUSHI_PLATES = [1, 4];  // plates each has
+const SUSHI_EAT = [10, 20];   // s a plate takes
+const SUSHI_PAUSE = [2, 8];   // s between plates
+const SUSHI_STACK = [0.2, 0.16, 0.02]; // m to the side of the first stack, between stacks, a plate's height
+function sushiDiner(p, here, seat, dt) {
+  const su = here.sushi;
+  if (!su.want && !su.plate) return;
+  here.timer = Math.max(here.timer, 1);
+  if (su.ordered || (su.next -= dt) > 0) return;
+  const at = plateSpot(p); at.y = seat.diner.top;
+  const eat = (plate, dish) => {
+    su.plate = plate; su.dish = dish;
+    su.next = SUSHI_EAT[0] + peopleRng()*(SUSHI_EAT[1] - SUSHI_EAT[0]);
+    p.pose = 'Eating';
+    if (!holding(p, 'chopsticks')) hold(p, 'chopsticks', { hand: 'R' });
+  };
+  if (!su.plate) {
+    if (seat.sushi.chef) {
+      su.ordered = sushiOrder(seat, o => { su.ordered = false; if (here.sushi === su) eat(o, o.userData.dish ?? 'Dish0'); else o.removeFromParent(); });
+      if (!su.ordered) su.next = 1;
+      return;
+    }
+    const dish = sushiGrab(seat.sushi.belt);
+    if (dish) eat(sushiPut(dish, at, p.heading), dish); else su.next = 0.2;
+    return;
+  }
+  // (eaten: onto its colour's stack, beside them)
+  su.plate.removeFromParent();
+  su.plate = null;
+  const colour = su.dish.slice(4), stacks = [...new Set(su.left.map(e => e.colour))];
+  let k = stacks.indexOf(colour); if (k < 0) k = stacks.length;
+  const side = k % 2 ? -1 : 1, off = side*(SUSHI_STACK[0] + (k >> 1)*SUSHI_STACK[1]), high = su.left.filter(e => e.colour === colour).length;
+  at.x += Math.cos(p.heading)*off; at.z -= Math.sin(p.heading)*off; at.y += high*SUSHI_STACK[2];
+  const o = sushiPut('Empty' + colour, at, p.heading);
+  if (o) su.left.push({ colour, o });
+  p.pose = 'Sit1';
+  su.next = SUSHI_PAUSE[0] + peopleRng()*(SUSHI_PAUSE[1] - SUSHI_PAUSE[0]);
+  if (--su.want > 0) return;
+  letGo(p, 'chopsticks');
+  here.timer = Math.min(here.timer, SAT_AFTER_MEAL*p.traits.patience);
+  if (p.indoors && isRestaurant(p.indoors.building)) { feel(p, 'dined'); leaveSoon(p.indoors, SAT_AFTER_MEAL + 20); }
+}
+function sushiClear(here) {
+  if (!here.sushi) return;
+  here.sushi.plate?.removeFromParent();
+  here.sushi.left.forEach(e => e.o.removeFromParent());
+  here.sushi = null;
+}
 /** How someone sits on a seat: typing, at a desk (if the model can), eating, at a dining table, else sat back. */
 const deskPose = seat => seat.desk && hasClip('Typing') ? 'Typing'
   : seat.diner && hasClip('Eating') ? 'Eating' : 'Sit1';

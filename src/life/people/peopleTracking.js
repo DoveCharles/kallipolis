@@ -159,6 +159,7 @@ export function personDoing(p) {
     const label = buildingLabel(p.indoors.building), stage = p.indoors.stage;
     if (stage === 'inside' && p.inRoom?.seat?.kind === 'cut' && p.inRoom.stage === 'sit' && !p.indoors.served) return 'Getting a haircut at ' + label;
     if (stage === 'inside' && p.inRoom?.cubicle) return p.inRoom.changing === 'go' ? 'Off to try some clothes on' : 'Trying clothes on at ' + label;
+    if (stage === 'inside' && p.inRoom?.paying) return 'Paying at ' + label;
     return (stage === 'approach' ? 'Going into ' : stage === 'inside' ? 'Inside ' : 'Coming out of ') + label;
   }
   if (p.act === 'buy') {
@@ -635,9 +636,9 @@ function buildingAhead(p) {
     if (!hit) continue;
     const key = buildingKey(hit.zone, hit.index), number = buildingNumber(key), kind = buildingKindOf(hit.group, hit.zone);
     const height = hit.group.userData.height ?? 0;
-    const title = buildingTitle(kind, number), name = buildingName(kind, number, height, key);
+    const title = buildingTitle(kind, number, key), name = buildingName(kind, number, height, key);
     return { ...hit, key, kind, number, at: { x, z }, enterable: buildingEnterable(kind),
-      name: buildingLabelName(kind, number, height, key), type: title ? name : buildingTypeOf(kind, number).name ?? name };
+      name: buildingLabelName(kind, number, height, key), type: title ? name : buildingTypeOf(kind, number, key).name ?? name };
   }
   return null;
 }

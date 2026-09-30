@@ -37,7 +37,7 @@ let lastReaction = -Infinity;
 export const SEEN_TIME = 60; // seconds someone remembers what they saw or felt, for {seen} and {felt} (p.seen / p.felt: see witness, notice and feel in people/people.js)
 const DEATHS = ['killedbycar', 'beatentodeath', 'smited', 'drowned', 'exploded', 'crashedinto', 'fell', 'punchedfence'];
 const SIGHTS = [...DEATHS, 'death', 'punch', 'knockedbycar', 'planecrash', 'beeattack', 'resurrected', 'healed', 'waterwalking', 'smelly', 'nude']; // ('death': any of DEATHS)
-const FEELINGS = ['punched', 'hitbycar', 'stung', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes', 'gifted', 'cheered', 'party', 'healed', 'dined', 'carcrash', 'broke'];
+const FEELINGS = ['punched', 'hitbycar', 'stung', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes', 'shopped', 'gifted', 'cheered', 'party', 'healed', 'dined', 'carcrash', 'broke'];
 const MOOD_SHOWS = 0.3;       // how far their face (p.emotion, -1 to 1) has to be from neutral for is = sad / happy
 const HURT_BELOW = 0.7;       // share of full health under which they're hurt
 const STATES = { // {is = …}: how the speaker (or other.is: who they're talking to) is right now
@@ -399,10 +399,10 @@ const worldAllows = (world, person) => world.every(w => {
   if (w.kind === 'indoors') return !!buildingOf(person) === w.is;
   if (w.kind === 'building') { const b = buildingOf(person); const layout = b && roomLayoutOf(b.kind, b.number);
     // (a craft beer bar's a pub too, and `craftpub` only one of those: see pubStyleOf; and every home has a
-    // bedroom and `ensuite` through the living room: see homeSuiteOf; a restaurant's `greek` or `italian`: restaurantStyleOf;
+    // bedroom and `ensuite` through the living room: see homeSuiteOf; a restaurant's `greek`, `sushi` or `italian`: restaurantStyleOf;
     // an office's `startup` or `corporate`: officeStyleOf)
     return !!b && (b.kind === w.is || layout === w.is || (w.is === 'craftpub' && layout === 'pub' && pubStyleOf(b.key) === 'craft')
-      || ((w.is === 'greek' || w.is === 'italian') && layout === 'restaurant' && restaurantStyleOf(b.key) === w.is)
+      || ((w.is === 'greek' || w.is === 'sushi' || w.is === 'italian') && layout === 'restaurant' && restaurantStyleOf(b.key) === w.is)
       || ((w.is === 'startup' || w.is === 'corporate') && layout === 'office' && officeStyleOf(b.key) === w.is)
       || (w.is === 'ensuite' && layout === 'home')); }
   if (w.kind === 'trait') {

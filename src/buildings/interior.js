@@ -14,7 +14,7 @@ import { officeAmbience, resetOfficeAmbience } from '../audio/office.js';
 import { pubMusic, stopPubMusic } from '../audio/pub-music.js';
 import { loadingTask, loadingSay } from '../ui/loading.js';
 import { loadBarbot, placeBarbot, updateBarbot, barbotWarmUp } from './barbot.js';
-import { placeWaiterbot, updateWaiterbot } from './waiterbot.js';
+import { placeWaiterbot, placeChefbot, placeClerkbot, chefOrder, chefUp, updateWaiterbot } from './waiterbot.js';
 import { placeJukebox, updateJukebox } from './jukebox.js';
 import { loadSalonBot, placeSalonBot, salonBotReach, clearSalonBots, updateSalonBots, salonBotWarmUp } from './salonbot.js';
 
@@ -211,7 +211,7 @@ function keyFraction(key, salt = ':walls') {
 // some way into the wall, black at the back — where anyone coming in comes from, and anyone going goes — with a door hung
 // in it that swings in to let them through (see openRoomDoor).
 const DOOR_W = 0.9, DOOR_H = 2.1, DOOR_IN = 1, RECESS = 0.5;   // the doorway: how far along the wall, how deep
-let DOOR_Z, doorFrom, doorTo;
+let DOOR_Z, doorFrom, doorTo, doorBack;
 const doorBlack = new THREE.MeshBasicMaterial({ color: 0x000000 });
 // The rest of that wall, past the door: solid (with the thick wall behind it all along), or in a shop (a salon or a
 // clothes shop: see `shopfront` on its layout) its shopfront, on the street — past a pier beside the door, glass the rest
@@ -251,17 +251,21 @@ function buildShell() {
   // z runs the other way along itself, turned as it is)
   curtainWall(ROOM_W + WALL, 0, ROOM_D/2 + WALL/2, 0, -ROOM_W/2 + COLUMN, ROOM_W/2 - COLUMN/2);
   curtainWall(ROOM_D + WALL, ROOM_W/2 + WALL/2, 0, Math.PI/2, -ROOM_D/2 + COLUMN/2, ROOM_D/2 - COLUMN);
-  wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK, backWall);  // behind the camera
+  // behind the camera: out past the door's wall, or in a shop only as far as its glass (see shopBack)
+  const fullBack = new THREE.Group(), shopBack = new THREE.Group();
+  backWall.add(fullBack, shopBack);
+  wall(ROOM_W + THICK*2, 0, 0, -ROOM_D/2 - THICK/2, 0, THICK, fullBack);
+  wall(ROOM_W + THICK + RECESS, 0, (THICK - RECESS)/2, -ROOM_D/2 - THICK/2, 0, THICK, shopBack);
   DOOR_Z = -ROOM_D/2 + DOOR_IN;
   doorFrom = DOOR_Z - DOOR_W/2; doorTo = DOOR_Z + DOOR_W/2;
   box(RECESS, ROOM_H, doorFrom + ROOM_D/2, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorFrom - ROOM_D/2)/2, bare);
   box(RECESS, ROOM_H - DOOR_H, DOOR_W, wallMaterial, -ROOM_W/2 - RECESS/2, (DOOR_H + ROOM_H)/2, DOOR_Z, bare);
-  box(0.02, DOOR_H, DOOR_W, doorBlack, -ROOM_W/2 - RECESS + 0.02, DOOR_H/2, DOOR_Z, bare);
+  doorBack = box(0.02, DOOR_H, DOOR_W, doorBlack, -ROOM_W/2 - RECESS + 0.02, DOOR_H/2, DOOR_Z, bare);
   box(THICK - RECESS, ROOM_H, ROOM_D, wallMaterial, -ROOM_W/2 - RECESS - (THICK - RECESS)/2, ROOM_H/2, 0, doorWall);
   box(RECESS, ROOM_H, ROOM_D/2 - doorTo, wallMaterial, -ROOM_W/2 - RECESS/2, ROOM_H/2, (doorTo + ROOM_D/2)/2, doorWall);
   shopfrontFrom = doorTo + SHOPFRONT_PIER;
   const x = -ROOM_W/2 - RECESS/2, len = ROOM_D/2 - shopfrontFrom, z = (shopfrontFrom + ROOM_D/2)/2;
-  box(THICK - RECESS, ROOM_H, shopfrontFrom + ROOM_D/2, wallMaterial, -ROOM_W/2 - RECESS - (THICK - RECESS)/2, ROOM_H/2, (shopfrontFrom - ROOM_D/2)/2, shopfront);
+  // (no thick wall behind it: the door's wall only as deep as the glass, so a glass door shows the street straight through)
   box(RECESS, ROOM_H, SHOPFRONT_PIER, wallMaterial, x, ROOM_H/2, doorTo + SHOPFRONT_PIER/2, shopfront);
   box(RECESS, ROOM_H - SHOPFRONT_TOP, len, wallMaterial, x, (SHOPFRONT_TOP + ROOM_H)/2, z, shopfront);
   box(RECESS + 0.04, 0.1, len, frameMaterial, x, SHOPFRONT_TOP, z, shopfront);     // the transom
@@ -279,15 +283,27 @@ function buildShell() {
   [lowGlass, dadoGlass] = shopfront.children.slice(-2);
   lowGlass.visible = false;
   door.position.set(-ROOM_W/2 - 0.03, 0, doorFrom);
+  glassDoor.position.copy(door.position);
 }
 // the door, on its hinge at the corner end of the doorway (put there by buildShell), and a knob on it
 const door = new THREE.Group();
-room.add(door);
+// or, in a shop that says `glassDoor`, a steel-framed one glazed in two panes, top and bottom
+const glassDoor = new THREE.Group();
+glassDoor.visible = false;
+room.add(door, glassDoor);
 buildShell();
 const DOOR_OPEN = THREE.MathUtils.degToRad(95), DOOR_HOLD = 1500, DOOR_EASE = 0.12; // how far, for how long (ms), how quickly
 const doorMaterial = roomLit(new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.7 }));
 box(0.05, DOOR_H - 0.01, DOOR_W - 0.01, doorMaterial, 0, DOOR_H/2, DOOR_W/2, door);
 box(0.12, 0.05, 0.05, frameMaterial, 0, 1, DOOR_W - 0.1, door);
+{
+  const steel = roomLit(new THREE.MeshStandardMaterial({ color: 0xb8bcc0, roughness: 0.3, metalness: 0.7 }));
+  const w = DOOR_W - 0.01;
+  box(0.02, DOOR_H - 0.12, w - 0.1, glassMaterial, 0, DOOR_H/2, w/2, glassDoor);
+  for (const [y, h] of [[0.05, 0.1], [1.0, 0.08], [DOOR_H - 0.04, 0.07]]) box(0.05, h, w, steel, 0, y, w/2, glassDoor); // rails
+  for (const z of [0.025, w - 0.025]) box(0.05, DOOR_H - 0.01, 0.05, steel, 0, DOOR_H/2, z, glassDoor);                // stiles
+  box(0.08, 0.5, 0.025, steel, 0.05, 1.3, w - 0.08, glassDoor);                                                        // pull bar
+}
 let doorOpenUntil = -Infinity;
 /** Swing the room's door open (or keep it open) for someone coming or going through it: it shuts on its own after. */
 export const openRoomDoor = () => { doorOpenUntil = performance.now() + DOOR_HOLD; };
@@ -296,6 +312,7 @@ function updateDoor() {
   const goal = performance.now() < doorOpenUntil ? DOOR_OPEN : 0, was = door.rotation.y;
   if (was === goal) return;
   door.rotation.y = Math.abs(goal - was) < 0.01 ? goal : was + (goal - was)*DOOR_EASE;
+  glassDoor.rotation.y = door.rotation.y;
   if (was === 0 || door.rotation.y === 0) playSound(was === 0 ? 'door' : 'latch', room.localToWorld(new THREE.Vector3(-ROOM_W/2, 1, DOOR_Z)));
 }
 // ---------------------------------------------------------- what's in it
@@ -1902,7 +1919,8 @@ function seatsInWorld(layout) {
     return { x: w.x, y: w.y, z: w.z, nx: n.x, nz: n.z, sofa: false, desk: seat.desk, bar: seat.bar, open: seat.open ? roomWay(seat.open.x, seat.open.z) : null, sideways: !!seat.sideways, kind: seat.kind ?? null, by: null,
       salonBot: seat.salonBot ?? null, // (a styling chair's: see salonbot.js)
       diner: seat.diner ? { top: room.localToWorld(new THREE.Vector3(seat.x, seat.diner, seat.z)).y } : false, // (a restaurant's)
-      table: seat.table ?? null }; // (which of its tables: see peopleWaiter.js)
+      table: seat.table ?? null, // (which of its tables: see peopleWaiter.js)
+      sushi: seat.sushi ?? null }; // (a sushi bar's: at the belt, { belt } how far round it, or the chef's bar, { chef })
   });
 }
 
@@ -2116,7 +2134,6 @@ function furnishOffice(key, glass) {
     }
   }
 
-  seatsInWorld(office);
   // on the walls (a glass office's solid ones only): a whiteboard or two, a clock, a noticeboard, and a startup's vision
   // boards and neon signs (see neonSign)
   const onWall = wallHanger(F, glass ? { ...plan, WALL_SIDES: plan.WALL_SIDES.filter(side => !side.far) } : plan, rng,
@@ -2136,6 +2153,7 @@ function furnishOffice(key, glass) {
     }
   }
 
+  seatsInWorld(office);
   // and the desks, for the phones and computers on them to be heard from (see audio/office.js): in front of each desk chair
   office.desks = office.seats.filter(seat => seat.desk)
     .map(seat => ({ x: seat.x + seat.nx*0.55, y: room.position.y + 0.85, z: seat.z + seat.nz*0.55 }));
@@ -3225,6 +3243,352 @@ function furnishClothes(key) {
   lightShop(group, 0xfff2dc, 1.2);
   seatsInWorld(layout);
 }
+// ---------------------------------------------------------- a convenience store
+// A 24-hour convenience store, strip-lit, fitted out from assets/models/Convenience.glb (built by
+// tools/convenience-models.py, which lists its pieces): the counter by the door with the cigarette gantry behind it, and
+// in front of it the till (roomTill) where whoever's come in pays before going (see "a convenience store" in
+// peopleActivities.js); wall shelves, drinks fridges, a pharmacy corner, coffee, slushies, an ATM round the walls;
+// aisles, a freezer and a crisp rack out in the room; umbrellas, baskets and papers by the door. Bare till it's loaded.
+const CONVENIENCE_MODEL_URL = 'assets/models/Convenience.glb';
+let convenience = null;
+const CONVENIENCE_WALLS = [0xf6f6f4, 0xf2f4f6, 0xf4f4f0];
+// small cream vinyl tiles, 30cm, each a touch off the next
+const creamTiles = floorTexture(512, 2.4, (g, rng) => {
+  const n = 8, t = 512/n;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const l = 88 + rng()*3;
+    g.fillStyle = `hsl(42, 45%, ${l}%)`;
+    g.fillRect(i*t, j*t, t, t);
+  }
+  g.fillStyle = 'rgba(90,75,50,0.35)';
+  for (let k = 0; k <= n; k++) { g.fillRect(k*t - 1, 0, 2, 512); g.fillRect(0, k*t - 1, 512, 2); }
+});
+const CONVENIENCE_FLOORS = [creamTiles];
+const CONVENIENCE_PAINTED = { Fixture: [0x3a3c40, 0x44464a], Stripe: [0], Stripe2: [0], Stripe3: [0] };
+// each store's brand, its stripes in one scheme: [Stripe, Stripe2, Stripe3]
+const CONVENIENCE_BRANDS = [
+  [0x1a8a4a, 0xf07a10, 0xe02030], // green, orange, red
+  [0xe02030, 0xf07a10, 0xe02030], // red and orange
+  [0x1a50a8, 0x2a9ad8, 0x1a50a8], // blues
+  [0x1a8a4a, 0x1a50a8, 0x1a8a4a], // green and blue
+  [0xe02030, 0x1a8a4a, 0xe02030], // red and green
+];
+const conveniencePainted = [];
+// What's for sale, from the model's Item_ pieces: each { name, kinds, w, d, h, parts: [{ geometry, material, packed }] },
+// `packed` parts coloured per instance from PACK_COLOURS.
+let stockItems = [], stockMeshes = [];
+const PACK_COLOURS = [0xe8407a, 0x40a8e0, 0xf0d040, 0x60c060, 0xf4f4f0, 0x9a40c0, 0xf08030, 0x282828, 0xd02020, 0x2040a0,
+  0x20b0a0, 0xf06040, 0x8ac040, 0x6040c0, 0xf4a0c0, 0x80d0f0];
+// Packaging: a 4×4 atlas of label designs (each instance picks one: packCell), drawn as masks, not colours — red how
+// much of the pack's own colour, green white print, blue dark ink — so every design works in every PACK_COLOURS.
+const LABEL_CELLS = 4, LABEL_PX = 128;
+const labelAtlas = (() => {
+  const canvas = document.createElement('canvas'), g = canvas.getContext('2d'), rng = mulberry32(711), T = LABEL_PX;
+  canvas.width = canvas.height = LABEL_CELLS*T;
+  g.fillStyle = '#ff0000';
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  const white = '#ffff00', ink = '#0000ff', shade = '#a00000';
+  const lines = (x, y, w, n, style) => {
+    g.fillStyle = style;
+    for (let k = 0; k < n; k++) g.fillRect(x, y + k*7, w*(0.5 + rng()*0.5), 3);
+  };
+  for (let i = 0; i < LABEL_CELLS*LABEL_CELLS; i++) {
+    g.save();
+    g.translate((i % LABEL_CELLS)*T, (LABEL_CELLS - 1 - Math.floor(i/LABEL_CELLS))*T); // (cell i counted up from the bottom, as uv is)
+    g.beginPath(); g.rect(6, 6, T - 12, T - 12); g.clip(); // (a plain margin: the sides and tops sample it, see labelUvs)
+    const d = i % 8;
+    if (d === 0) { g.fillStyle = white; g.fillRect(6, 40, T, 48); lines(20, 52, 80, 3, ink); }                    // a white band, printed
+    if (d === 1) { g.fillStyle = shade; g.fillRect(6, 6, T, 36); g.fillStyle = white; g.beginPath(); g.arc(64, 72, 26, 0, 7); g.fill(); } // dark top, round logo
+    if (d === 2) { g.fillStyle = white; g.beginPath(); g.moveTo(0, 90); g.lineTo(T, 50); g.lineTo(T, 70); g.lineTo(0, 110); g.fill(); lines(18, 20, 70, 2, white); } // a swoosh
+    if (d === 3) { g.fillStyle = ink; g.fillRect(6, 6, T, 30); lines(18, 14, 80, 2, white); g.fillStyle = white; g.fillRect(28, 50, 72, 50); } // dark header, window
+    if (d === 4) { g.fillStyle = white; g.beginPath(); g.ellipse(64, 60, 44, 30, 0, 0, 7); g.fill(); g.fillStyle = ink; g.font = 'bold 30px sans-serif'; g.textAlign = 'center'; g.fillText('ABCDEFGHKMNPRSTW'[i], 64, 71); } // oval brand
+    if (d === 5) { for (let k = 0; k < 5; k++) { g.fillStyle = k % 2 ? shade : white; g.fillRect(6, 20 + k*18, T, 9); } }  // stripes
+    if (d === 6) { g.fillStyle = shade; g.beginPath(); g.moveTo(0, 0); g.lineTo(T, 0); g.lineTo(0, T); g.fill(); g.fillStyle = white; g.fillRect(56, 76, 56, 26); lines(62, 82, 44, 2, ink); } // split, price flash
+    if (d === 7) { g.fillStyle = white; g.fillRect(14, 14, T - 28, T - 28); g.fillStyle = '#ff0000'; g.fillRect(24, 24, T - 48, 44); lines(24, 80, 70, 3, ink); } // framed
+    // (a barcode, bottom corner, on most)
+    if (i < 12) { g.fillStyle = white; g.fillRect(84, 100, 30, 18); g.fillStyle = ink; for (let x = 87; x < 111; x += 2 + Math.floor(rng()*2)) g.fillRect(x, 102, 1, 14); }
+    g.restore();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.anisotropy = 4;
+  return texture;
+})();
+// uv for a packed part: its front and back (±z) across the whole label, each span of it its own; the rest in the plain margin
+function labelUvs(geometry) {
+  geometry.computeBoundingBox();
+  const { min, max } = geometry.boundingBox, pos = geometry.attributes.position, nor = geometry.attributes.normal;
+  const uv = new Float32Array(pos.count*2), sx = Math.max(max.x - min.x, 1e-4), sy = Math.max(max.y - min.y, 1e-4);
+  for (let k = 0; k < pos.count; k++) {
+    const nz = nor.getZ(k), front = Math.abs(nz) > 0.6;
+    const u = (pos.getX(k) - min.x)/sx;
+    uv[k*2] = front ? (nz > 0 ? u : 1 - u) : 0.02;
+    uv[k*2 + 1] = front ? (pos.getY(k) - min.y)/sy : 0.02;
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+// (the instance's colour, printed over by its label, tints its glow as well as its paint: roomLit glows in white)
+function packMaterial(material) {
+  material.map = labelAtlas;
+  material.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <uv_pars_vertex>', '#include <uv_pars_vertex>\nattribute float packCell;')
+      .replace('#include <uv_vertex>', `#include <uv_vertex>
+#ifdef USE_MAP
+vMapUv = (vec2(mod(packCell, ${LABEL_CELLS}.0), floor(packCell/${LABEL_CELLS}.0)) + vMapUv)/${LABEL_CELLS}.0;
+#endif`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <map_fragment>', '')
+      .replace('#include <color_fragment>', `vec3 packTint = vec3(1.0);
+#ifdef USE_COLOR
+packTint = vColor.rgb;
+#endif
+#ifdef USE_MAP
+vec3 label = texture2D(map, vMapUv).rgb;
+packTint = mix(mix(packTint*label.r, vec3(0.94), label.g), vec3(0.05), label.b);
+#endif
+diffuseColor.rgb *= packTint;`)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= packTint;');
+  };
+  material.customProgramCacheKey = () => 'pack';
+  material.needsUpdate = true;
+}
+// Fills `name`'s shelves, stood at (x, z) turned by `angle`, from stockItems: runs of one thing in one colour, a few
+// wide, two deep (a freezer's full), the odd gap where it's sold out. Gathered into `into` (item name → instances) for stockUp.
+function stockShelf(F, name, x, z, angle, rng, into) {
+  const place = new THREE.Matrix4().makeTranslation(x, 0, z).multiply(new THREE.Matrix4().makeRotationY(angle));
+  const back = new THREE.Matrix4().makeRotationY(Math.PI);
+  for (const s of F[name].slots ?? []) {
+    // (a freezer's filled right back and heaped up, being seen from above; a shelf's two deep)
+    const frozen = s.kind === 'frozen';
+    for (let u = s.x0 + 0.01; ; ) {
+      const fit = stockItems.filter(i => i.kinds.includes(s.kind) && i.h <= s.y1 - s.y0 && i.w <= s.x1 - u && i.d <= s.z1 - s.z0);
+      if (!fit.length) break;
+      const item = fit[Math.floor(rng()*fit.length)], colour = PACK_COLOURS[Math.floor(rng()*PACK_COLOURS.length)];
+      const cell = Math.floor(rng()*LABEL_CELLS*LABEL_CELLS);
+      const list = into.get(item) ?? into.set(item, []).get(item);
+      for (let n = 1 + Math.floor(rng()*4); n > 0 && u + item.w <= s.x1; n--, u += item.w + 0.006) {
+        if (rng() < 0.05) continue;
+        for (let row = 0; row < (frozen ? 20 : 2); row++) {
+          const inset = item.d/2 + 0.01 + row*(item.d + 0.005);
+          if (inset + item.d/2 > s.z1 - s.z0) break;
+          for (let up = 0; up < (frozen ? 3 : 1) && (up + 1)*item.h <= s.y1 - s.y0; up++) {
+            if (up && rng() < 0.4) break;
+            const m = new THREE.Matrix4().makeTranslation(u + item.w/2, s.y0 + up*item.h, s.face > 0 ? s.z1 - inset : s.z0 + inset);
+            if (s.face < 0) m.multiply(back);
+            list.push({ matrix: place.clone().multiply(m), colour, cell });
+          }
+        }
+      }
+    }
+  }
+}
+// everything stockShelf gathered, as one instanced mesh per part of each item, into `group`
+const packColour = new THREE.Color();
+function stockUp(into, group) {
+  for (const [item, list] of into) for (const part of item.parts) {
+    if (!list.length) continue;
+    // (a packed part on a geometry of its own, sharing the item's buffers, to carry each instance's label: see labelAtlas)
+    let geometry = part.geometry;
+    if (part.packed) {
+      geometry = new THREE.BufferGeometry().setIndex(part.geometry.index);
+      for (const [key, attribute] of Object.entries(part.geometry.attributes)) geometry.setAttribute(key, attribute);
+      geometry.setAttribute('packCell', new THREE.InstancedBufferAttribute(Float32Array.from(list, one => one.cell), 1));
+    }
+    const mesh = new THREE.InstancedMesh(geometry, part.material, list.length);
+    mesh.userData.ownGeometry = part.packed;
+    list.forEach((one, i) => {
+      mesh.setMatrixAt(i, one.matrix);
+      if (part.packed) mesh.setColorAt(i, packColour.setHex(one.colour));
+    });
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    stockMeshes.push(mesh);
+  }
+}
+async function loadConvenience() {
+  try {
+    convenience = await loadPieces(CONVENIENCE_MODEL_URL, CONVENIENCE_PAINTED, conveniencePainted);
+  } catch (err) {
+    console.warn('Kallipolis: the convenience store model failed to load; convenience stores are left bare', err);
+    return;
+  }
+  // (see-through glass: the fridge doors, the freezer's lid, the scratchcard case — unlit by the room, and casting no shadow)
+  for (const piece of Object.values(convenience)) piece.object.traverse(o => {
+    if (!o.isMesh || o.material.name !== 'Glass') return;
+    Object.assign(o.material, { transparent: true, opacity: 0.12, depthWrite: false });
+    o.material.emissive.setHex(0);
+    o.castShadow = false;
+  });
+  // the shelves' Slots, measured and taken out, and the Item_ pieces made ready to stock them (see stockShelf)
+  stockItems = [];
+  for (const [name, piece] of Object.entries(convenience)) {
+    piece.object.updateMatrixWorld(true);
+    const item = name.match(/^Item_([\w-]+)_\w+$/);
+    if (item) {
+      const parts = [];
+      piece.object.traverse(o => {
+        if (!o.isMesh) return;
+        const packed = o.material.name === 'Pack';
+        if (packed) packMaterial(o.material);
+        const geometry = o.geometry.clone().applyMatrix4(o.matrixWorld);
+        if (packed) labelUvs(geometry);
+        parts.push({ geometry, material: o.material, packed });
+      });
+      stockItems.push({ name, kinds: item[1].split('-'), w: piece.w, d: piece.d, h: piece.h, parts });
+      delete convenience[name];
+      continue;
+    }
+    piece.slots = [];
+    const slots = [];
+    piece.object.traverse(o => { if (o.isMesh && o.material.name.startsWith('Slot_')) slots.push(o); });
+    for (const o of slots) {
+      const [, kind, face] = o.material.name.split('_'), box = new THREE.Box3().setFromObject(o);
+      piece.slots.push({ kind, face: face === 'f' ? 1 : -1, x0: box.min.x, x1: box.max.x, y0: box.min.y, y1: box.max.y, z0: box.min.z, z1: box.max.z });
+      o.removeFromParent();
+    }
+  }
+  if (inside && current === LAYOUTS.convenience) furnishConvenience(inside.key);
+}
+modelsLoading.push(loadConvenience());
+layout('convenience', 0xffffff, () => []);
+const convenienceGroup = new THREE.Group();
+LAYOUTS.convenience.group.add(convenienceGroup);
+Object.assign(LAYOUTS.convenience, { furnished: convenienceGroup, shopfront: true, glassDoor: true, shop: true, lamps: true, daylit: SHOP_DAYLIT, till: null });
+
+// Fits out the convenience store for the building with this key (see buildingKey).
+function furnishConvenience(key) {
+  const layout = LAYOUTS.convenience, group = convenienceGroup;
+  const rng = mulberry32(hashNameToNumber(key + ' convenience'));
+  const tint = mulberry32(hashNameToNumber(key + ' convenience colours'));
+  for (const mesh of stockMeshes) { mesh.dispose(); if (mesh.userData.ownGeometry) mesh.geometry.dispose(); }
+  stockMeshes = [];
+  openShop(layout, tint, { walls: CONVENIENCE_WALLS, floors: CONVENIENCE_FLOORS, painted: conveniencePainted, palette: CONVENIENCE_PAINTED });
+  const brand = CONVENIENCE_BRANDS[Math.floor(tint()*CONVENIENCE_BRANDS.length)];
+  for (const material of conveniencePainted) {
+    const k = ['Stripe', 'Stripe2', 'Stripe3'].indexOf(material.name);
+    if (k < 0) continue;
+    material.color.setHex(brand[k]);
+    roomLit(material);
+  }
+  layout.ceiling = CEILING;
+  layout.till = null;
+  paintRoom();
+  const F = convenience;
+  if (!F?.Counter) return;
+  const plan = planRoom(layout, F, group, rng, false, []);
+  const { taken, fits, put, WALL_SIDES, atWall, overlaps, underCamera } = plan;
+  taken.push(doorClear());
+  // (shelving, stocked)
+  const stock = new Map(), stockRng = mulberry32(hashNameToNumber(key + ' convenience stock'));
+  const shelf = (name, x, z, angle) => { put(name, x, z, angle); stockShelf(F, name, x, z, angle, stockRng, stock); };
+  // the counter out from the wall by the door, the gantry against the wall behind it, and the till in front
+  const c = F.Counter, rr = { ...c.bounds, z0: c.bounds.z0 - 1.2, z1: c.bounds.z1 + 0.9 };
+  for (const u of [-ROOM_W/2 + 2.2, -ROOM_W/2 + 2.6, 0, 0.8]) {
+    const spot = atWall(WALL_SIDES[2], u, rr);
+    if (!spot) continue;
+    put('Counter', spot.x, spot.z, spot.angle);
+    taken.push(spot.area);
+    if (F.Gantry) {
+      const back = WALL_SIDES[2].at(u), out = -F.Gantry.bounds.z0 + 0.02;
+      put('Gantry', back.x, back.z + out, spot.angle);
+      taken.push(turnedRect(F.Gantry.bounds, spot.angle, back.x, back.z + out));
+      // (the clerk bot between them, by the till: see waiterbot.js)
+      placeClerkbot(group, { x: spot.x + 0.2, z: (back.z + out + F.Gantry.bounds.z1 + spot.z + c.bounds.z0)/2, angle: spot.angle }, brand[0]);
+    }
+    const at = (x, z) => { const t = turned(x, z, spot.angle, spot.x, spot.z); return room.localToWorld(new THREE.Vector3(t.x, 0, t.z)); };
+    layout.till = { at: at(0.2, c.bounds.z1 + 0.45), facing: roomHeading(spot.angle + Math.PI) };
+    break;
+  }
+  // by the door: a mat, and the umbrellas, baskets and papers in the window beside it, room kept in front of them
+  if (F.DoorMat) put('DoorMat', -ROOM_W/2 + 0.45, DOOR_Z, Math.PI/2, { small: true });
+  for (const name of ['UmbrellaStand', 'BasketStack', 'NewsRack']) {
+    const piece = F[name];
+    if (!piece || (name === 'NewsRack' && rng() < 0.4)) continue;
+    for (let z = Math.max(shopfrontFrom, DOOR_Z + 1) + piece.w/2; z < ROOM_D/2 - piece.w/2; z += 0.3) {
+      const x = -ROOM_W/2 - piece.bounds.z0 + 0.1, area = turnedRect(piece.bounds, Math.PI/2, x, z);
+      if (!fits(area, 0.2)) continue;
+      put(name, x, z, Math.PI/2);
+      taken.push(turnedRect({ ...piece.bounds, z1: piece.bounds.z1 + 0.9 }, Math.PI/2, x, z));
+      break;
+    }
+  }
+  // Every wall but the window lined end to end, from `names` in turn (each wanting `front` clear before it), as far as
+  // there's room.
+  const lineWall = (side, names, front = 0.95) => {
+    let i = 0;
+    for (let u = -side.length/2 + 0.05; i < names.length && u < side.length/2; ) {
+      const piece = F[names[i]];
+      if (!piece) { i++; continue; }
+      const spot = atWall(side, u + piece.w/2, { ...piece.bounds, z1: piece.bounds.z1 + front }, 0);
+      if (!spot || (piece.h > 1.2 && overlaps(spot.area, underCamera))) { u += 0.1; continue; }
+      shelf(names[i], spot.x, spot.z, spot.angle);
+      taken.push(spot.area);
+      u += piece.w + 0.01;
+      i++;
+    }
+  };
+  const repeat = (name, n) => Array(n).fill(name);
+  const shuffled = list => { for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rng()*(i + 1)); [list[i], list[j]] = [list[j], list[i]]; } return list; };
+  // the far wall a bank of drinks fridges; the back wall chillers, the pharmacy and shelves; the counter's wall the
+  // machines and more shelves
+  lineWall(WALL_SIDES[1], repeat('DrinksFridge', 12));
+  const back = [...repeat('Chiller', 1 + Math.floor(rng()*2)), ...(rng() < 0.7 ? ['Pharmacy'] : []), ...repeat('WallShelf', 12)];
+  lineWall(WALL_SIDES[0], rng() < 0.5 ? back : back.reverse());
+  lineWall(WALL_SIDES[2], [...shuffled(['CoffeeStation', 'SlushieMachine', ...(rng() < 0.6 ? ['ATM'] : [])]), ...repeat('WallShelf', 12)]);
+  // Out in the room, rows of gondolas pointing at the window, end to end, between the wall runs (whose walkways they
+  // keep) and short of the counter's queue and the window: aisles only (fridges stay on the walls), the
+  // spare depth shared between the walkways, and a way through the middle of any long row.
+  const WALK = 1.0, X0 = -ROOM_W/2 + 2, X1 = ROOM_W/2 - 1.75, Z0 = -ROOM_D/2 + 2.5, Z1 = ROOM_D/2 - 1.8;
+  const units = [];
+  let used = -WALK;
+  for (const unit of ['Aisle', 'Aisle', 'Aisle', 'Aisle', 'Aisle']) {
+    if (!F[unit] || used + WALK + F[unit].d > Z1 - Z0) continue;
+    units.push(unit);
+    used += WALK + F[unit].d;
+  }
+  if (rng() < 0.5) units.reverse();
+  const walk = WALK + (units.length > 1 ? (Z1 - Z0 - used)/(units.length - 1) : 0);
+  let z = units.length > 1 ? Z0 : (Z0 + Z1 - used)/2;
+  // (in the deep plan, the row by the counter left out, the rest where they were: room to queue)
+  if (ROOM_D > ROOM_W && units.length > 1) z += F[units.shift()].d + walk;
+  for (const unit of units) {
+    const { w, d } = F[unit], mid = z + d/2, len = X1 - X0;
+    // (one run, or two either side of a way through)
+    const split = len > 6.5, per = Math.floor(((split ? len - WALK : len)/(split ? 2 : 1) + 0.01)/w);
+    const runs = split ? [[X0, per], [X1 - per*w, per]] : [[(X0 + X1 - per*w)/2, per]];
+    const gap = split ? X1 - X0 - 2*per*w : 0;
+    runs.forEach(([x, n], k) => {
+      const names = Array(n).fill(unit), start = x;
+      // (a freezer on the end by the way through, a little into it)
+      if (unit === 'Aisle' && F.FreezerChest && rng() < 0.4) names[k ? 0 : n - 1] = 'FreezerChest';
+      if (k && names[0] !== unit) x -= F[names[0]].w - w;
+      for (const name of names) {
+        const pw = F[name].w;
+        shelf(name, x + pw/2, mid, rng() < 0.5 ? 0 : Math.PI);
+        taken.push({ x0: x, x1: x + pw, z0: z, z1: z + d });
+        x += pw;
+      }
+      // (or a crisp rack there, if the way stays wide enough)
+      const rack = F.SnackRack;
+      if (split && unit === 'Aisle' && names.every(name => name === unit) && rack && gap - 2*rack.d > WALK && rng() < 0.5)
+        shelf('SnackRack', k ? start - rack.d/2 - 0.02 : x + rack.d/2 + 0.02, mid, k ? -Math.PI/2 : Math.PI/2);
+    });
+    z += d + walk;
+  }
+
+  // (posters above the shelving, all round)
+  const onWall = wallHanger(F, plan, rng, [doorClear()]);
+  for (let k = 3 + Math.floor(rng()*3); k > 0; k--) onWall('Poster', 2.15);
+  if (F.Tube) for (const x of [-ROOM_W/4, ROOM_W/4]) for (const z of [-ROOM_D/4, ROOM_D/4])
+    put('Tube', x, z, 0, { y: ROOM_H - F.Tube.h, small: true });
+  stockUp(stock, group);
+  lightShop(group, 0xf2f6ff, 2.2);
+  seatsInWorld(layout);
+}
+/** The convenience store's till, as the room's laid out now: where to stand to pay (`at`, in the world) and which way to
+ * face (`facing`, the counter); or null (another room, or no counter). */
+export const roomTill = () => inside && current === LAYOUTS.convenience ? current.till : null;
+
 // ---------------------------------------------------------- a restaurant
 // A restaurant (see roomLayoutOf): an old New York Italian joint, bigger than the other shops (see ROOM_SIZES), panelled
 // below a dado rail. Its pieces are in assets/models/Restaurant.glb (built by tools/restaurant-models.py): a bar and back
@@ -3251,7 +3615,20 @@ const GREEK_PAINTED = {
   Check: [0x1e5aa8, 0x1e5aa8, 0x2a6ab8, 0x1e4a8a],
 };
 const GREEK_DADOS = [0x1e5a9a, 0x2a6ab8, 0xe8e4d8], GREEK_RAILS = [0x1e4a8a, 0xf4f0e6];
-const restaurantPainted = [], greekPainted = [];
+// Or a kaiten sushi bar: RestaurantSushi.glb (tools/sushi-restaurant-models.py), laid out its own way (see furnishSushi).
+const SUSHI_MODEL_URL = 'assets/models/RestaurantSushi.glb';
+let sushiRestaurant = null;
+// whole looks, one per restaurant (picked by hand from what z2:8, 9, 10 and 12 rolled)
+const SUSHI_LOOKS = [
+  { wall: 0x3a2a20, floor: 0x3a3c3e, Wood: 0x1e1a18, Upholstery: 0x8a1e1e, Noren: 0x2a2a2e, ceiling: 0xf0e8d8, dado: 0x1e1a18, rail: 0x8a2a1e },
+  { wall: 0x2a2e2a, floor: 0x5a4030, Wood: 0x3a2a1e, Upholstery: 0x8a1e1e, Noren: 0x2a2a2e, ceiling: 0xe8dcc4, dado: 0xc8a878, rail: 0x8a2a1e },
+  { wall: 0x2e2a28, floor: 0x3a3c3e, Wood: 0x1e1a18, Upholstery: 0x8a1e1e, Noren: 0x22305a, ceiling: 0xf0e8d8, dado: 0xc8a878, rail: 0x8a2a1e },
+  { wall: 0x3a2224, floor: 0x3a3c3e, Wood: 0x3a2a1e, Upholstery: 0x3a5a3a, Noren: 0x22305a, ceiling: 0xe8dcc4, dado: 0xc8a878, rail: 0x1a1410 },
+];
+const SUSHI_PAINTED = { Wood: [0x1e1a18], Upholstery: [0x8a1e1e], Noren: [0x22305a] }; // (only which materials; colours come from the look)
+const sushiRafter = lit(0x2a1c14), unitBox = new THREE.BoxGeometry(1, 1, 1);
+const SUSHI_STOOL = 0.48; // (its seat's height)
+const restaurantPainted = [], greekPainted = [], sushiPainted = [];
 async function loadRestaurant(url, paint, painted, set) {
   let F;
   try {
@@ -3265,7 +3642,8 @@ async function loadRestaurant(url, paint, painted, set) {
   if (inside && current === LAYOUTS.restaurant) furnishRestaurant(inside.key);
 }
 modelsLoading.push(loadRestaurant(RESTAURANT_MODEL_URL, RESTAURANT_PAINTED, restaurantPainted, F => { restaurant = F; }),
-  loadRestaurant(GREEK_MODEL_URL, GREEK_PAINTED, greekPainted, F => { greekRestaurant = F; }));
+  loadRestaurant(GREEK_MODEL_URL, GREEK_PAINTED, greekPainted, F => { greekRestaurant = F; }),
+  loadRestaurant(SUSHI_MODEL_URL, SUSHI_PAINTED, sushiPainted, F => { if (F.Stool) F.Stool.seats = [{ x: 0, z: 0.02, y: SUSHI_STOOL }]; sushiRestaurant = F; }));
 layout('restaurant', 0xffffff, () => []);
 const restaurantGroup = new THREE.Group();
 LAYOUTS.restaurant.group.add(restaurantGroup);
@@ -3322,26 +3700,31 @@ function stoneUVs() {
 // and a passage beyond, glowing white, that the waiter walks through and out of the back of (see waiterbot.js).
 const KITCHEN_HOLE = 0.78, KITCHEN_H = 2.25, KITCHEN_DEEP = 0.8;
 const kitchenGlow = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
-function kitchenWay(group, cx) {
-  const x0 = cx - KITCHEN_HOLE, x1 = cx + KITCHEN_HOLE;
-  // (the wall pieces along it hidden, and built again either side of the hole and over it)
+const kitchenWay = (group, cx) => wallHole(group, cx - KITCHEN_HOLE, cx + KITCHEN_HOLE, 0, KITCHEN_H, KITCHEN_DEEP);
+// A hole through the far wall along x (and its dado) from x0 to x1, y0 to y1, and a glowing passage `deep` beyond it.
+function wallHole(group, x0, x1, y0, y1, deep) {
+  const cx = (x0 + x1)/2;
+  // (the wall pieces along it hidden, and built again either side of the hole, over it and under it)
   for (const o of [blankWalls.children[0], dado.children[0], dado.children[1]]) {
     if (!o) continue;
     const { width: w, height: h, depth: d } = o.geometry.parameters, p = o.position, a = p.x - w/2, b = p.x + w/2;
-    const top = p.y + h/2, bottom = Math.max(KITCHEN_H, p.y - h/2);
+    const top = p.y + h/2, bottom = p.y - h/2, over = Math.max(y1, bottom), under = Math.min(y0, top);
     o.visible = false;
     if (x0 > a) box(x0 - a, h, d, o.material, (a + x0)/2, p.y, p.z, group);
     if (b > x1) box(b - x1, h, d, o.material, (x1 + b)/2, p.y, p.z, group);
-    if (top > bottom) box(x1 - x0, top - bottom, d, o.material, cx, (top + bottom)/2, p.z, group);
+    if (top > over) box(x1 - x0, top - over, d, o.material, cx, (top + over)/2, p.z, group);
+    if (under > bottom) box(x1 - x0, under - bottom, d, o.material, cx, (under + bottom)/2, p.z, group);
   }
-  const z0 = ROOM_D/2, z1 = ROOM_D/2 + WALL + KITCHEN_DEEP, zm = (z0 + z1)/2, long = z1 - z0;
-  for (const [w, h, d, x, y, z] of [[0.02, KITCHEN_H, long, x0 + 0.01, KITCHEN_H/2, zm], [0.02, KITCHEN_H, long, x1 - 0.01, KITCHEN_H/2, zm],
-    [x1 - x0, 0.02, long, cx, KITCHEN_H - 0.01, zm], [x1 - x0, 0.006, long, cx, 0.003, zm], [x1 - x0, KITCHEN_H, 0.02, cx, KITCHEN_H/2, z1]]) {
-    box(w, h, d, kitchenGlow, x, y, z, group).castShadow = false;
+  const z0 = ROOM_D/2, z1 = ROOM_D/2 + WALL + deep, zm = (z0 + z1)/2, long = z1 - z0, h = y1 - y0, ym = (y0 + y1)/2;
+  for (const [w, hh, d, x, y, z] of [[0.02, h, long, x0 + 0.01, ym, zm], [0.02, h, long, x1 - 0.01, ym, zm],
+    [x1 - x0, 0.02, long, cx, y1 - 0.01, zm], [x1 - x0, 0.006, long, cx, y0 + 0.003, zm], [x1 - x0, h, 0.02, cx, ym, z1]]) {
+    box(w, hh, d, kitchenGlow, x, y, z, group).castShadow = false;
   }
 }
 function furnishRestaurant(key) {
   const layout = LAYOUTS.restaurant, group = restaurantGroup;
+  layout.belt = layout.chef = null;
+  if (restaurantStyleOf(key) === 'sushi') return furnishSushi(key);
   const rng = mulberry32(hashNameToNumber(key + ' restaurant'));
   const tint = mulberry32(hashNameToNumber(key + ' restaurant colours'));
   const greek = restaurantStyleOf(key) === 'greek';
@@ -3519,6 +3902,325 @@ function furnishRestaurant(key) {
   if (greek) stoneUVs();
   // the waiter behind the host stand (see waiterbot.js)
   if (host) placeWaiterbot(group, host, kitchen, !greek);
+}
+// ---------------------------------------------------------- a sushi bar
+// A kaiten sushi bar: an island counter snaking out of a hatch in the far wall, a belt of plates round its rim (out
+// along one side, back along the other, round through the kitchen behind the wall), stools round it; the chef's bar
+// along the far wall, stools in front; booths butted onto the island (boothAt).
+const ISLAND = 0.82, ISLAND_H = 0.74, BELT_IN = 0.36, BELT_OUT = 0.6, BELT_TOP = 0.8, SHELF = 0.3, SHELF_H = 0.86;
+const ISLAND_BEND = 1.1, HATCH_H = 1.25, HATCH_DEEP = 0.6, STOOL_OUT = 1.1, STOOL_GAP = 0.62;
+const BELT_SPEED = 0.08, BELT_GAP = 0.5, BELT_FULL = 0.85; // (m/s; m between plates; how many slots have one)
+const beltMaterial = roomLit(new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.6 }));
+// points along `points` (x, z) every `step`, the corners rounded to radius r: { x, z, tx, tz (its heading), bend }
+function roundedPath(points, r, step = 0.05) {
+  const out = [];
+  let [px, pz] = points[0];
+  for (let i = 1; i < points.length; i++) {
+    const [ax, az] = points[i - 1], [bx, bz] = points[i], next = points[i + 1];
+    let dx = bx - ax, dz = bz - az;
+    const len = Math.hypot(dx, dz); dx /= len; dz /= len;
+    let cut = 0, ex = 0, ez = 0, turn = 0;
+    if (next) {
+      ex = next[0] - bx; ez = next[1] - bz;
+      const l = Math.hypot(ex, ez); ex /= l; ez /= l;
+      turn = Math.acos(Math.max(-1, Math.min(1, dx*ex + dz*ez)));
+      cut = r*Math.tan(turn/2);
+    }
+    const endX = bx - dx*cut, endZ = bz - dz*cut, run = Math.hypot(endX - px, endZ - pz);
+    for (let s = 0; s < run; s += step) out.push({ x: px + dx*s, z: pz + dz*s, tx: dx, tz: dz, bend: false, leg: i });
+    if (!next) { out.push({ x: bx, z: bz, tx: dx, tz: dz, bend: false, leg: i }); break; }
+    // (the arc: its centre off towards where it turns)
+    let nx = ex - dx*(dx*ex + dz*ez), nz = ez - dz*(dx*ex + dz*ez);
+    const nl = Math.hypot(nx, nz); nx /= nl; nz /= nl;
+    const cx = endX + nx*r, cz = endZ + nz*r, n = Math.max(2, Math.ceil(r*turn/step));
+    for (let k = 0; k < n; k++) {
+      const t = k/n*turn, c = Math.cos(t), s = Math.sin(t);
+      out.push({ x: cx + (-nx*c + dx*s)*r, z: cz + (-nz*c + dz*s)*r, tx: nx*s + dx*c, tz: nz*s + dz*c, bend: true });
+    }
+    px = cx + (-nx*Math.cos(turn) + dx*Math.sin(turn))*r; pz = cz + (-nz*Math.cos(turn) + dz*Math.sin(turn))*r;
+  }
+  return out;
+}
+// the outline `d` out from a path: along its left, round its end, back along its right
+function rimOf(path, d, capSteps = 16) {
+  const end = path[path.length - 1], left = path.map(c => [c.x - c.tz*d, c.z + c.tx*d]);
+  const cap = [];
+  for (let k = 1; k < capSteps; k++) {
+    const f = k/capSteps*Math.PI;
+    cap.push([end.x + d*(-end.tz*Math.cos(f) + end.tx*Math.sin(f)), end.z + d*(end.tx*Math.cos(f) + end.tz*Math.sin(f))]);
+  }
+  return [...left, ...cap, ...path.map(c => [c.x + c.tz*d, c.z - c.tx*d]).reverse()];
+}
+// an outline (and a hole in it) stood up from y0 to y1
+function slab(outline, y0, y1, material, parent, hole = null) {
+  const shape = new THREE.Shape(outline.map(([x, z]) => new THREE.Vector2(x, -z)));
+  if (hole) shape.holes.push(new THREE.Path(hole.map(([x, z]) => new THREE.Vector2(x, -z))));
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: y1 - y0, bevelEnabled: false, curveSegments: 1 });
+  geometry.rotateX(-Math.PI/2).translate(0, y0, 0);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = mesh.receiveShadow = true;
+  parent.add(mesh);
+  return mesh;
+}
+// A material of `F`'s by name.
+function materialOf(F, name) {
+  for (const piece of Object.values(F)) {
+    let found = null;
+    piece.object.traverse(o => { if (!found && o.isMesh && o.material.name === name) found = o.material; });
+    if (found) return found;
+  }
+  return null;
+}
+
+// Hand-drawn plans: the island's line from the hatch (x along the far wall) out into the room ([x, z]...), where along
+// the far wall the chef's bar goes (bar, x), and which legs' sides get booths butted on (booths, [leg, side]; side 1 is
+// the leg's left, looking along it); stools elsewhere.
+const BOOTH_PITCH = 1.7;
+const SUSHI_PLANS = () => ROOM_W >= 11 ? [
+  { island: [[-0.6, -ROOM_D/2 + 1.4]], bar: ROOM_W/2 - 1.9, booths: [[1, 1]] },
+  { island: [[ROOM_W/2 - 0.92, -0.4], [0.2, -0.4]], bar: -1.6, booths: [[1, -1], [2, 1]] },
+] : [
+  { island: [[-ROOM_W/2 + 3, -ROOM_D/2 + 1.5]], bar: ROOM_W/2 - 1.9, booths: [[1, 1]] },
+];
+function furnishSushi(key) {
+  const layout = LAYOUTS.restaurant, group = restaurantGroup;
+  const rng = mulberry32(hashNameToNumber(key + ' restaurant'));
+  const tint = mulberry32(hashNameToNumber(key + ' restaurant colours'));
+  const look = SUSHI_LOOKS[Math.floor(tint()*SUSHI_LOOKS.length)];
+  openShop(layout, tint, { walls: [look.wall], floors: [look.floor], painted: sushiPainted, palette: Object.fromEntries(sushiPainted.map(m => [m.name, [look[m.name]]])) });
+  layout.ceiling = look.ceiling;
+  dadoMaterial.color.setHex(look.dado);
+  lineMaterial.color.setHex(look.rail);
+  roomLit(dadoMaterial); roomLit(lineMaterial);
+  layout.wallMap = null;
+  paintRoom();
+  // rafters: dark timber beams across, thin battens along above them
+  const timber = (w, h, d, x, y, z) => { const m = new THREE.Mesh(unitBox, sushiRafter); m.scale.set(w, h, d); m.position.set(x, y, z); group.add(m); };
+  const beams = Math.max(2, Math.round(ROOM_W/1.4)), battens = Math.floor(ROOM_D/0.45);
+  for (let i = 0; i < beams; i++) timber(0.14, 0.18, ROOM_D, (i - (beams - 1)/2)*ROOM_W/beams, ROOM_H - 0.13, 0);
+  for (let i = 0; i < battens; i++) timber(ROOM_W, 0.04, 0.04, 0, ROOM_H - 0.02, (i - (battens - 1)/2)*ROOM_D/battens);
+  const F = sushiRestaurant;
+  if (!F?.SushiBar || !F.Stool || !F.Dish0) return;
+  const plan = planRoom(layout, F, group, rng, false, []);
+  const { taken, overlaps, fits, put, underCamera, WALL_SIDES, againstWall, atWall } = plan;
+  taken.push(doorClear());
+  const P = SUSHI_PLANS()[Math.floor(rng()*SUSHI_PLANS().length)];
+  const tall = [], tops = [];
+  const stool = (x, z, angle, sushi, diner) => {
+    const area = { x0: x - 0.22, x1: x + 0.22, z0: z - 0.22, z1: z + 0.22 };
+    if (!fits(area, 0.04)) return false;
+    put('Stool', x, z, angle, { solid: { x0: -0.18, x1: 0.18, z0: -0.18, z1: 0.18 }, diner });
+    layout.seats[layout.seats.length - 1].sushi = sushi;
+    taken.push(area);
+    return true;
+  };
+
+  // the chef's bar: the back counter against the far wall, room to work, the bar, stools in front
+  if (F.BackCounter) {
+    const back = F.BackCounter, bar = F.SushiBar;
+    const spot = atWall(WALL_SIDES[0], P.bar, back.bounds, 0.05);
+    if (spot) {
+      const bz = ROOM_D/2 - back.d - 0.95 - bar.d/2, area = turnedRect(bar.bounds, Math.PI, spot.x, bz);
+      if (fits(area, 0.05)) {
+        const cats = [];
+        put('BackCounter', spot.x, spot.z, spot.angle).traverse(o => { const k = o.morphTargetDictionary?.Cat; if (k !== undefined) cats.push([o, k]); });
+        layout.cats = cats;
+        put('SushiBar', spot.x, bz, Math.PI);
+        const behind = { x0: area.x0, x1: area.x1, z0: area.z1, z1: ROOM_D/2 };
+        taken.push(spot.area, area, behind);
+        layout.solid.push(behind); layout.blocked.push(behind);
+        tall.push({ ...behind, z0: area.z0 });
+        layout.chef = { x: spot.x, z: (area.z1 + spot.area.z0)/2, angle: Math.PI, x0: area.x0 + 0.3, x1: area.x1 - 0.3 }; // (see waiterbot.js)
+        const plate = surfaceAt(bar, 0, 0, bar.bounds.z1 - 0.12);
+        const n = Math.floor((bar.w - 0.2)/STOOL_GAP);
+        layout.chef.plates = [];
+        for (let k = 0; k < n; k++) {
+          const x = spot.x + (k - (n - 1)/2)*STOOL_GAP;
+          if (stool(x, area.z0 - 0.3, 0, { chef: true }, plate)) layout.chef.plates.push({ x, y: ISLAND_H, z: area.z0 + 0.22 }); // (on the worktop in front)
+        }
+        if (F.MenuTags) put('MenuTags', spot.x, ROOM_D/2 + F.MenuTags.bounds.z0 - 0.01, Math.PI, { y: 1.45, small: true });
+        if (F.Lantern) for (const s of [-1, 1]) put('Lantern', spot.x + s*bar.w/4, area.z0 + 0.1, 0, { y: ROOM_H - F.Lantern.h, small: true });
+      }
+    }
+  }
+
+  // the island, out of its hatch: from the back of the passage beyond it
+  const x0 = P.island[0][0], zBack = ROOM_D/2 + WALL + HATCH_DEEP;
+  const line = [[x0, zBack], ...P.island];
+  const path = roundedPath(line, ISLAND_BEND);
+  wallHole(group, x0 - ISLAND - 0.05, x0 + ISLAND + 0.05, ISLAND_H - 0.04, HATCH_H, HATCH_DEEP);
+  const island = new THREE.Group();
+  group.add(island);
+  const wood = materialOf(F, 'Wood'), hinoki = materialOf(F, 'Hinoki'), chrome = materialOf(F, 'Chrome');
+  slab(rimOf(path, ISLAND - 0.08), 0, ISLAND_H - 0.04, wood, island);
+  slab(rimOf(path, ISLAND), ISLAND_H - 0.04, ISLAND_H, hinoki, island);
+  slab(rimOf(path, BELT_OUT), ISLAND_H, BELT_TOP - 0.006, chrome, island, rimOf(path, BELT_IN));
+  slab(rimOf(path, BELT_OUT - 0.02), BELT_TOP - 0.006, BELT_TOP, beltMaterial, island, rimOf(path, BELT_IN + 0.02));
+  slab(rimOf(path, SHELF), ISLAND_H, SHELF_H - 0.02, wood, island);
+  slab(rimOf(path, SHELF), SHELF_H - 0.02, SHELF_H, hinoki, island);
+  // (solid along each leg, to its end)
+  for (let i = 1; i < line.length; i++) {
+    const [ax, az] = line[i - 1], [bx, bz] = line[i], end = i === line.length - 1 ? ISLAND : 0;
+    const dx = Math.sign(bx - ax), dz = Math.sign(bz - az);
+    const r = { x0: Math.min(ax, bx + dx*end) - ISLAND, x1: Math.max(ax, bx + dx*end) + ISLAND,
+      z0: Math.min(az, bz + dz*end) - ISLAND, z1: Math.max(az, bz + dz*end) + ISLAND };
+    taken.push(r); layout.solid.push(r); layout.blocked.push(around(r.x0, r.x1, r.z0, r.z1, 0.35));
+  }
+  if (F.Noren) put('Noren', x0, ROOM_D/2 - 0.04, Math.PI, { y: HATCH_H + 0.05 - F.Noren.h, small: true });
+
+  // the belt: round the rim, then back through the kitchen; its length along the way (s) at every point
+  const lane = (BELT_IN + BELT_OUT)/2, way = rimOf(path, lane).map(([x, z]) => ({ x, z, s: 0 }));
+  way.push({ ...way[0], s: 0 });
+  for (let i = 1; i < way.length; i++) way[i].s = way[i - 1].s + Math.hypot(way[i].x - way[i - 1].x, way[i].z - way[i - 1].z);
+  const length = way[way.length - 1].s, capSteps = 16, back = path.length + capSteps - 1;
+  // a booth end on to the island at c, on its `side`, open to the room; its diners reach the belt s along it
+  const boothAt = (c, side, s) => {
+    if (!F.Booth || !F.BoothTable) return;
+    const bench = F.Booth, t = F.BoothTable, off = t.d/2 + bench.d/2 - 0.08;
+    const nx = -c.tz*side, nz = c.tx*side, angle = Math.atan2(nx, nz), out = ISLAND + bench.w/2 + 0.03;
+    const x = c.x + nx*out, z = c.z + nz*out;
+    const area = turnedRect({ x0: -off - bench.d/2, x1: off + bench.d/2, z0: -bench.w/2, z1: bench.w/2 }, angle, x, z);
+    if (!fits(area, 0.02)) return;
+    const plate = surfaceAt(t, 0, 0.28, 0.2), table = tops.push({ x, z }) - 1, first = layout.seats.length;
+    for (const [bx, turn] of [[-off, Math.PI/2], [off, -Math.PI/2]]) {
+      const at = turned(bx, 0, angle, x, z);
+      put('Booth', at.x, at.z, angle + turn, { diner: plate, table, open: { x: nx, z: nz } });
+    }
+    for (let k = first; k < layout.seats.length; k++) layout.seats[k].sushi = { belt: s, booth: true };
+    put('BoothTable', x, z, angle + Math.PI/2);
+    taken.push(area); tall.push(area);
+    if (F.Pendant && !overlaps(area, underCamera)) put('Pendant', x, z, 0, { y: ROOM_H - F.Pendant.h, small: true });
+  };
+  // stools round it, along its straight runs, either side, facing in; each knows how far round the belt's in front
+  const inRoom = c => c.z < ROOM_D/2 - 0.5;
+  for (const side of [1, -1]) {
+    let run = [];
+    const flush = () => {
+      const from = run[0], to = run[run.length - 1];
+      const booths = run.length > 1 && P.booths.some(([leg, s]) => leg === from.c.leg && s === side);
+      if (booths) {
+        const long = Math.hypot(to.c.x - from.c.x, to.c.z - from.c.z), n = Math.floor((long + 0.2)/BOOTH_PITCH);
+        const lead = (long - (n - 1)*BOOTH_PITCH)/2;
+        for (let k = 0; k < n; k++) {
+          const { c, i } = run[Math.min(run.length - 1, Math.round((lead + k*BOOTH_PITCH)/0.05))];
+          boothAt(c, side, way[side > 0 ? i : back + (path.length - 1 - i)].s);
+        }
+      } else if (run.length > 1) {
+        const long = Math.hypot(to.c.x - from.c.x, to.c.z - from.c.z), n = Math.floor((long - 0.3)/STOOL_GAP) + 1;
+        const lead = (long - (n - 1)*STOOL_GAP)/2;
+        for (let k = 0; k < n; k++) {
+          const { c, i } = run[Math.min(run.length - 1, Math.round((lead + k*STOOL_GAP)/0.05))];
+          const nx = -c.tz*side, nz = c.tx*side;
+          const s = way[side > 0 ? i : back + (path.length - 1 - i)].s;
+          stool(c.x + nx*STOOL_OUT, c.z + nz*STOOL_OUT, Math.atan2(-nx, -nz), { belt: s }, ISLAND_H);
+        }
+      }
+      run = [];
+    };
+    path.forEach((c, i) => { if (!c.bend && inRoom(c)) run.push({ c, i }); else flush(); });
+    flush();
+    // (and round its end)
+    if (side > 0) {
+      const end = path[path.length - 1];
+      for (const f of [0.5]) {
+        const a = f*Math.PI, nx = -end.tz*Math.cos(a) + end.tx*Math.sin(a), nz = end.tx*Math.cos(a) + end.tz*Math.sin(a);
+        stool(end.x + nx*STOOL_OUT, end.z + nz*STOOL_OUT, Math.atan2(-nx, -nz), { belt: way[path.length - 1 + Math.round(f*capSteps)].s }, ISLAND_H);
+      }
+    }
+  }
+  // condiments down the middle, lanterns over it
+  path.forEach((c, i) => {
+    if (c.bend || !inRoom(c) || i % 26 !== 13) return;
+    if (F.Condiments) put('Condiments', c.x, c.z, Math.atan2(-c.tz, c.tx), { y: SHELF_H, small: true });
+    const r = { x0: c.x - 0.3, x1: c.x + 0.3, z0: c.z - 0.3, z1: c.z + 0.3 };
+    if (F.Lantern && i % 52 === 13 && !overlaps(r, underCamera)) put('Lantern', c.x, c.z, 0, { y: ROOM_H - F.Lantern.h, small: true });
+  });
+  // plates on it, spaced along it, most slots filled
+  const n = Math.floor(length/BELT_GAP), dishes = Object.keys(F).filter(name => /^Dish\d$/.test(name));
+  const plates = Array.from({ length: n }, (_, k) => ({ s: k*length/n, dish: null, object: null }));
+  const beltGroup = new THREE.Group();
+  island.add(beltGroup);
+  const fill = plate => {
+    plate.object?.removeFromParent();
+    plate.dish = rng() < BELT_FULL ? dishes[Math.floor(rng()*dishes.length)] : null;
+    plate.object = plate.dish ? F[plate.dish].object.clone() : null;
+    if (plate.object) beltGroup.add(plate.object);
+  };
+  plates.forEach(fill);
+  layout.belt = { way, length, plates, shift: 0, fill, hideZ: zBack - 0.12 };
+
+  for (let n = 1 + Math.floor(rng()*2); n > 0 && F.Plant; n--) { const spot = againstWall(F.Plant.bounds, true); if (spot) { put('Plant', spot.x, spot.z, spot.angle); taken.push(spot.area); tall.push(spot.area); } }
+  const onWall = wallHanger(F, plan, rng, [...tall, doorClear(), { x0: x0 - 1, x1: x0 + 1, z0: ROOM_D/2 - 1, z1: ROOM_D/2 }]);
+  onWall('WavePrint', 1.3);
+  onWall('MenuTags', 1.5);
+  lightShop(group, 0xffe0c0, 1.0);
+  seatsInWorld(layout);
+  if (layout.chef) placeChefbot(group, layout.chef, () => { const d = dishes[Math.floor(Math.random()*dishes.length)], o = F[d].object.clone(); o.userData.dish = d; return o; });
+}
+/** The sushi chef's bar, in the room the view's in (plates: in front of each stool, the room's terms), or null. */
+export const sushiChef = () => inside && current === LAYOUTS.restaurant ? current.chef : null;
+// Each frame: the belt's plates moved on round it (hidden through the kitchen, and any taken refilled there).
+let beltAt = 0;
+const CAT_SPEED = 6; // rad/s
+function updateBelt() {
+  const now = performance.now(), dt = Math.min(0.1, (now - beltAt)/1000);
+  beltAt = now;
+  if (inside && current === LAYOUTS.restaurant) for (const [o, k] of current.cats ?? []) o.morphTargetInfluences[k] = 0.5 - 0.5*Math.cos(now/1000*CAT_SPEED); // (the counter's cat, 0-1-0)
+  const b = inside && current === LAYOUTS.restaurant && current.belt;
+  if (!b) return;
+  b.shift = (b.shift + dt*BELT_SPEED) % b.length;
+  for (const plate of b.plates) {
+    const at = beltPoint(b, (plate.s + b.shift) % b.length);
+    const hidden = at.z > b.hideZ;
+    if (hidden && plate.taken) { plate.taken = false; b.fill(plate); }
+    if (!plate.object) continue;
+    plate.object.visible = !hidden && !plate.taken;
+    plate.object.position.set(at.x, BELT_TOP, at.z);
+    plate.object.rotation.y = at.yaw;
+  }
+}
+const beltSpot = { x: 0, z: 0, yaw: 0 };
+// where on the belt `s` along it is, and which way it's going
+function beltPoint(b, s) {
+  const w = b.way;
+  let lo = 0, hi = w.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (w[mid].s <= s) lo = mid; else hi = mid; }
+  const a = w[lo], c = w[hi], f = (s - a.s)/Math.max(1e-6, c.s - a.s);
+  beltSpot.x = a.x + (c.x - a.x)*f; beltSpot.z = a.z + (c.z - a.z)*f;
+  beltSpot.yaw = Math.atan2(c.x - a.x, c.z - a.z);
+  return beltSpot;
+}
+const SUSHI_REACH = 0.1; // m either side of a diner's belt spot a plate can be taken from
+/** A plate of sushi off the belt at `s` along it (a sushi diner's reach), if one's passing: its dish ('Dish0'..), else null. */
+export function sushiGrab(s) {
+  const b = inside && current === LAYOUTS.restaurant && current.belt;
+  if (!b) return null;
+  for (const plate of b.plates) {
+    if (!plate.dish || plate.taken) continue;
+    const d = (((plate.s + b.shift - s) % b.length) + b.length) % b.length;
+    if (d < SUSHI_REACH || d > b.length - SUSHI_REACH) { plate.taken = true; return plate.dish; }
+  }
+  return null;
+}
+/** A plate ordered from the chef for whoever's on `seat` (world) at its bar: `done(plate)` once it's handed over (its dish in userData.dish). */
+export function sushiOrder(seat, done) {
+  const c = sushiChef();
+  if (!c?.plates?.length || !chefUp()) return false;
+  restaurantGroup.updateWorldMatrix(true, false);
+  const l = restaurantGroup.worldToLocal(new THREE.Vector3(seat.x, 0, seat.z)), d = a => Math.hypot(a.x - l.x, a.z - l.z);
+  chefOrder(c.plates.reduce((a, b) => d(b) < d(a) ? b : a), done);
+  return true;
+}
+/** A sushi bar piece ('Dish2', 'Empty2'...) set down in the room at `at` (world), turned `yaw`; removed with removeFromParent. */
+export function sushiPut(name, at, yaw = 0) {
+  const piece = sushiRestaurant?.[name];
+  if (!piece?.object || !restaurantGroup) return null;
+  const o = piece.object.clone();
+  restaurantGroup.updateWorldMatrix(true, false);
+  o.position.copy(restaurantGroup.worldToLocal(at.clone()));
+  o.rotation.y = yaw;
+  restaurantGroup.add(o);
+  return o;
 }
 /** The clothes shop's changing rooms, as the room's laid out now: where to stand in front of one (`front`) and inside it
  * (`inside`), in the world; `facing`, the heading out of it; `by`, whoever's using it; and `closed`, its curtain drawn. */
@@ -3947,7 +4649,7 @@ async function warmUp() {
     await compile('Preparing floors...');
     // one set at a time, so the label follows along
     const named = { Interior: furniture, Posh: posh, Student: student, MidCentury: retro, Boho: boho, Office: officeFurniture,
-      Industrial: industrial, Pub: pub, Salon: salon, Clothes: clothes, Restaurant: restaurant, Bedroom: bedroom };
+      Industrial: industrial, Pub: pub, Salon: salon, Clothes: clothes, Convenience: convenience, Restaurant: restaurant, Sushi: sushiRestaurant, Bedroom: bedroom };
     for (const [name, set] of Object.entries(named)) {
       if (!set) continue;
       for (const piece of Object.values(set)) {
@@ -4139,12 +4841,12 @@ function hideNeighbours(group) {
 
 // Goes into `group` (a building, as building-card.js follows it, with its key): the room onto its top floor (a warehouse
 // or factory's, or a pub's or a shop's, ground floor), laid out as `kind` of room (one of LAYOUTS: 'home', 'office',
-// 'warehouse', 'factory', 'pub', 'salon', 'clothes' or 'restaurant'),
+// 'warehouse', 'factory', 'pub', 'salon', 'clothes', 'convenience' or 'restaurant'),
 // the building hidden, and the camera cut straight to the corner, to go round the walls from there.
 // How big each layout's room can be, width (x) and depth (z): [narrowest, widest, shallowest, deepest].
 const ROOM_SIZES = {
   home: [6, 9.5, 5, 7.5], office: [7, 12, 5.5, 9], warehouse: [9, 14, 7, 11], factory: [9, 14, 7, 11],
-  pub: [7.5, 11, 6, 8.5], salon: [7, 10, 5.5, 8], clothes: [7, 10, 5.5, 8], restaurant: [12, 12, 8.5, 8.5],
+  pub: [7.5, 11, 6, 8.5], salon: [7, 10, 5.5, 8], clothes: [7, 10, 5.5, 8], convenience: [9.5, 12, 9.5, 12], restaurant: [12, 12, 8.5, 8.5],
 };
 /** The chance a room's as deep as it's wide (or as near as its layout lets it). */
 const ROOM_SQUARE = 0.25;
@@ -4162,6 +4864,8 @@ function roomSizeFor(group, key, kind, angle) {
   }
   const turned = across > along;
   if (turned) [along, across] = [across, along];
+  // (a convenience store is one of two plans: the shopfront on its short side, or its long one)
+  if (kind === 'convenience') return keyFraction(key, ':plan') < 0.5 ? { w: 12, d: 9.5, turned } : { w: 9.5, d: 12, turned };
   const jitter = salt => 0.85 + keyFraction(key, salt)*0.3;
   let w = THREE.MathUtils.clamp(along*jitter(':width'), w0, w1), d = THREE.MathUtils.clamp(across*jitter(':depth'), d0, d1);
   if (w0 < w1 && keyFraction(key, ':square') < ROOM_SQUARE) w = d = THREE.MathUtils.clamp(Math.min(w, d1), Math.max(w0, d0), d1);
@@ -4222,6 +4926,8 @@ export function enterBuilding(group, key, kind = 'home') {
   const workshop = !!current.industrial, groundFloor = workshop || current === LAYOUTS.pub || !!current.shop;
   curtain.visible = glass; punched.visible = !glass && !current.shopfront;
   blankWalls.visible = shopfront.visible = !!current.shopfront; doorWall.visible = !current.shopfront;
+  backWall.children[0].visible = !current.shopfront; backWall.children[1].visible = !!current.shopfront;
+  glassDoor.visible = !!current.glassDoor; door.visible = doorBack.visible = !current.glassDoor;
   for (const o of [blankWalls.children[0], dado.children[0], dado.children[1]]) if (o) o.visible = true; // (see kitchenWay)
   const bounds = new THREE.Box3().setFromObject(group);
   const base = bounds.min.y, height = group.userData.height ?? (bounds.max.y - base);
@@ -4247,6 +4953,7 @@ export function enterBuilding(group, key, kind = 'home') {
   else if (current === LAYOUTS.pub) furnishPub(key);
   else if (current === LAYOUTS.salon) furnishSalon(key);
   else if (current === LAYOUTS.clothes) furnishClothes(key);
+  else if (current === LAYOUTS.convenience) furnishConvenience(key);
   else if (current === LAYOUTS.restaurant) furnishRestaurant(key);
 
   visits++;
@@ -4473,6 +5180,7 @@ export function updateInteriorCamera() {
   updateFurnitureShadows();
   updateDoor();
   updateCurtains();
+  updateBelt();
   if (inside && (controls.hug === freeRoom) !== !!S.freeRoomCamera) freeCamera(!!S.freeRoomCamera);
   if (inside && reach !== reachGoal) reach = Math.abs(reachGoal - reach) < 0.002 ? reachGoal : reach + (reachGoal - reach)*RISE_EASE;
   if (inside && eyeHeight !== eyeGoal) eyeHeight = Math.abs(eyeGoal - eyeHeight) < 0.002 ? eyeGoal : eyeHeight + (eyeGoal - eyeHeight)*RISE_EASE;
@@ -4484,12 +5192,13 @@ export function updateInteriorCamera() {
   // (a pub's music comes from up by the ceiling, over the middle of the room)
   // (a restaurant's, quietly, its own songs: assets/music/restaurant/)
   if (inside && current === LAYOUTS.pub && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)));
-  else if (inside && current === LAYOUTS.restaurant && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)), restaurantStyleOf(inside.key) === 'greek' ? 'greek' : 'restaurant');
+  else if (inside && current === LAYOUTS.restaurant && performance.now() - occupiedAt < 1000) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)), { greek: 'greek', sushi: 'sushi' }[restaurantStyleOf(inside.key)] ?? 'restaurant');
+  else if (inside && current === LAYOUTS.convenience) pubMusic(inside.key, room.localToWorld(speakerAt.set(0, ROOM_H - 0.3, 0)), 'convenience');
   else stopPubMusic();
   updateJukebox();
   updateBarbot(!!inside && current === LAYOUTS.pub, performance.now() - occupiedAt < 1000);
   updateSalonBots(!!inside && current === LAYOUTS.salon);
-  updateWaiterbot(!!inside && current === LAYOUTS.restaurant, performance.now() - occupiedAt < 1000);
+  updateWaiterbot(!!inside && (current === LAYOUTS.restaurant || current === LAYOUTS.convenience), performance.now() - occupiedAt < 1000);
   // (riding a train carriage sets its own: see trains.js; boosting widens it: see life/traffic/driving.js; someone taken
   // over sees as wide as the wheel's set, in a room or out, so going through a door doesn't change the view: see possession.js)
   const goal = possession.index >= 0 ? possessedFov() : inside ? viewFov() : (App.ridingFov?.() ?? BASE_FOV*(App.boostFovScale?.() ?? 1));
@@ -4564,7 +5273,7 @@ export function roomThroughDoor(x, z) {
 /** The near plane the room's view uses (see enterBuilding). */
 export const roomNear = () => ROOM_NEAR;
 
-/** Which of the layouts the room's laid out as ('home', 'office', 'warehouse', 'factory', 'pub', 'salon', 'clothes' or 'restaurant'), or null if nobody's inside. */
+/** Which of the layouts the room's laid out as ('home', 'office', 'warehouse', 'factory', 'pub', 'salon', 'clothes', 'convenience' or 'restaurant'), or null if nobody's inside. */
 export const roomKind = () => inside ? current.name : null;
 /** The building the view's in ({ group, key }), or null. */
 export const roomBuilding = () => inside && { group: inside.group, key: inside.key };

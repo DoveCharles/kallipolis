@@ -4,7 +4,7 @@ import { camera } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeThumbnailDrawer } from '../life/thumbnail.js';
 import { makeCard } from '../ui/entity-card.js';
-import { buildingKey, buildingNumber, roomLayoutOf } from './footprints.js';
+import { buildingKey, buildingNumber, roomLayoutOf, restaurantStyleOf } from './footprints.js';
 import { buildingKindOf, buildingKindName, buildingCardName, buildingTypeOf, buildingEnterable } from './building-types.js';
 import { enterBuilding, leaveBuilding, isInsideBuilding } from './interior.js';
 import { startParty } from '../life/people/peopleActivities.js';
@@ -42,7 +42,7 @@ function throwAParty() {
 const drawThumbnail = makeThumbnailDrawer(card.canvas);
 
 // every zone's buildings (a zone's own children named 'Building': city blocks', industrial yards' and farmsteads')
-function buildingsInZones() {
+export function buildingsInZones() {
   const found = [];
   buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
     if (group.name === 'Building' && group.visible) found.push({ zone, group, index });
@@ -81,11 +81,12 @@ function followBuilding(picked) {
   card.showAction(followed.enterable);
   controls.minRadius = CAMERA_MIN_RADIUS;
   controls.goalRadius = Math.max(CAMERA_MIN_RADIUS, Math.min(600, radius*2.8));
-  const info = buildingTypeOf(kind, number);
+  const info = buildingTypeOf(kind, number, key);
   // what it is in the title bar (an Office Tower or Office Building, a Pub — see buildingKindName); its own name, then
   // its number, as the card's Name row: a pub's "The Red Lion", an office's company, a house's "No. 4213, Smith's Road",
   // and for a farm — which has no name of its own — just its number (see buildingCardName)
-  card.setTitle(buildingKindName(kind, number, picked.group.userData.height ?? 0));
+  const cuisine = kind === 'restaurant' ? ` (${{ greek: 'Greek', sushi: 'Sushi' }[restaurantStyleOf(key)] ?? 'Italian'})` : '';
+  card.setTitle(buildingKindName(kind, number, picked.group.userData.height ?? 0) + cuisine);
   card.show({ ...info, name: buildingCardName(kind, number, key) });
   setBuildingCardInhabitants([]);
   drawThumbnail(thumbnailOf(picked.group, box, center, radius));

@@ -266,6 +266,9 @@ function syncTrainRadiusUI() {
 // Generic dual-handle range slider — two overlapping native <input type=range> (see the
 // .range-slider CSS for how clicks reach whichever handle is under the cursor) plus a green
 // fill bar between them. `id` must be unique within whatever panel renders it.
+// A town's shop kinds, each on or off (on unless set false); every shop is one of those on, evenly (zones/town.js).
+const SHOP_KINDS = [['shopPlain', 'Plain shops'], ['shopPub', 'Pubs'], ['shopSalon', 'Salons'], ['shopClothes', 'Clothes shops'], ['shopRestaurant', 'Restaurants'], ['shopConvenience', 'Convenience stores']];
+
 function rangeSliderHtml(id, label, min, max, step, valLo, valHi, decimals) {
   const fmt = v => decimals!=null ? Number(v).toFixed(decimals) : v;
   return `
@@ -296,17 +299,20 @@ function wireRangeSlider(id, min, max, decimals, onChange) {
   const hiInput = document.getElementById(`rs-${id}-hi`);
   const dv = document.getElementById(`dv-${id}`);
   const fmt = v => decimals!=null ? Number(v).toFixed(decimals) : v;
-  function apply(movedLo) {
+  // labels follow the drag; the rebuild waits for release
+  function apply(movedLo, commit) {
     let lo = parseFloat(loInput.value), hi = parseFloat(hiInput.value);
     if (lo > hi) {
       if (movedLo) { hi = lo; hiInput.value = hi; } else { lo = hi; loInput.value = lo; }
     }
     dv.textContent = `${fmt(lo)}–${fmt(hi)}`;
     updateRangeFillVisual(id, min, max);
-    onChange(lo, hi);
+    if (commit) onChange(lo, hi);
   }
   loInput.addEventListener('input', () => apply(true));
   hiInput.addEventListener('input', () => apply(false));
+  loInput.addEventListener('change', () => apply(true, true));
+  hiInput.addEventListener('change', () => apply(false, true));
   updateRangeFillVisual(id, min, max);
 }
 
@@ -545,14 +551,8 @@ function renderDetails() {
       ${rangeSliderHtml('townstoreys', 'Storeys', 1, 5, 1, s.townStoreysMin!=null?s.townStoreysMin:2, s.townStoreysMax!=null?s.townStoreysMax:3)}
       <div class="slider-row"><div class="row"><label>Shops</label><span class="val" id="dv-townshops">${(s.townShops!=null?s.townShops:0.4).toFixed(2)}</span></div>
         <input type="range" id="ds-townshops" min="0" max="1" step="0.05" value="${s.townShops!=null?s.townShops:0.4}"></div>
-      <div class="slider-row"><div class="row"><label>Pubs</label><span class="val" id="dv-townpubs">${(s.townPubs!=null?s.townPubs:0.25).toFixed(2)}</span></div>
-        <input type="range" id="ds-townpubs" min="0" max="1" step="0.05" value="${s.townPubs!=null?s.townPubs:0.25}"></div>
-      <div class="slider-row"><div class="row"><label>Salons</label><span class="val" id="dv-townsalons">${(s.townSalons!=null?s.townSalons:0.2).toFixed(2)}</span></div>
-        <input type="range" id="ds-townsalons" min="0" max="1" step="0.05" value="${s.townSalons!=null?s.townSalons:0.2}"></div>
-      <div class="slider-row"><div class="row"><label>Clothes shops</label><span class="val" id="dv-townclothes">${(s.townClothes!=null?s.townClothes:0.25).toFixed(2)}</span></div>
-        <input type="range" id="ds-townclothes" min="0" max="1" step="0.05" value="${s.townClothes!=null?s.townClothes:0.25}"></div>
-      <div class="slider-row"><div class="row"><label>Restaurants</label><span class="val" id="dv-townrestaurants">${(s.townRestaurants!=null?s.townRestaurants:0.2).toFixed(2)}</span></div>
-        <input type="range" id="ds-townrestaurants" min="0" max="1" step="0.05" value="${s.townRestaurants!=null?s.townRestaurants:0.2}"></div>
+      <div class="section-label">Shop kinds</div>
+      ${SHOP_KINDS.map(([key, label]) => toggleHtml('ds-'+key.toLowerCase(), label, s[key]!==false)).join('')}
       <div class="slider-row"><div class="row"><label>Paint</label><span class="val" id="dv-townpaint">${(s.townPaint!=null?s.townPaint:0.3).toFixed(2)}</span></div>
         <input type="range" id="ds-townpaint" min="0" max="1" step="0.05" value="${s.townPaint!=null?s.townPaint:0.3}"></div>
       <div class="slider-row"><div class="row"><label>Lot setback</label><span class="val" id="dv-townsetback">${s.townSetback!=null?s.townSetback:0}</span></div>
@@ -639,11 +639,12 @@ function renderDetails() {
     });
     // an on/off setting (unset counts as on)
     const wireToggle = (id, key) => document.getElementById(id).addEventListener('click', () => { s[key] = s[key]===false; subdivideZone(zone); renderDetails(); });
-    const wireNumber = (sliderId, valId, key, decimals) => document.getElementById(sliderId).addEventListener('input', (e) => {
-      s[key] = parseFloat(e.target.value);
-      document.getElementById(valId).textContent = decimals!=null ? s[key].toFixed(decimals) : s[key];
-      subdivideZone(zone);
-    });
+    // label on drag, rebuild on release
+    const wireNumber = (sliderId, valId, key, decimals) => {
+      const el = document.getElementById(sliderId);
+      el.addEventListener('input', () => { const v = parseFloat(el.value); document.getElementById(valId).textContent = decimals!=null ? v.toFixed(decimals) : v; });
+      el.addEventListener('change', () => { s[key] = parseFloat(el.value); subdivideZone(zone); });
+    };
     const wireSwatches = (palette, key, swatchKey, fallback) => wireColorSwatchEvents(panel, palette, {
       onPick: (hex) => { s[key] = hex; subdivideZone(zone); renderDetails(); },
       onCommit: (hex, mode, oldHex) => {
@@ -680,10 +681,7 @@ function renderDetails() {
       wireNumber('ds-towndensity', 'dv-towndensity', 'townDensity', 2);
       wireRangeSlider('townstoreys', 1, 5, null, (lo, hi) => { s.townStoreysMin = lo; s.townStoreysMax = hi; subdivideZone(zone); });
       wireNumber('ds-townshops', 'dv-townshops', 'townShops', 2);
-      wireNumber('ds-townpubs', 'dv-townpubs', 'townPubs', 2);
-      wireNumber('ds-townsalons', 'dv-townsalons', 'townSalons', 2);
-      wireNumber('ds-townclothes', 'dv-townclothes', 'townClothes', 2);
-      wireNumber('ds-townrestaurants', 'dv-townrestaurants', 'townRestaurants', 2);
+      SHOP_KINDS.forEach(([key]) => wireToggle('ds-'+key.toLowerCase(), key));
       wireNumber('ds-townpaint', 'dv-townpaint', 'townPaint', 2);
       wireNumber('ds-townsetback', 'dv-townsetback', 'townSetback');
       wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);
@@ -700,14 +698,7 @@ function renderDetails() {
       wireSwatches(BUILDING_GROUND_COLORS, 'groundColor', 'groundcolor', BUILDING_GROUND_COLORS[0]);
     } else if (zoneType==='park') {
       wireToggle('ds-fence', 'fence');
-      const bindP = (sliderId,valId,key,decimals) => {
-        document.getElementById(sliderId).addEventListener('input', (e)=>{
-          const v = parseFloat(e.target.value);
-          s[key]=v;
-          document.getElementById(valId).textContent = decimals!=null ? v.toFixed(decimals) : v;
-          subdivideZone(zone);
-        });
-      };
+      const bindP = wireNumber;
       bindP('ds-treedensity','dv-treedensity','treeDensity',2);
       wireRangeSlider('treesize', 0.4, 5, 1, (lo,hi) => { s.treeSizeMin=lo; s.treeSizeMax=hi; subdivideZone(zone); });
       bindP('ds-treesetback','dv-treesetback','treeSetback');
@@ -764,22 +755,13 @@ function renderDetails() {
         onPreview: (hex) => { s.groundColor = hex; subdivideZone(zone); }
       }, 'groundcolor', renderDetails, s.groundColor!=null?s.groundColor:BUILDING_GROUND_COLORS[0]);
     } else {
-      const bind = (sliderId,valId,key,decimals) => {
-        document.getElementById(sliderId).addEventListener('input', (e)=>{
-          const v = parseFloat(e.target.value);
-          s[key]=v;
-          document.getElementById(valId).textContent = decimals!=null ? v.toFixed(decimals) : v;
-          subdivideZone(zone);
-        });
-      };
+      const bind = wireNumber;
       bind('ds-density','dv-density','density',2);
       wireRangeSlider('height', 1, 180, null, (lo,hi) => { s.heightMin=lo; s.heightMax=hi; subdivideZone(zone); });
       bind('ds-landmark','dv-landmark','landmarkChance',2);
-      document.getElementById('ds-minlot').addEventListener('input', (e) => {
-        s.lotCount = parseFloat(e.target.value);
-        document.getElementById('dv-minlot').textContent = s.lotCount<=1 ? 'Whole zone' : s.lotCount;
-        subdivideZone(zone);
-      });
+      const minlot = document.getElementById('ds-minlot');
+      minlot.addEventListener('input', () => { const v = parseFloat(minlot.value); document.getElementById('dv-minlot').textContent = v<=1 ? 'Whole zone' : v; });
+      minlot.addEventListener('change', () => { s.lotCount = parseFloat(minlot.value); subdivideZone(zone); });
       bind('ds-setback','dv-setback','setback');
       bind('ds-bordersetback','dv-bordersetback','borderSetback');
       wireRangeSlider('colorvar', 0, 1, 2, (lo,hi) => { s.colorVariationMin=lo; s.colorVariationMax=hi; subdivideZone(zone); });
@@ -857,6 +839,7 @@ function renderDetails() {
       ${mallSlider('mallsalons', 'Salons', mall.salons, 0, 1, 0.05, mall.salons.toFixed(2))}
       ${mallSlider('mallpubs', 'Bars', mall.pubs, 0, 1, 0.05, mall.pubs.toFixed(2))}
       ${mallSlider('mallrestaurants', 'Restaurants', mall.restaurants ?? 0.15, 0, 1, 0.05, (mall.restaurants ?? 0.15).toFixed(2))}
+      ${mallSlider('mallconvenience', 'Convenience stores', mall.convenience ?? 0, 0, 1, 0.05, (mall.convenience ?? 0).toFixed(2))}
       ${mallSlider('mallvacant', 'Vacant units', mall.vacant, 0, 1, 0.05, mall.vacant.toFixed(2))}
       ${mallSlider('malltheme', 'Colours', mall.theme, 0, MALL_THEMES.length, 1, mall.theme > 0 ? MALL_THEMES[mall.theme-1].name : 'By seed')}
       ${mallSlider('mallseed', 'Seed', mall.seed, 1, 9999, 1)}
@@ -902,7 +885,7 @@ function renderDetails() {
       const setMall = (key, v) => { lines.forEach(l => { l.mall = { ...mallSettingsOf(l), [key]: v }; }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); };
       document.getElementById('ds-mallwidth').addEventListener('change', e => { lines.forEach(l => { l.width = parseFloat(e.target.value); }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); });
       document.getElementById('ds-mallwidth').addEventListener('input', e => { document.getElementById('dv-mallwidth').textContent = e.target.value; });
-      [['malldepth', 'depth', 0], ['mallshopwidth', 'shopWidth', 0], ['mallclothes', 'clothes', 2], ['mallsalons', 'salons', 2], ['mallpubs', 'pubs', 2], ['mallrestaurants', 'restaurants', 2], ['mallvacant', 'vacant', 2], ['mallseed', 'seed', 0]]
+      [['malldepth', 'depth', 0], ['mallshopwidth', 'shopWidth', 0], ['mallclothes', 'clothes', 2], ['mallsalons', 'salons', 2], ['mallpubs', 'pubs', 2], ['mallrestaurants', 'restaurants', 2], ['mallconvenience', 'convenience', 2], ['mallvacant', 'vacant', 2], ['mallseed', 'seed', 0]]
         .forEach(([id, key, dp]) => {
           const el = document.getElementById('ds-'+id);
           el.addEventListener('input', () => { document.getElementById('dv-'+id).textContent = dp ? parseFloat(el.value).toFixed(dp) : el.value; });
@@ -915,8 +898,8 @@ function renderDetails() {
     }
     if (isRaised) {
       const height = document.getElementById('ds-raisedheight');
-      height.addEventListener('input', () => {
-        document.getElementById('dv-raisedheight').textContent = height.value + ' m';
+      height.addEventListener('input', () => { document.getElementById('dv-raisedheight').textContent = height.value + ' m'; });
+      height.addEventListener('change', () => {
         lines.forEach(l => { l.raisedHeight = parseFloat(height.value); });
         rebuildRoadMeshes();
       });

@@ -19,6 +19,12 @@ The Smiths - This Charming Man.mid
 The Verve - Bitter Sweet Symphony.mid
 Weezer - Buddy Holly.mid
 Weezer - Undone (The Sweater Song).mid
+convenience/B. J. Thomas - Raindrops Keep Fallin' on My Head.mid
+convenience/Burt Bacharach - I'll Never Fall in Love Again.mid
+convenience/The 5th Dimension - Up, Up and Away.mid
+convenience/The Association - Never My Love.mid
+convenience/The Association - Windy.mid
+convenience/The Mamas & the Papas - I Saw Her Again.mid
 restaurant/Cardillo - Core 'ngrato.mid
 restaurant/Cottrau - Santa Lucia.mid
 restaurant/De Curtis - Torna a Surriento.mid
@@ -30,3 +36,15 @@ restaurant-greek/Traditional - Alta es la Luna.mid
 restaurant-greek/Traditional - Psaropoula.mid
 restaurant-greek/Traditional - Syrtos Pylaias.mid
 restaurant-greek/Traditional - Tai Tai.mid
+restaurant-sushi/Hiroyuki Oshima - Cafe Cafe.mid
+restaurant-sushi/Hiroyuki Oshima - Tamashii no Sato.mid
+restaurant-sushi/Hiroyuki Oshima - d.h.z.mid
+restaurant-sushi/Michio Miyagi - Haru no Umi.mid
+restaurant-sushi/Seiji Asahi - Last Dance.mid
+restaurant-sushi/Unknown - 10.mid
+restaurant-sushi/Unknown - 12.mid
+restaurant-sushi/Unknown - Ashita e no Michi.mid
+restaurant-sushi/Unknown - Honoo Mau.mid
+restaurant-sushi/Unknown - Iyashi no Asa.mid
+restaurant-sushi/Unknown - Robotown.mid
+restaurant-sushi/Unknown - Senshi no Himitsu.mid

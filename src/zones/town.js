@@ -14,7 +14,7 @@ import { hangingSign } from '../buildings/shop-signs.js';
 
 // ---------------------------------------------------------- town
 // A British town: the zone is cut into lots like a City zone, but each lot is a two-to-four storey terrace house
-// or shop (now and then a pub, a hair salon or a clothes shop) built right up to the edge of it (so neighbours stand wall to wall down a street), in red or yellow brick,
+// or shop (now and then a pub, a hair salon, a clothes shop or a convenience store) built right up to the edge of it (so neighbours stand wall to wall down a street), in red or yellow brick,
 // white stucco or a painted pastel, under a pitched slate roof with its ridge along the street — a double-pile "M" roof
 // where the lot's too deep for one span — and chimney stacks with pots on the gable ends. Houses have tall sash windows
 // from the ground up and a painted front door; shops have a shopfront, a fascia over it and now and then awnings, with
@@ -38,6 +38,7 @@ const DOORS = [0x1b1b1b, 0x8a1c1c, 0x1d3557, 0x2d5a3d, 0xd8c35a, 0x5b8a9a];
 const PUB_BLACK = 0x121212; // a pub's ground floor, all the way round (see the end of makeTownBuilding)
 const SALON_FASCIAS = [0xe890b0, 0x8ec8d8, 0xb0a0d8, 0x1a1a1c, 0xf2f0ea, 0x60b0a0]; // (a salon's is loud, a clothes shop's smart)
 const CLOTHES_FASCIAS = [0x1a1a1c, 0xf2f0ea, 0xa82a2a, 0x2a3a5a, 0x3a3a3c];
+const CONVENIENCE_FASCIAS = [0x1a8a4a, 0xe86a1a, 0xd02030, 0x1d3a8a, 0xf2f0ea];
 const RESTAURANT_FASCIAS = [0x7a1a1a, 0x1f4a2a, 0xefe6cc, 0x1a1a1c, 0x9a2a1e];
 const FASCIAS = [0x1f3d2b, 0x1b2a4a, 0x5a1a22, 0x151515, 0xe8e2d2, 0x2c5f6b];
 const CHIMNEY_BRICK = 0x8e4a36, POT = 0xa0583a, TRIM = 0xefece4, STONE = 0xd6cdb8;
@@ -248,11 +249,15 @@ function makeTownBuilding(fp, front, rng, s) {
     });
     if (sills.length) part(group, mergeGeometryList(sills), plain(brick ? STONE : TRIM));
   }
-  // A share of the shops (the "pubs" setting) are pubs: a sign hung out over the pavement from an iron bracket above the
+  // Pubs: a sign hung out over the pavement from an iron bracket above the
   // fascia, a painted board in a gilt frame. (Drawn last, so every other building's rolls are as they were.) A pub's
   // ground floor is always painted black: its fascia and door frame, and the wall round the windows on every side — the
   // piers between them, a stallriser below and a band above, stood just off the wall where the window shader draws them.
-  if (shop && rng() < (s.townPubs ?? 0.25)) {
+  // Each shop is one of the kinds switched on for the town (the Shop kinds toggles), evenly; none on: plain.
+  const kinds = shop ? [['plain', s.shopPlain], ['pub', s.shopPub], ['salon', s.shopSalon], ['clothes', s.shopClothes], ['restaurant', s.shopRestaurant],
+    ['convenience', s.shopConvenience]].filter(([, on]) => on !== false).map(([kind]) => kind) : [];
+  const shopKind = kinds.length ? kinds[Math.floor(rng()*kinds.length)] : null;
+  if (shopKind === 'pub') {
     group.userData.buildingKind = 'pub';
     fascia.material.color.setHex(PUB_BLACK);
     streetFront.filter(m => m.material.metalness === 0.2).forEach(m => m.material.color.setHex(PUB_BLACK)); // (the door frame, not its glass or the awnings)
@@ -281,18 +286,15 @@ function makeTownBuilding(fp, front, rng, s) {
     if (black.length) part(group, mergeGeometryList(black), plain(PUB_BLACK, { roughness: 0.4 }));
     const t = Math.min(0.9, len/2), board = FASCIAS[Math.floor(rng()*FASCIAS.length)];
     hangingSign('pub', board).forEach(([geo, mat]) => part(group, place(geo, t, 0, SHOP + 0.9), mat));
-  } else if (shop) {
-    // Of the other shops, a share are hair salons, clothes shops and restaurants (the settings of those names),
-    // each with its fascia in colours of its own. (Rolled after everything else, as the pubs are.)
-    const roll = rng(), salons = s.townSalons ?? 0.2, clothes = s.townClothes ?? 0.25, eats = s.townRestaurants ?? 0.2;
-    const kind = roll < salons ? 'salon' : roll < salons + clothes ? 'clothes' : roll < salons + clothes + eats ? 'restaurant' : null;
-    if (kind) {
-      group.userData.buildingKind = kind;
-      const colours = kind === 'salon' ? SALON_FASCIAS : kind === 'clothes' ? CLOTHES_FASCIAS : RESTAURANT_FASCIAS;
-      const board = colours[Math.floor(rng()*colours.length)];
-      fascia.material.color.setHex(board);
-      hangingSign(kind, board).forEach(([geo, mat]) => part(group, place(geo, Math.min(0.9, len/2), 0, SHOP + 0.9), mat));
-    }
+  } else if (shopKind && shopKind !== 'plain') {
+    // Hair salons, clothes shops, restaurants and convenience stores: each with its fascia in colours of its own.
+    const kind = shopKind;
+    group.userData.buildingKind = kind;
+    const colours = kind === 'salon' ? SALON_FASCIAS : kind === 'clothes' ? CLOTHES_FASCIAS
+      : kind === 'convenience' ? CONVENIENCE_FASCIAS : RESTAURANT_FASCIAS;
+    const board = colours[Math.floor(rng()*colours.length)];
+    fascia.material.color.setHex(board);
+    hangingSign(kind, board).forEach(([geo, mat]) => part(group, place(geo, Math.min(0.9, len/2), 0, SHOP + 0.9), mat));
   }
   group.rotation.x = -Math.PI/2;
   group.userData.batchable = true;

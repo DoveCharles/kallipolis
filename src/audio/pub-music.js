@@ -18,9 +18,10 @@ const MUSIC_DIR = 'assets/music/';
 const SOUND_BANK = MUSIC_DIR + 'TimGM6mb.sf2';
 const PROCESSOR = 'https://cdn.jsdelivr.net/npm/spessasynth_lib@4.3.14/dist/spessasynth_processor.min.js'; // (as in index.html's import map)
 const SONG_GAP = 6;             // seconds between songs
-const VOLUME = { pub: 0.11, restaurant: 0.04, greek: 0.04 }; // (restaurants: quiet, in the background)
-const SET_OF = path => path.startsWith('restaurant/') ? 'restaurant' : path.startsWith('restaurant-greek/') ? 'greek' : 'pub'; // (assets/music/restaurant/, restaurant-greek/: theirs only)
+const VOLUME = { pub: 0.11, restaurant: 0.04, greek: 0.04, sushi: 0.04, convenience: 0.07 }; // (restaurants: quiet, in the background)
+const SET_OF = path => path.startsWith('restaurant/') ? 'restaurant' : path.startsWith('restaurant-greek/') ? 'greek' : path.startsWith('restaurant-sushi/') ? 'sushi' : path.startsWith('convenience/') ? 'convenience' : 'pub'; // (assets/music/restaurant/, restaurant-greek/, restaurant-sushi/, convenience/: theirs only)
 const TONE_HZ = 6500;           // the speaker's top end
+const TINNY = { convenience: [700, 3800] }; // sets through a cheap ceiling speaker: [low cut, top end] Hz
 const REF_DISTANCE = 4, MAX_DISTANCE = 30;
 const DRIFT = 1;                // seconds off the clock before it's set back
 const FADE = 0.8;
@@ -48,14 +49,15 @@ function load() {
     await synth.isReady;
     const sequencer = new Sequencer(synth, { skipToFirstNoteOn: false, initialPlaybackRate: 1 });
     sequencer.loopCount = 0;
-    const out = context.createGain(), tone = context.createBiquadFilter(), panner = makePanner(context, loopPanning());
+    const out = context.createGain(), tone = context.createBiquadFilter(), low = context.createBiquadFilter(), panner = makePanner(context, loopPanning());
     out.gain.value = 0;
     tone.type = 'lowpass'; tone.frequency.value = TONE_HZ; tone.Q.value = 0.5;
+    low.type = 'highpass'; low.frequency.value = 20; low.Q.value = 0.9;
     panner.distanceModel = 'linear';
     panner.refDistance = REF_DISTANCE; panner.maxDistance = MAX_DISTANCE;
     synth.connect(out);
-    out.connect(tone).connect(panner);
-    player = { songs, synth, sequencer, out, panner, pub: null, song: null, quiet: null };
+    out.connect(low).connect(tone).connect(panner);
+    player = { songs, synth, sequencer, out, tone, low, panner, pub: null, song: null, quiet: null };
   })().catch(err => console.warn('pub music: no music', err));
   return player;
 }
@@ -95,7 +97,7 @@ function hush() {
  * pub is in its songs.
  * @param {string} key - the pub's building key (see buildingKey)
  * @param {{x: number, y: number, z: number}} at - where it's heard from
- * @param {'pub'|'restaurant'|'greek'} [set] - which songs
+ * @param {'pub'|'restaurant'|'greek'|'sushi'|'convenience'} [set] - which songs
  * @returns {void}
  */
 export function pubMusic(key, at, set = 'pub') {
@@ -106,6 +108,8 @@ export function pubMusic(key, at, set = 'pub') {
     player.pub = key;
     panner.disconnect();
     panner.connect(heardFrom(at, 'music'));
+    const [cut, top] = TINNY[set] ?? [20, TONE_HZ];
+    player.low.frequency.value = cut; player.tone.frequency.value = top;
     const now = context.currentTime;
     out.gain.cancelScheduledValues(now);
     out.gain.setValueAtTime(out.gain.value, now);

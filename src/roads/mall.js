@@ -53,7 +53,7 @@ const MIN_AREA = 400;                 // the least of a mall worth building (a p
 // what a new mall path is, unless it takes after the one last selected (see input.js): its concourse is the line's width,
 // and the rest is kept on each line of the network as `mall`
 export const MALL_WIDTH = 14;
-export const MALL_DEFAULTS = { depth: 14, shopWidth: 10, upper: true, clothes: 0.55, salons: 0.25, pubs: 0.2, restaurants: 0.15, vacant: 0.1, theme: 0, seed: 1 };
+export const MALL_DEFAULTS = { depth: 14, shopWidth: 10, upper: true, clothes: 0.55, salons: 0.25, pubs: 0.2, restaurants: 0.15, convenience: 0.1, vacant: 0.1, theme: 0, seed: 1 };
 export const isMallLine = line => line.roadType === 'mall';
 export const mallSettingsOf = line => ({ ...MALL_DEFAULTS, ...(line.mall || {}) });
 const ESCALATOR_SLOPE = Math.tan(Math.PI/6), ESCALATOR_W = 1.1, BRIDGE_HALF = 1.5, BRIDGE_EVERY = 32;
@@ -351,7 +351,7 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs, cladding,
   group.name = 'Building';
   const top = y0 + MALL_LEVEL - 0.35;
   // (its fascia the colour its title asks for, if it does: see buildingSign)
-  const backcolor = kind === 'vacant' ? null : buildingSign(kind, buildingNumber(key)).backcolor;
+  const backcolor = kind === 'vacant' ? null : buildingSign(kind, buildingNumber(key), key).backcolor;
   if (backcolor) cladding = new THREE.Color(backcolor).getHex();
   Object.assign(group.userData, { footprint: lot, height: y0 + MALL_LEVEL, base: y0, buildingKind: kind, mallLevel: level, batchable: true });
   // (lit, its light spilling out onto the concourse after dark: see streetlights.js)
@@ -427,10 +427,11 @@ function makeUnit(lot, inC, y0, kind, rng, level, theme, piers, signs, cladding,
   ].forEach(m => m && group.add(m));
   return group;
 }
-// What a unit is: vacant, or a clothes shop, a salon, a bar or a restaurant, by the zone's shares of each.
+// What a unit is: vacant, or a clothes shop, a salon, a bar, a restaurant or a convenience store, by the zone's shares of each.
 function kindOf(rng, s) {
   if (rng() < (s.mallVacant ?? 0.1)) return 'vacant';
-  const shares = [['clothes', s.mallClothes ?? 0.55], ['salon', s.mallSalons ?? 0.25], ['pub', s.mallPubs ?? 0.2], ['restaurant', s.mallRestaurants ?? 0.15]];
+  const shares = [['clothes', s.mallClothes ?? 0.55], ['salon', s.mallSalons ?? 0.25], ['pub', s.mallPubs ?? 0.2], ['restaurant', s.mallRestaurants ?? 0.15],
+    ['convenience', s.mallConvenience ?? 0]];
   const total = shares.reduce((sum, [, w]) => sum + w, 0);
   if (total <= 0) return 'vacant';
   let r = rng()*total;
@@ -580,7 +581,7 @@ function signAtlas(signs) {
   if (!signs.length || typeof document === 'undefined') return null;
   const cells = signs.map(sg => {
     const number = buildingNumber(sg.key), w = Math.min(sg.len - 0.7, 6);
-    const sign = buildingSign(sg.kind, number), text = sign.text || buildingName(sg.kind, number, 0);
+    const sign = buildingSign(sg.kind, number, sg.key), text = sign.text || buildingName(sg.kind, number, 0);
     return { ...sg, number, w, text, sign, px: Math.max(SIGN_PX, Math.min(ATLAS_W, Math.round(SIGN_PX*w/SIGN_H))) };
   }).filter(c => c.w > 0.8 && c.text);
   // shelf packing: left to right, a new row whenever one's full
@@ -808,7 +809,7 @@ export function rebuildMalls() {
   if (changed) { S.peopleNavDirty = true; App.updateStats?.(); }
 }
 const toZoneSettings = (s, CW) => ({ mallConcourse: CW*2, mallShopWidth: s.shopWidth, mallUpper: s.upper, mallClothes: s.clothes,
-  mallSalons: s.salons, mallPubs: s.pubs, mallRestaurants: s.restaurants ?? 0.15, mallVacant: s.vacant, mallTheme: s.theme, seed: s.seed });
+  mallSalons: s.salons, mallPubs: s.pubs, mallRestaurants: s.restaurants ?? 0.15, mallConvenience: s.convenience ?? 0, mallVacant: s.vacant, mallTheme: s.theme, seed: s.seed });
 
 // ---------------------------------------------------------- the mall
 function generateMall(zone, outline, spine, CW) {
