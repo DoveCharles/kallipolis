@@ -199,10 +199,10 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   }
   el.append(titlebar, heart, close);
   const panes = {}, tabButtons = {}, tabListeners = [];
-  let activeTab = null;
+  let activeTab = null, tabStrip = null;
   if (tabs) {
     el.classList.add('pc-has-tabs');
-    const strip = document.createElement('div');
+    const strip = tabStrip = document.createElement('div');
     strip.className = 'pc-tabs';
     tabs.forEach((label, i) => {
       const key = label.toLowerCase(), button = document.createElement('button');
@@ -235,6 +235,13 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
     activeTab = key;
     if (own) layoutDrops();
     tabListeners.forEach(listener => listener(key));
+  }
+  // Shows or hides the tab strip (a piper's mini has none: see life/person-card.js); hidden, back on the first tab.
+  function showTabs(on) {
+    if (!tabStrip || tabStrip.hidden === !on) return;
+    if (!on) selectTab(tabs[0].toLowerCase());
+    tabStrip.hidden = !on;
+    el.classList.toggle('pc-has-tabs', on);
   }
   // Runs `change`, then slides the card's top edge from its old height to its new one over RESIZE_TIME. Only `translate`
   // and `clip-path` animate (no layout per frame), so it stays smooth while the scene is busy: the card is laid out once
@@ -659,7 +666,7 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   dragByTitle(el, () => !matchMedia('(max-width: 760px)').matches);
 
   const card = { el, canvas, show, hide, resetPlace, set, setList, relabel, setTitle, setFavorite, setAction, showAction, setSubAction, showSubAction, setHealth, bindHealth,
-    setEffects, selectTab, tabPane: key => panes[key] ?? null, activeTab: () => activeTab, onTab: listener => { tabListeners.push(listener); } };
+    setEffects, selectTab, showTabs, tabPane: key => panes[key] ?? null, activeTab: () => activeTab, onTab: listener => { tabListeners.push(listener); } };
   cards.push(card);
   // What this card's status column is doing, for the console (see the `status` handle in src/main.js): read live off the
   // card, so a redraw between a hover and reading it doesn't leave a stale answer.

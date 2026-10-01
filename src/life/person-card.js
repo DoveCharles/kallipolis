@@ -144,6 +144,7 @@ const isManAt = i => personModel ? personModel.isMan[i] === 1 : null;
 // building's, without its Smite button (see followPersonInside in people/peopleTracking.js)
 function fill(w, index, isMan, beside = false) {
   const { card } = w;
+  card.showTabs(!App.people[index]?.miniOf); // (a piper's mini: just the Overview — see people/peopleMinis.js)
   // whoever's actually standing in that slot right now, not the slot itself — see peopleIdSeq in people.js
   const id = App.people[index]?.id ?? index, profile = profileOf(id, isMan, App.people[index]?.moodNow);
   const { traits } = profile, again = w.shown?.index === index; // (again: people/*.txt just loaded, under an open card)

@@ -4,7 +4,8 @@ import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { canTakeControl, controlInput, endPossession, possession, startPossession, HATES_POSSESSED_SPEED, rushed } from '../possession.js';
 import { FLEE_SPEED, PEOPLE_MAX, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
-import { HAIR_ROW, HEAD_CENTER, PERSON_TRAIT_COLORS } from './peopleModel.js';
+import { HAIR_ROW, HEAD_CENTER, PERSON_TRAIT_COLORS, SPIRITS_ROW, TWIN_GAP, TWIN_LOOK_ROW, TWIN_SHOT_AIM, BODILESS_SHOT_RAISE, BODILESS_CLEAR, BODILESS_HOP, BODILESS_HOP_RATE } from './peopleModel.js';
+import { SPECTRAL } from './peopleSpirits.js';
 
 /** Their headsize trait as drawn (the Hair row's fourth number, 0 read as 1: see personLook). */
 export const headSizeOf = i => personModel.traitData[(HAIR_ROW*PEOPLE_MAX + i)*4 + 3] || 1;
@@ -63,7 +64,7 @@ export function pickPerson(clientX, clientY, out) {
     const lengthSq = (bx - ax)**2 + (by - ay)**2;
     const k = lengthSq > 0 ? Math.max(0, Math.min(1, ((clientX - ax)*(bx - ax) + (clientY - ay)*(by - ay))/lengthSq)) : 0;
     const off = Math.hypot(clientX - (ax + (bx - ax)*k), clientY - (ay + (by - ay)*k));
-    if (off <= Math.max(8, Math.sqrt(lengthSq)*0.22) && foot.z < bestDepth) { best = i; bestDepth = foot.z; }
+    if (off <= Math.max(8, Math.sqrt(lengthSq)*(0.22 + (p.traits.twins ? 0.35 : 0))) && foot.z < bestDepth) { best = i; bestDepth = foot.z; } // (twins: either of them)
   });
   if (out && best >= 0) { const p = people[best]; out.distance = camera.position.distanceTo(foot.set(p.x, p.y, p.z)); }
   return best;
@@ -265,7 +266,21 @@ export function headPointOf(i, spot, out) {
     headOffset.set(-spot.x, personModel.face.top.y - spot.y, spot.z);
   }
   headOffset.multiplyScalar(headSizeOf(i)).applyMatrix4(lookTurn).applyMatrix3(headTurn); // (scaled about the neck, as personLook)
-  return out.copy(personModel.headPivot).applyMatrix4(headMatrix).add(headOffset).applyMatrix4(headshotInstance);
+  return out.copy(personModel.headPivot).applyMatrix4(headMatrix).add(headOffset).add(headShift(i, shifted)).applyMatrix4(headshotInstance);
+}
+const shifted = new THREE.Vector3(), neckMatrix = new THREE.Matrix4(), neck = new THREE.Vector3();
+// Where the person shader's moved someone's head, in the model's space: a twin's half TWIN_GAP to their right (the one
+// they are: the copy's to the left), a bodiless head down on the ground, hopping (personBodiless).
+function headShift(i, out) {
+  const bits = Math.floor(personModel.traitData[(SPIRITS_ROW*PEOPLE_MAX + i)*4 + 3]);
+  out.set(bits & SPECTRAL.twins ? -TWIN_GAP*personModel.tall : 0, 0, 0);
+  if (bits & SPECTRAL.bodiless) {
+    boneAt(neckMatrix, personModel.headBone, i);
+    const hop = personModel.traitData[(TWIN_LOOK_ROW*PEOPLE_MAX + i)*4 + 2];
+    out.y = personModel.floorY + personModel.tall*(BODILESS_CLEAR + BODILESS_HOP*hop*Math.abs(Math.sin(personModel.time.value*BODILESS_HOP_RATE + i*1.7)))
+      - neck.copy(personModel.headPivot).applyMatrix4(neckMatrix).y;
+  }
+  return out;
 }
 
 /**
@@ -279,9 +294,11 @@ export function headshotOf(i) {
   chestTurn.setFromMatrix4(chestMatrix);
   personModel.mesh.getMatrixAt(i, headshotInstance);
   const size = headSizeOf(i);
-  headshot.head.copy(HEAD_CENTER).multiplyScalar(size).add(personModel.headPivot).applyMatrix4(chestMatrix).applyMatrix4(headshotInstance);
+  headshot.head.copy(HEAD_CENTER).multiplyScalar(size).add(personModel.headPivot).applyMatrix4(chestMatrix).add(headShift(i, shifted)).applyMatrix4(headshotInstance); // (on the one twin; a bodiless head where it's gone)
   headshot.forward.set(0, 0, 1).applyMatrix3(chestTurn).transformDirection(headshotInstance);
   headshot.up.set(0, 1, 0).applyMatrix3(chestTurn).transformDirection(headshotInstance);
+  if (people[i].traits.bodiless) headshot.head.addScaledVector(headshot.up, BODILESS_SHOT_RAISE*personModel.tall*modelScale(people[i])); // (sat lower in the frame)
+  if (people[i].traits.twins) headshot.head.add(shifted.set(1, 0, 0).transformDirection(headshotInstance).multiplyScalar(TWIN_SHOT_AIM*personModel.tall*modelScale(people[i]))); // (towards the other, behind: see TWIN_SHOT_SIDE)
   headshot.distance = 4.6*modelScale(people[i])*size;
   return headshot;
 }
@@ -321,7 +338,7 @@ let cameraNear = camera.near;
  */
 export function possessPerson(i) {
   const p = people[i];
-  if (i !== followed || !p || possession.index === i || !S.peopleEnabled || S.interactionMode !== 'move') return;
+  if (i !== followed || !p || p.miniOf || possession.index === i || !S.peopleEnabled || S.interactionMode !== 'move') return; // (nor a piper's mini, whose revenge would throw your punches: see peopleMinis.js)
   // (someone in the room the camera's inside — picked there, see followPersonInside — is walked round it, as anyone
   // walked in possessed is: see enterPossessed; not someone behind a changing room's curtain)
   const room = inRoom(p) ? p.indoors : null;
@@ -558,8 +575,8 @@ export function updateSwing(p, dt) {
   let nearest = (SWING_REACH + (p.walkingSpeed ?? 0)*SWING_REACH_PER_SPEED)*Math.max(1, p.traits.size); // (the faster they're running and the bigger they are, the further it reaches — but never less than a normal person's)
   people.forEach(q => {
     if (q === p || isGone(q) || !canBeKnockedOver(q)) return;
-    const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
-    if (d > nearest || d < 1e-3 || (dx*fx + dz*fz)/d < SWING_ARC) return;
+    const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz) - App.twinReach(q); // (twins: reached as wide as both)
+    if (d > nearest || Math.hypot(dx, dz) < 1e-3 || (dx*fx + dz*fz)/Math.hypot(dx, dz) < SWING_ARC) return;
     hit = q; nearest = d;
   });
   // a bee nearer than anyone takes it instead, and its colony comes for the puncher

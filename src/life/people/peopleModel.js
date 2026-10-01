@@ -507,14 +507,22 @@ const SKIN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Skin'), EYES_ROW = 2 + PERSON_
 const NUDE_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Cuff');
 // (its fourth number bits: 1 spirits, 2 ghost, 4 bodiless — see peopleSpirits.js and personBodiless)
 export const SPIRITS_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Glasses');
-const BODILESS_DROP = 0.35, BODILESS_BOB = 0.04, BODILESS_BOB_RATE = 2; // × the model's height; radians a second
-const BODILESS_SIT_RISE = 0.3; // how much less it drops sat all the way down (SPIRITS_ROW .w's fraction: see people.js), × the model's height
+// the bodiless trait's head, on the ground (BODILESS_CLEAR above it), hopping BODILESS_HOP high while they move (TWIN_LOOK_ROW's .z,
+// eased: see people.js), × the model's height; BODILESS_HOP_RATE radians a second (see personBodiless, and headShift in peopleTracking.js)
+export const BODILESS_CLEAR = 0.02, BODILESS_HOP = 0.12, BODILESS_HOP_RATE = 9;
+export const BODILESS_SHOT_RAISE = 0.04; // the headshot aimed that much higher on a bodiless head, × the model's height (see headshotOf)
+// The twins trait: the person drawn twice, side by side, in step — each layer half TWIN_GAP (× the model's height) to
+// their right, and a copy of it (twinOf) half to their left. One person still: one health, one hitbox (twinReach in people.js).
+export const TWIN_GAP = 0.22;
+const TWIN_SHOT_SIDE = 0.2, TWIN_SHOT_BACK = 0.15; // the copy in the headshot: to their left and behind the one shown, × the model's height
+export const TWIN_SHOT_AIM = 0.07; // and the headshot aimed that far towards it, so the two share the frame (see headshotOf in peopleTracking.js)
 // the censor's ends (see peopleCensor.js): down the thigh from the hip, × hip-to-knee; a man's up to the stomach, × hip-to-shoulder;
 // a woman's to below the shoulder, down from it × hip-to-shoulder
 const CENSOR_THIGH = 0.3, CENSOR_STOMACH = 0.45, CENSOR_SHOULDER = 0.1;
 const OUTFIT_RED_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitRed'), OUTFIT_GREEN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitGreen');
 const BLOOD_SCALE = 1.2; // how many splotches' worth of noise fit in a unit of the figure: bigger for smaller splotches
 export const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
+export const TWIN_LOOK_ROW = PERSON_FACE_ROW + 1; // (a twin's copy's own head turn and tilt, as instanceLook.xy: see personLook, people.js; .z how much a bodiless head hops)
 
 // A mesh named with a _U suffix is unused: kept in the model file, never drawn.
 const isUnused = name => /_U$/i.test(name);
@@ -567,6 +575,7 @@ const personCulling = {
   personViewPos: { value: new THREE.Vector3() }, personViewScale: { value: new THREE.Vector2() },
   personCullSphere: { value: new THREE.Vector4(0, 1, 0, 1) }, personTall: { value: 1 },
   personTime: { value: 0 }, // seconds, for bobbing (set by updatePeople)
+  personFloor: { value: 0 }, // the model's feet, in its units
 };
 const drawingBuffer = new THREE.Vector2();
 // (the same, kept on this side for updatePeople: the last frame's view, see personPixels)
@@ -619,6 +628,7 @@ const PERSON_VERTEX_PARS = `
   uniform float personMorphsWidth;
   uniform float personMorphsRows;
   uniform sampler2D personTraits;
+  uniform float personTwin; // -1 a person's own meshes, 1 their twin's (see TWIN_GAP)
   uniform float personHeadBone;
   uniform vec3 personHeadPivot;
   uniform vec2 personHeadMiddle;
@@ -701,12 +711,14 @@ const PERSON_VERTEX_PARS = `
   vec3 personLook(vec3 posed) {
     vec3 looked = posed;
     bool flipped = personVertex.x > 0.0 && texelFetch(personTraits, ivec2(personIndex(), ${EYES_ROW}), 0).w > 0.5;
-    if (personVertex.x > 0.0 && (instanceLook.x != 0.0 || instanceLook.y != 0.0 || flipped)) {
+    // (a twin's copy looks about on its own: TWIN_LOOK_ROW)
+    vec2 turn = personTwin > 0.0 && personVertex.x > 0.0 ? texelFetch(personTraits, ivec2(personIndex(), ${TWIN_LOOK_ROW}), 0).xy : instanceLook.xy;
+    if (personVertex.x > 0.0 && (turn.x != 0.0 || turn.y != 0.0 || flipped)) {
       mat4 head = personBone(personHeadBone);
       mat3 headTurn = mat3(head);
       vec3 pivot = (head*vec4(personHeadPivot, 1.0)).xyz, p = inverse(headTurn)*(posed - pivot);
       if (flipped) p = vec3(-p.x, 2.0*personHeadMiddle.x - p.y, p.z);
-      float ct = cos(instanceLook.x), st = sin(instanceLook.x), cn = cos(instanceLook.y), sn = sin(instanceLook.y);
+      float ct = cos(turn.x), st = sin(turn.x), cn = cos(turn.y), sn = sin(turn.y);
       p = vec3(p.x, p.y*cn - p.z*sn, p.y*sn + p.z*cn);
       p = vec3(p.x*ct + p.z*st, p.y, p.z*ct - p.x*st);
       looked = mix(posed, pivot + headTurn*p, personVertex.x);
@@ -818,18 +830,20 @@ const PERSON_VERTEX_PARS = `
   uniform vec3 personViewPos;
   uniform vec2 personViewScale; // x: pixels per metre (a metre off, if y: a perspective view)
   uniform float personTall; // (in the model's units)
+  uniform float personFloor; // (likewise)
   bool personRough = false; // (see PERSON_ROUGH_PIXELS)
   uniform float personTime;
-  // (.w: the bits, plus how far sat down as the fraction)
+  // (.w: the bits)
   int personSpectral() { return int(texelFetch(personTraits, ivec2(personIndex(), ${SPIRITS_ROW}), 0).w); }
   // 0 to 1 and back, each person out of step
   float personBob(float rate, float phase) { return 0.5 + 0.5*sin(personTime*rate + float(personIndex())*1.7 + phase); }
-  // the bodiless trait: all but the head folded away, the head dropped and bobbing
+  // the bodiless trait: all but the head folded away, the head down on the ground (its neck there, whatever the pose) and
+  // hopping along as they move (TWIN_LOOK_ROW .z)
   vec3 personBodiless(vec3 posed) {
     if ((personSpectral() & ${SPECTRAL.bodiless}) == 0) return posed;
     if (personVertex.x < 0.5) return vec3(0.0);
-    float sat = fract(texelFetch(personTraits, ivec2(personIndex(), ${SPIRITS_ROW}), 0).w);
-    return posed - vec3(0.0, personTall*(${BODILESS_DROP.toFixed(3)} - ${BODILESS_SIT_RISE.toFixed(3)}*sat + ${BODILESS_BOB.toFixed(3)}*personBob(${BODILESS_BOB_RATE.toFixed(2)}, 0.0)), 0.0);
+    float neck = (personBone(personHeadBone)*vec4(personHeadPivot, 1.0)).y, hop = texelFetch(personTraits, ivec2(personIndex(), ${TWIN_LOOK_ROW}), 0).z;
+    return posed - vec3(0.0, neck - personFloor - personTall*(${BODILESS_CLEAR.toFixed(3)} + ${BODILESS_HOP.toFixed(3)}*hop*abs(sin(personTime*${BODILESS_HOP_RATE.toFixed(2)} + float(personIndex())*1.7))), 0.0);
   }
   // the bone that moves this vertex most
   float personMainJoint() {
@@ -980,7 +994,7 @@ function injectPersonShader(shader, uniforms, look) {
   if (outfitted) shader.uniforms.personOutfitMap = { value: look.outfitMap };
   const blushed = colored && look.blushSlot != null, glinted = colored && look.pupilSlot != null;
   const rested = splotched || outfitted || blushed || glinted;
-  const hideHead = colored ? 'if (personIndex() == personHidden && personVertex.x > 0.0) transformed = (personBone(personChestBone)*vec4(personChestPivot, 1.0)).xyz;' : '';
+  const hideHead = colored ? 'if (personIndex() == personHidden && personTwin < -0.5 && personVertex.x > 0.0) transformed = (personBone(personChestBone)*vec4(personChestPivot, 1.0)).xyz;' : '';
   // (nude: the clothes' slots take their skin)
   const nudeIf = (look.nudeSlots || []).length ? `personTrait(${NUDE_ROW}).w > 0.5 && (${look.nudeSlots.map(slot => `personSlotIndex == ${slot}`).join(' || ')})` : '';
   const nude = nudeIf ? `${nudeIf} ? personTrait(${SKIN_ROW}).rgb : ` : '';
@@ -1013,6 +1027,10 @@ function injectPersonShader(shader, uniforms, look) {
       ${lashes}
       ${hideHead}
       transformed = personBodiless(transformed);
+      // (in the card's headshot, personOnly, the copy stands just behind the one it centres on, a little to their left)
+      if ((personSpectral() & ${SPECTRAL.twins}) != 0) transformed += personOnly >= 0 && personTwin > 0.0
+        ? vec3(${(TWIN_SHOT_SIDE - TWIN_GAP).toFixed(3)}, 0.0, ${(-TWIN_SHOT_BACK).toFixed(3)})*personTall : vec3(personTwin*${TWIN_GAP.toFixed(3)}*personTall, 0.0, 0.0);
+      else if (personTwin > 0.0) transformed = vec3(0.0); // (a twin's copy, for someone without one)
       if ((personSpectral() & ${SPECTRAL.ghost}) != 0) transformed = vec3(0.0); // (drawn see-through instead: peopleSpirits.js)
       if (personOnly >= 0 && personIndex() != personOnly) transformed = vec3(0.0);
       ${color}
@@ -1607,7 +1625,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   // colors (clothes, hair, skin, eyes, hat), and where their clothes stop — is seeded from their person id instead (see
   // assignAppearance below), so when someone dies and someone new takes their slot (see updatePeople in people.js),
   // the new arrival gets their own build, face and colors rather than a repeat of whoever was there before.
-  const traitRows = PERSON_FACE_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
+  const traitRows = TWIN_LOOK_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
   const isMan = new Uint8Array(PEOPLE_MAX);
   const NATURAL_COLOUR_CHANCE = 0.85;
   const sexRng = mulberry32(777);
@@ -1757,6 +1775,22 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   // wearers' slots (see `members`), each mesh with room for STYLE_ROOM more than it started with (see below), so moving
   // a slot from one style to another is: out of the one's list, into the other's (kept in order), and both lists'
   // slots written out again. False if the style has no room left (or no mesh).
+  /**
+   * Make slot `to` look just like slot `from` (a piper's mini: see peopleMinis.js) — sex, shape, face, colours, clothes
+   * and every worn style — without their blood, spectral bits or nudity, which people.js works out for them again.
+   * @param {number} from
+   * @param {number} to
+   * @returns {void}
+   */
+  function copyLook(from, to) {
+    isMan[to] = isMan[from];
+    wardrobe[to] = wardrobe[from];
+    for (let row = 0; row < traitRows; row++) traits.copyWithin((row*PEOPLE_MAX + to)*4, (row*PEOPLE_MAX + from)*4, (row*PEOPLE_MAX + from + 1)*4);
+    traits[(BLOOD_ROW*PEOPLE_MAX + to)*4 + 3] = 0;
+    traits[(SPIRITS_ROW*PEOPLE_MAX + to)*4 + 3] = 0;
+    wornLayers.forEach(layer => { if (!wear(layer, to, layer.of[from])) wear(layer, to, -1); });
+    traitTexture.needsUpdate = true;
+  }
   function wear(layer, i, k) {
     const was = layer.of[i];
     if (was === k) return true;
@@ -1894,7 +1928,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const uniforms = {
     personBones: { value: boneTexture }, personBonesSize: { value: new THREE.Vector2(boneWidth, boneRows) },
     personMorphs: { value: morphTexture }, personMorphsWidth: { value: morphWidth }, personMorphsRows: { value: morphRows },
-    personTraits: { value: traitTexture }, personHidden: { value: -1 }, personOnly: { value: -1 }, personBloodColor: { value: new THREE.Color(0.55, 0.05, 0.05) },
+    personTraits: { value: traitTexture }, personHidden: { value: -1 }, personOnly: { value: -1 }, personTwin: { value: -1 }, personBloodColor: { value: new THREE.Color(0.55, 0.05, 0.05) },
     personHeadBone: { value: headBone ?? 0 }, personHeadPivot: { value: headPivot }, personHeadMiddle: { value: new THREE.Vector2(face.top.y*0.5, face.top.z) }, personPullBones: { value: Object.keys(FACE_PULLS).map(name => boneByName.get(name) ?? -9) }, personPulls: { value: Object.values(FACE_PULLS).map(([[x, y, z], up]) => new THREE.Vector4(x, y, z, up).multiplyScalar(face.eyeHalf)) }, personChestBone: { value: chestBone }, personChestPivot: { value: chestPivot }, personArmBonesR: { value: armBonesR },
     personThighBones: { value: thighs ? new THREE.Vector4(thighBone, kneeBone, mirrorBone[thighBone], mirrorBone[kneeBone]) : new THREE.Vector4() },
     personHipRest: { value: thighs ? thighs.hip : new THREE.Vector3() }, personKneeRest: { value: thighs ? thighs.knee : new THREE.Vector3() },
@@ -1961,6 +1995,21 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   });
   // (and the spirits' hair and accessories: not clothes)
   const spiritWorn = makeSpiritWorn(spiritParts, wornLayers.filter(layer => layer.look !== 'skirt' && layer.look !== 'jeans').flatMap(layer => layer.styles).filter(style => style.mesh));
+  // (twins: each mesh again, shown and hidden with it, drawing its twin — see TWIN_GAP; nothing while nobody's a twin:
+  // copiesWanted, set by people.js)
+  const copiesWanted = { twins: false };
+  const copyOf = (source, look, capacity, byAttribute, own, kind) => {
+    const copy = makePersonMesh(source.geometry, { ...uniforms, personTwin: { value: 0 }, ...own }, look, capacity, byAttribute, { name: source.name + kind });
+    copy.instanceMatrix = source.instanceMatrix;
+    copy.visible = true;
+    copy.onBeforeRender = () => { copy.count = copiesWanted[kind] ? source.count : 0; };
+    source.add(copy);
+  };
+  const copiesOf = (source, look, capacity, byAttribute) => {
+    copyOf(source, look, capacity, byAttribute, { personTwin: { value: 1 } }, 'twins');
+  };
+  copiesOf(mesh, bodyLook, PEOPLE_MAX, false);
+  wornLayers.forEach(layer => layer.styles.forEach(style => { if (style.mesh) copiesOf(style.mesh, looks[layer.look], style.capacity, true); }));
   const gibs = buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm, wornLayers, uniforms, bodyLook, looks, traits, traitRows });
   root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
 
@@ -1969,10 +2018,11 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const middle = box.getCenter(new THREE.Vector3());
   personCulling.personCullSphere.value.set(middle.x, middle.y, middle.z, box.getSize(new THREE.Vector3()).length()*0.75);
   personCulling.personTall.value = box.max.y - box.min.y;
+  personCulling.personFloor.value = box.min.y;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, spirits, spiritWorn, spiritTalk, time: personCulling.personTime, wears, putOn, takeOff,
-    headBone: headBone ?? 0, headPivot, face, chestBone, hands, unitsPerMetre, floorY: geometry.boundingBox.min.y, gibs,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, spirits, spiritWorn, spiritTalk, copiesWanted, copyLook, time: personCulling.personTime, wears, putOn, takeOff,
+    headBone: headBone ?? 0, headPivot, face, chestBone, hands, unitsPerMetre, floorY: geometry.boundingBox.min.y, tall: box.max.y - box.min.y, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
 

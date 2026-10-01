@@ -2,7 +2,7 @@ import { S, App, buildingHolders } from '../../core/shared.js';
 import { Y_ROAD } from '../../core/scene.js';
 import { pointInPolygon } from '../../core/math.js';
 import { footprintBounds, wallsOf } from '../../buildings/footprints.js';
-import { isPedInDanger, voiceOfPerson } from '../people/people.js';
+import { isPedInDanger, twinReach, voiceOfPerson } from '../people/people.js';
 import { exclaim } from '../../audio/voices.js';
 import { puffSmoke, sparks, burnFx, igniteFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
@@ -92,11 +92,11 @@ export function runOverPeople(car, motion = null, inWay = null) {
   const near = !reachesAll && inWay?.near ? inWay.near(car.x, car.z, reach).map(k => inWay.list[k]) : null;
   (near ?? (reachesAll ? App.people : inWay ?? App.people.filter(inCarsWay))).forEach(p => {
     if (p.traits.ghost || (reachesAll ? Math.abs(p.y - Y_ROAD) > carHeight(car) : !inCarsWay(p))) return; // (checked again: someone knocked down by an earlier car this frame may have got up)
-    const dx = p.x - car.x, dz = p.z - car.z;
-    if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
+    const dx = p.x - car.x, dz = p.z - car.z, wide = isLying(p) ? 0 : twinReach(p); // (twins, standing: as wide as both — down, as one)
+    if (Math.abs(dx) > reach + wide || Math.abs(dz) > reach + wide) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
-    const under = isLying(p) ? lyingUnder(p, car, { halfLength, halfWidth }) : Math.abs(right) < halfWidth && Math.abs(forward) < halfLength;
-    const hit = under ? 'kill' : Math.abs(right) < clip.halfWidth && Math.abs(forward) < clip.halfLength ? 'knock' : null;
+    const under = isLying(p) ? lyingUnder(p, car, { halfLength, halfWidth }) : Math.abs(right) < halfWidth + wide && Math.abs(forward) < halfLength + wide;
+    const hit = under ? 'kill' : Math.abs(right) < clip.halfWidth + wide && Math.abs(forward) < clip.halfLength + wide ? 'knock' : null;
     if (hit) {
       // struck by it and knocked over (the hearted can't die of it: see ui/favorites.js), then hurt by its weight and speed
       const before = car.struck?.get(p);

@@ -59,6 +59,10 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   upsidedown: person => !!person?.traits?.upsidedown,
   spirits: person => !!person?.traits?.spirits, // (a ghost of them on each shoulder)
   spirit: person => !!person?.spiritOf, // (a shoulder spirit talking: see people/peopleSpiritChat.js — gold evil -1, purple evil 1)
+  twins: person => !!person?.traits?.twins, // (two of them, in step)
+  piper: person => !!person?.traits?.piper, // (little copies of them following behind)
+  mini: person => !!person?.miniOf, // (one of those little copies: see people/peopleMinis.js)
+  twin: person => !!person?.twinOf, // (a twin's other half talking to them: see people/peopleSpiritChat.js)
   ghost: person => !!person?.traits?.ghost, // (see-through, blue)
   bodiless: person => !!person?.traits?.bodiless, // (just a floating head)
   nude: person => !!person?.traits?.nude, // (no clothes, a censor over them)
