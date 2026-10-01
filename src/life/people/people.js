@@ -63,6 +63,8 @@ export const PERSON_WALK_SPEED = 1.4;   // world units per second at speed 1
 export const MOONWALK_FACING_FORWARD = true;
 /** How far a moonwalker faces round from the way they're going. */
 export const moonwalkTurn = p => p.traits.backwards && !MOONWALK_FACING_FORWARD ? Math.PI : 0;
+/** Bringing something up to their mouth: a snack, a drink, a cig, or a forkful (see eatingCues), so the head faces front. */
+const toMouth = p => p.snack?.up > 0 || !!p.clipA?.taps?.some(t => t.up && (p.idleTime % p.clipA.duration - t.up[0] + p.clipA.duration) % p.clipA.duration < t.up[1] - t.up[0]);
 /** How often, at least, the walkways are resampled to a point — for entrances and for re-seating people. */
 export const PEOPLE_NAV_SPACING = 4;
 S.peopleEnabled = false, S.peopleAmount = 300, S.peopleSpeed = 1, S.peopleSize = 1, S.showRoadsafetyDebug = false, S.showPeopleNavDebug = false, S.peopleFrozen = null;
@@ -1617,7 +1619,7 @@ export function updatePeople(t) {
           p.lookTiltTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TILT;
         }
         if (!p.lookAt && p.spiritGaze != null) { p.lookTurnTo = p.spiritGaze; p.lookTiltTo = 0; } // (to the spirit talking: see peopleSpiritChat.js)
-        if (possessed) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
+        if (possessed || toMouth(p)) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
         p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, fdt*4);
         p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, fdt*4);
         if (p.traits.twins) lookTwin(p, i, fdt, possessed);

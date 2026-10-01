@@ -262,7 +262,8 @@ function eatingCues(duration) {
     const at = EAT_FIRST + k*(EAT_MOUTHFUL + gap);
     cues.push({ time: at + EAT_DIP, cue: 'clink' });
     cues.push({ time: at + EAT_DIP + EAT_GATHER*0.85, cue: 'forkful' });
-    cues.push({ time: at + EAT_DIP + EAT_GATHER + EAT_LIFT + 0.1, cue: 'bite' });
+    // (`up`: the fork up from the plate till it's half back down, for the head to face front: see people.js)
+    cues.push({ time: at + EAT_DIP + EAT_GATHER + EAT_LIFT + 0.1, cue: 'bite', up: [at + EAT_DIP + EAT_GATHER, at + EAT_MOUTHFUL - EAT_LOWER/2] });
   }
   return cues;
 }
