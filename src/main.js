@@ -61,7 +61,7 @@ import './ui/ped-view.js';
 import './project/export-obj.js';
 import * as THREE from 'three';
 import { S } from './core/shared.js';
-import { scene, camera, renderer, skyDome, SKIP_OVER_WATER_AND_ROADS, blinkLights, refreshSceneIndex } from './core/scene.js';
+import { scene, camera, renderer, skyDome, sun, SKIP_OVER_WATER_AND_ROADS, blinkLights, refreshSceneIndex } from './core/scene.js';
 import { controls } from './core/camera-controls.js';
 import { mulberry32 } from './core/math.js';
 import { createWindowMaterial } from './buildings/windows.js';
@@ -75,7 +75,7 @@ import { loadCarriageModel, updateTrainShuttles, scaleNodeUi, nodeUiMaterial } f
 import { applyGrassNoiseShader } from './zones/surface-detail.js';
 import { applyPavingShader, loadFountainModel } from './zones/plazas.js';
 import { applyCropShader } from './zones/farmland.js';
-import { WATER_TIME, applyWaterShader, rebuildWater } from './water/water.js';
+import { WATER_TIME, WATER_SUN, applyWaterShader, rebuildWater } from './water/water.js';
 import { renderHierarchy, renderWorldTintPanel } from './ui/panels.js';
 import { applyModeVisibility } from './editor/tools.js';
 import { updateDayNight, syncSkyUI } from './sky/day-night.js';
@@ -188,6 +188,7 @@ function animate() {
   updateStreetlights();
   placeSunLight();
   WATER_TIME.value = t;
+  WATER_SUN.value.copy(sun.color).multiplyScalar(sun.intensity/(Math.PI*1.3)); // (1 at noon; the moon's faint light at night)
   refreshSceneIndex();
   updatePedView(t);
   fadeBuildingsAroundCamera(); // (a building the camera's inside or right up against fades out: see see-through.js)

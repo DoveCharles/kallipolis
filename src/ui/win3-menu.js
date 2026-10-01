@@ -17,6 +17,7 @@ import { openHeldDebug } from './held-debug.js';
 import { openMoodsDebug } from './moods-debug.js';
 import { openRestaurantsDebug } from './restaurants-debug.js';
 import { openSalonBotDebug } from './salonbot-debug.js';
+import { openWaterDebug } from './water-debug.js';
 import { people } from '../life/people/people.js';
 import { sendDiner } from '../life/people/peopleActivities.js';
 import { followPerson } from '../life/people/peopleTracking.js';
@@ -134,6 +135,7 @@ const MENUS = [
     { label:'Moods (debug)', key:'c', enabled:has('s-people', 'on'), run:openMoodsDebug },
     { label:'Salon Bot (debug)', key:'a', enabled:has('s-people', 'on'), run:openSalonBotDebug },
     { label:'Restaurants (debug)', key:'k', run:openRestaurantsDebug },
+    { label:'Water (debug)', key:'q', run:openWaterDebug },
     ...PRESETS.map(preset => ({ label:`Find ${preset.shortName} (debug)`, enabled:() => $('s-people').classList.contains('on') && people.length > preset.slot, run:() => followPerson(preset.slot) })),
     { label:'Fetch a Diner (debug)', key:'f', enabled:() => $('s-people').classList.contains('on') && roomKind() === 'restaurant', run:sendDiner },
   ]},
