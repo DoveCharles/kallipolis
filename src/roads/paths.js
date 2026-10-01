@@ -92,16 +92,36 @@ const PATH_COLOR_FRAGMENT = `
       d = min(d, length(pa - ba*h));
     }
     vec2 np = wp/uPathScale; // the noise, not the width, follows the texture scale
-    float coarse = pathNoise(np*0.3), grain = pathNoise(np*3.1);
-    // The edge wanders in and out a little. Across the fade beyond it, the sand breaks up grain by grain rather than
-    // blurring: fine noise is compared against how far into the fade each point is, so the grains thin out and
-    // scatter into the ground. (fadeT runs a little past 0..1 so the core stays solid and the far side fully clear.)
+    float coarse = pathNoise(np*0.3);
+    // Stylized: flat bands of tone rather than a smooth smear. The edge wanders a little, and past it the dirt breaks
+    // into crisp clumps (noise thresholded against how far into the fade each point is) instead of fading.
     float edge = uPathHalfWidth*(0.85 + 0.3*coarse);
     float fadeT = smoothstep(edge - uPathFade*0.5, edge + uPathFade*0.5, d)*1.3 - 0.15;
-    float speckle = 0.7*pathNoise(np*4.3) + 0.3*pathNoise(np*11.0);
-    float cover = 1.0 - smoothstep(speckle - 0.12, speckle + 0.12, fadeT);
-    vec3 sand = diffuseColor.rgb*(0.88 + 0.18*coarse)*(0.92 + 0.16*grain);
-    sand *= mix(1.05, 0.95, smoothstep(0.0, edge, d)); // trodden a little lighter down the middle
+    float clump = 0.65*pathNoise(np*2.2) + 0.35*pathNoise(np*6.0);
+    float aaC = max(fwidth(clump - fadeT), 1e-4);
+    float cover = 1.0 - smoothstep(-aaC, aaC, fadeT - clump);
+    // three tones from banded low-frequency noise, borders softened by a pixel
+    float n = 0.6*pathNoise(np*0.55) + 0.4*pathNoise(np*1.7 + 7.3);
+    float aaN = max(fwidth(n), 1e-4);
+    float tone = 0.9 + 0.1*smoothstep(0.42 - aaN, 0.42 + aaN, n) + 0.08*smoothstep(0.62 - aaN, 0.62 + aaN, n);
+    // a worn, lighter strip down the middle and a darker rim where it meets the ground
+    float rel = d/max(edge, 1e-3);
+    float aaR = max(fwidth(rel), 1e-4);
+    tone *= mix(1.06, 1.0, smoothstep(0.45 - aaR, 0.45 + aaR, rel));
+    tone *= mix(1.0, 0.86, smoothstep(0.82 - aaR, 0.82 + aaR, rel)*(1.0 - smoothstep(1.15, 1.35, rel)));
+    // scattered pebbles: flat dots in a jittered grid, some lighter, some darker, each with a little shadow below
+    vec2 pq = np*1.6, pc = floor(pq), pf = fract(pq);
+    float ph = pathHash(pc + 3.1);
+    if (ph < 0.35) {
+      vec2 c = 0.25 + 0.5*vec2(pathHash(pc + 11.7), pathHash(pc + 23.9));
+      float r = 0.07 + 0.07*pathHash(pc + 41.3);
+      float pd = length((pf - c)*vec2(1.0, 1.3)) - r;
+      float sd = length((pf - c - vec2(0.03, 0.035))*vec2(1.0, 1.3)) - r;
+      float aaP = max(fwidth(pd), 1e-4);
+      tone *= mix(0.8, 1.0, smoothstep(-aaP, aaP, sd));
+      tone = mix(tone, ph < 0.2 ? 1.2 : 0.82, 1.0 - smoothstep(-aaP, aaP, pd));
+    }
+    vec3 sand = diffuseColor.rgb*tone;
     diffuseColor = vec4(sand, diffuseColor.a*cover);
   }
 `;
