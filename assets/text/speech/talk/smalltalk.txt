@@ -212,6 +212,57 @@ What's that look for? {other.is = skeptical}
 > I'm thinking. {patience}
 >> Well, stop it. {aggression}
 
+Is that... you? On your shoulder? {other.is = spirits}
+> Which one? {is = spirits}
+> The purple one's a bad influence. {is = spirits, evil < 0}
+> Don't listen to the gold one. {is = spirits, evil > 0}
+>> I'm going to pretend I didn't see that. {shock}
+
+There's two little yous. On your shoulders. {other.is = spirits}
+> They follow me everywhere. {is = spirits, sad}
+> They're good company. {is = spirits}
+>> Do they talk?
+>>> Constantly.
+
+You've got this, [other.name]. {is = spirit, evil < 0}
+> Thanks, little me. {other.is = spirit}
+> Do I though? {other.is = spirit, sad}
+>> I believe in you.
+
+Go on. Do something bad. {is = spirit, evil > 0}
+> I really shouldn't. {other.is = spirit, evil < 0.5}
+> Way ahead of you. {other.is = spirit, evil > 0.5}
+>> That's my [other.name].
+
+Don't listen to the purple one. {is = spirit, evil < 0}
+> Which one's purple? {other.is = spirit}
+> Too late. {other.is = spirit, evil > 0.5}
+>> Ugh.
+
+Who asked you? {is = spirit, evil > 0, other.is = spirit}
+> Somebody has to be the sensible one. {is = spirit, evil < 0}
+>> Boring.
+
+Which of you do I listen to? {other.is = spirit}
+> Me. {is = spirit}
+>> That's what the other one said.
+
+Violence is never the answer. {pacifist}
+> Tell that to the last guy who hit me. {aggression}
+> Agreed. {pacifist}
+>> Peace, friend.
+
+Are you... dead? {other.is = ghost}
+> Not as far as I know. {is = ghost}
+> Whooo. {is = ghost, goofy}
+> Unfinished business. {is = ghost, evil > 0}
+>> I can see through you. {shock}
+
+Where's the rest of you? {other.is = bodiless}
+> Down here somewhere. {is = bodiless}
+> Travelling light. {is = bodiless, happy}
+>> How do you even eat? {shock}
+
 What's up with your face? {other.is = goofy}
 > Whuh? {is = goofy}
 > Nothing's up with my face. {aggression}

@@ -9,6 +9,7 @@ import { fitSkirt } from './skirtFit.js';
 import { fitJeans } from './jeansFit.js';
 import { OUTFITS, OUTFIT_ARM, OUTFIT_CHEST, OUTFIT_COLUMNS, OUTFIT_COLUMN_COUNT, OUTFIT_LEG, OUTFIT_TILES, buildOutfitTexture, pickOutfit } from './outfits.js';
 import { makeCensorMesh } from './peopleCensor.js';
+import { makeSpiritMeshes, makeSpiritWorn, SPECTRAL } from './peopleSpirits.js';
 import { HEADSHOT_LAYER, PEOPLE_MAX, people, peopleMesh, setPersonModel } from './people.js';
 
 // =========================================== PEOPLE MODEL ===========================================
@@ -504,6 +505,10 @@ const FACE_PULL_EYES = 12, FACE_PULL_COUNT = Object.keys(FACE_PULLS).length;
 export const HAIR_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Hair'); // (its fourth number the headsize trait)
 const SKIN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Skin'), EYES_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Eyes'), BLOOD_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Blood');
 const NUDE_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Cuff');
+// (its fourth number bits: 1 spirits, 2 ghost, 4 bodiless — see peopleSpirits.js and personBodiless)
+export const SPIRITS_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('Glasses');
+const BODILESS_DROP = 0.35, BODILESS_BOB = 0.04, BODILESS_BOB_RATE = 2; // × the model's height; radians a second
+const BODILESS_SIT_RISE = 0.3; // how much less it drops sat all the way down (SPIRITS_ROW .w's fraction: see people.js), × the model's height
 // the censor's ends (see peopleCensor.js): down the thigh from the hip, × hip-to-knee; a man's up to the stomach, × hip-to-shoulder;
 // a woman's to below the shoulder, down from it × hip-to-shoulder
 const CENSOR_THIGH = 0.3, CENSOR_STOMACH = 0.45, CENSOR_SHOULDER = 0.1;
@@ -561,6 +566,7 @@ const PERSON_LAYER_PIXELS = 5;
 const personCulling = {
   personViewPos: { value: new THREE.Vector3() }, personViewScale: { value: new THREE.Vector2() },
   personCullSphere: { value: new THREE.Vector4(0, 1, 0, 1) }, personTall: { value: 1 },
+  personTime: { value: 0 }, // seconds, for bobbing (set by updatePeople)
 };
 const drawingBuffer = new THREE.Vector2();
 // (the same, kept on this side for updatePeople: the last frame's view, see personPixels)
@@ -813,6 +819,18 @@ const PERSON_VERTEX_PARS = `
   uniform vec2 personViewScale; // x: pixels per metre (a metre off, if y: a perspective view)
   uniform float personTall; // (in the model's units)
   bool personRough = false; // (see PERSON_ROUGH_PIXELS)
+  uniform float personTime;
+  // (.w: the bits, plus how far sat down as the fraction)
+  int personSpectral() { return int(texelFetch(personTraits, ivec2(personIndex(), ${SPIRITS_ROW}), 0).w); }
+  // 0 to 1 and back, each person out of step
+  float personBob(float rate, float phase) { return 0.5 + 0.5*sin(personTime*rate + float(personIndex())*1.7 + phase); }
+  // the bodiless trait: all but the head folded away, the head dropped and bobbing
+  vec3 personBodiless(vec3 posed) {
+    if ((personSpectral() & ${SPECTRAL.bodiless}) == 0) return posed;
+    if (personVertex.x < 0.5) return vec3(0.0);
+    float sat = fract(texelFetch(personTraits, ivec2(personIndex(), ${SPIRITS_ROW}), 0).w);
+    return posed - vec3(0.0, personTall*(${BODILESS_DROP.toFixed(3)} - ${BODILESS_SIT_RISE.toFixed(3)}*sat + ${BODILESS_BOB.toFixed(3)}*personBob(${BODILESS_BOB_RATE.toFixed(2)}, 0.0)), 0.0);
+  }
   // the bone that moves this vertex most
   float personMainJoint() {
     float joint = personJoints.x, most = personWeights.x;
@@ -994,6 +1012,8 @@ function injectPersonShader(shader, uniforms, look) {
       ${hide}
       ${lashes}
       ${hideHead}
+      transformed = personBodiless(transformed);
+      if ((personSpectral() & ${SPECTRAL.ghost}) != 0) transformed = vec3(0.0); // (drawn see-through instead: peopleSpirits.js)
       if (personOnly >= 0 && personIndex() != personOnly) transformed = vec3(0.0);
       ${color}
       ${splotched ? `vPersonBlood = vec2(${bloodOver}, float(personIndex()));` : ''}
@@ -1905,10 +1925,18 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   geometry.setAttribute('instanceLook', look);
   geometry.setAttribute('instanceEyes', eyes);
   geometry.setAttribute('instancePupil', pupil);
+  const spiritTalk = dynamicInstanceAttribute(PEOPLE_MAX, 2); // (the spirits' mouths: see peopleSpirits.js, peopleSpiritChat.js)
+  geometry.setAttribute('instanceSpirit', spiritTalk);
   const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
   // (the nude trait's censor, pelvis to chest: see peopleCensor.js)
   const censor = makeCensorMesh({ vertexPars: PERSON_VERTEX_PARS, uniforms, anim, body: mesh, nudeRow: NUDE_ROW, skinRow: SKIN_ROW, headshotLayer: HEADSHOT_LAYER,
     rest: { ...censorRest, tall: geometry.boundingBox.max.y - geometry.boundingBox.min.y } });
+  // (the spirits trait's shoulder ghosts: see peopleSpirits.js)
+  const spiritParts = { vertexPars: PERSON_VERTEX_PARS, uniforms, geometry, body: mesh, headshotLayer: HEADSHOT_LAYER,
+    shoulder: bones[boneByName.get('ShoulderL')].getWorldPosition(new THREE.Vector3()), idle: clips.find(c => c.name === 'Idle'), fps: PERSON_BAKE_FPS,
+    slots: { white: PERSON_SLOTS.indexOf('White'), dark: ['Black', 'Eyelash1', 'Eyelash2', 'Eyelash3', 'Lips'].map(slot => PERSON_SLOTS.indexOf(slot)),
+      lashes: PERSON_LASHES.map(part => PERSON_SLOTS.indexOf(part)), femaleOnly: PERSON_FEMALE_ONLY.map(part => PERSON_SLOTS.indexOf(part)), lashRow: PERSON_CLOTHING_ROW } };
+  const spirits = makeSpiritMeshes(spiritParts);
   const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair'), 1: traitRow('Hat') }, femaleOnly: [] };
   const glassesLook = { palette: hairPalette, traitColors: { 0: traitRow('Glasses') }, femaleOnly: [] };
   const looks = { hair: hairLook, glasses: glassesLook, skirt: { palette: [new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Skirt') }, femaleOnly: [], clearThighs: !!thighs },
@@ -1931,6 +1959,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     style.mesh = makePersonMesh(style.geometry, uniforms, look, style.capacity, true);
     style.mesh.count = style.members.length;
   });
+  // (and the spirits' hair and accessories: not clothes)
+  const spiritWorn = makeSpiritWorn(spiritParts, wornLayers.filter(layer => layer.look !== 'skirt' && layer.look !== 'jeans').flatMap(layer => layer.styles).filter(style => style.mesh));
   const gibs = buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm, wornLayers, uniforms, bodyLook, looks, traits, traitRows });
   root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
 
@@ -1941,7 +1971,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   personCulling.personTall.value = box.max.y - box.min.y;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, wears, putOn, takeOff,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, spirits, spiritWorn, spiritTalk, time: personCulling.personTime, wears, putOn, takeOff,
     headBone: headBone ?? 0, headPivot, face, chestBone, hands, unitsPerMetre, floorY: geometry.boundingBox.min.y, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

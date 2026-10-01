@@ -859,7 +859,7 @@ let reach = PUNCH_REACH*S.peopleSize;
  * @returns {boolean} whether they're fair game
  */
 export const isFairGame = q => (q.mode === 'line' || q.mode === 'wander') && !q.act && !q.fright && !q.stun && !q.please && !q.jc && !q.crossStage
-  && !q.attack && !q.punched && !q.oneShot;
+  && !q.attack && !q.punched && !q.oneShot && !q.traits.ghost; // (ghosts neither throw nor take punches)
 /**
  * Let everyone who might pick a fight this frame think about it.
  * @param {number} dt - seconds since the last frame
@@ -882,6 +882,7 @@ export function pickFights(dt) {
  * @returns {void}
  */
 export function throwPunch(dt, p, isForced, forcedVictim) {
+  if (p.traits.pacifist) return; // (never throws one, even when called for)
   const { aggression } = p.traits;
   dt = isForced? p.punchCooldown : dt; //force punch roll if forced
   if ( !isForced && (aggression-1 <= 0 || (p.punchCooldown -= dt*aggression/3) > 0 || !isFairGame(p))) return;
@@ -1121,7 +1122,7 @@ const UNREACHABLE_MODES = ['dead', 'none', 'indoors', 'train', 'drowning'];
  * @param {Person} q - the person
  * @returns {boolean} whether a blow would land
  */
-export const canBeKnockedOver = q => !UNREACHABLE_MODES.includes(q.mode) && !q.water && (!q.punched || q.punched.stage === 'marked' || q.punched.stage === 'brace');
+export const canBeKnockedOver = q => !UNREACHABLE_MODES.includes(q.mode) && !q.water && !q.traits.ghost && (!q.punched || q.punched.stage === 'marked' || q.punched.stage === 'brace');
 
 /**
  * Knock someone over as if they'd been punched, by whatever is at `from` ({ x, z }): flat on their back, facing it, out

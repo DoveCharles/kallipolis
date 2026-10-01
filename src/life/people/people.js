@@ -19,7 +19,9 @@ import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
 import { controlInput, possession, rushed } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
-import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GOOFY_ROW, HAIR_ROW, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, SKEPTICAL_ROW, WELLING_ROW, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, PUPIL_MAX_X, PUPIL_MAX_Y, personPixels } from './peopleModel.js';
+import { SPECTRAL } from './peopleSpirits.js';
+import { updateSpiritChat } from './peopleSpiritChat.js';
+import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GOOFY_ROW, HAIR_ROW, SPIRITS_ROW, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, SKEPTICAL_ROW, WELLING_ROW, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, PUPIL_MAX_X, PUPIL_MAX_Y, personPixels } from './peopleModel.js';
 import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
@@ -603,7 +605,8 @@ const redOf = p => Math.min(1, p.traits.fuming + HUFFING_RED*p.traits.huffing);
 // The traits that have a say in the skin, as one number, for telling when one of them has changed (see tintSkin).
 const skinKeyOf = p => (p.traits.sick ? 1 : 0) + (p.traits.zombie ? 2 : 0) + (p.traits.vampire ? 4 : 0)
   + 8*Math.round(redOf(p)*100) + 808*Math.round(p.traits.blushing*100) + 81608*Math.round(p.traits.freezing*100) + 8242408*(p.traits.upsidedown ? 1 : 0)
-  + 16484816*Math.round(p.traits.skeptical*100) + 1664966416*Math.round(p.traits.goofy*100) + 17e12*Math.round(p.traits.welling*100);
+  + 16484816*Math.round(p.traits.skeptical*100) + 1664966416*Math.round(p.traits.goofy*100) + 17e12*Math.round(p.traits.welling*100) + 2e15*spectralOf(p);
+const spectralOf = p => Object.entries(SPECTRAL).reduce((bits, [trait, bit]) => bits | (p.traits[trait] ? bit : 0), 0);
 /**
  * Write the skin someone's traits give them to the person model: the colour they came with, moved towards the grey a
  * vampire's age pales it to and, all the way, the colour of the sick and zombie traits (see SICK_SKIN_COLOR) or, part way, the
@@ -637,6 +640,7 @@ function tintSkin(p, i) {
   data[(SKEPTICAL_ROW*PEOPLE_MAX + i)*4 + 3] = p.traits.skeptical; // (and their face pulled, 🤔 🥴: see FACE_PULLS)
   data[(GOOFY_ROW*PEOPLE_MAX + i)*4 + 3] = p.traits.goofy;
   data[(WELLING_ROW*PEOPLE_MAX + i)*4 + 3] = p.traits.welling; // (and the glint in their eyes, 🥺: see GLINT_GLSL)
+  data[(SPIRITS_ROW*PEOPLE_MAX + i)*4 + 3] = spectralOf(p) + (p.bodilessSat ?? 0); // (spirits, ghost, bodiless: see peopleSpirits.js; and how far sat, below)
   personModel.traitTexture.needsUpdate = true;
   if (p.blood && p.bloodBase) { p.bloodBase.Skin = [skin.r, skin.g, skin.b]; return; } // (blood's to stain from: see peopleBlood.js)
   data[o] = skin.r; data[o + 1] = skin.g; data[o + 2] = skin.b;
@@ -862,6 +866,7 @@ const SAY_AHEAD = 0.1;
 const FLEE_TALK_AGAIN = 12, FLEE_TALK_WITHIN = 2; // seconds before someone who's fled calls out again as they start another
 // flight, and how long after bolting they'll still call out (waiting for a turn to speak: see shoutLine)
 export function beginFleeing(p, from) {
+  if (p.traits.ghost) return;
   p.fright = { stage: 'flee', timer: FLEE_TIME, from };
   // (something called out as they bolt, from fleeing.txt — not every time, for those who keep running: see the talk below)
   const fleeNow = performance.now()/1000;
@@ -915,7 +920,7 @@ function hideFromSun(p) {
   } else {
     beginFleeing(p, { x: p.x - Math.sin(p.heading), z: p.z - Math.cos(p.heading) });
   }
-  p.fright.sun = true;
+  if (p.fright) p.fright.sun = true; // (not for a ghost: see beginFleeing)
 }
 /** How much faster than fleeing a vampire runs for cover from the sun. */
 const SUN_RUN_BOOST = 1.5;
@@ -1023,7 +1028,7 @@ export function hairColorOf(p) {
 }
 function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = null, cause = 'smited') {
   const p = people[i];
-  if (!p || (isGone(p) && !inRoom(p)) || isFavoritePerson(p.id) || p.punched?.revive) return; // (the hearted can't be killed: see ui/favorites.js; nor can the shaking, see below)
+  if (!p || (isGone(p) && !inRoom(p)) || isFavoritePerson(p.id) || p.traits.ghost || p.punched?.revive) return; // (the hearted and ghosts can't be killed: see ui/favorites.js; nor can the shaking, see below)
   if (canRespawn(p) && reviveInstead(p, source ?? (momentum ? { x: p.x - momentum.x, z: p.z - momentum.z } : null))) return;
   // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
   App.recordMoralityEvent?.(`${standingOf(p)} peds killed by ${by === 'car' ? 'cars' : 'player'}`, p.name);
@@ -1143,7 +1148,7 @@ const PUSH_DECAY = 6; // per second: how fast a push slows, so it covers its dis
  */
 function pushPerson(p, dirX, dirZ, distance) {
   const len = Math.hypot(dirX, dirZ);
-  if (len < 1e-6 || distance <= 0) return;
+  if (len < 1e-6 || distance <= 0 || p.traits.ghost) return; // (nothing shoves a ghost)
   const speed = distance*PUSH_DECAY/len; // (the distance covered is the starting speed over the decay rate)
   p.push = { x: (p.push?.x ?? 0) + dirX*speed, z: (p.push?.z ?? 0) + dirZ*speed };
 }
@@ -1187,7 +1192,7 @@ export function updatePeople(t) {
   if (followed >= 0 && (!S.peopleEnabled || S.interactionMode !== 'move')) stopFollowingPerson();
   if (followedInside && !App.isInsideBuilding()) stopFollowingPerson(); // (picked in a room since left)
   peopleMesh.visible = S.peopleEnabled && !personModel;
-  if (personModel) { [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; }); personModel.censor.visible = S.peopleEnabled; }
+  if (personModel) { [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; }); personModel.censor.visible = S.peopleEnabled; [...personModel.spirits, ...personModel.spiritWorn].forEach(m => { m.visible = S.peopleEnabled; }); personModel.time.value = performance.now()/1000; }
   peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
   if (!S.peopleEnabled) { showPassengers(); showInhabitants(); updateFlies(0); return; }
   pruneGone(people, t, forgetLinesExcept); // (relations and recent lines of the gone)
@@ -1236,6 +1241,7 @@ export function updatePeople(t) {
   setIndoorsCount(people.reduce((n, p) => n + (p.mode === 'indoors' ? 1 : 0), 0));
   if (personModel) {
     personModel.mesh.count = personModel.censor.count = people.length;
+    personModel.spirits.forEach(m => { m.count = people.length; });
     personModel.hair.forEach(style => { style.mesh.count = countBelow(style.members, people.length); });
     updateGroups(dt);
     meetOnWalkways(dt);
@@ -1265,6 +1271,10 @@ export function updatePeople(t) {
     if (personModel && !!p.traits.nude !== !!p.nudeDressed) { p.nudeDressed = !!p.traits.nude; personModel.setNude(i, p.id, p.nudeDressed); } // (see peopleCensor.js)
     if (personModel && p.headDrawn !== p.traits.headsize) { p.headDrawn = p.traits.headsize; personModel.traitData[(HAIR_ROW*PEOPLE_MAX + i)*4 + 3] = p.headDrawn; personModel.traitTexture.needsUpdate = true; } // (see personLook)
     if (p.traits.nude && (p.mode === 'line' || p.mode === 'wander') && (p.nudeSeenIn = (p.nudeSeenIn ?? 0) - dt) <= 0) { witness(p, 'nude'); p.nudeSeenIn = NUDE_SEEN_EVERY; }
+    if (personModel && p.traits.bodiless) { // (sat down, a bodiless head floats higher: see personBodiless in peopleModel.js)
+      const sat = Math.round(Math.min(0.95, sitWeight(p) + GRASS_SITS.reduce((w, name) => w + weightOf(p, personModel.clips[name]), 0))*20)/20;
+      if (sat !== (p.bodilessSat ?? 0)) { p.bodilessSat = sat; personModel.traitData[(SPIRITS_ROW*PEOPLE_MAX + i)*4 + 3] = spectralOf(p) + sat; personModel.traitTexture.needsUpdate = true; }
+    }
     if (!p.pocketsStocked) stockPockets(p, i); // (the sunglasses they came in: see life/gifts.js)
     if (p.blood) updateBlood(p, dt, i);
     if (p.traits.crazy > 0 || p.crazyShift) updateCrazy(p, dt);
@@ -1275,6 +1285,7 @@ export function updatePeople(t) {
     if (possessed) possession.alwaysForward = rushed(p); // (W and Shift held for good)
     if (p.push) stepPush(p, dt);
     if (possessed) p.fright = p.stun = p.please = null;
+    else if (p.traits.ghost) p.fright = p.stun = null; // (nothing frightens or stuns a ghost)
     if (p.fright) updateFright(p, dt);
     // terrified: never stop fleeing — each flee ended starts another, from just behind them, so they carry on the way they were going
     if (p.traits.terrified && (p.mode === 'line' || p.mode === 'wander') && !p.fright && !p.punched && !inWater(p)) beginFleeing(p, { x: p.x - Math.sin(p.heading), z: p.z - Math.cos(p.heading) });
@@ -1574,6 +1585,7 @@ export function updatePeople(t) {
           p.lookTurnTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TURN*reach;
           p.lookTiltTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TILT;
         }
+        if (!p.lookAt && p.spiritGaze != null) { p.lookTurnTo = p.spiritGaze; p.lookTiltTo = 0; } // (to the spirit talking: see peopleSpiritChat.js)
         if (possessed) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
         p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, fdt*4);
         p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, fdt*4);
@@ -1660,6 +1672,9 @@ export function updatePeople(t) {
       if (p.choosing && (!possessed || !S.dialogueChoices || p.group?.talk !== p.choosing.talk)) p.choosing = null;
       if (possessed) ownLine(p, p.saying ?? babbling, p.choosing);
       else if (bubbleSide && (p.saying || babbling || thinking || hasBubble(p))) speechBubble(p, bubbleAt(p), p.saying ?? babbling ?? thinking);
+      // (on their own with spirits: talking with them — see peopleSpiritChat.js)
+      if (p.traits.spirits || p.spiritChat?.on) updateSpiritChat(p, i, dt, { free: !group && !possessed && !aaaing && !fleeing && !frozen && !p.fleeTalkUntil && isDrawn(p),
+        voice: voiceOf(p, i), head: { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, bubble: bubbleSide && !possessed ? bubbleAt(p) : null, mouths: personModel?.spiritTalk.array });
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape
       else if ((frozen && !prays) || fleeing || scaredByBlood) p.talkTo = frozen && !prays ? 1 : scaredByBlood ? 0.3 + 0.7*fear : 0.55; // (blood, the more of it the wider)
@@ -1738,6 +1753,7 @@ export function updatePeople(t) {
 
   if (personModel) {
     [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; part.pupil.needsUpdate = true; });
+    personModel.spiritTalk.needsUpdate = true;
     updateHeld(); // (whatever anyone's holding, from where their hands ended up)
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;

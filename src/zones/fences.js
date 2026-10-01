@@ -80,8 +80,9 @@ export function fenceMeshList() {
 }
 function gridOf() {
   if (fenceGrid) return fenceGrid;
+  const meshes = fenceMeshList(); // (first: dropping a mesh gone from the scene clears fenceGrid)
   fenceGrid = new Map();
-  fenceMeshList().forEach(mesh => mesh.userData.fencePieces.forEach(piece => {
+  meshes.forEach(mesh => mesh.userData.fencePieces.forEach(piece => {
     const x0 = Math.floor(Math.min(piece.a.x, piece.b.x)/FENCE_CELL), x1 = Math.floor(Math.max(piece.a.x, piece.b.x)/FENCE_CELL);
     const z0 = Math.floor(Math.min(piece.a.z, piece.b.z)/FENCE_CELL), z1 = Math.floor(Math.max(piece.a.z, piece.b.z)/FENCE_CELL);
     for (let cx=x0;cx<=x1;cx++) for (let cz=z0;cz<=z1;cz++) {

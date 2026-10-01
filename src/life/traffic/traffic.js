@@ -244,7 +244,7 @@ export function updateTraffic(t) {
     const reach = DETONATION_REACH*S.peopleSize*blast.scale;
     App.people.forEach(p => { // (thrown clear of it, if it kills them)
       const dx = p.x - blast.x, dz = p.z - blast.z, d = Math.hypot(dx, dz);
-      if (!p.indoors && d <= reach && Math.abs(p.y - blast.y) <= reach) hits.push([p, blastDamageAt(blast.scale, d, reach), { by: 'player', cause: 'exploded', momentum: { x: dx/(d || 1)*BLAST_THROW, y: 0, z: dz/(d || 1)*BLAST_THROW } }]);
+      if (!p.indoors && !p.traits.ghost && d <= reach && Math.abs(p.y - blast.y) <= reach) hits.push([p, blastDamageAt(blast.scale, d, reach), { by: 'player', cause: 'exploded', momentum: { x: dx/(d || 1)*BLAST_THROW, y: 0, z: dz/(d || 1)*BLAST_THROW } }]);
     });
     App.blastBees?.(blast, reach);
     forCarsNear(blast.x, blast.z, reach, other => {
@@ -285,7 +285,7 @@ export function updateTraffic(t) {
  * @returns {void}
  */
 function knockedIntoWater(car, knocked, dt) {
-  if (car.traits?.aqua) { updateFloating(car, dt); return; }
+  if (car.traits?.aqua || car.traits?.ghost) { updateFloating(car, dt); return; }
   if (!car.kick || goingUnder(car) || !overOpenWater(car.x, car.z)) return;
   startSinking(car);
   car.speed = knocked ? knocked.x*Math.sin(car.heading) + knocked.z*Math.cos(car.heading) : 0;

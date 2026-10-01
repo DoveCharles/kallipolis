@@ -171,7 +171,7 @@ function rising(p, i, dt) {
  */
 function goUnder(p, i) {
   const w = p.water;
-  if (isFavoritePerson(p.id)) { climbOut(p); return; }
+  if (isFavoritePerson(p.id) || p.traits.ghost) { climbOut(p); return; }
   if (canRespawn(p) && respawnOnBank(p)) return;
   if (possession.index === i) { p.mode = 'drowning'; unpossessPerson(); } // (let go without being put back on a walkway: see unpossessPerson)
   endActivity(p);

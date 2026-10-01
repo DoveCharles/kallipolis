@@ -141,7 +141,7 @@ export function driveByHand(car, dt) {
   hitBuildings(car, was, dt);
   smashFences(car);
   if (Math.abs(car.speed) > 0.3) runOverPeople(car);
-  if (car.traits?.aqua) updateFloating(car, dt);
+  if (car.traits?.aqua || car.traits?.ghost) updateFloating(car, dt); // (a ghost car floats over water too)
   else if (overOpenWater(car.x, car.z)) startSinking(car);
 }
 /**

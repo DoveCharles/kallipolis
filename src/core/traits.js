@@ -75,6 +75,10 @@ export const TRAITS = {
   legendary: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as legendary
   terrible: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as terrible
   headsize: { base: 1, min: 0.01, max: 20 }, // multiplies the head (hair and all), scaled about the neck (see personLook in life/people/peopleModel.js)
+  spirits: { base: 0, min: 0, max: 1, combine: 'on' }, // a small ghost of them bobbing on each shoulder, gold on the right, purple on the left (life/people/peopleSpirits.js)
+  ghost: { base: 0, min: 0, max: 1, combine: 'on' }, // see-through and blue, bobbing (life/people/peopleSpirits.js); can't be hurt or killed (killPerson, core/health.js damage), cars pass through and don't wait (traffic/collisions.js, lanes.js), blasts, shoves, fright and stun pass them by, never punches or is punched (isFairGame), climbs out of water; cars: drawn see-through blue (makeCarGhost in life/traffic/materials.js), no hitting people, cars or walls, never shoved, float over water (life/traffic/collisions.js, driving.js)
+  bodiless: { base: 0, min: 0, max: 1, combine: 'on' }, // no body: just the head, dropped and bobbing (personBodiless in life/people/peopleModel.js)
+  pacifist: { base: 0, min: 0, max: 1, combine: 'on' }, // never punches or hunts, nor can be made to, possessed included (throwPunch, peopleBlood.js hunt, peopleTracking.js punchFromPossession)
   nude: { base: 0, min: 0, max: 1, combine: 'on' }, // no clothes, never changes into any; a mosaic censor over them (life/people/peopleCensor.js)
   smells: { base: 0, min: 0, max: 1, combine: 'on' }, //people keep clear and leave circles it sits in (life/people/peopleSmell.js); cars pull over to let it by (life/traffic/pullover.js)
   respawn: {base: 0, min: 0, max: 1, combine: 'on'}, //resist death one time: the body stays whole (a car still explodes), shakes, then lightning revives it (see life/revive.js)
@@ -105,6 +109,7 @@ export const TRAITS = {
 // the same way. Written as the text that goes inside [brackets]; edit the string to change what a shorthand brings. The
 // shorthand's own trait stays on the thing, so code can tell what it is. Shorthands are not expanded inside each other.
 export const TRAIT_MACROS = {
+  ghost: 'pacifist',
   vampire: 'agemult = 4.5, evil = 0.5, ageless, aggression = 50, speed = 1.2, bloodlust, dodge = 0.5, limit = 1a, respawn',
 };
 

@@ -112,11 +112,11 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
   if (paintUniform) shader.uniforms.instanceCarPaint = paintUniform;
   if (paintUniform) shader.uniforms.instanceCarWheel = { value: new THREE.Vector4(0, 0, 0, 0) }; // (not Vector4()'s w = 1, which would roll the body a radian)
   if (paintUniform) shader.uniforms.instanceCarHolo = { value: new THREE.Vector4() }; // (a thumbnail never shows the holo sheen or rust spots)
-  if (paintUniform) shader.uniforms.instanceCarRust = { value: new THREE.Vector2() };
+  if (paintUniform) shader.uniforms.instanceCarRust = { value: new THREE.Vector3() };
   if (plateUniform) shader.uniforms.instanceCarPlate = plateUniform;
   const paintDecl = paintUniform
-    ? 'uniform vec3 instanceCarPaint;\nuniform vec4 instanceCarWheel;\nuniform vec4 instanceCarPlate;\nuniform vec4 instanceCarHolo;\nuniform vec2 instanceCarRust;'
-    : 'attribute vec3 instanceCarPaint;\nattribute vec4 instanceCarWheel;\nattribute vec4 instanceCarPlate;\nattribute vec4 instanceCarHolo;\nattribute vec2 instanceCarRust;';
+    ? 'uniform vec3 instanceCarPaint;\nuniform vec4 instanceCarWheel;\nuniform vec4 instanceCarPlate;\nuniform vec4 instanceCarHolo;\nuniform vec3 instanceCarRust;'
+    : 'attribute vec3 instanceCarPaint;\nattribute vec4 instanceCarWheel;\nattribute vec4 instanceCarPlate;\nattribute vec4 instanceCarHolo;\nattribute vec3 instanceCarRust;';
   const plateDecl = 'varying vec3 vCarPlateUv;\nflat varying vec4 vCarPlate;';
   const holoVaryingDecl = 'varying vec4 vCarHolo;\nvarying vec2 vCarRust;\nvarying vec3 vHoloPos;\nvarying float vCarPainted;';
   const holoFns = `
@@ -303,6 +303,7 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       transformed = carWheelTurn(transformed - carWheel.xyz) + carWheel.xyz;
       transformed = carBodySway(transformed, true);
+      if (instanceCarRust.z > 0.5) transformed = vec3(0.0); // (a ghost car: drawn by its ghost mesh instead, see makeCarGhost)
       vCarColor = carSlot > 0.5 && carSlot < 1.5 ? instanceCarPaint : carColor;
       // whether this fragment is the paintable CarCol slot (instanceCarPaint above) or keeps its own baked colour
       // regardless of the car — see carFoilTint, which only has a car colour to work from in the first case
@@ -311,7 +312,7 @@ function injectCarShader(shader, glowUniform, paintUniform, plateUniform, isGlas
       vCarPlate = instanceCarPlate;
       // the holo sheen and rust spots only ever play on the body (paintable or not) — never lights, plate or glass
       vCarHolo = ${isGlass ? 'vec4(0.0)' : 'carSlot < 1.5 ? instanceCarHolo : vec4(0.0)'};
-      vCarRust = ${isGlass ? 'vec2(0.0)' : 'carSlot < 1.5 && carWheel.w < 0.5 ? instanceCarRust : vec2(0.0)'}; // (and never the wheels)
+      vCarRust = ${isGlass ? 'vec2(0.0)' : 'carSlot < 1.5 && carWheel.w < 0.5 ? instanceCarRust.xy : vec2(0.0)'}; // (and never the wheels)
       vHoloPos = position;
       vCarEmissive = ${CAR_SLOT_NAMES.map((name, k) => CAR_GLOW_MATERIALS[name] ? glowTerm(name, k + 1) : '').join('')}vec3(0.0);`);
   shader.fragmentShader = shader.fragmentShader
@@ -383,9 +384,17 @@ export function makeCarMesh(design) {
   const holo = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*4), 4); // [strength, kind, seed, heading] — a legendary car's foil/polychrome sheen (see carHoloOf, applyCarHolo); heading is written fresh each frame, the rest cached
   holo.setUsage(THREE.DynamicDrawUsage);
   design.geometry.setAttribute('instanceCarHolo', holo);
-  const rust = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*2), 2); // [strength, seed] — a terrible car's rust spots (see carRustOf, applyCarRust)
+  const rust = new THREE.InstancedBufferAttribute(new Float32Array(TRAFFIC_MAX*3), 3); // [strength, seed] — a terrible car's rust spots (see carRustOf, applyCarRust); then 1 for a ghost car (see makeCarGhost: its own attribute would pass the 16 a shader may have)
   rust.setUsage(THREE.DynamicDrawUsage);
   design.geometry.setAttribute('instanceCarRust', rust);
+  // (its shadow: none for a ghost car)
+  mesh.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  mesh.customDepthMaterial.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 instanceCarRust;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nif (instanceCarRust.z > 0.5) transformed = vec3(0.0);');
+  };
+  mesh.customDepthMaterial.customProgramCacheKey = () => 'car-depth';
+  makeCarGhost(design, mesh);
   mesh.count = 0;
   mesh.frustumCulled = false;
   mesh.castShadow = true; mesh.receiveShadow = true;
@@ -397,4 +406,44 @@ export function makeCarMesh(design) {
     wheelRadius: design.wheelRadius, wheelbase: design.wheelbase,
     name: design.name, bodyColor: design.bodyColor, // (null where the design is repainted per car)
     thumbMesh: thumb.mesh, thumbCamera: thumb.camera, thumbPaint: thumb.paint, thumbPlate: thumb.plate };
+}
+
+// ---- ghost cars (the ghost trait, as a ghost person's: life/people/peopleSpirits.js): flat light blue, see-through as a
+// whole (a depth-only twin drawn first, so overlapping parts don't build up; both after everything else), bobbing, the
+// lights and plates paler. Children of the design's mesh, sharing its instances; the mesh itself leaves them out.
+const GHOST_COLOR = 0x8fd4ff, GHOST_OPACITY = 0.45, GHOST_BOB = 0.06, GHOST_BOB_RATE = 1.8; // bob × the design's height, radians a second
+const GHOST_DEPTH_ORDER = 1000;
+function makeCarGhost(design, carMesh) {
+  const params = {
+    uniforms: { carGhostTime: carHoloTimeUniform, carGhostColor: { value: new THREE.Color(GHOST_COLOR) } },
+    side: THREE.DoubleSide, transparent: true, depthWrite: false,
+    vertexShader: `
+      attribute float carSlot;
+      attribute vec3 instanceCarRust; // (z: a ghost car)
+      uniform float carGhostTime;
+      varying float vGhostShade;
+      void main() {
+        if (instanceCarRust.z < 0.5) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+        float bob = ${(GHOST_BOB*design.height).toFixed(4)}*(0.5 + 0.5*sin(carGhostTime*${GHOST_BOB_RATE.toFixed(2)} + float(gl_InstanceID)*1.7));
+        // (lights paler, the plate a little)
+        vGhostShade = carSlot > 1.5 && carSlot < 4.5 ? 0.7 : carSlot > 4.5 ? 0.4 : 0.0;
+        gl_Position = projectionMatrix*viewMatrix*modelMatrix*instanceMatrix*vec4(position + vec3(0.0, bob, 0.0), 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 carGhostColor;
+      varying float vGhostShade;
+      void main() { gl_FragColor = vec4(mix(carGhostColor, vec3(1.0), vGhostShade), ${GHOST_OPACITY.toFixed(2)}); }`,
+  };
+  const make = (material, order) => {
+    const mesh = new THREE.InstancedMesh(design.geometry, material, TRAFFIC_MAX);
+    mesh.instanceMatrix = carMesh.instanceMatrix;
+    mesh.frustumCulled = false;
+    mesh.renderOrder = order;
+    mesh.onBeforeRender = () => { mesh.count = carMesh.count; };
+    mesh.name = 'GhostCar';
+    carMesh.add(mesh); // (shown and hidden with it)
+    return mesh;
+  };
+  make(new THREE.ShaderMaterial({ ...params, colorWrite: false, depthWrite: true }), GHOST_DEPTH_ORDER);
+  make(new THREE.ShaderMaterial(params), GHOST_DEPTH_ORDER + 1);
 }

@@ -76,6 +76,7 @@ hates = Crisp packet must be stuck under the pedal or something {terrible, braki
 hates = Yeah, back to your seat mate {terrible, drunk}
 hates = Mutany {terrible, drunk}
 hates = Just give her a minute {terrible, recovery = 0.3, unstable = 0.2}
+hates = The never-ending shift {legendary, ghost}
 
 [Canyonero]
 name = SUV

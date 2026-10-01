@@ -2,6 +2,8 @@ Their nickname | My nickname {nickname, choiceweight = 4} <habits>
 Swearing {swears, choiceweight = 2} <habits>
 Controversially, [hates] {choiceweight = 50}
 Stoicism | Stoicism {normal = 2, conservative = 0.05} <beliefs>
+Consulting the shoulder spirits {spirits} <surreal>
+trans-dimensional knowledge {bodiless, headsize = 3, nerd = 20, pacifist}
 Seed money {conservative = 0.2, capital = 5}
 stimulating the economy {shopping = 10, capital = 4}
 Big noses
@@ -385,7 +387,6 @@ Hacking screen displays at the station {nerd = 4} <vice>
 Their secret life with their second family | my secret life with my second family <folk>
 Anthropomorphism <beliefs>
 Practicing their jump | practicing my jump <hobbies>
-Consulting the shoulder spirits <surreal>
 Kissing toads <nature>
 Licking toads {psychs = 15, evil = 0.05} <vice>
 Giving context {evil = -0.05, nerd =2} <habits>

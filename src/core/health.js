@@ -41,7 +41,7 @@ function unstableHit(entity, amount) {
 /** Take `amount` hit points (negative heals). At 0 the kind's `die` runs. */
 export function damage(entity, amount, source = null) {
   const h = entity?.health;
-  if (!h || h.hp <= 0) return;
+  if (!h || h.hp <= 0 || entity.traits?.ghost) return; // (ghosts can't be hurt)
   amount = unstableHit(entity, amount);
   h.hp = Math.max(0, Math.min(h.max, h.hp - amount));
   notify(entity);
