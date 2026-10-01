@@ -86,7 +86,7 @@ export const ITEMS = {
 // Eating clip's EAT_POSES in peopleModel.js dip its fork about there), and what is on it. Its height there
 // only suits someone of about average size: the plate is set down on the table top itself (serveMeal), since a table
 // doesn't grow with whoever sits at it and a short diner's plate would otherwise sink into it.
-const PLATE_AT = new THREE.Vector3(-0.05, 3.44, -0.56);
+export const PLATE_AT = new THREE.Vector3(-0.05, 3.44, -0.56);
 const MEAL_FOOD = [3, 6];        // how many things are on a plate
 const FOOD_SIZE = 0.028, FOOD_SPREAD = 0.075; // a ball of food, and how far about the middle of the plate they lie, in metres
 const FOOD_COLORS = [0x6f9a3e, 0xd8762a, 0xe8dcb0, 0x8a4b2a, 0xb83a2a, 0xdcc98a, 0x4f7a3a];

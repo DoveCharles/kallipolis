@@ -3,7 +3,7 @@ import { openWindow } from './w3-window.js';
 import { controls } from '../core/camera-controls.js';
 import { people, personModel, isDrawn, followed } from '../life/people/people.js';
 import { EAT_POSES, EAT_SHOWN, PERSON_BAKE_FPS, SNACK_HOLD } from '../life/people/peopleModel.js';
-import { CIG_FIRE, ITEMS, dropSnack, exhale, giveSnack, hold, letGo, updateHeld } from '../life/people/peopleHolding.js';
+import { CIG_FIRE, ITEMS, PLATE_AT, dropSnack, exhale, giveSnack, hold, letGo, updateHeld } from '../life/people/peopleHolding.js';
 
 // ============================================================ held items (debug)
 // View > Held Items (debug): sliders for where a hot dog, a coffee or a pint sits in the hand (ITEMS in peopleHolding.js) and
@@ -20,8 +20,8 @@ let item = 'cig', biting = false, pinned = null, minRadius = null, playing = fal
 const clipName = () => TOOLS[item] ? (playing ? 'Eating' : 'EatingPaused') : 'Idle' + KINDS[item] + (biting ? 'Bite' : '');
 // what they're given: a snack, or a tool into the right hand
 function give() {
-  for (const t of Object.keys(TOOLS)) letGo(pinned, t);
-  if (TOOLS[item]) { dropSnack(pinned); hold(pinned, item, { hand: 'R' }); } else giveSnack(pinned, item);
+  for (const t of [...Object.keys(TOOLS), 'plate']) letGo(pinned, t);
+  if (TOOLS[item]) { dropSnack(pinned); hold(pinned, item, { hand: 'R' }); hold(pinned, 'plate', { at: PLATE_AT }); } else giveSnack(pinned, item);
 }
 const round = x => Math.round(x*1000)/1000;
 // one size slider: scales x/y/z together, keeping their ratios
@@ -68,7 +68,7 @@ function unpin() {
   S.peopleFrozen = null;
   if (personModel) personModel.only.value = -1;
   if (minRadius != null) { controls.minRadius = minRadius; minRadius = null; }
-  if (pinned) for (const t of Object.keys(TOOLS)) letGo(pinned, t);
+  if (pinned) for (const t of [...Object.keys(TOOLS), 'plate']) letGo(pinned, t);
   if (EAT_SHOWN.pose) { EAT_SHOWN.pose = 0; personModel?.rebakeClip('EatingPaused'); }
   playing = false;
   if (pinned?.snack) pinned.snack.next = 2;
