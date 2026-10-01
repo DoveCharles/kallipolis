@@ -289,12 +289,4 @@ html.win3 .meter-notice { background:var(--w3-window); border:1px solid var(--w3
 html.win3 .meter-notice.pos { border-left:4px solid var(--meter-pos); }
 html.win3 .meter-notice.neg { border-left:4px solid var(--meter-neg); }
 
-/* the phone layout — must match css/phone.css's own breakpoint (@media (max-width: 760px)) */
-@media (max-width: 760px) {
-  /* the meter goes under the buttons rather than beside them, where it would crowd them off a 375px screen */
-  html.win3 .meter, .meter {
-    top:calc(56px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left));
-    right:calc(8px + env(safe-area-inset-right)); width:auto; max-width:none;
-  }
-  .meter-details { max-height:calc(32vh / var(--ui-scale, 1)); overflow-y:auto; }
-}
+@media (max-width: 760px) { .meter-details { max-height:calc(32vh / var(--ui-scale, 1)); overflow-y:auto; } }

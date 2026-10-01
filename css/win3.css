@@ -247,11 +247,10 @@ html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; 
    src/ui/meter.css */
 
 /* ============================================================ the application window (src/ui/win3-menu.js)
-   Wider than a phone, the whole tab is the Kallipolis window: its frame round the edge, its title bar and menu bar across
+   At any width, the whole tab is the Kallipolis window: its frame round the edge, its title bar and menu bar across
    the top, and the side panel docked down the left of the inside (like Paintbrush's toolbox) with the view beside it.
    The canvas still fills the tab underneath — the frame and the panel sit over its edges, as the panel always did. */
 #app-frame, .w3-dropdown, .w3-modal { display:none; }
-@media (min-width: 761px) {
   html.win3 { --w3-top:47px; --w3-panel-w:267px; } /* (the frame's 4px, the title bar's 22 and the menu bar's 21) */
   html.win3 #app-frame {
     display:flex; flex-direction:column; position:fixed; inset:0; z-index:15; pointer-events:none;
@@ -311,9 +310,13 @@ html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; 
   html.win3 body.w3-no-tools { --w3-below:var(--w3-top); }
   html.win3 #canvas-tools {
     top:var(--w3-top); left:4px; right:4px; height:var(--w3-tools-h); gap:6px; align-items:center;
-    padding:0 calc(var(--w3-meter-w) + var(--w3-meter-right) - 4px) 0 8px; /* (the meter sits over the right end, flush with the etched line: see below) */
+    padding:0 0 0 8px; /* (the meter rides over #meter-slot at the end: win3-menu.js) */
     background:var(--w3-face); border-bottom:1px solid var(--w3-frame);
+    overflow-x:auto; overflow-y:hidden; scrollbar-width:none; /* (too narrow: scrolls sideways, the meter with it: win3-menu.js) */
   }
+  html.win3 #canvas-tools::-webkit-scrollbar { display:none; }
+  html.win3 #meter-slot { order:9; flex:0 0 calc(var(--w3-meter-w) + var(--w3-meter-right) - 4px); align-self:stretch; }
+  html.win3 #canvas-tools > *, html.win3 #canvas-tools #mode-toolbar .tool-btn { flex-shrink:0; }
   html.win3 #canvas-tools::before, html.win3 #canvas-tools::after {
     content:''; align-self:stretch; width:0; border-left:1px solid var(--w3-shadow); border-right:1px solid #fff;
   }
@@ -328,7 +331,7 @@ html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; 
   html.win3 #canvas-tools #mode-toolbar [data-mode=node] { order:-3; margin-right:4px; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=move] { order:-1; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=maps] { order:1; margin-right:auto; }
-  html.win3 #favorites-panel { top:calc(100% + 5px); }
+  html.win3 #favorites-panel { position:fixed; } /* (out of the scrolling strip's clip; placed by favorites.js) */
   html.win3 body.w3-no-tools :is(#canvas-tools, #morality-meter) { display:none; }
   /* the meter, laid in the strip: just the bar and the total, unlabelled; clicking it drops the breakdown down under it
      like a menu (see morality.js), and the notices stack below it (or beside the breakdown) */
@@ -372,7 +375,6 @@ html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; 
   /* what shows over the view while walking someone about or riding a train, below all that */
   html.win3 :is(#possess-hint, #ride-tune) { top:calc(var(--w3-below) + 8px); }
   html.win3 #ride-tune { right:12px; }
-}
 /* the active window (see src/ui/win3-menu.js): a window you're not working in keeps a white title bar, lettered black, in a grey frame (the scheme's Inactive Title Bar and Inactive Border) */
 html.win3 :is(#app-frame, .entity-card, .w3-window).w3-inactive { --w3-edge:var(--w3-border-inactive); }
 html.win3 :is(#app-frame, .entity-card, .w3-window).w3-inactive > .win3-titlebar { background:var(--w3-inactive); }
@@ -387,9 +389,7 @@ html.win3 .w3-window .win3-titlebar { user-select:none; cursor:default; }
 html.win3 .w3-window .slider-row { margin-bottom:10px; }
 /* the World panel under the Windows 3.0 window: what's set once and left moves out to the Options menu's windows
    (src/ui/settings-windows.js), the debug switches to the View menu, and the save/export buttons to the File menu */
-@media (min-width: 761px) {
   html.win3 #panel :is([data-settings], .w3-debug, .w3-file-buttons, #btn-settings-toggle, #extra-settings) { display:none; }
-}
 html.win3 .w3-window [data-settings] > .section-label:first-child { margin-top:0 !important; padding-top:0 !important; border-top:none !important; }
 html.win3 .w3-window [data-settings] + [data-settings] { margin-top:14px; padding-top:14px; border-top:1px solid var(--w3-frame); }
 html.win3 .w3-window .w3-dialog-body { max-height:calc(100vh / var(--ui-scale, 1) - 120px); overflow-y:auto; }
@@ -414,15 +414,11 @@ html.win3 #settings-world .w3-dialog-body { max-height:min(300px, calc(100vh / v
 html.win3 .w3-window.w3-sized:not([hidden]) { display:flex; flex-direction:column; box-sizing:border-box; max-width:none; }
 html.win3 .w3-window.w3-sized .w3-dialog-body { flex:1; min-height:0; max-height:none !important; }
 /* with the side panel hidden, World, Edit and Maps are all let up (see src/ui/win3-menu.js) */
-@media (min-width: 761px) {
   html.win3 body.w3-no-panel #mode-toolbar .tool-btn.active { box-shadow:var(--w3-raised); text-decoration:none; }
   html.win3 body.ui-loading.start-edit #mode-toolbar .tool-btn.active { box-shadow:var(--w3-pressed); text-decoration:underline; }
-}
-
 #mode-toolbar :is(.world-open, .maps-open, .node-open) { display:none; } /* (the icons in colour: only while pressed, below) */
 /* World and Maps are icons in the toolbar (Edit keeps its label); World opens the World window rather than a mode, so it's
    pressed while that's open, not in World mode (src/ui/win3-menu.js) */
-@media (min-width:761px) {
   html.win3 #canvas-tools #mode-toolbar :is([data-mode=move], [data-mode=maps]) { font-size:0; gap:0; padding:0; width:24px; justify-content:center; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=move].active:not(.w3-open) { box-shadow:var(--w3-raised); text-decoration:none; }
   html.win3 #canvas-tools #mode-toolbar [data-mode=move].w3-open { box-shadow:var(--w3-pressed); text-decoration:none; }
@@ -433,8 +429,6 @@ html.win3 .w3-window.w3-sized .w3-dialog-body { flex:1; min-height:0; max-height
   html.win3 :is(body:not(.w3-no-panel), body.ui-loading.start-edit) #canvas-tools #mode-toolbar [data-mode=node].active .node-shut { display:none; } /* (Edit's nodes go the green they're drawn in, trains.js, */
   html.win3 :is(body:not(.w3-no-panel), body.ui-loading.start-edit) #canvas-tools #mode-toolbar [data-mode=node].active .node-open { display:block; }  /*  outlined, while it's down) */
   html.win3 .w3-window .w3-debug { display:none; }
-}
-
 /* View > FPS (debug) (src/ui/fps.js) */
 #fps-counter { position:fixed; right:8px; bottom:8px; z-index:1000; pointer-events:none; padding:1px 4px;
   background:#000; color:#0f0; font:12px/1.2 monospace; }

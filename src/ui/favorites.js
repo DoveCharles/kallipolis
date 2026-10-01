@@ -1,4 +1,5 @@
 import { App, S } from '../core/shared.js';
+import { toUi } from './ui-scale.js';
 
 // ============================================================ favorites
 // Whatever the player has hearted on its card (see the heart in ui/entity-card.js) — a person, a car, a bee, a building,
@@ -30,7 +31,8 @@ let keptPeople = [];
 export const favoritePeople = () => keptPeople;
 function changed() {
   keptPeople = [...favorites.values()].filter(fav => fav.kind === 'Person').map(fav => fav.saved.id);
-  render();
+  document.getElementById('canvas-tools').addEventListener('scroll', () => setOpen(false));
+render();
   listeners.forEach(fn => fn());
 }
 // `entry` as above, less its picture and name, which are passed in as they are at the moment it's hearted
@@ -104,12 +106,18 @@ function followFavorite(fav) {
   if (S.interactionMode !== 'move') document.querySelector('#mode-toolbar .tool-btn[data-mode="move"]')?.click();
   App.letGoOfAllBut(fav.kind);
   fav.gone = !fav.follow();
-  render();
+  document.getElementById('canvas-tools').addEventListener('scroll', () => setOpen(false));
+render();
   if (!fav.gone) setOpen(false);
 }
 
 function setOpen(open) {
   panel.hidden = !open;
+  if (open && getComputedStyle(panel).position === 'fixed') { // (win3 strip: hung under the button by hand)
+    const box = button.getBoundingClientRect();
+    panel.style.left = toUi(box.left) + 'px';
+    panel.style.top = toUi(box.bottom + 5) + 'px';
+  } else panel.style.left = panel.style.top = '';
   button.classList.toggle('on', open);
 }
 button.addEventListener('click', () => setOpen(panel.hidden));
@@ -117,4 +125,5 @@ button.addEventListener('click', () => setOpen(panel.hidden));
 document.addEventListener('pointerdown', e => {
   if (!panel.hidden && !panel.contains(e.target) && !button.contains(e.target)) setOpen(false);
 });
+document.getElementById('canvas-tools').addEventListener('scroll', () => setOpen(false));
 render();

@@ -12,37 +12,16 @@ import { cards } from './entity-card.js';
 //   rather than clicked twice
 // - a thumbstick and a few buttons stand in for WASD, and for the click that throws a punch, while someone's being
 //   walked or driven about
-// - on a narrow screen the side panel becomes a sheet along the bottom, which ☰ slides up and down
-const panel = document.getElementById('panel');
 const addBtn = document.getElementById('btn-touch-add');
-const panelToggle = document.getElementById('btn-panel-toggle');
 const mapTools = document.getElementById('map-touch-tools');
 const drive = document.getElementById('touch-drive');
 const stick = document.getElementById('touch-stick'), knob = document.getElementById('touch-stick-knob');
 const runBtn = document.getElementById('touch-run'), brakeBtn = document.getElementById('touch-brake');
 const punchBtn = document.getElementById('touch-punch'), useBtn = document.getElementById('touch-use');
 
-// ============================================================ the panel as a bottom sheet
-// Only on a narrow screen: a tablet held either way has room for the panel where it always was. It starts open, because a
-// panel that isn't there is a panel nobody finds, and it's remembered after that.
-const PANEL_KEY = 'splinetopia.panelOpen';
-let panelOpen = true;
-try { panelOpen = localStorage.getItem(PANEL_KEY) !== '0'; } catch (err) { /* storage blocked: it just isn't remembered */ }
-function setPanelOpen(open) {
-  panelOpen = open;
-  document.body.classList.toggle('panel-open', open);
-  panelToggle.classList.toggle('on', open);
-  try { localStorage.setItem(PANEL_KEY, open ? '1' : '0'); } catch (err) { /* as above */ }
-}
-panelToggle.addEventListener('click', () => setPanelOpen(!panelOpen));
-// the win3 look folds the panel up to its title bar rather than sliding it away; tapping that title bar does both
-panel.querySelector('.win3-titlebar')?.addEventListener('dblclick', () => { if (isNarrow()) setPanelOpen(!panelOpen); });
-
-// A card for whoever's being followed sits at the bottom of the screen, which is where the sheet is, so opening one folds
-// the sheet away. Watching the cards' hidden attribute saves every one of them having to know about this.
+// On a phone a card spans the bottom of the window, over the panel, so opening one puts the panel away (win3-menu.js).
 const cardWatcher = new MutationObserver((records) => {
-  if (!isNarrow() || !panelOpen) return;
-  if (records.some(r => !r.target.hidden)) setPanelOpen(false);
+  if (isNarrow() && records.some(r => !r.target.hidden)) App.w3HidePanel?.();
 });
 cards.forEach(c => cardWatcher.observe(c.el, { attributes: true, attributeFilter: ['hidden'] }));
 
@@ -137,8 +116,6 @@ function syncDrive() {
 new MutationObserver(syncDrive).observe(possessHint, { attributes: true, attributeFilter: ['hidden'] });
 
 // ============================================================ getting going
-// Which of these show themselves is left to css/base.css: the ✛ to html.touch, the ☰ to a narrow window (so a desktop one
-// dragged narrow gets the sheet too). Only the panel's state has to be set here.
+// Which of these show themselves is left to css/base.css: the ✛ to html.touch.
 if (mapTools) mapTools.hidden = !IS_TOUCH;
-setPanelOpen(panelOpen);
 syncDrive();
