@@ -23,6 +23,8 @@ function give() {
   if (TOOLS[item]) { dropSnack(pinned); hold(pinned, item, { hand: 'R' }); } else giveSnack(pinned, item);
 }
 const round = x => Math.round(x*1000)/1000;
+// one size slider: scales x/y/z together, keeping their ratios
+const sizeSlider = part => ['size', () => Math.max(...part.size), v => { const k = v/Math.max(...part.size); part.size.forEach((s, i) => { part.size[i] = s*k; }); }, 0.002, 0.4, 0.001];
 
 /** Hold the pinned person in the first frame of the clip, everything they wear with them, and draw what they hold. */
 function holdStill() {
@@ -76,7 +78,7 @@ function sliders() {
     ...ITEMS[item].parts.flatMap((part, k) => [[`Part ${k + 1}`],
       ...['x', 'y', 'z'].map((a, i) => ['at ' + a, () => part.at[i], v => { part.at[i] = v; }, -0.2, 0.3, 0.001]),
       ...['x', 'y', 'z'].map((a, i) => ['turn ' + a, () => (part.turn ??= [0, 0, 0])[i], v => { part.turn[i] = v; }, -3.14, 3.14, 0.01]),
-      ...['x', 'y', 'z'].map((a, i) => ['size ' + a, () => part.size[i], v => { part.size[i] = v; }, 0.002, 0.4, 0.001])])];
+      sizeSlider(part)])];
   const part = ITEMS[item].parts[0], hold = () => SNACK_HOLD[KINDS[item]][biting ? 'bite' : 'carry'];
   const vec = (label, get, i, min, max, step, then) => [label, () => get()[i], v => { get()[i] = v; then?.(); }, min, max, step];
   const rebake = () => personModel?.rebakeClip(clipName());
@@ -85,7 +87,7 @@ function sliders() {
     ['Item'],
     ...xyz('loc', () => part.at, -0.2, 0.2, 0.001),
     ...xyz('rot', () => (part.turn ??= [0, 0, 0]), -3.14, 3.14, 0.01),
-    ...xyz('size', () => part.size, 0.002, 0.4, 0.001),
+    sizeSlider(part),
     [biting ? 'Hand.R (at the mouth)' : 'Hand.R'],
     ...xyz('loc', () => hold().at, -0.6, 0.6, 0.005, rebake),
     ...(biting ? [['reach', () => hold().reach, v => { hold().reach = v; rebake(); }, 0, 0.3, 0.005]] : []),
