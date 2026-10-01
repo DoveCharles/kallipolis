@@ -87,6 +87,7 @@ import { aimPersonCulling } from './life/people/peopleModel.js';
 import { updateTraffic, loadCarModels } from './life/traffic/traffic.js';
 import { updateGiblets } from './life/giblets.js';
 import { updateFences } from './life/fence-smash.js';
+import { updateCoins } from './life/coins.js';
 import { updateBodyParts } from './life/people/peopleGibs.js';
 import { updateCarWrecks } from './life/car-wrecks.js';
 import { shakeCamera, updateLightning } from './life/lightning.js';
@@ -166,6 +167,7 @@ function animate() {
   if (S.waterDirty) rebuildWater();
   updatePeople(t);
   updateGiblets(t);
+  updateCoins(t);
   updateBodyParts(t);
   updateCarWrecks(t);
   updateLightning(t);

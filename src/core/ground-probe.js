@@ -20,7 +20,9 @@ import { groundCandidates, refreshSceneIndex } from './scene.js';
 // a stencil helper over the same area; and 'Beach', the sloped sand running from the shore down under the water, which
 // would otherwise catch gibs partway down a slope that's still water. The main ground mesh has a hole cut under open
 // water, so a ray there finds nothing and falls through to `fallback`.
-const NON_GROUND_NAMES = new Set(['Water', 'WaterMask', 'Beach', 'RoadDragPreview']); // (the last: the strip over a road being dragged, see roads/drag-preview.js)
+const NON_GROUND_NAMES = new Set(['Water', 'WaterMask', 'Beach', 'RoadDragPreview', 'Coin']); // (the last: the strip over a road being dragged, see roads/drag-preview.js)
+// (starting this far above fromY, so a surface just over the feet it's from — a walkway, Y_PATH, over park grass — isn't missed)
+const PROBE_LIFT = 0.2;
 const MIN_UPWARD_NORMAL = 0.5; // a hit face must point at least this far upward to be stood on
 
 const isShown = o => { for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };
@@ -57,10 +59,13 @@ function prepareCandidates() {
  */
 export function groundBelow(x, fromY, z, fallback) {
   refreshSceneIndex();
-  ray.set(origin.set(x, fromY, z), DOWN);
+  ray.set(origin.set(x, fromY + PROBE_LIFT, z), DOWN);
   hits.length = 0;
   prepareCandidates();
   ray.intersectObjects(groundCandidates, false, hits);
+  // (ground left out of picking — a walkway's fringe, userData.ground — still caught here, so nothing lands under it)
+  for (const o of groundCandidates) if (o.userData.ground && o.raycast !== THREE.Mesh.prototype.raycast) THREE.Mesh.prototype.raycast.call(o, ray, hits);
+  hits.sort((a, b) => a.distance - b.distance);
   for (const hit of hits) {
     const o = hit.object;
     if (!hit.face || NON_GROUND_NAMES.has(o.name) || !isShown(o)) continue;

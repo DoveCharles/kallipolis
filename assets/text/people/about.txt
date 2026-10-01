@@ -44,6 +44,8 @@ which add up. Everyone starts at the value in
 #   parks       1       how likely they are to wander into a park they walk past — 0 never              0 to 8
 #   plazas      1       how likely they are to wander into a plaza they walk past — 0 never             0 to 8
 #   roadsafety  1       how big a gap in traffic they wait for before crossing a road — 0.2 barely looks 0.2 to 3
+#   shopping    1       how drawn to buying things and to malls (less so the less money they have)     0 to 20
+#   capital     1       multiplies the money they start with, rounded — 0 skint                         0 to 20
 #   agemult     1       multiplies age, suiting traits to younger or older people                      0.1 to Inf
 #   mood        0       their resting face — -1 a frown, 1 a smile (and it tints their reactions)       -1 to 1
 #   happy       0       how happy their eyes look                                                      0 to 1

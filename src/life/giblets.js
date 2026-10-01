@@ -61,7 +61,7 @@ const bloodChunkMesh = instancedMesh(chunkMesh.geometry, chunkMesh.material, BLO
 bloodChunkMesh.receiveShadow = true;
 bloodChunkMesh.setColorAt(0, new THREE.Color());
 const splatMesh = instancedMesh(new THREE.CircleGeometry(1, 12).rotateX(-Math.PI/2),
-  new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), SPLATS_MAX, 'Splats');
+  new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, polygonOffset: true, polygonOffsetFactor: -7, polygonOffsetUnits: -7 }), SPLATS_MAX, 'Splats'); // (over walkways and roads -4, markings -6)
 splatMesh.receiveShadow = true;
 splatMesh.setColorAt(0, new THREE.Color()); // (blood)
 // a car's scorch mark is a separate mesh, its edge fading out gradually (an alpha map solid over the middle half, then fading to nothing at the rim)
@@ -157,7 +157,7 @@ function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null
 function spawnSplat(at, height, color, sizeMul = 1, soot = false) {
   if (!S.showGibs || S.gibAmount <= 0) return; // (a gib mark, not a particle — the same settings as the chunks it's left with)
   if (splats.length >= SPLATS_MAX) splats.shift();
-  splats.push({ x: at.x, y: soot ? SOOT_Y : at.y + 0.015, z: at.z, size: height*(0.45 + Math.random()*0.3)*sizeMul, angle: Math.random()*Math.PI*2, born: performance.now()/1000, color, soot });
+  splats.push({ x: at.x, y: soot ? SOOT_Y : groundBelow(at.x, at.y, at.z, at.y) + 0.015, z: at.z, size: height*(0.45 + Math.random()*0.3)*sizeMul, angle: Math.random()*Math.PI*2, born: performance.now()/1000, color, soot });
 }
 // a car's fireball — bright chunks bursting up and out, quickly shrinking — and the smoke puffs that follow it, drifting up
 // and slowly spreading as they thin out; and the light flash, retriggered (so overlapping explosions just relight it)

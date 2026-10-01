@@ -98,6 +98,9 @@ html.win3 .dg-arrow-r { border-right-color:#000; }
 .dg-result [class$="-text"] { font-weight:700; }
 .dg-crap-text { color:#8b5a2b; } .dg-common-text { color:#3a7bd5; } .dg-rare-text { color:#c0393d; } .dg-epic-text { color:#8a4fd0; } .dg-legendary-text { color:#c89600; }
 .dg-confetti { position:fixed; z-index:200; width:6px; height:9px; margin:-4px 0 0 -3px; pointer-events:none; }
+/* "+n" rising off a count that's gone up (gainPop in src/ui/money.js) */
+.gain-pop { position:fixed; z-index:30; pointer-events:none; white-space:nowrap; font-family:var(--mono); font-size:12px; font-weight:700;
+  text-shadow:1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
 /* the countdown to the next energy while in control of something (src/life/possession.js) */
 #possess-timer { position:fixed; top:calc(var(--w3-below, 16px) + 8px); left:50%; transform:translateX(-50%); z-index:25; display:flex; align-items:center; gap:4px;
   font-family:var(--mono); font-size:11px; font-weight:700; color:var(--text); background:var(--bg-panel); border:1px solid var(--border); border-radius:5px; padding:3px 8px; pointer-events:none; }
