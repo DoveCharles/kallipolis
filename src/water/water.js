@@ -144,13 +144,25 @@ const WATER_COLOR_FRAGMENT = `
     // the waterline is right at a wall, but part-way out from a beach's edge, where its slope goes under
     float shoreDistance = min(wallDistance, abs(beachDistance - uBeachWaterline));
     vec3 deep = diffuseColor.rgb; // the material's own color is the deep water
-    vec3 water = mix(deep, vec3(0.17, 0.56, 0.58), (1.0 - smoothstep(0.0, 9.0, shoreDistance))*0.85);
+    // stylized: the shallows come in flat bands (three steps out from the waterline), edges kept soft by a pixel
+    float shallow = 1.0 - smoothstep(0.0, 9.0, shoreDistance);
+    float aa = max(fwidth(shallow*3.0), 1e-3);
+    float banded = (floor(shallow*3.0) + smoothstep(1.0 - aa, 1.0, fract(shallow*3.0)))/3.0;
+    vec3 water = mix(deep, vec3(0.17, 0.62, 0.62), banded*0.85);
     // sand showing through the first few units of water off a beach, with a slightly wavering edge
     float sandy = 1.0 - smoothstep(0.0, 4.0, beachDistance - uBeachWaterline + (waterNoise(wp*0.5) - 0.5)*1.5);
-    water = mix(water, uSandTint*vec3(0.70, 0.96, 1.28), sandy*0.65); // the same sand tint as the beach it runs on from, green-shifted and dimmed by the water above it
-    // a thin, broken, slowly shifting line of foam right at the water's edge
-    float foam = (1.0 - smoothstep(0.1, 0.9, shoreDistance))*smoothstep(0.35, 0.7, waterNoise(wp*1.6 + vec2(uWaterTime*0.25, -uWaterTime*0.18)));
-    diffuseColor.rgb = mix(water, vec3(0.9, 0.95, 0.96), foam*0.8);
+    water = mix(water, uSandTint*vec3(0.70, 0.96, 1.28), step(0.4, sandy)*0.6); // the same sand tint as the beach it runs on from, green-shifted and dimmed by the water above it
+    float foamAa = max(fwidth(shoreDistance), 1e-3);
+    float wobble = (waterNoise(wp*0.8 + vec2(uWaterTime*0.2, -uWaterTime*0.15)) - 0.5)*0.5;
+    // a solid band of foam at the edge, then a thin ring that drifts out and fades
+    float foam = 1.0 - smoothstep(0.45 - foamAa, 0.45 + foamAa, shoreDistance + wobble);
+    float ringPos = fract(uWaterTime*0.12)*3.0 + 0.8;
+    float ring = (1.0 - smoothstep(0.08, 0.08 + foamAa*1.5, abs(shoreDistance + wobble - ringPos)))*(1.0 - smoothstep(1.5, 3.8, ringPos));
+    ring *= step(0.4, waterNoise(wp*0.9 - vec2(uWaterTime*0.1)));
+    // cartoon glints: sparse wavy streaks drifting across the open water
+    float g = waterNoise(vec2(wp.x*0.6 + wp.y*0.25, wp.y*1.8 - wp.x*0.4) + vec2(uWaterTime*0.3, uWaterTime*0.12));
+    float glint = smoothstep(0.92, 0.94, g)*smoothstep(1.5, 6.0, shoreDistance)*clamp(1.4 - length(fwidth(wp))*1.2, 0.0, 1.0);
+    diffuseColor.rgb = mix(water, vec3(0.92, 0.97, 0.98), max(max(foam, ring*0.85), glint*0.25));
   }
 `;
 const WATER_NORMAL_FRAGMENT = `
@@ -161,7 +173,12 @@ const WATER_NORMAL_FRAGMENT = `
     float dhdz = (waterHeight(wp + vec2(0.0, e)) - waterHeight(wp - vec2(0.0, e)))/(2.0*e);
     // calm the ripples where they'd be smaller than a pixel, so distant water doesn't sparkle
     float calm = clamp(1.2 - length(fwidth(wp))*0.9, 0.15, 1.0);
-    vec3 waterNormal = normalize(vec3(-dhdx*1.6*calm, 1.0, -dhdz*1.6*calm));
+    // stylized: the slope snapped to 8 directions and 3 steepnesses, so the surface catches light in flat facets
+    vec2 slope = vec2(dhdx, dhdz)*1.6*calm;
+    float steep = floor(length(slope)*6.0 + 0.5)/6.0;
+    float dir = floor(atan(slope.y, slope.x)/0.7853982 + 0.5)*0.7853982;
+    slope = vec2(cos(dir), sin(dir))*min(steep, 0.5);
+    vec3 waterNormal = normalize(vec3(-slope.x, 1.0, -slope.y));
     normal = normalize((viewMatrix * vec4(waterNormal, 0.0)).xyz);
   }
 `;
