@@ -211,30 +211,35 @@ const WATER_COLOR_FRAGMENT = `
     float life = pow(max(0.0, sin(uWaterTime*uW_glintSpeed*gRate + gPhase*6.283)), 12.0)*step(0.55, waterHash(gi));
     vec2 ga = abs(gf);
     float gr = 0.06*uW_glintSize, garm = 0.008*uW_glintSize;
-    float star = max(1.0 - smoothstep(gr, gr + gpix*1.5, length(gf)),
-      (1.0 - smoothstep(garm, garm + gpix*1.2, min(ga.x, ga.y)))*(1.0 - smoothstep(0.0, 0.4*uW_glintSize*life + 1e-3, max(ga.x, ga.y))));
+    // (edges smoothed across a pixel centred on them, and anything thinner than a pixel dimmed by how much of it it covers,
+    // so they shrink with distance instead of holding at a pixel or two wide)
+    float star = max((1.0 - smoothstep(gr - gpix*0.5, gr + gpix*0.5, length(gf)))*min(1.0, gr*gr*4.0/(gpix*gpix)),
+      (1.0 - smoothstep(garm - gpix*0.5, garm + gpix*0.5, min(ga.x, ga.y)))*min(1.0, garm*2.0/gpix)*(1.0 - smoothstep(0.0, 0.4*uW_glintSize*life + 1e-3, max(ga.x, ga.y))));
     waterGlint = star*life*smoothstep(1.5, 6.0, shoreDistance)*clamp(1.4 - gpix*1.2, 0.0, 1.0);
-    // Wind Waker foam: soft, broken lines along the borders of wobbling cells, bent by noise so they curve, in patches
-    vec2 warp = vec2(waterNoise(wp*0.15 + uWaterTime*0.05), waterNoise(wp*0.15 + 9.1 - uWaterTime*0.04)) - 0.5;
-    vec2 vc = wp/uW_wwScale + warp*uW_wwWarp + vec2(1.0, 0.6)*uWaterTime*uW_wwDrift, vi = floor(vc), vf = fract(vc);
-    vec2 mr = vec2(0.0), mg = vec2(0.0);
-    float md = 8.0;
-    for (int y=-1; y<=1; y++) for (int x=-1; x<=1; x++) {
-      vec2 o = vec2(float(x), float(y)), r = o + wwPoint(vi + o) - vf;
-      if (dot(r, r) < md) { md = dot(r, r); mr = r; mg = o; }
+    float ww = 0.0;
+    if (uW_wwAmount > 0.0) { // (skipped when off: it's most of the shader's cost after the shore loop)
+      // Wind Waker foam: soft, broken lines along the borders of wobbling cells, bent by noise so they curve, in patches
+      vec2 warp = vec2(waterNoise(wp*0.15 + uWaterTime*0.05), waterNoise(wp*0.15 + 9.1 - uWaterTime*0.04)) - 0.5;
+      vec2 vc = wp/uW_wwScale + warp*uW_wwWarp + vec2(1.0, 0.6)*uWaterTime*uW_wwDrift, vi = floor(vc), vf = fract(vc);
+      vec2 mr = vec2(0.0), mg = vec2(0.0);
+      float md = 8.0;
+      for (int y=-1; y<=1; y++) for (int x=-1; x<=1; x++) {
+        vec2 o = vec2(float(x), float(y)), r = o + wwPoint(vi + o) - vf;
+        if (dot(r, r) < md) { md = dot(r, r); mr = r; mg = o; }
+      }
+      // (then the distance to every border round it, smooth-min'd so the cell's corners round off into blobs, the foam
+      // pooling where cells meet; wwRound is how round)
+      float wsum = 0.0, wk = max(uW_wwRound, 1e-3);
+      for (int y=-1; y<=1; y++) for (int x=-1; x<=1; x++) {
+        vec2 o = mg + vec2(float(x), float(y)), r = o + wwPoint(vi + o) - vf;
+        if (dot(mr - r, mr - r) > 1e-5) wsum += exp(-dot(0.5*(mr + r), normalize(r - mr))/wk);
+      }
+      md = -log(max(wsum, 1e-20))*wk;
+      float vaa = max(fwidth(md), 1e-3), soft = uW_wwSoft*0.5 + vaa;
+      float wwMask = smoothstep(uW_wwCover, uW_wwCover + 0.12, waterNoise(wp*0.04 + vec2(uWaterTime*0.02, -uWaterTime*0.013)));
+      float wwBreak = uW_wwBreak <= 0.0 ? 1.0 : smoothstep(uW_wwBreak - 0.1, uW_wwBreak + 0.1, waterNoise(vc*2.3 + 4.7));
+      ww = (1.0 - smoothstep(uW_wwWidth - soft, uW_wwWidth + soft, md))*wwBreak*wwMask*clamp(1.4 - length(fwidth(vc))*1.5, 0.0, 1.0)*uW_wwAmount;
     }
-    // (then the distance to every border round it, smooth-min'd so the cell's corners round off into blobs, the foam
-    // pooling where cells meet; wwRound is how round)
-    float wsum = 0.0, wk = max(uW_wwRound, 1e-3);
-    for (int y=-1; y<=1; y++) for (int x=-1; x<=1; x++) {
-      vec2 o = mg + vec2(float(x), float(y)), r = o + wwPoint(vi + o) - vf;
-      if (dot(mr - r, mr - r) > 1e-5) wsum += exp(-dot(0.5*(mr + r), normalize(r - mr))/wk);
-    }
-    md = -log(max(wsum, 1e-20))*wk;
-    float vaa = max(fwidth(md), 1e-3), soft = uW_wwSoft*0.5 + vaa;
-    float wwMask = smoothstep(uW_wwCover, uW_wwCover + 0.12, waterNoise(wp*0.04 + vec2(uWaterTime*0.02, -uWaterTime*0.013)));
-    float wwBreak = uW_wwBreak <= 0.0 ? 1.0 : smoothstep(uW_wwBreak - 0.1, uW_wwBreak + 0.1, waterNoise(vc*2.3 + 4.7));
-    float ww = (1.0 - smoothstep(uW_wwWidth - soft, uW_wwWidth + soft, md))*wwBreak*wwMask*clamp(1.4 - length(fwidth(vc))*1.5, 0.0, 1.0)*uW_wwAmount;
     diffuseColor.rgb = mix(water, uW_foam, max(max(foam, ring*uW_ringMix), ww));
   }
 `;
