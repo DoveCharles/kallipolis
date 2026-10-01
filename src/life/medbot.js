@@ -13,6 +13,7 @@ import { healFx } from './giblets.js';
 import { updateMedBotSounds } from '../audio/medbot.js';
 import { makeCard } from '../ui/entity-card.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
+import { makeStationCard } from './station-card.js';
 
 // ============================================================ MedBots
 // Every med booth put down in the Objects tab (see 'medbooth' in objects/object-types.js) is home to a MedBot
@@ -536,15 +537,21 @@ function stopFollowingMedBot() {
 }
 const DOING = { opening: 'Coming out', exiting: 'Coming out', patrol: 'On patrol', rush: 'Rushing to help', heal: 'Healing',
   home: 'Going home to charge', entering: 'Going home to charge', charging: 'Charging' };
+const doingOf = bot => bot.state === 'patrol' && bot.timer > 0 ? 'Looking about' : DOING[bot.state];
+// her booth's card (see station-card.js), its button putting the camera on her
+const booth = makeStationCard({ id: 'medbooth-card', title: 'Med Booth', kind: 'MedBooth', find: 'Find MedBot', bots, doing: doingOf,
+  onFind: bot => { App.letGoOfAllBut('MedBot'); followMedBotNow(bot); }, onClose: () => App.stopFollowingMedBooth() });
 function followMedBot() {
+  booth.update();
   if (!followed) return;
   if (S.interactionMode !== 'move') { stopFollowingMedBot(); return; }
   const bot = followed;
-  const doing = bot.state === 'patrol' && bot.timer > 0 ? 'Looking about' : DOING[bot.state];
+  const doing = doingOf(bot);
   if (doing !== doingShown) { doingShown = doing; card.set('status', doing); }
   const charge = Math.round(bot.charge*100) + '%';
   if (charge !== chargeShown) { chargeShown = charge; card.set('charge', charge); }
   controls.goalTarget.set(bot.x, bot.y + BOT_HEIGHT*0.6, bot.z);
 }
 
-Object.assign(App, { pickMedBot, followMedBotAt, stopFollowingMedBot, medBots: bots });
+Object.assign(App, { pickMedBot, followMedBotAt, stopFollowingMedBot, medBots: bots,
+  pickMedBooth: booth.pick, followMedBoothAt: booth.followAt, stopFollowingMedBooth: booth.stop });

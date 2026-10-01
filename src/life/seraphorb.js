@@ -4,6 +4,7 @@ import { scene, camera, SKY_ENV_MAP } from '../core/scene.js';
 import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeCard } from '../ui/entity-card.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
+import { makeStationCard } from './station-card.js';
 import { SERAPH_RING } from '../objects/object-types.js';
 import { solidTopAt } from '../buildings/footprints.js';
 import { people, isGone, standingOf, witness } from './people/people.js';
@@ -299,15 +300,21 @@ function stopFollowingSeraphorb() {
   card.hide();
 }
 const DOING = { charging: 'Charging', rising: 'Rising', patrol: 'On patrol', chase: 'Chasing a villain', smite: 'Smiting', home: 'Going home to charge' };
+const doingOf = orb => orb.state === 'patrol' && orb.timer > 0 ? 'Watching' : DOING[orb.state];
+// its ring's card (see station-card.js), its button putting the camera on the orb
+const station = makeStationCard({ id: 'seraphstation-card', title: 'Seraphorb Station', kind: 'SeraphStation', find: 'Find Seraphorb', bots: orbs, doing: doingOf,
+  onFind: orb => { App.letGoOfAllBut('Seraphorb'); followSeraphorbNow(orb); }, onClose: () => App.stopFollowingSeraphStation() });
 function followSeraphorb() {
+  station.update();
   if (!followed) return;
   if (S.interactionMode !== 'move') { stopFollowingSeraphorb(); return; }
   const orb = followed;
-  const doing = orb.state === 'patrol' && orb.timer > 0 ? 'Watching' : DOING[orb.state];
+  const doing = doingOf(orb);
   if (doing !== doingShown) { doingShown = doing; card.set('status', doing); }
   const charge = Math.round(orb.charge*100) + '%';
   if (charge !== chargeShown) { chargeShown = charge; card.set('charge', charge); }
   controls.goalTarget.set(orb.x, orb.y, orb.z);
 }
 
-Object.assign(App, { pickSeraphorb, followSeraphorbAt, stopFollowingSeraphorb, seraphorbs: orbs });
+Object.assign(App, { pickSeraphorb, followSeraphorbAt, stopFollowingSeraphorb, seraphorbs: orbs,
+  pickSeraphStation: station.pick, followSeraphStationAt: station.followAt, stopFollowingSeraphStation: station.stop });
