@@ -67,7 +67,7 @@ const WALK_CYCLE_LENGTH = 4;
  * whose right hand is full). `hold` names a snack clip whose right arm this one's is swapped for, carried along by the
  * body as it moves (WaveLeftBeer: see snackClips). */
 /** What can be held, for the snack clips' names (see SNACK_HOLD). */
-const SNACK_ITEMS = ['Hotdog', 'Coffee', 'Beer', 'Cig'];
+const SNACK_ITEMS = ['Hotdog', 'Skewer', 'Coffee', 'Beer', 'Cig'];
 const PERSON_CLIPS = [
   { name: 'Walk', loop: true }, { name: 'Idle', loop: true }, { name: 'Idle2' }, { name: 'Idle3' }, { name: 'Wave' },
   { name: 'WaveLeft', mirror: 'Wave' }, { name: 'Idle2Left', mirror: 'Idle2' },
@@ -208,46 +208,44 @@ const GRIP_CURL = [['Finger1', 1.15, 'fingers'], ['Finger2', 0.95, 'fingers'], [
 // brings it back down over the plate — twice over a loop. What happens when is kept on the clip (clip.taps,
 // which people.js plays as it comes round): the fork on the plate, a mouthful gathered, and the mouthful eaten.
 //
-// The places are in the model's own space, sat on a dining chair with the table's edge in front of them (see the dining
-// tables in buildings/interior.js): EAT_TIP_PLATE is the middle of the plate, and the mouth is wherever the head has got to.
+// Where the hand goes is EAT_POSES, blended from one to the next (eatingAt).
 const EAT_FORK = 0.76; // from the fist to the tines, in the model's units (the fork built in peopleHolding.js)
-const EAT_TIP_REST = new THREE.Vector3(-0.65, 3.60, -0.23), EAT_DIR_REST = new THREE.Vector3(0.4, -0.28, 0.88);
-const EAT_TIP_PLATE = new THREE.Vector3(-0.05, 3.56, -0.56), EAT_DIR_PLATE = new THREE.Vector3(0.2, -0.93, 0.3);
-const EAT_TIP_MOUTH = new THREE.Vector3(0.02, -0.05, 0.14), EAT_DIR_MOUTH = new THREE.Vector3(0.34, 0.75, -0.57);
-// seconds a mouthful's parts take: down to the plate, gathering, up to the mouth, in the mouth, and back down again
-const EAT_DIP = 0.6, EAT_GATHER = 0.4, EAT_LIFT = 0.8, EAT_IN_MOUTH = 0.45, EAT_LOWER = 0.7;
-const EAT_MOUTHFUL = EAT_DIP + EAT_GATHER + EAT_LIFT + EAT_IN_MOUTH + EAT_LOWER;
+/**
+ * Eating's four poses, tuned in View > Held Items (debug): just holding the fork, over the plate, picking up a forkful, at
+ * the mouth. Each is a hold as SNACK_HOLD's (the mouth one as a `bite`). One still given as `tip`/`dir` (the fork's tines
+ * and which way it points, in the model's units; the mouth's from the mouth) is turned into a hold the first time it's baked.
+ */
+export const EAT_POSES = [
+  { tip: [-0.65, 3.60, -0.23], dir: [0.4, -0.28, 0.88] },
+  { tip: [-0.05, 3.80, -0.56], dir: [0.2, -0.93, 0.3] },
+  { tip: [-0.05, 3.56, -0.56], dir: [0.2, -0.93, 0.3] },
+  { tip: [0.02, -0.05, 0.14], dir: [0.34, 0.75, -0.57], mouth: true },
+];
+/** Which of EAT_POSES EatingPaused holds (0; the debug window shows the others). */
+export const EAT_SHOWN = { pose: 0 };
+// seconds a mouthful's parts take: hold → over the plate → picking → (picking) → up to the mouth → (in the mouth) → hold
+const EAT_TO_PLATE = 0.4, EAT_DIP = 0.25, EAT_GATHER = 0.35, EAT_LIFT = 0.8, EAT_IN_MOUTH = 0.45, EAT_LOWER = 0.7;
+const EAT_STEPS = [[0, 1, EAT_TO_PLATE], [1, 2, EAT_DIP], [2, 2, EAT_GATHER], [2, 3, EAT_LIFT], [3, 3, EAT_IN_MOUTH], [3, 0, EAT_LOWER]];
+const EAT_MOUTHFUL = EAT_STEPS.reduce((sum, step) => sum + step[2], 0);
 const EAT_BITES = 2, EAT_FIRST = 0.5; // mouthfuls a loop, and how long before the first
 const EAT_BEND = new THREE.Vector3(-1, -0.4, -0.4); // the way the elbow goes, bending: out and down
 
 const eatEase = x => x*x*(3 - 2*x);
+const eatGap = duration => Math.max(0.3, (duration - EAT_FIRST - EAT_BITES*EAT_MOUTHFUL)/EAT_BITES);
 /**
- * Where the fork is part-way through a loop of Eating.
+ * Which two of EAT_POSES a loop of Eating is between, and how far.
  * @param {number} t - seconds into the loop
  * @param {number} duration - the loop's length in seconds
- * @param {THREE.Vector3} mouth - where their mouth is, in the model's space
- * @returns {{tip: THREE.Vector3, dir: THREE.Vector3, cue: ?string}} where the tines are, which way the fork points
- *   (from the fist to the tines), and anything to sound or show at this frame
+ * @returns {[number, number, number]} from, to, and how far from one to the other (eased)
  */
-function eatingAt(t, duration, mouth) {
-  const gap = Math.max(0.3, (duration - EAT_FIRST - EAT_BITES*EAT_MOUTHFUL)/EAT_BITES);
-  const fork = (tip, dir) => ({ tip: tip.clone(), dir: dir.clone().normalize() });
-  const between = (a, da, b, db, x) => ({ tip: a.clone().lerp(b, eatEase(x)),
-    dir: da.clone().normalize().lerp(db.clone().normalize(), eatEase(x)).normalize() });
-  const tipMouth = mouth.clone().add(EAT_TIP_MOUTH);
+function eatingAt(t, duration) {
+  const gap = eatGap(duration);
   for (let k=0;k<EAT_BITES;k++) {
-    const u = t - (EAT_FIRST + k*(EAT_MOUTHFUL + gap));
+    let u = t - (EAT_FIRST + k*(EAT_MOUTHFUL + gap));
     if (u < 0 || u >= EAT_MOUTHFUL) continue;
-    if (u < EAT_DIP) return between(EAT_TIP_REST, EAT_DIR_REST, EAT_TIP_PLATE, EAT_DIR_PLATE, u/EAT_DIP);
-    if (u < EAT_DIP + EAT_GATHER) { // rummaging about the plate for a forkful
-      const g = u - EAT_DIP;
-      return fork(EAT_TIP_PLATE.clone().add(new THREE.Vector3(0.09*Math.sin(g*15), -0.03*Math.sin(g*9), 0.07*Math.cos(g*13))), EAT_DIR_PLATE);
-    }
-    if (u < EAT_DIP + EAT_GATHER + EAT_LIFT) return between(EAT_TIP_PLATE, EAT_DIR_PLATE, tipMouth, EAT_DIR_MOUTH, (u - EAT_DIP - EAT_GATHER)/EAT_LIFT);
-    if (u < EAT_MOUTHFUL - EAT_LOWER) return fork(tipMouth, EAT_DIR_MOUTH);
-    return between(tipMouth, EAT_DIR_MOUTH, EAT_TIP_REST, EAT_DIR_REST, (u - (EAT_MOUTHFUL - EAT_LOWER))/EAT_LOWER);
+    for (const [from, to, time] of EAT_STEPS) { if (u < time) return [from, to, eatEase(u/time)]; u -= time; }
   }
-  return fork(EAT_TIP_REST, EAT_DIR_REST); // between mouthfuls, the fork held over the plate
+  return [0, 0, 0];
 }
 /**
  * What happens when over a loop of Eating: the fork touching down on the plate, a forkful gathered onto it, and the
@@ -256,23 +254,68 @@ function eatingAt(t, duration, mouth) {
  * @returns {{time: number, cue: string}[]} each cue, in order
  */
 function eatingCues(duration) {
-  const gap = Math.max(0.3, (duration - EAT_FIRST - EAT_BITES*EAT_MOUTHFUL)/EAT_BITES);
+  const gap = eatGap(duration);
   const cues = [];
   for (let k=0;k<EAT_BITES;k++) {
-    const at = EAT_FIRST + k*(EAT_MOUTHFUL + gap);
-    cues.push({ time: at + EAT_DIP, cue: 'clink' });
-    cues.push({ time: at + EAT_DIP + EAT_GATHER*0.85, cue: 'forkful' });
+    const at = EAT_FIRST + k*(EAT_MOUTHFUL + gap), picked = at + EAT_TO_PLATE + EAT_DIP;
+    cues.push({ time: picked, cue: 'clink' });
+    cues.push({ time: picked + EAT_GATHER*0.85, cue: 'forkful' });
     // (`up`: the fork up from the plate till it's half back down, for the head to face front: see people.js)
-    cues.push({ time: at + EAT_DIP + EAT_GATHER + EAT_LIFT + 0.1, cue: 'bite', up: [at + EAT_DIP + EAT_GATHER, at + EAT_MOUTHFUL - EAT_LOWER/2] });
+    cues.push({ time: picked + EAT_GATHER + EAT_LIFT + 0.1, cue: 'bite', up: [picked + EAT_GATHER, at + EAT_MOUTHFUL - EAT_LOWER/2] });
   }
   return cues;
 }
 /**
- * Repose a frame of Sit1 as a frame of Eating (see PERSON_CLIPS): the right arm holding a fork, everything else as it sits.
+ * Where a hold (SNACK_HOLD's, or one of EAT_POSES) puts the fist, as the rig stands now.
+ * @returns {{grip: THREE.Vector3, turn: THREE.Quaternion, elbowAt: ?THREE.Vector3}}
+ */
+function holdAt(rig, hold, atMouth) {
+  const metre = rig.metre, S = rig.bone('ShoulderR').getWorldPosition(new THREE.Vector3());
+  const turn = new THREE.Quaternion().setFromEuler(new THREE.Euler(...hold.rot));
+  const dir = new THREE.Vector3(0, 1, 0).applyQuaternion(turn), at = new THREE.Vector3(...hold.at).multiplyScalar(metre);
+  const grip = atMouth ? rig.mouth().add(at).addScaledVector(dir, -(hold.reach ?? 0)*metre) : S.clone().add(at);
+  return { grip, turn, elbowAt: hold.elbowAt && S.clone().addScaledVector(new THREE.Vector3(...hold.elbowAt), metre) };
+}
+/** Fill in a hold's elbowAt/elbowTurn from where gripRight bends it (`bend`), then put the arm back as it was. */
+function settleElbow(rig, hold, atMouth, bend, moved) {
+  if (hold.elbowAt && hold.elbowTurn) return;
+  const was = moved.map(b => [b.position.clone(), b.quaternion.clone()]);
+  const { grip, turn } = holdAt(rig, hold, atMouth), S = rig.bone('ShoulderR').getWorldPosition(new THREE.Vector3());
+  const went = gripRight(rig, grip, turn, hold.elbow ? new THREE.Vector3(...hold.elbow) : bend, { ...hold, elbowAt: null, elbowTurn: null });
+  const round = v => Math.round(v*1000)/1000;
+  if (went) {
+    hold.elbowAt ??= went.at.sub(S).divideScalar(rig.metre).toArray().map(round);
+    const e = new THREE.Euler().setFromQuaternion(went.turn.multiply(rig.restTurn('ElbowR').invert()));
+    hold.elbowTurn ??= [e.x, e.y, e.z].map(round);
+  }
+  delete hold.elbow; delete hold.swing; delete hold.elbowRot;
+  moved.forEach((b, i) => { b.position.copy(was[i][0]); b.quaternion.copy(was[i][1]); });
+  rig.update();
+}
+/** Turn an EAT_POSES entry still given as tip/dir into a hold (see EAT_POSES). */
+function eatPoseHold(rig, pose, moved) {
+  if (pose.tip) {
+    const dir = new THREE.Vector3(...pose.dir).normalize(), turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    const tip = new THREE.Vector3(...pose.tip);
+    if (pose.mouth) tip.add(rig.mouth());
+    const grip = tip.addScaledVector(dir, -EAT_FORK);
+    const from = pose.mouth ? rig.mouth() : rig.bone('ShoulderR').getWorldPosition(new THREE.Vector3());
+    const round = v => Math.round(v*1000)/1000, e = new THREE.Euler().setFromQuaternion(turn);
+    pose.at = grip.sub(from).divideScalar(rig.metre).toArray().map(round);
+    pose.rot = [e.x, e.y, e.z].map(round);
+    if (pose.mouth) pose.reach = 0;
+    delete pose.tip; delete pose.dir;
+  }
+  settleElbow(rig, pose, pose.mouth, EAT_BEND, moved);
+  return pose;
+}
+/**
+ * Repose a frame of Sit1 as a frame of Eating (see PERSON_CLIPS): the right arm holding a fork, everything else as it sits,
+ * blended from one of EAT_POSES to the next.
  * @param {number} frame - the frame, from 0
  * @param {number} frames - how many the loop is
  * @param {object} rig - the model's bones, by name, where they rest, where the mouth is, and a refresh (see buildPersonModel)
- * @param {boolean} [eating] - working through a meal, or false for the fork held still over the plate
+ * @param {boolean} [eating] - working through a meal, or false for EAT_SHOWN's pose held still
  * @returns {?{time: number, cue: string}[]} the loop's cues, if eating
  */
 function eatingPose(frame, frames, rig, eating = true) {
@@ -280,10 +323,13 @@ function eatingPose(frame, frames, rig, eating = true) {
   const moved = eatingBones(rig);
   unrepose(moved);
   rig.update();
-  const fork = eating ? eatingAt(t, duration, rig.mouth()) : eatingAt(-1, duration, rig.mouth());
-  // the fist on the fork's handle, which lies along the model's Y in the rest pose (HAND_GRIP)
-  const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), fork.dir);
-  gripRight(rig, fork.tip.clone().addScaledVector(fork.dir, -EAT_FORK), turn);
+  if (!rig.bone('ShoulderR')) return null;
+  const [from, to, x] = eating ? eatingAt(t, duration) : [EAT_SHOWN.pose, EAT_SHOWN.pose, 0];
+  const a = eatPoseHold(rig, EAT_POSES[from], moved), b = eatPoseHold(rig, EAT_POSES[to], moved);
+  const A = holdAt(rig, a, a.mouth), B = holdAt(rig, b, b.mouth);
+  const turnOf = h => new THREE.Quaternion().setFromEuler(new THREE.Euler(...h.elbowTurn));
+  const e = new THREE.Euler().setFromQuaternion(turnOf(a).slerp(turnOf(b), x));
+  gripRight(rig, A.grip.lerp(B.grip, x), A.turn.slerp(B.turn, x), EAT_BEND, { elbowAt: A.elbowAt.lerp(B.elbowAt, x), elbowTurn: [e.x, e.y, e.z] });
   markRepose(moved);
   return eating ? eatingCues(duration) : null;
 }
@@ -364,8 +410,12 @@ const eatingBones = rig => ['Shoulder', 'Elbow', 'Hand', ...GRIP_CURL.map(([name
 // (see gripRight). (An old hold — `elbow`, `swing`, `elbowRot` — gets both the first time it's baked.)
 export const SNACK_HOLD = {
   Hotdog: {
-    carry: { at: [-0.06, -0.08, 0.19], rot: [-3.14, 1.98, 1.64], elbowAt: [-0.092, -0.22, -0.072], elbowTurn: [-1.442, 0.976, 1.826] },
-    bite: { at: [-0.195, 0.04, 0.105], reach: 0.145, rot: [0.46, 2.81, -1.4], elbowAt: [-0.108, -0.169, 0.183], elbowTurn: [-2.817, 1.02, 2.077] },
+    carry: { at: [-0.025, -0.26, 0.31], rot: [-0.91, 1.44, 1.64], elbowAt: [-0.06, -0.238, 0.02], elbowTurn: [-0.98, 0.81, 1.76] },
+    bite: { at: [-0.015, 0.035, -0.025], reach: 0.145, rot: [0.71, 1.53, -1.86], elbowAt: [-0.108, -0.169, 0.183], elbowTurn: [-2.817, 0.94, 2.54] },
+  },
+  Skewer: {
+    carry: { at: [-0.03, -0.125, 0.31], rot: [-2.43, 3.14, 1.72], elbowAt: [-0.06, -0.238, 0.02], elbowTurn: [-0.98, 1.91, 1.76] },
+    bite: { at: [-0.05, 0.025, 0], reach: 0.145, rot: [0.51, 0.05, -1.43], elbowAt: [-0.21, -0.188, 0.03], elbowTurn: [-2.817, 1.83, 2.22] },
   },
   Coffee: {
     carry: { at: [-0.1, -0.265, 0.32], rot: [-3.142, 1.471, -3.142], elbow: [-0.35, -0.96, -0.2] },
@@ -400,21 +450,10 @@ function snackPose(rig, item, biting) {
   rig.update();
   const shoulder = rig.bone('ShoulderR');
   if (!shoulder) return null;
-  const hold = SNACK_HOLD[item][biting ? 'bite' : 'carry'], metre = rig.metre;
-  const turn = new THREE.Quaternion().setFromEuler(new THREE.Euler(...hold.rot));
-  const dir = new THREE.Vector3(0, 1, 0).applyQuaternion(turn);
-  const at = new THREE.Vector3(...hold.at).multiplyScalar(metre);
-  const grip = biting ? rig.mouth().add(at).addScaledVector(dir, -hold.reach*metre) : shoulder.getWorldPosition(new THREE.Vector3()).add(at);
-  const S = shoulder.getWorldPosition(new THREE.Vector3());
-  const elbowAt = hold.elbowAt && S.clone().addScaledVector(new THREE.Vector3(...hold.elbowAt), metre);
-  const went = gripRight(rig, grip, turn, hold.elbow ? new THREE.Vector3(...hold.elbow) : SNACK_BEND, { ...hold, elbowAt });
-  // (an old hold, the elbow bent and the forearm aimed: keep where that put them)
-  const round = v => Math.round(v*1000)/1000;
-  if (!hold.elbowAt && went) { hold.elbowAt = went.at.sub(S).divideScalar(metre).toArray().map(round); delete hold.elbow; delete hold.swing; }
-  if (!hold.elbowTurn && went) {
-    const e = new THREE.Euler().setFromQuaternion(went.turn.multiply(rig.restTurn('ElbowR').invert()));
-    hold.elbowTurn = [e.x, e.y, e.z].map(round); delete hold.elbowRot;
-  }
+  const hold = SNACK_HOLD[item][biting ? 'bite' : 'carry'];
+  settleElbow(rig, hold, biting, SNACK_BEND, moved);
+  const { grip, turn, elbowAt } = holdAt(rig, hold, biting);
+  gripRight(rig, grip, turn, SNACK_BEND, { ...hold, elbowAt });
   markRepose(moved);
   return null;
 }

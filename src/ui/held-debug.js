@@ -2,7 +2,7 @@ import { S } from '../core/shared.js';
 import { openWindow } from './w3-window.js';
 import { controls } from '../core/camera-controls.js';
 import { people, personModel, isDrawn, followed } from '../life/people/people.js';
-import { SNACK_HOLD } from '../life/people/peopleModel.js';
+import { EAT_POSES, EAT_SHOWN, PERSON_BAKE_FPS, SNACK_HOLD } from '../life/people/peopleModel.js';
 import { CIG_FIRE, ITEMS, dropSnack, exhale, giveSnack, hold, letGo, updateHeld } from '../life/people/peopleHolding.js';
 
 // ============================================================ held items (debug)
@@ -11,12 +11,13 @@ import { CIG_FIRE, ITEMS, dropSnack, exhale, giveSnack, hold, letGo, updateHeld 
 // held still (S.peopleFrozen) and one person stands in the first frame of IdleHotdog, IdleCoffeeBite… with the camera
 // on them, everyone else folded away (personModel.only); a hand slider bakes that one clip again (personModel.rebakeClip). Nothing is kept: the values to paste back
 // into the code are shown at the bottom.
-const KINDS = { hotdog: 'Hotdog', slice: 'Hotdog', skewer: 'Hotdog', coffee: 'Coffee', beer: 'Beer', cig: 'Cig' };
-// (held in the hand through another clip, not a snack: its parts' own sliders, a frame of the clip to pose in)
-const TOOLS = { chopsticks: 'Eating' };
-let item = 'cig', biting = false, pinned = null, minRadius = null, frame = 0;
+const KINDS = { hotdog: 'Hotdog', slice: 'Hotdog', skewer: 'Skewer', coffee: 'Coffee', beer: 'Beer', cig: 'Cig' };
+// (held in the hand through Eating, not a snack: one loc/rot/size for all its parts, and Eating's four poses (EAT_POSES),
+// one at a time in EatingPaused, or the whole loop played)
+const TOOLS = { fork: 'Eating', chopsticks: 'Eating' };
+let item = 'cig', biting = false, pinned = null, minRadius = null, playing = false, shown = null;
 
-const clipName = () => TOOLS[item] ?? 'Idle' + KINDS[item] + (biting ? 'Bite' : '');
+const clipName = () => TOOLS[item] ? (playing ? 'Eating' : 'EatingPaused') : 'Idle' + KINDS[item] + (biting ? 'Bite' : '');
 // what they're given: a snack, or a tool into the right hand
 function give() {
   for (const t of Object.keys(TOOLS)) letGo(pinned, t);
@@ -36,7 +37,7 @@ function holdStill() {
   pinned.oneShot = null;
   if (pinned.snack) { pinned.snack.next = 1e9; pinned.snack.held.glow = biting ? 1 : 0; } // (no bites while it's being looked at; a cig lit at the lips)
   const o = i*4, anim = personModel.anim.array;
-  anim[o] = anim[o+1] = clip.start + (TOOLS[item] ? Math.round(frame*clip.frames) : 0); anim[o+2] = 1; anim[o+3] = 0;
+  anim[o] = anim[o+1] = clip.start + (playing ? Math.floor(performance.now()/1000*PERSON_BAKE_FPS) % clip.frames : 0); anim[o+2] = 1; anim[o+3] = 0;
   personModel.wornLayers.forEach(layer => {
     const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null;
     if (style?.mesh) style.anim.array.set(anim.subarray(o, o + 4), layer.slot[i]*4);
@@ -68,17 +69,31 @@ function unpin() {
   if (personModel) personModel.only.value = -1;
   if (minRadius != null) { controls.minRadius = minRadius; minRadius = null; }
   if (pinned) for (const t of Object.keys(TOOLS)) letGo(pinned, t);
+  if (EAT_SHOWN.pose) { EAT_SHOWN.pose = 0; personModel?.rebakeClip('EatingPaused'); }
+  playing = false;
   if (pinned?.snack) pinned.snack.next = 2;
   pinned = null;
 }
 
 // a slider: [label, get, set, min, max, step]
 function sliders() {
-  if (TOOLS[item]) return [['Pose'], ['frame', () => frame, v => { frame = v; }, 0, 1, 0.01],
-    ...ITEMS[item].parts.flatMap((part, k) => [[`Part ${k + 1}`],
-      ...['x', 'y', 'z'].map((a, i) => ['at ' + a, () => part.at[i], v => { part.at[i] = v; }, -0.2, 0.3, 0.001]),
-      ...['x', 'y', 'z'].map((a, i) => ['turn ' + a, () => (part.turn ??= [0, 0, 0])[i], v => { part.turn[i] = v; }, -3.14, 3.14, 0.01]),
-      sizeSlider(part)])];
+  const tool = ITEMS[item];
+  if (TOOLS[item]) {
+    const pose = () => EAT_POSES[EAT_SHOWN.pose], rebake = () => personModel?.rebakeClip(playing ? 'Eating' : 'EatingPaused');
+    const xyz = (label, get, min, max, step) => ['x', 'y', 'z'].map((a, i) => [label + ' ' + a, () => get()[i], v => { get()[i] = v; rebake(); }, min, max, step]);
+    return [['Pose: 1 hold, 2 over plate, 3 pick, 4 mouth'], ['pose', () => EAT_SHOWN.pose + 1, v => { EAT_SHOWN.pose = v - 1; rebake(); shown?.(); }, 1, 4, 1],
+      ['Item'],
+      ...['x', 'y', 'z'].map((a, i) => ['loc ' + a, () => tool.at[i], v => { tool.at[i] = v; }, -0.2, 0.3, 0.001]),
+      ...['x', 'y', 'z'].map((a, i) => ['rot ' + a, () => tool.turn[i], v => { tool.turn[i] = v; }, -3.14, 3.14, 0.01]),
+      ['size', () => tool.size, v => { tool.size = v; }, 0.1, 3, 0.01],
+      [pose().mouth ? 'Hand.R (from the mouth)' : 'Hand.R'],
+      ...xyz('loc', () => pose().at, -0.6, 0.6, 0.005),
+      ...(pose().mouth ? [['reach', () => pose().reach, v => { pose().reach = v; rebake(); }, 0, 0.3, 0.005]] : []),
+      ...xyz('rot', () => pose().rot, -3.14, 3.14, 0.01),
+      ['Elbow.R'],
+      ...xyz('loc', () => pose().elbowAt, -0.5, 0.5, 0.002),
+      ...xyz('rot', () => pose().elbowTurn, -3.14, 3.14, 0.01)];
+  }
   const part = ITEMS[item].parts[0], hold = () => SNACK_HOLD[KINDS[item]][biting ? 'bite' : 'carry'];
   const vec = (label, get, i, min, max, step, then) => [label, () => get()[i], v => { get()[i] = v; then?.(); }, min, max, step];
   const rebake = () => personModel?.rebakeClip(clipName());
@@ -102,8 +117,9 @@ function sliders() {
 function values() {
   if (TOOLS[item]) {
     const list = a => `[${a.map(round).join(', ')}]`;
-    return `// ITEMS.${item} (peopleHolding.js)\n` + ITEMS[item].parts.map(p =>
-      `{ shape: '${p.shape}', size: ${list(p.size)}, at: ${list(p.at)}${p.turn ? `, turn: ${list(p.turn)}` : ''}${p.color != null ? `, color: 0x${p.color.toString(16).padStart(6, '0')}` : ''} },`).join('\n');
+    const t = ITEMS[item];
+    const pose = h => `{ at: ${list(h.at)}, ${h.mouth ? `reach: ${round(h.reach)}, ` : ''}rot: ${list(h.rot)}, elbowAt: ${list(h.elbowAt)}, elbowTurn: ${list(h.elbowTurn)}${h.mouth ? ', mouth: true' : ''} },`;
+    return `// ITEMS.${item} (peopleHolding.js)\nat: ${list(t.at)}, turn: ${list(t.turn)}, size: ${round(t.size)}\n// EAT_POSES (peopleModel.js)\n${EAT_POSES.map(pose).join('\n')}`;
   }
   const part = ITEMS[item].parts[0], hold = SNACK_HOLD[KINDS[item]], list = a => `[${a.map(round).join(', ')}]`;
   const side = h => `{ at: ${list(h.at)}, ${h.reach != null ? `reach: ${round(h.reach)}, ` : ''}rot: ${list(h.rot)}${h.elbowAt ? `, elbowAt: ${list(h.elbowAt)}` : ''}${h.elbowTurn ? `, elbowTurn: ${list(h.elbowTurn)}` : ''} }`;
@@ -117,7 +133,7 @@ function fill(body) {
     ${TOOLS[item] ? '' : `<label><input type="checkbox" id="hd-bite"${biting ? ' checked' : ''}> at the mouth</label>`}</div>
     <div id="hd-sliders" style="max-height:45vh;overflow-y:auto"></div>
     <textarea id="hd-out" readonly rows="5" style="width:100%;box-sizing:border-box;font:11px monospace;margin-top:6px"></textarea>
-    <button id="hd-copy">Copy</button>${item === 'cig' ? ' <button id="hd-smoke">Smoke</button>' : ''}${pinned ? '' : ' <span>No one to pose: turn people on first.</span>'}`;
+    <button id="hd-copy">Copy</button>${TOOLS[item] ? ` <button id="hd-play">${playing ? 'Stop' : 'Play'}</button>` : ''}${item === 'cig' ? ' <button id="hd-smoke">Smoke</button>' : ''}${pinned ? '' : ' <span>No one to pose: turn people on first.</span>'}`;
   const out = body.querySelector('#hd-out'), show = () => { out.value = values(); };
   const list = body.querySelector('#hd-sliders');
   // (one line a slider, label | bar | value, so the window stays short enough to drag about)
@@ -134,12 +150,22 @@ function fill(body) {
   body.querySelector('#hd-item').addEventListener('change', e => { item = e.target.value; if (pinned) give(); fill(body); });
   body.querySelector('#hd-bite')?.addEventListener('change', e => { biting = e.target.checked; fill(body); });
   body.querySelector('#hd-copy').addEventListener('click', () => navigator.clipboard?.writeText(out.value));
+  body.querySelector('#hd-play')?.addEventListener('click', () => { if (!playing) personModel?.rebakeClip('Eating'); playing = !playing; fill(body); });
+  // (another pose: the same sliders, refilled in place so the pose slider keeps its drag; or redrawn, reach come or gone)
+  const count = sliders().length;
+  shown = () => {
+    const now = sliders();
+    if (now.length !== count) return fill(body);
+    now.forEach(([, get], n) => { const input = list.querySelector(`#hd-${n}`); if (input && get) { input.value = get(); list.querySelector(`#hd-${n}-val`).textContent = round(get()); } });
+    show();
+  };
   body.querySelector('#hd-smoke')?.addEventListener('click', () => { if (pinned) for (let k = 0; k < 10; k++) setTimeout(() => exhale(pinned), k*50); });
   show();
 }
 
 /** Open the held-items debug window, or bring it to the front. */
 export function openHeldDebug() {
+  if (EAT_POSES.some(pose => pose.tip)) personModel?.rebakeClip('Eating'); // (its poses made holds, for the sliders)
   if (!pinned) pin();
   const win = openWindow({ id: 'held-debug', title: 'Held Items (debug)', width: 300, onClose: unpin, fill });
   win.style.transform = 'none';

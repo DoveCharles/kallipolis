@@ -31,12 +31,12 @@ export const ITEMS = {
     { shape: 'box', size: [0.014, 0.17, 0.007], at: [0, 0.035, 0], color: 0xc8ccd3 },
     { shape: 'box', size: [0.034, 0.038, 0.005], at: [0, 0.135, 0], color: 0xc8ccd3 },
     { shape: 'sphere', size: [0.028, 0.028, 0.028], at: [0, 0.155, 0], tint: true, loaded: true },
-  ] },
+  ], at: [0, 0, 0], turn: [0, 0, 0], size: 1 },
   // (a sushi diner's: see sushiDiner in peopleActivities.js)
   chopsticks: { parts: [
     { shape: 'box', size: [0.008, 0.21, 0.008], at: [-0.006, 0.055, 0], color: 0x3a2418 },
     { shape: 'box', size: [0.008, 0.21, 0.008], at: [0.006, 0.055, 0.004], color: 0x3a2418 },
-  ] },
+  ], at: [0, 0, 0], turn: [0, 0, 0], size: 1 }, // (at/turn/size: the pair moved as one)
   mug: { parts: [
     { shape: 'cylinder', size: [0.075, 0.09, 0.075], at: [0, 0.035, 0], color: 0xf2f0ea },
     { shape: 'box', size: [0.012, 0.045, 0.012], at: [0.048, 0.035, 0], color: 0xf2f0ea },
@@ -44,7 +44,7 @@ export const ITEMS = {
   ] },
   // (the parts that are `eaten` get shorter from the top as it goes: see A SNACK; a model's is cut away rather than squashed)
   hotdog: { parts: [
-    { shape: 'hotdog', size: [0.175, 0.175, 0.175], at: [0.046, 0.028, 0.013], turn: [-0.022, 0.968, 0], eaten: true },
+    { shape: 'hotdog', size: [0.226, 0.226, 0.226], at: [0.046, 0.028, 0.013], turn: [-0.022, 0.72, -0.02], eaten: true },
   ] },
   coffee: { parts: [
     { shape: 'coffee', size: [0.167, 0.167, 0.167], at: [0.059, 0.047, 0.036], turn: [-0.072, 2.588, 0.028] },
@@ -75,7 +75,7 @@ export const ITEMS = {
     { shape: 'cylinder', size: [0.36, 0.008, 0.36], at: [0, 0.004, 0], color: 0xf4f2ee },
   ] },
   skewer: { parts: [
-    { shape: 'skewer', size: [0.17, 0.17, 0.17], at: [0.046, 0.028, 0.013], turn: [-0.022, 0.968, 0], eaten: true },
+    { shape: 'skewer', size: [0.277, 0.277, 0.277], at: [0.039, 0.151, 0.013], turn: [-0.022, 0.968, 0], eaten: true },
   ] },
   slice: { parts: [
     { shape: 'slice', size: [0.173, 0.178, 0.17], at: [0.064, 0.011, 0.099], turn: [0, -1.2, -1.48], eaten: true },
@@ -83,7 +83,7 @@ export const ITEMS = {
 };
 
 // A dinner: where the plate goes on the table in front of someone sitting down to eat, in the model's own units (the
-// Eating clip dips its fork to the same spot — see EAT_TIP_PLATE in peopleModel.js), and what is on it. Its height there
+// Eating clip's EAT_POSES in peopleModel.js dip its fork about there), and what is on it. Its height there
 // only suits someone of about average size: the plate is set down on the table top itself (serveMeal), since a table
 // doesn't grow with whoever sits at it and a short diner's plate would otherwise sink into it.
 const PLATE_AT = new THREE.Vector3(-0.05, 3.44, -0.56);
@@ -367,7 +367,7 @@ const SNACKS = {
   beer: { clip: 'Beer', mouthfuls: 9, up: 1.7, gap: [4, 10], sound: 'sip' },
   cig: { clip: 'Cig', mouthfuls: 8, up: 1.6, gap: [4, 9] }, // (a drag each: see SMOKING)
   slice: { clip: 'Hotdog', mouthfuls: 3, up: 1.1, gap: [2, 4], sound: 'bite' }, // (a pizza's: see feedPizza)
-  skewer: { clip: 'Hotdog', mouthfuls: 3, up: 1.1, gap: [2, 4], sound: 'bite' }, // (souvlaki's)
+  skewer: { clip: 'Skewer', mouthfuls: 3, up: 1.1, gap: [2, 4], sound: 'bite' }, // (souvlaki's)
 };
 /** What someone's snack adds to a clip's name, for the version of it with that in hand ('Beer': WalkBeer, WaveLeftBeer…), or ''. */
 export const snackClipName = p => SNACKS[p.snack?.item]?.clip ?? '';
@@ -621,6 +621,7 @@ export function updateHeld(only = -1) {
       }
       anchor.scale(size.setScalar(personModel.unitsPerMetre));
       world.multiplyMatrices(instance, anchor);
+      if (item.size != null) world.multiply(part.compose(place.set(...item.at), turn.setFromEuler(euler.set(...item.turn)), size.setScalar(item.size)));
       for (const piece of item.parts) {
         if (piece.loaded && held.loaded == null) continue;
         euler.set(...(piece.turn ?? [0, 0, 0]));
