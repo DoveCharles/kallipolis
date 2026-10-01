@@ -153,13 +153,12 @@ const overHead = p => ({ x: p.x, y: p.y + personHeight(p) + HOVER, z: p.z });
 function updateOrb(orb, dt, t) {
   const p = orb.target;
   if (orb.state !== 'charging') orb.charge = Math.max(0, orb.charge - DRAIN*dt);
-  let glow = 0.08 + 0.06*Math.sin(t*3);
+  let glow = 0.08; // (steady unless pursuing or smiting)
   switch (orb.state) {
     case 'charging': {
       const at = restPoint(orb);
       orb.x = at.x; orb.y = at.y; orb.z = at.z; orb.vx = orb.vy = orb.vz = 0;
       orb.charge = Math.min(1, orb.charge + dt/CHARGE_TIME);
-      glow = 0.15 + 0.15*Math.sin(t*2);
       if (orb.charge >= 1) { orb.state = 'rising'; orb.goal = { x: at.x, y: groundY(orb) + CRUISE, z: at.z }; }
       break;
     }
