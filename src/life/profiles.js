@@ -102,10 +102,22 @@ export const MINI_TRAITS = { size: 0.2, headsize: 3.2 }; // (× the leader's)
 const minis = new Map(); // a mini's id → { leaderId, n }
 /** Make person `id` a mini of person `leaderId`'s, the `n`th. */
 export const registerMini = (id, leaderId, n) => { minis.set(id, { leaderId, n }); };
+// a preset's (see people/presets.js) ids: their own picks, but the preset's name
+const presets = new Map();
+/** Make person `id` preset `preset` (see people/presets.js). */
+export const registerPreset = (id, preset) => { presets.set(id, preset); };
+const ownProfile = (id, isMan, moodNow) => {
+  const profile = profileFor(id, isMan, moodNow), preset = presets.get(id);
+  if (!preset) return profile;
+  const own = side => preset[side] ? { [side]: preset[side].map(([card]) => card), [side + 'Said']: preset[side].map(([, said]) => said),
+    [side + 'Tier']: preset[side].map(() => null), [side + 'Mods']: preset[side].map(() => []), [side + 'Base']: preset[side].map(([card]) => card),
+    [side === 'loves' ? 'lovedWords' : 'hatedWords']: [] } : {};
+  return { ...profile, name: preset.name, shortName: preset.shortName, age: preset.age ?? profile.age, ...own('loves'), ...own('hates') };
+};
 export function profileOf(id, isMan, moodNow = null) {
   const mini = minis.get(id);
-  if (!mini) return profileFor(id, isMan, moodNow);
-  const leader = profileFor(mini.leaderId, isMan, moodNow), { traits } = leader;
+  if (!mini) return ownProfile(id, isMan, moodNow);
+  const leader = ownProfile(mini.leaderId, isMan, moodNow), { traits } = leader;
   return { ...leader, name: `Mini ${leader.shortName} #${mini.n}`,
     traits: { ...traits, piper: 0, size: traits.size*MINI_TRAITS.size, headsize: (traits.headsize || 1)*MINI_TRAITS.headsize } };
 }

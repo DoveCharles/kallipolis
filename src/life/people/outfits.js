@@ -32,7 +32,9 @@ const TILE_WIDTH = 256, TILE_HEIGHT = Math.round(TILE_WIDTH*(OUTFIT_CHEST.maxY -
  * wearing that hat (a hairstyle's name in Hair.glb) and no one else; with `trousers`, never by anyone in a skirt or baggy jeans;
  * with `women`, never by a man; with `skirted`, only by women in a skirt. With `fishnets`, the legs a skirt leaves bare wear
  * fishnet tights, and with `boots` black boots up them to
- * that height (the model's y) — both drawn in the shader: see OUTFIT_CHEST_GLSL in peopleModel.js.
+ * that height (the model's y); with `armWarmers` black sleeves from that far along the arm (x), and with `hem` a stripe
+ * of its green round the skirt below that height (y); `cuff` (x) and `trim` (depth under the boots' top) bands of its
+ * green on the arm warmers and boots, and `flare` the sleeves widened from the cuff to the wrist — all drawn in the shader: see OUTFIT_CHEST_GLSL in peopleModel.js.
  *
  * `colors` gives the color each part of them takes, in order (see PERSON_TRAIT_COLORS): a list to pick one from, or the
  * name of a part picked before it, to match. `bare` names the bands of clothes (see PERSON_CLOTHING) that stop where
@@ -119,9 +121,23 @@ export const OUTFITS = [
     },
     paint: paintLayeredTee, paintSleeve: paintLayeredTeeSleeve,
   },
+  {
+    // Hatsune Miku's (see presets.js): a sleeveless grey shirt and tie, black arm warmers, a black skirt with a stripe at
+    // its hem, black thigh-highs and shoes
+    name: 'Miku', hat: 'Hair_Miku', bare: [], skirted: true, boots: 3.6, trim: 0.1, armWarmers: 0.8, cuff: 2.75, flare: 0.8, hem: 4.1,
+    colors: {
+      Top: 'Skin',                                                              // (bare shoulders, and the arms above the warmers)
+      Skirt: [0x111114], Shoes: [0x0b0b0d],
+      OutfitRed: [0xa9adb3],                                                    // the shirt
+      OutfitGreen: [0x1ce7d1],                                                  // the tie and the skirt's hem: her hair's blue
+    },
+    paint: paintMiku,
+  },
 ];
 
 /** Where each outfit's columns of the texture start (see buildOutfitTexture); and how many there are. */
+// (tools/ped-maker.html's tuning, ?tune={"Miku":{"cuff":2.7}})
+try { for (const [name, v] of Object.entries(JSON.parse(new URLSearchParams(location.search).get('tune') || '{}'))) Object.assign(OUTFITS.find(o => o.name === name) ?? {}, v); } catch {}
 export const OUTFIT_COLUMNS = OUTFITS.map((outfit, k) => OUTFITS.slice(0, k).reduce((sum, o) => sum + (o.variants || 1), 0));
 export const OUTFIT_COLUMN_COUNT = OUTFITS.reduce((sum, o) => sum + (o.variants || 1), 0);
 
@@ -469,6 +485,19 @@ function paintGoth(ctx, width, height, front) {
  */
 function paintGothSleeve(ctx, width, height) {
   ctx.fillStyle = RED; ctx.fillRect(0, 0, width, height);
+}
+
+/**
+ * Miku's shirt: grey all over (the top under it being skin), with the shirt and tie's collar, placket and tie.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width
+ * @param {number} height
+ * @param {boolean} front - the front, or the back
+ */
+function paintMiku(ctx, width, height, front) {
+  ctx.fillStyle = RED; ctx.fillRect(0, 0, width, height);
+  ctx.globalCompositeOperation = 'lighter'; // (the shirt's shading added over its red, not in place of it)
+  paintShirtAndTie(ctx, width, height, front);
 }
 
 /** How far along the arm (the model's x) the t-shirt's sleeves reach, over the long-sleeved shirt's: halfway to the elbow. */

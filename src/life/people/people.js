@@ -18,7 +18,8 @@ import { ear } from '../../audio/sfx.js';
 import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
 import { controlInput, possession, rushed } from '../possession.js';
-import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
+import { DEFAULT_TRAITS, profileOf, profilesVersion, registerPreset } from '../profiles.js';
+import { presetAt } from './presets.js';
 import { SPECTRAL } from './peopleSpirits.js';
 import { TWIN_GAP, TWIN_LOOK_ROW } from './peopleModel.js';
 import { updateSpiritChat, twinBubble } from './peopleSpiritChat.js';
@@ -574,13 +575,15 @@ export function refreshTraits(p, i) {
   const isMan = personModel ? personModel.isMan[i] === 1 : null, key = traitsKeyOf(isMan);
   if (p.traitsKey === key) return;
   p.traitsKey = key;
+  const preset = presetAt(i);
+  if (preset) registerPreset(p.id, preset); // (whoever's in a preset's slot is them: see presets.js)
   const profile = profileOf(p.id, isMan, p.moodNow); // (a piper's mini's is theirs: see registerMini in profiles.js)
   // (who they are, with what's in their pockets and what they're under stacked over it: see life/statuseffects.js)
   p.baseTraits = profile.traits;
   restackTraits(p);
   // (their starting money times their capital, kept up with their traits until they've spent any)
   if (p.walletSet === undefined || p.wallet === p.walletSet) p.wallet = p.walletSet = Math.round(p.walletBase*p.baseTraits.capital);
-  p.height = p.baseHeight*p.traits.size;
+  p.height = preset?.height ?? p.baseHeight*p.traits.size;
   p.age = profile.age;
   p.name = profile.name; // (for their card, and for naming them in the morality notices when they die)
   p.loves = profile.lovesSaid; p.hates = profile.hatesSaid; // (for what they say: see life/speech-text.js)

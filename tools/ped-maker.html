@@ -20,16 +20,19 @@
 </style>
 </head>
 <body>
-<iframe id="app" src="../index.html?blank"></iframe>
+<iframe id="app"></iframe>
 <div id="panel"><div id="status">Loading…</div><div id="controls"></div></div>
 <script type="module">
 // Loads the app in the frame on an empty, unsaved scene (index.html?blank: see project/autosave.js), holds the crowd still
-// (S.peopleFrozen) and draws only slot 0 (personModel.only), posed and faced from the sliders, which write its look
+// (S.peopleFrozen) and draws only slot 0 (or ?slot=N; personModel.only), posed and faced from the sliders, which write its look
 // straight into the traits texture (see assignAppearance in peopleModel.js). Nothing is kept.
 const $ = id => document.getElementById(id);
 const frame = $('app');
 const inApp = path => frame.contentWindow.eval(`import(${JSON.stringify(path.startsWith('three') ? path : new URL(path, location.href).href)})`);
-const I = 0; // (the slot)
+const I = +new URLSearchParams(location.search).get('slot') || 0; // (the slot: ?slot=N, else 0)
+const tune = JSON.parse(new URLSearchParams(location.search).get('tune') || '{}'); // (outfit fields baked into the shaders: applied by reloading)
+const TUNABLE = ['boots', 'trim', 'armWarmers', 'cuff', 'flare', 'hem'];
+frame.src = '../index.html?blank' + (Object.keys(tune).length ? '&tune=' + encodeURIComponent(JSON.stringify(tune)) : '');
 let win, S, pm, peopleMod, controls, THREE, M, p;
 const ped = { clip: 'Idle', spin: false, heading: 0, time: 0, height: 1, talk: 0, emotion: 0, blink: 0, turn: 0, tilt: 0, eyes: [0, 0, 0, 0] };
 
@@ -97,7 +100,7 @@ const traitSlider = (label, row, k, min = -1, max = 1) => slider(label, min, max
 
 function build() {
   html.length = 0; handlers.length = 0; n = 0;
-  html.push(`<button id="random">Random</button><label><input type="checkbox" id="spin"${ped.spin ? ' checked' : ''}> turntable</label>`);
+  html.push(`<button id="random">Random</button><button id="copy">Copy values</button><textarea id="out" rows="4" style="width:100%" readonly></textarea><label><input type="checkbox" id="spin"${ped.spin ? ' checked' : ''}> turntable</label>`);
   head('Body');
   picker('Sex', [[1, 'Man'], [0, 'Woman']], () => M.isMan[I], v => { M.isMan[I] = +v; traits()[texel(1) + 1] = +v; dirty(); });
   slider('Height', 0.5, 1.6, 0.01, () => ped.height, v => { ped.height = v; });
@@ -105,6 +108,11 @@ function build() {
   slider('Facing', -3.14, 3.14, 0.01, () => ped.heading, v => { ped.heading = v; });
   head('Face');
   FACE().forEach(([name, row, k]) => traitSlider(name, row, k));
+  // (the lashes' bits on for worn, lipstick's on for none)
+  ['Lash 1', 'Lash 2', 'Lash 3', 'Lipstick'].forEach((name, b) => picker(name, [[1, 'On'], [0, 'Off']], () => ((traits()[texel(pm.PERSON_CLOTHING_ROW) + 3] >> b) & 1) ^ (b === 3), v => {
+    const t = texel(pm.PERSON_CLOTHING_ROW) + 3;
+    traits()[t] = +v ^ (b === 3) ? traits()[t] | (1 << b) : traits()[t] & ~(1 << b); dirty();
+  }));
   head('Colours');
   pm.PERSON_TRAIT_COLORS.forEach((part, k) => { if (part !== 'Blood') colour(part, 2 + k); });
   head('Worn');
@@ -116,8 +124,20 @@ function build() {
   picker('Outfit', [[0, '(none)'], ...outfits.OUTFITS.map((o, k) => [k + 1, o.name])], () => traits()[texel(pm.PERSON_TRAIT_COLORS.indexOf('OutfitRed') + 2) + 3], v => {
     traits()[texel(pm.PERSON_TRAIT_COLORS.indexOf('OutfitRed') + 2) + 3] = +v;
     traits()[texel(pm.PERSON_TRAIT_COLORS.indexOf('OutfitGreen') + 2) + 3] = +v ? outfits.OUTFIT_COLUMNS[+v - 1] : 0;
-    dirty();
+    dirty(); build();
   });
+  const outfit = outfits.OUTFITS[traits()[texel(pm.PERSON_TRAIT_COLORS.indexOf('OutfitRed') + 2) + 3] - 1];
+  if (outfit) {
+    head('Tune ' + outfit.name);
+    TUNABLE.forEach(key => html.push(`<label class="row">${key}<input type="number" step="0.05" data-tune="${key}" value="${outfit[key] ?? ''}"><span></span></label>`));
+    html.push(`<button id="tuneApply">Apply (reloads)</button>`);
+    handlers.push(() => {
+      $('tuneApply').onclick = () => {
+        tune[outfit.name] = Object.fromEntries([...document.querySelectorAll('[data-tune]')].filter(e => e.value !== '').map(e => [e.dataset.tune, +e.value]));
+        const q = new URLSearchParams(location.search); q.set('tune', JSON.stringify(tune)); location.search = q;
+      };
+    });
+  }
   picker('Nude', [[0, 'No'], [1, 'Yes']], () => traits()[texel(pm.PERSON_TRAIT_COLORS.indexOf('Cuff') + 2) + 3] > 0.5 ? 1 : 0, v => { M.setNude(I, p.id, +v === 1); });
   BANDS.forEach(([name, count], k) => slider(name, 1, count + 1, 1, () => traits()[texel(pm.PERSON_CLOTHING_ROW) + k], v => { traits()[texel(pm.PERSON_CLOTHING_ROW) + k] = v; dirty(); }));
   head('Pose');
@@ -132,9 +152,27 @@ function build() {
   $('controls').innerHTML = html.join('');
   handlers.forEach(h => h());
   $('random').onclick = () => { M.assignAppearance(I, Math.floor(Math.random()*1e9)); build(); };
+  $('copy').onclick = () => { $('out').value = values(); $('out').select(); navigator.clipboard?.writeText($('out').value).catch(() => document.execCommand('copy')); };
   $('spin').onchange = e => { ped.spin = e.target.checked; };
 }
 let outfits;
+
+// everything the sliders set, as text to paste
+function values() {
+  const t = traits(), r2 = v => Math.round(v*100)/100, at = (row, k) => r2(t[texel(row) + k]);
+  const red = pm.PERSON_TRAIT_COLORS.indexOf('OutfitRed') + 2, lash = t[texel(pm.PERSON_CLOTHING_ROW) + 3];
+  return JSON.stringify({
+    man: !!M.isMan[I], height: r2(ped.height),
+    body: Object.fromEntries(BODY.map(([name, row, k]) => [name, at(row, k)])),
+    face: Object.fromEntries(FACE().map(([name, row, k]) => [name, at(row, k)])),
+    colors: Object.fromEntries(pm.PERSON_TRAIT_COLORS.filter(c => c !== 'Blood').map((c, _, __, k = pm.PERSON_TRAIT_COLORS.indexOf(c)) =>
+      [c, '#' + new THREE.Color(t[texel(2 + k)], t[texel(2 + k) + 1], t[texel(2 + k) + 2]).getHexString()])),
+    worn: M.wornLayers.map(layer => layer.of[I] >= 0 ? layer.styles[layer.of[I]].name : null).filter(Boolean),
+    outfit: outfits.OUTFITS[t[texel(red) + 3] - 1]?.name ?? null, tune,
+    bands: Object.fromEntries(BANDS.map(([name], k) => [name, t[texel(pm.PERSON_CLOTHING_ROW) + k]])),
+    lashes: [0, 1, 2].filter(b => (lash >> b) & 1).map(b => b + 1), lipstick: !((lash >> 3) & 1),
+  });
+}
 
 frame.addEventListener('load', async () => {
   win = frame.contentWindow;
@@ -146,10 +184,10 @@ frame.addEventListener('load', async () => {
   S = win.kallipolis.S;
   [peopleMod, pm, outfits, { controls }, THREE] = await Promise.all(['../src/life/people/people.js', '../src/life/people/peopleModel.js',
     '../src/life/people/outfits.js', '../src/core/camera-controls.js', 'three'].map(inApp));
-  S.peopleAmount = 1;
+  S.peopleAmount = I + 1;
   S.peopleEnabled = true;
   $('status').textContent = 'Loading the person model…';
-  while (!peopleMod.personModel || !peopleMod.people.length) await new Promise(r => setTimeout(r, 200));
+  while (!peopleMod.personModel || peopleMod.people.length <= I) await new Promise(r => setTimeout(r, 200));
   M = peopleMod.personModel;
   p = peopleMod.people[I];
   S.peopleFrozen = draw;
