@@ -346,8 +346,7 @@ html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; 
   html.win3 #morality-meter .money { display:flex; align-items:center; justify-content:center; padding:0 12px; border-left:1px solid var(--w3-shadow); box-shadow:inset 1px 0 0 #fff; }
   html.win3 #morality-meter :is(#btn-daily-gift, #btn-identify) { flex:none; width:24px; height:22px; margin:0 2px; display:flex; align-items:center; justify-content:center; padding:0; }
   html.win3 #morality-meter #btn-identify { margin-right:6px; }
-  /* money and energy: a strip of the toolbar's grey between them, each ruled off from it by an etched line */
-  html.win3 #morality-meter .energy { margin-left:4px; border-left:1px solid var(--w3-shadow); box-shadow:inset 1px 0 0 #fff; }
+  /* money and energy: side by side, one etched line between */
   html.win3 #morality-meter :is(.money, .energy)::after { content:''; position:absolute; top:0; bottom:0; right:0; border-left:1px solid var(--w3-shadow); }
   html.win3 #morality-meter .meter-readout { flex:1; margin:0 0 0 8px; gap:8px; cursor:pointer; }
   html.win3 #morality-meter .meter-value { order:-1; } /* (the total before the bar, so the bar runs to the window's edge) */
