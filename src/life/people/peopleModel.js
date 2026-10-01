@@ -67,7 +67,7 @@ const WALK_CYCLE_LENGTH = 4;
  * whose right hand is full). `hold` names a snack clip whose right arm this one's is swapped for, carried along by the
  * body as it moves (WaveLeftBeer: see snackClips). */
 /** What can be held, for the snack clips' names (see SNACK_HOLD). */
-const SNACK_ITEMS = ['Hotdog', 'Coffee', 'Beer'];
+const SNACK_ITEMS = ['Hotdog', 'Coffee', 'Beer', 'Cig'];
 const PERSON_CLIPS = [
   { name: 'Walk', loop: true }, { name: 'Idle', loop: true }, { name: 'Idle2' }, { name: 'Idle3' }, { name: 'Wave' },
   { name: 'WaveLeft', mirror: 'Wave' }, { name: 'Idle2Left', mirror: 'Idle2' },
@@ -302,12 +302,15 @@ function markRepose(moved) {
 /**
  * Reach the right hand to hold something at `grip` (a place in the model's space), turned by `turn` from how the rest pose
  * holds it (a handle along Y: see HAND_GRIP), with the fingers closed round it — the elbow bent out towards `bendTo`, then
- * swung `swing` radians on round the line from shoulder to wrist, and the forearm rolled `twist` radians about itself.
- * @returns {void}
+ * swung `swing` radians on round the line from shoulder to wrist; or, given `elbowAt`, the elbow put there and the hand
+ * right on the grip, the shoulder tracking the elbow (its Y at it, X up, as a Track To). The forearm then points at the
+ * wrist, turned by `elbowRot` (x rolls it about itself, y and z swing it about the elbow's two other axes) — or, given
+ * `elbowTurn`, is turned just that from its rest pose, no aiming. Angles in radians.
+ * @returns {?{at: THREE.Vector3, turn: THREE.Quaternion}} where the elbow went, and its turn
  */
-function gripRight(rig, grip, turn, bendTo = EAT_BEND, { swing = 0, twist = 0 } = {}) {
+function gripRight(rig, grip, turn, bendTo = EAT_BEND, { swing = 0, elbowRot = null, elbowAt: fixed = null, elbowTurn = null } = {}) {
   const shoulder = rig.bone('ShoulderR'), elbow = rig.bone('ElbowR'), hand = rig.bone('HandR');
-  if (!shoulder || !elbow || !hand) return;
+  if (!shoulder || !elbow || !hand) return null;
   const wristTarget = grip.clone().sub(rig.grip('R').sub(rig.restAt('HandR')).applyQuaternion(turn));
   // the arm reaching it: the elbow bent out and down, where the two bones meet (as typingPose does it)
   const S = shoulder.getWorldPosition(new THREE.Vector3()), E = elbow.getWorldPosition(new THREE.Vector3()), W = hand.getWorldPosition(new THREE.Vector3());
@@ -317,11 +320,23 @@ function gripRight(rig, grip, turn, bendTo = EAT_BEND, { swing = 0, twist = 0 } 
   const bend = bendTo.clone();
   bend.addScaledVector(along, -bend.dot(along)).normalize().applyAxisAngle(along, swing);
   const a = (upper*upper - lower*lower + reach*reach)/(2*reach), h = Math.sqrt(Math.max(0, upper*upper - a*a));
-  const elbowAt = S.clone().addScaledVector(along, a).addScaledVector(bend, h), wristAt = S.clone().addScaledVector(along, reach);
-  reposeBone(shoulder, null, new THREE.Quaternion().setFromUnitVectors(E.clone().sub(S).normalize(), elbowAt.clone().sub(S).normalize()));
+  const elbowAt = fixed ?? S.clone().addScaledVector(along, a).addScaledVector(bend, h), wristAt = fixed ? wristTarget : S.clone().addScaledVector(along, reach);
+  if (fixed) {
+    const y = elbowAt.clone().sub(S).normalize(), x = new THREE.Vector3(0, 1, 0).addScaledVector(y, -y.y).normalize();
+    const want = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, new THREE.Vector3().crossVectors(x, y)));
+    reposeBone(shoulder, null, want.multiply(shoulder.getWorldQuaternion(new THREE.Quaternion()).invert()));
+  } else reposeBone(shoulder, null, new THREE.Quaternion().setFromUnitVectors(E.clone().sub(S).normalize(), elbowAt.clone().sub(S).normalize()));
   const forearm = wristAt.clone().sub(elbowAt).normalize();
-  reposeBone(elbow, elbowAt, new THREE.Quaternion().setFromUnitVectors(W.clone().sub(E).normalize(), forearm));
-  if (twist) reposeBone(elbow, null, new THREE.Quaternion().setFromAxisAngle(forearm, twist));
+  if (elbowTurn) {
+    const want = new THREE.Quaternion().setFromEuler(new THREE.Euler(...elbowTurn)).multiply(rig.restTurn('ElbowR'));
+    reposeBone(elbow, elbowAt, want.multiply(elbow.getWorldQuaternion(new THREE.Quaternion()).invert()));
+  } else reposeBone(elbow, elbowAt, new THREE.Quaternion().setFromUnitVectors(W.clone().sub(E).normalize(), forearm));
+  if (elbowRot && !elbowTurn) {
+    const side = new THREE.Vector3().crossVectors(forearm, bend).normalize(), up = new THREE.Vector3().crossVectors(side, forearm);
+    const q = new THREE.Quaternion(), about = (axis, angle) => q.multiply(new THREE.Quaternion().setFromAxisAngle(axis, angle));
+    about(forearm, elbowRot[0]); about(up, elbowRot[1]); about(side, elbowRot[2]);
+    reposeBone(elbow, null, q);
+  }
   // the hand turned onto the fork, whatever the arm did: the turn from the rest pose, over where the clip left it
   const want = turn.clone().multiply(rig.restTurn('HandR'));
   reposeBone(hand, wristAt, want.multiply(hand.getWorldQuaternion(new THREE.Quaternion()).invert()));
@@ -331,6 +346,7 @@ function gripRight(rig, grip, turn, bendTo = EAT_BEND, { swing = 0, twist = 0 } 
     const bone = rig.bone(name + 'R');
     if (bone) reposeBone(bone, null, new THREE.Quaternion().setFromAxisAngle(axes[about], angle));
   }
+  return { at: elbowAt, turn: elbow.getWorldQuaternion(new THREE.Quaternion()) };
 }
 /** The bones eatingPose moves. */
 const eatingBones = rig => ['Shoulder', 'Elbow', 'Hand', ...GRIP_CURL.map(([name]) => name)].map(name => rig.bone(name + 'R')).filter(Boolean);
@@ -342,21 +358,25 @@ const eatingBones = rig => ['Shoulder', 'Elbow', 'Hand', ...GRIP_CURL.map(([name
 //
 // Where the fist goes: carried, a place from the shoulder, in metres (x in towards the middle of them, y up, z forward);
 // at the mouth, where the end of the thing goes from the middle of the lips (`at`), and how far that end is from the fist
-// (`reach`). `dir` is the way the thing points out of the top of the fist, and `palm` roughly the way the palm faces.
-// The elbow bends down by their side (SNACK_BEND, or the hold's own `bend`), not out as it does over a plate, then
-// `swing`s on round the line from shoulder to wrist, and `twist` rolls the forearm, both in radians (see gripRight).
+// (`reach`). `rot` turns the hand from its rest pose (a handle along y), as x/y/z angles in radians.
+// `elbowAt` is where the elbow goes, in metres from the shoulder, which tracks it; `elbowTurn` turns it from its rest pose
+// (see gripRight). (An old hold — `elbow`, `swing`, `elbowRot` — gets both the first time it's baked.)
 export const SNACK_HOLD = {
   Hotdog: {
-    carry: { at: [-0.065, -0.31, 0.165], dir: [0.16, 0.24, 1], palm: [1, 1, 0.24], bend: [-0.41, -0.88, 0.19], swing: -0.17, twist: -0.54 },
-    bite: { at: [0.015, 0.045, -0.025], reach: 0.145, dir: [0.05, 0.12, -0.72], palm: [1, 0.03, 0.03], bend: [-0.28, -1, -0.1], swing: 0.01, twist: -0.71 },
+    carry: { at: [-0.06, -0.08, 0.19], rot: [-3.14, 1.98, 1.64], elbowAt: [-0.092, -0.22, -0.072], elbowTurn: [-1.442, 0.976, 1.826] },
+    bite: { at: [-0.195, 0.04, 0.105], reach: 0.145, rot: [0.46, 2.81, -1.4], elbowAt: [-0.108, -0.169, 0.183], elbowTurn: [-2.817, 1.02, 2.077] },
   },
   Coffee: {
-    carry: { at: [-0.1, -0.265, 0.32], dir: [0, 1, 0], palm: [0.9, -0.06, -0.09], bend: [-0.35, -0.96, -0.2] },
-    bite: { at: [-0.06, 0.07, 0.13], reach: 0.095, dir: [0.1, 0.39, -0.65], palm: [1, 0.07, -0.04], bend: [-0.12, -0.73, -0.2], swing: 0.27, twist: 0.06 },
+    carry: { at: [-0.1, -0.265, 0.32], rot: [-3.142, 1.471, -3.142], elbow: [-0.35, -0.96, -0.2] },
+    bite: { at: [-0.06, 0.07, 0.13], reach: 0.095, rot: [0.243, 1.434, -1.276], elbow: [-0.12, -0.73, -0.2], swing: 0.27, elbowRot: [0.06, 0, 0] },
   },
   Beer: {
-    carry: { at: [-0.1, -0.265, 0.32], dir: [0, 1, 0], palm: [0.9, -0.06, -0.09], bend: [-0.35, -0.96, -0.2] },
-    bite: { at: [-0.06, 0.07, 0.13], reach: 0.095, dir: [0.1, 0.39, -0.65], palm: [1, 0.07, -0.04], bend: [-0.12, -0.73, -0.2], swing: 0.27, twist: 0.06 },
+    carry: { at: [-0.1, -0.265, 0.32], rot: [-3.142, 1.471, -3.142], elbow: [-0.35, -0.96, -0.2] },
+    bite: { at: [-0.06, 0.07, 0.13], reach: 0.095, rot: [0.243, 1.434, -1.276], elbow: [-0.12, -0.73, -0.2], swing: 0.27, elbowRot: [0.06, 0, 0] },
+  },
+  Cig: {
+    carry: { at: [-0.14, -0.325, 0.275], rot: [-0.02, 1.191, 0], elbowAt: [-0.086, -0.23, -0.04], elbowTurn: [-1.18, 1.81, 2.14] },
+    bite: { at: [-0.03, 0.045, 0.07], reach: 0.09, rot: [0, 1.571, 0], elbowAt: [-0.132, -0.118, 0.19], elbowTurn: [0.81, -0.57, 1.24] },
   },
 };
 export const SNACK_BEND = new THREE.Vector3(-0.45, -1, -0.2);
@@ -369,7 +389,7 @@ function snackClips() {
 /**
  * Repose a frame of Walk, Idle or Sit1 with something held in the right hand (see SNACK_HOLD).
  * @param {object} rig - the model's bones (see buildPersonModel)
- * @param {string} item - 'Hotdog', 'Coffee' or 'Beer'
+ * @param {string} item - 'Hotdog', 'Coffee', 'Beer' or 'Cig'
  * @param {boolean} biting - up at the mouth, or carried
  * @returns {null}
  */
@@ -380,14 +400,20 @@ function snackPose(rig, item, biting) {
   const shoulder = rig.bone('ShoulderR');
   if (!shoulder) return null;
   const hold = SNACK_HOLD[item][biting ? 'bite' : 'carry'], metre = rig.metre;
-  const dir = new THREE.Vector3(...hold.dir).normalize();
+  const turn = new THREE.Quaternion().setFromEuler(new THREE.Euler(...hold.rot));
+  const dir = new THREE.Vector3(0, 1, 0).applyQuaternion(turn);
   const at = new THREE.Vector3(...hold.at).multiplyScalar(metre);
   const grip = biting ? rig.mouth().add(at).addScaledVector(dir, -hold.reach*metre) : shoulder.getWorldPosition(new THREE.Vector3()).add(at);
-  // the hand's turn from the rest pose: its Y onto the way the thing points, its Z (out of the palm) as near `palm` as that allows
-  const palm = new THREE.Vector3(...hold.palm);
-  palm.addScaledVector(dir, -palm.dot(dir)).normalize();
-  const turn = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(dir, palm), dir, palm));
-  gripRight(rig, grip, turn, hold.bend ? new THREE.Vector3(...hold.bend) : SNACK_BEND, hold);
+  const S = shoulder.getWorldPosition(new THREE.Vector3());
+  const elbowAt = hold.elbowAt && S.clone().addScaledVector(new THREE.Vector3(...hold.elbowAt), metre);
+  const went = gripRight(rig, grip, turn, hold.elbow ? new THREE.Vector3(...hold.elbow) : SNACK_BEND, { ...hold, elbowAt });
+  // (an old hold, the elbow bent and the forearm aimed: keep where that put them)
+  const round = v => Math.round(v*1000)/1000;
+  if (!hold.elbowAt && went) { hold.elbowAt = went.at.sub(S).divideScalar(metre).toArray().map(round); delete hold.elbow; delete hold.swing; }
+  if (!hold.elbowTurn && went) {
+    const e = new THREE.Euler().setFromQuaternion(went.turn.multiply(rig.restTurn('ElbowR').invert()));
+    hold.elbowTurn = [e.x, e.y, e.z].map(round); delete hold.elbowRot;
+  }
   markRepose(moved);
   return null;
 }

@@ -8,6 +8,8 @@ import { eatingSound } from '../../audio/eating.js';
 import { STATUS_SOURCES, addStatus } from '../statuseffects.js';
 import { S } from '../../core/shared.js';
 import { restaurantStyleOf } from '../../buildings/footprints.js';
+import { headPointOf } from './peopleTracking.js';
+import { cigSmokeFx } from '../giblets.js';
 
 // ============================================================ holding things
 // Anything a person carries: a fork and a plate of dinner for now, a mug or a hotdog when something wants one. A thing
@@ -50,6 +52,10 @@ export const ITEMS = {
   beer: { parts: [
     { shape: 'beer', size: [0.2, 0.2, 0.2], at: [0.059, 0.047, 0.036], turn: [-0.072, 2.588, 0.028] },
   ] },
+  // (filter out of the top of the fist, to the lips; its Fire glows as it's drawn on: see CIG_FIRE)
+  cig: { parts: [
+    { shape: 'cig', size: [0.117, 0.117, 0.117], at: [-0.036, 0.017, 0.039], turn: [1.5, -3.14, 1.61] },
+  ] },
   plate: { parts: [
     { shape: 'cylinder', size: [0.23, 0.010, 0.23], at: [0, 0.005, 0], color: 0xf4f2ee },
   ] },
@@ -72,7 +78,7 @@ export const ITEMS = {
     { shape: 'skewer', size: [0.17, 0.17, 0.17], at: [0.046, 0.028, 0.013], turn: [-0.022, 0.968, 0], eaten: true },
   ] },
   slice: { parts: [
-    { shape: 'slice', size: [0.17, 0.17, 0.17], at: [0.046, 0.028, 0.013], turn: [-0.022, 0.968, 0], eaten: true },
+    { shape: 'slice', size: [0.173, 0.178, 0.17], at: [0.064, 0.011, 0.099], turn: [0, -1.2, -1.48], eaten: true },
   ] },
 };
 
@@ -105,6 +111,7 @@ const MODELS = {
   hotdog: { node: 'Hotdog', turn: [Math.PI/2, 0, 0] },
   coffee: { node: 'CoffeeCup' },
   beer: { node: 'Pint', url: 'assets/models/Pub.glb' },
+  cig: { node: 'Cig', turn: [Math.PI/2, 0, 0] },
   stout: { node: 'Stout', url: 'assets/models/Pub.glb' },
   // (the restaurants', from Restaurant.glb — see tools/restaurant-models.py: the slice's tip up, cheese out of the palm)
   spaghetti: { node: 'Spaghetti', url: 'assets/models/Restaurant.glb' },
@@ -119,6 +126,8 @@ export const menuOf = building => restaurantStyleOf(building?.key) === 'greek' ?
 // A pint is of stout, drawn in place of the beer, for the share of people who'd rather (as the pubs' tables have it)
 const STOUT_SHARE = 0.25;
 const HELD_MAX = 512;
+// A cig's Fire material (its tip): dim red held, bright orange-yellow drawn on (`glow` 0–1 per held one), linear RGB
+export const CIG_FIRE = { dim: new THREE.Color(0.24, 0.17, 0.02), lit: new THREE.Color(3.58, 1.4, 0.15) };
 // Held things are lit like the room around them when they are in one (see roomLit in buildings/interior.js: a room under
 // its own ceiling is in shadow, and its things glow a little to make up for it), and plainly out in the daylight. The glow
 // is in each thing's own colour, as roomLit's is (a white one washes a pint of beer out to pale).
@@ -167,6 +176,7 @@ async function loadHoldables() {
       const colors = new Float32Array(geometry.attributes.position.count*4);
       for (let i = 0; i < colors.length; i += 4) colors.set([r, g, b, a], i);
       geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
+      geometry.setAttribute('fire', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count).fill(child.material.name === 'Fire' ? 1 : 0), 1));
       pieces[a < 1 ? 'clear' : 'solid'].push(geometry);
     });
     // (sized and centred as a whole, so the two halves still fit together)
@@ -180,20 +190,27 @@ async function loadHoldables() {
     for (const [half, list] of Object.entries(pieces)) for (const light of ['lit', 'plain']) {
       if (!list.length) continue;
       const geometry = mergeGeometries(list).applyMatrix4(place), clear = half === 'clear';
+      const fire = geometry.attributes.fire.array.some(v => v > 0);
       const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: clear ? 0.1 : 0.5, vertexColors: true, side: THREE.DoubleSide, transparent: clear, depthWrite: !clear });
+      if (fire) material.defines = { FIRE: '' };
       if (light === 'lit') { material.emissive.setScalar(1); material.emissiveIntensity = HELD_GLOW; }
       material.onBeforeCompile = shader => {
+        shader.uniforms.fireDim = { value: CIG_FIRE.dim };
+        shader.uniforms.fireLit = { value: CIG_FIRE.lit };
         shader.vertexShader = shader.vertexShader
-          .replace('#include <common>', '#include <common>\nattribute float cut;\nvarying float vUncut;')
-          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvUncut = cut - position.y;');
+          .replace('#include <common>', '#include <common>\nattribute float cut;\nvarying float vUncut;\n#ifdef FIRE\nattribute float fire;\nattribute float glow;\nuniform vec3 fireDim, fireLit;\nvarying vec3 vFire;\n#endif')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvUncut = cut - position.y;\n#ifdef FIRE\nvFire = fire*mix(fireDim, fireLit, glow);\n#endif');
         shader.fragmentShader = shader.fragmentShader
-          .replace('#include <common>', '#include <common>\nvarying float vUncut;')
-          .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (vUncut < 0.0) discard;');
+          .replace('#include <common>', '#include <common>\nvarying float vUncut;\n#ifdef FIRE\nvarying vec3 vFire;\n#endif')
+          .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (vUncut < 0.0) discard;')
+          .replace('#include <lights_fragment_begin>', '#ifdef FIRE\ntotalEmissiveRadiance += vFire;\n#endif\n#include <lights_fragment_begin>');
         glowOwnColor(shader);     // (for plain too: it has no glow to tint, and the two share a program)
       };
       const cut = new THREE.InstancedBufferAttribute(new Float32Array(HELD_MAX).fill(1), 1);
       cut.setUsage(THREE.DynamicDrawUsage);
-      const mesh = new THREE.InstancedMesh(geometry.clone().setAttribute('cut', cut), material, HELD_MAX);
+      const instanced = geometry.clone().setAttribute('cut', cut);
+      if (fire) instanced.setAttribute('glow', new THREE.InstancedBufferAttribute(new Float32Array(HELD_MAX), 1).setUsage(THREE.DynamicDrawUsage));
+      const mesh = new THREE.InstancedMesh(instanced, material, HELD_MAX);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0;
       mesh.frustumCulled = false;
@@ -348,6 +365,7 @@ const SNACKS = {
   hotdog: { clip: 'Hotdog', mouthfuls: 5, up: 1.1, gap: [2.5, 6], sound: 'bite' },
   coffee: { clip: 'Coffee', mouthfuls: 7, up: 1.5, gap: [3, 8], sound: 'sip' },
   beer: { clip: 'Beer', mouthfuls: 9, up: 1.7, gap: [4, 10], sound: 'sip' },
+  cig: { clip: 'Cig', mouthfuls: 8, up: 1.6, gap: [4, 9] }, // (a drag each: see SMOKING)
   slice: { clip: 'Hotdog', mouthfuls: 3, up: 1.1, gap: [2, 4], sound: 'bite' }, // (a pizza's: see feedPizza)
   skewer: { clip: 'Hotdog', mouthfuls: 3, up: 1.1, gap: [2, 4], sound: 'bite' }, // (souvlaki's)
 };
@@ -391,7 +409,7 @@ export function dropSnack(p) {
  */
 export function snackClip(p, clip, dt) {
   const snack = p.snack;
-  if (!snack) return clip;
+  if (!snack) { lightUp(p, clip, dt); return clip; }
   // knocked down, dead or gone indoors (but for into the room you're in, as a pint in a pub is: see aboutTheRoom): it's gone
   if (p.punched || p.mode === 'dead' || (p.mode === 'indoors' && !p.inRoom) || !p.holding?.includes(snack.held)) {
     if ((p.punched || p.mode === 'dead') && snack.mouthfuls > 0 && p.holding?.includes(snack.held)) dropToFloor(p, snack.held); // (knocked from their hand)
@@ -411,14 +429,54 @@ export function snackClip(p, clip, dt) {
       // and what it leaves on them, every mouthful stacking (STATUS_SOURCES, addStatus in life/statuseffects.js)
       const leaves = STATUS_SOURCES[snack.item];
       leaves?.forEach(leave => addStatus(p, leave.status, leave.seconds, lastPeopleTime ?? 0, leave.level));
-      eatingSound({ x: p.x, y: p.y + (clip.pose ? 1.05 : 1.5)*p.height*S.peopleSize, z: p.z }, kind.sound);
+      if (kind.sound) eatingSound({ x: p.x, y: p.y + (clip.pose ? 1.05 : 1.5)*p.height*S.peopleSize, z: p.z }, kind.sound);
     }
+    if (snack.item === 'cig' && was > EXHALE_AT && snack.up <= EXHALE_AT) snack.exhale = EXHALE_TIME;
     if (snack.up <= 0) {
-      if (snack.mouthfuls <= 0) { dropSnack(p); return clip; }
+      if (snack.mouthfuls <= 0) { if (snack.item === 'cig') dropToFloor(p, snack.held); dropSnack(p); return clip; } // (the butt's flicked away)
       snack.next = snackGap(kind);
     }
   } else if ((snack.next -= dt) <= 0) snack.up = kind.up;
+  if (snack.item === 'cig') smoke(p, snack, kind, dt);
   return snack.up > 0 ? raised : carried;
+}
+
+// ============== SMOKING ==============
+// A share of people smoke (p.smoker): now and then, out of doors with their hands free, they light up a cig, a snack
+// like any other but for its drags: the tip glows bright while it's at the lips (CIG_FIRE, held.glow) and a cloud's
+// blown out of the mouth as it comes down (EXHALE_*).
+const SMOKER_SHARE = 0.15, SMOKE_EVERY = [40, 200]; // (seconds between cigs)
+const DRAW_ON = [0.45, 0.4];   // the drag: from this long after the hand goes up, to this long before it's down (seconds)
+const GLOW_UP = 4, GLOW_DOWN = 1.2; // how fast the tip brightens and dims, per second
+const EXHALE_AT = 0.35, EXHALE_TIME = 1.1, EXHALE_PUFFS = 14; // (when, how long, puffs a second)
+const smokeGap = () => SMOKE_EVERY[0] + peopleRng()*(SMOKE_EVERY[1] - SMOKE_EVERY[0]);
+function lightUp(p, clip, dt) {
+  if (!(p.smoker ??= peopleRng() < SMOKER_SHARE)) return;
+  if ((p.nextCig ??= smokeGap()) > 0) { p.nextCig -= dt; return; }
+  if (p.holding?.length || p.punched || p.act || p.mode === 'dead' || p.mode === 'indoors' || inRoom(p) || !personModel?.clips[clip.name + 'Cig']) return;
+  p.nextCig = smokeGap();
+  giveSnack(p, 'cig');
+}
+function smoke(p, snack, kind, dt) {
+  const drawing = snack.up > 0 && snack.up < kind.up - DRAW_ON[0] && snack.up > DRAW_ON[1];
+  const held = snack.held;
+  held.glow = Math.max(0, Math.min(1, (held.glow ?? 0) + (drawing ? GLOW_UP : -GLOW_DOWN)*dt));
+  if (!(snack.exhale > 0)) return;
+  snack.exhale -= dt;
+  for (let k = Math.floor(EXHALE_PUFFS*dt + peopleRng()); k > 0; k--) exhale(p);
+}
+const mouth = new THREE.Vector3(), ahead = new THREE.Vector3(), mouthAt = new THREE.Vector3(), aheadAt = new THREE.Vector3();
+/**
+ * A puff of smoke out of someone's mouth.
+ * @param {object} p - the person
+ * @returns {void}
+ */
+export function exhale(p) {
+  const i = people.indexOf(p), face = personModel?.face;
+  if (i < 0 || !face?.mouth) return;
+  headPointOf(i, mouth.copy(face.mouth), mouthAt);
+  headPointOf(i, ahead.copy(face.mouth).setZ(face.mouth.z + 1), aheadAt);
+  cigSmokeFx(mouthAt, aheadAt.sub(mouthAt).normalize(), p.height*S.peopleSize, p);
 }
 
 // ============== DRAWING ==============
@@ -472,6 +530,7 @@ const BODIES = {
   hotdog: { half: [0.03, 0.025, 0.0875], turn: [Math.PI/2, 0, 0] },
   coffee: { half: [0.055, 0.083, 0.055] },
   beer: { half: [0.045, 0.1, 0.045] },
+  cig: { half: [0.005, 0.005, 0.04], turn: [Math.PI/2, 0, 0] },
   slice: { half: [0.06, 0.008, 0.085], turn: [-Math.PI/2, 0, 0] },
   skewer: { half: [0.016, 0.014, 0.085], turn: [-Math.PI/2, 0, 0] },
 };
@@ -572,7 +631,7 @@ export function updateHeld(only = -1) {
         if (piece.sits) place.y -= (meshes[`${piece.shape}:${light}`]?.userData.cut.bottom ?? -0.5)*size.y; // (its bottom on the table)
         if (size.y <= 0 || left <= 0) continue;
         part.compose(place, turn.setFromEuler(euler), size);
-        draw(piece.shape === 'beer' && held.stout ? 'stout' : piece.shape, light, part.premultiply(world), piece.tint ? color.setHex(held.loaded ?? held.color.getHex()) : color.setHex(piece.color ?? 0xffffff), left);
+        draw(piece.shape === 'beer' && held.stout ? 'stout' : piece.shape, light, part.premultiply(world), piece.tint ? color.setHex(held.loaded ?? held.color.getHex()) : color.setHex(piece.color ?? 0xffffff), left, held.glow ?? 0);
       }
       // and the slices left of a pizza, flat round the middle of its tray, tips in
       if (held.slices) for (let k = 0; k < held.slices; k++) {
@@ -595,15 +654,17 @@ export function updateHeld(only = -1) {
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     if (mesh.geometry.attributes.cut) mesh.geometry.attributes.cut.needsUpdate = true;
+    if (mesh.geometry.attributes.glow) mesh.geometry.attributes.glow.needsUpdate = true;
   }
 }
-function draw(shape, light, matrix, tint, left = 1) {
+function draw(shape, light, matrix, tint, left = 1, glow = 0) {
   for (const key of [`${shape}:${light}`, `${shape}~clear:${light}`]) { // (a model's see-through half, if it has one, along with it)
     const mesh = meshes[key], at = counts[key] ?? 0;
     if (!mesh || at >= HELD_MAX) continue;
     mesh.setMatrixAt(at, matrix);
     mesh.setColorAt(at, tint);
     if (mesh.userData.cut) mesh.geometry.attributes.cut.setX(at, left < 1 ? mesh.userData.cut.bottom + mesh.userData.cut.height*left : 1e6);
+    mesh.geometry.attributes.glow?.setX(at, glow);
     counts[key] = at + 1;
   }
 }

@@ -533,6 +533,17 @@ export function breathFx(at, away, height, huff = false, follow = null) {
     size: height*(huff ? 0.025 + Math.random()*0.015 : 0.03 + Math.random()*0.015), growth: huff ? 1 : 1.2, life: huff ? 0.45 + Math.random()*0.2 : 0.6 + Math.random()*0.3,
     opacity: huff ? 1 : 0.3, color: new THREE.Color(white, white, white) }, follow));
 }
+// and a drag's smoke blown out of a smoker's mouth at `at` the way `away` points: grey-white, slower than breath, spreading
+// and rising as it thins (the 'smoke' kind).
+export function cigSmokeFx(at, away, height, follow = null) {
+  if (S.maxParticles <= 0 || !isNearFx(at)) return;
+  if (softParticles.length >= softCap()*2) softParticles.shift();
+  const out = (0.12 + Math.random()*0.12)*height, r = () => (Math.random() - 0.5)*0.06*height, grey = 0.78 + Math.random()*0.12;
+  softParticles.push(carried({ kind: 'smoke', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+    vx: away.x*out + r(), vy: away.y*out + (0.05 + Math.random()*0.05)*height, vz: away.z*out + r(),
+    size: height*(0.02 + Math.random()*0.015), growth: 3, life: 1.4 + Math.random()*0.8,
+    opacity: 0.35, color: new THREE.Color(grey, grey, grey) }, follow));
+}
 // and a puff of cartoon steam — a solid white round cloud, as a haircut's are — blowing up off the top of their head at `at`, fuming.
 export function fumeFx(at, height, follow = null) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;

@@ -2,8 +2,8 @@ import { S } from '../core/shared.js';
 import { openWindow } from './w3-window.js';
 import { controls } from '../core/camera-controls.js';
 import { people, personModel, isDrawn, followed } from '../life/people/people.js';
-import { SNACK_HOLD, SNACK_BEND } from '../life/people/peopleModel.js';
-import { ITEMS, dropSnack, giveSnack, hold, letGo, updateHeld } from '../life/people/peopleHolding.js';
+import { SNACK_HOLD } from '../life/people/peopleModel.js';
+import { CIG_FIRE, ITEMS, dropSnack, exhale, giveSnack, hold, letGo, updateHeld } from '../life/people/peopleHolding.js';
 
 // ============================================================ held items (debug)
 // View > Held Items (debug): sliders for where a hot dog, a coffee or a pint sits in the hand (ITEMS in peopleHolding.js) and
@@ -11,10 +11,10 @@ import { ITEMS, dropSnack, giveSnack, hold, letGo, updateHeld } from '../life/pe
 // held still (S.peopleFrozen) and one person stands in the first frame of IdleHotdog, IdleCoffeeBite… with the camera
 // on them, everyone else folded away (personModel.only); a hand slider bakes that one clip again (personModel.rebakeClip). Nothing is kept: the values to paste back
 // into the code are shown at the bottom.
-const KINDS = { hotdog: 'Hotdog', slice: 'Hotdog', skewer: 'Hotdog', coffee: 'Coffee', beer: 'Beer' };
+const KINDS = { hotdog: 'Hotdog', slice: 'Hotdog', skewer: 'Hotdog', coffee: 'Coffee', beer: 'Beer', cig: 'Cig' };
 // (held in the hand through another clip, not a snack: its parts' own sliders, a frame of the clip to pose in)
 const TOOLS = { chopsticks: 'Eating' };
-let item = 'hotdog', biting = false, pinned = null, minRadius = null, frame = 0;
+let item = 'cig', biting = false, pinned = null, minRadius = null, frame = 0;
 
 const clipName = () => TOOLS[item] ?? 'Idle' + KINDS[item] + (biting ? 'Bite' : '');
 // what they're given: a snack, or a tool into the right hand
@@ -26,12 +26,13 @@ const round = x => Math.round(x*1000)/1000;
 
 /** Hold the pinned person in the first frame of the clip, everything they wear with them, and draw what they hold. */
 function holdStill() {
+  controls.minRadius = 0.3; // (every frame: following or clicking someone resets it)
   const i = people.indexOf(pinned), clip = personModel?.clips[clipName()];
   if (i < 0 || !clip) { personModel.only.value = -1; updateHeld(); return; }
   pinned.clipA = pinned.clipB = clip;
   pinned.fade = 1;
   pinned.oneShot = null;
-  if (pinned.snack) pinned.snack.next = 1e9; // (no bites while it's being looked at)
+  if (pinned.snack) { pinned.snack.next = 1e9; pinned.snack.held.glow = biting ? 1 : 0; } // (no bites while it's being looked at; a cig lit at the lips)
   const o = i*4, anim = personModel.anim.array;
   anim[o] = anim[o+1] = clip.start + (TOOLS[item] ? Math.round(frame*clip.frames) : 0); anim[o+2] = 1; anim[o+3] = 0;
   personModel.wornLayers.forEach(layer => {
@@ -79,20 +80,20 @@ function sliders() {
   const part = ITEMS[item].parts[0], hold = () => SNACK_HOLD[KINDS[item]][biting ? 'bite' : 'carry'];
   const vec = (label, get, i, min, max, step, then) => [label, () => get()[i], v => { get()[i] = v; then?.(); }, min, max, step];
   const rebake = () => personModel?.rebakeClip(clipName());
+  const xyz = (label, get, min, max, step, then) => ['x', 'y', 'z'].map((a, i) => vec(label + ' ' + a, get, i, min, max, step, then));
   return [
-    ['Item in hand'],
-    ...['x', 'y', 'z'].map((a, i) => vec('at ' + a, () => part.at, i, -0.2, 0.2, 0.001)),
-    ...['x', 'y', 'z'].map((a, i) => vec('turn ' + a, () => (part.turn ??= [0, 0, 0]), i, -3.14, 3.14, 0.01)),
-    ['size', () => part.size[0], v => part.size.fill(v), 0.03, 0.4, 0.001],
-    [biting ? 'Hand at the mouth' : 'Hand carrying'],
-    ...['x', 'y', 'z'].map((a, i) => vec('at ' + a, () => hold().at, i, -0.6, 0.6, 0.005, rebake)),
+    ['Item'],
+    ...xyz('loc', () => part.at, -0.2, 0.2, 0.001),
+    ...xyz('rot', () => (part.turn ??= [0, 0, 0]), -3.14, 3.14, 0.01),
+    ...xyz('size', () => part.size, 0.002, 0.4, 0.001),
+    [biting ? 'Hand.R (at the mouth)' : 'Hand.R'],
+    ...xyz('loc', () => hold().at, -0.6, 0.6, 0.005, rebake),
     ...(biting ? [['reach', () => hold().reach, v => { hold().reach = v; rebake(); }, 0, 0.3, 0.005]] : []),
-    ...['x', 'y', 'z'].map((a, i) => vec('dir ' + a, () => hold().dir, i, -1, 1, 0.01, rebake)),
-    ...['x', 'y', 'z'].map((a, i) => vec('palm ' + a, () => hold().palm, i, -1, 1, 0.01, rebake)),
-    ['Elbow'],
-    ...['x', 'y', 'z'].map((a, i) => vec('bend ' + a, () => (hold().bend ??= SNACK_BEND.toArray()), i, -1, 1, 0.01, rebake)),
-    ['swing', () => hold().swing ?? 0, v => { hold().swing = v; rebake(); }, -3.14, 3.14, 0.01],
-    ['twist', () => hold().twist ?? 0, v => { hold().twist = v; rebake(); }, -3.14, 3.14, 0.01],
+    ...xyz('rot', () => hold().rot, -3.14, 3.14, 0.01, rebake),
+    ['Elbow.R'],
+    ...xyz('loc', () => hold().elbowAt ?? [0, 0, 0], -0.5, 0.5, 0.002, rebake),
+    ...xyz('rot', () => (hold().elbowTurn ??= [0, 0, 0]), -3.14, 3.14, 0.01, rebake),
+    ...(item === 'cig' ? ['dim', 'lit'].flatMap(k => [[`Fire ${k}`], ...['r', 'g', 'b'].map(c => [c, () => CIG_FIRE[k][c], v => { CIG_FIRE[k][c] = v; }, 0, k === 'lit' ? 8 : 2, 0.01])]) : []),
   ];
 }
 
@@ -103,9 +104,10 @@ function values() {
       `{ shape: '${p.shape}', size: ${list(p.size)}, at: ${list(p.at)}${p.turn ? `, turn: ${list(p.turn)}` : ''}${p.color != null ? `, color: 0x${p.color.toString(16).padStart(6, '0')}` : ''} },`).join('\n');
   }
   const part = ITEMS[item].parts[0], hold = SNACK_HOLD[KINDS[item]], list = a => `[${a.map(round).join(', ')}]`;
-  const side = h => `{ at: ${list(h.at)}, ${h.reach != null ? `reach: ${round(h.reach)}, ` : ''}dir: ${list(h.dir)}, palm: ${list(h.palm)}${h.bend ? `, bend: ${list(h.bend)}` : ''}${h.swing ? `, swing: ${round(h.swing)}` : ''}${h.twist ? `, twist: ${round(h.twist)}` : ''} }`;
+  const side = h => `{ at: ${list(h.at)}, ${h.reach != null ? `reach: ${round(h.reach)}, ` : ''}rot: ${list(h.rot)}${h.elbowAt ? `, elbowAt: ${list(h.elbowAt)}` : ''}${h.elbowTurn ? `, elbowTurn: ${list(h.elbowTurn)}` : ''} }`;
   return `// ITEMS.${item} (peopleHolding.js)\n{ shape: '${part.shape}', size: ${list(part.size)}, at: ${list(part.at)}${part.turn ? `, turn: ${list(part.turn)}` : ''}${part.eaten ? ', eaten: true' : ''} },\n`
-    + `// SNACK_HOLD.${KINDS[item]} (peopleModel.js)\ncarry: ${side(hold.carry)},\nbite: ${side(hold.bite)},`;
+    + `// SNACK_HOLD.${KINDS[item]} (peopleModel.js)\ncarry: ${side(hold.carry)},\nbite: ${side(hold.bite)},`
+    + (item === 'cig' ? `\n// CIG_FIRE (peopleHolding.js)\n{ dim: new THREE.Color(${CIG_FIRE.dim.toArray().map(round).join(', ')}), lit: new THREE.Color(${CIG_FIRE.lit.toArray().map(round).join(', ')}) }` : '');
 }
 
 function fill(body) {
@@ -113,7 +115,7 @@ function fill(body) {
     ${TOOLS[item] ? '' : `<label><input type="checkbox" id="hd-bite"${biting ? ' checked' : ''}> at the mouth</label>`}</div>
     <div id="hd-sliders" style="max-height:45vh;overflow-y:auto"></div>
     <textarea id="hd-out" readonly rows="5" style="width:100%;box-sizing:border-box;font:11px monospace;margin-top:6px"></textarea>
-    <button id="hd-copy">Copy</button>${pinned ? '' : ' <span>No one to pose: turn people on first.</span>'}`;
+    <button id="hd-copy">Copy</button>${item === 'cig' ? ' <button id="hd-smoke">Smoke</button>' : ''}${pinned ? '' : ' <span>No one to pose: turn people on first.</span>'}`;
   const out = body.querySelector('#hd-out'), show = () => { out.value = values(); };
   const list = body.querySelector('#hd-sliders');
   // (one line a slider, label | bar | value, so the window stays short enough to drag about)
@@ -130,6 +132,7 @@ function fill(body) {
   body.querySelector('#hd-item').addEventListener('change', e => { item = e.target.value; if (pinned) give(); fill(body); });
   body.querySelector('#hd-bite')?.addEventListener('change', e => { biting = e.target.checked; fill(body); });
   body.querySelector('#hd-copy').addEventListener('click', () => navigator.clipboard?.writeText(out.value));
+  body.querySelector('#hd-smoke')?.addEventListener('click', () => { if (pinned) for (let k = 0; k < 12; k++) setTimeout(() => exhale(pinned), k*70); });
   show();
 }
 
