@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { HEIGHT, HEAD_UP, botFace, newFace, waiterBody, dressBot } from './barbot.js';
+import { HEIGHT, HEAD_UP, botFace, newFace, waiterBody, dressBot, showZzz } from './barbot.js';
 import { TOON_RAMP } from '../core/toon.js';
 import { playSound } from '../audio/sfx.js';
 import { botWhir } from '../audio/whir.js';
@@ -346,7 +346,7 @@ export function updateWaiterbot(inRestaurant, occupied) {
   }
 
   if (w.face) w.face.visible = !s.asleep;
-  if (w.zzz) w.zzz.visible = s.asleep;
+  showZzz(w, s.asleep);
   if (w.moustache) w.moustache.visible = !s.asleep;
   botFace(w, s, WAITER, dt, now, { asleep: s.asleep, working: false, still: !!target, talking: (s.talking || saying) && !s.asleep, snap });
   if (saying || hasBubble(WAITER)) speechBubble(WAITER, { x: WAITER.x, y: WAITER.y + 0.15, z: WAITER.z }, saying ? s.say.line : null);
@@ -484,7 +484,7 @@ function updateChef(dt, now, snap) {
   }
   if (w.knife) w.knife.visible = c.doing === 'SushiCut' && !s.asleep;
   if (w.face) w.face.visible = !s.asleep;
-  if (w.zzz) w.zzz.visible = s.asleep;
+  showZzz(w, s.asleep);
   if (w.moustache) w.moustache.visible = false;
   const working = c.doing === 'SushiCut' || c.doing === 'SushiBuild';
   botFace(w, s, WAITER, dt, now, { asleep: s.asleep, working, still: false, talking: false, snap });

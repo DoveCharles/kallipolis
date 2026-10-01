@@ -164,6 +164,26 @@ export function dressBot(b, waiter, chef = false) {
   for (const o of b.tux) o.morphTargetInfluences[o.morphTargetDictionary.Tux] = waiter || chef ? 1 : 0; // (the robe's fitted to the Tux body)
 }
 
+// In a mirrored room (ROOM_FLIPPED in interior.js) the bot's mirrored with it, so its Z z z would read backwards: shown
+// from a copy mirrored back (x negated; the sheet's double-sided, and centred on x = 0).
+const zzzMirrored = new WeakMap(), zzzPlain = new WeakMap();
+export function showZzz(b, on) {
+  const z = b.zzz;
+  if (!z) return;
+  z.visible = on;
+  if (!on) return;
+  let flip = 1;
+  for (let o = z; o; o = o.parent) flip *= Math.sign(o.scale.x*o.scale.y*o.scale.z) || 1;
+  const plain = zzzPlain.get(z.geometry) ?? z.geometry;
+  let mirrored = zzzMirrored.get(plain);
+  if (!mirrored) {
+    mirrored = plain.clone();
+    ['position', 'normal'].forEach(k => { const at = mirrored.attributes[k]; if (at) for (let i = 0; i < at.count; i++) at.setX(i, -at.getX(i)); });
+    zzzMirrored.set(plain, mirrored); zzzPlain.set(mirrored, plain);
+  }
+  z.geometry = flip < 0 ? mirrored : plain;
+}
+
 /** BARBOT if the bot's up in the pub the view's in, awake and not talking to anyone already, else null. */
 export const barbotFree = () => bot && place && state.inPub && bot.root.parent && !state.asleep && !chatOf() ? BARBOT : null;
 // the chat it's in, if whoever it's with is still keeping it going
@@ -260,7 +280,7 @@ export function updateBarbot(inPub, occupied) {
     if (state.asleep) { state.doing = 'sleep'; pose('Sleep', snap ? 0 : FADE*2); }
     else settle(snap ? 0 : FADE);
     if (bot.face) bot.face.visible = !state.asleep;
-    if (bot.zzz) bot.zzz.visible = state.asleep;
+    showZzz(bot, state.asleep);
   }
 
   // talking to someone: whatever it was doing dropped, and stood where it is turned to them
