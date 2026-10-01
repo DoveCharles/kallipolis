@@ -677,6 +677,17 @@ function spineOfNetwork(lines) {
       start = i;
     }
   });
+  // (two lines drawn end to end are one stretch: joined at a plain bend, so lanes and galleries run on round it)
+  nodes.forEach(n => {
+    if (n.deg !== 2 || n.food) return;
+    const [e1, e2] = edges.filter(e => e.a === n.id || e.b === n.id);
+    if (!e2) return;
+    const p1 = e1.b === n.id ? e1.pts : e1.pts.slice().reverse(), p2 = e2.a === n.id ? e2.pts : e2.pts.slice().reverse();
+    const a = e1.b === n.id ? e1.a : e1.b, b = e2.a === n.id ? e2.b : e2.a;
+    Object.assign(e1, { a, b, pts: [...p1, ...p2.slice(1)] });
+    edges.splice(edges.indexOf(e2), 1);
+    nodes.delete(n.id);
+  });
   nodes.forEach(n => {
     if (n.deg !== 1) return;
     const e = edges.find(e => e.a === n.id || e.b === n.id), pts = e.a === n.id ? e.pts.slice().reverse() : e.pts;
