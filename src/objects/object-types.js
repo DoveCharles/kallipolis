@@ -378,7 +378,7 @@ export const OBJECT_TYPES = [
   {
     // a chrome ring on four legs, home to a Seraphorb, which flies off from it to smite villains and comes back to charge
     // (see life/seraphorb.js)
-    id:'seraphring', label:'Seraph ring', color:'#e6ebf0', facing:'free', radius:1.6, turnJitter:0, sizeJitter:0,
+    id:'seraphring', label:'Seraphorb', color:'#e6ebf0', facing:'free', radius:1.6, turnJitter:0, sizeJitter:0,
     build() {
       const kit = propKit(), { y, r, tube } = SERAPH_RING, foot = 1.5;
       kit.ring(MAT.chrome, 0, y, 0, r, tube);
