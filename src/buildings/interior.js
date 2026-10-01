@@ -3412,10 +3412,11 @@ async function loadConvenience() {
     console.warn('Kallipolis: the convenience store model failed to load; convenience stores are left bare', err);
     return;
   }
-  // (see-through glass: the fridge doors, the freezer's lid, the scratchcard case — unlit by the room, and casting no shadow)
+  // (see-through glass: the fridge doors, the freezer's lid, the scratchcard case — unlit by the room, and casting no shadow;
+  // Glass2, the counter's, keeps its own opacity)
   for (const piece of Object.values(convenience)) piece.object.traverse(o => {
-    if (!o.isMesh || o.material.name !== 'Glass') return;
-    Object.assign(o.material, { transparent: true, opacity: 0.12, depthWrite: false });
+    if (!o.isMesh || !['Glass', 'Glass2'].includes(o.material.name)) return;
+    Object.assign(o.material, { transparent: true, depthWrite: false }, o.material.name === 'Glass' && { opacity: 0.12 });
     o.material.emissive.setHex(0);
     o.castShadow = false;
   });
