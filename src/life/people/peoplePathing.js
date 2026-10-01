@@ -738,7 +738,9 @@ const wayOn = link => { const to = peopleNav.lines[link.li]; return !to.oneWay |
  * @returns {NavLine} the walkway they're now on
  */
 function takeLink(p, link) {
-  placeAtVertex(p, link.li, link.vi, peopleRng() < 0.5 ? -1 : 1);
+  // (joined at an end, along it; else either way)
+  const to = peopleNav.lines[link.li], end = !to.loop && (link.vi === 0 ? 1 : link.vi === to.pts.length - 1 ? -1 : 0);
+  placeAtVertex(p, link.li, link.vi, end || (peopleRng() < 0.5 ? -1 : 1));
   p.linkCooldown = 6 + peopleRng()*4;
   return peopleNav.lines[link.li];
 }
@@ -781,10 +783,11 @@ export function walkAlong(p, dist) {
     const drawn = !area ? 0 : area.kind === 'foodcourt' ? mallWill(p) : isOpenGround(area) ? p.traits.parks : p.traits.plazas;
     if (entrance && peopleRng() < 0.12*drawn) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
     // linkCooldown stops them turning off again immediately after a turn, which would otherwise let a junction with
-    // several close-together links send them zigzagging back the way they came
+    // several close-together links send them zigzagging back the way they came — but not at an end, or a short link
+    // line (a court's corner arc) would bounce them back and forth till it ran out
     // (off the end of an escalator, straight off it, whenever they got on; and never onto one the wrong way)
     const offEscalator = isEnd && !!nav.oneWay;
-    if (vertex.links.length && (p.linkCooldown <= 0 || offEscalator)) {
+    if (vertex.links.length && (p.linkCooldown <= 0 || isEnd)) {
       const crossings = vertex.links.filter(l => l.cross), turns = vertex.links.filter(l => !l.cross && wayOn(l));
       if (crossings.length && !together && peopleRng() < 0.35) {
         p.u = at;
