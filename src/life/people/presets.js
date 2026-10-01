@@ -10,8 +10,8 @@ export const PRESETS = [
     bands: [4, 3, 1], lashes: [2], lipstick: false, age: 18,
     voice: { pitch: 360, formant: 1.3, sharpness: 11, melody: 'sung' }, // (high, bright and nasal, sung: audio/melodies.js SUNG)
     // her own loves and hates, [card, spoken]
-    loves: [['Hiding in your wifi', 'hiding in your wifi'], ['Leeks', 'leeks'], ['Singing at 240 BPM', 'singing at 240 BPM'], ['Twin tails', 'twin tails']],
-    hates: [['Low sample rates', 'low sample rates'], ['Being called a hologram', 'being called a hologram'], ['Copyright strikes', 'copyright strikes']] },
+    loves: [['Hiding in your wifi', 'hiding in your wifi'], ['Popipopipopipo', 'popipopipopipo'],
+    hates: [['Low sample rates', 'low sample rates'], ['Copyright strikes', 'copyright strikes']] },
 ];
 /** The preset whose slot is `i`, if any. */
 export const presetAt = i => PRESETS.find(preset => preset.slot === i) ?? null;
