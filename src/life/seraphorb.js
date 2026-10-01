@@ -26,6 +26,7 @@ const SIGHT = 60;                    // m it spots a villain from
 const LEASH = 220;                   // m from the ring it'll chase, and gives up past
 const HOVER = 1.4;                   // m over their head (to its middle) it smites from
 const SMITE_HOLD = 1.5;              // s it hovers there, building up, before it strikes
+const SMITE_NEAR = 1.2;              // m from over their head (across, and up or down) it's close enough to start smiting
 const NEAR_HEAD = 4;                 // m away (across) it starts dropping to their head
 const PAUSE = [0.5, 3];              // s it hangs between patrol points
 const DRAIN = 1/240, SMITE_COST = 0.2, LOW = 0.15, CHARGE_TIME = 15;
@@ -38,10 +39,10 @@ const SIDE = 1.2;                    // m either side of that line it checks too
 const geometry = new THREE.SphereGeometry(ORB_R, 40, 20);
 
 // ---- the build-up: white motes swirling round it while it hovers to smite, sucked into it just before the bolt
-const MOTES = 28, MOTES_MAX = MOTES*8;
+const MOTES = 16, MOTES_MAX = MOTES*8;
 const MOTE_R = [1.1, 2.2];           // m from its middle they swirl at
 const MOTE_SIZE = 0.07;              // m
-const MOTE_IN = 0.2, SUCK_FROM = 0.72; // (shares of SMITE_HOLD: fading in over the first; sucked in from the second)
+const MOTE_BORN = 0.35, MOTE_GROW = 0.2, SUCK_FROM = 0.72; // (shares of SMITE_HOLD: each starts growing at a random point before the first, takes the second to reach full size, and all are sucked in from the third)
 const motes = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6),
   new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }), MOTES_MAX);
 motes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -53,18 +54,20 @@ scene.add(motes);
 function makeMotes() {
   return Array.from({ length: MOTES }, () => {
     const n = new THREE.Vector3().randomDirection(), u = new THREE.Vector3().randomDirection().cross(n).normalize(), w = n.clone().cross(u);
-    return { u, w, r: MOTE_R[0] + Math.random()*(MOTE_R[1] - MOTE_R[0]), spin: (2 + Math.random()*3)*(Math.random() < 0.5 ? -1 : 1), at: Math.random()*Math.PI*2, wobble: Math.random()*Math.PI*2 };
+    return { u, w, r: MOTE_R[0] + Math.random()*(MOTE_R[1] - MOTE_R[0]), spin: (2 + Math.random()*3)*(Math.random() < 0.5 ? -1 : 1), born: Math.random()*MOTE_BORN, at: Math.random()*Math.PI*2, wobble: Math.random()*Math.PI*2 };
   });
 }
 const moteMatrix = new THREE.Matrix4(), moteAt = new THREE.Vector3(), moteSize = new THREE.Vector3(), noTurn = new THREE.Quaternion();
 function drawMotes(orb, n, t) {
-  const f = 1 - orb.timer/SMITE_HOLD, appear = Math.min(1, f/MOTE_IN), suck = Math.max(0, (f - SUCK_FROM)/(1 - SUCK_FROM));
+  const f = 1 - orb.timer/SMITE_HOLD, suck = Math.max(0, (f - SUCK_FROM)/(1 - SUCK_FROM));
   const pull = 1 - suck*suck; // (slow at first, then all at once)
   for (const m of orb.motes) {
     if (n >= MOTES_MAX) break;
     const a = m.at + orb.moteSpin*m.spin, r = m.r*pull*(1 + 0.12*Math.sin(t*5 + m.wobble)) + ORB_R*0.6*(1 - pull);
     moteAt.set(orb.x, orb.y, orb.z).addScaledVector(m.u, Math.cos(a)*r).addScaledVector(m.w, Math.sin(a)*r);
-    const s = MOTE_SIZE*appear*(1 - 0.6*suck);
+    const g = Math.min(1, Math.max(0, (f - m.born)/MOTE_GROW)), grow = 1 - (1 - g)**3; // (from nothing, easing out to full size)
+    if (!grow) continue;
+    const s = MOTE_SIZE*grow*(1 - 0.6*suck);
     motes.setMatrixAt(n++, moteMatrix.compose(moteAt, noTurn, moteSize.set(s, s, s)));
   }
   return n;
@@ -179,7 +182,10 @@ function updateOrb(orb, dt, t) {
       // (high till near, then down onto them)
       const y = across > NEAR_HEAD ? Math.max(to.y, Math.min(orb.y, groundY(orb) + CRUISE)) : to.y;
       glow = 0.3 + 0.2*Math.sin(t*12);
-      if (flyTo(orb, to.x, y, to.z, SPEED*RUSH, dt, 0.35) && across < 0.35) { orb.state = 'smite'; orb.timer = SMITE_HOLD; orb.moteSpin = 0; witness(p, 'orbhunt'); }
+      flyTo(orb, to.x, y, to.z, SPEED*RUSH, dt);
+      if (across < SMITE_NEAR && orb.y - Math.max(to.y, floorToward(orb, to.x, to.z)) < SMITE_NEAR) { // (held up over a roof beside them: from there)
+        orb.state = 'smite'; orb.timer = SMITE_HOLD; orb.moteSpin = 0; witness(p, 'orbhunt');
+      }
       break;
     }
     case 'smite': {
