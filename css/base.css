@@ -567,6 +567,7 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
    src/life/person-card.js) */
 @media (min-width: 761px) { :is(#person-card, #person-card-2, #person-look) { width:360px; } }
 .pc-tabs { display:flex; }
+.pc-tabs[hidden] { display:none; } /* (a piper's mini: no tabs — showTabs in src/ui/entity-card.js) */
 .pc-tab { cursor:pointer; font:inherit; }
 .pc-pane { box-sizing:border-box; min-height:120px; }
 .pc-pane[hidden] { display:none; }

@@ -96,7 +96,20 @@ export function sampleCardText(entry, side, rng = Math.random) {
 // in people.js), not their place in the crowd — so the same id always comes back as the same person, wherever they're standing.
 // `moodNow`, if given, is the text of a mood they've come round to since (a gift that cheered them up: see cheerierMood
 // and life/gifts.js), worn in place of the one they were picked with, its traits with it.
+// A piper's minis (see people/peopleMinis.js) are their leader, small and big-headed — the same profile (MINI_TRAITS
+// aside), called Mini and the name the leader goes by (a nickname, else their first name), numbered.
+export const MINI_TRAITS = { size: 0.2, headsize: 3.2 }; // (× the leader's)
+const minis = new Map(); // a mini's id → { leaderId, n }
+/** Make person `id` a mini of person `leaderId`'s, the `n`th. */
+export const registerMini = (id, leaderId, n) => { minis.set(id, { leaderId, n }); };
 export function profileOf(id, isMan, moodNow = null) {
+  const mini = minis.get(id);
+  if (!mini) return profileFor(id, isMan, moodNow);
+  const leader = profileFor(mini.leaderId, isMan, moodNow), { traits } = leader;
+  return { ...leader, name: `Mini ${leader.shortName} #${mini.n}`,
+    traits: { ...traits, piper: 0, size: traits.size*MINI_TRAITS.size, headsize: (traits.headsize || 1)*MINI_TRAITS.headsize } };
+}
+function profileFor(id, isMan, moodNow = null) {
   const rng = mulberry32(48271 + id*7919);
   const pick = list => list[Math.floor(rng()*list.length)];
   const man = isMan == null ? rng() < 0.5 : isMan;
@@ -139,14 +152,18 @@ export function profileOf(id, isMan, moodNow = null) {
   const traits = combineTraits([name, mood, ...lovesFull, ...hatesFull], TRAITS, DEFAULT_TRAITS);
 
   const nameRoll = rng();
+  let nick = null; // (the nickname in their name, if any: what they go by — shortName)
+  const nickname = () => (nick = pick(lists['nicknames']).text);
 
-  let fullname = traits.nickname ? pick(lists['nicknames']).text :                                    //nickname only - requires trait
-    nameRoll>0.9 ? `${name.text} '${pick(lists['nicknames']).text}' ${pick(lists['surnames']).text}`: //full name w/ nickname, 10%
+  let fullname = traits.nickname ? nickname() :                                    //nickname only - requires trait (twins too)
+    traits.twins ? `The ${pick(lists['surnames']).text} Twins` :                                       //the twins trait: The Smith Twins
+    nameRoll>0.9 ? `${name.text} '${nickname()}' ${pick(lists['surnames']).text}`: //full name w/ nickname, 10%
     nameRoll>0.3 ? `${name.text} ${pick(lists['surnames']).text}`:                                    //full name no nickname, 60%
       nameRoll>0.2? `${name.text} ${pick(LETTERS)} ${pick(lists['surnames']).text}`:                 //full name, abr middle, 10%
-        nameRoll>0.115?`'${pick(lists['nicknames']).text}' ${pick(lists['surnames']).text}`:           //nickname surname, 8.5%
-          nameRoll>0.2?`${name.text} '${pick(lists['nicknames']).text}'`:                            //forename nickname, 8.5%
+        nameRoll>0.115?`'${nickname()}' ${pick(lists['surnames']).text}`:           //nickname surname, 8.5%
+          nameRoll>0.2?`${name.text} '${nickname()}'`:                            //forename nickname, 8.5%
             `${name.text} ${pick(ROMAN_NUMERALS)}`;                                               //forename numeral, 2%
+
 
   //unknown entities have hidden traits
   // (UNKNOWN) people hide every love, every hate, or both — never neither. A hidden side that has no entries shows a single
@@ -171,7 +188,7 @@ export function profileOf(id, isMan, moodNow = null) {
   // `lovesMods`/`hatesMods` likewise: each entry's modifier lines (see modifiersOf) — none for a hidden (UNKNOWN) one.
   // `lovesSaid`/`hatesSaid`: the same, worded for speech (never hidden); `lovedWords`/`hatedWords`: words filled into them
   // `limits`: every limit rule their name, mood, loves and hates hold (see clash in core/entries.js), for what they'll say
-  return { name: fullname, age, mood: mood.text, loves: loveTexts, hates: hateTexts, limits: [...[name, mood, ...loves, ...hated].flatMap(limitsOf), ...[...lovesFilled, ...hatesFilled].flatMap(filled => filled.limits ?? [])],
+  return { name: fullname, shortName: nick ?? name.text, age, mood: mood.text, loves: loveTexts, hates: hateTexts, limits: [...[name, mood, ...loves, ...hated].flatMap(limitsOf), ...[...lovesFilled, ...hatesFilled].flatMap(filled => filled.limits ?? [])],
     lovesSaid: lovesFilled.map(filled => filled.said), hatesSaid: hatesFilled.map(filled => filled.said),
     lovedWords: lovesFilled.flatMap(filled => filled.words), hatedWords: hatesFilled.flatMap(filled => filled.words), lovesTier: loveTiers, hatesTier: hateTiers, lovesMods: loveMods, hatesMods: hateMods, lovesBase: loveBase, hatesBase: hateBase, traits: traits};
 }

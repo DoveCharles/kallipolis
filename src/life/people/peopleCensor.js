@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
 import { possession } from '../possession.js';
+import { SPECTRAL } from './peopleSpirits.js';
 
 // The nude trait's censor: a Sims-style mosaic rectangle over each nude person, from upper thigh to stomach (a man) or
 // to below the shoulders (a woman). It faces the camera, upright along the body's own up (pelvis to chest, as posed), so
@@ -13,6 +14,7 @@ const CENSOR_BLOCKS = 3;     // mosaic blocks across
 const CENSOR_MIN_TALL = 0.8;  // the least it's ever as tall as it's wide, seen from above
 const CENSOR_BELOW_NEAR = 2;  // seen from straight below, this many times CENSOR_NEAR more towards the camera
 const CENSOR_SHIMMER = 6;    // times a second the blocks' shades re-roll
+const CENSOR_TWINS = 3;     // how many times as wide on twins
 const CENSOR_OWN_NEAR = 0.1;  // CENSOR_NEAR for whoever's possessed: just in front of them
 
 /**
@@ -58,6 +60,7 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
         vec3 up = top - low;
         float tall = length(up);
         up /= max(tall, 1e-6);
+        float wide = (personSpectral() & ${SPECTRAL.twins}) != 0 ? ${CENSOR_TWINS.toFixed(1)} : 1.0; // (twins: over both)
         float block = censorWidth*scale/${CENSOR_BLOCKS.toFixed(1)};
         vCensorSkin = personTrait(${skinRow}).rgb;
         vCensorPerson = personIndex();
@@ -69,9 +72,9 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
           if (dot(fwd, fwd) < 1e-6) fwd = camUp - up*dot(camUp, up);
           fwd = normalize(fwd);
           vec3 side = normalize(cross(up, fwd));
-          vec3 world = 0.5*(low + top) + side*position.x*censorWidth*scale + up*position.y*tall + fwd*${CENSOR_OWN_NEAR.toFixed(2)}*censorNear/${CENSOR_NEAR.toFixed(2)}*scale;
+          vec3 world = 0.5*(low + top) + side*position.x*censorWidth*wide*scale + up*position.y*tall + fwd*${CENSOR_OWN_NEAR.toFixed(2)}*censorNear/${CENSOR_NEAR.toFixed(2)}*scale;
           gl_Position = projectionMatrix*viewMatrix*vec4(world, 1.0);
-          vCensorBlock = (position.xy + 0.5)*vec2(${CENSOR_BLOCKS.toFixed(1)}, max(1.0, floor(tall/block + 0.5)));
+          vCensorBlock = (position.xy + 0.5)*vec2(${CENSOR_BLOCKS.toFixed(1)}*wide, max(1.0, floor(tall/block + 0.5)));
           return;
         }
         // (towards the camera: its position in perspective, back along its view when orthographic)
@@ -89,10 +92,10 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
           tall = max(tall*sqrt(1.0 - above*above), ${CENSOR_MIN_TALL.toFixed(2)}*censorWidth*scale);
           middle = mix(top, (placed*(personBone(censorBones.y)*vec4(censorHighWoman, 1.0))).xyz, above) - onScreen*0.5*tall;
         }
-        vec3 world = middle + side*position.x*censorWidth*scale + onScreen*position.y*tall + facing*censorNear*scale*(1.0 + ${CENSOR_BELOW_NEAR.toFixed(2)}*below);
+        vec3 world = middle + side*position.x*censorWidth*wide*scale + onScreen*position.y*tall + facing*censorNear*scale*(1.0 + ${CENSOR_BELOW_NEAR.toFixed(2)}*below);
         gl_Position = projectionMatrix*viewMatrix*vec4(world, 1.0);
         // (whole blocks each way: a part-block sliver at an edge reads as a rim)
-        vCensorBlock = (position.xy + 0.5)*vec2(${CENSOR_BLOCKS.toFixed(1)}, max(1.0, floor(tall/block + 0.5)));
+        vCensorBlock = (position.xy + 0.5)*vec2(${CENSOR_BLOCKS.toFixed(1)}*wide, max(1.0, floor(tall/block + 0.5)));
       }`,
     fragmentShader: `
       uniform float censorTime;

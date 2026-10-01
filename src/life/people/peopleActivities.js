@@ -899,8 +899,8 @@ export function throwPunch(dt, p, isForced, forcedVictim) {
     // anyone near enough: along the same walkway (not across the block it runs round), or in the same hangout
     const nav = p.mode === 'line' ? peopleNav.lines[p.li] : null;
     const along = q => { const d = Math.abs(q.u - p.u); return nav.loop ? Math.min(d, nav.total - d) : d; };
-    const near = people.filter(q => q !== p && q.mode === p.mode && Math.abs(q.x - p.x) < reach && Math.abs(q.z - p.z) < reach
-      && Math.hypot(q.x - p.x, q.z - p.z) < reach && (nav ? q.li === p.li && along(q) < reach : q.area === p.area) && isFairGame(q));
+    const near = people.filter(q => q !== p && q.mode === p.mode && Math.abs(q.x - p.x) < reach + App.twinReach(q) && Math.abs(q.z - p.z) < reach + App.twinReach(q)
+      && Math.hypot(q.x - p.x, q.z - p.z) < reach + App.twinReach(q) && (nav ? q.li === p.li && along(q) < reach : q.area === p.area) && isFairGame(q));
     if (!near.length) { p.punchCooldown = 2 + peopleRng()*3; return; }
     victim = pickFrom(near);
   }
@@ -1883,7 +1883,7 @@ export function startParty({ group, key, kind, number }, { want: only = 0, diner
   // (the door itself: whoever reaches it is in: see updateIndoors' 'approach')
   const door = roomOutsideDoor(0.15);
   let possible = people.map(p => ({ p, d: Math.hypot(p.x - door.x, p.z - door.z) }))
-    .filter(({ p }) => p !== people[followed] && p !== people[riderFollowed] && couldComeToAParty(p) && welcomeAtParty(p, rule));
+    .filter(({ p }) => p !== people[followed] && p !== people[riderFollowed] && !p.miniOf && couldComeToAParty(p) && welcomeAtParty(p, rule)); // (a piper's minis only come with them: below)
   // (Fetch a Diner with nobody out, e.g. a town without walkways: anyone not spawned)
   if (diner && !possible.length) possible = people.filter(p => p.mode === 'none').map(p => ({ p, d: 0 }));
   const away = possible.filter(c => c.d >= PARTY_FAR);
@@ -1895,11 +1895,11 @@ export function startParty({ group, key, kind, number }, { want: only = 0, diner
   const fp = group.userData.footprint, bounds = fp && fp.length >= 3 ? footprintBounds(group) : null;
   const partyBuilding = { key, kind, number, x: bounds?.c.x ?? 0, z: bounds?.c.z ?? 0, y: ground,
     height: group.userData.height || 10, size: bounds?.r ?? 10, door: { x: door.x, z: door.z } };
-  let came = 0;
-  while (came < want && pool.length) {
-    const { p } = pool.splice(Math.floor(peopleRng()*pool.length), 1)[0];
+  let came = 0, queued = 0;
+  const bring = p => {
     // (queued out from the door, one behind another, so they come in one at a time rather than all at once)
-    const spot = roomOutsideDoor(PARTY_OUT + came*PARTY_STAGGER, came % 2 ? -PARTY_ALONG : -0.1);
+    const spot = roomOutsideDoor(PARTY_OUT + queued*PARTY_STAGGER, queued % 2 ? -PARTY_ALONG : -0.1);
+    queued++;
     p.x = spot.x; p.y = ground; p.z = spot.z;
     p.heading = headingTo(p, door) + moonwalkTurn(p);
     goIndoors(p, partyBuilding, { x: door.x, y: ground, z: door.z });
@@ -1910,6 +1910,12 @@ export function startParty({ group, key, kind, number }, { want: only = 0, diner
     // clock — which every visit's length is kept in — runs as fast as the World panel's day length has it)
     p.indoors.hoursLeft = Math.max(p.indoors.hoursLeft, clockHours(PARTY_MIN_SECONDS));
     feel(p, 'party');      // (so they've something to say about arriving: {felt = party} in life/speech-text.js)
+  };
+  while (came < want && pool.length) {
+    const { p } = pool.splice(Math.floor(peopleRng()*pool.length), 1)[0];
+    bring(p);
+    // (a piper's minis come too, staying as long: see people/peopleMinis.js)
+    (p.minis ?? []).forEach(m => { if (m?.miniOf === p && couldComeToAParty(m)) { m.follow = null; m.act = null; bring(m); m.indoors.hoursLeft = p.indoors.hoursLeft; } });
     came++;
   }
   return came;

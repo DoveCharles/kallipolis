@@ -7,7 +7,7 @@ import { scene } from '../../core/scene.js';
 // body's instanceMatrix and pose attributes; flagged by the SPIRITS_ROW bits (personSpectral).
 
 // the SPIRITS_ROW bits (peopleModel.js)
-export const SPECTRAL = { spirits: 1, ghost: 2, bodiless: 4 };
+export const SPECTRAL = { spirits: 1, ghost: 2, bodiless: 4, twins: 8 }; // (twins: see personTwin in peopleModel.js)
 
 const DEPTH_ORDER = 1000; // the see-through ones' depth twins draw at this, then they do (among the transparent, last)
 const WORN_DARK = 0.7;   // hair and accessories' colour, × the spirit's

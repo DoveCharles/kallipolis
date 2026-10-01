@@ -2,10 +2,11 @@ Their nickname | My nickname {nickname, choiceweight = 4} <habits>
 Swearing {swears, choiceweight = 2} <habits>
 Controversially, [hates] {choiceweight = 50}
 Stoicism | Stoicism {normal = 2, conservative = 0.05} <beliefs>
-Consulting the shoulder spirits {spirits} <surreal>
-trans-dimensional knowledge {bodiless, headsize = 3, nerd = 20, pacifist}
+mitosis {piper}
+Consulting the shoulder spirits {spirits, limit = 5b} <surreal>
 Seed money {conservative = 0.2, capital = 5}
 stimulating the economy {shopping = 10, capital = 4}
+being twins {twins, limit = 5a}
 Big noses
 Cop Dramas {outlaw = 0.9}
 Mighty Morphin Power Rangers

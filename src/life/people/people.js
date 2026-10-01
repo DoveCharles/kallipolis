@@ -20,7 +20,9 @@ import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.j
 import { controlInput, possession, rushed } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion } from '../profiles.js';
 import { SPECTRAL } from './peopleSpirits.js';
-import { updateSpiritChat } from './peopleSpiritChat.js';
+import { TWIN_GAP, TWIN_LOOK_ROW } from './peopleModel.js';
+import { updateSpiritChat, twinBubble } from './peopleSpiritChat.js';
+import { updateMinis, miniSpot } from './peopleMinis.js';
 import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GOOFY_ROW, HAIR_ROW, SPIRITS_ROW, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, SKEPTICAL_ROW, WELLING_ROW, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, PUPIL_MAX_X, PUPIL_MAX_Y, personPixels } from './peopleModel.js';
 import { navRebuildOnHold } from '../../roads/roads.js';
 import { getTrainStations } from '../../trains/trains.js';
@@ -570,7 +572,7 @@ export function refreshTraits(p, i) {
   const isMan = personModel ? personModel.isMan[i] === 1 : null, key = traitsKeyOf(isMan);
   if (p.traitsKey === key) return;
   p.traitsKey = key;
-  const profile = profileOf(p.id, isMan, p.moodNow);
+  const profile = profileOf(p.id, isMan, p.moodNow); // (a piper's mini's is theirs: see registerMini in profiles.js)
   // (who they are, with what's in their pockets and what they're under stacked over it: see life/statuseffects.js)
   p.baseTraits = profile.traits;
   restackTraits(p);
@@ -640,7 +642,7 @@ function tintSkin(p, i) {
   data[(SKEPTICAL_ROW*PEOPLE_MAX + i)*4 + 3] = p.traits.skeptical; // (and their face pulled, 🤔 🥴: see FACE_PULLS)
   data[(GOOFY_ROW*PEOPLE_MAX + i)*4 + 3] = p.traits.goofy;
   data[(WELLING_ROW*PEOPLE_MAX + i)*4 + 3] = p.traits.welling; // (and the glint in their eyes, 🥺: see GLINT_GLSL)
-  data[(SPIRITS_ROW*PEOPLE_MAX + i)*4 + 3] = spectralOf(p) + (p.bodilessSat ?? 0); // (spirits, ghost, bodiless: see peopleSpirits.js; and how far sat, below)
+  data[(SPIRITS_ROW*PEOPLE_MAX + i)*4 + 3] = spectralOf(p); // (spirits, ghost, bodiless, twins: see peopleSpirits.js)
   personModel.traitTexture.needsUpdate = true;
   if (p.blood && p.bloodBase) { p.bloodBase.Skin = [skin.r, skin.g, skin.b]; return; } // (blood's to stain from: see peopleBlood.js)
   data[o] = skin.r; data[o + 1] = skin.g; data[o + 2] = skin.b;
@@ -1114,7 +1116,7 @@ export function drownedPerson(i) {
  * @param {number} i - their index in people
  * @returns {void}
  */
-function benchPerson(i) {
+export function benchPerson(i) {
   const p = people[i];
   if (followed === i) stopFollowingPerson();
   if (awaited === i) setAwaited(-1);
@@ -1133,6 +1135,31 @@ function benchPerson(i) {
  * @param {Person} p - the person
  * @returns {boolean} whether they're in the road
  */
+/**
+ * A twin's copy's head (TWIN_LOOK_ROW): at the other while they talk to each other (p.twinGaze: see peopleSpiritChat.js),
+ * where the person looks while they're talking to anyone else, else glancing about on its own, as people do.
+ * @param {Person} p
+ * @param {number} i
+ * @param {number} dt
+ * @param {boolean} possessed
+ * @returns {void}
+ */
+function lookTwin(p, i, dt, possessed) {
+  if (p.twinGaze != null) { p.twinTurnTo = p.twinGaze; p.twinTiltTo = 0; }
+  else if (p.lookAt || possessed || p.spiritGaze != null) { p.twinTurnTo = p.lookTurnTo; p.twinTiltTo = p.lookTiltTo; }
+  else if ((p.twinLookIn = (p.twinLookIn ?? 0) - dt) <= 0) {
+    const { nosy } = p.traits, ahead = peopleRng() < 0.35/nosy, reach = (p.moving ? 0.6 : 1)*Math.min(1.5, Math.sqrt(nosy));
+    p.twinLookIn = (1.5 + peopleRng()*4)/nosy;
+    p.twinTurnTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TURN*reach;
+    p.twinTiltTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TILT;
+  }
+  const ease = Math.min(1, dt*4), o = (TWIN_LOOK_ROW*PEOPLE_MAX + i)*4, data = personModel.traitData;
+  p.twinTurn = (p.twinTurn ?? 0) + ((p.twinTurnTo ?? 0) - (p.twinTurn ?? 0))*ease;
+  p.twinTilt = (p.twinTilt ?? 0) + ((p.twinTiltTo ?? 0) - (p.twinTilt ?? 0))*ease;
+  if (Math.abs(data[o] - p.twinTurn) + Math.abs(data[o + 1] - p.twinTilt) > 0.005) { data[o] = p.twinTurn; data[o + 1] = p.twinTilt; personModel.traitTexture.needsUpdate = true; }
+}
+/** How much further someone's reached standing: a twin's other half, beside them (see TWIN_GAP), else 0. World units. */
+export const twinReach = p => p.traits?.twins ? 2*TWIN_GAP*1.7*p.height*S.peopleSize : 0;
 export function isPedInDanger(p) {
   return p.crossStage === 'jcross' || p.crossStage === 'half1' || p.crossStage === 'half2' || (p.mode === 'possessed' && p.onRoad);
 }
@@ -1175,7 +1202,7 @@ function stepPush(p, dt) {
  * What the people module hands the rest of the app: the World panel's controls, picking and following someone, possessing
  * them, swinging a punch and killing them — and, for poking at from the browser console, the crowd and its conversations.
  */
-Object.assign(App, { witnessPerson: witness, witnessAt, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, useFromPossession, killPerson, knockOverPerson: knockOver, knockAgainPerson: knockAgain, personHeight, people, peopleGroups: groups, followedPerson: () => followed, peopleClock: () => lastPeopleTime });
+Object.assign(App, { twinReach, witnessPerson: witness, witnessAt, feelPerson: feel, pushPerson, syncPeopleUI, pickPerson, followPersonAt, followPerson, followPersonInside, stopFollowingPerson, possessPerson, unpossessPerson, punchFromPossession, useFromPossession, killPerson, knockOverPerson: knockOver, knockAgainPerson: knockAgain, personHeight, people, peopleGroups: groups, followedPerson: () => followed, peopleClock: () => lastPeopleTime });
 
 /**
  * Run the crowd for one frame: keep the numbers right, rebuild the walkways when the map has changed, and move everyone
@@ -1227,7 +1254,7 @@ export function updatePeople(t) {
     people.push(p);
   }
   while (people.length > kept) endActivity(people.pop());
-  for (let i = wanted; i < people.length; i++) if (!people[i].benched && !isFavoritePerson(people[i].id)) benchPerson(i);
+  for (let i = wanted; i < people.length; i++) if (!people[i].benched && !isFavoritePerson(people[i].id) && !people[i].miniOf) benchPerson(i); // (minis live past the crowd's count: see peopleMinis.js)
   for (let i = 0; i < Math.min(wanted, people.length); i++) {
     const p = people[i];
     if (p.benched) { p.benched = false; p.mode = 'none'; } // (the same person, off the bench: spawned again below)
@@ -1263,6 +1290,8 @@ export function updatePeople(t) {
   peopleFrame++;
   beginEmotes();
   sweepPrayers();
+  if (personModel) personModel.copiesWanted.twins = people.some(p => p.traits.twins); // (see copiesOf in peopleModel.js)
+  updateMinis(dt, wanted); // (pipers' minis: made, followed, avenged — see peopleMinis.js)
   people.forEach((p, i) => {
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
@@ -1271,9 +1300,11 @@ export function updatePeople(t) {
     if (personModel && !!p.traits.nude !== !!p.nudeDressed) { p.nudeDressed = !!p.traits.nude; personModel.setNude(i, p.id, p.nudeDressed); } // (see peopleCensor.js)
     if (personModel && p.headDrawn !== p.traits.headsize) { p.headDrawn = p.traits.headsize; personModel.traitData[(HAIR_ROW*PEOPLE_MAX + i)*4 + 3] = p.headDrawn; personModel.traitTexture.needsUpdate = true; } // (see personLook)
     if (p.traits.nude && (p.mode === 'line' || p.mode === 'wander') && (p.nudeSeenIn = (p.nudeSeenIn ?? 0) - dt) <= 0) { witness(p, 'nude'); p.nudeSeenIn = NUDE_SEEN_EVERY; }
-    if (personModel && p.traits.bodiless) { // (sat down, a bodiless head floats higher: see personBodiless in peopleModel.js)
-      const sat = Math.round(Math.min(0.95, sitWeight(p) + GRASS_SITS.reduce((w, name) => w + weightOf(p, personModel.clips[name]), 0))*20)/20;
-      if (sat !== (p.bodilessSat ?? 0)) { p.bodilessSat = sat; personModel.traitData[(SPIRITS_ROW*PEOPLE_MAX + i)*4 + 3] = spectralOf(p) + sat; personModel.traitTexture.needsUpdate = true; }
+    if (personModel && p.traits.bodiless) { // (a bodiless head hops while they move: see personBodiless in peopleModel.js)
+      const o = (TWIN_LOOK_ROW*PEOPLE_MAX + i)*4 + 2, data = personModel.traitData;
+      p.headHop = p.hop?.h > 0 ? 0 : (p.headHop ?? 0) + ((p.moving ? 1 : 0) - (p.headHop ?? 0))*Math.min(1, dt*6); // (not mid-jump, possessed: a double jump)
+      const hop = p.headHop < 0.02 ? 0 : p.headHop;
+      if (Math.abs(data[o] - hop) > 0.02 || (!hop && data[o])) { data[o] = hop; personModel.traitTexture.needsUpdate = true; }
     }
     if (!p.pocketsStocked) stockPockets(p, i); // (the sunglasses they came in: see life/gifts.js)
     if (p.blood) updateBlood(p, dt, i);
@@ -1436,7 +1467,7 @@ export function updatePeople(t) {
       if (Math.hypot(p.exit.x - p.x, p.exit.z - p.z) < 0.5) p.mode = 'line';
     }
     // walking with someone: beside them, going where they go (see "walking together" in peopleActivities.js)
-    if (p.follow) goal = frozen ? null : besideLeader(p);
+    if (p.follow) goal = frozen ? null : p.miniOf ? miniSpot(p) : besideLeader(p); // (a piper's mini: in formation, see peopleMinis.js)
     // in a plaza, walk around its fountain rather than through the pool: while the straight line to where they're going
     // passes over it, head instead for the point on its rim nearest that line — which moves round as they do
     const hangout = (p.mode === 'wander' || p.mode === 'leaving') && p.area >= 0 ? peopleNav.areas[p.area] : null;
@@ -1589,6 +1620,7 @@ export function updatePeople(t) {
         if (possessed) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
         p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, fdt*4);
         p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, fdt*4);
+        if (p.traits.twins) lookTwin(p, i, fdt, possessed);
         // their pupils dart somewhere else every second or so, often back to the middle, snapping there quickly
         p.pupilIn -= fdt;
         if (p.pupilIn <= 0) {
@@ -1671,9 +1703,9 @@ export function updatePeople(t) {
       // Choices — see ui/speech-bubbles.js ownLine and audio/dictionary.js sayLine)
       if (p.choosing && (!possessed || !S.dialogueChoices || p.group?.talk !== p.choosing.talk)) p.choosing = null;
       if (possessed) ownLine(p, p.saying ?? babbling, p.choosing);
-      else if (bubbleSide && (p.saying || babbling || thinking || hasBubble(p))) speechBubble(p, bubbleAt(p), p.saying ?? babbling ?? thinking);
-      // (on their own with spirits: talking with them — see peopleSpiritChat.js)
-      if (p.traits.spirits || p.spiritChat?.on) updateSpiritChat(p, i, dt, { free: !group && !possessed && !aaaing && !fleeing && !frozen && !p.fleeTalkUntil && isDrawn(p),
+      else if (bubbleSide && (p.saying || babbling || thinking || hasBubble(p))) speechBubble(p, twinBubble(p, bubbleAt(p)), p.saying ?? babbling ?? thinking);
+      // (on their own with spirits or a twin: talking with them — see peopleSpiritChat.js)
+      if (p.traits.spirits || p.traits.twins || p.spiritChat?.on) updateSpiritChat(p, i, dt, { free: !group && !possessed && !aaaing && !fleeing && !frozen && !p.fleeTalkUntil && isDrawn(p),
         voice: voiceOf(p, i), head: { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, bubble: bubbleSide && !possessed ? bubbleAt(p) : null, mouths: personModel?.spiritTalk.array });
       // (shocked, a gasp — agape while they stare)
       if (delighted) p.talkTo = 0.45;                      // smiling, not agape

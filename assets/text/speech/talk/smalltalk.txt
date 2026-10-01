@@ -252,6 +252,43 @@ Violence is never the answer. {pacifist}
 > Agreed. {pacifist}
 >> Peace, friend.
 
+Are you two... the same person? {other.is = twins}
+> We get that a lot. {is = twins}
+> Which one of us are you asking? {is = twins}
+>> I'm seeing double.
+
+Are you thinking what I'm thinking? {is = twin}
+> Always. {other.is = twin}
+> Probably. {other.is = twin, goofy}
+>> Jinx.
+
+You're standing on my side again. {is = twin}
+> We're the same width. {other.is = twin}
+>> Still.
+
+Are those... yours? {other.is = piper}
+> They just follow me. {is = piper}
+> Don't make eye contact with them. {is = piper, evil > 0}
+>> There's three of them.
+
+Why are tiny yous following you? {other.is = piper}
+> I stopped asking. {is = piper}
+>> Fair.
+
+I'm the favourite. {is = mini}
+> Of who? {other.is != mini}
+> You are not. {other.is = mini}
+>> Everyone knows it.
+
+Where's your big one? {other.is = mini}
+> Around. {is = mini}
+> Don't call them that. {is = mini, aggression}
+>> Okay.
+
+Do you two ever do anything apart? {other.is = twins}
+> No. {is = twins}
+>> Right.
+
 Are you... dead? {other.is = ghost}
 > Not as far as I know. {is = ghost}
 > Whooo. {is = ghost, goofy}
