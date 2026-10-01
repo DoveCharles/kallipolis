@@ -95,7 +95,7 @@ function updateGesture() {
   // shouldn't, and two fingers closing always drag the middle about a little. So it's the distance the middle has
   // travelled over the whole gesture that decides, rather than any one frame's.
   gesture.travelled += Math.hypot(dx, dy);
-  if (gesture.travelled > 24 && !controls.locked) { App.stopFollowingPerson(); App.stopFollowingBuilding(); App.stopFollowingBee(); App.stopFollowingHive(); App.stopFollowingPigeon(); App.stopFollowingMedBot(); }
+  if (gesture.travelled > 24 && !controls.locked) { App.stopFollowingPerson(); App.stopFollowingBuilding(); App.stopFollowingBee(); App.stopFollowingHive(); App.stopFollowingPigeon(); App.stopFollowingMedBot(); App.stopFollowingSeraphorb(); }
   controls.pan(dx, dy);
   if (gesture.dist > 8 && now.dist > 8) controls.zoomBy(gesture.dist / now.dist);
   gesture = { ...now, travelled: gesture.travelled };
@@ -334,7 +334,7 @@ dom.addEventListener('pointermove', (e) => {
   if (isCameraDragging) {
     const { dx, dy } = pointerDelta(e);
     // panning takes the camera off whoever it's following; orbiting keeps it on them
-    if (dragMode==='pan') { if (!controls.locked) { App.stopFollowingPerson(); App.stopFollowingBuilding(); App.stopFollowingBee(); App.stopFollowingHive(); App.stopFollowingPigeon(); App.stopFollowingMedBot(); } controls.pan(dx, dy); } else controls.orbit(dx, dy);
+    if (dragMode==='pan') { if (!controls.locked) { App.stopFollowingPerson(); App.stopFollowingBuilding(); App.stopFollowingBee(); App.stopFollowingHive(); App.stopFollowingPigeon(); App.stopFollowingMedBot(); App.stopFollowingSeraphorb(); } controls.pan(dx, dy); } else controls.orbit(dx, dy);
     return;
   }
   if (S.draggedNode) {
@@ -388,7 +388,7 @@ dom.addEventListener('pointermove', (e) => {
     insertPreviewMarker.visible = false;
     setHover(null);
     const overClickable = App.isInsideBuilding() ? hoverJukebox(e.clientX, e.clientY) || App.pickPerson(e.clientX, e.clientY) >= 0 : (App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
-      || !!App.pickPlane(e.clientX, e.clientY) || !!App.pickBee(e.clientX, e.clientY) || !!App.pickHive(e.clientX, e.clientY) || !!App.pickPigeon(e.clientX, e.clientY) || !!App.pickMedBot(e.clientX, e.clientY)
+      || !!App.pickPlane(e.clientX, e.clientY) || !!App.pickBee(e.clientX, e.clientY) || !!App.pickHive(e.clientX, e.clientY) || !!App.pickPigeon(e.clientX, e.clientY) || !!App.pickMedBot(e.clientX, e.clientY) || !!App.pickSeraphorb(e.clientX, e.clientY)
       || !!App.pickBuilding(e.clientX, e.clientY));
     if (overClickable !== hoveringClickable) { hoveringClickable = overClickable; dom.style.cursor = overClickable ? 'pointer' : ''; }
     return;
@@ -467,7 +467,7 @@ function releasePointer(e) {
 }
 // Everything the camera can follow in World mode (see ui/entity-card.js), so a click on one of them lets go of all the
 // rest — a new kind of thing need only be named here, and export stopFollowing<its name> on App.
-const FOLLOWABLE = ['Person', 'Car', 'Train', 'Plane', 'Bee', 'Hive', 'Pigeon', 'MedBot', 'Building'];
+const FOLLOWABLE = ['Person', 'Car', 'Train', 'Plane', 'Bee', 'Hive', 'Pigeon', 'MedBot', 'Seraphorb', 'Building'];
 const letGoOfAllBut = kept => FOLLOWABLE.forEach(kind => { if (kind !== kept) App['stopFollowing' + kind](); });
 App.letGoOfAllBut = letGoOfAllBut; // (for the favorites too: see ui/favorites.js)
 // Each followable kind's picker, and whether what it returned is a hit. Every picker takes an `out` it gives the hit's
@@ -477,6 +477,7 @@ const FOLLOW_PICKERS = [
   { kind: 'Bee',    isHit: hit => !!hit,   pick: (x, y, out) => App.pickBee(x, y, out) },
   { kind: 'Pigeon', isHit: hit => !!hit,   pick: (x, y, out) => App.pickPigeon(x, y, out) },
   { kind: 'MedBot', isHit: hit => !!hit,   pick: (x, y, out) => App.pickMedBot(x, y, out) },
+  { kind: 'Seraphorb', isHit: hit => !!hit, pick: (x, y, out) => App.pickSeraphorb(x, y, out) },
   { kind: 'Person', isHit: hit => hit >= 0, pick: (x, y, out) => App.pickPerson(x, y, out) },
   { kind: 'Car',    isHit: hit => hit >= 0, pick: (x, y, out) => App.pickCar(x, y, out) },
   { kind: 'Train',  isHit: hit => hit >= 0, pick: (x, y, out) => App.pickTrain(x, y, out) },

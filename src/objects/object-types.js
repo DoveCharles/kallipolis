@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { S, App } from '../core/shared.js';
-import { computeWindowGlowFactor } from '../core/scene.js';
+import { computeWindowGlowFactor, SKY_ENV_MAP } from '../core/scene.js';
 import { createMeshBuilder } from '../roads/roads.js';
 
 // ============================================================ what there is to put down
@@ -39,6 +39,7 @@ const MAT = {
   sausage: standard(0x9a3b24, { roughness:0.6, metalness:0 }),
   beer:    standard(0xd08a1e, { roughness:0.35, metalness:0 }),
   timber:  standard(0x5e4128, { roughness:0.95, metalness:0 }),
+  chrome: standard(0xe6ebf0, { roughness:0.08, metalness:1, envMap:SKY_ENV_MAP, flatShading:false }),
   glass: standard(0xbcd6e0, { roughness:0.15, metalness:0.1, transparent:true, opacity:0.35 }),
   // a lamp's globe, which comes on after dark along with the windows — that's all baseEmissiveIntensity takes (see
   // refreshSceneIndex in scene.js)
@@ -125,6 +126,11 @@ const cylinderShape = (r, h, sides) => shapeOf(`cyl:${r}:${h}:${sides}`, () => n
 const coneShape = (r, h, sides) => shapeOf(`cone:${r}:${h}:${sides}`, () => new THREE.ConeGeometry(r, h, sides));
 const wheelShape = (r, w, sides) => shapeOf(`wheel:${r}:${w}:${sides}`, () => new THREE.CylinderGeometry(r, r, w, sides).rotateX(Math.PI/2));
 const ballShape = (r) => shapeOf(`ball:${r}`, () => new THREE.IcosahedronGeometry(r, 1));
+const ringShape = (r, tube) => shapeOf(`ring:${r}:${tube}`, () => new THREE.TorusGeometry(r, tube, 12, 40).rotateX(Math.PI/2)); // lying flat
+
+// The Seraph ring's ring (see 'seraphring'): how high its middle is, its radius and thickness. The orb (life/seraphorb.js)
+// sits in it.
+export const SERAPH_RING = { y: 2.8, r: 0.55, tube: 0.08 };
 
 // The kit a kind is described with. Everything is in the prop's own space: x across it, z out through its front, y up
 // from the ground — and a box or a post is given the height of its underside, since that's where it sits.
@@ -138,6 +144,14 @@ function propKit() {
     post(mat, x, y, z, r, h, sides = 10) { partFor(mat).addGeometry(cylinderShape(r, h, sides), x, y + h/2, z); },
     cap(mat, x, y, z, r, h, sides = 10) { partFor(mat).addGeometry(coneShape(r, h, sides), x, y + h/2, z); },
     ball(mat, x, y, z, r) { partFor(mat).addGeometry(ballShape(r), x, y, z); }, // y is its middle, not its underside
+    ring(mat, x, y, z, r, tube) { partFor(mat).addGeometry(ringShape(r, tube), x, y, z); }, // y is its middle
+    // a round bar from one point to another, at any slant
+    rod(mat, from, to, r, sides = 8) {
+      const d = new THREE.Vector3().subVectors(to, from), length = d.length();
+      const geo = new THREE.CylinderGeometry(r, r, length, sides).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+      partFor(mat).addGeometry(geo, (from.x + to.x)/2, (from.y + to.y)/2, (from.z + to.z)/2);
+      geo.dispose();
+    },
     wheel(mat, x, y, z, r, w, sides = 12) { partFor(mat).addGeometry(wheelShape(r, w, sides), x, y, z); }, // axle across z; y is its hub
     build() {
       const group = new THREE.Group();
@@ -358,6 +372,21 @@ export const OBJECT_TYPES = [
       kit.box(MAT.dark, 0, 0.1, 0.8, 1.1, 1.9, 0.04); // the door
       kit.box(MAT.red, 0, h - 0.45, 0.82, 0.3, 0.1, 0.02); // a red cross over it
       kit.box(MAT.red, 0, h - 0.55, 0.82, 0.1, 0.3, 0.02);
+      return kit.build();
+    },
+  },
+  {
+    // a chrome ring on four legs, home to a Seraphorb, which flies off from it to smite villains and comes back to charge
+    // (see life/seraphorb.js)
+    id:'seraphring', label:'Seraph ring', color:'#e6ebf0', facing:'free', radius:1.6, turnJitter:0, sizeJitter:0,
+    build() {
+      const kit = propKit(), { y, r, tube } = SERAPH_RING, foot = 1.5;
+      kit.ring(MAT.chrome, 0, y, 0, r, tube);
+      for (let k = 0; k < 4; k++) {
+        const a = Math.PI/4 + k*Math.PI/2, sx = Math.sin(a), sz = Math.cos(a);
+        kit.rod(MAT.chrome, new THREE.Vector3(sx*r, y, sz*r), new THREE.Vector3(sx*foot, 0, sz*foot), 0.06);
+        kit.post(MAT.chrome, sx*foot, 0, sz*foot, 0.14, 0.06, 12); // its foot
+      }
       return kit.build();
     },
   },

@@ -96,6 +96,7 @@ import { loadBeeModel, updateBees } from './life/bees.js';
 import { updateAirports, loadPlaneModel } from './zones/airport.js';
 import { loadPigeonModel, updatePigeons } from './life/pigeons.js';
 import { loadMedBot, updateMedBots } from './life/medbot.js';
+import { updateSeraphorbs } from './life/seraphorb.js';
 import { loadHouseModels } from './zones/suburbs.js';
 import { updateBuildingFollow } from './buildings/building-card.js';
 import { updateInteriorCamera, isInsideBuilding } from './buildings/interior.js';
@@ -174,6 +175,7 @@ function animate() {
   updateBees(t);
   updateAirports(t);
   updateMedBots(t);
+  updateSeraphorbs(t);
   updatePigeons(t); // (before updateTraffic, which sets off the blasts that scatter them)
   updateTraffic(t);
   updateFences(t); // (smashed fences put back once long out of view)

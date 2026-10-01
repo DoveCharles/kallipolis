@@ -11,7 +11,7 @@ import { possession } from './possession.js';
 const SEGMENTS_MAX = 400;
 const BOLT_HEIGHT = 140, BOLT_STEPS = 22, BOLT_JAG = 0.35; // how high it starts, in how many kinks, and how far each kink strays (against the step)
 const BOLT_LIFE = 0.2, BOLT_REDRAWS = [0, 0.08]; // seconds it lasts, and when in that it's drawn afresh
-const CORE_WIDTH = 0.5, GLOW_WIDTH = 2.2;
+const CORE_WIDTH = 0.5, GLOW_WIDTH = 2.2, NEAR_WIDTH = 0.35; // (NEAR_WIDTH: a bolt's width, × those, from something near rather than the sky)
 
 const boltGeometry = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0); // (from its base up: stretched between two points)
 function boltMesh(color, opacity, name) {
@@ -53,6 +53,11 @@ function crooked(from, to, steps, jag, width, out, forks) {
 }
 function drawBolt(bolt) {
   const ground = new THREE.Vector3(bolt.at.x, bolt.at.y, bolt.at.z);
+  if (bolt.from) { // (out of something nearer, e.g. a Seraphorb: fewer kinks, thinner)
+    const from = new THREE.Vector3(bolt.from.x, bolt.from.y, bolt.from.z);
+    bolt.segments = crooked(from, ground, Math.max(5, Math.round(from.distanceTo(ground)/BOLT_HEIGHT*BOLT_STEPS*3)), BOLT_JAG, NEAR_WIDTH, [], true);
+    return;
+  }
   const sky = ground.clone().add(new THREE.Vector3((Math.random() - 0.5)*30, BOLT_HEIGHT, (Math.random() - 0.5)*30));
   bolt.segments = crooked(sky, ground, BOLT_STEPS, BOLT_JAG, 1, [], true);
 }
@@ -60,10 +65,11 @@ function drawBolt(bolt) {
 /**
  * Bring a bolt of lightning down on `at` (the ground under whoever's being smitten), and light it up.
  * @param {{x: number, y: number, z: number}} at
+ * @param {?{x: number, y: number, z: number}} [from] - where it comes out of, if not the sky
  * @returns {void}
  */
-export function strikeLightning(at) {
-  const bolt = { at: { ...at }, born: performance.now()/1000, drawn: 0 };
+export function strikeLightning(at, from = null) {
+  const bolt = { at: { ...at }, from: from && { ...from }, born: performance.now()/1000, drawn: 0 };
   drawBolt(bolt);
   bolts.push(bolt);
   shakes.push({ at: bolt.at, born: bolt.born });
