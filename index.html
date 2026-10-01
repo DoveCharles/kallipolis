@@ -241,8 +241,7 @@ try {
 
 <!-- the row of buttons over the view: the panel toggle and ✛ show themselves only on touch (src/ui/mobile.js) -->
 <div id="canvas-tools">
-  <!-- World / Edit / Maps: here from the start, where the Windows 3.0 window shows them; src/ui/win3-menu.js moves them to
-       the top of the side panel on a phone -->
+  <!-- World / Edit / Maps, at the left of the toolbar (src/ui/win3-menu.js) -->
   <div class="toolbar" id="mode-toolbar" style="margin-top:0;">
     <button class="tool-btn" data-mode="move"><svg class="world-open" width="17" height="17" viewBox="0 0 16 16"><!-- (the globe in colour, while the World window's open: css/win3.css) -->
       <clipPath id="world-open-clip"><circle cx="8" cy="8" r="6.3"/></clipPath>
@@ -314,6 +313,7 @@ try {
      shared .meter-* structure below, so another meter elsewhere in the menu can reuse it by copying this shape under
      its own id (see src/ui/morality.js, which finds its pieces with #morality-meter's own querySelector rather than
      by id, for exactly that reason) -->
+<svg width="0" height="0" style="position:absolute"><filter id="tint-gold"><feFlood flood-color="#a8860c"/><feComposite in2="SourceAlpha" operator="in"/></filter></svg>
 <div id="morality-meter" class="meter meter-settling">
   <button class="canvas-tool" id="btn-daily-gift" title="Daily gift"><img src="assets/icons/status/gift.png" alt="Daily gift"></button>
   <button class="canvas-tool" id="btn-identify" title="Identified traits"><img src="assets/icons/identify.png" alt="Identify"></button>

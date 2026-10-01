@@ -1,10 +1,7 @@
 /* ============================================================ touch, and small screens
    Two different things, kept apart. `pointer: coarse` is about the size of a fingertip: the controls this theme draws at
    mouse size grow, and the ones that only ever appear under a cursor (a swatch's delete badge) appear anyway. The
-   `max-width: 760px` block below is about the width of a phone: the panel leaves the left-hand side and becomes a sheet
-   along the bottom that ☰ slides up and down. A tablet gets the first of those and not the second.
-   Where a rule has to beat the Windows 3.0 look, html.win3 is named alongside it — otherwise that sheet, being more
-   specific, would go on putting the window back in the corner. */
+   width of a phone is css/phone.css's. Where a rule has to beat the Windows 3.0 look, html.win3 is named alongside it. */
 
 @media (pointer: coarse) {
   /* no waiting to see whether a tap was the first of a double, and no double-tap zoom over the controls */

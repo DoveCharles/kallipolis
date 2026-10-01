@@ -48,12 +48,12 @@
 #morality-meter .meter-value { width:calc(8ch + 44px); justify-content:center; }
 #morality-meter .meter-icon[alt=Evil] { position:relative; top:-1px; } /* (art sits a row lower than holy's) */
 @media (min-width: 761px) { #morality-meter { width:360px; } }
-#morality-meter .money { font-weight:700; padding:0 4px; background:#4d6b45; }
-#morality-meter .money-n { text-align:center; color:#fff; text-shadow:2px 2px 0 #1f4a1f; display:inline-block; min-width:7ch; font-variant-numeric:tabular-nums; }
-/* energy: a muted gold, the count and icon white over a dark gold shadow like the money */
-#morality-meter .energy { background:#95834b; font-weight:700; }
-#morality-meter .energy-n { color:#fff; text-shadow:2px 2px 0 #4a4028; }
-#morality-meter .energy .meter-icon { filter:brightness(0) invert(1) drop-shadow(2px 2px 0 #4a4028); } /* (white, shadowed like the count) */
+#morality-meter .money { font-weight:700; padding:0 4px; }
+#morality-meter .money-n { text-align:center; color:#1f7a1f; display:inline-block; min-width:7ch; font-variant-numeric:tabular-nums; }
+/* energy: gold on the UI grey, like the money's green */
+#morality-meter .energy { font-weight:700; }
+#morality-meter .energy-n { color:#a8860c; }
+#morality-meter .energy .meter-icon { filter:url(#tint-gold); } /* (svg filter in index.html) */
 /* the count and icon centred together, in a box that doesn't change size with the count */
 #morality-meter .energy, html.win3 #morality-meter .energy { justify-content:center; min-width:calc(3ch + 50px); padding:0 12px; }
 /* the daily gift button (src/ui/daily-gift.js): pressed in and greyed once used; refused, it shakes and flashes red */
@@ -185,6 +185,8 @@ body.ui-locked :is(#canvas-tools, #w3-menubar, #morality-meter, #app-frame .win3
 #morality-meter .meter-fill { left:0; width:100%; --good-pct:50%; transition:--good-pct .8s ease-out;
   background:linear-gradient(to right, var(--ratio-good) var(--good-pct), var(--ratio-evil) var(--good-pct)); }
 .meter-icon { width:auto; height:auto; flex:none; image-rendering:pixelated; vertical-align:middle; }
+.canvas-tool img { image-rendering:pixelated; }
+#morality-meter .meter-icon[alt=Good] { position:relative; top:-1px; }
 .meter .energy { display:flex; align-items:center; gap:6px; margin-top:4px; color:var(--text); white-space:nowrap; }
 .energy-count { display:inline-flex; align-items:center; gap:3px; font-weight:700; }
 
@@ -287,12 +289,4 @@ html.win3 .meter-notice { background:var(--w3-window); border:1px solid var(--w3
 html.win3 .meter-notice.pos { border-left:4px solid var(--meter-pos); }
 html.win3 .meter-notice.neg { border-left:4px solid var(--meter-neg); }
 
-/* the phone layout — must match css/phone.css's own breakpoint (@media (max-width: 760px)) */
-@media (max-width: 760px) {
-  /* the meter goes under the buttons rather than beside them, where it would crowd them off a 375px screen */
-  html.win3 .meter, .meter {
-    top:calc(56px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left));
-    right:calc(8px + env(safe-area-inset-right)); width:auto; max-width:none;
-  }
-  .meter-details { max-height:calc(32vh / var(--ui-scale, 1)); overflow-y:auto; }
-}
+@media (max-width: 760px) { .meter-details { max-height:calc(32vh / var(--ui-scale, 1)); overflow-y:auto; } }

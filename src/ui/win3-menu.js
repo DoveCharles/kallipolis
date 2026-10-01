@@ -1,17 +1,16 @@
 // ============================================================ the Kallipolis window
-// On a screen wider than a phone, the whole tab is one application window: a frame
+// At any width, the whole tab is one application window: a frame
 // round the edge, a title bar saying Kallipolis, and a menu bar under it — File, Edit, View, Options, Help — with the
 // side panel docked down its left like Paintbrush's toolbox, and the canvas tools still over the view. The styles are in
-// css/win3.css ("the application window"); on a phone none of it shows, the panel keeping its own title bar instead.
+// css/win3.css ("the application window"); on a phone, css/phone.css lays the panel over the view.
 //
 // Nearly every menu item presses a button that's already on the page, so it does exactly what that button does, and its
 // check mark is read off the button's own state each time the menu opens rather than kept here.
-import { S } from '../core/shared.js';
+import { S, App } from '../core/shared.js';
 import { isMuted } from '../audio/sfx.js';
 import { openSoundLevels } from './sound-levels.js';
 import { openSettings } from './settings-windows.js';
 import { openHelp } from './help.js';
-import { closeWindows } from './w3-window.js';
 import { editHints, generalHints } from './view-prefs.js';
 import { fpsCounter } from './fps.js';
 import { openHeldDebug } from './held-debug.js';
@@ -241,20 +240,8 @@ sysbox.addEventListener('mousedown', e => { e.preventDefault(); if (open?.anchor
 window.addEventListener('mousedown', e => { if (open && !open.dropdown.contains(e.target) && !open.anchor.contains(e.target)) closeMenus(); }, true);
 window.addEventListener('blur', closeMenus);
 
-// ---- World / Edit / Maps: in the window, they sit at the left of the toolbar rather than the top of the side panel, and go
-// back to the panel whenever the window isn't showing (on a phone). They're found by id
-// everywhere else (tools.js, favorites.js), so it doesn't matter to anything else which of the two they're in.
+// ---- World / Edit / Maps sit at the left of the toolbar (index.html); found by id everywhere else (tools.js, favorites.js)
 const modeButtons = $('mode-toolbar');
-const panelHome = $('panel-body'), panelNext = $('entity-toolbar'); // (where they go on a phone: index.html has them in the toolbar)
-const wide = window.matchMedia('(min-width: 761px)');
-function placeModeButtons() {
-  if (wide.matches) { if (modeButtons.parentElement !== $('canvas-tools')) $('canvas-tools').prepend(modeButtons); }
-  else {
-    if (modeButtons.parentElement !== panelHome) panelHome.insertBefore(modeButtons, panelNext);
-    closeWindows(); // (and any settings in a window go back to the panel: see ui/settings-windows.js)
-  }
-}
-placeModeButtons();
 
 // In the toolbar, Edit and Maps are radio buttons that can both be let up: pressing the one that's down lets it up and
 // hides the side panel, leaving the view to work as it does in World; pressing either then opens the panel on it. World
@@ -280,7 +267,7 @@ function togglePanel() {
 }
 modeButtons.addEventListener('click', e => {
   const button = e.target.closest('.tool-btn');
-  if (!button || !wide.matches) return;
+  if (!button) return;
   // (World pressed by the code rather than a person — here, or favorites.js going back to World to go to a place — is
   // for tools.js, to go back to its mode, so the panel goes; only a real press opens the window)
   if (button === worldButton && !e.isTrusted) setShown('w3-no-panel', false);
@@ -288,7 +275,7 @@ modeButtons.addEventListener('click', e => {
   else if (panelShown() && button.classList.contains('active')) { e.stopPropagation(); hidePanel(); }
   else setShown('w3-no-panel', true);
 }, true);
-function worldModeHidesPanel() { if (wide.matches && S.interactionMode === 'move') setShown('w3-no-panel', false); }
+function worldModeHidesPanel() { if (S.interactionMode === 'move') setShown('w3-no-panel', false); }
 worldModeHidesPanel();
 
 // The active window: like Windows 3.0, only the window you're working in has a navy title bar; the rest go white. A card
@@ -321,8 +308,7 @@ document.addEventListener('pointerdown', e => {
   if (e.target.closest('.w3-dropdown, .w3-modal, .win3-sysbox, .card-close')) return; // (nor a close box: closing isn't working in it)
   setActive(e.target.closest(WINDOWS));
 }, true);
-const placed = () => { placeModeButtons(); worldModeHidesPanel(); };
-wide.addEventListener('change', placed);
+App.w3HidePanel = hidePanel; // (mobile.js: a card opening on a phone)
 
 // ---- the keyboard: Alt+letter opens a menu; arrows, Enter, Esc and the underlined letters work it; Ctrl+S and Ctrl+O
 window.addEventListener('keydown', e => {
@@ -355,3 +341,25 @@ window.addEventListener('keydown', e => {
     $(letter === 's' ? 'btn-save-project' : 'btn-load-project').click();
   }
 }, true);
+
+// the toolbar, when too narrow to show every tool, scrolls sideways (a plain mouse wheel too); the meter rides over a
+// slot at its end, clipped to the strip
+const strip = document.getElementById('canvas-tools'), meter = document.getElementById('morality-meter');
+const slot = Object.assign(document.createElement('div'), { id: 'meter-slot' });
+strip.append(slot);
+function followStrip() {
+  meter.style.transform = '';
+  const dx = toUi(slot.getBoundingClientRect().left - meter.getBoundingClientRect().left);
+  const left = meter.offsetLeft + dx, cut = strip.offsetLeft - left, past = left + meter.offsetWidth - (strip.offsetLeft + strip.offsetWidth);
+  meter.style.transform = dx ? `translateX(${dx}px)` : '';
+  const px = n => n > 0 ? n + 'px' : '-100vw';
+  meter.style.clipPath = cut > 0 || past > 0 ? `inset(-100vh ${px(past)} -100vh ${px(cut)})` : '';
+}
+new ResizeObserver(followStrip).observe(strip);
+strip.addEventListener('scroll', followStrip);
+addEventListener('resize', followStrip);
+for (const el of [strip, meter]) el.addEventListener('wheel', e => {
+  if (strip.scrollWidth <= strip.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.target.closest('.meter-details')) return;
+  strip.scrollLeft += e.deltaY;
+  e.preventDefault();
+}, { passive: false });

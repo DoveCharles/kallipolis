@@ -381,7 +381,7 @@ button.pc-pick:hover { text-decoration:underline; }
   content:attr(data-mark); flex:0 0 32px; height:15px; text-align:right; font-size:16px; font-weight:700; line-height:15px; color:var(--text-dim);
 }
 .entity-card .pc-value:is([data-mark="+"], [data-mark="-"], [data-mark="*"])::after {
-  content:''; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:left, right; mask-position:left, right;
+  content:''; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:left, right; mask-position:left, right; image-rendering:pixelated;
 }
 .entity-card .pc-value[data-mark="*"]::after {
   -webkit-mask-image:url(../assets/icons/identify.png); mask-image:url(../assets/icons/identify.png);
