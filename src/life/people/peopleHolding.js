@@ -31,12 +31,12 @@ export const ITEMS = {
     { shape: 'box', size: [0.014, 0.17, 0.007], at: [0, 0.035, 0], color: 0xc8ccd3 },
     { shape: 'box', size: [0.034, 0.038, 0.005], at: [0, 0.135, 0], color: 0xc8ccd3 },
     { shape: 'sphere', size: [0.028, 0.028, 0.028], at: [0, 0.155, 0], tint: true, loaded: true },
-  ], at: [0, 0, 0], turn: [0, 0, 0], size: 1 },
+  ], at: [0.027, 0, 0], turn: [0, 0, 0], size: 1.2 },
   // (a sushi diner's: see sushiDiner in peopleActivities.js)
   chopsticks: { parts: [
     { shape: 'box', size: [0.008, 0.21, 0.008], at: [-0.006, 0.055, 0], color: 0x3a2418 },
     { shape: 'box', size: [0.008, 0.21, 0.008], at: [0.006, 0.055, 0.004], color: 0x3a2418 },
-  ], at: [0, 0, 0], turn: [0, 0, 0], size: 1 }, // (at/turn/size: the pair moved as one)
+  ], at: [0.039, 0.164, 0], turn: [0.04, 0.08, 3.14], size: 0.89 }, // (at/turn/size: the pair moved as one)
   mug: { parts: [
     { shape: 'cylinder', size: [0.075, 0.09, 0.075], at: [0, 0.035, 0], color: 0xf2f0ea },
     { shape: 'box', size: [0.012, 0.045, 0.012], at: [0.048, 0.035, 0], color: 0xf2f0ea },

@@ -216,15 +216,15 @@ const EAT_FORK = 0.76; // from the fist to the tines, in the model's units (the 
  * and which way it points, in the model's units; the mouth's from the mouth) is turned into a hold the first time it's baked.
  */
 export const EAT_POSES = [
-  { tip: [-0.65, 3.60, -0.23], dir: [0.4, -0.28, 0.88] },
-  { tip: [-0.05, 3.80, -0.56], dir: [0.2, -0.93, 0.3] },
-  { tip: [-0.05, 3.56, -0.56], dir: [0.2, -0.93, 0.3] },
-  { tip: [0.02, -0.05, 0.14], dir: [0.34, 0.75, -0.57], mouth: true },
+  { at: [-0.15, -0.13, 0.35], rot: [1.18, 1.24, -1.45], elbowAt: [-0.098, -0.178, -0.026], elbowTurn: [-1.8, 0.991, 2.466] },
+  { at: [-0.18, -0.075, 0.365], rot: [1.4, 0.75, -1.42], elbowAt: [-0.232, -0.164, 0.12], elbowTurn: [-2.933, 1.78, 2.82] },
+  { at: [-0.055, -0.04, 0.36], rot: [1.51, -0.72, -1.5], elbowAt: [-0.18, -0.06, 0.11], elbowTurn: [-2.82, 2.22, 2.508] },
+  { at: [-0.01, -0.13, 0.135], reach: 0, rot: [-1, 3.14, 0.11], elbowAt: [-0.134, -0.148, 0.204], elbowTurn: [-2.14, 0.68, 1.97], mouth: true },
 ];
 /** Which of EAT_POSES EatingPaused holds (0; the debug window shows the others). */
 export const EAT_SHOWN = { pose: 0 };
 // seconds a mouthful's parts take: hold → over the plate → picking → (picking) → up to the mouth → (in the mouth) → hold
-const EAT_TO_PLATE = 0.4, EAT_DIP = 0.25, EAT_GATHER = 0.35, EAT_LIFT = 0.8, EAT_IN_MOUTH = 0.45, EAT_LOWER = 0.7;
+const EAT_TO_PLATE = 0.25, EAT_DIP = 0.4, EAT_GATHER = 0.35, EAT_LIFT = 0.8, EAT_IN_MOUTH = 0.45, EAT_LOWER = 0.7;
 const EAT_STEPS = [[0, 1, EAT_TO_PLATE], [1, 2, EAT_DIP], [2, 2, EAT_GATHER], [2, 3, EAT_LIFT], [3, 3, EAT_IN_MOUTH], [3, 0, EAT_LOWER]];
 const EAT_MOUTHFUL = EAT_STEPS.reduce((sum, step) => sum + step[2], 0);
 const EAT_BITES = 2, EAT_FIRST = 0.5; // mouthfuls a loop, and how long before the first
