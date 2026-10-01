@@ -107,7 +107,7 @@ const presets = new Map();
 /** Make person `id` preset `preset` (see people/presets.js). */
 export const registerPreset = (id, preset) => { presets.set(id, preset); };
 const ownProfile = (id, isMan, moodNow) => {
-  const profile = profileFor(id, isMan, moodNow), preset = presets.get(id);
+  const preset = presets.get(id), profile = profileFor(id, isMan, moodNow ?? preset?.mood ?? null); // (a preset's own mood till another's worn)
   if (!preset) return profile;
   const own = side => preset[side] ? { [side]: preset[side].map(([card]) => card), [side + 'Said']: preset[side].map(([, said]) => said),
     [side + 'Tier']: preset[side].map(() => null), [side + 'Mods']: preset[side].map(() => []), [side + 'Base']: preset[side].map(([card]) => card),
