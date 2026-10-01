@@ -103,6 +103,7 @@ export function placeCar(car, i, designCounts) {
     const toCamera = Math.atan2(camera.position.x - car.x, camera.position.z - car.z) - car.heading;
     cm.holo.setXYZW(idx, holo[0], holo[1], holo[2], toCamera);
     cm.rust.setXY(idx, rust[0], rust[1]);
+    cm.rust.setZ(idx, car.traits?.ghost ? 1 : 0); // (a ghost car: see makeCarGhost in materials.js)
     matrix.makeScale(0, 0, 0);
     carParts.body.setMatrixAt(i, matrix);
   } else {

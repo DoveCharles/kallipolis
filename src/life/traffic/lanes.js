@@ -408,7 +408,7 @@ const YIELD_GIVE_UP = 8; // (seconds)
  */
 export function roadCrossers() {
   const out = [];
-  App.people.forEach((p, i) => { if (p.crossStage === 'mid' || isPedInDanger(p)) out.push(i); });
+  App.people.forEach((p, i) => { if ((p.crossStage === 'mid' || isPedInDanger(p)) && !p.traits.ghost) out.push(i); /* (nobody waits for a ghost) */ });
   return out;
 }
 /**

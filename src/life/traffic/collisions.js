@@ -80,17 +80,18 @@ function throwBack(p, car, factor, speed = car.speed, sideThrow = 1) {
 const CAR_HIT_DAMAGE = 8, KNOCK_BOX_DAMAGE_SHARE = 1/5;
 const carHitDamage = (car, speed) => CAR_HIT_DAMAGE*(car.traits?.weight ?? 1)*speed;
 // Whether a normal car can reach someone at all: out on the road, over it or halfway (and not waved over), or knocked down.
-export const inCarsWay = p => (isPedInDanger(p) || p.crossStage === 'mid' || !!p.punched) && !p.jc?.waved;
+export const inCarsWay = p => (isPedInDanger(p) || p.crossStage === 'mid' || !!p.punched) && !p.jc?.waved && !p.traits.ghost; // (ghosts: cars go through them)
 // (`inWay`: App.people filtered by inCarsWay, if the caller has it already — updateTraffic does, once a frame for every car,
 // in a crowdGrid (core/math.js), so only those near the car are looked at)
 export function runOverPeople(car, motion = null, inWay = null) {
+  if (car.traits?.ghost) return; // (a ghost car goes through people)
   const { halfLength, halfWidth } = carHitbox(car, motion?.thrown ? 1 : undefined), clip = carHitbox(car, CAR_HITBOX_SCALE*CAR_CLIP_SCALE), stun = carHitbox(car, CAR_HITBOX_SCALE*CAR_STUN_SCALE);
   const reach = Math.hypot(stun.halfLength, stun.halfWidth) + 1.5*LYING_HEAD*S.peopleSize, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
   const driven = car === drivenCar, reachesAll = driven || !!motion, shocked = new Set(), struck = new Map();
   const velocity = motion ?? { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }, speed = Math.hypot(velocity.x, velocity.z);
   const near = !reachesAll && inWay?.near ? inWay.near(car.x, car.z, reach).map(k => inWay.list[k]) : null;
   (near ?? (reachesAll ? App.people : inWay ?? App.people.filter(inCarsWay))).forEach(p => {
-    if (reachesAll ? Math.abs(p.y - Y_ROAD) > carHeight(car) : !inCarsWay(p)) return; // (checked again: someone knocked down by an earlier car this frame may have got up)
+    if (p.traits.ghost || (reachesAll ? Math.abs(p.y - Y_ROAD) > carHeight(car) : !inCarsWay(p))) return; // (checked again: someone knocked down by an earlier car this frame may have got up)
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) return; // (cheaply rules out most people before the exact check)
     const right = dx*cos - dz*sin, forward = dx*sin + dz*cos;
@@ -157,7 +158,7 @@ export function strikeWithAircraft({ x, y, z, heading, halfLength, halfWidth, be
   const aircraft = { traits: { weight: AIRCRAFT_WEIGHT } };
   let keep = 1;
   App.people.forEach((p, i) => {
-    if (!sharesHeight(p.y, p.height*S.peopleSize) || !inFootprint(p.x, p.z)) return;
+    if (p.traits.ghost || !sharesHeight(p.y, p.height*S.peopleSize) || !inFootprint(p.x, p.z)) return;
     App.killPerson(i, 'player', velocity);
     keep *= 1 - Math.min(PERSON_MAX_SLOWDOWN, PERSON_SLOWDOWN*(p.traits?.weight ?? 1)/AIRCRAFT_WEIGHT);
   });
@@ -308,6 +309,7 @@ function nearestWall(fp, p) {
  * @returns {void}
  */
 export function hitBuildings(car, was, dt) {
+  if (car.traits?.ghost) return; // (through walls)
   const fp = buildingHit(car);
   if (!fp) { car.clearOfWalls = (car.clearOfWalls ?? Infinity) + dt; return; }
   const { q, n } = nearestWall(fp, was), moved = { x: car.x - was.x, z: car.z - was.z }, push = moved.x*n.x + moved.z*n.z;
@@ -441,7 +443,7 @@ const turnBetween = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
  */
 export function kickCar(car, dirX, dirZ, distance) {
   const len = Math.hypot(dirX, dirZ);
-  if (len < 1e-6 || distance <= 0) return;
+  if (len < 1e-6 || distance <= 0 || car.traits?.ghost) return; // (nothing shoves a ghost car)
   const kick = car.kick ??= { x: 0, z: 0, vx: 0, vz: 0, heading: car.heading, goal: null, seated: false, blocked: false, speed: 0, driving: 0 }, speed = distance*KICK_DECAY/len;
   if (car.sway) { kick.x += car.sway.x; kick.z += car.sway.z; car.sway = null; } // (knocked from where it's drawn off its route — weave or pull-over — not from its route)
   kick.vx += dirX*speed; kick.vz += dirZ*speed;
@@ -541,7 +543,7 @@ function canStepBack(car, sx, sz) {
 function personInWay(car, k, dirX, dirZ) {
   const x = car.x + k.x, z = car.z + k.z, len = carLength(car), side = carWidth(car)*0.5 + 0.3*S.peopleSize;
   return App.people.some(p => {
-    if (p.indoors) return false;
+    if (p.indoors || p.traits.ghost) return false;
     const dx = p.x - x, dz = p.z - z, along = dx*dirX + dz*dirZ;
     return along > 0 && along < len*0.5 + KICK_PEOPLE_AHEAD*S.peopleSize && Math.abs(dx*dirZ - dz*dirX) < side;
   });
@@ -643,9 +645,10 @@ const SWAY_BOUNCE = 1; // (how far a weaving drunk car is thrown back off what i
  * @returns {boolean} whether it hit anything
  */
 export function swayCrash(car) {
+  if (car.traits?.ghost) return false;
   const w = car.sway, onRoute = { ...car, x: car.x - w.x, z: car.z - w.z, heading: car.heading - w.turn };
   let other = null;
-  forCarsNear(car.x, car.z, carLength(car)*1.5 + 4*S.peopleSize, q => { if (!other && q !== car && !wreckedCars.includes(q) && carsOverlap(car, q) && !carsOverlap(onRoute, q)) other = q; });
+  forCarsNear(car.x, car.z, carLength(car)*1.5 + 4*S.peopleSize, q => { if (!other && q !== car && !q.traits?.ghost && !wreckedCars.includes(q) && carsOverlap(car, q) && !carsOverlap(onRoute, q)) other = q; });
   if (!other && !buildingHit(car)) return false;
   const speed = Math.abs(car.speed), contact = other ? { x: (car.x + other.x)/2, y: Y_ROAD, z: (car.z + other.z)/2 } : { x: car.x, y: Y_ROAD, z: car.z };
   impactSound('crash', contact, speed);
@@ -668,11 +671,12 @@ export function swayCrash(car) {
  * @returns {void}
  */
 export function bumpIntoCars(car, was) {
+  if (car.traits?.ghost) { car.bumping = false; return; } // (ghost cars go through, and are gone through)
   const reach = carLength(car)*1.5 + 4*S.peopleSize, before = { ...car, ...was }, hitSpeed = Math.abs(car.speed);
   let contact = null, cutsEngine = null; // (cutsEngine: the weight of the car that cut it)
   const hurt = []; // (dealt after the loop: a car dying mid-loop changes the cars array)
   forCarsNear(car.x, car.z, reach, other => {
-    if (other === car || wreckedCars.includes(other) || !carsOverlap(car, other)) return;
+    if (other === car || other.traits?.ghost || wreckedCars.includes(other) || !carsOverlap(car, other)) return;
     const d = Math.hypot(other.x - car.x, other.z - car.z), dWas = Math.hypot(other.x - was.x, other.z - was.z);
     if (carsOverlap(before, other) && d >= dWas) return; // (moving off it)
     const joltSpeed = JOLT_SPEED_PER_SLOWDOWN*slowdownShare(car, other.traits?.weight), jolted = Math.abs(car.speed) >= joltSpeed;

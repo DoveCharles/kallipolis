@@ -19,6 +19,7 @@ const broken = new Set();
  * @param {?{x: number, z: number}} motion - its velocity, if not along its heading
  */
 export function smashFences(car, motion = null) {
+  if (car.traits?.ghost) return; // (a ghost car goes through)
   const speed = motion ? Math.hypot(motion.x, motion.z) : Math.abs(car.speed ?? 0);
   if (speed < SMASH_SPEED) return;
   const hl = carLength(car)/2, hw = carWidth(car)/2, sin = Math.sin(car.heading), cos = Math.cos(car.heading);

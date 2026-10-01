@@ -141,7 +141,7 @@ function outsideWindow(c, car) {
  * contact, whether or not it was seen coming (car.roomRoll only stops it veering); not a car hidden in there already. */
 export function crashingIn(car) {
   const c = roomClash();
-  if (!c || car.roomHid === c || car.roomRoll?.smashing || !anyCornerIn(car)) return null;
+  if (!c || car.traits?.ghost || car.roomHid === c || car.roomRoll?.smashing || !anyCornerIn(car)) return null;
   return outsideWindow(c, car);
 }
 

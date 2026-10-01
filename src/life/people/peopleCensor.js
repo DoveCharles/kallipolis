@@ -48,7 +48,7 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
       varying vec3 vCensorSkin;
       flat varying int vCensorPerson; // (flat: interpolated, its tiny errors turn the hash to noise)
       void main() {
-        if (personTrait(${nudeRow}).w < 0.5 || (personOnly >= 0 && personIndex() != personOnly)) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+        if (personTrait(${nudeRow}).w < 0.5 || (personSpectral() & 6) != 0 || (personOnly >= 0 && personIndex() != personOnly)) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
         mat4 placed = modelMatrix*instanceMatrix;
         float scale = length(placed[0].xyz);
         if (scale < 1e-6) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }

@@ -536,7 +536,7 @@ let swing = null;
  */
 export function punchFromPossession() {
   const p = people[possession.index];
-  if (!p || p.mode !== 'possessed' || (p.punched && p.punched.stage !== 'marked' && p.punched.stage !== 'brace') || swing || // (chased or braced for, they can still hit back)
+  if (!p || p.mode !== 'possessed' || p.traits.pacifist || (p.punched && p.punched.stage !== 'marked' && p.punched.stage !== 'brace') || swing || // (chased or braced for, they can still hit back)
        !hasClip('Punch') || !hasClip('Fall')) return;
   swing = { timer: PUNCH_HIT_TIME };
   playOnce(p, 'Punch');

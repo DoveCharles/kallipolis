@@ -1,6 +1,7 @@
 Wet stuff <nature>
 Being possessed {hatespossessed, noflip}
 Contrarily, [loves] {choiceweight = 50}
+Unfinished business {ghost}
 bacteria {appeal = -0.1}
 forgetting an idea (it makes you suicidal) | forgetting an idea {appeal = -0.3}
 getting trapped in a microwave {appeal = -0.5} <scary>

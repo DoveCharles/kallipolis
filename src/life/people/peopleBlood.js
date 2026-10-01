@@ -100,7 +100,7 @@ function splatter(p, i, from, points) {
   stain(p, i);
   if (canRun(p)) {
     if (p.fright?.stage !== 'flee') { endActivity(p); p.stun = p.please = null; p.oneShot = null; beginFleeing(p, from); }
-    p.fright.timer = BLOOD_FLEE_TIME*p.blood;
+    if (p.fright) p.fright.timer = BLOOD_FLEE_TIME*p.blood;
   }
 }
 
@@ -128,6 +128,7 @@ export function updateBlood(p, dt, i) {
  * @returns {void}
  */
 function hunt(p, dt) {
+  if (p.traits.pacifist) return;
   if ((p.huntIn = (p.huntIn ?? 0) - dt) > 0) return;
   p.huntIn = HUNT_EVERY;
   if ((p.mode !== 'line' && p.mode !== 'wander') || p.punched || p.attack) return;
@@ -151,7 +152,7 @@ function hunt(p, dt) {
 function keepRunning(p) {
   if (!canRun(p) || p.fright || p.stun || p.please) return;
   beginFleeing(p, p.bloodFrom ?? { x: p.x, z: p.z });
-  p.fright.timer = BLOOD_FADE_TIME*(p.blood - 1) + p.bloodTimer; // (as long as their blood will last)
+  if (p.fright) p.fright.timer = BLOOD_FADE_TIME*(p.blood - 1) + p.bloodTimer; // (as long as their blood will last)
 }
 
 const arriving = []; // blood on its way to people: { p, i, from, points, delay }

@@ -57,6 +57,10 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   partying: person => (person?.traits?.partying ?? 0) > 0,
   singing: person => (person?.traits?.singing ?? 0) > 0,
   upsidedown: person => !!person?.traits?.upsidedown,
+  spirits: person => !!person?.traits?.spirits, // (a ghost of them on each shoulder)
+  spirit: person => !!person?.spiritOf, // (a shoulder spirit talking: see people/peopleSpiritChat.js — gold evil -1, purple evil 1)
+  ghost: person => !!person?.traits?.ghost, // (see-through, blue)
+  bodiless: person => !!person?.traits?.bodiless, // (just a floating head)
   nude: person => !!person?.traits?.nude, // (no clothes, a censor over them)
   drooling: person => (person?.traits?.drooling ?? 0) > 0,
   skeptical: person => (person?.traits?.skeptical ?? 0) > 0,
