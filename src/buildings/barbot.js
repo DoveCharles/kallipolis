@@ -161,7 +161,7 @@ export function dressBot(b, waiter, chef = false) {
   if (b.bowtie) b.bowtie.visible = !chef;
   if (chef) b.aprons.forEach(o => { o.visible = false; });
   for (const o of b.black) { o.userData.black ??= o.material; o.material = chef && b.chrome ? b.chrome : o.userData.black; } // (Black → Chrome2 on the chef)
-  for (const o of b.tux) o.morphTargetInfluences[o.morphTargetDictionary.Tux] = waiter && !chef ? 1 : 0;
+  for (const o of b.tux) o.morphTargetInfluences[o.morphTargetDictionary.Tux] = waiter || chef ? 1 : 0; // (the robe's fitted to the Tux body)
 }
 
 /** BARBOT if the bot's up in the pub the view's in, awake and not talking to anyone already, else null. */
