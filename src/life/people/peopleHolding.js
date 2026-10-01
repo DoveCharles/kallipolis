@@ -9,7 +9,7 @@ import { STATUS_SOURCES, addStatus } from '../statuseffects.js';
 import { S } from '../../core/shared.js';
 import { restaurantStyleOf } from '../../buildings/footprints.js';
 import { headPointOf } from './peopleTracking.js';
-import { cigSmokeFx } from '../giblets.js';
+import { breathFx } from '../giblets.js';
 
 // ============================================================ holding things
 // Anything a person carries: a fork and a plate of dinner for now, a mug or a hotdog when something wants one. A thing
@@ -444,11 +444,11 @@ export function snackClip(p, clip, dt) {
 // ============== SMOKING ==============
 // A share of people smoke (p.smoker): now and then, out of doors with their hands free, they light up a cig, a snack
 // like any other but for its drags: the tip glows bright while it's at the lips (CIG_FIRE, held.glow) and a cloud's
-// blown out of the mouth as it comes down (EXHALE_*).
+// streamed out of the mouth as it comes down, a huff's puffs (EXHALE_*).
 const SMOKER_SHARE = 0.15, SMOKE_EVERY = [40, 200]; // (seconds between cigs)
 const DRAW_ON = [0.45, 0.4];   // the drag: from this long after the hand goes up, to this long before it's down (seconds)
 const GLOW_UP = 4, GLOW_DOWN = 1.2; // how fast the tip brightens and dims, per second
-const EXHALE_AT = 0.35, EXHALE_TIME = 1.1, EXHALE_PUFFS = 14; // (when, how long, puffs a second)
+const EXHALE_AT = 0.35, EXHALE_TIME = 0.5, EXHALE_PUFFS = 20; // (seconds before the hand's down, how long, puffs a second)
 const smokeGap = () => SMOKE_EVERY[0] + peopleRng()*(SMOKE_EVERY[1] - SMOKE_EVERY[0]);
 function lightUp(p, clip, dt) {
   if (!(p.smoker ??= peopleRng() < SMOKER_SHARE)) return;
@@ -467,7 +467,7 @@ function smoke(p, snack, kind, dt) {
 }
 const mouth = new THREE.Vector3(), ahead = new THREE.Vector3(), mouthAt = new THREE.Vector3(), aheadAt = new THREE.Vector3();
 /**
- * A puff of smoke out of someone's mouth.
+ * A puff of smoke out of someone's mouth, as a huff's (breathFx).
  * @param {object} p - the person
  * @returns {void}
  */
@@ -476,7 +476,7 @@ export function exhale(p) {
   if (i < 0 || !face?.mouth) return;
   headPointOf(i, mouth.copy(face.mouth), mouthAt);
   headPointOf(i, ahead.copy(face.mouth).setZ(face.mouth.z + 1), aheadAt);
-  cigSmokeFx(mouthAt, aheadAt.sub(mouthAt).normalize(), p.height*S.peopleSize, p);
+  breathFx(mouthAt, aheadAt.sub(mouthAt).normalize(), p.height*S.peopleSize, true, p);
 }
 
 // ============== DRAWING ==============

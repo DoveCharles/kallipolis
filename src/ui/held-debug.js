@@ -132,7 +132,7 @@ function fill(body) {
   body.querySelector('#hd-item').addEventListener('change', e => { item = e.target.value; if (pinned) give(); fill(body); });
   body.querySelector('#hd-bite')?.addEventListener('change', e => { biting = e.target.checked; fill(body); });
   body.querySelector('#hd-copy').addEventListener('click', () => navigator.clipboard?.writeText(out.value));
-  body.querySelector('#hd-smoke')?.addEventListener('click', () => { if (pinned) for (let k = 0; k < 12; k++) setTimeout(() => exhale(pinned), k*70); });
+  body.querySelector('#hd-smoke')?.addEventListener('click', () => { if (pinned) for (let k = 0; k < 10; k++) setTimeout(() => exhale(pinned), k*50); });
   show();
 }
 
