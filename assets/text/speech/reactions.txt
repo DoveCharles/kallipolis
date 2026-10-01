@@ -18,6 +18,19 @@ Did lightning just— {seen = smited}
 >> What did [seen.name] do?!
 > Who do you think God will smite next? {evil}
 The sky just killed [seen.name]! {seen = smited, shock}
+That orb just fried [seen.name]! {seen = orbsmited}
+> Serves them right. {evil = -1}
+>> They were a monster anyway.
+> It could be any of us next. {mood = -1}
+The orb got [seen.name]! {seen = orbsmited, shock}
+I always knew there was something off about [seen.name]. {seen = orbsmited, nosy}
+It only goes for the wicked. I think. {seen = orbsmited, thought}
+Justice, from above. {seen = orbsmited, evil = -1, happy}
+That thing's a murderer! {seen = orbsmited, evil}
+> Only of murderers. {evil = -1}
+It'll be coming for me next... {seen = orbsmited, vampire > 0, thought}
+Brother! No! {seen = orbsmited, vampire > 0}
+Smells like burnt [seen.name]. {seen = orbsmited, evil, thought}
 Oh God, [seen.name] drowned... {seen = drowned}
 > Couldn't anyone swim?
 > They should've learnt to swim. {evil}
@@ -77,6 +90,16 @@ That robot just fixed [seen.name] right up! {seen = healed}
 > Where do I sign up? {happy}
 > I don't trust it. {mood = -0.5}
 Was that robot hugging [seen.name]? {seen = healed, thought}
+What's that orb doing over [seen.name]? {seen = orbhunt}
+> Get away from them! {shock}
+> Whatever they did, it knows. {evil = -1}
+[seen.name], look up! {seen = orbhunt, shock}
+Can you hear it humming? {seen = orbhunt}
+> It's getting louder...
+Run, [seen.name]! {seen = orbhunt, evil}
+Don't look at it. Don't look at it. {seen = orbhunt, thought, aggression = -1}
+Ooh, someone's in trouble. {seen = orbhunt, nosy}
+It's found one of them. {seen = orbhunt, vampire > 0, thought}
 Is that... [seen.name] walking on the water? {seen = waterwalking}
 > It's a miracle! {happy}
 > It's a trick. {patience = -1}

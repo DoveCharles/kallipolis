@@ -741,7 +741,7 @@ export function standingOf(p) {
 // about once, straight away. A lesser sight doesn't replace a greater one still fresh (SEEN_RANK); the same sight of the
 // same person isn't seen again while it's fresh, so something that goes on (walking on water, a smell) counts once.
 const WITNESS_RADIUS = 20; // how near (× people size) someone has to be to see something happen
-const SEEN_RANK = { killedbycar: 3, crashedinto: 3, fell: 3, punchedfence: 3, planecrash: 3, beeattack: 1, beatentodeath: 3, smited: 3, drowned: 3, exploded: 3, resurrected: 2, punch: 1, knockedbycar: 1, healed: 0, waterwalking: 0, smelly: 0, nude: 0 };
+const SEEN_RANK = { killedbycar: 3, crashedinto: 3, fell: 3, punchedfence: 3, planecrash: 3, beeattack: 1, beatentodeath: 3, smited: 3, orbsmited: 3, orbhunt: 2, drowned: 3, exploded: 3, resurrected: 2, punch: 1, knockedbycar: 1, healed: 0, waterwalking: 0, smelly: 0, nude: 0 };
 const NUDE_SEEN_EVERY = 4; // seconds between someone nude being noticed by whoever's near
 const NOTICED_FOR = 60; // seconds a sight stays fresh (as SEEN_TIME in life/speech-text.js)
 const MAX_WITNESSES = 5;  // how many of the nearest see something happen (not a whole park at once)

@@ -147,6 +147,16 @@ export function solidAt(x, y, z) {
   for (const w of list) if (y < w.top && y >= w.base - 0.5 && pointInPolygon({ x, z }, w.poly)) return w;
   return null;
 }
+/**
+ * The top of the highest wall (of a building or a solid prop) standing at (x, z), or -Infinity — for anything flying over.
+ * @returns {number}
+ */
+export function solidTopAt(x, z) {
+  const list = solidGridNow().cells.get(Math.floor(x/SOLID_CELL) + ',' + Math.floor(z/SOLID_CELL));
+  let top = -Infinity;
+  if (list) for (const w of list) if (w.top > top && pointInPolygon({ x, z }, w.poly)) top = w.top;
+  return top;
+}
 
 // ---------------------------------------------------------- building identity
 // Which building a zone's child `index` is, as a key (see people.js and building-card.js), and its number on its card —

@@ -5,7 +5,8 @@ import { controls, CAMERA_MIN_RADIUS } from '../core/camera-controls.js';
 import { makeCard } from '../ui/entity-card.js';
 import { makeThumbnailDrawer } from './thumbnail.js';
 import { SERAPH_RING } from '../objects/object-types.js';
-import { people, isGone, standingOf } from './people/people.js';
+import { solidTopAt } from '../buildings/footprints.js';
+import { people, isGone, standingOf, witness } from './people/people.js';
 import { personHeight } from './people/peopleTracking.js';
 import { strikeLightning } from './lightning.js';
 import { updateSeraphorbSounds } from '../audio/seraphorb.js';
@@ -24,14 +25,50 @@ const PATROL_RADIUS = 160;           // m round the ring it drifts to
 const SIGHT = 60;                    // m it spots a villain from
 const LEASH = 220;                   // m from the ring it'll chase, and gives up past
 const HOVER = 1.4;                   // m over their head (to its middle) it smites from
-const SMITE_HOLD = 0.9;              // s it hovers there, building up, before it strikes
+const SMITE_HOLD = 1.5;              // s it hovers there, building up, before it strikes
 const NEAR_HEAD = 4;                 // m away (across) it starts dropping to their head
 const PAUSE = [0.5, 3];              // s it hangs between patrol points
 const DRAIN = 1/240, SMITE_COST = 0.2, LOW = 0.15, CHARGE_TIME = 15;
 const SPARE = 20;                    // s someone it's struck at is left alone (a ghost, the hearted, a vampire reviving)
 const BOB = 0.25;                    // m it bobs, drifting
+const CLEAR = 2.5;                   // m it keeps over any roof it's over or heading for
+const LOOK = [0, 3, 7, 12, 18];      // m ahead (toward where it's going) it checks for roofs
+const SIDE = 1.2;                    // m either side of that line it checks too
 
 const geometry = new THREE.SphereGeometry(ORB_R, 40, 20);
+
+// ---- the build-up: white motes swirling round it while it hovers to smite, sucked into it just before the bolt
+const MOTES = 28, MOTES_MAX = MOTES*8;
+const MOTE_R = [1.1, 2.2];           // m from its middle they swirl at
+const MOTE_SIZE = 0.07;              // m
+const MOTE_IN = 0.2, SUCK_FROM = 0.72; // (shares of SMITE_HOLD: fading in over the first; sucked in from the second)
+const motes = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6),
+  new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }), MOTES_MAX);
+motes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+motes.count = 0;
+motes.frustumCulled = false;
+motes.name = 'SeraphorbMotes';
+scene.add(motes);
+// each mote's own orbit: a tilted circle (u, w its axes), speed and start
+function makeMotes() {
+  return Array.from({ length: MOTES }, () => {
+    const n = new THREE.Vector3().randomDirection(), u = new THREE.Vector3().randomDirection().cross(n).normalize(), w = n.clone().cross(u);
+    return { u, w, r: MOTE_R[0] + Math.random()*(MOTE_R[1] - MOTE_R[0]), spin: (2 + Math.random()*3)*(Math.random() < 0.5 ? -1 : 1), at: Math.random()*Math.PI*2, wobble: Math.random()*Math.PI*2 };
+  });
+}
+const moteMatrix = new THREE.Matrix4(), moteAt = new THREE.Vector3(), moteSize = new THREE.Vector3(), noTurn = new THREE.Quaternion();
+function drawMotes(orb, n, t) {
+  const f = 1 - orb.timer/SMITE_HOLD, appear = Math.min(1, f/MOTE_IN), suck = Math.max(0, (f - SUCK_FROM)/(1 - SUCK_FROM));
+  const pull = 1 - suck*suck; // (slow at first, then all at once)
+  for (const m of orb.motes) {
+    if (n >= MOTES_MAX) break;
+    const a = m.at + orb.moteSpin*m.spin, r = m.r*pull*(1 + 0.12*Math.sin(t*5 + m.wobble)) + ORB_R*0.6*(1 - pull);
+    moteAt.set(orb.x, orb.y, orb.z).addScaledVector(m.u, Math.cos(a)*r).addScaledVector(m.w, Math.sin(a)*r);
+    const s = MOTE_SIZE*appear*(1 - 0.6*suck);
+    motes.setMatrixAt(n++, moteMatrix.compose(moteAt, noTurn, moteSize.set(s, s, s)));
+  }
+  return n;
+}
 const orbs = new Map(); // ring object id → orb
 let orbNumbers = 0;
 const spared = new WeakMap(); // person → when last struck at
@@ -42,7 +79,7 @@ function makeOrb(obj) {
   mesh.castShadow = true;
   mesh.name = 'Seraphorb';
   scene.add(mesh);
-  const orb = { obj, mesh, material, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, number: ++orbNumbers, state: 'charging', charge: 1, goal: null, timer: 0, target: null, scan: 0, glow: 0 };
+  const orb = { obj, mesh, material, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, number: ++orbNumbers, motes: makeMotes(), moteSpin: 0, state: 'charging', charge: 1, goal: null, timer: 0, target: null, scan: 0, glow: 0 };
   const at = restPoint(orb);
   orb.x = at.x; orb.y = at.y; orb.z = at.z;
   return orb;
@@ -73,11 +110,25 @@ function letGo(orb) {
   if (orb.target?.seraphorb === orb) orb.target.seraphorb = null;
   orb.target = null;
 }
-// steer toward (x, y, z) at up to `speed`, slowing into it; true once there
+// the lowest it may fly on its way toward (x, z): CLEAR over the highest roof under it or along the way ahead
+function floorToward(orb, x, z) {
+  const dx = x - orb.x, dz = z - orb.z, d = Math.hypot(dx, dz), ux = d ? dx/d : 0, uz = d ? dz/d : 0;
+  let top = -Infinity;
+  for (const a of LOOK) {
+    const along = Math.min(a, d), px = orb.x + ux*along, pz = orb.z + uz*along;
+    top = Math.max(top, solidTopAt(px, pz), solidTopAt(px - uz*SIDE, pz + ux*SIDE), solidTopAt(px + uz*SIDE, pz - ux*SIDE));
+    if (a >= d) break;
+  }
+  return top + CLEAR + ORB_R;
+}
+// steer toward (x, y, z) at up to `speed`, slowing into it, over any buildings in the way; true once there
 function flyTo(orb, x, y, z, speed, dt, within = 0.3) {
+  const floor = floorToward(orb, x, z);
+  y = Math.max(y, floor);
   const dx = x - orb.x, dy = y - orb.y, dz = z - orb.z, d = Math.hypot(dx, dy, dz);
   const want = Math.min(speed*(S.peopleSpeed ?? 1), d*1.5)/(d || 1), k = Math.min(1, ACCEL*dt);
-  orb.vx += (dx*want - orb.vx)*k; orb.vy += (dy*want - orb.vy)*k; orb.vz += (dz*want - orb.vz)*k;
+  const climb = floor > orb.y + 0.3 ? 0.15 : 1; // (a roof ahead and not over it yet: up first, barely forward)
+  orb.vx += (dx*want*climb - orb.vx)*k; orb.vy += (dy*want - orb.vy)*k; orb.vz += (dz*want*climb - orb.vz)*k;
   orb.x += orb.vx*dt; orb.y += orb.vy*dt; orb.z += orb.vz*dt;
   return d < within;
 }
@@ -128,7 +179,7 @@ function updateOrb(orb, dt, t) {
       // (high till near, then down onto them)
       const y = across > NEAR_HEAD ? Math.max(to.y, Math.min(orb.y, groundY(orb) + CRUISE)) : to.y;
       glow = 0.3 + 0.2*Math.sin(t*12);
-      if (flyTo(orb, to.x, y, to.z, SPEED*RUSH, dt, 0.35) && across < 0.35) { orb.state = 'smite'; orb.timer = SMITE_HOLD; }
+      if (flyTo(orb, to.x, y, to.z, SPEED*RUSH, dt, 0.35) && across < 0.35) { orb.state = 'smite'; orb.timer = SMITE_HOLD; orb.moteSpin = 0; witness(p, 'orbhunt'); }
       break;
     }
     case 'smite': {
@@ -137,10 +188,11 @@ function updateOrb(orb, dt, t) {
       flyTo(orb, to.x, to.y, to.z, SPEED*RUSH, dt, 0);
       orb.timer -= dt;
       glow = 0.4 + 2*(1 - orb.timer/SMITE_HOLD) + 0.3*Math.sin(t*30);
+      orb.moteSpin += dt*(1 + 4*Math.max(0, (1 - orb.timer/SMITE_HOLD - SUCK_FROM)/(1 - SUCK_FROM))); // (whirling faster as they're sucked in)
       if (orb.timer <= 0) {
         strikeLightning({ x: p.x, y: p.y, z: p.z }, { x: orb.x, y: orb.y - ORB_R*0.8, z: orb.z });
         spared.set(p, t);
-        App.killPerson?.(people.indexOf(p), 'orb');
+        App.killPerson?.(people.indexOf(p), 'orb', null, 1, null, 'orbsmited');
         orb.charge = Math.max(0, orb.charge - SMITE_COST);
         letGo(orb);
         orb.glow = 4;
@@ -180,10 +232,14 @@ export function updateSeraphorbs(t) {
   for (const id of [...orbs.keys()]) if (!seen.has(id)) removeOrb(id);
   if (!dt) { updateSeraphorbSounds([]); return; }
   const heard = [];
+  let moteCount = 0;
   orbs.forEach(orb => {
     updateOrb(orb, dt, t);
+    if (orb.state === 'smite') moteCount = drawMotes(orb, moteCount, t);
     heard.push({ orb, x: orb.x, y: orb.y, z: orb.z, chasing: orb.state === 'chase', smiting: orb.state === 'smite', charging: orb.state === 'charging' });
   });
+  motes.count = moteCount;
+  motes.instanceMatrix.needsUpdate = true;
   updateSeraphorbSounds(heard);
   followSeraphorb();
 }

@@ -187,9 +187,9 @@
 # SEEN: something the speaker saw happen to someone else in the last 60 seconds (hard limits)
 #   {seen}                    anything                        {seen = drowned}  that one thing
 #   {seen = death}            any death                       {seen = punch, evil}   a punch, leaning toward the evil
-#   Deaths: killedbycar, beatentodeath, smited, drowned, exploded, crashedinto (a car smashed into the building they were in), fell (a fall from high up), punchedfence (bled out punching a fence)
+#   Deaths: killedbycar, beatentodeath, smited, drowned, exploded, crashedinto (a car smashed into the building they were in), fell (a fall from high up), punchedfence (bled out punching a fence), orbsmited (a Seraphorb struck them down with its lightning: only villains)
 #   ({seen = death} is any of them). Others: punch (someone
-#   punched), knockedbycar (hit, not killed), planecrash (an aircraft blew up nearby; [seen.name] means nothing), beeattack (a bee stung someone, knocking them down), resurrected, healed (a MedBot patched them up), waterwalking, smelly (a smelly person near), nude (a nude person near). Anyone near
+#   punched), knockedbycar (hit, not killed), planecrash (an aircraft blew up nearby; [seen.name] means nothing), beeattack (a bee stung someone, knocking them down), resurrected, healed (a MedBot patched them up), orbhunt (a Seraphorb, a flying chrome orb, stopped over [seen.name]'s head, humming, about to smite them), waterwalking, smelly (a smelly person near), nude (a nude person near). Anyone near
 #   enough (or in the same building) sees it; a death isn't replaced by something lesser while it's fresh.
 # FELT: something that happened to the speaker in the last 60 seconds (hard limits)
 #   {felt = punched}          someone punched them            {felt = hitbycar}  a car knocked them down
