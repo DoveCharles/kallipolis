@@ -2883,8 +2883,13 @@ function openShop(layout, tint, { walls, floors, painted, palette }) {
   const floor = pick(floors);
   if (floor.isTexture) { layout.floorMap = floor; layout.floor.setHex(0xffffff); }
   else { layout.floorMap = boards; layout.floor.setHex(floor); }
-  for (const material of painted) {
-    material.color.setHex(pick(palette[material.name]));
+  const chosen = {}; // (a palette entry that's a function picks from the others' colours, after them)
+  for (const material of painted) if (typeof palette[material.name] !== 'function') {
+    material.color.setHex(chosen[material.name] = pick(palette[material.name]));
+    roomLit(material);
+  }
+  for (const material of painted) if (typeof palette[material.name] === 'function') {
+    material.color.setHex(palette[material.name](chosen));
     roomLit(material);
   }
   return pick;
@@ -3605,7 +3610,8 @@ const RESTAURANT_FLOORS = [chequer, chequer, terrazzo, 0x5a3a22, 0x7a5030];
 const RESTAURANT_PAINTED = {
   Wood: [0x3e2014, 0x2a160c, 0x4a2a18, 0x1a1210, 0x5a3420],
   Upholstery: [0x7e1616, 0x6a1020, 0x1e4a2a, 0x5a1a22, 0x8a5a2a],
-  Check: [0xb81e1e, 0xb81e1e, 0xa01818, 0x1e5a2a, 0x2a3a7a],
+  Check: [0xb81e1e, 0xb81e1e, 0xa01818, 0x1e5a2a],
+  Napkin: ({ Check }) => Check === 0x1e5a2a ? 0xb81e1e : 0x1e5a2a, // (against the check)
 };
 const RESTAURANT_DADOS = [0x3e2014, 0x2a160c, 0x4a2a18], RESTAURANT_RAILS = [0x1a0e08, 0xb8923a];
 const GREEK_WALLS = [0xffffff, 0xfaf6ee, 0xf4eee2]; // (over the stone)
