@@ -411,6 +411,7 @@ function pitchContour(segments, clauses, pitch, melody) {
   // (which syllable of its clause each vowel is, for a melody that goes syllable by syllable)
   const syllable = new Map(), counts = clauses.map(() => 0);
   for (const s of segments) if (s.vowel) syllable.set(s, counts[s.clause]++);
+  const sungNth = new Map(segments.filter(s => s.vowel).map((s, k) => [s, k])); // (sung: the tune runs on through clauses)
   let nth = 0;
   let i = 0;
   for (let k = 0; k < raw.length; k++) {
@@ -418,8 +419,9 @@ function pitchContour(segments, clauses, pitch, melody) {
     while (i < segments.length - 1 && t >= segments[i].start + segments[i].dur) i++;
     const s = segments[i], [from, to] = spans[s.clause], ending = clauses[s.clause].end, lively = ending === '!' ? 1.6 : 1;
     const through = Math.max(0, Math.min(1, (t - from)/(to - from || 1)));
-    if (s.vowel) nth = syllable.get(s);
+    if (s.vowel) nth = melody.sung ? sungNth.get(s) : syllable.get(s);
     let f = pitch*(1 + melody.shape(through, nth))*(ending === '!' ? 1.08 : 1);
+    if (melody.sung) { raw[k] = ending === '?' && lastVowels[s.clause] === s ? f*2**(5/12) : f; continue; }
     if (s.accent) f *= 1 + STRESS*lively*s.accent*Math.sin(Math.PI*Math.min(1, (t - s.start)/s.dur*0.8 + 0.2));
     if (s.vowel) f *= 1 + wobble.get(s);
     const last = lastVowels[s.clause];
@@ -432,5 +434,6 @@ function pitchContour(segments, clauses, pitch, melody) {
   const smoothed = new Float32Array(raw.length);
   let v = raw[0];
   for (let k = 0; k < raw.length; k++) smoothed[k] = v += (raw[k] - v)*0.35;
-  return t => { const k = Math.min(raw.length - 1, t/step), j = Math.floor(k); return smoothed[j] + ((smoothed[j + 1] ?? smoothed[j]) - smoothed[j])*(k - j); };
+  const vibrato = melody.sung ? t => 1 + 0.02*Math.sin(2*Math.PI*5.5*t)*Math.min(1, t*2) : () => 1; // (sung: a singer's wobble)
+  return t => { const k = Math.min(raw.length - 1, t/step), j = Math.floor(k); return (smoothed[j] + ((smoothed[j + 1] ?? smoothed[j]) - smoothed[j])*(k - j))*vibrato(t); };
 }

@@ -15,9 +15,14 @@ export const MELODIES = [
   { name: 'flat', shape: () => 0, fall: 0 },                                         // one note, like a robot
 ];
 
+// sung, not spoken (a preset's voice only: see people/presets.js): each syllable held on the next note of TUNE (semitones
+// over their pitch), with vibrato and no wander (audio/speech.js, audio/voices.js)
+const TUNE = [0, 4, 7, 9, 7, 4, 2, 4, 0, 7, 12, 9, 7, 4, 2, 0];
+export const SUNG = { name: 'sung', sung: true, shape: (u, k) => 2**(TUNE[k % TUNE.length]/12) - 1, fall: 0 };
+
 /**
  * Someone's melody.
- * @param {{melody?: number}} voice - its melody, an index into MELODIES (none, the first)
+ * @param {{melody?: number|string}} voice - its melody, an index into MELODIES (none, the first), or 'sung'
  * @returns {{name: string, shape: (through: number, k: number) => number, fall: number}}
  */
-export const melodyOf = voice => MELODIES[voice.melody ?? 0] ?? MELODIES[0];
+export const melodyOf = voice => voice.melody === 'sung' ? SUNG : MELODIES[voice.melody ?? 0] ?? MELODIES[0];

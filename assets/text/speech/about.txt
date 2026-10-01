@@ -233,6 +233,7 @@
 #   {is = twins}              the twins trait: two of them side by side, moving in perfect step — "> Are you two... the same person? {other.is = twins}"
 #   {is = twin}               a twin's other half, talking with them while they're alone (they're its other) — "Are you thinking what I'm thinking? {is = twin}"
 #   {is = piper}              the piper trait: little copies of them following along behind — "> Are those... yours? {other.is = piper}"
+#   {is = miku}               Hatsune Miku, the preset (people/presets.js): her own lines in talk/miku.txt and mikuthoughts.txt
 #   {is = mini}               one of a piper's minis itself (Mini Dave): small, big-headed, following them about — "I'm the favourite. {is = mini}"
 #   {is = ghost}              the ghost trait: see-through, blue, bobbing — "> Are you... dead? {other.is = ghost}"
 #   {is = bodiless}           the bodiless trait: just a head, hopping along the ground — "> Where's the rest of you? {other.is = bodiless}"

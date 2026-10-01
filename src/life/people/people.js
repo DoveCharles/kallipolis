@@ -370,7 +370,7 @@ function voiceOf(p, i) {
   const pitch = (isMan ? 150 : 250)/tall*(0.85 + 0.3*own());
   const formant = (isMan ? 1 : 1.15)/Math.sqrt(tall)*(0.8 + 0.42*own());
   const sharpness = 3 + 9*own();
-  return { pitch, formant, sharpness, melody: Math.floor(own()*MELODIES.length), isMan };
+  return { pitch, formant, sharpness, melody: Math.floor(own()*MELODIES.length), isMan, ...presetAt(i)?.voice };
 }
 /** Someone's voice (see voiceOf), for a sound made outside the frame loop: a cry as they're hit, say. */
 export const voiceOfPerson = p => voiceOf(p, people.indexOf(p));

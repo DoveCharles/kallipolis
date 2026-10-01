@@ -123,10 +123,10 @@ export function babble(at, voice, length, loudness = 1, mood = 0, intonation = n
   const { through = 0.5, k = 0, stressed = false, last = false, question = false } = intonation ?? {};
   const melody = melodyOf(voice);
   // (where their melody has them through the phrase — see audio/melodies.js — strayed a little, and lifted if stressed)
-  const f = pitch*(1 + (Math.random()*2 - 1)*BEND)*(1 + melody.shape(through, k))*(stressed ? 1 + STRESS : 1);
+  const f = melody.sung ? pitch*(1 + melody.shape(through, k)) : pitch*(1 + (Math.random()*2 - 1)*BEND)*(1 + melody.shape(through, k))*(stressed ? 1 + STRESS : 1);
   // (the slide through the syllable: a phrase's end falls, or rises for a question; otherwise a little either way, lifted
   // by cheer and sagging with gloom)
-  const slide = last ? (question ? 1.3 : 1 - 0.2*melody.fall) : 1 + Math.max(-0.2, Math.min(0.2, mood*0.1 + (Math.random() - 0.5)*0.1));
+  const slide = melody.sung ? (last && question ? 2**(5/12) : 1) : last ? (question ? 1.3 : 1 - 0.2*melody.fall) : 1 + Math.max(-0.2, Math.min(0.2, mood*0.1 + (Math.random() - 0.5)*0.1));
   // (a robot's on flat notes: see ROBOT_NOTES)
   if (voice.robot) {
     const note = stressed ? ROBOT_NOTES.length - 1 : last ? 0 : Math.floor(Math.random()*ROBOT_NOTES.length);

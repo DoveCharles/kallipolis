@@ -1,0 +1,37 @@
+# Hatsune Miku's own lines (the preset in people/presets.js: {is = miku}). From dialogue.txt and thoughts.txt.
+Have you tried leeks? Like, really tried them?
+> I don't think so.
+> Every day, Miku.
+Somebody turned the sample rate down again. Can you hear it? Everything sounds crunchy.
+> Sounds fine to me.
+> Yeah, a bit.
+I live in your wifi, you know. That little bar on your phone? That's me waving.
+> That explains the lag.
+> Please leave.
+Sing with me! La la la!
+> La la la!
+> I'd rather not.
+I'm not a hologram. Don't let anyone tell you I'm a hologram.
+> You look a bit see-through.
+> I believe you.
+My voice goes up to... well, as high as you type it.
+> That's not how voices work.
+> Impressive.
+Do you think the city has a theme song? It should. I'll write it.
+> Make it catchy.
+> Please don't.
+I had a concert last night. Ten thousand glowsticks. All the same colour as my hair.
+> Teal?
+> I was there!
+Twin tails take forty minutes. Every morning. Worth it.
+> They're very long.
+> I believe it.
+Someone tried to copyright my humming. My HUMMING.
+> That's rough.
+> Was it catchy, though?
+Is it weird that I've never actually been tired?
+> Very weird.
+> Lucky you.
+I'm going to sing you something. One, two, one two three four!
+> Go on then.
+> Not here!

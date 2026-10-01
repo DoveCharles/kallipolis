@@ -141,3 +141,4 @@ Drink o'clock! {is != drunk, here.building = pub}
 I need a fucking drink. {is != drunk, here.building = pub, mood = -2}
 
 [musings]
+[mikuthoughts] {is = miku, weight = 15}
