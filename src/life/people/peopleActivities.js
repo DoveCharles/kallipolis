@@ -1414,9 +1414,12 @@ export function updateTrainRider(p, i, dt) {
     const landing = ride.side > 0 ? plus : minus;
     const byLift = st.lifts.find(l => l.side === ride.side);
     if (byLift) {
+      // at whichever of its ground doorways is nearer: out, or in under the landing
+      const o = byLift.spot(LIFT_WAIT_OUT, 0, byLift.bottom), i = byLift.spot(-LIFT_WAIT_OUT, 0, byLift.bottom);
+      const face = Math.hypot(o.x - p.x, o.z - p.z) <= Math.hypot(i.x - p.x, i.z - p.z) ? 1 : -1;
       ride.lift = { from: 'bottom', to: 'top' };
       ride.stage = 'liftWait';
-      ride.target = byLift.spot(LIFT_WAIT_OUT, (peopleRng()*2 - 1)*0.6, byLift.bottom);
+      ride.target = byLift.spot(face*LIFT_WAIT_OUT, (peopleRng()*2 - 1)*0.6, byLift.bottom);
       return ride.target;
     }
     if (Math.abs(landing.y - p.y) < 0.8) { ride.stage = 'toLanding'; ride.target = landing; return ride.target; }

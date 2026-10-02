@@ -137,8 +137,8 @@ function stationRegions(st) {
     if (st.doorHalf > BODY) {
       out.push({ s, a0: H - 0.6, a1: H + 0.2, b0: -(st.doorHalf - BODY), b1: st.doorHalf - BODY });
       const lift = st.lifts.find(l => l.side === s), face = lift && lift.across - lift.depth;
-      const a1 = !lift ? st.reach - BODY : lift.openAt('top') ? face + LIFT_IN : face - BODY;
-      out.push({ s, a0: H, a1, b0: -(st.landingHalf - BODY), b1: st.landingHalf - BODY });
+      out.push({ s, a0: H, a1: lift ? face - BODY : st.reach - BODY, b0: -(st.landingHalf - BODY), b1: st.landingHalf - BODY });
+      if (lift?.openAt('top')) out.push({ s, a0: face - BODY, a1: face + LIFT_IN, b0: -(lift.doorHalf - BODY), b1: lift.doorHalf - BODY });
     }
     const door = shuttle && carriageDoorOn(shuttle, st, s);
     if (door) out.push({ s, a0: door.a, a1: edge + 0.05, b0: door.b - CARRIAGE_DOOR_HALF, b1: door.b + CARRIAGE_DOOR_HALF, gap: { shuttle, door } });
@@ -162,7 +162,7 @@ function onStation(p, f, x, z) {
     const c = cabOf(lift, a, b);
     if (Math.abs(c.b) > lift.width + 0.5 || c.out < -lift.depth - LIFT_CALL_REACH) continue;
     if (!lift.openAt('top')) { if (c.out < -lift.depth) lift.call('top'); continue; }
-    if (c.out > -lift.depth + LIFT_IN && Math.abs(c.b) <= lift.width - BODY) { p.footing = { kind: 'lift', node: st.nodeId, side: lift.side }; lift.call('bottom'); return inLift(p, p.footing, x, z); }
+    if (c.out > -lift.depth + LIFT_IN && Math.abs(c.b) <= lift.doorHalf - BODY) { p.footing = { kind: 'lift', node: st.nodeId, side: lift.side }; lift.call('bottom'); return inLift(p, p.footing, x, z); }
   }
   const regions = stationRegions(st);
   // across the gap into a stopped carriage
@@ -201,7 +201,7 @@ function inLift(p, f, x, z) {
   const local = localOf(st, x, z), c = cabOf(lift, local.a, local.b);
   // out of its doorway at whichever end it's standing at
   if (lift.openAt('top') && c.out < -lift.depth + BODY) { p.footing = { kind: 'station', node: st.nodeId }; return onStation(p, p.footing, x, z); }
-  if (lift.openAt('bottom') && c.out > lift.depth - BODY) { p.footing = null; return null; }
+  if (lift.openAt('bottom') && Math.abs(c.out) > lift.depth - BODY) { p.footing = null; return null; }
   // otherwise kept in the cab (moving about in it, it waits for them a moment)
   const out = clamp(c.out, -lift.depth + BODY, lift.depth - BODY), along = clamp(c.b, -lift.width + BODY, lift.width - BODY);
   if (lift.level && Math.hypot(x - p.x, z - p.z) > 1e-3) lift.wait();
@@ -244,12 +244,13 @@ function fromGround(p, x, z) {
     // a lift: called down to anyone by its doorway, stepped into from there once it's down — a wall otherwise
     for (const lift of st.lifts) {
       const c = cabOf(lift, a, b);
-      if (Math.abs(c.b) > lift.width + 0.5 || c.out > lift.depth + LIFT_CALL_REACH || c.out < -lift.depth - 0.5) continue;
-      if (!lift.openAt('bottom') && c.out > lift.depth) lift.call('bottom');
+      if (Math.abs(c.b) > lift.width + 0.5 || Math.abs(c.out) > lift.depth + LIFT_CALL_REACH) continue;
+      if (!lift.openAt('bottom') && Math.abs(c.out) > lift.depth) lift.call('bottom');
       if (!inShaft(lift, c, -BODY)) continue;
-      const was = localOf(st, p.x, p.z), from = cabOf(lift, was.a, was.b);
-      const doorway = lift.openAt('bottom') && Math.abs(c.b) <= lift.width - BODY && from.out >= lift.depth - LIFT_IN - 0.2;
-      if (doorway && c.out >= lift.depth - LIFT_IN) return null; // (stood in its doorway)
+      // (a doorway on both faces, out and in)
+      const was = localOf(st, p.x, p.z), from = Math.abs(cabOf(lift, was.a, was.b).out);
+      const doorway = lift.openAt('bottom') && Math.abs(c.b) <= lift.doorHalf - BODY && from >= lift.depth - LIFT_IN - 0.2;
+      if (doorway && Math.abs(c.out) >= lift.depth - LIFT_IN) return null; // (stood in its doorway)
       if (doorway) { p.footing = { kind: 'lift', node: st.nodeId, side: lift.side }; lift.call('top'); return inLift(p, p.footing, x, z); }
       // pushed back out of the shaft, by whichever face is nearest
       const faces = [

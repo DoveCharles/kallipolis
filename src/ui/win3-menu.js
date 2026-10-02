@@ -24,6 +24,7 @@ import { followPerson } from '../life/people/peopleTracking.js';
 import { PRESETS } from '../life/people/presets.js';
 import { roomKind } from '../buildings/interior.js';
 import { cars } from '../life/traffic/state.js';
+import { liftDebug } from '../trains/trains.js';
 import { toUi } from './ui-scale.js';
 
 const $ = id => document.getElementById(id);
@@ -136,6 +137,7 @@ const MENUS = [
     { label:'Salon Bot (debug)', key:'a', enabled:has('s-people', 'on'), run:openSalonBotDebug },
     { label:'Restaurants (debug)', key:'k', run:openRestaurantsDebug },
     { label:'Water (debug)', key:'q', run:openWaterDebug },
+    { label:'Cycle Lifts (debug)', key:'e', check:() => liftDebug.cycle, run:() => { liftDebug.cycle = !liftDebug.cycle; } },
     ...PRESETS.map(preset => ({ label:`Find ${preset.shortName} (debug)`, enabled:() => $('s-people').classList.contains('on') && people.length > preset.slot, run:() => followPerson(preset.slot) })),
     { label:'Fetch a Diner (debug)', key:'f', enabled:() => $('s-people').classList.contains('on') && roomKind() === 'restaurant', run:sendDiner },
   ]},
