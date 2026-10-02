@@ -125,7 +125,18 @@ export const registerMini = (id, leaderId, n) => { minis.set(id, { leaderId, n }
 const presets = new Map();
 /** Make person `id` preset `preset` (see people/presets.js). */
 export const registerPreset = (id, preset) => { presets.set(id, preset); };
+// Whether person `id` is a man: from their id alone, so the same wherever they stand (see assignAppearance in peopleModel.js).
+export const sexOf = id => mulberry32(13 + id*7877)() < 0.5;
+// the hearted, as saved (see people/peopleKeep.js): their profile as it was, over whatever their id rolls now
+const pinned = new Map();
+export const pinProfile = (id, kept) => { if (kept?.profile) pinned.set(id, kept); };
 const ownProfile = (id, isMan, moodNow) => {
+  const pin = pinned.get(id);
+  if (pin) {
+    const fresh = profileFor(id, isMan, moodNow), same = (moodNow ?? null) === (pin.moodNow ?? null);
+    // (cheered up since: their mood's traits as worked out now)
+    return { ...fresh, ...pin.profile, mood: same ? pin.profile.mood : fresh.mood, traits: same ? { ...fresh.traits, ...pin.profile.traits } : fresh.traits };
+  }
   const preset = presets.get(id), profile = profileFor(id, isMan, moodNow ?? preset?.mood ?? null); // (a preset's own mood till another's worn)
   if (!preset) return profile;
   const own = side => preset[side] ? { [side]: preset[side].map(([card]) => card), [side + 'Said']: preset[side].map(([, said]) => said),
@@ -143,7 +154,7 @@ export function profileOf(id, isMan, moodNow = null) {
 function profileFor(id, isMan, moodNow = null) {
   const rng = mulberry32(48271 + id*7919);
   const pick = list => list[Math.floor(rng()*list.length)];
-  const man = isMan == null ? rng() < 0.5 : isMan;
+  const man = isMan ?? sexOf(id);
   const name = pick(lists[man ? 'boy names' : 'girl names']);
   let age = 18 + Math.floor(rng()*65);
   const picked = pick(lists.moods); // (picked either way, so nothing after it changes)

@@ -3,7 +3,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mulberry32, lerp } from '../../core/math.js';
 import { scene } from '../../core/scene.js';
 import { TOON_RAMP } from '../../core/toon.js';
-import { onProfilesLoaded, profileOf } from '../profiles.js';
+import { onProfilesLoaded, profileOf, sexOf } from '../profiles.js';
+import { pinnedLookOf } from './peopleKeep.js';
 import { splitBody } from './bodySplit.js';
 import { fitSkirt } from './skirtFit.js';
 import { fitJeans } from './jeansFit.js';
@@ -1709,12 +1710,10 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const presetStyle = (layer, preset) => layer.styles.findIndex(style => style.name === (layer === hairLayer ? preset.hair : layer === skirtLayer ? preset.skirt : null));
 
   // ============== Body Traits ==============
-  // Sex, and which hairstyle and facial hair (if any) someone wears, are fixed to the render slot itself, decided once
-  // here — a hairstyle is instanced from a fixed-size buffer of its wearers' slots, built once, so a slot can't switch
-  // hairstyle without that buffer being rebuilt. Everything else about how someone looks — body shape, face shape,
-  // colors (clothes, hair, skin, eyes, hat), and where their clothes stop — is seeded from their person id instead (see
-  // assignAppearance below), so when someone dies and someone new takes their slot (see updatePeople in people.js),
-  // the new arrival gets their own build, face and colors rather than a repeat of whoever was there before.
+  // Everything about how someone looks — sex, worn styles, body and face shape, colors, where their clothes stop — is
+  // seeded from their person id (see assignAppearance below), so they look the same in whichever slot they stand. The
+  // per-slot rolls here only size each style's instance buffer (see STYLE_ROOM); assignAppearance moves a slot between
+  // styles as anyone's born into it.
   const traitRows = TWIN_LOOK_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
   const isMan = new Uint8Array(PEOPLE_MAX);
   // (the bald and beard traits on each slot, and the styles it had before they changed them: see groom)
@@ -1787,14 +1786,16 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
 
   /**
    * Write one person's body shape, face shape, colors and clothing into the traits texture, from their id — not their
-   * slot, since two different ids taking the same slot one after another should look nothing alike. Their sex and
-   * hairstyle are left alone: those are fixed to the slot above. Called whenever someone is born into a slot (see
-   * newPerson and updatePeople in people.js).
+   * slot, since two different ids taking the same slot one after another should look nothing alike. The hearted, as
+   * saved, wear their kept look over it (see wearLook, people/peopleKeep.js). Called whenever someone is born into a
+   * slot (see newPerson and updatePeople in people.js).
    * @param {number} i - their place in the crowd: the slot to write into
    * @param {number} id - their person id: what everything here is seeded from
    * @returns {void}
    */
   function assignAppearance(i, id) {
+    const preset = presetAt(i);
+    if (!preset) pickWorn(i, id, isMan[i] = sexOf(id) ? 1 : 0);
     const man = isMan[i] === 1, ranges = man ? PERSON_BODY_SHAPES.male : PERSON_BODY_SHAPES.female;
     const texel = row => (row*PEOPLE_MAX + i)*4;
     const traitRng = mulberry32(777 + id*7919), faceRng = mulberry32(2718 + id*7919);
@@ -1831,6 +1832,58 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     wardrobe[i] = 0; // (in the clothes they came in)
     traits[texel(NUDE_ROW) + 3] = 0; // (dressed, till people.js says otherwise: see setNude)
     dressOutfit(i, id, mulberry32(5151 + id*7919), mulberry32(5152 + id*7919));
+    const kept = !preset && pinnedLookOf(id);
+    if (kept) wearLook(i, kept);
+  }
+  // Which style of each worn layer person `id` wears, by the same rolls as the slots' above but on their own streams.
+  const WORN_SALTS = [6101, 6203, 6301, 6407, 6521]; // (one per wornLayers entry)
+  function pickWorn(i, id, man) {
+    wornLayers.forEach((layer, n) => {
+      const rng = mulberry32(WORN_SALTS[n] + id*7919);
+      const hats = layer.hatChance != null ? (man ? layer.boysHats : layer.girlsHats) : [];
+      const styles = hats.length && rng() < layer.hatChance ? hats : man ? layer.boys : layer.girls;
+      let k = -1;
+      if (styles.length && !(layer.without?.of[i] >= 0)) {
+        const pick = layer.chance != null ? (rng() < layer.chance ? Math.floor(rng()*styles.length) : styles.length)
+          : Math.floor(rng()*(man ? styles.length + 1 : styles.length));
+        if (pick < styles.length) k = styles[pick];
+      }
+      if (!wear(layer, i, k) && !wear(layer, i, otherStyle(layer, styles, i, rng, true))) wear(layer, i, -1); // (full: another)
+    });
+    groomed.bald[i] = groomed.beard[i] = 0; groomed.ownHair[i] = groomed.ownBeard[i] = UNGROOMED;
+  }
+  // ---- a look kept for a hearted person between sessions (see people/peopleKeep.js): by name and value, not by roll, so
+  // new styles, outfits or ranges don't change it. A style or outfit gone since leaves what their id rolls.
+  const LAYER_NAMES = ['hair', 'beard', 'glasses', 'skirt', 'jeans']; // (wornLayers' order)
+  const KEPT_ROWS = { body: 0, more: 1, face: PERSON_FACE_ROW, clothing: PERSON_CLOTHING_ROW };
+  const KEPT_COLORS = PERSON_TRAIT_COLORS.filter(part => part !== 'Blood' && part !== 'OutfitRed' && part !== 'OutfitGreen');
+  function lookOf(i) {
+    const at = row => (row*PEOPLE_MAX + i)*4, outfit = traits[at(OUTFIT_RED_ROW) + 3];
+    return { man: isMan[i] === 1, wardrobe: wardrobe[i],
+      worn: Object.fromEntries(wornLayers.map((layer, n) => [LAYER_NAMES[n], layer.of[i] >= 0 ? layer.styles[layer.of[i]].name : null])),
+      rows: Object.fromEntries(Object.entries(KEPT_ROWS).map(([name, row]) => [name, Array.from(traits.subarray(at(row), at(row) + 4))])),
+      colors: Object.fromEntries(KEPT_COLORS.map(part => [part, Array.from(traits.subarray(at(traitRow(part)), at(traitRow(part)) + 3))])),
+      outfit: outfit ? { name: OUTFITS[outfit - 1].name, variant: traits[at(OUTFIT_GREEN_ROW) + 3] - OUTFIT_COLUMNS[outfit - 1] } : null };
+  }
+  function wearLook(i, look) {
+    const at = row => (row*PEOPLE_MAX + i)*4, ok = v => Array.isArray(v) && v.every(Number.isFinite);
+    if (typeof look.man === 'boolean') isMan[i] = look.man ? 1 : 0;
+    wornLayers.forEach((layer, n) => {
+      const name = look.worn?.[LAYER_NAMES[n]];
+      if (name === undefined) return;
+      const k = name === null ? -1 : layer.styles.findIndex(style => style.name === name);
+      if (name === null || k >= 0) wear(layer, i, k);
+    });
+    Object.entries(KEPT_ROWS).forEach(([name, row]) => { if (ok(look.rows?.[name])) traits.set(look.rows[name].slice(0, 4), at(row)); });
+    KEPT_COLORS.forEach(part => { if (ok(look.colors?.[part])) traits.set(look.colors[part].slice(0, 3), at(traitRow(part))); });
+    traits[at(1) + 1] = isMan[i]; // (the shader's sex)
+    if (look.outfit !== undefined) {
+      const o = look.outfit ? OUTFITS.findIndex(outfit => outfit.name === look.outfit.name) : -1;
+      traits[at(OUTFIT_RED_ROW) + 3] = o + 1;
+      traits[at(OUTFIT_GREEN_ROW) + 3] = o < 0 ? 0 : OUTFIT_COLUMNS[o] + Math.max(0, Math.min((OUTFITS[o].variants || 1) - 1, Math.round(look.outfit.variant) || 0));
+    }
+    wardrobe[i] = Number.isFinite(look.wardrobe) ? look.wardrobe : 0;
+    traitTexture.needsUpdate = true;
   }
   /**
    * The rest of someone's clothes over the colors already written for them: an outfit's colors over their own (`outfitRng`,
@@ -2065,13 +2118,10 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     const back = before == null ? -1 : found.layer.styles.findIndex(style => style.name === before);
     if (!wear(found.layer, i, back)) wear(found.layer, i, -1);
   }
-  // whoever's already in the crowd when the model finishes loading has been walking round as a cuboid till now: fill
-  // in their looks. Everyone born after this just gets them as they arrive (see updatePeople in people.js).
-  people.forEach((p, i) => assignAppearance(i, p.id));
   // a woman's clothes depend on her age, which comes from people/*.txt: whenever that (re)loads, work out everyone's
   // clothing again, without touching the rest of how they look
   onProfilesLoaded(() => {
-    people.forEach((p, i) => { if (traits[(NUDE_ROW*PEOPLE_MAX + i)*4 + 3] < 0.5) traits.set(clothingRowFor(p.id, i), (PERSON_CLOTHING_ROW*PEOPLE_MAX + i)*4); });
+    people.forEach((p, i) => { if (!pinnedLookOf(p.id) && traits[(NUDE_ROW*PEOPLE_MAX + i)*4 + 3] < 0.5) traits.set(clothingRowFor(p.id, i), (PERSON_CLOTHING_ROW*PEOPLE_MAX + i)*4); });
     traitTexture.needsUpdate = true;
   });
 
@@ -2171,9 +2221,13 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   personCulling.personCullSphere.value.set(middle.x, middle.y, middle.z, box.getSize(new THREE.Vector3()).length()*0.75);
   personCulling.personTall.value = box.max.y - box.min.y;
   personCulling.personFloor.value = box.min.y;
+  // whoever's already in the crowd when the model finishes loading has been walking round as a cuboid till now: fill
+  // in their looks (once the styles' meshes are made, so they can be worn). Everyone born after this just gets them as
+  // they arrive (see updatePeople in people.js).
+  people.forEach((p, i) => assignAppearance(i, p.id));
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, spirits, spiritWorn, spiritTalk, copiesWanted, copyLook, groom, headOf, time: personCulling.personTime, wears, putOn, takeOff,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, lookOf, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, spirits, spiritWorn, spiritTalk, copiesWanted, copyLook, groom, headOf, time: personCulling.personTime, wears, putOn, takeOff,
     headBone: headBone ?? 0, headPivot, face, chestBone, hands, unitsPerMetre, floorY: geometry.boundingBox.min.y, tall: box.max.y - box.min.y, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

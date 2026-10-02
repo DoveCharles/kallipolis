@@ -30,6 +30,7 @@ import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
 import { MELODIES } from '../../audio/melodies.js';
 import { favoritePeople, isFavoritePerson } from '../../ui/favorites.js';
+import { nextKept, takeKept, takeReset } from './peopleKeep.js';
 import { registerHealthKind } from '../../core/health.js';
 import { relateFelt, relateSaw, pruneGone } from './peopleRelations.js';
 import { logLine, forgetLinesExcept } from './peopleSaid.js';
@@ -482,7 +483,7 @@ export function syncPeopleUI() {
 // (see the end of newPerson)
 const PERSON_LATER_FIELDS = Object.fromEntries([
   // who they are (refreshTraits), how they look (updatePeople)
-  'health', 'walletSet', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'spectralKey', 'groomKey', 'showsBald', 'showsBeard', 'vanished', 'vanishUntil', 'shyCount', 'shyArmed', 'shyPhase', 'shyAt', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
+  'health', 'walletSet', 'moodNow', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'spectralKey', 'groomKey', 'showsBald', 'showsBeard', 'vanished', 'vanishUntil', 'shyCount', 'shyArmed', 'shyPhase', 'shyAt', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
   // what they say and think
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
   'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
@@ -557,11 +558,17 @@ export function newPerson(id = S.peopleIdSeq++) {
     ...PERSON_LATER_FIELDS };
 }
 
+// someone saved (see peopleKeep.js) back as themselves, or someone new
+function bornPerson(kp) {
+  const p = newPerson(kp?.id);
+  if (kp?.moodNow != null) p.moodNow = kp.moodNow;
+  return p;
+}
+
 /**
  * Work out a person's traits, from the entries picked for them in people/*.txt (see profiles.js) by their id — who they
  * are, not where they're standing (see the note on peopleIdSeq above). Worked out again whenever people/*.txt loads,
- * and once the model's loaded and says whether they're a man (which decides their name, and so the rest of their
- * picks; sex is still tied to their render slot, not their id — see assignAppearance in peopleModel.js).
+ * and once the model's loaded and says whether they're a man (from their id too: see sexOf in profiles.js).
  * @param {Person} p - the person
  * @param {number} i - their place in the crowd, just to look up their slot's sex
  * @returns {void}
@@ -1070,6 +1077,7 @@ function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = 
   bystandersReactToDeath(p, source);
   witness(p, cause);
   p.mode = 'dead';
+  App.crowdChanged?.(); // (saved soon: see project/autosave.js)
   if (p.traits.explosive) { // (a blast killing whoever's around, on the next traffic update: see blasts in life/traffic/state.js)
     blastFx(at, 1.7*p.height*S.peopleSize, 1.5);
     blasts.push({ ...at, scale: PERSON_BLAST_SCALE });
@@ -1112,6 +1120,7 @@ export function drownedPerson(i) {
   witness(p, 'drowned');
   p.water = null;
   p.mode = 'dead';
+  App.crowdChanged?.();
   p.train = null;
   p.indoors = null;
   p.moving = false;
@@ -1273,6 +1282,8 @@ export function updatePeople(t) {
   // born into it below — a fresh id, so they don't come back as themselves. See newPerson, and assignAppearance in
   // peopleModel.js. A hearted id missing from the crowd altogether — a reload hasn't reached their spot yet — is
   // revived into a new spot with their own saved id, rather than waiting to be spawned like anyone else.)
+  // (a saved crowd come in — see peopleKeep.js — replaces this one: its people are born below, in their saved order)
+  if (takeReset()) { stopFollowingPerson(); setRiderFollowed(-1); while (people.length) endActivity(people.pop()); }
   const wanted = Math.min(PEOPLE_MAX, Math.round(S.peopleAmount));
   const presentIds = new Set(people.map(p => p.id));
   const missingFavoriteIds = favoritePeople().filter(id => !presentIds.has(id));
@@ -1280,7 +1291,13 @@ export function updatePeople(t) {
   for (let i = 0; i < people.length; i++) if (isFavoritePerson(people[i].id)) highestFavoriteSlot = i;
   const kept = Math.min(PEOPLE_MAX, Math.max(wanted, highestFavoriteSlot + 1, people.length + missingFavoriteIds.length));
   while (people.length < kept) {
-    const p = newPerson(missingFavoriteIds.shift()); // (a hearted id waiting to be found again, else a fresh one)
+    // (someone saved, in order, while the crowd's short of `wanted`; past it, a hearted id waiting to be found again;
+    // else a fresh one)
+    let kp = people.length < wanted || !missingFavoriteIds.length ? nextKept(presentIds) : null;
+    if (kp) { const at = missingFavoriteIds.indexOf(kp.id); if (at >= 0) missingFavoriteIds.splice(at, 1); }
+    else if (missingFavoriteIds.length) kp = takeKept(missingFavoriteIds.shift());
+    const p = bornPerson(kp);
+    presentIds.add(p.id);
     personModel?.assignAppearance(people.length, p.id);
     spawnPerson(p);
     people.push(p);
@@ -1290,7 +1307,7 @@ export function updatePeople(t) {
   for (let i = 0; i < Math.min(wanted, people.length); i++) {
     const p = people[i];
     if (p.benched) { p.benched = false; p.mode = 'none'; } // (the same person, off the bench: spawned again below)
-    else if (p.mode === 'dead' && !isFavoritePerson(p.id)) { people[i] = newPerson(); personModel?.assignAppearance(i, people[i].id); } // (someone new, spawned again below)
+    else if (p.mode === 'dead' && !isFavoritePerson(p.id)) { people[i] = bornPerson(nextKept(presentIds)); presentIds.add(people[i].id); personModel?.assignAppearance(i, people[i].id); } // (someone new, spawned again below)
   }
   if (followed >= people.length) stopFollowingPerson();
   if (riderFollowed >= people.length) setRiderFollowed(-1);

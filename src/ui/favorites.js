@@ -31,8 +31,7 @@ let keptPeople = [];
 export const favoritePeople = () => keptPeople;
 function changed() {
   keptPeople = [...favorites.values()].filter(fav => fav.kind === 'Person').map(fav => fav.saved.id);
-  document.getElementById('canvas-tools').addEventListener('scroll', () => setOpen(false));
-render();
+  render();
   listeners.forEach(fn => fn());
 }
 // `entry` as above, less its picture and name, which are passed in as they are at the moment it's hearted
@@ -106,8 +105,7 @@ function followFavorite(fav) {
   if (S.interactionMode !== 'move') document.querySelector('#mode-toolbar .tool-btn[data-mode="move"]')?.click();
   App.letGoOfAllBut(fav.kind);
   fav.gone = !fav.follow();
-  document.getElementById('canvas-tools').addEventListener('scroll', () => setOpen(false));
-render();
+  render();
   if (!fav.gone) setOpen(false);
 }
 
