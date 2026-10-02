@@ -9,6 +9,7 @@ import { DIRT_COLOR, WALKWAY_COLOR, WALKWAY_COLOR_PALETTE, WALKWAY_TEXTURE, isWa
 import { isTrainLine, pathTypeOf } from '../trains/trains.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { subdivideZone } from '../zones/cutouts.js';
+import { zoneBox, zoneNearBoxes } from '../editor/input.js';
 import { renderHierarchy, renderWorldTintPanel } from '../ui/panels.js';
 import { restoreObjects } from '../objects/objects.js';
 import { serializeImportedModels, restoreImportedModels } from '../objects/imported-models.js';
@@ -160,6 +161,33 @@ function splitMixedNetworks() {
     line.networkId = splitIds.get(key);
   });
 }
+// Undo/redo (`options.prev`: the snapshot being left): the live zones that can stay as built — same data, same order,
+// everything else the same, and no zone or road that changed near them. Null if all must be redone.
+function unchangedZones(prev, data) {
+  const rest = d => JSON.stringify({ ...d, roads: { ...d.roads, nodes: 0, lines: 0 }, zones: 0, objects: 0, objectSeq: 0, zoneSeq: 0 });
+  if (rest(prev) !== rest(data)) return null;
+  const was = new Map(prev.zones.map(z => [z.id, z])), now = new Map(data.zones.map(z => [z.id, z]));
+  const order = zs => zs.filter(z => was.has(z.id) && now.has(z.id)).map(z => z.id).join();
+  if (order(prev.zones) !== order(data.zones)) return null;
+  const boxes = [];
+  was.forEach((z, id) => { const n = now.get(id); if (!n || JSON.stringify(n) !== JSON.stringify(z)) boxes.push(zoneBox(z), n && zoneBox(n)); });
+  now.forEach((z, id) => { if (!was.has(id)) boxes.push(zoneBox(z)); });
+  // roads: a line that changed, or any of whose nodes did — the box round both versions, padded past its sidewalks
+  const lineSig = (d, l) => JSON.stringify([l, l.nodeIds.map(id => d.roads.nodes[id])]);
+  const lineBox = (d, l) => {
+    const pad = (l.width || 0)/2 + (l.sidewalkWidth || 0) + 20;
+    return zoneBox({ points: l.nodeIds.map(id => d.roads.nodes[id]).filter(Boolean).flatMap(p => [{ x:p.x-pad, z:p.z-pad }, { x:p.x+pad, z:p.z+pad }]) });
+  };
+  const oldLines = new Map(prev.roads.lines.map(l => [l.id, l])), newLines = new Map(data.roads.lines.map(l => [l.id, l]));
+  oldLines.forEach((l, id) => { const n = newLines.get(id); if (!n || lineSig(data, n) !== lineSig(prev, l)) boxes.push(lineBox(prev, l), n && lineBox(data, n)); });
+  newLines.forEach((l, id) => { if (!oldLines.has(id)) boxes.push(lineBox(data, l)); });
+  const kept = new Map();
+  S.zones.forEach(z => {
+    const p = was.get(z.id), n = now.get(z.id);
+    if (!z.drawing && p && n && JSON.stringify(p) === JSON.stringify(n) && !zoneNearBoxes(z, boxes)) kept.set(z.id, z);
+  });
+  return kept;
+}
 // `options.keepMaps`: leave the map images as they are (used by undo and redo, whose snapshots don't include them)
 export async function loadProjectFromData(data, options) {
   const keepMaps = !!(options && options.keepMaps);
@@ -167,7 +195,8 @@ export async function loadProjectFromData(data, options) {
   // wipe current scene (roads, zones, map images, selection) before restoring
   cancelActiveDrawing();
   S.roadLines = []; Object.keys(roadNodes).forEach(k => delete roadNodes[k]);
-  S.zones.forEach(z => { if (z.outlineGroup) { scene.remove(z.outlineGroup); disposeObject(z.outlineGroup); } if (z.buildingsGroup) { scene.remove(z.buildingsGroup); disposeObject(z.buildingsGroup); } });
+  const kept = options && options.prev ? unchangedZones(options.prev, data) : null;
+  S.zones.forEach(z => { if (kept && kept.has(z.id)) return; if (z.outlineGroup) { scene.remove(z.outlineGroup); disposeObject(z.outlineGroup); } if (z.buildingsGroup) { scene.remove(z.buildingsGroup); disposeObject(z.buildingsGroup); } });
   S.zones = [];
   if (!keepMaps) mapImages.slice().forEach(m => removeMapImage(m.id));
   S.selection = { type:null, id:null };
@@ -286,6 +315,7 @@ export async function loadProjectFromData(data, options) {
   rebuildRoadMeshes();
 
   (data.zones||[]).forEach(zd => {
+    if (kept && kept.has(zd.id)) { const z = kept.get(zd.id); S.zones.push(z); rebuildZoneVisual(z); return; } // (its selected look may be stale)
     const zone = {
       // (malls were zones once: one saved from then comes back a plain zone — malls are drawn as paths now)
       id: zd.id, name: zd.name, closed: !!zd.closed, drawing:false, zoneType: zd.zoneType==='mall' ? 'plain' : zd.zoneType||'buildings',
@@ -299,7 +329,7 @@ export async function loadProjectFromData(data, options) {
     rebuildZoneVisual(zone);
   });
   // only once every zone is in: a zone's beaches and fences depend on the zones below it too, not just the ones above
-  S.zones.forEach(subdivideZone);
+  S.zones.forEach(z => { if (!kept || !kept.has(z.id)) subdivideZone(z); });
   S.zoneSeq = data.zoneSeq || 1;
   if (!keepMaps) await restoreImportedModels(data.importedModels, data.importedModelSeq); // (undo's snapshots leave them out, like the map images)
   restoreObjects(data.objects);

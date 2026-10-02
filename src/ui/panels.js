@@ -9,11 +9,15 @@ import { networkKindOf, pathTypeOf, currentPathType, PATH_TYPES, rebuildRoadMark
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
 import { PLAZA_COLORS } from '../zones/plazas.js';
 import { MALL_THEMES, mallSettingsOf } from '../roads/mall.js';
-import { subdivideZone, subdivideZonesFrom, subdivideZonesFromIndex, moveZone } from '../zones/cutouts.js';
+import { subdivideZone, subdivideZonesFrom, moveZone, zoneRedoneBelow } from '../zones/cutouts.js';
 import { refreshHighlights } from '../water/bridges.js';
 import { IS_TOUCH } from '../core/device.js';
+import { zonesNearPath, zonesNearNode, zoneBox, zoneNearBoxes } from '../editor/input.js';
 
 // ============================================================ selection / hierarchy
+// the zones paths `lines` can cut as they are now, added to `into`; redoZones redoes them in list order
+const zonesNearLines = (lines, into = new Set()) => { lines.forEach(l => zonesNearPath(l.nodeIds, l).forEach(z => into.add(z))); return into; };
+const redoZones = near => S.zones.forEach(z => { if (near.has(z)) subdivideZone(z); });
 export function selectItem(type,id,force) {
   if (!force && S.selection.type===type && S.selection.id===id) { deselect(); return; }
   S.selection = { type, id };
@@ -45,13 +49,14 @@ function deselect() {
   renderHierarchy();
 }
 function removeRoadNetwork(networkId) {
+  const near = zonesNearLines(S.roadLines.filter(l=>l.networkId===networkId));
   const removedIds = S.roadLines.filter(l=>l.networkId===networkId).map(l=>l.id);
   S.roadLines = S.roadLines.filter(l => l.networkId!==networkId);
   if (S.activeRoadLine && removedIds.includes(S.activeRoadLine.id)) S.activeRoadLine=null;
   if ((S.selection.type==='road' || S.selection.type==='train') && S.selection.id===networkId) S.selection={type:null,id:null};
   cleanupOrphanRoadNodes();
   rebuildRoadMeshes();
-  S.zones.forEach(subdivideZone);
+  redoZones(near);
   renderHierarchy();
 }
 function removeZone(id) {
@@ -63,11 +68,14 @@ function removeZone(id) {
   if (zone.buildingsGroup) { scene.remove(zone.buildingsGroup); disposeObject(zone.buildingsGroup); }
   if (S.activeZone && S.activeZone.id===id) S.activeZone=null;
   if (S.selection.id===id) S.selection={type:null,id:null};
-  if (!zone.drawing) subdivideZonesFromIndex(index); // the zones below get back what it was cutting out of them
+  // the zones below, near it, get back what it was cutting out of them
+  const box = [zoneBox(zone)];
+  if (!zone.drawing) S.zones.forEach((z, i) => { if (zoneRedoneBelow(z, i, index) && zoneNearBoxes(z, box)) subdivideZone(z); });
   renderHierarchy();
   updateStats();
 }
 export function deleteRoadNode(id) {
+  const near = new Set(zonesNearNode(id));
   delete roadNodes[id];
   for (let i=S.roadLines.length-1;i>=0;i--) {
     const line = S.roadLines[i];
@@ -77,7 +85,7 @@ export function deleteRoadNode(id) {
   }
   if ((S.selection.type==='road' || S.selection.type==='train') && !S.roadLines.some(l=>l.networkId===S.selection.id)) S.selection={type:null,id:null};
   rebuildRoadMeshes();
-  S.zones.forEach(subdivideZone);
+  redoZones(near);
   renderHierarchy();
 }
 export function deleteZoneVertex(zone, idx) {
@@ -896,15 +904,16 @@ function renderDetails() {
       <button class="btn danger" id="d-delete">Delete path${lines.length>1?' network':''}</button>
     `;
     document.getElementById('ds-roadtype').addEventListener('change', (e) => {
+      const near = zonesNearLines(lines);
       lines.forEach(l => { l.roadType = e.target.value; });
       S.newRoadType = e.target.value; // (and the Paths tab follows it to its new type)
       App.applyModeVisibility();
-      rebuildRoadMeshes(); S.zones.forEach(subdivideZone); renderDetails(); renderHierarchy();
+      rebuildRoadMeshes(); redoZones(zonesNearLines(lines, near)); renderDetails(); renderHierarchy();
     });
     if (isMall) {
       // (every line of the network keeps the same settings: see mallSettingsOf)
-      const setMall = (key, v) => { lines.forEach(l => { l.mall = { ...mallSettingsOf(l), [key]: v }; }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); };
-      document.getElementById('ds-mallwidth').addEventListener('change', e => { lines.forEach(l => { l.width = parseFloat(e.target.value); }); rebuildRoadMeshes(); S.zones.forEach(subdivideZone); });
+      const setMall = (key, v) => { lines.forEach(l => { l.mall = { ...mallSettingsOf(l), [key]: v }; }); rebuildRoadMeshes(); redoZones(zonesNearLines(lines)); };
+      document.getElementById('ds-mallwidth').addEventListener('change', e => { const near = zonesNearLines(lines); lines.forEach(l => { l.width = parseFloat(e.target.value); }); rebuildRoadMeshes(); redoZones(zonesNearLines(lines, near)); });
       document.getElementById('ds-mallwidth').addEventListener('input', e => { document.getElementById('dv-mallwidth').textContent = e.target.value; });
       [['malldepth', 'depth', 0], ['mallshopwidth', 'shopWidth', 0], ['mallclothes', 'clothes', 2], ['mallsalons', 'salons', 2], ['mallpubs', 'pubs', 2], ['mallrestaurants', 'restaurants', 2], ['mallconvenience', 'convenience', 2], ['mallvacant', 'vacant', 2], ['mallseed', 'seed', 0]]
         .forEach(([id, key, dp]) => {

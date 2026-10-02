@@ -132,6 +132,11 @@ function roadNodeLinesBounds(nodeId) {
   });
   return b;
 }
+// the zones deleting road node `nodeId` can change
+export function zonesNearNode(nodeId) {
+  const b = roadNodeLinesBounds(nodeId);
+  return b ? S.zones.filter(z => zoneNearBoxes(z, [b])) : [];
+}
 // the box round nodes `ids` of `line`, as above, grown out of box `b` if there's one
 function pathBounds(ids, line, b = null) {
   const { hw, cw, sw } = roadLineWidths(line), pad = hw + cw + sw;
@@ -157,7 +162,7 @@ export function zonesNearPath(ids, line) {
 // crossing it or running just along its edge (ZONE_CUTOUT_REACH, plus a fence's inset).
 const SUBURB_STREET_REACH = 90, NEAR_ZONE_REACH = App.ZONE_CUTOUT_REACH + 6;
 // the box round zone `zone`'s outline, handles included; null if it isn't one yet
-function zoneBox(zone) {
+export function zoneBox(zone) {
   if (zone.points.length < 3) return null;
   const b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
   zone.points.forEach(p => [p, p.handleIn, p.handleOut].forEach(q => {
@@ -166,7 +171,7 @@ function zoneBox(zone) {
   }));
   return b;
 }
-function zoneNearBoxes(zone, boxes) {
+export function zoneNearBoxes(zone, boxes) {
   const zb = zoneBox(zone);
   if (!zb) return false;
   const reach = zone.zoneType === 'suburbs' ? SUBURB_STREET_REACH : NEAR_ZONE_REACH;
