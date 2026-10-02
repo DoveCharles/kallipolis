@@ -22,7 +22,7 @@ import { controlInput, possession, rushed } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion, registerPreset } from '../profiles.js';
 import { presetAt } from './presets.js';
 import { SPECTRAL, BALD_BIT, VANISHED_BIT } from './peopleSpirits.js';
-import { TWIN_GAP, TWIN_LOOK_ROW } from './peopleModel.js';
+import { TWIN_GAP, TWIN_LOOK_ROW, SPIRIT_ANIM_ROW } from './peopleModel.js';
 import { updateSpiritChat, twinBubble } from './peopleSpiritChat.js';
 import { updateMinis, miniSpot } from './peopleMinis.js';
 import { BLINK_DURATION, FADE_POSE, FADE_QUICK, FADE_SNACK, FIDGETS, GOOFY_ROW, HAIR_ROW, SPIRITS_ROW, GRASS_SITS, LOOK_MAX_TILT, LOOK_MAX_TURN, PERSON_BAKE_FPS, SKEPTICAL_ROW, WELLING_ROW, PERSON_FACE_PIXELS, PERSON_TRAIT_COLORS, PERSON_WORN_PIXELS, PUPIL_MAX_X, PUPIL_MAX_Y, personPixels } from './peopleModel.js';
@@ -1843,6 +1843,14 @@ export function updatePeople(t) {
         animArray[o+3] = Math.max(p.traits.drowsy, p.pray && !p.saying ? 0.85 : 0, p.oneShot?.name === 'Hit' ? 1 : 0, p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0);
         lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
         if (p.water?.drowned) holdDrowned(o, animArray, lookArray); // (still, face down: see peopleWater.js)
+        // (their shoulder spirits' pose: theirs — sitting, falling, lying — but the Idle loop wherever they walk: see peopleSpirits.js)
+        if (p.traits.spirits) {
+          const walks = clip => !!clip && (clip.base ?? clip).name === 'Walk', idle = personModel.clips.Idle;
+          const idleRow = idle ? idle.start + (t*PERSON_BAKE_FPS + i*7) % idle.frames : animArray[o];
+          const a = walks(p.clipA) ? idleRow : animArray[o], b = p.clipB === p.clipA ? a : walks(p.clipB) ? idleRow : animArray[o+1];
+          personModel.traitData.set([a, b, animArray[o+2]], (SPIRIT_ANIM_ROW*PEOPLE_MAX + i)*4);
+          personModel.traitTexture.needsUpdate = true;
+        }
         const eyesArray = personModel.eyes.array;
         for (let k=0;k<4;k++) eyesArray[o + k] = p.eyes[k];
         const pupilArray = personModel.pupil.array;

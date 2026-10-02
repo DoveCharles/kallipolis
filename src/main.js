@@ -169,7 +169,7 @@ function animate() {
   controls.update(false);
   skyDome.position.copy(camera.position);
   const t = performance.now()*0.001;
-  if (lastFrameT != null && S.interactionMode !== 'move') worldClock.paused += t - lastFrameT;
+  if (lastFrameT != null && (S.interactionMode !== 'move' || stillLoading())) worldClock.paused += t - lastFrameT; // (frozen under the loading screen too)
   lastFrameT = t;
   const w = t - worldClock.paused;
   updateTrainShuttles(w);

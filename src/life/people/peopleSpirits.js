@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { scene } from '../../core/scene.js';
 
 // One-colour copies of a person (face picked out), posed as they are and bobbing: the spirits trait's small one on each
-// shoulder, standing idle (gold on their right, purple on their left, riding the chest bone), and the ghost trait's full-size blue one
+// shoulder, posed as they are but idling where they walk (gold on their right, purple on their left, riding the chest bone), and the ghost trait's full-size blue one
 // in place of their body (hidden in the person shader). The body's geometry again, one instanced mesh each, over a compact
 // copy of the body's instances holding only those flagged by its SPIRITS_ROW bit (personSpectral; see compactOf in peopleModel.js).
 
@@ -32,8 +32,7 @@ const FACES = { happy: [[0, 1, 0, 0], 1, 'x'], angry: [[0, 0, 1, 0], -1, 'y'] };
  * @param {function(THREE.InstancedMesh, number, ...THREE.InstancedMesh): {geometry: THREE.BufferGeometry, matrix: THREE.InstancedBufferAttribute}} o.compact -
  *   a mesh's instances with a SPECTRAL bit, drawn by the meshes given
  * @param {THREE.Vector3} o.shoulder - the left shoulder at rest
- * @param {{start: number, frames: number}} o.idle - the Idle clip, which a spirit stands in whatever they're doing
- * @param {number} o.fps - PERSON_BAKE_FPS
+ * @param {number} o.animRow - traits row of a spirit's own pose (SPIRIT_ANIM_ROW: the person's, the Idle loop where they walk)
  * @param {{white: number, dark: number[], lashes: number[], femaleOnly: number[], lashRow: number}} o.slots - the eye whites' slot, the face's drawn dark,
  *   and (as the body hides them: injectPersonShader) the lashes they've not got (lashRow's .w bits) and the parts a man hasn't
  * @param {number} o.headshotLayer - the headshot camera's layer
@@ -56,16 +55,15 @@ export function makeSpiritWorn(o, styles) {
 }
 
 // One spirit's (or the ghost's) mesh over `source`'s compact copy (o.compact); `dressed` for a worn layer.
-function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color, opacity, name }, { vertexPars, uniforms, geometry: bodyGeometry, shoulder, idle, fps, slots, headshotLayer, fadeRow, compact }, source, dressed) {
+function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color, opacity, name }, { vertexPars, uniforms, geometry: bodyGeometry, shoulder, slots, headshotLayer, fadeRow, animRow, compact }, source, dressed) {
   const box = bodyGeometry.boundingBox, tall = box.max.y - box.min.y;
   // (a spirit sits on the shoulder, feet first; the ghost stands where they do)
   const place = side
-    ? `mat4 chest = personBone(personChestBone);
-          vec3 at = (chest*vec4(${(side*shoulder.x*SPIRIT_OUT).toFixed(4)}, ${shoulder.y.toFixed(4)}, ${shoulder.z.toFixed(4)}, 1.0)).xyz
+    ? `vec3 at = (chest*vec4(${(side*shoulder.x*SPIRIT_OUT).toFixed(4)}, ${shoulder.y.toFixed(4)}, ${shoulder.z.toFixed(4)}, 1.0)).xyz
             + mat3(chest)*((posed - vec3(0.0, ${box.min.y.toFixed(4)}, 0.0))*${scale.toFixed(3)} + vec3(0.0, lift, 0.0));`
     : 'vec3 at = posed + vec3(0.0, lift, 0.0);';
   let pars = face ? worn(vertexPars, ...FACES[face], dressed) : vertexPars;
-  if (side) pars = idled(pars, idle, fps);
+  if (side) pars = posedOwn(pars);
   const params = {
     uniforms: { ...uniforms, spiritColor: { value: new THREE.Color(color).multiplyScalar(dressed ? WORN_DARK : 1) }, spiritClock: uniforms.personTime },
     side: THREE.DoubleSide, transparent: opacity < 1, depthWrite: opacity >= 1,
@@ -76,6 +74,10 @@ function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color,
         void main() {
           vSpiritFade = texelFetch(personTraits, ivec2(personIndex(), ${fadeRow}), 0).w;
           if ((personSpectral() & ${bit}) == 0 || (personSpectral() & ${VANISHED_BIT}) != 0 || personIndex() == personHidden || (personOnly >= 0 && personIndex() != personOnly)) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+          ${side ? `// (riding their chest as it's posed; posed itself as they are, but idling where they walk: animRow)
+          spiritAnimNow = spiritRawAnim();
+          mat4 chest = personBone(personChestBone);
+          spiritAnimNow = vec4(texelFetch(personTraits, ivec2(personIndex(), ${animRow}), 0).xyz, spiritRawAnim().w);` : ''}
           vec3 posed = personBodiless(personLook((personSkinMatrix()*vec4(position + personShape(), 1.0)).xyz));
           int slot = int(personVertex.y + 0.5);
           ${dressed ? '' : `if (${[...slots.lashes.map((k, b) => `(slot == ${k} && (int(personTrait(${slots.lashRow}).w + 0.5) & ${1 << b}) == 0)`),
@@ -127,10 +129,11 @@ const worn = (pars, eyes, mouth, talk, dressed) => pars
   .replace('attribute vec4 instanceLook;', `attribute vec4 instanceLook;
 ${dressed ? '' : 'attribute vec2 instanceSpirit;'}
 #define instanceLook vec4(instanceLook.xy, ${dressed ? '0.0' : 'instanceSpirit.' + talk}, ${mouth.toFixed(1)})`);
-// the pars with the pose held to the Idle clip, looping on its own (each person out of step), whatever the person's doing
-const idled = (pars, idle, fps) => pars
+// the pars with the pose its own to set (spiritAnimNow: see spiritMesh) — the person's for the chest it rides, its own
+// row (people.js) for itself; spiritRawAnim the person's
+const posedOwn = pars => pars
   .replace(/int personIndex\(\) \{ return gl_InstanceID; \}\s*#endif/, `int personIndex() { return gl_InstanceID; }
   #endif
-uniform float spiritClock;
-vec4 spiritAnim() { float row = ${idle.start.toFixed(1)} + mod(spiritClock*${fps.toFixed(1)} + float(personIndex())*7.0, ${idle.frames.toFixed(1)}); return vec4(row, row, 1.0, instanceAnim.w); }
-#define instanceAnim spiritAnim()`);
+vec4 spiritRawAnim() { return instanceAnim; }
+vec4 spiritAnimNow;
+#define instanceAnim spiritAnimNow`);

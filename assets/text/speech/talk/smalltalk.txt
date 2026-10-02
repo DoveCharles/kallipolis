@@ -212,18 +212,6 @@ What's that look for? {other.is = skeptical}
 > I'm thinking. {patience}
 >> Well, stop it. {aggression}
 
-Is that... you? On your shoulder? {other.is = spirits}
-> Which one? {is = spirits}
-> The purple one's a bad influence. {is = spirits, evil < 0}
-> Don't listen to the gold one. {is = spirits, evil > 0}
->> I'm going to pretend I didn't see that. {mood = -0.5}
-
-There's two little yous. On your shoulders. {other.is = spirits}
-> They follow me everywhere. {is = spirits, mood = -1}
-> They're good company. {is = spirits}
->> Do they talk?
->>> Constantly.
-
 You've got this, [other.name]. {is = spirit, evil < 0}
 > Thanks, little me. {other.is = spirit}
 > Do I though? {other.is = spirit, mood = -1}
@@ -415,10 +403,10 @@ So, fuck marry kill?
 >> Awww, come on!
 >>> Not gonna happen, kid. {other.age = -2, age = 2, age > 40}
 >>> Ugh, whatever. Go on then. {evil = -1, then = fmk_names}
->>> Yeah, I'll choose!
+>>> Hmmm, okay, but I get to choose.
 >>>> But I had some good ones loaded up!
 >>>>> Too bad! {now = fmk_names}
->>>>> Okay, okay, hit me. {then = fmk_names}
+>>>>> Okay then, okay, hit me. {then = fmk_names}
 >>>> Sure! Yay {then = fmk_names}
 > Go on then.
 >> [people#1], [people#2], [people#3]. {as = fmk_names}
@@ -459,11 +447,11 @@ So, fuck marry kill?
 >>>>>> Aw, sweet! So who are you marrying? {age, likes#4 > 0, then = fmk_marry, score =1}
 >>>>>> [most#4]? Wow, okay... Tell me you're marrying someone better at least, right? {likes#4 < 0, then = fmk_marry}
 >>>>>> Let me stop right there, [most#4]? After everything they've done? Sorry, but that's so weird of you. Forget I asked. {likes#4 < 0.5, likes#4 = -4, score = -2}
->>>> Wait, are you even into [most#4: him]? {as = fmk_into}
->>>>> Not really, no. [most#4: he's] just the best of a bad bunch. {fancies#4 < 0}
->>>>>> Fair enough. Marry? {then = fmk_marry}
->>>>> Oh, absolutely. {fancies#4 > 0}
->>>>>> Noted. Marry? {then = fmk_marry}
+>>>> Wait, you're into [most#4: him]? Really? {as = fmk_into}
+>>>>> Not really, I just don't want to fuck the other two! {fancies#4 < 0}
+>>>>>> Yeahhh, sure. So, marry? {then = fmk_marry}
+>>>>> Oh, yeah. Bad bad. {fancies#4 > 0}
+>>>>>> Damn, okay. Who you marrying then? {then = fmk_marry}
 >>>>> I'm into everybody, honestly. {gay > 0.25, gay < 0.75}
 >>>>>> Hahaha, nice. Marry? {then = fmk_marry}
 >>> Okay, fuck? [most#4: fancies+likes-age#1#2#3].
@@ -485,6 +473,8 @@ So, fuck marry kill?
 >>>>>>>> ...
 >>>>>>>>> ...
 >>>>>>>>>> ...hello? [other.name]? Are you still with us?
+>>>>>>>>>>> I'm with [most#5] now. Wait, huh? What? Oh, yeah, the game. {then = fmk_killnext}
+>>>>>>>>>> ...hello? Are you still with us? {other.stranger}
 >>>>>>>>>>> I'm with [most#5] now. Wait, huh? What? Oh, yeah, the game. {then = fmk_killnext}
 >>>>>> Alright, so that means... {as = fmk_killnext}
 >>>>>>> Kill [least#6: likes#1#2#3], easy decision. {likes#6 < 0.2}
@@ -514,6 +504,7 @@ So, fuck marry kill?
 >>>>>>>>>>>> I'd carve [least#6: him] up with [knives: a]. Then I'd use [utensils: a] to piece [least#6: him] back together again. I'd stab them with random bullshit for days.
 >>>>>>>>>>>>> What are you even saying right now?
 >>>>>>>>>>>>>> I'm a vampire. Bleh! {vampire > 0}
+>>>>>>>>>>>>>>> [insults], you crazy motherfucker. {end=bad, score = -3}
 >>>>>>>>>>>>>> I'm crazy. I'm an evil murderer. I'm insane. I'm nasty. I'm on some freak shit. I'll kill anybody. But most of all? I'd kill [least#6]. {evil}
 >>>>>>>>>>>>>>> [insults], you crazy motherfucker. {end=bad, score = -3}
 
@@ -534,6 +525,7 @@ So, fuck marry kill?
 >>>>>>>>>>>> I'd carve [least#6: him] up with [knives: a]. Then I'd use [utensils: a] to piece [least#6: him] back together again. I'd stab them with random bullshit for days.
 >>>>>>>>>>>>> What are you even saying right now?
 >>>>>>>>>>>>>> I'm a vampire. Bleh! {vampire > 0}
+>>>>>>>>>>>>>>> [insults], you crazy motherfucker. {end=bad, score = -3}
 >>>>>>>>>>>>>> I'm crazy. I'm an evil murderer. I'm insane. I'm nasty. I'm on some freak shit. I'll kill anybody. But most of all? I'd kill [least#6]. {evil}
 >>>>>>>>>>>>>>> [insults], you crazy motherfucker. {end=bad, score = -3}
 
@@ -548,6 +540,8 @@ So, fuck marry kill?
 >>>>>>>>>>> I need [most#4] so bad. God. {likes#4 = 3, score = 2}
 >>>>>>>>>>> [most#5]... Oh, [most#5]... {likes#5 = 3, score = 2}
 >>>>>>>>>>> Yeah, this was silly. I shouldn't have said anything. {age, aggression, mood = -1}
+>>>>>>>>>> Your picks revealed something deeply concerning about your psyche, about who you truly are as a person. Your picks scared me. {talk.score < -1}
+>>>>>>>>>>> Oh? Well fuck marry kill you, man. {score = -2}
 
 
 Do you ever take a leak, and you think you're done, and then, whoop! Pee right over the toilet seat and over the floor? {man > 0}
@@ -564,3 +558,10 @@ Do you ever take a leak, and you think you're done, and then, whoop! Pee right o
 >>>>>>> Penis thing. {score = 1}
 >>>>>>>> Penis thing. {as=penisthing, then=penisthing}
 >>> Yeah... {score = -1}
+
+So, [fruit#1: plural] or [fruit#2: plural]?
+> Are you seriously comparing [fruit#1: plural] and [fruit#2: plural] right now?
+> [most#3: likes#1#2], easy. That shit's yum.
+>> Agreed! [most#3] for me too. {likes#3 >= likes#1#2#any, score = 1}
+>> Ewww! What!? [most#3] is [swears: gerund] disgusting! {likes#3 < 0.1, score = -1}
+>> Nah, [most#4: likes#1#2] is way better. {likes#3 < likes#1#2#any}

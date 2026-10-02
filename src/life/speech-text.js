@@ -58,7 +58,6 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   partying: person => (person?.traits?.partying ?? 0) > 0,
   singing: person => (person?.traits?.singing ?? 0) > 0,
   upsidedown: person => !!person?.traits?.upsidedown,
-  spirits: person => !!person?.traits?.spirits, // (a ghost of them on each shoulder)
   spirit: person => !!person?.spiritOf, // (a shoulder spirit talking: see people/peopleSpiritChat.js — gold evil -1, purple evil 1)
   twins: person => !!person?.traits?.twins && !person.chattingWithTwin, // (two of them, in step — not to each other: see people/peopleSpiritChat.js)
   bald: person => !!person?.showsBald, // (no hair showing — or the bald trait under a hat: see headOf in people/peopleModel.js)
@@ -153,11 +152,13 @@ function parseTags(text, where) {
       tags.world.push({ kind: 'trait', other: !!m[1], trait: m[2].toLowerCase(), op: m[3], value: +m[4] });
     else if ((m = part.match(/^other\.([a-z]+)\s*(?:=\s*(-?\d+(?:\.\d+)?))?$/i)) && isTrait(m[1].toLowerCase()))
       tags.world.push({ kind: 'otherLean', trait: m[1].toLowerCase(), value: m[2] == null ? 1 : +m[2] });
-    // (pick tags: {likes}, {likes#1 < 0}, {evil#all > 0.5}, {likes-age#all} — a trait or appeal needs its #, or it's the speaker's)
-    else if ((m = part.match(/^([a-z0-9.+\-\s]+?)\s*((?:#\s*\w+\s*)*)(?:(=|<=|>=|<|>)\s*(-?\d+(?:\.\d+)?))?$/i)) && parseMeasure(m[1], !!m[2])) {
-      const measure = parseMeasure(m[1], !!m[2]), sel = parseSelector(m[2]);
+    // (pick tags: {likes}, {likes#1 < 0}, {evil#all > 0.5}, {likes-age#all}, {likes#3 >= likes#1#2#any} — a trait or appeal
+    // needs its #, or it's the speaker's; a limit can compare with another pick tag's level instead of a number)
+    else if ((m = part.match(/^([a-z0-9.+\-\s]+?)\s*((?:#\s*\w+\s*)*)(?:(=|<=|>=|<|>)\s*(-?\d+(?:\.\d+)?|[a-z0-9.+\-\s]+?(?:#\s*\w+\s*)+))?$/i))
+      && parseMeasure(m[1], !!m[2]) && (m[4] == null || /^-?\d/.test(m[4]) || (m[3] !== '=' && againstOf(m[4])))) {
+      const measure = parseMeasure(m[1], !!m[2]), sel = parseSelector(m[2]), number = m[4] == null || /^-?\d/.test(m[4]);
       tags.world.push(!m[3] || m[3] === '=' ? { kind: 'pick', measure, sel, value: m[4] == null ? 1 : +m[4] }
-        : { kind: 'pickLimit', measure, sel, op: m[3], value: +m[4] });
+        : { kind: 'pickLimit', measure, sel, op: m[3], value: number ? +m[4] : null, against: number ? null : againstOf(m[4]) });
     }
     else if ((m = part.match(/^(other|seen|felt)\.(friend|enemy|introduced|stranger)$/i))) tags.world.push({ kind: 'relation', whose: m[1].toLowerCase(), is: m[2].toLowerCase() });
     else if ((m = part.match(/^talk\.score\s*(<=|>=|<|>)\s*(-?\d+(?:\.\d+)?)$/i))) tags.world.push({ kind: 'talkScore', op: m[1], value: +m[2] });
@@ -540,10 +541,15 @@ function liking(word, person) {
 }
 
 // {likes > n}, {evil#all < 0} and the like: hard limits on the picks' level
+// (the other side of {likes#3 >= likes#1#2#any}: a measure and its picks, as on the left)
+function againstOf(text) {
+  const m = text.replace(/\s+/g, '').match(/^([^#]+)((?:#\w+)+)$/), measure = m && parseMeasure(m[1]);
+  return measure ? { measure, sel: parseSelector(m[2]) } : null;
+}
 const picksAllow = (world, person, vars) => world.every(w => {
   if (w.kind !== 'pickLimit') return true;
-  const level = pickLevel(w, person, vars);
-  return w.op === '<' ? level < w.value : w.op === '>' ? level > w.value : w.op === '<=' ? level <= w.value : level >= w.value;
+  const level = pickLevel(w, person, vars), value = w.against ? pickLevel(w.against, person, vars) : w.value;
+  return w.op === '<' ? level < value : w.op === '>' ? level > value : w.op === '<=' ? level <= value : level >= value;
 });
 
 // Which way a love or hate's traits lean who says they like it: a love's as written, a hate's backwards (the fast hate

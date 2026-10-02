@@ -1,4 +1,5 @@
 bees.txt
+boats.txt
 buildings.txt
 cars.txt
 gifts.txt

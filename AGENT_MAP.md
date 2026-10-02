@@ -32,7 +32,7 @@ Browser city-blockout tool on three.js (plain ES modules, no build step). Read t
 Format: `file` (size) purpose — key exports.
 
 ### src/
-- `main.js` (8K) Entry point: imports every module in load order, then runs the render loop. The world's updates (people, traffic, critters, trains, day/night, weather…) get the world clock `w`, stopped while S.interactionMode isn't 'move' (edit mode: the world frozen); water, lights, sound and camera shake keep real time.
+- `main.js` (8K) Entry point: imports every module in load order, then runs the render loop. The world's updates (people, traffic, critters, trains, day/night, weather…) get the world clock `w`, stopped while S.interactionMode isn't 'move' (edit mode: the world frozen) or the loading screen's up; water, lights, sound and camera shake keep real time.
 
 ### src/audio/
 - `accents.js` (5K) Accents on real lines (not babble): rewrites speech.js phonemes per accent (cockney, scottish, french, german, welsh, irish, australian, manc, japanese (Miku only, presets.js) — the last five's tunes via melodies.js ACCENT_MELODIES, babble too: swapped/dropped sounds, own vowel formants p.f/p.to, French last-syllable stress; RU, the throat r, is in speech.js PHONEMES); applied in dictionary.js voiceLine from voice.accent, rolled in people.js voiceOf (ACCENT_SHARE); tools/speech.html has a picker. — exports: ACCENTS, ACCENT_SHARE, accentFor, accented

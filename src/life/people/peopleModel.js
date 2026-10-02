@@ -601,6 +601,8 @@ const CENSOR_THIGH = 0.3, CENSOR_STOMACH = 0.45, CENSOR_SHOULDER = 0.1;
 const OUTFIT_RED_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitRed'), OUTFIT_GREEN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitGreen');
 const BLOOD_SCALE = 1.2; // how many splotches' worth of noise fit in a unit of the figure: bigger for smaller splotches
 export const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
+// (and a shoulder spirit's pose: the person's animation rows and blend, the Idle loop where theirs walks — see people.js, peopleSpirits.js)
+export const SPIRIT_ANIM_ROW = PERSON_FACE_ROW + 2;
 export const TWIN_LOOK_ROW = PERSON_FACE_ROW + 1; // (a twin's copy's own head turn and tilt, as instanceLook.xy: see personLook, people.js; .z how much a bodiless head hops; .w how far a shy ghost's faded: shyGhost)
 
 // A mesh named with a _U suffix is unused: kept in the model file, never drawn.
@@ -1735,7 +1737,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   // seeded from their person id (see assignAppearance below), so they look the same in whichever slot they stand. The
   // per-slot rolls here only size each style's instance buffer (see STYLE_ROOM); assignAppearance moves a slot between
   // styles as anyone's born into it.
-  const traitRows = TWIN_LOOK_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
+  const traitRows = SPIRIT_ANIM_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
   const isMan = new Uint8Array(PEOPLE_MAX);
   // (the bald and beard traits on each slot, and the styles it had before they changed them: see groom)
   const UNGROOMED = -2, groomed = { bald: new Int8Array(PEOPLE_MAX), beard: new Int8Array(PEOPLE_MAX), ownHair: new Int16Array(PEOPLE_MAX).fill(UNGROOMED), ownBeard: new Int16Array(PEOPLE_MAX).fill(UNGROOMED) };
@@ -2259,7 +2261,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   }
   copiesAfterAim = () => { if (mesh.visible) updateCopies(); };
   // (the spirits trait's shoulder ghosts: see peopleSpirits.js)
-  const spiritParts = { vertexPars: PERSON_VERTEX_PARS, uniforms, geometry, body: mesh, compact: (source, bit, ...copies) => { const c = compactOf(source, bit); copies.forEach(copy => drawsCompact(c, copy)); return c; }, headshotLayer: HEADSHOT_LAYER, fadeRow: TWIN_LOOK_ROW,
+  const spiritParts = { vertexPars: PERSON_VERTEX_PARS, uniforms, geometry, animRow: SPIRIT_ANIM_ROW, body: mesh, compact: (source, bit, ...copies) => { const c = compactOf(source, bit); copies.forEach(copy => drawsCompact(c, copy)); return c; }, headshotLayer: HEADSHOT_LAYER, fadeRow: TWIN_LOOK_ROW,
     shoulder: bones[boneByName.get('ShoulderL')].getWorldPosition(new THREE.Vector3()), idle: clips.find(c => c.name === 'Idle'), fps: PERSON_BAKE_FPS,
     slots: { white: PERSON_SLOTS.indexOf('White'), dark: ['Black', 'Eyelash1', 'Eyelash2', 'Eyelash3', 'Lips'].map(slot => PERSON_SLOTS.indexOf(slot)),
       lashes: PERSON_LASHES.map(part => PERSON_SLOTS.indexOf(part)), femaleOnly: PERSON_FEMALE_ONLY.map(part => PERSON_SLOTS.indexOf(part)), lashRow: PERSON_CLOTHING_ROW } };

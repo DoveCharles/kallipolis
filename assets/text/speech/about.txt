@@ -219,6 +219,8 @@
 #     #mean                   their average must
 #   Then, as with likes: no value or = n leans (soft), < > <= >= n limits (hard). Several pick tags can be given at once;
 #   each counts separately. With none of its picks held, a pick tag's level is 0.
+#   A limit can compare with another pick tag instead of a number: {likes#3 >= likes#1#2#any} (they like #3 at least
+#   as much as their favourite of #1 and #2: it's their favourite too), {age#1 > age#2}, {fancies#4 < fancies#5}.
 #
 # MOST AND LEAST: a placeholder that says one of the held words, ranked by a measure:  [most: measure#picks, options]
 #   [most: …] / [least: …]    the word that measures highest / lowest, for the speaker
@@ -291,7 +293,6 @@
 #   {is = partying}           confetti flying off them (🥳 gives it) — "> Where's the party? {other.is = partying}"
 #   {is = singing}            music notes floating off them (🎵 gives it) — "> What are you humming? {other.is = singing}"
 #   {is = upsidedown}         their head the wrong way up (🙃 gives it) — "> Your head's on upside down! {other.is = upsidedown}"
-#   {is = spirits}            the spirits trait: a gold ghost of them on the right shoulder, a purple on the left — "> Is that... you? On your shoulder? {other.is = spirits}"
 #   {is = spirit}             a shoulder spirit itself, talking with whoever it's on while they're alone (they're its other; gold is evil -1 and happy, purple evil 1 and angry) — "Go on, do something bad. {is = spirit, evil > 0}"
 #   {is = twins}              the twins trait: two of them side by side, moving in perfect step — "> Are you two... the same person? {other.is = twins}"
 #   {is = twin}               a twin's other half, talking with them while they're alone (they're its other) — "Are you thinking what I'm thinking? {is = twin}"
