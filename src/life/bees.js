@@ -834,7 +834,7 @@ function flyBee() {
   const bee = followedBee.colony.bees[followedBee.index];
   if (isHome(bee) || bee === flownBee || !startFlying(stopFlyingBee, {
     keys: 'W/S forward and back · A/D to turn · Space to rise · Shift to sink',
-    touch: 'Stick to fly it · Brake to rise · Run to sink', kind: 'critter' })) return;
+    touch: 'Stick to fly it · Brake to rise · Run to sink', kind: 'critter', at: () => bee.at })) return;
   flownBee = bee;
   // (already going the way it was, so the handover is invisible)
   const along = Math.hypot(bee.v.x, bee.v.z);

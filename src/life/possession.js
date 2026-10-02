@@ -40,7 +40,7 @@ const HATES_FOV_SCALE = 1 + 0.5*(HATES_POSSESSED_SPEED - 1), FOV_RUSHED_MAX = 13
 /** How wide the possessed person sees just now: the wheel's width, widened while forced to rush. @returns {number} */
 export const possessedFov = () => possession.alwaysForward ? Math.min(FOV_RUSHED_MAX, possession.fov*HATES_FOV_SCALE) : possession.fov;
 export const driving = { active: false, lookedAt: -Infinity }; // (lookedAt: when the mouse last swung the camera round)
-export const flying = { active: false, lookedAt: -Infinity, release: null }; // the same, for anything flown (release: what lets go of it)
+export const flying = { active: false, lookedAt: -Infinity, release: null, at: null }; // the same, for anything flown (release: what lets go of it; at: () => where it is, for life/coins.js)
 // Sitting inside something that's carrying you along (a train carriage: see trains.js) — the view pinned to a spot that
 // moves with it, the mouse the only thing that does anything: a tripod rather than a set of controls.
 export const riding = { active: false, release: null }; // (release: what puts the view back outside)
@@ -159,14 +159,15 @@ const FLYING_KEYS = 'W/S to dive and climb · A/D to bank · Shift for power · 
 const FLYING_TOUCH = 'Stick to fly it · Run for power · Brake to slow';
 /**
  * @param {() => void} release - called to let go of whatever is being flown, when Esc or the exit button asks
- * @param {{keys?: string, touch?: string, kind?: 'flying'|'critter'}} [hint] - how it is flown, if not like an aeroplane (the start of the hint's line); kind: what energy it costs (see CHARGE_MS)
+ * @param {{keys?: string, touch?: string, kind?: 'flying'|'critter', at?: () => ?{x: number, y: number, z: number}}} [hint] - how it is flown, if not like an aeroplane (the start of the hint's line); kind: what energy it costs (see CHARGE_MS); at: where it is
  */
-export function startFlying(release, { keys = FLYING_KEYS, touch = FLYING_TOUCH, kind = 'flying' } = {}) {
+export function startFlying(release, { keys = FLYING_KEYS, touch = FLYING_TOUCH, kind = 'flying', at = null } = {}) {
   // (no people check, unlike the two above: an aircraft flies its schedule whether or not the town has anyone in it,
   // so its card is there to be clicked either way, and "Fly it" shouldn't be a button that does nothing)
   if (S.interactionMode !== 'move' || !beginCharge(kind)) return false;
   flying.active = true;
   flying.release = release;
+  flying.at = at;
   flying.lookedAt = -Infinity;
   held.clear();
   showHint(IS_TOUCH ? 'Flying' : 'Press <kbd>Esc</kbd> to stop flying',

@@ -258,6 +258,9 @@
 #   {felt = dined}            just finished a meal at a restaurant
 #   {felt = broke}            couldn't pay (£4) at a stall, pub, salon, clothes shop, convenience store or restaurant (see src/life/shop-money.js);
 #                             here.building says which shop, none at a stall (coffee, hot dog or beer, outdoors)
+#   {felt = leftmoney}        walked past coins dropped by someone who just died, and left them (not evil enough)
+#   {felt = lootedbody}       picked up coins dropped by someone who just died (only the evil do: src/life/coins.js)
+#   {felt = foundmoney}       picked up coins that had been lying on the ground a while, as if dropped by chance
 #   {felt = carcrash}         was inside when a car smashed through the wall; ran out as the building came down
 #   {felt = healed}          a MedBot just healed them back to full health (see src/life/medbot.js)
 #   {felt = party}            just turned up at a party (the Party button on a building's card, while you're inside it:
