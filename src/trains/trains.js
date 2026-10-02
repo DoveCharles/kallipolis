@@ -1647,6 +1647,7 @@ export function scaleNodeUi(camera) {
   S.zones.forEach(z => { if (z.outlineGroup && z.outlineGroup.visible) scaleGroup(z.markerGroup); });
 }
 
+const NODE_MARKER_GEO = new THREE.SphereGeometry(1.6,12,12); // (one for every marker: a city has thousands)
 export function rebuildRoadMarkers() {
   scene.remove(S.roadMarkerGroup); disposeObject(S.roadMarkerGroup);
   S.roadMarkerGroup = new THREE.Group();
@@ -1658,9 +1659,9 @@ export function rebuildRoadMarkers() {
     const n = roadNodes[id];
     if (!shown.has(id)) return;
     const color = isTrain && n.type==='station' ? TRAIN_STATION_NODE_COLOR : 0x3ddc97;
-    const m = new THREE.Mesh(new THREE.SphereGeometry(1.6,12,12), nodeUiMaterial(THREE.MeshBasicMaterial, { color }));
+    const m = new THREE.Mesh(NODE_MARKER_GEO, nodeUiMaterial(THREE.MeshBasicMaterial, { color }));
     m.position.set(n.x, isTrain ? trainNodeY(n) : 1.6, n.z);
-    m.userData = { nodeId:id, baseColor:color };
+    m.userData = { nodeId:id, baseColor:color, sharedGeometry:true };
     S.roadMarkerGroup.add(asNodeUi(m));
   });
   scene.add(S.roadMarkerGroup);

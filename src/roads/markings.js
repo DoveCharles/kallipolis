@@ -150,6 +150,21 @@ function buildRoadDetails() {
     const ax = dx*halfLen, az = dz*halfLen, bx = -dz*halfWid, bz = dx*halfWid;
     marks.addQuad({ x: cx-ax-bx, y: MARKING_Y, z: cz-az-bz }, { x: cx+ax-bx, y: MARKING_Y, z: cz+az-bz }, { x: cx+ax+bx, y: MARKING_Y, z: cz+az+bz }, { x: cx-ax+bx, y: MARKING_Y, z: cz-az+bz }, up);
   };
+  // the junctions within `pad` (≤ 6) of segment a→b, from a grid rather than every junction in the city
+  const CELL = 32, grid = new Map(), cellOf = v => Math.floor(v/CELL);
+  S.roadJunctions.forEach(j => {
+    for (let cx = cellOf(j.x - j.r - 6); cx <= cellOf(j.x + j.r + 6); cx++) for (let cz = cellOf(j.z - j.r - 6); cz <= cellOf(j.z + j.r + 6); cz++) {
+      const k = cx + ',' + cz;
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(j);
+    }
+  });
+  const junctionsNear = (a, b, pad) => {
+    const found = new Set();
+    for (let cx = cellOf(Math.min(a.x, b.x)); cx <= cellOf(Math.max(a.x, b.x)); cx++) for (let cz = cellOf(Math.min(a.z, b.z)); cz <= cellOf(Math.max(a.z, b.z)); cz++)
+      (grid.get(cx + ',' + cz) || []).forEach(j => found.add(j));
+    return [...found].filter(j => distPointSegment(j, a, b) < j.r + pad);
+  };
   const paintLine = (p, q, halfWidth) => {
     const len = Math.hypot(q.x - p.x, q.z - p.z);
     if (len > 1e-4) paintRect((p.x + q.x)/2, (p.z + q.z)/2, (q.x - p.x)/len, (q.z - p.z)/len, len/2, halfWidth);
@@ -167,7 +182,7 @@ function buildRoadDetails() {
       for (let i=0;i<edge.length-1;i++) {
         const pa = edge[i], pb = edge[i+1], len = Math.hypot(pb.x - pa.x, pb.z - pa.z);
         if (len < 1e-4) continue;
-        const near = S.roadJunctions.filter(j => distPointSegment(j, pa, pb) < j.r + 1);
+        const near = junctionsNear(pa, pb, 1);
         outsideCircles(pa, pb, near.map(j => ({ x: j.x, z: j.z, R: j.r + 0.3 }))).forEach(([t0, t1]) => {
           const e0 = t0 < 1e-6 && i > 0 ? 0.09/len : 0, e1 = t1 > 1 - 1e-6 && i < edge.length-2 ? 0.09/len : 0;
           paintLine(at(pa, pb, t0 - e0), at(pa, pb, t1 + e1), 0.09);
@@ -178,7 +193,7 @@ function buildRoadDetails() {
     for (let i=0;i<pts.length-1;i++) {
       const a = pts[i], b = pts[i+1], len = Math.hypot(b.x - a.x, b.z - a.z);
       if (len < 1e-4) continue;
-      const near = S.roadJunctions.filter(j => distPointSegment(j, a, b) < j.r + 6);
+      const near = junctionsNear(a, b, 6);
       // center dashes, up to the stop lines
       if (hw*2 >= 6) {
         for (let k = Math.floor(along/PERIOD); k*PERIOD < along + len; k++) {

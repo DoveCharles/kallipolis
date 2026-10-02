@@ -3,7 +3,8 @@ import { S, App } from '../core/shared.js';
 import { camera, renderer, snapPointToGrid, Y_PREVIEW } from '../core/scene.js';
 import { controls } from '../core/camera-controls.js';
 import { IS_TOUCH } from '../core/device.js';
-import { ROAD_COLOR } from '../core/splines.js';
+import { ROAD_COLOR, tessellateClosedPath } from '../core/splines.js';
+import { pointInPolygon } from '../core/math.js';
 import { roadNodes, mapImages, DEFAULT_ZONE_SETTINGS } from '../core/state.js';
 import { setSelectedMap, setMapHover, startMapTransform, applyMapTransform, confirmMapTransform, cancelMapTransform, previewLine } from '../maps/map-images.js';
 import { SIDEWALK_COLOR, setLinePoints, roadLineWidths } from '../roads/roads.js';
@@ -13,7 +14,7 @@ import { moveRoadDragPreview, endRoadDragPreview, showDrawingPreview, endDrawing
 import { isTrainLine, isTrainNode, networkKindOf, pathTypeOf, currentPathType, trainNodeY, trainPlanePoint, dragTrainPoint, findNearestTrainEdge } from '../trains/trains.js';
 import { setHover, insertPreviewMarker, updateInsertPreviewGeometry, findNearestEdge, insertNodeOnEdge } from './hover.js';
 import { rebuildZoneVisual } from '../zones/zone-visuals.js';
-import { subdivideZone, subdivideZonesFrom } from '../zones/cutouts.js';
+import { subdivideZone, subdivideZonesFrom, zoneRedoneBelow } from '../zones/cutouts.js';
 import { selectItem, deleteRoadNode, deleteZoneVertex, renderHierarchy } from '../ui/panels.js';
 import { cancelActiveDrawing, closeActiveZone, finishActiveDrawing } from './tools.js';
 import { addObject, applyObjectTransform, cancelObjectTransform, clickObject, confirmObjectTransform, dragObjectTo, endObjectTurn, moveObjectGhost, pickObjectAt, pickObjectRing, removeObject, selectObject, startObjectDrag, startObjectTransform, startObjectTurn, turnObjectTo } from '../objects/objects.js';
@@ -154,15 +155,40 @@ export function zonesNearPath(ids, line) {
 // either. Suburbs lay their streets along roads up to STREET_REACH outside them; everything else only minds roads
 // crossing it or running just along its edge (ZONE_CUTOUT_REACH, plus a fence's inset).
 const SUBURB_STREET_REACH = 90, NEAR_ZONE_REACH = App.ZONE_CUTOUT_REACH + 6;
-function zoneNearBoxes(zone, boxes) {
-  if (zone.points.length < 3) return false;
-  const reach = zone.zoneType === 'suburbs' ? SUBURB_STREET_REACH : NEAR_ZONE_REACH;
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+// the box round zone `zone`'s outline, handles included; null if it isn't one yet
+function zoneBox(zone) {
+  if (zone.points.length < 3) return null;
+  const b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
   zone.points.forEach(p => [p, p.handleIn, p.handleOut].forEach(q => {
     if (!q) return;
-    minX = Math.min(minX, q.x); maxX = Math.max(maxX, q.x); minZ = Math.min(minZ, q.z); maxZ = Math.max(maxZ, q.z);
+    b.minX = Math.min(b.minX, q.x); b.maxX = Math.max(b.maxX, q.x); b.minZ = Math.min(b.minZ, q.z); b.maxZ = Math.max(b.maxZ, q.z);
   }));
-  return boxes.some(b => b && b.minX <= maxX + reach && b.maxX >= minX - reach && b.minZ <= maxZ + reach && b.maxZ >= minZ - reach);
+  return b;
+}
+function zoneNearBoxes(zone, boxes) {
+  const zb = zoneBox(zone);
+  if (!zb) return false;
+  const reach = zone.zoneType === 'suburbs' ? SUBURB_STREET_REACH : NEAR_ZONE_REACH;
+  const near = boxes.filter(b => b && b.minX <= zb.maxX + reach && b.maxX >= zb.minX - reach && b.minZ <= zb.maxZ + reach && b.maxZ >= zb.minZ - reach);
+  if (!near.length) return false;
+  // boxes only overlap: does the outline itself come within reach? (a big or L-shaped zone's box takes in a lot it doesn't)
+  const poly = tessellateClosedPath(zone.points);
+  return near.some(b => polyNearBox(poly, { minX: b.minX - reach, maxX: b.maxX + reach, minZ: b.minZ - reach, maxZ: b.maxZ + reach }));
+}
+// whether closed outline `poly` overlaps box `r`: an edge through it, or the box inside the outline
+function polyNearBox(poly, r) {
+  for (let i = 0; i < poly.length; i++) if (segmentHitsBox(poly[i], poly[(i+1) % poly.length], r)) return true;
+  return pointInPolygon({ x: (r.minX + r.maxX)/2, z: (r.minZ + r.maxZ)/2 }, poly);
+}
+function segmentHitsBox(a, b, r) { // (Liang–Barsky)
+  let t0 = 0, t1 = 1;
+  const dx = b.x - a.x, dz = b.z - a.z;
+  for (const [p, q] of [[-dx, a.x - r.minX], [dx, r.maxX - a.x], [-dz, a.z - r.minZ], [dz, r.maxZ - a.z]]) {
+    if (p === 0) { if (q < 0) return false; continue; }
+    const t = q/p;
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return true;
 }
 // a node let go of after being moved: rebuild what it's part of, and reselect it
 function commitNodeDrag(dn) {
@@ -180,7 +206,13 @@ function commitNodeDrag(dn) {
     if (line) selectItem(networkKindOf(line), line.networkId, true); else renderHierarchy();
   } else if (dn.kind === 'zone' || dn.kind === 'zoneHandle') {
     const zone = S.zones.find(z => z.id === dn.zoneId);
-    if (zone) { subdivideZonesFrom(zone); selectItem('zone', zone.id, true); } else renderHierarchy();
+    if (zone) {
+      // as subdivideZonesFrom, but only the zones near where it was or is now
+      const boxes = [dn.startBounds, zoneBox(zone)];
+      if (dn.startBounds) S.zones.forEach((z, i) => { if (z === zone || (zoneRedoneBelow(z, i, S.zones.indexOf(zone)) && zoneNearBoxes(z, boxes))) subdivideZone(z); });
+      else subdivideZonesFrom(zone);
+      selectItem('zone', zone.id, true);
+    } else renderHierarchy();
   }
 }
 // (only the nodes on show can be picked: a path's in the Paths tab, a zone's in the Zones tab)
@@ -296,6 +328,7 @@ dom.addEventListener('pointerdown', (e) => {
     } else {
       const picked = pickNodeOrHandle(e.clientX, e.clientY);
       if (picked && (picked.kind === 'road' || picked.kind === 'roadHandle')) picked.startBounds = roadNodeLinesBounds(picked.nodeId); // (see commitNodeDrag)
+      if (picked && (picked.kind === 'zone' || picked.kind === 'zoneHandle')) { const z = S.zones.find(z => z.id === picked.zoneId); picked.startBounds = z && zoneBox(z); }
       if (picked) S.draggedNode = picked;
       else { isCameraDragging = true; dragMode = e.shiftKey ? 'pan' : 'orbit'; }
     }

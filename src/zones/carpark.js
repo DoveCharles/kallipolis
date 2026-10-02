@@ -45,10 +45,11 @@ export function kerbDrops(strokes) {
   const drops = [], rects = [];
   S.zones.forEach(zone => {
     if (zone.zoneType !== 'carpark' || zone.drawing || zone.points.length < 3) return;
-    const poly = tessellateClosedPath(zone.points);
+    const poly = tessellateClosedPath(zone.points), box = boxOf(poly);
     strokes.forEach(s => {
       if (s.sw < 0.5) return;
-      const pts = s.path.map(p => ({ x: p.X/CLIPPER_SCALE, z: p.Y/CLIPPER_SCALE })), reach = s.hw + s.cw + s.sw + 0.6;
+      const pts = s.path.map(p => ({ x: p.X/CLIPPER_SCALE, z: p.Y/CLIPPER_SCALE })), reach = s.hw + s.cw + s.sw + 0.6, sb = boxOf(pts);
+      if (sb.minX > box.maxX + reach || sb.maxX < box.minX - reach || sb.minZ > box.maxZ + reach || sb.maxZ < box.minZ - reach) return; // (nowhere near)
       let run = [];
       const flush = () => { if (run.length >= 8) addDrop(zone, poly, run[run.length >> 1], s); run = []; };
       for (let i = 0; i < pts.length-1; i++) {
@@ -73,6 +74,11 @@ export function kerbDrops(strokes) {
     rects.push(toClipperPath([[-L, b0], [L, b0], [L, b1], [-L, b1]].map(([a, b]) => ({ x: d.x + d.tx*a + d.nx*b, z: d.z + d.tz*a + d.nz*b }))));
   }
   return { drops, rects };
+}
+function boxOf(pts) {
+  const b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
+  pts.forEach(p => { b.minX = Math.min(b.minX, p.x); b.maxX = Math.max(b.maxX, p.x); b.minZ = Math.min(b.minZ, p.z); b.maxZ = Math.max(b.maxZ, p.z); });
+  return b;
 }
 function closestOn(poly, p) {
   let best = null, bestD = Infinity;
