@@ -384,7 +384,7 @@ button.pc-pick:hover { text-decoration:underline; }
   content:''; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:left, right; mask-position:left, right; image-rendering:pixelated;
 }
 .entity-card .pc-value[data-mark="*"]::after {
-  -webkit-mask-image:url(../assets/icons/identify.png); mask-image:url(../assets/icons/identify.png);
+  -webkit-mask-image:url(../assets/icons/trait-lens.png); mask-image:url(../assets/icons/trait-lens.png);
   -webkit-mask-position:right; mask-position:right;
 }
 .entity-card .pc-value[data-mark="+"]::after {
