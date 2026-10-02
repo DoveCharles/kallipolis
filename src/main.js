@@ -60,6 +60,7 @@ import './ui/color-schemes.js';
 import './ui/ped-view.js';
 import './ui/ped-builder.js';
 import './ui/quests.js';
+import './ui/tech-tree.js';
 import './net/net.js';
 import './project/export-obj.js';
 import * as THREE from 'three';
@@ -172,8 +173,9 @@ function animate() {
   controls.update(false);
   skyDome.position.copy(camera.position);
   const t = performance.now()*0.001;
-  if (lastFrameT != null && (S.interactionMode !== 'move' || stillLoading())) worldClock.paused += t - lastFrameT; // (frozen under the loading screen too)
+  if (lastFrameT != null && (S.interactionMode !== 'move' || stillLoading() || S.techOpen)) worldClock.paused += t - lastFrameT; // (frozen under the loading screen too)
   lastFrameT = t;
+  if (S.techOpen) return; // (tech tree over everything: ui/tech-tree.js)
   const w = t - worldClock.paused;
   updateTrainShuttles(w);
   updateRoadDragPreview();

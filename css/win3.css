@@ -347,7 +347,7 @@ html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; 
     border-right:1px solid #fff; position:relative;
   }
   html.win3 #morality-meter .money { display:flex; align-items:center; justify-content:center; padding:0 12px; border-left:1px solid var(--w3-shadow); box-shadow:inset 1px 0 0 #fff; }
-  html.win3 #morality-meter :is(#btn-quests, #btn-daily-gift, #btn-identify) { flex:none; width:24px; height:22px; margin:0 2px; display:flex; align-items:center; justify-content:center; padding:0; }
+  html.win3 #morality-meter :is(#btn-tech, #btn-quests, #btn-daily-gift, #btn-identify) { flex:none; width:24px; height:22px; margin:0 2px; display:flex; align-items:center; justify-content:center; padding:0; }
   html.win3 #morality-meter #btn-identify { margin-right:6px; }
   /* money and energy: side by side, one etched line between */
   html.win3 #morality-meter :is(.money, .energy)::after { content:''; position:absolute; top:0; bottom:0; right:0; border-left:1px solid var(--w3-shadow); }
@@ -521,6 +521,71 @@ html.win3 #quests .w3-dialog-body { overflow:hidden; padding-bottom:12px; }
 .qs-body .qs-time { text-align:left; flex:1; }
 .qs-bounty b { color:#800000; }
 .qs-refuse { all:unset; cursor:pointer; padding:0 4px; font-weight:bold; }
+
+/* Tech tree (src/ui/tech-tree.js): everything under the toolbar, the rest hidden (body.tech-open) */
+body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, .tt-notice, .w3-dropdown, .w3-modal, script, svg) { visibility:hidden !important; }
+#btn-tech.on { box-shadow:var(--w3-pressed, inset 1px 1px 0 #808080); }
+#tech-tree {
+  position:fixed; top:var(--w3-below, 60px); left:4px; right:4px; bottom:4px; z-index:14; display:flex; flex-direction:column;
+  color:var(--w3-text, #000); font-family:var(--sans); font-size:11px;
+}
+#tech-tree[hidden] { display:none; }
+#tech-tree .tt-tabs { display:flex; padding:6px 8px 0; background:var(--w3-dither, #c0c0c0); border-bottom:1px solid var(--w3-frame, #000); }
+#tech-tree .tt-tab {
+  position:relative; height:20px; padding:0 18px; margin:0 0 -1px -6px; border:none; border-radius:0; background:var(--w3-frame, #000);
+  clip-path:polygon(0 100%, 7px 0, calc(100% - 7px) 0, 100% 100%); color:var(--w3-text, #000); font-size:11px;
+}
+#tech-tree .tt-tab:first-child { margin-left:0; }
+#tech-tree .tt-tab::before {
+  content:''; position:absolute; inset:1px 1px 1px; background:color-mix(in srgb, var(--w3-face, #c0c0c0) 45%, var(--w3-window, #fff));
+  clip-path:polygon(0 100%, 6.6px 0, calc(100% - 6.6px) 0, 100% 100%);
+}
+#tech-tree .tt-tab > span { position:relative; }
+#tech-tree .tt-tab.on { z-index:1; font-weight:700; }
+#tech-tree .tt-tab.on::before { bottom:0; background:var(--w3-window, #fff); }
+#tech-tree .tt-body { flex:1; display:flex; min-height:0; }
+#tech-tree .tt-tree {
+  flex:1; position:relative; overflow:auto;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='1' height='1' fill='%23d4d4d4'/%3E%3Crect x='2' y='2' width='1' height='1' fill='%23d4d4d4'/%3E%3C/svg%3E") var(--w3-window, #fff);
+}
+#tech-tree .tt-links { position:absolute; left:0; top:0; pointer-events:none; }
+#tech-tree .tt-links path { fill:none; stroke:var(--w3-frame, #000); stroke-width:2; stroke-dasharray:8 6; }
+#tech-tree .tt-node { position:absolute; width:220px; background:var(--w3-window, #fff); outline:1px solid var(--w3-frame, #000); box-shadow:2px 2px 0 var(--w3-frame, #000); cursor:pointer; user-select:none; }
+.tt-titlebar {
+  height:20px; display:flex; align-items:center; justify-content:center; font-weight:700; white-space:nowrap;
+  background:var(--w3-inactive, #8080c0); color:var(--w3-inactive-text, #000); border-bottom:1px solid var(--w3-frame, #000);
+}
+#tech-tree .tt-node.on .tt-titlebar, .tt-notice .tt-titlebar { background:var(--w3-title, #000080); color:var(--w3-title-text, #fff); }
+#tech-tree .tt-node-body { display:flex; height:52px; }
+#tech-tree .tt-icon { flex:0 0 52px; display:flex; align-items:center; justify-content:center; border-right:1px solid var(--w3-frame, #000); }
+#tech-tree .tt-icon img { width:32px; height:32px; image-rendering:pixelated; }
+#tech-tree .tt-info { flex:1; padding:6px 8px; display:flex; flex-direction:column; justify-content:center; gap:4px; font-weight:700; }
+#tech-tree .tt-cost, #tech-tree .tt-side-cost { display:flex; align-items:center; gap:3px; }
+#tech-tree .meter-icon { width:11px; height:11px; image-rendering:pixelated; }
+#tech-tree .tt-bar { height:4px; background:var(--w3-window, #fff); border-top:1px solid var(--w3-frame, #000); }
+#tech-tree .tt-bar > div { height:100%; background:#0060ff; }
+#tech-tree .tt-node.locked { filter:grayscale(1); opacity:0.5; }
+#tech-tree .tt-node.done .tt-time { color:#008000; }
+#tech-tree .tt-side {
+  flex:0 0 240px; display:flex; flex-direction:column; gap:8px; padding:12px; overflow-y:auto;
+  background:var(--w3-window, #fff); border-left:2px solid var(--w3-frame, #000); animation:tt-slide .15s ease-out;
+}
+#tech-tree .tt-side[hidden] { display:none; }
+@keyframes tt-slide { from { transform:translateX(100%); } }
+#tech-tree .tt-pic { height:140px; display:flex; align-items:center; justify-content:center; outline:1px solid var(--w3-frame, #000); background:var(--w3-face, #c0c0c0); }
+#tech-tree .tt-pic img { width:96px; height:96px; image-rendering:pixelated; }
+#tech-tree .tt-name { font-size:16px; font-weight:700; }
+#tech-tree .tt-text { margin:0; line-height:1.45; flex:1; }
+#tech-tree .tt-get { margin:0; padding:6px 12px; font-size:16px; font-weight:700; }
+#tech-tree .tt-side-time { font-weight:700; }
+#tech-tree .tt-side .tt-bar { height:8px; outline:1px solid var(--w3-frame, #000); border:none; }
+.tt-notice {
+  position:fixed; top:calc(var(--w3-below, 60px) + 12px); left:50%; transform:translateX(-50%); z-index:65; min-width:200px;
+  background:var(--w3-window, #fff); outline:1px solid var(--w3-frame, #000); box-shadow:2px 2px 0 var(--w3-frame, #000);
+  font-family:var(--sans); font-size:11px; color:var(--w3-text, #000); cursor:pointer;
+}
+.tt-notice-body { padding:10px 14px; text-align:center; font-weight:700; }
+
 /* world name (World window; Save asks for it) */
 #s-worldname, #w3-namebox { flex:1; width:100%; box-sizing:border-box; border:1px solid var(--w3-frame); background:var(--w3-window); color:var(--w3-text); font:inherit; padding:2px 4px; }
 /* the chronicle (View > Chronicle: life/chronicle.js) */
