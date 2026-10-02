@@ -194,6 +194,45 @@ Well, it's mine now. {felt = foundmoney}
 Always look down, that's what I say. {felt = foundmoney}
 Heads up! Nice. {felt = foundmoney, thought}
 That'll buy me a coffee. {felt = foundmoney, thought}
+Five second rule. {felt = scavenged}
+Nobody saw that. {felt = scavenged, thought}
+Shame to waste it. {felt = scavenged}
+Don't judge me. {felt = scavenged, patience = -1}
+Still warm. Mostly. {felt = scavenged, stimulants = 2}
+I need this more than they did. {felt = scavenged, stimulants = 2, thought}
+Waste not. Cheers! {felt = scavenged, alcoholic = 2}
+Never leave a man behind. Or a pint. {felt = scavenged, alcoholic = 2}
+It's practically full! {felt = scavenged, alcoholic = 2, thought}
+I'm not proud of this. {felt = scavenged, mood = -1, thought}
+Oooh, nice find! {felt = scavenged}
+Who would litter here? {felt = leftlitter}
+Some people. Honestly. {felt = leftlitter, patience = -1}
+Bin's right there. {felt = leftlitter, thought}
+I'm not touching that. {felt = leftlitter}
+Gross. {felt = leftlitter, thought}
+Littering's a crime, you know. {felt = leftlitter, conservative}
+Tempting, but no. {felt = leftlitter, alcoholic = 2, thought}
+Is that... still good? No. {felt = leftlitter, stimulants = 2, thought}
+Got it. Still good. {felt = reclaimed}
+Not wasting that. {felt = reclaimed}
+Phew. Barely spilled. {felt = reclaimed, thought}
+You're not getting away from me. {felt = reclaimed}
+I paid for that. {felt = reclaimed, patience = -1}
+Ugh, it's ruined. Better leave it. {felt = ruined}
+I didn't want that anyway. {felt = ruined}
+Well, that's gone. {felt = ruined, mood = -1}
+Four quid, on the floor. {felt = ruined, thought}
+Typical. {felt = ruined, patience = -1, thought}
+Yoink! {felt = snatched}
+Finders keepers, losers weepers! {felt = snatched}
+Too slow! {felt = snatched}
+Mine now. {felt = snatched, evil}
+Thanks, mate. Very kind. {felt = snatched, thought}
+Hey! That's mine! {felt = robbed}
+Oi! Give that back! {felt = robbed, aggression = 2}
+Unbelievable. {felt = robbed, patience = -1}
+I hope you choke on it. {felt = robbed, thought}
+You'd rob a man while he's down? {felt = robbed}
 
 Skint again. {felt = broke}
 Four quid? For that? {felt = broke, patience = -1}

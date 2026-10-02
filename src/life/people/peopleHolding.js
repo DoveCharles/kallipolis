@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { scene } from '../../core/scene.js';
-import { HEADSHOT_LAYER, PEOPLE_MAX, inRoom, isDrawn, lastPeopleTime, people, peopleRng, personModel } from './people.js';
+import { scene, camera } from '../../core/scene.js';
+import { HEADSHOT_LAYER, PEOPLE_MAX, feel, inRoom, isDrawn, isGone, standingOf, lastPeopleTime, people, peopleRng, personModel } from './people.js';
+import { possession } from '../possession.js';
+import { avengeTheft } from './peopleActivities.js';
 import { PERSON_ARM_SPREAD } from './peopleModel.js';
 import { eatingSound } from '../../audio/eating.js';
 import { STATUS_SOURCES, addStatus } from '../statuseffects.js';
@@ -422,7 +424,7 @@ export function snackClip(p, clip, dt) {
   const umbrella = snack.item === 'umbrella';
   // knocked down, dead or gone indoors (but for into the room you're in, as a pint in a pub is: see aboutTheRoom): it's gone
   if (p.punched || p.mode === 'dead' || (p.mode === 'indoors' && (!p.inRoom || umbrella)) || !p.holding?.includes(snack.held) || (umbrella && !raining())) {
-    if ((p.punched || p.mode === 'dead') && !umbrella && snack.mouthfuls > 0 && p.holding?.includes(snack.held)) dropToFloor(p, snack.held); // (knocked from their hand)
+    if ((p.punched || p.mode === 'dead') && !umbrella && snack.mouthfuls > 0 && p.holding?.includes(snack.held)) dropToFloor(p, snack.held, p.mode !== 'dead'); // (knocked from their hand)
     dropSnack(p);
     return clip;
   }
@@ -552,9 +554,13 @@ function armShift(out, p, i, hand) {
 // ============== DROPPED ==============
 // A snack not finished when another's handed over, or they're punched or killed, falls from their hand (dropToFloor) and
 // tumbles as a box on the flat ground at their feet — gravity, bouncing off its corners, friction — so a cup or a pint can
-// land upright or fall over; it lies there DROPPED_TIME seconds.
+// land upright or fall over; it lies there DROPPED_TIME seconds, longer while in view. Knocked from their hand, the owner, once up, usually
+// goes back for it (RETURN_SHARE, p.fetch: a goal in people.js; felt 'reclaimed'), else leaves it ('ruined'). Passers-by
+// with free hands may pick it up and carry on with it (scavenge, 'scavenged'): most won't touch it ('leftlitter'), likelier for a coffee the more
+// they crave stimulants, a pint alcohol. While its owner's about, only the evil take it (snatched; the owner 'robbed',
+// and once up, their revenge roll: avengeTheft in peopleActivities.js).
 // BODIES: each one's box, half its size in metres (as ITEMS' are) once turned by `turn` from how it's held to how it stands.
-const DROPPED_TIME = 30, DROPPED_MAX = 64, DROP_FROM = [0, 1, -0.25]; // (where it leaves them: metres, their frame)
+const DROPPED_TIME = 180, DROPPED_MAX = 64, DROP_FROM = [0, 1, -0.25]; // (where it leaves them: metres, their frame)
 const BODIES = {
   hotdog: { half: [0.03, 0.025, 0.0875], turn: [Math.PI/2, 0, 0] },
   coffee: { half: [0.055, 0.083, 0.055] },
@@ -563,13 +569,78 @@ const BODIES = {
   slice: { half: [0.06, 0.008, 0.085], turn: [-Math.PI/2, 0, 0] },
   skewer: { half: [0.016, 0.014, 0.085], turn: [-Math.PI/2, 0, 0] },
 };
+const SCAVENGE_EVERY = 0.25, SCAVENGE_REACH = 0.6, SCAVENGE_BASE = 0.02, SCAVENGE_MAX = 0.8; // (s; m at people size 1; chance)
+const RETURN_SHARE = 0.75, RETURN_REACH = 8, FETCH_TIME = 8; // (m at people size 1; s to get there)
+const SNATCH_PER_EVIL = 0.8, AVENGE_WITHIN = 10; // (chance per point of evil; s the owner has to get up and go after them)
+// how much likelier each trait point over the usual 1 makes it, by item
+// TODO: food (hotdog, slice, skewer) by hunger, once there is any
+const SCAVENGE_CRAVE = { coffee: ['stimulants', 0.05], beer: ['alcoholic', 0.07] };
+function scavengeChance(p, item) {
+  const [trait, per] = SCAVENGE_CRAVE[item] ?? [];
+  return Math.min(SCAVENGE_MAX, SCAVENGE_BASE + (trait ? Math.max(0, (p.traits[trait] ?? 1) - 1)*per : 0));
+}
+// dropped[k] gone (picked up or lain too long): whoever was going back for it stops
+function unDrop(k) {
+  const d = dropped.splice(k, 1)[0];
+  if (d.owner?.fetch === d.fetch) d.owner.fetch = null;
+}
+function takeUp(p, k) {
+  const d = dropped[k];
+  unDrop(k);
+  giveSnack(p, d.item);
+  const snack = p.snack;
+  snack.mouthfuls = Math.max(1, Math.round(SNACKS[d.item].mouthfuls*d.frac));
+  if (ITEMS[d.item].parts[0].eaten) snack.held.left = d.left;
+  if (d.item === 'beer') snack.held.stout = d.shape === 'stout';
+}
+const free = (p, i) => i !== possession.index && !p.holding?.length && !p.punched && !p.fall && !p.act && !isGone(p) && isDrawn(p);
+const within = (d, p, reach) => (d.pos.x - p.x)**2 + (d.pos.z - p.z)**2 < reach*reach && Math.abs(d.ground - p.y) < 1;
+let scavengeIn = 0;
+const avengers = []; // {p, thief, by}: robbed while down, waiting to get up
+function scavenge(now) {
+  for (let k = avengers.length - 1; k >= 0; k--) {
+    const a = avengers[k];
+    if (isGone(a.p) || now > a.by) avengers.splice(k, 1);
+    else if (!a.p.punched && !a.p.fall) { avengers.splice(k, 1); avengeTheft(a.p, a.thief); }
+  }
+  const reach = SCAVENGE_REACH*S.peopleSize;
+  for (let k = dropped.length - 1; k >= 0; k--) {
+    const d = dropped[k];
+    if (!d.still || d.item === 'cig') continue;
+    // its owner's, while they're getting up or going back for it
+    const o = d.owner;
+    if (o) {
+      const i = people.indexOf(o);
+      if (i < 0 || isGone(o) || (d.fetch && (o.fetch !== d.fetch || now > d.fetchBy))) { if (o.fetch === d.fetch) o.fetch = null; d.owner = null; continue; }
+      if (!d.fetch && !(o.punched || o.fall || i === possession.index)) { // (up, and not yours: decides)
+        if (o.holding?.length || !within(d, o, RETURN_REACH*S.peopleSize) || peopleRng() >= RETURN_SHARE) { feel(o, 'ruined'); d.owner = null; continue; }
+        o.fetch = d.fetch = { x: d.pos.x, y: d.ground, z: d.pos.z }; d.fetchBy = now + FETCH_TIME;
+        continue;
+      }
+      if (d.fetch && within(d, o, reach) && free(o, i)) { takeUp(o, k); feel(o, 'reclaimed'); continue; }
+    }
+    for (let i = 0; i < people.length; i++) {
+      const p = people[i];
+      if (p === o || d.passed.has(p) || !free(p, i) || !within(d, p, reach)) continue;
+      d.passed.add(p); // (each decides once)
+      const evil = standingOf(p) !== 'innocent';
+      if (o && !evil) continue;
+      if (peopleRng() >= Math.min(SCAVENGE_MAX, scavengeChance(p, d.item) + (o ? SNATCH_PER_EVIL*p.traits.evil : 0))) { if (!o) feel(p, 'leftlitter'); continue; }
+      takeUp(p, k);
+      if (o) { feel(p, 'snatched', o); feel(o, 'robbed', p); avengers.push({ p: o, thief: p, by: now + AVENGE_WITHIN }); }
+      else feel(p, 'scavenged');
+      break;
+    }
+  }
+}
 const DROP_GRAVITY = 9.8, BOUNCE = 0.25, GRIP = 0.4, SETTLE = 0.05, DROP_STEPS = 4;
-const dropped = []; // {shape, left, light, until, scale, ground, half, pos, vel, spin, turn, rest: Quaternion}, oldest first
+const dropped = []; // {item, frac, passed, owner, fetch, fetchBy, shape, left, light, until, scale, ground, half, pos, vel, spin, turn, rest: Quaternion}, oldest first
 let droppedAt = null;
 const yAxis = new THREE.Vector3(0, 1, 0), corner = new THREE.Vector3(), arm = new THREE.Vector3(), pointVel = new THREE.Vector3(), push = new THREE.Vector3();
 const spinTurn = new THREE.Quaternion();
 const layFlat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI/2, 0, 0)), PIZZA_SLICE_Y = 0.016; // (a slice on the tray: cheese up)
-function dropToFloor(p, held) {
+// (knocked: out of their hand by a blow or a fall, so they may come back for it)
+function dropToFloor(p, held, knocked = false) {
   const i = people.indexOf(p), body = BODIES[held.item], item = ITEMS[held.item];
   if (!personModel || i < 0 || !body || !item) return;
   personModel.mesh.getMatrixAt(i, instance);
@@ -578,7 +649,9 @@ function dropToFloor(p, held) {
   const scale = place.setFromMatrixColumn(world, 0).length(), ground = place.setFromMatrixPosition(world).y;
   const facing = new THREE.Quaternion().setFromRotationMatrix(part.extractRotation(world));
   const left = item.parts[0].eaten ? held.left : 1, r = () => peopleRng() - 0.5;
+  const frac = p.snack?.held === held ? p.snack.mouthfuls/SNACKS[held.item].mouthfuls : 1; // (what's left of it, for scavenge)
   dropped.push({
+    item: held.item, frac, passed: new WeakSet(), owner: knocked ? p : null,
     shape: item.parts[0].shape === 'beer' && held.stout ? 'stout' : item.parts[0].shape, left, light: inRoom(p) ? 'lit' : 'plain',
     until: (lastPeopleTime ?? 0) + DROPPED_TIME, scale, ground, size: item.parts[0].size,
     half: new THREE.Vector3(...body.half).multiplyScalar(scale).multiply(new THREE.Vector3(1, 1, body.turn ? Math.max(0.2, left) : 1)),
@@ -588,7 +661,7 @@ function dropToFloor(p, held) {
     turn: facing.clone().multiply(spinTurn.setFromAxisAngle(yAxis, peopleRng()*Math.PI*2)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(r()*0.8, 0, r()*0.8))),
     rest: new THREE.Quaternion().setFromEuler(new THREE.Euler(...(body.turn ?? [0, 0, 0]))),
   });
-  if (dropped.length > DROPPED_MAX) dropped.shift();
+  if (dropped.length > DROPPED_MAX) unDrop(0);
 }
 // One step of a dropped thing: falling and turning, then pushed back up out of the ground at each corner under it (an
 // impulse at that corner, which is what tips it over), sliding to a stop.
@@ -617,10 +690,12 @@ function stepDropped(d, dt) {
   if (deepest > 0) d.pos.y += deepest;
   if (deepest > 0 && d.vel.lengthSq() < (SETTLE*d.scale)**2 && d.spin.lengthSq() < SETTLE) { d.vel.set(0, 0, 0); d.spin.set(0, 0, 0); d.still = true; }
 }
+const inView = d => { const v = arm.copy(d.pos).project(camera); return v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1; };
 function updateDropped() {
   const now = lastPeopleTime ?? 0, dt = Math.min(0.05, Math.max(0, now - (droppedAt ?? now)));
   droppedAt = now;
-  while (dropped.length && dropped[0].until <= now) dropped.shift();
+  for (let k = dropped.length - 1; k >= 0; k--) if (dropped[k].until <= now && !inView(dropped[k])) unDrop(k); // (never while watched)
+  if ((scavengeIn -= dt) <= 0) { scavengeIn = SCAVENGE_EVERY; scavenge(now); }
   for (const d of dropped) {
     if (!d.still && dt > 0) for (let n = 0; n < DROP_STEPS; n++) stepDropped(d, dt/DROP_STEPS);
     part.compose(d.pos, turn.copy(d.turn).multiply(d.rest), size.set(...d.size).multiplyScalar(d.scale));

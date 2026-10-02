@@ -1568,6 +1568,7 @@ export function updatePeople(t) {
     }
     // walking with someone: beside them, going where they go (see "walking together" in peopleActivities.js)
     if (p.follow) goal = frozen ? null : p.miniOf ? miniSpot(p) : besideLeader(p); // (a piper's mini: in formation, see peopleMinis.js)
+    if (p.fetch && !possessed && !p.attack && !p.swat) goal = frozen ? null : p.fetch; // (back for something they dropped: see peopleHolding.js)
     // in a plaza, walk around its fountain rather than through the pool: while the straight line to where they're going
     // passes over it, head instead for the point on its rim nearest that line — which moves round as they do
     const hangout = (p.mode === 'wander' || p.mode === 'leaving') && p.area >= 0 ? peopleNav.areas[p.area] : null;
