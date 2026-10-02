@@ -1,4 +1,4 @@
-import { scene } from '../core/scene.js';
+import { scene, camera, renderer } from '../core/scene.js';
 import { S, buildingHolders } from '../core/shared.js';
 import { people, personModel, standingOf, PEOPLE_MAX } from '../life/people/people.js';
 import { PERSON_TRAIT_COLORS } from '../life/people/peopleModel.js';
@@ -38,7 +38,8 @@ const LUMA = 'float pedLuma = dot(clamp(gl_FragColor.rgb, 0.0, 1.0), vec3(0.299,
 // rarely enough that walking the whole scene graph doesn't show
 const RESCAN = 0.3;
 
-let on = false, scannedAt = -Infinity;
+let on = false, scannedAt = -Infinity, warmed = false, warming = null;
+let tintedGroups = new Map(); // building group -> its tint, as of the last look
 const variants = new Map(); // original material -> { grey, yellow }: its copy per tint
 const swapped = new Set();  // every mesh whose material we've swapped, to put back when the mode goes off
 
@@ -145,7 +146,7 @@ function markVillains() {
  */
 function repaint() {
   markVillains();
-  const occupied = occupiedBuildings(), groupTints = new Map();
+  const occupied = occupiedBuildings(), groupTints = tintedGroups = new Map();
   buildingHolders().forEach(zone => (zone.buildingsGroup?.children || []).forEach((group, index) => {
     const tint = occupied.get(zone.id + ':' + index);
     if (tint) groupTints.set(group, tint);
@@ -169,13 +170,51 @@ function repaint() {
  * @returns {void}
  */
 export const pedViewOn = () => on;
+// (a building lit up yellow or red: building-batches.js draws it on its own, the rest of its zone staying merged, in grey)
+export const pedViewTinted = group => on && tintedGroups.has(group);
+// a merged mesh handed a new material by building-batches.js: grey again, if the mode's on
+export function pedViewRepaint(mesh) {
+  delete mesh.userData.pedViewMaterial;
+  if (on) paint(mesh, 'grey'); else swapped.delete(mesh);
+}
 export function updatePedView(t) {
   if (!on || t - scannedAt < RESCAN) return;
   scannedAt = t;
   repaint();
 }
 
+const WARM_MS = 8; // compiling per frame, at most (bar one shader)
+/**
+ * Compile the tinted shaders of everything drawn, a few ms a frame, the meshes keeping their own colors meanwhile.
+ * @returns {Promise<void>}
+ */
+async function warmUp() {
+  repaint();
+  const tinted = [];
+  scene.traverseVisible(o => { if (swapped.has(o)) tinted.push([o, o.material]); });
+  [...swapped].forEach(mesh => paint(mesh, null));
+  const pending = [];
+  for (let i = 0; i < tinted.length;) {
+    const start = performance.now();
+    while (i < tinted.length && performance.now() - start < WARM_MS) {
+      const [mesh, material] = tinted[i++], own = mesh.material;
+      mesh.material = material;
+      // (just this mesh: compile() walks all of what it's given, hidden ones too, and the scene has tens of thousands)
+      pending.push(renderer.compileAsync({ traverse: fn => fn(mesh), traverseVisible: () => {} }, camera, scene));
+      mesh.material = own;
+    }
+    await new Promise(requestAnimationFrame);
+  }
+  await Promise.all(pending);
+}
+
 function setPedView(v) {
+  // the first time on, the tinted shaders are compiled in the background (seconds' worth, done while drawing would freeze
+  // the page) with the old colors still showing, and the mode comes on once they're ready
+  if (v && !warmed) {
+    if (!warming) warming = warmUp().catch(() => {}).finally(() => { warmed = true; warming = null; setPedView(true); });
+    return;
+  }
   on = v;
   scannedAt = -Infinity;
   button.classList.toggle('on', on);

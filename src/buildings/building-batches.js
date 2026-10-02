@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { S, buildingHolders } from '../core/shared.js';
 import { scene, computeWindowGlowFactor } from '../core/scene.js';
 import { createBatchedWindowMaterial, addBaseShade } from './windows.js';
-import { pedViewOn } from '../ui/ped-view.js';
+import { pedViewTinted, pedViewRepaint } from '../ui/ped-view.js';
 
 // ============================================================ merged buildings
 // A city block's buildings are each a handful of meshes with materials of their own (every building has its own color,
@@ -17,8 +17,8 @@ import { pedViewOn } from '../ui/ped-view.js';
 // drawn). A building that has to be drawn on its own — one the camera's inside and has faded (see-through.js), or one
 // hidden (a building gone into, and its neighbours: interior.js) — is cut out of its zone's merged meshes (each building
 // is one run of each merged mesh's triangles, left out through the geometry's draw groups) and its own parts drawn
-// instead, for as long as it lasts; the rest of the zone stays merged. Ped view, which tints every building its own way,
-// hands the whole zone back.
+// instead, for as long as it lasts; the rest of the zone stays merged. Ped view cuts out the buildings it lights up
+// the same way, the merged rest drawn grey.
 //
 // Left out, and drawn as they were: see-through surfaces (glass domes, balcony rails — they're sorted back to front one
 // by one), blinking lights (animated), and anything not built with a plain MeshStandardMaterial.
@@ -211,13 +211,14 @@ function showOriginals(entry, all, apart) {
     mesh.visible = !all;
     const geo = mesh.geometry, cut = cuts.get(mesh);
     geo.clearGroups();
-    if (!cut) { mesh.material = mesh.userData.batchMaterial; return; }
+    if (!cut) { mesh.material = mesh.userData.batchMaterial; pedViewRepaint(mesh); return; }
     // what's left between the runs cut out, drawn as groups of one material (a mesh with an array of materials draws
     // its geometry's groups only)
     let at = 0;
     cut.sort((a, b) => a[0] - b[0]).forEach(([start, end]) => { if (start > at) geo.addGroup(at, start - at, 0); at = end; });
     if (geo.index.count > at) geo.addGroup(at, geo.index.count - at, 0);
     mesh.material = [mesh.userData.batchMaterial];
+    pedViewRepaint(mesh);
   });
 }
 
@@ -235,7 +236,7 @@ export function updateBuildingBatches() {
     let entry = zoneBatches.get(zone);
     if (entry && (entry.source !== source || entry.count !== source.children.length)) { unbatchZone(entry); entry = null; }
     if (!entry) { entry = batchZone(zone); zoneBatches.set(zone, entry); }
-    showOriginals(entry, pedViewOn(), source.children.filter(g => g.userData.batchable && (!g.visible || g.userData.seeThrough != null)));
+    showOriginals(entry, false, source.children.filter(g => g.userData.batchable && (!g.visible || g.userData.seeThrough != null || pedViewTinted(g))));
   }
   zoneBatches.forEach((entry, zone) => { if (!live.has(zone)) { unbatchZone(entry); zoneBatches.delete(zone); } });
 }

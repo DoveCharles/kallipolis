@@ -52,6 +52,7 @@ import { slideOff, stepFall } from './peopleFall.js';
 import { updateErratic } from './peopleErratic.js';
 import { aimPrayerView, prayerDue, prayerViewing, sweepPrayers, updatePrayer } from './peoplePrayer.js';
 import { beginEmotes, updateEmotes } from './peopleEmotes.js';
+import { stillLoading } from '../../ui/loading.js';
 import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, updatePossessedTarget, useFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
 export { loadPersonModel } from './peopleModel.js';
 
@@ -1299,7 +1300,9 @@ export function updatePeople(t) {
   if (followed >= 0 && (!S.peopleEnabled || S.interactionMode !== 'move')) stopFollowingPerson();
   if (followedInside && !App.isInsideBuilding()) stopFollowingPerson(); // (picked in a room since left)
   peopleMesh.visible = S.peopleEnabled && !personModel;
-  if (personModel) { [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; }); personModel.censor.visible = S.peopleEnabled; [...personModel.spirits, ...personModel.spiritWorn].forEach(m => { m.visible = S.peopleEnabled; }); personModel.time.value = worldNow(); }
+  // (shown under the loading screen too, so their shaders are compiled there rather than on first switching peds on)
+  const shown = S.peopleEnabled || stillLoading();
+  if (personModel) { [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = shown; }); personModel.censor.visible = shown; [...personModel.spirits, ...personModel.spiritWorn].forEach(m => { m.visible = shown; }); personModel.time.value = worldNow(); }
   peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
   if (!S.peopleEnabled) { showPassengers(); showInhabitants(); updateFlies(0); return; }
   pruneGone(people, t, forgetLinesExcept); // (relations and recent lines of the gone)
