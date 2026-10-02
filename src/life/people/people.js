@@ -505,7 +505,7 @@ export function syncPeopleUI() {
 // (see the end of newPerson)
 const PERSON_LATER_FIELDS = Object.fromEntries([
   // who they are (refreshTraits), how they look (updatePeople)
-  'health', 'walletSet', 'moodNow', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'spectralKey', 'groomKey', 'showsBald', 'showsBeard', 'vanished', 'vanishUntil', 'shyCount', 'shyArmed', 'shyPhase', 'shyAt', 'chattingWithTwin', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
+  'health', 'walletSet', 'moodNow', 'keptAt', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'spectralKey', 'groomKey', 'showsBald', 'showsBeard', 'vanished', 'vanishUntil', 'shyCount', 'shyArmed', 'shyPhase', 'shyAt', 'chattingWithTwin', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
   // what they say and think
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
   'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate', 'feet',
@@ -584,7 +584,18 @@ export function newPerson(id = S.peopleIdSeq++) {
 function bornPerson(kp) {
   const p = newPerson(kp?.id);
   if (kp?.moodNow != null) p.moodNow = kp.moodNow;
+  if (Array.isArray(kp?.at) && kp.at.length === 4 && kp.at.every(Number.isFinite)) p.keptAt = kp.at;
   return p;
+}
+// Someone saved (see peopleKeep.js) put back where they were, once spawned: in the hangout that spot's in, else on the
+// nearest walkway to it (reseatPerson), else wherever spawnPerson put them.
+function placeKept(p) {
+  const at = p.keptAt;
+  if (!at || p.mode === 'none') return; // (not spawned yet: kept till they are)
+  p.keptAt = undefined;
+  [p.x, p.y, p.z, p.heading] = at;
+  p.mode = p.y > 1 ? 'line' : 'wander'; // (the hangout first, or a raised walkway: see reseatPerson)
+  reseatPerson(p);
 }
 
 /**
@@ -1328,6 +1339,7 @@ export function updatePeople(t) {
     presentIds.add(p.id);
     personModel?.assignAppearance(people.length, p.id);
     spawnPerson(p);
+    placeKept(p);
     people.push(p);
   }
   while (people.length > kept) endActivity(people.pop());
@@ -1374,7 +1386,7 @@ export function updatePeople(t) {
     const dt = frameDt + (p.lazyDt ?? 0);
     p.lazyDt = 0;
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
-    if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
+    if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) { spawnPerson(p); placeKept(p); }
     refreshTraits(p, i);
     if (p.skinKey !== skinKeyOf(p) || p.spectralKey !== spectralOf(p)) tintSkin(p, i); // (a keepsake or status that's just moved the skin's traits: see tintSkin)
     if (p.traits.ghost || p.shyPhase) shyGhost(p, i, p.mode === 'possessed'); // (gone when you come near, the first few times)

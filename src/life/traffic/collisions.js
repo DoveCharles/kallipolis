@@ -490,6 +490,17 @@ const SEAT_TRIES = 3; // (car-lengths either way along the lane it looks for a f
 // It rejoins ahead of where it is along its way (SEAT_AHEAD × how far off the road it is, at least a car length), so it
 // merges back at a shallow angle the way it's facing rather than turning round to where it was knocked from.
 const SEAT_AHEAD = 2;
+/**
+ * A saved car (see carKeep.js) put back where it was: on the nearest lane to its spot, going the way it faced. Clears it.
+ * @param {object} car - with keptAt [x, z, heading]
+ * @returns {void}
+ */
+export function seatSavedCar(car) {
+  const at = car.keptAt;
+  car.keptAt = undefined;
+  const spot = at && S.trafficNav?.lines.length ? nearestLaneSpot(at[0], at[1], at[2]) : null;
+  if (spot) { car.plan = null; carJoinLane(car, spot.li, spot.u, spot.dir); }
+}
 export function seatKickedCar(car, realX, realZ, avoid = null) {
   const k = car.kick, spot = nearestLaneSpot(realX, realZ, k.heading, avoid);
   if (!spot) return false;

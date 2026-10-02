@@ -6,7 +6,7 @@ import { navRebuildOnHold } from '../../roads/roads.js';
 import { placeKey } from '../../roads/markings.js';
 import { updateEngines } from '../../audio/engine.js';
 import { carTypeOf } from '../car-types.js';
-import { BLAST_THROW, burnFuse, DETONATION_REACH, swayCrash, inCarsWay, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars } from './collisions.js';
+import { BLAST_THROW, burnFuse, DETONATION_REACH, swayCrash, inCarsWay, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars, seatSavedCar } from './collisions.js';
 import { boostMax, driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, rechargeBoost, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
 import { chaseCamera, updateCarRevive, respawnFromWater, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
 import { crowdGrid } from '../../core/math.js';
@@ -99,14 +99,14 @@ export function updateTraffic(t) {
   const wanted = Math.min(TRAFFIC_MAX, Math.round(S.trafficAmount), S.trafficNav.capacity);
   // (saved traffic come in replaces this: see carKeep.js — not while one's being driven)
   if (!drivenCar && takeCarReset()) { stopFollowingCar(); cars.length = 0; }
-  while (cars.length < wanted) { const car = keptCar(newCar()); spawnCar(car); cars.push(car); } // (a saved car back, else a new one)
+  while (cars.length < wanted) { const car = keptCar(newCar()); spawnCar(car); if (car.keptAt && car.li >= 0) seatSavedCar(car); cars.push(car); } // (a saved car back, where it was, else a new one)
   if (cars.length > wanted) benchCars(cars.splice(wanted)); // (to come back first when there's room)
   if (followedCar >= cars.length) stopFollowingCar();
   carParts.all.forEach(mesh => { mesh.count = cars.length; });
   // who's in front of whom: cars in the same lane going the same way, in order along it
   const lanes = new Map();
   cars.forEach(car => {
-    if (car.li < 0 && S.trafficNav.lines.length) spawnCar(car);
+    if (car.li < 0 && S.trafficNav.lines.length) { spawnCar(car); if (car.keptAt && car.li >= 0) seatSavedCar(car); }
     car.ahead = null;
     if (car.li < 0 || car === drivenCar) return; // (the one being driven isn't in any lane — see "driving a car")
     const key = car.li*2 + (car.dir > 0 ? 1 : 0);

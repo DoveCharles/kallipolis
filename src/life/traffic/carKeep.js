@@ -7,7 +7,8 @@ import { isFavorite } from '../../ui/favorites.js';
 import { carTypeOf, pinCarType } from '../car-types.js';
 
 // ============================================================ the traffic kept between sessions
-// Every car on the roads, in order, saved as { v, cars: [{ design, number, paint, width, height, kept? }], numbers }: its
+// Every car on the roads, in order, saved as { v, cars: [{ design, number, paint, width, height, at?, kept? }], numbers }: its
+// where it was (`at`: [x, z, heading], put back on the nearest lane to it, see seatSavedCar in collisions.js);
 // design by name, its number within it (so its card and plate come back the same), and its paint. Destroyed cars aren't in
 // it, so they never come back; `numbers` keeps each design's count, so new cars never reuse a number. Cars thinned off the
 // roads wait at the front to come back first. The hearted also carry `kept`: their card and plate as they were, so
@@ -33,6 +34,7 @@ function entryOf(car) {
   const design = car.design != null ? carMeshes[car.design].name : car.keptDesign ?? null;
   const number = car.design != null ? car.number : car.keptNumber ?? null;
   const entry = { design, number, paint: car.paint.map(round), width: round(car.width), height: round(car.height) };
+  if (car.li >= 0 && [car.x, car.z, car.heading].every(Number.isFinite)) entry.at = [round(car.x), round(car.z), round(car.heading)];
   if (car.design != null && isFavorite(carKeyOf(design, number))) {
     const { traits, baseTraits, ...type } = carTypeOf(design, number);
     entry.kept = { type: { ...type, traits, baseTraits }, plate: car.plate?.text ?? null };
@@ -49,7 +51,7 @@ export function serializeCars() {
 
 /** Put back saved traffic (null: leave the current one). */
 export function restoreCars(data) {
-  if (!data || !Array.isArray(data.cars)) return;
+  if (!data || !Array.isArray(data.cars)) { waiting = []; reset = true; return; } // (none saved: fresh traffic for the new city)
   const ok = c => c && typeof c === 'object' && (c.design == null || typeof c.design === 'string');
   waiting = data.cars.filter(ok);
   waiting.sort((a, b) => !!b.kept - !!a.kept); // (the hearted first, so they're always on the roads)
@@ -76,6 +78,7 @@ function wearEntry(car, c) {
   if (Number.isFinite(c.width)) car.width = c.width;
   if (Number.isFinite(c.height)) car.height = c.height;
   car.keptDesign = c.design; car.keptNumber = c.number; car.keptPin = c.kept;
+  if (Array.isArray(c.at) && c.at.length === 3 && c.at.every(Number.isFinite)) car.keptAt = c.at;
   return car;
 }
 /** A car destroyed: kept as a wreck if it's hearted, to come back RESPAWN_AFTER on. */
