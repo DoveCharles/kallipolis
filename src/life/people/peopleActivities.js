@@ -937,6 +937,19 @@ export function goAfter(p, victim, revenge = false, social = false) {
   if (!victim.punched) victim.punched = { by: p, stage: 'marked', timer: 0 }; // (several can be after one person: the first to reach them lands it)
 }
 
+/**
+ * Set someone going after someone to punch them for what's in their hand (see muggings in peopleHolding.js), which
+ * they then pick up and run off with.
+ * @param {Person} p - the mugger
+ * @param {Person} victim
+ * @returns {void}
+ */
+export function mug(p, victim) {
+  goAfter(p, victim);
+  p.attack.mug = true;
+  p.punchCooldown = 20 + peopleRng()*20;
+}
+
 /** How far, as a multiple of the gap they stand at, a controlled person can get from whoever's punching them before the punch lands and still not be hit. */
 const PUNCH_MISS_FACTOR = 1.5;
 
