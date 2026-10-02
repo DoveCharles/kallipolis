@@ -161,6 +161,20 @@ The suburbs are so quiet. {here.suburbs}
 > Too quiet. {nosy}
 The city never sleeps. {here.city, world.hour 22-4}
 What's that smell? Oh, the factory. {here.industrial}
+Which one would you have, if you could pick any boat here? {here.marina}
+> The big white one. Obviously.
+> None. I get seasick in the bath. {mood = -1}
+> The little rowing one. Less to go wrong.
+Some of these boats never leave the harbour. {here.marina}
+> Floating sheds, basically.
+>> Floating sheds that cost more than my flat. {mood = -1}
+Smells like diesel and seaweed down here. {here.marina}
+Mind that car, it's backing out. {here.carpark}
+I always forget which level I parked on. {here.carpark}
+> I love it. {mood = 1}
+> Smells like money to me.
+Mind the edge, the water's freezing. {here.marina}
+> I wasn't going to jump in!
 Have you been up the escalator? There's more shops up there. {here.mall}
 > I only came in for one thing.
 Love the glass roof in here. {here.mall}

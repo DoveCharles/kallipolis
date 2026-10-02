@@ -133,9 +133,9 @@ const ghosting = car => (car.kick?.heldFor ?? 0) >= KICK_GHOST_AFTER;
  */
 export function separateCars() {
   cars.forEach(car => {
-    if (car.li < 0 || car === drivenCar || ghosting(car)) return;
+    if (car.li < 0 || car === drivenCar || car.park || ghosting(car)) return;
     forCarsNear(car.x, car.z, carLength(car)*1.5 + 4*S.peopleSize, other => {
-      if (other === car || other.li < 0 || ghosting(other)) return;
+      if (other === car || other.li < 0 || other.park || ghosting(other)) return;
       const clip = clipDepth(car, other);
       if (!clip) return;
       const out = clip.depth + CLIP_MARGIN*S.peopleSize;
@@ -230,7 +230,7 @@ function goesFirst(car, other) {
  */
 export function uTurnBlocked(car) {
   const nav = S.trafficNav.lines[car.li], end = car.dir > 0 ? nav.total : 0, length = carLength(car);
-  return cars.some(other => other !== car && other !== drivenCar && other.li === car.li && other.dir === -car.dir
+  return cars.some(other => other !== car && other !== drivenCar && !other.park && other.li === car.li && other.dir === -car.dir
     && Math.abs(other.u - end) < (length + carLength(other))*0.5 + CAR_STOP_GAP*S.peopleSize);
 }
 /**

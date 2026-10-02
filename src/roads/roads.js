@@ -30,7 +30,7 @@ S.roadSurfaceOutline = [];
 // Paths' footprint (the track itself, not its fade), cached alongside by rebuildRoadMeshes — zones keep lots, buildings
 // and trees off it without cutting their ground (see "paths").
 S.pathFootprint = [];
-S.walkDeck = []; // S.pathFootprint plus malls (see paths.js): what people walk over water on
+S.walkDeck = [], S.pathWalkDeck = []; // S.pathFootprint plus malls (+ marina jetties in walkDeck; see paths.js): what people walk over water on
 // Rivers' footprint (see "water"), and roads and rivers together — what cuts into every zone except water.
 S.riverFootprint = [], S.riverFootprintKey = '', S.riverSeq = 0;
 S.landCutFootprint = [];

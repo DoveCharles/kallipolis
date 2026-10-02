@@ -94,6 +94,7 @@ import { shakeCamera, updateLightning } from './life/lightning.js';
 import { updateAmbience } from './audio/ambience.js';
 import { loadBeeModel, updateBees } from './life/bees.js';
 import { updateAirports, loadPlaneModel } from './zones/airport.js';
+import { updateMarinas } from './zones/marina.js';
 import { loadPigeonModel, updatePigeons } from './life/pigeons.js';
 import { loadMedBot, updateMedBots } from './life/medbot.js';
 import { updateSeraphorbs } from './life/seraphorb.js';
@@ -174,6 +175,7 @@ function animate() {
   updateLightning(t);
   updateBees(t);
   updateAirports(t);
+  updateMarinas(t);
   updateMedBots(t);
   updateSeraphorbs(t);
   updatePigeons(t); // (before updateTraffic, which sets off the blasts that scatter them)

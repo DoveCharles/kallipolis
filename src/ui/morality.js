@@ -91,6 +91,8 @@ const GROUPS = [
     { key: 'beach', label: 'Beaches' }, { key: 'water', label: 'Water' }, { key: 'plaza', label: 'Plazas' },
     { key: 'farmland', label: 'Farmland' }, { key: 'industrial', label: 'Industrial' },
     { key: 'suburbs', label: 'Suburbs' }, { key: 'town', label: 'Towns' }, { key: 'airport', label: 'Airports' },
+    { key: 'marina', label: 'Marinas' },
+    { key: 'carpark', label: 'Car parks' },
   ] },
   { id: 'paths', label: 'Paths', items: [
     { key: 'roads', label: 'Roads' }, { key: 'walkways', label: 'Walkways' },

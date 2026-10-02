@@ -26,7 +26,8 @@ const ZONE_TYPES = [ // `thumb` seeds each one's thumbnail (the order they used 
   { id: 'farmland', label: 'Farmland', color: '#c9b75c', thumb: 6 }, { id: 'suburbs', label: 'Suburbs', color: '#8a9a6d', thumb: 8 },
   { id: 'town', label: 'Town', color: '#8e4a36', thumb: 9 }, { id: 'plaza', label: 'Plaza', color: '#b7b0a4', thumb: 5 },
   { id: 'buildings', label: 'City', color: '#6d717c', thumb: 0 }, { id: 'industrial', label: 'Industrial', color: '#7d8187', thumb: 7 },
-  { id: 'airport', label: 'Airport', color: '#6f7a80', thumb: 10 },
+  { id: 'airport', label: 'Airport', color: '#6f7a80', thumb: 10 }, { id: 'marina', label: 'Marina', color: '#a29e95', thumb: 11 },
+  { id: 'carpark', label: 'Car park', color: '#3b3d40', thumb: 12 },
 ];
 const THUMBNAIL_SIZE = 128;
 let zoneThumbnails = null, zoneThumbnailsScheduled = false;
@@ -140,7 +141,7 @@ function renderZoneThumbnails() {
         // an airport gets a long field, so its runway runs straight along it with room for a terminal beside it
         const points = type.id === 'airport' ? [{ x: cx-380, z: cz-140 }, { x: cx+380, z: cz-140 }, { x: cx+380, z: cz+140 }, { x: cx-380, z: cz+140 }].map(p => ({ ...p, type: 'poly' })) : square(half);
         const zone = { id: '__thumbnail-' + type.id, name: type.label, zoneType: type.id, closed: true, drawing: false, points,
-          settings: { ...DEFAULT_ZONE_SETTINGS, seed: 4242 + type.thumb, lotCount: 14, fieldCount: 9, industrialLots: 7, suburbPlots: 9, treeDensity: 0.5, plazaTrees: 0.6, ...(type.id === 'town' && { seed: 1, townPaint: 0.7, townLots: 40, townStoreysMin: 1, townStoreysMax: 5 }) } };
+          settings: { ...DEFAULT_ZONE_SETTINGS, seed: 4242 + type.thumb, lotCount: 14, fieldCount: 9, industrialLots: 7, suburbPlots: 9, treeDensity: 0.5, plazaTrees: 0.6, ...(type.id === 'carpark' && { carParkStoreys: 2 }), ...(type.id === 'town' && { seed: 1, townPaint: 0.7, townLots: 40, townStoreysMin: 1, townStoreysMax: 5 }) } };
         subdivideZone(zone);
         group = zone.buildingsGroup;
       }

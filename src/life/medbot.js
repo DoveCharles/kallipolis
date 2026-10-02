@@ -69,10 +69,12 @@ export async function loadMedBot() {
     console.warn('Kallipolis: the MedBot model failed to load; med booths stand empty', err);
     return;
   }
-  const root = gltf.scene, toon = new Map();
+  const root = gltf.scene, toon = new Map(), boothParts = new Set();
+  root.getObjectByName('MedBooth')?.traverse(o => boothParts.add(o));
   root.traverse(o => {
     if (!o.isMesh) return;
     o.castShadow = o.receiveShadow = true;
+    if (boothParts.has(o)) return; // the booth keeps its own (not toon) materials
     const m = o.material;
     if (!toon.has(m)) toon.set(m, new THREE.MeshToonMaterial({ name: m.name, color: m.color, gradientMap: TOON_RAMP, flatShading: true,
       emissive: m.emissive, emissiveIntensity: m.emissiveIntensity ?? 1, side: THREE.DoubleSide }));

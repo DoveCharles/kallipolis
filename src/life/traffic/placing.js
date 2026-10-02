@@ -81,10 +81,11 @@ export function placeCar(car, i, designCounts) {
   const { matrix, rotation, scale, position, up } = placing;
   rotation.setFromAxisAngle(up, car.heading + (car.driftYaw ?? 0)); // (driftYaw: the driven car's kart-drift slide, drawn only — see kartDrift)
   if (car.sinking) rotation.multiply(tilting.setFromAxisAngle(sideways, car.sinking.pitch)); // (nose down, into the water)
+  if (car.rampPitch) rotation.multiply(tilting.setFromAxisAngle(sideways, car.rampPitch)); // (on a car park ramp)
   if (car.sinking?.roll) rotation.multiply(rolling.setFromAxisAngle(forward, car.sinking.roll)); // (shaking as it climbs back out — see riseCar)
   if (car.bumpShake) rotation.multiply(rolling.setFromAxisAngle(forward, car.bumpShake)); // (rocking side to side while it hops, like a plane landing — see updateSpecialTraits)
   // (floatDrop: an aqua car settled into water — see updateFloating; bumpY: a terrible car hopping — see updateSpecialTraits)
-  position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0) + (car.hopY ?? 0), car.z);
+  position.set(car.x, Y_ROAD - (car.sinking?.drop ?? 0) - (car.floatDrop ?? 0) + (car.bumpY ?? 0) + (car.hopY ?? 0) + (car.deckY ?? 0), car.z);
   if (car.reviving) shake(position, rotation, CAR_SHAKE*carScale(car)); // (blown up, before the bolt: see startCarRevive in follow.js)
   const hidden = !!hiddenByRoom(car); // (in or been in a room reaching into the street: see room-veer.js)
   if (car.design != null && carMeshes[car.design]) {

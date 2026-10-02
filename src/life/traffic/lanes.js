@@ -83,6 +83,8 @@ const CAR_LATER_FIELDS = Object.fromEntries([
   'stall', 'stallSmoke', 'floatPhase', 'floatBobPhase', 'floatDrop', 'floatWasWet', 'sinking',
   // (punched, and turned to face or look at something, as a person would be: see peopleActivities.js)
   'punched', 'faceTo', 'lookAt',
+  // in a car park (parking.js): its trip, height off the road and ramp pitch, and the entrance it last passed up
+  'park', 'deckY', 'rampPitch', 'parkSkip',
 ].map(key => [key, undefined]));
 /**
  * A new car at rest, off any lane, with its own id.

@@ -7,6 +7,7 @@ import { BUILDING_GROUND_COLORS, PARK_TINT_COLORS, TREE_TINT_COLORS, DEFAULT_GRA
 S.interactionMode = 'node'; // 'node' | 'move'
 S.currentTool = 'road';     // what Edit mode edits: 'road' or 'train' (both in the Paths tab), 'zone' or 'objects'
 S.lastPathTool = 'road';    // which of the two the Paths tab was last on
+S.newZoneType = 'buildings'; // the type a new zone gets
 S.newRoadType = 'sidewalk'; // the type a new path gets ('sidewalk' | 'walkway' | 'river'), unless it's a train line
 S.DEFAULT_ROAD_WIDTH = 8;
 
@@ -39,7 +40,9 @@ export const DEFAULT_ZONE_SETTINGS = { density:0.8, heightMin:4, heightMax:40, l
   industrialLots:10, industrialDensity:0.85, industrialHeightMin:5, industrialHeightMax:14, lotFences:true, // industrial
   suburbPlots:40, suburbDensity:0.9, suburbHedges:true,                              // suburbs
   townLots:40, townDensity:0.92, townStoreysMin:2, townStoreysMax:3, townShops:0.4, townPaint:0.3, townSetback:0, // town
-  airportTerminal:true, airportTower:true, airportAircraft:true, airportFence:true }; // airport
+  airportTerminal:true, airportTower:true, airportAircraft:true, airportFence:true, // airport
+  marinaBoats:0.75, jettyLength:16, // marina
+  carParkStoreys:0 }; // car park
 export const MAX_TARGET_LOTS = 150; // slider max = this many lots; slider min (1) = "whole zone"
 export const MIN_ZONE_TREES = 1, MAX_ZONE_TREES = 100; // tree count is a flat target regardless of zone size, not an area-scaled density
 
