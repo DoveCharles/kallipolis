@@ -376,6 +376,7 @@ export function unpossessPerson() {
   swing = null;
   camera.near = cameraNear;
   camera.updateProjectionMatrix();
+  if (S.netGuest) { if (possessedRoom) { possessedRoom = null; followedInside = false; App.stopFollowingBuilding?.(); } return; } // (the host lets them go)
   if (!p || p.mode !== 'possessed') { possessedRoom = null; return; }
   leaveGroup(p); // (done with any chat: see talkWith)
   if (possessedRoom && stayIndoors(p)) return; // (let go of in a room they've walked into: they stay on there a while)
@@ -459,6 +460,8 @@ function bounceOffCars(p, x, z, shove, hop) {
  * @returns {{x: number, y: number, z: number}} where they end up, at the height of the ground there
  */
 export function walkPossessed(p, dt) {
+  const room = p.remote?.room; // (a multiplayer guest in a room of their own: where they've walked, see stepGuestRoom)
+  if (room) { const k = 1 - Math.exp(-12*dt); p.walkingSpeed = room.speed; p.footing = null; return { x: p.x + (room.x - p.x)*k, y: room.y, z: p.z + (room.z - p.z)*k }; }
   carryPossessed(p); // (along with the carriage or lift they're in, first: then walked about in it)
   const { forward, right, run, brake: jump } = p.remote ?? controlInput(), yaw = p.remote?.yaw ?? possession.yaw;
   const len = Math.hypot(forward, right);
@@ -738,7 +741,7 @@ export function updatePossessedTarget() {
   if (p?.mode === 'possessed' && possessedRoom) someoneHome(); // (in the room like anyone else: its lamp, music, bar bot…)
   if (p?.mode === 'possessed' && S.interactionMode === 'move') {
     const partner = talkingTo(p);
-    const q = rushed(p) ? null : partner ?? personAhead(p); // (rushed: can't talk)
+    const q = rushed(p) || S.netGuest ? null : partner ?? personAhead(p); // (rushed: can't talk; nor, yet, a multiplayer guest)
     if (q) target = { person: q };
     else if (possessedRoom) {
       const door = roomDoorway();
@@ -850,6 +853,21 @@ function stepInRoom(p, i, x, z) {
   }
   return { x, y: possessedRoom.floor, z };
 }
+/**
+ * A multiplayer guest's own possessed in a room they've walked into, a frame: walked here (the room's only in the guest's
+ * view), the host told where (guestRoomAt, see net/net.js).
+ */
+export function stepGuestRoom(p, dt) {
+  const { forward, right, run } = controlInput(), yaw = possession.yaw, len = Math.hypot(forward, right);
+  const speed = len ? PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.speed)*(run ? FLEE_SPEED*p.traits.boost : 1) : 0;
+  let x = p.x, z = p.z;
+  if (len) { x += (Math.sin(yaw)*forward - Math.cos(yaw)*right)/len*speed*dt; z += (Math.cos(yaw)*forward + Math.sin(yaw)*right)/len*speed*dt; }
+  p.walkingSpeed = speed;
+  const at = stepInRoom(p, possession.index, x, z);
+  p.x = at.x; p.y = at.y; p.z = at.z;
+  p.heading = possession.yaw + moonwalkTurn(p);
+}
+export const guestRoomAt = p => possessedRoom && p ? { x: p.x, y: p.y, z: p.z, speed: p.walkingSpeed ?? 0 } : null;
 // let go of in the room: they stay on a while, as anyone visiting would (see updateIndoors); false if there's no room
 function stayIndoors(p) {
   const { building, back } = possessedRoom;

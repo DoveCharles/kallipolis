@@ -71,6 +71,7 @@ export function buildTrafficNav() {
 // (see the end of newCar)
 const CAR_LATER_FIELDS = Object.fromEntries([
   // who it is and how it looks (its card, its paint's holo and rust, its plate)
+  'remote', // (a multiplayer guest's controls, while one drives it: see driveRemote in driving.js)
   'health', 'number', 'plate', 'keptDesign', 'keptNumber', 'keptPin', 'traitsKey', 'traits', 'baseTraits', 'legendaryCount', 'terribleCount', 'holo', 'holoAttrs',
   'sparkleTimer', 'rust', 'rustAttrs', 'terribleTimer',
   // on its route: turning, holding back, drawn off it (offroute.js), junction gates, what it's seen

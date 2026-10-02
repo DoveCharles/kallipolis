@@ -8,7 +8,7 @@ import { explodeCar, splashCar } from '../giblets.js';
 import { throwCarWreck } from '../car-wrecks.js';
 import { carTypeOf } from '../car-types.js';
 import { driving, controlInput } from '../possession.js';
-import { boostMax, drivenCar, overOpenWater, stopDriving } from './driving.js';
+import { boostMax, drivenCar, overOpenWater, releaseRemoteCar, stopDriving } from './driving.js';
 import { canRespawn, REVIVE_SHAKE_TIME } from '../revive.js';
 import { carMeshes } from './models.js';
 import { carHeight, carLength, carWidth, carModelOf, carScale, placing } from './placing.js';
@@ -144,9 +144,9 @@ export function chaseCamera(car) {
 // or, with a respawn left, shakes and comes back (killCar → startCarRevive, which puts its health back to full).
 registerHealthKind('car', { max: 800, die: car => {
   if (car.fuse != null || car.reviving) return;
-  if (car === drivenCar) { // (the driver is thrown out, and it burns where it is — not where stopDriving respawns it, when it can't be seated back on a lane)
+  if (car === drivenCar || car.remote) { // (the driver is thrown out, and it burns where it is — not where stopDriving respawns it, when it can't be seated back on a lane)
     const at = { x: car.x, z: car.z, heading: car.heading };
-    stopDriving();
+    if (car.remote) releaseRemoteCar(car); else stopDriving();
     if (!car.kick) Object.assign(car, at);
   }
   lightFuse(car);
@@ -191,6 +191,7 @@ export function killCar(i, byPlayer = true) { // (byPlayer false: a car crashing
  */
 function startCarRevive(car) {
   if (car === drivenCar) stopDriving();
+  releaseRemoteCar(car);
   car.revived = true;
   car.reviving = { timer: REVIVE_SHAKE_TIME };
   car.fuse = null; car.speed = 0; car.stall = 0;

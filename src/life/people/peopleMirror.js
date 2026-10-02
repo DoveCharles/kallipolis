@@ -6,7 +6,7 @@ import { S, App } from '../../core/shared.js';
 import { controls } from '../../core/camera-controls.js';
 import { people, personModel, newPerson, refreshTraits, followed, countBelow } from './people.js';
 import { updateHeld } from './peopleHolding.js';
-import { placePossessedCamera } from './peopleTracking.js';
+import { placePossessedCamera, guestRoomAt, stepGuestRoom, updatePossessedTarget } from './peopleTracking.js';
 import { possession } from '../possession.js';
 
 export const REC = 24;
@@ -14,6 +14,8 @@ const ROW_JUMP = 8; // (an animation row moving further than this between snapsh
 const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3();
 const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), pa = new THREE.Vector3(), pb = new THREE.Vector3();
 const lerp = (x, y, f) => x + (y - x)*f;
+const UP = new THREE.Vector3(0, 1, 0);
+let lastAt = 0;
 
 /**
  * Everyone drawn within `reach` of (cx, cz), as records.
@@ -44,6 +46,8 @@ export function mirrorCrowd() {
   people.length = n;
   personModel.mesh.instanceMatrix.array.fill(0, 0, n*16);
   people.forEach(p => { p.mode = 'none'; });
+  const now = performance.now()/1000, dt = Math.min(0.1, now - lastAt), mine = possession.index, roomed = mine >= 0 && !!guestRoomAt(people[mine]);
+  lastAt = now;
   if (pair) {
     const { a, b, f } = pair, inA = bySlot(a.people), B = b.people, A = a.people;
     const an = personModel.anim.array, lo = personModel.look.array, ey = personModel.eyes.array, pu = personModel.pupil.array;
@@ -59,9 +63,10 @@ export function mirrorCrowd() {
       pa.fromArray(from, s + 2); pb.fromArray(B, r + 2);
       qa.fromArray(from, s + 5); qb.fromArray(B, r + 5);
       position.lerpVectors(pa, pb, f); rotation.slerpQuaternions(qa, qb, f);
+      if (roomed && i === mine) { stepGuestRoom(p, dt); position.set(p.x, p.y, p.z); rotation.setFromAxisAngle(UP, p.heading); } // (in a room of our own: walked here)
       const size = lerp(from[s+9], B[r+9], f);
       matrix.compose(position, rotation, scale.setScalar(size)).toArray(personModel.mesh.instanceMatrix.array, i*16);
-      p.x = position.x; p.y = position.y; p.z = position.z; p.heading = 2*Math.atan2(rotation.y, rotation.w); p.mode = 'wander';
+      p.x = position.x; p.y = position.y; p.z = position.z; p.heading = 2*Math.atan2(rotation.y, rotation.w); p.mode = i === mine ? 'possessed' : 'wander';
       const k = i*4, rows = [0, 1].every(c => B[r+10+c] >= from[s+10+c] && B[r+10+c] - from[s+10+c] < ROW_JUMP);
       const g = rows ? f : f < 0.5 ? 0 : 1;
       for (let c = 0; c < 4; c++) {
@@ -88,6 +93,6 @@ export function mirrorCrowd() {
   updateHeld();
   const p = people[followed], own = possession.index >= 0 && possession.index === followed && p?.mode !== 'none'; // (possessed by this guest: walked by the host, from our keys)
   if (personModel.hidden) personModel.hidden.value = own && S.hideOwnHead && !(possession.distance > 0) ? followed : -1;
-  if (own) placePossessedCamera(followed);
+  if (own) { placePossessedCamera(followed); updatePossessedTarget(); }
   else if (p && p.mode !== 'none') controls.goalTarget.set(p.x, p.y + 1.4*p.height*S.peopleSize, p.z);
 }

@@ -93,7 +93,7 @@ import { updateBodyParts } from './life/people/peopleGibs.js';
 import { updateCarWrecks } from './life/car-wrecks.js';
 import { shakeCamera, updateLightning } from './life/lightning.js';
 import { updateAmbience } from './audio/ambience.js';
-import { loadBeeModel, updateBees } from './life/bees.js';
+import { loadBeeModel, updateBees, mirrorBees } from './life/bees.js';
 import { updateAirports, loadPlaneModel } from './zones/airport.js';
 import { updateMarinas } from './zones/marina.js';
 import { updateBoatFollow } from './zones/marina-follow.js';
@@ -182,7 +182,7 @@ function animate() {
   updateBodyParts(w);
   updateCarWrecks(w);
   updateLightning(w);
-  if (!S.netGuest) updateBees(w); // (multiplayer guests: not yet sent — see net/net.js)
+  if (S.netGuest) mirrorBees(w); else updateBees(w); // (multiplayer guests: the host's, as sent — see net/net.js)
   if (!S.netGuest) updateAirports(w);
   if (!S.netGuest) updateMarinas(w);
   updateBoatFollow();

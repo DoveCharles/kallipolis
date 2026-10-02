@@ -1,5 +1,5 @@
 import { S } from '../../core/shared.js';
-import { drivenCar } from './driving.js';
+import { byHand } from './driving.js';
 import { TURN_CURVE, lanePoint } from './lanes.js';
 import { carLength, carWidth } from './placing.js';
 import { cars, trafficRng } from './state.js';
@@ -62,7 +62,7 @@ function gapTo(car, other, range) {
   const forward = dx*sin + dz*cos;
   if (forward <= 0 || forward > range) return Infinity;
   const turn = other.heading - car.heading, left = dx*cos - dz*sin; // (how far off to its left other is)
-  if (other !== drivenCar && car !== drivenCar && inOncomingLane(car, other, turn)) return Infinity;
+  if (!byHand(other) && !byHand(car) && inOncomingLane(car, other, turn)) return Infinity;
   const aLen = carLength(car), aWid = carWidth(car), bLen = carLength(other), bWid = carWidth(other);
   const c = Math.abs(Math.cos(turn)), s = Math.abs(Math.sin(turn));
   // (other's footprint, as seen along and across car's heading)
@@ -133,16 +133,16 @@ const ghosting = car => (car.kick?.heldFor ?? 0) >= KICK_GHOST_AFTER;
  */
 export function separateCars() {
   cars.forEach(car => {
-    if (car.li < 0 || car === drivenCar || car.park || ghosting(car)) return;
+    if (car.li < 0 || byHand(car) || car.park || ghosting(car)) return;
     forCarsNear(car.x, car.z, carLength(car)*1.5 + 4*S.peopleSize, other => {
       if (other === car || other.li < 0 || other.park || ghosting(other)) return;
       const clip = clipDepth(car, other);
       if (!clip) return;
       const out = clip.depth + CLIP_MARGIN*S.peopleSize;
       if (car.kick) {
-        const share = other.kick && other !== drivenCar ? 0.5 : 1, sx = clip.x*out*share, sz = clip.z*out*share;
+        const share = other.kick && !byHand(other) ? 0.5 : 1, sx = clip.x*out*share, sz = clip.z*out*share;
         car.kick.x += sx; car.kick.z += sz; car.x += sx; car.z += sz;
-      } else if (!other.kick && other !== drivenCar && clip.depth > CLIP_DEEP*S.peopleSize && Math.abs(car.speed) < CLIP_STILL && Math.abs(other.speed) < CLIP_STILL && overlapYield(car, other)) {
+      } else if (!other.kick && !byHand(other) && clip.depth > CLIP_DEEP*S.peopleSize && Math.abs(car.speed) < CLIP_STILL && Math.abs(other.speed) < CLIP_STILL && overlapYield(car, other)) {
         kickCar(car, clip.x, clip.z, out); // (from then on it's knocked, and pushed straight out as above)
       }
     });
@@ -173,14 +173,14 @@ export function gapAhead(car) {
   forCarsNear(car.x, car.z, range, other => {
     if (other === car || other.ahead === car) return; // (the car behind it in its own lane never is)
     if (car.traits?.smells && other.pull > 0.3) return; // (pulled over to let it by: see pullover.js)
-    if (car.pushing > 0 && other !== drivenCar && (other !== car.ahead || other.kick) && !other.traits?.smells && Math.abs(other.speed) < 0.3) return; // (pushing past, see waitOrGiveUp — never a smelly car, which it'd only shove further into the jam)
+    if (car.pushing > 0 && !byHand(other) && (other !== car.ahead || other.kick) && !other.traits?.smells && Math.abs(other.speed) < 0.3) return; // (pushing past, see waitOrGiveUp — never a smelly car, which it'd only shove further into the jam)
     if (carsOverlap(car, other)) {
       if (overlapYield(car, other) && best > 0) { best = 0; by = other; }
       return;
     }
     const gap = gapTo(car, other, range);
     if (gap >= best) return;
-    if (other !== drivenCar && gapTo(other, car, senseRange(other)) < Infinity && goesFirst(car, other)) return;
+    if (!byHand(other) && gapTo(other, car, senseRange(other)) < Infinity && goesFirst(car, other)) return;
     best = gap; by = other;
   });
   return { gap: best, by };
@@ -198,7 +198,7 @@ export const GIVE_UP_AFTER = 2.5, PUSH_FOR = 3; // (seconds)
  */
 export function waitOrGiveUp(car, by, dt) {
   car.pushing = Math.max(0, car.pushing - dt);
-  if (!by || (by === car.ahead && !by.kick) || by === drivenCar || car.speed > 0.3 || Math.abs(by.speed) > 0.3) {
+  if (!by || (by === car.ahead && !by.kick) || byHand(by) || car.speed > 0.3 || Math.abs(by.speed) > 0.3) {
     car.waited = 0;
     return;
   }
@@ -230,7 +230,7 @@ function goesFirst(car, other) {
  */
 export function uTurnBlocked(car) {
   const nav = S.trafficNav.lines[car.li], end = car.dir > 0 ? nav.total : 0, length = carLength(car);
-  return cars.some(other => other !== car && other !== drivenCar && !other.park && other.li === car.li && other.dir === -car.dir
+  return cars.some(other => other !== car && !byHand(other) && !other.park && other.li === car.li && other.dir === -car.dir
     && Math.abs(other.u - end) < (length + carLength(other))*0.5 + CAR_STOP_GAP*S.peopleSize);
 }
 /**

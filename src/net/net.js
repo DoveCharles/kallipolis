@@ -12,8 +12,12 @@ import { modelsLoaded } from '../ui/loading.js';
 import { packCrowd } from '../life/people/peopleMirror.js';
 import { packTraffic } from '../life/traffic/trafficMirror.js';
 import { people } from '../life/people/people.js';
-import { possessRemote, releaseRemote } from '../life/people/peopleTracking.js';
+import { possessRemote, releaseRemote, guestRoomAt } from '../life/people/peopleTracking.js';
 import { possession, controlInput } from '../life/possession.js';
+import { cars } from '../life/traffic/state.js';
+import { drivenCar, driveRemote, releaseRemoteCar, stopDriving } from '../life/traffic/driving.js';
+import { notePlates } from '../life/traffic/trafficMirror.js';
+import { packBees, flyRemote, releaseRemoteBee, beeFlown, stopFlyingBee } from '../life/bees.js';
 import { showTags } from './nametags.js';
 
 const PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
@@ -21,9 +25,9 @@ const PREFIX = 'kallipolis-', LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const INPUT_TICK = 50, NAME_KEY = 'splinetopia-net-name', NAME_MAX = 24;
 const TICK = 100, REACH = 300, DELAY = 0.15, KEEP = 8; // ms between snapshots; sent this far round a guest's view; drawn this far behind (s); snapshots held
 const JOIN = new URLSearchParams(location.search).get('join');
-let peer = null, role = null, timer = null, myName = '', tags = []; // (tags: [slot, name] — guest: as the host last sent)
+let peer = null, role = null, timer = null, myName = '', tags = []; // (tags: [kind, which, name] — guest: as the host last sent)
 const links = new Set(); // (host: guests that have loaded the city)
-const snaps = [];        // (guest: { at, count, people, cars }, oldest first)
+const snaps = [];        // (guest: { at, count, people, cars, bees }, oldest first)
 let loaded = null, shown = null, pending = null, applying = false; // (guest: the city's first load; the host's snapshot it's showing; the next to show)
 
 const home = () => { location.href = location.pathname; };
@@ -71,7 +75,7 @@ async function hostServer() {
   role = 'host';
   peer.on('connection', conn => {
     conn.on('open', () => conn.send({ t: 'project', project: serializeProject(), at: controls.goalTarget.toArray() }));
-    conn.slot = -1;
+    conn.what = null; conn.plates = new Set();
     conn.on('data', m => {
       if (m?.t === 'ready') { conn.name = String(m.name ?? '').trim().slice(0, NAME_MAX) || 'Guest'; links.add(conn); }
       else if (m?.t === 'cam') conn.cam = m;
@@ -85,10 +89,21 @@ async function hostServer() {
   const link = `${location.origin}${location.pathname}?join=${code}`;
   say('Host Server', `<p>Server running. Code: <b>${code}</b></p><p>Link: <input readonly value="${link}" style="width:100%" onclick="this.select()"></p>`);
 }
+// what a guest has hold of (conn.what, of conn.kind 'person', 'car' or 'bee'), if they still do
+function holding(conn) {
+  const w = conn.what;
+  if (!w || w.remote !== conn.ctl) return false;
+  if (conn.kind === 'car') return cars.includes(w) && w.fuse == null && !w.reviving;
+  if (conn.kind === 'bee') return !!w.hand && w.state !== 'hive';
+  return w.mode === 'possessed' && people.includes(w);
+}
 function letGo(conn) {
-  const p = people[conn.slot];
-  if (p?.remote === conn.ctl) releaseRemote(p);
-  conn.slot = -1;
+  const w = conn.what;
+  conn.what = null;
+  if (w?.remote !== conn.ctl) return;
+  if (conn.kind === 'car') { if (cars.includes(w)) releaseRemoteCar(w); else w.remote = null; }
+  else if (conn.kind === 'bee') releaseRemoteBee(w);
+  else releaseRemote(w);
 }
 // an edit: every guest's sent the city as it is now (see commitHistory in history.js)
 function netEdit(snap) {
@@ -106,31 +121,48 @@ async function applyEdits() {
   App.resetHistory?.();
   applying = false;
 }
-// a guest's keys and view, for whoever they're possessing (m.i: -1 when they let go)
+// a guest's keys and view, for whatever they've hold of (m.kind: 'person' (m.i its slot), 'car' or 'bee'; m.i -1 when they let go)
 function steer(conn, m) {
-  const ctl = { forward: +m.forward || 0, right: +m.right || 0, run: !!m.run, brake: !!m.brake, yaw: +m.yaw || 0, pitch: +m.pitch || 0 };
-  if (m.i === conn.slot && conn.slot >= 0 && people[conn.slot]?.remote === conn.ctl) { Object.assign(conn.ctl, ctl); return; }
+  const ctl = { forward: +m.forward || 0, right: +m.right || 0, run: !!m.run, brake: !!m.brake, yaw: +m.yaw || 0, pitch: +m.pitch || 0, room: null };
+  const kind = m.kind ?? 'person', room = m.room, put = m.put, ok = v => v && [v.x, v.y, v.z].every(Number.isFinite);
+  if (kind === 'person' && ok(room)) ctl.room = { x: room.x, y: room.y, z: room.z, speed: +room.speed || 0 }; // (in a room of their own: see stepGuestRoom)
+  if (conn.what && conn.kind === kind && conn.what[kind === 'bee' ? 'netId' : 'id'] === m.id && holding(conn)) {
+    Object.assign(conn.ctl, ctl);
+    if (kind === 'person' && ok(put)) { const p = conn.what; p.x = put.x; p.y = put.y; p.z = put.z; p.footing = put.y > 1 ? { kind: 'raised', y: put.y } : null; } // (out of it again, at its door)
+    return;
+  }
   letGo(conn);
   if (!(m.i >= 0)) return;
-  conn.ctl = ctl;
-  if (people[m.i]?.id === m.id && possessRemote(m.i, ctl)) conn.slot = m.i;
-  else conn.send({ t: 'out' });
+  conn.ctl = ctl; conn.kind = kind;
+  if (kind === 'car') { const car = cars.find(c => c.id === m.id); conn.what = driveRemote(car, ctl) ? car : null; }
+  else if (kind === 'bee') conn.what = flyRemote(m.id, ctl);
+  else conn.what = people[m.i]?.id === m.id && possessRemote(m.i, ctl) ? people[m.i] : null;
+  if (!conn.what) conn.send({ t: 'out' });
 }
-// who's possessing whom: [slot, name]
+// who's holding what: [kind, which (a person's slot, a car's id, a bee's netId), name, conn]
+const tagOf = (kind, w) => [kind, kind === 'car' ? w.id : kind === 'bee' ? w.netId : people.indexOf(w)];
 function hostTags() {
-  const list = [...links].filter(c => c.slot >= 0 && people[c.slot]?.remote === c.ctl && people[c.slot].mode === 'possessed').map(c => [c.slot, c.name, c]);
-  if (possession.index >= 0 && people[possession.index]?.mode === 'possessed') list.push([possession.index, myName]);
+  const list = [...links].filter(holding).map(c => [...tagOf(c.kind, c.what), c.name, c]);
+  if (possession.index >= 0 && people[possession.index]?.mode === 'possessed') list.push(['person', possession.index, myName]);
+  if (drivenCar) list.push(['car', drivenCar.id, myName]);
+  if (beeFlown()) list.push(['bee', beeFlown().netId, myName]);
   return list;
 }
 function sendSnapshots() {
   const all = hostTags();
-  tags = all.filter(t => t[2]);
+  tags = all.filter(t => t[3]);
   for (const conn of links) {
-    const q = people[conn.slot];
-    if (conn.slot >= 0 && (q?.remote !== conn.ctl || q.mode !== 'possessed')) { letGo(conn); conn.send({ t: 'out' }); } // (let go of on the host: dead, gone…)
-    const x = conn.cam?.x ?? 0, z = conn.cam?.z ?? 0;
-    conn.send({ t: 's', time: S.timeOfDay, count: App.people?.length ?? 0, people: packCrowd(x, z, REACH).buffer, cars: packTraffic(x, z, REACH).buffer,
-      tags: all.filter(t => t[2] !== conn).map(([i, name]) => [i, name]) });
+    if (conn.what && !holding(conn)) { letGo(conn); conn.send({ t: 'out' }); } // (let go of on the host: dead, gone…)
+    const x = conn.cam?.x ?? 0, z = conn.cam?.z ?? 0, traffic = packTraffic(x, z, REACH), plates = [];
+    for (let r = 27; r < traffic.length; r += 29) { // (each car's plate, the first time this guest sees it: see trafficMirror.js)
+      const id = traffic[r];
+      if (conn.plates.has(id)) continue;
+      conn.plates.add(id);
+      const car = cars.find(c => c.id === id);
+      if (car?.plate) plates.push([id, car.plate.text]);
+    }
+    conn.send({ t: 's', time: S.timeOfDay, count: App.people?.length ?? 0, people: packCrowd(x, z, REACH).buffer, cars: traffic.buffer,
+      bees: packBees(x, z, REACH).buffer, plates, tags: all.filter(t => t[3] !== conn).map(t => t.slice(0, 3)) });
   }
 }
 
@@ -167,20 +199,25 @@ async function join(code) {
       if (Array.isArray(m.at)) controls.goalTarget.fromArray(m.at);
       conn.send({ t: 'ready', name: myName });
       timer = setInterval(() => conn.send({ t: 'cam', x: controls.target.x, z: controls.target.z }), 200);
-      let was = -1;
+      let was = false, roomed = false;
       setInterval(() => {
-        const i = possession.index;
-        if (i >= 0) conn.send({ t: 'in', i, id: people[i]?.id, ...controlInput(), yaw: possession.yaw, pitch: possession.pitch });
-        else if (was >= 0) conn.send({ t: 'in', i: -1 });
-        was = i;
+        const i = possession.index, bee = beeFlown(), keys = controlInput(), p = people[i], room = i >= 0 ? guestRoomAt(p) : null;
+        const put = roomed && !room && p ? { x: p.x, y: p.y, z: p.z } : undefined; // (just walked out: where)
+        roomed = !!room;
+        if (i >= 0) conn.send({ t: 'in', kind: 'person', i, id: p?.id, ...keys, yaw: possession.yaw, pitch: possession.pitch, room, put });
+        else if (drivenCar) conn.send({ t: 'in', kind: 'car', i: 0, id: drivenCar.id, ...keys });
+        else if (bee) conn.send({ t: 'in', kind: 'bee', i: 0, id: bee.netId, ...keys });
+        else if (was) conn.send({ t: 'in', i: -1 });
+        was = i >= 0 || !!drivenCar || !!bee;
       }, INPUT_TICK);
     } else if (m?.t === 's') {
-      snaps.push({ at: performance.now()/1000, count: m.count, people: floats(m.people), cars: floats(m.cars) });
+      snaps.push({ at: performance.now()/1000, count: m.count, people: floats(m.people), cars: floats(m.cars), bees: floats(m.bees ?? new ArrayBuffer(0)) });
+      notePlates(m.plates);
       if (snaps.length > KEEP) snaps.shift();
       S.timeOfDay = m.time;
       tags = Array.isArray(m.tags) ? m.tags : [];
     } else if (m?.t === 'edit') { pending = m.snap; if (!applying) applyEdits(); }
-    else if (m?.t === 'out') App.unpossessPerson?.(); // (the host wouldn't, or no longer does)
+    else if (m?.t === 'out') { App.unpossessPerson?.(); stopDriving(); stopFlyingBee(); } // (the host wouldn't, or no longer does)
   });
   conn.on('close', async () => { await say('Join Server', '<p>The host has closed the server.</p>'); home(); });
 }
