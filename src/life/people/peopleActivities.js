@@ -1,5 +1,5 @@
 import { App, S } from '../../core/shared.js';
-import { feel, witness, voiceOfPerson, hairColorOf, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, insideFor, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
+import { feetOf, feel, witness, voiceOfPerson, hairColorOf, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, insideFor, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { buildingNumber, footprintBounds, roomLayoutOf } from '../../buildings/footprints.js';
 import { Y_ZONE_GROUND } from '../../core/scene.js';
@@ -115,7 +115,17 @@ function welcome(p) {
 function leaveCircle(p, how) {
   p.closing = false;
   p.leftBadly = how === 'bad';
-  if (p.stage === 'sit') { p.stage = 'rise'; p.pose = 'Idle'; p.lookAt = null; } else finishActivity(p);
+  if (p.stage === 'sit') rise(p); else finishActivity(p);
+}
+/**
+ * Have someone sitting or lying start getting up: through the pose's own getting-up clip, if it has one (see PERSON_CLIPS).
+ * @param {Person} p
+ * @returns {void}
+ */
+function rise(p) {
+  p.stage = 'rise';
+  playOnce(p, p.pose + 'Up');
+  p.pose = 'Idle'; p.lookAt = null;
 }
 /**
  * After someone leaves a circle badly: they roll BAD_END_PUNCH × aggression against each still in it and go after
@@ -776,7 +786,11 @@ export function updateActivity(p, area, dt) {
     case 'go':
       p.timer -= dt;
       if (p.timer <= 0) { finishActivity(p); return null; } // can't get there
-      if (Math.hypot(spot.x - p.x, spot.z - p.z) > 0.25) return { x: spot.x, y: area.y, z: spot.z };
+      {
+        // (off a bench, to where their feet go: their pelvis lands on the spot — see feetOf)
+        const at = p.act === 'bench' ? spot : feetOf(p, clipNamed(poseName), facing, spot);
+        if (Math.hypot(at.x - p.x, at.z - p.z) > 0.25) return { x: at.x, y: area.y, z: at.z };
+      }
       p.stage = 'turn';
       // falls through
     case 'turn':
@@ -789,6 +803,7 @@ export function updateActivity(p, area, dt) {
       if (p.oneShot) break;
       p.stage = 'sit';
       p.pose = poseName;
+      if (p.act !== 'bench') { p.feet = { x: p.x, z: p.z }; playOnce(p, poseName + 'Down'); } // (sitting or lying down where they stand)
       p.timer = ((p.act === 'circle' ? 25 : 15) + peopleRng()*45)*p.traits.patience;
       if (p.act === 'bench') p.seatLift = p.seat.y - area.y - clipNamed('Sit1').seatY*modelScale(p);
       // falls through
@@ -810,7 +825,7 @@ export function updateActivity(p, area, dt) {
         p.closing = true; p.timer = CLOSE_WAIT;
         if (!p.group.speaker?.saying) { p.group.speaker = p; p.group.turnIn = CLOSE_WAIT; closeNow(p); } // (their turn now, to say it)
       }
-      else if (p.timer <= 0) { p.closing = false; p.stage = 'rise'; p.pose = 'Idle'; p.lookAt = null; }
+      else if (p.timer <= 0) { p.closing = false; rise(p); }
       break;
     case 'rise':
       if (weightOf(p, clipNamed('Idle')) < 1) break;
@@ -1008,7 +1023,7 @@ function endAttack(p) {
   p.attack = null;
   p.lookAt = null; p.faceTo = null;
   const t = a.target;
-  if (t.punched?.by === p && (t.punched.stage === 'marked' || t.punched.stage === 'brace')) { t.punched = null; t.faceTo = null; t.lookAt = null; }
+  if (t.punched?.by === p && (t.punched.stage === 'marked' || (t.punched.stage === 'brace' && !t.punched.hit))) { t.punched = null; t.faceTo = null; t.lookAt = null; }
   // (anyone left in their queue — see brawl — is next, unless they've been knocked down themselves)
   while (p.attackQueue?.length && !p.punched && p.mode !== 'dead') {
     const next = p.attackQueue.shift();
@@ -1041,25 +1056,32 @@ export function swingSound(p) {
 }
 
 /**
- * Land the punch: knock them flat on their back, facing whoever hit them.
+ * Land the punch: knock them flat on their back, facing whoever hit them — or, now and then, leave them standing, reeling.
  * They cry out as they go (whatever knocked them down), and a fist landing is heard.
  * @param {Person} t - the one being hit
  * @param {Person} p - the one hitting them
  * @returns {void}
  */
 const FALL_DAMAGE = 5, CRITICAL_PUNCH_DAMAGE = 10, VAMPIRE_CRITICAL_HEAL = 5; // (a critical punch is one that draws blood: see punchSpill)
+const STAY_UP_CHANCE = 0.35; // the chance a punch that draws no blood leaves them standing, reeling (the Hit clip)
 const REVENGE_TIME = 120; // seconds after being punched that punching the puncher back counts as revenge
 export function knockDown(t, p) {
   const critical = !!p.traits && punchSpill(t, p) && people.includes(p); // (a car's knock can spill blood too, but isn't a punch)
   const head = { x: t.x, y: t.y + personHeight(t)*0.9, z: t.z };
   if (people.includes(p)) playSound('punch', { ...head, y: t.y + personHeight(t)*0.75 });
   exclaim(head, voiceOfPerson(t));
-  t.punched.stage = 'fall';
-  t.heading = headingTo(t, p);
-  if (blockedBehind(t)) t.heading += Math.PI; // (not back through a railing or wall: the other way, see peopleFall.js)
-  t.faceTo = null; t.lookAt = null;
-  playOnce(t, 'Fall');
-  t.pose = 'Fallen';
+  if (!critical && people.includes(p) && hasClip('Hit') && peopleRng() < STAY_UP_CHANCE) { // (reeling, still braced, till Hit's done: see updatePunched)
+    t.punched.stage = 'brace'; t.punched.hit = true;
+    t.heading = t.faceTo = headingTo(t, p); t.lookAt = p;
+    playOnce(t, 'Hit');
+  } else {
+    t.punched.stage = 'fall';
+    t.heading = headingTo(t, p);
+    if (blockedBehind(t)) t.heading += Math.PI; // (not back through a railing or wall: the other way, see peopleFall.js)
+    t.faceTo = null; t.lookAt = null;
+    playOnce(t, 'Fall');
+    t.pose = 'Fallen';
+  }
   bystandersReactToPunch(t, p);
   if (people.includes(p)) { // (for what people say: see life/speech-text.js) — punching back whoever last punched you is revenge
     if (p.felt?.what === 'punched' && p.felt.by === t && performance.now()/1000 - p.felt.at < REVENGE_TIME) feel(p, 'revenge', t);
@@ -1187,6 +1209,19 @@ export function knockAgain(p, from) {
   return true;
 }
 /**
+ * Start someone knocked flat getting up: through GetUp from Fallen, their feet planted where it stands them (see feetOf).
+ * @param {Person} p - the person
+ * @returns {void}
+ */
+function getUp(p) {
+  p.punched.stage = 'rise'; p.pose = 'Idle';
+  const fallen = clipNamed('Fallen');
+  if (!hasClip('GetUp') || p.clipA !== fallen) return;
+  p.feet = feetOf(p, fallen);
+  playOnce(p, 'GetUp');
+}
+
+/**
  * Move someone who's been punched on, each frame: lying there a while, then getting up.
  * @param {Person} p - the person
  * @param {number} dt - seconds since the last frame
@@ -1195,12 +1230,13 @@ export function knockAgain(p, from) {
 export function updatePunched(p, dt) {
   const k = p.punched;
   if (k.revive) { // (dead, shaking, until the bolt brings them back: see reviveInstead in people.js)
-    if (k.stage === 'down' && (k.timer -= dt) <= 0) { strikeLightning({ x: p.x, y: p.y, z: p.z }); witness(p, 'resurrected'); k.stage = 'rise'; p.pose = 'Idle'; }
+    if (k.stage === 'down' && (k.timer -= dt) <= 0) { strikeLightning({ x: p.x, y: p.y, z: p.z }); witness(p, 'resurrected'); getUp(p); }
     else if (k.stage === 'rise' && weightOf(p, clipNamed('Idle')) >= 1) { p.punched = null; p.wait = 0.5; }
     return;
   }
-  if (k.stage === 'down' && (k.timer -= dt) <= 0) { if (!crawlOffRoad(p)) { k.stage = 'rise'; p.pose = 'Idle'; } } // (out on the road, they crawl off it first: see peopleRoad.js)
+  if (k.stage === 'down' && (k.timer -= dt) <= 0) { if (!crawlOffRoad(p)) getUp(p); } // (out on the road, they crawl off it first: see peopleRoad.js)
   else if (k.stage === 'crawl') updateCrawl(p, dt);
+  else if (k.hit && !p.oneShot) { p.punched = null; p.faceTo = null; p.lookAt = null; p.wait = 0.3; reactToPunch(p, k.by); } // (done reeling)
   else if (k.stage === 'rise' && weightOf(p, clipNamed('Idle')) >= 1) { p.punched = null; p.wait = 0.5 + peopleRng(); reactToPunch(p, k.by); }
 }
 

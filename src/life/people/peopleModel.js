@@ -56,7 +56,9 @@ export const PERSON_BAKE_FPS = 24;
 /** Distances the model's foot travels per walk-animation cycle. The walk plays slower for the same speed the higher this is. */
 const WALK_CYCLE_LENGTH = 4;
 /** The model's clips: `loop` plays round and round, otherwise once (or held, if `pose`). `pose` is a single held pose, and
- * `from` names a clip whose last frame this pose is (Fallen is where Fall leaves them). `over` names a clip this one is
+ * `from` names a clip whose last frame this pose is (Fallen is where Fall leaves them), `at` the frame of its own it holds.
+ * `play` names a clip this one plays (backwards, if `reverse`), first frame to last; `anchor` a pose it starts or ends in,
+ * whose pelvis offset it keeps (see `feet` in people.js). `over` names a clip this one is
  * played over `times` times and reposed each frame by `repose` (Typing is Sit1 with the arms brought up: see typingPose;
  * TypingPaused the same with the hands held still on the keys) —
  * straight after it, so any bone it has no keys for is left as it left it.
@@ -79,9 +81,10 @@ const PERSON_CLIPS = [
   { name: 'TypingPaused', over: 'Sit1', loop: true, pose: true, repose: (frame, frames, rig) => typingPose(frame, frames, rig, false) },
   { name: 'Eating', over: 'Sit1', times: 3, loop: true, pose: true, spread: 0, repose: eatingPose },
   { name: 'EatingPaused', over: 'Sit1', loop: true, pose: true, spread: 0, repose: (frame, frames, rig) => eatingPose(frame, frames, rig, false) },
-  { name: 'SitDown1', pose: true }, { name: 'SitDown2', pose: true }, { name: 'SitDown3', pose: true },
-  { name: 'LieDown1', pose: true }, { name: 'LieDown2', pose: true }, { name: 'LieDown3', pose: true },
-  { name: 'Punch' }, { name: 'Fall' }, { name: 'Fallen', from: 'Fall', pose: true },
+  // (each sit/lie clip: its first frame the pose, the rest getting up — played on as <name>Up, backwards as <name>Down)
+  ...['SitDown1', 'SitDown2', 'SitDown3', 'LieDown1', 'LieDown2', 'LieDown3'].flatMap(name => [{ name, at: 0, pose: true },
+    { name: name + 'Up', play: name, anchor: name }, { name: name + 'Down', play: name, anchor: name, reverse: true }]),
+  { name: 'Punch' }, { name: 'Hit' }, { name: 'Fall' }, { name: 'Fallen', from: 'Fall', pose: true }, { name: 'GetUp', anchor: 'Fallen' },
   ...snackClips(),
   ...['WaveLeft', 'Idle2Left'].flatMap(name => SNACK_ITEMS.map(item => ({ name: name + item, mirror: name.slice(0, -4), hold: 'Idle' + item }))),
   ...SNACK_ITEMS.map(item => ({ name: 'Idle3' + item, over: 'Idle3', hold: 'Idle' + item })),
@@ -1514,14 +1517,15 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const mixer = new THREE.AnimationMixer(root);
   const pelvisBone = bones[boneByName.get('Pelvis') ?? 0], restPelvis = pelvisBone.getWorldPosition(new THREE.Vector3());
   const clips = PERSON_CLIPS.map(def => {
-    const source = def.from || def.over || def.mirror || def.name;
+    const source = def.from || def.over || def.mirror || def.play || def.name;
     const clip = gltf.animations.find(c => c.name.toLowerCase() === source.toLowerCase());
-    if (!clip && !def.from && !def.over && !def.mirror) console.warn(`Kallipolis: the people model has no ${def.name} animation`);
+    if (!clip && !def.from && !def.over && !def.mirror && !def.play) console.warn(`Kallipolis: the people model has no ${def.name} animation`);
     const sourceFrames = clip ? Math.max(1, Math.round(clip.duration*PERSON_BAKE_FPS)) : 1;
-    const frames = def.from ? 1 : sourceFrames*(def.times || 1);
-    return { name: def.name, clip, missing: !clip, loop: !!def.loop && frames > 1, pose: !!def.pose, frames, duration: frames/PERSON_BAKE_FPS,
+    const frames = def.from || def.at != null ? 1 : sourceFrames*(def.times || 1);
+    return { name: def.name, clip, missing: !clip || (!!def.play && sourceFrames < 2), loop: !!def.loop && frames > 1, pose: !!def.pose, frames, duration: frames/PERSON_BAKE_FPS,
       sourceFrames, repose: clip ? def.repose : null, taps: null, spread: def.spread ?? 1, spreadR: def.spreadR ?? def.spread ?? 1, base: def.base ?? null,
-      holdAt: def.from ? (sourceFrames - 1)/PERSON_BAKE_FPS : null, mirror: !!def.mirror, hold: def.hold ?? null,
+      holdAt: def.at != null ? def.at/PERSON_BAKE_FPS : def.from ? (sourceFrames - 1)/PERSON_BAKE_FPS : null, mirror: !!def.mirror, hold: def.hold ?? null,
+      span: !!def.play, reverse: !!def.reverse, anchor: def.anchor ?? null,
       start: 0, pelvis: new THREE.Vector3(), pelvisX: 0, pelvisZ: 0, top: 0, heightScale: 1, seatY: 0 };
   });
   clips.forEach(c => { if (c.base) c.base = clips.find(o => o.name === c.base) ?? null; });
@@ -1560,7 +1564,9 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     mixer.stopAllAction();
     const action = c.clip ? mixer.clipAction(c.clip).play() : null;
     for (let f=0;f<=c.frames;f++) {
-      if (action) mixer.setTime(c.holdAt ?? (f % c.sourceFrames)/PERSON_BAKE_FPS); else skeleton.pose();
+      // (a `play` clip runs exactly first frame to last — or last to first)
+      const span = c.span ? Math.min(f, c.frames - 1)/Math.max(1, c.frames - 1)*c.clip.duration : 0;
+      if (action) mixer.setTime(c.holdAt ?? (c.span ? (c.reverse ? c.clip.duration - span : span) : (f % c.sourceFrames)/PERSON_BAKE_FPS)); else skeleton.pose();
       root.updateMatrixWorld(true);
       if (c.repose) { c.taps = c.repose(f % c.frames, c.frames, rig); root.updateMatrixWorld(true); }
       bones.forEach((bone, b) => {
@@ -1606,6 +1612,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     // only sitting or lying down moves the pelvis far enough to follow; standing about, it only sways
     if (c.pose) { c.pelvisX = c.pelvis.x - restPelvis.x; c.pelvisZ = c.pelvis.z - restPelvis.z; }
   });
+  clips.forEach(c => { const a = c.anchor && clips.find(o => o.name === c.anchor); if (a) { c.pelvisX = a.pelvisX; c.pelvisZ = a.pelvisZ; } });
   const standingTop = clips.find(c => c.name === 'Idle').top;
   clips.forEach(c => { c.heightScale = standingTop > 0 ? c.top/standingTop : 1; });
   // half floats, which (unlike full floats, everywhere) the texture can blend between rows

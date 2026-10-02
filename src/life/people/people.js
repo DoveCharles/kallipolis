@@ -260,6 +260,19 @@ export const headingTo = (p, q) => Math.atan2(q.x - p.x, q.z - p.z);
  * @returns {number} the scale
  */
 export const modelScale = p => 1.7*p.height*S.peopleSize/personModel.height;
+/**
+ * Where someone's feet are with their pelvis at `at` in a pose (sitting, lying, fallen) — for `feet`, which holds the feet
+ * there while they sit, lie or get up, their pelvis moved instead, so the body doesn't slide (see updatePeople).
+ * @param {Person} p - the person
+ * @param {object} clip - the pose
+ * @param {number} [heading] - which way they face
+ * @param {{x: number, z: number}} [at] - where their pelvis is
+ * @returns {{x: number, z: number}} where their feet are
+ */
+export function feetOf(p, clip, heading = p.heading, at = p) {
+  const s = modelScale(p), offX = clip.pelvisX*s, offZ = clip.pelvisZ*s, sin = Math.sin(heading), cos = Math.cos(heading);
+  return { x: at.x - offX*cos - offZ*sin, z: at.z - offZ*cos + offX*sin };
+}
 
 /**
  * How much of a person's pose is `clip`, part-way through blending from one animation into the next — counting any version
@@ -301,7 +314,7 @@ export function setClip(p, clip) {
   if (p.clipA === clip) return;
   p.rowB = clipRow(p, p.clipA);
   p.fade = p.clipB === clip ? 1 - p.fade : 0;
-  p.fadeTime = clip.pose || p.clipA.pose ? FADE_POSE : clip.base || p.clipA.base ? FADE_SNACK : FADE_QUICK;
+  p.fadeTime = clip.anchor || p.clipA.anchor ? FADE_QUICK : clip.pose || p.clipA.pose ? FADE_POSE : clip.base || p.clipA.base ? FADE_SNACK : FADE_QUICK;
   p.clipB = p.clipA;
   p.clipA = clip;
 }
@@ -488,7 +501,7 @@ const PERSON_LATER_FIELDS = Object.fromEntries([
   'health', 'walletSet', 'moodNow', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'spectralKey', 'groomKey', 'showsBald', 'showsBeard', 'vanished', 'vanishUntil', 'shyCount', 'shyArmed', 'shyPhase', 'shyAt', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
   // what they say and think
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
-  'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
+  'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate', 'feet',
   // fleeing, fighting, blood
   'sunRun', 'fleeArea', 'fleeInArea', 'fleeStarts', 'fledTalkAt', 'fleeTalkUntil', 'pray', 'attackQueue', 'push', 'revived', 'medbot',
   'blood', 'bloodBase', 'bloodFrom', 'bloodTimer', 'huntIn', 'roadWaryUntil', 'benched', 'bankHeld',
@@ -1635,6 +1648,12 @@ export function updatePeople(t) {
         }
       }
       const blend = key => p.clipA[key]*p.fade + p.clipB[key]*(1 - p.fade);
+      // (feet planted while they sit, lie or get up: see feetOf)
+      if (p.feet && (p.moving || (!p.oneShot && p.fade >= 1 && !p.clipA.pose && !p.clipA.anchor))) p.feet = null;
+      if (p.feet) {
+        const ms = modelScale(p), offX = blend('pelvisX')*ms, offZ = blend('pelvisZ')*ms, sin = Math.sin(p.heading), cos = Math.cos(p.heading);
+        p.x = p.feet.x + offX*cos + offZ*sin; p.z = p.feet.z + offZ*cos - offX*sin;
+      }
       p.heightScale = blend('heightScale');
       // how much of them there is to see (see FINE_EVERY): the one followed or controlled always in full, and anyone not
       // drawn at all as out of view. Out of view, they're left where they were last put — so long as that was out of view too.
