@@ -52,3 +52,10 @@ Miracle in {city}: {name} rises again
 [healed]
 MedBot saves {name}
 {name} patched up by MedBot
+
+# the front page's lead when nothing happened since the last edition
+[quiet]
+All quiet in {city}
+Nothing happens in {city}, again
+{city} enjoys a peaceful night
+Slow news day in {city}

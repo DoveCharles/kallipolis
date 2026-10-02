@@ -528,3 +528,7 @@ html.win3 #quests .w3-dialog-body { overflow:hidden; padding-bottom:12px; }
 .w3-chronicle-item { display:flex; gap:8px; width:100%; text-align:left; background:none; border:0; padding:3px 2px; font:inherit; color:var(--w3-text); cursor:pointer; }
 .w3-chronicle-item:hover { background:var(--w3-hl); color:var(--w3-hl-text); }
 .w3-chronicle-time { font-family:var(--mono); opacity:.7; }
+.w3-paper-mast { font-family:Georgia, 'Times New Roman', serif; font-size:22px; font-weight:bold; text-align:center; border-bottom:3px double var(--w3-text); padding-bottom:4px; }
+.w3-paper-date { font-size:11px; text-align:center; border-bottom:1px solid var(--w3-text); padding:3px 0; margin-bottom:8px; }
+.w3-paper-lead { font-family:Georgia, 'Times New Roman', serif; font-size:18px; font-weight:bold; line-height:1.2; cursor:pointer; margin-bottom:6px; }
+.w3-paper-tally { font-style:italic; margin-bottom:8px; }
