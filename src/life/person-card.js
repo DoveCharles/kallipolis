@@ -360,6 +360,7 @@ function drawPersonHeadshot(view, index = focused?.shown?.index) {
   renderer.setClearColor(0x000000, 0);
   renderer.setRenderTarget(w.target);
   updateHeld(index); headshotLight(true); // (only their held things, lit as by day)
+  renderer.info.render.frame++; // (three.js uploads instance data once per frame number, and the last shadow pass took this one: without it, last frame's pose)
   renderer.render(scene, camera);
   headshotLight(false); updateHeld();
   renderer.setRenderTarget(target);
