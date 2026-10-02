@@ -19,6 +19,8 @@ import { melodyOf } from './melodies.js';
 // babble's does: through each clause in the speaker's own melody (see audio/melodies.js), lifted on its stressed
 // syllables, falling at the end, or rising for a question.
 export const SAMPLE_RATE = 22050;
+/** Breath (as TUNING.breathy) from age: none to 40, then up to TUNING.ageBreath at 100. */
+export const agedBreath = age => TUNING.ageBreath*Math.max(0, Math.min(1, (age - 40)/60));
 const T = 1/SAMPLE_RATE;
 const FRAME = 0.005;            // seconds between updates of the voice's settings
 const PAUSE = { ',': 0.18, '-': 0.15, '.': 0.32, '?': 0.32, '!': 0.32 }; // seconds of quiet after each
@@ -42,7 +44,7 @@ export const TUNING = {
   bandwidth: 1,      // × every formant's width
   aspiration: 0.35,  // breath, next to the voice
   breathy: 0,        // breath under the voice all the time
-  ageBreath: 1,      // × age/100 added to breathy (80: 0.8; capped at 100)
+  ageBreath: 1,      // × age's breath added to breathy (none to 40, then up to 1 at 100: agedBreath)
   drive: 1.2,        // soft clipping
 };
 const NASAL = [270, 450];       // Hz, the nasal pole, and the zero that pairs with it in an "m", "n" or "ng" (moved off it otherwise)
@@ -311,7 +313,7 @@ export function speakText(text, voice, { mood = 0, who = 0, speed = 1, clauses =
   const end = segments.at(-1).start + segments.at(-1).dur;
   const samples = new Float32Array(Math.ceil(end*SAMPLE_RATE));
   const { pitch, formant = 1, sharpness = 6, age = 0 } = voice;
-  const breathy = 2.2*(TUNING.breathy + TUNING.ageBreath*Math.min(1, age/100)); // (×2.2: the formants pass little of it)
+  const breathy = 1.5*(TUNING.breathy + agedBreath(age)); // (×1.5: the formants pass little of it)
   const width = Math.max(0.6, Math.min(1.8, 6/sharpness))*TUNING.bandwidth; // (a sharper voice's formants ring narrower)
   const pitchOf = pitchContour(segments, clauses, pitch, melodyOf(voice), voice.vibrato ?? 0);
 

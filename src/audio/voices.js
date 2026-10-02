@@ -2,7 +2,7 @@ import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
 import { listener, isMuted, heardFrom, muffler, ear, oneShotPanner } from './sfx.js';
 import { melodyOf } from './melodies.js';
-import { TUNING } from './speech.js';
+import { TUNING, agedBreath } from './speech.js';
 
 // ============================================================ voices
 // People talking babble, Animal Crossing style: every time a speaker's mouth opens on a new syllable (see "talking" in
@@ -58,7 +58,7 @@ export const hearDistance = () => S.hearDistance ?? HEAR_DISTANCE;
 export const hearRef = () => REF_DISTANCE*hearDistance()/HEAR_DISTANCE;
 const MUFFLE = 1.4;                // how fast the top comes off past REF_DISTANCE (see muffler in sfx.js): far off, talk's a murmur, not words
 const VOLUME = 0.22;
-const BREATH = 0.8; // × speech's breathy (age/100 and TUNING), as breath through babble's wider bands
+const BREATH = 0.5; // × speech's breathy (agedBreath and TUNING), as breath through babble's wider bands
 const BLIPS_MAX = 12;              // syllables sounding at once, past which new ones are dropped
 const BEND = 0.1;                  // how far each syllable's pitch strays at random from where the phrase has it, either way
 const STRESS = 0.12;               // how much higher a stressed syllable is
@@ -212,7 +212,7 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant,
   oscillator.frequency.setValueAtTime(f, now);
   // (age: a quaver, and breath through the same bands, as speech.js's)
   const old = !voice.robot, quaver = old ? TUNING.vibrato + (voice.vibrato ?? 0) : 0;
-  const breath = old ? BREATH*(TUNING.breathy + TUNING.ageBreath*Math.min(1, (voice.age ?? 0)/100)) : 0;
+  const breath = old ? BREATH*(TUNING.breathy + agedBreath(voice.age ?? 0)) : 0;
   let wobble = null, air = null, airLevel = null;
   if (quaver) {
     wobble = context.createOscillator();
