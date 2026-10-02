@@ -128,10 +128,17 @@ function lockPointer() {
   if (document.pointerLockElement !== dom) dom.requestPointerLock?.()?.catch?.(() => {});
 }
 function unlockPointer() { if (document.pointerLockElement === dom) document.exitPointerLock(); }
+// replies to pick (ui/speech-bubbles.js) free the cursor without letting go of the person; picking locks it back
+let cursorFreed = false;
+App.freeCursor = (on) => {
+  if (on) { if (isPossessing() && document.pointerLockElement === dom) { cursorFreed = true; document.exitPointerLock(); } }
+  else if (cursorFreed) { cursorFreed = false; if (isPossessing()) lockPointer(); }
+};
 export function endPossession() {
   if (possession.index < 0) return;
   possession.index = -1;
   possession.alwaysForward = false;
+  cursorFreed = false;
   endCharge();
   held.clear();
   lookPointer = null; pressedAt = null;
@@ -251,7 +258,7 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => held.delete(keyName(e)));
 window.addEventListener('blur', () => held.clear());
 document.addEventListener('pointerlockchange', () => {
-  if (document.pointerLockElement === dom) return;
+  if (document.pointerLockElement === dom || cursorFreed) return;
   if (inControl()) releaseControl();
 });
 // Clicking the view while in control picks no one. Possessing someone, the left button throws a punch; driving, and
