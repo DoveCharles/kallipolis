@@ -197,7 +197,7 @@ function plan(clauses, baseTempo) {
         // (consonants in a cluster squeeze each other)
         if ((prevPh && prevPh.kind !== 'vowel') || (nextPh && nextPh.kind !== 'vowel')) dur *= 0.85;
       }
-      dur *= finalStretch*tempo/1000;
+      dur *= finalStretch*tempo/1000*(p.long ?? 1); // (p.long: an accent's drawl, audio/accents.js)
       if (p.ms) dur = p.ms/1000; // (a phoneme given its own length: see aaa in audio/dictionary.js)
       const after = vowelNear(i, 1), before = vowelNear(i, -1);
       const base = { voice: 0, breath: 0, noise: null, nasal: false, muffle: 1, burst: null, accent: 0, clause: c, trans: 0.02 };

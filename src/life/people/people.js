@@ -10,7 +10,7 @@ import { blasts, PERSON_BLAST_SCALE } from '../traffic/state.js';
 import { canRespawn, PERSON_SHAKE, shake } from '../revive.js';
 import { throwBodyParts, warmBodyParts } from './peopleGibs.js';
 import { babble, nextSyllable, hearDistance } from '../../audio/voices.js';
-import { accentFor } from '../../audio/accents.js';
+import { accentFor, accentVoice } from '../../audio/accents.js';
 import { sayLine, shoutLine, reactAloud, lineMouth, stopLine, linePause, aaa } from '../../audio/dictionary.js';
 import { pickThought, pickReaction } from '../speech-text.js';
 import { babbleLine, hasBubble, ownLine, speechBubble } from '../../ui/speech-bubbles.js';
@@ -375,7 +375,7 @@ function voiceOf(p, i) {
   const melody = Math.floor(own()*MELODIES.length);
   const vibrato = own() < (p.age - 40)/50 ? 0.01 + 0.03*own() : 0; // (a quaver: likelier the older, from 40; all by 90)
   const accent = accentFor(own()); // (audio/accents.js)
-  return { pitch, formant, sharpness, melody, isMan, age: p.age, vibrato, accent, ...presetAt(i)?.voice };
+  return accentVoice({ pitch, formant, sharpness, melody, isMan, age: p.age, vibrato, accent, ...presetAt(i)?.voice });
 }
 /** Someone's voice (see voiceOf), for a sound made outside the frame loop: a cry as they're hit, say. */
 export const voiceOfPerson = p => voiceOf(p, people.indexOf(p));

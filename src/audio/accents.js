@@ -1,7 +1,7 @@
 // ============================================================ accents
 // How someone's real words come out (audio/speech.js): SAM's American phonemes rewritten per accent — sounds swapped,
 // dropped or added, vowels given their own formants (p.f, p.to: null for a pure vowel) — and, for some, the stress moved.
-// Babble's unaffected. Picked per person in people.js voiceOf (ACCENT_SHARE); none is plain SAM.
+// Babble keeps only the accent's tune (audio/melodies.js ACCENT_MELODIES). Picked per person in people.js voiceOf (ACCENT_SHARE); none is plain SAM.
 const VOWELS = new Set(['IY', 'IH', 'EH', 'AE', 'AA', 'AH', 'AO', 'UH', 'AX', 'IX', 'ER', 'UX', 'OH', 'EY', 'AY', 'OY', 'AW', 'OW', 'UW']);
 const isVowel = p => !!p && VOWELS.has(p.name);
 const as = (p, name, more) => ({ ...p, name, ...more });
@@ -39,6 +39,64 @@ const RULES = {
       case 'AY': return { ...p, f: [580, 1350, 2450], to: [400, 2000, 2600] };
       case 'AE': return { ...p, f: [720, 1300, 2450] };
     }
+  },
+  welsh(p, prev, next, { end }) {
+    // (a consonant after a stressed vowel, before another, held long: "mun-ney")
+    const held = isVowel(prev) && prev.stress === 1 && isVowel(next) && !isVowel(p) && !end && prev.word === p.word;
+    switch (p.name) {
+      case 'DX': return held ? [as(p, 'T'), as(p, 'T')] : as(p, 'T');
+      case 'R': case 'RX': return isVowel(next) ? as(p, 'DX') : null; // tapped, none after a vowel
+      case 'ER': return { ...p, f: [500, 1600, 2450] };
+      case 'EY': return { ...p, f: [430, 2000, 2600], to: null };    // pure "e"
+      case 'OW': return { ...p, f: [450, 850, 2350], to: null };     // pure "o"
+      case 'AY': return { ...p, f: [600, 1300, 2450], to: [420, 1950, 2600] };
+      case 'AH': return { ...p, f: [520, 1350, 2450] };
+    }
+    if (held) return [p, p];
+  },
+  irish(p) {
+    switch (p.name) {
+      case 'TH': return as(p, 'T');                                  // tink
+      case 'DH': return as(p, 'D');                                  // dat
+      case 'DX': return as(p, 'T');                                  // a crisp "t", not a flap
+      case 'LX': return as(p, 'L');                                  // clear "l" throughout
+      case 'EY': return { ...p, f: [430, 2000, 2600], to: null };    // pure "e"
+      case 'OW': return { ...p, f: [450, 850, 2350], to: null };     // pure "o"
+      case 'AY': return { ...p, f: [600, 1000, 2400], to: [420, 1900, 2550] }; // noice
+      case 'AE': return { ...p, f: [720, 1350, 2450] };
+    }
+  },
+  australian(p, prev, next) {
+    switch (p.name) {
+      case 'R': case 'RX': return isVowel(next) ? undefined : null; // no r after a vowel
+      case 'ER': return { ...p, f: [520, 1450, 2450] };
+      case 'EY': return { ...p, f: [650, 1500, 2450], to: [400, 2000, 2600] }; // mate → mite
+      case 'AY': return { ...p, f: [650, 950, 2400], to: [420, 1900, 2550] };  // like → loike
+      case 'IY': return { ...p, f: [420, 1900, 2550], to: [280, 2250, 2950] }; // bee → bəi
+      case 'OW': return { ...p, f: [600, 1250, 2450], to: [420, 1400, 2300] }; // no → naʉ
+      case 'AW': return { ...p, f: [700, 1700, 2450], to: [450, 1000, 2350] }; // how → hæo
+      case 'UW': return { ...p, f: [330, 1500, 2250], to: [300, 1600, 2250] }; // fronted "oo"
+      case 'AE': return { ...p, f: [600, 1800, 2500] };                        // raised "a"
+    }
+  },
+  manc(p, prev, next, { end }) {
+    // (a drawl: stressed vowels long, a word's last longer still)
+    const long = isVowel(p) ? (p.stress === 1 ? 1.4 : 1) * (end ? 1.3 : 1) : undefined;
+    const drawn = more => ({ ...p, long, ...more });
+    switch (p.name) {
+      case '/H': return null;                                       // 'ouse
+      case 'DX': return as(p, 'Q');                                 // wa'er
+      case 'T': return isVowel(prev) && (end || isVowel(next)) ? as(p, 'Q') : undefined;
+      case 'R': case 'RX': return isVowel(next) ? undefined : null; // no r after a vowel
+      case 'NX': return end ? prev?.stress === 1 ? [p, extra(p, 'G')] : as(p, 'N') : undefined; // sing-g, but singin'
+      case 'AH': return as(p, 'UH', { f: [360, 900, 2250], long: (long ?? 1)*1.2 }); // buns like boons
+      case 'AX': case 'ER': return end ? drawn({ name: 'AH', f: [680, 1250, 2450] }) : drawn({ f: [500, 1500, 2450] }); // lettah, werk
+      case 'EY': return drawn({ f: [450, 1950, 2550], to: null });  // a long pure "e"
+      case 'OW': return drawn({ f: [520, 850, 2400], to: null });   // a long "aw" for "oh"
+      case 'AY': return drawn({ f: [720, 1000, 2450], to: [450, 1800, 2550] }); // shoine, drawn out
+      case 'IY': return end ? drawn({ name: 'EH', f: [520, 1800, 2500] }) : drawn(); // happeh
+    }
+    if (long) return drawn();
   },
   french(p, prev, next) {
     switch (p.name) {
@@ -82,12 +140,14 @@ function germanSound(p, prev, next, { start, end }) {
     case 'OW': return { ...p, f: [430, 800, 2350], to: null };
   }
 }
+// A voice made to suit its accent (people.js voiceOf): Manc's nasal
+export const accentVoice = v => v.accent === 'manc' ? { ...v, sharpness: Math.max(v.sharpness, 10) } : v;
 // French stresses each word's last vowel, and nothing else in it
 const LAST_STRESS = new Set(['french']);
 
 export const ACCENTS = ['none', ...Object.keys(RULES)];
 /** Share of people with each accent; the rest have none. */
-export const ACCENT_SHARE = { cockney: 0.15, scottish: 0.15, french: 0.1, german: 0.1 };
+export const ACCENT_SHARE = { cockney: 0.15, scottish: 0.15, french: 0.1, german: 0.1, welsh: 0.1, irish: 0.1, australian: 0.1, manc: 0.1 };
 /** An accent for a roll u in [0, 1). */
 export function accentFor(u) {
   for (const [name, share] of Object.entries(ACCENT_SHARE)) if ((u -= share) < 0) return name;

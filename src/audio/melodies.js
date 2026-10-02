@@ -20,9 +20,17 @@ export const MELODIES = [
 const TUNE = [0, 4, 7, 9, 7, 4, 2, 4, 0, 7, 12, 9, 7, 4, 2, 0];
 export const SUNG = { name: 'sung', sung: true, shape: (u, k) => 2**(TUNE[k % TUNE.length]/12) - 1, fall: 0 };
 
+// an accent's tune, in place of their own (audio/accents.js): Welsh lilts, up and down, ending up; Irish lifts; Australian rises at the end; Manc drones
+export const ACCENT_MELODIES = {
+  irish: { name: 'irish', shape: u => 0.26*Math.sin(Math.PI*0.9*u) - 0.06, fall: 0.3 }, // up through the middle, down a little
+  australian: { name: 'australian', shape: u => 0.08*(1 - 2*u) + 0.4*Math.max(0, (u - 0.7)/0.3)**2, fall: 0 }, // ends up, statements too
+  manc: { name: 'manc', shape: u => 0.03 - 0.08*u + 0.14*Math.sin(Math.PI*Math.max(0, (u - 0.7)/0.3)), fall: 0.3 }, // level and low, a lazy lift on the last word
+  welsh: { name: 'welsh', shape: (u, k) => 0.2*Math.sin(Math.PI*1.6*u) - 0.06 + (k % 2 ? 0.07 : -0.03), fall: 0 },
+};
+
 /**
  * Someone's melody.
  * @param {{melody?: number|string}} voice - its melody, an index into MELODIES (none, the first), or 'sung'
  * @returns {{name: string, shape: (through: number, k: number) => number, fall: number}}
  */
-export const melodyOf = voice => voice.melody === 'sung' ? SUNG : MELODIES[voice.melody ?? 0] ?? MELODIES[0];
+export const melodyOf = voice => voice.melody === 'sung' ? SUNG : ACCENT_MELODIES[voice.accent] ?? MELODIES[voice.melody ?? 0] ?? MELODIES[0];

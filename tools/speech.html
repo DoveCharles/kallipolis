@@ -40,7 +40,7 @@
 <script type="module">
 import SamJs from 'sam-js';
 import { speakText, phonemesOf, SAMPLE_RATE, TUNING } from '../src/audio/speech.js';
-import { ACCENTS, accented } from '../src/audio/accents.js';
+import { ACCENTS, accented, accentVoice } from '../src/audio/accents.js';
 import { MELODIES } from '../src/audio/melodies.js';
 
 const $ = id => document.getElementById(id);
@@ -63,7 +63,7 @@ for (const [key, min, max, step] of KNOBS) {
 }
 $('reset').onclick = () => { for (const [key] of KNOBS) { $('k-' + key).value = DEFAULTS[key]; $('k-' + key).oninput(); } };
 $('copy').onclick = () => navigator.clipboard.writeText(JSON.stringify({ ...voice(), mood: +$('mood').value, ...TUNING }));
-const voice = () => ({ pitch: +$('pitch').value, formant: +$('formant').value, sharpness: +$('sharpness').value, melody: +$('melody').value, age: +$('age').value, accent: $('accent').value });
+const voice = () => accentVoice({ pitch: +$('pitch').value, formant: +$('formant').value, sharpness: +$('sharpness').value, melody: +$('melody').value, age: +$('age').value, accent: $('accent').value });
 const clausesOf = text => accented(phonemesOf(text), $('accent').value);
 for (const id of ['pitch', 'formant', 'sharpness', 'mood', 'age', 'speed']) {
   const show = () => $(id).nextElementSibling.textContent = $(id).value;
