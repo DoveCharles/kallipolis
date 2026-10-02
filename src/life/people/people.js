@@ -1930,7 +1930,7 @@ export function updatePeople(t) {
     personModel.only.value = -1;
   }
   // while controlling someone, their own head and hair are hidden (if S.hideOwnHead)
-  if (personModel?.hidden && S.hideOwnHead && possession.index >= 0) personModel.hidden.value = possession.index;
+  if (personModel?.hidden && S.hideOwnHead && possession.index >= 0 && !(possession.distance > 0)) personModel.hidden.value = possession.index;
   // or, possessing them, the view from their eyes
   if (possession.index >= 0 && possession.index === followed && people[followed].mode === 'possessed') placePossessedCamera(followed);
   updatePossessedTarget(); // (and what E would do from there, labelled: see peopleTracking.js)

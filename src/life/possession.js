@@ -30,8 +30,10 @@ const hint = document.getElementById('possess-hint');
 const hintExit = document.getElementById('ph-exit');
 // (fov: how wide someone taken over sees, in or out of a room, the wheel taking it between FOV_NARROWEST and FOV_WIDEST —
 // scrolling down widens it: see updateInteriorCamera in buildings/interior.js)
-export const possession = { index: -1, yaw: 0, pitch: 0, fov: 85.3, alwaysForward: false }; // (alwaysForward: rushed, W and Shift held for good)
-const FOV_NARROWEST = 30, FOV_WIDEST = 100;
+// (distance: 0 in first person, else third person that far behind, in heights: see placePossessedCamera in peopleTracking.js —
+// scrolling out past FOV_WIDEST goes to it at THIRD_NEAREST, in past that back to first person)
+export const possession = { index: -1, yaw: 0, pitch: 0, fov: 85.3, distance: 0, alwaysForward: false }; // (alwaysForward: rushed, W and Shift held for good)
+const FOV_NARROWEST = 30, FOV_WIDEST = 100, THIRD_NEAREST = 1, THIRD_FURTHEST = 6;
 /** Whether someone, possessed, is forced to rush and rant (hatespossessed, or terrified: no swears). @param {object} p @returns {boolean} */
 export const rushed = p => !!(p.traits.hatespossessed || p.traits.terrified);
 // Rushed (see rushed): how many times their running speed, and the view widened for it as a boosting car's (BOOST_FOV in traffic/driving.js), capped
@@ -113,6 +115,7 @@ export function startPossession(i, heading) {
   possession.index = i;
   possession.yaw = heading;
   possession.pitch = -0.1;
+  possession.distance = 0;
   held.clear();
   showHint(IS_TOUCH ? 'First person' : 'Press <kbd>Esc</kbd> to exit first person',
     IS_TOUCH ? 'Stick to walk · Run to run · Punch to swing · Use to talk or go in · drag to look'
@@ -306,7 +309,13 @@ window.addEventListener('pointercancel', endLook);
 dom.addEventListener('wheel', (e) => {
   if (!isPossessing() && !riding.active) return;
   e.preventDefault(); e.stopImmediatePropagation();
-  if (isPossessing() && !App.scrollChoice?.(e.deltaY)) possession.fov = Math.max(FOV_NARROWEST, Math.min(FOV_WIDEST, possession.fov*(1 + e.deltaY*0.001)));
+  if (!isPossessing() || App.scrollChoice?.(e.deltaY)) return;
+  const k = 1 + e.deltaY*0.001;
+  if (possession.distance > 0) {
+    const d = possession.distance*k;
+    possession.distance = d < THIRD_NEAREST ? 0 : Math.min(THIRD_FURTHEST, d);
+  } else if (possession.fov >= FOV_WIDEST && e.deltaY > 0) possession.distance = THIRD_NEAREST;
+  else possession.fov = Math.max(FOV_NARROWEST, Math.min(FOV_WIDEST, possession.fov*k));
 }, { capture: true, passive: false });
 
 Object.assign(App, { isPossessing, isDriving: () => driving.active, isFlying: () => flying.active, isRiding: () => riding.active });
