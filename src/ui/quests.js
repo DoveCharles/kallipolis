@@ -4,6 +4,7 @@ import { openWindow } from './w3-window.js';
 import { stillLoading } from './loading.js';
 import { standingOf } from '../life/people/people.js';
 import { getTrainStations } from '../trains/trains.js';
+import { setImgIcon } from './pixel-icons.js';
 import { getProgress, setProgress, onProgress } from '../project/progress.js';
 
 // Quests (toolbar button left of the daily gift): TIMED_MAX timed ones (do N things before the clock runs out, which
@@ -239,7 +240,7 @@ setInterval(() => {
 const KINDS = [{ key: 'timed', name: 'Timed' }, { key: 'requests', name: 'Requests' }, { key: 'bounties', name: 'Bounties' }, { key: 'achievements', name: 'Goals' }];
 let win = null, kind = 'timed';
 const button = document.getElementById('btn-quests');
-const setIcon = open => { const img = button?.querySelector('img'); if (img) img.src = `assets/icons/quests${open ? '-open' : ''}.png`; button?.classList.toggle('on', open); };
+const setIcon = open => { setImgIcon(button?.querySelector('img'), open ? 'quests-open' : 'quests'); button?.classList.toggle('on', open); };
 function flash() { if (win) return; button?.classList.remove('qs-new'); void button?.offsetWidth; button?.classList.add('qs-new'); }
 const clock = t => `${Math.floor(t/60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const energyIcon = '<img class="meter-icon" src="assets/icons/energy.png" alt="energy">';
