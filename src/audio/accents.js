@@ -98,6 +98,17 @@ const RULES = {
     }
     if (long) return drawn();
   },
+  japanese(p, prev, next, { end }) {
+    const sound = japaneseSound(p, next);
+    if (sound === null) return null;
+    const said = sound ?? p;
+    if (isVowel(said) || said.name === 'N' || said.name === 'Q') return said;
+    if (said.name === 'M') return end || !isVowel(next) ? as(said, 'N') : said; // only "n" closes a syllable
+    if (!end && (isVowel(next) || GLIDES.has(next?.name) || GLIDES.has(said.name))) return said;
+    // (a vowel after any other consonant with none after it: desuku, sutoriito)
+    const v = said.name === 'T' || said.name === 'D' ? 'OH' : said.name === 'CH' || said.name === 'J' || said.name === 'SH' ? 'IY' : 'UH';
+    return [said, { name: v, stress: 0, word: p.word, ...(v === 'UH' ? JAPANESE_U : {}) }];
+  },
   french(p, prev, next) {
     switch (p.name) {
       case '/H': return null;
@@ -142,12 +153,36 @@ function germanSound(p, prev, next, { start, end }) {
 }
 // A voice made to suit its accent (people.js voiceOf): Manc's nasal
 export const accentVoice = v => v.accent === 'manc' ? { ...v, sharpness: Math.max(v.sharpness, 10) } : v;
+const GLIDES = new Set(['Y', 'YX', 'W', 'WX']);
+const JAPANESE_U = { f: [350, 1300, 2300], to: null }; // unrounded "u"
+const BEFORE_I = { S: 'SH', T: 'CH', D: 'J', Z: 'J' };   // shi, chi, ji
+// five vowels, evenly timed (every one lightly stressed); r and l one tap; no th, v or ng
+function japaneseSound(p, next) {
+  const even = { stress: 2 };
+  switch (p.name) {
+    case 'TH': return as(p, 'S');
+    case 'DH': return as(p, 'Z');
+    case 'V': return as(p, 'B');
+    case 'R': case 'RX': case 'L': case 'LX': return as(p, 'DX');
+    case 'NX': return as(p, 'N');
+    case 'S': case 'T': case 'D': case 'Z': return next?.name === 'IY' || next?.name === 'IH' ? as(p, BEFORE_I[p.name]) : undefined;
+    case 'AE': case 'AH': case 'AA': case 'AX': return as(p, 'AA', even);
+    case 'AO': return as(p, 'OH', { ...even, long: 1.3 });
+    case 'ER': return as(p, 'AA', { ...even, long: 1.5 });  // "aa"
+    case 'IH': case 'IX': case 'IY': return as(p, 'IY', even);
+    case 'UH': case 'UW': case 'UX': return as(p, 'UH', { ...even, ...JAPANESE_U });
+    case 'EH': return { ...p, ...even };
+    case 'EY': return as(p, 'EH', { ...even, long: 1.4 });  // a long "e"
+    case 'OW': return as(p, 'OH', { ...even, long: 1.4 });  // a long "o"
+    case 'AY': case 'AW': case 'OY': return { ...p, ...even };
+  }
+}
 // French stresses each word's last vowel, and nothing else in it
 const LAST_STRESS = new Set(['french']);
 
 export const ACCENTS = ['none', ...Object.keys(RULES)];
 /** Share of people with each accent; the rest have none. */
-export const ACCENT_SHARE = { cockney: 0.15, scottish: 0.15, french: 0.1, german: 0.1, welsh: 0.1, irish: 0.1, australian: 0.1, manc: 0.1 };
+export const ACCENT_SHARE = { cockney: 0.1, scottish: 0.08, french: 0.08, german: 0.08, welsh: 0.08, irish: 0.08, australian: 0.08, manc: 0.08 }; // (japanese: Miku's only, people/presets.js)
 /** An accent for a roll u in [0, 1). */
 export function accentFor(u) {
   for (const [name, share] of Object.entries(ACCENT_SHARE)) if ((u -= share) < 0) return name;

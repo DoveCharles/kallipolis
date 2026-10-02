@@ -41,7 +41,7 @@
 import SamJs from 'sam-js';
 import { speakText, phonemesOf, SAMPLE_RATE, TUNING } from '../src/audio/speech.js';
 import { ACCENTS, accented, accentVoice } from '../src/audio/accents.js';
-import { MELODIES } from '../src/audio/melodies.js';
+import { MELODIES, ACCENT_MELODIES } from '../src/audio/melodies.js';
 
 const $ = id => document.getElementById(id);
 const context = new AudioContext();
@@ -95,6 +95,9 @@ function say() {
   drawSpectrogram(last);
 }
 $('say').onclick = say;
+// (an accent with its own tune overrides the melody)
+$('melody').onchange = say;
+$('accent').onchange = () => { $('melody').disabled = !!ACCENT_MELODIES[$('accent').value]; say(); };
 $('sam').onclick = () => {
   const v = voice(), clamp = (x, lo, hi) => Math.round(Math.max(lo, Math.min(hi, x))), shape = 128*v.formant;
   const sam = new SamJs({ pitch: clamp(50*(150/v.pitch)**0.7, 22, 110), mouth: clamp(shape, 90, 200), throat: clamp(shape*0.95, 90, 200), speed: 72 });

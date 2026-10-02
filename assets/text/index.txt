@@ -5,6 +5,7 @@ gifts.txt
 morality.txt
 pigeons.txt
 planes.txt
+pronounce.txt
 trains.txt
 tv.txt
 people/about.txt

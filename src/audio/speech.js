@@ -19,8 +19,8 @@ import { melodyOf } from './melodies.js';
 // babble's does: through each clause in the speaker's own melody (see audio/melodies.js), lifted on its stressed
 // syllables, falling at the end, or rising for a question.
 export const SAMPLE_RATE = 22050;
-/** Breath (as TUNING.breathy) from age: none to 40, then up to TUNING.ageBreath at 100. */
-export const agedBreath = age => TUNING.ageBreath*Math.max(0, Math.min(1, (age - 40)/60));
+/** Breath (as TUNING.breathy) from age: none to 60, then up to TUNING.ageBreath at 100. */
+export const agedBreath = age => TUNING.ageBreath*Math.max(0, Math.min(1, (age - 60)/40));
 const T = 1/SAMPLE_RATE;
 const FRAME = 0.005;            // seconds between updates of the voice's settings
 const PAUSE = { ',': 0.18, '-': 0.15, '.': 0.32, '?': 0.32, '!': 0.32 }; // seconds of quiet after each
@@ -44,7 +44,7 @@ export const TUNING = {
   bandwidth: 1,      // × every formant's width
   aspiration: 0.35,  // breath, next to the voice
   breathy: 0,        // breath under the voice all the time
-  ageBreath: 1,      // × age's breath added to breathy (none to 40, then up to 1 at 100: agedBreath)
+  ageBreath: 1,      // × age's breath added to breathy (none to 60, then up to 1 at 100: agedBreath)
   drive: 1.2,        // soft clipping
 };
 const NASAL = [270, 450];       // Hz, the nasal pole, and the zero that pairs with it in an "m", "n" or "ng" (moved off it otherwise)
@@ -123,6 +123,36 @@ const locus = (place, vowel) => {
   return [250, f2, f2 + 350];
 };
 
+// Words SAM says wrong, as assets/text/pronounce.txt has them instead ("word: SAM phonemes", or "word = respelling")
+const OWN = new Map();
+fetch(new URL('../../assets/text/pronounce.txt', import.meta.url)).then(r => r.ok ? r.text() : '').then(text => {
+  for (const line of text.split('\n')) {
+    const m = line.replace(/#.*/, '').match(/^\s*([a-z']+)\s*([:=])\s*(.+?)\s*$/i);
+    if (m) OWN.set(m[1].toLowerCase(), m[2] === ':' ? m[3].toUpperCase() : SamJs.convert(m[3]) || '');
+  }
+}).catch(() => {});
+// SamJs.convert, with OWN's words spliced in
+function spell(text) {
+  if (!OWN.size) return SamJs.convert(text);
+  let out = '', plain = '';
+  const flush = () => {
+    if (/[a-z0-9]/i.test(plain)) {
+      let said = SamJs.convert(plain) || '';
+      if (!/[.,?!-]\s*$/.test(plain)) said = said.replace(/[\s.,?!-]+$/, ''); // (none added where the text had none)
+      out += said + ' ';
+    } else out += [...plain].filter(c => PAUSE[c] !== undefined).join('') + ' ';
+    plain = '';
+  };
+  text.split(/([a-z']+)/i).forEach((part, i) => {
+    const own = i % 2 ? OWN.get(part.toLowerCase()) : undefined;
+    if (own === undefined) { plain += part; return; }
+    flush();
+    out += own + ' ';
+  });
+  flush();
+  return out;
+}
+
 /**
  * SAM's phonemes for some text, split into clauses, each a list of { name, stress, word } (stress 0 none, 1 stressed, 2
  * lightly, where SAM left a word unmarked; word, which word of the clause it's in) and the punctuation it ends on.
@@ -130,7 +160,7 @@ const locus = (place, vowel) => {
  * @returns {{phonemes: object[], end: string}[]}
  */
 export function phonemesOf(text) {
-  const spelled = SamJs.convert(text);
+  const spelled = spell(text);
   if (!spelled) return [];
   const clauses = [];
   let clause = { phonemes: [], end: '.' }, word = 0;
