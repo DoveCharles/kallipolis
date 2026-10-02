@@ -485,9 +485,9 @@ function buildStationParts(position, tangent, radius, mats) {
     return geo;
   };
   add(slab(stadium(halfW, halfL), deckTop - deckDepth, deckDepth), mats.liftClad, 'TrainStationDeck', true);
-  const trim = stadium(halfW + 0.2, halfL + 0.2);
+  const trim = stadium(halfW + 0.08, halfL + 0.08); // as thin as the lift's strips, in the line's colour
   trim.holes.push(stadium(halfW - 0.02, halfL - 0.02));
-  add(slab(trim, deckTop - deckDepth*0.65, deckDepth*0.35), mats.stationTrim, 'TrainStationTrim', true);
+  add(slab(trim, deckTop - deckDepth*0.475 - 0.05, 0.1), mats.liftAccent, 'TrainStationTrim', true);
 
   // vault: rows of half-ellipse arcs along the track, full size through the middle and shrinking over each end
   // (sampled by angle there, so the curve closing onto the deck stays smooth)
@@ -575,7 +575,7 @@ function buildStationParts(position, tangent, radius, mats) {
       entrance.push(box(vaultX - 0.1, reach, awningY, awningY + 0.16));
     });
     add(mergeGeometryList(entrance), mats.liftClad, 'TrainStationEntrance', true);
-    add(mergeGeometryList(glow), mats.stationTrim, 'TrainStationEntranceGlow', true);
+    add(mergeGeometryList(glow), mats.liftAccent, 'TrainStationEntranceGlow', true);
     // a little ramp at each door, stepping up from the deck to rail height right where people board — a plain "/|"
     // wedge facing the doors: flat across the doorway, sloping up from the threshold in toward the rails
     const gapHeight = railY - deckTop;
@@ -740,7 +740,7 @@ export function rebuildTrainMeshes() {
       liftKick: new THREE.MeshStandardMaterial({ color:0x23272c, roughness:0.5, metalness:0.5 }),
       liftAccent: (() => {
         const c = LIFT_ACCENTS[trainHash(String(netId)) % LIFT_ACCENTS.length];
-        const m = new THREE.MeshStandardMaterial({ color:c, roughness:0.3, metalness:0.1, emissive:c, emissiveIntensity:1.4*computeWindowGlowFactor(S.sunElevation) });
+        const m = new THREE.MeshStandardMaterial({ color:c, roughness:0.3, metalness:0.1, emissive:c, emissiveIntensity:1.4*computeWindowGlowFactor(S.sunElevation), side:THREE.DoubleSide });
         m.userData.baseEmissiveIntensity = 1.4;
         return m;
       })(),
