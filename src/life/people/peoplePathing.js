@@ -175,24 +175,27 @@ export function buildPeopleNav() {
   const areas = [], lines = [];
   const inWater = createRegionTester(getWaterRegion()), onRoad = createRegionTester(S.roadFootprint);
   S.zones.forEach(zone => {
-    if (zone.drawing || zone.points.length < 3 || (zone.zoneType !== 'plaza' && zone.zoneType !== 'park' && zone.zoneType !== 'beach')) return;
+    if (zone.drawing || zone.points.length < 3 || (zone.zoneType !== 'plaza' && zone.zoneType !== 'park' && zone.zoneType !== 'beach' && zone.zoneType !== 'marina')) return;
+    const paved = zone.zoneType === 'plaza' || zone.zoneType === 'marina';
     const poly = tessellateClosedPath(zone.points);
     const paths = offsetPaths(clipPolygons(ClipperLib.ClipType.ctDifference, [toClipperPath(poly)], zoneCutoutsNear(zone, poly)), -1.2, ClipperLib.JoinType.jtMiter);
     const size = pathsArea(paths);
     if (size < 20) return;
     let minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
-    paths.forEach(path => path.forEach(p => { minX=Math.min(minX,p.X); maxX=Math.max(maxX,p.X); minZ=Math.min(minZ,p.Y); maxZ=Math.max(maxZ,p.Y); }));
-    const inArea = createRegionTester(paths), fountain = zone.zoneType==='plaza' ? zone.fountainSpot : null;
+    paths.concat(zone.pontoonDeck || []).forEach(path => path.forEach(p => { minX=Math.min(minX,p.X); maxX=Math.max(maxX,p.X); minZ=Math.min(minZ,p.Y); maxZ=Math.max(maxZ,p.Y); }));
+    // (a marina's jetties are part of it, kept a little in from their edges)
+    const onJetty = zone.pontoonDeck?.length ? createRegionTester(offsetPaths(zone.pontoonDeck, -0.35, ClipperLib.JoinType.jtMiter)) : null;
+    const inQuay = createRegionTester(paths), inArea = onJetty ? (x, z) => inQuay(x, z) || onJetty(x, z) : inQuay, fountain = zone.zoneType==='plaza' ? zone.fountainSpot : null;
     const inside = fountain ? (x, z) => inArea(x, z) && Math.hypot(x - fountain.x, z - fountain.z) > fountain.r + 0.8 : inArea;
     // waterwalking/aqua people's hangout: the water in it counts too, and off a park or beach, water up to SWIM_REACH out (see insideFor in people.js)
-    const reach = zone.zoneType === 'plaza' ? -1.2 : SWIM_REACH;
+    const reach = paved ? -1.2 : SWIM_REACH;
     const inReach = createRegionTester(offsetPaths([toClipperPath(poly)], reach, reach < 0 ? ClipperLib.JoinType.jtMiter : ClipperLib.JoinType.jtRound));
     const insideWet = (x, z) => inside(x, z) || (inReach(x, z) && inWater(x, z) && !onRoad(x, z));
     const out = Math.max(0, reach);
     areas.push({ kind: zone.zoneType, inside, insideWet, fountain, minX: minX/CLIPPER_SCALE, maxX: maxX/CLIPPER_SCALE, minZ: minZ/CLIPPER_SCALE, maxZ: maxZ/CLIPPER_SCALE,
       wetBox: { minX: minX/CLIPPER_SCALE - out, maxX: maxX/CLIPPER_SCALE + out, minZ: minZ/CLIPPER_SCALE - out, maxZ: maxZ/CLIPPER_SCALE + out },
-      size, y: zone.zoneType==='plaza' ? Y_PLAZA : Y_PARK, exits: [],
-      seats: zone.zoneType==='plaza' ? (zone.benchSeats || []).map(seat => ({ ...seat, by: null })) : [],
+      size, y: paved ? Y_PLAZA : Y_PARK, exits: [],
+      seats: paved ? (zone.benchSeats || []).map(seat => ({ ...seat, by: null })) : [],
       trees: zone.zoneType==='park' ? zone.treeSpots || [] : [] });
   });
   // a mall's food courts: hangouts like a plaza's, round their tables, palms and lamps, with a seat at every chair (see

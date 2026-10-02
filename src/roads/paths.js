@@ -5,6 +5,7 @@ import { distPointSegment } from '../buildings/footprints.js';
 import { tessellateOpenPath, ROAD_COLOR } from '../core/splines.js';
 import { roadNodes } from '../core/state.js';
 import { buildRaisedWalkway, isRaisedWalkwayLine } from './raised.js';
+import { kerbDrops, kerbDropMesh } from '../zones/carpark.js';
 import { CURB_COLOR, SIDEWALK_COLOR, CLIPPER_SCALE, roadLineWidths, unionRoadStrokes, clipPolygons, createMeshBuilder, forEachPolyTreeEdge, createEdgeIndex, addRoadLayerMesh, disposeObject } from './roads.js';
 
 // ---------------------------------------------------------- walkways
@@ -476,10 +477,14 @@ export function rebuildRoadMeshes() {
   const curbOutline = outlineAt(s => s.hw+s.cw);
   const sidewalkOutline = outlineAt(s => s.hw+s.cw+s.sw);
   S.roadFootprint = sidewalkOutline;
-  S.roadSurfaceOutline = roadOutline; // the ground has a hole cut here, for the sunk road surface (see rebuildGround)
   const { ctDifference, ctIntersection, ctUnion } = ClipperLib.ClipType;
-  const curbBand = clipPolygons(ctDifference, curbOutline, roadOutline);
-  const sidewalkBand = clipPolygons(ctDifference, sidewalkOutline, curbOutline);
+  // dropped kerbs into car parks: cut from the kerb and pavement, and drawn on their own (see zones/carpark.js)
+  const kerb = kerbDrops(allStrokes), cutDrops = band => kerb.rects.length ? clipPolygons(ctDifference, band, kerb.rects) : band;
+  S.kerbDrops = kerb.drops;
+  // the ground has a hole cut here, for the sunk road surface (see rebuildGround)
+  S.roadSurfaceOutline = kerb.rects.length ? clipPolygons(ctUnion, roadOutline, kerb.rects) : roadOutline;
+  const curbBand = cutDrops(clipPolygons(ctDifference, curbOutline, roadOutline));
+  const sidewalkBand = cutDrops(clipPolygons(ctDifference, sidewalkOutline, curbOutline));
   // Curb and sidewalk together are one raised platform: where its edge runs along the road outline it steps
   // down to the road, and where it runs along the outer outline it drops to the ground. The road itself is sunk
   // below the ground, so wherever its edge has no platform beside it, a low wall lines the hole it sits in.
@@ -504,7 +509,7 @@ export function rebuildRoadMeshes() {
     sidewalk.addTops(clipPolygons(ctIntersection, sidewalkBand, territory, true), Y_SIDEWALK);
     const roadFacing = strokes.some(s => s.cw>0) ? curb : sidewalk; // curbless paths step straight up onto the sidewalk
     const pointAt = (p, q, t) => ({ X: p.X+(q.X-p.X)*t, Y: p.Y+(q.Y-p.Y)*t });
-    forEachPolyTreeEdge(clipPolygons(ctIntersection, platformBand, territory, true), (p, q, outward) => {
+    forEachPolyTreeEdge(clipPolygons(ctIntersection, cutDrops(platformBand), territory, true), (p, q, outward) => {
       roadEdges.coverage(p, q).forEach(([t0, t1]) => roadFacing.addWall(pointAt(p, q, t0), pointAt(p, q, t1), Y_ROAD, Y_SIDEWALK, outward));
       outerEdges.coverage(p, q).forEach(([t0, t1]) => sidewalk.addWall(pointAt(p, q, t0), pointAt(p, q, t1), 0, Y_SIDEWALK, outward));
       // the rest of an edge is where this network's share of the platform meets another network's — no step there
@@ -524,6 +529,7 @@ export function rebuildRoadMeshes() {
     const sidewalkMesh = S.roadMeshGroup.children[S.roadMeshGroup.children.length-1];
     if (sidewalkMesh?.name === 'Sidewalk') applySlabShader(sidewalkMesh.material, pathSegmentsOf(strokes.map(s => s.line)), strokes[0].hw+strokes[0].cw, strokes[0].sw);
   });
+  if (kerb.drops.length) S.roadMeshGroup.add(kerbDropMesh(kerb.drops));
   const pathStrokes = [];
   S.pathBridgeSources = [];
   // walkway networks: one mesh each, plus their combined footprint for zones to keep lots and trees off
@@ -596,7 +602,8 @@ export function rebuildRoadMeshes() {
   const malls = App.mallFootprints?.() || [];
   if (malls.length) S.landCutFootprint = clipPolygons(ctUnion, S.landCutFootprint, malls);
   // what people can walk over water on: paths, malls and their entrance bridges
-  S.walkDeck = malls.length ? clipPolygons(ctUnion, S.pathFootprint, malls.concat(S.pathBridgeSources.flatMap(src => src.outline || []))) : S.pathFootprint;
+  S.pathWalkDeck = malls.length ? clipPolygons(ctUnion, S.pathFootprint, malls.concat(S.pathBridgeSources.flatMap(src => src.outline || []))) : S.pathFootprint;
+  refreshWalkDeck();
   App.rebuildMalls?.();
   const layoutKey = roadLayoutKey();
   if (layoutKey !== lastLayoutKey) {
@@ -613,4 +620,9 @@ export function rebuildRoadMeshes() {
   App.refreshHighlights();
   App.updateStats();
 }
-Object.assign(App, { attachWalkwayFringes });
+// S.walkDeck: S.pathWalkDeck plus marina jetties (zone.pontoonDeck, see zones/marina.js)
+export function refreshWalkDeck() {
+  const jetties = S.zones.flatMap(z => z.pontoonDeck || []), base = S.pathWalkDeck || [];
+  S.walkDeck = jetties.length ? clipPolygons(ClipperLib.ClipType.ctUnion, base, jetties) : base;
+}
+Object.assign(App, { attachWalkwayFringes, refreshWalkDeck });

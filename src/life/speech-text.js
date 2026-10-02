@@ -81,10 +81,10 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   walking: person => person?.act === 'walk', // (walking along beside someone, talking: see "walking together" in people/peopleActivities.js)
   sitting: person => ((person?.act === 'bench' || person?.act === 'circle') && person.stage === 'sit') || (!!person?.inRoom?.seat && person.inRoom.stage === 'sit'),
 };
-const PLACES = ['park', 'plaza', 'beach', 'foodcourt', 'roadside', 'path', 'bridge', 'crossing']; // (here.<place>: see placeOf)
+const PLACES = ['park', 'plaza', 'beach', 'foodcourt', 'roadside', 'path', 'bridge', 'crossing', 'marina']; // (here.<place>: see placeOf)
 // here.<zone>: standing in a zone of that type (zoneOf); city is the 'buildings' zone
 const ZONES = { plain: 'plain', park: 'park', water: 'water', beach: 'beach', farmland: 'farmland', suburbs: 'suburbs',
-  town: 'town', plaza: 'plaza', city: 'buildings', buildings: 'buildings', industrial: 'industrial', airport: 'airport', mall: 'mall' };
+  town: 'town', plaza: 'plaza', city: 'buildings', buildings: 'buildings', industrial: 'industrial', airport: 'airport', marina: 'marina', mall: 'mall', carpark: 'carpark' };
 // sex, read as a trait (-1 to 1): {man}, {woman = -1}, {other.man > 0}; 0 for anyone without one (the cuboid people)
 const SEXES = { man: person => person?.isMan == null ? 0 : person.isMan ? 1 : -1, woman: person => -SEXES.man(person) };
 // age, read as a trait for leans (-1 at AGE_YOUNG or under, 1 at AGE_OLD or over): {age}, {age = -1}; comparisons are in years

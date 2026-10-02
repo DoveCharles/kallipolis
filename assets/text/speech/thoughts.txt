@@ -100,6 +100,13 @@ Shops, shops, shops. {here.mall, mood = -1}
 Smells like a hundred different lunches in here. {here.foodcourt}
 I could eat. {here.foodcourt}
 The sand gets everywhere. {here.beach, mood = -1}
+One day I'll have a boat. {here.marina}
+Imagine just sailing away from all this. {here.marina, mood = -0.5}
+Don't fall in, don't fall in. {here.marina}
+There goes another one out on the water. Lucky them. {here.marina}
+Where did I leave the car again? {here.carpark}
+Every level looks exactly the same. {here.carpark}
+It always smells like petrol in these places. {here.carpark, mood = -0.5}
 One step and it'd all be over. {here.roadside, mood = -1}
 Look both ways. Look both ways. {here.crossing}
 Nearly there. {here.path}

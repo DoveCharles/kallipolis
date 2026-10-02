@@ -25,6 +25,8 @@ import { smellyCars, updatePull } from './pullover.js';
 import { junctionGate, updateJunctionGates } from './junctions.js';
 import { crashingIn } from './room-veer.js';
 import { crashIntoRoom, updateRoomCrash } from '../room-crash.js';
+import { driveParked, maybePark, maybeStartParked, reseatParked, endPark } from './parking.js';
+import { carParkFloorAt } from '../../zones/carpark.js';
 import { smashFences } from '../fence-smash.js';
 const crashes = []; // [car, windowed side] this frame
 const PUSHED_REVERSE_SPEED = 3; // (units a second a car backs up at while pushed)
@@ -94,12 +96,12 @@ export function updateTraffic(t) {
     S.trafficNavDirty = false;
     S.trafficNavBuiltAt = t;
     S.trafficNav = buildTrafficNav();
-    cars.forEach(car => { if (car !== drivenCar) reseatCar(car); });
+    cars.forEach(car => { if (car.park) reseatParked(car); else if (car !== drivenCar) reseatCar(car); });
   }
   const wanted = Math.min(TRAFFIC_MAX, Math.round(S.trafficAmount), S.trafficNav.capacity);
   // (saved traffic come in replaces this: see carKeep.js — not while one's being driven)
   if (!drivenCar && takeCarReset()) { stopFollowingCar(); cars.length = 0; }
-  while (cars.length < wanted) { const car = keptCar(newCar()); spawnCar(car); if (car.keptAt && car.li >= 0) seatSavedCar(car); cars.push(car); } // (a saved car back, where it was, else a new one)
+  while (cars.length < wanted) { const car = keptCar(newCar()); spawnCar(car); if (car.keptAt && car.li >= 0) seatSavedCar(car); else maybeStartParked(car); cars.push(car); } // (a saved car back, where it was, else a new one)
   if (cars.length > wanted) benchCars(cars.splice(wanted)); // (to come back first when there's room)
   if (followedCar >= cars.length) stopFollowingCar();
   carParts.all.forEach(mesh => { mesh.count = cars.length; });
@@ -108,7 +110,7 @@ export function updateTraffic(t) {
   cars.forEach(car => {
     if (car.li < 0 && S.trafficNav.lines.length) { spawnCar(car); if (car.keptAt && car.li >= 0) seatSavedCar(car); }
     car.ahead = null;
-    if (car.li < 0 || car === drivenCar) return; // (the one being driven isn't in any lane — see "driving a car")
+    if (car.li < 0 || car === drivenCar || car.park) return; // (the one being driven isn't in any lane — see "driving a car")
     const key = car.li*2 + (car.dir > 0 ? 1 : 0);
     if (!lanes.has(key)) lanes.set(key, []);
     lanes.get(key).push(car);
@@ -139,11 +141,12 @@ export function updateTraffic(t) {
     }
     if (car.design != null) refreshCarTraits(car);
     if (car.reviving) { updateCarRevive(car, dt); placeCar(car, i, designCounts); return; } // (blown up with a respawn left: see startCarRevive)
-    if (car === drivenCar) { car.sway = null; car.pull = 0; if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
+    if (car === drivenCar) { if (car.park) endPark(car); car.sway = null; car.pull = 0; if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } deckDriven(car); turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
     rechargeBoost(car, dt); // (driven or not: see driving.js)
     if (i === followedCar && car.boostLeft != null) App.setCarBoost(car.boostLeft, boostMax(car), car.boostLocked); // (the card's meter keeps filling after it's let go)
     if (car.fuse != null) { burnFuse(car, dt); placeCar(car, i, designCounts); return; } // (about to blow: it neither drives nor turns)
     if (goingUnder(car)) { sinkKnockedCar(car, dt); turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
+    if ((car.park || maybePark(car, t)) && driveParked(car, dt, t)) { turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; } // (see parking.js)
     // cruise, but ease off for the car in front and slow down into junctions
     const cruise = CAR_SPEED*S.peopleSpeed*(car.traits?.speed ?? 1);
     let target = cruise;
@@ -272,8 +275,15 @@ export function updateTraffic(t) {
     cm.glowUniform.value = glowFactor;
   });
   // the camera onto whoever it's following, at about their roof — and driving it, round behind it
-  if (followedCar >= 0) { const car = cars[followedCar]; controls.goalTarget.set(car.x, Y_ROAD + carHeight(car)*(drivenCar ? 1.1 : 0.6), car.z); }
+  if (followedCar >= 0) { const car = cars[followedCar]; controls.goalTarget.set(car.x, Y_ROAD + (car.deckY ?? 0) + carHeight(car)*(drivenCar ? 1.1 : 0.6), car.z); }
   if (drivenCar) chaseCamera(drivenCar);
+}
+// the driven car on a car park's decks and ramps: its height and nose-down pitch from the floor under each end
+function deckDriven(car) {
+  const y = car.deckY ?? 0, fx = Math.sin(car.heading)*1.5, fz = Math.cos(car.heading)*1.5;
+  car.deckY = carParkFloorAt(car.x, car.z, y);
+  const front = carParkFloorAt(car.x + fx, car.z + fz, y), rear = carParkFloorAt(car.x - fx, car.z - fz, y);
+  car.rampPitch = car.deckY ? -Math.atan2(front - rear, 3) : 0;
 }
 /**
  * A car knocked off its lane (car.kick), each frame: floated if it has the aqua trait (updateFloating, which also lets

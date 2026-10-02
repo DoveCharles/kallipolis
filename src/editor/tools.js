@@ -207,31 +207,20 @@ function pickPathType(type) {
   renderHierarchy();
 }
 
-document.getElementById('s-roadwidth').addEventListener('input', (e)=>{
-  const v = parseFloat(e.target.value);
-  document.getElementById('v-roadwidth').textContent = v;
-  if (S.selection.type==='road') {
-    const lines = S.roadLines.filter(l=>l.networkId===S.selection.id);
-    if (lines.length) { lines.forEach(l=>{ l.width = v; }); rebuildRoadMeshes(); }
-  } else {
-    S.DEFAULT_ROAD_WIDTH = v;
-  }
+// labels follow the drag; roads, lots and buildings only rebuild once the slider's let go of — every tick is slow
+[['s-roadwidth', 'v-roadwidth', 'width', 'DEFAULT_ROAD_WIDTH'], ['s-sidewalkwidth', 'v-sidewalkwidth', 'sidewalkWidth', 'DEFAULT_SIDEWALK_WIDTH']].forEach(([id, label, key, def]) => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => { document.getElementById(label).textContent = parseFloat(el.value); });
+  el.addEventListener('change', () => {
+    const v = parseFloat(el.value);
+    const lines = S.selection.type==='road' ? S.roadLines.filter(l=>l.networkId===S.selection.id) : [];
+    if (S.selection.type!=='road') { S[def] = v; return; }
+    if (!lines.length) return;
+    lines.forEach(l=>{ l[key] = v; });
+    rebuildRoadMeshes();
+    S.zones.forEach(subdivideZone);
+  });
 });
-document.getElementById('s-sidewalkwidth').addEventListener('input', (e)=>{
-  const v = parseFloat(e.target.value);
-  document.getElementById('v-sidewalkwidth').textContent = v;
-  if (S.selection.type==='road') {
-    const lines = S.roadLines.filter(l=>l.networkId===S.selection.id);
-    if (lines.length) { lines.forEach(l=>{ l.sidewalkWidth = v; }); rebuildRoadMeshes(); }
-  } else {
-    S.DEFAULT_SIDEWALK_WIDTH = v;
-  }
-});
-
-// the zones' lots and buildings only follow once the slider's let go of — regenerating them on every tick is slow
-['s-roadwidth', 's-sidewalkwidth'].forEach(id => document.getElementById(id).addEventListener('change', () => {
-  if (S.selection.type==='road' && S.roadLines.some(l=>l.networkId===S.selection.id)) S.zones.forEach(subdivideZone);
-}));
 
 document.getElementById('s-tuberadius').addEventListener('input', (e)=>{
   const v = parseFloat(e.target.value);
@@ -308,7 +297,6 @@ syncExtraSettings();
 document.getElementById('s-people').addEventListener('click', () => { S.peopleEnabled = !S.peopleEnabled; App.syncPeopleUI(); });
 document.getElementById('s-peopleamount').addEventListener('input', (e) => { S.peopleAmount = parseFloat(e.target.value); App.syncPeopleUI(); });
 document.getElementById('s-peoplespeed').addEventListener('input', (e) => { S.peopleSpeed = parseFloat(e.target.value); App.syncPeopleUI(); });
-document.getElementById('s-weathercycle').addEventListener('click', () => { S.weatherCycle = !S.weatherCycle; App.syncSkyUI(); });
 document.getElementById('s-peoplesize').addEventListener('input', (e) => { S.peopleSize = parseFloat(e.target.value); App.syncPeopleUI(); });
 document.getElementById('s-roadsafety-debug').addEventListener('click', () => { S.showRoadsafetyDebug = !S.showRoadsafetyDebug; App.syncPeopleUI(); });
 document.getElementById('s-peoplenav-debug').addEventListener('click', () => { S.showPeopleNavDebug = !S.showPeopleNavDebug; App.syncPeopleUI(); });
@@ -320,6 +308,7 @@ document.getElementById('s-daynight').addEventListener('click', () => {
 document.getElementById('s-timeofday').addEventListener('input', (e) => { S.timeOfDay = parseFloat(e.target.value) % 24; App.applyTimeOfDay(false); });
 document.getElementById('s-daylength').addEventListener('input', (e) => { S.dayLengthMinutes = parseFloat(e.target.value); App.syncSkyUI(); });
 ['rain', 'snow', 'clouds'].forEach(kind => document.getElementById('s-' + kind).addEventListener('input', (e) => App.setWeather(kind, parseFloat(e.target.value))));
+document.getElementById('s-weathercycle').addEventListener('click', () => { S.weatherCycle = !S.weatherCycle; App.syncSkyUI(); });
 document.getElementById('s-groundcolor').addEventListener('input', (e) => {
   groundMat.color.set(e.target.value);
 });

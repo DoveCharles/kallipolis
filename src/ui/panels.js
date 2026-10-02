@@ -25,7 +25,11 @@ export function selectItem(type,id,force) {
     const line = S.roadLines.find(l=>l.networkId===id);
     if (line) S.newRoadType = line.roadType || 'sidewalk';
   }
-  else if (type==='zone') S.lastSelectedZoneId = id;
+  else if (type==='zone') {
+    S.lastSelectedZoneId = id;
+    const zone = S.zones.find(z=>z.id===id);
+    if (zone) S.newZoneType = zone.zoneType || 'buildings';
+  }
   else if (type==='train') S.lastSelectedTrainNetworkId = id;
   refreshHighlights();
   S.zones.forEach(rebuildZoneVisual);
@@ -527,6 +531,17 @@ function renderDetails() {
       <div class="slider-row" style="margin-top:11px;"><div class="row"><label>Trees</label><span class="val" id="dv-plazatrees">${(s.plazaTrees!=null?s.plazaTrees:0.35).toFixed(2)}</span></div>
         <input type="range" id="ds-plazatrees" min="0" max="1" step="0.05" value="${s.plazaTrees!=null?s.plazaTrees:0.35}"></div>
       ${seedHtml}
+    ` : zoneType==='carpark' ? `
+      <div class="empty" style="margin:6px 0 10px;">${!zone.carPark?.entrances.length ? 'Touch it to a road for an entrance.' : (s.carParkStoreys > 0 && !zone.carPark.N) ? 'Too small for ramps: kept to one level.' : (zone.carPark.bays.length + ' bays.')}</div>
+      <div class="slider-row"><div class="row"><label>Storeys</label><span class="val" id="dv-carparkstoreys">${s.carParkStoreys ?? 0}</span></div>
+        <input type="range" id="ds-carparkstoreys" min="0" max="8" step="1" value="${s.carParkStoreys ?? 0}"></div>
+    ` : zoneType==='marina' ? `
+      <div class="empty" style="margin:6px 0 10px;">${zone.marinaWet ? 'Jetties run out into the water beside it, with boats moored along them.' : 'Needs water to launch boats: touch it to a water zone or river. Until then it&rsquo;s a boatyard.'}</div>
+      <div class="slider-row"><div class="row"><label>Boats</label><span class="val" id="dv-marinaboats">${(s.marinaBoats!=null?s.marinaBoats:0.75).toFixed(2)}</span></div>
+        <input type="range" id="ds-marinaboats" min="0" max="1" step="0.05" value="${s.marinaBoats!=null?s.marinaBoats:0.75}"></div>
+      <div class="slider-row"><div class="row"><label>Jetty length</label><span class="val" id="dv-jettylength">${s.jettyLength!=null?s.jettyLength:16}</span></div>
+        <input type="range" id="ds-jettylength" min="6" max="40" step="1" value="${s.jettyLength!=null?s.jettyLength:16}"></div>
+      ${seedHtml}
     ` : zoneType==='farmland' ? `
       <div class="slider-row"><div class="row"><label>Fields</label><span class="val" id="dv-fieldcount">${s.fieldCount!=null?s.fieldCount:14}</span></div>
         <input type="range" id="ds-fieldcount" min="1" max="60" step="1" value="${s.fieldCount!=null?s.fieldCount:14}"></div>
@@ -667,6 +682,12 @@ function renderDetails() {
       wireSwatches(PLAZA_COLORS, 'pavingColor', 'pavingcolor', PLAZA_COLORS[0]);
       wireToggle('ds-fountain', 'fountain');
       wireNumber('ds-plazatrees', 'dv-plazatrees', 'plazaTrees', 2);
+    } else if (zoneType==='carpark') {
+      wireNumber('ds-carparkstoreys', 'dv-carparkstoreys', 'carParkStoreys');
+      document.getElementById('ds-carparkstoreys').addEventListener('change', () => renderDetails());
+    } else if (zoneType==='marina') {
+      wireNumber('ds-marinaboats', 'dv-marinaboats', 'marinaBoats', 2);
+      wireNumber('ds-jettylength', 'dv-jettylength', 'jettyLength');
     } else if (zoneType==='farmland') {
       wireNumber('ds-fieldcount', 'dv-fieldcount', 'fieldCount');
       wireToggle('ds-hedgerows', 'hedgerows');
@@ -997,6 +1018,10 @@ function renderDetails() {
     `;
     document.getElementById('d-delete').addEventListener('click', ()=> removeRoadNetwork(netId));
     document.getElementById('d-close').addEventListener('click', deselect);
+  } else if (S.interactionMode==='node' && S.currentTool==='zone') {
+    // nothing selected: the carousel picks what the next zone drawn is
+    panel.innerHTML = App.zoneTypeCarouselHtml(S.newZoneType);
+    App.wireZoneTypeCarousel(panel, (type) => { S.newZoneType = type; renderDetails(); });
   } else {
     panel.innerHTML = '<div class="empty">Select a path or zone from the list to see its settings.</div>';
   }

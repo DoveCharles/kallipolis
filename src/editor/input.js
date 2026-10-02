@@ -922,7 +922,7 @@ function handleLeftClick(x,y) {
     if (S.activeZone) { S.activeZone.points.push(point); rebuildZoneVisual(S.activeZone); }
     else {
       const templateZone = S.lastSelectedZoneId ? S.zones.find(z=>z.id===S.lastSelectedZoneId) : null;
-      const zoneType = templateZone ? templateZone.zoneType : 'buildings';
+      const zoneType = S.newZoneType;
       const baseSettings = templateZone ? templateZone.settings : DEFAULT_ZONE_SETTINGS;
       const zone = { id:'zone-'+(S.zoneSeq++), name:'Zone '+S.zoneSeq, points:[point], closed:false, drawing:true, zoneType,
         settings:{ ...baseSettings, seed:Math.floor(Math.random()*100000) } };

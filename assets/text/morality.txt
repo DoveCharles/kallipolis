@@ -22,6 +22,8 @@ industrial = -4
 suburbs = -1
 town = 1
 airport = -2
+marina = 0
+carpark = -1
 
 # ------------------------------------------------------------------------------------------------------------------------
 # PATHS: per path of each type (roads are the ones with sidewalks)

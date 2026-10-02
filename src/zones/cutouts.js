@@ -8,6 +8,9 @@ import { CLIPPER_SCALE, ROAD_ARC_TOLERANCE, clipPolygons, disposeObject } from '
 import { makeBuildingMesh, makeParkMesh, makeFlatZoneMesh, generateParkContent, generateBeachContent } from './surface-detail.js';
 import { generatePlazaContent } from './plazas.js';
 import { generateFarmlandContent } from './farmland.js';
+import { generateMarinaContent } from './marina.js';
+import { generateCarParkContent } from './carpark.js';
+import { rebuildRoadMeshes } from '../roads/paths.js';
 import { generateSuburbsContent } from './suburbs.js';
 import { generateAirportContent } from './airport.js';
 import { wreckDestroyed } from '../buildings/rubble.js';
@@ -200,6 +203,10 @@ export function subdivideZone(zone) {
   zone.airportInfo = null;
   zone.airportFlights = []; // (the aircraft themselves have just gone with the group; a camera following one lets go)
   zone.airportField = null;
+  const hadDeck = !!zone.pontoonDeck?.length;
+  zone.pontoonDeck = null; zone.marinaWet = false; zone.marinaRoamers = null; zone.marinaJetties = null; // (a marina's: see zones/marina.js)
+  zone.carPark = null;
+  if (zone.kerbKey && zone.zoneType !== 'carpark') { zone.kerbKey = null; rebuildRoadMeshes(); } // (its kerb drops go)
 
   if (zone.points.length>=3) {
     const poly = tessellateClosedPath(zone.points);
@@ -225,6 +232,10 @@ export function subdivideZone(zone) {
       App.generateIndustrialContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='airport') {
       generateAirportContent(zone, poly, cutouts, blockers);
+    } else if (zone.zoneType==='marina') {
+      generateMarinaContent(zone, poly, cutouts, blockers);
+    } else if (zone.zoneType==='carpark') {
+      generateCarParkContent(zone, poly, cutouts, blockers);
     } else if (zone.zoneType==='plain') {
       const ground = makeFlatZoneMesh(poly, zone.settings.groundColor!=null ? zone.settings.groundColor : BUILDING_GROUND_COLORS[0], Y_ZONE_GROUND, 'ZoneGround', null, cutouts);
       if (ground) zone.buildingsGroup.add(ground);
@@ -294,6 +305,7 @@ export function subdivideZone(zone) {
       });
     }
   }
+  if (hadDeck || zone.pontoonDeck?.length) App.refreshWalkDeck?.();
   wreckDestroyed(zone); // (any a car's smashed into: see buildings/rubble.js)
   scene.add(zone.buildingsGroup);
   App.updateStats();
@@ -305,7 +317,7 @@ export function subdivideZonesFrom(zone) {
   subdivideZonesFromIndex(Math.max(0, S.zones.indexOf(zone)));
 }
 export function subdivideZonesFromIndex(index) {
-  S.zones.forEach((z, i) => { if (i >= index || z.zoneType==='water' || z.zoneType==='park' || z.zoneType==='beach' || z.zoneType==='farmland') subdivideZone(z); });
+  S.zones.forEach((z, i) => { if (i >= index || z.zoneType==='water' || z.zoneType==='park' || z.zoneType==='beach' || z.zoneType==='farmland' || z.zoneType==='marina') subdivideZone(z); });
 }
 // Moves a zone to just before (or after) another in the zone list. The order is priority — a zone cuts itself out of
 // every zone below it — so every zone is re-subdivided.
