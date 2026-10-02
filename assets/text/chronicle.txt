@@ -59,3 +59,22 @@ All quiet in {city}
 Nothing happens in {city}, again
 {city} enjoys a peaceful night
 Slow news day in {city}
+
+# relationships (from life/people/peopleRelations.js): {name} and {by} both feel it
+[friends]
+{name} and {by} strike up a friendship
+New friends: {name} and {by}
+
+[bestfriends]
+{name} and {by} now inseparable
+Best friends forever: {name} and {by}
+
+[couple]
+Love is in the air: {name} and {by}
+{name} and {by} an item, sources say
+Romance blossoms for {name} and {by}
+
+[feud]
+{name} and {by} at war
+Bad blood between {name} and {by}
+Feud erupts: {name} vs {by}

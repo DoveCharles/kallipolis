@@ -1,6 +1,9 @@
 // ============================================================ who likes whom
 // A score per pair (keyed by person id, one-sided: a → b can differ from b → a). First contact seeds it from shared
 // and clashing loves/hates; chats, fights and what they see move it. The person card's Social tab ranks it (ranked).
+// When both feel past a TIES line for the first time, the papers hear (App.chronicle: life/chronicle.js).
+import { App } from '../../core/shared.js';
+import { sexOf } from '../profiles.js';
 
 const TASTE_SHARED = 6, TASTE_CLASH = 8; // per love/hate in common, per love of one that the other hates
 const MAX_KNOWN = 64; // pairs kept per person; the weakest feelings are forgotten past it
@@ -12,6 +15,11 @@ export const RELATE = { chat: 6, circle: 3, roomChat: 4, badChat: -15 };
 const FELT = { punched: -30, hitbycar: -15, robbed: -15 };
 // seen (see notice in people.js): towards whoever did it
 const SAW = { punch: -6, beatentodeath: -20, killedbycar: -12 };
+
+// what both feeling at least (at most, below 0) this makes them, in the paper; couple only if each is drawn to the other
+const TIES = [['friends', 40], ['couple', 80], ['bestfriends', 120], ['feud', -40]];
+const drawn = (a, b) => (sexOf(a.id) === sexOf(b.id) ? (a.traits?.gay ?? 0) >= 0.5 : (a.traits?.gay ?? 0) <= 0.5) && (a.age ?? 30) >= 18;
+const tied = new Set(); // 'what lowId highId', once each
 
 const scores = new Map(); // id → Map(otherId → score)
 const met = new Map();    // id → Set of ids they've finished a conversation with (introduced; both ways)
@@ -39,8 +47,21 @@ export function relate(p, other, delta) {
   if (!isPerson(p) || !isPerson(other) || p === other) return;
   let known = scores.get(p.id);
   if (!known) scores.set(p.id, known = new Map());
-  known.set(other.id, (known.get(other.id) ?? tasteBetween(p, other)) + delta);
+  const was = known.get(other.id) ?? tasteBetween(p, other), now = was + delta;
+  known.set(other.id, now);
   if (known.size > MAX_KNOWN) forgetWeakest(known);
+  const back = feelingFor(other, p);
+  if (back != null) newsOfTie(p, other, Math.min(was, back), Math.min(now, back), Math.max(was, back), Math.max(now, back));
+}
+function newsOfTie(a, b, lowWas, low, highWas, high) {
+  TIES.forEach(([what, line]) => {
+    const crossed = line > 0 ? lowWas < line && low >= line : highWas > line && high <= line;
+    const pair = ' ' + Math.min(a.id, b.id) + ' ' + Math.max(a.id, b.id), key = what + pair;
+    if (!crossed || (what === 'couple' && !(drawn(a, b) && drawn(b, a))) || (what === 'bestfriends' && tied.has('couple' + pair))) return;
+    if (tied.has(key)) return;
+    tied.add(key);
+    App.chronicle?.(a, what, b);
+  });
 }
 export function relateBoth(a, b, delta) { relate(a, b, delta); relate(b, a, delta); }
 /** Everyone in `members` towards everyone else in it. */

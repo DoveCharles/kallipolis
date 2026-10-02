@@ -15,8 +15,10 @@ const MAX = 100, REPEAT = 60; // (headlines kept; seconds before the same thing 
 const headlines = {};
 const MORNING = 7; // (the hour the paper comes out)
 // what leads the front page, worst first; and what each counts as in its summary
-const LEAD = ['planecrash', 'beatentodeath', 'exploded', 'orbsmited', 'smited', 'killedbycar', 'crashedinto', 'drowned', 'fell', 'punchedfence', 'resurrected', 'healed'];
-const TALLY = { planecrash: ['plane crash', 'plane crashes'], resurrected: ['resurrection', 'resurrections'], healed: ['rescue', 'rescues'] };
+const LEAD = ['planecrash', 'beatentodeath', 'exploded', 'orbsmited', 'smited', 'killedbycar', 'crashedinto', 'drowned', 'fell', 'punchedfence', 'resurrected', 'couple', 'feud', 'healed', 'bestfriends', 'friends'];
+const FRIENDSHIP = ['friendship', 'friendships'];
+const TALLY = { planecrash: ['plane crash', 'plane crashes'], resurrected: ['resurrection', 'resurrections'], healed: ['rescue', 'rescues'],
+  friends: FRIENDSHIP, bestfriends: FRIENDSHIP, couple: ['romance', 'romances'], feud: ['feud', 'feuds'] };
 const DEATH = ['death', 'deaths'];
 fetch('assets/text/chronicle.txt').then(r => r.text()).then(text => {
   let kind = null;
@@ -37,7 +39,7 @@ onProgress('chronicleEd', saved => { edition = saved ?? 0; });
 App.chronicle = (who, what, by) => {
   const lines = (headlines[what] ?? []).filter(l => by?.name || !l.includes('{by}'));
   if (!lines.length) return;
-  const key = what + ' ' + (who.id ?? Math.round(who.x) + ',' + Math.round(who.z)), now = worldNow();
+  const key = what + ' ' + (who.id ?? Math.round(who.x) + ',' + Math.round(who.z)) + ' ' + (by?.id ?? ''), now = worldNow();
   if (now - (last.get(key) ?? -Infinity) < REPEAT) return;
   last.set(key, now);
   const text = lines[Math.floor(Math.random()*lines.length)]
