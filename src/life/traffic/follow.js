@@ -162,7 +162,7 @@ export function killCar(i, byPlayer = true) { // (byPlayer false: a car crashing
   if (!car || car.li < 0 || car.reviving) return;
   const survives = canRespawn(car); // (it still blows up, but stays whole: see startCarRevive)
   if (!survives) {
-    if (byPlayer) App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
+    if (byPlayer) { App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined); App.questEvent?.('car'); }
     if (followedCar === i) stopFollowingCar();
   }
   const paint = new THREE.Color(...(carModelOf(car)?.bodyColor ?? car.paint));
@@ -251,6 +251,7 @@ export function drownCar(i) {
   const car = cars[i];
   if (!car || car.li < 0) return;
   App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
+  App.questEvent?.('car');
   if (followedCar === i) stopFollowingCar();
   splashCar({ x: car.x, y: WATER_LEVEL, z: car.z }, carHeight(car));
   carWrecked(car);

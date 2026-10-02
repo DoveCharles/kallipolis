@@ -97,6 +97,7 @@ export function followPerson(i) {
   controls.minRadius = Math.max(1.2, h*0.8);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9)); // swooping in, if the camera's far off
   App.showPersonCard(i, personModel ? personModel.isMan[i] === 1 : null);
+  App.questEvent?.('find', { p: people[i] }); // (ui/quests.js)
   doingShown = undefined;
   showFollowedDoing();
 }

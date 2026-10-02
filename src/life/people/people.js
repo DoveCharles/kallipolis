@@ -1090,6 +1090,7 @@ function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = 
   // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
   App.recordMoralityEvent?.(`${standingOf(p)} peds killed by ${by === 'car' ? 'cars' : 'player'}`, p.name);
   if (by === 'player' && standingOf(p) === 'villainous') App.addEnergy?.(1); // (killing the evil gives energy: see ui/energy.js)
+  App.questEvent?.('kill', { p, by }); // (ui/quests.js)
   if (followed === i) stopFollowingPerson();
   if (awaited === i) setAwaited(-1);
   endActivity(p);
@@ -1155,6 +1156,7 @@ export function drownedPerson(i) {
   const p = people[i];
   App.recordMoralityEvent?.(`${standingOf(p)} peds killed by player`, p.name);
   if (standingOf(p) === 'villainous') App.addEnergy?.(1);
+  App.questEvent?.('kill', { p, by: 'player' });
   if (followed === i) stopFollowingPerson();
   if (awaited === i) setAwaited(-1);
   bystandersReactToDeath(p);

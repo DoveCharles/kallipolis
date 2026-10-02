@@ -347,7 +347,7 @@ html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; 
     border-right:1px solid #fff; position:relative;
   }
   html.win3 #morality-meter .money { display:flex; align-items:center; justify-content:center; padding:0 12px; border-left:1px solid var(--w3-shadow); box-shadow:inset 1px 0 0 #fff; }
-  html.win3 #morality-meter :is(#btn-daily-gift, #btn-identify) { flex:none; width:24px; height:22px; margin:0 2px; display:flex; align-items:center; justify-content:center; padding:0; }
+  html.win3 #morality-meter :is(#btn-quests, #btn-daily-gift, #btn-identify) { flex:none; width:24px; height:22px; margin:0 2px; display:flex; align-items:center; justify-content:center; padding:0; }
   html.win3 #morality-meter #btn-identify { margin-right:6px; }
   /* money and energy: side by side, one etched line between */
   html.win3 #morality-meter :is(.money, .energy)::after { content:''; position:absolute; top:0; bottom:0; right:0; border-left:1px solid var(--w3-shadow); }
@@ -464,3 +464,37 @@ html.win3 .gift-info { border-color:var(--w3-frame); background:var(--w3-window)
 html.win3 .w3-window .gift-pick { aspect-ratio:1; padding:0; margin:0; width:auto; font-size:20px; line-height:1; display:flex; align-items:center; justify-content:center; }
 html.win3 .w3-window .gift-pick.on { outline:1px dotted var(--w3-text); outline-offset:-4px; }
 html.win3 .w3-window .gift-lists { max-height:50vh; overflow-y:auto; }
+
+/* Quests (src/ui/quests.js): kinds in a column on the left, their quests on the right */
+#btn-quests img { width:16px; height:15px; image-rendering:pixelated; display:block; }
+#btn-quests.qs-new { animation:qs-new 1s steps(1, end) 4; }
+@keyframes qs-new { 50% { background:var(--w3-hl); } }
+html.win3 #quests .w3-dialog-body { overflow:hidden; padding-bottom:12px; }
+.qs { display:flex; flex-direction:row; align-items:stretch; height:340px; border:1px solid var(--w3-frame); background:var(--w3-window); }
+#quests.w3-sized .qs { height:100%; }
+.qs-kinds { display:flex; flex-direction:column; width:118px; flex:none; border-right:1px solid var(--w3-frame); padding-top:2px; }
+.qs-kind { font-weight:700; padding:3px 6px; border-left:3px solid transparent; cursor:pointer; white-space:nowrap; }
+.qs-kind:hover { text-decoration:underline; }
+.qs-kind.qs-on { border-left-color:var(--w3-hl); background:#ececec; }
+.qs-n { font-weight:400; }
+.qs-list { flex:1; min-width:0; overflow-y:auto; }
+.qs-empty { padding:8px; color:var(--w3-shadow); }
+.qs-quest { padding:5px 6px; border-bottom:1px solid var(--w3-face); }
+.qs-won { background:#d8f0d8; }
+.qs-lost { opacity:.5; }
+.qs-row { display:flex; align-items:center; gap:6px; }
+.qs-row > b { flex:1; }
+.qs-reward { white-space:nowrap; }
+.qs-bar { flex:1; height:8px; border:1px solid var(--w3-frame); background:var(--w3-window); }
+.qs-bar > div { height:100%; background:var(--w3-hl); }
+.qs-time { font-size:11px; min-width:4em; text-align:right; }
+.qs-request { display:flex; gap:6px; align-items:flex-start; }
+.qs-thumb { width:40px; height:40px; flex:none; border:1px solid var(--w3-frame); background:var(--w3-face); }
+.qs-thumb img { width:100%; height:100%; display:block; }
+.qs-body { flex:1; min-width:0; }
+.qs-body .qs-row > .qs-name { flex:1; text-align:left; }
+.qs-name { all:unset; font-weight:bold; cursor:pointer; text-decoration:underline; }
+.qs-line { font-style:italic; }
+.qs-body .qs-time { text-align:left; flex:1; }
+.qs-bounty b { color:#800000; }
+.qs-refuse { all:unset; cursor:pointer; padding:0 4px; font-weight:bold; }

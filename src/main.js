@@ -58,6 +58,7 @@ import './ui/toon-shading.js';
 import './ui/view-prefs.js';
 import './ui/color-schemes.js';
 import './ui/ped-view.js';
+import './ui/quests.js';
 import './net/net.js';
 import './project/export-obj.js';
 import * as THREE from 'three';
