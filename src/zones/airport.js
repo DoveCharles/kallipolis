@@ -95,6 +95,7 @@ const TIERS = [
   { id:'regional',      label:'Regional',      width:26, minLength:150, terminal:20, apron:38, paved:true, tower:true, stands:2 },
   { id:'airstrip',      label:'Airstrip',      width:14, minLength:40,  hangars:true, mown:true },
   { id:'heliport',      label:'Heliport',      width:22, minLength:22,  pad:true },
+  { id:'heliport',      label:'Heliport',      width:14, minLength:0,   pad:true }, // any room at all: a small pad
 ];
 const CHORD_ANGLES = 36;        // directions swept through each seed — every 5°, since a line and its reverse are one line
 const CHORD_SEED_GRID = 6;      // seeds across the bounding box, each way
@@ -981,7 +982,8 @@ export function generateAirportContent(zone, poly, cutouts, blockers) {
   const strip = frameRect(frame, { s: 0, w: 0, halfLen: L, halfWid: W });
   if (tier.pad) {
     // a helipad: a square of apron with an H on it, rather than a strip
-    const half = Math.min(L, tier.width/2);
+    // the biggest square on the chord whose corners stay within W of it (W/√2 for a chord of nothing)
+    const half = L >= W ? W : (L + Math.sqrt(2*W*W - L*L))/2;
     const padBox = { s: 0, w: 0, halfLen: half, halfWid: half };
     pave(tarmac, frameRect(frame, padBox), owned);
     const bar = half*0.11;
