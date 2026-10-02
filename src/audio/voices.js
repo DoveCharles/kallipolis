@@ -2,6 +2,7 @@ import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
 import { listener, isMuted, heardFrom, muffler, ear, oneShotPanner } from './sfx.js';
 import { melodyOf } from './melodies.js';
+import { TUNING } from './speech.js';
 
 // ============================================================ voices
 // People talking babble, Animal Crossing style: every time a speaker's mouth opens on a new syllable (see "talking" in
@@ -57,6 +58,7 @@ export const hearDistance = () => S.hearDistance ?? HEAR_DISTANCE;
 export const hearRef = () => REF_DISTANCE*hearDistance()/HEAR_DISTANCE;
 const MUFFLE = 1.4;                // how fast the top comes off past REF_DISTANCE (see muffler in sfx.js): far off, talk's a murmur, not words
 const VOLUME = 0.22;
+const BREATH = 0.8; // × speech's breathy (age/100 and TUNING), as breath through babble's wider bands
 const BLIPS_MAX = 12;              // syllables sounding at once, past which new ones are dropped
 const BEND = 0.1;                  // how far each syllable's pitch strays at random from where the phrase has it, either way
 const STRESS = 0.12;               // how much higher a stressed syllable is
@@ -208,6 +210,25 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant,
   const oscillator = context.createOscillator();
   oscillator.type = voice.robot ? 'square' : 'sawtooth';
   oscillator.frequency.setValueAtTime(f, now);
+  // (age: a quaver, and breath through the same bands, as speech.js's)
+  const old = !voice.robot, quaver = old ? TUNING.vibrato + (voice.vibrato ?? 0) : 0;
+  const breath = old ? BREATH*(TUNING.breathy + TUNING.ageBreath*Math.min(1, (voice.age ?? 0)/100)) : 0;
+  let wobble = null, air = null, airLevel = null;
+  if (quaver) {
+    wobble = context.createOscillator();
+    const depth = context.createGain();
+    wobble.frequency.value = TUNING.vibratoRate;
+    depth.gain.value = f*quaver;
+    wobble.connect(depth).connect(oscillator.frequency);
+  }
+  if (breath) {
+    air = context.createBufferSource();
+    air.buffer = noiseBuffer(context);
+    air.loop = true;
+    airLevel = context.createGain();
+    airLevel.gain.value = breath;
+    air.connect(airLevel);
+  }
   if (rise !== 1) oscillator.frequency.exponentialRampToValueAtTime(f*rise, now + (end - now)/3);
   if (slide !== 1) oscillator.frequency.exponentialRampToValueAtTime(f*slide, end);
   const c = consonant ? Math.min(consonant.time, (end - now)*0.4) : 0;
@@ -234,6 +255,7 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant,
     band.Q.value = sharpness;
     bandLevel.gain.value = level*3*Math.sqrt(6/sharpness); // (a sharper band lets less through: made up for)
     oscillator.connect(band).connect(bandLevel).connect(gain);
+    airLevel?.connect(band);
   });
   const panner = oneShotPanner(at, oscillator, { refDistance: hearRef(), rolloff: ROLLOFF });
   const muffle = muffler(at, hearRef(), MUFFLE);
@@ -272,4 +294,5 @@ function speak(at, voice, { f, rise = 1, slide, length, level, vowel, consonant,
   oscillator.onended = () => { blips--; panner.disconnect(); };
   oscillator.start(now);
   oscillator.stop(end + 0.01);
+  for (const extra of [wobble, air]) if (extra) { extra.start(now, extra === air ? Math.random()*0.9 : 0); extra.stop(end + 0.01); }
 }
