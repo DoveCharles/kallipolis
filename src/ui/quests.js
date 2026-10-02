@@ -202,7 +202,7 @@ setInterval(() => {
   const before = s.timed.length + s.requests.length + s.bounties.length;
   s.timed = s.timed.filter(q => !ended(q)); s.requests = s.requests.filter(q => !ended(q)); s.bounties = s.bounties.filter(q => !ended(q));
   let changed = s.timed.length + s.requests.length + s.bounties.length !== before;
-  if (S.interactionMode === 'move' && !stillLoading() && App.people?.length) {
+  if (S.interactionMode === 'move' && !stillLoading() && !S.techOpen && App.people?.length) {
     s.timed.forEach(q => { if (!q.end && (q.left -= dt) <= 0) { q.left = 0; finish(q, false, 'timed'); } });
     s.bounties.forEach(q => { if (!q.end && (q.left -= dt) <= 0) { q.left = 0; finish(q, false, 'bounties'); } });
     const n = s.timed.length + s.requests.length + s.bounties.length;
