@@ -4,19 +4,22 @@ import { onProfilesLoaded, peopleListsLoaded, peopleTraitEntries, profileOf, sam
 import { toUi } from './ui-scale.js';
 import { openWindow } from './w3-window.js';
 import { mulberry32 } from '../core/math.js';
+import { getProgress, setProgress, onProgress } from '../project/progress.js';
 
 // Identified love/hate traits (1 energy each: see set in entity-card.js). Per trait, not per person: identifying one on
-// anybody reveals it on everyone. Kept in localStorage as lowercase 'love:<text>' / 'hate:<text>' keys; any no longer in
+// anybody reveals it on everyone. Kept with the project (project/progress.js) as lowercase 'love:<text>' / 'hate:<text>' keys; any no longer in
 // people/loves.txt or hates.txt are dropped once those have loaded. The toolbar's identify button lists them.
-const KEY = 'kallipolis.traitsKnown';
 const known = new Map(); // key → when it was identified (Date.now; 0 for ones saved before that was kept)
-try {
-  const saved = JSON.parse(localStorage.getItem(KEY));
+function knownFrom(saved) {
+  known.clear();
   if (Array.isArray(saved)) saved.forEach(k => known.set(String(k).toLowerCase(), 0));
   else if (saved) Object.entries(saved).forEach(([k, t]) => known.set(k.toLowerCase(), Number(t) || 0));
-} catch {}
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(Object.fromEntries(known))); } catch {} };
+}
+knownFrom(getProgress('traitsKnown'));
+const save = () => setProgress('traitsKnown', Object.fromEntries(known));
 const listeners = [];
+// (a project's coming in: what it knows unlocked on any open card)
+onProgress('traitsKnown', v => { knownFrom(v); prune(); known.forEach((_, key) => listeners.forEach(fn => fn(key))); refreshWindow(); });
 let win = null; // (the window's parts, while it's open)
 // entries with a [category] in them ("Conversely, [hates]"): shown cycling through VARY_COUNT fillings, one every VARY_MS
 // — the same few each time (seeded by the trait), so it hints without giving the whole list away — their effects

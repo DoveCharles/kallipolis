@@ -2,6 +2,7 @@ import { S, App } from '../core/shared.js';
 import { renderer } from '../core/scene.js';
 import { controls } from '../core/camera-controls.js';
 import { IS_TOUCH } from '../core/device.js';
+import { getProgress, setProgress, onProgress } from '../project/progress.js';
 
 // ============================================================ taking control
 // Taking over whoever or whatever the camera's following, from its card — the keys held, the mouse, and the note across
@@ -64,16 +65,16 @@ function hideHint() {
 // ---------------------------------------------------------- energy
 // Taking control of anything costs 1 energy for a stretch of time (CHARGE_MS by kind), then 1 more for each stretch after,
 // with a countdown at the top of the screen (#possess-timer); out of energy, it lets go. The paid-for time runs out in real
-// time whether in control or not (even with the page closed: its end is kept in localStorage), and what's left of it is
+// time whether in control or not (even with the page closed: its end is kept with the project, project/progress.js), and what's left of it is
 // used first next time — kept apart for each group (people / cars and planes / bees and pigeons), so time paid for one
 // never carries to another. Riding a train is free.
 const CHARGE_MS = { person: 5*60000, car: 60000, flying: 60000, critter: 10*60000 }; // (critter: a bee or pigeon)
 const GROUP_OF = { person: 'person', car: 'vehicle', flying: 'vehicle', critter: 'animal' };
-const PAID_KEY = 'kallipolis.possessPaidUntil';
 const timerEl = document.getElementById('possess-timer'), timerText = timerEl.querySelector('.pt-time');
-let paid = { person: 0, vehicle: 0, animal: 0 }; // group → when its paid-for time ends, by Date.now
-try { const saved = JSON.parse(localStorage.getItem(PAID_KEY)); if (saved && typeof saved === 'object') paid = { ...paid, ...saved }; } catch {}
-const savePaid = () => { try { localStorage.setItem(PAID_KEY, JSON.stringify(paid)); } catch {} };
+const paidFrom = v => ({ person: 0, vehicle: 0, animal: 0, ...(v && typeof v === 'object' ? v : {}) });
+let paid = paidFrom(getProgress('possessPaid')); // group → when its paid-for time ends, by Date.now
+const savePaid = () => setProgress('possessPaid', { ...paid });
+onProgress('possessPaid', v => { paid = paidFrom(v); });
 let chargeTick = null, chargeMs = 0, group = 'person'; // (what's being paid for now)
 /** Whether there's time paid for `kind` or energy to take control with (flashing the energy count if not). @param {keyof CHARGE_MS} [kind] @returns {boolean} */
 export const canTakeControl = (kind = 'person') => paid[GROUP_OF[kind]] > Date.now() || (App.hasEnergy ? App.hasEnergy() : true);

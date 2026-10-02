@@ -3,15 +3,16 @@ import { mulberry32 } from '../core/math.js';
 import { listener, isMuted } from '../audio/sfx.js';
 import { openWindow } from './w3-window.js';
 import { toUi } from './ui-scale.js';
+import { getProgress, setProgress, onProgress } from '../project/progress.js';
 
 // The daily gift button (left of the identify button) opens the Daily Gift window. Once the gift's claimed there
 // (claimDailyGift), it's locked till local midnight: pressed in and greyed, hovering says how long till the next, and a
 // click shakes it red. Options > Dev > Infinite daily gifts never locks it.
-const KEY = 'kallipolis.dailyGiftDay';
 const button = document.getElementById('btn-daily-gift');
 const dayOf = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-let claimed = null;
-try { claimed = localStorage.getItem(KEY); } catch {}
+// (the day it was last claimed, today's spin, and how many gifts have been claimed: the project's — see project/progress.js)
+let claimed = getProgress('dailyGift')?.claimed ?? null, received = getProgress('dailyGift')?.received ?? 0;
+const saveGift = () => setProgress('dailyGift', { claimed, spun, received });
 const usedToday = () => !S.devInfiniteGifts && claimed === dayOf(new Date());
 
 // how long till midnight, as h:mm:ss
@@ -58,7 +59,7 @@ refresh();
 // REWARDS as a list banded like a card's loves and hates, coloured by rarity, VISIBLE of them at a time with an arrow at
 // the middle one. Spin sends it rushing down (looping round at the top, ticking as each passes the bottom), slowing to a
 // stop on a reward, confetti; Spin then reads Claim, which pays it and locks the button till midnight. What was spun is
-// kept for the day (SPIN_KEY), so closing the window and opening it again can't spin twice.
+// kept for the day (with the project: spun), so closing the window and opening it again can't spin twice.
 const RARITIES = {
   crap: { label: 'CRAP', count: 1, energy: 1 },
   common: { label: 'Common', count: 10, energy: 10 },
@@ -75,11 +76,10 @@ const REWARDS = (() => {
 })();
 const VISIBLE = 9, MIDDLE = 4, ROW_H = 22;
 const SPIN_MS = 6000, SPIN_LOOPS = 3; // how long it spins, and how many times round the reel at least
-const SPIN_KEY = 'kallipolis.dailyGiftSpin';
 const mod = (n, m) => ((n % m) + m) % m;
 
-let spun = null; // { day, slot }: today's spin, if there's been one
-try { spun = JSON.parse(localStorage.getItem(SPIN_KEY)); } catch {}
+let spun = getProgress('dailyGift')?.spun ?? null; // { day, slot }: today's spin, if there's been one
+onProgress('dailyGift', v => { claimed = v?.claimed ?? null; spun = v?.spun ?? null; received = v?.received ?? 0; refresh(); });
 const spunToday = () => spun && spun.day === dayOf(new Date()) && REWARDS[spun.slot] ? spun : null;
 
 // the tick as each reward passes: a click of filtered noise with a little knock under it, through the master volume
@@ -129,9 +129,9 @@ function confetti(box) {
 /** Take today's gift: locks the button till midnight. @returns {void} */
 export function claimDailyGift() {
   claimed = dayOf(new Date());
-  try { localStorage.setItem(KEY, claimed); } catch {}
+  received++;
   spun = null;
-  try { localStorage.removeItem(SPIN_KEY); } catch {}
+  saveGift();
   refresh();
 }
 
@@ -186,9 +186,12 @@ export function openDailyGift() {
   draw(0);
   spin.onclick = () => {
     spin.disabled = true;
-    const slot = Math.floor(Math.random()*REWARDS.length); // (each reward as likely as any other: rarity is how many there are)
+    // (each reward as likely as any other: rarity is how many there are. Picked by the day and how many gifts they've had,
+    // not at random: reloading a save and spinning again lands the same)
+    const seed = [...`${dayOf(new Date())}#${received}`].reduce((h, c) => (h*31 + c.charCodeAt(0)) | 0, 7);
+    const slot = Math.floor(mulberry32(seed)()*REWARDS.length);
     spun = { day: dayOf(new Date()), slot };
-    try { localStorage.setItem(SPIN_KEY, JSON.stringify(spun)); } catch {}
+    saveGift();
     // round SPIN_LOOPS times and on to where `slot` sits at the middle: easing out, as a wheel slows
     const end = SPIN_LOOPS*REWARDS.length + mod(MIDDLE - slot, REWARDS.length), start = performance.now();
     const step = now => {

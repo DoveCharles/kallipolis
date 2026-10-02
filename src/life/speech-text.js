@@ -60,7 +60,7 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   upsidedown: person => !!person?.traits?.upsidedown,
   spirits: person => !!person?.traits?.spirits, // (a ghost of them on each shoulder)
   spirit: person => !!person?.spiritOf, // (a shoulder spirit talking: see people/peopleSpiritChat.js — gold evil -1, purple evil 1)
-  twins: person => !!person?.traits?.twins, // (two of them, in step)
+  twins: person => !!person?.traits?.twins && !person.chattingWithTwin, // (two of them, in step — not to each other: see people/peopleSpiritChat.js)
   bald: person => !!person?.showsBald, // (no hair showing — or the bald trait under a hat: see headOf in people/peopleModel.js)
   bearded: person => !!person?.showsBeard, // (facial hair)
   piper: person => !!person?.traits?.piper, // (little copies of them following behind)

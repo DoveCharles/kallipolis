@@ -1,16 +1,16 @@
 import { App, S } from '../core/shared.js';
 import { gainPop, tickUp } from './money.js';
+import { getProgress, setProgress, onProgress } from '../project/progress.js';
 
-// Energy: regenerates to ENERGY_MAX (addEnergy's `over` can pass it), one back every REGEN_MS, kept in localStorage so it carries across reloads.
+// Energy: regenerates to ENERGY_MAX (addEnergy's `over` can pass it), one back every REGEN_MS, kept with the project (project/progress.js).
 // Shown in #morality-meter's .energy: the count.
-const KEY = 'kallipolis.energy';
 export const ENERGY_MAX = 10;
 const REGEN_MS = 20 * 60 * 1000;
 
-let s = null; // { n: energy, t: when the current regen started }
-try { s = JSON.parse(localStorage.getItem(KEY)); } catch {}
-if (!s || !Number.isFinite(s.n) || !Number.isFinite(s.t)) s = { n: ENERGY_MAX, t: Date.now() };
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
+// { n: energy, t: when the current regen started } — a project's, or full
+const fresh = v => v && Number.isFinite(v.n) && Number.isFinite(v.t) ? { n: v.n, t: v.t } : { n: ENERGY_MAX, t: Date.now() };
+let s = fresh(getProgress('energy'));
+const save = () => setProgress('energy', { ...s });
 
 // credit whatever has regenerated since s.t
 function settle() {
@@ -75,6 +75,7 @@ export function revealEnergy() {
 setInterval(render, 1000);
 render();
 // another tab changed it
-window.addEventListener('storage', e => { if (e.key !== KEY) return; try { s = JSON.parse(e.newValue) || s; } catch {} render(); });
+// a project's coming in (no gain shown for it)
+onProgress('energy', v => { s = fresh(v); if (revealed) shownN = s.n; render(); });
 
 Object.assign(App, { energy, spendEnergy, hasEnergy, addEnergy });

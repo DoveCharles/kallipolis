@@ -14,6 +14,7 @@ import { refreshHighlights, styleZoneVisual } from '../water/bridges.js';
 import { disarmObject, invalidateObjectFacing, objectsHint, showObjectUi } from '../objects/objects.js';
 import { selectItem, renderHierarchy } from '../ui/panels.js';
 import { IS_TOUCH } from '../core/device.js';
+import { loadProgress } from '../project/progress.js';
 
 // ============================================================ tool switching / drawing lifecycle
 export function cancelActiveDrawing() {
@@ -331,6 +332,7 @@ document.getElementById('btn-clear').addEventListener('click', ()=>{
   mapImages.slice().forEach(m => removeMapImage(m.id));
   rebuildRoadMeshes();
   renderHierarchy();
+  loadProgress({}); // (a new city starts from nothing: see project/progress.js)
 });
 document.getElementById('btn-import-image').addEventListener('click', () => {
   document.getElementById('map-file-input').click();

@@ -4,6 +4,7 @@ import { whenLoaded } from './loading.js';
 import { revealEnergy } from './energy.js';
 import './daily-gift.js';
 import { gainPop, revealMoney, tickUp } from './money.js';
+import { getProgress, setProgress, onProgress } from '../project/progress.js';
 
 // ============================================================ morality meter
 // How good or evil the city is, in a meter at the top right: spendable evil/good points, and a bar split red/green by the lifetime ratio.
@@ -204,18 +205,18 @@ const scoreClass = n => round1(n) > 0 ? 'pos' : round1(n) < 0 ? 'neg' : '';
 
 
 // ---------------------------------------------------------- spendable points
-// Lifetime evil/good stats (the bar) and spendable points (capped at POINTS_MAX), both kept in localStorage: every rise in
+// Lifetime evil/good stats (the bar) and spendable points (capped at POINTS_MAX), both kept with the project (project/progress.js): every rise in
 // the world's evil or good total adds to both alike. Loading (a reload, a project: see quietUntil) only moves the
 // baseline, so a city isn't counted again each session.
-const POINTS_KEY = 'kallipolis.moralityPoints', POINTS_MAX = 999;
-let pts = { evil: 0, good: 0, lifeEvil: 0, lifeGood: 0 };
-try {
-  const saved = JSON.parse(localStorage.getItem(POINTS_KEY)) || {};
-  pts = { ...pts, ...saved };
-  if (saved.lifeEvil == null) { pts.lifeEvil = saved.peakEvil || 0; pts.lifeGood = saved.peakGood || 0; } // (from before lifetime stats)
-  delete pts.peakEvil; delete pts.peakGood;
-} catch {}
-const savePoints = () => { try { localStorage.setItem(POINTS_KEY, JSON.stringify(pts)); } catch {} };
+const POINTS_MAX = 999;
+function pointsFrom(saved) {
+  const out = { evil: 0, good: 0, lifeEvil: 0, lifeGood: 0, ...(saved || {}) };
+  if (saved && saved.lifeEvil == null) { out.lifeEvil = saved.peakEvil || 0; out.lifeGood = saved.peakGood || 0; } // (from before lifetime stats)
+  delete out.peakEvil; delete out.peakGood;
+  return out;
+}
+let pts = pointsFrom(getProgress('moralityPoints'));
+const savePoints = () => setProgress('moralityPoints', { ...pts });
 let baseline = null; // the world's totals last counted from
 function accrue(t) {
   // (nothing counts until BAR_DELAY after the page has loaded, while buildings are still popping in)
@@ -254,7 +255,7 @@ export function spendMorality(side, k) {
   pts[side] -= k; savePoints(); renderPoints();
   return true;
 }
-window.addEventListener('storage', e => { if (e.key !== POINTS_KEY) return; try { pts = { ...pts, ...JSON.parse(e.newValue) }; } catch {} renderPoints(); });
+onProgress('moralityPoints', v => { pts = pointsFrom(v); shownPts = null; renderPoints(); }); // (a project's coming in)
 
 // (50/50 until BAR_DELAY after loading: easing while the load stutters would go unseen)
 const BAR_DELAY = 1000;

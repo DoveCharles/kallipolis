@@ -51,6 +51,7 @@ export function updateSpiritChat(p, i, dt, { free, voice, head, bubble, mouths }
   }
   const c = chatOf(p, key), t = performance.now()/1000;
   c.on = true;
+  p.chattingWithTwin = !!p.traits.twins; // (so neither half talks about being twins to the other: {is = twins} in speech-text.js)
   // (spirit traits follow the person's: rebuilt when theirs are)
   if (c.traits !== p.traits) { c.traits = p.traits; c.spirits.forEach(s => { s.traits = { ...p.traits, ...s.own, ...(s.spiritOf ? { spirits: 0, twins: 0 } : {}) }; }); }
   for (const s of c.spirits) {
@@ -101,7 +102,7 @@ function chatOf(p, key) {
 }
 
 function endChat(p, c, mouths, i) {
-  c.on = false; c.talk = null; c.ownLine = null; p.spiritGaze = p.twinGaze = null;
+  c.on = false; c.talk = null; c.ownLine = null; p.spiritGaze = p.twinGaze = null; p.chattingWithTwin = false;
   c.spirits.forEach(s => { stopLine(s.saying); s.saying = null; s.talk = 0; if (mouths && s.k != null) mouths[i*2 + s.k] = 0; });
 }
 

@@ -480,7 +480,7 @@ export function syncPeopleUI() {
 // (see the end of newPerson)
 const PERSON_LATER_FIELDS = Object.fromEntries([
   // who they are (refreshTraits), how they look (updatePeople)
-  'health', 'walletSet', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'spectralKey', 'groomKey', 'showsBald', 'showsBeard', 'vanished', 'vanishUntil', 'shyCount', 'shyArmed', 'shyPhase', 'shyAt', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
+  'health', 'walletSet', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'spectralKey', 'groomKey', 'showsBald', 'showsBeard', 'vanished', 'vanishUntil', 'shyCount', 'shyArmed', 'shyPhase', 'shyAt', 'chattingWithTwin', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
   // what they say and think
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
   'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
@@ -1164,9 +1164,9 @@ function lookTwin(p, i, dt, possessed) {
   if (Math.abs(data[o] - p.twinTurn) + Math.abs(data[o + 1] - p.twinTilt) > 0.005) { data[o] = p.twinTurn; data[o + 1] = p.twinTilt; personModel.traitTexture.needsUpdate = true; }
 }
 // A ghost is shy: the first SHY_TIMES you come within SHY_NEAR (× people size) — as whoever you're possessing, else the
-// camera — they vanish for SHY_FOR seconds (VANISHED_BIT: not drawn, not picked, their card closed), and won't again
+// camera; or, clicked on, once the camera's done swooping over — they vanish for SHY_FOR seconds (VANISHED_BIT: not drawn, not picked, their card closed), and won't again
 // till you've been SHY_NEAR*1.5 off. Not a hearted one (ui/favorites.js).
-const SHY_NEAR = 7, SHY_TIMES = 3, SHY_FOR = 60;
+const SHY_NEAR = 16, SHY_TIMES = 3, SHY_FOR = 60;
 // (fading out over SHY_FADE seconds first, and back in after: shyPhase 'out', 'gone', 'in'; how faded, TWIN_LOOK_ROW .w)
 const SHY_FADE = 3;
 function shyGhost(p, i, possessed) {
@@ -1184,7 +1184,9 @@ function shyGhost(p, i, possessed) {
   const you = possession.index >= 0 ? people[possession.index] : camera.position;
   const d = Math.hypot(you.x - p.x, you.y - p.y, you.z - p.z), near = SHY_NEAR*S.peopleSize;
   if (d > near*1.5) p.shyArmed = true;
-  if (d >= near || p.shyArmed === false) return;
+  // (followed: as soon as the camera's got to them — not on its way)
+  const arrived = Math.abs(controls.radius - controls.goalRadius) < 0.02*controls.goalRadius && controls.target.distanceTo(controls.goalTarget) < 0.3*S.peopleSize;
+  if (followed === i && possession.index < 0 ? !arrived : d >= near || p.shyArmed === false) return;
   Object.assign(p, { shyPhase: 'out', shyAt: now, shyCount: (p.shyCount ?? 0) + 1, shyArmed: false });
   if (followed === i) stopFollowingPerson();
 }
@@ -1339,7 +1341,7 @@ export function updatePeople(t) {
     if (p.traits.nude && (p.mode === 'line' || p.mode === 'wander') && (p.nudeSeenIn = (p.nudeSeenIn ?? 0) - dt) <= 0) { witness(p, 'nude'); p.nudeSeenIn = NUDE_SEEN_EVERY; }
     if (personModel && p.traits.bodiless) { // (a bodiless head hops while they move: see personBodiless in peopleModel.js)
       const o = (TWIN_LOOK_ROW*PEOPLE_MAX + i)*4 + 2, data = personModel.traitData;
-      p.headHop = p.hop?.h > 0 ? 0 : (p.headHop ?? 0) + ((p.moving ? 1 : 0) - (p.headHop ?? 0))*Math.min(1, dt*6); // (not mid-jump, possessed: a double jump)
+      p.headHop = p.hop?.h > 0 ? 0 : (p.headHop ?? 0) + ((p.moving && !p.punched && !isGone(p) ? 1 : 0) - (p.headHop ?? 0))*Math.min(1, dt*6); // (not knocked down or dead either) // (not mid-jump, possessed: a double jump)
       const hop = p.headHop < 0.02 ? 0 : p.headHop;
       if (Math.abs(data[o] - hop) > 0.02 || (!hop && data[o])) { data[o] = hop; personModel.traitTexture.needsUpdate = true; }
     }

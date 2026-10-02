@@ -1,6 +1,7 @@
 import { S, App } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
 import { serializeProject, loadProjectFromData } from './save-load.js';
+import { loadProgress } from './progress.js';
 import { modelsLoaded, loadingTask } from '../ui/loading.js';
 
 // ============================================================ autosave
@@ -77,6 +78,7 @@ loadingTask('Building the city...', (async () => {
       }
       App.resetHistory(); // (the restored project is where undo starts from, not a step to undo)
     }
+    else loadProgress(undefined); // (no project yet: the old browser-wide progress, or fresh — see progress.js)
     restoredCleanly = true; // restored, or there was nothing to restore
   } catch (err) {
     // A failed restore leaves the scene half-loaded: autosaving now would destroy the very
@@ -88,4 +90,4 @@ loadingTask('Building the city...', (async () => {
   }
 })(), 5);
 
-Object.assign(App, { saveNow: save });
+Object.assign(App, { saveNow: save, scheduleSave });

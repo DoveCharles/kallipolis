@@ -14,6 +14,7 @@ import { restoreObjects } from '../objects/objects.js';
 import { serializeImportedModels, restoreImportedModels } from '../objects/imported-models.js';
 import { cancelActiveDrawing, applyModeVisibility } from '../editor/tools.js';
 import { savedFavorites, restoreFavorites } from '../ui/favorites.js';
+import { progressData, loadProgress } from './progress.js';
 
 // ============================================================ project save / load
 const PROJECT_FORMAT_VERSION = 1;
@@ -68,6 +69,7 @@ export function serializeProject() {
       weather: { rain: S.weatherRain, snow: S.weatherSnow, clouds: S.weatherClouds }
     },
     favorites: savedFavorites(), // (only those that can be found again in a reloaded city: see ui/favorites.js)
+    progress: progressData(), // (energy, money, morality points, the daily gift…: see progress.js)
     roads: {
       nodeSeq: S.roadNodeSeq, lineSeq: S.roadLineSeq, networkSeq: S.roadNetworkSeq,
       walkwayOrder: (S.walkwayOrder || []).slice(), // (defensively: same fallback loadProjectFromData below already uses on the way back in)
@@ -227,6 +229,7 @@ export async function loadProjectFromData(data, options) {
   document.getElementById('dv-grassnoise').textContent = S.globalGrassNoiseStrength.toFixed(2);
   renderWorldTintPanel();
   if (!keepMaps) restoreFavorites(data.favorites); // (undo and redo leave the favorites alone: they aren't steps to undo)
+  if (!keepMaps) loadProgress(data.progress); // (nor what's been earned and spent)
   if (sc.people) {
     S.peopleEnabled = !!sc.people.enabled;
     if (sc.people.amount != null) S.peopleAmount = sc.people.amount;

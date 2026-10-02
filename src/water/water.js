@@ -363,7 +363,7 @@ export function applyWaterShader(mat, shoreSegments, beachSegments, beachWaterli
 // The water region — every water zone minus the zones above it, plus every river, unioned — and the land beside it that
 // gets a sloping beach rather than a wall (every park and beach zone minus the zones above it), plus the beach zones on
 // their own (for parks to fade into sand beside them). Cached, and only worked out again when a zone or river changes.
-const waterCache = { key: null, region: [], parkArea: [], beachZoneArea: [] };
+const waterCache = { key: null, region: [], parkArea: [], beachZoneArea: [], shoreLand: [] };
 // (the key's a stringify of every zone's points, and everyone walking is checked against the water each frame: so it's
 // worked out once a task — a frame — unless something's marked the water dirty since)
 let keyChecked = false;
@@ -384,6 +384,8 @@ function refreshWaterCache() {
   waterCache.region = water.length ? clipPolygons(ctUnion, water, []) : [];
   waterCache.parkArea = parks.length || beaches.length ? clipPolygons(ctUnion, parks.concat(beaches), []) : [];
   waterCache.beachZoneArea = beaches.length ? clipPolygons(ctUnion, beaches, []) : [];
+  // (the grass and sand that's actually land: a river isn't a zone, so one running through a park is still inside it)
+  waterCache.shoreLand = waterCache.parkArea.length && waterCache.region.length ? clipPolygons(ctDifference, waterCache.parkArea, waterCache.region) : waterCache.parkArea;
 }
 export function getWaterRegion() { refreshWaterCache(); return waterCache.region; }
 // Where the water's surface actually shows: the water region less the stretch of beach slope still above the waterline
@@ -393,9 +395,9 @@ export function getVisibleWaterRegion() {
   refreshWaterCache();
   if (sinkCache.key === waterCache.key) return sinkCache.region;
   sinkCache.key = waterCache.key;
-  const { region, parkArea } = waterCache;
-  sinkCache.region = region.length && parkArea.length
-    ? clipPolygons(ClipperLib.ClipType.ctDifference, region, App.offsetPaths(parkArea, BEACH_WATERLINE, ClipperLib.JoinType.jtRound))
+  const { region, shoreLand } = waterCache;
+  sinkCache.region = region.length && shoreLand.length
+    ? clipPolygons(ClipperLib.ClipType.ctDifference, region, App.offsetPaths(shoreLand, BEACH_WATERLINE, ClipperLib.JoinType.jtRound))
     : region;
   return sinkCache.region;
 }
@@ -422,7 +424,7 @@ function shoreGrid() {
   if (shoreCache.key === waterCache.key) return shoreCache.grid;
   shoreCache.key = waterCache.key;
   const grid = shoreCache.grid = new Map(), reach = BEACH_WATERLINE;
-  waterCache.parkArea.forEach(path => path.forEach((a, i) => {
+  waterCache.shoreLand.forEach(path => path.forEach((a, i) => {
     const b = path[(i+1)%path.length], seg = [a.X/CLIPPER_SCALE, a.Y/CLIPPER_SCALE, b.X/CLIPPER_SCALE, b.Y/CLIPPER_SCALE];
     const x0 = Math.floor((Math.min(seg[0], seg[2]) - reach)/SHORE_CELL), x1 = Math.floor((Math.max(seg[0], seg[2]) + reach)/SHORE_CELL);
     const z0 = Math.floor((Math.min(seg[1], seg[3]) - reach)/SHORE_CELL), z1 = Math.floor((Math.max(seg[1], seg[3]) + reach)/SHORE_CELL);

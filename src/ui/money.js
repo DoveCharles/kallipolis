@@ -1,10 +1,9 @@
 import { App, S } from '../core/shared.js';
 import { toUi } from './ui-scale.js';
+import { getProgress, setProgress, onProgress } from '../project/progress.js';
 
-// Money: a count kept in localStorage, shown in #morality-meter's .money.
-const KEY = 'kallipolis.money';
-let n = 0;
-try { n = Number(localStorage.getItem(KEY)) || 0; } catch {}
+// Money: a count kept with the project (project/progress.js), shown in #morality-meter's .money.
+let n = Number(getProgress('money')) || 0;
 
 const el = document.querySelector('#morality-meter .money-n');
 // Cookie Clicker style, padded: £000000 to £999999, then £001.234M, £012.345B… (3 decimals, floored)
@@ -63,11 +62,11 @@ export function addMoney(k) {
   if (k < 0 && S.devFreePurchases) return true; // (Options > Dev > Free purchases)
   if (n + k < 0) return false;
   n += k;
-  try { localStorage.setItem(KEY, String(n)); } catch {}
+  setProgress('money', n);
   render();
   return true;
 }
 
 render();
-window.addEventListener('storage', e => { if (e.key === KEY) { n = Number(e.newValue) || 0; render(); } });
+onProgress('money', v => { n = Number(v) || 0; if (revealed) shownN = n; render(); }); // (a project's coming in: no gain shown)
 Object.assign(App, { money, addMoney });

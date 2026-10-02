@@ -10,6 +10,7 @@ Out of my way! {evil}
 Oh no, oh no, oh no... {mood = -0.5}
 Murderer! {seen = beatentodeath}
 They killed [seen.name]! {seen = death}
+Damn, they got slimed. {seen = death, evil}
 Somebody call the police! {seen = death, evil = -1}
 It's [seen.name]! Run, run! {seen = resurrected}
 The sun! It burns! {vampire > 0}
