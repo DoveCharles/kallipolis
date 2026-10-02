@@ -17,7 +17,7 @@
 // - Options > Speech > Hearing distance (S.hearDistance, 40): how far off talk is heard (see audio/voices.js).
 // - Options > Speech > Babble only as fallback (S.babbleFallbackOnly, off): people say real lines whenever one can be
 //   had, babbling only when none can (see linePause in audio/dictionary.js).
-// - Options > Display > Colorful Icons (off): ui/pixel-icons.js setColorfulIcons.
+// - Options > Display > Colorful Icons (off): ui/pixel-icons.js setColorfulIcons; Icon saturation slider under it.
 // - Options > Speech > Bubble distance (S.bubbleDistance, 35) and Babble bubbles (S.babbleBubbles, off): see ui/speech-bubbles.js.
 import { S, App } from '../core/shared.js';
 import { whenLoaded } from './loading.js';
@@ -30,6 +30,7 @@ const CHAT_SPEED_KEY = 'splinetopia.chatSpeed', BUBBLE_DISTANCE_KEY = 'splinetop
 const HEAR_DISTANCE_KEY = 'splinetopia.hearDistance', FREE_ROOM_CAMERA_KEY = 'splinetopia.freeRoomCamera';
 const BABBLE_BUBBLES_KEY = 'splinetopia.babbleBubbles', BABBLE_FALLBACK_KEY = 'splinetopia.babbleFallbackOnly';
 const DITHER_SEE_THROUGH_KEY = 'splinetopia.ditherSeeThrough', COLORFUL_ICONS_KEY = 'splinetopia.colorfulIcons';
+const ICON_SATURATION_KEY = 'splinetopia.iconSaturation';
 const body = document.body;
 const startModeSelect = document.getElementById('s-startmode');
 
@@ -86,6 +87,18 @@ const colorfulIconsToggle = document.getElementById('s-colorfulicons');
 const showColorfulIcons = () => { colorfulIconsToggle.classList.toggle('on', colorfulIcons); setColorfulIcons(colorfulIcons); };
 showColorfulIcons();
 colorfulIconsToggle.addEventListener('click', () => { colorfulIcons = !colorfulIcons; remember(COLORFUL_ICONS_KEY, colorfulIcons); showColorfulIcons(); });
+// Icon saturation (%, 100): the colourful icons' CSS saturate() (css/base.css --icon-saturation)
+const saturationSlider = document.getElementById('s-iconsaturation'), saturationShown = document.getElementById('dv-iconsaturation');
+const showSaturation = () => {
+  saturationShown.textContent = `${saturationSlider.value}%`;
+  document.documentElement.style.setProperty('--icon-saturation', saturationSlider.value / 100);
+};
+try { const v = localStorage.getItem(ICON_SATURATION_KEY); if (v !== null) saturationSlider.value = v; } catch (err) { /* storage blocked */ }
+showSaturation();
+saturationSlider.addEventListener('input', () => {
+  showSaturation();
+  try { localStorage.setItem(ICON_SATURATION_KEY, saturationSlider.value); } catch (err) { /* storage blocked */ }
+});
 S.freeRoomCamera = recall(FREE_ROOM_CAMERA_KEY, true);
 const freeRoomCameraToggle = document.getElementById('s-freeroomcamera');
 freeRoomCameraToggle.classList.toggle('on', S.freeRoomCamera);

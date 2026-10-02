@@ -28,6 +28,7 @@ export function setImgIcon(img, name) {
 }
 export function setColorfulIcons(on) {
   colorful = on;
+  document.body.classList.toggle('colorful-icons', on);
   icons.forEach((icon, svg) => pixelate(svg));
   document.querySelectorAll('img[data-icon]').forEach(img => setImgIcon(img, img.dataset.icon));
 }
@@ -110,6 +111,7 @@ async function pixelate(svg) {
       + `<rect width="${W}" height="${H}" fill="currentColor" stroke="none" mask="url(#${id})"/>`;
   }
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.classList.add('pixel-icon');
   svg.innerHTML = layers;
 }
 

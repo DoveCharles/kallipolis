@@ -630,3 +630,6 @@ body.ui-loading #loading-screen { opacity:1; visibility:visible; transition:none
 body.net-guest #mode-toolbar .tool-btn:not([data-mode="move"]) { opacity: .4; pointer-events: none; }
 .net-tag { position: fixed; left: 0; top: 0; z-index: 5; pointer-events: none; padding: 0 4px; background: #fff; color: #000; border: 1px solid #000; font: 11px/16px sans-serif; white-space: nowrap; }
 .net-tag[hidden] { display: none; }
+
+/* Options > Display > Colorful Icons, at the Icon saturation slider's (ui/view-prefs.js) */
+body.colorful-icons .pixel-icon, body.colorful-icons img[data-icon] { filter:saturate(var(--icon-saturation, 1)); }
