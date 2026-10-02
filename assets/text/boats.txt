@@ -1,0 +1,53 @@
+# What each boat is like: what its card says when you click one out on the water in World mode. Edit freely, then reload.
+# The same format as assets/text/planes.txt (read by src/core/type-text.js): a [section] per kind of boat (dinghy, motor,
+# sail, fishing), falling back on [default]. Several lines for an attribute: each boat picks one (always the same one).
+
+[distribution]
+1, 1 @ 0.6
+2, 0 @ 0.1
+0, 2 @ 0.1
+2, 1 @ 0.1
+1, 2 @ 0.1
+
+[default]
+name = Boat
+mood = ⛵
+loves = Calm water
+loves = A good knot
+hates = Rocks
+hates = Barnacles
+
+[dinghy]
+name = Dinghy
+mood = 🚣
+loves = Being small enough to go anywhere
+loves = Oars that match
+hates = Wash from bigger boats
+hates = Being called a tender
+
+[motor]
+name = Motorboat
+mood = 🛥️
+loves = Full throttle
+loves = Being seen
+loves = Sunglasses on deck
+hates = Speed limits
+hates = The price of fuel
+
+[sail]
+name = Yacht
+mood = ⛵
+loves = A steady breeze
+loves = Tacking
+loves = Saying starboard
+hates = Flat calm
+hates = Motorboats
+hates = Getting the boom to the head
+
+[fishing]
+name = Trawler
+mood = 🎣
+loves = An early start
+loves = Gulls following
+hates = Empty nets
+hates = Pleasure boats in the way

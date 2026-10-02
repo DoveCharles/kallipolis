@@ -204,7 +204,7 @@ export function subdivideZone(zone) {
   zone.airportFlights = []; // (the aircraft themselves have just gone with the group; a camera following one lets go)
   zone.airportField = null;
   const hadDeck = !!zone.pontoonDeck?.length;
-  zone.pontoonDeck = null; zone.marinaWet = false; zone.marinaRoamers = null; zone.marinaJetties = null; // (a marina's: see zones/marina.js)
+  zone.pontoonDeck = null; zone.marinaWet = false; zone.marinaRoamers = null; zone.marinaJetties = null; zone.marinaMoored = null; zone.marinaBoatMesh = null; // (a marina's: see zones/marina.js)
   zone.carPark = null;
   if (zone.kerbKey && zone.zoneType !== 'carpark') { zone.kerbKey = null; rebuildRoadMeshes(); } // (its kerb drops go)
 
