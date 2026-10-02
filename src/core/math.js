@@ -52,6 +52,24 @@ export function mulberry32(seed) {
   };
 }
 
+// ---- rendezvous picks: each item scored by a hash of the seed and its own key (its text or name), over its weight; the
+// lowest wins. Adding an item to a list changes only the picks it now wins (about 1 in N), unlike an index into the list.
+/** FNV-1a hash of a string, unsigned. */
+export const textHash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+const fmix = h => { h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); return (h ^ (h >>> 16)) >>> 0; };
+/** A seed from whole numbers (an id, a salt…), for rendezvousScore. */
+export const seedOf = (...parts) => parts.reduce((h, n) => fmix(h ^ (Math.floor(n) % 4294967296)) + 0x9e3779b9 | 0, 0x2545f491) >>> 0;
+/** An item's hash for `seed`, unsigned: with equal weights the highest wins (the same order as rendezvousScore). */
+export const rendezvousHash = (seed, keyHash) => fmix(seed ^ Math.imul(keyHash, 0x9e3779b1));
+/** An item's score for `seed` (lower wins): exponential over `weight`, so a weight-2 item wins twice as often. */
+export const rendezvousScore = (seed, keyHash, weight = 1) => weight > 0 ? -Math.log((rendezvousHash(seed, keyHash) + 0.5)/4294967296)/weight : Infinity;
+/** The item of `items` with the lowest score for `seed`, keyed by `keyOf(item)` (a string), or null if none. */
+export function rendezvousPick(items, seed, keyOf, weightOf = () => 1) {
+  let best = null, low = Infinity;
+  for (const item of items) { const s = rendezvousScore(seed, textHash(keyOf(item)), weightOf(item)); if (s < low) { low = s; best = item; } }
+  return best;
+}
+
 /**
  * Linear interpolation.
  * @param {number} a Value at `t` = 0.

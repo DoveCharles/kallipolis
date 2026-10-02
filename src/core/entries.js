@@ -4,6 +4,7 @@
 // <categories> it's also said as (see speech/about.txt). `Card text | spoken text` gives it a second wording for speech.
 // Every kind shares the trait table in core/traits.js.
 import { TRAITS, TRAIT_MACROS, modifierLines } from './traits.js';
+import { textHash } from './math.js';
 
 const warned = new Set();
 function warnOnce(message) {
@@ -218,13 +219,59 @@ export function parseCounts(value, columns = 0) {
     : null;
 }
 
+// Picks by rendezvous (see core/math.js) on `seed`: an entry in the list w times (its choiceweight) has w hashed copies
+// and goes by its best, so it wins w times as often — no logs, which matters as this runs over every entry of every list
+// a profile picks from.
+const pools = new WeakMap(); // list → { entries (one per text), hashes (one per copy), owners (each copy's entry) }
+function poolOf(list) {
+  let pool = pools.get(list);
+  if (!pool) {
+    const byText = new Map();
+    list.forEach(entry => { const p = byText.get(entry.text); if (p) p.weight++; else byText.set(entry.text, { entry, weight: 1 }); });
+    const all = [...byText.values()], hashes = [], owners = [];
+    all.forEach(({ entry, weight }, k) => {
+      const key = textHash(entry.text);
+      for (let j = 0; j < weight; j++) { hashes.push(j ? textHash(entry.text + '#' + j) : key); owners.push(k); }
+    });
+    pool = { entries: all.map(p => p.entry), hashes: Uint32Array.from(hashes), owners: Uint32Array.from(owners) };
+    pools.set(list, pool);
+  }
+  return pool;
+}
+// a copy's hash for `seed` (rendezvousHash in core/math.js, written out: it's the hot loop)
+const scoreOf = (seed, hash) => {
+  let h = seed ^ Math.imul(hash, 0x9e3779b1);
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
+};
+/** The entry of `list` that `seed` picks (null for an empty list). */
+export function pickEntry(list, seed) {
+  const { hashes, owners, entries } = poolOf(list);
+  let best = -1, high = -1;
+  for (let c = 0; c < hashes.length; c++) { const h = scoreOf(seed, hashes[c]); if (h > high) { high = h; best = owners[c]; } }
+  return best < 0 ? null : entries[best];
+}
+/** `list`'s entries, once each, in the order `seed` would pick them: a function handing back the next (null when done). */
+export function rankEntries(list, seed) {
+  const { hashes, owners, entries } = poolOf(list), scores = new Float64Array(entries.length).fill(-1);
+  for (let c = 0; c < hashes.length; c++) { const h = scoreOf(seed, hashes[c]); if (h > scores[owners[c]]) scores[owners[c]] = h; }
+  return () => { // (best first, found as asked for: callers want a few, not the whole order)
+    let best = -1, high = -1;
+    for (let k = 0; k < scores.length; k++) if (scores[k] > high) { high = scores[k]; best = k; }
+    if (best < 0) return null;
+    scores[best] = -2;
+    return entries[best];
+  };
+}
 // Adds entries from `list` to `mine` until it has `count`. `sides` holds every list of chosen entries (`mine` among them):
 // an entry is skipped if it has the same text as, or a limit clashing with, any of them. A solo entry is never added to a
-// non-empty list, and a list holding one stops there, so the result can end lower than `count`. Gives up after 50 tries.
-export function addEntries(mine, list, count, rng, sides) {
-  const target = mine.some(isSolo) ? 1 : count;
+// non-empty list, and a list holding one stops there, so the result can end lower than `count`. Gives up after
+// 50 tries, taken in `seed`'s order (rankEntries).
+export function addEntries(mine, list, count, seed, sides) {
+  const target = mine.some(isSolo) ? 1 : count, next = rankEntries(list, seed);
   for (let tries = 0; mine.length < target && tries < 50; tries++) {
-    const entry = list[Math.floor(rng()*list.length)];
+    const entry = next();
+    if (!entry) break;
     if (isSolo(entry) && mine.length) continue;
     if (sides.flat().every(other => other.text !== entry.text && !clash(entry, other))) mine.push(entry);
   }

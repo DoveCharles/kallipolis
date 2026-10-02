@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { mulberry32, lerp } from '../../core/math.js';
+import { mulberry32, lerp, seedOf, rendezvousPick } from '../../core/math.js';
 import { scene } from '../../core/scene.js';
 import { TOON_RAMP } from '../../core/toon.js';
 import { onProfilesLoaded, profileOf, sexOf } from '../profiles.js';
@@ -1763,7 +1763,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   /** Which outfit someone wears (see outfits.js), 0 for none: from their id, by a generator of its own, unless their
    * hat (the slot's) says; and never trousers under a skirt or jeans, a woman's outfit on a man, nor a skirted one on
    * anyone without a skirt (the slot's). */
-  const outfitOf = (id, i) => pickOutfit(mulberry32(wardrobe[i] ? wardrobe[i] + 2 : 5150 + id*7919), hairLayer.of[i] >= 0 ? hairLayer.styles[hairLayer.of[i]].name : null, skirtLayer.of[i] >= 0, jeansLayer.of[i] >= 0, isMan[i] === 1);
+  const outfitOf = (id, i) => pickOutfit(wardrobe[i] ? seedOf(wardrobe[i], 2) : seedOf(5150, id), hairLayer.of[i] >= 0 ? hairLayer.styles[hairLayer.of[i]].name : null, skirtLayer.of[i] >= 0, jeansLayer.of[i] >= 0, isMan[i] === 1);
   // Clothes bought since (see changeClothes): for each slot, 0 for the clothes they came in (seeded from their id, above
   // and in assignAppearance), or else the seed of what they've changed into since. Like their hairstyle, it's the slot's:
   // whoever takes it next starts again from their own (see assignAppearance).
@@ -1835,7 +1835,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     const kept = !preset && pinnedLookOf(id);
     if (kept) wearLook(i, kept);
   }
-  // Which style of each worn layer person `id` wears, by the same rolls as the slots' above but on their own streams.
+  // Which style of each worn layer person `id` wears, by the same chances as the slots' above but from their id.
   const WORN_SALTS = [6101, 6203, 6301, 6407, 6521]; // (one per wornLayers entry)
   function pickWorn(i, id, man) {
     wornLayers.forEach((layer, n) => {
@@ -1843,10 +1843,11 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
       const hats = layer.hatChance != null ? (man ? layer.boysHats : layer.girlsHats) : [];
       const styles = hats.length && rng() < layer.hatChance ? hats : man ? layer.boys : layer.girls;
       let k = -1;
-      if (styles.length && !(layer.without?.of[i] >= 0)) {
-        const pick = layer.chance != null ? (rng() < layer.chance ? Math.floor(rng()*styles.length) : styles.length)
-          : Math.floor(rng()*(man ? styles.length + 1 : styles.length));
-        if (pick < styles.length) k = styles[pick];
+      // (which style by rendezvous on their names — see core/math.js — so a new style takes only the people it wins; a man
+      // may wear none of a layer without a chance, as one more option)
+      if (styles.length && !(layer.without?.of[i] >= 0) && (layer.chance == null || rng() < layer.chance)) {
+        const options = layer.chance == null && man ? [...styles, -1] : styles;
+        k = rendezvousPick(options, seedOf(WORN_SALTS[n], id), o => o < 0 ? '' : layer.styles[o].name);
       }
       if (!wear(layer, i, k) && !wear(layer, i, otherStyle(layer, styles, i, rng, true))) wear(layer, i, -1); // (full: another)
     });

@@ -3,6 +3,7 @@ import { controls } from '../core/camera-controls.js';
 import { serializeProject, loadProjectFromData } from './save-load.js';
 import { modelsLoaded, loadingTask } from '../ui/loading.js';
 import { serializeCrowd } from '../life/people/peopleKeep.js';
+import { serializeCars } from '../life/traffic/carKeep.js';
 import { onFavoritesChanged } from '../ui/favorites.js';
 
 // ============================================================ autosave
@@ -11,9 +12,10 @@ import { onFavoritesChanged } from '../ui/favorites.js';
 // opens, so a refresh loses nothing. It's saved a moment after anything's changed (the same moments undo takes a step,
 // and after zooming), and whenever the tab's hidden or closed. Clear empties it along with the scene; Save/Load project
 // still read and write files.
-// Who's in the crowd (life/people/peopleKeep.js) is kept under a key of its own, so it can be saved often without
-// writing the map images again: with the project, CROWD_DELAY after a death or (un)hearting, and every CROWD_EVERY.
-const DB_NAME = 'splinetopia', STORE_NAME = 'autosave', RECORD_KEY = 'current', CROWD_KEY = 'crowd';
+// Who's in the crowd and on the roads (life/people/peopleKeep.js, life/traffic/carKeep.js) is kept under keys of their own,
+// so they can be saved often without writing the map images again: with the project, CROWD_DELAY after a death, a car
+// destroyed or (un)hearting, and every CROWD_EVERY.
+const DB_NAME = 'splinetopia', STORE_NAME = 'autosave', RECORD_KEY = 'current', CROWD_KEY = 'crowd', TRAFFIC_KEY = 'traffic';
 const CROWD_DELAY = 3000, CROWD_EVERY = 45000; // ms
 let ready = false, restoring = false, saveTimer = null, crowdTimer = null, warned = false;
 navigator.storage?.persist?.().catch(() => {}); // (asks the browser not to clear it under disk pressure)
@@ -42,7 +44,7 @@ async function save() {
   saveTimer = null;
   if (!ready || restoring) return;
   const project = serializeProject();
-  delete project.crowd; // (its own key: saveCrowd)
+  delete project.crowd; delete project.traffic; // (their own keys: saveCrowd)
   saveCrowd();
   const record = {
     savedAt: Date.now(),
@@ -59,7 +61,8 @@ async function saveCrowd() {
   clearTimeout(crowdTimer);
   crowdTimer = null;
   if (!ready || restoring) return;
-  try { await inStore('readwrite', store => store.put(serializeCrowd(), CROWD_KEY)); }
+  const crowd = serializeCrowd(), traffic = serializeCars();
+  try { await inStore('readwrite', store => { store.put(traffic, TRAFFIC_KEY); return store.put(crowd, CROWD_KEY); }); }
   catch (err) { if (!warned) { warned = true; console.warn('Kallipolis: autosave failed', err); } }
 }
 const crowdChanged = () => { if (ready && !crowdTimer) crowdTimer = setTimeout(saveCrowd, CROWD_DELAY); };
@@ -87,6 +90,8 @@ loadingTask('Building the city...', (async () => {
       restoring = true;
       const crowd = await inStore('readonly', store => store.get(CROWD_KEY));
       if (crowd) record.project.crowd = crowd;
+      const traffic = await inStore('readonly', store => store.get(TRAFFIC_KEY));
+      if (traffic) record.project.traffic = traffic;
       await modelsLoaded;
       await loadProjectFromData(record.project);
       const camera = record.camera;

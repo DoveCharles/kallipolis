@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { rendezvousPick } from '../../core/math.js';
 
 // =========================================== OUTFITS ===========================================
 // Now and then someone wears an outfit instead of clothes in colors of their own: every part of the body their clothes
@@ -143,24 +144,23 @@ export const OUTFIT_COLUMN_COUNT = OUTFITS.reduce((sum, o) => sum + (o.variants 
 
 /**
  * Pick which outfit someone wears.
- * @param {function(): number} rng - their outfit rng
+ * @param {number} seed - their outfit seed: picked by rendezvous on outfit names (see core/math.js), each by its chance,
+ *   so a new outfit takes only the people it wins
  * @param {?string} hat - the name of the hairstyle (or hat) they wear, or null
  * @param {boolean} skirt - whether they wear a skirt
  * @param {boolean} jeans - whether they wear baggy jeans (which, like a skirt, go over where an outfit's trousers would be)
  * @param {boolean} man - whether they're a man
  * @returns {number} the outfit's id (its place in OUTFITS, from 1), or 0 for none
  */
-export function pickOutfit(rng, hat, skirt, jeans, man) {
+export function pickOutfit(seed, hat, skirt, jeans, man) {
   const worn = OUTFITS.findIndex(outfit => outfit.hat && outfit.hat === hat);
   if (worn >= 0) return worn + 1;
-  let roll = rng();
-  for (let k=0;k<OUTFITS.length;k++) {
-    if (OUTFITS[k].hat) continue;
-    const { trousers, women, skirted } = OUTFITS[k];
-    if (roll < OUTFITS[k].chance) return (trousers && (skirt || jeans)) || (women && man) || (skirted && !skirt) ? 0 : k + 1;
-    roll -= OUTFITS[k].chance;
-  }
-  return 0;
+  const options = OUTFITS.filter(outfit => !outfit.hat && outfit.chance > 0);
+  const none = Math.max(0, 1 - options.reduce((sum, outfit) => sum + outfit.chance, 0));
+  const pick = rendezvousPick([...options, null], seed, outfit => outfit ? outfit.name : '', outfit => outfit ? outfit.chance : none);
+  if (!pick) return 0;
+  const { trousers, women, skirted } = pick;
+  return (trousers && (skirt || jeans)) || (women && man) || (skirted && !skirt) ? 0 : OUTFITS.indexOf(pick) + 1;
 }
 
 /**

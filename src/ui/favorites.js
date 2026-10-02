@@ -11,7 +11,7 @@ import { toUi } from './ui-scale.js';
 // kind (an index, a line id, the object itself), `kind` is its name among the things the camera follows (see FOLLOWABLE
 // in editor/input.js), and `follow` finds it again and follows it, handing back false if it's no longer there to follow
 // (a car that's been blown up, a building whose zone has gone). Most last as long as the page does; a kind that can be
-// found again in a reloaded city (a person: see life/person-card.js) gives its entries `saved`, what finding it again
+// found again in a reloaded city (a person or a car: see life/person-card.js, life/car-card.js) gives its entries `saved`, what finding it again
 // takes, and they're kept in the project (see savedFavorites and restoreFavorites), so they're still there after a reload.
 // An entry that `spares` its thing takes the Smite button off its card while it's hearted (see ui/entity-card.js).
 //

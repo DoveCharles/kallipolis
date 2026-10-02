@@ -6,6 +6,9 @@ import { makeCard } from '../ui/entity-card.js';
 import { garbles, garbled, garbledEntry, cased } from '../ui/garble.js';
 import { hashNameToNumber } from '../core/math.js';
 import { showCarDetails, hideCarDetails } from './car-details.js';
+import { reviveFavoritesAs } from '../ui/favorites.js';
+import { carKey, carKeyOf, carNamed } from './traffic/carKeep.js';
+import { carMeshes } from './traffic/models.js';
 
 // ============================================================ car card
 // Who's behind the wheel, in a card at the bottom right while the camera follows a vehicle (see "following a car" in
@@ -37,11 +40,17 @@ function showCarCard(i, info, car) {
   card.show({ ...info, name: cased(info.name, traits), 
     loves: garbledEntry(info.loves, traits, seed), hates: garbledEntry(info.hates, traits, seed) });
   drawCarThumbnail(i);
-  card.setFavorite({ key: car, kind: 'Car', follow: () => App.followCar(car) });
+  card.setFavorite(car.design != null ? carFavorite(carMeshes[car.design].name, car.number) : { key: carKey(car), kind: 'Car', follow: () => App.followCar(car) });
   card.bindHealth(car, 'car');
   showCarDetails(car, card.el);
   showBoost();
 }
+// A car's favorite goes by its design and number (see traffic/carKeep.js), so it's found again after a reload.
+function carFavorite(design, number) {
+  return { key: carKeyOf(design, number), kind: 'Car', saved: { design, number },
+    follow: () => { const car = carNamed(design, number); return !!car && App.followCar(car) !== false; } };
+}
+reviveFavoritesAs('Car', saved => typeof saved.design === 'string' && Number.isInteger(saved.number) ? carFavorite(saved.design, saved.number) : null);
 function hideCarCard() {
   shown = -1;
   card.hide();

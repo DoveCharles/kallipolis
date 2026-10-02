@@ -11,8 +11,9 @@ import { boostMax, driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, 
 import { chaseCamera, updateCarRevive, respawnFromWater, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
 import { crowdGrid } from '../../core/math.js';
 import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, roadCrossers, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
-import { carHoloTimeUniform, carPlate } from './materials.js';
-import { carMeshes, carParts, designNumbers } from './models.js';
+import { carHoloTimeUniform } from './materials.js';
+import { benchCars, giveDesign, keptCar, takeCarReset } from './carKeep.js';
+import { carMeshes, carParts } from './models.js';
 import { CAR_REAR_AXLE, carHeight, carLength, engineOf, placeCar, placing, turnWheels } from './placing.js';
 import { buildCarGrid, CAR_BRAKE, CAR_STOP_GAP, carsOverlap, forCarsNear, gapAhead, GIVE_UP_AFTER, lyingAhead, overlapYield, separateCars, uTurnBlocked, waitOrGiveUp } from './spacing.js';
 import { updateSpecialTraits } from './special.js';
@@ -96,8 +97,10 @@ export function updateTraffic(t) {
     cars.forEach(car => { if (car !== drivenCar) reseatCar(car); });
   }
   const wanted = Math.min(TRAFFIC_MAX, Math.round(S.trafficAmount), S.trafficNav.capacity);
-  while (cars.length < wanted) { const car = newCar(); spawnCar(car); cars.push(car); }
-  if (cars.length > wanted) cars.length = wanted;
+  // (saved traffic come in replaces this: see carKeep.js — not while one's being driven)
+  if (!drivenCar && takeCarReset()) { stopFollowingCar(); cars.length = 0; }
+  while (cars.length < wanted) { const car = keptCar(newCar()); spawnCar(car); cars.push(car); } // (a saved car back, else a new one)
+  if (cars.length > wanted) benchCars(cars.splice(wanted)); // (to come back first when there's room)
   if (followedCar >= cars.length) stopFollowingCar();
   carParts.all.forEach(mesh => { mesh.count = cars.length; });
   // who's in front of whom: cars in the same lane going the same way, in order along it
@@ -132,10 +135,7 @@ export function updateTraffic(t) {
   cars.forEach((car, i) => {
     if (car.li < 0) { matrix.makeScale(0, 0, 0); carParts.body.setMatrixAt(i, matrix); if (S.showRoadsafetyDebug) carHitboxDebugMesh.setMatrixAt(i, matrix); return; }
     if (car.design == null && carMeshes.length) {
-      car.design = Math.floor(trafficRng()*carMeshes.length);
-      car.length = carMeshes[car.design].length;
-      car.number = ++designNumbers[car.design];
-      car.plate =  carPlate(car);
+      giveDesign(car, trafficRng()); // (its saved one, if it was saved: see carKeep.js)
     }
     if (car.design != null) refreshCarTraits(car);
     if (car.reviving) { updateCarRevive(car, dt); placeCar(car, i, designCounts); return; } // (blown up with a respawn left: see startCarRevive)

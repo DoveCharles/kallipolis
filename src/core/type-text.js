@@ -1,4 +1,4 @@
-import { mulberry32 } from './math.js';
+import { mulberry32, seedOf, textHash } from './math.js';
 import { DEFAULT_COUNTS, parseSections, entryOf, plainEntry, weighted, combineTraits, pickCounts, addEntries, clash, tierOf, modifiersOf } from './entries.js';
 
 // ============================================================ what a kind of thing is like
@@ -76,7 +76,7 @@ export function loadTypeText(url, { attributes, settings = [], fallbacks = {}, p
           const first = counts[i] >= 1 && firstFor(attribute);
           if (first && !chosen.flat().some(other => clash(first, other))) chosen[i].push(first);
         });
-        counted.forEach((attribute, i) => { if (entriesFor(attribute)) addEntries(chosen[i], entriesFor(attribute), counts[i], rng, chosen); });
+        counted.forEach((attribute, i) => { if (entriesFor(attribute)) addEntries(chosen[i], entriesFor(attribute), counts[i], seedOf(textHash(kind || ''), number, i), chosen); });
         // `<attribute>Tier` runs alongside it: which of its entries are legendary or terrible (see tierOf), for the card to
         // colour that row (ui/entity-card.js) — null for an entry that's neither. `<attribute>Mods` likewise: each entry's
         // modifier lines (see modifiersOf), for the drop-down under its row.

@@ -52,6 +52,7 @@ const plateAtlas = (() => {
  * @param {string} text
  * @returns {number[]} four floats
  */
+export const platePacked = text => packPlate(text); // (a kept plate's text, packed again: see carKeep.js)
 function packPlate(text) {
   const format = text.includes('-') ? 1 : text[3] === ' ' ? 2 : 0; // (AB-123-CD is EU, ABC 1234 US, AB12 CDE UK)
   const length = Math.min(PLATE_MAX_CHARS, text.length), packed = [0, 0, 0, length*4 + format];

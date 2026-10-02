@@ -15,6 +15,7 @@ import { serializeImportedModels, restoreImportedModels } from '../objects/impor
 import { cancelActiveDrawing, applyModeVisibility } from '../editor/tools.js';
 import { savedFavorites, restoreFavorites } from '../ui/favorites.js';
 import { serializeCrowd, restoreCrowd } from '../life/people/peopleKeep.js';
+import { serializeCars, restoreCars } from '../life/traffic/carKeep.js';
 
 // ============================================================ project save / load
 const PROJECT_FORMAT_VERSION = 1;
@@ -70,6 +71,7 @@ export function serializeProject() {
     },
     favorites: savedFavorites(), // (only those that can be found again in a reloaded city: see ui/favorites.js)
     crowd: serializeCrowd(), // (who's in the crowd, the dead left out: see life/people/peopleKeep.js)
+    traffic: serializeCars(), // (and on the roads: see life/traffic/carKeep.js)
     roads: {
       nodeSeq: S.roadNodeSeq, lineSeq: S.roadLineSeq, networkSeq: S.roadNetworkSeq,
       walkwayOrder: (S.walkwayOrder || []).slice(), // (defensively: same fallback loadProjectFromData below already uses on the way back in)
@@ -228,7 +230,7 @@ export async function loadProjectFromData(data, options) {
   document.getElementById('s-grassnoise').value = S.globalGrassNoiseStrength;
   document.getElementById('dv-grassnoise').textContent = S.globalGrassNoiseStrength.toFixed(2);
   renderWorldTintPanel();
-  if (!keepMaps) { restoreFavorites(data.favorites); restoreCrowd(data.crowd); } // (undo and redo leave the favorites and crowd alone: they aren't steps to undo)
+  if (!keepMaps) { restoreFavorites(data.favorites); restoreCrowd(data.crowd); restoreCars(data.traffic); } // (undo and redo leave the favorites and crowd alone: they aren't steps to undo)
   if (sc.people) {
     S.peopleEnabled = !!sc.people.enabled;
     if (sc.people.amount != null) S.peopleAmount = sc.people.amount;

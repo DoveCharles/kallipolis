@@ -178,6 +178,7 @@ export function killCar(i, byPlayer = true) { // (byPlayer false: a car crashing
   } else explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint, wrecked }, blastScale);
   if (survives) { startCarRevive(car); return; }
   cars.splice(i, 1);
+  App.crowdChanged?.(); // (gone for good, saved soon: see project/autosave.js)
   if (followedCar > i) followedCar--; // (a car ahead of it in the array, still being followed, keeps its place)
 }
 /**
@@ -250,6 +251,7 @@ export function drownCar(i) {
   if (followedCar === i) stopFollowingCar();
   splashCar({ x: car.x, y: WATER_LEVEL, z: car.z }, carHeight(car));
   cars.splice(i, 1);
+  App.crowdChanged?.();
   if (followedCar > i) followedCar--;
 }
 /**

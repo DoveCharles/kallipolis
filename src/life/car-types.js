@@ -19,7 +19,13 @@ const cars = loadTypeText('assets/text/cars.txt', {
 
 // A vehicle's card details: `design` is its model's name in Cars.glb (null for the plain box car) and `number` its own
 // number among others like it (see designNumbers in traffic/models.js).
-export const carTypeOf = (design, number = 1) => cars.of(design, number);
+// A hearted vehicle, as saved (see traffic/carKeep.js), keeps its card as it was over whatever cars.txt now gives it.
+const pinned = new Map();
+export const pinCarType = (design, number, type) => { pinned.set(design + '#' + number, type); };
+export const carTypeOf = (design, number = 1) => {
+  const fresh = cars.of(design, number), pin = pinned.get(design + '#' + number);
+  return pin ? { ...fresh, ...pin, traits: { ...fresh.traits, ...pin.traits }, baseTraits: { ...fresh.baseTraits, ...pin.baseTraits } } : fresh;
+};
 
 // The vanity registrations a vehicle can wear (see carPlate in traffic/materials.js): its type's own `plate` lines, else [default]'s.
 export const vanityPlatesOf = design => cars.listOf(design, 'plate');
