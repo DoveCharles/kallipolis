@@ -78,3 +78,27 @@ Romance blossoms for {name} and {by}
 {name} and {by} at war
 Bad blood between {name} and {by}
 Feud erupts: {name} vs {by}
+
+# "In other news" on each morning's front page: two picked at random (three on a day with no news). {someone} is a
+# random living resident (clicking the story follows them), {city} the world's name
+[filler]
+Local man insists pigeons "know something"
+{someone} claims to have seen a bee "the size of a dog"
+Council debates whether roads really need to go anywhere
+{city} pigeon population reaches all-time high
+Study finds 9 in 10 residents walk in circles
+{someone} wins {city} Most Ordinary Person award
+Hot dog prices unchanged for record day
+{someone} denies starting rumour about the MedBot
+Scientists baffled as nobody in {city} ever goes home
+{someone} spotted talking to nobody in the park, again
+Residents asked to stop praying in the middle of the road
+{city} named "Most Okay City" for third year running
+Lightning experts warn: don't annoy anyone powerful
+{someone} reports stolen sandwich; pigeons questioned
+Pub stocks running low, landlord blames {someone}
+New survey: most of {city} "fine, thanks"
+{someone} to open shop selling only left shoes
+Mysterious glowing orb seen over {city}; mayor shrugs
+{someone} breaks own record for standing still
+Traffic lights "mostly decorative", admits council

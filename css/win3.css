@@ -597,3 +597,4 @@ body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, .t
 .w3-paper-date { font-size:11px; text-align:center; border-bottom:1px solid var(--w3-text); padding:3px 0; margin-bottom:8px; }
 .w3-paper-lead { font-family:Georgia, 'Times New Roman', serif; font-size:18px; font-weight:bold; line-height:1.2; cursor:pointer; margin-bottom:6px; }
 .w3-paper-tally { font-style:italic; margin-bottom:8px; }
+.w3-paper-other { font-weight:bold; border-top:1px solid var(--w3-text); margin-top:8px; padding-top:4px; }

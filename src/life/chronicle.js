@@ -60,7 +60,8 @@ function render() {
   if (!win) return;
   win.querySelector('.win3-title').textContent = (worldName() || 'Kallipolis') + ' Chronicle';
   const list = win.querySelector('.w3-chronicle');
-  list.replaceChildren(...(news.length ? [...news].reverse().map(storyRow) : [Object.assign(document.createElement('p'), { textContent: 'No news yet.' })]));
+  const told = news.filter(item => item.kind !== 'filler');
+  list.replaceChildren(...(told.length ? [...told].reverse().map(storyRow) : [Object.assign(document.createElement('p'), { textContent: 'No news yet.' })]));
 }
 // ---- the morning edition: everything since the last, under the city's masthead
 let hourWas = S.timeOfDay;
@@ -73,12 +74,28 @@ function printEdition() {
   if (S.netGuest) return;
   edition++;
   setProgress('chronicleEd', edition);
+  printFiller();
   frontPage();
 }
 const pick = list => list[Math.floor(Math.random()*list.length)];
+// "In other news": FILLER lines from [filler] (one more on a day with no news), {someone} a random passer-by
+const FILLER = 2;
+function printFiller() {
+  const living = people.filter(p => p.mode !== 'dead' && p.name), city = worldName() || 'Kallipolis';
+  let lines = (headlines.filler ?? []).filter(l => living.length || !l.includes('{someone}'));
+  const quiet = !news.some(item => item.ed === edition && item.kind !== 'filler');
+  for (let n = FILLER + (quiet ? 1 : 0); n > 0 && lines.length; n--) {
+    const line = pick(lines), who = line.includes('{someone}') ? pick(living) : null;
+    lines = lines.filter(l => l !== line);
+    news.push({ text: line.replace(/\{city\}/g, city).replace(/\{someone\}/g, who?.name ?? ''), kind: 'filler', ed: edition, time: '',
+      id: who?.id ?? null, x: who?.x ?? 0, z: who?.z ?? 0 });
+  }
+  news = news.slice(-MAX);
+  setProgress('chronicle', news);
+}
 /** The front page of the latest edition (or `ed`). @param {number} [ed] @returns {void} */
 export function frontPage(ed = edition) {
-  const city = worldName() || 'Kallipolis', stories = news.filter(item => item.ed === (ed || 1)); // (before the first edition: what will be in it)
+  const city = worldName() || 'Kallipolis', stories = news.filter(item => item.ed === (ed || 1) && item.kind !== 'filler'); // (before the first edition: what will be in it)
   const rank = item => { const r = LEAD.indexOf(item.kind); return r < 0 ? LEAD.length : r; };
   const sorted = [...stories].sort((a, b) => rank(a) - rank(b)), lead = sorted[0];
   const counts = new Map();
@@ -88,7 +105,8 @@ export function frontPage(ed = edition) {
   paper = openWindow({ id: 'front-page', title: `${city} Chronicle`, width: 340, noOk: true, onClose: () => { paper = null; },
     fill: body => {
       body.innerHTML = `<div class="w3-paper"><div class="w3-paper-mast"></div><div class="w3-paper-date"></div>
-        <div class="w3-paper-lead"></div><div class="w3-paper-tally"></div><div class="w3-chronicle"></div></div>`;
+        <div class="w3-paper-lead"></div><div class="w3-paper-tally"></div><div class="w3-chronicle"></div>
+        <div class="w3-paper-other">In other news</div><div class="w3-chronicle w3-paper-filler"></div></div>`;
       body.querySelector('.w3-paper-mast').textContent = `The ${city} Chronicle`;
       body.querySelector('.w3-paper-date').textContent = ed ? `No. ${ed} · Morning edition` : 'Special edition';
       const leadEl = body.querySelector('.w3-paper-lead');
@@ -96,6 +114,9 @@ export function frontPage(ed = edition) {
       if (lead) leadEl.addEventListener('click', () => goTo(lead));
       body.querySelector('.w3-paper-tally').textContent = tally ? `Since the last edition: ${tally}.` : '';
       body.querySelector('.w3-chronicle').replaceChildren(...sorted.slice(1).map(storyRow));
+      const filler = news.filter(item => item.ed === ed && item.kind === 'filler');
+      body.querySelector('.w3-paper-filler').replaceChildren(...filler.map(storyRow));
+      body.querySelector('.w3-paper-other').hidden = !filler.length;
     } });
 }
 function storyRow(item) {
