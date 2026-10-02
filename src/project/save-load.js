@@ -65,7 +65,7 @@ export function serializeProject() {
       globalGrassNoiseStrength: S.globalGrassNoiseStrength,
       people: { enabled: S.peopleEnabled, amount: S.peopleAmount, speed: S.peopleSpeed, size: S.peopleSize, traffic: S.trafficAmount, idSeq: S.peopleIdSeq },
       dayNight: { enabled: S.dayNightEnabled, dayLength: S.dayLengthMinutes, time: S.timeOfDay },
-      weather: { rain: S.weatherRain, snow: S.weatherSnow, clouds: S.weatherClouds }
+      weather: { rain: S.weatherRain, snow: S.weatherSnow, clouds: S.weatherClouds, cycle: S.weatherCycle }
     },
     favorites: savedFavorites(), // (only those that can be found again in a reloaded city: see ui/favorites.js)
     roads: {
@@ -239,8 +239,11 @@ export async function loadProjectFromData(data, options) {
     App.syncPeopleUI();
   }
   if (sc.weather) {
-    S.weatherRain = sc.weather.rain || 0; S.weatherSnow = sc.weather.snow || 0;
-    App.setWeather('clouds', sc.weather.clouds || 0); // also applies the rain and snow to the light and sky
+    S.weatherCycle = !!sc.weather.cycle;
+    if ('rain' in sc.weather) { // (undo steps taken while cycling leave the weather be)
+      S.weatherRain = sc.weather.rain || 0; S.weatherSnow = sc.weather.snow || 0;
+      App.setWeather('clouds', sc.weather.clouds || 0); // also applies the rain and snow to the light and sky
+    }
   }
   if (sc.dayNight) {
     S.dayNightEnabled = !!sc.dayNight.enabled;

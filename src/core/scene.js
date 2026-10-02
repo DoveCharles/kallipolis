@@ -318,7 +318,7 @@ function updateSkyEnvMap(sky) {
   skyPmrem.fromCubemap(skyCube, skyEnvTarget);
 }
 // Weather, 0..1 each (see "weather") — here because it dims the light and greys the sky.
-S.weatherRain = 0, S.weatherSnow = 0, S.weatherClouds = 0;
+S.weatherRain = 0, S.weatherSnow = 0, S.weatherClouds = 0, S.weatherCycle = false;
 const MOON_COLOR = new THREE.Color(0x9fb4d8);
 // which way the sun (or moon) is from what it shines on — placeSunLight makes it the light's position
 export const DAYLIGHT = { value: 1 }; // outdoor light, 1 at a clear noon (for unlit shaders: see updateSun)
