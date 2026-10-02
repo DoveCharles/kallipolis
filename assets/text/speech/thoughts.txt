@@ -1,6 +1,8 @@
 # What people think to themselves when they're alone — no replies (see about.txt).
 
 I hope the day is kind to me.
+"[news.headline]." Hm.
+I wonder if I'll ever make [news.paper].
 Where am I?
 
 Where the fuck did I put my [belongings]? {aggression}

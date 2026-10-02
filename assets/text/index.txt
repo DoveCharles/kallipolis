@@ -34,6 +34,7 @@ speech/talk/hints.txt
 speech/talk/miku.txt
 speech/talk/mikuthoughts.txt
 speech/talk/musings.txt
+speech/talk/news.txt
 speech/talk/oneliners.txt
 speech/talk/places.txt
 speech/talk/smalltalk.txt

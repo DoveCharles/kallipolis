@@ -1,0 +1,28 @@
+# Talking about the paper (life/chronicle.js): [news.headline] is a story from the latest edition or since (a line
+# using it isn't said when there's no news), [news.paper] the paper's name, [world.city] the city's.
+Did you see the paper? "[news.headline]."
+> Terrible.
+> I don't read it.
+>> You should. It's all about us.
+> Typical [world.city].
+Have you read [news.paper] today? {nosy}
+> No, why?
+>> "[news.headline]." That's what.
+>>> I knew it.
+>>> Unbelievable.
+"[news.headline]." Can you believe that? {nosy}
+> I can, honestly.
+> No!
+>> It's in [news.paper], so it must be true.
+They wrote "[news.headline]" on the front page. {aggression = -0.5}
+> Poor them.
+> Serves them right. {evil}
+I'm cancelling my subscription to [news.paper]. {mood = -1}
+> Why?
+>> All they print is "[news.headline]."
+Only in [world.city], eh?
+> Only in [world.city].
+You know I'm going to be in [news.paper] one day. {mood}
+> For what?
+>> Something good, hopefully.
+>> Nobody knows yet. {evil}
