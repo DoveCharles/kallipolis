@@ -374,6 +374,13 @@ export const isDrawn = p => !p.vanished && (!isGone(p) && (p.mode === 'possessed
 // say, still goes on every frame.
 const FINE_EVERY = 4;
 let peopleFrame = 0;
+// And someone off screen or a speck on it (under LAZY_PIXELS), out of earshot and doing nothing that needs every frame,
+// isn't updated at all but on their fine turn, taking in all the time since (lazyDt).
+const LAZY_PIXELS = PERSON_WORN_PIXELS;
+const lazyNow = (p, i, carded) => (peopleFrame + i) % FINE_EVERY !== 0 && i !== followed && i !== possession.index
+  && p.mode !== 'none' && p.mode !== 'possessed' && !p.jc && !p.fall && !p.push && !p.punched && !p.attack && !p.swat && !inWater(p)
+  && !carded.includes(i) && Math.hypot(p.x - ear.x, p.y - ear.y, p.z - ear.z) > hearDistance()
+  && personPixels(p.x, p.y, p.z, 1.7*p.height*S.peopleSize) < LAZY_PIXELS;
 const FOOTFALLS = 0.13, STEPS_PER_CYCLE = 4; // how far through the walk cycle a foot first comes down, and how many times
 // one does in a cycle: the Walk clip is two full strides, left, right, left, right, each foot reaching furthest forward there
 // Someone's voice (see audio/voices.js), the same every time for the same person: its pitch, lower for a man than a woman
@@ -1336,7 +1343,6 @@ export function updatePeople(t) {
   setIndoorsCount(people.reduce((n, p) => n + (p.mode === 'indoors' ? 1 : 0), 0));
   if (personModel) {
     personModel.mesh.count = personModel.censor.count = people.length;
-    personModel.spirits.forEach(m => { m.count = people.length; });
     personModel.hair.forEach(style => { style.mesh.count = countBelow(style.members, people.length); });
     updateGroups(dt);
     meetOnWalkways(dt);
@@ -1359,9 +1365,12 @@ export function updatePeople(t) {
   const carded = App.cardedPeople?.() ?? []; // (anyone with a card open: posed in full, as its headshot's close up)
   beginEmotes();
   sweepPrayers();
-  if (personModel) personModel.copiesWanted.twins = people.some(p => p.traits.twins); // (see copiesOf in peopleModel.js)
   updateMinis(dt, wanted); // (pipers' minis: made, followed, avenged — see peopleMinis.js)
+  const frameDt = dt;
   people.forEach((p, i) => {
+    if (lazyNow(p, i, carded)) { p.lazyDt = (p.lazyDt ?? 0) + frameDt; return; }
+    const dt = frameDt + (p.lazyDt ?? 0);
+    p.lazyDt = 0;
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
@@ -1869,6 +1878,7 @@ export function updatePeople(t) {
   if (personModel) {
     [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; part.pupil.needsUpdate = true; });
     personModel.spiritTalk.needsUpdate = true;
+    personModel.updateCopies(people.length, [followed, possession.index, ...carded]); // (who's drawn: see compactOf in peopleModel.js)
     updateHeld(); // (whatever anyone's holding, from where their hands ended up)
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;

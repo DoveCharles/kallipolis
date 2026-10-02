@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mulberry32, lerp, seedOf, rendezvousPick } from '../../core/math.js';
-import { scene } from '../../core/scene.js';
+import { scene, sun } from '../../core/scene.js';
 import { TOON_RAMP } from '../../core/toon.js';
 import { onProfilesLoaded, profileOf, sexOf } from '../profiles.js';
 import { pinnedLookOf } from './peopleKeep.js';
@@ -661,6 +661,8 @@ const drawingBuffer = new THREE.Vector2();
 // (the same, kept on this side for updatePeople: the last frame's view, see personPixels)
 const viewFrustum = new THREE.Frustum(), viewMatrix = new THREE.Matrix4(), viewSphere = new THREE.Sphere();
 let viewAimed = false;
+const shadowFrustum = new THREE.Frustum();
+let shadowAimed = false, copiesAfterAim = null; // (see updateCopies in buildPersonModel)
 /**
  * Tell the person meshes where the view is drawn from, so they can leave out whoever's off screen or too small to see
  * (see personCulled). Called just before the frame is drawn.
@@ -676,6 +678,10 @@ export function aimPersonCulling(camera, renderer) {
   camera.updateMatrixWorld();
   viewFrustum.setFromProjectionMatrix(viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
   viewAimed = true;
+  const shadow = sun.castShadow && renderer.shadowMap.enabled ? sun.shadow.camera : null; // (as it was last drawn)
+  shadowAimed = !!shadow;
+  if (shadow) shadowFrustum.setFromProjectionMatrix(viewMatrix.multiplyMatrices(shadow.projectionMatrix, shadow.matrixWorldInverse));
+  copiesAfterAim?.();
 }
 
 // Off screen, or too small on it to make out, the finer things about someone needn't be kept up every frame (see
@@ -1157,12 +1163,12 @@ function injectPersonShader(shader, uniforms, look) {
  * @param {object} look - what the material draws and how it colors it
  * @param {number} capacity - how many instances to make room for
  * @param {boolean} byAttribute - whether the instances say which person they are (instancePerson) rather than being them in order
- * @param {{name?: string, headshot?: boolean, culled?: boolean}} [options] - the mesh's name, whether it's drawn in headshots,
- * and whether whoever's out of view or too small is left out (see personCulled — not for anything posed away from the person's
- * own place, like a gib's flying pieces)
+ * @param {{name?: string, headshot?: boolean, culled?: boolean, layer?: boolean}} [options] - the mesh's name, whether it's drawn in headshots,
+ * whether whoever's out of view or too small is left out (see personCulled — not for anything posed away from the person's
+ * own place, like a gib's flying pieces), and whether it's worn over the body (by default, if byAttribute)
  * @returns {THREE.InstancedMesh} the mesh, added to the scene
  */
-function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name = 'People', headshot = true, culled = true } = {}) {
+function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name = 'People', headshot = true, culled = true, layer = byAttribute } = {}) {
   const material = new THREE.MeshToonMaterial({ gradientMap: TOON_RAMP, side: THREE.DoubleSide, flatShading: true });
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   if (byAttribute) { material.defines = { PERSON_INDEX_ATTRIBUTE: '' }; depth.defines = { PERSON_INDEX_ATTRIBUTE: '' }; }
@@ -1170,10 +1176,10 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name 
   material.defines = { ...material.defines, ROOM_LAMP: '', ROOM_GLOW: '' };
   if (culled) { material.defines.PERSON_CULL = ''; depth.defines = { ...depth.defines, PERSON_CULL: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
-  const key = ['person', byAttribute, culled, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, !!look.hemmed, look.femaleOnly.join(','), (look.lashes || []).join(','), look.blushSlot ?? '', look.pupilSlot ?? '', (look.nudeSlots || []).join(','), !!look.stripBald].join('|');
-  material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { ...look, layer: byAttribute });
+  const key = ['person', byAttribute, layer, culled, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, !!look.hemmed, look.femaleOnly.join(','), (look.lashes || []).join(','), look.blushSlot ?? '', look.pupilSlot ?? '', (look.nudeSlots || []).join(','), !!look.stripBald].join('|');
+  material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { ...look, layer });
   material.customProgramCacheKey = () => key;
-  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly, lashes: look.lashes, clearThighs: look.clearThighs, stripBald: look.stripBald, shadow: true, layer: byAttribute });
+  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly, lashes: look.lashes, clearThighs: look.clearThighs, stripBald: look.stripBald, shadow: true, layer });
   depth.customProgramCacheKey = () => key + '|depth';
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -2178,12 +2184,82 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   geometry.setAttribute('instancePupil', pupil);
   const spiritTalk = dynamicInstanceAttribute(PEOPLE_MAX, 2); // (the spirits' mouths: see peopleSpirits.js, peopleSpiritChat.js)
   geometry.setAttribute('instanceSpirit', spiritTalk);
-  const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, false);
+  const mesh = makePersonMesh(geometry, uniforms, bodyLook, PEOPLE_MAX, true, { layer: false }); // (as its shown copy: see compactOf)
   // (the nude trait's censor, pelvis to chest: see peopleCensor.js)
   const censor = makeCensorMesh({ vertexPars: PERSON_VERTEX_PARS, uniforms, anim, body: mesh, nudeRow: NUDE_ROW, skinRow: SKIN_ROW, headshotLayer: HEADSHOT_LAYER,
     rest: { ...censorRest, tall: geometry.boundingBox.max.y - geometry.boundingBox.min.y } });
+  // (nothing's drawn from the body's and worn styles' own instances, kept one a person (or slot) for updatePeople: each
+  // source mesh has compact copies of them, sharing its vertices, holding only those shown — bit 0 — and of those, the
+  // ones with a SPECTRAL bit, for twins, spirits and ghosts drawn again; refilled each frame by updateCopies)
+  const compacts = [];
+  const compactOf = (source, bit) => {
+    const found = compacts.find(c => c.source === source && c.bit === bit);
+    if (found) return found;
+    const capacity = source.instanceMatrix.count, geometry = new THREE.BufferGeometry(), pairs = [];
+    geometry.index = source.geometry.index;
+    Object.entries(source.geometry.attributes).forEach(([name, attribute]) => {
+      const own = attribute.isInstancedBufferAttribute ? dynamicInstanceAttribute(capacity, attribute.itemSize) : attribute;
+      if (own !== attribute) pairs.push([attribute, own]);
+      geometry.setAttribute(name, own);
+    });
+    const person = geometry.attributes.instancePerson ? null : dynamicInstanceAttribute(capacity, 1); // (the body's are in order)
+    if (person) geometry.setAttribute('instancePerson', person);
+    geometry.boundingBox = source.geometry.boundingBox; geometry.boundingSphere = source.geometry.boundingSphere;
+    const matrix = dynamicInstanceAttribute(capacity, 16);
+    pairs.push([source.instanceMatrix, matrix]);
+    const layer = wornLayers.find(l => l.styles.some(style => style.mesh === source)), k = layer?.styles.findIndex(style => style.mesh === source);
+    const slotOf = layer ? i => layer.of[i] === k ? layer.slot[i] : -1 : i => i;
+    const compact = { source, bit, geometry, matrix, pairs, person, slotOf, meshes: [], owns: [...pairs.map(pair => pair[1]), ...(person ? [person] : [])] };
+    compacts.push(compact);
+    return compact;
+  };
+  // (a copy's mesh is shown once with nobody in it, so its shaders are compiled with the rest)
+  const drawsCompact = (c, copy) => { c.meshes.push(copy); copy.onBeforeRender = () => { copy.userData.warm = true; }; };
+  const spectralBits = Object.values(SPECTRAL), shown = [], having = { 0: shown, ...Object.fromEntries(spectralBits.map(bit => [bit, []])) };
+  const sphere = new THREE.Sphere();
+  let copyCount = 0, copyAlways = [];
+  /**
+   * Refill the compact copies (see compactOf): with whoever's shown — in view, or near enough to cast a shadow into it,
+   * as personOnScreen has it but with a margin — and `always` (for headshots). Called by updatePeople, and again once the
+   * frame's view is aimed (see aimPersonCulling).
+   * @param {number} [count] - how many people
+   * @param {number[]} [always] - who's shown whatever
+   */
+  function updateCopies(count = copyCount, always = copyAlways) {
+    copyCount = count; copyAlways = always;
+    const m = mesh.instanceMatrix.array, [cx, cy, cz, cw] = personCulling.personCullSphere.value.toArray(), tall = personCulling.personTall.value;
+    const [perMetre, perspective] = personCulling.personViewScale.value.toArray(), from = personCulling.personViewPos.value;
+    shown.length = 0;
+    for (let i = 0; i < count; i++) {
+      const o = i*16, s = Math.hypot(m[o+4], m[o+5], m[o+6]);
+      if (!viewAimed || i === uniforms.personOnly.value || always.includes(i)) { shown.push(i); continue; }
+      if (!s) continue;
+      sphere.center.set(m[o]*cx + m[o+4]*cy + m[o+8]*cz + m[o+12], m[o+1]*cx + m[o+5]*cy + m[o+9]*cz + m[o+13], m[o+2]*cx + m[o+6]*cy + m[o+10]*cz + m[o+14]);
+      sphere.radius = 2*cw*Math.hypot(m[o], m[o+1], m[o+2]);
+      const pixels = tall*s*perMetre/(perspective ? Math.max(sphere.center.distanceTo(from), 1e-3) : 1);
+      if ((pixels >= PERSON_DRAW_PIXELS && viewFrustum.intersectsSphere(sphere)) || (pixels >= PERSON_SHADOW_PIXELS && shadowAimed && shadowFrustum.intersectsSphere(sphere))) shown.push(i);
+    }
+    spectralBits.forEach(bit => { having[bit].length = 0; });
+    shown.forEach(i => {
+      const bits = traits[(SPIRITS_ROW*PEOPLE_MAX + i)*4 + 3];
+      if (bits) spectralBits.forEach(bit => { if (bits & bit) having[bit].push(i); });
+    });
+    compacts.forEach(c => {
+      let n = 0;
+      for (const i of having[c.bit]) {
+        const at = c.slotOf(i);
+        if (at < 0) continue;
+        for (const [from, to] of c.pairs) { const size = from.itemSize, a = from.array, b = to.array; for (let k = 0; k < size; k++) b[n*size + k] = a[at*size + k]; }
+        if (c.person) c.person.array[n] = i;
+        n++;
+      }
+      if (n) c.owns.forEach(a => { a.clearUpdateRanges(); a.addUpdateRange(0, n*a.itemSize); a.needsUpdate = true; });
+      c.meshes.forEach(copy => { copy.count = n; copy.visible = n > 0 || !copy.userData.warm; });
+    });
+  }
+  copiesAfterAim = () => { if (mesh.visible) updateCopies(); };
   // (the spirits trait's shoulder ghosts: see peopleSpirits.js)
-  const spiritParts = { vertexPars: PERSON_VERTEX_PARS, uniforms, geometry, body: mesh, headshotLayer: HEADSHOT_LAYER, fadeRow: TWIN_LOOK_ROW,
+  const spiritParts = { vertexPars: PERSON_VERTEX_PARS, uniforms, geometry, body: mesh, compact: (source, bit, ...copies) => { const c = compactOf(source, bit); copies.forEach(copy => drawsCompact(c, copy)); return c; }, headshotLayer: HEADSHOT_LAYER, fadeRow: TWIN_LOOK_ROW,
     shoulder: bones[boneByName.get('ShoulderL')].getWorldPosition(new THREE.Vector3()), idle: clips.find(c => c.name === 'Idle'), fps: PERSON_BAKE_FPS,
     slots: { white: PERSON_SLOTS.indexOf('White'), dark: ['Black', 'Eyelash1', 'Eyelash2', 'Eyelash3', 'Lips'].map(slot => PERSON_SLOTS.indexOf(slot)),
       lashes: PERSON_LASHES.map(part => PERSON_SLOTS.indexOf(part)), femaleOnly: PERSON_FEMALE_ONLY.map(part => PERSON_SLOTS.indexOf(part)), lashRow: PERSON_CLOTHING_ROW } };
@@ -2213,21 +2289,27 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   });
   // (and the spirits' hair and accessories: not clothes)
   const spiritWorn = makeSpiritWorn(spiritParts, wornLayers.filter(layer => layer.look !== 'skirt' && layer.look !== 'jeans').flatMap(layer => layer.styles).filter(style => style.mesh));
-  // (twins: each mesh again, shown and hidden with it, drawing its twin — see TWIN_GAP; nothing while nobody's a twin:
-  // copiesWanted, set by people.js)
-  const copiesWanted = { twins: false };
-  const copyOf = (source, look, capacity, byAttribute, own, kind) => {
-    const copy = makePersonMesh(source.geometry, { ...uniforms, personTwin: { value: 0 }, ...own }, look, capacity, byAttribute, { name: source.name + kind });
-    copy.instanceMatrix = source.instanceMatrix;
-    copy.visible = true;
-    copy.onBeforeRender = () => { copy.count = copiesWanted[kind] ? source.count : 0; };
+  // (twins: each mesh again, shown and hidden with it, drawing its twin — see TWIN_GAP — over only the twins: compactOf)
+  const twinOf = (source, look, layer) => {
+    const c = compactOf(source, SPECTRAL.twins);
+    const copy = makePersonMesh(c.geometry, { ...uniforms, personTwin: { value: 1 } }, look, c.matrix.count, true, { name: source.name + 'twins', layer });
+    copy.instanceMatrix = c.matrix;
     source.add(copy);
+    drawsCompact(c, copy);
   };
-  const copiesOf = (source, look, capacity, byAttribute) => {
-    copyOf(source, look, capacity, byAttribute, { personTwin: { value: 1 } }, 'twins');
+  // (and each drawn from its compact copy of those shown, itself never: its layers off, so not its children's)
+  const shownOf = (source, look, layer) => {
+    const c = compactOf(source, 0);
+    const copy = makePersonMesh(c.geometry, uniforms, look, c.matrix.count, true, { name: source.name, layer });
+    copy.instanceMatrix = c.matrix;
+    source.add(copy);
+    source.layers.disableAll();
+    drawsCompact(c, copy);
   };
-  copiesOf(mesh, bodyLook, PEOPLE_MAX, false);
-  wornLayers.forEach(layer => layer.styles.forEach(style => { if (style.mesh) copiesOf(style.mesh, looks[layer.look], style.capacity, true); }));
+  shownOf(mesh, bodyLook, false);
+  wornLayers.forEach(layer => layer.styles.forEach(style => { if (style.mesh) shownOf(style.mesh, looks[layer.look], true); }));
+  twinOf(mesh, bodyLook, false);
+  wornLayers.forEach(layer => layer.styles.forEach(style => { if (style.mesh) twinOf(style.mesh, looks[layer.look], true); }));
   const gibs = buildGibMeshes({ geometry, joints, weights, slots, bones, inHead, inArm, wornLayers, uniforms, bodyLook, looks, traits, traitRows });
   root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
 
@@ -2243,7 +2325,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   people.forEach((p, i) => assignAppearance(i, p.id));
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, lookOf, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, spirits, spiritWorn, spiritTalk, copiesWanted, copyLook, groom, headOf, time: personCulling.personTime, wears, putOn, takeOff,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, lookOf, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, spirits, spiritWorn, spiritTalk, updateCopies, copyLook, groom, headOf, time: personCulling.personTime, wears, putOn, takeOff,
     headBone: headBone ?? 0, headPivot, face, chestBone, hands, unitsPerMetre, floorY: geometry.boundingBox.min.y, tall: box.max.y - box.min.y, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }
