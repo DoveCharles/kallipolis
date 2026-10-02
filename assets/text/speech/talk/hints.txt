@@ -6,29 +6,29 @@ It is considered evil to kill hundreds of people.
 You can fly a plane!
 Watch television.
 Everything is so messed up.
-**Left-click** on a person to understand them intimately
+**Left-click** a person to understand them intimately.
 Driving a car into a wall is not so good.
-You can go to the **pub** and have a **pint**
-**Left-click** on the thumbnail of a ped to possess them
-Place down a **MedBooth** to have a robot heal your peds
+You can go to the **pub** and have a pint.
+**Left-click** the thumbnail of a ped to possess them.
+Place down a **Med booth** to have a robot heal your peds.
 Place down a **Seraphorb** to have an orb kill evil people.
-Marina zones need to touch water for the boats to go out
-Making a small Airport zone will create a helipad
+Marina zones need to touch water for the boats to go out.
+Making a small Airport zone will create a helipad.
 You can import your own objects to place in the world!
 Hearting a ped will keep them alive forever!
-You can change the UI colour scheme by going to **Options > Display**
-In the list of Zones, drag around Zones to change what appears on top
+You can change the UI colour scheme by going to **Options > Display**.
+In the list of Zones, drag around Zones to change what appears on top.
 **Right-click** a train node to turn it into a station!
-**Right-click** a Mall node to turn it into a food court
-When possessing a ped, you can punch people with **left-click**
+**Right-click** a Mall node to turn it into a food court.
+When possessing a ped, you can punch people with **left-click**.
 Peds, Birds, Bees, Cars, Planes & Boats are all possessable!
-**Clothing stores** allow a ped to change outfits
-**Hair salons* allow peds to get a haircut
-Peds can get drunk
+**Clothing stores** allow a ped to change outfits.
+**Hair salons** allow peds to get a haircut.
+Peds can get drunk.
 More trains make a happier world.
-Less cars make a happier world.
+Fewer cars make a happier world.
 Try not to kill a bee.
 You can ride the train as a ped!
 Walkways are needed for peds to access an area.
-Plazas, parks, and beaches make for nice connections between walkways. 
-When possessing a ped, press E to enter a building
+Plazas, parks, and beaches make for nice connections between walkways.
+When possessing a ped, press **E** to enter a building.

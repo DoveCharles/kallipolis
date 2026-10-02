@@ -10,7 +10,7 @@
 //   each counted as a step ("Unpacking X (3/11)"), and nothing's drawn while loading — the scene's shaders are compiled in the background instead (`compileWhileLoading`, called by main.js).
 // - `whenLoaded(run)`: runs once the page has loaded, nothing's been pending for a couple of frames and the scene's
 //   compiled, or after GIVE_UP_AFTER of the tab being shown regardless (view-prefs.js takes the screen away then).
-// - A hint from assets/text/speech/talk/hints.txt shows every HINT_EVERY, fading between (`.ls-hint`, css/base.css).
+// - A hint from assets/text/speech/talk/hints.txt shows every HINT_EVERY (**bold**), fading between (`.ls-hint`, css/base.css).
 // - Once done, the console lists how long the page was frozen under each step: what to speed up.
 const screen = document.getElementById('loading-screen');
 const label = screen.querySelector('.ls-text');
@@ -90,12 +90,19 @@ function track(set, item, settled, weight = 1) {
 const HINTS_URL = 'assets/text/speech/talk/hints.txt', HINT_EVERY = 3000, HINT_FADE = 400; // ms
 const hintEl = screen.querySelector('.ls-hint'), hintText = hintEl.querySelector('.ls-hint-text');
 let hints = [], hintAt = 0, hintTimer = 0;
+// **word** is bold
+function showHint(text) {
+  hintText.replaceChildren(...text.split('**').map((part, i) => {
+    if (!(i % 2)) return part;
+    const b = document.createElement('b'); b.textContent = part; return b;
+  }));
+}
 function nextHint() {
   if (!hints.length) return;
   if (hintAt % hints.length === 0) for (let i = hints.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i + 1)); [hints[i], hints[j]] = [hints[j], hints[i]]; }
   const text = hints[hintAt++ % hints.length];
   hintEl.classList.remove('shown');
-  setTimeout(() => { hintText.textContent = text; hintEl.classList.add('shown'); }, hintText.textContent ? HINT_FADE : 0);
+  setTimeout(() => { showHint(text); hintEl.classList.add('shown'); }, hintText.textContent ? HINT_FADE : 0);
 }
 
 // ---------------------------------------------------------------- fetches
