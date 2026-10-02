@@ -18,6 +18,9 @@ export const S = {
   hideOwnHead: true, carSpawnDistance: 2000, bloodSoak: true,
 };
 export const App = {};
+// the world's clock in seconds: real time less time spent editing (paused advanced by main.js's animate)
+export const worldClock = { paused: 0 };
+export const worldNow = () => performance.now()/1000 - worldClock.paused;
 // Everything that holds buildings: the zones, and the malls (see roads/mall.js), each shaped enough like a zone — an id, a
 // buildingsGroup, walkGaps and so on — for anything looking for buildings to find theirs too.
 export const buildingHolders = () => S.malls?.length ? S.zones.concat(S.malls) : S.zones;

@@ -1,4 +1,4 @@
-import { S } from '../../core/shared.js';
+import { S, worldNow } from '../../core/shared.js';
 import { sayLine, lineMouth, stopLine } from '../../audio/dictionary.js';
 import { speechBubble, hasBubble } from '../../ui/speech-bubbles.js';
 import { LOOK_MAX_TURN, TWIN_GAP } from './peopleModel.js';
@@ -49,7 +49,7 @@ export function updateSpiritChat(p, i, dt, { free, voice, head, bubble, mouths }
     if (chat && chat.key !== key) p.spiritChat = null; // (a spirit or twin come or gone: made again)
     if (!key || !free) return;
   }
-  const c = chatOf(p, key), t = performance.now()/1000;
+  const c = chatOf(p, key), t = worldNow();
   c.on = true;
   p.chattingWithTwin = !!p.traits.twins; // (so neither half talks about being twins to the other: {is = twins} in speech-text.js)
   // (spirit traits follow the person's: rebuilt when theirs are)

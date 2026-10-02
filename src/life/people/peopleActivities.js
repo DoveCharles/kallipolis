@@ -1,4 +1,4 @@
-import { App, S } from '../../core/shared.js';
+import { App, S, worldNow } from '../../core/shared.js';
 import { feetOf, feel, witness, voiceOfPerson, hairColorOf, beginFleeing, buildingLabel, clipNamed, followed, groups, hasClip, moonwalkTurn, headingTo, indoorsCount, insideFor, isGone, isOpenGround, modelScale, people, peopleNav, peopleNavBuiltAt, peopleRng, personModel, pickFrom, pickWeighted, playOnce, randomSpotIn, riderFollowed, setIndoorsCount, setRiderFollowed, sitWeight, walkableUpTo, weightOf, wrapAngle } from './people.js';
 import { CHAT_GAP, CIRCLE_MAX, CIRCLE_RADIUS, GRASS_SITS, LIE_DOWNS } from './peopleModel.js';
 import { buildingNumber, footprintBounds, roomLayoutOf } from '../../buildings/footprints.js';
@@ -101,7 +101,7 @@ function welcome(p) {
   const free = seated.filter(m => !m.saying && !m.closing);
   if (!free.length) return;
   const greeter = pickFrom(free);
-  greeter.greetTo = { who: p, until: performance.now()/1000 + GREET_WAIT };
+  greeter.greetTo = { who: p, until: worldNow() + GREET_WAIT };
   if (!g.speaker?.saying) { g.speaker = greeter; g.turnIn = 2; closeNow(greeter); }
 }
 
@@ -152,7 +152,7 @@ function brawl(p, others, circle) {
     goAfter(m, p, false, true);
   });
   // (whoever the fight gets up, bar the one who left, goes back to the circle once it's over: see rejoinCircles)
-  const now = performance.now()/1000;
+  const now = worldNow();
   [...targets, ...(p.attackQueue ?? []), ...avengers].forEach(m => { if (!rejoiners.some(r => r.p === m)) rejoiners.push({ p: m, circle, until: now + REJOIN_WITHIN }); });
   if (p.attack?.target && !rejoiners.some(r => r.p === p.attack.target)) rejoiners.push({ p: p.attack.target, circle, until: now + REJOIN_WITHIN });
 }
@@ -162,7 +162,7 @@ const settled = q => isFairGame(q) && !q.attack && !q.punched && !q.attackQueue?
 // Each frame: anyone got up by a brawl who's calmed down (not fighting, hit, or running) goes back to their circle, if
 // it's still there with room and they're still in its hangout.
 function rejoinCircles() {
-  const now = performance.now()/1000;
+  const now = worldNow();
   for (let k = rejoiners.length - 1; k >= 0; k--) {
     const { p, circle, until } = rejoiners[k];
     if (now > until || isGone(p) || !groups.includes(circle)) { rejoiners.splice(k, 1); continue; }
@@ -288,7 +288,7 @@ export function talkWith(p, q) {
   p.chatWith = q;
   p.closing = false;
   p.lookAt = q; q.lookAt = p;
-  p.greetTo = { who: q, until: performance.now()/1000 + GREET_WAIT };
+  p.greetTo = { who: q, until: worldNow() + GREET_WAIT };
   if (!g.speaker?.saying) { g.speaker = p; g.turnIn = GREET_WAIT; closeNow(p); }
 }
 
@@ -525,7 +525,7 @@ export function meetOnWalkways(dt) {
  * @returns {void}
  */
 // A dialogue under way (g.talk: a line waiting for its reply from whoever it was said to — see audio/dictionary.js)
-const dialogueOn = g => !!g?.talk && performance.now()/1000 < g.talk.expires;
+const dialogueOn = g => !!g?.talk && worldNow() < g.talk.expires;
 const inDialogue = p => dialogueOn(p.group) && (p.group.talk.by === p || p.group.talk.to === p);
 function takeTurns(g, talkers, dt) {
   const pending = dialogueOn(g) ? g.talk : null;
@@ -540,7 +540,7 @@ function takeTurns(g, talkers, dt) {
     const others = talkers.filter(m => m !== g.speaker);
     // (a greeting for a newcomer goes in between lines; then the dialogue's answer, from whoever was spoken to — never a
     // third person, who'd answer as if asked; then a goodbye, once it's not in the middle of one; else whoever's talkative)
-    const now = performance.now()/1000, answer = g.talk && dialogueOn(g) ? g.talk.to : null;
+    const now = worldNow(), answer = g.talk && dialogueOn(g) ? g.talk.to : null;
     g.speaker = others.find(m => m.greetTo && now < m.greetTo.until) ?? (others.includes(answer) ? answer : null)
       ?? others.find(m => m.closing && !inDialogue(m)) ?? others[pickWeighted(others, m => m.traits.talkative)];
     g.turnIn = (1.5 + peopleRng()*4)*Math.sqrt(g.speaker.traits.talkative);
@@ -1097,7 +1097,7 @@ export function knockDown(t, p) {
   }
   bystandersReactToPunch(t, p);
   if (people.includes(p)) { // (for what people say: see life/speech-text.js) — punching back whoever last punched you is revenge
-    if (p.felt?.what === 'punched' && p.felt.by === t && performance.now()/1000 - p.felt.at < REVENGE_TIME) feel(p, 'revenge', t);
+    if (p.felt?.what === 'punched' && p.felt.by === t && worldNow() - p.felt.at < REVENGE_TIME) feel(p, 'revenge', t);
     feel(t, 'punched', p);
     witness(t, 'punch', p);
   }
@@ -2802,7 +2802,7 @@ function chatWithBarbot(p) {
   if (!bot) return false;
   const [lo, hi] = BAR_CHAT_SPELL;
   const g = { kind: 'bar', sat: true, members: [p], stage: 'talk', speaker: null, turnIn: 0,
-    timer: (lo + peopleRng()*(hi - lo))*p.traits.patience, seenAt: performance.now()/1000 };
+    timer: (lo + peopleRng()*(hi - lo))*p.traits.patience, seenAt: worldNow() };
   groups.push(g);
   p.group = g;
   p.lookAt = bot;
@@ -2818,7 +2818,7 @@ function chatWithBarbot(p) {
 function barChat(g, dt) {
   const p = g.members[0];
   if (!p || p.mode !== 'indoors' || p.inRoom?.visit !== roomVisit() || p.group !== g || BARBOT.chat !== g) { endBarChat(g); return; }
-  g.seenAt = performance.now()/1000; // (keeping the bot at it: see BARBOT.chat)
+  g.seenAt = worldNow(); // (keeping the bot at it: see BARBOT.chat)
   g.timer -= dt;
   if (endedByLine(g)) return;
   takeTurns(g, [p, BARBOT], dt);

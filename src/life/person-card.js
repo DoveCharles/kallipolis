@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { App } from '../core/shared.js';
+import { App, worldNow } from '../core/shared.js';
 import { scene, renderer, headshotLight } from '../core/scene.js';
 import { updateHeld } from './people/peopleHolding.js';
 import { HEADSHOT_LAYER, personModel, isGone, inRoom, lastPeopleTime } from './people/people.js';
@@ -342,7 +342,7 @@ function pollOthers() {
 function drawPersonHeadshot(view, index = focused?.shown?.index) {
   const w = windows.find(x => x.shown?.index === index) ?? (look.shown?.index === index ? look : null);
   if (!w || w.canvas.hidden || w.reading) return;
-  const now = performance.now()/1000;
+  const now = worldNow();
   if (now - w.drawnAt < (w === focused ? HEADSHOT_INTERVAL : OTHER_HEADSHOT_INTERVAL)) return;
   w.drawnAt = now;
   // the lights light them there too (put on the layer each time the card opens, to catch any added since)
@@ -371,7 +371,7 @@ function drawPersonHeadshot(view, index = focused?.shown?.index) {
     .then(() => copyHeadshot(w), () => {}).finally(() => { w.reading = false; });
 }
 function otherHeadshotIndex() {
-  const now = performance.now()/1000;
+  const now = worldNow();
   const w = [...openWindows(), ...(look.shown ? [look] : [])]
     .find(x => x !== focused && !x.reading && !x.canvas.hidden && now - x.drawnAt >= OTHER_HEADSHOT_INTERVAL && (x === look || personOf(x)));
   return w ? w.shown.index : -1;
@@ -579,7 +579,7 @@ function hideLook() {
   look.card.hide(); look.card.bindHealth(null);
 }
 function showLookCard(index) {
-  const p = index >= 0 ? App.people[index] : null, anchor = focused?.card.el, now = performance.now()/1000;
+  const p = index >= 0 ? App.people[index] : null, anchor = focused?.card.el, now = worldNow();
   if (look.dismissed !== index) look.dismissed = -1;
   if (!p || index === look.dismissed || !anchor || anchor.hidden) { hideLook(); return; }
   if (look.shown?.index !== index || look.wantId !== p.id) {

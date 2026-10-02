@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { scene, camera, sunOffset } from '../core/scene.js';
 import { ear, playSound } from '../audio/sfx.js';
 import { groundBelow } from '../core/ground-probe.js';
-import { App, S } from '../core/shared.js';
+import { App, S, worldNow } from '../core/shared.js';
 import { addMoney } from '../ui/money.js';
 import { getProgress, setProgress, onProgress } from '../project/progress.js';
 import { NO_GROUND_FALLBACK } from './giblets.js';
@@ -56,7 +56,7 @@ const FLAT_TO_VIEW = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1
 export function dropCoins(at, amount) {
   amount = Math.floor(amount);
   const ground = groundBelow(at.x, at.y + 1, at.z, NO_GROUND_FALLBACK);
-  const pile = { x: at.x, z: at.z, born: performance.now()/1000, count: 0, refused: new Set(), took: new Set() }; // (refused/took: person ids, said once each)
+  const pile = { x: at.x, z: at.z, born: worldNow(), count: 0, refused: new Set(), took: new Set() }; // (refused/took: person ids, said once each)
   piles.push(pile);
   for (let k = 0; k < KINDS.length; k++) {
     for (let n = Math.floor(amount / KINDS[k].value); n > 0; n--) {
@@ -69,7 +69,7 @@ export function dropCoins(at, amount) {
       scene.add(mesh);
       const a = Math.random()*Math.PI*2, s = 0.3 + Math.random()*0.7;
       coins.push({ mesh, kind: k, pile, unseen: 0, state: 'fall', ground, vx: Math.sin(a)*s, vy: 3 + Math.random()*2, vz: Math.cos(a)*s,
-        tumble: new THREE.Vector3(Math.random(), Math.random(), Math.random()).multiplyScalar(12), born: performance.now()/1000, bounced: false });
+        tumble: new THREE.Vector3(Math.random(), Math.random(), Math.random()).multiplyScalar(12), born: worldNow(), bounced: false });
     }
     amount %= KINDS[k].value;
   }

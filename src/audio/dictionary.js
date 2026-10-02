@@ -1,5 +1,5 @@
 import { camera } from '../core/scene.js';
-import { S } from '../core/shared.js';
+import { S, worldNow } from '../core/shared.js';
 import { listener, playBufferAt, muffler, ear, isMuted } from './sfx.js';
 import { lineSound, lineLength, phonemesOf, SAMPLE_RATE, MOUTH_FRAME } from './speech.js';
 import { accented } from './accents.js';
@@ -63,7 +63,7 @@ export function sayLine(at, voice, who, person) {
   // (someone's just joined their circle: see welcome in life/people/peopleActivities.js)
   const greet = person.greetTo;
   let greeted = false, replying = false;
-  if (greet && (performance.now()/1000 > greet.until || !group?.members.includes(greet.who))) person.greetTo = null;
+  if (greet && (worldNow() > greet.until || !group?.members.includes(greet.who))) person.greetTo = null;
   else if (!said && greet) { said = pickGreeting(person, greet.who); person.greetTo = null; greeted = !!said; }
   // (a dialogue stays between the two it started with: only whoever was spoken to answers — see takeTurns)
   if (!said && talk && talk.by !== person && (!talk.to || talk.to === person) && now < talk.until) {
@@ -75,7 +75,7 @@ export function sayLine(at, voice, who, person) {
       const options = choosing ? null : pickReplyChoices(talk.replies, person, talk.vars, talk.by);
       if (options?.length > 1) {
         person.choosing = { talk, options, index: 0, picked: null };
-        talk.to = person; talk.until = now + CHOICE_WAIT; talk.expires = performance.now()/1000 + CHOICE_WAIT;
+        talk.to = person; talk.until = now + CHOICE_WAIT; talk.expires = worldNow() + CHOICE_WAIT;
         return null;
       }
       said = choosing ? choosing.options[choosing.picked] : options[0] ?? null;
@@ -98,7 +98,7 @@ export function sayLine(at, voice, who, person) {
   if (line && group) {
     const pending = talk && now < talk.until && group.talk === talk;
     const next = said.replies.length && !said.end ? { replies: said.replies, vars: said.vars, by: person, to: replying ? talk.by : greeted ? greet.who : facing,
-      until: now + line.length + REPLY_WINDOW, expires: performance.now()/1000 + line.length + REPLY_WINDOW } : null;
+      until: now + line.length + REPLY_WINDOW, expires: worldNow() + line.length + REPLY_WINDOW } : null;
     // (a line between a dialogue's lines — a greeting for a newcomer, a reaction: the dialogue's held while any exchange
     // it starts runs, then picked up by the two who were in it: resumeTalk)
     if (pending && !replying) {
@@ -116,7 +116,7 @@ function resumeTalk(group, now) {
   for (const line of speaking) if (group.members.includes(line.by)) return;
   const talk = group.held.pop();
   if (!group.members.includes(talk.by) || (talk.to && !group.members.includes(talk.to))) { group.talk = null; return; }
-  group.talk = { ...talk, until: now + REPLY_WINDOW, expires: performance.now()/1000 + REPLY_WINDOW };
+  group.talk = { ...talk, until: now + REPLY_WINDOW, expires: worldNow() + REPLY_WINDOW };
 }
 
 /**

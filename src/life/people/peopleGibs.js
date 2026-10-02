@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { S } from '../../core/shared.js';
+import { S, worldNow } from '../../core/shared.js';
 import { groundBelow } from '../../core/ground-probe.js';
 import { NO_GROUND_FALLBACK, fallStep, gibGone, gibSink, isNear, landingGround } from '../giblets.js';
 import { gibPartCentre } from './peopleModel.js';
@@ -53,7 +53,7 @@ export function throwBodyParts(personModel, i, at, momentum = null) {
   personModel.mesh.getMatrixAt(i, personMatrix);
   if (personMatrix.getMaxScaleOnAxis() < 1e-6) return false;
   model = personModel;
-  const t = performance.now()/1000, column = freeColumn(), o = i*4;
+  const t = worldNow(), column = freeColumn(), o = i*4;
   model.gibs.snapshot(i, column);
   const body = { column, born: t, pieces: [] };
   highestColumn = Math.max(highestColumn, column);

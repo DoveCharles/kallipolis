@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { DAYLIGHT, scene } from '../../core/scene.js';
 import { possession } from '../possession.js';
 import { SPECTRAL } from './peopleSpirits.js';
+import { worldNow } from '../../core/shared.js';
 
 // The nude trait's censor: a Sims-style mosaic rectangle over each nude person, from upper thigh to stomach (a man) or
 // to below the shoulders (a woman). It faces the camera, upright along the body's own up (pelvis to chest, as posed), so
@@ -120,7 +121,7 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
   mesh.layers.enable(headshotLayer);
   mesh.visible = false;
   mesh.name = 'Censor';
-  mesh.onBeforeRender = () => { own.censorTime.value = performance.now()/1000; own.censorPossessed.value = possession.index; };
+  mesh.onBeforeRender = () => { own.censorTime.value = worldNow(); own.censorPossessed.value = possession.index; };
   scene.add(mesh);
   return mesh;
 }

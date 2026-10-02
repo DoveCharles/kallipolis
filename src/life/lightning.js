@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { scene } from '../core/scene.js';
 import { playSound } from '../audio/sfx.js';
 import { possession } from './possession.js';
+import { worldNow } from '../core/shared.js';
 
 // ============================================================ lightning
 // The Smite button's bolt (see the person and car cards): a jagged streak from high in the sky down to whoever's smitten,
@@ -69,7 +70,7 @@ function drawBolt(bolt) {
  * @returns {void}
  */
 export function strikeLightning(at, from = null) {
-  const bolt = { at: { ...at }, from: from && { ...from }, born: performance.now()/1000, drawn: 0 };
+  const bolt = { at: { ...at }, from: from && { ...from }, born: worldNow(), drawn: 0 };
   drawBolt(bolt);
   bolts.push(bolt);
   shakes.push({ at: bolt.at, born: bolt.born });

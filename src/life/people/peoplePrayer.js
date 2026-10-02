@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { App } from '../../core/shared.js';
+import { App, worldNow } from '../../core/shared.js';
 import { scene } from '../../core/scene.js';
 import { controls } from '../../core/camera-controls.js';
 import { followed, isDrawn, people, peopleRng, wrapAngle } from './people.js';
@@ -50,7 +50,7 @@ const makeGlow = () => {
   return s;
 };
 
-const now = () => performance.now()/1000;
+const now = () => worldNow();
 const free = (p, possessed) => !possessed && (p.mode === 'line' || p.mode === 'wander') && !p.act && !p.group && !p.follow && !p.jc && !p.crossStage
   && !p.fright && !p.stun && !p.please && !p.punched && !p.attack && !p.traits.terrified && !inWater(p);
 

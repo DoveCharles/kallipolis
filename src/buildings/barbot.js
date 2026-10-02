@@ -4,6 +4,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { babble, nextSyllable } from '../audio/voices.js';
 import { botWhir } from '../audio/whir.js';
 import { TOON_RAMP } from '../core/toon.js';
+import { worldNow } from '../core/shared.js';
 
 // ============================================================ the bar bot
 // (The same model, dressed as a waiter — Pint hidden, Moustache shown, Tux shape on — is every restaurant's waiter: waiterBody,
@@ -51,7 +52,7 @@ const ROBOT_VOICE = { pitch: 240, formant: 1.1, sharpness: 7, melody: 0, robot: 
 /**
  * The bar bot as the people talking to it see it (see "talking to the bar bot" in life/people/peopleActivities.js): where
  * its head is, in the world; how talkative it is, for taking turns; and the chat it's in (a group, kept fresh by its
- * `seenAt`, performance.now() in seconds), set and cleared by whoever it's talking to.
+ * `seenAt`, worldNow()), set and cleared by whoever it's talking to.
  */
 export const BARBOT = { x: 0, y: 0, z: 0, traits: { talkative: 1 }, chat: null, lookAt: null, phrase: null, isBarbot: true };
 
@@ -189,7 +190,7 @@ export const barbotFree = () => bot && place && state.inPub && bot.root.parent &
 // the chat it's in, if whoever it's with is still keeping it going
 function chatOf() {
   const chat = BARBOT.chat;
-  if (chat && performance.now()/1000 - (chat.seenAt ?? 0) > CHAT_STALE) BARBOT.chat = null;
+  if (chat && worldNow() - (chat.seenAt ?? 0) > CHAT_STALE) BARBOT.chat = null;
   return BARBOT.chat;
 }
 

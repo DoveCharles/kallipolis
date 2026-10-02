@@ -1,4 +1,4 @@
-import { S, buildingHolders } from '../core/shared.js';
+import { S, buildingHolders, worldNow } from '../core/shared.js';
 import { TRAITS } from '../core/traits.js';
 import { entryOf, limitsOf } from '../core/entries.js';
 import { setEntryFiller } from './profiles.js';
@@ -410,7 +410,7 @@ function traitLevel(trait, value) {
 
 // the building someone's inside (their room shown or not), else null
 const buildingOf = person => person?.mode === 'indoors' && person.indoors?.stage === 'inside' ? person.indoors.building : null;
-const fresh = memory => memory && performance.now()/1000 - memory.at < SEEN_TIME ? memory : null;
+const fresh = memory => memory && worldNow() - memory.at < SEEN_TIME ? memory : null;
 const seenFresh = person => fresh(person?.seen), feltFresh = person => fresh(person?.felt);
 
 // where someone is out and about: in a park, plaza or beach (a hangout), crossing a road, by one (on a sidewalk ring), on
@@ -818,7 +818,7 @@ export const pickThought = person => ready ? (speakingTo = null, sayFrom(categor
  * @returns {?{text: string, replies: object[], vars: object}}
  */
 export function pickReaction(person, other = null) {
-  const now = performance.now()/1000;
+  const now = worldNow();
   const news = [feltFresh(person), seenFresh(person)].filter(m => m && !m.reacted && !(m.after > now)); // (after: see notice in people.js)
   news.forEach(m => { if (now - (m.after ?? m.at) > REACTION_KEEP) m.reacted = true; });
   if (!ready || !news.some(m => !m.reacted) || now - lastReaction < REACTION_GAP) return null;
@@ -888,6 +888,6 @@ export function pickWord(category, rng) {
  * @returns {boolean}
  */
 export function hasNews(person) {
-  const now = performance.now()/1000;
+  const now = worldNow();
   return [feltFresh(person), seenFresh(person)].some(m => m && !m.reacted && !(m.after > now));
 }

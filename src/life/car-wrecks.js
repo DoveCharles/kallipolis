@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { scene, camera, renderer } from '../core/scene.js';
-import { S } from '../core/shared.js';
+import { S, worldNow } from '../core/shared.js';
 import { groundBelow } from '../core/ground-probe.js';
 import { NO_GROUND_FALLBACK, fallStep, gibGone, gibSink, isNear, landingGround } from './giblets.js';
 
@@ -357,7 +357,7 @@ export function throwWreck(pool, matrix, paint, { trim = paint, power = 1, groun
   matrix.decompose(wreckPosition, wreckTurn, wreckScale);
   const middle = pool ? pool.centre.clone().applyMatrix4(matrix) : null;
   if (!pool || !S.showGibs || S.gibAmount <= 0 || !isNear(middle)) return false;
-  const slot = pool.cursor, t = performance.now()/1000, size = wreckScale.x;
+  const slot = pool.cursor, t = worldNow(), size = wreckScale.x;
   const rayFrom = (groundFrom ?? wreckPosition.y) + RAY_LIFT*power;
   pool.cursor = (slot + 1) % WRECKS_MAX;
   pool.used = Math.max(pool.used, slot + 1);

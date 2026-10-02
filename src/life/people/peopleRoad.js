@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { App, S } from '../../core/shared.js';
+import { App, S, worldNow } from '../../core/shared.js';
 import { isOpenWater } from '../../water/water.js';
 import { peopleNav } from './people.js';
 import { reseatPerson } from './peoplePathing.js';
@@ -84,13 +84,13 @@ export function turnCrawling(p, rotation) {
 
 /** Mark someone a car has just knocked down as wary of the road for a while. */
 function knockedByCar(p) {
-  p.roadWaryUntil = performance.now()/1000 + ROAD_WARY_TIME;
+  p.roadWaryUntil = worldNow() + ROAD_WARY_TIME;
 }
 /**
  * How many times the usual berth someone wants from cars before crossing: more for a while after a car knocked them down.
  * @param {Person} p - the person
  * @returns {number}
  */
-export const roadWariness = p => (p.roadWaryUntil ?? 0) > performance.now()/1000 ? ROAD_WARY_RADIUS : 1;
+export const roadWariness = p => (p.roadWaryUntil ?? 0) > worldNow() ? ROAD_WARY_RADIUS : 1;
 
 Object.assign(App, { knockedByCar });

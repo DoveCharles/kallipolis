@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { scene, camera, Y_PATH } from '../core/scene.js';
-import { S } from '../core/shared.js';
+import { S, worldNow } from '../core/shared.js';
 import { playSound } from '../audio/sfx.js';
 import { WATER_LEVEL } from '../water/water.js';
 import { groundBelow } from '../core/ground-probe.js';
@@ -126,7 +126,7 @@ export function landingGround(piece, fromGround, groundAt) {
 }
 function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null, amount = S.gibAmount, pool = fleshPool) {
   if (!S.showGibs || amount <= 0 || !isNear(at)) return;
-  const now = performance.now()/1000;
+  const now = worldNow();
   const groundAtStart = typeof ground === 'function' ? ground(at.x, at.z) : ground;
   parts.forEach(([color, count, size]) => {
     const scaled = count*amount, chunks = Math.floor(scaled) + (Math.random() < scaled % 1 ? 1 : 0); // (a fractional amount rounds at random, so small counts still scale)
@@ -157,7 +157,7 @@ function spawnParts(at, height, parts, power = 1, ground = at.y, momentum = null
 function spawnSplat(at, height, color, sizeMul = 1, soot = false) {
   if (!S.showGibs || S.gibAmount <= 0) return; // (a gib mark, not a particle — the same settings as the chunks it's left with)
   if (splats.length >= SPLATS_MAX) splats.shift();
-  splats.push({ x: at.x, y: soot ? SOOT_Y : groundBelow(at.x, at.y, at.z, at.y) + 0.015, z: at.z, size: height*(0.45 + Math.random()*0.3)*sizeMul, angle: Math.random()*Math.PI*2, born: performance.now()/1000, color, soot });
+  splats.push({ x: at.x, y: soot ? SOOT_Y : groundBelow(at.x, at.y, at.z, at.y) + 0.015, z: at.z, size: height*(0.45 + Math.random()*0.3)*sizeMul, angle: Math.random()*Math.PI*2, born: worldNow(), color, soot });
 }
 // a car's fireball — bright chunks bursting up and out, quickly shrinking — and the smoke puffs that follow it, drifting up
 // and slowly spreading as they thin out; and the light flash, retriggered (so overlapping explosions just relight it)
@@ -167,7 +167,7 @@ function explodeFx(at, height, scale = 1) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   height *= scale;
   const spread = Math.sqrt(scale); // (a bigger blast throws its fire and smoke further out, not just bigger)
-  const now = performance.now()/1000;
+  const now = worldNow();
   for (let k=0;k<30;k++) {
     const angle = Math.random()*Math.PI*2, outward = (3 + Math.random()*9)*spread;
     pushFx({ kind: 'fire', x: at.x, y: at.y + height*0.2, z: at.z,
@@ -211,7 +211,7 @@ const flightTime = vy0 => 2*vy0/SPLASH_GRAVITY;
 const WAKE_LAUNCH_SHARE = 0.35, WAKE_SPRAY_PER_SECOND = 30, WAKE_FOAM_PER_SECOND = 14, WAKE_SPOTS = 3;
 function splashFx(at, height, mist = true) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
-  const now = performance.now()/1000;
+  const now = worldNow();
   for (let k=0;k<36;k++) { // (fine spray — a short, contained pop up and out, then snapping back down under the heavy gravity)
     const angle = Math.random()*Math.PI*2, outward = 1 + Math.random()*3, vy0 = SPRAY_LAUNCH_SPEED[0] + Math.random()*(SPRAY_LAUNCH_SPEED[1] - SPRAY_LAUNCH_SPEED[0]);
     pushFx({ kind: 'spray', priority: 1, x: at.x, y: at.y, z: at.z, // (priority 1: a nearby car's ambient smoke can't crowd this out)
@@ -239,7 +239,7 @@ function splashFx(at, height, mist = true) {
 // A few small puffs of light smoke round `at` (where feet were), `height` tall, floating up and thinning out in a second or two.
 export function puffSmoke(at, height, count = 6) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
-  const now = performance.now()/1000;
+  const now = worldNow();
   for (let k=0;k<count;k++) {
     const angle = Math.random()*Math.PI*2, outward = 0.2 + Math.random()*0.8, grey = 0.55 + Math.random()*0.2;
     pushFx({ kind: 'smoke', x: at.x + Math.cos(angle)*0.25*height, y: at.y + height*(0.1 + Math.random()*0.5), z: at.z + Math.sin(angle)*0.25*height,
@@ -373,7 +373,7 @@ const carried = (particle, follow) => follow ? Object.assign(particle, { follow,
 export function sparkleFx(at, color, size = 0.35, follow = null) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
-  softParticles.push(carried({ kind: 'sparkle', born: performance.now()/1000, still: true, x: at.x, y: at.y, z: at.z,
+  softParticles.push(carried({ kind: 'sparkle', born: worldNow(), still: true, x: at.x, y: at.y, z: at.z,
     size, life: 0.5 + Math.random()*0.3, opacity: 1, color: new THREE.Color(color),
     roll: Math.random()*Math.PI*2, spin: (Math.random() < 0.5 ? -1 : 1)*1.5, growth: 0 }, follow));
 }
@@ -384,7 +384,7 @@ export function sparkleFx(at, color, size = 0.35, follow = null) {
 const CUT_PUFFS_PER_SECOND = 36, CLIPPINGS_PER_SECOND = 9;
 export function haircutFx(at, size, hair, dt) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
-  const now = performance.now()/1000, count = rate => Math.floor(rate*dt + Math.random());
+  const now = worldNow(), count = rate => Math.floor(rate*dt + Math.random());
   const add = particle => { if (softParticles.length >= softCap()*2) softParticles.shift(); softParticles.push({ born: now, ...particle }); };
   for (let k = count(CUT_PUFFS_PER_SECOND); k > 0; k--) {
     const angle = Math.random()*Math.PI*2, out = Math.random()*0.1*size, white = 0.82 + Math.random()*0.18;
@@ -409,7 +409,7 @@ const HEAL_PUFFS_PER_SECOND = 70, HEARTS_PER_SECOND = 1.75, PLUSES_PER_SECOND = 
 const HEAL_PUFF_COLOR = new THREE.Color(0xc8f4f4), WHITE = new THREE.Color(1, 1, 1);
 export function healFx(at, height, lying, heading, dt) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
-  const now = performance.now()/1000, count = rate => Math.floor(rate*dt + Math.random());
+  const now = worldNow(), count = rate => Math.floor(rate*dt + Math.random());
   const add = particle => { if (softParticles.length >= softCap()*2) softParticles.shift(); softParticles.push({ born: now, ...particle }); };
   const sx = Math.sin(heading ?? 0), sz = Math.cos(heading ?? 0);
   // a point on the body, `k` 0 at the feet to 1 at the head
@@ -447,7 +447,7 @@ export function tearFx(at, forward, height, follow = null, spill = 1) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
   const out = (0.15 + Math.random()*0.15)*height*spill, spread = (Math.random() - 0.5)*0.1*height*spill;
-  softParticles.push(carried({ kind: 'tear', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+  softParticles.push(carried({ kind: 'tear', born: worldNow(), x: at.x, y: at.y, z: at.z,
     vx: forward.x*out + forward.z*spread, vy: 0.1*height*spill, vz: forward.z*out - forward.x*spread, fall: 0.1 + 0.25*spill, swell: TEAR_SWELL*(1 - spill),
     size: height*(0.03 + Math.random()*0.012), growth: 0, life: TEAR_SWELL*(1 - spill) + 0.7 + Math.random()*0.3 + (1 - spill)*0.6, opacity: 0.9, color: TEAR_COLOR }, follow));
 }
@@ -456,7 +456,7 @@ export function heartFx(at, height) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
   const angle = Math.random()*Math.PI*2, out = (0.1 + Math.random()*0.2)*height;
-  softParticles.push({ kind: 'heart', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+  softParticles.push({ kind: 'heart', born: worldNow(), x: at.x, y: at.y, z: at.z,
     vx: Math.cos(angle)*out, vy: (0.3 + Math.random()*0.25)*height, vz: Math.sin(angle)*out,
     size: height*(0.08 + Math.random()*0.05), growth: 0.2, life: 1.3 + Math.random()*0.6, opacity: 1,
     color: new THREE.Color(HEART_COLORS[Math.floor(Math.random()*HEART_COLORS.length)]),
@@ -468,7 +468,7 @@ export function sweatFx(at, away, height, fling = 0, follow = null) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
   const out = fling*(0.8 + Math.random()*0.8)*height;
-  softParticles.push(carried({ kind: 'tear', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+  softParticles.push(carried({ kind: 'tear', born: worldNow(), x: at.x, y: at.y, z: at.z,
     vx: away.x*out, vy: fling ? (0.5 + Math.random()*0.5)*height : -0.05*height, vz: away.z*out,
     size: height*(0.03 + Math.random()*0.01), growth: 0, life: fling ? 0.6 + Math.random()*0.3 : 0.9, opacity: 0.9, color: SWEAT_COLOR }, follow));
 }
@@ -478,7 +478,7 @@ export function droolFx(at, height, follow = null) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
   const swell = 0.8 + Math.random()*0.4;
-  softParticles.push(carried({ kind: 'drool', born: performance.now()/1000, x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, swell,
+  softParticles.push(carried({ kind: 'drool', born: worldNow(), x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, swell,
     size: height*(0.014 + Math.random()*0.004), growth: 0, life: swell + 0.6, opacity: 0.85, color: DROOL_COLOR }, follow));
 }
 // a Z drifting up and away off their head at `at`, sleepy, and one of a trail of them;
@@ -486,7 +486,7 @@ export function zedFx(at, height) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
   const angle = Math.random()*Math.PI*2, out = 0.06*height;
-  softParticles.push({ kind: 'zed', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+  softParticles.push({ kind: 'zed', born: worldNow(), x: at.x, y: at.y, z: at.z,
     vx: Math.cos(angle)*out, vy: 0.18*height, vz: Math.sin(angle)*out,
     size: height*0.06, growth: 1.2, life: 2.2, opacity: 0.95, color: new THREE.Color(0xeef2ff),
     roll: (Math.random() - 0.5)*0.5, spin: (Math.random() - 0.5)*0.4 });
@@ -497,7 +497,7 @@ export function noteFx(at, height) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
   const angle = Math.random()*Math.PI*2, out = (0.1 + Math.random()*0.15)*height;
-  softParticles.push({ kind: 'note', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+  softParticles.push({ kind: 'note', born: worldNow(), x: at.x, y: at.y, z: at.z,
     vx: Math.cos(angle)*out, vy: (0.25 + Math.random()*0.15)*height, vz: Math.sin(angle)*out,
     size: height*(0.08 + Math.random()*0.03), growth: 0.1, life: 1.4 + Math.random()*0.5, opacity: 1,
     color: new THREE.Color(NOTE_COLORS[Math.floor(Math.random()*NOTE_COLORS.length)]),
@@ -516,7 +516,7 @@ export function confettiFx(at, height) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
   const angle = Math.random()*Math.PI*2, up = Math.random()*2 - 1, flat = Math.sqrt(1 - up*up), out = (1.2 + Math.random()*0.8)*height;
-  softParticles.push({ kind: 'confetti', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+  softParticles.push({ kind: 'confetti', born: worldNow(), x: at.x, y: at.y, z: at.z,
     vx: Math.cos(angle)*flat*out, vy: up*out, vz: Math.sin(angle)*flat*out,
     size: height*(0.04 + Math.random()*0.02), growth: 0, life: 1.3 + Math.random()*0.6, opacity: 1,
     color: new THREE.Color(CONFETTI_COLORS[Math.floor(Math.random()*CONFETTI_COLORS.length)]),
@@ -528,7 +528,7 @@ export function breathFx(at, away, height, huff = false, follow = null) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
   const out = (huff ? 0.45 : 0.25 + Math.random()*0.15)*height, white = 0.9 + Math.random()*0.1;
-  softParticles.push(carried({ kind: huff ? 'cloud' : 'puff', born: performance.now()/1000, x: at.x, y: at.y, z: at.z,
+  softParticles.push(carried({ kind: huff ? 'cloud' : 'puff', born: worldNow(), x: at.x, y: at.y, z: at.z,
     vx: away.x*out, vy: away.y*out + (huff ? -0.05 : 0.04)*height, vz: away.z*out,
     size: height*(huff ? 0.025 + Math.random()*0.015 : 0.03 + Math.random()*0.015), growth: huff ? 1 : 1.2, life: huff ? 0.45 + Math.random()*0.2 : 0.6 + Math.random()*0.3,
     opacity: huff ? 1 : 0.3, color: new THREE.Color(white, white, white) }, follow));
@@ -538,7 +538,7 @@ export function fumeFx(at, height, follow = null) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
   if (softParticles.length >= softCap()*2) softParticles.shift();
   const angle = Math.random()*Math.PI*2, out = (0.1 + Math.random()*0.15)*height, white = 0.92 + Math.random()*0.08;
-  softParticles.push(carried({ kind: 'cloud', born: performance.now()/1000, x: at.x + Math.cos(angle)*0.04*height, y: at.y, z: at.z + Math.sin(angle)*0.04*height,
+  softParticles.push(carried({ kind: 'cloud', born: worldNow(), x: at.x + Math.cos(angle)*0.04*height, y: at.y, z: at.z + Math.sin(angle)*0.04*height,
     vx: Math.cos(angle)*out, vy: (0.45 + Math.random()*0.3)*height, vz: Math.sin(angle)*out,
     size: height*(0.05 + Math.random()*0.035), growth: 0.8, life: 0.6 + Math.random()*0.3, opacity: 1, color: new THREE.Color(white, white, white) }, follow));
 }
@@ -550,7 +550,7 @@ const BURN_FLAMES_PER_SECOND = 30, BURN_SMOKE_PER_SECOND = 10;
 const BURN_AURA_SIZE = 2.2, BURN_AURA_OPACITY = 0.12; // (the aura's size is a multiple of the car's height)
 export function burnFx(at, height, dt) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
-  const now = performance.now()/1000, count = rate => Math.floor(rate*dt + Math.random());
+  const now = worldNow(), count = rate => Math.floor(rate*dt + Math.random());
   const add = particle => { if (softParticles.length >= softCap()*2) softParticles.shift(); softParticles.push({ born: now, ...particle }); };
   add({ kind: 'glow', still: true, x: at.x, y: at.y + height*0.45, z: at.z, vx: 0, vy: 0, vz: 0, size: height*BURN_AURA_SIZE*(0.9 + Math.random()*0.2), growth: 0, life: 0.3, opacity: BURN_AURA_OPACITY, color: BURN_AURA_COLOR });
   solidPuffs(at, height, count(BURN_FLAMES_PER_SECOND), puffColor(BURN_FLAME_COLORS),
@@ -569,7 +569,7 @@ export function burnFx(at, height, dt) {
 // and engine smoke (below) instead pass CAR_SMOKE_PRIORITY and isNearCarSmoke, being the most frequent particle around.
 function solidPuffs(at, height, count, colorAt, { size, life, rise, spread = 0.25, outward = [0.2, 0.8], lift = 0.3, alpha = 1, priority = 0, near = isNearFx }) {
   if (S.maxParticles <= 0 || !near(at)) return;
-  const now = performance.now()/1000, between = ([least, most]) => least + Math.random()*(most - least);
+  const now = worldNow(), between = ([least, most]) => least + Math.random()*(most - least);
   for (let k=0;k<count;k++) {
     const angle = Math.random()*Math.PI*2, out = between(outward);
     pushFx({ kind: 'smoke', priority, x: at.x + Math.cos(angle)*spread*height, y: at.y + height*lift, z: at.z + Math.sin(angle)*spread*height,
@@ -595,7 +595,7 @@ export function driftSmoke(at, height, dt) {
   solidPuffs(at, height, Math.floor(DRIFT_SMOKE_PER_SECOND*dt + Math.random()), () => { const grey = 0.7 + Math.random()*0.2; return new THREE.Color(grey, grey, grey); },
     { size: [0.18, 0.34], life: [0.9, 1.6], rise: [0.4, 1.1], spread: 0.08, outward: [0.4, 1.2], lift: 0.08 });
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
-  const now = performance.now()/1000;
+  const now = worldNow();
   for (let k = Math.floor(DRIFT_SPARKS_PER_SECOND*dt + Math.random()); k > 0; k--) {
     const angle = Math.random()*Math.PI*2, outward = 1 + Math.random()*3;
     pushFx({ kind: 'fire', x: at.x, y: at.y + 0.02, z: at.z, vx: Math.cos(angle)*outward, vy: 0.5 + Math.random()*2, vz: Math.sin(angle)*outward,
@@ -619,7 +619,7 @@ export function engineSmoke(at, height) {
 const TERRIBLE_SMOKE_PER_SECOND = 24, TERRIBLE_SMOKE_LIFT = 1.5; // per level of `terrible`; how hard the curve up kicks in
 export function terribleSmoke(at, height, width, dt, level, heading, speed) {
   if (S.maxParticles <= 0 || !isNearCarSmoke(at)) return;
-  const now = performance.now()/1000, sideX = Math.cos(heading), sideZ = -Math.sin(heading);
+  const now = worldNow(), sideX = Math.cos(heading), sideZ = -Math.sin(heading);
   const alongX = Math.sin(heading)*speed, alongZ = Math.cos(heading)*speed; // (keeps pace with the car for a moment, so it reads as spreading to the sides rather than trailing behind)
   const count = Math.floor(TERRIBLE_SMOKE_PER_SECOND*level*dt + Math.random());
   for (let k=0;k<count;k++) {
@@ -641,7 +641,7 @@ export function igniteFx(at, height) {
 // A burst of `count` small bright sparks flying out from `at` and quickly dying, for metal hitting metal.
 export function sparks(at, count = 8) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
-  const now = performance.now()/1000;
+  const now = worldNow();
   for (let k=0;k<count;k++) {
     const angle = Math.random()*Math.PI*2, outward = 2 + Math.random()*5;
     pushFx({ kind: 'fire', x: at.x, y: at.y, z: at.z, vx: Math.cos(angle)*outward, vy: 1 + Math.random()*4, vz: Math.sin(angle)*outward,
@@ -739,7 +739,7 @@ export function splashUp(at, height) {
 // it up in place. `share` scales how much it throws (aqua people: see peopleWater.js).
 export function aquaWake(at, height, width, heading, dt, share = 1) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
-  const now = performance.now()/1000, sideX = Math.cos(heading), sideZ = -Math.sin(heading);
+  const now = worldNow(), sideX = Math.cos(heading), sideZ = -Math.sin(heading);
   const spots = [{ x: at.x, z: at.z }, { x: at.x + sideX*width*0.5, z: at.z + sideZ*width*0.5 }, { x: at.x - sideX*width*0.5, z: at.z - sideZ*width*0.5 }];
   spots.forEach(spot => {
     for (let k=0;k<Math.floor(WAKE_SPRAY_PER_SECOND/WAKE_SPOTS*dt*share + Math.random());k++) {
@@ -770,7 +770,7 @@ export function aquaWake(at, height, width, heading, dt, share = 1) {
 const BOOST_WAKE_ARC = Math.PI*0.7, BOOST_WAKE_SPRAY_PER_SECOND = 40, BOOST_WAKE_FOAM_PER_SECOND = 22, BOOST_WAKE_SIZE_SHARE = 1.8, BOOST_WAKE_LAUNCH_SHARE = WAKE_LAUNCH_SHARE*1.5;
 export function boostWake(at, height, heading, dt) {
   if (S.maxParticles <= 0 || !isNearFx(at)) return;
-  const now = performance.now()/1000, back = heading + Math.PI;
+  const now = worldNow(), back = heading + Math.PI;
   for (let k=0;k<Math.floor(BOOST_WAKE_SPRAY_PER_SECOND*dt + Math.random());k++) {
     const angle = back + (Math.random() - 0.5)*BOOST_WAKE_ARC, outward = 2 + Math.random()*4,
       vy0 = (SPRAY_LAUNCH_SPEED[0] + Math.random()*(SPRAY_LAUNCH_SPEED[1] - SPRAY_LAUNCH_SPEED[0]))*BOOST_WAKE_LAUNCH_SHARE;

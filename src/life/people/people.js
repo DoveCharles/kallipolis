@@ -1,4 +1,4 @@
-import { App, S } from '../../core/shared.js';
+import { App, S, worldNow } from '../../core/shared.js';
 import { crowdGrid, mulberry32 } from '../../core/math.js';
 import { buildingLabelName } from '../../buildings/building-types.js';
 import { isInsideBuilding, roomCovers, roomHolds, roomVisit } from '../../buildings/interior.js';
@@ -802,7 +802,7 @@ const insideOf = q => q.mode === 'indoors' && q.indoors.stage === 'inside' ? q.i
  */
 export function notice(q, who, what, by = null) {
   if (by) relateSaw(q, what, by);
-  const at = performance.now()/1000, old = q.seen, fresh = old && at - old.at < NOTICED_FOR;
+  const at = worldNow(), old = q.seen, fresh = old && at - old.at < NOTICED_FOR;
   if (fresh && (SEEN_RANK[old.what] > SEEN_RANK[what] || (old.what === what && old.who === who))) return;
   // (no more than MAX_WITNESSES notice the same thing about the same person while it's fresh — a smell, walking on water)
   const tally = who.noticed?.what === what && at - who.noticed.since < NOTICED_FOR ? who.noticed : (who.noticed = { what, since: at, count: 0 });
@@ -843,7 +843,7 @@ export function witnessAt(at, what) { witness({ x: at.x, z: at.z, name: null, no
  * @param {?Person} [by] - who did it (for revenge, who they got back at)
  * @returns {void}
  */
-export function feel(p, what, by = null) { p.felt = { what, at: performance.now()/1000, by }; if (by) relateFelt(p, what, by); }
+export function feel(p, what, by = null) { p.felt = { what, at: worldNow(), by }; if (by) relateFelt(p, what, by); }
 /**
  * How the people around someone take their death: an innocent's leaves them horrified, a bad sort's stops them in
  * their tracks, and a villain's delights them. Called for every death, whoever caused it — the Smite button, or a car
@@ -918,7 +918,7 @@ export function beginFleeing(p, from) {
   if (p.traits.ghost) return;
   p.fright = { stage: 'flee', timer: FLEE_TIME, from };
   // (something called out as they bolt, from fleeing.txt — not every time, for those who keep running: see the talk below)
-  const fleeNow = performance.now()/1000;
+  const fleeNow = worldNow();
   if (!(fleeNow - (p.fledTalkAt ?? -Infinity) < FLEE_TALK_AGAIN)) { p.fledTalkAt = fleeNow; p.fleeTalkUntil = fleeNow + FLEE_TALK_WITHIN; }
   const now = lastPeopleTime ?? 0;
   p.fleeStarts = (p.fleeStarts ?? []).filter(t => now - t < FLEE_REPEAT_WINDOW);
@@ -1218,7 +1218,7 @@ const SHY_NEAR = 16, SHY_TIMES = 3, SHY_FOR = 60;
 // (fading out over SHY_FADE seconds first, and back in after: shyPhase 'out', 'gone', 'in'; how faded, TWIN_LOOK_ROW .w)
 const SHY_FADE = 3;
 function shyGhost(p, i, possessed) {
-  const now = performance.now()/1000;
+  const now = worldNow();
   if (!p.traits.ghost) Object.assign(p, { vanished: false, shyPhase: null });
   else if (p.shyPhase === 'out' && now - p.shyAt >= SHY_FADE) Object.assign(p, { vanished: true, shyPhase: 'gone', vanishUntil: now + SHY_FOR });
   else if (p.shyPhase === 'gone' && now >= p.vanishUntil) Object.assign(p, { vanished: false, shyPhase: 'in', shyAt: now });
@@ -1299,7 +1299,7 @@ export function updatePeople(t) {
   if (followed >= 0 && (!S.peopleEnabled || S.interactionMode !== 'move')) stopFollowingPerson();
   if (followedInside && !App.isInsideBuilding()) stopFollowingPerson(); // (picked in a room since left)
   peopleMesh.visible = S.peopleEnabled && !personModel;
-  if (personModel) { [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; }); personModel.censor.visible = S.peopleEnabled; [...personModel.spirits, ...personModel.spiritWorn].forEach(m => { m.visible = S.peopleEnabled; }); personModel.time.value = performance.now()/1000; }
+  if (personModel) { [personModel, ...personModel.hair].forEach(part => { part.mesh.visible = S.peopleEnabled; }); personModel.censor.visible = S.peopleEnabled; [...personModel.spirits, ...personModel.spiritWorn].forEach(m => { m.visible = S.peopleEnabled; }); personModel.time.value = worldNow(); }
   peopleNavDebugMesh.visible = S.peopleEnabled && S.showPeopleNavDebug;
   if (!S.peopleEnabled) { showPassengers(); showInhabitants(); updateFlies(0); return; }
   pruneGone(people, t, forgetLinesExcept); // (relations and recent lines of the gone)
@@ -1754,12 +1754,12 @@ export function updatePeople(t) {
       const aaaing = possessed ? rushed(p) : !!p.traits.terrified; // (says nothing but a rant: see aaa in audio/dictionary.js)
       if (!group && !possessed && !aaaing && !p.saying && isDrawn(p) && (p.seen || p.felt)) {
         const head = { x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, reaction = reactAloud(head, voiceOf(p, i), i, p);
-        if (reaction?.thought) { p.thought = reaction; p.thoughtUntil = performance.now()/1000 + THOUGHT_TIME; }
+        if (reaction?.thought) { p.thought = reaction; p.thoughtUntil = worldNow() + THOUGHT_TIME; }
         else if (reaction) { p.saying = reaction; p.shouting = true; }
       }
       if (aaaing && p.group) leaveGroup(p);
       if (p.fleeTalkUntil && !p.saying && !aaaing) {
-        if (performance.now()/1000 > p.fleeTalkUntil || !isDrawn(p)) p.fleeTalkUntil = 0;
+        if (worldNow() > p.fleeTalkUntil || !isDrawn(p)) p.fleeTalkUntil = 0;
         else if ((p.saying = shoutLine({ x: p.x, y: p.y + 1.6*p.height*S.peopleSize, z: p.z }, voiceOf(p, i), i, p, 'fleeing'))) { p.shouting = true; p.fleeTalkUntil = 0; }
       }
       // (praying, watched: the prayer — see peoplePrayer.js)

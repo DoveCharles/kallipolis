@@ -60,7 +60,7 @@ import './ui/color-schemes.js';
 import './ui/ped-view.js';
 import './project/export-obj.js';
 import * as THREE from 'three';
-import { S } from './core/shared.js';
+import { S, worldClock } from './core/shared.js';
 import { scene, camera, renderer, skyDome, sun, SKIP_OVER_WATER_AND_ROADS, blinkLights, refreshSceneIndex } from './core/scene.js';
 import { controls } from './core/camera-controls.js';
 import { mulberry32 } from './core/math.js';
@@ -163,15 +163,15 @@ commitHistory(); // the starting point undo goes back to
 // The world's clock (`w`): stopped while editing (S.interactionMode not 'move'), so people, traffic, the day and the
 // weather hold still while the city's changed, and pick up where they were (see project/history.js for why). Water,
 // blinking lights and sound keep the real clock (`t`).
-let worldPaused = 0, lastFrameT = null;
+let lastFrameT = null;
 function animate() {
   requestAnimationFrame(animate);
   controls.update(false);
   skyDome.position.copy(camera.position);
   const t = performance.now()*0.001;
-  if (lastFrameT != null && S.interactionMode !== 'move') worldPaused += t - lastFrameT;
+  if (lastFrameT != null && S.interactionMode !== 'move') worldClock.paused += t - lastFrameT;
   lastFrameT = t;
-  const w = t - worldPaused;
+  const w = t - worldClock.paused;
   updateTrainShuttles(w);
   updateRoadDragPreview();
   if (S.waterDirty) rebuildWater();

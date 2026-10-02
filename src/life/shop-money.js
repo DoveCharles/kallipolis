@@ -1,4 +1,5 @@
 import { addMoney } from '../ui/money.js';
+import { worldNow } from '../core/shared.js';
 
 // What people pay at stalls and shops, out of their wallet (p.wallet: see newPerson in people/people.js), and the
 // business tax the player takes of it.
@@ -30,7 +31,7 @@ export function pay(p, price = PRICE) {
  * @param {object} p @param {(p: object, what: string) => void} feel - people.js feel
  */
 export function tooPoor(p, feel) {
-  const now = performance.now()/1000;
+  const now = worldNow();
   if (p.felt?.what === 'broke' && now - p.felt.at < BROKE_GAP) return;
   feel(p, 'broke');
 }

@@ -1,4 +1,4 @@
-import { S } from '../../core/shared.js';
+import { S, worldNow } from '../../core/shared.js';
 import { benchPerson, headingTo, isGone, newPerson, people, personModel, PEOPLE_MAX } from './people.js';
 import { spawnPerson } from './peoplePathing.js';
 import { goAfter } from './peopleActivities.js';
@@ -109,7 +109,7 @@ export function miniSpot(p) {
   if (FOLLOW_MODES.includes(L.mode)) Object.assign(p, { mode: L.mode, li: L.li, u: L.u, seg: L.seg, dir: L.dir, area: L.area, exit: L.exit, lat: L.lat });
   else if (L.mode !== 'possessed') { p.faceTo = headingTo(p, L); return null; }
   if (p.fright?.stage === 'flee') { // (frightened: running round and round them, spaced out)
-    const a = performance.now()/1000*2*Math.PI/FLEE_LAP + p.miniIndex*2*Math.PI/3;
+    const a = worldNow()*2*Math.PI/FLEE_LAP + p.miniIndex*2*Math.PI/3;
     return { x: L.x + Math.sin(a)*FLEE_RING*tall, y: L.y, z: L.z + Math.cos(a)*FLEE_RING*tall };
   }
   const fx = Math.sin(L.heading), fz = Math.cos(L.heading);
