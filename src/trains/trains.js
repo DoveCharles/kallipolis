@@ -1063,7 +1063,7 @@ function makeLift(s, { side, across, width, bottom, top, cab: cabHeight }, right
     const slab = new THREE.Mesh(new THREE.BoxGeometry(0.03, doorH - 0.08, W/2 + 0.02), mats.liftDoor);
     slab.castShadow = slab.receiveShadow = true;
     leaf.add(slab);
-    const kick = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.22, W/2 + 0.02), mats.liftKick);
+    const kick = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.22, W/2 + 0.04), mats.liftKick);
     kick.position.y = -(doorH - 0.08)/2 + 0.11;
     leaf.add(kick);
     if (fast) {
