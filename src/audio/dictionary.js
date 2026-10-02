@@ -2,6 +2,7 @@ import { camera } from '../core/scene.js';
 import { S } from '../core/shared.js';
 import { listener, playBufferAt, muffler, ear, isMuted } from './sfx.js';
 import { lineSound, lineLength, phonemesOf, SAMPLE_RATE, MOUTH_FRAME } from './speech.js';
+import { accented } from './accents.js';
 import { loudnessOf, hearDistance, hearRef, edgeFade } from './voices.js';
 import { speechReady, pickCall, pickReply, pickReplyChoices, pickReaction, pickCloser, pickGreeting, pickShout, pickWord, hasNews } from '../life/speech-text.js';
 
@@ -161,7 +162,7 @@ export function reactAloud(at, voice, who, person) {
 function voiceLine(said, at, voice, who, person, full = false) {
   const context = listener.context, now = context.currentTime, text = said.text, mood = person.traits?.mood ?? 0, speed = person.traits?.speed ?? 1;
   if (isMuted() || context.state !== 'running') return null;
-  const clauses = phonemesOf(text), length = lineLength(clauses, { mood, who, speed });
+  const clauses = accented(phonemesOf(text), voice.accent), length = lineLength(clauses, { mood, who, speed });
   if (!length) { // (nothing to sound out, "...": a silent beat, its bubble up and mouth shut, so the conversation goes on)
     const line = { source: null, start: now, length: SILENT_LINE, mouth: new Float32Array(0), text, quiet: quietOf(person), end: said.end, by: person };
     speaking.add(line);

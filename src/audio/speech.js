@@ -102,6 +102,7 @@ const PHONEMES = {
   V: { kind: 'fric', place: 'lips', voiced: true, noise: [4000, 6000, 0.08], dur: [60, 40] },
   TH: { kind: 'fric', place: 'teeth', noise: [5000, 6000, 0.1], dur: [90, 60] },
   DH: { kind: 'fric', place: 'teeth', voiced: true, noise: [5000, 6000, 0.06], dur: [50, 30] },
+  RU: { kind: 'fric', place: 'uvula', voiced: true, noise: [1100, 1400, 0.12], dur: [70, 40] }, // (not SAM's: a French r, for audio/accents.js)
   CH: { kind: 'affricate', place: 'palate', noise: [2800, 2000, 0.55], dur: [70, 50] },
   J: { kind: 'affricate', place: 'palate', voiced: true, noise: [2800, 2000, 0.3], dur: [70, 50] },
   '/H': { kind: 'h', dur: [60, 30] },
@@ -112,7 +113,7 @@ const PHONEMES = {
 const SYLLABIC = { UL: ['AX', 'L'], UM: ['AX', 'M'], UN: ['AX', 'N'], WH: ['HW', 'W'] };
 // where each place in the mouth pulls the formants as the tongue or lips close there (the soft palate's depends on the
 // vowel beside it: see locus); and the click a stop makes as it opens there [Hz, bandwidth, level, seconds]
-const LOCI = { lips: [250, 850, 2200], gum: [250, 1750, 2650], palate: [280, 1950, 2450], teeth: [280, 1450, 2600] };
+const LOCI = { lips: [250, 850, 2200], gum: [250, 1750, 2650], palate: [280, 1950, 2450], teeth: [280, 1450, 2600], uvula: [450, 1150, 2450] };
 const BURSTS = { lips: [1100, 1600, 0.35, 0.008], gum: [4200, 2500, 0.6, 0.01], soft: [0, 900, 0.6, 0.02] };
 
 const locus = (place, vowel) => {
@@ -201,7 +202,7 @@ function plan(clauses, baseTempo) {
       const after = vowelNear(i, 1), before = vowelNear(i, -1);
       const base = { voice: 0, breath: 0, noise: null, nasal: false, muffle: 1, burst: null, accent: 0, clause: c, trans: 0.02 };
       if (ph.kind === 'vowel') {
-        const from = ph.f, to = ph.to;
+        const from = p.f ?? ph.f, to = p.to !== undefined ? p.to : ph.to; // (an accent's own: audio/accents.js)
         push({ ...base, dur, voice: p.stress ? 1 : 0.8, accent: p.stress === 1 ? 1 : p.stress === 2 ? 0.5 : 0, trans: 0.05, vowel: true,
           f: to ? frac => { const u = smooth((frac - 0.2)/0.65); return from.map((v, k) => v + (to[k] - v)*u); } : still(from) });
       } else if (ph.kind === 'liquid') {

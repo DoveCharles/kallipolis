@@ -10,6 +10,7 @@ import { blasts, PERSON_BLAST_SCALE } from '../traffic/state.js';
 import { canRespawn, PERSON_SHAKE, shake } from '../revive.js';
 import { throwBodyParts, warmBodyParts } from './peopleGibs.js';
 import { babble, nextSyllable, hearDistance } from '../../audio/voices.js';
+import { accentFor } from '../../audio/accents.js';
 import { sayLine, shoutLine, reactAloud, lineMouth, stopLine, linePause, aaa } from '../../audio/dictionary.js';
 import { pickThought, pickReaction } from '../speech-text.js';
 import { babbleLine, hasBubble, ownLine, speechBubble } from '../../ui/speech-bubbles.js';
@@ -365,7 +366,7 @@ const FOOTFALLS = 0.13, STEPS_PER_CYCLE = 4; // how far through the walk cycle a
 // Someone's voice (see audio/voices.js), the same every time for the same person: its pitch, lower for a man than a woman
 // and for someone taller; its formants, likewise lower, and shifted either way on their own, apart from the pitch, so two
 // voices at one pitch can still sound nothing alike; how sharp those formants ring, from breathy to nasal; and the tune
-// they talk in (see audio/melodies.js).
+// they talk in (see audio/melodies.js); and their accent.
 function voiceOf(p, i) {
   const own = mulberry32(i*7919 + 13), isMan = personModel?.isMan[i] === 1, tall = Math.sqrt(Math.max(0.5, p.height));
   const pitch = Math.max(60, Math.min(600, (isMan ? 150 : 250)/tall*2**(2.8*(own() - 0.5)))); // (±1.4 octaves)
@@ -373,7 +374,8 @@ function voiceOf(p, i) {
   const sharpness = 3 + 9*own();
   const melody = Math.floor(own()*MELODIES.length);
   const vibrato = own() < (p.age - 40)/50 ? 0.01 + 0.03*own() : 0; // (a quaver: likelier the older, from 40; all by 90)
-  return { pitch, formant, sharpness, melody, isMan, age: p.age, vibrato, ...presetAt(i)?.voice };
+  const accent = accentFor(own()); // (audio/accents.js)
+  return { pitch, formant, sharpness, melody, isMan, age: p.age, vibrato, accent, ...presetAt(i)?.voice };
 }
 /** Someone's voice (see voiceOf), for a sound made outside the frame loop: a cry as they're hit, say. */
 export const voiceOfPerson = p => voiceOf(p, people.indexOf(p));

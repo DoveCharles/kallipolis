@@ -32,6 +32,7 @@ Format: `file` (size) purpose — key exports.
 - `main.js` (8K) Entry point: imports every module in load order, then runs the render loop.
 
 ### src/audio/
+- `accents.js` (5K) Accents on real lines (not babble): rewrites speech.js phonemes per accent (cockney, scottish, french, german: swapped/dropped sounds, own vowel formants p.f/p.to, French last-syllable stress; RU, the throat r, is in speech.js PHONEMES); applied in dictionary.js voiceLine from voice.accent, rolled in people.js voiceOf (ACCENT_SHARE); tools/speech.html has a picker. — exports: ACCENTS, ACCENT_SHARE, accentFor, accented
 - `aircraft.js` (14K) The aircraft about the airfields (see updateAirports in zones/airport.js): — exports: updateAircraftSounds, cabinChime, tyreChirp
 - `ambience.js` (14K) The city's background: — exports: updateAmbience
 - `buzz.js` (4K) The buzz of the bees flying near the camera (see updateBees in life/bees.js), a loop synthesized live like the engines (see engine.js): — exports: updateBuzzes
