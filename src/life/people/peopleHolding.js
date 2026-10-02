@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene } from '../../core/scene.js';
-import { PEOPLE_MAX, inRoom, isDrawn, lastPeopleTime, people, peopleRng, personModel } from './people.js';
+import { HEADSHOT_LAYER, PEOPLE_MAX, inRoom, isDrawn, lastPeopleTime, people, peopleRng, personModel } from './people.js';
 import { PERSON_ARM_SPREAD } from './peopleModel.js';
 import { eatingSound } from '../../audio/eating.js';
 import { STATUS_SOURCES, addStatus } from '../statuseffects.js';
@@ -652,6 +652,7 @@ export function updateHeld(only = -1) {
   if (only < 0) updateDropped();
   for (const [key, mesh] of Object.entries(meshes)) {
     mesh.count = counts[key];
+    mesh.layers.enable(HEADSHOT_LAYER); // (in the card's headshot too: see person-card.js)
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     if (mesh.geometry.attributes.cut) mesh.geometry.attributes.cut.needsUpdate = true;

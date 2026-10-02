@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { App } from '../core/shared.js';
-import { scene, renderer } from '../core/scene.js';
+import { scene, renderer, headshotLight } from '../core/scene.js';
+import { updateHeld } from './people/peopleHolding.js';
 import { HEADSHOT_LAYER, personModel, isGone, inRoom, lastPeopleTime } from './people/people.js';
 import { personDoing } from './people/peopleTracking.js';
 import { bloodLeft, isBloodlusting } from './people/peopleBlood.js';
@@ -358,7 +359,9 @@ function drawPersonHeadshot(view, index = focused?.shown?.index) {
   renderer.shadowMap.autoUpdate = false;
   renderer.setClearColor(0x000000, 0);
   renderer.setRenderTarget(w.target);
+  updateHeld(index); headshotLight(true); // (only their held things, lit as by day)
   renderer.render(scene, camera);
+  headshotLight(false); updateHeld();
   renderer.setRenderTarget(target);
   renderer.setClearColor(clearColor, clearAlpha);
   renderer.shadowMap.autoUpdate = shadows;

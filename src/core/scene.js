@@ -379,6 +379,18 @@ export function updateSun(quick) {
   }
 }
 updateSun();
+// the person card's headshot: lit as at day whatever the hour (on before it draws, off after)
+const HEADSHOT_SKY = new THREE.Color(0xdde6ee), keptSky = new THREE.Color();
+let keptHemi = 0, keptDaylight = 1;
+export function headshotLight(on) {
+  if (on) {
+    keptSky.copy(hemi.color); keptHemi = hemi.intensity; keptDaylight = DAYLIGHT.value;
+    hemi.color.copy(HEADSHOT_SKY); hemi.intensity = Math.max(hemi.intensity, LIGHT_INTENSITY_SCALE*0.9);
+    DAYLIGHT.value = Math.max(DAYLIGHT.value, 0.8);
+  } else {
+    hemi.color.copy(keptSky); hemi.intensity = keptHemi; DAYLIGHT.value = keptDaylight;
+  }
+}
 
 // Water and road surfaces sit below the ground (see "water" and rebuildRoadMeshes). The ground mesh itself is rebuilt
 // with holes where they are, but a few things are drawn flat just above ground level across the whole map — the grid,
