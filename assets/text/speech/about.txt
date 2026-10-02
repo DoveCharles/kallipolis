@@ -60,6 +60,12 @@
 #   [bad: superlative]        "worst"; [violence: past] "punched"; [badhabits: third] "bites"; [foods: general, lower]
 #   [pets#1]                  the same pick every time #1 is used, for the whole conversation — a reply can say
 #                             [pets#1: general] and mean the same pet ("a dog" ... "dogs")
+#   [folk#4: he]              the word's pronoun instead of the word, by its {sex}: he / she / they (they with no
+#                             {sex}). Also him (him/her/them), his (his/her/their), himself (himself/herself/themself)
+#                             and he's (he's/she's/they're). Mostly on a held #n, to talk about who it was.
+#   No repeats: a new pick is never a word already picked in the same line, or one held as any #n in the conversation
+#   (so [folk#1], [folk#2], [folk#3] are three different people). Saying a held #n again ([pets#1]) is still the same
+#   word, as above. A category with too few words left can't be filled, and the line isn't said.
 # The first letter of a line is capitalised when it's said, and the first after any . ! or ? (not an ellipsis …) — so write words in lower
 # case ("labubu!!!" mid-line makes the next word start with a capital), and proper nouns with their capitals.
 # Nothing is ever made lower case for you (it can't tell a name from a word), so a capital in a file comes out as written.
@@ -70,7 +76,8 @@
 #   {evil}                    leans toward speakers high in that trait (same as evil = 1); any trait from people/about.txt
 #   {patience = -1}           leans toward speakers low in it
 #   {nosy, chatty = 0.5}      several at once: leans toward the nosy, and a little toward the chatty
-#   {aggression = -0.5, happy} a little toward the gentle, and toward the happy
+#   {aggression = -0.5, mood} a little toward the gentle, and toward the cheerful (mood, not happy: face states like
+#                             happy, sad, goofy are rare and short-lived, so a lean on them does next to nothing)
 #   {effect.speed = 2}        what the word does to someone whose love or hate it fills ("Taking [drugs]" filled with
 #                             "ayahuasca {effect.blazed, effect.speed = 0.8}" gives them those): the same values as
 #                             {traits} in people/ files (a multiplier, an amount to add, or on). Only counts there —
@@ -180,6 +187,50 @@
 #   {likes > 0}               only if they like it (hard)            {likes < 0}     only if they dislike it
 #   {likes > 0.5}             only if they like it a lot             {likes #1 < 0}  about the word held as #1 instead
 #   {likes = -1, aggression}  disliking it, leaning toward the aggressive
+#
+# PICK TAGS: {likes} is one of these; the same works for any measure of any held word(s).
+#   Measure (what's read from each word, about -1 to 1):
+#     likes                   how much the speaker likes it (above)
+#     appeal                  the word's own {appeal}
+#     a trait (evil, ...)     the word's own tag for it (0 if it has none; a hate's tags read backwards, as in LOVES AND
+#                             HATES). Needs a #: without one, {evil} is the speaker's trait, as in TAGS.
+#                             age reads a word's {years = n} (its age in years, put on the age scale: -1 at 18 or
+#                             under, 1 at 80 or over), else its {age} tag. {years} does nothing but this: it doesn't
+#                             lean who picks the word. Pick tags are always on the -1 to 1 scale, age too — years are
+#                             only for {years} and the speaker's own comparisons (age > 50, other.age < 30).
+#     man / woman             the word's {sex = man} or {sex = woman} (1 / -1, the other way round for woman; 0 if
+#                             not given). {sex} only describes the word: it doesn't lean who picks it.
+#     fancies                 how drawn the speaker is to the word, by its {sex}, theirs and their gay trait (people/
+#                             about.txt): 1 the sex they go for, -1 the other, 0 if they're bi or either sex isn't
+#                             known. A word without {sex} is always 0. Needs a #, like a trait.
+#     several, joined by + or -  their weighted average, still about -1 to 1. - turns a term round (as = -1 would);
+#                             a number in front weights it (2likes counts twice, 0.5evil half). Always needs a #.
+#                             Every term reads the words; to weigh the speaker's own traits as well, give those as
+#                             their own tags beside it (TAGS), and each leans or limits on its own.
+#   Picks (after the measure, any number of #s, run together or spaced):
+#     (none)                  the last word picked in the line being replied to (likes only)
+#     #n                      the word held as #n, whatever its category: [folk#1] and [animals#1] are both #1, so keep
+#                             each number to one word in a conversation
+#     #1#2#3                  several held words
+#     #all / #any / #mean     with no numbers: every word held with a #n so far in the conversation
+#   Mode (one more #, anywhere among the picks; all if none):
+#     #all                    every one must pass a limit (the level is the lowest of them)
+#     #any                    at least one must (the highest)
+#     #mean                   their average must
+#   Then, as with likes: no value or = n leans (soft), < > <= >= n limits (hard). Several pick tags can be given at once;
+#   each counts separately. With none of its picks held, a pick tag's level is 0.
+#
+# MOST AND LEAST: a placeholder that says one of the held words, ranked by a measure:  [most: measure#picks, options]
+#   [most: …] / [least: …]    the word that measures highest / lowest, for the speaker
+#   [most2: …] [least3: …]    the 2nd, 3rd... (the line isn't said if there are fewer words)
+#   The first option is the measure and picks, as in PICK TAGS (no picks: every word held so far; the mode doesn't
+#   count); the rest are the usual call options (forms, a, lower...). Ties are broken at random.
+#   In one line, each [most]/[least] skips any word another has already chosen, moving on down its own ranking
+#   ([most2] after [most] is still the 2nd, unless that was taken). They fill left to right, so the first gets first choice.
+#   One held with a #n ([most#5: …]) also skips any word held by another [most#n]/[least#n] earlier in the
+#   conversation, so a later round of choices never repeats an earlier one.
+#   [most#4: …]               holds the word it chose as #4, like any pick: later lines say [most#4] for the same word,
+#                             and pick tags read it as #4. A reply's measure is the replier's, not the first speaker's.
 # Questions and remarks about the other person should be limited like this, so nobody asks why a smiling person's
 # crying. In a reply, the other person is whoever said the line above it: "You make me so mad. > Why are you crying?"
 # asks the first speaker.
@@ -235,6 +286,9 @@
 #   {is = piper}              the piper trait: little copies of them following along behind — "> Are those... yours? {other.is = piper}"
 #   {is = miku}               Hatsune Miku, the preset (people/presets.js): her own lines in talk/miku.txt and mikuthoughts.txt
 #   {is = mini}               one of a piper's minis itself (Mini Dave): small, big-headed, following them about — "I'm the favourite. {is = mini}"
+#   {is = bald}               no hair (born bald, cut bald, or the bald trait — under a hat too) — "> Nice head. {other.is = bald}"
+#   {is = bearded}            facial hair, anyone with it (the beard trait gives it women too) — "> Nice beard. {other.is = bearded}"
+#   (traits bald and beard: 1 / -1 force no hair / hair and facial hair / none; {bald = 1} matches only the trait)
 #   {is = ghost}              the ghost trait: see-through, blue, bobbing — "> Are you... dead? {other.is = ghost}"
 #   {is = bodiless}           the bodiless trait: just a head, hopping along the ground — "> Where's the rest of you? {other.is = bodiless}"
 #   pacifist (a trait: {pacifist}) never punches or hunts, even possessed — "Violence is never the answer. {pacifist}"
@@ -326,6 +380,24 @@
 #   > [dismissal]                          a reply can be an include
 # The talkers take turns round their chat circle. If nothing fits, they babble instead.
 #
+# JUMPS: a branch can rejoin another line anywhere, in this file or another.
+#   {as = name}               names this line (letters, numbers, _), so a {then} can reach it. Each name once per file.
+#   {then = name}             the next line said is the one named, by whoever's turn is next, and the conversation goes
+#                             on from that line's replies. Its own > replies are never said (a warning says so).
+#   {then = file@name}        the line named in another file (the file's name, as for a [category]).
+#   {now = name}              the line named is said on the end of this one, by the same speaker, in the same bubble
+#                             (filled in as if written there), and the conversation goes on from its replies. With
+#                             no text of its own ({now = name} alone on a line) it just says the named line. If the
+#                             named line can't be said (its tags don't fit, a placeholder can't be filled), neither
+#                             is this one. Its own > replies are never said. file@name as for {then}.
+#   A line can have both: {now} first, then {then} decides what comes next.
+#   On an include ([dismissal] {then = name}), every line it brings jumps there.
+#   The named line keeps its own tags: if they don't fit whoever's next, nothing's said and the conversation stalls
+#   there, as when no reply fits. #n picks are kept across a jump, so a line jumped to sees whatever's held by then:
+#   a line reached from several branches should only use #n's every one of them sets.
+#   A conversation follows at most 8 jumps ({then} and {now} both count); past that, a {then} or {now} is left off and the line ends the conversation (so a loop can't go on forever).
+#   A {then} naming no line warns once when the files load.
+#
 # ------------------------------------------------------------------------------------------------------------------------
 # NOTES (answers to questions that have come up)
 # - New files and folders need no code changes: serve.py lists whatever's there. Serving some other way (another port,
@@ -339,8 +411,8 @@
 #   the slow are who'd say they love them. That's all speech does with them — persist doesn't change it; for a hard
 #   rule on who says something, use a speech.… tag.
 #   Drawn into the other list ("Conversely, [hates]" as someone's love), its traits are turned round (×1.7 → ×0.59,
-#   +0.5 → −0.5, ×0 → the trait's max: "Conversely, the law" {outlaw = 0} makes a full outlaw; crazy and normal turn
-#   into each other: crazy 1 → normal ×20, crazy 0.5 → normal ×4.5, normal ×2 → crazy 0.23; a switch is dropped, as loving the opposite can't switch it off), except any that persist, which stay
+#   +0.5 → −0.5, ×0 → the trait's max: "Conversely, the law" {outlaw = 0} makes a full outlaw; erratic and normal turn
+#   into each other: erratic 1 → normal ×20, erratic 0.5 → normal ×4.5, normal ×2 → erratic 0.23; a switch is dropped, as loving the opposite can't switch it off), except any that persist, which stay
 #   as written because they go with the subject whichever way you feel:
 #     Hate: Slow walkers {speed = 1.7}              haters are fast; "Conversely, slow walkers" makes someone slower
 #     Hate: Walking so fast {speed = 2, persist}    loving it makes you fast too

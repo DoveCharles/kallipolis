@@ -54,8 +54,8 @@ The world feels so dangerous lately. {world.morality < -0.3, world.morality = -1
 > Someone's out there killing people. {world.morality < -0.5, weight = 3}
 > I blame [animals: plural].
 This weather, honestly. {world.weather = rain, mood = -1}
-> I like the rain. {happy}
-> [scary: plural]! It's raining [scary: plural]! {shock}
+> I like the rain. {mood}
+> [scary: plural]! It's raining [scary: plural]! {mood = -0.5}
 Things have been so peaceful lately. {world.morality > 0.3, world.morality = 1}
 > Too peaceful. {evil}
 > Isn't it lovely? {evil = -1}

@@ -4,6 +4,6 @@ I don't give a [swears]. {aggression, score = -2}
 Cool story, bro. {evil, score = -1}
 Let me think about what you've said, and I'll get back to you. {patience}
 Let's not do this here, okay?
-Do you want to fucking fight or something? {end = bad, aggression}
-Swing then! Hit me! {end = bad, aggression}
-...just leave me alone. {end = bad, patience = -1}
+Do you want to fucking fight or something? {end = bad, aggression, talk.score < 2}
+Swing then! Hit me! {end = bad, aggression, talk.score < 2}
+...just leave me alone. {end = bad, patience = -1, talk.score < 1}

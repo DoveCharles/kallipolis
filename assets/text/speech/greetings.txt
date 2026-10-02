@@ -6,7 +6,7 @@ Hey!
 Oh, hello. {other.stranger}
 > Hi, I'm [me.name]. {chatty}
 >> Nice to meet you, [other.name]. {score = 1}
-Pull up some grass. {happy, is = sitting}
+Pull up some grass. {mood, is = sitting}
 Look who it is! {other.friend, weight = 2}
 > Wouldn't miss it. {score = 1}
 [other.name]! Sit down, sit down. {other.friend, is = sitting}

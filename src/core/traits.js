@@ -76,10 +76,12 @@ export const TRAITS = {
   terrible: { base: 0, min: 0, max: 1, combine: 'on' }, //marks trait as terrible
   headsize: { base: 1, min: 0.01, max: 20 }, // multiplies the head (hair and all), scaled about the neck (see personLook in life/people/peopleModel.js)
   spirits: { base: 0, min: 0, max: 1, combine: 'on' }, // a small ghost of them bobbing on each shoulder, gold on the right, purple on the left (life/people/peopleSpirits.js)
-  ghost: { base: 0, min: 0, max: 1, combine: 'on' }, // see-through and blue, bobbing (life/people/peopleSpirits.js); can't be hurt or killed (killPerson, core/health.js damage), cars pass through and don't wait (traffic/collisions.js, lanes.js), blasts, shoves, fright and stun pass them by, never punches or is punched (isFairGame), climbs out of water; cars: drawn see-through blue (makeCarGhost in life/traffic/materials.js), no hitting people, cars or walls, never shoved, float over water (life/traffic/collisions.js, driving.js)
+  ghost: { base: 0, min: 0, max: 1, combine: 'on' }, // see-through and blue, bobbing (life/people/peopleSpirits.js); vanishes for a minute the first 3 times you come near, unless hearted (shyGhost in people.js); can't be hurt or killed (killPerson, core/health.js damage), cars pass through and don't wait (traffic/collisions.js, lanes.js), blasts, shoves, fright and stun pass them by, never punches or is punched (isFairGame), climbs out of water; cars: drawn see-through blue (makeCarGhost in life/traffic/materials.js), no hitting people, cars or walls, never shoved, float over water (life/traffic/collisions.js, driving.js)
   bodiless: { base: 0, min: 0, max: 1, combine: 'on' }, // no body: just the head, on the ground, hopping along as they move (personBodiless in life/people/peopleModel.js)
   twins: { base: 0, min: 0, max: 1, combine: 'on' }, // drawn twice side by side, in step; hit as wide as both standing, as one down (TWIN_GAP in life/people/peopleModel.js, twinReach in people.js)
   piper: { base: 0, min: 0, max: 1, combine: 'on' }, // followed by three Mini thems (real people: small, big-headed) in formation, who avenge any of them punched (life/people/peopleMinis.js)
+  bald: { base: 0, min: -1, max: 1, combine: 'add' }, // 1 no hair (a hat stays, bare under it), -1 always some, 0 as the slot has it; anyone (life/people/peopleModel.js groom)
+  beard: { base: 0, min: -1, max: 1, combine: 'add' }, // 1 always facial hair (women too), -1 never, 0 as the slot has it (groom)
   pacifist: { base: 0, min: 0, max: 1, combine: 'on' }, // never punches or hunts, nor can be made to, possessed included (throwPunch, peopleBlood.js hunt, peopleTracking.js punchFromPossession)
   nude: { base: 0, min: 0, max: 1, combine: 'on' }, // no clothes, never changes into any; a mosaic censor over them (life/people/peopleCensor.js)
   smells: { base: 0, min: 0, max: 1, combine: 'on' }, //people keep clear and leave circles it sits in (life/people/peopleSmell.js); cars pull over to let it by (life/traffic/pullover.js)
@@ -103,7 +105,8 @@ export const TRAITS = {
   painkillers: {base: 1, min: 0, max: 20}, //desire for drugs that take the edge off
   nerd: {base: 1, min: 0, max: 20}, //chance to bring up deep stuff & trivia
   conservative: {base: 0, min: -1, max: 1, combine: 'add'}, //communist to fascist, -1 left, 1 right
-  crazy: { base: 0, min: 0, max: 1, combine: 'add' }, // every so often, a few random traits pushed towards their extremes for a while (see life/people/peopleCrazy.js)
+  gay: { base: 0, min: 0, max: 1, combine: 'set', hidden: true }, // who they're drawn to: 0 straight, 0.5 bi, 1 gay; each person's drawn (SEXUALITY in life/profiles.js), and a love or hate's gay = n sets it outright
+  erratic: { base: 0, min: 0, max: 1, combine: 'add' }, // every so often, a few random traits pushed towards their extremes for a while (see life/people/peopleErratic.js)
   normal: { base: 1, min: 1, max: 20 }, // pulls every other trait back towards its start: Chatty ×3 with Normal ×2 is Chatty ×1.5; mood +0.4 is +0.2 (see combineTraits in core/entries.js)
 };
 
@@ -140,8 +143,9 @@ export function modifierLines(entryTraits, table = TRAITS) {
       && !(table[key].combine === 'on' && !switchedOn(value)))
     .map(([key, value]) => {
       const name = key[0].toUpperCase() + key.slice(1), { combine } = table[key];
-      const amount = Math.round(amounts(value).reduce((total, one) => combine === 'add' ? total + one : total*one, combine === 'add' ? 0 : 1)*100)/100;
+      const amount = combine === 'set' ? amounts(value).at(-1) : Math.round(amounts(value).reduce((total, one) => combine === 'add' ? total + one : total*one, combine === 'add' ? 0 : 1)*100)/100;
       if (combine === 'on') return name;
+      if (combine === 'set') return `${name} ${amount}`;
       if (combine === 'add') return `${name} ${amount < 0 ? '−' + -amount : '+' + amount}`;
       return `${name} ×${amount}`;
     });

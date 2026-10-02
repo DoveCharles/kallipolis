@@ -1,4 +1,6 @@
 # Hatsune Miku's own lines (the preset in people/presets.js: {is = miku}). From dialogue.txt and thoughts.txt.
+Miku!
+Miku! Miku!
 Have you tried leeks? Like, really tried them?
 > I don't think so.
 > Every day, Miku.

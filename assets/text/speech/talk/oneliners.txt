@@ -1,15 +1,5 @@
 # Short things said on their own, or as a reply anywhere (see about.txt).
-Anyway.
-Honestly?
-No way.
-Exactly.
-Right, right.
-Tuesday.
-Absolutely not. {patience = -1}
-I know, I know.
-Mm-hm.
-Seriously.
-Wait, what?
-Oh, that reminds me.
-Uhm, ok?
-Groovy. {happy}
+Tweetie tweetie twoo... You every heard that one before? Tweee, twoo twee twee! I'm whistling.
+Am I talking too much? I'm such a [swears: gerund] idiot... baka, baka... {mood = -2, aggression = -2}
+Woe is me, woe is me. {mood < 0}
+What to say... what to say...

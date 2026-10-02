@@ -2,7 +2,7 @@
 # "she was [actions: ing] all day", "we [actions: past] for hours".
 forms: base | past | ing | third
 dance | danced | dancing {fidgety}
-sing | sang | singing {happy}
+sing | sang | singing {mood}
 swim | swam | swimming
 run | ran | running {speed}
 cook | cooked | cooking

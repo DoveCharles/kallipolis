@@ -8,6 +8,8 @@ import { scene } from '../../core/scene.js';
 
 // the SPIRITS_ROW bits (peopleModel.js)
 export const SPECTRAL = { spirits: 1, ghost: 2, bodiless: 4, twins: 8 }; // (twins: see personTwin in peopleModel.js)
+export const VANISHED_BIT = 32; // (a shy ghost gone for a while: nothing of them drawn — see shyGhost in people.js)
+export const BALD_BIT = 16; // (bald = 1 under a hat: the hat's hair parts folded away — see stripBald in peopleModel.js)
 
 const DEPTH_ORDER = 1000; // the see-through ones' depth twins draw at this, then they do (among the transparent, last)
 const WORN_DARK = 0.7;   // hair and accessories' colour, × the spirit's
@@ -54,7 +56,7 @@ export function makeSpiritWorn(o, styles) {
 }
 
 // One spirit's (or the ghost's) mesh over a geometry, sharing `matrices`' instanceMatrix; `dressed` for a worn layer.
-function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color, opacity, name }, { vertexPars, uniforms, geometry: bodyGeometry, shoulder, idle, fps, slots, headshotLayer }, geometry, matrices, dressed) {
+function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color, opacity, name }, { vertexPars, uniforms, geometry: bodyGeometry, shoulder, idle, fps, slots, headshotLayer, fadeRow }, geometry, matrices, dressed) {
   const box = bodyGeometry.boundingBox, tall = box.max.y - box.min.y;
   // (a spirit sits on the shoulder, feet first; the ghost stands where they do)
   const place = side
@@ -70,8 +72,10 @@ function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color,
     defines: dressed ? { PERSON_INDEX_ATTRIBUTE: '' } : {},
     vertexShader: `${pars}
         varying float vSpiritShade;
+        varying float vSpiritFade; // (a shy ghost fading out or in: see shyGhost in people.js)
         void main() {
-          if ((personSpectral() & ${bit}) == 0 || personIndex() == personHidden || (personOnly >= 0 && personIndex() != personOnly)) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+          vSpiritFade = texelFetch(personTraits, ivec2(personIndex(), ${fadeRow}), 0).w;
+          if ((personSpectral() & ${bit}) == 0 || (personSpectral() & ${VANISHED_BIT}) != 0 || personIndex() == personHidden || (personOnly >= 0 && personIndex() != personOnly)) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
           vec3 posed = personBodiless(personLook((personSkinMatrix()*vec4(position + personShape(), 1.0)).xyz));
           int slot = int(personVertex.y + 0.5);
           ${dressed ? '' : `if (${[...slots.lashes.map((k, b) => `(slot == ${k} && (int(personTrait(${slots.lashRow}).w + 0.5) & ${1 << b}) == 0)`),
@@ -86,9 +90,10 @@ function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color,
     fragmentShader: `
         uniform vec3 spiritColor;
         varying float vSpiritShade;
+        varying float vSpiritFade;
         void main() {
           vec3 color = vSpiritShade > 0.5 ? mix(spiritColor, vec3(1.0), 0.7) : vSpiritShade < -0.5 ? spiritColor*0.15 : spiritColor;
-          gl_FragColor = vec4(color, ${opacity.toFixed(2)});
+          gl_FragColor = vec4(color, ${opacity.toFixed(2)}*(1.0 - vSpiritFade));
         }`,
   };
   const material = new THREE.ShaderMaterial(params);

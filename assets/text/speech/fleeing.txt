@@ -7,7 +7,7 @@ Not today!
 I'm too young to die! {mood = -0.5, age = -1, age < 55}
 Every man for himself! {evil}
 Out of my way! {evil}
-Oh no, oh no, oh no... {shock}
+Oh no, oh no, oh no... {mood = -0.5}
 Murderer! {seen = beatentodeath}
 They killed [seen.name]! {seen = death}
 Somebody call the police! {seen = death, evil = -1}
@@ -17,6 +17,6 @@ I'm melting, meellttinnggg... {vampire > 0}
 Wait for me! {is = drunk}
 I knew this city was cursed. {world.morality < -0.3}
 Get it off me! {is = bloody}
-It's everywhere! {is = bloody, shock}
+It's everywhere! {is = bloody, mood = -0.5}
 Is it mine?! Is it mine?! {is = bloody, is = hurt}
 I'm bleeding! {is = hurt, is != bloody}

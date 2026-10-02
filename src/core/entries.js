@@ -153,7 +153,7 @@ export function parseSections(text, { traits: table = TRAITS, file, attributes =
 function towardsNormal(traits, table, start) {
   const n = traits.normal;
   Object.entries(table).forEach(([key, trait]) => {
-    if (key === 'normal' || trait.combine === 'on') return;
+    if (key === 'normal' || trait.combine === 'on' || trait.combine === 'set') return;
     const from = start[key], value = traits[key];
     if (trait.combine === 'add' || !from) { traits[key] = from + (value - from)/n; return; }
     const ratio = value/from;
@@ -165,7 +165,7 @@ export function combineTraits(entries, table = TRAITS, start = startingTraits(ta
   const traits = { ...start };
   entries.forEach(entry => entry.traits.forEach(([key, value]) => {
     const { combine } = table[key];
-    traits[key] = combine === 'add' ? traits[key] + value : combine === 'on' ? (value > 0 ? 1 : traits[key]) : traits[key]*value;
+    traits[key] = combine === 'add' ? traits[key] + value : combine === 'on' ? (value > 0 ? 1 : traits[key]) : combine === 'set' ? value : traits[key]*value;
   }));
   if (table.normal && traits.normal > 1) towardsNormal(traits, table, start);
   Object.entries(table).forEach(([key, trait]) => { traits[key] = Math.max(trait.min, Math.min(trait.max, traits[key])); });

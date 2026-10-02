@@ -18,11 +18,12 @@ const LINE_GAP = 3;         // seconds after a line ends before its conversation
 const LINE_START_GAP = 0.15; // seconds between any two lines starting (a burst of them to synthesize at once)
 const CROWD_EASY = 3;       // lines at once before each is made quieter (by the square root of how many more), so a crowd doesn't clip
 const MAX_LINES = 4;        // real lines said at once, at most (each is synthesized as it starts) — no limit with babble only as fallback
-const REPLY_WINDOW = 6;     // seconds after a line ends that a reply to it can still come
+const REPLY_WINDOW = 6;     // seconds after a line ends that a reply to it can still come (started again while only the line limit holds it up)
 const CHOICE_WAIT = 60;     // seconds a conversation waits for the possessed person's picked reply (Options > Game > Dialogue Choices)
 const MATCH = 1;            // how loud a real line is next to the speaker's own babble (see loudnessOf in audio/voices.js)
 const MUFFLE = 1.4; // (as for babble; beyond its hearDistance they only babble)
 const MAKING_MAX = 2;       // seconds a line waits to be made before it's given up on
+const SILENT_LINE = 1.5;    // seconds a line with nothing to sound out ("...") is held for
 
 let lastStart = -Infinity;
 const speaking = new Set(); // { source, start, length, mouth: Float32Array, text, quiet } for each line being said (source and mouth null while it's made)
@@ -42,7 +43,16 @@ const chatSpeed = () => S.chatSpeed ?? 1;
  */
 export function sayLine(at, voice, who, person) {
   const context = listener.context, now = context.currentTime;
-  if ((!S.babbleFallbackOnly && speaking.size >= MAX_LINES) || !speechReady() || now - lastStart < LINE_START_GAP) return null;
+  resumeTalk(person.group, now);
+  if ((!S.babbleFallbackOnly && speaking.size >= MAX_LINES) || !speechReady() || now - lastStart < LINE_START_GAP) {
+    // (a reply held up only by the line limit keeps its place: its window starts again, so a busy scene ends no dialogue)
+    const due = person.group?.talk;
+    if (due && due.by !== person && (!due.to || due.to === person) && now < due.until && Math.hypot(at.x - ear.x, at.y - ear.y, at.z - ear.z) <= hearDistance()) {
+      const more = Math.max(0, now + REPLY_WINDOW - due.until);
+      due.until += more; due.expires += more;
+    }
+    return null;
+  }
   if (Math.hypot(at.x - ear.x, at.y - ear.y, at.z - ear.z) > hearDistance()) return null;
   const group = person.group, talk = group?.talk;
   // (a death they've just seen comes first, straight away: see pickReaction)
@@ -75,6 +85,8 @@ export function sayLine(at, voice, who, person) {
   // 'sit' stage in life/people/peopleActivities.js)
   if (!said && (group?.wantsEnd || person.closing)) said = pickCloser(person, facing);
   if (!said) {
+    // (no new call over a dialogue under way, or one held: it'd cut in — see resumeTalk)
+    if ((group?.talk && now < group.talk.until) || group?.held?.length) return null;
     // (with Options > Speech > Babble only as fallback, every phrase tries for a real line: see linePause)
     if (now < (quietOf(person).quietUntil ?? 0) || (!S.babbleFallbackOnly && Math.random() >= LINE_CHANCE*chatSpeed())) return null;
     said = pickCall(person, facing);
@@ -84,11 +96,26 @@ export function sayLine(at, voice, who, person) {
   if (line && group && said.score) group.score = (group.score ?? 0) + said.score; // (see {score}: how the conversation's going)
   if (line && group) {
     const pending = talk && now < talk.until && group.talk === talk;
-    if (greeted && pending) { talk.until += line.length; talk.expires += line.length; } // (a greeting between lines: the dialogue picks up after it)
-    else group.talk = said.replies.length && !said.end ? { replies: said.replies, vars: said.vars, by: person, to: replying ? talk.by : greeted ? greet.who : facing,
+    const next = said.replies.length && !said.end ? { replies: said.replies, vars: said.vars, by: person, to: replying ? talk.by : greeted ? greet.who : facing,
       until: now + line.length + REPLY_WINDOW, expires: performance.now()/1000 + line.length + REPLY_WINDOW } : null;
+    // (a line between a dialogue's lines — a greeting for a newcomer, a reaction: the dialogue's held while any exchange
+    // it starts runs, then picked up by the two who were in it: resumeTalk)
+    if (pending && !replying) {
+      if (next) { (group.held ??= []).push(talk); group.talk = next; }
+      else { talk.until += line.length; talk.expires += line.length; }
+    } else group.talk = next;
   }
   return line;
+}
+
+// A dialogue held for a line between (see sayLine) picked up again once that exchange is over and no one in the group is
+// mid-line: its answer's due afresh from whoever it was waiting on. Dropped if either of the two has left.
+function resumeTalk(group, now) {
+  if (!group?.held?.length || (group.talk && now < group.talk.until)) return;
+  for (const line of speaking) if (group.members.includes(line.by)) return;
+  const talk = group.held.pop();
+  if (!group.members.includes(talk.by) || (talk.to && !group.members.includes(talk.to))) { group.talk = null; return; }
+  group.talk = { ...talk, until: now + REPLY_WINDOW, expires: performance.now()/1000 + REPLY_WINDOW };
 }
 
 /**
@@ -135,7 +162,12 @@ function voiceLine(said, at, voice, who, person, full = false) {
   const context = listener.context, now = context.currentTime, text = said.text, mood = person.traits?.mood ?? 0;
   if (isMuted() || context.state !== 'running') return null;
   const clauses = phonemesOf(text), length = lineLength(clauses, { mood, who });
-  if (!length) return null;
+  if (!length) { // (nothing to sound out, "...": a silent beat, its bubble up and mouth shut, so the conversation goes on)
+    const line = { source: null, start: now, length: SILENT_LINE, mouth: new Float32Array(0), text, quiet: quietOf(person), end: said.end, by: person };
+    speaking.add(line);
+    lastStart = now;
+    return line;
+  }
   const crowd = full ? 1 : edgeFade(at)/Math.sqrt(Math.max(1, (speaking.size + 1)/CROWD_EASY)); // (and fading towards the hearing distance: see edgeFade)
   // (a line tagged {end} ends its conversation once it's said: see finish)
   const line = { source: null, start: now, length, mouth: null, text, quiet: quietOf(person), end: said.end, by: person };

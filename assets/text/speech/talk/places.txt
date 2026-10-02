@@ -133,7 +133,7 @@ Thrown a coin in the fountain recently? {here.plaza}
 
 Everyone's out today, aren't they? {here.plaza, nosy}
 
-I love the sea air. {here.beach, happy}
+I love the sea air. {here.beach, mood}
 > It smells of [foods], if you ask me.
 
 Sand. So much sand. {here.beach}
@@ -152,7 +152,7 @@ These cars go way too fast. {here.roadside}
 Stand back from the kerb. {here.roadside, patience}
 Wait for the green man! {here.crossing}
 What a view from up here. {here.bridge}
-> Don't look down. {shock}
+> Don't look down. {mood = -0.5}
 Where does this path even go? {here.path}
 > Nowhere good. {mood = -1}
 Town's busy today, isn't it? {here.town}

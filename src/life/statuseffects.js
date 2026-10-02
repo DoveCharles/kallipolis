@@ -48,7 +48,7 @@ export const EFFECTS = {
   sugarrush: { name: 'Sugar rush', icon: 'sweetie', seconds: 60, traits: { speed: 1.2, fidgety: 3 } },
   wired: { name: 'Wired', icon: 'energydrink', seconds: 180, traits: { speed: 2, fidgety: 4, blinks: 0.3, aggression: 2 } },
   blazed: { name: 'Blazed', icon: 'leafl', seconds: 600, traits: { blazed: 1, speed: 0.6, lounging: 5, patience: 4, chatty: 2, aggression: 0.3 } },
-  buzzing: { name: 'Buzzing', icon: 'adderall', seconds: 300, traits: { speed: 3, chatty: 6, talkative: 6, blinks: 5, mood: 0.5, fidgety: 12, happy: 0.9, aggression: 10, crazy: 0.3 } },
+  buzzing: { name: 'Buzzing', icon: 'adderall', seconds: 300, traits: { speed: 3, chatty: 6, talkative: 6, blinks: 5, mood: 0.5, fidgety: 12, happy: 0.9, aggression: 10, erratic: 0.3 } },
   backwards: { name: 'Backwards', icon: 'magicbroth', seconds: 60, traits: { backwards: 1 } },
   // (shown only, while bloodlusting: its traits are the bloodlust trait's own — see person-card.js statusListFor)
   bloodlust: { name: 'Bloodlust', icon: 'bloodlustt', seconds: 0, traits: {} },
@@ -67,7 +67,7 @@ export function effectOf(key, level = 1) {
   if (level === 1) return effect;
   const traits = Object.fromEntries(Object.entries(effect.traits ?? {}).map(([k, v]) => {
     const combine = TRAITS[k]?.combine;
-    return [k, combine === 'add' ? v*level : combine === 'on' ? v : v**level];
+    return [k, combine === 'add' ? v*level : combine === 'on' || combine === 'set' ? v : v**level];
   }));
   return { ...effect, traits };
 }
@@ -123,7 +123,7 @@ function stackTrait(key, values, baseTraits) {
   let value = baseTraits[key];
   for (const amount of values) {
     const { combine } = TRAITS[key];
-    value = combine === 'add' ? value + amount : combine === 'on' ? (amount > 0 ? 1 : value) : value*amount;
+    value = combine === 'add' ? value + amount : combine === 'on' ? (amount > 0 ? 1 : value) : combine === 'set' ? amount : value*amount;
     value = Math.max(min, Math.min(max, value));
   }
   return value;

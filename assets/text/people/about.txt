@@ -14,21 +14,24 @@
 # Separate several with commas (or give each its own brackets). A trait with no value, like {backwards}, is switched on.
 # {normal = 2} pulls every other trait back towards its start by that much: Loves Talking {chatty = 3} with Being normal
 # {normal = 2} is Chatty ×1.5; mood +0.4 becomes +0.2; switches stay as they are.
-# {crazy = 0.5} (0 to 1, adds up): every 15 seconds or so, 1 to 5 random traits are pushed towards their max or min —
-# crazy ÷ how many of the way (crazy 1, one trait: Chatty ×20 or ×0) — then put back before the next lot. Switches, size,
-# agemult, health and the card-only traits are never touched; nor is what shows on their card. Crazy and normal are each
-# other's opposite, on one scale (normal = 20^crazy): taken the other way round ("Conversely, …"), one becomes the
-# other. Someone with both has both: normal settles their traits, crazy still pushes them about.
+# {erratic = 0.5} (0 to 1, adds up): every 15 seconds or so, 1 to 5 random traits are pushed towards their max or min —
+# erratic ÷ how many of the way (erratic 1, one trait: Chatty ×20 or ×0) — then put back before the next lot. Switches, size,
+# agemult, health and the card-only traits are never touched; nor is what shows on their card. Erratic and normal are each
+# other's opposite, on one scale (normal = 20^erratic): taken the other way round ("Conversely, …"), one becomes the
+# other. Someone with both has both: normal settles their traits, erratic still pushes them about.
 # In loves and hates, `Card text | spoken text` gives how it's said aloud (see speech/about.txt), [placeholders] fill in
 # a word per person, and <tastes, vice> puts it in those speech categories. {persist} or {persist = trait}: traits that
 # stay as written when a love or hate is taken the other way round ("Conversely, [hates]"), {persist, flip = trait} all
 # but that one; {noflip} or {noflip = trait}: dropped instead, taken the other way round; {speech.…}: a speech tag,
-# e.g. {speech.appeal = 0.5} or {speech.conservative < 0} (see speech/about.txt).
+# e.g. {speech.appeal = 0.5} or {speech.conservative < 0} (see speech/about.txt). A love or hate that's a person can say
+# who they are to speech the same way: {speech.sex = woman, speech.years = 65} (pronouns, fancies, age#n).
 # Moods, enjoys, hates (even names) can all have traits, and someone's traits stack up: they multiply together — two
 # entries with speed = 2 make someone four times as fast — except mood and the eye looks (happy, sad, angry, shock),
-which add up. Everyone starts at the value in
+# which add up. Everyone starts at the value in
 # brackets below, and a value outside a trait's range is kept to it. A misspelt trait is ignored (and says so in the
 # browser's console).
+# (Most personality traits start a little off that for each person, up to 5% either way: TRAIT_JITTER and JITTERED in
+# life/profiles.js; 0 turns it off.)
 #
 #   trait       start   what it does                                                                    range
 #   speed   1       how fast they walk — 2 is twice as fast, 0.5 half                               0.1 to 6
@@ -69,6 +72,10 @@ which add up. Everyone starts at the value in
 #   partying    0       confetti thrown up off the head, in bursts                                     0 to 1
 #   singing     0       music notes floating off the head                                              0 to 1
 #   evil        0       how evil they are, the reactions of others when they die                       -1 to 1
+#   gay         drawn   who they're drawn to: 0 straight, 0.5 bi, 1 gay. Each person's drawn at        0 to 1
+#                       60% 0, 20% 0.5, 20% 1 (SEXUALITY in life/profiles.js). Unlike other traits it doesn't
+#                       add or multiply: {gay = 0} or {gay = 1} on a love or hate sets it outright (the last
+#                       one given wins). Hidden from cards; read by speech's fancies (see speech/about.txt).
 #   weight      1       how much a car slows when it hits them, multiplying a small base (always far less than hitting a car)  0.1 to 10
 #   aggression  1       how likely they are to punch sommone                                           0 to 20
 #   bloodlust   off     covered in blood, they run twice as fast and go about punching everyone they can  on or off

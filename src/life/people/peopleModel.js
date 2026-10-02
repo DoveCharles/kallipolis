@@ -9,7 +9,7 @@ import { fitSkirt } from './skirtFit.js';
 import { fitJeans } from './jeansFit.js';
 import { OUTFITS, OUTFIT_ARM, OUTFIT_CHEST, OUTFIT_COLUMNS, OUTFIT_COLUMN_COUNT, OUTFIT_LEG, OUTFIT_TILES, buildOutfitTexture, pickOutfit } from './outfits.js';
 import { makeCensorMesh } from './peopleCensor.js';
-import { makeSpiritMeshes, makeSpiritWorn, SPECTRAL } from './peopleSpirits.js';
+import { makeSpiritMeshes, makeSpiritWorn, SPECTRAL, BALD_BIT, VANISHED_BIT } from './peopleSpirits.js';
 import { presetAt, isPresetHair } from './presets.js';
 import { HEADSHOT_LAYER, PEOPLE_MAX, people, peopleMesh, setPersonModel } from './people.js';
 
@@ -590,7 +590,7 @@ const CENSOR_THIGH = 0.3, CENSOR_STOMACH = 0.45, CENSOR_SHOULDER = 0.1;
 const OUTFIT_RED_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitRed'), OUTFIT_GREEN_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitGreen');
 const BLOOD_SCALE = 1.2; // how many splotches' worth of noise fit in a unit of the figure: bigger for smaller splotches
 export const PERSON_CLOTHING_ROW = 2 + PERSON_TRAIT_COLORS.length, PERSON_FACE_ROW = PERSON_CLOTHING_ROW + 1;
-export const TWIN_LOOK_ROW = PERSON_FACE_ROW + 1; // (a twin's copy's own head turn and tilt, as instanceLook.xy: see personLook, people.js; .z how much a bodiless head hops)
+export const TWIN_LOOK_ROW = PERSON_FACE_ROW + 1; // (a twin's copy's own head turn and tilt, as instanceLook.xy: see personLook, people.js; .z how much a bodiless head hops; .w how far a shy ghost's faded: shyGhost)
 
 // A mesh named with a _U suffix is unused: kept in the model file, never drawn.
 const isUnused = name => /_U$/i.test(name);
@@ -1110,7 +1110,9 @@ function injectPersonShader(shader, uniforms, look) {
       ${hide}
       ${lashes}
       ${hideHead}
+      ${look.stripBald ? `if ((personSpectral() & ${BALD_BIT}) != 0 && personSlotIndex == 0) transformed = vec3(0.0); // (bald under their hat: its hair parts gone)` : ''}
       transformed = personBodiless(transformed);
+      if ((personSpectral() & ${VANISHED_BIT}) != 0) transformed = vec3(0.0); // (a shy ghost, gone: see shyGhost in people.js)
       // (in the card's headshot, personOnly, the copy stands just behind the one it centres on, a little to their left)
       if ((personSpectral() & ${SPECTRAL.twins}) != 0) transformed += personOnly >= 0 && personTwin > 0.0
         ? vec3(${(TWIN_SHOT_SIDE - TWIN_GAP).toFixed(3)}, 0.0, ${(-TWIN_SHOT_BACK).toFixed(3)})*personTall : vec3(personTwin*${TWIN_GAP.toFixed(3)}*personTall, 0.0, 0.0);
@@ -1156,10 +1158,10 @@ function makePersonMesh(geometry, uniforms, look, capacity, byAttribute, { name 
   material.defines = { ...material.defines, ROOM_LAMP: '', ROOM_GLOW: '' };
   if (culled) { material.defines.PERSON_CULL = ''; depth.defines = { ...depth.defines, PERSON_CULL: '' }; }
   // three.js reuses a compiled shader for materials whose onBeforeCompile reads the same, so a look of its own needs a key of its own
-  const key = ['person', byAttribute, culled, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, !!look.hemmed, look.femaleOnly.join(','), (look.lashes || []).join(','), look.blushSlot ?? '', look.pupilSlot ?? '', (look.nudeSlots || []).join(',')].join('|');
+  const key = ['person', byAttribute, culled, look.palette.length, JSON.stringify(look.traitColors), (look.bloodSlots || []).join(','), !!look.bloodOnBands, JSON.stringify(look.bands || []), (look.outfitSlots || []).join(','), JSON.stringify(look.outfitBands || []), (look.outfitLegSlots || []).join(','), (look.outfitBareLegSlots || []).join(','), !!look.clearThighs, !!look.hemmed, look.femaleOnly.join(','), (look.lashes || []).join(','), look.blushSlot ?? '', look.pupilSlot ?? '', (look.nudeSlots || []).join(','), !!look.stripBald].join('|');
   material.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { ...look, layer: byAttribute });
   material.customProgramCacheKey = () => key;
-  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly, lashes: look.lashes, clearThighs: look.clearThighs, shadow: true, layer: byAttribute });
+  depth.onBeforeCompile = shader => injectPersonShader(shader, uniforms, { femaleOnly: look.femaleOnly, lashes: look.lashes, clearThighs: look.clearThighs, stripBald: look.stripBald, shadow: true, layer: byAttribute });
   depth.customProgramCacheKey = () => key + '|depth';
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -1670,7 +1672,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     return { styles, rng, chance, look, hatChance, without, of: new Int16Array(PEOPLE_MAX).fill(-1), slot: new Int32Array(PEOPLE_MAX),
       girls: who('girls', false), boys: who('boys', false), girlsHats: who('girls', true), boysHats: who('boys', true) };
   };
-  const hairLayer = headLayer(headStylesFrom(hairGltf, hairstyleWearers), mulberry32(31337), { hatChance: HAT_CHANCE });
+  const hairLayer = headLayer(headStylesFrom(hairGltf, hairstyleWearers), mulberry32(31337), { hatChance: HAT_CHANCE, look: 'scalp' });
   const facialHairLayer = headLayer(headStylesFrom(facialHairGltf, () => ({ girls: false, boys: true })), mulberry32(4711));
   const glassesLayer = headLayer(headStylesFrom(glassesGltf, () => ({ girls: true, boys: true })), mulberry32(2020), { chance: GLASSES_CHANCE, look: 'glasses' });
   // skirts, ridden by the bones and shape keys each vertex was fitted to above; only women wear them
@@ -1714,6 +1716,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   // the new arrival gets their own build, face and colors rather than a repeat of whoever was there before.
   const traitRows = TWIN_LOOK_ROW + 1, traits = new Float32Array(PEOPLE_MAX*traitRows*4);
   const isMan = new Uint8Array(PEOPLE_MAX);
+  // (the bald and beard traits on each slot, and the styles it had before they changed them: see groom)
+  const UNGROOMED = -2, groomed = { bald: new Int8Array(PEOPLE_MAX), beard: new Int8Array(PEOPLE_MAX), ownHair: new Int16Array(PEOPLE_MAX).fill(UNGROOMED), ownBeard: new Int16Array(PEOPLE_MAX).fill(UNGROOMED) };
   const NATURAL_COLOUR_CHANCE = 0.85;
   const sexRng = mulberry32(777);
   for (let i=0;i<PEOPLE_MAX;i++) {
@@ -1894,6 +1898,39 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     wornLayers.forEach(layer => { if (!wear(layer, to, layer.of[from])) wear(layer, to, -1); });
     traitTexture.needsUpdate = true;
   }
+  /**
+   * The bald and beard traits on whoever's in slot `i` (each -1, 0 or 1: see core/traits.js). bald 1: no hairstyle (a hat
+   * stays, its hair parts folded away: stripBald, BALD_BIT); -1: one, if they've none (picked by their id). beard 1:
+   * facial hair (anyone, women too), if they've none; -1: none. 0 gives back what the slot had before (groomed.own…).
+   * @param {number} i
+   * @param {number} id
+   * @param {number} bald
+   * @param {number} beard
+   * @returns {void}
+   */
+  function groom(i, id, bald, beard) {
+    if (presetAt(i)) return;
+    const pick = (layer, list, salt) => list.length ? otherStyle(layer, list, i, mulberry32(salt + id*7919), true) : -1;
+    const side = (layer, want, own, gives, list, salt) => {
+      if (want && own[i] === UNGROOMED) own[i] = layer.of[i];
+      const now = layer.of[i], hat = now >= 0 && layer.styles[now].hat;
+      if (!want) { if (own[i] !== UNGROOMED) { wear(layer, i, own[i]); own[i] = UNGROOMED; } return; }
+      // (`gives`: 1 means having it — facial hair; else 1 means not — bald. A hat stays on the bald)
+      const wanted = gives ? want > 0 : want < 0;
+      if (wanted && now < 0) wear(layer, i, pick(layer, list, salt));
+      else if (!wanted && now >= 0 && !hat) wear(layer, i, -1);
+    };
+    groomed.bald[i] = bald; groomed.beard[i] = beard;
+    side(hairLayer, bald, groomed.ownHair, false, isMan[i] === 1 ? hairLayer.boys : hairLayer.girls, 9091);
+    side(facialHairLayer, beard, groomed.ownBeard, true, facialHairLayer.boys, 9092);
+  }
+  /**
+   * What shows on slot `i`'s head, for what people say ({is = bald}, {is = bearded}): bald with no hairstyle, or under a
+   * hat with the bald trait; bearded with facial hair.
+   * @param {number} i
+   * @returns {{bald: boolean, bearded: boolean}}
+   */
+  const headOf = i => ({ bald: hairLayer.of[i] < 0 || (groomed.bald[i] > 0 && hairLayer.styles[hairLayer.of[i]].hat), bearded: facialHairLayer.of[i] >= 0 });
   function wear(layer, i, k) {
     const was = layer.of[i];
     if (was === k) return true;
@@ -1947,9 +1984,12 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   function cutHair(i, id, rng) {
     if (presetAt(i)) return;
     const man = isMan[i] === 1, wasHat = hairLayer.of[i] >= 0 && hairLayer.styles[hairLayer.of[i]].hat;
-    const k = man && hairLayer.of[i] >= 0 && rng() < BALD_CUT ? -1 : otherStyle(hairLayer, man ? hairLayer.boys : hairLayer.girls, i, rng);
-    if (k >= 0 || man) wear(hairLayer, i, k);
-    if (man && rng() < FACIAL_HAIR_CUT) wear(facialHairLayer, i, rng() < 0.4 ? -1 : otherStyle(facialHairLayer, facialHairLayer.boys, i, rng));
+    // (the bald and beard traits have their way: groom)
+    let k = man && hairLayer.of[i] >= 0 && rng() < BALD_CUT ? -1 : otherStyle(hairLayer, man ? hairLayer.boys : hairLayer.girls, i, rng);
+    if (groomed.bald[i] > 0) k = -1;
+    if (k >= 0 || man || groomed.bald[i] > 0) wear(hairLayer, i, k);
+    if (groomed.beard[i] === 0 && man && rng() < FACIAL_HAIR_CUT) wear(facialHairLayer, i, rng() < 0.4 ? -1 : otherStyle(facialHairLayer, facialHairLayer.boys, i, rng));
+    if (groomed.bald[i] || groomed.beard[i]) { groomed.ownHair[i] = groomed.ownBeard[i] = UNGROOMED; groom(i, id, groomed.bald[i], groomed.beard[i]); } // (the cut's their own now)
     if (rng() < HAIR_DYE) {
       const color = new THREE.Color();
       hairColor(rng, color);
@@ -2076,14 +2116,15 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const censor = makeCensorMesh({ vertexPars: PERSON_VERTEX_PARS, uniforms, anim, body: mesh, nudeRow: NUDE_ROW, skinRow: SKIN_ROW, headshotLayer: HEADSHOT_LAYER,
     rest: { ...censorRest, tall: geometry.boundingBox.max.y - geometry.boundingBox.min.y } });
   // (the spirits trait's shoulder ghosts: see peopleSpirits.js)
-  const spiritParts = { vertexPars: PERSON_VERTEX_PARS, uniforms, geometry, body: mesh, headshotLayer: HEADSHOT_LAYER,
+  const spiritParts = { vertexPars: PERSON_VERTEX_PARS, uniforms, geometry, body: mesh, headshotLayer: HEADSHOT_LAYER, fadeRow: TWIN_LOOK_ROW,
     shoulder: bones[boneByName.get('ShoulderL')].getWorldPosition(new THREE.Vector3()), idle: clips.find(c => c.name === 'Idle'), fps: PERSON_BAKE_FPS,
     slots: { white: PERSON_SLOTS.indexOf('White'), dark: ['Black', 'Eyelash1', 'Eyelash2', 'Eyelash3', 'Lips'].map(slot => PERSON_SLOTS.indexOf(slot)),
       lashes: PERSON_LASHES.map(part => PERSON_SLOTS.indexOf(part)), femaleOnly: PERSON_FEMALE_ONLY.map(part => PERSON_SLOTS.indexOf(part)), lashRow: PERSON_CLOTHING_ROW } };
   const spirits = makeSpiritMeshes(spiritParts);
   const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair'), 1: traitRow('Hat') }, femaleOnly: [] };
+  const scalpLook = { ...hairLook, stripBald: true }; // (the hairstyles and hats themselves: facial hair is hairLook)
   const glassesLook = { palette: hairPalette, traitColors: { 0: traitRow('Glasses') }, femaleOnly: [] };
-  const looks = { hair: hairLook, glasses: glassesLook, skirt: { palette: [new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Skirt') }, femaleOnly: [], clearThighs: !!thighs, hemmed: true },
+  const looks = { hair: hairLook, scalp: scalpLook, glasses: glassesLook, skirt: { palette: [new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Skirt') }, femaleOnly: [], clearThighs: !!thighs, hemmed: true },
     jeans: { palette: [new THREE.Color(0xffffff), new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Pants'), 1: traitRow('Cuff') }, femaleOnly: [] } };
   // (each with room for STYLE_ROOM more wearers than it started with, for haircuts and changes of clothes: see wear)
   wornLayers.flatMap(layer => layer.styles.map(style => [style, looks[layer.look]])).forEach(([style, look]) => {
@@ -2131,7 +2172,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   personCulling.personFloor.value = box.min.y;
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, spirits, spiritWorn, spiritTalk, copiesWanted, copyLook, time: personCulling.personTime, wears, putOn, takeOff,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, spirits, spiritWorn, spiritTalk, copiesWanted, copyLook, groom, headOf, time: personCulling.personTime, wears, putOn, takeOff,
     headBone: headBone ?? 0, headPivot, face, chestBone, hands, unitsPerMetre, floorY: geometry.boundingBox.min.y, tall: box.max.y - box.min.y, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

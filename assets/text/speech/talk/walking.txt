@@ -11,19 +11,19 @@ Slow down a bit, would you? {speed = -1}
 > Sorry, sorry. {evil = -1, score = 1}
 
 Nice day for a walk. {world.weather = clear}
-> Isn't it? {happy}
+> Isn't it? {mood}
 > I suppose. {mood = -1}
 
 Lovely day for a walk in the rain. {world.weather = rain}
 > You and I have very different ideas of lovely. {mood = -1}
-> I don't mind it, actually. {happy}
+> I don't mind it, actually. {mood}
 
 Mind your step, it's slippery. {world.weather = snow}
 > I'm fine, I'm fine. {patience = -1}
 > Thanks. {evil = -1}
 
 I'm glad I bumped into you. {other.friend}
-> Me too, [other.name]. {happy, score = 1}
+> Me too, [other.name]. {mood, score = 1}
 > Are you, though? {other.enemy, score = -1}
 
 Do you walk this way often? {other.stranger}

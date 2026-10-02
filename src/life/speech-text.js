@@ -28,9 +28,10 @@ const MIN_LEAN = 0.05;       // the least a leaning can bring an entry's weight 
 const FRIEND_ABOVE = 20, ENEMY_BELOW = -20; // how someone feels about another (peopleRelations) to count as {other.friend} / {other.enemy}
 const SCORE_FULL = 3;        // a conversation score (see {score}) that counts fully for {talk.score = n}
 const LOVE_APPEAL = 0.3, HATE_APPEAL = -0.3; // appeal of people/'s loves and hates that don't give their own
-const AGREE_FLOOR = 0.2;     // {likes = n}: the least it can make a reply's weight, so the unlikely still happens now and then
+const AGREE_FLOOR = 0.2;     // {likes = n} and other pick leans: the least they can make a reply's weight, so the unlikely still happens now and then
 const LOVED_CHANCE = 0.5;    // the chance of picking from the speaker's loves (hates, in a hated call) when any are there
 const TRIES = 6;             // lines tried before giving up, when placeholders can't be filled
+const MAX_JUMPS = 8;         // {then} jumps one conversation can take before it stops following them (so a loop ends)
 const REACTION_GAP = 0.5;    // seconds between any two reactions starting, city-wide (a crowd reacts one after another, not at once)
 const REACTION_KEEP = 8;     // seconds a reaction can wait its turn before it's dropped (it'd be stale)
 let lastReaction = -Infinity;
@@ -60,6 +61,8 @@ const STATES = { // {is = …}: how the speaker (or other.is: who they're talkin
   spirits: person => !!person?.traits?.spirits, // (a ghost of them on each shoulder)
   spirit: person => !!person?.spiritOf, // (a shoulder spirit talking: see people/peopleSpiritChat.js — gold evil -1, purple evil 1)
   twins: person => !!person?.traits?.twins, // (two of them, in step)
+  bald: person => !!person?.showsBald, // (no hair showing — or the bald trait under a hat: see headOf in people/peopleModel.js)
+  bearded: person => !!person?.showsBeard, // (facial hair)
   piper: person => !!person?.traits?.piper, // (little copies of them following behind)
   miku: person => person?.name === 'Hatsune Miku', // (the preset: see people/presets.js)
   mini: person => !!person?.miniOf, // (one of those little copies: see people/peopleMinis.js)
@@ -86,11 +89,23 @@ const ZONES = { plain: 'plain', park: 'park', water: 'water', beach: 'beach', fa
 const SEXES = { man: person => person?.isMan == null ? 0 : person.isMan ? 1 : -1, woman: person => -SEXES.man(person) };
 // age, read as a trait for leans (-1 at AGE_YOUNG or under, 1 at AGE_OLD or over): {age}, {age = -1}; comparisons are in years
 const AGE_YOUNG = 18, AGE_OLD = 80;
-const AGED = { age: person => person?.age == null ? 0 : Math.max(-1, Math.min(1, (person.age - (AGE_YOUNG + AGE_OLD)/2)/((AGE_OLD - AGE_YOUNG)/2))) };
+const ageScale = years => Math.max(-1, Math.min(1, (years - (AGE_YOUNG + AGE_OLD)/2)/((AGE_OLD - AGE_YOUNG)/2)));
+const AGED = { age: person => person?.age == null ? 0 : ageScale(person.age) };
 const PSEUDO = { ...SEXES, ...AGED };
 const isTrait = name => !!(TRAITS[name] || PSEUDO[name]);
 const NAMED = /^(me|other|seen|felt)\.(name|by)$/; // [me.name], [other.name], [seen.name], [seen.by], [felt.by]
 const PERSONAL = /^(me|other)\.(loves|hates)$|^both\.(loves|hates|clash)$/; // [me.loves], [other.hates], [both.loves]...
+const RANKED = /^(most|least)(\d*)$/; // [most: likes#1#2], [least2: evil#all]: a pick ranked by a measure (rankedPick)
+const MODES = ['all', 'any', 'mean']; // how a pick tag combines several picks (pickLevel)
+// What pick tags and [most]/[least] measure in a word: likes, appeal or a trait, or several weighted and averaged
+// ("likes-age", "2likes+0.5evil") → [{ name, w }]; null if it isn't one. Only plain likes goes without a # on a tag.
+function parseMeasure(text, hasPicks = true) {
+  const s = text.replace(/\s+/g, '').toLowerCase();
+  if (!/^[+-]?(\d*\.?\d+)?[a-z]+([+-](\d*\.?\d+)?[a-z]+)*$/.test(s)) return null;
+  const terms = [...s.matchAll(/([+-]?)(\d*\.?\d+)?([a-z]+)/g)].map(([, sign, w, name]) => ({ name, w: (sign === '-' ? -1 : 1)*(w == null ? 1 : +w) }));
+  if (!terms.every(t => t.name === 'likes' || t.name === 'appeal' || t.name === 'fancies' || isTrait(t.name))) return null;
+  return hasPicks || s === 'likes' ? terms : null;
+}
 const WEATHERS = { rain: () => S.weatherRain > 0.05, snow: () => S.weatherSnow > 0.05, cloud: () => S.weatherClouds > 0.05,
   clear: () => !(S.weatherRain > 0.05 || S.weatherSnow > 0.05 || S.weatherClouds > 0.05) };
 
@@ -110,7 +125,7 @@ const nameOf = inner => inner.split(':')[0].split('#')[0].trim().toLowerCase();
 
 // A tag list, {weight = 2, evil, patience = -1, world.hour 22-5, world.morality < -0.3, world.weather = rain}.
 function parseTags(text, where) {
-  const tags = { weight: 1, traits: {}, world: [], end: null, thought: false, appeal: 0, score: 0, effects: [], limits: [] };
+  const tags = { weight: 1, traits: {}, world: [], end: null, thought: false, appeal: 0, score: 0, effects: [], limits: [], years: null, sex: null, as: null, then: null, now: null };
   text.split(',').map(part => part.trim().replace(/:/g, '=')).filter(Boolean).forEach(part => { // (weight: 4 reads as weight = 4)
     let m;
     if ((m = part.match(/^world\.hour\s+(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/i))) tags.world.push({ kind: 'hour', from: +m[1], to: +m[2] });
@@ -138,9 +153,12 @@ function parseTags(text, where) {
       tags.world.push({ kind: 'trait', other: !!m[1], trait: m[2].toLowerCase(), op: m[3], value: +m[4] });
     else if ((m = part.match(/^other\.([a-z]+)\s*(?:=\s*(-?\d+(?:\.\d+)?))?$/i)) && isTrait(m[1].toLowerCase()))
       tags.world.push({ kind: 'otherLean', trait: m[1].toLowerCase(), value: m[2] == null ? 1 : +m[2] });
-    else if ((m = part.match(/^likes(?:\s*#\s*(\w+))?\s*(?:(=|<=|>=|<|>)\s*(-?\d+(?:\.\d+)?))?$/i)))
-      tags.world.push(!m[2] || m[2] === '=' ? { kind: 'likes', ref: m[1] ?? null, value: m[3] == null ? 1 : +m[3] }
-        : { kind: 'likesLimit', ref: m[1] ?? null, op: m[2], value: +m[3] });
+    // (pick tags: {likes}, {likes#1 < 0}, {evil#all > 0.5}, {likes-age#all} — a trait or appeal needs its #, or it's the speaker's)
+    else if ((m = part.match(/^([a-z0-9.+\-\s]+?)\s*((?:#\s*\w+\s*)*)(?:(=|<=|>=|<|>)\s*(-?\d+(?:\.\d+)?))?$/i)) && parseMeasure(m[1], !!m[2])) {
+      const measure = parseMeasure(m[1], !!m[2]), sel = parseSelector(m[2]);
+      tags.world.push(!m[3] || m[3] === '=' ? { kind: 'pick', measure, sel, value: m[4] == null ? 1 : +m[4] }
+        : { kind: 'pickLimit', measure, sel, op: m[3], value: +m[4] });
+    }
     else if ((m = part.match(/^(other|seen|felt)\.(friend|enemy|introduced|stranger)$/i))) tags.world.push({ kind: 'relation', whose: m[1].toLowerCase(), is: m[2].toLowerCase() });
     else if ((m = part.match(/^talk\.score\s*(<=|>=|<|>)\s*(-?\d+(?:\.\d+)?)$/i))) tags.world.push({ kind: 'talkScore', op: m[1], value: +m[2] });
     else if ((m = part.match(/^talk\.score\s*=\s*(-?\d+(?:\.\d+)?)$/i))) tags.world.push({ kind: 'talkLean', value: +m[1] });
@@ -150,6 +168,10 @@ function parseTags(text, where) {
     }
     else if ((m = part.match(/^limit\s*=\s*(\w+?)([ab])$/i))) tags.limits.push({ rule: m[1], polarity: m[2].toLowerCase() });
     else if ((m = part.match(/^appeal\s*=\s*(-?\d+(?:\.\d+)?)$/i))) tags.appeal = +m[1];
+    else if ((m = part.match(/^as\s*=\s*(\w+)$/i))) tags.as = m[1].toLowerCase();
+    else if ((m = part.match(/^(then|now)\s*=\s*(\w+(?:@\w+)?)$/i))) tags[m[1].toLowerCase()] = m[2].toLowerCase();
+    else if ((m = part.match(/^sex\s*=\s*(man|woman)$/i))) tags.sex = m[1].toLowerCase() === 'man' ? 1 : -1; // (a word's own sex: pronouns, man#n, fancies)
+    else if ((m = part.match(/^years\s*=\s*(\d+(?:\.\d+)?)$/i))) tags.years = +m[1]; // (a word's own age, for pick tags: termOf)
     else if ((m = part.match(/^score\s*=\s*(-?\d+(?:\.\d+)?)$/i))) tags.score = +m[1];
     else if (/^thought$/i.test(part)) tags.thought = true;
     else if ((m = part.match(/^end(?:\s*=\s*(good|bad))?$/i))) tags.end = (m[1] ?? 'good').toLowerCase();
@@ -166,7 +188,9 @@ const lowerFirst = text => text.charAt(0).toLowerCase() + text.slice(1);
 // What a [category: …] call can ask for besides a form, which is any other word it names (see fill): [animals: a] with
 // a/an in front, [loves: lower] with its first letter made small, [colours: capitalise] with every word's raised,
 // [interests: hated] for the negative pick.
-const CALL_OPTIONS = ['a', 'lower', 'capitalise', 'hated'];
+const CALL_OPTIONS = ['a', 'lower', 'capitalise', 'hated', "he", "him", "his", "himself", "he's"];
+// [folk#4: he] and the like: the word's pronoun by its {sex} instead of the word (they for none)
+const PRONOUNS = { he: ['he', 'she', 'they'], him: ['him', 'her', 'them'], his: ['his', 'her', 'their'], himself: ['himself', 'herself', 'themself'], "he's": ["he's", "she's", "they're"] };
 // An entry's {traits} (people/'s lists) as tags: each trait's effect on someone starting at its base, measured -1 to 1 as
 // for the speaker's traits (see traitLevel), softened by a square root so a small effect still leans. They say who holds
 // it: taken the other way round (a hate said as a love, or picked for someone's loves) they're read backwards, bar any
@@ -176,7 +200,7 @@ function tagsOfTraits(traits) {
   traits.forEach(([trait, value]) => {
     const t = TRAITS[trait];
     if (!t) return;
-    const effect = t.combine === 'add' ? t.base + value : t.combine === 'on' ? (value > 0 ? t.max : t.base) : t.base*value;
+    const effect = t.combine === 'add' ? t.base + value : t.combine === 'on' ? (value > 0 ? t.max : t.base) : t.combine === 'set' ? value : t.base*value;
     const level = traitLevel(trait, Math.max(t.min, Math.min(t.max, effect)));
     if (level) tags[trait] = Math.max(-1, Math.min(1, (tags[trait] ?? 0) + Math.sign(level)*Math.sqrt(Math.abs(level))));
   });
@@ -185,7 +209,7 @@ function tagsOfTraits(traits) {
 
 // One file: `forms:` names, then its lines as a tree — each `>` deeper is a reply to the line above it one level up.
 function parseFile(name, text, path = `speech/${name}.txt`) {
-  const file = { forms: null, nodes: [] }, where = path, stack = [], plainList = path.startsWith('people/');
+  const file = { forms: null, nodes: [], labels: {} }, where = path, stack = [], plainList = path.startsWith('people/');
   const lowered = plainList && LOWERED.includes(name);
   text.split(/\r?\n/).forEach(raw => {
     let line = raw.trim();
@@ -219,8 +243,9 @@ function parseFile(name, text, path = `speech/${name}.txt`) {
     const include = line.match(/^\[([^\]:#]+)\]$/);
     const node = { tags, replies: [], where, categories: depth === 0 ? categories : [] };
     if (depth && categories.length) warnOnce(`in ${where}, "${raw.trim()}": <categories> on a reply are ignored`);
+    if (tags.as) { if (file.labels[tags.as]) warnOnce(`in ${where}, {as = ${tags.as}} is given twice; the first is used`); else file.labels[tags.as] = node; }
     if (include) node.include = include[1].trim().toLowerCase();
-    else if (file.forms && !HAS_PLACEHOLDER.test(line)) node.forms = wordForms(line.split('|').map(f => f.trim()), file.forms);
+    else if (file.forms && line && !HAS_PLACEHOLDER.test(line)) node.forms = wordForms(line.split('|').map(f => f.trim()), file.forms);
     else node.text = line;
     if (depth === 0) file.nodes.push(node);
     else if (stack[depth - 1]) stack[depth - 1].replies.push(node);
@@ -284,15 +309,31 @@ async function loadAll() {
       if (files[name]) files[name].nodes.forEach(node => node.categories?.forEach(category => (members[category] ??= []).push(node)));
       if (files[name] && !index) walk(files[name].nodes, node => {
         if (node.include) next.add(node.include);
-        if (node.text) for (const m of node.text.matchAll(PLACEHOLDER)) if (!NAMED.test(nameOf(m[1])) && !PERSONAL.test(nameOf(m[1]))) next.add(nameOf(m[1]));
+        if (node.text) for (const m of node.text.matchAll(PLACEHOLDER)) if (!NAMED.test(nameOf(m[1])) && !PERSONAL.test(nameOf(m[1])) && !RANKED.test(nameOf(m[1]))) next.add(nameOf(m[1]));
       });
     });
     wanted = [...next].filter(name => !(name in files));
   }
+  checkJumps();
   ready = true;
   setEntryFiller(fillEntry);
 }
 function walk(nodes, visit) { nodes.forEach(node => { visit(node); walk(node.replies, visit); }); }
+// The line a {then} names: {then = fmk} in the same file as `where`, {then = smalltalk@fmk} in another. Null if none.
+const fileNameOf = where => where?.split('/').pop().replace(/\.txt$/i, '').toLowerCase();
+function jumpTarget(then, where) {
+  const [file, label] = then.includes('@') ? then.split('@') : [fileNameOf(where), then];
+  return files[file]?.labels?.[label] ?? null;
+}
+// (warned once, as the files load: a {then} or {now} naming nothing, or a line with replies of its own that it skips)
+function checkJumps() {
+  Object.values(files).forEach(file => file && walk(file.nodes, node => ['then', 'now'].forEach(kind => {
+    const name = node.tags[kind];
+    if (!name) return;
+    if (!jumpTarget(name, node.where)) warnOnce(`in ${node.where}, {${kind} = ${name}}: no line has {as = ${name.split('@').pop()}} there`);
+    if (node.replies.length) warnOnce(`in ${node.where}, a line with {${kind} = ${name}} has replies of its own; they're never said`);
+  })));
+}
 loadAll();
 
 /** Whether the speech files have all loaded. @returns {boolean} */
@@ -309,6 +350,10 @@ function compileNodes(nodes, depth, path, where) {
     had.weight = Math.max(had.weight, item.weight);
     if (Math.abs(item.appeal) > Math.abs(had.appeal)) had.appeal = item.appeal;
     if (!had.effects?.length && item.effects?.length) had.effects = item.effects;
+    had.years ??= item.years;
+    had.sex ??= item.sex;
+    had.then ??= item.then;
+    had.now ??= item.now;
     if (item.limits?.length) had.limits = [...(had.limits ?? []), ...item.limits];
     Object.entries(item.traits).forEach(([trait, value]) => {
       const old = had.traits[trait] ?? 0;
@@ -325,14 +370,15 @@ function compileNodes(nodes, depth, path, where) {
         ...inner, weight: inner.weight*node.tags.weight, end: node.tags.end ?? inner.end, thought: node.tags.thought || inner.thought,
         traits: addTraits(inner.traits, node.tags.traits), world: inner.world.concat(node.tags.world),
         appeal: inner.appeal + node.tags.appeal, score: inner.score || node.tags.score, effects: [...(inner.effects ?? []), ...node.tags.effects],
-        limits: [...(inner.limits ?? []), ...node.tags.limits],
+        limits: [...(inner.limits ?? []), ...node.tags.limits], then: inner.then ?? node.tags.then,
       }));
       return;
     }
     // (a love and a hate with the same words stay two entries: each leans its own way)
-    const key = (node.forms ? node.forms.first : node.text).toLowerCase().trim() + (node.where?.startsWith('people/') ? `@${node.where}` : '');
+    const key = (node.forms ? node.forms.first : node.text).toLowerCase().trim() + (node.where?.startsWith('people/') ? `@${node.where}` : '')
+      + (node.tags.now ? ` {now = ${node.tags.now}}` : '');
     add({ key, forms: node.forms, text: node.text, replies: node.replies, weight: node.tags.weight, end: node.tags.end, thought: node.tags.thought,
-      appeal: node.tags.appeal, score: node.tags.score, effects: node.tags.effects, limits: node.tags.limits,
+      appeal: node.tags.appeal, score: node.tags.score, effects: node.tags.effects, limits: node.tags.limits, years: node.tags.years, sex: node.tags.sex, then: node.tags.then, now: node.tags.now,
       side: node.side ?? 0, persist: node.persist, persists: node.persists, flips: node.flips, noflip: node.noflip, noflips: node.noflips, personTraits: node.personTraits,
       traits: { ...node.tags.traits }, world: node.tags.world.slice(), where: node.where });
   });
@@ -435,8 +481,53 @@ const worldAllows = (world, person) => world.every(w => {
   return true;
 });
 
-// the word a {likes} tag means: the #n pick, else the last word picked in the line being replied to
-const wordFor = (ref, vars) => ref == null ? vars?.$last : Object.entries(vars ?? {}).find(([key]) => key.endsWith(`#${ref}`))?.[1];
+// the word held as #n, whatever its category ([folk#1] or [most#1] alike)
+const wordFor = (ref, vars) => Object.entries(vars ?? {}).find(([key]) => key.endsWith(`#${ref}`))?.[1];
+// A pick selector, "#1#2#any" → { refs: ['1', '2'], mode: 'any' }. No # at all: refs null (the last word picked in the
+// line being replied to); only a mode (#all): refs [] (every #n pick so far). Mode defaults to all.
+function parseSelector(text) {
+  const parts = (text ?? '').split('#').map(s => s.trim().toLowerCase()).filter(Boolean);
+  return { refs: parts.length ? parts.filter(p => !MODES.includes(p)) : null, mode: parts.find(p => MODES.includes(p)) ?? 'all' };
+}
+// the words a selector means (each once; missing ones left out)
+function picksOf(sel, vars) {
+  const words = sel.refs == null ? [vars?.$last] : sel.refs.length ? sel.refs.map(ref => wordFor(ref, vars))
+    : Object.entries(vars ?? {}).filter(([key]) => !key.startsWith('$')).map(([, item]) => item);
+  return [...new Set(words.filter(Boolean))];
+}
+// How a word measures, for the person: likes (liking), appeal (its own), or a trait (its own tag, 0 if untagged — a
+// hate's read backwards, as sideSign; age: its {years} on the age scale, if given; man/woman: its {sex}, if given;
+// fancies: how drawn the person is to it, by its {sex}, theirs, and their gay trait); several terms: their weighted average
+// (1 the sex they're drawn to, -1 the other, 0 for bi, or with no sex known either side: a straight man and a woman 1)
+function fancies(word, person) {
+  const theirs = SEXES.man(person), its = word.sex ?? 0;
+  return theirs && its ? -theirs*its*(1 - 2*(person?.traits?.gay ?? 0)) : 0;
+}
+const termOf = name => name === 'likes' ? liking : name === 'appeal' ? (word => word.appeal ?? 0) : name === 'fancies' ? fancies
+  : name === 'age' ? (word => word.years != null ? ageScale(word.years) : (word.traits?.age ?? 0)*sideSign(word))
+  : name === 'man' || name === 'woman' ? (word => (word.sex ?? (word.traits?.man ?? 0)*sideSign(word))*(name === 'man' ? 1 : -1))
+  : (word => (word.traits?.[name] ?? 0)*sideSign(word));
+const measureOf = terms => (word, person) =>
+  terms.reduce((sum, t) => sum + t.w*termOf(t.name)(word, person), 0)/terms.reduce((sum, t) => sum + Math.abs(t.w), 0);
+// A pick tag's level: the picks' measures combined — all: the least of them (so every one passes a limit), any: the
+// most, mean: their average. 0 if none are held.
+function pickLevel(w, person, vars) {
+  const levels = picksOf(w.sel, vars).map(word => measureOf(w.measure)(word, person));
+  if (!levels.length) return 0;
+  return w.sel.mode === 'any' ? Math.max(...levels) : w.sel.mode === 'mean' ? levels.reduce((a, b) => a + b)/levels.length : Math.min(...levels);
+}
+// [most: likes#1#2#3], [least2#4: evil#all]: the nth of those picks ranked highest (most) or lowest (least) by the
+// measure, ties broken at random, moving on down past any in `taken`; refs default to every pick so far, and the mode
+// doesn't count. Null if too few.
+function rankedPick(name, spec, person, vars, taken = null) {
+  const [, which, nth] = name.match(RANKED);
+  const m = spec?.replace(/\s+/g, '').match(/^([^#]+)((?:#\w+)*)$/), terms = m && parseMeasure(m[1]);
+  if (!terms) { warnOnce(`"[${name}: ${spec ?? ''}]" needs a measure (likes, appeal, a trait, or several: likes-age), then any #picks`); return null; }
+  const sel = parseSelector(m[2]), measure = measureOf(terms), sign = which === 'most' ? 1 : -1;
+  const ranked = picksOf({ ...sel, refs: sel.refs ?? [] }, vars).map(word => [word, sign*measure(word, person), random()])
+    .sort((a, b) => b[1] - a[1] || a[2] - b[2]);
+  return ranked.slice((+nth || 1) - 1).find(([word]) => !taken?.has(word))?.[0] ?? null; // (past any taken: see fill)
+}
 // How much a person likes a word, -1 to 1: 1 for one of their loves, -1 for a hate, else its own tags read against their
 // traits (as if they were picking it); 0 for no word, or one without tags.
 function liking(word, person) {
@@ -448,10 +539,10 @@ function liking(word, person) {
   return Math.max(-1, Math.min(1, sum));
 }
 
-// {likes > n} and the like: hard limits on how much they like the word
-const likesAllow = (world, person, vars) => world.every(w => {
-  if (w.kind !== 'likesLimit') return true;
-  const level = liking(wordFor(w.ref, vars), person);
+// {likes > n}, {evil#all < 0} and the like: hard limits on the picks' level
+const picksAllow = (world, person, vars) => world.every(w => {
+  if (w.kind !== 'pickLimit') return true;
+  const level = pickLevel(w, person, vars);
   return w.op === '<' ? level < w.value : w.op === '>' ? level > w.value : w.op === '<=' ? level <= w.value : level >= w.value;
 });
 
@@ -473,7 +564,7 @@ function weightOf(item, person, hated, vars = null) {
     if (w.kind === 'moralityLean') weight *= Math.max(MIN_LEAN, 1 + LEAN*flip*w.value*moralityLevel());
     if (w.kind === 'otherLean') weight *= Math.max(MIN_LEAN, 1 + LEAN*flip*w.value*levelOf(speakingTo, w.trait));
     if (w.kind === 'talkLean') weight *= Math.max(MIN_LEAN, 1 + LEAN*flip*w.value*Math.max(-1, Math.min(1, (person?.group?.score ?? 0)/SCORE_FULL)));
-    if (w.kind === 'likes') weight *= Math.max(AGREE_FLOOR, 1 + LEAN*w.value*liking(wordFor(w.ref, vars), person));
+    if (w.kind === 'pick') weight *= Math.max(AGREE_FLOOR, 1 + LEAN*w.value*pickLevel(w, person, vars));
   });
   return weight;
 }
@@ -504,11 +595,12 @@ const hatesOf = person => person && [...(person.hates ?? []), ...(person.hatedWo
 // other way round — nothing on their own side (they'd never say they hate what makes them what they are).
 const limitClash = (item, person, hated) => !!person?.limits?.length && !!item.limits?.length
   && item.limits.some(l => person.limits.some(x => x.rule === l.rule && (x.polarity === l.polarity) === hated));
-function pickItem(items, person, { form = null, hated = false, vars = null, plainOnly = false, avoid = null } = {}) {
+function pickItem(items, person, { form = null, hated = false, vars = null, plainOnly = false, avoid = null, exclude = null } = {}) {
+  if (exclude?.size) items = items.filter(item => !exclude.has(item));
   if (plainOnly) items = items.filter(item => item.forms || !HAS_PLACEHOLDER.test(item.text));
   if (avoid?.length) items = items.filter(item => !matches(item, avoid));
   const liked = hated ? hatesOf(person) : lovesOf(person), disliked = hated ? lovesOf(person) : hatesOf(person);
-  const open = items.filter(item => worldAllows(item.world, person) && likesAllow(item.world, person, vars) && (!form || !item.forms || item.forms[form])
+  const open = items.filter(item => worldAllows(item.world, person) && picksAllow(item.world, person, vars) && (!form || !item.forms || item.forms[form])
     && !matches(item, disliked) && !limitClash(item, person, hated));
   const favourites = open.filter(item => matches(item, liked));
   const from = favourites.length && random() < LOVED_CHANCE ? favourites : open;
@@ -548,14 +640,19 @@ function personalItem(key, person) {
 // A line's text with its [placeholders] filled; `vars` holds #n picks for the whole conversation. Null if one can't be.
 // A call takes a form and any of CALL_OPTIONS with it: [animals: plural], [animals: a], [loves: lower], [colours:
 // capitalise], [interests: hated].
+// A new pick is never a word already picked in the line, or held as a #n; a [most]/[least] never one another's chosen
+// in the line, and a held one ([most#5]) never one held by another in the conversation ([most#4]).
+const heldRanked = vars => Object.entries(vars).filter(([key]) => RANKED.test(key.split('#')[0])).map(([, word]) => word);
 function fill(text, person, vars, depth = 0, picks = null, avoid = null) {
   let failed = false;
-  const counts = {};
+  const counts = {}, used = new Set(), ranked = new Set();
   const out = text.replace(PLACEHOLDER, (_, inner) => {
     if (failed) return '';
     const [head, ...rest] = inner.split(':');
     const [rawName, tag] = head.split('#').map(s => s.trim());
     const name = rawName.toLowerCase(), options = rest.join(':').split(',').map(o => o.trim().toLowerCase()).filter(Boolean);
+    // ([most: measure#picks, …]: the first option's the ranking, unless it's a call option — [most#4: him] on a held one)
+    const rank = RANKED.test(name) && options.length && !CALL_OPTIONS.includes(options[0]) ? options.shift() : null;
     if (NAMED.test(name)) { const said = nameIn(name, person); if (!said) failed = true; return said ?? ''; }
     const hated = options.includes('hated'), article = options.includes('a'), lower = options.includes('lower'), everyWord = options.includes('capitalise');
     const form = options.find(o => !CALL_OPTIONS.includes(o)) || null;
@@ -563,13 +660,17 @@ function fill(text, person, vars, depth = 0, picks = null, avoid = null) {
     // (picks: the card's words, reused in order by the spoken wording — see fillEntry)
     const nth = counts[name] = (counts[name] ?? -1) + 1, reused = !tag && picks?.reuse ? picks.reuse[name]?.[nth] : null;
     // (FILL_DEPTH down, only a word with no placeholders of its own will do, so nothing recurses for ever)
-    const item = held || reused || (PERSONAL.test(name) ? personalItem(name, person)
-      : pickItem(categoryItems(name), person, { form, hated, plainOnly: depth >= FILL_DEPTH - 1, avoid }));
+    const exclude = () => new Set([...used, ...Object.entries(vars).filter(([key]) => !key.startsWith('$')).map(([, word]) => word)]);
+    const item = held || reused || (RANKED.test(name) ? rank && rankedPick(name, rank, person, vars, tag ? new Set([...ranked, ...heldRanked(vars)]) : ranked) : PERSONAL.test(name) ? personalItem(name, person)
+      : pickItem(categoryItems(name), person, { form, hated, plainOnly: depth >= FILL_DEPTH - 1, avoid, exclude: exclude() }));
+    if (item) { used.add(item); if (RANKED.test(name)) ranked.add(item); }
     if (picks?.record && !tag && !PERSONAL.test(name)) (picks.record[name] ??= []).push(item);
     if (!item) { failed = true; return ''; }
     if (tag) vars[`${name}#${tag}`] = item;
-    let said = item.forms ? (form && item.forms[form]) || item.forms.first : item.text;
-    if (!item.forms && depth < FILL_DEPTH - 1) said = fill(said, person, vars, depth + 1, null, avoid);
+    const pronoun = options.find(o => PRONOUNS[o]);
+    let said = pronoun ? PRONOUNS[pronoun][item.sex === 1 ? 0 : item.sex === -1 ? 1 : 2]
+      : item.forms ? (form && item.forms[form]) || item.forms.first : item.text;
+    if (!pronoun && !item.forms && depth < FILL_DEPTH - 1) said = fill(said, person, vars, depth + 1, null, avoid);
     vars.$last = item; // (for {likes} on the replies)
     if (said == null) { failed = true; return ''; }
     if (lower) said = said.charAt(0).toLowerCase() + said.slice(1); // (a list written with capitals, like people/loves.txt)
@@ -594,13 +695,14 @@ const sworn = text => text.split(' ').map((word, i) => i && random() < SWEAR_CHA
  */
 // A trait effect the other way round: added amounts negated, multipliers inverted (×0 — none of it — to as much as it
 // goes: its max; any other kept to its range when the traits are combined); a switch can't be switched off, so none.
-// Crazy and normal are each other's reverse, on one scale: normal = NORMAL_MAX^crazy (crazy 1 ↔ normal ×20, 0.5 ↔ ×4.5).
+// Erratic and normal are each other's reverse, on one scale: normal = NORMAL_MAX^erratic (erratic 1 ↔ normal ×20, 0.5 ↔ ×4.5).
 function reversed(trait, value) {
   const normalMax = TRAITS.normal?.max ?? 20;
-  if (trait === 'crazy' && TRAITS.normal) return value > 0 ? ['normal', Math.pow(normalMax, value)] : null;
-  if (trait === 'normal' && TRAITS.crazy) return value > 1 ? ['crazy', Math.log(value)/Math.log(normalMax)] : null;
-  const { combine, base, max } = TRAITS[trait];
+  if (trait === 'erratic' && TRAITS.normal) return value > 0 ? ['normal', Math.pow(normalMax, value)] : null;
+  if (trait === 'normal' && TRAITS.erratic) return value > 1 ? ['erratic', Math.log(value)/Math.log(normalMax)] : null;
+  const { combine, base, min, max } = TRAITS[trait];
   if (combine === 'add') return [trait, -value];
+  if (combine === 'set') return [trait, min + max - value]; // (gay 1 → 0)
   if (combine === 'on') return null;
   return [trait, value ? 1/value : max/(base || 1)];
 }
@@ -613,7 +715,7 @@ function fillEntry(entry, rng, side = 1, held = []) {
     const vars = {}, record = {}, avoid = held.map(e => e.said ?? e.text);
     const filled = fill(entry.text, null, vars, 0, { record }, avoid), card = filled ?? entry.text;
     const spoken = fill(said, null, vars, 0, { reuse: record }, avoid) ?? card;
-    const picked = [...new Set([...Object.values(record).flat(), ...Object.entries(vars).filter(([key]) => key !== '$last').map(([, item]) => item)])].filter(Boolean);
+    const picked = [...new Set([...Object.values(record).flat(), ...Object.entries(vars).filter(([key]) => !key.startsWith('$')).map(([, item]) => item)])].filter(Boolean);
     const words = picked.map(item => item.forms ? item.forms.first : item.text);
     // (what the words bring: a speech word its {effect.…} traits, as written; a love or hate — "Conversely, [hates]" —
     // its own {traits}, turned round if it's from the other list, bar any that persist; its limits likewise)
@@ -639,10 +741,24 @@ function sayFrom(items, person, vars = {}, tried = new Set()) {
     const item = pickItem(items.filter(it => !tried.has(it)), person, { vars });
     if (!item) return null;
     tried.add(item);
-    const held = { ...vars, $last: null };
+    let held = { ...vars, $last: null };
     let text = item.forms ? item.forms.first : fill(item.text, person, held);
     if (text && person?.traits?.swears && !item.thought) text = sworn(text);
-    if (text) return { text: capitalise(text), replies: item.replies ? compileNodes(item.replies, 0, [], item.where) : [], vars: held, end: item.end, thought: item.thought, score: item.score ?? 0 };
+    // ({now}: the line it names said on the end of this one, same bubble, its replies taken on — none, and this isn't said)
+    let replies = item.replies && !item.then && !item.now ? compileNodes(item.replies, 0, [], item.where) : [], end = item.end, score = item.score ?? 0;
+    // (past MAX_JUMPS it's left off, and the line ends there: so a line can {now} itself, "forever and forever and…")
+    if (item.now && text != null && (held.$jumps ?? 0) < MAX_JUMPS) {
+      const target = jumpTarget(item.now, item.where);
+      const rest = target && sayFrom(compileNodes([target], 0, [], target.where), person, { ...held, $jumps: (held.$jumps ?? 0) + 1 });
+      if (!rest) continue;
+      text = text ? `${text} ${rest.text}` : rest.text;
+      ({ replies } = rest); held = rest.vars; end = rest.end ?? end; score += rest.score;
+    }
+    // ({then}: the next line's the one it names, not a reply of its own — till MAX_JUMPS, when it ends there)
+    const jump = item.then && (held.$jumps ?? 0) < MAX_JUMPS ? jumpTarget(item.then, item.where) : null;
+    if (jump) { held.$jumps = (held.$jumps ?? 0) + 1; replies = compileNodes([jump], 0, [], jump.where); }
+    else if (item.then) replies = [];
+    if (text) return { text: capitalise(text), replies, vars: held, end, thought: item.thought, score };
   }
   return null;
 }

@@ -24,16 +24,16 @@ Eleven quid for a third? {here.building = craftpub, patience = -1}
 Why does this beer taste of grapefruit? {here.building = craftpub, weight = 0.6}
 Nobody told me it was nine percent. {here.building = craftpub, is = drunk}
 I just want a lager. {here.building = craftpub, weight = 0.5}
-Those little lights are nice. {here.building = craftpub, happy, weight = 0.5}
+Those little lights are nice. {here.building = craftpub, mood, weight = 0.5}
 Is that sign meant to say that? {here.building = craftpub, weight = 0.3}
 An ensuite. Fancy. {here.building = ensuite, weight = 0.5}
 Nobody needs a glass shower. {here.building = ensuite, patience = -1, weight = 0.4}
-I could live here. The bedroom's got its own loo. {here.building = ensuite, happy, weight = 0.4}
+I could live here. The bedroom's got its own loo. {here.building = ensuite, mood, weight = 0.4}
 Should've made the bed. {here.building = ensuite, weight = 0.4}
 Can't sleep... not even in that bed. {world.hour 23-4, here.building = ensuite, weight = 0.4}
 Just a trim. Just a trim. {here.building = salon}
 Something different this time. {here.building = salon, weight = 0.7}
-I love that smell. {here.building = salon, happy, weight = 0.5}
+I love that smell. {here.building = salon, mood, weight = 0.5}
 Those fish look bored. {here.building = salon, weight = 0.4}
 Those dryers look like space helmets. {here.building = salon, weight = 0.4}
 Not those posters again. {here.building = salon, patience = -1, weight = 0.4}
@@ -64,7 +64,7 @@ Those blue domes. I need a holiday. {here.building = greek, weight = 0.5}
 Just one more bit of pitta. {here.building = greek, weight = 0.5}
 Who's hogging the ping pong table? {here.building = startup, patience = -1}
 Is kombucha meant to fizz like that? {here.building = startup, weight = 0.6}
-Nobody told me there'd be beanbags. {here.building = startup, happy, weight = 0.5}
+Nobody told me there'd be beanbags. {here.building = startup, mood, weight = 0.5}
 We're a family here, apparently. {here.building = startup, mood = -1}
 That crystal's not doing anything for me. {here.building = startup, weight = 0.5}
 Somebody's cancelled standup again. {here.building = corporate, weight = 0.5}
@@ -72,7 +72,7 @@ Is that clock broken? It's always ten to two. {here.building = office, weight = 
 Who needs a neon sign telling them how to feel? {here.building = startup, weight = 0.4}
 Is anyone going to smash a plate? {here.building = greek, weight = 0.4}
 That one's been round three times. Nobody wants it. {here.building = sushi}
-Gold plate. Treat yourself. {here.building = sushi, happy, weight = 0.6}
+Gold plate. Treat yourself. {here.building = sushi, mood, weight = 0.6}
 I've lost count of my plates. {here.building = sushi, weight = 0.6}
 Grab it before it's gone! {here.building = sushi, weight = 0.5}
 Tuna's coming round. Tuna's coming round. {here.building = sushi, weight = 0.5}
@@ -93,7 +93,7 @@ Why does it always rain on me? {world.weather = rain, mood = -1}
 Who do you think God will smite today? {evil}
 I should come to the park more often. {here.park}
 Feed the ducks, or go home? {here.park}
-So many people... {here.plaza, shock}
+So many people... {here.plaza, mood = -0.5}
 Where's the way out of this place... {here.mall}
 I've walked past this shop three times now. {here.mall}
 Shops, shops, shops. {here.mall, mood = -1}
@@ -110,7 +110,7 @@ What a [good] day. {mood}
 I'd love to [violence] someone right now. {is = bloodlusting}
 Everything's spinning. {is = drunk}
 Which way is home again? {is = drunk}
-I love everyone. {is = drunk, happy}
+I love everyone. {is = drunk, mood}
 Just one more pint. {is = drunk, weight = 0.5}
 Is the ground moving or is it me? {is = drunk}
 Blood. I need blood. {is = bloodlusting}

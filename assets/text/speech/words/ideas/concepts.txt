@@ -4,5 +4,5 @@ death | deaths | death {evil = 0.8, mood = -0.5}
 crime | crimes | crime {evil = 0.6}
 tragedy | tragedies | tragedy {mood = -1}
 charity | charities | charity {evil = -1}
-love | loves | love {happy}
+love | loves | love {mood}
 zoning law

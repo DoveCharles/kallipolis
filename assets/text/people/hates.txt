@@ -1,10 +1,31 @@
 Wet stuff <nature>
 Being possessed {hatespossessed, noflip}
 Contrarily, [loves] {choiceweight = 50}
-Unfinished business {ghost}
+Unfinished business {ghost, agemult = 5}
 Violence {pacifist, evil = -0.5}
-The Sorceress {bodiless, headsize = 2.2, pacifist}
+transmogrification {bodiless, headsize = 2.2, pacifist}
 bacteria {appeal = -0.1}
+folding the napkins {patience= 0.5}
+asbestos
+feeling a real emotion {normal = 1.5}
+being turned into a wooden doorknob
+advertising {shopping = 0.4}
+brambles
+getting caught on a door handle
+eye boogers
+nitroglycerin
+not being flame retardant
+gender dysphoria
+jumpscares
+the smell of your hair after cooking an impossible burger
+academia {nerd = 0.5}
+accents
+potato blight
+haemorrhoids
+problematic medias
+protein powder
+naturalisation {conservative = 0.4}
+Going bald {bald = 1, limit = 6a, persist} <health>
 forgetting an idea (it makes you suicidal) | forgetting an idea {appeal = -0.3}
 getting trapped in a microwave {appeal = -0.5} <scary>
 The confines of their apartment | the confines of my apartment <places>
@@ -69,8 +90,8 @@ Smells <health>
 Peoples knees <health>
 Gamers <folk>
 Most food {stimulants = 4} <tastes>
-Mum | Mum <folk>
-Dad | Dad <folk>
+Mum | Mum {speech.sex = woman} <folk>
+Dad | Dad {speech.sex = man} <folk>
 Cousins, as a concept {conservative = 0.05} <folk>
 Eyes {blinks = 5} <health>
 "Juicers" <folk>
@@ -125,9 +146,9 @@ Cognitio-hazards { evil = -0.05, agemult = 0.8} <surreal>
 The haunting visage of a lost-love, formed unwittingly as a sordid projection of the self {mood = -0.6, agemult = 1.1} <surreal>
 Variations in toe size <health>
 JavaScript | JavaScript <media>
-Larry David | Larry David <folk>
+Larry David | Larry David {speech.sex = man, speech.years = 60} <folk>
 Their nemesis | my nemesis { aggression = 2} <folk>
-Practicing restraint {patience = 0.4, aggression = 2, outlaw = 2, alcoholic = 2, stoner =2, stimulants =2, painkillers = 2, crazy = 0.05} <habits>
+Practicing restraint {patience = 0.4, aggression = 2, outlaw = 2, alcoholic = 2, stoner =2, stimulants =2, painkillers = 2, erratic = 0.05} <habits>
 Spending money <beliefs>
 High Treason { agemult = 1.2, outlaw = 0.6, conservative = 0.05} <vice>
 Looking in the mirror { vampire } <habits>
@@ -186,7 +207,7 @@ Being obliterated by unsucessful journey through Da'at {mood = -1, blinks = 0.2,
 The Curse | The Curse {mood = -1, blinks = 0.2, speed = 0.7, agemult = 1.3, smells} <surreal>
 Generational trauma {mood = -0.5} <beliefs>
 Déjà vu <surreal>
-Gangstalking { aggression = 10, stimulants = 3, crazy = 0.05} <surreal>
+Gangstalking { aggression = 10, stimulants = 3, erratic = 0.05} <surreal>
 Outside forces <surreal>
 Birdsong in the morning { evil = 0.05, limit = 2b} <nature>
 Sexual dimorphism {conservative = -0.05} <beliefs>
@@ -196,7 +217,7 @@ Using a douche <health>
 Psychosomatic symptoms <health>
 Leaving work {plazas = 5} <beliefs>
 Yearning <beliefs>
-Feeling an effect {crazy = 0.05, persist = crazy} <surreal>
+Feeling an effect {erratic = 0.05, persist = erratic} <surreal>
 Hemorrhaging everywhere <health>
 Anything viscous <surreal>
 That hand sanitiser that's really really sticky <stuff>
@@ -263,10 +284,9 @@ Garlic bread <tastes>
 Garlic bread { vampire } <tastes>
 Running water <nature>
 Running water { vampire } <nature>
-Going bald <health>
-Their bastard son... bastard little boy... | my bastard son... bastard little boy... {agemult = 1.2, evil = 0.1} <folk>
+Their bastard son... bastard little boy... | my bastard son... bastard little boy... {agemult = 1.2, evil = 0.1, speech.sex = man} <folk>
 The Killer | The Killer <folk>
-When the entity freezes time to taunt you and then after everyone is like, "Are you okay?" Uhhhhh no I'm not ok, i just spoke to the freaking entity {crazy = 0.05, persist = crazy} <surreal>
+When the entity freezes time to taunt you and then after everyone is like, "Are you okay?" Uhhhhh no I'm not ok, i just spoke to the freaking entity {erratic = 0.05, persist = erratic} <surreal>
 Getting eaten by the worms and weird fishes <surreal>
 The dead bodies fucking everywhere {roadsafety = 2, outlaw = 0.5} <vice>
 Forgetting their dog's birthday | forgetting my dog's birthday <habits>
@@ -317,7 +337,7 @@ Everything we do in the pursuit for happiness <beliefs>
 Putting the work in {patience = 0.2} <habits>
 Looking like if their parents had a baby| looking like if my parents had a baby  <surreal>
 Unfulfilled desire <beliefs>
-The bugs all over them... can't you see them? | thinking bugs are all over you {stimulants = 5, mood = -1, terrified, crazy = 0.05, persist = stimulants, persist = crazy}
+The bugs all over them... can't you see them? | thinking bugs are all over you {stimulants = 5, mood = -1, terrified, erratic = 0.05, persist = stimulants, persist = erratic}
 Desire <beliefs>
 Typos {keysmash} <beliefs>
 Shingles <health>

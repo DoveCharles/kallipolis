@@ -108,6 +108,7 @@ speech/words/topics/hobbies.txt
 speech/words/topics/lewd.txt
 speech/words/topics/media.txt
 speech/words/topics/nature.txt
+speech/words/topics/people.txt
 speech/words/topics/stuff.txt
 speech/words/topics/surreal.txt
 speech/words/topics/tastes.txt

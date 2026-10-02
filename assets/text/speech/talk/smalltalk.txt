@@ -10,7 +10,7 @@ I slept well last night. {weight = 2}
 
 I was thinking about getting [pets#1: a], but I heard they [badhabits].
 > Ugh, I can't stand [pets#1: general]. {evil}
-> Aww, you should! {evil = -1, happy}
+> Aww, you should! {evil = -1, mood}
 >> I don't know, they [badhabits: base] so much...
 
 Have you tried the new place on the corner?
@@ -52,43 +52,43 @@ Going anywhere nice on your holidays? {here.building = salon}
 
 What are you having? {here.building = italian}
 > The veal parm. Always the veal parm.
-> Spaghetti and meatballs. {happy}
+> Spaghetti and meatballs. {mood}
 > Whatever's cheapest. {mood = -1}
 
 What are you having? {here.building = greek}
 > The lamb kleftiko. Always the kleftiko.
-> Souvlaki. Can't go wrong. {happy}
+> Souvlaki. Can't go wrong. {mood}
 > The moussaka, obviously.
-> Meze for the table. {happy}
+> Meze for the table. {mood}
 > Whatever's cheapest. {mood = -1}
 
 What are you having? {here.building = sushi}
 > Whatever comes round next.
-> Salmon. Only salmon. {happy}
+> Salmon. Only salmon. {mood}
 > Nothing off the black plates. {mood = -1}
-> The chef's choice. {happy}
+> The chef's choice. {mood}
 
 How many plates is that? {here.building = sushi}
-> Don't count. {happy}
+> Don't count. {mood}
 > Enough for the week. {mood = -1}
 > Only six!
 
 Should we get a bottle? {here.building = italian}
-> The Chianti. {happy}
+> The Chianti. {mood}
 > Just water for me. {alcoholic = -1}
 
 Should we get a bottle? {here.building = greek}
-> A kilo of the house red. {happy}
+> A kilo of the house red. {mood}
 > Ouzo. Lots of ouzo. {alcoholic}
 > Just water for me. {alcoholic = -1}
 
 What are you having done? {here.building = salon}
 > Just a trim.
-> Everything. {happy}
+> Everything. {mood}
 > No idea yet. {weight = 0.5}
 
 Do you think this would suit me? {here.building = clothes}
-> Try it on! {happy}
+> Try it on! {mood}
 > Not really your colour. {patience = -1}
 > Everything suits you, [other.name]. {other.friend}
 
@@ -98,7 +98,7 @@ Have they got this in a medium? {here.building = clothes, weight = 0.6}
 
 Is the robot looking at me? {here.building = pub, weight = 0.5}
 > It's looking at everyone.
-> Wave at it. {happy}
+> Wave at it. {mood}
 
 Same again? {here.building = pub}
 > Go on then.
@@ -107,7 +107,7 @@ Same again? {here.building = pub}
 >> One more won't hurt. {is = drunk}
 
 Love this song. {here.building = pub, mood}
-> Me too! {happy}
+> Me too! {mood}
 > It's alright. {patience = -1}
 > Bit before my time. {weight = 0.5}
 
@@ -118,11 +118,11 @@ Have you tried the hazy one? {here.building = craftpub}
 
 Who sits at a long table with strangers? {here.building = craftpub, weight = 0.5}
 > Everyone, now.
-> I quite like it. {happy}
+> I quite like it. {mood}
 
 Can you hear the music in here? {here.building = pub, weight = 0.5}
 > Barely. {patience = -1}
-It's cosy in here, isn't it? {here.indoors, happy}
+It's cosy in here, isn't it? {here.indoors, mood}
 
 Lovely day to be out. {here.outdoors, world.weather = clear, mood}
 
@@ -136,7 +136,7 @@ You're in a rush today. {other.speed > 0.3, nosy}
 Take your time, why don't you. {other.speed < -0.3, patience < 0}
 
 You seem cheerful. {other.is = happy}
-> Life's good! {happy}
+> Life's good! {mood}
 > Do you want to know why?
 >> Not particularly. {nosy = -1, evil}
 >> Yeah, what's up?
@@ -152,19 +152,19 @@ Why the long face? {other.is = sad}
 
 Hey, are you crying? What's wrong? {other.is = crying, evil = -1}
 > I'm fine. I'm fine. {mood < 0}
-> Happy tears! {happy}
-> Everything. Everything's wrong. {sad}
+> Happy tears! {mood}
+> Everything. Everything's wrong. {mood = -1}
 >> Do you want a hug? {evil = -1}
->>> ...Yeah. {sad}
+>>> ...Yeah. {mood = -1}
 
 You've gone all red! {other.is = blushing}
-> Have I? I haven't. {shock}
-> It's warm out, isn't it? {shock}
-> Stop it! {happy}
+> Have I? I haven't. {mood = -0.5}
+> It's warm out, isn't it? {mood = -0.5}
+> Stop it! {mood}
 
 Whoa, calm down. You're actually steaming. {other.is = fuming}
 > Don't tell me to calm down! {aggression}
-> I AM calm. {angry}
+> I AM calm. {aggression}
 >> Right.
 
 Late night, was it? {other.is = sleepy}
@@ -173,7 +173,7 @@ Late night, was it? {other.is = sleepy}
 >> Don't. {patience = -1}
 
 You're sweating buckets, [other.name]. {other.is = sweating}
-> Am I? {shock}
+> Am I? {mood = -0.5}
 > It's nothing. It's fine. {is = sweating}
 
 Breathe! Just breathe! {other.is = panicking, evil = -1}
@@ -185,25 +185,25 @@ You're blue! Get inside! {other.is = freezing, evil = -1}
 > I'm fine. {is = freezing}
 
 What's got you so starry-eyed? {other.is = starstruck}
-> I just saw someone famous! {happy}
-> Everything! {happy}
+> I just saw someone famous! {mood}
+> Everything! {mood}
 
 Where's the party? {other.is = partying}
-> Everywhere I go! {happy}
+> Everywhere I go! {mood}
 > You're not invited. {evil}
 
 What's that you're humming? {other.is = singing}
-> Just something stuck in my head. {happy}
-> Was I? Sorry. {shock}
+> Just something stuck in my head. {mood}
+> Was I? Sorry. {mood = -0.5}
 >> Don't stop! {evil = -1}
 
 Um. Your head's on upside down. {other.is = upsidedown}
 > Is it? Feels fine. {is = upsidedown}
 > No, YOURS is. {is = upsidedown}
->> ...Is it? {shock}
+>> ...Is it? {mood = -0.5}
 
 You're drooling, [other.name]. {other.is = drooling}
-> Am I? {shock}
+> Am I? {mood = -0.5}
 > I was thinking about [tastes]. {is = drooling}
 >> Fair enough.
 
@@ -216,17 +216,17 @@ Is that... you? On your shoulder? {other.is = spirits}
 > Which one? {is = spirits}
 > The purple one's a bad influence. {is = spirits, evil < 0}
 > Don't listen to the gold one. {is = spirits, evil > 0}
->> I'm going to pretend I didn't see that. {shock}
+>> I'm going to pretend I didn't see that. {mood = -0.5}
 
 There's two little yous. On your shoulders. {other.is = spirits}
-> They follow me everywhere. {is = spirits, sad}
+> They follow me everywhere. {is = spirits, mood = -1}
 > They're good company. {is = spirits}
 >> Do they talk?
 >>> Constantly.
 
 You've got this, [other.name]. {is = spirit, evil < 0}
 > Thanks, little me. {other.is = spirit}
-> Do I though? {other.is = spirit, sad}
+> Do I though? {other.is = spirit, mood = -1}
 >> I believe in you.
 
 Go on. Do something bad. {is = spirit, evil > 0}
@@ -280,25 +280,30 @@ I'm the favourite. {is = mini}
 > You are not. {other.is = mini}
 >> Everyone knows it.
 
-Where's your big one? {other.is = mini}
-> Around. {is = mini}
-> Don't call them that. {is = mini, aggression}
->> Okay.
-
 Do you two ever do anything apart? {other.is = twins}
 > No. {is = twins}
 >> Right.
+
+Your head's very shiny today. {other.is = bald}
+> I polish it. {is = bald}
+> Thanks? {is = bald, patience}
+>> It's blinding.
+
+Nice beard. {other.is = bearded}
+> Took me years. {is = bearded}
+> It grew in overnight. {is = bearded, beard = 1}
+>> Respect.
 
 Are you... dead? {other.is = ghost}
 > Not as far as I know. {is = ghost}
 > Whooo. {is = ghost, goofy}
 > Unfinished business. {is = ghost, evil > 0}
->> I can see through you. {shock}
+>> I can see through you. {mood = -0.5}
 
 Where's the rest of you? {other.is = bodiless}
 > Down here somewhere. {is = bodiless}
-> Travelling light. {is = bodiless, happy}
->> How do you even eat? {shock}
+> Travelling light. {is = bodiless, mood}
+>> How do you even eat? {mood = -0.5}
 
 What's up with your face? {other.is = goofy}
 > Whuh? {is = goofy}
@@ -306,10 +311,8 @@ What's up with your face? {other.is = goofy}
 >> If you say so.
 
 Is that blood on you?! {other.is = bloody}
-> It's not mine. {evil}
+> Don't worry, it's not mine. {evil}
 > Long story.
-> What blood? {evil > 0.5}
->> ...Right. {end = bad}
 
 Are you alright? You look terrible. {other.is = hurt, evil = -1}
 > I've been better.
@@ -317,13 +320,14 @@ Are you alright? You look terrible. {other.is = hurt, evil = -1}
 
 You're drunk, aren't you? {other.is = drunk}
 > I'm not drunk, YOU'RE drunk. {is = drunk}
-> Just a little. {is = drunk, happy}
+>> Huh, I guess you're right! Cheers! {is = drunk, score = 1}
+> Just a little. {is = drunk, mood}
 
 Are you feeling alright? You look green. {other.is = sick, evil = -1}
 > I've felt better. {is = sick}
 > It's just something I ate. {is = sick}
 >> I'd go home if I were you. {evil = -1}
-> Never better! {is = sick, happy}
+> Never better! {is = sick, mood}
 
 You look like death warmed up. {other.is = zombie, nosy}
 > Mind your own business. {aggression}
@@ -332,10 +336,10 @@ You look like death warmed up. {other.is = zombie, nosy}
 
 What a [good] day! {mood}
 > Is it? It's [bad: comparative] than yesterday. {mood = -1}
-> Yes, [good: superlative] one this week! {happy}
+> Yes, [good: superlative] one this week! {mood}
 
 What do you do for fun?
-> I [actions]. {happy}
+> I [actions]. {mood}
 >> Oh, I love [actions: ing]!
 > Mostly [badhabits: ing]. {evil}
 
@@ -345,7 +349,7 @@ Do you like [hobbies#1]?
 >> Fair enough.
 
 I could really go for some [tastes] right now.
-> Same. {happy}
+> Same. {mood}
 
 Good morning! {world.hour 6-11}
 > It's alright.
@@ -353,44 +357,210 @@ Good morning! {world.hour 6-11}
 > Maybe for you but my whole family just died so... {mood = -1, is != happy}
 >> Aw, shucks!
 >> ...and it gets even better! {evil}
+
 I really love [topics].
 > Me too! {likes}
 > Same, honestly. {likes, chatty}
 > That's awful. {likes = -1}
 >> Each to their own. {patience}
-> You would. {likes = -1, aggression}
+> Yeah, of course YOU would like that sort of thing... {likes = -1, aggression}
+
 Honestly? I can't stand [topics: hated].
 > Ugh, same. {likes < 0}
 > What's wrong with it? {likes > 0}
 >> Everything. {aggression}
+
 What's your favourite thing in the world?
 > [me.loves#1]. {chatty}
 >> Really? [me.loves#1]? {likes #1 < 0}
 >> Oh, me too! {likes #1 > 0}
 >> Actually, I love [me.loves] more. {likes #1 = -0.5}
 > I don't know... I suppose [me.loves].
+
 What do you hate most?
 > [me.hates], easily.
 >> Same. {likes < 0}
 >> Actually, I hate [me.hates] more.
 >> What? I love it! {likes > 0.5}
+
 You love [other.loves], don't you? {nosy}
-> How did you know? {happy}
+> How did you know? {mood}
 > Doesn't everyone? {chatty}
+
 We both love [both.loves#1], don't we? {chatty}
-> [both.loves#1]? Always. {happy}
+> [both.loves#1]? Always. {mood}
 > Who doesn't?
-At least we agree [both.hates] is awful. {weight = 0.5}
+
+At least we agree [both.hates] is awful.
 > Too right. {aggression}
-How can you hate [both.clash#1]? {weight = 0.5}
+
+How can you hate [both.clash#1]?
 > [both.clash#1] is disgusting. {aggression}
 >> Take that back! {aggression, end = bad}
 > Each to their own. {patience}
-Hi, I'm [me.name]. {other.stranger, chatty}
+
+Hi, I'm [me.name]. {other.stranger, chatty, weight = 5}
 > Nice to meet you, [other.name]! {score = 1}
 > Did I ask? {aggression, score = -2, end = bad}
+
 Good to see you again, [other.name]! {other.friend, weight = 2}
 > You too! {score = 1}
+
 Oh. It's you. {other.enemy}
 > Charming. {score = -1}
 >> Just go away. {aggression, end = bad}
+
+So, fuck marry kill?
+> I'm too old for this bullshit. {age, aggression, mood = -1}
+>> Awww, come on!
+>>> Not gonna happen, kid. {other.age = -2, age = 2, age > 40}
+>>> Ugh, whatever. Go on then. {evil = -1, then = fmk_names}
+>>> Yeah, I'll choose!
+>>>> But I had some good ones loaded up!
+>>>>> Too bad! {now = fmk_names}
+>>>>> Okay, okay, hit me. {then = fmk_names}
+>>>> Sure! Yay {then = fmk_names}
+> Go on then.
+>> [people#1], [people#2], [people#3]. {as = fmk_names}
+>>> Oh my God. I can't do this. They're all so [swears: past] up. {likes#all < 0}
+>>>> What, you're telling me you wouldn't fuck [most#4: fancies+likes#1#2#3]? {likes#any > 0}
+>>>>> Uh, yuck! Way too old for me. {age < 50, age#4 > 0.03}
+>>>>> Look, [most#4: he's] cute, I just couldn't do it.
+>>>>> Not my type. {fancies#4 < 0}
+>>> Kill them all. {likes#all < 0, evil}
+>>>> Yeah obviously, but if you HAD to marry one? {likes#all < 0, evil}
+>>>>> Ugh, [most: likes#1#2#3]. Whatever.
+>>>>>> Grossss dude, ahaha.
+>>>> You're... fucked up. {likes#any > 0.1, score =-1}
+>>>> Really, even [most#4: likes#1#2#3]? {likes#any > 0.1, aggression = -3}
+>>>>> Yeah, especially. [most#4]
+>>>>>> Aw... :( {aggression = -3, score = -1}
+>>>>>> Huh! Well, I guess I did ask.
+>>>>>> Take it back now! {aggression, score = -1}
+>>>>>>> Not gonna happen. {aggression, score = -1}
+>>>>>>> Alright, alright! Unkill [most#4], whatever.
+>>> I like them all too much, I can't choose! {likes#all > 0.5}
+>>>> Well, who do you like the least?
+>>>>> Uhh, well, it's really close, but, but...
+>>>>>> Come on!
+>>>>>>> [least#4: likes#1#2#3]! Okay!?
+>>>>>> Well, [least#4: likes#1#2#3] is on the chopping block, I'm afraid!
+>>>>>>> Noooooo
+>>>>>>>> ...and you're the executioner!
+>>>>>>>>> I'm sorry, [least#4]. I'm sorry.
+>>> Okay, fuck? [most#4: fancies+likes+age#1#2#3].
+>>>> A little older, but so distinguished. I get it. Who are you marrying? {likes#4 > 0, likes#4 = 2, age#4 > 0.68, then = fmk_marry, score =1}
+>>>> Yeah, so sexy, I know. Who are you marrying? {likes#4 > 0, likes#4 = 2, then = fmk_marry, score =1}
+>>>> Ewwwwwww! Who you gonna marry? {likes#4 < 0, likes#4 = -2, then = fmk_marry}
+>>>> Alright then, marry? {then = fmk_marry}
+>>>> [most#4]!? [most#4: he's] so old! {other.age < 40, age#4 > 0.03}
+>>>>> That's just how I like 'em!
+>>>>>> Hahaha, you're such a freak. Who are you gonna marry? {age = -1, age < 50, then = fmk_marry}
+>>>>>> Aw, sweet! So who are you marrying? {age, likes#4 > 0, then = fmk_marry, score =1}
+>>>>>> [most#4]? Wow, okay... Tell me you're marrying someone better at least, right? {likes#4 < 0, then = fmk_marry}
+>>>>>> Let me stop right there, [most#4]? After everything they've done? Sorry, but that's so weird of you. Forget I asked. {likes#4 < 0.5, likes#4 = -4, score = -2}
+>>>> Wait, are you even into [most#4: him]? {as = fmk_into}
+>>>>> Not really, no. [most#4: he's] just the best of a bad bunch. {fancies#4 < 0}
+>>>>>> Fair enough. Marry? {then = fmk_marry}
+>>>>> Oh, absolutely. {fancies#4 > 0}
+>>>>>> Noted. Marry? {then = fmk_marry}
+>>>>> I'm into everybody, honestly. {gay > 0.25, gay < 0.75}
+>>>>>> Hahaha, nice. Marry? {then = fmk_marry}
+>>> Okay, fuck? [most#4: fancies+likes-age#1#2#3].
+>>>> {now = fmk_into}
+>>>> Ewwwwwww! Who you gonna marry? {likes#4 < 0, likes#4 = -2, then = fmk_marry}
+>>>> Yeah, so sexy, I know. Who are you marrying? {likes#4 > 0, likes#4 = 2, then = fmk_marry, score =1}
+>>>> Alright then, marry?
+>>>>> Marry [most#5: likes#1#2#3]. {as = fmk_marry}
+>>>>>> Let me stop right there, [most#5]? After everything they've done? Sorry, but that's so weird of you. Forget I asked. {likes#5 < 0.5, likes#5 = -4, score = -2}
+>>>>>> [most#5], really? You'd be able to stay with [most#5: him] forever?! {likes#5 < 0, likes#5 = -1}
+>>>>>>> I never said I'd stay loyal! {evil, likes#5 = -2}
+>>>>>>>> You'd be calling up [most#4] every time you take a "work trip," huh?
+>>>>>>>>> Ohhhh, you know it. {likes#4 = 2, then = fmk_killnext}
+>>>>>>>>> Or, you know, whoever. {evil, likes#5 = -2, then = fmk_killnext}
+>>>>>>> Of course! [most#5: he's] so [good]! {likes#5 = 2, then = fmk_killnext}
+>>>>>> [most#5], yeah, I could see you living a happy life with [most#5: him]. {likes#5}
+>>>>>>> I don't know about that, I just had to choose someone. {likes#5 = -2, then = fmk_killnext}
+>>>>>>> Yeah, we would. Us, and the kids, and the grandkids, and...
+>>>>>>>> ...
+>>>>>>>>> ...
+>>>>>>>>>> ...hello? [other.name]? Are you still with us?
+>>>>>>>>>>> I'm with [most#5] now. Wait, huh? What? Oh, yeah, the game. {then = fmk_killnext}
+>>>>>> Alright, so that means... {as = fmk_killnext}
+>>>>>>> Kill [least#6: likes#1#2#3], easy decision. {likes#6 < 0.2}
+>>>>>>>> Really? I always thought [least#6] was kind of cool... {likes#6 > 0, likes#6 = 2}
+>>>>>>>>> Oh, I hate [least#6: him]. I'd love to kill [least#6: him]. {evil = 2}
+>>>>>>>>>> Oh, I know this is just a game, but you actually sound kind of serious.
+>>>>>>>>>>> I'm just joking, don't worry. [least#6: he's] fine, I guess.
+>>>>>>>>>>> I am. I'd bask in [least#6: his] blood, turn [least#6: him] into furniture, that sort of thing.
+>>>>>>>>>>>> I get the appeal, trust me, but [least#6]? Leave [least#6: him] out of it. {score = -1, then = fmk_closer}
+>>>>>>>>>>>> ...right, right. I have to go. {end=bad, score = -3, aggression = -2}
+>>>>>>>>>>>> What the fuck dude? What... {score = -3, then = fmk_closer}
+>>>>>>>>>>>> [least#6], I will defend you! I will die for your honour! {likes#6 > 0.3, outlaw = -1, aggression, score = -3, end=bad}
+>>>>>>>>> Eh, [least#6: he's] alright.
+>>>>>>>>>> Yeah... {score = -1, then = fmk_closer}
+>>>>>>>>> I can't stand [least#6: him].
+>>>>>>>>>> Oh, alright. Well... {score = -2, then = fmk_closer}
+>>>>>>> You gotta kill [least#6: likes#1#2#3].
+>>>>>>>> Yeah, has to be done. {then = fmk_closer}
+>>>>>>>> Aw, poor [least#6]! Well, them's the breaks! {likes#6 > 0, likes#6 = 2, then = fmk_closer}
+>>>>>>>> Yeah, good call. {likes#6 < 0.2, likes#6 = -1, then = fmk_closer}
+>>>>>>>> Oh, I would love to kill [least#6]. I'd kill [least#6] so bad. {likes#6 < 0.2, likes#6 = -1, evil = 2}
+>>>>>>>>> Uh, maybe going a bit far. {likes#6, evil = -1}
+>>>>>>>>>> Yeah, maybe a little. {then = fmk_closer, evil = -2}
+>>>>>>>>>> I'd string [least#6: him] up and torture [least#6: him] for days. {evil = 2}
+>>>>>>>>>>> Woah, woah... Calm down...
+>>>>>>>>>>>> I would... Uh... Sorry. That got out of hand. {then = fmk_closer}
+>>>>>>>>>>>> I'd carve [least#6: him] up with [knives: a]. Then I'd use [utensils: a] to piece [least#6: him] back together again. I'd stab them with random bullshit for days.
+>>>>>>>>>>>>> What are you even saying right now?
+>>>>>>>>>>>>>> I'm a vampire. Bleh! {vampire > 0}
+>>>>>>>>>>>>>> I'm crazy. I'm an evil murderer. I'm insane. I'm nasty. I'm on some freak shit. I'll kill anybody. But most of all? I'd kill [least#6]. {evil}
+>>>>>>>>>>>>>>> [insults], you crazy motherfucker. {end=bad, score = -3}
+
+>>>>>>> Kill [least#6: likes#1#2#3], I'm afraid. {likes#6 > 0.2}
+>>>>>>>> Aw, poor [least#6]! Well, them's the breaks! {likes#6 > 0, likes#6 = 2, then = fmk_closer}
+>>>>>>>> You're afraid? What are you afraid of? {nerd = -3, nerd <0}
+>>>>>>>>> The undue death of [least#6], in a tragic miscarriage of justice. {nerd, now = fmk_closer}
+>>>>>>>>> Huh, what?
+>>>>>>>>>> Oh, sorry, haha yeah. Kill [least#6]. Sad, yeah. {score = -1, then = fmk_closer}
+>>>>>>>>> Uh, [scary: plural], mostly. {nerd < 0, nerd = -3}
+>>>>>>>>>> Yeah, that shit is pretty frightening. {then = fmk_closer}
+>>>>>>>> Oh, I would love to kill [least#6]. I'd kill [least#6] so bad. {likes#6 < 0.2, likes#6 = -1, evil = 2}
+>>>>>>>>> Uh, maybe going a bit far. {likes#6, evil = -1}
+>>>>>>>>>> Yeah, maybe a little. {then = fmk_closer, evil = -2}
+>>>>>>>>>> I'd string [least#6: him] up and torture [least#6: him] for days. {evil = 2}
+>>>>>>>>>>> Woah, woah... Calm down...
+>>>>>>>>>>>> I would... Uh... Sorry. That got out of hand. {then = fmk_closer}
+>>>>>>>>>>>> I'd carve [least#6: him] up with [knives: a]. Then I'd use [utensils: a] to piece [least#6: him] back together again. I'd stab them with random bullshit for days.
+>>>>>>>>>>>>> What are you even saying right now?
+>>>>>>>>>>>>>> I'm a vampire. Bleh! {vampire > 0}
+>>>>>>>>>>>>>> I'm crazy. I'm an evil murderer. I'm insane. I'm nasty. I'm on some freak shit. I'll kill anybody. But most of all? I'd kill [least#6]. {evil}
+>>>>>>>>>>>>>>> [insults], you crazy motherfucker. {end=bad, score = -3}
+
+>>>>>>>> Yeah, good call. {likes#6 < 0.2, likes#6 = -1}
+>>>>>>>>> Well, those are my picks. {as = fmk_closer}
+>>>>>>>>>> Your picks sucked man, but I forgive you. {talk.score > -2, talk.score < 1}
+>>>>>>>>>>> Well, I tried my best.
+>>>>>>>>>>>> You tried your best to fuck and kill and marry, but you failed. It's chill though.
+>>>>>>>>>>>>> I thought I fucked and married and killed that shit, personally.
+>>>>>>>>>> All in all, not bad. I'd have fucked [most: fancies+likes-age#1#2#3], married [most: likes#1#2#3], and killed [least: likes#1#2#3]. {talk.score > 1}
+>>>>>>>>>>> This was fun! We should play again some time. {score = 3, evil = -1}
+>>>>>>>>>>> I need [most#4] so bad. God. {likes#4 = 3, score = 2}
+>>>>>>>>>>> [most#5]... Oh, [most#5]... {likes#5 = 3, score = 2}
+>>>>>>>>>>> Yeah, this was silly. I shouldn't have said anything. {age, aggression, mood = -1}
+
+
+Do you ever take a leak, and you think you're done, and then, whoop! Pee right over the toilet seat and over the floor? {man > 0}
+> Yeah man, all the time. {man > 0}
+> That... how does that even happen? {woman > 0}
+>> Oh. Must be a penis thing.
+>>> Penis thing?
+>>>> Yeah. Penises can have things, you know?
+>>>>> Whatever man. Let your penis do its thing, I don't care. Just don't do it near my bathroom.
+>>>> Penis thing.
+>>>>> Penis thing?
+>>>>>> Penis thing.
+>>>>>>> Alright, that's enough.
+>>>>>>> Penis thing. {score = 1}
+>>>>>>>> Penis thing. {as=penisthing, then=penisthing}
+>>> Yeah... {score = -1}

@@ -7,25 +7,25 @@ Did you see that? That car just flattened [seen.name]! {seen = killedbycar}
 > Somebody call an ambulance! {evil = -1}
 > Should've looked both ways. {evil}
 >> That's horrible. {evil = -1}
-Oh my God, they just got run over! {seen = killedbycar, shock}
+Oh my God, they just got run over! {seen = killedbycar, mood = -0.5}
 Watch where you're driving, you [swears]! {seen = killedbycar, aggression}
 [seen.by] beat [seen.name] to death! {seen = beatentodeath}
 > Nobody move. {patience}
 > Good riddance. {evil}
-They just— with their fists! {seen = beatentodeath, shock}
+They just— with their fists! {seen = beatentodeath, mood = -0.5}
 Did lightning just— {seen = smited}
 > God did that. {weight = 2}
 >> What did [seen.name] do?!
 > Who do you think God will smite next? {evil}
-The sky just killed [seen.name]! {seen = smited, shock}
+The sky just killed [seen.name]! {seen = smited, mood = -0.5}
 That orb just fried [seen.name]! {seen = orbsmited}
 > Serves them right. {evil = -1}
 >> They were a monster anyway.
 > It could be any of us next. {mood = -1}
-The orb got [seen.name]! {seen = orbsmited, shock}
+The orb got [seen.name]! {seen = orbsmited, mood = -0.5}
 I always knew there was something off about [seen.name]. {seen = orbsmited, nosy}
 It only goes for the wicked. I think. {seen = orbsmited, thought}
-Justice, from above. {seen = orbsmited, evil = -1, happy}
+Justice, from above. {seen = orbsmited, evil = -1, mood}
 That thing's a murderer! {seen = orbsmited, evil}
 > Only of murderers. {evil = -1}
 It'll be coming for me next... {seen = orbsmited, vampire > 0, thought}
@@ -37,7 +37,7 @@ Oh God, [seen.name] drowned... {seen = drowned}
 I didn't know how to help them. {seen = drowned, evil = -1, mood = -1, thought}
 They just exploded! {seen = exploded}
 That car came straight through the wall! {seen = crashedinto}
-They were just sitting there... {seen = crashedinto, shock}
+They were just sitting there... {seen = crashedinto, mood = -0.5}
 Who builds right up against a road like that? {seen = crashedinto, aggression}
 > My ears are ringing...
 > Was that [scary: a]? {nosy}
@@ -45,8 +45,8 @@ They went right over the railing! {seen = fell}
 That was a long way down... {seen = fell, mood = -1}
 Should've held on tighter. {seen = fell, evil}
 They punched a fence to death. Their own. {seen = punchedfence}
-Why would anyone fight a fence? {seen = punchedfence, shock}
-Is this a terrorist attack!? {seen = planecrash, shock}
+Why would anyone fight a fence? {seen = punchedfence, mood = -0.5}
+Is this a terrorist attack!? {seen = planecrash, mood = -0.5}
 Oh my god, this is awful! {seen = planecrash}
 A plane just went down! Someone call someone! {seen = planecrash}
 Was anyone on board? {seen = planecrash, mood = -1}
@@ -54,16 +54,16 @@ I'm never flying again. {seen = planecrash, thought}
 That was spectacular. {seen = planecrash, evil}
 > How can you say that?!
 A bee just stung [seen.name]! {seen = beeattack}
-Bees are stinging people! {seen = beeattack, shock}
+Bees are stinging people! {seen = beeattack, mood = -0.5}
 Someone swat that bee! {seen = beeattack}
-Get it off them! {seen = beeattack, shock}
+Get it off them! {seen = beeattack, mood = -0.5}
 I'm not getting stung, I'm out of here! {seen = beeattack, aggression = -1}
 Stay away from the flowers... {seen = beeattack, thought}
 Ha! Stung and floored. {seen = beeattack, evil}
 Ow! It stung me! {felt = stung}
 That bee is going down. {felt = stung, aggression}
 I think I'm allergic... {felt = stung, mood = -1, thought}
-There's [objects: plural] everywhere... {seen = exploded, shock}
+There's [objects: plural] everywhere... {seen = exploded, mood = -0.5}
 I still can't believe [seen.name]'s gone. {seen = death, mood = -1, thought}
 
 # ---- things seen happening to other people
@@ -82,18 +82,18 @@ Not again. {seen = punch, patience = -1, thought}
 That car just hit [seen.name]! {seen = knockedbycar}
 > Are they okay?! {evil = -1}
 > Ha! Did you see them fly? {evil}
-[seen.name] just came back to life! {seen = resurrected, shock}
+[seen.name] just came back to life! {seen = resurrected, mood = -0.5}
 > That's not natural. {mood = -0.5}
-> Praise be! {happy}
+> Praise be! {mood}
 I watched [seen.name] die, I swear I did. {seen = resurrected, thought}
 That robot just fixed [seen.name] right up! {seen = healed}
-> Where do I sign up? {happy}
+> Where do I sign up? {mood}
 > I don't trust it. {mood = -0.5}
 Was that robot hugging [seen.name]? {seen = healed, thought}
 What's that orb doing over [seen.name]? {seen = orbhunt}
-> Get away from them! {shock}
+> Get away from them! {mood = -0.5}
 > Whatever they did, it knows. {evil = -1}
-[seen.name], look up! {seen = orbhunt, shock}
+[seen.name], look up! {seen = orbhunt, mood = -0.5}
 Can you hear it humming? {seen = orbhunt}
 > It's getting louder...
 Run, [seen.name]! {seen = orbhunt, evil}
@@ -101,16 +101,16 @@ Don't look at it. Don't look at it. {seen = orbhunt, thought, aggression = -1}
 Ooh, someone's in trouble. {seen = orbhunt, nosy}
 It's found one of them. {seen = orbhunt, vampire > 0, thought}
 Is that... [seen.name] walking on the water? {seen = waterwalking}
-> It's a miracle! {happy}
+> It's a miracle! {mood}
 > It's a trick. {patience = -1}
 Ugh, what's that smell? {seen = smelly}
 > Don't look now, but I think it's [seen.name].
 [seen.name] needs a bath. {seen = smelly, evil}
-I'm going to be sick. {seen = smelly, mood = -1}
+Ugh, that smell... I'm going to be sick. {seen = smelly, mood = -1}
 Is [seen.name] naked?! {seen = nude}
 Put it away! {seen = nude, mood = -1}
-My eyes! {seen = nude, shock}
-Oh my. {seen = nude, blushing}
+My eyes! {seen = nude, mood = -0.5}
+Oh my. {seen = nude, chatty = -1}
 Nice. {seen = nude, evil, thought}
 Someone call the police. {seen = nude, conservative}
 Free the nipple! {seen = nude, conservative = -1}
@@ -124,14 +124,14 @@ Not so tough now, are you, [felt.by]? {felt = revenge, evil}
 Revenge is sweet. {felt = revenge, thought}
 Did that car just hit me?! {felt = hitbycar}
 A car! Through the window! {felt = carcrash}
-The whole place is coming down! {felt = carcrash, shock}
+The whole place is coming down! {felt = carcrash, mood = -0.5}
 I could have died in there. {felt = carcrash, thought}
 I knew that corner was dangerous. {felt = carcrash, mood = -1}
-My legs... I can't feel my legs. {felt = hitbycar, shock}
+My legs... I can't feel my legs. {felt = hitbycar, mood = -0.5}
 Learn to drive! {felt = hitbycar, aggression}
-What a show. {felt = watchedtv, happy}
+What a show. {felt = watchedtv, mood}
 > I've seen better. {mood = -1}
-I can't believe they killed him off. {felt = watchedtv, shock}
+I can't believe they killed him off. {felt = watchedtv, mood = -0.5}
 That's an hour I'm never getting back. {felt = watchedtv, mood = -1, thought}
 Right, bed. {felt = watchedtv, world.hour 22-3}
 One more episode wouldn't hurt... {felt = watchedtv, lounging, thought}
@@ -142,34 +142,34 @@ I'm fine! I'm fine. {felt = fellover, mood}
 Nobody saw that. Nobody saw that. {felt = fellover, nosy, thought}
 Ugh, I'm too drunk for this. {felt = fellover, mood = -1}
 
-New hair, new me. {felt = haircut, happy}
+New hair, new me. {felt = haircut, mood}
 Is it too short? It's too short. {felt = haircut, mood = -1, thought}
 I asked for a trim. {felt = haircut, patience = -1}
 > It suits you, honestly.
 > What did you ask for? {nosy}
 Feels so light! {felt = haircut}
-That robot came out of the floor. The floor! {felt = haircut, shock}
+That robot came out of the floor. The floor! {felt = haircut, mood = -0.5}
 Never seen scissors move that fast. {felt = haircut, thought}
 I didn't even get to say what I wanted. The robot just went for it. {felt = haircut, patience = -1}
-Nobody look at me. {felt = haircut, shock, thought}
+Nobody look at me. {felt = haircut, mood = -0.5, thought}
 Worth every penny. {felt = haircut, mood}
 My mum's going to hate it. {felt = haircut, weight = 0.5}
 Do I look like Rachel from Friends? {felt = haircut, woman, weight = 0.5}
-> A bit. {happy}
+> A bit. {mood}
 > Not really. {patience = -1}
 Cold head. {felt = haircut, man, world.weather = snow}
 
-I feel brand new! {felt = healed, happy}
-Did a robot just heal me? {felt = healed, shock}
-> Looked like it. {happy}
+I feel brand new! {felt = healed, mood}
+Did a robot just heal me? {felt = healed, mood = -0.5}
+> Looked like it. {mood}
 Those were hearts. Actual hearts. {felt = healed, thought}
 Nothing hurts. Nothing at all. {felt = healed}
 I didn't ask for that. {felt = healed, patience = -1, thought}
 Thank you, little robot! {felt = healed, mood}
 
-I couldn't eat another bite. {felt = dined, happy}
+I couldn't eat another bite. {felt = dined, mood}
 Best meatballs in town. {felt = dined}
-> Don't tell my mother. {happy}
+> Don't tell my mother. {mood}
 I'll need a nap after that. {felt = dined, thought}
 Too much garlic. There's no such thing. {felt = dined, thought}
 The portions were tiny. {felt = dined, patience = -1}
@@ -195,7 +195,7 @@ I'll wear what I've got. {felt = broke, here.building = clothes, thought}
 I'll just smell the food, then. {felt = broke, here.building = restaurant}
 Is the bread free, at least? {felt = broke, here.building = restaurant}
 
-Fits like a glove. {felt = newclothes, happy}
+Fits like a glove. {felt = newclothes, mood}
 Does this make me look fat? {felt = newclothes, thought}
 I'm never taking this off. {felt = newclothes, mood}
 Should've got the other one. {felt = newclothes, mood = -1, thought}
@@ -203,15 +203,15 @@ How do I look? {felt = newclothes}
 Cheers, mate. {felt = shopped}
 How much?! {felt = shopped, patience = -1}
 Forgot the thing I came in for. {felt = shopped, thought}
-Snacks secured. {felt = shopped, happy}
-> Like a million quid. {happy}
+Snacks secured. {felt = shopped, mood}
+> Like a million quid. {mood}
 > Like you've spent too much. {patience = -1}
 > Very... you. {weight = 0.5}
 They'd better take returns. {felt = newclothes, mood = -1}
 Right, wearing it out. {felt = newclothes}
 
-Where did this come from? {felt = gifted, shock}
-For me? {felt = gifted, happy}
+Where did this come from? {felt = gifted, mood = -0.5}
+For me? {felt = gifted, mood}
 I didn't get you anything... {felt = gifted, thought}
 Is this a trick? {felt = gifted, patience = -1}
 Just what I always wanted. {felt = gifted, mood}
@@ -220,17 +220,17 @@ Someone up there likes me. {felt = gifted, nosy, thought}
 I'm keeping it. {felt = gifted}
 
 You've made my day. {felt = cheered}
-Oh, that's cheered me right up! {felt = cheered, happy}
+Oh, that's cheered me right up! {felt = cheered, mood}
 I needed that. {felt = cheered, thought}
 Things are looking up. {felt = cheered, mood}
-I forgot how to smile for a second there. {felt = cheered, sad, thought}
+I forgot how to smile for a second there. {felt = cheered, mood = -1, thought}
 Fine. FINE. I'm happy now. {felt = cheered, aggression}
 
 # ---- turning up at a party
 Right, whose is this then? {felt = party}
 > Mine, actually. Make yourself at home. {chatty}
-Let's get this party started. {felt = party, chatty, happy}
-> Somebody get the music on. {happy}
+Let's get this party started. {felt = party, chatty, mood}
+> Somebody get the music on. {mood}
 I don't know a single person here. {felt = party, nosy, thought}
 Where is everyone? {felt = party, thought}
 This better be worth the walk. {felt = party, patience = -1}
@@ -240,7 +240,7 @@ Somebody's already spilled something. {felt = party, mood = -1}
 I'm not staying long. {felt = party, patience = -1, thought}
 
 Oof, that last one's gone to my head. {felt = drunk}
-I feel amazing. {felt = drunk, happy}
+I feel amazing. {felt = drunk, mood}
 The world's gone all wobbly. {felt = drunk, thought}
 I can taste it already. {felt = bloodlust, thought}
 Something's come over me... {felt = bloodlust, evil = -1, thought}
@@ -253,17 +253,17 @@ I'm too old for chasing people. {felt = gaveup, speed < 0, thought}
 Is this... blood?! {felt = bloodsoaked}
 > Don't touch me! {other.is = bloody}
 > Whose is it? {nosy}
-Get it off me! Get it off! {felt = bloodsoaked, shock}
+Get it off me! Get it off! {felt = bloodsoaked, mood = -0.5}
 Whose blood is this?! {felt = bloodsoaked}
 This was my good [belongings]... {felt = bloodsoaked, mood = -1}
 I'm going to be sick. {felt = bloodsoaked, mood = -1}
 Mmm, still warm. {felt = bloodsoaked, evil > 0.5}
-It's in my mouth. It's in my mouth! {felt = bloodsoaked, shock}
+It's in my mouth. It's in my mouth! {felt = bloodsoaked, mood = -0.5}
 Finally, it's off. {felt = bloodclean}
 > What was? {nosy}
-Good as new. {felt = bloodclean, happy}
+Good as new. {felt = bloodclean, mood}
 I'll never get that smell out. {felt = bloodclean, mood = -1, thought}
-I can still feel it on me... {felt = bloodclean, shock, thought}
+I can still feel it on me... {felt = bloodclean, mood = -0.5, thought}
 Shame, I liked the colour. {felt = bloodclean, evil}
 Let's never speak of this. {felt = bloodclean, patience}
 

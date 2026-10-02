@@ -50,7 +50,10 @@ export function relateAll(members, delta) {
 /** How `p` feels about `other` (undefined if they've never had cause to). */
 export const feelingFor = (p, other) => scores.get(p?.id)?.get(other?.id);
 /** Whether two have been introduced: finished a conversation together (see introduceAll). */
-export const introduced = (a, b) => !!met.get(a?.id)?.has(b?.id);
+// (and anyone knows themselves — a shoulder spirit or twin talking to them shares their id: see peopleSpiritChat.js — and a
+// piper's minis know them and each other: peopleMinis.js)
+const family = p => p?.miniOf ?? p;
+export const introduced = (a, b) => (!!a && !!b && family(a)?.id === family(b)?.id) || !!met.get(a?.id)?.has(b?.id);
 /** Everyone in `members` introduced to everyone else in it. */
 export function introduceAll(members) {
   members.forEach(a => members.forEach(b => {

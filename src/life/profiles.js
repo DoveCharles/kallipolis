@@ -27,6 +27,25 @@ const PEOPLE_FILES = [
 // the value everyone starts with, by trait: each trait's base until the files load, then whatever its trait table's start
 // column says (see parseSections) — updated in place, so people holding it see the file's values
 export const DEFAULT_TRAITS = startingTraits();
+const SEXUALITY = [[0, 0.6], [0.5, 0.2], [1, 0.2]]; // [gay, share]: 60% straight, 20% bi, 20% gay
+// Natural variance: each person starts these a little off their base, before their entries stack on top — up to
+// TRAIT_JITTER either way (a share of the base for multipliers, that much for added traits like evil). 0 turns it off.
+const TRAIT_JITTER = 0.05;
+const JITTERED = ['chatty', 'talkative', 'patience', 'aggression', 'nerd', 'mood', 'evil', 'conservative', 'fidgety', 'lounging', 'nosy',
+  'shopping', 'outlaw', 'stimulants', 'alcoholic', 'stoner', 'psychs', 'smoker', 'painkillers', 'erratic', 'normal'];
+// (on a stream of its own, so nothing else about a person changes; kept to each trait's range)
+function startOf(id, gay) {
+  const start = { ...DEFAULT_TRAITS, gay };
+  if (!TRAIT_JITTER) return start;
+  const rng = mulberry32(52711 + id*2797);
+  JITTERED.forEach(key => {
+    const t = TRAITS[key];
+    if (!t) return;
+    const base = start[key], off = (rng()*2 - 1)*TRAIT_JITTER, value = t.combine === 'add' ? base + off : base*(1 + off); // (base: the file's start, if it sets one)
+    start[key] = Math.max(t.min, Math.min(t.max, value));
+  });
+  return start;
+}
 
 let version = 0; // counts up each time the people files load, so what was worked out from it can be worked out again
 let filesLoaded = false;
@@ -161,7 +180,10 @@ function profileFor(id, isMan, moodNow = null) {
   }
   const withEffects = (entry, filled) => ({ ...entry, traits: [...entry.traits, ...(filled.effects ?? [])] });
   const lovesFull = loves.map((entry, i) => withEffects(entry, lovesFilled[i])), hatesFull = hated.map((entry, i) => withEffects(entry, hatesFilled[i]));
-  const traits = combineTraits([name, mood, ...lovesFull, ...hatesFull], TRAITS, DEFAULT_TRAITS);
+  // (who they're drawn to, on a stream of its own: SEXUALITY; a love or hate with gay = n overrides it)
+  const roll = mulberry32(31337 + id*4513)();
+  const gay = SEXUALITY.find(([, share], i) => roll < SEXUALITY.slice(0, i + 1).reduce((sum, [, s]) => sum + s, 0))?.[0] ?? 0;
+  const traits = combineTraits([name, mood, ...lovesFull, ...hatesFull], TRAITS, startOf(id, gay));
 
   const nameRoll = rng();
   let nick = null; // (the nickname in their name, if any: what they go by — shortName)

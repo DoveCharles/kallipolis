@@ -56,7 +56,7 @@ export function pickPerson(clientX, clientY, out) {
   const indoors = !!App.isInsideBuilding?.();
   let best = -1, bestDepth = Infinity;
   people.forEach((p, i) => {
-    if (indoors ? !inRoom(p) : isGone(p)) return;
+    if ((indoors ? !inRoom(p) : isGone(p)) || p.vanished || p.shyPhase === 'out') return; // (nor a shy ghost, gone: see shyGhost in people.js)
     foot.set(p.x, p.y, p.z).project(camera);
     head.set(p.x, p.y + personHeight(p), p.z).project(camera);
     if (Math.abs(foot.z) > 1 || Math.abs(head.z) > 1) return; // behind the camera, or beyond what it draws
@@ -553,7 +553,7 @@ let swing = null;
  */
 export function punchFromPossession() {
   const p = people[possession.index];
-  if (!p || p.mode !== 'possessed' || p.traits.pacifist || (p.punched && p.punched.stage !== 'marked' && p.punched.stage !== 'brace') || swing || // (chased or braced for, they can still hit back)
+  if (!p || p.mode !== 'possessed' || (p.traits.pacifist && !p.traits.ghost) || (p.punched && p.punched.stage !== 'marked' && p.punched.stage !== 'brace') || swing || // (chased or braced for, they can still hit back)
        !hasClip('Punch') || !hasClip('Fall')) return;
   swing = { timer: PUNCH_HIT_TIME };
   playOnce(p, 'Punch');
@@ -569,6 +569,7 @@ export function punchFromPossession() {
 export function updateSwing(p, dt) {
   if (!swing || (swing.timer -= dt) > 0) return;
   swing = null;
+  if (p.traits.ghost) return; // (a ghost's swing goes through everything)
   const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
   /** @type {?Person} */
   let hit = null;

@@ -1,1 +1,2 @@
 # [folk]: everything in people/loves.txt and hates.txt tagged <folk>, plus any entries added here (see ../../about.txt).
+[people] {weight = 100}

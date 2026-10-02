@@ -1,30 +1,28 @@
 # Swear words (see about.txt).
-forms: singular | plural
-fuck | fucks
-shit | -
-damn | -
-toss | tosses {evil = -1, outlaw = -1}
-cunt 
-crank {evil = -1, outlaw = -1}
-wank 
-screw {evil = -1, outlaw = -1}
-eff {evil = -1, outlaw = -1}
-feck {evil = -1, outlaw = -1}
-frick {evil = -1, outlaw = -1}
-frank {evil = -1, outlaw = -1}
-rue {evil = -1, outlaw = -1, nerd}
-shag {evil = -1, outlaw = -1}
-bugger {evil = -1, outlaw = -1}
-duck {evil = -1, outlaw = -1}
-cum
-arse {evil = -1, outlaw = -1}
-suck {vampire}
-cock
-dick
-penis
-wang
-willy
-chode
-fanny
-crack
-gee {outlaw = -2, evil = -1}
+forms: singular | plural | past | gerund
+fuck | fucks | fucked | fucking
+shit | shits | shitted | shitting
+damn | damns | damned | damning
+toss | tosses | tossed | tossing        {evil = -1, outlaw = -1}
+cunt | cunts | cunted | cunting
+crank | cranks | cranked | cranked      {evil = -1, outlaw = -1}
+wank | wank | wanked | wanking
+screw | screws | screwed | screwing     {evil = -1, outlaw = -1}
+eff | effs | effed | effing             {evil = -1, outlaw = -1}
+feck | fecks | fecked | fecking         {evil = -1, outlaw = -1}
+frick | fricks | fricked | fricking      {evil = -1, outlaw = -1}
+frank | franks | franked | franking     {evil = -1, outlaw = -1}
+shag | shags | shagged | shagging       {evil = -1, outlaw = -1}
+bugger | buggers | buggered | buggering {evil = -1, outlaw = -1}
+duck | ducks | ducked | ducking         {evil = -1, outlaw = -1}
+arse | arses | arsed | arsing           {evil = -1, outlaw = -1}
+suck | sucks | sucked | sucking         {vampire}
+cock | cocks | cocked | cocking
+dick | dicks | dicked | dicking
+penis | penises | penised | penising
+wang | wangs | wanged | wanging
+willy | willies | willied | willying
+chode | chodes | choded | chode-ing
+fanny | fannies | fannied | fannying
+crack | cracks | cracked | cracking
+bullshit | bullshits | bullshitted | bullshitting

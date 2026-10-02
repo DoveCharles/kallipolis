@@ -9,7 +9,22 @@ stimulating the economy {shopping = 10, capital = 4}
 being twins {twins, limit = 5a}
 Big noses
 Cop Dramas {outlaw = 0.9}
-Mighty Morphin Power Rangers
+ham radio
+radioactive isotopes
+bush weed {shopping = 0.4, stoner = 10}
+spending 20 minutes on a V60 every morning {patience = 5, stimulants = 5, nerd = 3}
+raw meat
+rat meat
+interviewing themself in the shower | interviewing myself in the shower {chatty = 3, talkative = 3}
+crypts
+communion wine {conservative = 0.05, alcoholic = 3}
+lubrication
+two sugars
+beard growth serum {bald = -1, beard = 1, limit = 6b, persist}
+Running their fingers through their hair | running my fingers through my hair {fidgety = 5, bald = -1, limit = 6b, persist} <habits>
+playgrounds
+treature which neither moth nor rust will corrupt {shopping = 0.2}
+fourteen words {conservative = 0.5, evil = 0.3}
 Butt plugs
 Having a victim complex {evil = 0.05, sad = -0.2}
 Energy drinks {speed = 2.5, fidgety = 4, blinks = 0.2, patience = 0.3, aggression = 2, stimulants = 8} <tastes>
@@ -33,7 +48,7 @@ Poppers {speed = 1.5, mood = 0.3, outlaw = 2, painkillers = 3} <vice>
 Good grammar {nerd = 3} <beliefs>
 Child-like whimsy {mood = 0.5, nosy = 2, evil = -0.1} <beliefs>
 The smell of things {nosy = 3} <surreal>
-Being a wolf {speed = 1.4, nosy = 3, parks = 3, aggression = 5, limit = 1b, persist} <surreal>
+Being a wolf {speed = 1.4, nosy = 3, parks = 10, aggression = 5, limit = 1b, persist, beard = 1, bald = -1, limit = 6b} <surreal>
 Bingo <hobbies>
 Bathing <habits>
 Walking around the city aimlessly {speed = 0.7, parks = 0.3, plazas = 0.3, nosy = 2} <hobbies>
@@ -119,7 +134,7 @@ Their awesome antidepressants that make them never want sex | my awesome antidep
 Mustelidae | Mustelidae {parks = 2, nerd = 3} <nature>
 Barfing after drinking but before getting to the club {agemult = 0.8, alcoholic = 8} <vice>
 Staring at the eclipse {blinks = 5, limit = 1b} <surreal>
-Taking medicine without checking the label {patience = 0.4, mood = -0.2, evil = 0.05, painkillers = 8, psychs = 2, crazy = 0.2} <health>
+Taking medicine without checking the label {patience = 0.4, mood = -0.2, evil = 0.05, painkillers = 8, psychs = 2, erratic = 0.2} <health>
 Befriending house spiders { evil = -0.05, aggression = 0.5} <nature>
 Guns... like, way too much | guns, love love love guns {evil = 0.2, aggression = 10, outlaw = 2, conservative = 0.3} <vice>
 Staring at their feet | staring at my feet {chatty = 0.4, talkative =0.4} <habits>
@@ -199,7 +214,7 @@ Dwelling in obscurity {chatty = 0.1, talkative = 0.1} <surreal>
 Hypnagogic visions {lounging = 3, psychs = 3} <surreal>
 Preaching {chatty = 5, talkative = 10} <beliefs>
 Foreign cigarettes {smoker = 10} <vice>
-Suicide, as a concept {mood = 0.4, crazy = 0.1} <beliefs>
+Suicide, as a concept {mood = 0.4, erratic = 0.1} <beliefs>
 Trying to kiss the dentist {evil = 0.05} <lewd>
 Getting older {mood = 0.4, evil = -0.05, agemult = 1.3} <health>
 Summary execution {evil = 0.2, aggression = 3, conservative = 0.1} <vice>
@@ -209,7 +224,7 @@ Labubu!!! | Labubu!!! <stuff>
 The subscription model {evil = 0.05} <beliefs>
 Looking at their guitar but never playing it, ever | looking at my guitar but never playing it, ever <habits>
 Not eating their vegetables | not eating my vegetables  {size = 0.84, evil = 0.05} <tastes>
-Pots of gold {size =0.3, evil = 0.05, aggression = 10, capital = 5, headsize = 3, limit = 4b} <stuff>
+Pots of gold {size =0.3, evil = 0.05, aggression = 10, capital = 5, headsize = 3, limit = 4b, noflip, flip = capital} <stuff>
 Stinky tofu {appeal = -0.2, conservative = -0.01} <tastes>
 Capitalising Every Word In A Sentence {capitalise, limit = 3b} <habits>
 Rocket boots {speed = 4} <stuff>
@@ -232,7 +247,6 @@ Having "animal swag" <habits>
 Having "prescient swag" <habits>
 Searching for scrap metal {plazas = 0.1, parks = 0.1, chatty = 0.1, speed = 1.2, aggression = 2, stimulants = 2} <hobbies>
 Happy hardcore {speed = 1.5, mood = 0.4, aggression = 2, stimulants = 5} <media>
-Running their fingers through their hair | running my fingers through my hair {fidgety = 5} <habits>
 Biting their nails | biting my nails {fidgety = 5} <habits>
 Eating the skin on the inside of their lip | eating the skin on the inside of my lip {fidgety = 5} <habits>
 Thinking about everything, all of it {fidgety = 3, speed = 0.8, lounging = 3, nerd = 3} <habits>
@@ -247,7 +261,7 @@ Moving dialectically {agemult = 0.9, nerd = 3, conservative = -0.2} <beliefs>
 Calling girls "bro" {agemult = 0.7} <habits>
 Burning shit { evil = 0.1, aggression = 2} <vice>
 Monkeys, lesser apes, greater apes too {nerd = 2} <nature>
-Barack Hussein Obama II | Barack Hussein Obama II {outlaw = 0.8} <folk>
+Barack Hussein Obama II | Barack Hussein Obama II {outlaw = 0.8, speech.sex = man, speech.years = 50} <folk>
 Wonders of the flesh <lewd>
 Power tools <stuff>
 Personality tests that don't really mean anything { agemult = 0.9} <beliefs>
@@ -284,10 +298,10 @@ Sunning their holes | sunning my holes {parks = 4, limit = 1b, stoner = 2, psych
 Coffee enemas {parks = 4, speed = 1.4, stimulants = 3, stoner = 2, psychs = 3} <health>
 Yearning {lounging = 2} <beliefs>
 Turning it off in just a minute {patience = 2, agemult = 0.5, aggression = 2} <habits>
-Feeling an effect {crazy = 0.05, persist = crazy} <surreal>
+Feeling an effect {erratic = 0.05, persist = erratic} <surreal>
 Greek mythology | Greek mythology {nerd = 4} <beliefs>
 Eco-fascism {evil = 0.3, parks = 8, conservative = 0.4} <beliefs>
-Ted Kaczynski | Ted Kaczynski {plazas = 0.1, parks = 5, chatty = 0.1, evil = 0.15, nerd = 3} <folk>
+Ted Kaczynski | Ted Kaczynski {plazas = 0.1, parks = 5, chatty = 0.1, evil = 0.15, nerd = 3, speech.sex = man, speech.years = 53} <folk>
 Slicing garlic razor thin {patience = 3, limit = 1b} <tastes>
 Doing 10 press-ups and calling it a day <hobbies>
 Throwing a thumbs up {mood = 0.3, evil = -0.05 } <habits>
@@ -295,11 +309,11 @@ Home-movies <media>
 April Fool's Day | April Fool's Day <hobbies>
 Outer space <nature>
 Peanuts <tastes>
-Writhing about {speed = 0.6, mood = -0.5, aggression = 5, crazy = 0.1} <habits>
+Writhing about {speed = 0.6, mood = -0.5, aggression = 5, erratic = 0.1} <habits>
 Banana bread <tastes>
 Exposed ankle <lewd>
 Modular Synthesis {patience = 2, talkative = 5, mood = -0.1, agemult = 1.2, nerd = 3} <media>
-Acting up {mood = -0.1, evil = 0.05, aggression = 10, stimulants = 4, alcoholic = 4, crazy = 0.1} <habits>
+Acting up {mood = -0.1, evil = 0.05, aggression = 10, stimulants = 4, alcoholic = 4, erratic = 0.1} <habits>
 Cloth Mother | Cloth Mother <surreal>
 Cuddling Blanky {evil = -0.05} <habits>
 Personifying inanimate objects {evil = -0.05} <surreal>
@@ -314,7 +328,7 @@ Grinding and grinding and grinding on it {stimulants = 3} <lewd>
 Caffeine tablet for lunch {speed = 1.4, size = 0.9, stimulants = 10} <tastes>
 Theory {nerd = 5} <beliefs>
 Carrying around a suitcase on the weekends <habits>
-Yelling on the bus {chatty = 4,  talkative = 4, evil = 0.15, aggression = 10, alcoholic = 3, stimulants = 3, crazy = 0.1} <habits>
+Yelling on the bus {chatty = 4,  talkative = 4, evil = 0.15, aggression = 10, alcoholic = 3, stimulants = 3, erratic = 0.1} <habits>
 Seeming human { agemult = 1.3, ageless, normal = 1.2} <surreal>
 Dressing as a civilian {normal = 1.2} <surreal>
 Light spanking <lewd>
@@ -347,7 +361,7 @@ Sowing {patience = 3, aggression = 2} <hobbies>
 Finger tattoos <health>
 Cryptic crosswords {patience = 3, lounging = 2, mood = -0.1, agemult = 1.1, nerd = 5} <hobbies>
 The new IRA {mood = -0.3, evil = 0.1, agemult = 0.6, aggression = 20, conservative = -0.3} <beliefs>
-82 year old korean man online. <3 | this 82 year old korean man online whomst I love deeply {mood = 0.3, agemult = 0.8} <folk>
+82 year old korean man online. <3 | this 82 year old korean man online whomst I love deeply {mood = 0.3, agemult = 0.8, speech.sex = man, speech.years = 82} <folk>
 AAVE | AAVE <beliefs>
 Learning nothing {patience = 0.4, nerd = 0.2} <habits>
 Notifications {patience = 0.4, lounging = 2, agemult = 0.8} <media>
@@ -433,7 +447,7 @@ Order {outlaw = 0.5, normal = 1.1} <beliefs>
 Caramelising onions {patience = 4} <tastes>
 Typing sooooo quick {keysmash} <habits>
 Headbutting shit { scramble, aggression = 5} <vice>
-Smashing mirrors with their face | smashing mirrors with my face {roadsafety = 0.3, scramble, aggression = 5, stimulants = 3, crazy = 0.1} <vice>
+Smashing mirrors with their face | smashing mirrors with my face {roadsafety = 0.3, scramble, aggression = 5, stimulants = 3, erratic = 0.1} <vice>
 Streamers <media>
 Late-night gamings on discord :rolling_on_the_floor_laughing: | late-night gamings on discord, rolling on floor emoji {limit = 2b, agemult = 0.7} <media>
 Dreaming of a better world <beliefs>
@@ -490,6 +504,6 @@ Saying, "touché" <habits>
 Squirty cheese <tastes>
 Angry Birds | Angry Birds <media>
 Dostoevsky's Crime and Punishment | Dostoevsky's Crime and Punishment {nerd =3, patience = 3} <media>
-Getting sillay {mood = 0.2, crazy = 0.05} <habits>
+Getting sillay {mood = 0.2, erratic = 0.05} <habits>
 Performing miracles {waterwalking} <surreal>
 The quick brown fox that jumps over the lazy dog <surreal>

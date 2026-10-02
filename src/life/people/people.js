@@ -20,7 +20,7 @@ import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.j
 import { controlInput, possession, rushed } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion, registerPreset } from '../profiles.js';
 import { presetAt } from './presets.js';
-import { SPECTRAL } from './peopleSpirits.js';
+import { SPECTRAL, BALD_BIT, VANISHED_BIT } from './peopleSpirits.js';
 import { TWIN_GAP, TWIN_LOOK_ROW } from './peopleModel.js';
 import { updateSpiritChat, twinBubble } from './peopleSpiritChat.js';
 import { updateMinis, miniSpot } from './peopleMinis.js';
@@ -47,7 +47,7 @@ import { stockPockets } from '../gifts.js';
 import { dropCoins } from '../coins.js';
 import { bloodBurst, bloodFear, bloodSpeed, bloodlustSpeed, isBloodlusting, updateArrivingBlood, updateBlood } from './peopleBlood.js';
 import { slideOff, stepFall } from './peopleFall.js';
-import { updateCrazy } from './peopleCrazy.js';
+import { updateErratic } from './peopleErratic.js';
 import { aimPrayerView, prayerDue, prayerViewing, sweepPrayers, updatePrayer } from './peoplePrayer.js';
 import { beginEmotes, updateEmotes } from './peopleEmotes.js';
 import { followPersonAt, followPerson, followPersonInside, followedInside, headshotOf, personHeight, pickPerson, placePossessedCamera, possessPerson, punchFromPossession, updatePossessedTarget, useFromPossession, stopFollowingPerson, unpossessPerson, updateSwing, walkPossessed, cancelSwing, showFollowedDoing } from './peopleTracking.js';
@@ -346,7 +346,7 @@ export const aboard = p => p.mode === 'train' && p.train.stage === 'ride';
  * @returns {boolean} whether they're drawn
  */
 // (not someone on the street passing through the room the view's in, which reaches into it: see buildings/interior.js roomClash)
-export const isDrawn = p => (!isGone(p) && (p.mode === 'possessed' || !roomCovers(p.x, p.y + 0.5, p.z))) || (inRoom(p) && !p.inRoom.hidden) || aboard(p);
+export const isDrawn = p => !p.vanished && (!isGone(p) && (p.mode === 'possessed' || !roomCovers(p.x, p.y + 0.5, p.z))) || (inRoom(p) && !p.inRoom.hidden) || aboard(p);
 /**
  * Whether this person is inside the building the camera's gone into, and so drawn in its room (see buildings/interior.js)
  * though they count as gone for everything else.
@@ -480,7 +480,7 @@ export function syncPeopleUI() {
 // (see the end of newPerson)
 const PERSON_LATER_FIELDS = Object.fromEntries([
   // who they are (refreshTraits), how they look (updatePeople)
-  'health', 'walletSet', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
+  'health', 'walletSet', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'spectralKey', 'groomKey', 'showsBald', 'showsBeard', 'vanished', 'vanishUntil', 'shyCount', 'shyArmed', 'shyPhase', 'shyAt', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
   // what they say and think
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
   'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
@@ -612,8 +612,8 @@ const redOf = p => Math.min(1, p.traits.fuming + HUFFING_RED*p.traits.huffing);
 // The traits that have a say in the skin, as one number, for telling when one of them has changed (see tintSkin).
 const skinKeyOf = p => (p.traits.sick ? 1 : 0) + (p.traits.zombie ? 2 : 0) + (p.traits.vampire ? 4 : 0)
   + 8*Math.round(redOf(p)*100) + 808*Math.round(p.traits.blushing*100) + 81608*Math.round(p.traits.freezing*100) + 8242408*(p.traits.upsidedown ? 1 : 0)
-  + 16484816*Math.round(p.traits.skeptical*100) + 1664966416*Math.round(p.traits.goofy*100) + 17e12*Math.round(p.traits.welling*100) + 2e15*spectralOf(p);
-const spectralOf = p => Object.entries(SPECTRAL).reduce((bits, [trait, bit]) => bits | (p.traits[trait] ? bit : 0), 0);
+  + 16484816*Math.round(p.traits.skeptical*100) + 1664966416*Math.round(p.traits.goofy*100) + 17e12*Math.round(p.traits.welling*100);
+const spectralOf = p => Object.entries(SPECTRAL).reduce((bits, [trait, bit]) => bits | (p.traits[trait] ? bit : 0), 0) | (p.traits.bald > 0.5 ? BALD_BIT : 0) | (p.vanished ? VANISHED_BIT : 0);
 /**
  * Write the skin someone's traits give them to the person model: the colour they came with, moved towards the grey a
  * vampire's age pales it to and, all the way, the colour of the sick and zombie traits (see SICK_SKIN_COLOR) or, part way, the
@@ -629,7 +629,7 @@ const spectralOf = p => Object.entries(SPECTRAL).reduce((bits, [trait, bit]) => 
  * @returns {void}
  */
 function tintSkin(p, i) {
-  p.skinKey = skinKeyOf(p); // (even without the model: its coming is a traits change of its own, which tints them for real)
+  p.skinKey = skinKeyOf(p); p.spectralKey = spectralOf(p); // (even without the model: its coming is a traits change of its own, which tints them for real)
   if (!personModel) return;
   const o = ((2 + PERSON_TRAIT_COLORS.indexOf('Skin'))*PEOPLE_MAX + i)*4, data = personModel.traitData;
   p.skinBase ??= [data[o], data[o + 1], data[o + 2]];
@@ -1163,6 +1163,31 @@ function lookTwin(p, i, dt, possessed) {
   p.twinTilt = (p.twinTilt ?? 0) + ((p.twinTiltTo ?? 0) - (p.twinTilt ?? 0))*ease;
   if (Math.abs(data[o] - p.twinTurn) + Math.abs(data[o + 1] - p.twinTilt) > 0.005) { data[o] = p.twinTurn; data[o + 1] = p.twinTilt; personModel.traitTexture.needsUpdate = true; }
 }
+// A ghost is shy: the first SHY_TIMES you come within SHY_NEAR (× people size) — as whoever you're possessing, else the
+// camera — they vanish for SHY_FOR seconds (VANISHED_BIT: not drawn, not picked, their card closed), and won't again
+// till you've been SHY_NEAR*1.5 off. Not a hearted one (ui/favorites.js).
+const SHY_NEAR = 7, SHY_TIMES = 3, SHY_FOR = 60;
+// (fading out over SHY_FADE seconds first, and back in after: shyPhase 'out', 'gone', 'in'; how faded, TWIN_LOOK_ROW .w)
+const SHY_FADE = 3;
+function shyGhost(p, i, possessed) {
+  const now = performance.now()/1000;
+  if (!p.traits.ghost) Object.assign(p, { vanished: false, shyPhase: null });
+  else if (p.shyPhase === 'out' && now - p.shyAt >= SHY_FADE) Object.assign(p, { vanished: true, shyPhase: 'gone', vanishUntil: now + SHY_FOR });
+  else if (p.shyPhase === 'gone' && now >= p.vanishUntil) Object.assign(p, { vanished: false, shyPhase: 'in', shyAt: now });
+  else if (p.shyPhase === 'in' && now - p.shyAt >= SHY_FADE) p.shyPhase = null;
+  const fade = p.shyPhase === 'out' ? (now - p.shyAt)/SHY_FADE : p.shyPhase === 'gone' ? 1 : p.shyPhase === 'in' ? 1 - (now - p.shyAt)/SHY_FADE : 0;
+  if (personModel) {
+    const o = (TWIN_LOOK_ROW*PEOPLE_MAX + i)*4 + 3, data = personModel.traitData, f = Math.max(0, Math.min(1, fade));
+    if (data[o] !== f) { data[o] = f; personModel.traitTexture.needsUpdate = true; }
+  }
+  if (p.shyPhase || possessed || !p.traits.ghost || (p.shyCount ?? 0) >= SHY_TIMES || isFavoritePerson(p.id)) return;
+  const you = possession.index >= 0 ? people[possession.index] : camera.position;
+  const d = Math.hypot(you.x - p.x, you.y - p.y, you.z - p.z), near = SHY_NEAR*S.peopleSize;
+  if (d > near*1.5) p.shyArmed = true;
+  if (d >= near || p.shyArmed === false) return;
+  Object.assign(p, { shyPhase: 'out', shyAt: now, shyCount: (p.shyCount ?? 0) + 1, shyArmed: false });
+  if (followed === i) stopFollowingPerson();
+}
 /** How much further someone's reached standing: a twin's other half, beside them (see TWIN_GAP), else 0. World units. */
 export const twinReach = p => p.traits?.twins ? 2*TWIN_GAP*1.7*p.height*S.peopleSize : 0;
 export function isPedInDanger(p) {
@@ -1301,7 +1326,14 @@ export function updatePeople(t) {
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
-    if (p.skinKey !== skinKeyOf(p)) tintSkin(p, i); // (a keepsake or status that's just moved the skin's traits: see tintSkin)
+    if (p.skinKey !== skinKeyOf(p) || p.spectralKey !== spectralOf(p)) tintSkin(p, i); // (a keepsake or status that's just moved the skin's traits: see tintSkin)
+    if (p.traits.ghost || p.shyPhase) shyGhost(p, i, p.mode === 'possessed'); // (gone when you come near, the first few times)
+    // (the bald and beard traits: their hair and facial hair as they say — see groom in peopleModel.js; and what shows, for speech)
+    if (personModel) {
+      const bald = Math.sign(Math.round(p.traits.bald)), beard = Math.sign(Math.round(p.traits.beard)), groomKey = p.id*9 + (bald + 1)*3 + beard + 1;
+      if (p.groomKey !== groomKey) { p.groomKey = groomKey; personModel.groom(i, p.id, bald, beard); }
+      const head = personModel.headOf(i); p.showsBald = head.bald; p.showsBeard = head.bearded;
+    }
     if (personModel && !!p.traits.nude !== !!p.nudeDressed) { p.nudeDressed = !!p.traits.nude; personModel.setNude(i, p.id, p.nudeDressed); } // (see peopleCensor.js)
     if (personModel && p.headDrawn !== p.traits.headsize) { p.headDrawn = p.traits.headsize; personModel.traitData[(HAIR_ROW*PEOPLE_MAX + i)*4 + 3] = p.headDrawn; personModel.traitTexture.needsUpdate = true; } // (see personLook)
     if (p.traits.nude && (p.mode === 'line' || p.mode === 'wander') && (p.nudeSeenIn = (p.nudeSeenIn ?? 0) - dt) <= 0) { witness(p, 'nude'); p.nudeSeenIn = NUDE_SEEN_EVERY; }
@@ -1313,7 +1345,7 @@ export function updatePeople(t) {
     }
     if (!p.pocketsStocked) stockPockets(p, i); // (the sunglasses they came in: see life/gifts.js)
     if (p.blood) updateBlood(p, dt, i);
-    if (p.traits.crazy > 0 || p.crazyShift) updateCrazy(p, dt);
+    if (p.traits.erratic > 0 || p.erraticShift) updateErratic(p, dt);
     p.trainCooldown -= dt;
     p.snackCooldown -= dt;
     p.indoorsCooldown -= dt;

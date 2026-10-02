@@ -1,0 +1,93 @@
+# make them >18 just in case lmao
+# {years}: the age they're best known at (kept 19+). {appeal}: known as attractive (+) or not (-). {sex}: for pronouns and fancies.
+Jean Baudrillard {nerd, conservative = -0.3, years = 60, sex = man, psychs = 0.3}
+Barack Hussein Obama II {conservative = -0.1, years = 50, sex = man, normal = 0.5, patience = 0.3, appeal = 0.2}
+Joe Biden {conservative = -0.1, years = 80, sex = man, normal = 0.3}
+Michel Foucault {nerd, conservative = -0.6, years = 50, sex = man, psychs = 0.5, gay = 0.6, evil = 0.5}
+Fetty Wap {stoner = 0.5, outlaw = 0.2, years = 24, sex = man}
+Pope Benedict XVI {conservative = 0.8, years = 80, sex = man, patience = 0.3}
+Francis Bacon {alcoholic = 0.5, evil = 0.1, years = 60, sex = man, gay = 0.6, erratic = 0.3}
+Andy Warhol {stimulants = 0.3, years = 40, sex = man, gay = 0.6, nosy = 0.5}
+The Laughing Cow {mood = 0.5, normal = 0.5, psychs = 0.3, stoner = 0.3}
+George W. Bush {conservative = 0.7, evil = 0.3, years = 58, sex = man, normal = 0.3}
+Martin Luther {conservative = 0.5, nerd = 0.2, years = 40, sex = man, aggression = 0.3}
+Jean-Paul Sartre {nerd, smoker, conservative = -0.6, years = 60, sex = man, psychs = 0.3}
+Hannibal Lecter {evil, nerd = 0.5, years = 58, sex = man, patience = 0.5, aggression = 0.5}
+Markus Persson {nerd, conservative = 0.4, years = 30, sex = man, erratic = 0.3, appeal = -0.1}
+Harriet Tubman {evil = -1, outlaw = 0.5, years = 40, sex = woman, patience = 0.5, parks = 0.3}
+Hillary Clinton {conservative = 0.1, years = 69, sex = woman, normal = 0.3}
+Woah Vicky {talkative = 0.5, years = 19, sex = woman, nerd = -0.2, erratic = 0.3, nosy = 0.3}
+Xi Jinping {conservative = -0.5, years = 65, sex = man, patience = 0.5}
+Ice Spice {mood = 0.3, years = 24, sex = woman, normal = 0.3, appeal = 0.3}
+Prince Andrew {evil, conservative = 0.5, years = 60, sex = man, appeal = -0.2}
+Julian Assange {nerd, outlaw, years = 45, sex = man, nosy, erratic = 0.3}
+Angela Davis {conservative = -1, nerd = 0.5, outlaw = 0.2, years = 26, sex = woman, gay = 0.6, appeal = 0.2}
+Malcolm X {conservative = -0.6, aggression = 0.5, years = 38, sex = man, outlaw = 0.2}
+Charli D'Amelio {years = 19, sex = woman, normal = 0.5, fidgety = 0.5}
+Marge Simpson {evil = -0.5, mood = 0.3, years = 36, sex = woman, normal, patience = 0.5, nosy = 0.3}
+Celine Dion {mood = 0.3, years = 29, sex = woman, gay = 0.5, normal = 0.5}
+Julia Louis-Dreyfus {mood = 0.3, years = 33, sex = woman, appeal = 0.1, normal = 0.3, fidgety = 0.3}
+Tyler Robinson {outlaw, years = 22, sex = man, aggression = 0.5}
+Alec Baldwin {aggression = 0.5, conservative = -0.1, years = 60, sex = man, erratic = 0.5, patience = -0.5}
+Queen Elizabeth II {conservative = 0.6, years = 75, sex = woman, patience = 0.5, normal = 0.5}
+David Attenborough {evil = -0.8, parks, nerd = 0.5, years = 80, sex = man, patience = 0.5, normal = 0.3}
+David Cronenberg {nerd, years = 45, sex = man, psychs = 0.5}
+David Lynch {nerd, smoker, years = 44, sex = man, psychs = 0.5, patience = 0.3}
+James Gandolfini {aggression = 0.5, years = 45, sex = man, erratic = 0.3}
+Ben Shapiro {conservative = 0.8, talkative, years = 35, sex = man, patience = -0.5, aggression = 0.3, appeal = -0.2}
+Sarah Palin {conservative = 0.8, years = 44, sex = woman, parks = 0.3}
+Margaret Thatcher {conservative = 0.9, evil = 0.4, years = 60, sex = woman, aggression = 0.3}
+NorthernLion {nerd, talkative, years = 30, sex = man}
+Aunt Jemima {sex = woman}
+Underscores {nerd = 0.5, years = 26, sex = woman}
+Danny Brown {psychs =0.5, stimulants = 0.5, years = 30, sex = man, erratic = 0.3, fidgety = 0.5}
+Aleister Crowley {evil = 0.5, psychs, years = 45, sex = man, gay = 0.4, erratic = 0.3}
+H. P. Lovecraft {nerd, conservative = 0.7, years = 40, sex = man, psychs = 0.5, evil = 0.4, appeal = -0.2}
+Frida Kahlo {conservative = -0.8, years = 40, sex = woman, gay = 0.4}
+Rosa Luxemburg {conservative = -1, nerd, years = 45, sex = woman}
+Ayn Rand {conservative = 0.6, evil = 0.3, nerd, stimulants = 0.5, years = 50, sex = woman}
+Eva Braun {conservative = 1, evil = 0.5, years = 30, sex = woman}
+Sylvia Plath {nerd, mood = -1, years = 30, sex = woman, erratic = 0.5, conservative = 0.3}
+Albert Camus {nerd, smoker, years = 44, sex = man, appeal = 0.3}
+Franz Kafka {nerd, mood = -0.6, years = 35, sex = man, fidgety = 0.3}
+George Harrison {psychs, evil = -0.5, years = 25, sex = man, patience = 0.5, parks = 0.3, appeal = 0.3}
+John Lennon {psychs, stoner = 0.5, conservative = -0.5, years = 28, sex = man, erratic = 0.3, appeal = 0.2}
+Björk {erratic = 0.5, years = 30, sex = woman, parks = 0.5, psychs = 0.3}
+Yoko Ono {years = 36, sex = woman, psychs = 0.5, patience = 0.3}
+Kim Gordon {years = 35, sex = woman, appeal = 0.2}
+Ringo Starr {mood = 0.5, years = 25, sex = man, psychs = 0.5, normal = 0.3}
+Paul McCartney {mood = 0.4, years = 25, sex = man, psychs = 0.5, normal = 0.5, appeal = 0.3}
+James Joyce {nerd, alcoholic = 0.5, years = 40, sex = man}
+William S. Burroughs {outlaw, painkillers, evil = 0.3, years = 65, sex = man, gay = 0.5, psychs = 0.5, erratic = 0.3}
+Aphex Twin {nerd, years = 25, sex = man, psychs = 0.3}
+Jordan Peterson {conservative = 0.6, nerd = 0.5, years = 56, sex = man, erratic = 0.5, appeal = -0.2}
+Joe Rogan {psychs, stoner = 0.5, talkative, conservative = 0.3, aggression = 0.3, years = 50, sex = man}
+Gilles Deleuze {nerd, conservative = -0.6, psychs = 0.3, years = 50, sex = man}
+René Descartes {nerd, patience = 0.3, years = 53, sex = man}
+Kim Kardashian {normal = 0.5, shopping, capital, years = 35, sex = woman, appeal = 0.3}
+Jeremy Clarkson {conservative = 0.5, alcoholic = 0.3, aggression = 0.3, patience = -0.3, parks = 0.3, years = 60, sex = man}
+Nigella Lawson {normal = 0.3, mood = 0.3, years = 45, sex = woman, appeal = 0.3}
+Marie Curie {nerd, patience = 0.5, evil = -0.3, years = 40, sex = woman}
+J.K. Rowling {evil = 0.3, conservative = 0.3, normal = 0.3, years = 50, sex = woman}
+Taylor Swift {normal = 0.5, years = 33, sex = woman, appeal = 0.1}
+André 3000 {psychs = 0.3, stoner = 0.3, patience = 0.3, years = 40, sex = man, appeal = 0.3}
+David Beckham {normal = 0.5, years = 50, sex = man, appeal = 0.3}
+Serena Williams {aggression = 0.3, years = 40, sex = woman, appeal = 0.2}
+Dr. Miami {evil = 0.1, years = 50, sex = man, shopping}
+Hayao Miyazaki {parks = 0.5, patience = 0.3, evil = -0.3, conservative = -0.3, years = 60, sex = man}
+Santa Claus {evil = -1, mood = 0.5, years = 80, sex = man}
+George Costanza {patience = -0.5, erratic = 0.3, evil = 0.2, years = 35, sex = man}
+Limmy {erratic = 0.3, psychs = 0.3, years = 40, sex = man}
+Jeremy Corbyn {conservative = -0.8, patience = 0.3, parks = 0.3, years = 68, sex = man}
+Tigress from Kung Fu Panda {aggression = 0.5, patience = 0.3, sex = woman}
+Chris Rock {talkative = 0.5, years = 49, sex = man}
+Simon Cowell {patience = -0.5, evil = 0.2, normal = 0.3, years = 55, sex = man}
+Sharon Osbourne {aggression = 0.3, erratic = 0.3, years = 60, sex = woman}
+Greta Thunberg {parks, conservative = -0.6, patience = -0.3, years = 20, sex = woman}
+Sigmund Freud {nerd, nosy = 0.5, stimulants = 0.5, smoker, years = 70, sex = man}
+Carl Jung {nerd, psychs = 0.5, years = 60, sex = man}
+Kurt Cobain {painkillers, erratic = 0.3, mood = -0.5, smoker, conservative = -0.3, years = 27, sex = man, appeal = 0.3}
+Paris Hilton {shopping, capital, normal = 0.3, years = 30, sex = woman, appeal = 0.2}
+Fidel Castro {conservative = -1, appeal = 0.3, smoker, aggression = 0.3, outlaw = 0.3, years = 40, sex = man}
+Pope Francis {evil = -0.5, patience = 0.5, conservative = 0.2, years = 80, sex = man}
+Jesse Pinkman {stimulants, outlaw = 0.5, erratic = 0.3, evil = -0.2, years = 25, sex = man, appeal = 0.3, painkillers = 0.5, smoker}
