@@ -629,7 +629,7 @@ export function refreshTraits(p, i) {
   restackTraits(p);
   // (their starting money times their capital, kept up with their traits until they've spent any)
   if (p.walletSet === undefined || p.wallet === p.walletSet) p.wallet = p.walletSet = Math.round(p.walletBase*p.baseTraits.capital);
-  p.height = preset?.height ?? p.baseHeight*p.traits.size;
+  p.height = preset?.height ?? (profile.height ?? p.baseHeight)*p.traits.size; // (a Ped Builder one's own: profiles.js customs)
   p.age = profile.age;
   p.name = profile.name; // (for their card, and for naming them in the morality notices when they die)
   p.loves = profile.lovesSaid; p.hates = profile.hatesSaid; // (for what they say: see life/speech-text.js)
@@ -1187,6 +1187,30 @@ export function benchPerson(i) {
   p.train = null;
   p.indoors = null;
   p.moving = false;
+}
+/**
+ * Someone new (person `id`, wearing their pinned look) born into the crowd near `at` ([x, y, z, heading]): in a dead
+ * stranger's slot, else the furthest stranger's from the camera (benched first). For the Ped Builder (ui/ped-builder.js).
+ * @returns {number} their slot, or -1
+ */
+export function addPerson(id, at) {
+  const free = i => { const p = people[i]; return !isFavoritePerson(p.id) && !p.miniOf && !presetAt(i) && i !== followed && i !== possession.index && p.mode !== 'possessed'; };
+  const wanted = Math.min(PEOPLE_MAX, Math.round(S.peopleAmount));
+  let j = -1, far = -1;
+  for (let i = 0; i < Math.min(wanted, people.length); i++) {
+    if (!free(i)) continue;
+    if (people[i].mode === 'dead') { j = i; break; }
+    const d = Math.hypot(people[i].x - at[0], people[i].z - at[2]);
+    if (d > far) { far = d; j = i; }
+  }
+  if (j < 0) return -1;
+  if (people[j].mode !== 'dead') benchPerson(j);
+  endActivity(people[j]);
+  const p = newPerson(id);
+  p.keptAt = at;
+  people[j] = p;
+  personModel?.assignAppearance(j, id);
+  return j;
 }
 /**
  * Whether this person is walking over a road (see updateCrossing) — treated like someone standing in the middle of it
@@ -1918,7 +1942,8 @@ export function updatePeople(t) {
   if (personModel) {
     [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; part.pupil.needsUpdate = true; });
     personModel.spiritTalk.needsUpdate = true;
-    personModel.updateCopies(people.length, [followed, possession.index, ...carded]); // (who's drawn: see compactOf in peopleModel.js)
+    App.posePedBuilder?.(); // (the Ped Builder's ped, past the crowd: ui/ped-builder.js)
+    personModel.updateCopies(people.length, [followed, possession.index, ...carded, ...(App.pedBuilderSlots?.() ?? [])]); // (who's drawn: see compactOf in peopleModel.js)
     updateHeld(); // (whatever anyone's holding, from where their hands ended up)
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;
@@ -1947,6 +1972,7 @@ export function updatePeople(t) {
     App.drawPersonHeadshot(headshotOf(followed), followed);
     personModel.only.value = -1;
   }
+  App.drawPedBuilder?.(); // (and the Ped Builder's picture of its ped)
   // (and a second person card's, now and then: see otherHeadshotIndex in person-card.js)
   const other = App.otherHeadshotIndex?.() ?? -1;
   if (other >= 0 && other !== followed && personModel && people[other] && (!isGone(people[other]) || inRoom(people[other]))) {

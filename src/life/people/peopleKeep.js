@@ -1,7 +1,7 @@
 import { S } from '../../core/shared.js';
 import { people, personModel } from './people.js';
 import { isFavoritePerson } from '../../ui/favorites.js';
-import { profileOf, pinProfile } from '../profiles.js';
+import { profileOf, pinProfile, customOf, registerCustom } from '../profiles.js';
 
 // ============================================================ the crowd kept between sessions
 // Who's in the crowd, in slot order, saved as { v, people: [{ id, moodNow?, at?, kept? }] } — `at` where they were
@@ -14,6 +14,8 @@ let waiting = []; // saved people not yet back in the crowd, in slot order (see 
 let reset = false; // a crowd's come in: clear the current one first (see takeReset)
 const pinnedLooks = new Map(); // id → kept look
 export const pinnedLookOf = id => pinnedLooks.get(id);
+/** Person `id` wears `look` whenever they're born into a slot (a Ped Builder one: ui/ped-builder.js). */
+export const pinLook = (id, look) => { pinnedLooks.set(id, look); };
 
 const alive = p => p.mode !== 'dead' || p.benched || isFavoritePerson(p.id) || !!p.punched?.revive;
 const round = v => Math.round(v*100)/100;
@@ -47,6 +49,8 @@ export function serializeCrowd() {
     if (p.moodNow != null) entry.moodNow = p.moodNow;
     if (!p.benched && p.mode !== 'none' && p.mode !== 'dead' && [p.x, p.y, p.z, p.heading].every(Number.isFinite)) entry.at = [round(p.x), round(p.y), round(p.z), round(p.heading)];
     if (isFavoritePerson(p.id)) { const kept = keptOf(p, i); if (kept) entry.kept = kept; }
+    const custom = customOf(p.id); // (made in the Ped Builder: who they are and how they look, kept)
+    if (custom) { entry.custom = custom; entry.look = personModel?.lookOf(i) ?? pinnedLooks.get(p.id) ?? null; }
     list.push(entry);
   });
   waiting.forEach(kp => list.push(kp.kept && !isFavoritePerson(kp.id) ? { ...kp, kept: undefined } : kp));
@@ -59,6 +63,8 @@ export function restoreCrowd(data) {
   const seen = new Set();
   waiting = data.people.filter(kp => Number.isInteger(kp?.id) && kp.id > 0 && !seen.has(kp.id) && seen.add(kp.id));
   waiting.forEach(kp => {
+    if (kp.custom) registerCustom(kp.id, kp.custom);
+    if (kp.look) pinnedLooks.set(kp.id, kp.look);
     if (!kp.kept) return;
     pinProfile(kp.id, kp.kept);
     if (kp.kept.look) pinnedLooks.set(kp.id, kp.kept.look);
