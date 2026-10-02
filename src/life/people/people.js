@@ -1815,8 +1815,8 @@ export function updatePeople(t) {
         animArray[o] = clipRow(p, p.clipA);
         animArray[o+1] = p.clipB === p.clipA ? animArray[o] : p.rowB;
         animArray[o+2] = p.fade;
-        // (the drowsy, 😴, hold their eyes that far shut between blinks)
-        animArray[o+3] = Math.max(p.traits.drowsy, p.pray && !p.saying ? 0.85 : 0, p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0);
+        // (the drowsy, 😴, hold their eyes that far shut between blinks; a punch that leaves them reeling, Hit, shuts them)
+        animArray[o+3] = Math.max(p.traits.drowsy, p.pray && !p.saying ? 0.85 : 0, p.oneShot?.name === 'Hit' ? 1 : 0, p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0);
         lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
         if (p.water?.drowned) holdDrowned(o, animArray, lookArray); // (still, face down: see peopleWater.js)
         const eyesArray = personModel.eyes.array;
