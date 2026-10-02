@@ -376,7 +376,7 @@ const FINE_EVERY = 4;
 let peopleFrame = 0;
 // And someone off screen or a speck on it (under LAZY_PIXELS), out of earshot and doing nothing that needs every frame,
 // isn't updated at all but on their fine turn, taking in all the time since (lazyDt).
-const LAZY_PIXELS = PERSON_WORN_PIXELS;
+const LAZY_PIXELS = 20;
 const lazyNow = (p, i, carded) => (peopleFrame + i) % FINE_EVERY !== 0 && i !== followed && i !== possession.index
   && p.mode !== 'none' && p.mode !== 'possessed' && !p.jc && !p.fall && !p.push && !p.punched && !p.attack && !p.swat && !inWater(p)
   && !carded.includes(i) && Math.hypot(p.x - ear.x, p.y - ear.y, p.z - ear.z) > hearDistance()
