@@ -159,9 +159,9 @@ export function reactAloud(at, voice, who, person) {
 // A picked line set making in the speaker's voice, to play where they are once it's made: the line (for lineMouth and
 // stopLine; its length known now, its sound and start once made), or null.
 function voiceLine(said, at, voice, who, person, full = false) {
-  const context = listener.context, now = context.currentTime, text = said.text, mood = person.traits?.mood ?? 0;
+  const context = listener.context, now = context.currentTime, text = said.text, mood = person.traits?.mood ?? 0, speed = person.traits?.speed ?? 1;
   if (isMuted() || context.state !== 'running') return null;
-  const clauses = phonemesOf(text), length = lineLength(clauses, { mood, who });
+  const clauses = phonemesOf(text), length = lineLength(clauses, { mood, who, speed });
   if (!length) { // (nothing to sound out, "...": a silent beat, its bubble up and mouth shut, so the conversation goes on)
     const line = { source: null, start: now, length: SILENT_LINE, mouth: new Float32Array(0), text, quiet: quietOf(person), end: said.end, by: person };
     speaking.add(line);
@@ -173,7 +173,7 @@ function voiceLine(said, at, voice, who, person, full = false) {
   const line = { source: null, start: now, length, mouth: null, text, quiet: quietOf(person), end: said.end, by: person };
   speaking.add(line);
   lastStart = now;
-  synth(voice, { mood, who, clauses }, sound => {
+  synth(voice, { mood, who, speed, clauses }, sound => {
     if (!speaking.has(line)) return; // (stopped while it was made)
     if (!sound || !(line.source = playSound(sound, at, voice, crowd))) { finish(line); return; }
     line.mouth = sound.mouth;
@@ -223,7 +223,7 @@ export function aaa(person, at, voice, who, swears) {
   if (a?.mouth && now - a.start < a.length) return Math.min(1, a.mouth[Math.floor((now - a.start)/MOUTH_FRAME)] ?? 0);
   if (isMuted() || listener.context.state !== 'running') return 0;
   const made = person.aaa = { mouth: null, start: now, length: 0 };
-  synth(voice, { mood: person.traits?.mood ?? 0, who, clauses: rant(swears) }, sound => {
+  synth(voice, { mood: person.traits?.mood ?? 0, speed: person.traits?.speed ?? 1, who, clauses: rant(swears) }, sound => {
     if (person.aaa !== made) return;
     if (!sound) { person.aaa = null; return; }
     playSound(sound, at, voice, edgeFade(at));

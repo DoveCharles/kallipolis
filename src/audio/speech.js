@@ -21,13 +21,30 @@ import { melodyOf } from './melodies.js';
 export const SAMPLE_RATE = 22050;
 const T = 1/SAMPLE_RATE;
 const FRAME = 0.005;            // seconds between updates of the voice's settings
-const TEMPO = 0.9;              // how much longer than Klatt's own durations it takes (under 1, brisker)
-const STRESS = 0.14;            // how much higher a stressed syllable is (babble's STRESS, a touch more)
-const JITTER = 0.03;            // how far each syllable's pitch strays at random, either way
 const PAUSE = { ',': 0.18, '-': 0.15, '.': 0.32, '?': 0.32, '!': 0.32 }; // seconds of quiet after each
 const BANDWIDTHS = [60, 90, 150, 250]; // Hz, of F1 to F4, for a voice of middling sharpness (6), wider the breathier
-const F4 = 3500;                // Hz, the fourth formant, which barely moves
-const ASPIRATION = 0.35;        // breath, next to the voice
+// Knobs (tools/speech.html tweaks these live; the defaults are the game's)
+export const TUNING = {
+  tempo: 0.9,        // how much longer than Klatt's own durations it takes (under 1, brisker)
+  speedTalk: 0.5,   // pace × speed trait to this power (coffee, energy drinks: quicker)
+  pause: 1,          // × the quiet between clauses
+  stress: 0.14,      // how much higher a stressed syllable is (babble's STRESS, a touch more)
+  jitter: 0.03,      // how far each syllable's pitch strays at random, either way
+  melodyDepth: 1,    // × the melody's swing
+  fall: 0.2,         // how far a statement's end falls
+  rise: 0.3,         // how far a question's end rises
+  smooth: 0.35,      // how fast the pitch follows its target (1: jumps)
+  vibrato: 0,        // wobble depth, fraction of pitch (sung adds 0.02)
+  vibratoRate: 5.5,  // Hz
+  glide: 1,          // × how long formants take to move between sounds
+  f1: 1, f2: 1, f3: 1, // × each formant
+  f4: 3500,          // Hz, the fourth formant, which barely moves
+  bandwidth: 1,      // × every formant's width
+  aspiration: 0.35,  // breath, next to the voice
+  breathy: 0,        // breath under the voice all the time
+  ageBreath: 1,      // × age/100 added to breathy (80: 0.8; capped at 100)
+  drive: 1.2,        // soft clipping
+};
 const NASAL = [270, 450];       // Hz, the nasal pole, and the zero that pairs with it in an "m", "n" or "ng" (moved off it otherwise)
 
 // ------------------------------------------------------------ the sounds
@@ -223,7 +240,7 @@ function plan(clauses, baseTempo) {
       }
     });
     const tail = segments.at(-1);
-    if (tail) push({ ...base0(c), dur: (c < clauses.length - 1 ? PAUSE[clause.end] : 0.06)*tempo, f: frac => tail.f(1) });
+    if (tail) push({ ...base0(c), dur: (c < clauses.length - 1 ? PAUSE[clause.end]*TUNING.pause : 0.06)*tempo, f: frac => tail.f(1) });
   });
   return segments;
 }
@@ -234,13 +251,13 @@ const smooth = u => { u = Math.max(0, Math.min(1, u)); return u*u*(3 - 2*u); };
 function formantsAt(segments, i, t) {
   const s = segments[i], prev = segments[i - 1], next = segments[i + 1];
   const edge = (a, b, boundary) => {
-    const wa = Math.min(a.trans, 0.45*a.dur), wb = Math.min(b.trans, 0.45*b.dur);
+    const wa = Math.min(a.trans*TUNING.glide, 0.45*a.dur), wb = Math.min(b.trans*TUNING.glide, 0.45*b.dur);
     const u = (t - (boundary - wa))/(wa + wb || 1);
     const from = a.f(1 - wa/a.dur), to = b.f(wb/b.dur);
     return from.map((v, k) => v + (to[k] - v)*u);
   };
-  if (prev && t < s.start + Math.min(s.trans, 0.45*s.dur)) return edge(prev, s, s.start);
-  if (next && t > s.start + s.dur - Math.min(s.trans, 0.45*s.dur)) return edge(s, next, s.start + s.dur);
+  if (prev && t < s.start + Math.min(s.trans*TUNING.glide, 0.45*s.dur)) return edge(prev, s, s.start);
+  if (next && t > s.start + s.dur - Math.min(s.trans*TUNING.glide, 0.45*s.dur)) return edge(s, next, s.start + s.dur);
   return s.f((t - s.start)/s.dur);
 }
 // How much of something (voice, breath, hiss) there is at time t: each segment's own, ramped over a few ms at its ends.
@@ -283,19 +300,20 @@ function band() {
 /**
  * A line of text said in someone's babble voice.
  * @param {string} text
- * @param {{pitch: number, formant: number, sharpness: number, melody?: number}} voice - as for babble
+ * @param {{pitch: number, formant: number, sharpness: number, melody?: number, age?: number}} voice - as for babble (age: breathier when old)
  * @param {{mood?: number, who?: number, clauses?: object[]}} [options] - their mood trait (the cheerier, the quicker), and a number of their
  *   own, so the same person always talks at the same pace, and phonemes to say in place of the text's (as phonemesOf's; each clause's `pace`: times faster)
  * @returns {?Float32Array} its samples, at SAMPLE_RATE; or null, if there's nothing to say
  */
-export function speakText(text, voice, { mood = 0, who = 0, clauses = phonemesOf(text) } = {}) {
+export function speakText(text, voice, { mood = 0, who = 0, speed = 1, clauses = phonemesOf(text) } = {}) {
   if (!clauses.length) return null;
-  const segments = plan(clauses, tempoOf(mood, who));
+  const segments = plan(clauses, tempoOf(mood, who, speed));
   const end = segments.at(-1).start + segments.at(-1).dur;
   const samples = new Float32Array(Math.ceil(end*SAMPLE_RATE));
-  const { pitch, formant = 1, sharpness = 6 } = voice;
-  const width = Math.max(0.6, Math.min(1.8, 6/sharpness)); // (a sharper voice's formants ring narrower)
-  const pitchOf = pitchContour(segments, clauses, pitch, melodyOf(voice));
+  const { pitch, formant = 1, sharpness = 6, age = 0 } = voice;
+  const breathy = 3*(TUNING.breathy + TUNING.ageBreath*Math.min(1, age/100)); // (×3: the formants pass little of it)
+  const width = Math.max(0.6, Math.min(1.8, 6/sharpness))*TUNING.bandwidth; // (a sharper voice's formants ring narrower)
+  const pitchOf = pitchContour(segments, clauses, pitch, melodyOf(voice), voice.vibrato ?? 0);
 
   const formants = [0, 1, 2, 3].map(resonator), nasalPole = resonator(), nasalZero = resonator();
   const hiss = band(), click = band();
@@ -311,10 +329,10 @@ export function speakText(text, voice, { mood = 0, who = 0, clauses = phonemesOf
       while (i < segments.length - 1 && t >= segments[i].start + segments[i].dur) i++;
       const s = segments[i], [F1, F2, F3] = formantsAt(segments, i, t);
       const muffle = levelAt(segments, i, t, x => x.muffle, 0.01);
-      formants[0].set(F1*formant, BANDWIDTHS[0]*width*(s.nasal ? 1.6 : 1));
-      formants[1].set(F2*formant, BANDWIDTHS[1]*width*muffle);
-      formants[2].set(F3*formant, BANDWIDTHS[2]*width*muffle);
-      formants[3].set(F4*formant, BANDWIDTHS[3]*width*muffle);
+      formants[0].set(F1*formant*TUNING.f1, BANDWIDTHS[0]*width*(s.nasal ? 1.6 : 1));
+      formants[1].set(F2*formant*TUNING.f2, BANDWIDTHS[1]*width*muffle);
+      formants[2].set(F3*formant*TUNING.f3, BANDWIDTHS[2]*width*muffle);
+      formants[3].set(TUNING.f4*formant, BANDWIDTHS[3]*width*muffle);
       nasalPole.set(NASAL[0]*formant, 100);
       nasalZero.set((levelAt(segments, i, t, x => x.nasal ? NASAL[1] : NASAL[0], 0.01))*formant, 100);
       targets[0] = levelAt(segments, i, t, x => x.voice);
@@ -338,7 +356,7 @@ export function speakText(text, voice, { mood = 0, who = 0, clauses = phonemesOf
     if (phase < dt) { const u = phase/dt; saw -= u + u - u*u - 1; } else if (phase > 1 - dt) { const u = (phase - 1)/dt; saw -= u*u + u + u + 1; }
     const white = Math.random()*2 - 1;
     // through the mouth: the voice, and any breath, through the nasal pair and the formants in turn
-    let x = voiceLevel*saw + breath*ASPIRATION*white;
+    let x = voiceLevel*(saw + breathy*white*(phase < 0.5 ? 1 : 0.3)) + breath*TUNING.aspiration*white;
     x = nasalZero.notch(nasalPole.run(x));
     for (const r of formants) x = r.run(x);
     let y = x*0.3;
@@ -356,21 +374,21 @@ export function speakText(text, voice, { mood = 0, who = 0, clauses = phonemesOf
   for (const v of samples) peak = Math.max(peak, Math.abs(v));
   const gain = peak ? 0.9/peak : 1, fade = Math.round(0.01*SAMPLE_RATE);
   for (let n = 0; n < samples.length; n++) {
-    samples[n] = Math.tanh(samples[n]*gain*1.2)/Math.tanh(1.2)*Math.min(1, n/fade, (samples.length - n)/fade);
+    samples[n] = Math.tanh(samples[n]*gain*TUNING.drive)/Math.tanh(TUNING.drive)*Math.min(1, n/fade, (samples.length - n)/fade);
   }
   return samples;
 }
 
-const tempoOf = (mood, who) => TEMPO/(1 + mood*0.08 + ((who*7) % 11 - 5)*0.015);
+const tempoOf = (mood, who, speed) => TUNING.tempo/(1 + mood*0.08 + ((who*7) % 11 - 5)*0.015)/speed**TUNING.speedTalk;
 /**
  * How long speakText's line of these clauses lasts, without making it.
  * @param {object[]} clauses - as phonemesOf's
  * @param {{mood?: number, who?: number}} [options] - as speakText's
  * @returns {number} seconds
  */
-export function lineLength(clauses, { mood = 0, who = 0 } = {}) {
+export function lineLength(clauses, { mood = 0, who = 0, speed = 1 } = {}) {
   if (!clauses.length) return 0;
-  const last = plan(clauses, tempoOf(mood, who)).at(-1);
+  const last = plan(clauses, tempoOf(mood, who, speed)).at(-1);
   return Math.ceil((last.start + last.dur)*SAMPLE_RATE)/SAMPLE_RATE;
 }
 export const MOUTH_FRAME = 0.05; // seconds over which how wide the mouth is follows a line
@@ -399,7 +417,7 @@ export function lineSound(voice, options) {
 // The pitch through the line, as babble's through a phrase: each clause in the speaker's melody, lifted on stressed
 // syllables and wandering a little on each, and at the clause's end falling as far as the melody lets it, or rising for a
 // question, a little for a clause to follow; the lot livelier with an exclamation. Smoothed, as a voice can't jump.
-function pitchContour(segments, clauses, pitch, melody) {
+function pitchContour(segments, clauses, pitch, melody, quaver) {
   const step = 0.01, end = segments.at(-1).start + segments.at(-1).dur;
   const raw = new Float32Array(Math.ceil(end/step) + 1);
   const spans = clauses.map((_, c) => {
@@ -407,7 +425,7 @@ function pitchContour(segments, clauses, pitch, melody) {
     return own.length ? [own[0].start, own.at(-1).start + own.at(-1).dur] : [0, 1];
   });
   const lastVowels = clauses.map((_, c) => segments.findLast(s => s.clause === c && s.vowel));
-  const wobble = new Map(segments.filter(s => s.vowel).map(s => [s, (Math.random()*2 - 1)*JITTER]));
+  const wobble = new Map(segments.filter(s => s.vowel).map(s => [s, (Math.random()*2 - 1)*TUNING.jitter]));
   // (which syllable of its clause each vowel is, for a melody that goes syllable by syllable)
   const syllable = new Map(), counts = clauses.map(() => 0);
   for (const s of segments) if (s.vowel) syllable.set(s, counts[s.clause]++);
@@ -420,20 +438,21 @@ function pitchContour(segments, clauses, pitch, melody) {
     const s = segments[i], [from, to] = spans[s.clause], ending = clauses[s.clause].end, lively = ending === '!' ? 1.6 : 1;
     const through = Math.max(0, Math.min(1, (t - from)/(to - from || 1)));
     if (s.vowel) nth = melody.sung ? sungNth.get(s) : syllable.get(s);
-    let f = pitch*(1 + melody.shape(through, nth))*(ending === '!' ? 1.08 : 1);
+    let f = pitch*(1 + TUNING.melodyDepth*melody.shape(through, nth))*(ending === '!' ? 1.08 : 1);
     if (melody.sung) { raw[k] = ending === '?' && lastVowels[s.clause] === s ? f*2**(5/12) : f; continue; }
-    if (s.accent) f *= 1 + STRESS*lively*s.accent*Math.sin(Math.PI*Math.min(1, (t - s.start)/s.dur*0.8 + 0.2));
+    if (s.accent) f *= 1 + TUNING.stress*lively*s.accent*Math.sin(Math.PI*Math.min(1, (t - s.start)/s.dur*0.8 + 0.2));
     if (s.vowel) f *= 1 + wobble.get(s);
     const last = lastVowels[s.clause];
     if (last && t >= last.start) {
       const u = Math.min(1, (t - last.start)/(last.dur || 1));
-      f *= ending === '?' ? 1 + 0.3*u : ending === ',' || ending === '-' ? 1 + 0.06*u : 1 - 0.2*melody.fall*u;
+      f *= ending === '?' ? 1 + TUNING.rise*u : ending === ',' || ending === '-' ? 1 + 0.06*u : 1 - TUNING.fall*melody.fall*u;
     }
     raw[k] = f;
   }
   const smoothed = new Float32Array(raw.length);
   let v = raw[0];
-  for (let k = 0; k < raw.length; k++) smoothed[k] = v += (raw[k] - v)*0.35;
-  const vibrato = melody.sung ? t => 1 + 0.02*Math.sin(2*Math.PI*5.5*t)*Math.min(1, t*2) : () => 1; // (sung: a singer's wobble)
+  for (let k = 0; k < raw.length; k++) smoothed[k] = v += (raw[k] - v)*TUNING.smooth;
+  const depth = TUNING.vibrato + quaver + (melody.sung ? 0.02 : 0), rate = TUNING.vibratoRate;
+  const vibrato = depth ? t => 1 + depth*Math.sin(2*Math.PI*rate*t)*Math.min(1, t*2) : () => 1; // (sung: a singer's wobble)
   return t => { const k = Math.min(raw.length - 1, t/step), j = Math.floor(k); return (smoothed[j] + ((smoothed[j + 1] ?? smoothed[j]) - smoothed[j])*(k - j))*vibrato(t); };
 }

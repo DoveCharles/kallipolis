@@ -287,5 +287,5 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `salon-models.py` (23K) Built assets/models/Salon.glb (since reworked by hand in Blender — rerunning it would undo that): a nineties hair salon's styling stations and chairs, backwash basin, hood dryer chairs, waiting bench, magazine table, reception, trolley, product shelves, fish tank, plant, posters, clock and fluorescent tubes (furnished by furnishSalon in buildings/interior.js).
 - `set_pieces.py` (6K) The building blocks tools/posh-models.py, tools/student-models.py and the rest make their furniture sets from:
 - `skirt-models.py` (3K) Builds assets/models/Skirt.glb:
-- `speech.html` (6K) Standalone "Speech bench" test page for synthesized speech.
+- `speech.html` (8K) Standalone "Speech bench": voice sliders plus every speech.js TUNING knob (pitch wobble, melody depth, formants, breath…), live; copy dumps them as JSON.
 - `student-models.py` (22K) Builds assets/models/Student.glb:

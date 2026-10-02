@@ -367,10 +367,12 @@ const FOOTFALLS = 0.13, STEPS_PER_CYCLE = 4; // how far through the walk cycle a
 // they talk in (see audio/melodies.js).
 function voiceOf(p, i) {
   const own = mulberry32(i*7919 + 13), isMan = personModel?.isMan[i] === 1, tall = Math.sqrt(Math.max(0.5, p.height));
-  const pitch = (isMan ? 150 : 250)/tall*(0.85 + 0.3*own());
+  const pitch = Math.max(60, Math.min(600, (isMan ? 150 : 250)/tall*2**(2.8*(own() - 0.5)))); // (±1.4 octaves)
   const formant = (isMan ? 1 : 1.15)/Math.sqrt(tall)*(0.8 + 0.42*own());
   const sharpness = 3 + 9*own();
-  return { pitch, formant, sharpness, melody: Math.floor(own()*MELODIES.length), isMan, ...presetAt(i)?.voice };
+  const melody = Math.floor(own()*MELODIES.length);
+  const vibrato = own() < (p.age - 40)/50 ? 0.01 + 0.03*own() : 0; // (a quaver: likelier the older, from 40; all by 90)
+  return { pitch, formant, sharpness, melody, isMan, age: p.age, vibrato, ...presetAt(i)?.voice };
 }
 /** Someone's voice (see voiceOf), for a sound made outside the frame loop: a cry as they're hit, say. */
 export const voiceOfPerson = p => voiceOf(p, people.indexOf(p));
