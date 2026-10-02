@@ -5,10 +5,10 @@
       "name": "kallipolis",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
-        "serve.py",
-        "8743"
+        "serve.py"
       ],
-      "port": 8743
+      "port": 8743,
+      "autoPort": true
     },
     {
       "name": "kallipolis-alt",

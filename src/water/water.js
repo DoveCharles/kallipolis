@@ -33,6 +33,66 @@ const WATER_TILE_SIZE = 96;         // world units per surface tile
 const WATER_TILE_MARGIN = 12;       // shore this far outside a tile still counts for it — past the shallows' reach
 const PARK_BEACH_WIDTH = 5;         // roughly how far sand reaches into a park from the water's edge
 export const WATER_TIME = { value: 0 };    // shared by every water material; advanced each frame in animate()
+export const WATER_SUN = { value: new THREE.Color(1, 1, 1) }; // the sun's (or moon's) light, glints lit by it; set in animate()
+// The water shaders' looks, as uniforms every water material shares; tuned live from View > Water (debug), ui/water-debug.js
+const rgb = (r, g, b) => ({ value: new THREE.Color(r, g, b) }), num = v => ({ value: v });
+export const WATER_TUNE = {
+  deep: { value: new THREE.Color(WATER_COLOR) }, shallow: rgb(0.2, 0.42, 0.42), weed: rgb(0.22, 0.478, 0.341),
+  sandTint: rgb(0.58, 0.92, 0.72), halo: rgb(0.52, 0.84, 0.64), foam: rgb(0.92, 0.97, 0.98), wet: rgb(0.5, 0.58, 0.52), coping: rgb(0.78, 0.76, 0.71),
+  shallowWidth: num(5.9), shallowMix: num(0), bands: num(3), weedFrom: num(0), weedMix: num(0.79), weedPatch: num(0.74),
+  sandWidth: num(6.1), sandMix: num(0.02), haloWidth: num(5.15), haloMix: num(0.19), wobble: num(0.65), lip: num(0.16),
+  foamReach: num(0.54), foamSwell: num(0.6), swellSpeed: num(0.66), laceScale: num(1.2), laceHoles: num(0),
+  ringSpeed: num(0.165), ringReach: num(2.9), ringWidth: num(0.07), ringBreak: num(0.44), ringMix: num(1),
+  wwAmount: num(0.07), wwScale: num(3.4), wwWidth: num(0.02), wwSoft: num(0), wwRound: num(0.095), wwWarp: num(0.3), wwBreak: num(0),
+  wwSpeed: num(0.1), wwDrift: num(0.03), wwCover: num(0),
+  glint: num(2), glintColor: rgb(1, 0.95, 0.8), glintScale: num(2), glintSize: num(1), glintSpeed: num(1.5),
+  ripple: num(0.65), facets: num(10), wetHeight: num(0), wetWave: num(0), copeHeight: num(0.31),
+  roughness: num(0.01), reflection: num(1.72),
+};
+const TUNE_PARS = Object.entries(WATER_TUNE).map(([k, u]) => `uniform ${u.value.isColor ? 'vec3' : 'float'} uW_${k};`).join('\n');
+const tuneUniforms = shader => { for (const k in WATER_TUNE) shader.uniforms['uW_' + k] = WATER_TUNE[k]; };
+// ---- Wind Waker foam's field: WW_CELLS × WW_CELLS cells of md (as WW_FIELD_PROCEDURAL, at time 0), tiling, WW_RES texels a
+// cell; baked again when wwRound changes (see refreshWaterMaterials). Baked, cells keep still (only drift and warp move
+// them); false is the old per-pixel version, where they wobble on wwSpeed
+const WW_BAKED = true;
+const WW_CELLS = 8, WW_RES = 32;
+const WW_FIELD = { value: null };
+let wwBakedRound = null;
+function bakeWindWaker() {
+  const k = Math.max(WATER_TUNE.wwRound.value, 1e-3), N = WW_CELLS, size = N*WW_RES, data = new Uint16Array(size*size);
+  const fract = x => x - Math.floor(x), hash = (x, y) => fract(Math.sin(x*127.1 + y*311.7)*43758.5453);
+  const pts = []; // (each cell's point, wrapped so the field tiles)
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) pts.push([0.5 + 0.4*Math.sin(6.283*hash(x, y)), 0.5 + 0.4*Math.sin(6.283*hash(x + 5.3, y + 5.3))]);
+  const pt = (x, y) => pts[((y % N) + N) % N*N + ((x % N) + N) % N];
+  for (let ty = 0; ty < size; ty++) for (let tx = 0; tx < size; tx++) {
+    const vx = (tx + 0.5)/WW_RES, vy = (ty + 0.5)/WW_RES, ix = Math.floor(vx), iy = Math.floor(vy), fx = vx - ix, fy = vy - iy;
+    let md = 8, mrx = 0, mry = 0, mgx = 0, mgy = 0;
+    for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
+      const q = pt(ix + x, iy + y), rx = x + q[0] - fx, ry = y + q[1] - fy, d = rx*rx + ry*ry;
+      if (d < md) { md = d; mrx = rx; mry = ry; mgx = x; mgy = y; }
+    }
+    let sum = 0;
+    for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
+      const ox = mgx + x, oy = mgy + y, q = pt(ix + ox, iy + oy), rx = ox + q[0] - fx, ry = oy + q[1] - fy;
+      const dx = rx - mrx, dy = ry - mry, l = Math.hypot(dx, dy);
+      if (l*l > 1e-5) sum += Math.exp(-((mrx + rx)*0.5*dx + (mry + ry)*0.5*dy)/l/k);
+    }
+    data[ty*size + tx] = THREE.DataUtils.toHalfFloat(-Math.log(Math.max(sum, 1e-20))*k);
+  }
+  const tex = new THREE.DataTexture(data, size, size, THREE.RedFormat, THREE.HalfFloatType);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  WW_FIELD.value?.dispose();
+  WW_FIELD.value = tex;
+  wwBakedRound = WATER_TUNE.wwRound.value;
+}
+if (WW_BAKED) bakeWindWaker();
+/** Roughness and reflection onto every water surface (they're the material's own, not uniforms). */
+export function refreshWaterMaterials() {
+  if (WW_BAKED && WATER_TUNE.wwRound.value !== wwBakedRound) bakeWindWaker();
+  S.waterGroup?.traverse(o => { if (o.material?.userData.water) { o.material.roughness = WATER_TUNE.roughness.value; o.material.envMapIntensity = WATER_TUNE.reflection.value; } });
+}
 
 // a fixed-length list of vec4 segment uniforms (GLSL array sizes are compile-time constants) — padding is never read
 // (flat, four numbers a segment: three.js hands a Float32Array straight to the GPU, where an array of Vector4s would be
@@ -101,6 +161,26 @@ function sharedEdgeSegmentsWith(ownPaths, otherArea, max) {
   return segments;
 }
 
+// Wind Waker foam's cell-border distance (md, in cells) at vc: baked (WW_BAKED) or worked out per pixel as before
+const WW_FIELD_BAKED = `      float md = textureLod(uWWField, vc/${WW_CELLS}.0, 0.0).r;
+`;
+const WW_FIELD_PROCEDURAL = `      vec2 mr = vec2(0.0), mg = vec2(0.0);
+      vec2 pts[9]; // (each cell's point, kept for the second pass)
+      float md = 8.0;
+      for (int y=-1; y<=1; y++) for (int x=-1; x<=1; x++) {
+        vec2 o = vec2(float(x), float(y)), r = o + (pts[(y + 1)*3 + x + 1] = wwPoint(vi + o)) - vf;
+        if (dot(r, r) < md) { md = dot(r, r); mr = r; mg = o; }
+      }
+      // (then the distance to every border round it, smooth-min'd so the cell's corners round off into blobs, the foam
+      // pooling where cells meet; wwRound is how round)
+      float wsum = 0.0, wk = max(uW_wwRound, 1e-3);
+      for (int y=-1; y<=1; y++) for (int x=-1; x<=1; x++) {
+        vec2 o = mg + vec2(float(x), float(y));
+        vec2 r = o + (abs(o.x) < 1.5 && abs(o.y) < 1.5 ? pts[int(o.y + 1.0)*3 + int(o.x + 1.0)] : wwPoint(vi + o)) - vf;
+        if (dot(mr - r, mr - r) > 1e-5) wsum += exp(-dot(0.5*(mr + r), normalize(r - mr))/wk);
+      }
+      md = -log(max(wsum, 1e-20))*wk;
+`;
 const WATER_FRAGMENT_PARS = `
   #define WATER_MAX_SHORE ${WATER_MAX_SHORE_SEGMENTS}
   #define WATER_MAX_BEACH ${WATER_MAX_BEACH_SEGMENTS}
@@ -112,6 +192,10 @@ const WATER_FRAGMENT_PARS = `
   uniform int uBeachCount;
   uniform float uBeachWaterline;
   uniform vec3 uSandTint;
+  ${TUNE_PARS}
+  float waterGlint = 0.0;
+  uniform vec3 uWaterSun;
+  uniform sampler2D uWWField;
   float waterHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
   float waterNoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -124,6 +208,8 @@ const WATER_FRAGMENT_PARS = `
     float h = clamp(dot(pa, ba)/max(dot(ba, ba), 1e-6), 0.0, 1.0);
     return length(pa - ba*h);
   }
+  // a Wind Waker foam cell's wobbling point
+  vec2 wwPoint(vec2 c) { return 0.5 + 0.4*sin(uWaterTime*uW_wwSpeed + 6.283*vec2(waterHash(c), waterHash(c + 5.3))); }
   // the surface's height: a few long travelling swells plus two layers of drifting noise
   float waterHeight(vec2 p) {
     float t = uWaterTime;
@@ -143,26 +229,67 @@ const WATER_COLOR_FRAGMENT = `
     for (int i=0; i<WATER_MAX_BEACH; i++) { if (i >= uBeachCount) break; beachDistance = min(beachDistance, waterSegmentDistance(wp, uBeachSegments[i])); }
     // the waterline is right at a wall, but part-way out from a beach's edge, where its slope goes under
     float shoreDistance = min(wallDistance, abs(beachDistance - uBeachWaterline));
-    vec3 deep = diffuseColor.rgb; // the material's own color is the deep water
+    vec3 deep = uW_deep;
     // stylized: the shallows come in flat bands (three steps out from the waterline), edges kept soft by a pixel
-    float shallow = 1.0 - smoothstep(0.0, 9.0, shoreDistance);
-    float aa = max(fwidth(shallow*3.0), 1e-3);
-    float banded = (floor(shallow*3.0) + smoothstep(1.0 - aa, 1.0, fract(shallow*3.0)))/3.0;
-    vec3 water = mix(deep, vec3(0.17, 0.62, 0.62), banded*0.85);
+    float shallow = 1.0 - smoothstep(0.0, uW_shallowWidth, shoreDistance);
+    float aa = max(fwidth(shallow*uW_bands), 1e-3);
+    float banded = (floor(shallow*uW_bands) + smoothstep(1.0 - aa, 1.0, fract(shallow*uW_bands)))/uW_bands;
+    vec3 water = mix(deep, uW_shallow, banded*uW_shallowMix);
+    // the bands nearest the shore turn green, unevenly, as if over weed
+    float weedy = smoothstep(uW_weedFrom, 1.0, banded)*(1.0 - uW_weedPatch + uW_weedPatch*waterNoise(wp*0.25));
+    water = mix(water, uW_weed, weedy*uW_weedMix);
     // sand showing through the first few units of water off a beach, with a slightly wavering edge
-    float sandy = 1.0 - smoothstep(0.0, 4.0, beachDistance - uBeachWaterline + (waterNoise(wp*0.5) - 0.5)*1.5);
-    water = mix(water, uSandTint*vec3(0.70, 0.96, 1.28), step(0.4, sandy)*0.6); // the same sand tint as the beach it runs on from, green-shifted and dimmed by the water above it
+    float sandy = 1.0 - smoothstep(0.0, uW_sandWidth, beachDistance - uBeachWaterline + (waterNoise(wp*0.5) - 0.5)*1.5);
+    water = mix(water, uSandTint*uW_sandTint, step(0.4, sandy)*uW_sandMix); // the same sand tint as the beach it runs on from, green-shifted and dimmed by the water above it
     float foamAa = max(fwidth(shoreDistance), 1e-3);
-    float wobble = (waterNoise(wp*0.8 + vec2(uWaterTime*0.2, -uWaterTime*0.15)) - 0.5)*0.5;
-    // a solid band of foam at the edge, then a thin ring that drifts out and fades
-    float foam = 1.0 - smoothstep(0.45 - foamAa, 0.45 + foamAa, shoreDistance + wobble);
-    float ringPos = fract(uWaterTime*0.12)*3.0 + 0.8;
-    float ring = (1.0 - smoothstep(0.08, 0.08 + foamAa*1.5, abs(shoreDistance + wobble - ringPos)))*(1.0 - smoothstep(1.5, 3.8, ringPos));
-    ring *= step(0.4, waterNoise(wp*0.9 - vec2(uWaterTime*0.1)));
-    // cartoon glints: sparse wavy streaks drifting across the open water
-    float g = waterNoise(vec2(wp.x*0.6 + wp.y*0.25, wp.y*1.8 - wp.x*0.4) + vec2(uWaterTime*0.3, uWaterTime*0.12));
-    float glint = smoothstep(0.92, 0.94, g)*smoothstep(1.5, 6.0, shoreDistance)*clamp(1.4 - length(fwidth(wp))*1.2, 0.0, 1.0);
-    diffuseColor.rgb = mix(water, vec3(0.92, 0.97, 0.98), max(max(foam, ring*0.85), glint*0.25));
+    float wobble = (waterNoise(wp*0.8 + vec2(uWaterTime*0.2, -uWaterTime*0.15)) - 0.5)*uW_wobble;
+    float d = shoreDistance + wobble;
+    // a lighter halo of churned water just past the foam
+    water = mix(water, uW_halo, (1.0 - smoothstep(0.5, uW_haloWidth, d))*uW_haloMix);
+    // a solid lip at the edge, then lacy foam that swells out and ebbs, holed by drifting noise
+    float swell = 0.5 + 0.5*sin(uWaterTime*uW_swellSpeed + waterNoise(wp*0.12)*6.283);
+    float lip = 1.0 - smoothstep(uW_lip - foamAa, uW_lip + foamAa, d);
+    float reach = uW_foamReach + swell*uW_foamSwell;
+    float band = 1.0 - smoothstep(reach - foamAa, reach + foamAa, d);
+    float lace = waterNoise(wp*uW_laceScale + vec2(uWaterTime*0.25, -uWaterTime*0.2))*0.6 + waterNoise(wp*uW_laceScale*2.08 - vec2(uWaterTime*0.3))*0.4;
+    float laceAa = max(fwidth(lace), 1e-3), holeAt = uW_laceHoles + d/reach*0.3;
+    float foam = max(lip, band*smoothstep(holeAt - laceAa, holeAt + laceAa, lace));
+    // two broken rings drifting out in turn, thinning and fading as they go
+    float ring = 0.0;
+    for (int k=0; k<2; k++) {
+      float ph = fract(uWaterTime*uW_ringSpeed + float(k)*0.5);
+      float w = mix(uW_ringWidth, uW_ringWidth*0.3, ph);
+      float r = 1.0 - smoothstep(w, w + foamAa*1.5, abs(d - (0.9 + ph*uW_ringReach)));
+      r *= step(uW_ringBreak + ph*0.2, waterNoise(wp*0.9 + vec2(float(k)*17.0) - vec2(uWaterTime*0.1)));
+      ring = max(ring, r*(1.0 - ph*ph));
+    }
+    // glints: sun twinkles out on open water — a star (dot and cross) in some cells of a grid, each flashing on its own clock
+    // (glintScale: world units between them; glintSize: how big each one is, in world units too)
+    vec2 gc = wp/uW_glintScale, gi = floor(gc), gf = (fract(gc) - (vec2(waterHash(gi + 3.1), waterHash(gi + 7.7))*0.6 + 0.2))*uW_glintScale;
+    float gpix = max(fwidth(wp.x), 1e-3), gPhase = waterHash(gi + 11.3), gRate = 0.6 + 0.8*waterHash(gi + 19.7);
+    float life = pow(max(0.0, sin(uWaterTime*uW_glintSpeed*gRate + gPhase*6.283)), 12.0)*step(0.55, waterHash(gi));
+    vec2 ga = abs(gf);
+    float gr = 0.06*uW_glintSize, garm = 0.008*uW_glintSize;
+    // (edges smoothed across a pixel centred on them, and anything thinner than a pixel dimmed by how much of it it covers,
+    // so they shrink with distance instead of holding at a pixel or two wide)
+    float star = max((1.0 - smoothstep(gr - gpix*0.5, gr + gpix*0.5, length(gf)))*min(1.0, gr*gr*4.0/(gpix*gpix)),
+      (1.0 - smoothstep(garm - gpix*0.5, garm + gpix*0.5, min(ga.x, ga.y)))*min(1.0, garm*2.0/gpix)*(1.0 - smoothstep(0.0, 0.4*uW_glintSize*life + 1e-3, max(ga.x, ga.y))));
+    waterGlint = star*life*smoothstep(1.5, 6.0, shoreDistance)*clamp(1.4 - gpix*1.2, 0.0, 1.0);
+    float ww = 0.0;
+    // (patch mask and distance fade first, derivatives outside the branch: the cells are skipped wherever they'd come to 0)
+    float wwPix = max(fwidth(wp.x), fwidth(wp.y))/uW_wwScale;
+    float wwFade = clamp(1.4 - wwPix*2.1, 0.0, 1.0);
+    float wwMask = smoothstep(uW_wwCover, uW_wwCover + 0.12, waterNoise(wp*0.04 + vec2(uWaterTime*0.02, -uWaterTime*0.013)));
+    if (uW_wwAmount > 0.0 && wwFade*wwMask > 0.0) { // (it's most of the shader's cost after the shore loop)
+      // Wind Waker foam: soft, broken lines along the borders of wobbling cells, bent by noise so they curve, in patches
+      vec2 warp = vec2(waterNoise(wp*0.15 + uWaterTime*0.05), waterNoise(wp*0.15 + 9.1 - uWaterTime*0.04)) - 0.5;
+      vec2 vc = wp/uW_wwScale + warp*uW_wwWarp + vec2(1.0, 0.6)*uWaterTime*uW_wwDrift, vi = floor(vc), vf = fract(vc);
+${WW_BAKED ? WW_FIELD_BAKED : WW_FIELD_PROCEDURAL}
+      float soft = uW_wwSoft*0.5 + max(wwPix, 1e-3);
+      float wwBreak = uW_wwBreak <= 0.0 ? 1.0 : smoothstep(uW_wwBreak - 0.1, uW_wwBreak + 0.1, waterNoise(vc*2.3 + 4.7));
+      ww = (1.0 - smoothstep(uW_wwWidth - soft, uW_wwWidth + soft, md))*wwBreak*wwMask*wwFade*uW_wwAmount;
+    }
+    diffuseColor.rgb = mix(water, uW_foam, max(max(foam, ring*uW_ringMix), ww));
   }
 `;
 const WATER_NORMAL_FRAGMENT = `
@@ -174,20 +301,42 @@ const WATER_NORMAL_FRAGMENT = `
     // calm the ripples where they'd be smaller than a pixel, so distant water doesn't sparkle
     float calm = clamp(1.2 - length(fwidth(wp))*0.9, 0.15, 1.0);
     // stylized: the slope snapped to 8 directions and 3 steepnesses, so the surface catches light in flat facets
-    vec2 slope = vec2(dhdx, dhdz)*1.6*calm;
-    float steep = floor(length(slope)*6.0 + 0.5)/6.0;
+    vec2 slope = vec2(dhdx, dhdz)*uW_ripple*calm;
+    float steep = floor(length(slope)*uW_facets + 0.5)/uW_facets;
     float dir = floor(atan(slope.y, slope.x)/0.7853982 + 0.5)*0.7853982;
     slope = vec2(cos(dir), sin(dir))*min(steep, 0.5);
     vec3 waterNormal = normalize(vec3(-slope.x, 1.0, -slope.y));
     normal = normalize((viewMatrix * vec4(waterNormal, 0.0)).xyz);
   }
 `;
+// Embankments: a pale coping along the top and a dark wet band at the waterline, lapping with the water
+function applyBankShader(mat) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uWaterTime = WATER_TIME;
+    tuneUniforms(shader);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBankPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBankPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBankPos;\nuniform float uWaterTime;\n' + TUNE_PARS)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          float y = vBankPos.y, aa = max(fwidth(y), 1e-3);
+          float lap = ${WATER_LEVEL.toFixed(2)} + uW_wetHeight + uW_wetWave*sin(dot(vBankPos.xz, vec2(0.7, 0.5)) + uWaterTime*1.3);
+          float wet = 1.0 - smoothstep(lap - aa, lap + aa, y);
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*uW_wet, wet);
+          float copeAt = ${WATER_BANK_TOP.toFixed(2)} - uW_copeHeight, cope = smoothstep(copeAt - aa, copeAt + aa, y);
+          diffuseColor.rgb = mix(diffuseColor.rgb, uW_coping, cope);
+        }`);
+  };
+}
 // `shoreSegments`: walled edges; `beachSegments`: edges with a beach, whose waterline is `beachWaterline` out from them
 export function applyWaterShader(mat, shoreSegments, beachSegments, beachWaterline) {
-  mat.roughness = 0.08;
+  mat.roughness = WATER_TUNE.roughness.value;
   mat.metalness = 0;
   mat.envMap = SKY_ENV_MAP;
-  mat.envMapIntensity = 1.1;
+  mat.envMapIntensity = WATER_TUNE.reflection.value;
+  mat.userData.water = true;
   const shore = segmentUniformArray(shoreSegments, WATER_MAX_SHORE_SEGMENTS);
   const beach = segmentUniformArray(beachSegments, WATER_MAX_BEACH_SEGMENTS);
   mat.onBeforeCompile = (shader) => {
@@ -198,13 +347,17 @@ export function applyWaterShader(mat, shoreSegments, beachSegments, beachWaterli
     shader.uniforms.uBeachCount = { value: Math.min(beachSegments.length, WATER_MAX_BEACH_SEGMENTS) };
     shader.uniforms.uBeachWaterline = { value: beachWaterline || 0 };
     shader.uniforms.uSandTint = SAND_TINT;
+    shader.uniforms.uWaterSun = WATER_SUN;
+    shader.uniforms.uWWField = WW_FIELD;
+    tuneUniforms(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWaterWorldPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWaterWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + WATER_FRAGMENT_PARS)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + WATER_COLOR_FRAGMENT)
-      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n' + WATER_NORMAL_FRAGMENT);
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n' + WATER_NORMAL_FRAGMENT)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += uW_glintColor*uWaterSun*waterGlint*uW_glint;');
   };
 }
 // The water region — every water zone minus the zones above it, plus every river, unioned — and the land beside it that
@@ -416,7 +569,7 @@ function buildWaterBody(region, parkArea) {
       mesh.name = name;
       S.waterGroup.add(mesh);
     };
-    addBankMesh(banks, WATER_BANK_COLOR, 'WaterBank');
+    addBankMesh(banks, WATER_BANK_COLOR, 'WaterBank', applyBankShader);
     // the same wet sand the beach meets the water with, so the slope carries straight on from it
     addBankMesh(beaches, 0xffffff, 'Beach', mat => App.applySandShader(mat, [], true), 1); // fully rough like the flat sand beside it, so it picks up no sheen the beach doesn't have
 

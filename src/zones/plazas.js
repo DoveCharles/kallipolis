@@ -140,6 +140,9 @@ export function makeFountainSpray(spout, poolY, poolRadius) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (length(gl_PointCoord - 0.5) > 0.5) discard;');
   };
+  // spout is baked into the shader text, so each spout needs its own program (else three.js reuses the first one compiled)
+  const key = `spray:${spout.x.toFixed(4)},${spout.y.toFixed(4)},${spout.z.toFixed(4)}`;
+  material.customProgramCacheKey = () => key;
   const points = new THREE.Points(geometry, material);
   points.name = 'FountainSpray';
   points.userData.sharedGeometry = true; points.userData.sharedMaterial = true;

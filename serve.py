@@ -96,6 +96,6 @@ if __name__ == '__main__':
         write_tv_loudness()
         sys.exit()
     threading.Thread(target=write_tv_loudness, daemon=True).start()
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get('PORT', 8000))
     print(f'Serving {sys.path[0] or "."} on port {port} (no-store)')
     ThreadingHTTPServer(('', port), NoStoreHandler).serve_forever()
