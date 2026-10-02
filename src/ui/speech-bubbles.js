@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { camera, renderer } from '../core/scene.js';
 import { S, App } from '../core/shared.js';
-import { cased } from './garble.js';
+import { cased, setBolded } from './garble.js';
 
 // ============================================================ speech bubbles
 // A bubble over the head of anyone saying a real line (see audio/dictionary.js), with the line in it. It stays up while
@@ -47,7 +47,7 @@ export function speechBubble(who, at, line) {
   if (line && line !== bubble.line) {
     bubble.line = line;
     // (cased to the speaker's own traits — the same reading their card gives the rest of them: see ui/garble.js)
-    bubble.element.textContent = cased(line.text, who.traits ?? {});
+    setBolded(bubble.element, cased(line.text, who.traits ?? {}));
     bubble.element.classList.toggle('thought', !!line.thought); // (a thought, not said: see thoughtOf in life/people/people.js)
   }
   bubble.doneAt = line ? 0 : bubble.doneAt || performance.now();
@@ -88,7 +88,7 @@ export function ownLine(who, line, choosing = null) {
       own.element.replaceChildren(...choosing.options.map((option, k) => {
         const row = document.createElement('div');
         row.className = 'own-choice' + (k === choosing.index ? ' picked' : '');
-        row.textContent = cased(option.text, who.traits ?? {});
+        setBolded(row, cased(option.text, who.traits ?? {}));
         return row;
       }));
       own.line = null; own.index = choosing.index;
@@ -100,7 +100,7 @@ export function ownLine(who, line, choosing = null) {
     own.choosing = null;
     if (line && line !== own.line) {
       own.line = line;
-      own.element.textContent = cased(line.text, who.traits ?? {});
+      setBolded(own.element, cased(line.text, who.traits ?? {}));
     }
     own.doneAt = line ? 0 : own.doneAt || performance.now();
   }

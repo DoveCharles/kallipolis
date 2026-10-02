@@ -31,6 +31,15 @@ export const capitalisedWords = text => text.replace(/(^|[\s(–—\-])(["'(]*)(
  * @param {object} traits - The traits the thing has (see core/traits.js).
  * @returns {string} The same text, cased as the traits ask.
  */
+/** Fill an element with a line's text, **word** in bold (as the loading tips): the asterisks never shown.
+ * @param {HTMLElement} el @param {string} text @returns {void} */
+export function setBolded(el, text) {
+  el.replaceChildren(...String(text).split('**').map((part, i) => {
+    if (!(i % 2)) return part;
+    const b = document.createElement('b'); b.textContent = part; return b;
+  }));
+}
+
 export const cased = (text, traits) => traits.lowercase > 0 ? String(text).toLowerCase()
   : traits.capitalise > 0 ? capitalisedWords(String(text)) : text;
 

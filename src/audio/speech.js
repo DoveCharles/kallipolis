@@ -160,7 +160,7 @@ function spell(text) {
  * @returns {{phonemes: object[], end: string}[]}
  */
 export function phonemesOf(text) {
-  const spelled = spell(text);
+  const spelled = spell(String(text).replace(/\*\*/g, '')); // (**bold** is for the bubble only)
   if (!spelled) return [];
   const clauses = [];
   let clause = { phonemes: [], end: '.' }, word = 0;

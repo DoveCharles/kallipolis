@@ -69,6 +69,7 @@
 # The first letter of a line is capitalised when it's said, and the first after any . ! or ? (not an ellipsis …) — so write words in lower
 # case ("labubu!!!" mid-line makes the next word start with a capital), and proper nouns with their capitals.
 # Nothing is ever made lower case for you (it can't tell a name from a word), so a capital in a file comes out as written.
+# **word** is bold in the bubble (and on the person card's said lines); the asterisks aren't shown or said.
 #
 # ------------------------------------------------------------------------------------------------------------------------
 # TAGS: {…} after any entry, include or reply

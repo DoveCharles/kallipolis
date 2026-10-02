@@ -9,7 +9,7 @@ import { profileOf, onProfilesLoaded } from './profiles.js';
 import { strikeLightning } from './lightning.js';
 import { makeCard } from '../ui/entity-card.js';
 import { personKey, reviveFavoritesAs } from '../ui/favorites.js';
-import { garbles, garbled, garbledEntry, cased } from '../ui/garble.js';
+import { garbles, garbled, garbledEntry, cased, setBolded } from '../ui/garble.js';
 import { ranked } from './people/peopleRelations.js';
 import { recentLines, onLineLogged } from './people/peopleSaid.js';
 import { GIFTS, POCKET_SLOTS, giftLines, giftsLoaded, giveGift, heldSnack, onGiftsLoaded, pocketsFull, takeBack } from './gifts.js';
@@ -423,7 +423,7 @@ function drawLines(w) {
   w.saidList.replaceChildren(...lines.slice().reverse().map(({ text, thought }) => {
     const line = document.createElement('div');
     line.className = 'pc-said-line' + (thought ? ' pc-said-thought' : '');
-    line.textContent = thought ? text : '“' + text + '”';
+    setBolded(line, thought ? text : '“' + text + '”');
     return line;
   }));
   if (!lines.length) w.saidList.textContent = 'Nothing yet';
