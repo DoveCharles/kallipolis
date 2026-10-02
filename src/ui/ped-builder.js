@@ -20,9 +20,10 @@ const AT = new THREE.Vector3(0, -5000, 0); // (where the ped's posed: out of eve
 const W = 256, H = 384; // first picture size (then the canvas's own)
 const LOVE_SLOTS = 4;
 const BODY = [['Breast', 0, 0], ['Waist', 0, 1], ['Hips', 0, 2], ['Weight', 0, 3], ['Butt', 1, 0], ['Shoulders', 1, 3]];
-const FACE = [['Key 1', PERSON_FACE_ROW, 0], ['Key 2', PERSON_FACE_ROW, 1], ['Shape 1', PERSON_FACE_ROW, 2], ['Shape 2', PERSON_FACE_ROW, 3], ['Shape 3', 1, 2]];
+const FACE = [['Chin Width', PERSON_FACE_ROW, 0], ['Chin Height', PERSON_FACE_ROW, 1], ['Eye Top', PERSON_FACE_ROW, 2], ['Eye Bottom', PERSON_FACE_ROW, 3], ['Eye Shape', 1, 2]];
 const COLOURS = ['Skin', 'Eyes', 'Hair', 'Hat', 'Top', 'Pants', 'Shoes', 'Skirt', 'Glasses'];
 const LAYERS = ['Hair / hat', 'Facial hair', 'Glasses', 'Skirt', 'Jeans'];
+const NUMBERED = [0, 1, 3]; // (worn layers shown by number: hair / hat, facial hair, skirt)
 const BANDS = [['Sleeves', 3], ['Tummy', 2], ['Legs', 2]];
 const OUTFIT_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitRed'), OUTFIT_COL_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitGreen');
 
@@ -154,9 +155,10 @@ function build() {
   head('Makeup');
   // (the clothing row's fourth number: bits 0–2 the lashes worn, bit 3 set for no lipstick)
   const lash = () => texel(PERSON_CLOTHING_ROW) + 3;
-  ['Lashes 1', 'Lashes 2', 'Lashes 3', 'Lipstick'].forEach((label, b) => check(label, () => (((t[lash()] >> b) & 1) ^ (b === 3)) === 1, v => {
-    t[lash()] = (v ? 1 : 0) ^ (b === 3) ? t[lash()] | (1 << b) : t[lash()] & ~(1 << b); dirty();
-  }));
+  const lashes = id();
+  row('Lashes', `<span class="pb-bands" id="${lashes}">${[0, 1, 2].map(b => `<input type="checkbox" data-b="${b}"${(t[lash()] >> b) & 1 ? ' checked' : ''}>`).join('')}</span>`);
+  on.push([lashes, 'change', e => { const b = +e.target.dataset.b; t[lash()] = e.target.checked ? t[lash()] | (1 << b) : t[lash()] & ~(1 << b); dirty(); }]);
+  check('Lipstick', () => !((t[lash()] >> 3) & 1), v => { t[lash()] = v ? t[lash()] & ~8 : t[lash()] | 8; dirty(); });
 
   head('Colours');
   COLOURS.forEach(part => {
@@ -178,7 +180,7 @@ function build() {
       e.currentTarget.querySelector('span').textContent = options[at()][1];
     }]);
   };
-  M.wornLayers.forEach((layer, l) => stepper(LAYERS[l] ?? 'Layer ' + l, [[-1, '(none)'], ...layer.styles.map((st, k) => [k, st.name.replace(/_[GB]+$/, '')])], () => layer.of[SLOT], v => {
+  M.wornLayers.forEach((layer, l) => stepper(LAYERS[l] ?? 'Layer ' + l, [[-1, '(none)'], ...layer.styles.map((st, k) => [k, NUMBERED.includes(l) ? String(k + 1) : st.name.replace(/_[GB]+$/, '')])], () => layer.of[SLOT], v => {
     const was = layer.of[SLOT];
     if (+v >= 0) { if (M.putOn(SLOT, layer.styles[+v].name) === undefined) say('No room for that style'); }
     else if (was >= 0) M.takeOff(SLOT, layer.styles[was].name);
