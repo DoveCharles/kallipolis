@@ -1565,8 +1565,9 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     const action = c.clip ? mixer.clipAction(c.clip).play() : null;
     for (let f=0;f<=c.frames;f++) {
       // (a `play` clip runs exactly first frame to last — or last to first)
-      const span = c.span ? Math.min(f, c.frames - 1)/Math.max(1, c.frames - 1)*c.clip.duration : 0;
-      if (action) mixer.setTime(c.holdAt ?? (c.span ? (c.reverse ? c.clip.duration - span : span) : (f % c.sourceFrames)/PERSON_BAKE_FPS)); else skeleton.pose();
+      // (short of the very end: a looping action set to its duration wraps round to its first frame)
+      const span = c.span ? Math.min(f, c.frames - 1)/Math.max(1, c.frames - 1)*(c.clip.duration - 1e-4) : 0;
+      if (action) mixer.setTime(c.holdAt ?? (c.span ? (c.reverse ? c.clip.duration - 1e-4 - span : span) : (f % c.sourceFrames)/PERSON_BAKE_FPS)); else skeleton.pose();
       root.updateMatrixWorld(true);
       if (c.repose) { c.taps = c.repose(f % c.frames, c.frames, rig); root.updateMatrixWorld(true); }
       bones.forEach((bone, b) => {
