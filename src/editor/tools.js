@@ -154,9 +154,11 @@ function setMode(mode) {
     S.zones.forEach(rebuildZoneVisual);
   }
   if (mode!=='maps') { S.hoveredMapId = null; setSelectedMap(null); }
+  const was = S.interactionMode;
   S.interactionMode = mode;
   applyModeVisibility();
   renderHierarchy();
+  App.modeChanged?.(was, mode); // (undo's for edit mode: see project/history.js)
 }
 function setEntityTab(tab) {
   S.lastGroundClick = null;
@@ -323,6 +325,7 @@ document.getElementById('btn-clear').addEventListener('click', ()=>{
   rebuildRoadMeshes();
   renderHierarchy();
   loadProgress({}); // (a new city starts from nothing: see project/progress.js)
+  App.resetHistory?.(); // (nothing of the last city to undo back to)
 });
 document.getElementById('btn-import-image').addEventListener('click', () => {
   document.getElementById('map-file-input').click();

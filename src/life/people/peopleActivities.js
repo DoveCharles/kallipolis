@@ -1255,12 +1255,22 @@ function reactToPunch(p, by) {
     return;
   }
   if (!by?.traits || isGone(by)) return;
+  if (retaliates(p, by)) goAfter(p, by, true);
+  else beginFleeing(p, { x: by.x, z: by.z });
+}
+// the revenge roll: whether p, wronged by `by`, goes after them
+function retaliates(p, by) {
   const canFight = (p.mode === 'line' || p.mode === 'wander') && (!by.punched || by.punched.stage === 'marked') && ['line', 'wander', 'leaving', 'possessed'].includes(by.mode);
-  if (canFight && !hidingFromSun(p) && (p.traits.vampire || peopleRng() < RETALIATE_CHANCE*p.traits.aggression)) {
-    goAfter(p, by, true);
-  } else {
-    beginFleeing(p, { x: by.x, z: by.z });
-  }
+  return canFight && !hidingFromSun(p) && (p.traits.vampire || peopleRng() < RETALIATE_CHANCE*p.traits.aggression);
+}
+/**
+ * Someone whose dropped snack was snatched (see scavenge in peopleHolding.js), once they're up: the revenge roll, and after the thief if it comes up.
+ * @param {Person} p - the owner
+ * @param {Person} thief
+ * @returns {void}
+ */
+export function avengeTheft(p, thief) {
+  if (thief?.traits && !isGone(thief) && !isGone(p) && retaliates(p, thief)) goAfter(p, thief, true);
 }
 
 // ---- revenge on a bee: after it (at SWAT_TIME × patience at most), and a swing once it's in reach — which, if it's still

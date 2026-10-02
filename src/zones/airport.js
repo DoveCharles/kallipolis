@@ -1487,7 +1487,7 @@ function updatePlaneFollow() {
  */
 function flyPlane() {
   const flight = followedFlight();
-  if (!flight || flown === flight || flight.wreckedUntil || !startFlying(stopFlying)) return;
+  if (!flight || flown === flight || flight.wreckedUntil || !startFlying(stopFlying, { at: () => flown?.plane?.position })) return;
   flown = flight;
   flight.handback = null;
   flight.returning = null; // (taken back off the autopilot, if it was flying itself home)

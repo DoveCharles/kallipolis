@@ -656,7 +656,7 @@ function flyByHand(colony, bird, dt) {
 function flyPigeon() {
   if (!followed || flown || !startFlying(stopFlyingPigeon, {
     keys: 'W/S forward and back · A/D to turn · Shift to hurry, or sink and land · Space to take off and climb',
-    touch: 'Stick to walk or fly it · Brake to take off and climb · Run to hurry, or sink', kind: 'critter' })) return;
+    touch: 'Stick to walk or fly it · Brake to take off and climb · Run to hurry, or sink', kind: 'critter', at: () => flown?.bird })) return;
   const { colony, bird } = followed;
   flown = followed;
   const air = bird.state !== 'ground';

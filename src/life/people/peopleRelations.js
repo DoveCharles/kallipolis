@@ -9,7 +9,7 @@ const PRUNE_EVERY = 30; // seconds between dropping the gone (see pruneGone)
 // how much each thing moves the score
 export const RELATE = { chat: 6, circle: 3, roomChat: 4, badChat: -15 };
 // felt (see feel in people.js): towards whoever did it
-const FELT = { punched: -30, hitbycar: -15 };
+const FELT = { punched: -30, hitbycar: -15, robbed: -15 };
 // seen (see notice in people.js): towards whoever did it
 const SAW = { punch: -6, beatentodeath: -20, killedbycar: -12 };
 

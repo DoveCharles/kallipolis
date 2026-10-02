@@ -21,9 +21,18 @@ function historySnapshot() {
   if (data.scene.weather && data.scene.weather.cycle) data.scene.weather = { cycle: true }; // nor the weather it moves
   return JSON.stringify(data);
 }
+// Undo and redo are for edit mode only (S.interactionMode not 'move'): the world's frozen there (see main.js), so a step is
+// only ever what was edited. In a game city (S.playMode, see ui/view-prefs.js) leaving edit mode closes the steps behind
+// it — the world's run on them since; a sandbox's reach back regardless.
+const editing = () => S.interactionMode !== 'move';
 function syncHistoryButtons() {
-  document.getElementById('btn-undo').disabled = !undoStack.length;
-  document.getElementById('btn-redo').disabled = !redoStack.length;
+  document.getElementById('btn-undo').disabled = !undoStack.length || !editing();
+  document.getElementById('btn-redo').disabled = !redoStack.length || !editing();
+}
+/** The view's mode changed (see setMode in editor/tools.js): the buttons follow, and a game city leaving edit mode drops its steps. */
+export function modeChanged(was, now) {
+  if (was !== 'move' && now === 'move' && S.playMode === 'game') { commitHistory(); resetHistory(); }
+  syncHistoryButtons();
 }
 export function commitHistory() {
   clearTimeout(historyTimer);
@@ -69,7 +78,7 @@ async function restoreHistory(snapshot) {
   syncHistoryButtons();
 }
 function undo() {
-  if (historyRestoring) return;
+  if (historyRestoring || !editing()) return;
   if (S.activeRoadLine || S.activeZone) { cancelActiveDrawing(); return; }
   commitHistory(); // anything not yet taken as a step becomes one first
   if (!undoStack.length) return;
@@ -77,11 +86,11 @@ function undo() {
   restoreHistory(undoStack.pop());
 }
 function redo() {
-  if (historyRestoring || S.activeRoadLine || S.activeZone) return;
+  if (historyRestoring || !editing() || S.activeRoadLine || S.activeZone) return;
   commitHistory();
   if (!redoStack.length) return;
   undoStack.push(historyCurrent);
   restoreHistory(redoStack.pop());
 }
 
-Object.assign(App, { scheduleHistory, resetHistory, undo, redo });
+Object.assign(App, { scheduleHistory, resetHistory, undo, redo, modeChanged });
