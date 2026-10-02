@@ -388,7 +388,7 @@ dom.addEventListener('pointermove', (e) => {
     insertPreviewMarker.visible = false;
     setHover(null);
     const overClickable = App.isInsideBuilding() ? hoverJukebox(e.clientX, e.clientY) || App.pickPerson(e.clientX, e.clientY) >= 0 : (App.pickPerson(e.clientX, e.clientY) >= 0 || App.pickCar(e.clientX, e.clientY) >= 0 || App.pickTrain(e.clientX, e.clientY) >= 0
-      || !!App.pickPlane(e.clientX, e.clientY) || !!App.pickBee(e.clientX, e.clientY) || !!App.pickHive(e.clientX, e.clientY) || !!App.pickPigeon(e.clientX, e.clientY) || !!App.pickMedBot(e.clientX, e.clientY) || !!App.pickSeraphorb(e.clientX, e.clientY)
+      || !!App.pickPlane(e.clientX, e.clientY) || !!App.pickBoat(e.clientX, e.clientY) || !!App.pickBee(e.clientX, e.clientY) || !!App.pickHive(e.clientX, e.clientY) || !!App.pickPigeon(e.clientX, e.clientY) || !!App.pickMedBot(e.clientX, e.clientY) || !!App.pickSeraphorb(e.clientX, e.clientY)
       || App.pickMedBooth(e.clientX, e.clientY) != null || App.pickSeraphStation(e.clientX, e.clientY) != null
       || !!App.pickBuilding(e.clientX, e.clientY));
     if (overClickable !== hoveringClickable) { hoveringClickable = overClickable; dom.style.cursor = overClickable ? 'pointer' : ''; }
@@ -468,7 +468,7 @@ function releasePointer(e) {
 }
 // Everything the camera can follow in World mode (see ui/entity-card.js), so a click on one of them lets go of all the
 // rest — a new kind of thing need only be named here, and export stopFollowing<its name> on App.
-const FOLLOWABLE = ['Person', 'Car', 'Train', 'Plane', 'Bee', 'Hive', 'Pigeon', 'MedBot', 'Seraphorb', 'MedBooth', 'SeraphStation', 'Building'];
+const FOLLOWABLE = ['Person', 'Car', 'Train', 'Plane', 'Boat', 'Bee', 'Hive', 'Pigeon', 'MedBot', 'Seraphorb', 'MedBooth', 'SeraphStation', 'Building'];
 const letGoOfAllBut = kept => FOLLOWABLE.forEach(kind => { if (kind !== kept) App['stopFollowing' + kind](); });
 App.letGoOfAllBut = letGoOfAllBut; // (for the favorites too: see ui/favorites.js)
 // Each followable kind's picker, and whether what it returned is a hit. Every picker takes an `out` it gives the hit's
@@ -483,6 +483,7 @@ const FOLLOW_PICKERS = [
   { kind: 'Car',    isHit: hit => hit >= 0, pick: (x, y, out) => App.pickCar(x, y, out) },
   { kind: 'Train',  isHit: hit => hit >= 0, pick: (x, y, out) => App.pickTrain(x, y, out) },
   { kind: 'Plane',  isHit: hit => !!hit,   pick: (x, y, out) => App.pickPlane(x, y, out) },
+  { kind: 'Boat',   isHit: hit => !!hit,   pick: (x, y, out) => App.pickBoat(x, y, out) },
   { kind: 'Hive',   isHit: hit => !!hit,   pick: (x, y, out) => App.pickHive(x, y, out) },
   { kind: 'MedBooth', isHit: hit => hit != null, pick: (x, y, out) => App.pickMedBooth(x, y, out) },
   { kind: 'SeraphStation', isHit: hit => hit != null, pick: (x, y, out) => App.pickSeraphStation(x, y, out) },

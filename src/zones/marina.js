@@ -6,6 +6,7 @@ import { clipPolygons, createMeshBuilder } from '../roads/roads.js';
 import { makeFlatZoneMesh } from './surface-detail.js';
 import { applyPavingShader, Y_PLAZA } from './plazas.js';
 import { WATER_TIME, WATER_LEVEL, WATER_BANK_BOTTOM, getWaterRegion } from '../water/water.js';
+import { controlInput } from '../life/possession.js';
 
 // ---------------------------------------------------------- marinas
 // A concrete quay. Where its edge meets water (a water zone or river), timber jetties run out into it with boats moored
@@ -15,7 +16,7 @@ import { WATER_TIME, WATER_LEVEL, WATER_BANK_BOTTOM, getWaterRegion } from '../w
 export const MARINA_COLOR = 0xa29e95;
 const JETTY_SPACING = 13, JETTY_HALF_WIDTH = 1, DECK_TOP = Y_PLAZA + 0.03, LAMP_SPACING = 14, BOLLARD_SPACING = 7;
 const HULLS = [0xf4f4f0, 0xf4f4f0, 0x1d2b4a, 0xb33a2e, 0x2f6d4f, 0xe8d9b5];
-const BOATS = { // L length, B beam, H freeboard, D draft
+export const BOATS = { // L length, B beam, H freeboard, D draft
   dinghy: { L: 3.2, B: 1.4, H: 0.35, D: 0.2 },
   motor: { L: 7.5, B: 2.6, H: 0.7, D: 0.5 },
   sail: { L: 8.5, B: 2.7, H: 0.6, D: 0.6 },
@@ -90,7 +91,7 @@ function boatBatch() {
   return {
     // y is the waterline; amp 0 holds it still (up on stands)
     add(kind, x, y, z, yaw, amp, rng) {
-      const cs = Math.cos(yaw), sn = Math.sin(yaw), ph = rng()*Math.PI*2;
+      const cs = Math.cos(yaw), sn = Math.sin(yaw), ph = rng()*Math.PI*2, start = pos.length/3;
       boatParts(kind, rng).forEach(([geo, hex]) => {
         const p = geo.attributes.position;
         c.setHex(hex);
@@ -101,6 +102,7 @@ function boatBatch() {
         }
         geo.dispose();
       });
+      return { start, count: pos.length/3 - start }; // (its vertices)
     },
     build() {
       if (!pos.length) return null;
@@ -157,7 +159,7 @@ export function generateMarinaContent(zone, poly, cutouts, blockers) {
   const kit = createMeshBuilder(), timber = createMeshBuilder(), lampHeads = createMeshBuilder(), boats = boatBatch(), lampPosts = [];
   const bollard = new THREE.CylinderGeometry(0.16, 0.2, 0.55, 8), lampGlobe = new THREE.IcosahedronGeometry(0.3, 1);
   const jetties = [], deck = [], roamers = [];
-  zone.benchSeats = [];
+  zone.benchSeats = []; zone.marinaMoored = [];
   const nearJetty = (x, z, gap) => jetties.some(j => {
     const rx = x - j.x, rz = z - j.z, al = rx*j.dx + rz*j.dz, ac = Math.abs(-rx*j.dz + rz*j.dx);
     return al > -gap && al < j.len + gap && ac < JETTY_HALF_WIDTH + gap;
@@ -219,15 +221,18 @@ export function generateMarinaContent(zone, poly, cutouts, blockers) {
           }
           // the outermost boat on a side can head out: its way along the jetty's line is clear
           const last = moored.pop();
-          moored.forEach(m => boats.add(m.kind, m.bx, WATER_LEVEL, m.bz, m.yaw, 1, rng));
+          const exitOf = m => { const reach = j.len + 7 - m.along; return { x: m.bx + jdx*reach, z: m.bz + jdz*reach }; };
+          const tie = m => zone.marinaMoored.push({ kind: m.kind, x: m.bx, z: m.bz, yaw: m.yaw, jdx, jdz, exit: exitOf(m),
+            range: boats.add(m.kind, m.bx, WATER_LEVEL, m.bz, m.yaw, 1, rng) });
+          moored.forEach(tie);
           if (!last) return;
-          const reach = j.len + 7 - last.along, ex = last.bx + jdx*reach, ez = last.bz + jdz*reach;
+          const { x: ex, z: ez } = exitOf(last), reach = j.len + 7 - last.along;
           let free = rng() < 0.5;
           for (let d = 0; free && d <= reach; d += 1) {
             const cx = last.bx + jdx*d, cz = last.bz + jdz*d;
             free = wet(cx, cz) && wet(cx - jdz*2, cz + jdx*2) && wet(cx + jdz*2, cz - jdx*2);
           }
-          if (!free) { boats.add(last.kind, last.bx, WATER_LEVEL, last.bz, last.yaw, 1, rng); return; }
+          if (!free) { tie(last); return; }
           roamers.push(makeRoamer(last.kind, last.bx, last.bz, last.yaw, jdx, jdz, ex, ez, rng));
         });
       }
@@ -294,7 +299,9 @@ export function generateMarinaContent(zone, poly, cutouts, blockers) {
   }
   const boatMesh = boats.build();
   if (boatMesh) zone.buildingsGroup.add(boatMesh);
+  zone.marinaBoatMesh = boatMesh;
   roamers.forEach(r => { zone.buildingsGroup.add(r.mesh, r.wake); placeRoamer(r); });
+  roamers.forEach((r, i) => { r.zone = zone; r.index = i; });
   zone.marinaRoamers = roamers;
   zone.marinaJetties = jetties;
 }
@@ -346,23 +353,62 @@ function updateWake(r, dt) {
 function makeRoamer(kind, x, z, yaw, dx, dz, ex, ez, rng) {
   const batch = boatBatch();
   batch.add(kind, 0, 0, 0, 0, 1, rng);
-  const mesh = batch.build(), wake = new THREE.Mesh(wakeGeometry(), wakeMaterial());
+  return roamerOf(batch.build(), kind, x, z, yaw, dx, dz, ex, ez);
+}
+function roamerOf(mesh, kind, x, z, yaw, dx, dz, ex, ez) {
+  const wake = new THREE.Mesh(wakeGeometry(), wakeMaterial());
   mesh.name = 'MarinaBoat'; mesh.rotation.order = 'YXZ';
   wake.name = 'MarinaWake'; wake.visible = false; wake.renderOrder = 1; wake.frustumCulled = false;
   return { kind, mesh, wake, x, z, yaw, v: 0, roll: 0, berth: { x, z }, exit: { x: ex, z: ez }, inward: Math.atan2(-dz, -dx),
     state: 'berth', timer: 20 + Math.random()*280, route: null, leg: 0 };
 }
+// a moored boat clicked (zones/marina-follow.js): lifted out of the shared mesh (its vertices there collapsed) into a roamer
+// of its own that stays put (r.stay) unless steered out by hand
+export function unmoor(zone, i) {
+  const m = zone.marinaMoored?.[i], merged = zone.marinaBoatMesh;
+  if (!m || !merged) return null;
+  if (m.roamer) return m.roamer;
+  const src = merged.geometry.attributes, { start, count } = m.range, cs = Math.cos(m.yaw), sn = Math.sin(m.yaw);
+  const pos = new Float32Array(count*3), col = new Float32Array(count*3), boat = new Float32Array(count*4), dir = new Float32Array(count*3);
+  for (let k = 0; k < count; k++) {
+    const v = start + k, px = src.aBoat.getX(v), py = src.aBoat.getY(v), pz = src.aBoat.getZ(v);
+    const dx = src.position.getX(v) - px, dz = src.position.getZ(v) - pz;
+    pos.set([dx*cs + dz*sn, src.position.getY(v) - py, -dx*sn + dz*cs], k*3);
+    col.set([src.color.getX(v), src.color.getY(v), src.color.getZ(v)], k*3);
+    boat.set([0, 0, 0, src.aBoat.getW(v)], k*4); dir.set([1, 0, src.aDir.getZ(v)], k*3);
+    src.position.setXYZ(v, px, py, pz);
+  }
+  src.position.needsUpdate = true;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aBoat', new THREE.BufferAttribute(boat, 4));
+  geo.setAttribute('aDir', new THREE.BufferAttribute(dir, 3));
+  geo.computeVertexNormals(); geo.computeBoundingSphere(); geo.boundingSphere.radius += 1;
+  const mesh = new THREE.Mesh(geo, boatMaterial);
+  mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.sharedMaterial = true;
+  const r = roamerOf(mesh, m.kind, m.x, m.z, m.yaw, m.jdx, m.jdz, m.exit.x, m.exit.z);
+  Object.assign(r, { stay: true, timer: Infinity, zone, index: zone.marinaRoamers.length, mooredIndex: i });
+  zone.marinaRoamers.push(r);
+  zone.buildingsGroup.add(mesh, r.wake);
+  placeRoamer(r);
+  return m.roamer = r;
+}
+const restTime = r => r.stay ? Infinity : 60 + Math.random()*300;
 function placeRoamer(r) {
   r.mesh.position.set(r.x, WATER_LEVEL, r.z);
   r.mesh.rotation.set(r.roll, -r.yaw, Math.max(0, r.v)*(r.kind === 'sail' ? 0.004 : 0.012));
 }
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 // a there-and-back chain of waypoints from the roamer's exit, or null when the water round it is too tight
-function planTrip(r) {
+// the water's tests, made fresh (it changes as the map does): open (no land, road or deck), ok (open and clear of every
+// jetty's moorings), sight (a boat's width of ok water all the way between two points)
+function waterways() {
   const inWater = App.createRegionTester(getWaterRegion()), onRoad = App.createRegionTester(S.roadFootprint || []);
   const onDeck = App.createRegionTester(S.walkDeck || []);
   const jetties = S.zones.flatMap(z => z.marinaJetties || []);
-  const ok = (x, z) => inWater(x, z) && !onRoad(x, z) && !onDeck(x, z) && !jetties.some(j => {
+  const open = (x, z) => inWater(x, z) && !onRoad(x, z) && !onDeck(x, z);
+  const ok = (x, z) => open(x, z) && !jetties.some(j => {
     const rx = x - j.x, rz = z - j.z, al = rx*j.dx + rz*j.dz;
     return al > -KEEP_OUT && al < j.len + KEEP_OUT && Math.abs(-rx*j.dz + rz*j.dx) < JETTY_HALF_WIDTH + KEEP_OUT;
   });
@@ -374,6 +420,11 @@ function planTrip(r) {
     }
     return true;
   };
+  return { open, ok, sight };
+}
+// a there-and-back chain of waypoints from the roamer's exit, or null when the water round it is too tight
+function planTrip(r) {
+  const { ok, sight } = waterways();
   const roomy = c => { for (let k = 0; k < 8; k++) if (!ok(c.x + Math.cos(k*Math.PI/4)*7, c.z + Math.sin(k*Math.PI/4)*7)) return false; return true; };
   const chain = [], legs = 2 + Math.floor(Math.random()*4);
   let from = r.exit;
@@ -398,16 +449,46 @@ function slide(r, to, dt) {
   r.x += dx/d*step; r.z += dz/d*step; r.v = ahead ? sp : -sp;
   return false;
 }
+// ---- steered by hand (zones/marina-follow.js): W/S throttle (astern on S), A/D the helm, Shift for more, Space to stop;
+// bumping land, a road or a deck stops it dead
+export function takeHelm(r) {
+  r.state = 'hand'; r.route = null;
+  r.open = waterways().open;
+}
+// let go: back to its berth by the exit (straight there, or by one waypoint between), else it's simply back in its berth
+export function giveHelmBack(r) {
+  r.open = null;
+  const { ok, sight } = waterways(), here = { x: r.x, z: r.z };
+  let route = sight(here, r.exit) ? [r.exit] : null;
+  for (let tries = 0; tries < 80 && !route; tries++) {
+    const a = Math.random()*Math.PI*2, d = 10 + Math.random()*110, c = { x: r.exit.x + Math.cos(a)*d, z: r.exit.z + Math.sin(a)*d };
+    if (ok(c.x, c.z) && sight(here, c) && sight(c, r.exit)) route = [c, r.exit];
+  }
+  if (route) { r.route = route; r.leg = 0; r.state = 'roam'; return; }
+  Object.assign(r, { x: r.berth.x, z: r.berth.z, yaw: r.inward, v: 0, roll: 0, state: 'berth', timer: restTime(r) });
+  placeRoamer(r);
+}
+function steerByHand(r, dt) {
+  const k = controlInput(), top = SPEED[r.kind]*(k.run ? 1.6 : 1.2);
+  const want = k.brake ? 0 : k.forward > 0 ? top : k.forward < 0 ? -2.5 : r.v*0.98;
+  r.v += Math.max(-ACCEL*2*dt, Math.min(ACCEL*dt, want - r.v));
+  const turn = k.right*TURN*1.8*Math.min(1, Math.abs(r.v)/2 + 0.15)*(r.v < -0.1 ? -1 : 1)*dt;
+  const yaw = r.yaw + turn, x = r.x + Math.cos(yaw)*r.v*dt, z = r.z + Math.sin(yaw)*r.v*dt, half = BOATS[r.kind].L/2;
+  const clear = [half, -half].every(a => r.open(x + Math.cos(yaw)*a, z + Math.sin(yaw)*a));
+  if (clear) { r.x = x; r.z = z; r.yaw = yaw; } else r.v *= -0.2;
+  return clear ? turn : 0;
+}
 function stepRoamer(r, dt) {
   let turn = 0;
-  if (r.state === 'berth') {
+  if (r.state === 'hand') turn = steerByHand(r, dt);
+  else if (r.state === 'berth') {
     if ((r.timer -= dt) > 0) return;
     r.route = planTrip(r);
     if (!r.route) { r.timer = 30 + Math.random()*90; return; }
     r.leg = 0; r.state = 'out';
   } else if (r.state === 'out' || r.state === 'in') {
     if (slide(r, r.state === 'out' ? r.exit : r.berth, dt)) {
-      if (r.state === 'in') { r.state = 'berth'; r.timer = 60 + Math.random()*300; }
+      if (r.state === 'in') { r.state = 'berth'; r.timer = restTime(r); }
       else { r.state = 'pivot'; r.face = Math.atan2(r.route[0].z - r.z, r.route[0].x - r.x); r.then = 'roam'; }
     }
   } else if (r.state === 'pivot') {

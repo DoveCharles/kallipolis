@@ -159,9 +159,9 @@ const FLYING_KEYS = 'W/S to dive and climb · A/D to bank · Shift for power · 
 const FLYING_TOUCH = 'Stick to fly it · Run for power · Brake to slow';
 /**
  * @param {() => void} release - called to let go of whatever is being flown, when Esc or the exit button asks
- * @param {{keys?: string, touch?: string, kind?: 'flying'|'critter', at?: () => ?{x: number, y: number, z: number}}} [hint] - how it is flown, if not like an aeroplane (the start of the hint's line); kind: what energy it costs (see CHARGE_MS); at: where it is
+ * @param {{keys?: string, touch?: string, kind?: 'flying'|'critter', at?: () => ?{x: number, y: number, z: number}, verb?: string}} [hint] - how it is flown, if not like an aeroplane (the start of the hint's line); kind: what energy it costs (see CHARGE_MS); at: where it is; verb: what Esc stops ('flying', or 'steering' a boat)
  */
-export function startFlying(release, { keys = FLYING_KEYS, touch = FLYING_TOUCH, kind = 'flying', at = null } = {}) {
+export function startFlying(release, { keys = FLYING_KEYS, touch = FLYING_TOUCH, kind = 'flying', at = null, verb = 'flying' } = {}) {
   // (no people check, unlike the two above: an aircraft flies its schedule whether or not the town has anyone in it,
   // so its card is there to be clicked either way, and "Fly it" shouldn't be a button that does nothing)
   if (S.interactionMode !== 'move' || !beginCharge(kind)) return false;
@@ -170,7 +170,7 @@ export function startFlying(release, { keys = FLYING_KEYS, touch = FLYING_TOUCH,
   flying.at = at;
   flying.lookedAt = -Infinity;
   held.clear();
-  showHint(IS_TOUCH ? 'Flying' : 'Press <kbd>Esc</kbd> to stop flying',
+  showHint(IS_TOUCH ? verb[0].toUpperCase() + verb.slice(1) : `Press <kbd>Esc</kbd> to stop ${verb}`,
     IS_TOUCH ? touch + ' · drag to look around' : keys + ' · mouse to look around · scroll to zoom');
   lockPointer();
   return true;

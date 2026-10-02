@@ -95,6 +95,7 @@ import { updateAmbience } from './audio/ambience.js';
 import { loadBeeModel, updateBees } from './life/bees.js';
 import { updateAirports, loadPlaneModel } from './zones/airport.js';
 import { updateMarinas } from './zones/marina.js';
+import { updateBoatFollow } from './zones/marina-follow.js';
 import { loadPigeonModel, updatePigeons } from './life/pigeons.js';
 import { loadMedBot, updateMedBots } from './life/medbot.js';
 import { updateSeraphorbs } from './life/seraphorb.js';
@@ -183,6 +184,7 @@ function animate() {
   updateBees(w);
   updateAirports(w);
   updateMarinas(w);
+  updateBoatFollow();
   updateMedBots(w);
   updateSeraphorbs(w);
   updatePigeons(w); // (before updateTraffic, which sets off the blasts that scatter them)
