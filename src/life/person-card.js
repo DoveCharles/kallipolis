@@ -603,4 +603,5 @@ function showLookCard(index) {
   Object.assign(el.style, { left: a.left + 'px', right: 'auto', top: 'auto', bottom: innerHeight - a.top + BESIDE_GAP + 'px' });
 }
 
-Object.assign(App, { showLookCard, showPersonCard,hidePersonCard, drawPersonHeadshot, otherHeadshotIndex, setPersonCardDoing, refreshCardStatuses });
+const cardedPeople = () => [...openWindows(), look].flatMap(w => w.shown ? [w.shown.index] : []);
+Object.assign(App, { cardedPeople, showLookCard, showPersonCard,hidePersonCard, drawPersonHeadshot, otherHeadshotIndex, setPersonCardDoing, refreshCardStatuses });

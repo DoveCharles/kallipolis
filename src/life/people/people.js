@@ -1339,6 +1339,7 @@ export function updatePeople(t) {
   const lyingNear = lyingDown.length > 8 ? crowdGrid(lyingDown) : null;
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   peopleFrame++;
+  const carded = App.cardedPeople?.() ?? []; // (anyone with a card open: posed in full, as its headshot's close up)
   beginEmotes();
   sweepPrayers();
   if (personModel) personModel.copiesWanted.twins = people.some(p => p.traits.twins); // (see copiesOf in peopleModel.js)
@@ -1632,7 +1633,7 @@ export function updatePeople(t) {
       p.heightScale = blend('heightScale');
       // how much of them there is to see (see FINE_EVERY): the one followed or controlled always in full, and anyone not
       // drawn at all as out of view. Out of view, they're left where they were last put — so long as that was out of view too.
-      const pixels = i === followed || i === possession.index ? Infinity : s <= 0 ? -1 : personPixels(p.x, p.y, p.z, 1.7*p.height*S.peopleSize);
+      const pixels = i === followed || i === possession.index || carded.includes(i) ? Infinity : s <= 0 ? -1 : personPixels(p.x, p.y, p.z, 1.7*p.height*S.peopleSize);
       const fineTurn = (peopleFrame + i) % FINE_EVERY === 0, out = pixels < 0;
       const placed = !(out && p.placedOut && !fineTurn), faced = fineTurn || pixels >= PERSON_FACE_PIXELS, worn = placed && (fineTurn || pixels >= PERSON_WORN_PIXELS);
       p.faceDt = (p.faceDt ?? 0) + dt;
