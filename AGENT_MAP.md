@@ -216,7 +216,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 ### src/sky/
 - `day-night.js` (3K) With the cycle on, the clock runs — a whole day in dayLengthMinutes — and the sun follows the path it really takes over a mid-latitude city in late sp… — exports: updateDayNight, syncSkyUI
 - `streetlights.js` (23K) A real light per lamp post is one more light in every lit material in the scene, and a street's worth of them would cost more than the rest of the fra… — exports: updateStreetlights
-- `weather.js` (9K) Cycle Weather (S.weatherCycle) eases between random spells. Rain and snow fall through a box of air around wherever the camera's looking — sized to how far out it's zoomed, and anchored to the world, so the dro… — exports: placeSunLight, updateWeather
+- `weather.js` (9K) Cycle Weather (S.weatherCycle) eases between random spells. Drops stop at roofs (coverTopAt: footprints.js solidTopAt plus malls' roofTop, cached per 1.5 m cell). Rain and snow fall through a box of air around wherever the camera's looking — sized to how far out it's zoomed, and anchored to the world, so the dro… — exports: placeSunLight, updateWeather
 
 ### src/trains/
 - `trains.js` (91K, **big**)  — exports: getTrainStations, trainStationsVersion, getTrainShuttles, isTrainLine, isTrainNode, networkKindOf, PATH_TYPES, pathTypeOf, currentPathType, trainNodeY, snapStationHeight …
