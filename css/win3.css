@@ -523,3 +523,8 @@ html.win3 #quests .w3-dialog-body { overflow:hidden; padding-bottom:12px; }
 .qs-refuse { all:unset; cursor:pointer; padding:0 4px; font-weight:bold; }
 /* world name (World window; Save asks for it) */
 #s-worldname, #w3-namebox { flex:1; width:100%; box-sizing:border-box; border:1px solid var(--w3-frame); background:var(--w3-window); color:var(--w3-text); font:inherit; padding:2px 4px; }
+/* the chronicle (View > Chronicle: life/chronicle.js) */
+.w3-chronicle { max-height:320px; overflow-y:auto; }
+.w3-chronicle-item { display:flex; gap:8px; width:100%; text-align:left; background:none; border:0; padding:3px 2px; font:inherit; color:var(--w3-text); cursor:pointer; }
+.w3-chronicle-item:hover { background:var(--w3-hl); color:var(--w3-hl-text); }
+.w3-chronicle-time { font-family:var(--mono); opacity:.7; }
