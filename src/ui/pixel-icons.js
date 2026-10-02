@@ -16,21 +16,83 @@ const COLORFUL = { 'grid-toggle': 'grid-toggle-on', favorites: 'favorites-on', '
   maps: 'maps-open', edit: 'edit-open', 'ped-builder': 'ped-builder-open', quests: 'quests-open', identify: 'identify-on',
   undo: 'undo-c', redo: 'redo-c', 'sound-on': 'sound-on-c', 'sound-off': 'sound-off-c',
   'projection-perspective': 'projection-perspective-c', 'projection-orthographic': 'projection-orthographic-c', 'status/gift': 'daily-gift-c' };
+const TINTED = new Set(Object.values(COLORFUL));
 let colorful = false;
 const colored = name => colorful && COLORFUL[name] || name;
-const iconSrc = name => `assets/icons/${colored(name)}.png`;
 // an <img> icon (data-icon its plain name) shown as `name`
 export function setImgIcon(img, name) {
   if (!img) return;
   img.dataset.icon = name;
-  img.src = iconSrc(name);
-  img.onerror = () => { img.onerror = null; img.src = `assets/icons/${name}.png`; };
+  const shown = colored(name), plain = () => { img.src = `assets/icons/${name}.png`; };
+  if (!TINTED.has(shown)) return plain();
+  tinted(shown).then(url => { if (img.dataset.icon === name && colored(name) === shown) img.src = url; }, plain);
 }
-export function setColorfulIcons(on) {
-  colorful = on;
-  document.body.classList.toggle('colorful-icons', on);
+const redraw = () => {
   icons.forEach((icon, svg) => pixelate(svg));
   document.querySelectorAll('img[data-icon]').forEach(img => setImgIcon(img, img.dataset.icon));
+};
+export function setColorfulIcons(on) {
+  colorful = on;
+  redraw();
+}
+
+// Colourful bitmaps are evened out in OKLCH: every coloured pixel gets the same chroma (the Icon saturation slider's),
+// and each icon's colours are shifted together to the same mean lightness, keeping their hues and light/dark contrast.
+const TINT_L = 0.7, TINT_C = 0.13;
+let saturation = 1;
+export function setIconSaturation(s) {
+  if (s === saturation) return;
+  saturation = s;
+  for (const name of TINTED) { bitmaps.delete(name); tints.delete(name); }
+  if (colorful) redraw();
+}
+const lin = c => (c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+const gam = c => 255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+function toLab(r, g, b) {
+  [r, g, b] = [lin(r), lin(g), lin(b)];
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+}
+function fromLab(L, a, b) {
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3,
+    s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s];
+}
+// the colour at lightness L, hue h, chroma c or as near it as the screen can show
+function lch(L, h, c) {
+  for (let i = 0; i < 12; i++, c *= 0.85) {
+    const rgb = fromLab(L, c * Math.cos(h), c * Math.sin(h));
+    if (rgb.every(v => v >= -1e-4 && v <= 1.0001) || i === 11) return rgb.map(v => Math.round(gam(Math.min(1, Math.max(0, v)))));
+  }
+}
+const tints = new Map(); // name -> Promise of its evened-out bitmap's data URL
+function tinted(name) {
+  if (!tints.has(name)) tints.set(name, (async () => {
+    const img = new Image();
+    img.src = `assets/icons/${name}.png`;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const all = ctx.getImageData(0, 0, canvas.width, canvas.height), d = all.data, coloured = [];
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 128) continue;
+      const [L, a, b] = toLab(d[i], d[i + 1], d[i + 2]);
+      if (Math.hypot(a, b) < 0.03) continue; // (black, white, greys: left be)
+      coloured.push([i, L, Math.atan2(b, a)]); sum += L;
+    }
+    const shift = coloured.length ? TINT_L - sum / coloured.length : 0;
+    for (const [i, L, h] of coloured) d.set(lch(Math.min(0.97, Math.max(0.2, L + shift)), h, TINT_C * saturation), i);
+    ctx.putImageData(all, 0, 0);
+    return canvas.toDataURL();
+  })());
+  return tints.get(name);
 }
 
 // which bitmap the icon shows, now
@@ -64,7 +126,7 @@ function nameOf(svg) {
 function load(name) {
   if (!bitmaps.has(name)) bitmaps.set(name, (async () => {
     const img = new Image();
-    img.src = `assets/icons/${name}.png`;
+    img.src = TINTED.has(name) ? await tinted(name) : `assets/icons/${name}.png`;
     await img.decode();
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;

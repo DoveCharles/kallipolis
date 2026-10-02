@@ -21,7 +21,7 @@
 // - Options > Speech > Bubble distance (S.bubbleDistance, 35) and Babble bubbles (S.babbleBubbles, off): see ui/speech-bubbles.js.
 import { S, App } from '../core/shared.js';
 import { whenLoaded } from './loading.js';
-import { setColorfulIcons } from './pixel-icons.js';
+import { setColorfulIcons, setIconSaturation } from './pixel-icons.js';
 
 const EDIT_HINTS_KEY = 'splinetopia.editHints', GENERAL_HINTS_KEY = 'splinetopia.generalHints';
 const START_MODE_KEY = 'splinetopia.startMode', LAST_MODE_KEY = 'splinetopia.lastMode', OLD_START_EDIT_KEY = 'splinetopia.startInEdit';
@@ -87,11 +87,11 @@ const colorfulIconsToggle = document.getElementById('s-colorfulicons');
 const showColorfulIcons = () => { colorfulIconsToggle.classList.toggle('on', colorfulIcons); setColorfulIcons(colorfulIcons); };
 showColorfulIcons();
 colorfulIconsToggle.addEventListener('click', () => { colorfulIcons = !colorfulIcons; remember(COLORFUL_ICONS_KEY, colorfulIcons); showColorfulIcons(); });
-// Icon saturation (%, 100): the colourful icons' CSS saturate() (css/base.css --icon-saturation)
+// Icon saturation (%, 100): the colourful icons' chroma, the same for all of them (ui/pixel-icons.js)
 const saturationSlider = document.getElementById('s-iconsaturation'), saturationShown = document.getElementById('dv-iconsaturation');
 const showSaturation = () => {
   saturationShown.textContent = `${saturationSlider.value}%`;
-  document.documentElement.style.setProperty('--icon-saturation', saturationSlider.value / 100);
+  setIconSaturation(saturationSlider.value / 100);
 };
 try { const v = localStorage.getItem(ICON_SATURATION_KEY); if (v !== null) saturationSlider.value = v; } catch (err) { /* storage blocked */ }
 showSaturation();
