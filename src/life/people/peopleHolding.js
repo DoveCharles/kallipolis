@@ -587,8 +587,8 @@ function scavengeChance(p, item) {
 // dropped[k] gone (picked up or lain too long): whoever was going back for it stops
 function unDrop(k) {
   const d = dropped.splice(k, 1)[0];
-  if (d.owner?.fetch === d.fetch) d.owner.fetch = null;
-  if (d.mugger?.fetch === d.mugFetch) d.mugger.fetch = null;
+  if (d.fetch && d.owner?.fetch === d.fetch) d.owner.fetch = null;
+  if (d.mugFetch && d.mugger?.fetch === d.mugFetch) d.mugger.fetch = null;
 }
 function takeUp(p, k) {
   const d = dropped[k];
@@ -636,11 +636,11 @@ function scavenge(now) {
     const o = d.owner, m = d.mugger;
     // punched out of their hand for it: the mugger's, once they've done staring (nobody else gets to it first)
     if (m) {
-      if (isGone(m) || m.punched || now > d.mugBy) { if (m.fetch === d.mugFetch) m.fetch = null; d.mugger = null; }
+      if (isGone(m) || m.punched || now > d.mugBy) { if (d.mugFetch && m.fetch === d.mugFetch) m.fetch = null; d.mugger = null; }
       else {
         if (!m.attack && !m.fetch) m.fetch = d.mugFetch = { x: d.pos.x, y: d.ground, z: d.pos.z };
         if (!m.attack && !m.holding?.length && within(d, m, reach)) {
-          if (m.fetch === d.mugFetch) m.fetch = null;
+          if (d.mugFetch && m.fetch === d.mugFetch) m.fetch = null;
           takeUp(m, k);
           feelAbout(m, 'snatched', d, o); if (o) feelAbout(o, 'robbed', d, m);
           beginFleeing(m, o ?? d.pos);
@@ -651,7 +651,7 @@ function scavenge(now) {
     // its owner's, while they're getting up or going back for it
     if (o) {
       const i = people.indexOf(o);
-      if (i < 0 || isGone(o) || (d.fetch && (o.fetch !== d.fetch || now > d.fetchBy))) { if (o.fetch === d.fetch) o.fetch = null; d.owner = null; continue; }
+      if (i < 0 || isGone(o) || (d.fetch && (o.fetch !== d.fetch || now > d.fetchBy))) { if (d.fetch && o.fetch === d.fetch) o.fetch = null; d.owner = null; continue; }
       if (!d.fetch && !(o.punched || o.fall || i === possession.index)) { // (up, and not yours: decides)
         if (o.holding?.length || !within(d, o, RETURN_REACH*S.peopleSize) || peopleRng() >= RETURN_SHARE) { feelAbout(o, 'ruined', d); d.owner = null; continue; }
         o.fetch = d.fetch = { x: d.pos.x, y: d.ground, z: d.pos.z }; d.fetchBy = now + FETCH_TIME;

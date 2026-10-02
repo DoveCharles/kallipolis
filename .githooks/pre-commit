@@ -1,0 +1,8 @@
+#!/bin/sh
+# Names each commit's version (tools/version.py) and stages it. Enable per clone: git config core.hooksPath .githooks
+# Never blocks a commit. (Windows' python3 can be a Store stub: try each.)
+for py in python3 python py; do
+  "$py" tools/version.py >/dev/null 2>&1 && { git add index.html; exit 0; }
+done
+echo "pre-commit: no working python, version not renamed" >&2
+exit 0

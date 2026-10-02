@@ -88,14 +88,14 @@ function track(set, item, settled, weight = 1) {
 // ---------------------------------------------------------------- hints
 // Shuffled, none twice till all have shown. Tags ({…}, <…>) stripped. Fetched unwatched: not a step of the bar.
 const HINTS_URL = 'assets/text/speech/talk/hints.txt', HINT_EVERY = 3000, HINT_FADE = 400; // ms
-const hintEl = screen.querySelector('.ls-hint');
+const hintEl = screen.querySelector('.ls-hint'), hintText = hintEl.querySelector('.ls-hint-text');
 let hints = [], hintAt = 0, hintTimer = 0;
 function nextHint() {
   if (!hints.length) return;
   if (hintAt % hints.length === 0) for (let i = hints.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i + 1)); [hints[i], hints[j]] = [hints[j], hints[i]]; }
   const text = hints[hintAt++ % hints.length];
   hintEl.classList.remove('shown');
-  setTimeout(() => { hintEl.textContent = text; hintEl.classList.add('shown'); }, hintEl.textContent ? HINT_FADE : 0);
+  setTimeout(() => { hintText.textContent = text; hintEl.classList.add('shown'); }, hintText.textContent ? HINT_FADE : 0);
 }
 
 // ---------------------------------------------------------------- fetches
