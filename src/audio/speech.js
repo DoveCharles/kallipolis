@@ -311,7 +311,7 @@ export function speakText(text, voice, { mood = 0, who = 0, speed = 1, clauses =
   const end = segments.at(-1).start + segments.at(-1).dur;
   const samples = new Float32Array(Math.ceil(end*SAMPLE_RATE));
   const { pitch, formant = 1, sharpness = 6, age = 0 } = voice;
-  const breathy = 3*(TUNING.breathy + TUNING.ageBreath*Math.min(1, age/100)); // (×3: the formants pass little of it)
+  const breathy = 2.2*(TUNING.breathy + TUNING.ageBreath*Math.min(1, age/100)); // (×2.2: the formants pass little of it)
   const width = Math.max(0.6, Math.min(1.8, 6/sharpness))*TUNING.bandwidth; // (a sharper voice's formants ring narrower)
   const pitchOf = pitchContour(segments, clauses, pitch, melodyOf(voice), voice.vibrato ?? 0);
 
