@@ -14,6 +14,7 @@ import { openHelp } from './help.js';
 import { editHints, generalHints } from './view-prefs.js';
 import { fpsCounter } from './fps.js';
 import { openHeldDebug } from './held-debug.js';
+import { openChronicle } from '../life/chronicle.js';
 import { openMoodsDebug } from './moods-debug.js';
 import { openRestaurantsDebug } from './restaurants-debug.js';
 import { openSalonBotDebug } from './salonbot-debug.js';
@@ -49,7 +50,7 @@ const tab = (sel, enabled = () => true) => ({ enabled, radio: () => panelShown()
 const inEdit = () => $('entity-toolbar').style.display !== 'none';
 
 // ---- message boxes: a little window in the middle of the view, a line or two of text and a row of buttons
-function messageBox(title, html, buttons = ['OK']) {
+export function messageBox(title, html, buttons = ['OK']) {
   return new Promise(resolve => {
     closeMenus();
     const veil = document.createElement('div');
@@ -125,6 +126,7 @@ const MENUS = [
     { label:'Side Panel', key:'s', check:panelShown, run:togglePanel },
     { label:'Toolbar', key:'t', check:toolsShown, run:() => setShown('w3-no-tools', !toolsShown()) },
     { label:'Favorites', key:'f', check:() => !$('favorites-panel').hidden, run:() => { setShown('w3-no-tools', true); $('btn-favorites').click(); } },
+    { label:'Daily Chronicle', key:'y', run:openChronicle },
     '-',
     { label:'Orthographic', key:'h', check:has('btn-projection', 'on'), run:press('btn-projection') },
     { label:'Ped View', key:'d', check:has('btn-ped-view', 'on'), run:press('btn-ped-view') },

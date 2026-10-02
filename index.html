@@ -27,7 +27,7 @@ window.KALLIPOLIS_ICONS = 'car card-heart card-heart-on edit edit-open energy ev
 <body>
 <!-- the Kallipolis window's title and menu bars, here rather than built by script so they show from the first moment of
      loading; src/ui/win3-menu.js wires them up (the titles must match its MENUS, in order) and fills in the clock -->
-<div id="app-frame"><div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Kallipolis -&nbsp;<span id="version">Date Peanut</span></div><button class="win3-min" title="Hide or show the side panel"></button><button class="win3-max" title="Full screen"></button></div><div id="w3-menubar" role="menubar"><button class="w3-menu-title"><u>F</u>ile</button><button class="w3-menu-title"><u>E</u>dit</button><button class="w3-menu-title"><u>V</u>iew</button><button class="w3-menu-title"><u>O</u>ptions</button><button class="w3-menu-title"><u>H</u>elp</button><button class="w3-clock" title="Time of day"></button></div></div>
+<div id="app-frame"><div class="win3-titlebar"><button class="win3-sysbox" title="Control menu"></button><div class="win3-title">Kallipolis -&nbsp;<span id="version">R***** Manufacturing</span><span id="world-title"></span></div><button class="win3-min" title="Hide or show the side panel"></button><button class="win3-max" title="Full screen"></button></div><div id="w3-menubar" role="menubar"><button class="w3-menu-title"><u>F</u>ile</button><button class="w3-menu-title"><u>E</u>dit</button><button class="w3-menu-title"><u>V</u>iew</button><button class="w3-menu-title"><u>O</u>ptions</button><button class="w3-menu-title"><u>H</u>elp</button><button class="w3-clock" title="Time of day"></button></div></div>
 <!-- the side panel and hints start hidden (ui-loading); src/ui/view-prefs.js slides them in once the page has loaded.
      start-edit keeps the Edit button pressed meanwhile when Options > Game > Start in Mode comes to Edit (see view-prefs.js). -->
 <script>
@@ -114,6 +114,8 @@ try {
 
   <div class="section" id="section-move" style="display:none;">
     <div data-settings="world"><!-- under the Windows 3.0 window, these open in a window from World in the toolbar -->
+    <div class="section-label">Name</div>
+    <div class="row"><input type="text" id="s-worldname" maxlength="40" placeholder="Unnamed world" spellcheck="false"></div>
     <div class="section-label">Time</div>
     <div class="slider-row"><div class="row"><label>Sun elevation</label><span class="val" id="dv-sunelev">45</span></div>
       <input type="range" id="s-sunelev" min="-20" max="90" step="1" value="45"></div>

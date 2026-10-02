@@ -830,6 +830,7 @@ export function witness(who, what, by = null, { reachScale = 1, most = MAX_WITNE
     if (building || d <= reach) near.push({ q, d });
   });
   near.sort((a, b) => a.d - b.d).slice(0, most).forEach(({ q }) => notice(q, who, what, by));
+  App.chronicle?.(who, what, by); // (the newspaper: life/chronicle.js)
 }
 const EVENT_REACH = 4, EVENT_WITNESSES = 15; // (how many times further off than WITNESS_RADIUS, and how many, see something happen at a place)
 /**

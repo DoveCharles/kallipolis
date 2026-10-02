@@ -1,0 +1,54 @@
+# Headlines for View > Chronicle, the city's newspaper. Edit freely, then reload the page.
+# Each [section] is something that happened (as witnessed in life/people/people.js); under it, one headline per line,
+# picked at random. {name} is who it happened to, {by} who did it (lines with {by} are only used when someone did),
+# {city} the world's name (World window).
+
+[killedbycar]
+{name} killed by car
+Pedestrian {name} dies in road horror
+{city} roads claim {name}
+
+[crashedinto]
+{name} dies in crash
+Fatal crash: {name} named as victim
+
+[fell]
+{name} dies in fall
+Tragic plunge for {name}
+
+[punchedfence]
+{name} dies fighting a fence
+Fence 1, {name} 0
+
+[beatentodeath]
+{name} beaten to death
+{by} beats {name} to death in broad daylight
+Police hunt {by} after killing of {name}
+
+[smited]
+{name} struck down by lightning
+Act of God: {name} smitten
+
+[orbsmited]
+{name} judged by the Seraphorb
+Orb strikes again: {name} dead
+
+[drowned]
+{name} drowns
+Body of {name} pulled from {city} waters
+
+[exploded]
+{name} explodes
+Residents shaken as {name} goes off
+
+[planecrash]
+Plane down over {city}
+Air disaster rocks {city}
+
+[resurrected]
+{name} back from the dead
+Miracle in {city}: {name} rises again
+
+[healed]
+MedBot saves {name}
+{name} patched up by MedBot
