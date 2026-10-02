@@ -954,7 +954,7 @@ export function updateGiblets(t) {
   const meshes = { glow: glowMesh, smoke: smokeMesh, sparkle: sparkleMesh, clipping: clippingMesh, cloud: cloudMesh, heart: heartMesh, tear: tearMesh,
     zed: zedMesh, note: noteMesh, confetti: confettiMesh, puff: puffMesh, drool: droolMesh, plus: plusMesh };
   softParticles.forEach(p => {
-    const age = t - p.born, life = age/p.life, mesh = meshes[p.kind];
+    const age = Math.max(0, t - p.born), life = age/p.life, mesh = meshes[p.kind]; // (born after this frame's t: a negative age would draw a swelling tear huge)
     if (life > 1 || drawnSoft[p.kind] >= softCap() || !isNearFx(p)) return;
     const swelling = age < (p.swell ?? 0); // (a tear still welling up: it holds still, growing)
     if (p.kind === 'drool' && !swelling) p.vy -= GRAVITY*0.5*dt;
