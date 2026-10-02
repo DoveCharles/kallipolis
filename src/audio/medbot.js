@@ -22,7 +22,7 @@ const VOICES_MAX = 2;
 const MOTOR_HZ = 165, MOTOR_VOLUME = 0.05;
 const SPEED_PITCH = 1.9, SPEED_LOUDER = 2;
 const SOFT_VOLUME = 0.07, STONE_VOLUME = 0.05, PROBE_EVERY = 0.25;
-const CRACKS = 2.5, CRACK_VOLUME = 0.12, WHEELBASE = 0.07; // cracks a second at speed 1; s between her front and back wheels' clacks
+const CRACKS = 6, CRACK_VOLUME = 0.12, WHEELBASE = 0.05; // cracks a second at speed 1; s between her front and back wheels' clacks
 const TREAD_HZ = 9;                     // the treads' rattle a second at her rolling speed (faster when she's faster)
 const SIREN_HZ = 760, SIREN_SWING = 330, SIREN_RATE = 0.55, SIREN_VOLUME = 0.05; // centre, ± Hz, wails a second
 const CHORD = [523.25, 659.25, 783.99, 987.77, 1318.5]; // Cmaj7 and a high E
@@ -83,7 +83,7 @@ function makeVoice() {
   loop(1).connect(filter('bandpass', 900, 0.7)).connect(crunch).connect(soft).connect(near);
   const grain = loop(0.004), roar = gain(0.7), stone = gain(0); // (the roar's grain: its loudness shaken quickly)
   grain.connect(gain(0.3)).connect(roar.gain);
-  loop(1).connect(filter('bandpass', 450, 0.6)).connect(filter('lowpass', 1400, 0.7)).connect(roar);
+  loop(1).connect(filter('bandpass', 900, 0.6)).connect(filter('lowpass', 2800, 0.7)).connect(roar);
   roar.connect(stone).connect(near);
 
   // the siren: a triangle wailing up and down (a slow sine on its pitch)
@@ -119,16 +119,16 @@ function crack(v, now, volume) {
   for (const at of [now, now + WHEELBASE*(0.8 + Math.random()*0.4)]) {
     const o = context.createOscillator(), knock = context.createGain();
     o.type = 'sine';
-    o.frequency.setValueAtTime(170 + Math.random()*40, at);
-    o.frequency.exponentialRampToValueAtTime(70, at + 0.06);
+    o.frequency.setValueAtTime(420 + Math.random()*80, at);
+    o.frequency.exponentialRampToValueAtTime(200, at + 0.04);
     knock.gain.setValueAtTime(volume, at);
-    knock.gain.exponentialRampToValueAtTime(0.0001, at + 0.09);
+    knock.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
     o.connect(knock).connect(v.near);
     o.start(at); o.stop(at + 0.1);
     o.onended = () => knock.disconnect();
     const n = context.createBufferSource(), f = context.createBiquadFilter(), click = context.createGain();
     n.buffer = noise;
-    f.type = 'bandpass'; f.frequency.value = 2500; f.Q.value = 0.8;
+    f.type = 'bandpass'; f.frequency.value = 4500; f.Q.value = 0.8;
     click.gain.setValueAtTime(volume*0.5, at);
     click.gain.exponentialRampToValueAtTime(0.0001, at + 0.025);
     n.connect(f).connect(click).connect(v.near);
