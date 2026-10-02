@@ -207,7 +207,21 @@ function setWeather(kind, value) {
   updateSun();
   syncSkyUI();
 }
+// Cycle Weather: every few minutes picks a new spell (clear, cloudy, rain, storm, snow) and eases toward it.
+const SPELLS = [[0, 0, 0], [0, 0, 0.3], [0, 0, 0.7], [0.4, 0, 0.8], [1, 0, 1], [0, 0.5, 0.6]];
+const SPELL_MIN = 90, SPELL_MAX = 300, EASE = 0.02; // seconds; share of the gap closed per second
+let spellEnd = 0, spell = SPELLS[0], lastCycle = 0;
+function cycleWeather(t) {
+  if (!S.weatherCycle) { spellEnd = 0; return; }
+  if (t - lastCycle < 0.5) return;
+  const dt = Math.min(t - lastCycle, 1); lastCycle = t;
+  if (t > spellEnd) { spell = SPELLS[Math.floor(Math.random()*SPELLS.length)]; spellEnd = t + SPELL_MIN + Math.random()*(SPELL_MAX - SPELL_MIN); }
+  const step = (v, to) => Math.abs(to - v) < 0.01 ? to : v + (to - v)*Math.min(1, EASE*dt*4);
+  S.weatherRain = step(S.weatherRain, spell[0]); S.weatherSnow = step(S.weatherSnow, spell[1]);
+  setWeather('clouds', step(S.weatherClouds, spell[2]));
+}
 export function updateWeather(t) {
+  cycleWeather(t);
   const wrap = (v, size) => ((v % size) + size) % size;
   const W = THREE.MathUtils.clamp(controls.radius*1.4, 160, 800), H = Math.min(260, W*0.5);
   const x0 = controls.target.x - W/2, z0 = controls.target.z - W/2, scale = W/300;

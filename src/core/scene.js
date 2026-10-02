@@ -318,9 +318,10 @@ function updateSkyEnvMap(sky) {
   skyPmrem.fromCubemap(skyCube, skyEnvTarget);
 }
 // Weather, 0..1 each (see "weather") — here because it dims the light and greys the sky.
-S.weatherRain = 0, S.weatherSnow = 0, S.weatherClouds = 0;
+S.weatherRain = 0, S.weatherSnow = 0, S.weatherClouds = 0, S.weatherCycle = false;
 const MOON_COLOR = new THREE.Color(0x9fb4d8);
 // which way the sun (or moon) is from what it shines on — placeSunLight makes it the light's position
+export const DAYLIGHT = { value: 1 }; // outdoor light, 1 at a clear noon (for unlit shaders: see updateSun)
 export const sunOffset = new THREE.Vector3(150, 220, 100);
 // Points the light, sky and fog at the current sun position and weather. While the sun is up (or just below the horizon)
 // the light is the sun; once it's well down, the moon — opposite it, dim and cool — takes over, with the two fading
@@ -371,12 +372,25 @@ export function updateSun(quick) {
   hemi.color.copy(sky.top).lerp(new THREE.Color(0xffffff), 0.35);
   setToonSky(hemi.color);
   hemi.intensity = LIGHT_INTENSITY_SCALE*0.9*THREE.MathUtils.lerp(0.3, 1, ease(-14, 6, S.sunElevation))*(1 - overcast*0.25);
+  DAYLIGHT.value = (sun.intensity + hemi.intensity)/(LIGHT_INTENSITY_SCALE*2.2);
   if (!quick) {
     updateSkyEnvMap(sky);
     updateWindowGlowForSun();
   }
 }
 updateSun();
+// the person card's headshot: lit as at day whatever the hour (on before it draws, off after)
+const HEADSHOT_SKY = new THREE.Color(0xdde6ee), keptSky = new THREE.Color();
+let keptHemi = 0, keptDaylight = 1;
+export function headshotLight(on) {
+  if (on) {
+    keptSky.copy(hemi.color); keptHemi = hemi.intensity; keptDaylight = DAYLIGHT.value;
+    hemi.color.copy(HEADSHOT_SKY); hemi.intensity = Math.max(hemi.intensity, LIGHT_INTENSITY_SCALE*0.9);
+    DAYLIGHT.value = Math.max(DAYLIGHT.value, 0.8);
+  } else {
+    hemi.color.copy(keptSky); hemi.intensity = keptHemi; DAYLIGHT.value = keptDaylight;
+  }
+}
 
 // Water and road surfaces sit below the ground (see "water" and rebuildRoadMeshes). The ground mesh itself is rebuilt
 // with holes where they are, but a few things are drawn flat just above ground level across the whole map — the grid,

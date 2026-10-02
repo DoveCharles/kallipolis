@@ -1,0 +1,7 @@
+# Words SAM (audio/speech.js) says wrong, one a line, in place of its guess:
+#   word: SAM phonemes    (a vowel's stress as a digit after it, 4 is usual: see the speech bench's readout)
+#   word = respelling     (said as SAM says this spelling)
+dozen: DAH4ZAXN
+dozens: DAH4ZAXNZ
+window: WIH4NDOW
+windows: WIH4NDOWZ

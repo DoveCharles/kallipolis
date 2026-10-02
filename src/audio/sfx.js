@@ -456,6 +456,8 @@ export function zzfxBuffer(layer) {
 // what's under it isn't heard, but it drives speakers into distortion and the limiter into pumping everything else
 // (tearing); and every end's faded over FADE_OUT, as some stop short (a pop).
 const FADE_OUT = 0.01, SUBSONIC_HZ = 35;
+// layers whose crush is the sound (a snow crunch): left as ZzFX makes it
+export const keepCrush = new WeakSet();
 function biquad(samples, type, hz, rate) {
   const w = 2*Math.PI*hz/rate, alpha = Math.sin(w)/(2*Math.SQRT1_2), cos = Math.cos(w), a0 = 1 + alpha;
   const b1 = (type === 'lowpass' ? 1 - cos : -(1 + cos))/a0, b0 = b1/2*(type === 'lowpass' ? 1 : -1), a1 = -2*cos/a0, a2 = (1 - alpha)/a0;
@@ -468,7 +470,7 @@ function biquad(samples, type, hz, rate) {
 }
 function tidy(samples, layer) {
   const crush = layer[15], cutoff = -(layer[20] ?? 0), rate = ZZFX.sampleRate;
-  if (crush && cutoff > 0) {
+  if (crush && cutoff > 0 && !keepCrush.has(layer)) {
     biquad(samples, 'lowpass', cutoff, rate);
     const tail = Math.min(samples.length, Math.round(((layer[5] ?? 0) + (layer[16] ?? 0))*rate));
     for (let k = 0; k < tail; k++) samples[samples.length - tail + k] *= (1 - k/tail)**2;

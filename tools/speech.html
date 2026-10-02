@@ -7,8 +7,9 @@
 <script type="importmap">{ "imports": { "sam-js": "https://cdn.jsdelivr.net/npm/sam-js@0.3.1/dist/samjs.esm.min.js" } }</script>
 <style>
   body { font: 15px system-ui, sans-serif; margin: 16px; max-width: 760px; background: #fff; color: #111; }
-  textarea { width: 100%; box-sizing: border-box; font: inherit; height: 4em; }
+  textarea { width: 100%; box-sizing: border-box; font: inherit; height: 7em; }
   label { display: inline-block; margin: 6px 12px 6px 0; }
+  #knobs label { width: 230px; } #knobs input { width: 110px; vertical-align: middle; }
   button { font: inherit; margin: 4px 6px 4px 0; padding: 4px 12px; }
   canvas { width: 100%; height: 200px; background: #000; display: block; margin-top: 8px; }
   #phonemes { font-family: ui-monospace, monospace; color: #555; margin-top: 6px; word-break: break-all; }
@@ -17,13 +18,18 @@
 </head>
 <body>
 <h3>Speech bench</h3>
-<textarea id="text">Where is the nearest train station?</textarea>
+<textarea id="text">Well, I told the man at the bakery that I wanted three loaves of bread, a dozen sticky buns, and whatever that strange purple cake was in the window. He looked at me, very slowly, and said: are you absolutely sure? So I said yes! Of course I'm sure! Why would anybody ask a question like that, on a Tuesday morning, in the rain? Honestly, some people.</textarea>
 <div>
-  <label>pitch <input id="pitch" type="range" min="80" max="320" value="130"> <span></span> Hz</label>
+  <label>pitch <input id="pitch" type="range" min="60" max="600" value="130"> <span></span> Hz</label>
   <label>formant <input id="formant" type="range" min="0.75" max="1.45" step="0.01" value="1"> <span></span></label>
   <label>sharpness <input id="sharpness" type="range" min="3" max="12" step="0.1" value="6"> <span></span></label>
   <label>melody <select id="melody"></select></label>
+  <label>accent <select id="accent"></select></label>
+  <label>age <input id="age" type="range" min="0" max="100" value="30"> <span></span></label>
+  <label>speed <input id="speed" type="range" min="0.1" max="6" step="0.1" value="1"> <span></span></label>
+  <label>mood <input id="mood" type="range" min="-3" max="3" step="0.1" value="0"> <span></span></label>
 </div>
+<fieldset id="knobs"><legend>Tuning <button id="reset">reset</button> <button id="copy">copy</button></legend></fieldset>
 <div>
   <button id="man">man</button><button id="woman">woman</button><button id="child">child</button>
   &nbsp; <button id="say"><b>Say</b> (babble voice)</button><button id="sam">SAM</button><button id="wav">save .wav</button>
@@ -33,41 +39,65 @@
 <ul id="lines"></ul>
 <script type="module">
 import SamJs from 'sam-js';
-import { speakText, phonemesOf, SAMPLE_RATE } from '../src/audio/speech.js';
-import { MELODIES } from '../src/audio/melodies.js';
+import { speakText, phonemesOf, SAMPLE_RATE, TUNING } from '../src/audio/speech.js';
+import { ACCENTS, accented, accentVoice } from '../src/audio/accents.js';
+import { MELODIES, ACCENT_MELODIES } from '../src/audio/melodies.js';
 
 const $ = id => document.getElementById(id);
 const context = new AudioContext();
 MELODIES.forEach((m, k) => $('melody').add(new Option(m.name, k)));
-const voice = () => ({ pitch: +$('pitch').value, formant: +$('formant').value, sharpness: +$('sharpness').value, melody: +$('melody').value });
-for (const id of ['pitch', 'formant', 'sharpness']) {
+ACCENTS.forEach(a => $('accent').add(new Option(a, a)));
+// [key, min, max, step]
+const KNOBS = [['tempo', 0.4, 2, 0.01], ['speedTalk', 0, 1.5, 0.05], ['pause', 0, 3, 0.05], ['stress', 0, 0.6, 0.01], ['jitter', 0, 0.3, 0.005],
+  ['melodyDepth', 0, 3, 0.05], ['fall', 0, 0.8, 0.01], ['rise', 0, 1, 0.01], ['smooth', 0.02, 1, 0.01],
+  ['vibrato', 0, 0.15, 0.002], ['vibratoRate', 1, 15, 0.1], ['glide', 0.2, 4, 0.05], ['f1', 0.6, 1.6, 0.01],
+  ['f2', 0.6, 1.6, 0.01], ['f3', 0.6, 1.6, 0.01], ['f4', 2500, 5000, 50], ['bandwidth', 0.3, 4, 0.05],
+  ['aspiration', 0, 1.5, 0.01], ['breathy', 0, 1.5, 0.01], ['ageBreath', 0, 2, 0.01], ['drive', 0.1, 6, 0.1]];
+const DEFAULTS = { ...TUNING };
+for (const [key, min, max, step] of KNOBS) {
+  const label = document.createElement('label'), input = Object.assign(document.createElement('input'), { type: 'range', min, max, step, value: TUNING[key], id: 'k-' + key });
+  const out = document.createElement('span');
+  input.oninput = () => { TUNING[key] = +input.value; out.textContent = input.value; };
+  input.onchange = say;
+  label.append(key + ' ', input, ' ', out); $('knobs').append(label); input.oninput();
+}
+$('reset').onclick = () => { for (const [key] of KNOBS) { $('k-' + key).value = DEFAULTS[key]; $('k-' + key).oninput(); } };
+$('copy').onclick = () => navigator.clipboard.writeText(JSON.stringify({ ...voice(), mood: +$('mood').value, ...TUNING }));
+const voice = () => accentVoice({ pitch: +$('pitch').value, formant: +$('formant').value, sharpness: +$('sharpness').value, melody: +$('melody').value, age: +$('age').value, accent: $('accent').value });
+const clausesOf = text => accented(phonemesOf(text), $('accent').value);
+for (const id of ['pitch', 'formant', 'sharpness', 'mood', 'age', 'speed']) {
   const show = () => $(id).nextElementSibling.textContent = $(id).value;
   $(id).oninput = show; show();
 }
 const preset = (p, f, s) => () => { $('pitch').value = p; $('formant').value = f; $('sharpness').value = s; ['pitch', 'formant', 'sharpness'].forEach(id => $(id).oninput()); };
 $('man').onclick = preset(130, 1, 6); $('woman').onclick = preset(220, 1.17, 6); $('child').onclick = preset(290, 1.35, 7);
 
-let last = null;
+let last = null, playing = null;
 function play(samples, rate) {
   context.resume();
+  playing?.stop();
   const buffer = context.createBuffer(1, samples.length, rate);
   buffer.getChannelData(0).set(samples);
   const source = context.createBufferSource();
   source.buffer = buffer;
   source.connect(context.destination);
   source.start();
+  playing = source;
 }
 function say() {
   const text = $('text').value;
-  $('phonemes').textContent = SamJs.convert(text) + '  →  ' + phonemesOf(text).map(c => c.phonemes.map(p => p.name + (p.stress ? p.stress : '')).join(' ') + ' ' + c.end).join(' | ');
+  $('phonemes').textContent = SamJs.convert(text) + '  →  ' + clausesOf(text).map(c => c.phonemes.map(p => p.name + (p.stress ? p.stress : '')).join(' ') + ' ' + c.end).join(' | ');
   const t0 = performance.now();
-  last = speakText(text, voice());
+  last = speakText(text, voice(), { mood: +$('mood').value, speed: +$('speed').value, clauses: clausesOf(text) });
   $('phonemes').textContent += `  (${(performance.now() - t0).toFixed(1)} ms)`;
   if (!last) return;
   play(last, SAMPLE_RATE);
   drawSpectrogram(last);
 }
 $('say').onclick = say;
+// (an accent with its own tune overrides the melody)
+$('melody').onchange = say;
+$('accent').onchange = () => { $('melody').disabled = !!ACCENT_MELODIES[$('accent').value]; say(); };
 $('sam').onclick = () => {
   const v = voice(), clamp = (x, lo, hi) => Math.round(Math.max(lo, Math.min(hi, x))), shape = 128*v.formant;
   const sam = new SamJs({ pitch: clamp(50*(150/v.pitch)**0.7, 22, 110), mouth: clamp(shape, 90, 200), throat: clamp(shape*0.95, 90, 200), speed: 72 });
@@ -109,9 +139,9 @@ function drawSpectrogram(samples) {
   g.putImageData(image, 0, 0);
 }
 
-fetch('../assets/dictionary.txt').then(r => r.text()).then(text => {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && !l.includes('['));
-  const fixed = ['Hello world.', 'Where is the nearest train station?', 'I really like cheese, but not on Tuesdays!',
+{
+  const lines = [];
+  const fixed = [$('text').value, 'Hello world.', 'Where is the nearest train station?', 'I really like cheese, but not on Tuesdays!',
     'The quick brown fox jumps over the lazy dog.', 'Bad dog. Big pig. Red leaf. Wet road.'];
   for (const line of [...fixed, ...lines.slice(0, 40)]) {
     const li = document.createElement('li');
@@ -119,7 +149,7 @@ fetch('../assets/dictionary.txt').then(r => r.text()).then(text => {
     li.onclick = () => { $('text').value = line; say(); };
     $('lines').append(li);
   }
-});
+}
 </script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { scene } from '../../core/scene.js';
+import { DAYLIGHT, scene } from '../../core/scene.js';
 import { possession } from '../possession.js';
 import { SPECTRAL } from './peopleSpirits.js';
 
@@ -36,7 +36,7 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
     censorBones: { value: new THREE.Vector2(rest.pelvis, rest.chest) },
     censorLow: { value: rest.low }, censorHighMan: { value: rest.highMan }, censorHighWoman: { value: rest.highWoman },
     censorWidth: { value: CENSOR_WIDTH*rest.tall }, censorNear: { value: CENSOR_NEAR*rest.tall },
-    censorTime: { value: 0 }, censorPossessed: { value: -1 },
+    censorTime: { value: 0 }, censorLight: DAYLIGHT, censorPossessed: { value: -1 },
   };
   const material = new THREE.ShaderMaterial({
     uniforms: { ...uniforms, ...own },
@@ -98,7 +98,7 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
         vCensorBlock = (position.xy + 0.5)*vec2(${CENSOR_BLOCKS.toFixed(1)}*wide, max(1.0, floor(tall/block + 0.5)));
       }`,
     fragmentShader: `
-      uniform float censorTime;
+      uniform float censorTime, censorLight;
       varying vec2 vCensorBlock;
       varying vec3 vCensorSkin;
       flat varying int vCensorPerson; // (flat: interpolated, its tiny errors turn the hash to noise)
@@ -110,7 +110,7 @@ export function makeCensorMesh({ vertexPars, uniforms, anim, body, nudeRow, skin
         float h = float(k & 0xffffu)/65535.0;
         // (mostly near their skin, a third of blocks much darker)
         float shade = h < 0.33 ? 0.35 + 0.6*h : 0.8 + 0.35*(h - 0.33);
-        gl_FragColor = vec4(vCensorSkin*shade, 1.0);
+        gl_FragColor = vec4(vCensorSkin*shade*clamp(censorLight, 0.15, 1.0), 1.0); // (dims at night, as the lit body does)
       }`,
   });
   const mesh = new THREE.InstancedMesh(geometry, material, body.instanceMatrix.count);

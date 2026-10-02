@@ -3,6 +3,9 @@ import { controls } from '../core/camera-controls.js';
 import { serializeProject, loadProjectFromData } from './save-load.js';
 import { loadProgress } from './progress.js';
 import { modelsLoaded, loadingTask } from '../ui/loading.js';
+import { serializeCrowd } from '../life/people/peopleKeep.js';
+import { serializeCars } from '../life/traffic/carKeep.js';
+import { onFavoritesChanged } from '../ui/favorites.js';
 
 // ============================================================ autosave
 // The project (everything a saved project file holds, map images and all) and where the camera is are kept in the
@@ -10,8 +13,13 @@ import { modelsLoaded, loadingTask } from '../ui/loading.js';
 // opens, so a refresh loses nothing. It's saved a moment after anything's changed (the same moments undo takes a step,
 // and after zooming), and whenever the tab's hidden or closed. Clear empties it along with the scene; Save/Load project
 // still read and write files.
-const DB_NAME = 'splinetopia', STORE_NAME = 'autosave', RECORD_KEY = 'current';
-let ready = false, restoring = false, saveTimer = null, warned = false;
+// Who's in the crowd and on the roads (life/people/peopleKeep.js, life/traffic/carKeep.js) is kept under keys of their own,
+// so they can be saved often without writing the map images again: with the project, CROWD_DELAY after a death, a car
+// destroyed or (un)hearting, and every CROWD_EVERY.
+const DB_NAME = 'splinetopia', STORE_NAME = 'autosave', RECORD_KEY = 'current', CROWD_KEY = 'crowd', TRAFFIC_KEY = 'traffic';
+const CROWD_DELAY = 3000, CROWD_EVERY = 45000; // ms
+let ready = false, restoring = false, saveTimer = null, crowdTimer = null, warned = false;
+navigator.storage?.persist?.().catch(() => {}); // (asks the browser not to clear it under disk pressure)
 // (index.html?blank: an empty scene, never saved — for tools/ped-maker.html)
 const BLANK = new URLSearchParams(location.search).has('blank');
 
@@ -36,9 +44,12 @@ async function save() {
   clearTimeout(saveTimer);
   saveTimer = null;
   if (!ready || restoring) return;
+  const project = serializeProject();
+  delete project.crowd; delete project.traffic; // (their own keys: saveCrowd)
+  saveCrowd();
   const record = {
     savedAt: Date.now(),
-    project: serializeProject(),
+    project,
     camera: { target: controls.goalTarget.toArray(), radius: controls.goalRadius, theta: controls.goalTheta, phi: controls.goalPhi },
   };
   try {
@@ -47,6 +58,17 @@ async function save() {
     if (!warned) { warned = true; console.warn('Kallipolis: autosave failed', err); }
   }
 }
+async function saveCrowd() {
+  clearTimeout(crowdTimer);
+  crowdTimer = null;
+  if (!ready || restoring) return;
+  const crowd = serializeCrowd(), traffic = serializeCars();
+  try { await inStore('readwrite', store => { store.put(traffic, TRAFFIC_KEY); return store.put(crowd, CROWD_KEY); }); }
+  catch (err) { if (!warned) { warned = true; console.warn('Kallipolis: autosave failed', err); } }
+}
+const crowdChanged = () => { if (ready && !crowdTimer) crowdTimer = setTimeout(saveCrowd, CROWD_DELAY); };
+onFavoritesChanged(crowdChanged);
+setInterval(() => { if (S.peopleEnabled && !document.hidden) saveCrowd(); }, CROWD_EVERY);
 function scheduleSave(delay) {
   if (!ready) return;
   clearTimeout(saveTimer);
@@ -67,6 +89,10 @@ loadingTask('Building the city...', (async () => {
     const record = await inStore('readonly', store => store.get(RECORD_KEY));
     if (record && record.project && record.project.roads && record.project.zones) {
       restoring = true;
+      const crowd = await inStore('readonly', store => store.get(CROWD_KEY));
+      if (crowd) record.project.crowd = crowd;
+      const traffic = await inStore('readonly', store => store.get(TRAFFIC_KEY));
+      if (traffic) record.project.traffic = traffic;
       await modelsLoaded;
       await loadProjectFromData(record.project);
       const camera = record.camera;
@@ -90,4 +116,4 @@ loadingTask('Building the city...', (async () => {
   }
 })(), 5);
 
-Object.assign(App, { saveNow: save, scheduleSave });
+Object.assign(App, { saveNow: save, crowdChanged, scheduleSave });

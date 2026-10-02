@@ -58,6 +58,36 @@ function prepareCandidates() {
  * @returns {number}
  */
 export function groundBelow(x, fromY, z, fallback) {
+  return hitBelow(x, fromY, z)?.point.y ?? fallback;
+}
+
+// (a shader's onBeforeCompile source names the look it draws: see project/export-glb.js's exportLookOf)
+const kinds = new WeakMap();
+function kindOf(material) {
+  const walk = material.userData.walkUniforms; // (a walkway: its texture can change live, so never cached)
+  if (walk) return walk.uWalkPattern.value ? 'stone' : null;
+  let kind = kinds.get(material);
+  if (kind === undefined) {
+    const shader = Object.prototype.hasOwnProperty.call(material, 'onBeforeCompile') ? String(material.onBeforeCompile) : '';
+    kind = !shader ? null : /uZoneEdgePoints|uSandTint|uPathSegments/.test(shader) ? 'soft' : 'stone';
+    kinds.set(material, kind);
+  }
+  return kind;
+}
+/**
+ * What the ground straight below (x, fromY, z) sounds like rolled over: 'soft' (grass, sand, a dirt path), 'stone'
+ * (paving), or null (roads, plain walkways and anything else plain).
+ * @param {number} x
+ * @param {number} fromY
+ * @param {number} z
+ * @returns {?string}
+ */
+export function groundKindBelow(x, fromY, z) {
+  const material = hitBelow(x, fromY, z)?.material;
+  return material ? kindOf(material) : null;
+}
+
+function hitBelow(x, fromY, z) {
   refreshSceneIndex();
   ray.set(origin.set(x, fromY + PROBE_LIFT, z), DOWN);
   hits.length = 0;
@@ -73,7 +103,8 @@ export function groundBelow(x, fromY, z, fallback) {
     // (see-through only counts as not there when it's mostly see-through: a dirt path is 'transparent' only for its faded edges)
     if (!material || (material.transparent && material.opacity < 0.5) || material.visible === false) continue;
     if (normal.copy(hit.face.normal).transformDirection(o.matrixWorld).y < MIN_UPWARD_NORMAL) continue;
-    return hit.point.y;
+    hit.material = material;
+    return hit;
   }
-  return fallback;
+  return null;
 }

@@ -71,7 +71,7 @@ export function buildTrafficNav() {
 // (see the end of newCar)
 const CAR_LATER_FIELDS = Object.fromEntries([
   // who it is and how it looks (its card, its paint's holo and rust, its plate)
-  'health', 'number', 'plate', 'traitsKey', 'traits', 'baseTraits', 'legendaryCount', 'terribleCount', 'holo', 'holoAttrs',
+  'health', 'number', 'plate', 'keptDesign', 'keptNumber', 'keptPin', 'traitsKey', 'traits', 'baseTraits', 'legendaryCount', 'terribleCount', 'holo', 'holoAttrs',
   'sparkleTimer', 'rust', 'rustAttrs', 'terribleTimer',
   // on its route: turning, holding back, drawn off it (offroute.js), junction gates, what it's seen
   'turned', 'stillFor', 'ignoreSmells', 'pullHold', 'pull', 'pullDrawn', 'offEase', 'veer', 'veerVel', 'veerYaw', 'veerHold', 'roomRoll', 'roomHid', 'reverseFor', 'sway', 'swayPhase', 'swayDist',

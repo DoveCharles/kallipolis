@@ -3,8 +3,8 @@ import { scene } from '../../core/scene.js';
 
 // One-colour copies of a person (face picked out), posed as they are and bobbing: the spirits trait's small one on each
 // shoulder, standing idle (gold on their right, purple on their left, riding the chest bone), and the ghost trait's full-size blue one
-// in place of their body (hidden in the person shader). The body's geometry again, one instanced mesh each, sharing the
-// body's instanceMatrix and pose attributes; flagged by the SPIRITS_ROW bits (personSpectral).
+// in place of their body (hidden in the person shader). The body's geometry again, one instanced mesh each, over a compact
+// copy of the body's instances holding only those flagged by its SPIRITS_ROW bit (personSpectral; see compactOf in peopleModel.js).
 
 // the SPIRITS_ROW bits (peopleModel.js)
 export const SPECTRAL = { spirits: 1, ghost: 2, bodiless: 4, twins: 8 }; // (twins: see personTwin in peopleModel.js)
@@ -28,7 +28,9 @@ const FACES = { happy: [[0, 1, 0, 0], 1, 'x'], angry: [[0, 0, 1, 0], -1, 'y'] };
  * @param {string} o.vertexPars - PERSON_VERTEX_PARS
  * @param {Object<string, {value: *}>} o.uniforms - the person uniforms
  * @param {THREE.BufferGeometry} o.geometry - the body's geometry (with its instance attributes)
- * @param {THREE.InstancedMesh} o.body - the body mesh (its instanceMatrix is shared)
+ * @param {THREE.InstancedMesh} o.body - the body mesh
+ * @param {function(THREE.InstancedMesh, number, ...THREE.InstancedMesh): {geometry: THREE.BufferGeometry, matrix: THREE.InstancedBufferAttribute}} o.compact -
+ *   a mesh's instances with a SPECTRAL bit, drawn by the meshes given
  * @param {THREE.Vector3} o.shoulder - the left shoulder at rest
  * @param {{start: number, frames: number}} o.idle - the Idle clip, which a spirit stands in whatever they're doing
  * @param {number} o.fps - PERSON_BAKE_FPS
@@ -38,7 +40,7 @@ const FACES = { happy: [[0, 1, 0, 0], 1, 'x'], angry: [[0, 0, 1, 0], -1, 'y'] };
  * @returns {THREE.InstancedMesh[]} right spirit, left spirit, ghost
  */
 export function makeSpiritMeshes(o) {
-  return SPIRITS.map(spec => spiritMesh(spec, o, o.geometry, o.body, false));
+  return SPIRITS.map(spec => spiritMesh(spec, o, o.body, false));
 }
 
 /**
@@ -49,14 +51,12 @@ export function makeSpiritMeshes(o) {
  */
 export function makeSpiritWorn(o, styles) {
   return SPIRITS.flatMap(spec => styles.map(style => {
-    const mesh = spiritMesh(spec, o, style.geometry, style.mesh, true);
-    mesh.onBeforeRender = () => { mesh.count = style.mesh.count; }; // (as many wearers as the style has just now)
-    return mesh;
+    return spiritMesh(spec, o, style.mesh, true);
   }));
 }
 
-// One spirit's (or the ghost's) mesh over a geometry, sharing `matrices`' instanceMatrix; `dressed` for a worn layer.
-function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color, opacity, name }, { vertexPars, uniforms, geometry: bodyGeometry, shoulder, idle, fps, slots, headshotLayer, fadeRow }, geometry, matrices, dressed) {
+// One spirit's (or the ghost's) mesh over `source`'s compact copy (o.compact); `dressed` for a worn layer.
+function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color, opacity, name }, { vertexPars, uniforms, geometry: bodyGeometry, shoulder, idle, fps, slots, headshotLayer, fadeRow, compact }, source, dressed) {
   const box = bodyGeometry.boundingBox, tall = box.max.y - box.min.y;
   // (a spirit sits on the shoulder, feet first; the ghost stands where they do)
   const place = side
@@ -69,7 +69,7 @@ function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color,
   const params = {
     uniforms: { ...uniforms, spiritColor: { value: new THREE.Color(color).multiplyScalar(dressed ? WORN_DARK : 1) }, spiritClock: uniforms.personTime },
     side: THREE.DoubleSide, transparent: opacity < 1, depthWrite: opacity >= 1,
-    defines: dressed ? { PERSON_INDEX_ATTRIBUTE: '' } : {},
+    defines: { PERSON_INDEX_ATTRIBUTE: '' },
     vertexShader: `${pars}
         varying float vSpiritShade;
         varying float vSpiritFade; // (a shy ghost fading out or in: see shyGhost in people.js)
@@ -97,8 +97,9 @@ function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color,
         }`,
   };
   const material = new THREE.ShaderMaterial(params);
-  const mesh = new THREE.InstancedMesh(geometry, material, matrices.instanceMatrix.count);
-  mesh.instanceMatrix = matrices.instanceMatrix;
+  const { geometry: compacted, matrix } = compact(source, bit);
+  const mesh = new THREE.InstancedMesh(compacted, material, matrix.count);
+  mesh.instanceMatrix = matrix;
   mesh.count = 0;
   mesh.frustumCulled = false;
   mesh.layers.enable(headshotLayer);
@@ -106,15 +107,16 @@ function spiritMesh({ bit, shoulder: side, face, scale, bob, rate, phase, color,
   // (see-through as a whole: a depth-only twin drawn first, so only the nearest surface is blended — overlapping parts
   // don't build up. Both after everything else, the opaque included, or it would hide what's behind it: DEPTH_ORDER)
   if (opacity < 1) {
-    const depth = new THREE.InstancedMesh(geometry, new THREE.ShaderMaterial({ ...params, colorWrite: false, depthWrite: true }), matrices.instanceMatrix.count);
-    depth.instanceMatrix = matrices.instanceMatrix;
+    const depth = new THREE.InstancedMesh(compacted, new THREE.ShaderMaterial({ ...params, colorWrite: false, depthWrite: true }), matrix.count);
+    depth.instanceMatrix = matrix;
     depth.frustumCulled = false;
     depth.renderOrder = DEPTH_ORDER; mesh.renderOrder = DEPTH_ORDER + 1;
     depth.layers.enable(headshotLayer);
     depth.name = mesh.name + 'Depth';
-    depth.onBeforeRender = (...args) => { mesh.onBeforeRender(...args); depth.count = mesh.count; }; // (the worn's count synced first)
     mesh.add(depth); // (shown and hidden with it)
+    compact(source, bit, depth);
   }
+  compact(source, bit, mesh);
   scene.add(mesh);
   return mesh;
 }

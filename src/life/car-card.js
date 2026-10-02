@@ -6,6 +6,11 @@ import { makeCard } from '../ui/entity-card.js';
 import { garbles, garbled, garbledEntry, cased } from '../ui/garble.js';
 import { hashNameToNumber } from '../core/math.js';
 import { showCarDetails, hideCarDetails } from './car-details.js';
+import { reviveFavoritesAs } from '../ui/favorites.js';
+import { carKey, carKeyOf, carNamed, respawnWreck, wreckWait } from './traffic/carKeep.js';
+import { followedCar } from './traffic/follow.js';
+import { drivenCar } from './traffic/driving.js';
+import { carMeshes } from './traffic/models.js';
 
 // ============================================================ car card
 // Who's behind the wheel, in a card at the bottom right while the camera follows a vehicle (see "following a car" in
@@ -37,11 +42,25 @@ function showCarCard(i, info, car) {
   card.show({ ...info, name: cased(info.name, traits), 
     loves: garbledEntry(info.loves, traits, seed), hates: garbledEntry(info.hates, traits, seed) });
   drawCarThumbnail(i);
-  card.setFavorite({ key: car, kind: 'Car', follow: () => App.followCar(car) });
+  card.setFavorite(car.design != null ? carFavorite(carMeshes[car.design].name, car.number) : { key: carKey(car), kind: 'Car', follow: () => App.followCar(car) });
   card.bindHealth(car, 'car');
   showCarDetails(car, card.el);
   showBoost();
 }
+// A car's favorite goes by its design and number (see traffic/carKeep.js), so it's found again after a reload. Destroyed,
+// it's a wreck for an hour, then clicking it brings it back away from the camera and follows it (respawnWreck).
+function carFavorite(design, number) {
+  return { key: carKeyOf(design, number), kind: 'Car', saved: { design, number },
+    follow: () => {
+      const car = carNamed(design, number) ?? respawnWreck(design, number, followedCar, drivenCar);
+      return !!car && App.followCar(car) !== false;
+    },
+    note: () => {
+      const wait = carNamed(design, number) ? null : wreckWait(design, number);
+      return wait == null ? null : wait > 0 ? `wrecked · back in ${Math.ceil(wait/60000)} min` : 'wrecked · click to respawn';
+    } };
+}
+reviveFavoritesAs('Car', saved => typeof saved.design === 'string' && Number.isInteger(saved.number) ? carFavorite(saved.design, saved.number) : null);
 function hideCarCard() {
   shown = -1;
   card.hide();

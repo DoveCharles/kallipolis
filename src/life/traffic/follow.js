@@ -15,6 +15,7 @@ import { carHeight, carLength, carWidth, carModelOf, carScale, placing } from '.
 import { blasts, cars, EXPLOSIVE_SCALE } from './state.js';
 import { buildingHit, lightFuse } from './collisions.js';
 import { registerHealthKind, resetHealth } from '../../core/health.js';
+import { carWrecked } from './carKeep.js';
 
 // The followed car (camera, card, thumbnail) and taking a car out (killCar, drownCar, smiteCar).
 
@@ -177,7 +178,9 @@ export function killCar(i, byPlayer = true) { // (byPlayer false: a car crashing
     [-1, 1].forEach(end => explodeCar({ x: car.x + Math.sin(car.heading)*offset*end, y: Y_ROAD, z: car.z + Math.cos(car.heading)*offset*end }, carHeight(car), { paint, wrecked }, blastScale));
   } else explodeCar({ x: car.x, y: Y_ROAD, z: car.z }, carHeight(car), { paint, wrecked }, blastScale);
   if (survives) { startCarRevive(car); return; }
+  carWrecked(car); // (hearted: back in an hour, see carKeep.js)
   cars.splice(i, 1);
+  App.crowdChanged?.(); // (gone for good, saved soon: see project/autosave.js)
   if (followedCar > i) followedCar--; // (a car ahead of it in the array, still being followed, keeps its place)
 }
 /**
@@ -249,7 +252,9 @@ export function drownCar(i) {
   App.recordMoralityEvent?.('cars destroyed by player', car.plate ? car.plate.text : undefined);
   if (followedCar === i) stopFollowingCar();
   splashCar({ x: car.x, y: WATER_LEVEL, z: car.z }, carHeight(car));
+  carWrecked(car);
   cars.splice(i, 1);
+  App.crowdChanged?.();
   if (followedCar > i) followedCar--;
 }
 /**

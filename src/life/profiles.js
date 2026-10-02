@@ -1,5 +1,5 @@
-import { mulberry32 } from '../core/math.js';
-import { DEFAULT_COUNTS, startingTraits, plainEntry, parseSections, combineTraits, pickCounts, addEntries, clash, tierOf, modifiersOf, limitsOf } from '../core/entries.js';
+import { mulberry32, seedOf } from '../core/math.js';
+import { DEFAULT_COUNTS, startingTraits, plainEntry, parseSections, combineTraits, pickCounts, addEntries, pickEntry, rankEntries, clash, tierOf, modifiersOf, limitsOf } from '../core/entries.js';
 import { TRAITS } from '../core/traits.js';
 
 const LETTERS = ['A.','B.','C.','D.','E.','F.','G.','H.','I.','J.','K.','L.','M.','N.','O.','P.','Q.','R.','S.','T.','U.','V.','W.','X.','Y.','Z.','Ñ.']
@@ -120,12 +120,23 @@ export function sampleCardText(entry, side, rng = Math.random) {
 export const MINI_TRAITS = { size: 0.2, headsize: 3.2 }; // (× the leader's)
 const minis = new Map(); // a mini's id → { leaderId, n }
 /** Make person `id` a mini of person `leaderId`'s, the `n`th. */
-export const registerMini = (id, leaderId, n) => { minis.set(id, { leaderId, n }); };
+export const registerMini = (id, leaderId, n) => { minis.set(id, { leaderId, n }); cache.clear(); };
 // a preset's (see people/presets.js) ids: their own picks, but the preset's name
 const presets = new Map();
 /** Make person `id` preset `preset` (see people/presets.js). */
-export const registerPreset = (id, preset) => { presets.set(id, preset); };
+export const registerPreset = (id, preset) => { if (presets.get(id) !== preset) { presets.set(id, preset); cache.clear(); } };
+// Whether person `id` is a man: from their id alone, so the same wherever they stand (see assignAppearance in peopleModel.js).
+export const sexOf = id => mulberry32(13 + id*7877)() < 0.5;
+// the hearted, as saved (see people/peopleKeep.js): their profile as it was, over whatever their id rolls now
+const pinned = new Map();
+export const pinProfile = (id, kept) => { if (kept?.profile) { pinned.set(id, kept); cache.clear(); } };
 const ownProfile = (id, isMan, moodNow) => {
+  const pin = pinned.get(id);
+  if (pin) {
+    const fresh = profileFor(id, isMan, moodNow), same = (moodNow ?? null) === (pin.moodNow ?? null);
+    // (cheered up since: their mood's traits as worked out now)
+    return { ...fresh, ...pin.profile, mood: same ? pin.profile.mood : fresh.mood, traits: same ? { ...fresh.traits, ...pin.profile.traits } : fresh.traits };
+  }
   const preset = presets.get(id), profile = profileFor(id, isMan, moodNow ?? preset?.mood ?? null); // (a preset's own mood till another's worn)
   if (!preset) return profile;
   const own = side => preset[side] ? { [side]: preset[side].map(([card]) => card), [side + 'Said']: preset[side].map(([, said]) => said),
@@ -133,7 +144,17 @@ const ownProfile = (id, isMan, moodNow) => {
     [side === 'loves' ? 'lovedWords' : 'hatedWords']: [] } : {};
   return { ...profile, name: preset.name, shortName: preset.shortName, age: preset.age ?? profile.age, ...own('loves'), ...own('hates') };
 };
+// (each worked out once per id, sex and mood till the files or registrations change: callers ask often — cards, speech)
+const cache = new Map();
+let cacheVersion = -1;
 export function profileOf(id, isMan, moodNow = null) {
+  if (cacheVersion !== version || cache.size > 5000) { cache.clear(); cacheVersion = version; }
+  const key = id + ':' + isMan + ':' + moodNow;
+  let profile = cache.get(key);
+  if (!profile) cache.set(key, profile = workOutProfile(id, isMan, moodNow));
+  return profile;
+}
+function workOutProfile(id, isMan, moodNow) {
   const mini = minis.get(id);
   if (!mini) return ownProfile(id, isMan, moodNow);
   const leader = ownProfile(mini.leaderId, isMan, moodNow), { traits } = leader;
@@ -143,17 +164,20 @@ export function profileOf(id, isMan, moodNow = null) {
 function profileFor(id, isMan, moodNow = null) {
   const rng = mulberry32(48271 + id*7919);
   const pick = list => list[Math.floor(rng()*list.length)];
-  const man = isMan == null ? rng() < 0.5 : isMan;
-  const name = pick(lists[man ? 'boy names' : 'girl names']);
+  const man = isMan ?? sexOf(id);
+  // (the lists' picks by rendezvous on their own salts — see core/math.js — so new entries change few people)
+  const name = pickEntry(lists[man ? 'boy names' : 'girl names'], seedOf(id, 1));
   let age = 18 + Math.floor(rng()*65);
-  const picked = pick(lists.moods); // (picked either way, so nothing after it changes)
+  const picked = pickEntry(lists.moods, seedOf(id, 2));
   const mood = (moodNow != null && lists.moods.find(entry => entry.text === moodNow)) || picked;
-  const firstLove = pick(lists.loves);
+  const firstLove = pickEntry(lists.loves, seedOf(id, 3));
 
   // (gives up after 50 tries, leaving no first hate, if nothing in the list goes with what they enjoy)
   let hates, incompatible = true;
+  const nextHate = rankEntries(lists.hates, seedOf(id, 4));
   for (let tries = 0; incompatible && tries < 50; tries++) {
-    hates = pick(lists.hates);
+    hates = nextHate();
+    if (!hates) break;
     incompatible = clash(firstLove, hates);
   }
 
@@ -162,8 +186,8 @@ function profileFor(id, isMan, moodNow = null) {
   const extra = mulberry32(90173 + id*6151);
   const [loveCount, hateCount] = pickCounts(counts, extra());
   const loves = loveCount >= 1 ? [firstLove] : [], hated = hateCount >= 1 && !incompatible ? [hates] : [];
-  addEntries(loves, lists.loves, loveCount, extra, [loves, hated]);
-  addEntries(hated, lists.hates, hateCount, extra, [loves, hated]);
+  addEntries(loves, lists.loves, loveCount, seedOf(id, 7), [loves, hated]);
+  addEntries(hated, lists.hates, hateCount, seedOf(id, 8), [loves, hated]);
 
   // (placeholders filled on their own stream, so filling doesn't change anything else picked; the words filled in bring
   // their {effect.…} traits — see fillEntry in speech-text.js)
@@ -187,14 +211,15 @@ function profileFor(id, isMan, moodNow = null) {
 
   const nameRoll = rng();
   let nick = null; // (the nickname in their name, if any: what they go by — shortName)
-  const nickname = () => (nick = pick(lists['nicknames']).text);
+  const nickname = () => (nick = pickEntry(lists['nicknames'], seedOf(id, 5)).text);
+  const surname = () => pickEntry(lists['surnames'], seedOf(id, 6)).text;
 
   let fullname = traits.nickname ? nickname() :                                    //nickname only - requires trait (twins too)
-    traits.twins ? `The ${pick(lists['surnames']).text} Twins` :                                       //the twins trait: The Smith Twins
-    nameRoll>0.9 ? `${name.text} '${nickname()}' ${pick(lists['surnames']).text}`: //full name w/ nickname, 10%
-    nameRoll>0.3 ? `${name.text} ${pick(lists['surnames']).text}`:                                    //full name no nickname, 60%
-      nameRoll>0.2? `${name.text} ${pick(LETTERS)} ${pick(lists['surnames']).text}`:                 //full name, abr middle, 10%
-        nameRoll>0.115?`'${nickname()}' ${pick(lists['surnames']).text}`:           //nickname surname, 8.5%
+    traits.twins ? `The ${surname()} Twins` :                                       //the twins trait: The Smith Twins
+    nameRoll>0.9 ? `${name.text} '${nickname()}' ${surname()}`: //full name w/ nickname, 10%
+    nameRoll>0.3 ? `${name.text} ${surname()}`:                                    //full name no nickname, 60%
+      nameRoll>0.2? `${name.text} ${pick(LETTERS)} ${surname()}`:                 //full name, abr middle, 10%
+        nameRoll>0.115?`'${nickname()}' ${surname()}`:           //nickname surname, 8.5%
           nameRoll>0.2?`${name.text} '${nickname()}'`:                            //forename nickname, 8.5%
             `${name.text} ${pick(ROMAN_NUMERALS)}`;                                               //forename numeral, 2%
 

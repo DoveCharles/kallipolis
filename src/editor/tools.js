@@ -306,6 +306,7 @@ syncExtraSettings();
 document.getElementById('s-people').addEventListener('click', () => { S.peopleEnabled = !S.peopleEnabled; App.syncPeopleUI(); });
 document.getElementById('s-peopleamount').addEventListener('input', (e) => { S.peopleAmount = parseFloat(e.target.value); App.syncPeopleUI(); });
 document.getElementById('s-peoplespeed').addEventListener('input', (e) => { S.peopleSpeed = parseFloat(e.target.value); App.syncPeopleUI(); });
+document.getElementById('s-weathercycle').addEventListener('click', () => { S.weatherCycle = !S.weatherCycle; App.syncSkyUI(); });
 document.getElementById('s-peoplesize').addEventListener('input', (e) => { S.peopleSize = parseFloat(e.target.value); App.syncPeopleUI(); });
 document.getElementById('s-roadsafety-debug').addEventListener('click', () => { S.showRoadsafetyDebug = !S.showRoadsafetyDebug; App.syncPeopleUI(); });
 document.getElementById('s-peoplenav-debug').addEventListener('click', () => { S.showPeopleNavDebug = !S.showPeopleNavDebug; App.syncPeopleUI(); });

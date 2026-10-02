@@ -49,6 +49,7 @@ export function syncSkyUI() {
     slider.disabled = S.dayNightEnabled;
     document.getElementById(valueId).textContent = Math.round(value);
   });
+  document.getElementById('s-weathercycle').classList.toggle('on', S.weatherCycle);
   [['rain', S.weatherRain], ['snow', S.weatherSnow], ['clouds', S.weatherClouds]].forEach(([kind, value]) => {
     document.getElementById('s-' + kind).value = value;
     document.getElementById('dv-' + kind).textContent = value.toFixed(2);

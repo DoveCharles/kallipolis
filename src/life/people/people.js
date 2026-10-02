@@ -10,6 +10,7 @@ import { blasts, PERSON_BLAST_SCALE } from '../traffic/state.js';
 import { canRespawn, PERSON_SHAKE, shake } from '../revive.js';
 import { throwBodyParts, warmBodyParts } from './peopleGibs.js';
 import { babble, nextSyllable, hearDistance } from '../../audio/voices.js';
+import { accentFor, accentVoice } from '../../audio/accents.js';
 import { sayLine, shoutLine, reactAloud, lineMouth, stopLine, linePause, aaa } from '../../audio/dictionary.js';
 import { pickThought, pickReaction } from '../speech-text.js';
 import { babbleLine, hasBubble, ownLine, speechBubble } from '../../ui/speech-bubbles.js';
@@ -30,11 +31,12 @@ import { getTrainStations } from '../../trains/trains.js';
 import { closestPointOnSegment } from '../../buildings/footprints.js';
 import { MELODIES } from '../../audio/melodies.js';
 import { favoritePeople, isFavoritePerson } from '../../ui/favorites.js';
+import { nextKept, takeKept, takeReset } from './peopleKeep.js';
 import { registerHealthKind } from '../../core/health.js';
 import { relateFelt, relateSaw, pruneGone } from './peopleRelations.js';
 import { logLine, forgetLinesExcept } from './peopleSaid.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
-import { hidingFromSun, leaveGroup, outOfTime, vanishIndoors } from './peopleActivities.js';
+import { hidingFromSun, leaveGroup, outOfTime, shelteringFromRain, vanishIndoors } from './peopleActivities.js';
 import { PUNCH_CHASE_SPEED, WALK_PACE, awaited, besideLeader, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, knockAgain, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateSwat, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater, wouldWade, onWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
@@ -258,6 +260,19 @@ export const headingTo = (p, q) => Math.atan2(q.x - p.x, q.z - p.z);
  * @returns {number} the scale
  */
 export const modelScale = p => 1.7*p.height*S.peopleSize/personModel.height;
+/**
+ * Where someone's feet are with their pelvis at `at` in a pose (sitting, lying, fallen) — for `feet`, which holds the feet
+ * there while they sit, lie or get up, their pelvis moved instead, so the body doesn't slide (see updatePeople).
+ * @param {Person} p - the person
+ * @param {object} clip - the pose
+ * @param {number} [heading] - which way they face
+ * @param {{x: number, z: number}} [at] - where their pelvis is
+ * @returns {{x: number, z: number}} where their feet are
+ */
+export function feetOf(p, clip, heading = p.heading, at = p) {
+  const s = modelScale(p), offX = clip.pelvisX*s, offZ = clip.pelvisZ*s, sin = Math.sin(heading), cos = Math.cos(heading);
+  return { x: at.x - offX*cos - offZ*sin, z: at.z - offZ*cos + offX*sin };
+}
 
 /**
  * How much of a person's pose is `clip`, part-way through blending from one animation into the next — counting any version
@@ -299,7 +314,7 @@ export function setClip(p, clip) {
   if (p.clipA === clip) return;
   p.rowB = clipRow(p, p.clipA);
   p.fade = p.clipB === clip ? 1 - p.fade : 0;
-  p.fadeTime = clip.pose || p.clipA.pose ? FADE_POSE : clip.base || p.clipA.base ? FADE_SNACK : FADE_QUICK;
+  p.fadeTime = clip.anchor || p.clipA.anchor ? FADE_QUICK : clip.pose || p.clipA.pose ? FADE_POSE : clip.base || p.clipA.base ? FADE_SNACK : FADE_QUICK;
   p.clipB = p.clipA;
   p.clipA = clip;
 }
@@ -359,18 +374,28 @@ export const isDrawn = p => !p.vanished && (!isGone(p) && (p.mode === 'possessed
 // say, still goes on every frame.
 const FINE_EVERY = 4;
 let peopleFrame = 0;
+// And someone off screen or a speck on it (under LAZY_PIXELS), out of earshot and doing nothing that needs every frame,
+// isn't updated at all but on their fine turn, taking in all the time since (lazyDt).
+const LAZY_PIXELS = 20;
+const lazyNow = (p, i, carded) => (peopleFrame + i) % FINE_EVERY !== 0 && i !== followed && i !== possession.index
+  && p.mode !== 'none' && p.mode !== 'possessed' && !p.jc && !p.fall && !p.push && !p.punched && !p.attack && !p.swat && !inWater(p)
+  && !carded.includes(i) && Math.hypot(p.x - ear.x, p.y - ear.y, p.z - ear.z) > hearDistance()
+  && personPixels(p.x, p.y, p.z, 1.7*p.height*S.peopleSize) < LAZY_PIXELS;
 const FOOTFALLS = 0.13, STEPS_PER_CYCLE = 4; // how far through the walk cycle a foot first comes down, and how many times
 // one does in a cycle: the Walk clip is two full strides, left, right, left, right, each foot reaching furthest forward there
 // Someone's voice (see audio/voices.js), the same every time for the same person: its pitch, lower for a man than a woman
 // and for someone taller; its formants, likewise lower, and shifted either way on their own, apart from the pitch, so two
 // voices at one pitch can still sound nothing alike; how sharp those formants ring, from breathy to nasal; and the tune
-// they talk in (see audio/melodies.js).
+// they talk in (see audio/melodies.js); and their accent.
 function voiceOf(p, i) {
   const own = mulberry32(i*7919 + 13), isMan = personModel?.isMan[i] === 1, tall = Math.sqrt(Math.max(0.5, p.height));
-  const pitch = (isMan ? 150 : 250)/tall*(0.85 + 0.3*own());
+  const pitch = Math.max(60, Math.min(600, (isMan ? 150 : 250)/tall*2**(2.8*(own() - 0.5)))); // (±1.4 octaves)
   const formant = (isMan ? 1 : 1.15)/Math.sqrt(tall)*(0.8 + 0.42*own());
   const sharpness = 3 + 9*own();
-  return { pitch, formant, sharpness, melody: Math.floor(own()*MELODIES.length), isMan, ...presetAt(i)?.voice };
+  const melody = Math.floor(own()*MELODIES.length);
+  const vibrato = own() < (p.age - 40)/50 ? 0.01 + 0.03*own() : 0; // (a quaver: likelier the older, from 40; all by 90)
+  const accent = accentFor(own()); // (audio/accents.js)
+  return accentVoice({ pitch, formant, sharpness, melody, isMan, age: p.age, vibrato, accent, ...presetAt(i)?.voice });
 }
 /** Someone's voice (see voiceOf), for a sound made outside the frame loop: a cry as they're hit, say. */
 export const voiceOfPerson = p => voiceOf(p, people.indexOf(p));
@@ -480,16 +505,16 @@ export function syncPeopleUI() {
 // (see the end of newPerson)
 const PERSON_LATER_FIELDS = Object.fromEntries([
   // who they are (refreshTraits), how they look (updatePeople)
-  'health', 'walletSet', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'spectralKey', 'groomKey', 'showsBald', 'showsBeard', 'vanished', 'vanishUntil', 'shyCount', 'shyArmed', 'shyPhase', 'shyAt', 'chattingWithTwin', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
+  'health', 'walletSet', 'moodNow', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'spectralKey', 'groomKey', 'showsBald', 'showsBeard', 'vanished', 'vanishUntil', 'shyCount', 'shyArmed', 'shyPhase', 'shyAt', 'chattingWithTwin', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
   // what they say and think
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
-  'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate',
+  'greetTo', 'closing', 'leftBadly', 'seen', 'felt', 'noticed', 'shotRate', 'feet',
   // fleeing, fighting, blood
   'sunRun', 'fleeArea', 'fleeInArea', 'fleeStarts', 'fledTalkAt', 'fleeTalkUntil', 'pray', 'attackQueue', 'push', 'revived', 'medbot',
   'blood', 'bloodBase', 'bloodFrom', 'bloodTimer', 'huntIn', 'roadWaryUntil', 'benched', 'bankHeld',
   // water, drink, smell
   'water', 'waterHere', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
-  'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'smellCheck',
+  'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'umbrella', 'smellCheck',
   // walked about by hand (peopleTracking.js)
   'footing', 'onRoad', 'shove', 'fall', 'fellOff', 'swat', 'touching', 'near', 'walkingSpeed', 'chatWith',
 ].map(key => [key, undefined]));
@@ -555,11 +580,17 @@ export function newPerson(id = S.peopleIdSeq++) {
     ...PERSON_LATER_FIELDS };
 }
 
+// someone saved (see peopleKeep.js) back as themselves, or someone new
+function bornPerson(kp) {
+  const p = newPerson(kp?.id);
+  if (kp?.moodNow != null) p.moodNow = kp.moodNow;
+  return p;
+}
+
 /**
  * Work out a person's traits, from the entries picked for them in people/*.txt (see profiles.js) by their id — who they
  * are, not where they're standing (see the note on peopleIdSeq above). Worked out again whenever people/*.txt loads,
- * and once the model's loaded and says whether they're a man (which decides their name, and so the rest of their
- * picks; sex is still tied to their render slot, not their id — see assignAppearance in peopleModel.js).
+ * and once the model's loaded and says whether they're a man (from their id too: see sexOf in profiles.js).
  * @param {Person} p - the person
  * @param {number} i - their place in the crowd, just to look up their slot's sex
  * @returns {void}
@@ -931,6 +962,10 @@ function hideFromSun(p) {
 }
 /** How much faster than fleeing a vampire runs for cover from the sun. */
 const SUN_RUN_BOOST = 1.5;
+/** How much faster someone caught in the rain without an umbrella walks (see shelteringFromRain). */
+const RAIN_HURRY = 1.35;
+/** Hangouts the rain doesn't reach. */
+const isUnderCover = area => area.kind === 'foodcourt';
 /**
  * Send someone in a hangout out of it: onto the walkway at one of its entrances — the nearest of a few, or, running from
  * `from`, whichever takes them furthest from it — as mode 'leaving'. Entrances reached over dry ground come first.
@@ -1068,6 +1103,7 @@ function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = 
   bystandersReactToDeath(p, source);
   witness(p, cause);
   p.mode = 'dead';
+  App.crowdChanged?.(); // (saved soon: see project/autosave.js)
   if (p.traits.explosive) { // (a blast killing whoever's around, on the next traffic update: see blasts in life/traffic/state.js)
     blastFx(at, 1.7*p.height*S.peopleSize, 1.5);
     blasts.push({ ...at, scale: PERSON_BLAST_SCALE });
@@ -1110,6 +1146,7 @@ export function drownedPerson(i) {
   witness(p, 'drowned');
   p.water = null;
   p.mode = 'dead';
+  App.crowdChanged?.();
   p.train = null;
   p.indoors = null;
   p.moving = false;
@@ -1273,6 +1310,8 @@ export function updatePeople(t) {
   // born into it below — a fresh id, so they don't come back as themselves. See newPerson, and assignAppearance in
   // peopleModel.js. A hearted id missing from the crowd altogether — a reload hasn't reached their spot yet — is
   // revived into a new spot with their own saved id, rather than waiting to be spawned like anyone else.)
+  // (a saved crowd come in — see peopleKeep.js — replaces this one: its people are born below, in their saved order)
+  if (takeReset()) { stopFollowingPerson(); setRiderFollowed(-1); while (people.length) endActivity(people.pop()); }
   const wanted = Math.min(PEOPLE_MAX, Math.round(S.peopleAmount));
   const presentIds = new Set(people.map(p => p.id));
   const missingFavoriteIds = favoritePeople().filter(id => !presentIds.has(id));
@@ -1280,7 +1319,13 @@ export function updatePeople(t) {
   for (let i = 0; i < people.length; i++) if (isFavoritePerson(people[i].id)) highestFavoriteSlot = i;
   const kept = Math.min(PEOPLE_MAX, Math.max(wanted, highestFavoriteSlot + 1, people.length + missingFavoriteIds.length));
   while (people.length < kept) {
-    const p = newPerson(missingFavoriteIds.shift()); // (a hearted id waiting to be found again, else a fresh one)
+    // (someone saved, in order, while the crowd's short of `wanted`; past it, a hearted id waiting to be found again;
+    // else a fresh one)
+    let kp = people.length < wanted || !missingFavoriteIds.length ? nextKept(presentIds) : null;
+    if (kp) { const at = missingFavoriteIds.indexOf(kp.id); if (at >= 0) missingFavoriteIds.splice(at, 1); }
+    else if (missingFavoriteIds.length) kp = takeKept(missingFavoriteIds.shift());
+    const p = bornPerson(kp);
+    presentIds.add(p.id);
     personModel?.assignAppearance(people.length, p.id);
     spawnPerson(p);
     people.push(p);
@@ -1290,7 +1335,7 @@ export function updatePeople(t) {
   for (let i = 0; i < Math.min(wanted, people.length); i++) {
     const p = people[i];
     if (p.benched) { p.benched = false; p.mode = 'none'; } // (the same person, off the bench: spawned again below)
-    else if (p.mode === 'dead' && !isFavoritePerson(p.id)) { people[i] = newPerson(); personModel?.assignAppearance(i, people[i].id); } // (someone new, spawned again below)
+    else if (p.mode === 'dead' && !isFavoritePerson(p.id)) { people[i] = bornPerson(nextKept(presentIds)); presentIds.add(people[i].id); personModel?.assignAppearance(i, people[i].id); } // (someone new, spawned again below)
   }
   if (followed >= people.length) stopFollowingPerson();
   if (riderFollowed >= people.length) setRiderFollowed(-1);
@@ -1300,7 +1345,6 @@ export function updatePeople(t) {
   setIndoorsCount(people.reduce((n, p) => n + (p.mode === 'indoors' ? 1 : 0), 0));
   if (personModel) {
     personModel.mesh.count = personModel.censor.count = people.length;
-    personModel.spirits.forEach(m => { m.count = people.length; });
     personModel.hair.forEach(style => { style.mesh.count = countBelow(style.members, people.length); });
     updateGroups(dt);
     meetOnWalkways(dt);
@@ -1320,11 +1364,15 @@ export function updatePeople(t) {
   const lyingNear = lyingDown.length > 8 ? crowdGrid(lyingDown) : null;
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   peopleFrame++;
+  const carded = App.cardedPeople?.() ?? []; // (anyone with a card open: posed in full, as its headshot's close up)
   beginEmotes();
   sweepPrayers();
-  if (personModel) personModel.copiesWanted.twins = people.some(p => p.traits.twins); // (see copiesOf in peopleModel.js)
   updateMinis(dt, wanted); // (pipers' minis: made, followed, avenged — see peopleMinis.js)
+  const frameDt = dt;
   people.forEach((p, i) => {
+    if (lazyNow(p, i, carded)) { p.lazyDt = (p.lazyDt ?? 0) + frameDt; return; }
+    const dt = frameDt + (p.lazyDt ?? 0);
+    p.lazyDt = 0;
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) spawnPerson(p);
     refreshTraits(p, i);
@@ -1361,6 +1409,7 @@ export function updatePeople(t) {
     if (p.traits.terrified && (p.mode === 'line' || p.mode === 'wander') && !p.fright && !p.punched && !inWater(p)) beginFleeing(p, { x: p.x - Math.sin(p.heading), z: p.z - Math.cos(p.heading) });
     if (!possessed && hidingFromSun(p)) hideFromSun(p);
     else if (p.sunRun) p.sunRun = false;
+    if (!possessed && p.mode === 'wander' && !p.punched && !p.fright && !p.attack && !inWater(p) && shelteringFromRain(p) && !isUnderCover(peopleNav.areas[p.area])) { if (p.act) endActivity(p); leaveArea(p, peopleNav.areas[p.area]); }
     //attempting to give additional reactions to npc death depending on how evil they are
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
     if (p.please) updatePlease(p, dt); // (the same hold as stun, read as delight: see pleased below)
@@ -1380,7 +1429,7 @@ export function updatePeople(t) {
     // updatePeople freezes them on — read as delight rather than shock, below.
     const pleased = !!p.please && (p.please.stage === 'look' || p.please.stage === 'held');
     let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*(p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(fleeing || p.traits.terrified ? FLEE_SPEED*p.traits.boost : 1) // (terrified: always at a run)
-      *(fleeing && p.sunRun ? SUN_RUN_BOOST : 1);
+      *(fleeing && p.sunRun ? SUN_RUN_BOOST : 1)*(!fleeing && shelteringFromRain(p) ? RAIN_HURRY : 1);
     let goal = null;
     //Updating hair colour depending on age
     //set default hair colour once
@@ -1610,10 +1659,16 @@ export function updatePeople(t) {
         }
       }
       const blend = key => p.clipA[key]*p.fade + p.clipB[key]*(1 - p.fade);
+      // (feet planted while they sit, lie or get up: see feetOf)
+      if (p.feet && (p.moving || (!p.oneShot && p.fade >= 1 && !p.clipA.pose && !p.clipA.anchor))) p.feet = null;
+      if (p.feet) {
+        const ms = modelScale(p), offX = blend('pelvisX')*ms, offZ = blend('pelvisZ')*ms, sin = Math.sin(p.heading), cos = Math.cos(p.heading);
+        p.x = p.feet.x + offX*cos + offZ*sin; p.z = p.feet.z + offZ*cos - offX*sin;
+      }
       p.heightScale = blend('heightScale');
       // how much of them there is to see (see FINE_EVERY): the one followed or controlled always in full, and anyone not
       // drawn at all as out of view. Out of view, they're left where they were last put — so long as that was out of view too.
-      const pixels = i === followed || i === possession.index ? Infinity : s <= 0 ? -1 : personPixels(p.x, p.y, p.z, 1.7*p.height*S.peopleSize);
+      const pixels = i === followed || i === possession.index || carded.includes(i) ? Infinity : s <= 0 ? -1 : personPixels(p.x, p.y, p.z, 1.7*p.height*S.peopleSize);
       const fineTurn = (peopleFrame + i) % FINE_EVERY === 0, out = pixels < 0;
       const placed = !(out && p.placedOut && !fineTurn), faced = fineTurn || pixels >= PERSON_FACE_PIXELS, worn = placed && (fineTurn || pixels >= PERSON_WORN_PIXELS);
       p.faceDt = (p.faceDt ?? 0) + dt;
@@ -1771,8 +1826,8 @@ export function updatePeople(t) {
         animArray[o] = clipRow(p, p.clipA);
         animArray[o+1] = p.clipB === p.clipA ? animArray[o] : p.rowB;
         animArray[o+2] = p.fade;
-        // (the drowsy, 😴, hold their eyes that far shut between blinks)
-        animArray[o+3] = Math.max(p.traits.drowsy, p.pray && !p.saying ? 0.85 : 0, p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0);
+        // (the drowsy, 😴, hold their eyes that far shut between blinks; a punch that leaves them reeling, Hit, shuts them)
+        animArray[o+3] = Math.max(p.traits.drowsy, p.pray && !p.saying ? 0.85 : 0, p.oneShot?.name === 'Hit' ? 1 : 0, p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0);
         lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
         if (p.water?.drowned) holdDrowned(o, animArray, lookArray); // (still, face down: see peopleWater.js)
         const eyesArray = personModel.eyes.array;
@@ -1825,6 +1880,7 @@ export function updatePeople(t) {
   if (personModel) {
     [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; part.pupil.needsUpdate = true; });
     personModel.spiritTalk.needsUpdate = true;
+    personModel.updateCopies(people.length, [followed, possession.index, ...carded]); // (who's drawn: see compactOf in peopleModel.js)
     updateHeld(); // (whatever anyone's holding, from where their hands ended up)
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;

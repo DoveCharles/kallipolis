@@ -18,7 +18,7 @@ import { createRegionTester, offsetPaths, pathsArea, toClipperPath, zoneCutoutsN
 import { FOOTBRIDGE_TOP } from '../../water/bridges.js';
 import { nearestRaisedVertex } from './peopleFooting.js';
 import { PEOPLE_NAV_SPACING, headingTo, isOpenGround, lastPeopleTime, people, peopleNav, peopleNavDebugMesh, peopleRng, pickWeighted, randomSpotIn, insideFor } from './people.js';
-import { RIDE_CHANCE, enterChance, goIndoors, goRideTrain, hidingFromSun, mayGoIndoors, stationLinks } from './peopleActivities.js';
+import { RIDE_CHANCE, enterChance, goIndoors, goRideTrain, hidingFromSun, mayGoIndoors, shelteringFromRain, stationLinks } from './peopleActivities.js';
 // (whether a walkway has a door on it: a vampire hiding from the sun on one without takes every turning off it)
 const hasDoor = nav => (nav.hasDoor ??= nav.vertices.some(vertex => vertex.building));
 import { signalRedLeft } from '../../roads/markings.js';
@@ -776,12 +776,12 @@ export function walkAlong(p, dist) {
     const vertex = nav.vertices[ahead];
     const station = p.trainCooldown <= 0 && !together ? stationLinks().byVertex.get(p.li + ':' + ahead) : null;
     if (station != null && peopleRng() < RIDE_CHANCE) { p.u = at; goRideTrain(p, station, walkwayPoint(p)); return; }
-    if (vertex.building && (hidingFromSun(p) || (mayGoIndoors(p) && peopleRng() < enterChance(p, vertex.building)))) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
+    if (vertex.building && (hidingFromSun(p) || shelteringFromRain(p) || (mayGoIndoors(p) && peopleRng() < enterChance(p, vertex.building)))) { p.u = at; goIndoors(p, vertex.building, walkwayPoint(p)); return; }
     const isEnd = (!nav.loop && (ahead === 0 || ahead === last)) || !!nav.blocked?.[nextVertex(nav, ahead, p.dir)];
     const entrance = vertex.entrances.length ? vertex.entrances[Math.floor(peopleRng()*vertex.entrances.length)] : null;
     const area = entrance ? peopleNav.areas[entrance.area] : null;
     const drawn = !area ? 0 : area.kind === 'foodcourt' ? mallWill(p) : isOpenGround(area) ? p.traits.parks : p.traits.plazas;
-    if (entrance && peopleRng() < 0.12*drawn) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
+    if (entrance && (area.kind === 'foodcourt' || !shelteringFromRain(p)) && peopleRng() < 0.12*drawn) { p.u = at; wanderInto(p, entrance.area, entrance); return; }
     // linkCooldown stops them turning off again immediately after a turn, which would otherwise let a junction with
     // several close-together links send them zigzagging back the way they came — but not at an end, or a short link
     // line (a court's corner arc) would bounce them back and forth till it ran out
@@ -796,7 +796,7 @@ export function walkAlong(p, dist) {
       }
       // (into a mall by their mallWill; the skint, in one, take any way out)
       const leaving = nav.mall && !canAfford(p) && turns.some(l => !peopleNav.lines[l.li].mall);
-      if (turns.length && (leaving || offEscalator || peopleRng() < (isEnd ? 0.85 : 0.3) || (hidingFromSun(p) && !hasDoor(nav)))) {
+      if (turns.length && (leaving || offEscalator || peopleRng() < (isEnd ? 0.85 : 0.3) || ((hidingFromSun(p) || shelteringFromRain(p)) && !hasDoor(nav)))) {
         const remaining = Math.abs(u - at);
         nav = takeLink(p, pickTurn(p, nav, turns));
         u = p.u + p.dir*remaining;

@@ -11,7 +11,7 @@ import { toUi } from './ui-scale.js';
 // kind (an index, a line id, the object itself), `kind` is its name among the things the camera follows (see FOLLOWABLE
 // in editor/input.js), and `follow` finds it again and follows it, handing back false if it's no longer there to follow
 // (a car that's been blown up, a building whose zone has gone). Most last as long as the page does; a kind that can be
-// found again in a reloaded city (a person: see life/person-card.js) gives its entries `saved`, what finding it again
+// found again in a reloaded city (a person or a car: see life/person-card.js, life/car-card.js) gives its entries `saved`, what finding it again
 // takes, and they're kept in the project (see savedFavorites and restoreFavorites), so they're still there after a reload.
 // An entry that `spares` its thing takes the Smite button off its card while it's hearted (see ui/entity-card.js).
 //
@@ -31,8 +31,7 @@ let keptPeople = [];
 export const favoritePeople = () => keptPeople;
 function changed() {
   keptPeople = [...favorites.values()].filter(fav => fav.kind === 'Person').map(fav => fav.saved.id);
-  document.getElementById('canvas-tools').addEventListener('scroll', () => setOpen(false));
-render();
+  render();
   listeners.forEach(fn => fn());
 }
 // `entry` as above, less its picture and name, which are passed in as they are at the moment it's hearted
@@ -80,8 +79,9 @@ function render() {
   }
   favorites.forEach(fav => {
     const row = document.createElement('button');
-    row.className = 'fav-row' + (fav.gone ? ' fav-gone' : '');
-    row.title = fav.gone ? 'Not to be found any more' : 'Follow';
+    const note = fav.note?.(); // (a hearted wreck's wait: see life/car-card.js)
+    row.className = 'fav-row' + (fav.gone || note ? ' fav-gone' : '');
+    row.title = note ?? (fav.gone ? 'Not to be found any more' : 'Follow');
     const img = document.createElement('img');
     img.className = 'fav-thumb';
     img.alt = '';
@@ -93,7 +93,7 @@ function render() {
     name.textContent = fav.name;
     const kind = document.createElement('span');
     kind.className = 'fav-kind';
-    kind.textContent = fav.gone ? fav.kindLabel + ' · gone' : fav.kindLabel;
+    kind.textContent = note ? fav.kindLabel + ' · ' + note : fav.gone ? fav.kindLabel + ' · gone' : fav.kindLabel;
     text.append(name, kind);
     row.append(img, text);
     row.addEventListener('click', () => followFavorite(fav));
@@ -106,12 +106,12 @@ function followFavorite(fav) {
   if (S.interactionMode !== 'move') document.querySelector('#mode-toolbar .tool-btn[data-mode="move"]')?.click();
   App.letGoOfAllBut(fav.kind);
   fav.gone = !fav.follow();
-  document.getElementById('canvas-tools').addEventListener('scroll', () => setOpen(false));
-render();
+  render();
   if (!fav.gone) setOpen(false);
 }
 
 function setOpen(open) {
+  if (open) render(); // (so waits shown are up to date)
   panel.hidden = !open;
   if (open && getComputedStyle(panel).position === 'fixed') { // (win3 strip: hung under the button by hand)
     const box = button.getBoundingClientRect();

@@ -15,6 +15,8 @@ import { serializeImportedModels, restoreImportedModels } from '../objects/impor
 import { cancelActiveDrawing, applyModeVisibility } from '../editor/tools.js';
 import { savedFavorites, restoreFavorites } from '../ui/favorites.js';
 import { progressData, loadProgress } from './progress.js';
+import { serializeCrowd, restoreCrowd } from '../life/people/peopleKeep.js';
+import { serializeCars, restoreCars } from '../life/traffic/carKeep.js';
 
 // ============================================================ project save / load
 const PROJECT_FORMAT_VERSION = 1;
@@ -66,10 +68,12 @@ export function serializeProject() {
       globalGrassNoiseStrength: S.globalGrassNoiseStrength,
       people: { enabled: S.peopleEnabled, amount: S.peopleAmount, speed: S.peopleSpeed, size: S.peopleSize, traffic: S.trafficAmount, idSeq: S.peopleIdSeq },
       dayNight: { enabled: S.dayNightEnabled, dayLength: S.dayLengthMinutes, time: S.timeOfDay },
-      weather: { rain: S.weatherRain, snow: S.weatherSnow, clouds: S.weatherClouds }
+      weather: { rain: S.weatherRain, snow: S.weatherSnow, clouds: S.weatherClouds, cycle: S.weatherCycle }
     },
     favorites: savedFavorites(), // (only those that can be found again in a reloaded city: see ui/favorites.js)
     progress: progressData(), // (energy, money, morality points, the daily gift…: see progress.js)
+    crowd: serializeCrowd(), // (who's in the crowd, the dead left out: see life/people/peopleKeep.js)
+    traffic: serializeCars(), // (and on the roads: see life/traffic/carKeep.js)
     roads: {
       nodeSeq: S.roadNodeSeq, lineSeq: S.roadLineSeq, networkSeq: S.roadNetworkSeq,
       walkwayOrder: (S.walkwayOrder || []).slice(), // (defensively: same fallback loadProjectFromData below already uses on the way back in)
@@ -228,8 +232,8 @@ export async function loadProjectFromData(data, options) {
   document.getElementById('s-grassnoise').value = S.globalGrassNoiseStrength;
   document.getElementById('dv-grassnoise').textContent = S.globalGrassNoiseStrength.toFixed(2);
   renderWorldTintPanel();
-  if (!keepMaps) restoreFavorites(data.favorites); // (undo and redo leave the favorites alone: they aren't steps to undo)
-  if (!keepMaps) loadProgress(data.progress); // (nor what's been earned and spent)
+  if (!keepMaps) loadProgress(data.progress); // (undo and redo leave what's been earned and spent alone, too: see progress.js)
+  if (!keepMaps) { restoreFavorites(data.favorites); restoreCrowd(data.crowd); restoreCars(data.traffic); } // (undo and redo leave the favorites and crowd alone: they aren't steps to undo)
   if (sc.people) {
     S.peopleEnabled = !!sc.people.enabled;
     if (sc.people.amount != null) S.peopleAmount = sc.people.amount;
@@ -242,8 +246,11 @@ export async function loadProjectFromData(data, options) {
     App.syncPeopleUI();
   }
   if (sc.weather) {
-    S.weatherRain = sc.weather.rain || 0; S.weatherSnow = sc.weather.snow || 0;
-    App.setWeather('clouds', sc.weather.clouds || 0); // also applies the rain and snow to the light and sky
+    S.weatherCycle = !!sc.weather.cycle;
+    if ('rain' in sc.weather) { // (undo steps taken while cycling leave the weather be)
+      S.weatherRain = sc.weather.rain || 0; S.weatherSnow = sc.weather.snow || 0;
+      App.setWeather('clouds', sc.weather.clouds || 0); // also applies the rain and snow to the light and sky
+    }
   }
   if (sc.dayNight) {
     S.dayNightEnabled = !!sc.dayNight.enabled;

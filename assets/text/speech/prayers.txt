@@ -6,5 +6,20 @@ Hear me Lord, I'm not asking for much. Just a little more money. Amen.
 Dear God, why is everything so expensive? Amen.
 Oh God, forgive me for what I said earlier. Amen. {mood = -0.3}
 Hear me Lord, smite my enemies. Amen. {evil}
+Dear Lord, deliver me from evil, protect me from the malice and snares of the devil. And 2 more inches. Amen
+Oh God, please cure my aerosol addiction. Amen.
+Dear God, make me better at the computer. Amen. {age > 60}
+Hear me God, please protect the Bees. Amen.
+My Lord, please give me a doggy. Amen.
+Dear God, please make my chronic pains go away. Amen.
+Oh Lord, all I ask is to love and be loved in return. Amen.
+Dear Lord, thank you for my wonderful life. Amen. {mood > 0.5}
+Dear God, give me a big beautiful woman with lovely supple breasts and tiny nipples. Amen.
+Oh God, make me a better musician. If you don't, I'm signing a covenant with the devil. Amen.
+My Lord, bring back Ted Season 3. Amen.
+Hear me Lord, Simpsons Hit and Run remaster. Amen.
+Dear God, how shall I use my software coding skills to please you? Amen.
+My lovely Lord, please can I have some yummy chocolate? Amen.
+Dear God, please let me blaze today. Amen.
 Dear God, I'm sorry for the last few days. Amen. {is = drunk}
 Oh God, this city has lost its way. Amen. {world.morality < -0.3}
