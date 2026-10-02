@@ -58,6 +58,7 @@ import './ui/toon-shading.js';
 import './ui/view-prefs.js';
 import './ui/color-schemes.js';
 import './ui/ped-view.js';
+import './net/net.js';
 import './project/export-obj.js';
 import * as THREE from 'three';
 import { S, worldClock } from './core/shared.js';
@@ -181,12 +182,12 @@ function animate() {
   updateBodyParts(w);
   updateCarWrecks(w);
   updateLightning(w);
-  updateBees(w);
-  updateAirports(w);
-  updateMarinas(w);
+  if (!S.netGuest) updateBees(w); // (multiplayer guests: not yet sent — see net/net.js)
+  if (!S.netGuest) updateAirports(w);
+  if (!S.netGuest) updateMarinas(w);
   updateBoatFollow();
-  updateMedBots(w);
-  updateSeraphorbs(w);
+  if (!S.netGuest) updateMedBots(w);
+  if (!S.netGuest) updateSeraphorbs(w);
   updatePigeons(w); // (before updateTraffic, which sets off the blasts that scatter them)
   updateTraffic(w);
   updateFences(w); // (smashed fences put back once long out of view)

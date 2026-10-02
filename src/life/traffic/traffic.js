@@ -14,6 +14,7 @@ import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, roadC
 import { carHoloTimeUniform } from './materials.js';
 import { benchCars, giveDesign, keptCar, takeCarReset } from './carKeep.js';
 import { carMeshes, carParts } from './models.js';
+import { mirrorTraffic } from './trafficMirror.js';
 import { CAR_REAR_AXLE, carHeight, carLength, engineOf, placeCar, placing, turnWheels } from './placing.js';
 import { buildCarGrid, CAR_BRAKE, CAR_STOP_GAP, carsOverlap, forCarsNear, gapAhead, GIVE_UP_AFTER, lyingAhead, overlapYield, separateCars, uTurnBlocked, waitOrGiveUp } from './spacing.js';
 import { updateSpecialTraits } from './special.js';
@@ -92,6 +93,7 @@ export function updateTraffic(t) {
   carParts.all.forEach(mesh => { mesh.visible = S.peopleEnabled; });
   carMeshes.forEach(cm => { cm.mesh.visible = S.peopleEnabled; });
   if (!S.peopleEnabled) { updateEngines([], null, null, dt); return; }
+  if (S.netGuest) { mirrorTraffic(); updateEngines([], null, null, dt); const glow = computeWindowGlowFactor(S.sunElevation); carMeshes.forEach(cm => { cm.glowUniform.value = glow; }); return; } // (multiplayer: the host's traffic, as sent — see trafficMirror.js)
   if (!S.trafficNav || (S.trafficNavDirty && t - S.trafficNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.trafficNavDirty = false;
     S.trafficNavBuiltAt = t;

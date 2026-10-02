@@ -18,6 +18,7 @@ import { footstep } from '../../audio/footsteps.js';
 import { ear } from '../../audio/sfx.js';
 import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
+import { mirrorCrowd } from './peopleMirror.js';
 import { controlInput, possession, rushed } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion, registerPreset } from '../profiles.js';
 import { presetAt } from './presets.js';
@@ -1309,6 +1310,7 @@ export function updatePeople(t) {
   pruneGone(people, t, forgetLinesExcept); // (relations and recent lines of the gone)
   // (everyone held still where they are while the held-items debug window poses someone: see ui/held-debug.js)
   if (S.peopleFrozen) { S.peopleFrozen(); return; }
+  if (S.netGuest) { mirrorCrowd(); return; } // (multiplayer: the host's crowd, as sent — see peopleMirror.js)
   if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.peopleNavDirty = false;
     setPeopleNavBuiltAt(t);

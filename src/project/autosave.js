@@ -21,7 +21,8 @@ const CROWD_DELAY = 3000, CROWD_EVERY = 45000; // ms
 let ready = false, restoring = false, saveTimer = null, crowdTimer = null, warned = false;
 navigator.storage?.persist?.().catch(() => {}); // (asks the browser not to clear it under disk pressure)
 // (index.html?blank: an empty scene, never saved — for tools/ped-maker.html)
-const BLANK = new URLSearchParams(location.search).has('blank');
+// (and index.html?join=CODE: a guest in someone else's city — see net/net.js)
+const BLANK = ['blank', 'join'].some(key => new URLSearchParams(location.search).has(key));
 
 const database = new Promise((resolve, reject) => {
   const request = indexedDB.open(DB_NAME, 1);
