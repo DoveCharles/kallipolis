@@ -58,6 +58,33 @@ function prepareCandidates() {
  * @returns {number}
  */
 export function groundBelow(x, fromY, z, fallback) {
+  return hitBelow(x, fromY, z)?.point.y ?? fallback;
+}
+
+// (a shader's onBeforeCompile source names the look it draws: see project/export-glb.js's exportLookOf)
+const softKinds = new WeakMap();
+const isSoft = material => {
+  let soft = softKinds.get(material);
+  if (soft == null) {
+    const shader = Object.prototype.hasOwnProperty.call(material, 'onBeforeCompile') ? String(material.onBeforeCompile) : '';
+    soft = /uZoneEdgePoints|uSandTint/.test(shader) || (shader.includes('uPathSegments') && !shader.includes('uPavePattern'));
+    softKinds.set(material, soft);
+  }
+  return soft;
+};
+/**
+ * Whether the ground straight below (x, fromY, z) is soft — grass, sand or a dirt path — rather than hard (stone, paving, roads).
+ * @param {number} x
+ * @param {number} fromY
+ * @param {number} z
+ * @returns {boolean}
+ */
+export function softGroundBelow(x, fromY, z) {
+  const material = hitBelow(x, fromY, z)?.material;
+  return !!material && isSoft(material);
+}
+
+function hitBelow(x, fromY, z) {
   refreshSceneIndex();
   ray.set(origin.set(x, fromY + PROBE_LIFT, z), DOWN);
   hits.length = 0;
@@ -73,7 +100,8 @@ export function groundBelow(x, fromY, z, fallback) {
     // (see-through only counts as not there when it's mostly see-through: a dirt path is 'transparent' only for its faded edges)
     if (!material || (material.transparent && material.opacity < 0.5) || material.visible === false) continue;
     if (normal.copy(hit.face.normal).transformDirection(o.matrixWorld).y < MIN_UPWARD_NORMAL) continue;
-    return hit.point.y;
+    hit.material = material;
+    return hit;
   }
-  return fallback;
+  return null;
 }

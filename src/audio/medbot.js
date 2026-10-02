@@ -1,3 +1,4 @@
+import { softGroundBelow } from '../core/ground-probe.js';
 import { listener, outdoorsOf, ear, loopPanning, placePanner, makePanner } from './sfx.js';
 
 // ============================================================ the MedBot's noises
@@ -5,6 +6,8 @@ import { listener, outdoorsOf, ear, loopPanning, placePanner, makePanner } from 
 //  - her conveyor-belt boots: a low whirring motor (a sawtooth and a square a fifth up, through a lowpass) over the hiss
 //    of the belt (noise through a bandpass), rattling with the treads as they go round; rolling about it's MOTOR_HZ,
 //    rushing it's SPEED_PITCH times that and SPEED_LOUDER times as loud. Still, she's quiet.
+//  - under them, the ground she's rolling over (softGroundBelow, checked every PROBE_EVERY s): over grass, sand and dirt a
+//    crunch (noise, its loudness crackling at random); over anything else a gritty rumble of stone, clacking with the treads.
 //  - her siren while she rushes to someone hurt: a slow wail, woooo-woooo, rising and falling around SIREN_HZ; heard much
 //    further off than the rest (SIREN_HEAR).
 //  - healing: a soft major-seventh chord swelling in and shimmering, with bubbly notes (each a sine blooping up to pitch)
@@ -17,6 +20,7 @@ const SIREN_HEAR = 70, SIREN_REF = 4;   // the siren: from right across a plaza
 const VOICES_MAX = 2;
 const MOTOR_HZ = 165, MOTOR_VOLUME = 0.05;
 const SPEED_PITCH = 1.9, SPEED_LOUDER = 2;
+const SOFT_VOLUME = 0.07, STONE_VOLUME = 0.05, PROBE_EVERY = 0.25;
 const TREAD_HZ = 9;                     // the treads' rattle a second at her rolling speed (faster when she's faster)
 const SIREN_HZ = 760, SIREN_SWING = 330, SIREN_RATE = 0.55, SIREN_VOLUME = 0.05; // centre, ± Hz, wails a second
 const CHORD = [523.25, 659.25, 783.99, 987.77, 1318.5]; // Cmaj7 and a high E
@@ -69,6 +73,19 @@ function makeVoice() {
   belt.connect(hiss).connect(gain(0.35)).connect(rattle);
   rattle.connect(motor).connect(near);
 
+  // the ground: a crunch (noise, its loudness shaken by the same noise played very slowly) or a stony rumble and grit
+  const loop = rate => { const n = context.createBufferSource(); n.buffer = noise; n.loop = true; n.playbackRate.value = rate; started.push(n); return n; };
+  const filter = (type, hz, q) => { const f = context.createBiquadFilter(); f.type = type; f.frequency.value = hz; f.Q.value = q; return f; };
+  const crackle = loop(0.0008), crunch = gain(0.5), soft = gain(0);
+  crackle.connect(gain(0.9)).connect(crunch.gain);
+  loop(1).connect(filter('bandpass', 900, 0.7)).connect(crunch).connect(soft).connect(near);
+  const grind = gain(0.7), stone = gain(0);
+  tread.connect(gain(0.35)).connect(grind.gain);
+  const stoneNoise = loop(0.9);
+  stoneNoise.connect(filter('lowpass', 320, 1)).connect(grind);
+  stoneNoise.connect(filter('highpass', 4000, 0.7)).connect(gain(0.2)).connect(grind);
+  grind.connect(stone).connect(near);
+
   // the siren: a triangle wailing up and down (a slow sine on its pitch)
   const wail = osc('triangle', SIREN_HZ), swing = osc('sine', SIREN_RATE), swingDepth = gain(SIREN_SWING);
   swing.connect(swingDepth).connect(wail.frequency);
@@ -93,7 +110,7 @@ function makeVoice() {
   shimmer.connect(healing).connect(sparkle);
 
   started.forEach(o => o.start());
-  return { bot: null, near, far, sparkle, nextTwinkle: 0, motor, saw, square, lowpass, hiss, tread, siren, healing, notes: 0, nextRustle: 0 };
+  return { bot: null, near, far, sparkle, nextTwinkle: 0, motor, saw, square, lowpass, hiss, tread, soft, stone, crackle, onSoft: false, nextProbe: 0, siren, healing, notes: 0, nextRustle: 0 };
 }
 
 // A noise of dressings going on, one of three at random: all noise, shaped by its filter and loudness.
@@ -181,10 +198,10 @@ export function updateMedBotSounds(bots) {
   while (voices.length < Math.min(VOICES_MAX, near.length)) voices.push(makeVoice());
   const now = listener.context.currentTime;
   voices.forEach(v => { if (v.bot && !near.some(b => b.bot === v.bot)) v.bot = null; });
-  near.forEach(b => { if (!voices.some(v => v.bot === b.bot)) voices.find(v => !v.bot).bot = b.bot; });
+  near.forEach(b => { if (!voices.some(v => v.bot === b.bot)) { const v = voices.find(v => !v.bot); v.bot = b.bot; v.nextProbe = 0; } });
   for (const v of voices) {
     const b = v.bot && near.find(n => n.bot === v.bot);
-    if (!b) { [v.motor, v.siren, v.healing].forEach(g => g.gain.setTargetAtTime(0, now, 0.15)); continue; }
+    if (!b) { [v.motor, v.soft, v.stone, v.siren, v.healing].forEach(g => g.gain.setTargetAtTime(0, now, 0.15)); continue; }
     for (const p of [v.near, v.far]) placePanner(p, b.x, b.y + 0.8, b.z);
     // (her boots: the faster, the higher and louder, rushing most of all)
     const fast = b.rushing ? 1 : 0, pitch = MOTOR_HZ*(0.8 + 0.2*Math.min(1, b.speed))*(fast ? SPEED_PITCH : 1);
@@ -195,6 +212,12 @@ export function updateMedBotSounds(bots) {
     v.tread.frequency.setTargetAtTime(TREAD_HZ*Math.max(0.3, b.speed), now, 0.12);
     const rolling = Math.min(1, b.speed/0.3);
     v.motor.gain.setTargetAtTime(MOTOR_VOLUME*rolling*(fast ? SPEED_LOUDER : 1), now, 0.08);
+    // (the ground under her, as loud as her boots are)
+    if (now >= v.nextProbe) { v.onSoft = softGroundBelow(b.x, b.y, b.z); v.nextProbe = now + PROBE_EVERY; }
+    const ground = rolling*(fast ? SPEED_LOUDER : 1);
+    v.soft.gain.setTargetAtTime(v.onSoft ? SOFT_VOLUME*ground : 0, now, 0.08);
+    v.stone.gain.setTargetAtTime(v.onSoft ? 0 : STONE_VOLUME*ground, now, 0.08);
+    v.crackle.playbackRate.setTargetAtTime(0.0008*Math.max(0.3, b.speed), now, 0.12);
     v.siren.gain.setTargetAtTime(b.rushing ? SIREN_VOLUME : 0, now, b.rushing ? 0.05 : 0.4);
     v.healing.gain.setTargetAtTime(b.healing ? HEAL_VOLUME : 0, now, b.healing ? 0.3 : 0.25);
     // (one strum up the scale over the whole heal: each note as the heal gets that far through)
