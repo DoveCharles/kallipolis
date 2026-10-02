@@ -233,7 +233,7 @@ const setIcon = open => { const img = button?.querySelector('img'); if (img) img
 /** Open the Ped Builder. @returns {void} */
 export function openPedBuilder() {
   if (win) { win.close(); return; }
-  win = openWindow({ id: 'ped-builder', title: 'Ped Builder', width: 600, resizable: true, noOk: true, onClose: close,
+  win = openWindow({ id: 'ped-builder', title: 'Ped Builder', width: 750, resizable: true, noOk: true, onClose: close,
     fill: el => {
       body = el;
       el.innerHTML = `<div class="pb"><div class="pb-controls">Loading peds…</div>
