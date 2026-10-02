@@ -888,6 +888,7 @@ function generateMall(zone, outline, spine, CW) {
   });
   const upper = s.mallUpper !== false && bridges.length > 0 && VH >= 0.8;
   const levels = upper ? 2 : 1, HW = levels*MALL_LEVEL + PARAPET, ROOF = HW - 0.2, GLASS_TOP = ROOF + CLERESTORY;
+  zone.roofTop = GLASS_TOP; // (rain stops here: sky/weather.js)
 
   // ---- the units: all along the concourse's edge, cut across every shop width, out to the walls (see lotsAlong)
   const segs = segmentsOf(spine), W = Math.max(5, s.mallShopWidth ?? 10), R = spine.halfWidth*1.6 + 10;

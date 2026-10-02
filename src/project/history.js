@@ -44,6 +44,7 @@ export function commitHistory() {
     if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
     redoStack.length = 0;
   }
+  if (snapshot !== historyCurrent) App.netEdit?.(snapshot); // (a multiplayer host's guests: see net/net.js)
   historyCurrent = snapshot;
   syncHistoryButtons();
 }
@@ -53,7 +54,9 @@ export function resetHistory() {
   historyTimer = null;
   undoStack.length = 0;
   redoStack.length = 0;
+  const was = historyCurrent;
   historyCurrent = historySnapshot();
+  if (historyCurrent !== was) App.netEdit?.(historyCurrent);
   syncHistoryButtons();
 }
 function scheduleHistory(delay) {
@@ -74,6 +77,7 @@ async function restoreHistory(snapshot) {
   const stillThere = kept.type === 'zone' ? S.zones.some(z => z.id === kept.id) : kept.type ? S.roadLines.some(l => l.networkId === kept.id) : false;
   if (stillThere) selectItem(kept.type, kept.id, true);
   historyCurrent = historySnapshot(); // as the restored project serializes now
+  App.netEdit?.(historyCurrent);
   historyRestoring = false;
   syncHistoryButtons();
 }
@@ -93,4 +97,4 @@ function redo() {
   restoreHistory(redoStack.pop());
 }
 
-Object.assign(App, { scheduleHistory, resetHistory, undo, redo, modeChanged });
+Object.assign(App, { historyNow: () => historyCurrent, scheduleHistory, resetHistory, undo, redo, modeChanged });

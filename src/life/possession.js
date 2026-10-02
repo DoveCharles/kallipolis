@@ -83,6 +83,7 @@ export const canTakeControl = (kind = 'person') => paid[GROUP_OF[kind]] > Date.n
 const charged = () => isPossessing() || driving.active || flying.active;
 const spend = () => (App.spendEnergy ? App.spendEnergy() : true);
 function beginCharge(kind) {
+  if (S.netGuest) return true; // (free: the host's city, not the guest's)
   chargeMs = CHARGE_MS[kind]; group = GROUP_OF[kind];
   if (paid[group] <= Date.now()) {
     if (!spend()) return false;

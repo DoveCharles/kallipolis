@@ -130,6 +130,10 @@ export const sexOf = id => mulberry32(13 + id*7877)() < 0.5;
 // the hearted, as saved (see people/peopleKeep.js): their profile as it was, over whatever their id rolls now
 const pinned = new Map();
 export const pinProfile = (id, kept) => { if (kept?.profile) { pinned.set(id, kept); cache.clear(); } };
+// people made in the Ped Builder (ui/ped-builder.js): { name, age, mood, loves, hates, height } picked over their id's rolls
+const customs = new Map();
+export const registerCustom = (id, custom) => { customs.set(id, custom); cache.clear(); };
+export const customOf = id => customs.get(id);
 const ownProfile = (id, isMan, moodNow) => {
   const pin = pinned.get(id);
   if (pin) {
@@ -164,11 +168,12 @@ function workOutProfile(id, isMan, moodNow) {
 function profileFor(id, isMan, moodNow = null) {
   const rng = mulberry32(48271 + id*7919);
   const pick = list => list[Math.floor(rng()*list.length)];
-  const man = isMan ?? sexOf(id);
+  const man = isMan ?? sexOf(id), custom = customs.get(id);
   // (the lists' picks by rendezvous on their own salts — see core/math.js — so new entries change few people)
-  const name = pickEntry(lists[man ? 'boy names' : 'girl names'], seedOf(id, 1));
+  const nameList = lists[man ? 'boy names' : 'girl names'], first = custom?.name?.trim().split(/\s+/)[0] ?? '';
+  const name = custom?.name ? nameList.find(entry => entry.text === first) ?? plainEntry(first) : pickEntry(nameList, seedOf(id, 1));
   let age = 18 + Math.floor(rng()*65);
-  const picked = pickEntry(lists.moods, seedOf(id, 2));
+  const picked = (custom && lists.moods.find(entry => entry.text === custom.mood)) || pickEntry(lists.moods, seedOf(id, 2));
   const mood = (moodNow != null && lists.moods.find(entry => entry.text === moodNow)) || picked;
   const firstLove = pickEntry(lists.loves, seedOf(id, 3));
 
@@ -185,9 +190,11 @@ function profileFor(id, isMan, moodNow = null) {
   // the names, ages and moods of existing people. Keep new random draws for a profile on `extra`, not `rng`.
   const extra = mulberry32(90173 + id*6151);
   const [loveCount, hateCount] = pickCounts(counts, extra());
-  const loves = loveCount >= 1 ? [firstLove] : [], hated = hateCount >= 1 && !incompatible ? [hates] : [];
+  let loves = loveCount >= 1 ? [firstLove] : [], hated = hateCount >= 1 && !incompatible ? [hates] : [];
   addEntries(loves, lists.loves, loveCount, seedOf(id, 7), [loves, hated]);
   addEntries(hated, lists.hates, hateCount, seedOf(id, 8), [loves, hated]);
+  const chosen = (texts, list) => (texts ?? []).map(text => list.find(entry => entry.text === text)).filter(Boolean);
+  if (custom) { loves = chosen(custom.loves, lists.loves); hated = chosen(custom.hates, lists.hates); }
 
   // (placeholders filled on their own stream, so filling doesn't change anything else picked; the words filled in bring
   // their {effect.…} traits — see fillEntry in speech-text.js)
@@ -241,6 +248,7 @@ function profileFor(id, isMan, moodNow = null) {
   }
 
   age = Math.round(Math.max(18, age*traits.agemult)) //no minors!
+  if (custom) { if (custom.name) { fullname = custom.name; nick = null; } if (Number.isFinite(custom.age)) age = Math.max(18, Math.round(custom.age)); }
 
   // `loves` and `hates` are lists of text; at most one is ever empty. `lovesTier`/`hatesTier` run alongside, entry for
   // entry (see tierOf): 'legendary' or 'terrible' or null, for the card to colour that entry's row (ui/entity-card.js).
@@ -249,7 +257,7 @@ function profileFor(id, isMan, moodNow = null) {
   // `limits`: every limit rule their name, mood, loves and hates hold (see clash in core/entries.js), for what they'll say
   return { name: fullname, shortName: nick ?? name.text, age, mood: mood.text, loves: loveTexts, hates: hateTexts, limits: [...[name, mood, ...loves, ...hated].flatMap(limitsOf), ...[...lovesFilled, ...hatesFilled].flatMap(filled => filled.limits ?? [])],
     lovesSaid: lovesFilled.map(filled => filled.said), hatesSaid: hatesFilled.map(filled => filled.said),
-    lovedWords: lovesFilled.flatMap(filled => filled.words), hatedWords: hatesFilled.flatMap(filled => filled.words), lovesTier: loveTiers, hatesTier: hateTiers, lovesMods: loveMods, hatesMods: hateMods, lovesBase: loveBase, hatesBase: hateBase, traits: traits};
+    lovedWords: lovesFilled.flatMap(filled => filled.words), hatedWords: hatesFilled.flatMap(filled => filled.words), lovesTier: loveTiers, hatesTier: hateTiers, lovesMods: loveMods, hatesMods: hateMods, lovesBase: loveBase, hatesBase: hateBase, traits: traits, height: custom?.height};
 }
 
 // ---- cheering up

@@ -2241,6 +2241,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
       const pixels = tall*s*perMetre/(perspective ? Math.max(sphere.center.distanceTo(from), 1e-3) : 1);
       if ((pixels >= PERSON_DRAW_PIXELS && viewFrustum.intersectsSphere(sphere)) || (pixels >= PERSON_SHADOW_PIXELS && shadowAimed && shadowFrustum.intersectsSphere(sphere))) shown.push(i);
     }
+    always.forEach(i => { if (i >= count) shown.push(i); }); // (a slot past the crowd: the Ped Builder's, ui/ped-builder.js)
     spectralBits.forEach(bit => { having[bit].length = 0; });
     shown.forEach(i => {
       const bits = traits[(SPIRITS_ROW*PEOPLE_MAX + i)*4 + 3];

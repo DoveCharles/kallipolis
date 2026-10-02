@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { S, App } from '../core/shared.js';
+import { S, App, buildingHolders } from '../core/shared.js';
 import { scene, sun, sunOffset, updateSun, skyDome } from '../core/scene.js';
 import { controls } from '../core/camera-controls.js';
-import { mulberry32 } from '../core/math.js';
+import { mulberry32, pointInPolygon } from '../core/math.js';
+import { solidTopAt } from '../buildings/footprints.js';
 import { syncSkyUI } from './day-night.js';
 
 // ============================================================ weather
@@ -220,18 +221,43 @@ function cycleWeather(t) {
   S.weatherRain = step(S.weatherRain, spell[0]); S.weatherSnow = step(S.weatherSnow, spell[1]);
   setWeather('clouds', step(S.weatherClouds, spell[2]));
 }
+// Rain and snow stop at roofs (buildings' and malls'): the cover's top per COVER_CELL, cached till the buildings change.
+const COVER_CELL = 1.5;
+let cover = new Map(), coverKey = '', coverCheckedAt = -Infinity;
+function coverTopAt(x, z) {
+  const cx = Math.floor(x/COVER_CELL), cz = Math.floor(z/COVER_CELL), k = (cx + 32768)*65536 + cz + 32768;
+  let top = cover.get(k);
+  if (top === undefined) {
+    const px = (cx + 0.5)*COVER_CELL, pz = (cz + 0.5)*COVER_CELL;
+    top = solidTopAt(px, pz);
+    for (const m of S.malls || []) if (m.roofTop > top && pointInPolygon({ x: px, z: pz }, m.points)) top = m.roofTop;
+    if (cover.size > 300000) cover.clear();
+    cover.set(k, top);
+  }
+  return top;
+}
+function checkCover() {
+  const now = performance.now();
+  if (now - coverCheckedAt < 500) return;
+  coverCheckedAt = now;
+  const key = buildingHolders().map(z => z.id + ':' + (z.buildingsGroup?.children.length ?? 0)).join(',');
+  if (key !== coverKey) { coverKey = key; cover.clear(); }
+}
 export function updateWeather(t) {
   cycleWeather(t);
   const wrap = (v, size) => ((v % size) + size) % size;
   const W = THREE.MathUtils.clamp(controls.radius*1.4, 160, 800), H = Math.min(260, W*0.5);
   const x0 = controls.target.x - W/2, z0 = controls.target.z - W/2, scale = W/300;
   rainLines.visible = S.weatherRain > 0;
+  if (rainLines.visible || S.weatherSnow > 0) checkCover();
   if (rainLines.visible) {
     const count = Math.round(RAIN_MAX*S.weatherRain), pos = rainGeo.attributes.position.array;
     const length = 1.4*scale + 0.6, slant = length*0.25, fall = t*RAIN_SPEED*(0.7 + scale*0.3), drift = t*6;
     for (let i=0;i<count;i++) {
       const x = x0 + wrap(rainSeeds[i*3]*W + drift - x0, W), z = z0 + wrap(rainSeeds[i*3+2]*W - z0, W), y = H - wrap(rainSeeds[i*3+1]*H + fall, H);
-      pos.set([x, y, z, x - slant, y + length, z], i*6);
+      const top = coverTopAt(x, z);
+      if (y + length <= top) pos.set([x, -1e4, z, x, -1e4, z], i*6);
+      else pos.set([x, Math.max(y, top), z, x - slant, y + length, z], i*6);
     }
     rainGeo.setDrawRange(0, count*2);
     rainGeo.attributes.position.needsUpdate = true;
@@ -244,6 +270,7 @@ export function updateWeather(t) {
       pos[i*3] = x0 + wrap(snowSeeds[i*4]*W + sway + t*1.5 - x0, W);
       pos[i*3+1] = H - wrap(snowSeeds[i*4+1]*H + fall*(0.7 + snowSeeds[i*4+3]*0.6), H);
       pos[i*3+2] = z0 + wrap(snowSeeds[i*4+2]*W + Math.cos(t*0.5 + phase)*1.2*scale - z0, W);
+      if (pos[i*3+1] < coverTopAt(pos[i*3], pos[i*3+2])) pos[i*3+1] = -1e4;
     }
     snowPoints.material.size = 0.35 + scale*0.35;
     snowGeo.setDrawRange(0, count);

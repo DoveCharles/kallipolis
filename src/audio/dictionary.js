@@ -69,7 +69,7 @@ export function sayLine(at, voice, who, person) {
   if (!said && talk && talk.by !== person && (!talk.to || talk.to === person) && now < talk.until) {
     // (possessed, with Options > Game > Dialogue Choices: several replies wait for the player's pick — person.choosing,
     // shown by ui/speech-bubbles.js ownLine — the dialogue held till then)
-    if (S.dialogueChoices && person.mode === 'possessed') {
+    if (S.dialogueChoices && person.mode === 'possessed' && !person.remote) {
       const choosing = person.choosing?.talk === talk ? person.choosing : null;
       if (choosing && choosing.picked == null) return null;
       const options = choosing ? null : pickReplyChoices(talk.replies, person, talk.vars, talk.by);

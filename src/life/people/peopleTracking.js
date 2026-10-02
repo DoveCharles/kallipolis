@@ -97,6 +97,7 @@ export function followPerson(i) {
   controls.minRadius = Math.max(1.2, h*0.8);
   controls.goalRadius = Math.max(controls.minRadius, Math.min(controls.goalRadius, h*9)); // swooping in, if the camera's far off
   App.showPersonCard(i, personModel ? personModel.isMan[i] === 1 : null);
+  App.questEvent?.('find', { p: people[i] }); // (ui/quests.js)
   doingShown = undefined;
   showFollowedDoing();
 }
@@ -338,12 +339,13 @@ let cameraNear = camera.near;
  */
 export function possessPerson(i) {
   const p = people[i];
-  if (i !== followed || !p || p.miniOf || possession.index === i || !S.peopleEnabled || S.interactionMode !== 'move') return; // (nor a piper's mini, whose revenge would throw your punches: see peopleMinis.js)
+  if (i !== followed || !p || p.miniOf || p.remote || possession.index === i || !S.peopleEnabled || S.interactionMode !== 'move') return; // (nor a piper's mini, whose revenge would throw your punches: see peopleMinis.js)
   // (someone in the room the camera's inside — picked there, see followPersonInside — is walked round it, as anyone
   // walked in possessed is: see enterPossessed; not someone behind a changing room's curtain)
   const room = inRoom(p) ? p.indoors : null;
   if (isGone(p) && !room) return;
   if (room && (p.inRoom.cubicle || p.inRoom.hidden)) return;
+  if (S.netGuest) { startPossession(i, p.heading); return; } // (a multiplayer guest: the host walks them, from our keys — see net/net.js)
   if (!canTakeControl()) return; // (checked before anything's undone; spent in possession.js)
   if (room) { standUp(p); p.inRoom = null; }
   // (up on a raised walkway, in a station, its lift or a carriage, they stay there: see peopleFooting.js)
@@ -375,9 +377,17 @@ export function unpossessPerson() {
   swing = null;
   camera.near = cameraNear;
   camera.updateProjectionMatrix();
+  if (S.netGuest) { if (possessedRoom) { possessedRoom = null; followedInside = false; App.stopFollowingBuilding?.(); } return; } // (the host lets them go)
   if (!p || p.mode !== 'possessed') { possessedRoom = null; return; }
   leaveGroup(p); // (done with any chat: see talkWith)
   if (possessedRoom && stayIndoors(p)) return; // (let go of in a room they've walked into: they stay on there a while)
+  letGo(p);
+  // the camera behind them, looking the way they were
+  const behind = possession.yaw + Math.PI;
+  controls.goalTheta = controls.theta + wrapAngle(behind - controls.theta);
+  controls.goalPhi = Math.max(controls.goalPhi, Math.PI*0.3);
+}
+function letGo(p) {
   // back into a hangout they're standing in, else walking back to the nearest walkway they can reach (walkBackToWalkway),
   // else onto the nearest walkway — up on a raised one, the nearest point of that
   // (the grid reseatPerson looks in leaves the decks out, so it would drop them to the ground below); in a station, a lift
@@ -393,10 +403,26 @@ export function unpossessPerson() {
     if (inHangout || !walkBackToWalkway(p)) reseatPerson(p);
   }
   if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; p.wait = 1; }
-  // the camera behind them, looking the way they were
-  const behind = possession.yaw + Math.PI;
-  controls.goalTheta = controls.theta + wrapAngle(behind - controls.theta);
-  controls.goalPhi = Math.max(controls.goalPhi, Math.PI*0.3);
+}
+/**
+ * A multiplayer guest's hold on someone, on the host (net/net.js): walked by `ctl` ({forward, right, run, brake, yaw, pitch}, kept up to date by the guest).
+ * @returns {boolean} whether they could be
+ */
+export function possessRemote(i, ctl) {
+  const p = people[i];
+  if (!p || p.mode === 'possessed' || p.miniOf || isGone(p) || inRoom(p) || p.indoors || p.train) return false;
+  p.footing = footingAt(p.x, p.y, p.z);
+  endActivity(p);
+  p.crossStage = null; p.jc = null; p.fright = p.stun = p.please = null; p.oneShot = null;
+  p.mode = 'possessed'; p.onRoad = false; p.remote = ctl;
+  return true;
+}
+export function releaseRemote(p) {
+  if (!p?.remote) return;
+  p.remote = null;
+  if (p.mode !== 'possessed') return;
+  leaveGroup(p);
+  letGo(p);
 }
 // Walking into people: anyone within BUMP_RADIUS is shocked (as by a bad sort's death — see stunBystanders in people.js) for
 // BUMP_SHOCK_TIME, once, as you come within it. Walking into someone's very middle (within BUMP_CORE_RADIUS) sends you staggering SHOVE_DISTANCE straight
@@ -435,8 +461,10 @@ function bounceOffCars(p, x, z, shove, hop) {
  * @returns {{x: number, y: number, z: number}} where they end up, at the height of the ground there
  */
 export function walkPossessed(p, dt) {
+  const room = p.remote?.room; // (a multiplayer guest in a room of their own: where they've walked, see stepGuestRoom)
+  if (room) { const k = 1 - Math.exp(-12*dt); p.walkingSpeed = room.speed; p.footing = null; return { x: p.x + (room.x - p.x)*k, y: room.y, z: p.z + (room.z - p.z)*k }; }
   carryPossessed(p); // (along with the carriage or lift they're in, first: then walked about in it)
-  const { forward, right, run, brake: jump } = controlInput(), yaw = possession.yaw;
+  const { forward, right, run, brake: jump } = p.remote ?? controlInput(), yaw = p.remote?.yaw ?? possession.yaw;
   const len = Math.hypot(forward, right);
   let x = p.x, z = p.z;
   const shove = p.shove ??= { x: 0, z: 0 };
@@ -477,7 +505,7 @@ export function walkPossessed(p, dt) {
   const partner = talkingTo(p);
   if (p.group && (!partner || Math.hypot(partner.x - x, partner.z - z) > TALK_LEAVE*S.peopleSize)) leaveGroup(p);
   // (in a room they've walked into: round its furniture — see "walking into buildings")
-  if (possessedRoom) { p.walkingSpeed = walkingSpeed; return stepInRoom(p, possession.index, x, z); }
+  if (possessedRoom && !p.remote) { p.walkingSpeed = walkingSpeed; return stepInRoom(p, possession.index, x, z); }
   const touching = new Set(), near = new Set();
   people.forEach(q => {
     if (q === p || isGone(q) || !(q.mode === 'line' || q.mode === 'wander' || q.mode === 'leaving')) return;
@@ -494,7 +522,7 @@ export function walkPossessed(p, dt) {
     if (punching) { endActivity(q); q.stun = q.fright = q.please = null; q.oneShot = null; goAfter(q, p); }
     else if (len > 0 && startled && !q.stun && !q.fright && !q.please && !q.punched && !q.attack) q.stun = { stage: 'notice', timer: 0.15, from: { x: p.x, z: p.z }, hold: BUMP_SHOCK_TIME };
     if (len === 0 || !entering) return;
-    if (swing) return; // (no staggering back while throwing a punch)
+    if (swing && !p.remote) return; // (no staggering back while throwing a punch)
     const backX = d > 1e-3 ? -dx/d : -Math.sin(yaw), backZ = d > 1e-3 ? -dz/d : -Math.cos(yaw);
     // (the distance a shove covers is its speed over SHOVE_DECAY)
     const speed = SHOVE_DISTANCE*S.peopleSize*SHOVE_DECAY;
@@ -714,7 +742,7 @@ export function updatePossessedTarget() {
   if (p?.mode === 'possessed' && possessedRoom) someoneHome(); // (in the room like anyone else: its lamp, music, bar bot…)
   if (p?.mode === 'possessed' && S.interactionMode === 'move') {
     const partner = talkingTo(p);
-    const q = rushed(p) ? null : partner ?? personAhead(p); // (rushed: can't talk)
+    const q = rushed(p) || S.netGuest ? null : partner ?? personAhead(p); // (rushed: can't talk; nor, yet, a multiplayer guest)
     if (q) target = { person: q };
     else if (possessedRoom) {
       const door = roomDoorway();
@@ -826,6 +854,21 @@ function stepInRoom(p, i, x, z) {
   }
   return { x, y: possessedRoom.floor, z };
 }
+/**
+ * A multiplayer guest's own possessed in a room they've walked into, a frame: walked here (the room's only in the guest's
+ * view), the host told where (guestRoomAt, see net/net.js).
+ */
+export function stepGuestRoom(p, dt) {
+  const { forward, right, run } = controlInput(), yaw = possession.yaw, len = Math.hypot(forward, right);
+  const speed = len ? PERSON_WALK_SPEED*p.stride*Math.max(0.5, p.traits.speed)*(run ? FLEE_SPEED*p.traits.boost : 1) : 0;
+  let x = p.x, z = p.z;
+  if (len) { x += (Math.sin(yaw)*forward - Math.cos(yaw)*right)/len*speed*dt; z += (Math.cos(yaw)*forward + Math.sin(yaw)*right)/len*speed*dt; }
+  p.walkingSpeed = speed;
+  const at = stepInRoom(p, possession.index, x, z);
+  p.x = at.x; p.y = at.y; p.z = at.z;
+  p.heading = possession.yaw + moonwalkTurn(p);
+}
+export const guestRoomAt = p => possessedRoom && p ? { x: p.x, y: p.y, z: p.z, speed: p.walkingSpeed ?? 0 } : null;
 // let go of in the room: they stay on a while, as anyone visiting would (see updateIndoors); false if there's no room
 function stayIndoors(p) {
   const { building, back } = possessedRoom;

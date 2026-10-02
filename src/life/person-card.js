@@ -340,7 +340,7 @@ function pollOthers() {
 // ---- headshots (called from updatePeople in people.js with the person alone on the model): `index` defaults to the
 // followed person's; otherHeadshotIndex says which unfocused window's person is due a redraw, if any
 function drawPersonHeadshot(view, index = focused?.shown?.index) {
-  const w = windows.find(x => x.shown?.index === index) ?? (look.shown?.index === index ? look : null);
+  const w = windows.find(x => x.shown?.index === index) ?? (look.shown?.index === index ? look : null) ?? (snap.shown?.index === index ? snap : null);
   if (!w || w.canvas.hidden || w.reading) return;
   const now = worldNow();
   if (now - w.drawnAt < (w === focused ? HEADSHOT_INTERVAL : OTHER_HEADSHOT_INTERVAL)) return;
@@ -372,6 +372,7 @@ function drawPersonHeadshot(view, index = focused?.shown?.index) {
 }
 function otherHeadshotIndex() {
   const now = worldNow();
+  if (snap.shown && !snap.reading && now - snap.drawnAt >= OTHER_HEADSHOT_INTERVAL) return snap.shown.index;
   const w = [...openWindows(), ...(look.shown ? [look] : [])]
     .find(x => x !== focused && !x.reading && !x.canvas.hidden && now - x.drawnAt >= OTHER_HEADSHOT_INTERVAL && (x === look || personOf(x)));
   return w ? w.shown.index : -1;
@@ -388,7 +389,21 @@ function copyHeadshot(w) {
   if (w === look && look.index !== w.shown.index) { look.faceReady = true; return; } // (the look card's next person: shown with it)
   w.context.putImageData(w.image, 0, 0);
   if (w.faceTimer) revealFace(w);
+  if (w === snap) snapDone(snap.canvas.toDataURL());
 }
+// ---- one-off headshots (ui/quests.js): a PNG data URL once they've been drawn on screen, or null after SNAP_WAIT
+const SNAP_WAIT = 8000, snapQueue = [];
+const snap = { shown: null, canvas: Object.assign(document.createElement('canvas'), { width: HEADSHOT_SIZE, height: HEADSHOT_SIZE }) };
+function snapHeadshot(index) {
+  if (!snap.target) headshotParts(snap, snap);
+  return new Promise(resolve => { snapQueue.push({ index, resolve }); if (!snap.shown) snapNext(); });
+}
+function snapNext() {
+  const next = snapQueue.shift();
+  snap.shown = next ? { index: next.index, resolve: next.resolve, timer: setTimeout(() => snapDone(null), SNAP_WAIT) } : null;
+  snap.drawnAt = -Infinity;
+}
+function snapDone(url) { if (!snap.shown) return; clearTimeout(snap.shown.timer); snap.shown.resolve(url); snapNext(); }
 
 // ---- the Social tab's drawing
 const socialOpen = w => !!w.shown && w.card.activeTab() === 'social';
@@ -537,6 +552,7 @@ function openGifts(w) {
       const { given, cheered } = giveGift(q, w.shown.index, gift);
       if (!given) return;
       App.spendEnergy();
+      App.questEvent?.('gift', { p: q });
       hint(`${gift.emoji} Given to ${name}.` + (cheered ? ' That cheered them up!' : ''));
       w.pocketsShown = null;
       refreshPockets(w);
@@ -605,4 +621,4 @@ function showLookCard(index) {
 }
 
 const cardedPeople = () => [...openWindows(), look].flatMap(w => w.shown ? [w.shown.index] : []);
-Object.assign(App, { cardedPeople, showLookCard, showPersonCard,hidePersonCard, drawPersonHeadshot, otherHeadshotIndex, setPersonCardDoing, refreshCardStatuses });
+Object.assign(App, { cardedPeople, showLookCard, showPersonCard,hidePersonCard, drawPersonHeadshot, otherHeadshotIndex, snapHeadshot, setPersonCardDoing, refreshCardStatuses });

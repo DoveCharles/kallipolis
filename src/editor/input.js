@@ -656,6 +656,7 @@ window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (!typing && (e.ctrlKey || e.metaKey) && !e.altKey && (key === 'z' || key === 'y')) {
     e.preventDefault();
+    if (S.netGuest) return; // (a guest can't edit)
     if (key === 'y' || e.shiftKey) App.redo(); else App.undo();
     return;
   }

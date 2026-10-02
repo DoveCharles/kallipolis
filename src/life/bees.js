@@ -540,7 +540,7 @@ export function plantParkLife(zone, { rng, foliage, ground, spot, clear, trees, 
     const near = flowerSpots.filter(f => f.distanceTo(hive.mouth) < BEE_RANGE);
     for (let k=0;k<hive.bees;k++) {
       const key = zone.id + ':bee:' + index + ':' + k;
-      bees.push({ hive, key, number: numberFor(key),
+      bees.push({ hive, key, number: numberFor(key), netId: netHash(zone.id)*4096 + bees.length,
         flowers: near.length ? near : flowerSpots,
         at: hive.mouth.clone(), v: new THREE.Vector3(), aim: hive.mouth.clone(),
         state: 'hive', until: between(Math.random, 0.5, BEE_REST_MAX), yaw: Math.random()*Math.PI*2, pitch: 0, bank: 0, hand: null,
@@ -564,6 +564,7 @@ const held = new THREE.Object3D(), toward = new THREE.Vector3(), wander = new TH
 held.rotation.order = 'YXZ'; // rolled about its own length first, then pitched and turned (as an aircraft is: see poseAircraft)
 const pick = list => list[Math.floor(Math.random()*list.length)];
 const isHome = bee => bee.state === 'hive';
+const netHash = id => { let h = 0; for (const c of String(id)) h = (h*31 + c.charCodeAt(0)) % 1048573; return h; }; // (a bee's netId: the same on host and guest)
 /**
  * Set bee.traits from its entries in assets/text/bees.txt, once per bee. `speed` scales its flight speed and `size` its
  * body; other traits can be read off bee.traits wherever they're wanted.
@@ -687,7 +688,7 @@ const HAND_TURN = 2.4, HAND_LAG = 0.3;                        // radians a secon
 const HAND_LEAN = 0.3, HAND_BANK = 0.45;                      // radians it tips its nose at full speed, and leans over at the full turn
 const handSpeed = bee => BEE_SPEED*bee.traits.speed;
 function flyByHand(bee, t, dt) {
-  const hand = bee.hand, { forward, right, run, brake } = controlInput();
+  const hand = bee.hand, { forward, right, run, brake } = bee.remote ?? controlInput(); // (remote: a multiplayer guest's keys)
   const ease = (v, goal) => v + (goal - v)*(1 - Math.exp(-dt/HAND_LAG));
   const speed = handSpeed(bee);
   hand.turn = ease(hand.turn, -right*HAND_TURN);
@@ -781,6 +782,7 @@ function punchBee(bee, puncher) {
 registerHealthKind('bee', { max: 3, die: bee => killBee(bee), alive: () => true });
 function killBee(bee) {
   if (isHome(bee)) return;
+  if (bee.remote) letBeeGo(bee);
   if (flownBee === bee || (followedBee && followedBee.colony.bees[followedBee.index] === bee)) stopFollowingBee();
   const at = { x: bee.at.x, y: bee.at.y, z: bee.at.z };
   explodeBee(at, BEE_LENGTH*bee.traits.size, Y_PARK);
@@ -832,10 +834,11 @@ function strikeBees({ x, z, heading, halfLength, halfWidth, height }) {
 function flyBee() {
   if (!followedBee) return;
   const bee = followedBee.colony.bees[followedBee.index];
-  if (isHome(bee) || bee === flownBee || !startFlying(stopFlyingBee, {
+  if (isHome(bee) || bee === flownBee || bee.remote || !startFlying(stopFlyingBee, {
     keys: 'W/S forward and back · A/D to turn · Space to rise · Shift to sink',
     touch: 'Stick to fly it · Brake to rise · Run to sink', kind: 'critter', at: () => bee.at })) return;
   flownBee = bee;
+  if (S.netGuest) return; // (the host flies it, from our keys: see net/net.js)
   // (already going the way it was, so the handover is invisible)
   const along = Math.hypot(bee.v.x, bee.v.z);
   bee.hand = { x: bee.at.x, y: bee.at.y, z: bee.at.z, heading: bee.yaw, along, turn: 0, vx: bee.v.x, vy: bee.v.y, vz: bee.v.z };
@@ -845,11 +848,16 @@ function flyBee() {
  * Let go of the flown bee: it carries on in the direction it was going and heads home, as one caught out by the dark does.
  * @returns {void}
  */
-function stopFlyingBee() {
+export function stopFlyingBee() {
   if (!flownBee) return;
-  const bee = flownBee, hand = bee.hand;
+  const bee = flownBee;
   flownBee = null;
   endFlying();
+  if (!S.netGuest) letBeeGo(bee);
+}
+function letBeeGo(bee) {
+  const hand = bee.hand;
+  bee.remote = null;
   bee.v.set(hand.vx, hand.vy, hand.vz);
   bee.hand = null; bee.pitch = 0; bee.bank = 0;
   bee.plan.length = 0;
@@ -978,7 +986,8 @@ function followBees() {
       const doing = beeDoing(bee);
       if (doing !== beeDoingShown) { beeDoingShown = doing; setBeeCardDoing(doing); }
       controls.goalTarget.copy(bee.at);
-      if (bee.hand) chaseBehind(bee.hand.heading);
+      if (bee.hand && !bee.remote) chaseBehind(bee.hand.heading);
+      else if (S.netGuest && bee === flownBee) chaseBehind(bee.yaw);
     }
   }
   if (!followedHive) return;
@@ -997,9 +1006,7 @@ function followBees() {
 }
 
 let lastBeeTime = null;
-export function updateBees(t) {
-  const dt = lastBeeTime == null ? 0 : Math.min(0.05, Math.max(0, t - lastBeeTime));
-  lastBeeTime = t;
+function dropGoneColonies() {
   for (let i=colonies.length-1;i>=0;i--) {
     const colony = colonies[i];
     if (colony.group.parent) continue;
@@ -1010,6 +1017,11 @@ export function updateBees(t) {
     if (followedBee && followedBee.colony === colony) stopFollowingBee();
     if (followedHive && followedHive.colony === colony) stopFollowingHive();
   }
+}
+export function updateBees(t) {
+  const dt = lastBeeTime == null ? 0 : Math.min(0.05, Math.max(0, t - lastBeeTime));
+  lastBeeTime = t;
+  dropGoneColonies();
   if (S.interactionMode !== 'move') { stopFollowingBee(); stopFollowingHive(); }
   const sheltering = beesSheltering();
   const flying = []; // (the bees in the air, for their buzzing: see buzz.js)
@@ -1036,6 +1048,68 @@ export function updateBees(t) {
     if (colony.mesh.morphTexture) colony.mesh.morphTexture.needsUpdate = true;
   });
   updateBuzzes(flying);
+  followBees();
+}
+
+// ---- multiplayer (see net/net.js): REC floats a bee out, [netId, x, y, z, yaw, pitch, bank, look, land, landed]
+export const BEE_REC = 10;
+const beeState = new Map(); // (guest: what each bee was last drawn from)
+export function packBees(cx, cz, reach) {
+  const out = [];
+  colonies.forEach(colony => colony.bees.forEach(bee => {
+    if (isHome(bee) || Math.hypot(bee.at.x - cx, bee.at.z - cz) > reach) return;
+    out.push(bee.netId, bee.at.x, bee.at.y, bee.at.z, bee.yaw, bee.pitch, bee.bank, bee.look, bee.land, bee.state === 'land' ? 1 : 0);
+  }));
+  return new Float32Array(out);
+}
+const findBee = id => { for (const c of colonies) { const bee = c.bees.find(b => b.netId === id); if (bee) return bee; } return null; };
+/** Host: a guest flies a bee from `ctl` (kept up to date). */
+export function flyRemote(id, ctl) {
+  const bee = findBee(id);
+  if (!bee || isHome(bee) || bee.hand) return null;
+  bee.hand = { x: bee.at.x, y: bee.at.y, z: bee.at.z, heading: bee.yaw, along: Math.hypot(bee.v.x, bee.v.z), turn: 0, vx: bee.v.x, vy: bee.v.y, vz: bee.v.z };
+  bee.remote = ctl;
+  return bee;
+}
+export const releaseRemoteBee = bee => { if (bee?.remote && bee.hand) letBeeGo(bee); else if (bee) bee.remote = null; };
+export const beeFlown = () => flownBee;
+export const beeById = findBee;
+/** Guest: the bees as the host last sent them (App.netPair), blended, in place of updateBees. */
+export function mirrorBees(t) {
+  const dt = lastBeeTime == null ? 0 : Math.min(0.05, Math.max(0, t - lastBeeTime));
+  lastBeeTime = t;
+  dropGoneColonies();
+  const pair = App.netPair?.(), A = pair?.a.bees, B = pair?.b.bees, f = pair?.f ?? 1, inA = new Map(), inB = new Map();
+  if (pair) { for (let r = 0; r < A.length; r += BEE_REC) inA.set(A[r], r); for (let r = 0; r < B.length; r += BEE_REC) inB.set(B[r], r); }
+  const flying = [], lerp = (x, y) => x + (y - x)*f, turn = (x, y) => x + Math.atan2(Math.sin(y - x), Math.cos(y - x))*f;
+  colonies.forEach(colony => {
+    colony.bees.forEach((bee, k) => {
+      refreshBeeTraits(bee);
+      const r = inB.get(bee.netId);
+      if (r == null) bee.state = 'hive';
+      else {
+        const ra = inA.get(bee.netId), F = ra != null ? A : B, s = ra ?? r;
+        bee.at.set(lerp(F[s+1], B[r+1]), lerp(F[s+2], B[r+2]), lerp(F[s+3], B[r+3]));
+        bee.yaw = turn(F[s+4], B[r+4]); bee.pitch = lerp(F[s+5], B[r+5]); bee.bank = lerp(F[s+6], B[r+6]);
+        bee.state = B[r+9] ? 'land' : 'travel';
+        if (B[r+9]) { bee.flap = 0; bee.legs = 0; } else beatWings(bee, t);
+        bee.look = B[r+7]; bee.land = B[r+8];
+        const moved = beeState.has(bee) ? bee.at.distanceTo(beeState.get(bee)) : 0;
+        (beeState.get(bee) ?? beeState.set(bee, new THREE.Vector3()).get(bee)).copy(bee.at);
+        if (!B[r+9] && dt > 0) flying.push({ bee, x: bee.at.x, y: bee.at.y, z: bee.at.z, speed: moved/dt/(BEE_SPEED*bee.traits.speed), size: bee.traits.size, angry: false });
+      }
+      held.position.copy(bee.at);
+      held.rotation.set(-bee.pitch, bee.yaw, -bee.bank);
+      held.scale.setScalar(isHome(bee) ? 0 : bee.traits.size);
+      held.updateMatrix();
+      colony.mesh.setMatrixAt(k, held.matrix);
+      setShape(colony.mesh, k, bee);
+    });
+    colony.mesh.instanceMatrix.needsUpdate = true;
+    if (colony.mesh.morphTexture) colony.mesh.morphTexture.needsUpdate = true;
+  });
+  updateBuzzes(flying);
+  if (flownBee && isHome(flownBee)) stopFollowingBee(); // (out of the host's reach, or gone in)
   followBees();
 }
 

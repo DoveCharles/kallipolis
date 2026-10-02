@@ -3,7 +3,7 @@ import { S } from '../../core/shared.js';
 import { camera, Y_ROAD } from '../../core/scene.js';
 import { carHitbox } from './collisions.js';
 import { hiddenByRoom } from './room-veer.js';
-import { drivenCar, goingUnder } from './driving.js';
+import { byHand, goingUnder } from './driving.js';
 import { BOX_CAR_LENGTH, BOX_CAR_WIDTH, carMeshes, carParts } from './models.js';
 import { DEFAULT_HOLO, DEFAULT_RUST } from './special.js';
 import { cars } from './state.js';
@@ -29,7 +29,7 @@ export function turnWheels(car, dt) {
   if (!cm || !cm.wheelRadius || dt <= 0) return;
   car.wheelSpin = (car.wheelSpin + car.speed*dt/(cm.wheelRadius*carScale(car))) % (Math.PI*2);
   let steer = 0;
-  if (car === drivenCar) steer = -car.steerHeld*WHEEL_STEER_MAX;
+  if (byHand(car)) steer = -car.steerHeld*WHEEL_STEER_MAX;
   else if (Math.abs(car.speed) > 0.5 && cm.wheelbase) steer = Math.atan(turned/dt*cm.wheelbase*carScale(car)/car.speed);
   steer = Math.max(-WHEEL_STEER_MAX, Math.min(WHEEL_STEER_MAX, steer));
   car.wheelSteer += (steer - car.wheelSteer)*Math.min(1, dt*10);
@@ -54,7 +54,7 @@ function swayBody(car, turned, dt) {
   car.lastSpeed = car.speed;
   car.accel += (accel - car.accel)*Math.min(1, dt*8); // (eased, so a single jolty frame doesn't kick it)
   const clampSway = (a, most) => Math.max(-most, Math.min(most, a));
-  const pitchGoal = clampSway(car.accel*SWAY_PITCH_PER_ACCEL + (car === drivenCar ? (car.throttle ?? 0)*SWAY_REV_PITCH : 0), SWAY_PITCH_MAX);
+  const pitchGoal = clampSway(car.accel*SWAY_PITCH_PER_ACCEL + (byHand(car) ? (car.throttle ?? 0)*SWAY_REV_PITCH : 0), SWAY_PITCH_MAX);
   const rollGoal = clampSway(car.speed*turned/dt*SWAY_ROLL_PER_CORNERING, SWAY_ROLL_MAX);
   for (let left = Math.min(dt, 0.1); left > 0; left -= 0.02) { // (small steps, for the spring to stay steady)
     const step = Math.min(left, 0.02);
@@ -150,7 +150,7 @@ export const engineOf = car => ({ y: Y_ROAD + carHeight(car)/2, size: carLength(
 // Each car on the road, for the light its headlights throw (see streetlights.js): where it is, which way it faces and how
 // long it is. (A car going under the water has its lights put out.)
 export function forEachHeadlight(fn) {
-  cars.forEach(car => { if ((car.li >= 0 || car === drivenCar) && !goingUnder(car) && !car.roomHid) fn(car.x, car.z, car.heading, carLength(car)); });
+  cars.forEach(car => { if ((car.li >= 0 || byHand(car)) && !goingUnder(car) && !car.roomHid) fn(car.x, car.z, car.heading, carLength(car)); });
 }
 export function carLength(car) { const cm = carModelOf(car); return (cm ? cm.length : car.length)*BOX_CAR_LENGTH*carScale(car); }
 /**

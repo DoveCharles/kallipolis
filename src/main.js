@@ -58,6 +58,9 @@ import './ui/toon-shading.js';
 import './ui/view-prefs.js';
 import './ui/color-schemes.js';
 import './ui/ped-view.js';
+import './ui/ped-builder.js';
+import './ui/quests.js';
+import './net/net.js';
 import './project/export-obj.js';
 import * as THREE from 'three';
 import { S, worldClock } from './core/shared.js';
@@ -92,7 +95,7 @@ import { updateBodyParts } from './life/people/peopleGibs.js';
 import { updateCarWrecks } from './life/car-wrecks.js';
 import { shakeCamera, updateLightning } from './life/lightning.js';
 import { updateAmbience } from './audio/ambience.js';
-import { loadBeeModel, updateBees } from './life/bees.js';
+import { loadBeeModel, updateBees, mirrorBees } from './life/bees.js';
 import { updateAirports, loadPlaneModel } from './zones/airport.js';
 import { updateMarinas } from './zones/marina.js';
 import { updateBoatFollow } from './zones/marina-follow.js';
@@ -181,12 +184,12 @@ function animate() {
   updateBodyParts(w);
   updateCarWrecks(w);
   updateLightning(w);
-  updateBees(w);
-  updateAirports(w);
-  updateMarinas(w);
+  if (S.netGuest) mirrorBees(w); else updateBees(w); // (multiplayer guests: the host's, as sent — see net/net.js)
+  if (!S.netGuest) updateAirports(w);
+  if (!S.netGuest) updateMarinas(w);
   updateBoatFollow();
-  updateMedBots(w);
-  updateSeraphorbs(w);
+  if (!S.netGuest) updateMedBots(w);
+  if (!S.netGuest) updateSeraphorbs(w);
   updatePigeons(w); // (before updateTraffic, which sets off the blasts that scatter them)
   updateTraffic(w);
   updateFences(w); // (smashed fences put back once long out of view)

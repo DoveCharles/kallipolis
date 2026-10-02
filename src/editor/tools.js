@@ -142,6 +142,7 @@ export function applyModeVisibility() {
   updateHint();
 }
 function setMode(mode) {
+  if (S.netGuest) mode = 'move'; // (a multiplayer guest can't edit the host's city: see net/net.js)
   S.lastGroundClick = null;
   cancelActiveDrawing();
   setHover(null);

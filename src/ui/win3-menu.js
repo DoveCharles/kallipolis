@@ -94,20 +94,24 @@ function toggleAllHints() {
 // checked (check), one of a set (radio), greyed out (enabled), and show a shortcut at the right.
 const MENUS = [
   { name:'File', key:'f', items:[
-    { label:'New', key:'n', run:newProject },
-    { label:'Open...', key:'o', shortcut:'Ctrl+O', run:press('btn-load-project') },
+    { label:'New', key:'n', run:newProject, enabled:() => !S.netGuest },
+    { label:'Open...', key:'o', shortcut:'Ctrl+O', run:press('btn-load-project'), enabled:() => !S.netGuest },
     { label:'Save', key:'s', shortcut:'Ctrl+S', run:press('btn-save-project') },
     '-',
-    { label:'Import Map Image...', key:'i', run:press('btn-import-image') },
+    { label:'Host Server...', key:'h', run:() => App.hostServer(), enabled:() => !App.netRole() },
+    { label:'Join Server...', key:'j', run:() => App.joinServer(), enabled:() => !App.netRole() },
+    { label:'Leave Server', key:'l', run:() => App.leaveServer(), enabled:() => !!App.netRole() },
+    '-',
+    { label:'Import Map Image...', key:'i', run:press('btn-import-image'), enabled:() => !S.netGuest },
     '-',
     { label:'Export GLB...', key:'g', run:press('btn-export-glb') },
     { label:'Export OBJ...', key:'b', run:press('btn-export') },
   ]},
   { name:'Edit', key:'e', items:[
-    { label:'Undo', key:'u', shortcut:'Ctrl+Z', run:press('btn-undo'), enabled:() => !$('btn-undo').disabled },
-    { label:'Redo', key:'r', shortcut:'Ctrl+Y', run:press('btn-redo'), enabled:() => !$('btn-redo').disabled },
+    { label:'Undo', key:'u', shortcut:'Ctrl+Z', run:press('btn-undo'), enabled:() => !S.netGuest && !$('btn-undo').disabled },
+    { label:'Redo', key:'r', shortcut:'Ctrl+Y', run:press('btn-redo'), enabled:() => !S.netGuest && !$('btn-redo').disabled },
     '-',
-    { label:'Clear All...', key:'a', run:newProject },
+    { label:'Clear All...', key:'a', run:newProject, enabled:() => !S.netGuest },
   ]},
   { name:'View', key:'v', items:[
     { label:'World...', key:'w', check:worldOpen, run:toggleWorld },
@@ -315,6 +319,7 @@ document.addEventListener('pointerdown', e => {
   if (e.target.closest('.w3-dropdown, .w3-modal, .win3-sysbox, .card-close')) return; // (nor a close box: closing isn't working in it)
   setActive(e.target.closest(WINDOWS));
 }, true);
+App.messageBox = messageBox; // (net/net.js)
 App.w3HidePanel = hidePanel; // (mobile.js: a card opening on a phone)
 
 // ---- the keyboard: Alt+letter opens a menu; arrows, Enter, Esc and the underlined letters work it; Ctrl+S and Ctrl+O
@@ -345,6 +350,7 @@ window.addEventListener('keydown', e => {
   }
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (letter === 's' || letter === 'o') && !typingIn(document.activeElement)) {
     e.preventDefault(); e.stopImmediatePropagation();
+    if (letter === 'o' && S.netGuest) return;
     $(letter === 's' ? 'btn-save-project' : 'btn-load-project').click();
   }
 }, true);

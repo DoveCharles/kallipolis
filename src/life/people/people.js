@@ -18,6 +18,7 @@ import { footstep } from '../../audio/footsteps.js';
 import { ear } from '../../audio/sfx.js';
 import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
+import { mirrorCrowd } from './peopleMirror.js';
 import { controlInput, possession, rushed } from '../possession.js';
 import { DEFAULT_TRAITS, profileOf, profilesVersion, registerPreset } from '../profiles.js';
 import { presetAt } from './presets.js';
@@ -507,6 +508,7 @@ export function syncPeopleUI() {
 // (see the end of newPerson)
 const PERSON_LATER_FIELDS = Object.fromEntries([
   // who they are (refreshTraits), how they look (updatePeople)
+  'remote', // (a multiplayer guest's controls, while one possesses them: see possessRemote in peopleTracking.js)
   'health', 'walletSet', 'moodNow', 'keptAt', 'age', 'name', 'loves', 'hates', 'lovedWords', 'hatedWords', 'isMan', 'spectralKey', 'groomKey', 'showsBald', 'showsBeard', 'vanished', 'vanishUntil', 'shyCount', 'shyArmed', 'shyPhase', 'shyAt', 'chattingWithTwin', 'defaultHair', 'eyeBase', 'skinBase', 'skinKey', 'nudeDressed', 'nudeSeenIn', 'headDrawn', 'faceDt', 'placedOut',
   // what they say and think
   'lusting', 'shouting', 'phrase', 'saying', 'babbleLine', 'thought', 'thoughtUntil', 'fidgetThought', 'nextThoughtAt', 'loggedLine',
@@ -627,7 +629,7 @@ export function refreshTraits(p, i) {
   restackTraits(p);
   // (their starting money times their capital, kept up with their traits until they've spent any)
   if (p.walletSet === undefined || p.wallet === p.walletSet) p.wallet = p.walletSet = Math.round(p.walletBase*p.baseTraits.capital);
-  p.height = preset?.height ?? p.baseHeight*p.traits.size;
+  p.height = preset?.height ?? (profile.height ?? p.baseHeight)*p.traits.size; // (a Ped Builder one's own: profiles.js customs)
   p.age = profile.age;
   p.name = profile.name; // (for their card, and for naming them in the morality notices when they die)
   p.loves = profile.lovesSaid; p.hates = profile.hatesSaid; // (for what they say: see life/speech-text.js)
@@ -1088,6 +1090,7 @@ function killPerson(i, by = 'player', momentum = null, throwScale = 1, source = 
   // one of six events: what the victim counted as, and which of the two ways they died (see morality.txt)
   App.recordMoralityEvent?.(`${standingOf(p)} peds killed by ${by === 'car' ? 'cars' : 'player'}`, p.name);
   if (by === 'player' && standingOf(p) === 'villainous') App.addEnergy?.(1); // (killing the evil gives energy: see ui/energy.js)
+  App.questEvent?.('kill', { p, by }); // (ui/quests.js)
   if (followed === i) stopFollowingPerson();
   if (awaited === i) setAwaited(-1);
   endActivity(p);
@@ -1153,6 +1156,7 @@ export function drownedPerson(i) {
   const p = people[i];
   App.recordMoralityEvent?.(`${standingOf(p)} peds killed by player`, p.name);
   if (standingOf(p) === 'villainous') App.addEnergy?.(1);
+  App.questEvent?.('kill', { p, by: 'player' });
   if (followed === i) stopFollowingPerson();
   if (awaited === i) setAwaited(-1);
   bystandersReactToDeath(p);
@@ -1183,6 +1187,30 @@ export function benchPerson(i) {
   p.train = null;
   p.indoors = null;
   p.moving = false;
+}
+/**
+ * Someone new (person `id`, wearing their pinned look) born into the crowd near `at` ([x, y, z, heading]): in a dead
+ * stranger's slot, else the furthest stranger's from the camera (benched first). For the Ped Builder (ui/ped-builder.js).
+ * @returns {number} their slot, or -1
+ */
+export function addPerson(id, at) {
+  const free = i => { const p = people[i]; return !isFavoritePerson(p.id) && !p.miniOf && !presetAt(i) && i !== followed && i !== possession.index && p.mode !== 'possessed'; };
+  const wanted = Math.min(PEOPLE_MAX, Math.round(S.peopleAmount));
+  let j = -1, far = -1;
+  for (let i = 0; i < Math.min(wanted, people.length); i++) {
+    if (!free(i)) continue;
+    if (people[i].mode === 'dead') { j = i; break; }
+    const d = Math.hypot(people[i].x - at[0], people[i].z - at[2]);
+    if (d > far) { far = d; j = i; }
+  }
+  if (j < 0) return -1;
+  if (people[j].mode !== 'dead') benchPerson(j);
+  endActivity(people[j]);
+  const p = newPerson(id);
+  p.keptAt = at;
+  people[j] = p;
+  personModel?.assignAppearance(j, id);
+  return j;
 }
 /**
  * Whether this person is walking over a road (see updateCrossing) — treated like someone standing in the middle of it
@@ -1309,6 +1337,7 @@ export function updatePeople(t) {
   pruneGone(people, t, forgetLinesExcept); // (relations and recent lines of the gone)
   // (everyone held still where they are while the held-items debug window poses someone: see ui/held-debug.js)
   if (S.peopleFrozen) { S.peopleFrozen(); return; }
+  if (S.netGuest) { mirrorCrowd(); return; } // (multiplayer: the host's crowd, as sent — see peopleMirror.js)
   if (!peopleNav || (S.peopleNavDirty && t - peopleNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.peopleNavDirty = false;
     setPeopleNavBuiltAt(t);
@@ -1416,7 +1445,7 @@ export function updatePeople(t) {
     p.snackCooldown -= dt;
     p.indoorsCooldown -= dt;
     const possessed = p.mode === 'possessed';
-    if (possessed) possession.alwaysForward = rushed(p); // (W and Shift held for good)
+    if (possessed && !p.remote) possession.alwaysForward = rushed(p); // (W and Shift held for good)
     if (p.push) stepPush(p, dt);
     if (possessed) p.fright = p.stun = p.please = null;
     else if (p.traits.ghost) p.fright = p.stun = null; // (nothing frightens or stuns a ghost)
@@ -1563,7 +1592,7 @@ export function updatePeople(t) {
     }
     if (possessed) {
       if (frozen) cancelSwing(); // (knocked down: no walking, no punching)
-      else { goal = walkPossessed(p, dt); updateSwing(p, dt); }
+      else { goal = walkPossessed(p, dt); if (!p.remote) updateSwing(p, dt); } // (p.remote: a multiplayer guest's, see possessRemote)
     }
     if (p.mode === 'leaving') {
       // already placed on their walkway by joinWalkway; once they've reached it they carry on along it
@@ -1630,7 +1659,7 @@ export function updatePeople(t) {
     // possessed, the body goes the way the keys walk them (backing off, still facing ahead: the walk played backwards);
     // the head turns to the view, as far as it goes, the body coming round after it past that
     if (possessed && !frozen) {
-      const { forward, right } = controlInput(), yaw = possession.yaw, back = forward < 0 ? -1 : 1;
+      const { forward, right } = p.remote ?? controlInput(), yaw = p.remote?.yaw ?? possession.yaw, back = forward < 0 ? -1 : 1;
       if (p.moving && (forward || right)) {
         const want = yaw + Math.atan2(-right*back, forward*back) + moonwalkTurn(p);
         p.heading += wrapAngle(want - p.heading)*Math.min(1, dt*8);
@@ -1736,7 +1765,7 @@ export function updatePeople(t) {
         }
         if (!p.lookAt && p.spiritGaze != null) { p.lookTurnTo = p.spiritGaze; p.lookTiltTo = 0; } // (to the spirit talking: see peopleSpiritChat.js)
         if (toMouth(p)) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
-        else if (possessed) { p.lookTurnTo = wrapAngle(possession.yaw - p.heading); p.lookTiltTo = Math.max(-POSSESSED_MAX_TILT, Math.min(POSSESSED_MAX_TILT, -possession.pitch)); }
+        else if (possessed) { p.lookTurnTo = wrapAngle((p.remote?.yaw ?? possession.yaw) - p.heading); p.lookTiltTo = Math.max(-POSSESSED_MAX_TILT, Math.min(POSSESSED_MAX_TILT, -(p.remote?.pitch ?? possession.pitch))); }
         p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, fdt*4);
         p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, fdt*4);
         if (p.traits.twins) lookTwin(p, i, fdt, possessed);
@@ -1821,7 +1850,7 @@ export function updatePeople(t) {
       // (possessed: not a bubble but a box low on screen, listing any replies to pick from with Options > Game > Dialogue
       // Choices — see ui/speech-bubbles.js ownLine and audio/dictionary.js sayLine)
       if (p.choosing && (!possessed || !S.dialogueChoices || p.group?.talk !== p.choosing.talk)) p.choosing = null;
-      if (possessed) ownLine(p, p.saying ?? babbling, p.choosing);
+      if (possessed && !p.remote) ownLine(p, p.saying ?? babbling, p.choosing);
       else if (bubbleSide && (p.saying || babbling || thinking || hasBubble(p))) speechBubble(p, twinBubble(p, bubbleAt(p)), p.saying ?? babbling ?? thinking);
       // (on their own with spirits or a twin: talking with them — see peopleSpiritChat.js)
       if (p.traits.spirits || p.traits.twins || p.spiritChat?.on) updateSpiritChat(p, i, dt, { free: !group && !possessed && !aaaing && !fleeing && !frozen && !p.fleeTalkUntil && isDrawn(p),
@@ -1913,7 +1942,8 @@ export function updatePeople(t) {
   if (personModel) {
     [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; part.pupil.needsUpdate = true; });
     personModel.spiritTalk.needsUpdate = true;
-    personModel.updateCopies(people.length, [followed, possession.index, ...carded]); // (who's drawn: see compactOf in peopleModel.js)
+    App.posePedBuilder?.(); // (the Ped Builder's ped, past the crowd: ui/ped-builder.js)
+    personModel.updateCopies(people.length, [followed, possession.index, ...carded, ...(App.pedBuilderSlots?.() ?? [])]); // (who's drawn: see compactOf in peopleModel.js)
     updateHeld(); // (whatever anyone's holding, from where their hands ended up)
   } else {
     peopleMesh.instanceMatrix.needsUpdate = true;
@@ -1942,6 +1972,7 @@ export function updatePeople(t) {
     App.drawPersonHeadshot(headshotOf(followed), followed);
     personModel.only.value = -1;
   }
+  App.drawPedBuilder?.(); // (and the Ped Builder's picture of its ped)
   // (and a second person card's, now and then: see otherHeadshotIndex in person-card.js)
   const other = App.otherHeadshotIndex?.() ?? -1;
   if (other >= 0 && other !== followed && personModel && people[other] && (!isGone(people[other]) || inRoom(people[other]))) {

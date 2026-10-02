@@ -43,6 +43,8 @@ export function rechargeBoost(car, dt) {
   if (car.boostLeft >= BOOST_UNLOCK*boostMax(car)) car.boostLocked = false;
 }
 export let drivenCar = null;
+/** Whether a car's driven by hand: ours (drivenCar), or a multiplayer guest's (car.remote: see driveRemote). */
+export const byHand = car => !!car && (car === drivenCar || !!car.remote);
 /**
  * Take the followed car for driving, if startDriving allows it and it is on a line; drops anyone it was yielding to.
  * @param {number} i - index in cars
@@ -50,7 +52,7 @@ export let drivenCar = null;
  */
 export function driveCar(i) {
   const car = cars[i];
-  if (i !== followedCar || !car || car.li < 0 || car.fuse != null || drivenCar === car || !startDriving()) return;
+  if (i !== followedCar || !car || car.li < 0 || car.fuse != null || byHand(car) || !startDriving()) return;
   drivenCar = car;
   App.setCarBoostShown(true);
   car.yieldFor = null;
@@ -73,6 +75,25 @@ export function stopDriving() {
   endKartDrift(car);
   App.setCarBoostShown(false);
   endDriving();
+  if (S.netGuest) return; // (the host's car: the host puts it back — see net/net.js)
+  putBack(car);
+}
+/**
+ * A multiplayer guest takes a car (on the host: see net/net.js), driven from `ctl` ({forward, right, run, brake}, kept up to date).
+ * @returns {boolean} whether it could
+ */
+export function driveRemote(car, ctl) {
+  if (!car || car.li < 0 || car.fuse != null || byHand(car)) return false;
+  car.remote = ctl; car.yieldFor = null; car.throttle = 0; car.stall = 0; car.bumping = false;
+  return true;
+}
+export function releaseRemoteCar(car) {
+  if (!car?.remote) return;
+  car.remote = null;
+  endKartDrift(car);
+  if (cars.includes(car)) putBack(car);
+}
+function putBack(car) {
   car.speed = Math.max(0, car.speed);
   car.floatPhase = 0; car.floatDrop = 0; car.floatBobPhase = 0; car.floatWasWet = false;
   // it drives back to the nearest lane, as a knocked car does
@@ -91,7 +112,7 @@ export function stopDriving() {
  * @returns {void}
  */
 export function driveByHand(car, dt) {
-  const input = controlInput(), { right, run, brake } = input;
+  const input = car.remote ?? controlInput(), { right, run, brake } = input;
   // a stalled engine gives no drive, and smokes from the bonnet
   const stalled = car.stall > 0, forward = stalled ? 0 : input.forward;
   if (stalled) {
@@ -113,7 +134,7 @@ export function driveByHand(car, dt) {
   else rechargeBoost(car, drifting ? dt*DRIFT_RECHARGE : dt);
   if (drifting && !car.hop) boostSmoke(car, dt, driftSmoke);
   else if (boosting && car.speed > 1) boostSmoke(car, dt);
-  App.setCarBoost(car.boostLeft, max, car.boostLocked, wants && !boosting);
+  if (car === drivenCar) App.setCarBoost(car.boostLeft, max, car.boostLocked, wants && !boosting);
   // its speed and boost traits scale the top speed and the boost (see cars.txt)
   const boost = boosting ? boostMultiplier(car) : 1;
   car.boostingNow = boosting; // (for the view: see boostFovScale)

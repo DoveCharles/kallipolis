@@ -6,7 +6,7 @@ import { isPedInDanger, twinReach, voiceOfPerson } from '../people/people.js';
 import { exclaim } from '../../audio/voices.js';
 import { puffSmoke, sparks, burnFx, igniteFx } from '../giblets.js';
 import { playSound } from '../../audio/sfx.js';
-import { BOOST_UNLOCK, DRIVE_ACCEL, DRIVE_TOP_SPEED, boostMax, boostMultiplier, boostSmoke, drivenCar } from './driving.js';
+import { BOOST_UNLOCK, DRIVE_ACCEL, DRIVE_TOP_SPEED, boostMax, boostMultiplier, boostSmoke, byHand } from './driving.js';
 import { killCar } from './follow.js';
 import { carJoinLane, lanePoint, routePoint } from './lanes.js';
 import { CAR_REAR_AXLE, carHeight, carLength, carWidth } from './placing.js';
@@ -87,7 +87,7 @@ export function runOverPeople(car, motion = null, inWay = null) {
   if (car.traits?.ghost) return; // (a ghost car goes through people)
   const { halfLength, halfWidth } = carHitbox(car, motion?.thrown ? 1 : undefined), clip = carHitbox(car, CAR_HITBOX_SCALE*CAR_CLIP_SCALE), stun = carHitbox(car, CAR_HITBOX_SCALE*CAR_STUN_SCALE);
   const reach = Math.hypot(stun.halfLength, stun.halfWidth) + 1.5*LYING_HEAD*S.peopleSize, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
-  const driven = car === drivenCar, reachesAll = driven || !!motion, shocked = new Set(), struck = new Map();
+  const driven = byHand(car), reachesAll = driven || !!motion, shocked = new Set(), struck = new Map();
   const velocity = motion ?? { x: Math.sin(car.heading)*car.speed, z: Math.cos(car.heading)*car.speed }, speed = Math.hypot(velocity.x, velocity.z);
   const near = !reachesAll && inWay?.near ? inWay.near(car.x, car.z, reach).map(k => inWay.list[k]) : null;
   (near ?? (reachesAll ? App.people : inWay ?? App.people.filter(inCarsWay))).forEach(p => {
@@ -541,11 +541,11 @@ function canStepBack(car, sx, sz) {
   let clear = true;
   forCarsNear(at.x, at.z, carLength(car)*1.5 + 4*S.peopleSize, other => {
     if (other === car || !carsOverlap(at, other) || carsOverlap(from, other)) return; // (one it's already in doesn't stop it driving out)
-    if (car.kick.reverse && !other.kick && other !== drivenCar && other.li >= 0) { other.reverseFor = PUSHED_REVERSE_TIME; clear = false; return; }
+    if (car.kick.reverse && !other.kick && !byHand(other) && other.li >= 0) { other.reverseFor = PUSHED_REVERSE_TIME; clear = false; return; }
     const otherWeight = other.traits?.weight ?? 1, dx = other.x - at.x, dz = other.z - at.z;
     if (weight <= otherWeight) { clear = false; return; }
     const push = BUMP_PUSH_POWER*weight/otherWeight;
-    if (other === drivenCar) { const d = Math.hypot(dx, dz) || 1; other.x += dx/d*push; other.z += dz/d*push; } else kickCar(other, dx, dz, push);
+    if (byHand(other)) { const d = Math.hypot(dx, dz) || 1; other.x += dx/d*push; other.z += dz/d*push; } else kickCar(other, dx, dz, push);
   });
   return clear;
 }
@@ -635,7 +635,7 @@ function bounceOffBuildings(car, k, nx, nz) {
 /** Hand a knocked car's slide on to the car it's hit (see KICK_TRANSFER). */
 function passKick(car, k, other) {
   const mine = car.traits?.weight ?? 1, theirs = other.traits?.weight ?? 1, share = mine/(mine + theirs), carry = Math.hypot(k.vx, k.vz)/KICK_DECAY;
-  if (other === drivenCar) slowedBy(other, 'car', mine);
+  if (byHand(other)) slowedBy(other, 'car', mine);
   else { kickCar(other, k.vx, k.vz, carry*2*share*KICK_TRANSFER); other.speed = 0; }
   const keep = Math.max(0, (mine - theirs)/(mine + theirs));
   k.vx *= keep; k.vz *= keep;
@@ -665,7 +665,7 @@ export function swayCrash(car) {
   impactSound('crash', contact, speed);
   puffSmoke(contact, carHeight(car), BUMP_SMOKE_PUFFS);
   sparks({ ...contact, y: contact.y + carHeight(car)*0.4 }, BUMP_SPARKS);
-  if (other && other === drivenCar) slowedBy(other, 'car', car.traits?.weight); // (both null when it hit a building with no car driven) // (the player's car keeps its own handling, just jolted)
+  if (byHand(other)) slowedBy(other, 'car', car.traits?.weight); // (both null when it hit a building with no car driven) // (the player's car keeps its own handling, just jolted)
   else if (other) { kickCar(other, other.x - car.x, other.z - car.z, Math.min(1, speed*BUMP_SHOVE + BUMP_PUSH_POWER*(car.traits?.weight ?? 1))); other.speed = 0; hitCar(other, knockDamage(car, other, speed), car); }
   if (w.drunk) redirectWeave(car, Math.sign(w.off)); // (a new weave away from what it hit, so it doesn't keep hitting it)
   kickCar(car, other ? car.x - other.x : -w.x, other ? car.z - other.z : -w.z, SWAY_BOUNCE*S.peopleSize); // (takes its weave into the kick)

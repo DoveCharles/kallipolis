@@ -7,13 +7,14 @@ import { placeKey } from '../../roads/markings.js';
 import { updateEngines } from '../../audio/engine.js';
 import { carTypeOf } from '../car-types.js';
 import { BLAST_THROW, burnFuse, DETONATION_REACH, swayCrash, inCarsWay, isLying, runOverPeople, stepKick, strikeWithAircraft, wreckedCars, seatSavedCar } from './collisions.js';
-import { boostMax, driveByHand, driveCar, drivenCar, goingUnder, overOpenWater, rechargeBoost, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
+import { boostMax, driveByHand, byHand, driveCar, drivenCar, goingUnder, overOpenWater, rechargeBoost, riseCar, sinkCar, startSinking, stopDriving, updateFloating } from './driving.js';
 import { chaseCamera, updateCarRevive, respawnFromWater, drownCar, followCar, followCarAt, followedCar, killCar, pickCar, smiteCar, stopFollowingCar } from './follow.js';
 import { crowdGrid } from '../../core/math.js';
 import { ROUTE_SAMPLE, buildTrafficNav, carsNearby, carsWhere, checkYield, roadCrossers, driveAlong, junctionAhead, laneLength, lanePoint, newCar, reseatCar, routePoint, spawnCar } from './lanes.js';
 import { carHoloTimeUniform } from './materials.js';
 import { benchCars, giveDesign, keptCar, takeCarReset } from './carKeep.js';
 import { carMeshes, carParts } from './models.js';
+import { mirrorTraffic } from './trafficMirror.js';
 import { CAR_REAR_AXLE, carHeight, carLength, engineOf, placeCar, placing, turnWheels } from './placing.js';
 import { buildCarGrid, CAR_BRAKE, CAR_STOP_GAP, carsOverlap, forCarsNear, gapAhead, GIVE_UP_AFTER, lyingAhead, overlapYield, separateCars, uTurnBlocked, waitOrGiveUp } from './spacing.js';
 import { updateSpecialTraits } from './special.js';
@@ -61,7 +62,7 @@ scene.add(carHitboxDebugMesh);
  * @param {object} car
  * @returns {void}
  */
-function refreshCarTraits(car) {
+export function refreshCarTraits(car) {
   const key = car.design + ':' + car.number;
   if (car.traitsKey === key) return;
   car.traitsKey = key;
@@ -92,11 +93,12 @@ export function updateTraffic(t) {
   carParts.all.forEach(mesh => { mesh.visible = S.peopleEnabled; });
   carMeshes.forEach(cm => { cm.mesh.visible = S.peopleEnabled; });
   if (!S.peopleEnabled) { updateEngines([], null, null, dt); return; }
+  if (S.netGuest) { mirrorGuest(dt); return; } // (multiplayer: the host's traffic, as sent — see trafficMirror.js)
   if (!S.trafficNav || (S.trafficNavDirty && t - S.trafficNavBuiltAt > 0.25 && !navRebuildOnHold())) {
     S.trafficNavDirty = false;
     S.trafficNavBuiltAt = t;
     S.trafficNav = buildTrafficNav();
-    cars.forEach(car => { if (car.park) reseatParked(car); else if (car !== drivenCar) reseatCar(car); });
+    cars.forEach(car => { if (car.park) reseatParked(car); else if (!byHand(car)) reseatCar(car); });
   }
   const wanted = Math.min(TRAFFIC_MAX, Math.round(S.trafficAmount), S.trafficNav.capacity);
   // (saved traffic come in replaces this: see carKeep.js — not while one's being driven)
@@ -110,7 +112,7 @@ export function updateTraffic(t) {
   cars.forEach(car => {
     if (car.li < 0 && S.trafficNav.lines.length) { spawnCar(car); if (car.keptAt && car.li >= 0) seatSavedCar(car); }
     car.ahead = null;
-    if (car.li < 0 || car === drivenCar || car.park) return; // (the one being driven isn't in any lane — see "driving a car")
+    if (car.li < 0 || byHand(car) || car.park) return; // (the one being driven isn't in any lane — see "driving a car")
     const key = car.li*2 + (car.dir > 0 ? 1 : 0);
     if (!lanes.has(key)) lanes.set(key, []);
     lanes.get(key).push(car);
@@ -141,7 +143,7 @@ export function updateTraffic(t) {
     }
     if (car.design != null) refreshCarTraits(car);
     if (car.reviving) { updateCarRevive(car, dt); placeCar(car, i, designCounts); return; } // (blown up with a respawn left: see startCarRevive)
-    if (car === drivenCar) { if (car.park) endPark(car); car.sway = null; car.pull = 0; if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } deckDriven(car); turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
+    if (byHand(car)) { if (car.park) endPark(car); car.sway = null; car.pull = 0; if (goingUnder(car)) sinkCar(car, dt); else { driveByHand(car, dt); if (car.sinking?.rising) riseCar(car, dt); } deckDriven(car); turnWheels(car, dt); updateSpecialTraits(car, t, dt); placeCar(car, i, designCounts); return; }
     rechargeBoost(car, dt); // (driven or not: see driving.js)
     if (i === followedCar && car.boostLeft != null) App.setCarBoost(car.boostLeft, boostMax(car), car.boostLocked); // (the card's meter keeps filling after it's let go)
     if (car.fuse != null) { burnFuse(car, dt); placeCar(car, i, designCounts); return; } // (about to blow: it neither drives nor turns)
@@ -276,6 +278,16 @@ export function updateTraffic(t) {
   });
   // the camera onto whoever it's following, at about their roof — and driving it, round behind it
   if (followedCar >= 0) { const car = cars[followedCar]; controls.goalTarget.set(car.x, Y_ROAD + (car.deckY ?? 0) + carHeight(car)*(drivenCar ? 1.1 : 0.6), car.z); }
+  if (drivenCar) chaseCamera(drivenCar);
+}
+// a multiplayer guest's traffic: drawn as sent, heard from how fast each moves, and the camera on the one followed or driven
+function mirrorGuest(dt) {
+  mirrorTraffic(dt);
+  updateEngines(cars.filter(car => car.li >= 0), null, engineOf, dt);
+  const glow = computeWindowGlowFactor(S.sunElevation);
+  carMeshes.forEach(cm => { cm.glowUniform.value = glow; });
+  const car = cars[followedCar];
+  if (car?.li >= 0) controls.goalTarget.set(car.x, Y_ROAD + (car.deckY ?? 0) + carHeight(car)*(drivenCar ? 1.1 : 0.6), car.z);
   if (drivenCar) chaseCamera(drivenCar);
 }
 // the driven car on a car park's decks and ramps: its height and nose-down pitch from the floor under each end
