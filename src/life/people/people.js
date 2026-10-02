@@ -245,6 +245,7 @@ export const pickFrom = list => list[Math.floor(peopleRng()*list.length)];
  * @param {number} a - the angle
  * @returns {number} the same angle, wrapped
  */
+const POSSESSED_MAX_TILT = 40*Math.PI/180; // (how far a possessed head nods up or down with the view)
 export const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 /**
@@ -1735,7 +1736,7 @@ export function updatePeople(t) {
         }
         if (!p.lookAt && p.spiritGaze != null) { p.lookTurnTo = p.spiritGaze; p.lookTiltTo = 0; } // (to the spirit talking: see peopleSpiritChat.js)
         if (toMouth(p)) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
-        else if (possessed) { p.lookTurnTo = wrapAngle(possession.yaw - p.heading); p.lookTiltTo = 0; }
+        else if (possessed) { p.lookTurnTo = wrapAngle(possession.yaw - p.heading); p.lookTiltTo = Math.max(-POSSESSED_MAX_TILT, Math.min(POSSESSED_MAX_TILT, -possession.pitch)); }
         p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, fdt*4);
         p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, fdt*4);
         if (p.traits.twins) lookTwin(p, i, fdt, possessed);
