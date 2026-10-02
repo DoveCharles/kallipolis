@@ -175,9 +175,11 @@ function sayAt(text, e) {
   el.addEventListener('animationend', () => el.remove());
 }
 /** Open the list of identified traits. @returns {void} */
+const identifyIcon = on => { const img = document.querySelector('#btn-identify img'); if (img) img.src = `assets/icons/identify${on ? '-on' : ''}.png`; };
 export function openTraitsKnown() {
   openWindow({ id: 'traits-known', title: 'Identified Traits', width: 580, resizable: true, noOk: true,
     fill: body => {
+      identifyIcon(true);
       body.innerHTML = `<div class="tk-bar"><input type="search" class="tk-search" placeholder="Search">
         <select class="select-input tk-sort"><option value="alpha">A–Z</option><option value="recent">Recent</option></select>
         <label class="tk-group-toggle"><input type="checkbox"> Group</label></div>
@@ -195,7 +197,7 @@ export function openTraitsKnown() {
       win.next.addEventListener('click', () => { view.page++; refreshWindow(); });
       refreshWindow();
     },
-    onClose: () => { win = null; clearInterval(varyTimer); varyTimer = null; varying = []; } });
+    onClose: () => { identifyIcon(false); win = null; clearInterval(varyTimer); varyTimer = null; varying = []; } });
   if (!varyTimer) varyTimer = setInterval(() => { varyStep++; varying.forEach(v => { const t = fillingsOf(v.key, v.entry, v.side); v.inner.textContent = t[varyStep % t.length]; }); }, VARY_MS);
 }
 document.getElementById('btn-identify')?.addEventListener('click', openTraitsKnown);
