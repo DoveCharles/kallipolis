@@ -51,8 +51,46 @@ export const WATER_TUNE = {
 };
 const TUNE_PARS = Object.entries(WATER_TUNE).map(([k, u]) => `uniform ${u.value.isColor ? 'vec3' : 'float'} uW_${k};`).join('\n');
 const tuneUniforms = shader => { for (const k in WATER_TUNE) shader.uniforms['uW_' + k] = WATER_TUNE[k]; };
+// ---- Wind Waker foam's field: WW_CELLS × WW_CELLS cells of md (as WW_FIELD_PROCEDURAL, at time 0), tiling, WW_RES texels a
+// cell; baked again when wwRound changes (see refreshWaterMaterials). Baked, cells keep still (only drift and warp move
+// them); false is the old per-pixel version, where they wobble on wwSpeed
+const WW_BAKED = true;
+const WW_CELLS = 8, WW_RES = 32;
+const WW_FIELD = { value: null };
+let wwBakedRound = null;
+function bakeWindWaker() {
+  const k = Math.max(WATER_TUNE.wwRound.value, 1e-3), N = WW_CELLS, size = N*WW_RES, data = new Uint16Array(size*size);
+  const fract = x => x - Math.floor(x), hash = (x, y) => fract(Math.sin(x*127.1 + y*311.7)*43758.5453);
+  const pts = []; // (each cell's point, wrapped so the field tiles)
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) pts.push([0.5 + 0.4*Math.sin(6.283*hash(x, y)), 0.5 + 0.4*Math.sin(6.283*hash(x + 5.3, y + 5.3))]);
+  const pt = (x, y) => pts[((y % N) + N) % N*N + ((x % N) + N) % N];
+  for (let ty = 0; ty < size; ty++) for (let tx = 0; tx < size; tx++) {
+    const vx = (tx + 0.5)/WW_RES, vy = (ty + 0.5)/WW_RES, ix = Math.floor(vx), iy = Math.floor(vy), fx = vx - ix, fy = vy - iy;
+    let md = 8, mrx = 0, mry = 0, mgx = 0, mgy = 0;
+    for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
+      const q = pt(ix + x, iy + y), rx = x + q[0] - fx, ry = y + q[1] - fy, d = rx*rx + ry*ry;
+      if (d < md) { md = d; mrx = rx; mry = ry; mgx = x; mgy = y; }
+    }
+    let sum = 0;
+    for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
+      const ox = mgx + x, oy = mgy + y, q = pt(ix + ox, iy + oy), rx = ox + q[0] - fx, ry = oy + q[1] - fy;
+      const dx = rx - mrx, dy = ry - mry, l = Math.hypot(dx, dy);
+      if (l*l > 1e-5) sum += Math.exp(-((mrx + rx)*0.5*dx + (mry + ry)*0.5*dy)/l/k);
+    }
+    data[ty*size + tx] = THREE.DataUtils.toHalfFloat(-Math.log(Math.max(sum, 1e-20))*k);
+  }
+  const tex = new THREE.DataTexture(data, size, size, THREE.RedFormat, THREE.HalfFloatType);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  WW_FIELD.value?.dispose();
+  WW_FIELD.value = tex;
+  wwBakedRound = WATER_TUNE.wwRound.value;
+}
+if (WW_BAKED) bakeWindWaker();
 /** Roughness and reflection onto every water surface (they're the material's own, not uniforms). */
 export function refreshWaterMaterials() {
+  if (WW_BAKED && WATER_TUNE.wwRound.value !== wwBakedRound) bakeWindWaker();
   S.waterGroup?.traverse(o => { if (o.material?.userData.water) { o.material.roughness = WATER_TUNE.roughness.value; o.material.envMapIntensity = WATER_TUNE.reflection.value; } });
 }
 
@@ -123,6 +161,26 @@ function sharedEdgeSegmentsWith(ownPaths, otherArea, max) {
   return segments;
 }
 
+// Wind Waker foam's cell-border distance (md, in cells) at vc: baked (WW_BAKED) or worked out per pixel as before
+const WW_FIELD_BAKED = `      float md = textureLod(uWWField, vc/${WW_CELLS}.0, 0.0).r;
+`;
+const WW_FIELD_PROCEDURAL = `      vec2 mr = vec2(0.0), mg = vec2(0.0);
+      vec2 pts[9]; // (each cell's point, kept for the second pass)
+      float md = 8.0;
+      for (int y=-1; y<=1; y++) for (int x=-1; x<=1; x++) {
+        vec2 o = vec2(float(x), float(y)), r = o + (pts[(y + 1)*3 + x + 1] = wwPoint(vi + o)) - vf;
+        if (dot(r, r) < md) { md = dot(r, r); mr = r; mg = o; }
+      }
+      // (then the distance to every border round it, smooth-min'd so the cell's corners round off into blobs, the foam
+      // pooling where cells meet; wwRound is how round)
+      float wsum = 0.0, wk = max(uW_wwRound, 1e-3);
+      for (int y=-1; y<=1; y++) for (int x=-1; x<=1; x++) {
+        vec2 o = mg + vec2(float(x), float(y));
+        vec2 r = o + (abs(o.x) < 1.5 && abs(o.y) < 1.5 ? pts[int(o.y + 1.0)*3 + int(o.x + 1.0)] : wwPoint(vi + o)) - vf;
+        if (dot(mr - r, mr - r) > 1e-5) wsum += exp(-dot(0.5*(mr + r), normalize(r - mr))/wk);
+      }
+      md = -log(max(wsum, 1e-20))*wk;
+`;
 const WATER_FRAGMENT_PARS = `
   #define WATER_MAX_SHORE ${WATER_MAX_SHORE_SEGMENTS}
   #define WATER_MAX_BEACH ${WATER_MAX_BEACH_SEGMENTS}
@@ -137,6 +195,7 @@ const WATER_FRAGMENT_PARS = `
   ${TUNE_PARS}
   float waterGlint = 0.0;
   uniform vec3 uWaterSun;
+  uniform sampler2D uWWField;
   float waterHash(vec2 p) { p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
   float waterNoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -217,28 +276,18 @@ const WATER_COLOR_FRAGMENT = `
       (1.0 - smoothstep(garm - gpix*0.5, garm + gpix*0.5, min(ga.x, ga.y)))*min(1.0, garm*2.0/gpix)*(1.0 - smoothstep(0.0, 0.4*uW_glintSize*life + 1e-3, max(ga.x, ga.y))));
     waterGlint = star*life*smoothstep(1.5, 6.0, shoreDistance)*clamp(1.4 - gpix*1.2, 0.0, 1.0);
     float ww = 0.0;
-    if (uW_wwAmount > 0.0) { // (skipped when off: it's most of the shader's cost after the shore loop)
+    // (patch mask and distance fade first, derivatives outside the branch: the cells are skipped wherever they'd come to 0)
+    float wwPix = max(fwidth(wp.x), fwidth(wp.y))/uW_wwScale;
+    float wwFade = clamp(1.4 - wwPix*2.1, 0.0, 1.0);
+    float wwMask = smoothstep(uW_wwCover, uW_wwCover + 0.12, waterNoise(wp*0.04 + vec2(uWaterTime*0.02, -uWaterTime*0.013)));
+    if (uW_wwAmount > 0.0 && wwFade*wwMask > 0.0) { // (it's most of the shader's cost after the shore loop)
       // Wind Waker foam: soft, broken lines along the borders of wobbling cells, bent by noise so they curve, in patches
       vec2 warp = vec2(waterNoise(wp*0.15 + uWaterTime*0.05), waterNoise(wp*0.15 + 9.1 - uWaterTime*0.04)) - 0.5;
       vec2 vc = wp/uW_wwScale + warp*uW_wwWarp + vec2(1.0, 0.6)*uWaterTime*uW_wwDrift, vi = floor(vc), vf = fract(vc);
-      vec2 mr = vec2(0.0), mg = vec2(0.0);
-      float md = 8.0;
-      for (int y=-1; y<=1; y++) for (int x=-1; x<=1; x++) {
-        vec2 o = vec2(float(x), float(y)), r = o + wwPoint(vi + o) - vf;
-        if (dot(r, r) < md) { md = dot(r, r); mr = r; mg = o; }
-      }
-      // (then the distance to every border round it, smooth-min'd so the cell's corners round off into blobs, the foam
-      // pooling where cells meet; wwRound is how round)
-      float wsum = 0.0, wk = max(uW_wwRound, 1e-3);
-      for (int y=-1; y<=1; y++) for (int x=-1; x<=1; x++) {
-        vec2 o = mg + vec2(float(x), float(y)), r = o + wwPoint(vi + o) - vf;
-        if (dot(mr - r, mr - r) > 1e-5) wsum += exp(-dot(0.5*(mr + r), normalize(r - mr))/wk);
-      }
-      md = -log(max(wsum, 1e-20))*wk;
-      float vaa = max(fwidth(md), 1e-3), soft = uW_wwSoft*0.5 + vaa;
-      float wwMask = smoothstep(uW_wwCover, uW_wwCover + 0.12, waterNoise(wp*0.04 + vec2(uWaterTime*0.02, -uWaterTime*0.013)));
+${WW_BAKED ? WW_FIELD_BAKED : WW_FIELD_PROCEDURAL}
+      float soft = uW_wwSoft*0.5 + max(wwPix, 1e-3);
       float wwBreak = uW_wwBreak <= 0.0 ? 1.0 : smoothstep(uW_wwBreak - 0.1, uW_wwBreak + 0.1, waterNoise(vc*2.3 + 4.7));
-      ww = (1.0 - smoothstep(uW_wwWidth - soft, uW_wwWidth + soft, md))*wwBreak*wwMask*clamp(1.4 - length(fwidth(vc))*1.5, 0.0, 1.0)*uW_wwAmount;
+      ww = (1.0 - smoothstep(uW_wwWidth - soft, uW_wwWidth + soft, md))*wwBreak*wwMask*wwFade*uW_wwAmount;
     }
     diffuseColor.rgb = mix(water, uW_foam, max(max(foam, ring*uW_ringMix), ww));
   }
@@ -299,6 +348,7 @@ export function applyWaterShader(mat, shoreSegments, beachSegments, beachWaterli
     shader.uniforms.uBeachWaterline = { value: beachWaterline || 0 };
     shader.uniforms.uSandTint = SAND_TINT;
     shader.uniforms.uWaterSun = WATER_SUN;
+    shader.uniforms.uWWField = WW_FIELD;
     tuneUniforms(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWaterWorldPos;')

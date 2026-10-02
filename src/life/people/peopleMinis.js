@@ -19,6 +19,12 @@ const FLEE_RING = 0.45, FLEE_LAP = 1.6; // frightened, running round them: how f
 const SETTLE = 0.15;       // stopped, a mini this close to its spot (× their height) stands still, turned to them
 const FOLLOW_MODES = ['line', 'wander', 'leaving'];
 
+const SCAN_EVERY = 1;     // seconds between looks through the crowd for new pipers
+const pipers = new Set(); // (leaders: only they and their minis are seen to each frame)
+let scanIn = 0;
+// where someone is in the crowd (-1: gone), remembered on them (p.crowdSlot) so it's rarely looked for
+const at = p => people[p.crowdSlot] === p ? p.crowdSlot : (p.crowdSlot = people.indexOf(p));
+
 const leading = p => p.traits.piper && !p.miniOf && !p.benched && p.mode !== 'dead' && !isGone(p);
 
 /**
@@ -29,29 +35,31 @@ const leading = p => p.traits.piper && !p.miniOf && !p.benched && p.mode !== 'de
  */
 export function updateMinis(dt, wanted) {
   if (!personModel) return;
-  // (minis of nobody — their leader gone, off the bench, or without the trait — go)
-  people.forEach((m, j) => {
-    if (!m.miniOf || m.benched) return;
-    const L = m.miniOf;
-    if (!people.includes(L) || L.benched || !L.traits.piper || L.miniOf) { m.miniOf = null; m.follow = null; m.act = null; benchPerson(j); }
-  });
-  people.forEach((L, i) => {
-    if (!leading(L)) return;
+  if ((scanIn -= dt) <= 0) { scanIn = SCAN_EVERY; people.forEach(L => { if (leading(L)) pipers.add(L); }); } // (new pipers, now and then)
+  for (const L of pipers) {
+    const i = at(L);
+    // (their minis go once they're gone from the crowd, benched, a mini, or without the trait)
+    if (i < 0 || L.benched || !L.traits.piper || L.miniOf) {
+      (L.minis || []).forEach(m => { const j = m && m.miniOf === L ? at(m) : -1; if (j >= 0 && !m.benched) { m.miniOf = null; m.follow = null; m.act = null; benchPerson(j); } });
+      L.minis = null; pipers.delete(L);
+      continue;
+    }
+    if (!leading(L)) continue;
     const minis = L.minis ??= [];
     for (let k = 0; k < MINI_COUNT; k++) {
       let m = minis[k];
-      if (m && (m.miniOf !== L || !people.includes(m))) m = minis[k] = null;
+      if (m && (m.miniOf !== L || at(m) < 0)) m = minis[k] = null;
       if (m?.mode === 'dead' && (m.deadFor = (m.deadFor ?? 0) + dt) < MINI_RESPAWN) continue;
       if (!m || m.mode === 'dead') { minis[k] = makeMini(L, i, k, m, wanted); continue; }
       keepFollowing(m, L);
     }
     avenge(L, minis);
-  });
+  }
 }
 
 // a new mini of L's (in place of `old`, if it's one that died), next to them
 function makeMini(L, i, k, old, wanted) {
-  let j = old ? people.indexOf(old) : -1;
+  let j = old ? at(old) : -1;
   if (j < 0) j = people.findIndex((q, n) => n >= wanted && q.benched && !q.miniOf);
   if (j < 0 && people.length >= PEOPLE_MAX) return null;
   const m = newPerson();
@@ -81,7 +89,7 @@ function avenge(L, minis) {
     if (!hit || hit.stage === 'marked' || hit === x.avenged) continue;
     x.avenged = hit;
     const by = hit.by;
-    if (!by?.traits || !people.includes(by) || by === L || by.miniOf === L || isGone(by)) continue;
+    if (!by?.traits || at(by) < 0 || by === L || by.miniOf === L || isGone(by)) continue;
     for (const m of minis) {
       if (!m || m === x || m.mode === 'dead' || m.punched || m.attack || m.traits.pacifist) continue;
       Object.assign(m, { follow: null, act: null });

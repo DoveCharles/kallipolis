@@ -1090,6 +1090,7 @@ function injectPersonShader(shader, uniforms, look) {
     ? 'vPersonColor = ' + nude + bands + Object.entries(look.traitColors).map(([slot, row]) => `personSlotIndex == ${slot} ? personTrait(${row}).rgb : `).join('') + 'personPalette[personSlotIndex];' : '';
   shader.vertexShader = shader.vertexShader
     .replace('void main() {', `void main() {
+      if (personTwin > 0.0 && (personSpectral() & ${SPECTRAL.twins}) == 0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; } // (a twin's copy, for someone without one: before skinning)
       #ifdef PERSON_CULL
         float personPixels = personOnScreen();
         if (personPixels < ${Math.max(look.shadow ? PERSON_SHADOW_PIXELS : PERSON_DRAW_PIXELS, look.layer ? PERSON_LAYER_PIXELS : 0).toFixed(1)}) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; } // (outside the clip volume: nothing drawn)
