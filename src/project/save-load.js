@@ -16,6 +16,7 @@ import { serializeImportedModels, restoreImportedModels } from '../objects/impor
 import { cancelActiveDrawing, applyModeVisibility } from '../editor/tools.js';
 import { savedFavorites, restoreFavorites } from '../ui/favorites.js';
 import { progressData, loadProgress } from './progress.js';
+import { saveFileName } from './world-name.js';
 import { serializeCrowd, restoreCrowd } from '../life/people/peopleKeep.js';
 import { serializeCars, restoreCars } from '../life/traffic/carKeep.js';
 
@@ -129,9 +130,10 @@ export async function downloadFile(filename, blob) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 async function saveProject() {
-  const data = serializeProject();
-  const blob = new Blob([JSON.stringify(data)], { type:'application/json' });
-  await downloadFile('kallipolis_project.json', blob);
+  const filename = await saveFileName();
+  if (!filename) return;
+  const blob = new Blob([JSON.stringify(serializeProject())], { type:'application/json' });
+  await downloadFile(filename, blob);
 }
 async function restoreMapImages(list) {
   for (const im of (list||[])) {

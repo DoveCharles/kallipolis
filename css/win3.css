@@ -521,3 +521,5 @@ html.win3 #quests .w3-dialog-body { overflow:hidden; padding-bottom:12px; }
 .qs-body .qs-time { text-align:left; flex:1; }
 .qs-bounty b { color:#800000; }
 .qs-refuse { all:unset; cursor:pointer; padding:0 4px; font-weight:bold; }
+/* world name (World window; Save asks for it) */
+#s-worldname, #w3-namebox { flex:1; width:100%; box-sizing:border-box; border:1px solid var(--w3-frame); background:var(--w3-window); color:var(--w3-text); font:inherit; padding:2px 4px; }
