@@ -1615,7 +1615,7 @@ export function updatePeople(t) {
         // keeping pace with their walkway is always right on top of the point they're heading for
         if (Math.hypot(mx, mz) > (possessed ? 1e-3 : speed*dt*0.25)) {
           const facing = Math.atan2(mx, mz) + moonwalkTurn(p); // (or away from it, walking backwards)
-          p.heading += Math.atan2(Math.sin(facing - p.heading), Math.cos(facing - p.heading))*Math.min(1, dt*8);
+          if (!possessed) p.heading += Math.atan2(Math.sin(facing - p.heading), Math.cos(facing - p.heading))*Math.min(1, dt*8);
           p.moving = true;
           p.stepped = riding ? 0 : Math.hypot(mx, mz); // (carried, they take no steps)
         }
@@ -1626,10 +1626,17 @@ export function updatePeople(t) {
     if (p.fall) stepFall(p, dt); // (see peopleFall.js)
     updateWater(p, i, dt, wasX, wasZ, goal ? goal.y : null); // (over open water, they go in — or waterwalking/aqua, stand or swim on it: see peopleWater.js)
     updateDrunk(p, dt, wasX, wasZ); // (weaving, and now and then falling over: see peopleDrunk.js)
-    // possessed, they face the way they're looking — the walk played backwards, stepping backwards
+    // possessed, the body goes the way the keys walk them (backing off, still facing ahead: the walk played backwards);
+    // the head turns to the view, as far as it goes, the body coming round after it past that
     if (possessed && !frozen) {
-      p.heading = possession.yaw;
-      if (p.moving && controlInput().forward < 0 !== !!moonwalkTurn(p)) p.stepped = -p.stepped;
+      const { forward, right } = controlInput(), yaw = possession.yaw, back = forward < 0 ? -1 : 1;
+      if (p.moving && (forward || right)) {
+        const want = yaw + Math.atan2(-right*back, forward*back) + moonwalkTurn(p);
+        p.heading += wrapAngle(want - p.heading)*Math.min(1, dt*8);
+      }
+      const off = wrapAngle(yaw - p.heading);
+      if (Math.abs(off) > LOOK_MAX_TURN) p.heading = yaw - Math.sign(off)*LOOK_MAX_TURN;
+      if (p.moving && back < 0 !== !!moonwalkTurn(p)) p.stepped = -p.stepped;
     }
     // standing still for something (talking, sitting down), they turn to face the way it wants
     if (!p.moving && p.faceTo != null) p.heading += wrapAngle(p.faceTo - p.heading)*Math.min(1, dt*5);
@@ -1727,7 +1734,8 @@ export function updatePeople(t) {
           p.lookTiltTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TILT;
         }
         if (!p.lookAt && p.spiritGaze != null) { p.lookTurnTo = p.spiritGaze; p.lookTiltTo = 0; } // (to the spirit talking: see peopleSpiritChat.js)
-        if (possessed || toMouth(p)) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
+        if (toMouth(p)) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
+        else if (possessed) { p.lookTurnTo = wrapAngle(possession.yaw - p.heading); p.lookTiltTo = 0; }
         p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, fdt*4);
         p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, fdt*4);
         if (p.traits.twins) lookTwin(p, i, fdt, possessed);
