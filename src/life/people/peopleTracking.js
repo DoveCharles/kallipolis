@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { App, S, buildingHolders } from '../../core/shared.js';
-import { Y_ROAD, Y_SIDEWALK, camera } from '../../core/scene.js';
+import { Y_ROAD, Y_SIDEWALK, camera, CAMERA_NEAR } from '../../core/scene.js';
 import { CAMERA_MIN_RADIUS, controls } from '../../core/camera-controls.js';
 import { canTakeControl, controlInput, endPossession, possession, startPossession, HATES_POSSESSED_SPEED, rushed } from '../possession.js';
 import { FLEE_SPEED, PEOPLE_MAX, PERSON_WALK_SPEED, followed, wrapAngle, buildingLabel, hasClip, moonwalkTurn, inRoom, isGone, modelScale, insideFor, people, peopleNav, peopleRng, personModel, playOnce, setFollowed, setRiderFollowed } from './people.js';
@@ -358,7 +358,7 @@ export function possessPerson(i) {
   if (!startPossession(i, p.heading + moonwalkTurn(p))) { p.mode = 'wander'; reseatPerson(p); return; }
   setSelf(p);
   if (room) { possessedRoom = { key: room.building.key, building: room.building, back: room.back, floor: p.y }; p.footing = null; p.area = -1; }
-  cameraNear = camera.near;
+  cameraNear = room || App.isInsideBuilding?.() ? CAMERA_NEAR : camera.near; // (the outside view's, not the room's)
   camera.near = S.hideOwnHead ? EYE_NEAR_HEADLESS : EYE_NEAR;
   camera.updateProjectionMatrix();
 }
