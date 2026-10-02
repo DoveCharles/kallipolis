@@ -129,6 +129,14 @@ prefToggle('s-babblefallback', BABBLE_FALLBACK_KEY, 'babbleFallbackOnly', false)
 prefToggle('s-infiniteenergy', 'kallipolis.dev.infiniteEnergy', 'devInfiniteEnergy', false);
 prefToggle('s-freepurchases', 'kallipolis.dev.freePurchases', 'devFreePurchases', false);
 prefToggle('s-infinitegifts', 'kallipolis.dev.infiniteGifts', 'devInfiniteGifts', false);
+// Options > Dev > Sandbox city: the city's play mode, saved with it (S.playMode, scene.playMode in project/save-load.js) —
+// a sandbox's undo reaches back past time in the world; a game's stops where the world last ran (see project/history.js)
+S.playMode ??= 'sandbox';
+const sandboxToggle = document.getElementById('s-sandbox');
+const syncPlayMode = () => sandboxToggle.classList.toggle('on', S.playMode !== 'game');
+sandboxToggle.addEventListener('click', () => { S.playMode = S.playMode === 'game' ? 'sandbox' : 'game'; syncPlayMode(); App.scheduleSave?.(500); });
+syncPlayMode();
+App.syncPlayMode = syncPlayMode;
 S.babbleBubbles = recall(BABBLE_BUBBLES_KEY, false);
 const babbleBubblesToggle = document.getElementById('s-babblebubbles');
 babbleBubblesToggle.classList.toggle('on', S.babbleBubbles);

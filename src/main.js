@@ -158,39 +158,46 @@ scene.add(shaderKeepAlive);
 syncPeopleUI();
 syncSkyUI();
 commitHistory(); // the starting point undo goes back to
+// The world's clock (`w`): stopped while editing (S.interactionMode not 'move'), so people, traffic, the day and the
+// weather hold still while the city's changed, and pick up where they were (see project/history.js for why). Water,
+// blinking lights and sound keep the real clock (`t`).
+let worldPaused = 0, lastFrameT = null;
 function animate() {
   requestAnimationFrame(animate);
   controls.update(false);
   skyDome.position.copy(camera.position);
   const t = performance.now()*0.001;
-  updateTrainShuttles(t);
+  if (lastFrameT != null && S.interactionMode !== 'move') worldPaused += t - lastFrameT;
+  lastFrameT = t;
+  const w = t - worldPaused;
+  updateTrainShuttles(w);
   updateRoadDragPreview();
   if (S.waterDirty) rebuildWater();
-  updatePeople(t);
-  updateGiblets(t);
-  updateCoins(t);
-  updateBodyParts(t);
-  updateCarWrecks(t);
-  updateLightning(t);
-  updateBees(t);
-  updateAirports(t);
-  updateMedBots(t);
-  updateSeraphorbs(t);
-  updatePigeons(t); // (before updateTraffic, which sets off the blasts that scatter them)
-  updateTraffic(t);
-  updateFences(t); // (smashed fences put back once long out of view)
+  updatePeople(w);
+  updateGiblets(w);
+  updateCoins(w);
+  updateBodyParts(w);
+  updateCarWrecks(w);
+  updateLightning(w);
+  updateBees(w);
+  updateAirports(w);
+  updateMedBots(w);
+  updateSeraphorbs(w);
+  updatePigeons(w); // (before updateTraffic, which sets off the blasts that scatter them)
+  updateTraffic(w);
+  updateFences(w); // (smashed fences put back once long out of view)
   updateAmbience(t);
   updateBuildingFollow();
   updateInteriorCamera();
-  updateTrafficLights(t);
-  updateDayNight(t);
-  updateWeather(t);
+  updateTrafficLights(w);
+  updateDayNight(w);
+  updateWeather(w);
   updateStreetlights();
   placeSunLight();
   WATER_TIME.value = t;
   WATER_SUN.value.copy(sun.color).multiplyScalar(sun.intensity/(Math.PI*1.3)); // (1 at noon; the moon's faint light at night)
   refreshSceneIndex();
-  updatePedView(t);
+  updatePedView(w);
   fadeBuildingsAroundCamera(); // (a building the camera's inside or right up against fades out: see see-through.js)
   updateBuildingBatches();
   updateNodeHighlight();

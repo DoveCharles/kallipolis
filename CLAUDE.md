@@ -7,3 +7,4 @@
 - CSS lives in `css/` (cascade order: base, win3, touch, phone, ped) plus `src/ui/meter.css`.
 - Keep `AGENT_MAP.md` in sync when adding, moving or removing files.
 - When adding death causes, traits, world values, building kinds or other events people could notice, update the speech system to match (see the speech rule in `AGENT_MAP.md`).
+- When adding state the player would notice losing, decide whether it's saved with the project file (as it would be with the browser session) — see the saving rule in `AGENT_MAP.md`.

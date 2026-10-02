@@ -67,6 +67,7 @@ export function serializeProject() {
       globalSandTint: colorToHex(S.globalSandTint, SAND_TINT_COLORS[0]),
       globalGrassNoiseStrength: S.globalGrassNoiseStrength,
       people: { enabled: S.peopleEnabled, amount: S.peopleAmount, speed: S.peopleSpeed, size: S.peopleSize, traffic: S.trafficAmount, idSeq: S.peopleIdSeq },
+      playMode: S.playMode, // ('sandbox' or 'game': see ui/view-prefs.js, history.js)
       dayNight: { enabled: S.dayNightEnabled, dayLength: S.dayLengthMinutes, time: S.timeOfDay },
       weather: { rain: S.weatherRain, snow: S.weatherSnow, clouds: S.weatherClouds, cycle: S.weatherCycle }
     },
@@ -234,6 +235,7 @@ export async function loadProjectFromData(data, options) {
   renderWorldTintPanel();
   if (!keepMaps) loadProgress(data.progress); // (undo and redo leave what's been earned and spent alone, too: see progress.js)
   if (!keepMaps) { restoreFavorites(data.favorites); restoreCrowd(data.crowd); restoreCars(data.traffic); } // (undo and redo leave the favorites and crowd alone: they aren't steps to undo)
+  if (!keepMaps) { S.playMode = sc.playMode === 'game' ? 'game' : 'sandbox'; App.syncPlayMode?.(); } // (older cities: sandboxes)
   if (sc.people) {
     S.peopleEnabled = !!sc.people.enabled;
     if (sc.people.amount != null) S.peopleAmount = sc.people.amount;
