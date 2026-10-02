@@ -70,8 +70,9 @@ const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 const shiftHeld = (e) => e.shiftKey || S.touchAdd === true;
 const cmdKey = (e) => IS_MAC ? e.metaKey : e.ctrlKey;
 const addHeld = (e) => cmdKey(e) || S.touchAdd === true;
-// alt in Paths (not while drawing): a click deletes the stretch of path under it (see deleteRoadSegment)
-const deleteHeld = (e) => e.altKey && S.interactionMode==='node' && S.currentTool==='road' && !S.activeRoadLine;
+// alt in Paths (not while drawing): a click deletes the stretch of path under it (see deleteRoadSegment); in Zones, the
+// node under it
+const deleteHeld = (e) => e.altKey && S.interactionMode==='node' && ((S.currentTool==='road' && !S.activeRoadLine) || (S.currentTool==='zone' && !S.activeZone));
 const inControl = () => App.isPossessing?.() || App.isDriving?.();
 
 function pointerDelta(e) {
@@ -269,6 +270,10 @@ dom.addEventListener('pointerdown', (e) => {
     return;
   }
   // alt+click a path: the stretch of it between two nodes, gone
+  if (e.button===0 && deleteHeld(e) && S.currentTool==='zone') {
+    const picked = pickNodeOrHandle(e.clientX, e.clientY), zone = picked?.kind==='zone' && S.zones.find(z => z.id===picked.zoneId);
+    if (zone) { deleteZoneVertex(zone, picked.index); dom.setPointerCapture(e.pointerId); return; }
+  }
   if (e.button===0 && deleteHeld(e)) {
     const seg = segmentUnder(e.clientX, e.clientY);
     if (seg) { endDeletePreview(); deleteRoadSegment(seg.line, seg.index); dom.setPointerCapture(e.pointerId); return; }
@@ -694,7 +699,7 @@ window.addEventListener('blur', () => showAddCursor(null));
 function showDeleteHover(e) {
   const on = !!e && deleteHeld(e) && !pointerDown && !S.draggedNode;
   dom.classList.toggle('deleting', on);
-  const seg = on ? segmentUnder(S.lastMouseX, S.lastMouseY) : null;
+  const seg = on && S.currentTool==='road' ? segmentUnder(S.lastMouseX, S.lastMouseY) : null;
   if (seg) showDeletePreview(seg.line, seg.index); else endDeletePreview();
 }
 window.addEventListener('keydown', (e) => {
