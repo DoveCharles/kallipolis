@@ -20,6 +20,7 @@ Browser city-blockout tool on three.js (plain ES modules, no build step). Read t
 - `style.css` Stub; unused (split into `css/`). Safe to delete.
 - `src/ui/meter.css` Reusable meter component. `src/ui/morality.css` superseded, unlinked.
 - `serve.py` Dev server with no-store caching: `python3 serve.py [port]`. Also writes `assets/text/index.txt` (every .txt under assets/text/, for the speech loader) and `assets/music/index.txt` (every .mid under assets/music/, for audio/pub-music.js) on start and whenever they're fetched; on start looks up missing YouTube loudness for tv.txt into `assets/tv-loudness.json` (the TV's levelling, buildings/interior.js); `python3 serve.py --index` only writes them. `.claude/launch.json` lists ports 8743–8753.
+- `worlds/*.json` Project files shared by link: index.html?world=NAME (project/autosave.js).
 - `netlify.toml` Deploys repo root as-is; push to `main` redeploys.
 - `README.md` Feature overview. `jsconfig.json` JS type-check settings for `src/`.
 
@@ -197,7 +198,7 @@ Cars. Only `traffic.js` is imported from outside (main.js, sky/streetlights.js, 
 - `nametags.js` (1K) Each player's Name (.net-tag) over the person, car or bee they possess — exports: showTags
 
 ### src/project/
-- `autosave.js` (4K) The project (everything a saved project file holds, map images and all) and where the camera is are kept in the browser — in IndexedDB, which has room… The crowd (life/people/peopleKeep.js) under its own key: with the project, 3s after a death or (un)hearting, and every 45s. Restores only after ui/loading.js's `modelsLoaded`.
+- `autosave.js` (4K) The project (everything a saved project file holds, map images and all) and where the camera is are kept in the browser — in IndexedDB, which has room… The crowd (life/people/peopleKeep.js) under its own key: with the project, 3s after a death or (un)hearting, and every 45s. Restores only after ui/loading.js's `modelsLoaded`. `?world=NAME` (worlds/NAME.json) or `?world=URL` loads a shared world instead, never saved.
 - `export-glb.js` (7K) The city as a GLB with real materials, for Blender, Unity, Unreal and the like:
 - `export-obj.js` (1K) OBJ export of the scene.
 - `history.js` (4K) History is a stack of project snapshots — the same JSON a saved project holds, less the map images (they're big, and importing, moving or removing map… Undo/redo only in edit mode (buttons disabled in world mode); modeChanged (from setMode in editor/tools.js): a game city (S.playMode 'game', Options > Dev > Sandbox city, saved as scene.playMode) leaving edit mode resets history (the world's run on those steps); a sandbox keeps it. Clear All resets it. Every new snapshot also goes to App.netEdit (multiplayer). — exports: commitHistory, resetHistory

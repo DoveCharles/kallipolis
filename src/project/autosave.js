@@ -22,7 +22,10 @@ let ready = false, restoring = false, saveTimer = null, crowdTimer = null, warne
 navigator.storage?.persist?.().catch(() => {}); // (asks the browser not to clear it under disk pressure)
 // (index.html?blank: an empty scene, never saved — for tools/ped-maker.html)
 // (and index.html?join=CODE: a guest in someone else's city — see net/net.js)
-const BLANK = ['blank', 'join'].some(key => new URLSearchParams(location.search).has(key));
+// (and index.html?world=NAME: worlds/NAME.json, or ?world=URL: any JSON project — a shared world to look at, never saved)
+const WORLD = new URLSearchParams(location.search).get('world');
+const BLANK = ['blank', 'join'].some(key => new URLSearchParams(location.search).has(key)) || !!WORLD;
+const worldUrl = name => /[/:]/.test(name) ? name : `worlds/${encodeURIComponent(name)}.json`;
 
 const database = new Promise((resolve, reject) => {
   const request = indexedDB.open(DB_NAME, 1);
@@ -85,6 +88,17 @@ window.addEventListener('pagehide', save);
 // it's built with them the first time (see ui/loading.js)
 loadingTask('Building the city...', (async () => {
   let restoredCleanly = false;
+  if (WORLD) {
+    try {
+      const response = await fetch(worldUrl(WORLD));
+      if (!response.ok) throw new Error(response.status);
+      const data = await response.json();
+      await modelsLoaded;
+      await loadProjectFromData(data);
+      App.resetHistory();
+    } catch (err) { console.warn('Kallipolis: couldn\'t load the shared world', WORLD, err); }
+    return;
+  }
   if (BLANK) return;
   try {
     const record = await inStore('readonly', store => store.get(RECORD_KEY));
