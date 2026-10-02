@@ -6,6 +6,8 @@ import { S, App } from '../../core/shared.js';
 import { controls } from '../../core/camera-controls.js';
 import { people, personModel, newPerson, refreshTraits, followed, countBelow } from './people.js';
 import { updateHeld } from './peopleHolding.js';
+import { placePossessedCamera } from './peopleTracking.js';
+import { possession } from '../possession.js';
 
 export const REC = 24;
 const ROW_JUMP = 8; // (an animation row moving further than this between snapshots is a new clip or a loop: not blended)
@@ -84,6 +86,8 @@ export function mirrorCrowd() {
   [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; part.pupil.needsUpdate = true; });
   personModel.updateCopies(n, followed >= 0 ? [followed] : []);
   updateHeld();
-  const p = people[followed];
-  if (p && p.mode !== 'none') controls.goalTarget.set(p.x, p.y + 1.4*p.height*S.peopleSize, p.z);
+  const p = people[followed], own = possession.index >= 0 && possession.index === followed && p?.mode !== 'none'; // (possessed by this guest: walked by the host, from our keys)
+  if (personModel.hidden) personModel.hidden.value = own && S.hideOwnHead && !(possession.distance > 0) ? followed : -1;
+  if (own) placePossessedCamera(followed);
+  else if (p && p.mode !== 'none') controls.goalTarget.set(p.x, p.y + 1.4*p.height*S.peopleSize, p.z);
 }

@@ -338,12 +338,13 @@ let cameraNear = camera.near;
  */
 export function possessPerson(i) {
   const p = people[i];
-  if (i !== followed || !p || p.miniOf || possession.index === i || !S.peopleEnabled || S.interactionMode !== 'move') return; // (nor a piper's mini, whose revenge would throw your punches: see peopleMinis.js)
+  if (i !== followed || !p || p.miniOf || p.remote || possession.index === i || !S.peopleEnabled || S.interactionMode !== 'move') return; // (nor a piper's mini, whose revenge would throw your punches: see peopleMinis.js)
   // (someone in the room the camera's inside — picked there, see followPersonInside — is walked round it, as anyone
   // walked in possessed is: see enterPossessed; not someone behind a changing room's curtain)
   const room = inRoom(p) ? p.indoors : null;
   if (isGone(p) && !room) return;
   if (room && (p.inRoom.cubicle || p.inRoom.hidden)) return;
+  if (S.netGuest) { startPossession(i, p.heading); return; } // (a multiplayer guest: the host walks them, from our keys — see net/net.js)
   if (!canTakeControl()) return; // (checked before anything's undone; spent in possession.js)
   if (room) { standUp(p); p.inRoom = null; }
   // (up on a raised walkway, in a station, its lift or a carriage, they stay there: see peopleFooting.js)
@@ -378,6 +379,13 @@ export function unpossessPerson() {
   if (!p || p.mode !== 'possessed') { possessedRoom = null; return; }
   leaveGroup(p); // (done with any chat: see talkWith)
   if (possessedRoom && stayIndoors(p)) return; // (let go of in a room they've walked into: they stay on there a while)
+  letGo(p);
+  // the camera behind them, looking the way they were
+  const behind = possession.yaw + Math.PI;
+  controls.goalTheta = controls.theta + wrapAngle(behind - controls.theta);
+  controls.goalPhi = Math.max(controls.goalPhi, Math.PI*0.3);
+}
+function letGo(p) {
   // back into a hangout they're standing in, else walking back to the nearest walkway they can reach (walkBackToWalkway),
   // else onto the nearest walkway — up on a raised one, the nearest point of that
   // (the grid reseatPerson looks in leaves the decks out, so it would drop them to the ground below); in a station, a lift
@@ -393,10 +401,26 @@ export function unpossessPerson() {
     if (inHangout || !walkBackToWalkway(p)) reseatPerson(p);
   }
   if (p.mode === 'wander') { p.tx = p.x; p.tz = p.z; p.wait = 1; }
-  // the camera behind them, looking the way they were
-  const behind = possession.yaw + Math.PI;
-  controls.goalTheta = controls.theta + wrapAngle(behind - controls.theta);
-  controls.goalPhi = Math.max(controls.goalPhi, Math.PI*0.3);
+}
+/**
+ * A multiplayer guest's hold on someone, on the host (net/net.js): walked by `ctl` ({forward, right, run, brake, yaw, pitch}, kept up to date by the guest).
+ * @returns {boolean} whether they could be
+ */
+export function possessRemote(i, ctl) {
+  const p = people[i];
+  if (!p || p.mode === 'possessed' || p.miniOf || isGone(p) || inRoom(p) || p.indoors || p.train) return false;
+  p.footing = footingAt(p.x, p.y, p.z);
+  endActivity(p);
+  p.crossStage = null; p.jc = null; p.fright = p.stun = p.please = null; p.oneShot = null;
+  p.mode = 'possessed'; p.onRoad = false; p.remote = ctl;
+  return true;
+}
+export function releaseRemote(p) {
+  if (!p?.remote) return;
+  p.remote = null;
+  if (p.mode !== 'possessed') return;
+  leaveGroup(p);
+  letGo(p);
 }
 // Walking into people: anyone within BUMP_RADIUS is shocked (as by a bad sort's death — see stunBystanders in people.js) for
 // BUMP_SHOCK_TIME, once, as you come within it. Walking into someone's very middle (within BUMP_CORE_RADIUS) sends you staggering SHOVE_DISTANCE straight
@@ -436,7 +460,7 @@ function bounceOffCars(p, x, z, shove, hop) {
  */
 export function walkPossessed(p, dt) {
   carryPossessed(p); // (along with the carriage or lift they're in, first: then walked about in it)
-  const { forward, right, run, brake: jump } = controlInput(), yaw = possession.yaw;
+  const { forward, right, run, brake: jump } = p.remote ?? controlInput(), yaw = p.remote?.yaw ?? possession.yaw;
   const len = Math.hypot(forward, right);
   let x = p.x, z = p.z;
   const shove = p.shove ??= { x: 0, z: 0 };
@@ -477,7 +501,7 @@ export function walkPossessed(p, dt) {
   const partner = talkingTo(p);
   if (p.group && (!partner || Math.hypot(partner.x - x, partner.z - z) > TALK_LEAVE*S.peopleSize)) leaveGroup(p);
   // (in a room they've walked into: round its furniture — see "walking into buildings")
-  if (possessedRoom) { p.walkingSpeed = walkingSpeed; return stepInRoom(p, possession.index, x, z); }
+  if (possessedRoom && !p.remote) { p.walkingSpeed = walkingSpeed; return stepInRoom(p, possession.index, x, z); }
   const touching = new Set(), near = new Set();
   people.forEach(q => {
     if (q === p || isGone(q) || !(q.mode === 'line' || q.mode === 'wander' || q.mode === 'leaving')) return;
@@ -494,7 +518,7 @@ export function walkPossessed(p, dt) {
     if (punching) { endActivity(q); q.stun = q.fright = q.please = null; q.oneShot = null; goAfter(q, p); }
     else if (len > 0 && startled && !q.stun && !q.fright && !q.please && !q.punched && !q.attack) q.stun = { stage: 'notice', timer: 0.15, from: { x: p.x, z: p.z }, hold: BUMP_SHOCK_TIME };
     if (len === 0 || !entering) return;
-    if (swing) return; // (no staggering back while throwing a punch)
+    if (swing && !p.remote) return; // (no staggering back while throwing a punch)
     const backX = d > 1e-3 ? -dx/d : -Math.sin(yaw), backZ = d > 1e-3 ? -dz/d : -Math.cos(yaw);
     // (the distance a shove covers is its speed over SHOVE_DECAY)
     const speed = SHOVE_DISTANCE*S.peopleSize*SHOVE_DECAY;

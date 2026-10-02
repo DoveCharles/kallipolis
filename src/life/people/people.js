@@ -1418,7 +1418,7 @@ export function updatePeople(t) {
     p.snackCooldown -= dt;
     p.indoorsCooldown -= dt;
     const possessed = p.mode === 'possessed';
-    if (possessed) possession.alwaysForward = rushed(p); // (W and Shift held for good)
+    if (possessed && !p.remote) possession.alwaysForward = rushed(p); // (W and Shift held for good)
     if (p.push) stepPush(p, dt);
     if (possessed) p.fright = p.stun = p.please = null;
     else if (p.traits.ghost) p.fright = p.stun = null; // (nothing frightens or stuns a ghost)
@@ -1565,7 +1565,7 @@ export function updatePeople(t) {
     }
     if (possessed) {
       if (frozen) cancelSwing(); // (knocked down: no walking, no punching)
-      else { goal = walkPossessed(p, dt); updateSwing(p, dt); }
+      else { goal = walkPossessed(p, dt); if (!p.remote) updateSwing(p, dt); } // (p.remote: a multiplayer guest's, see possessRemote)
     }
     if (p.mode === 'leaving') {
       // already placed on their walkway by joinWalkway; once they've reached it they carry on along it
@@ -1632,7 +1632,7 @@ export function updatePeople(t) {
     // possessed, the body goes the way the keys walk them (backing off, still facing ahead: the walk played backwards);
     // the head turns to the view, as far as it goes, the body coming round after it past that
     if (possessed && !frozen) {
-      const { forward, right } = controlInput(), yaw = possession.yaw, back = forward < 0 ? -1 : 1;
+      const { forward, right } = p.remote ?? controlInput(), yaw = p.remote?.yaw ?? possession.yaw, back = forward < 0 ? -1 : 1;
       if (p.moving && (forward || right)) {
         const want = yaw + Math.atan2(-right*back, forward*back) + moonwalkTurn(p);
         p.heading += wrapAngle(want - p.heading)*Math.min(1, dt*8);
@@ -1738,7 +1738,7 @@ export function updatePeople(t) {
         }
         if (!p.lookAt && p.spiritGaze != null) { p.lookTurnTo = p.spiritGaze; p.lookTiltTo = 0; } // (to the spirit talking: see peopleSpiritChat.js)
         if (toMouth(p)) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
-        else if (possessed) { p.lookTurnTo = wrapAngle(possession.yaw - p.heading); p.lookTiltTo = Math.max(-POSSESSED_MAX_TILT, Math.min(POSSESSED_MAX_TILT, -possession.pitch)); }
+        else if (possessed) { p.lookTurnTo = wrapAngle((p.remote?.yaw ?? possession.yaw) - p.heading); p.lookTiltTo = Math.max(-POSSESSED_MAX_TILT, Math.min(POSSESSED_MAX_TILT, -(p.remote?.pitch ?? possession.pitch))); }
         p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, fdt*4);
         p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, fdt*4);
         if (p.traits.twins) lookTwin(p, i, fdt, possessed);
@@ -1823,7 +1823,7 @@ export function updatePeople(t) {
       // (possessed: not a bubble but a box low on screen, listing any replies to pick from with Options > Game > Dialogue
       // Choices — see ui/speech-bubbles.js ownLine and audio/dictionary.js sayLine)
       if (p.choosing && (!possessed || !S.dialogueChoices || p.group?.talk !== p.choosing.talk)) p.choosing = null;
-      if (possessed) ownLine(p, p.saying ?? babbling, p.choosing);
+      if (possessed && !p.remote) ownLine(p, p.saying ?? babbling, p.choosing);
       else if (bubbleSide && (p.saying || babbling || thinking || hasBubble(p))) speechBubble(p, twinBubble(p, bubbleAt(p)), p.saying ?? babbling ?? thinking);
       // (on their own with spirits or a twin: talking with them — see peopleSpiritChat.js)
       if (p.traits.spirits || p.traits.twins || p.spiritChat?.on) updateSpiritChat(p, i, dt, { free: !group && !possessed && !aaaing && !fleeing && !frozen && !p.fleeTalkUntil && isDrawn(p),
