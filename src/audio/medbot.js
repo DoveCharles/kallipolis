@@ -21,8 +21,8 @@ const SIREN_HEAR = 70, SIREN_REF = 4;   // the siren: from right across a plaza
 const VOICES_MAX = 2;
 const MOTOR_HZ = 165, MOTOR_VOLUME = 0.05;
 const SPEED_PITCH = 1.9, SPEED_LOUDER = 2;
-const SOFT_VOLUME = 0.07, STONE_VOLUME = 0.05, PROBE_EVERY = 0.25;
-const CRACKS = 6, CRACK_VOLUME = 0.12, WHEELBASE = 0.05; // cracks a second at speed 1; s between her front and back wheels' clacks
+const SOFT_VOLUME = 0.035, STONE_VOLUME = 0.025, PROBE_EVERY = 0.25;
+const CRACKS = 6, CRACK_VOLUME = 0.06, WHEELBASE = 0.05; // cracks a second at speed 1; s between her front and back wheels' clacks
 const TREAD_HZ = 9;                     // the treads' rattle a second at her rolling speed (faster when she's faster)
 const SIREN_HZ = 760, SIREN_SWING = 330, SIREN_RATE = 0.55, SIREN_VOLUME = 0.05; // centre, ± Hz, wails a second
 const CHORD = [523.25, 659.25, 783.99, 987.77, 1318.5]; // Cmaj7 and a high E
