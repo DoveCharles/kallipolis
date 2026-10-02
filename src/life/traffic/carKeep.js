@@ -1,4 +1,6 @@
+import { S, App } from '../../core/shared.js';
 import { cars } from './state.js';
+import { newCar, spawnCar } from './lanes.js';
 import { carMeshes, designNumbers } from './models.js';
 import { carPlate, platePacked } from './materials.js';
 import { isFavorite } from '../../ui/favorites.js';
@@ -10,11 +12,15 @@ import { carTypeOf, pinCarType } from '../car-types.js';
 // it, so they never come back; `numbers` keeps each design's count, so new cars never reuse a number. Cars thinned off the
 // roads wait at the front to come back first. The hearted also carry `kept`: their card and plate as they were, so
 // cars.txt updates don't change them. Saved with the crowd (project/autosave.js, and `traffic` in project files).
+// A hearted car destroyed is kept as a wreck (`wrecks`, with when, by the wall clock): RESPAWN_AFTER on, clicking it in
+// the favorites brings it back somewhere away from the camera (see carFavorite in life/car-card.js).
 
 let waiting = []; // saved cars not yet back on the roads, in order
 let reset = false; // a saved traffic's come in: clear the current one first
 let savedNumbers = {}; // design name → how many numbers it had given out
 const pinnedPlates = new Map(); // 'design#number' → plate text
+export const RESPAWN_AFTER = 60*60*1000; // ms
+const wrecks = new Map(); // carKeyOf → { entry (as entryOf), at (Date.now()) }
 
 export const carKeyOf = (design, number) => `car:${design}#${number}`;
 /** The key a car's favorite goes by: its design and number, which is who it is — or the car itself before it has a design. */
@@ -37,7 +43,8 @@ function entryOf(car) {
 export function serializeCars() {
   const numbers = { ...savedNumbers };
   carMeshes.forEach((cm, d) => { numbers[cm.name] = Math.max(numbers[cm.name] || 0, designNumbers[d] || 0); });
-  return { v: 1, cars: [...cars.map(entryOf), ...waiting], numbers };
+  const kept = [...wrecks].filter(([key]) => isFavorite(key)).map(([, w]) => ({ ...w.entry, at: w.at }));
+  return { v: 1, cars: [...cars.map(entryOf), ...waiting], numbers, wrecks: kept };
 }
 
 /** Put back saved traffic (null: leave the current one). */
@@ -47,7 +54,11 @@ export function restoreCars(data) {
   waiting = data.cars.filter(ok);
   waiting.sort((a, b) => !!b.kept - !!a.kept); // (the hearted first, so they're always on the roads)
   savedNumbers = data.numbers && typeof data.numbers === 'object' ? { ...data.numbers } : {};
-  waiting.forEach(c => {
+  wrecks.clear();
+  (Array.isArray(data.wrecks) ? data.wrecks : []).forEach(w => {
+    if (ok(w) && typeof w.design === 'string' && Number.isInteger(w.number) && Number.isFinite(w.at)) { const { at, ...entry } = w; wrecks.set(carKeyOf(w.design, w.number), { entry, at }); }
+  });
+  [...waiting, ...[...wrecks.values()].map(w => w.entry)].forEach(c => {
     if (!c.kept || c.design == null || !Number.isInteger(c.number)) return;
     if (c.kept.type) pinCarType(c.design, c.number, c.kept.type);
     if (c.kept.plate) pinnedPlates.set(c.design + '#' + c.number, c.kept.plate);
@@ -58,13 +69,38 @@ export function restoreCars(data) {
 export const takeCarReset = () => { const r = reset; reset = false; return r; };
 
 /** Give a new car the next saved car's design, number and paint, if there is one. */
-export function keptCar(car) {
-  const c = waiting.shift();
+export const keptCar = car => wearEntry(car, waiting.shift());
+function wearEntry(car, c) {
   if (!c) return car;
   if (Array.isArray(c.paint) && c.paint.length === 3 && c.paint.every(Number.isFinite)) car.paint = c.paint;
   if (Number.isFinite(c.width)) car.width = c.width;
   if (Number.isFinite(c.height)) car.height = c.height;
   car.keptDesign = c.design; car.keptNumber = c.number; car.keptPin = c.kept;
+  return car;
+}
+/** A car destroyed: kept as a wreck if it's hearted, to come back RESPAWN_AFTER on. */
+export function carWrecked(car) {
+  const key = carKey(car);
+  if (typeof key === 'string' && isFavorite(key)) wrecks.set(key, { entry: entryOf(car), at: Date.now() });
+}
+/** Ms till a hearted wreck can come back (0: now), or null if it isn't one. */
+export function wreckWait(design, number) {
+  const w = wrecks.get(carKeyOf(design, number));
+  return w ? Math.max(0, w.at + RESPAWN_AFTER - Date.now()) : null;
+}
+/** Bring a hearted wreck back, once it may, somewhere away from the camera (see spawnCar), in place of a car that isn't
+ * followed, driven or hearted (so the traffic's count holds): the car, or null. */
+export function respawnWreck(design, number, followed, driven) {
+  const key = carKeyOf(design, number), w = wrecks.get(key);
+  if (!w || wreckWait(design, number) > 0 || !S.trafficNav || !S.peopleEnabled) return null;
+  const car = wearEntry(newCar(), w.entry);
+  if (carMeshes.length) giveDesign(car, 0);
+  spawnCar(car);
+  if (car.li < 0) return null; // (nowhere to put it)
+  const j = cars.findIndex((c, k) => k !== followed && c !== driven && !isFavorite(carKey(c)));
+  if (j >= 0) { benchCars([cars[j]]); cars[j] = car; } else cars.push(car);
+  wrecks.delete(key);
+  App.crowdChanged?.();
   return car;
 }
 /** Cars thinned off the roads: back to the front of the queue, to come back first. */

@@ -79,8 +79,9 @@ function render() {
   }
   favorites.forEach(fav => {
     const row = document.createElement('button');
-    row.className = 'fav-row' + (fav.gone ? ' fav-gone' : '');
-    row.title = fav.gone ? 'Not to be found any more' : 'Follow';
+    const note = fav.note?.(); // (a hearted wreck's wait: see life/car-card.js)
+    row.className = 'fav-row' + (fav.gone || note ? ' fav-gone' : '');
+    row.title = note ?? (fav.gone ? 'Not to be found any more' : 'Follow');
     const img = document.createElement('img');
     img.className = 'fav-thumb';
     img.alt = '';
@@ -92,7 +93,7 @@ function render() {
     name.textContent = fav.name;
     const kind = document.createElement('span');
     kind.className = 'fav-kind';
-    kind.textContent = fav.gone ? fav.kindLabel + ' · gone' : fav.kindLabel;
+    kind.textContent = note ? fav.kindLabel + ' · ' + note : fav.gone ? fav.kindLabel + ' · gone' : fav.kindLabel;
     text.append(name, kind);
     row.append(img, text);
     row.addEventListener('click', () => followFavorite(fav));
@@ -110,6 +111,7 @@ function followFavorite(fav) {
 }
 
 function setOpen(open) {
+  if (open) render(); // (so waits shown are up to date)
   panel.hidden = !open;
   if (open && getComputedStyle(panel).position === 'fixed') { // (win3 strip: hung under the button by hand)
     const box = button.getBoundingClientRect();

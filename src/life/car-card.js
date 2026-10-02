@@ -7,7 +7,9 @@ import { garbles, garbled, garbledEntry, cased } from '../ui/garble.js';
 import { hashNameToNumber } from '../core/math.js';
 import { showCarDetails, hideCarDetails } from './car-details.js';
 import { reviveFavoritesAs } from '../ui/favorites.js';
-import { carKey, carKeyOf, carNamed } from './traffic/carKeep.js';
+import { carKey, carKeyOf, carNamed, respawnWreck, wreckWait } from './traffic/carKeep.js';
+import { followedCar } from './traffic/follow.js';
+import { drivenCar } from './traffic/driving.js';
 import { carMeshes } from './traffic/models.js';
 
 // ============================================================ car card
@@ -45,10 +47,18 @@ function showCarCard(i, info, car) {
   showCarDetails(car, card.el);
   showBoost();
 }
-// A car's favorite goes by its design and number (see traffic/carKeep.js), so it's found again after a reload.
+// A car's favorite goes by its design and number (see traffic/carKeep.js), so it's found again after a reload. Destroyed,
+// it's a wreck for an hour, then clicking it brings it back away from the camera and follows it (respawnWreck).
 function carFavorite(design, number) {
   return { key: carKeyOf(design, number), kind: 'Car', saved: { design, number },
-    follow: () => { const car = carNamed(design, number); return !!car && App.followCar(car) !== false; } };
+    follow: () => {
+      const car = carNamed(design, number) ?? respawnWreck(design, number, followedCar, drivenCar);
+      return !!car && App.followCar(car) !== false;
+    },
+    note: () => {
+      const wait = carNamed(design, number) ? null : wreckWait(design, number);
+      return wait == null ? null : wait > 0 ? `wrecked · back in ${Math.ceil(wait/60000)} min` : 'wrecked · click to respawn';
+    } };
 }
 reviveFavoritesAs('Car', saved => typeof saved.design === 'string' && Number.isInteger(saved.number) ? carFavorite(saved.design, saved.number) : null);
 function hideCarCard() {
