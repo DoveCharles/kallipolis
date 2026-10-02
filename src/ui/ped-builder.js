@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { App, S } from '../core/shared.js';
+import { setImgIcon } from './pixel-icons.js';
 import { scene, renderer, headshotLight } from '../core/scene.js';
 import { controls } from '../core/camera-controls.js';
 import { HEADSHOT_LAYER, PEOPLE_MAX, personModel, modelScale, addPerson, people } from '../life/people/people.js';
@@ -228,7 +229,7 @@ function close() {
 }
 
 const button = document.getElementById('btn-ped-builder');
-const setIcon = open => { const img = button?.querySelector('img'); if (img) img.src = `assets/icons/ped-builder${open ? '-open' : ''}.png`; button?.classList.toggle('on', open); };
+const setIcon = open => { setImgIcon(button?.querySelector('img'), open ? 'ped-builder-open' : 'ped-builder'); button?.classList.toggle('on', open); };
 
 /** Open the Ped Builder. @returns {void} */
 export function openPedBuilder() {

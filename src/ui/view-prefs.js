@@ -17,9 +17,11 @@
 // - Options > Speech > Hearing distance (S.hearDistance, 40): how far off talk is heard (see audio/voices.js).
 // - Options > Speech > Babble only as fallback (S.babbleFallbackOnly, off): people say real lines whenever one can be
 //   had, babbling only when none can (see linePause in audio/dictionary.js).
+// - Options > Display > Colorful Icons (off): ui/pixel-icons.js setColorfulIcons.
 // - Options > Speech > Bubble distance (S.bubbleDistance, 35) and Babble bubbles (S.babbleBubbles, off): see ui/speech-bubbles.js.
 import { S, App } from '../core/shared.js';
 import { whenLoaded } from './loading.js';
+import { setColorfulIcons } from './pixel-icons.js';
 
 const EDIT_HINTS_KEY = 'splinetopia.editHints', GENERAL_HINTS_KEY = 'splinetopia.generalHints';
 const START_MODE_KEY = 'splinetopia.startMode', LAST_MODE_KEY = 'splinetopia.lastMode', OLD_START_EDIT_KEY = 'splinetopia.startInEdit';
@@ -27,7 +29,7 @@ const ENCOURAGE_TV_KEY = 'splinetopia.encourageTV', DIALOGUE_CHOICES_KEY = 'spli
 const CHAT_SPEED_KEY = 'splinetopia.chatSpeed', BUBBLE_DISTANCE_KEY = 'splinetopia.bubbleDistance';
 const HEAR_DISTANCE_KEY = 'splinetopia.hearDistance', FREE_ROOM_CAMERA_KEY = 'splinetopia.freeRoomCamera';
 const BABBLE_BUBBLES_KEY = 'splinetopia.babbleBubbles', BABBLE_FALLBACK_KEY = 'splinetopia.babbleFallbackOnly';
-const DITHER_SEE_THROUGH_KEY = 'splinetopia.ditherSeeThrough';
+const DITHER_SEE_THROUGH_KEY = 'splinetopia.ditherSeeThrough', COLORFUL_ICONS_KEY = 'splinetopia.colorfulIcons';
 const body = document.body;
 const startModeSelect = document.getElementById('s-startmode');
 
@@ -79,6 +81,11 @@ lookCardToggle.addEventListener('click', () => {
   lookCardToggle.classList.toggle('on', S.lookCard);
   remember(LOOK_CARD_KEY, S.lookCard);
 });
+let colorfulIcons = recall(COLORFUL_ICONS_KEY, false);
+const colorfulIconsToggle = document.getElementById('s-colorfulicons');
+const showColorfulIcons = () => { colorfulIconsToggle.classList.toggle('on', colorfulIcons); setColorfulIcons(colorfulIcons); };
+showColorfulIcons();
+colorfulIconsToggle.addEventListener('click', () => { colorfulIcons = !colorfulIcons; remember(COLORFUL_ICONS_KEY, colorfulIcons); showColorfulIcons(); });
 S.freeRoomCamera = recall(FREE_ROOM_CAMERA_KEY, true);
 const freeRoomCameraToggle = document.getElementById('s-freeroomcamera');
 freeRoomCameraToggle.classList.toggle('on', S.freeRoomCamera);

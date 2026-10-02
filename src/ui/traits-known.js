@@ -3,6 +3,7 @@ import { App } from '../core/shared.js';
 import { onProfilesLoaded, peopleListsLoaded, peopleTraitEntries, profileOf, sampleCardText } from '../life/profiles.js';
 import { toUi } from './ui-scale.js';
 import { openWindow } from './w3-window.js';
+import { setImgIcon } from './pixel-icons.js';
 import { mulberry32 } from '../core/math.js';
 import { getProgress, setProgress, onProgress } from '../project/progress.js';
 
@@ -175,7 +176,7 @@ function sayAt(text, e) {
   el.addEventListener('animationend', () => el.remove());
 }
 /** Open the list of identified traits. @returns {void} */
-const identifyIcon = on => { const img = document.querySelector('#btn-identify img'); if (img) img.src = `assets/icons/identify${on ? '-on' : ''}.png`; };
+const identifyIcon = on => setImgIcon(document.querySelector('#btn-identify img'), on ? 'identify-on' : 'identify');
 export function openTraitsKnown() {
   openWindow({ id: 'traits-known', title: 'Identified Traits', width: 580, resizable: true, noOk: true,
     fill: body => {

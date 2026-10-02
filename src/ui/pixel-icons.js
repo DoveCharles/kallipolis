@@ -11,6 +11,27 @@ const icons = new Map(); // svg -> { layers: what's shown, name: its bitmap for 
 const bitmaps = new Map(); // name -> Promise of { current, own } data URLs (either null if there's nothing there)
 let masks = 0;
 
+// Options > Display > Colorful Icons: the coloured bitmap in place of the plain one (the plain one if it's missing)
+const COLORFUL = { 'grid-toggle': 'grid-toggle-on', favorites: 'favorites-on', 'ped-view': 'ped-view-on', world: 'world-open',
+  maps: 'maps-open', edit: 'edit-open', 'ped-builder': 'ped-builder-open', quests: 'quests-open', identify: 'identify-on',
+  undo: 'undo-c', redo: 'redo-c', 'sound-on': 'sound-on-c', 'sound-off': 'sound-off-c',
+  'projection-perspective': 'projection-perspective-c', 'projection-orthographic': 'projection-orthographic-c', 'status/gift': 'daily-gift-c' };
+let colorful = false;
+const colored = name => colorful && COLORFUL[name] || name;
+const iconSrc = name => `assets/icons/${colored(name)}.png`;
+// an <img> icon (data-icon its plain name) shown as `name`
+export function setImgIcon(img, name) {
+  if (!img) return;
+  img.dataset.icon = name;
+  img.src = iconSrc(name);
+  img.onerror = () => { img.onerror = null; img.src = `assets/icons/${name}.png`; };
+}
+export function setColorfulIcons(on) {
+  colorful = on;
+  icons.forEach((icon, svg) => pixelate(svg));
+  document.querySelectorAll('img[data-icon]').forEach(img => setImgIcon(img, img.dataset.icon));
+}
+
 // which bitmap the icon shows, now
 function which(svg, icon) {
   if (icon.name) return icon.name;
@@ -73,11 +94,13 @@ function prepare(svg) {
 }
 
 async function pixelate(svg) {
-  const icon = prepare(svg), name = which(svg, icon);
-  if (!name) return; // (not one of ours: left as drawn)
-  const drawing = ++icon.drawn;
+  const icon = prepare(svg), plain = which(svg, icon);
+  if (!plain) return; // (not one of ours: left as drawn)
+  const name = colored(plain), drawing = ++icon.drawn;
   let bitmap;
-  try { bitmap = await load(name); } catch (err) { console.warn(`pixel icon ${name} didn't load`, err); return; }
+  try { bitmap = await load(name); } catch (err) {
+    try { bitmap = await load(plain); } catch (err) { console.warn(`pixel icon ${plain} didn't load`, err); return; }
+  }
   if (drawing !== icon.drawn) return; // (drawn again since)
   const image = url => `<image href="${url}" width="${W}" height="${H}" style="image-rendering:pixelated"/>`;
   let layers = bitmap.own ? image(bitmap.own) : '';
