@@ -541,7 +541,7 @@ So, fuck marry kill?
 >>>>>>>>>>> [most#5]... Oh, [most#5]... {likes#5 = 3, score = 2}
 >>>>>>>>>>> Yeah, this was silly. I shouldn't have said anything. {age, aggression, mood = -1}
 >>>>>>>>>> Your picks revealed something deeply concerning about your psyche, about who you truly are as a person. Your picks scared me. {talk.score < -1}
->>>>>>>>>>> Oh? Well fuck marry kill you, man. {score = -2}
+>>>>>>>>>>> Oh? Well fuck marry kill you too, man. {score = -2}
 
 
 Do you ever take a leak, and you think you're done, and then, whoop! Pee right over the toilet seat and over the floor? {man > 0}

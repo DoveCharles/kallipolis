@@ -198,4 +198,8 @@ export function openTraitsKnown() {
     onClose: () => { win = null; clearInterval(varyTimer); varyTimer = null; varying = []; } });
   if (!varyTimer) varyTimer = setInterval(() => { varyStep++; varying.forEach(v => { const t = fillingsOf(v.key, v.entry, v.side); v.inner.textContent = t[varyStep % t.length]; }); }, VARY_MS);
 }
-document.getElementById('btn-identify')?.addEventListener('click', openTraitsKnown);
+// (the button opens it, and closes it again if it's open)
+document.getElementById('btn-identify')?.addEventListener('click', () => {
+  const open = document.getElementById('traits-known');
+  if (open) open.close(); else openTraitsKnown();
+});
