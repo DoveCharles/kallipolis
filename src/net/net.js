@@ -2,7 +2,8 @@
 // into the host's city. Peer to peer over WebRTC (PeerJS and its free broker); the host's game is the server. The guest
 // thinks nothing for itself: the crowd and traffic are drawn as the host last sent them (peopleMirror.js, trafficMirror.js),
 // DELAY behind, blended between snapshots. A guest possessing someone sends its keys and view (INPUT_TICK); the host walks
-// them (possessRemote in peopleTracking.js). Everyone's Name shows over whoever they're possessing (nametags.js). A ?join page is never autosaved (project/autosave.js), so leaving — a reload
+// them (possessRemote in peopleTracking.js). The host's edits go to guests as undo snapshots (history.js), put in as undo
+// does (only the zones that changed rebuilt). Everyone's Name shows over whoever they're possessing (nametags.js). A ?join page is never autosaved (project/autosave.js), so leaving — a reload
 // without it — puts the guest's own city back.
 import { S, App } from '../core/shared.js';
 import { controls } from '../core/camera-controls.js';
@@ -23,6 +24,7 @@ const JOIN = new URLSearchParams(location.search).get('join');
 let peer = null, role = null, timer = null, myName = '', tags = []; // (tags: [slot, name] — guest: as the host last sent)
 const links = new Set(); // (host: guests that have loaded the city)
 const snaps = [];        // (guest: { at, count, people, cars }, oldest first)
+let loaded = null, shown = null, pending = null, applying = false; // (guest: the city's first load; the host's snapshot it's showing; the next to show)
 
 const home = () => { location.href = location.pathname; };
 const say = (title, html) => App.messageBox?.(title, html) ?? Promise.resolve(alert(html.replace(/<[^>]+>/g, '')));
@@ -88,6 +90,22 @@ function letGo(conn) {
   if (p?.remote === conn.ctl) releaseRemote(p);
   conn.slot = -1;
 }
+// an edit: every guest's sent the city as it is now (see commitHistory in history.js)
+function netEdit(snap) {
+  if (role === 'host') for (const conn of links) conn.send({ t: 'edit', snap });
+}
+async function applyEdits() {
+  applying = true;
+  await loaded;
+  while (pending) {
+    const data = JSON.parse(pending);
+    pending = null;
+    await loadProjectFromData(data, { keepMaps: true, prev: shown });
+    shown = data;
+  }
+  App.resetHistory?.();
+  applying = false;
+}
 // a guest's keys and view, for whoever they're possessing (m.i: -1 when they let go)
 function steer(conn, m) {
   const ctl = { forward: +m.forward || 0, right: +m.right || 0, run: !!m.run, brake: !!m.brake, yaw: +m.yaw || 0, pitch: +m.pitch || 0 };
@@ -139,9 +157,12 @@ async function join(code) {
   const conn = peer.connect(PREFIX + code.toUpperCase(), { reliable: true });
   conn.on('data', async m => {
     if (m?.t === 'project') {
+      let done; loaded = new Promise(r => { done = r; });
       await modelsLoaded;
       await loadProjectFromData(m.project);
       App.resetHistory?.();
+      shown = JSON.parse(App.historyNow());
+      done();
       document.querySelector('#mode-toolbar .tool-btn[data-mode="move"]')?.click();
       if (Array.isArray(m.at)) controls.goalTarget.fromArray(m.at);
       conn.send({ t: 'ready', name: myName });
@@ -158,7 +179,8 @@ async function join(code) {
       if (snaps.length > KEEP) snaps.shift();
       S.timeOfDay = m.time;
       tags = Array.isArray(m.tags) ? m.tags : [];
-    } else if (m?.t === 'out') App.unpossessPerson?.(); // (the host wouldn't, or no longer does)
+    } else if (m?.t === 'edit') { pending = m.snap; if (!applying) applyEdits(); }
+    else if (m?.t === 'out') App.unpossessPerson?.(); // (the host wouldn't, or no longer does)
   });
   conn.on('close', async () => { await say('Join Server', '<p>The host has closed the server.</p>'); home(); });
 }
@@ -186,5 +208,5 @@ function leaveServer() {
 }
 
 showTags(() => tags);
-Object.assign(App, { hostServer, joinServer: joinDialog, leaveServer, netRole: () => role ?? (JOIN ? 'guest' : null), netPair });
+Object.assign(App, { netEdit, hostServer, joinServer: joinDialog, leaveServer, netRole: () => role ?? (JOIN ? 'guest' : null), netPair });
 if (JOIN) join(JOIN);
