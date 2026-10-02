@@ -30,7 +30,8 @@ scene.fog = new THREE.Fog(bgColor, 600, 2800);
 // one, and an orthographic one that flattens the city out the way a plan or an elevation does. Everything else reads
 // `camera` at the moment it draws or picks, so the live export below is enough to swap it under them — nothing keeps a
 // camera of its own.
-const perspectiveCamera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.5, 3000);
+export const CAMERA_NEAR = 0.5; // the outdoor view's near plane (rooms, carriages and eyes put back to it)
+const perspectiveCamera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, CAMERA_NEAR, 3000);
 const orthographicCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.5, 3000);
 export let camera = perspectiveCamera;
 export function isOrthographic() { return camera === orthographicCamera; }
