@@ -3,22 +3,13 @@
 # picked at random. {name} is who it happened to, {by} who did it (lines with {by} are only used when someone did),
 # {city} the world's name (World window).
 
-[killedbycar]
-{name} killed by car
-Pedestrian {name} dies in road horror
-{city} roads claim {name}
-
-[crashedinto]
-{name} dies in crash
-Fatal crash: {name} named as victim
-
-[fell]
-{name} dies in fall
-Tragic plunge for {name}
-
-[punchedfence]
-{name} dies fighting a fence
-Fence 1, {name} 0
+# Deaths go in the Obituaries column; only beatentodeath, exploded, smited and orbsmited also make a headline.
+# Three or more road deaths in one edition make a [roads] headline: {n} how many
+[roads]
+{n} killed on {city} roads
+Carnage on {city} streets: {n} dead
+{n} pedestrians mown down as drivers run riot
+Road toll hits {n}; council "looking into it"
 
 [beatentodeath]
 {name} beaten to death
@@ -32,10 +23,6 @@ Act of God: {name} smitten
 [orbsmited]
 {name} judged by the Seraphorb
 Orb strikes again: {name} dead
-
-[drowned]
-{name} drowns
-Body of {name} pulled from {city} waters
 
 [exploded]
 {name} explodes

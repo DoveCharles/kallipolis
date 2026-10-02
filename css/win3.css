@@ -610,3 +610,4 @@ body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, .t
 .w3-paper-strip button:disabled { opacity:.25; cursor:default; }
 .w3-paper-stop { border:2px solid var(--ink); padding:0 8px 4px; margin-top:10px; }
 .w3-paper-stop .w3-paper-other { margin-top:0; border-top:0; }
+.w3-paper-story.obit { font-weight:400; font-size:13px; border-bottom:0; padding:1px 0; margin:0; }
