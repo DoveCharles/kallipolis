@@ -32,3 +32,4 @@ You can ride the train as a ped!
 Walkways are needed for peds to access an area.
 Plazas, parks, and beaches make for nice connections between walkways.
 When possessing a ped, press **E** to enter a building.
+**Cmd-click** to add a new node to an existing path/zone. **Alt-click** deletes a node.
