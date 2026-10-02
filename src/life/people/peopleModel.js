@@ -69,7 +69,9 @@ const WALK_CYCLE_LENGTH = 4;
  * whose right hand is full). `hold` names a snack clip whose right arm this one's is swapped for, carried along by the
  * body as it moves (WaveLeftBeer: see snackClips). */
 /** What can be held, for the snack clips' names (see SNACK_HOLD). */
-const SNACK_ITEMS = ['Hotdog', 'Skewer', 'Coffee', 'Beer', 'Cig'];
+const SNACK_ITEMS = ['Hotdog', 'Skewer', 'Coffee', 'Beer', 'Cig', 'Umbrella'];
+/** Held up, never raised to the mouth: no Bite clips. */
+const NO_BITE = ['Umbrella'];
 const PERSON_CLIPS = [
   { name: 'Walk', loop: true }, { name: 'Idle', loop: true }, { name: 'Idle2' }, { name: 'Idle3' }, { name: 'Wave' },
   { name: 'WaveLeft', mirror: 'Wave' }, { name: 'Idle2Left', mirror: 'Idle2' },
@@ -427,6 +429,11 @@ export const SNACK_HOLD = {
     carry: { at: [-0.1, -0.265, 0.32], rot: [-3.142, 1.471, -3.142], elbow: [-0.35, -0.96, -0.2] },
     bite: { at: [-0.06, 0.07, 0.13], reach: 0.095, rot: [0.243, 1.434, -1.276], elbow: [-0.12, -0.73, -0.2], swing: 0.27, elbowRot: [0.06, 0, 0] },
   },
+  // (up over the head in the rain: see UMBRELLA in peopleHolding.js; no bite, so the same twice)
+  Umbrella: {
+    carry: { at: [-0.1, -0.265, 0.32], rot: [-3.142, 1.471, -3.142], elbow: [-0.35, -0.96, -0.2] },
+    bite: { at: [-0.1, -0.265, 0.32], rot: [-3.142, 1.471, -3.142], elbow: [-0.35, -0.96, -0.2] },
+  },
   Cig: {
     carry: { at: [-0.14, -0.325, 0.275], rot: [-0.02, 1.191, 0], elbowAt: [-0.086, -0.23, -0.04], elbowTurn: [-1.18, 1.81, 2.14] },
     bite: { at: [-0.03, 0.045, 0.07], reach: 0.09, rot: [0, 1.571, 0], elbowAt: [-0.132, -0.118, 0.19], elbowTurn: [0.81, -0.57, 1.24] },
@@ -435,7 +442,7 @@ export const SNACK_HOLD = {
 export const SNACK_BEND = new THREE.Vector3(-0.45, -1, -0.2);
 /** The snack clips, for PERSON_CLIPS: WalkHotdog, WalkHotdogBite, IdleCoffee, Sit1CoffeeBite… (one for each of SNACK_HOLD, which isn't set yet when PERSON_CLIPS is) */
 function snackClips() {
-  return ['Walk', 'Idle', 'Sit1'].flatMap(base => SNACK_ITEMS.flatMap(item => [false, true].map(biting => ({
+  return ['Walk', 'Idle', 'Sit1'].flatMap(base => SNACK_ITEMS.flatMap(item => (NO_BITE.includes(item) ? [false] : [false, true]).map(biting => ({
     name: base + item + (biting ? 'Bite' : ''), over: base, base, loop: true, pose: base === 'Sit1', spreadR: biting ? 0 : 1,
     repose: (frame, frames, rig) => snackPose(rig, item, biting) }))));
 }

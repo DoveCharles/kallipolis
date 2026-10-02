@@ -80,6 +80,12 @@ export const ITEMS = {
   slice: { parts: [
     { shape: 'slice', size: [0.173, 0.178, 0.17], at: [0.064, 0.011, 0.099], turn: [0, -1.2, -1.48], eaten: true },
   ] },
+  // (up over their head in the rain, its canopy their own colour: see UMBRELLA)
+  umbrella: { parts: [
+    { shape: 'rod', size: [0.018, 0.95, 0.018], at: [0, 0.4, 0], color: 0x2a2a2a },
+    { shape: 'canopy', size: [1, 0.28, 1], at: [0, 0.78, 0], tint: true },
+    { shape: 'rod', size: [0.012, 0.08, 0.012], at: [0, 0.95, 0], color: 0x2a2a2a },
+  ], at: [0, 0, 0], turn: [0, 0, 0], size: 1 },
 };
 
 // A dinner: where the plate goes on the table in front of someone sitting down to eat, in the model's own units (the
@@ -99,6 +105,8 @@ const SHAPES = {
   box: new THREE.BoxGeometry(1, 1, 1),
   sphere: new THREE.IcosahedronGeometry(0.5, 1),
   cylinder: new THREE.CylinderGeometry(0.5, 0.5, 1, 12),
+  rod: new THREE.CylinderGeometry(0.5, 0.5, 1, 6),
+  canopy: new THREE.ConeGeometry(0.5, 1, 8, 1, true),
 };
 // The shapes that are models: a node of Holdables.glb each, turned so that it's held the way the items above are (the hot
 // dog lies along Z in Blender, its bun open to +Y: stood on end here, open away from the palm), centred, and scaled so
@@ -137,7 +145,7 @@ const glowOwnColor = shader => {
     .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= diffuseColor.rgb;');
 };
 const meshes = Object.fromEntries(Object.entries(SHAPES).flatMap(([shape, geometry]) => ['lit', 'plain'].map(light => {
-  const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+  const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, side: shape === 'canopy' ? THREE.DoubleSide : THREE.FrontSide });
   if (light === 'lit') { material.emissive.setScalar(1); material.emissiveIntensity = HELD_GLOW; material.onBeforeCompile = glowOwnColor; }
   const mesh = new THREE.InstancedMesh(geometry, material, HELD_MAX);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -368,6 +376,7 @@ const SNACKS = {
   cig: { clip: 'Cig', mouthfuls: 8, up: 1.6, gap: [4, 9] }, // (a drag each: see SMOKING)
   slice: { clip: 'Hotdog', mouthfuls: 3, up: 1.1, gap: [2, 4], sound: 'bite' }, // (a pizza's: see feedPizza)
   skewer: { clip: 'Skewer', mouthfuls: 3, up: 1.1, gap: [2, 4], sound: 'bite' }, // (souvlaki's)
+  umbrella: { clip: 'Umbrella', mouthfuls: Infinity, up: 0, gap: [Infinity, Infinity] }, // (never raised: see UMBRELLA)
 };
 /** What someone's snack adds to a clip's name, for the version of it with that in hand ('Beer': WalkBeer, WaveLeftBeer…), or ''. */
 export const snackClipName = p => SNACKS[p.snack?.item]?.clip ?? '';
@@ -383,7 +392,7 @@ const snackGap = kind => kind.gap[0] + peopleRng()*(kind.gap[1] - kind.gap[0]);
 export function giveSnack(p, item) {
   const kind = SNACKS[item];
   if (!kind) return;
-  if (p.snack?.mouthfuls > 0 && p.holding?.includes(p.snack.held)) dropToFloor(p, p.snack.held); // (one not finished falls)
+  if (p.snack?.mouthfuls > 0 && p.snack.item !== 'umbrella' && p.holding?.includes(p.snack.held)) dropToFloor(p, p.snack.held); // (one not finished falls; an umbrella's put away)
   dropSnack(p);
   const held = hold(p, item, { hand: 'R' });
   if (item === 'beer') held.stout = p.likesStout ??= peopleRng() < STOUT_SHARE;
@@ -409,15 +418,18 @@ export function dropSnack(p) {
  */
 export function snackClip(p, clip, dt) {
   const snack = p.snack;
-  if (!snack) { lightUp(p, clip, dt); return clip; }
+  if (!snack) { if (!openUmbrella(p, clip)) lightUp(p, clip, dt); return clip; }
+  const umbrella = snack.item === 'umbrella';
   // knocked down, dead or gone indoors (but for into the room you're in, as a pint in a pub is: see aboutTheRoom): it's gone
-  if (p.punched || p.mode === 'dead' || (p.mode === 'indoors' && !p.inRoom) || !p.holding?.includes(snack.held)) {
-    if ((p.punched || p.mode === 'dead') && snack.mouthfuls > 0 && p.holding?.includes(snack.held)) dropToFloor(p, snack.held); // (knocked from their hand)
+  if (p.punched || p.mode === 'dead' || (p.mode === 'indoors' && (!p.inRoom || umbrella)) || !p.holding?.includes(snack.held) || (umbrella && !raining())) {
+    if ((p.punched || p.mode === 'dead') && !umbrella && snack.mouthfuls > 0 && p.holding?.includes(snack.held)) dropToFloor(p, snack.held); // (knocked from their hand)
     dropSnack(p);
     return clip;
   }
   const kind = SNACKS[snack.item], clips = personModel.clips;
   const carried = clips[clip.name + kind.clip], raised = clips[clip.name + kind.clip + 'Bite'];
+  if (umbrella && (!carried || carried.missing)) { dropSnack(p); return clip; } // (lying down or on the grass: folded till they're up)
+  if (umbrella) return carried;
   if (!carried || carried.missing || !raised) return clip; // (lying down or on the grass, it waits)
   if (snack.up > 0) {
     const was = snack.up;
@@ -439,6 +451,23 @@ export function snackClip(p, clip, dt) {
   } else if ((snack.next -= dt) <= 0) snack.up = kind.up;
   if (snack.item === 'cig') smoke(p, snack, kind, dt);
   return snack.up > 0 ? raised : carried;
+}
+
+// ============== UMBRELLA ==============
+// In the rain (past RAIN_AT) a share of people (UMBRELLA_SHARE) put an umbrella up whenever they're out with their hands
+// free, a snack that's never raised; a snack bought puts it away till it's finished. Anyone without one shelters
+// (shelteringFromRain in peopleActivities.js).
+const RAIN_AT = 0.15, UMBRELLA_SHARE = 0.5;
+const UMBRELLA_COLORS = [0x1c1c1c, 0x1c1c1c, 0x23345e, 0xa8242a, 0x2f6b3a, 0xe0b52a, 0x6a2c70, 0xd8d8d8];
+/** Whether it's raining hard enough to want cover. */
+export const raining = () => S.weatherRain > RAIN_AT;
+/** Whether someone carries an umbrella (p.umbrella: its colour, or 0). */
+export const hasUmbrella = p => !!(p.umbrella ??= peopleRng() < UMBRELLA_SHARE ? UMBRELLA_COLORS[Math.floor(peopleRng()*UMBRELLA_COLORS.length)] : 0);
+function openUmbrella(p, clip) {
+  if (!raining() || !hasUmbrella(p) || p.holding?.length || p.punched || p.mode === 'dead' || p.mode === 'indoors' || inRoom(p) || !personModel?.clips[clip.name + 'Umbrella']) return false;
+  giveSnack(p, 'umbrella');
+  p.snack.held.color.setHex(p.umbrella);
+  return true;
 }
 
 // ============== SMOKING ==============

@@ -11,13 +11,14 @@ import { CIG_FIRE, ITEMS, PLATE_AT, dropSnack, exhale, giveSnack, hold, letGo, u
 // held still (S.peopleFrozen) and one person stands in the first frame of IdleHotdog, IdleCoffeeBite… with the camera
 // on them, everyone else folded away (personModel.only); a hand slider bakes that one clip again (personModel.rebakeClip). Nothing is kept: the values to paste back
 // into the code are shown at the bottom.
-const KINDS = { hotdog: 'Hotdog', slice: 'Hotdog', skewer: 'Skewer', coffee: 'Coffee', beer: 'Beer', cig: 'Cig' };
+const KINDS = { hotdog: 'Hotdog', slice: 'Hotdog', skewer: 'Skewer', coffee: 'Coffee', beer: 'Beer', cig: 'Cig', umbrella: 'Umbrella' };
+const NO_BITE = ['umbrella']; // (no Bite clip; its sliders move the whole thing, ITEMS' own at/turn/size)
 // (held in the hand through Eating, not a snack: one loc/rot/size for all its parts, and Eating's four poses (EAT_POSES),
 // one at a time in EatingPaused, or the whole loop played)
 const TOOLS = { fork: 'Eating', chopsticks: 'Eating' };
 let item = 'cig', biting = false, pinned = null, minRadius = null, playing = false, shown = null;
 
-const clipName = () => TOOLS[item] ? (playing ? 'Eating' : 'EatingPaused') : 'Idle' + KINDS[item] + (biting ? 'Bite' : '');
+const clipName = () => TOOLS[item] ? (playing ? 'Eating' : 'EatingPaused') : 'Idle' + KINDS[item] + (biting && !NO_BITE.includes(item) ? 'Bite' : '');
 // what they're given: a snack, or a tool into the right hand
 function give() {
   for (const t of [...Object.keys(TOOLS), 'plate']) letGo(pinned, t);
@@ -94,15 +95,16 @@ function sliders() {
       ...xyz('loc', () => pose().elbowAt, -0.5, 0.5, 0.002),
       ...xyz('rot', () => pose().elbowTurn, -3.14, 3.14, 0.01)];
   }
-  const part = ITEMS[item].parts[0], hold = () => SNACK_HOLD[KINDS[item]][biting ? 'bite' : 'carry'];
+  const part = ITEMS[item].parts[0], hold = () => SNACK_HOLD[KINDS[item]][biting && !NO_BITE.includes(item) ? 'bite' : 'carry'];
   const vec = (label, get, i, min, max, step, then) => [label, () => get()[i], v => { get()[i] = v; then?.(); }, min, max, step];
   const rebake = () => personModel?.rebakeClip(clipName());
   const xyz = (label, get, min, max, step, then) => ['x', 'y', 'z'].map((a, i) => vec(label + ' ' + a, get, i, min, max, step, then));
+  const whole = NO_BITE.includes(item);
   return [
     ['Item'],
-    ...xyz('loc', () => part.at, -0.2, 0.2, 0.001),
-    ...xyz('rot', () => (part.turn ??= [0, 0, 0]), -3.14, 3.14, 0.01),
-    sizeSlider(part),
+    ...xyz('loc', () => whole ? tool.at : part.at, -0.2, 0.2, 0.001),
+    ...xyz('rot', () => whole ? tool.turn : (part.turn ??= [0, 0, 0]), -3.14, 3.14, 0.01),
+    whole ? ['size', () => tool.size, v => { tool.size = v; }, 0.1, 3, 0.01] : sizeSlider(part),
     [biting ? 'Hand.R (at the mouth)' : 'Hand.R'],
     ...xyz('loc', () => hold().at, -0.6, 0.6, 0.005, rebake),
     ...(biting ? [['reach', () => hold().reach, v => { hold().reach = v; rebake(); }, 0, 0.3, 0.005]] : []),
@@ -122,6 +124,7 @@ function values() {
     return `// ITEMS.${item} (peopleHolding.js)\nat: ${list(t.at)}, turn: ${list(t.turn)}, size: ${round(t.size)}\n// EAT_POSES (peopleModel.js)\n${EAT_POSES.map(pose).join('\n')}`;
   }
   const part = ITEMS[item].parts[0], hold = SNACK_HOLD[KINDS[item]], list = a => `[${a.map(round).join(', ')}]`;
+  if (NO_BITE.includes(item)) { const t = ITEMS[item], h = hold.carry; return `// ITEMS.${item} (peopleHolding.js)\nat: ${list(t.at)}, turn: ${list(t.turn)}, size: ${round(t.size)}\n// SNACK_HOLD.${KINDS[item]} (peopleModel.js)\ncarry: { at: ${list(h.at)}, rot: ${list(h.rot)}${h.elbowAt ? `, elbowAt: ${list(h.elbowAt)}` : ''}${h.elbowTurn ? `, elbowTurn: ${list(h.elbowTurn)}` : ''} },`; }
   const side = h => `{ at: ${list(h.at)}, ${h.reach != null ? `reach: ${round(h.reach)}, ` : ''}rot: ${list(h.rot)}${h.elbowAt ? `, elbowAt: ${list(h.elbowAt)}` : ''}${h.elbowTurn ? `, elbowTurn: ${list(h.elbowTurn)}` : ''} }`;
   return `// ITEMS.${item} (peopleHolding.js)\n{ shape: '${part.shape}', size: ${list(part.size)}, at: ${list(part.at)}${part.turn ? `, turn: ${list(part.turn)}` : ''}${part.eaten ? ', eaten: true' : ''} },\n`
     + `// SNACK_HOLD.${KINDS[item]} (peopleModel.js)\ncarry: ${side(hold.carry)},\nbite: ${side(hold.bite)},`
@@ -130,7 +133,7 @@ function values() {
 
 function fill(body) {
   body.innerHTML = `<div class="row"><label>Item</label><select id="hd-item">${[...Object.keys(KINDS), ...Object.keys(TOOLS)].map(k => `<option value="${k}"${k === item ? ' selected' : ''}>${k}</option>`).join('')}</select>
-    ${TOOLS[item] ? '' : `<label><input type="checkbox" id="hd-bite"${biting ? ' checked' : ''}> at the mouth</label>`}</div>
+    ${TOOLS[item] || NO_BITE.includes(item) ? '' : `<label><input type="checkbox" id="hd-bite"${biting ? ' checked' : ''}> at the mouth</label>`}</div>
     <div id="hd-sliders" style="max-height:45vh;overflow-y:auto"></div>
     <textarea id="hd-out" readonly rows="5" style="width:100%;box-sizing:border-box;font:11px monospace;margin-top:6px"></textarea>
     <button id="hd-copy">Copy</button>${TOOLS[item] ? ` <button id="hd-play">${playing ? 'Stop' : 'Play'}</button>` : ''}${item === 'cig' ? ' <button id="hd-smoke">Smoke</button>' : ''}${pinned ? '' : ' <span>No one to pose: turn people on first.</span>'}`;

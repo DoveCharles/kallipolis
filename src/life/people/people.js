@@ -36,7 +36,7 @@ import { registerHealthKind } from '../../core/health.js';
 import { relateFelt, relateSaw, pruneGone } from './peopleRelations.js';
 import { logLine, forgetLinesExcept } from './peopleSaid.js';
 import { CROSS_SPEED_MULT, ROADSAFETY_RADIUS, buildPeopleNav, joinWalkway, maybeCrossRoad, rebuildPeopleNavDebug, reseatPerson, spawnPerson, updateCrossing, walkAlong, walkwayPoint } from './peoplePathing.js';
-import { hidingFromSun, leaveGroup, outOfTime, vanishIndoors } from './peopleActivities.js';
+import { hidingFromSun, leaveGroup, outOfTime, shelteringFromRain, vanishIndoors } from './peopleActivities.js';
 import { PUNCH_CHASE_SPEED, WALK_PACE, awaited, besideLeader, setAwaited, endActivity, goChat, goLieDown, goRideTrain, goSit, knockOver, knockAgain, holdDown, landFall, meetOnWalkways, pickFights, showInhabitants, showPassengers, stationLinks, updateActivity, updateAttack, updateSwat, updateGroups, updateIndoors, updatePunched, updateTrainRider } from './peopleActivities.js';
 import { holdDrowned, inWater, turnInWater, updateWater, wouldWade, onWater } from './peopleWater.js';
 import { turnCrawling } from './peopleRoad.js';
@@ -494,7 +494,7 @@ const PERSON_LATER_FIELDS = Object.fromEntries([
   'blood', 'bloodBase', 'bloodFrom', 'bloodTimer', 'huntIn', 'roadWaryUntil', 'benched', 'bankHeld',
   // water, drink, smell
   'water', 'waterHere', 'swimming', 'floatDrop', 'floatPhase', 'floatBobPhase', 'floatWasWet', 'slopeDrop', 'waterSeenIn',
-  'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'smellCheck',
+  'pints', 'feltDrunk', 'swayAmp', 'swayDist', 'likesStout', 'holding', 'umbrella', 'smellCheck',
   // walked about by hand (peopleTracking.js)
   'footing', 'onRoad', 'shove', 'fall', 'fellOff', 'swat', 'touching', 'near', 'walkingSpeed', 'chatWith',
 ].map(key => [key, undefined]));
@@ -942,6 +942,10 @@ function hideFromSun(p) {
 }
 /** How much faster than fleeing a vampire runs for cover from the sun. */
 const SUN_RUN_BOOST = 1.5;
+/** How much faster someone caught in the rain without an umbrella walks (see shelteringFromRain). */
+const RAIN_HURRY = 1.35;
+/** Hangouts the rain doesn't reach. */
+const isUnderCover = area => area.kind === 'foodcourt';
 /**
  * Send someone in a hangout out of it: onto the walkway at one of its entrances — the nearest of a few, or, running from
  * `from`, whichever takes them furthest from it — as mode 'leaving'. Entrances reached over dry ground come first.
@@ -1381,6 +1385,7 @@ export function updatePeople(t) {
     if (p.traits.terrified && (p.mode === 'line' || p.mode === 'wander') && !p.fright && !p.punched && !inWater(p)) beginFleeing(p, { x: p.x - Math.sin(p.heading), z: p.z - Math.cos(p.heading) });
     if (!possessed && hidingFromSun(p)) hideFromSun(p);
     else if (p.sunRun) p.sunRun = false;
+    if (!possessed && p.mode === 'wander' && !p.punched && !p.fright && !p.attack && !inWater(p) && shelteringFromRain(p) && !isUnderCover(peopleNav.areas[p.area])) { if (p.act) endActivity(p); leaveArea(p, peopleNav.areas[p.area]); }
     //attempting to give additional reactions to npc death depending on how evil they are
     if (p.stun) updateStun(p, dt); //Should freeze bystanders and turn them to face, currently interrupts their actions without freezing or turning
     if (p.please) updatePlease(p, dt); // (the same hold as stun, read as delight: see pleased below)
@@ -1400,7 +1405,7 @@ export function updatePeople(t) {
     // updatePeople freezes them on — read as delight rather than shock, below.
     const pleased = !!p.please && (p.please.stage === 'look' || p.please.stage === 'held');
     let speed = PERSON_WALK_SPEED*S.peopleSpeed*p.stride*(p.traits.speed + bloodSpeed(p))*bloodlustSpeed(p)*(fleeing || p.traits.terrified ? FLEE_SPEED*p.traits.boost : 1) // (terrified: always at a run)
-      *(fleeing && p.sunRun ? SUN_RUN_BOOST : 1);
+      *(fleeing && p.sunRun ? SUN_RUN_BOOST : 1)*(!fleeing && shelteringFromRain(p) ? RAIN_HURRY : 1);
     let goal = null;
     //Updating hair colour depending on age
     //set default hair colour once

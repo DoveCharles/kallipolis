@@ -16,7 +16,7 @@ import { exclaim } from '../../audio/voices.js';
 import { PUNCH_MIN_PUSH, followPerson, followPersonInside, personHeight, stopFollowingPerson } from './peopleTracking.js';
 import { drawCurtain, openRoomDoor, roomBeyondDoor, roomBuilding, roomCubicles, roomDoorway, roomKind, roomHolds, roomOutsideDoor, roomRoute, roomSeats, roomSpot, roomTill, roomVisit, someoneHome, sushiGrab, sushiOrder, sushiPut, watchingTV } from '../../buildings/interior.js';
 import { canAfford, pay, spendWill, tooPoor } from '../shop-money.js';
-import { TRAYS, clearMeal, feedPizza, giveSnack, hold, holding, letGo, mealFinished, menuOf, plateSpot, serveMeal } from './peopleHolding.js';
+import { TRAYS, clearMeal, feedPizza, giveSnack, hasUmbrella, hold, holding, letGo, mealFinished, menuOf, plateSpot, raining, serveMeal } from './peopleHolding.js';
 import { BARBOT, barbotFree } from '../../buildings/barbot.js';
 import { awaitWaiter, leavePlate, queueForTable, runWaiter, servedMeal, waitForTable, waiterOn } from './peopleWaiter.js';
 import { summonSalonBot, salonBotSnipping, salonBotNoise, seatedHead } from '../../buildings/salonbot.js';
@@ -1710,6 +1710,13 @@ const VAMPIRE_IN_AT = 5.5, VAMPIRE_OUT_AT = 18.5;
  * @returns {boolean} whether they must be in
  */
 export const hidingFromSun = p => !!p.traits.vampire && S.timeOfDay >= VAMPIRE_IN_AT && S.timeOfDay < VAMPIRE_OUT_AT;
+/**
+ * Whether someone's out of the rain if they can be: without an umbrella (see UMBRELLA in peopleHolding.js) they leave
+ * open hangouts (people.js), hurry, go in at the first door they pass (walkAlong in peoplePathing.js) and stay in till it stops.
+ * @param {Person} p - the person
+ * @returns {boolean} whether they want cover
+ */
+export const shelteringFromRain = p => raining() && !hasUmbrella(p);
 /** When a vampire still out gives up looking for a door and vanishes into the nearest building (vanishIndoors). */
 const VAMPIRE_POOF_AT = 6.5;
 export const outOfTime = p => hidingFromSun(p) && S.timeOfDay >= VAMPIRE_POOF_AT;
@@ -1954,7 +1961,7 @@ export function updateIndoors(p, i, dt) {
     // (time's up, but not partway through a video: they sit it out, get up, and only then go)
     const arriving = visit.justIn;
     visit.justIn = false;
-    if (visit.hoursLeft > 0 || p.inRoom?.watched != null || hidingFromSun(p) || beingServed(p, visit, dt)) return aboutTheRoom(p, visit, dt, arriving);
+    if (visit.hoursLeft > 0 || p.inRoom?.watched != null || hidingFromSun(p) || shelteringFromRain(p) || beingServed(p, visit, dt)) return aboutTheRoom(p, visit, dt, arriving);
     // (with the camera in there too, off out of the room first, and the door heard shutting behind them)
     if (roomHolds(visit.building.key) && p.inRoom?.visit === roomVisit() && !p.inRoom.gone) return leaveRoom(p, dt);
     // back out, at the door, facing the walkway — with their haircut or new clothes, if they've not been seen getting them
