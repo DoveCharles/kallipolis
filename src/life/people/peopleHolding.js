@@ -6,6 +6,7 @@ import { HEADSHOT_LAYER, PEOPLE_MAX, beginFleeing, feel, inRoom, isDrawn, isGone
 import { possession } from '../possession.js';
 import { avengeTheft, isFairGame, mug } from './peopleActivities.js';
 import { PERSON_ARM_SPREAD } from './peopleModel.js';
+import { presetAt } from './presets.js';
 import { eatingSound } from '../../audio/eating.js';
 import { STATUS_SOURCES, addStatus } from '../statuseffects.js';
 import { S } from '../../core/shared.js';
@@ -482,7 +483,7 @@ const GLOW_UP = 4, GLOW_DOWN = 1.2; // how fast the tip brightens and dims, per 
 const EXHALE_AT = 0.35, EXHALE_TIME = 0.5, EXHALE_PUFFS = 20; // (seconds before the hand's down, how long, puffs a second)
 const smokeGap = () => SMOKE_EVERY[0] + peopleRng()*(SMOKE_EVERY[1] - SMOKE_EVERY[0]);
 function lightUp(p, clip, dt) {
-  if (!(p.smoker ??= peopleRng() < SMOKER_SHARE)) return;
+  if (!(p.smoker ??= presetAt(people.indexOf(p))?.smoker ?? peopleRng() < SMOKER_SHARE)) return;
   if ((p.nextCig ??= smokeGap()) > 0) { p.nextCig -= dt; return; }
   if (p.holding?.length || p.punched || p.act || p.mode === 'dead' || p.mode === 'indoors' || inRoom(p) || !personModel?.clips[clip.name + 'Cig']) return;
   p.nextCig = smokeGap();

@@ -56,8 +56,8 @@ export function speechBubble(who, at, line) {
 }
 
 // the possessed person's own lines: no bubble, but a box low on screen (styled as #hint), lingering the same way
-// (with replies to pick from — choosing, from audio/dictionary.js sayLine — it lists them instead: the wheel moves the
-// highlight and a click says it; on touch, tap one)
+// (with replies to pick from — choosing, from audio/dictionary.js sayLine — it lists them instead: the cursor's freed
+// (possession.js freeCursor) to hover/click one, the wheel moves the highlight too; on touch, tap one)
 const own = { element: null, line: null, doneAt: 0, seen: false, choosing: null, index: -1 };
 /**
  * Show what the possessed person's saying, or the replies they can pick; call each frame while possessing.
@@ -76,6 +76,10 @@ export function ownLine(who, line, choosing = null) {
       if (k < 0 || !own.choosing) return;
       e.stopPropagation(); own.choosing.index = k; pickChoice();
     });
+    own.element.addEventListener('pointerover', e => {
+      const k = [...own.element.children].indexOf(e.target.closest('.own-choice'));
+      if (k >= 0 && own.choosing) own.choosing.index = k;
+    });
     own.element.addEventListener('wheel', e => { if (scrollChoice(e.deltaY)) e.preventDefault(); }, { passive: false });
     layer.appendChild(own.element);
   }
@@ -89,8 +93,10 @@ export function ownLine(who, line, choosing = null) {
       }));
       own.line = null; own.index = choosing.index;
     }
+    if (!own.choosing) App.freeCursor?.(true);
     own.choosing = choosing; own.doneAt = 0;
   } else {
+    if (own.choosing) App.freeCursor?.(false);
     own.choosing = null;
     if (line && line !== own.line) {
       own.line = line;
@@ -113,12 +119,14 @@ function pickChoice() {
   if (!own.choosing) return false;
   own.choosing.picked = own.choosing.index;
   own.choosing = null;
+  App.freeCursor?.(false);
   return true;
 }
 Object.assign(App, { scrollChoice, pickChoice });
 function updateOwnLine(now) {
   if (!own.element) return;
   if (!own.seen || (!own.line && !own.choosing) || (own.doneAt && now - own.doneAt > LINGER*1000)) {
+    if (own.choosing) App.freeCursor?.(false);
     own.element.remove(); own.element = own.line = own.choosing = null; own.index = -1; own.doneAt = 0; own.seen = false; return;
   }
   own.seen = false;

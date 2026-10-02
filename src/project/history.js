@@ -70,7 +70,7 @@ window.addEventListener('input', () => scheduleHistory(500), true);
 async function restoreHistory(snapshot) {
   historyRestoring = true;
   const kept = { ...S.selection };
-  await loadProjectFromData(JSON.parse(snapshot), { keepMaps: true });
+  await loadProjectFromData(JSON.parse(snapshot), { keepMaps: true, prev: JSON.parse(historyCurrent) });
   const stillThere = kept.type === 'zone' ? S.zones.some(z => z.id === kept.id) : kept.type ? S.roadLines.some(l => l.networkId === kept.id) : false;
   if (stillThere) selectItem(kept.type, kept.id, true);
   historyCurrent = historySnapshot(); // as the restored project serializes now

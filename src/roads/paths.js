@@ -355,19 +355,24 @@ export function makeWalkwayMaterial({ texture, color, scale, rotation, segments,
 // mesh, so the caller can add it to what the next, lower-priority network has to give way to. Paving's dusty
 // fringe isn't part of either: it's returned as `fringeBand`, for rebuildRoadMeshes to trim and attachWalkwayFringes
 // to lay only where the walkway crosses grass or sand.
-function buildWalkwayMesh(lines, networkId, claim) {
+// a walkway network's outline (paved, or a dirt path's out to its faded edge) and, paved, the outer edge of its fringe
+function walkwayOutlines(lines) {
+  const line = lines[0], halfWidth = (line.width || S.DEFAULT_ROAD_WIDTH)/2, dirt = (line.walkwayTexture || WALKWAY_TEXTURE) === 'dirt';
+  const fade = dirt ? pathFadeWidth(halfWidth) : pavingFringeWidth(halfWidth);
+  const strokesAt = radius => unionRoadStrokes(lines.map(l => ({
+    path: App.toClipperPath(tessellateOpenPath(l.nodeIds.map(id => roadNodes[id]).filter(Boolean))),
+    radius,
+  })));
+  return { outline: strokesAt(dirt ? halfWidth + fade : halfWidth), outer: dirt ? [] : strokesAt(halfWidth + fade) };
+}
+function buildWalkwayMesh(lines, networkId, claim, outline, outer) {
   const line = lines[0]; // colors and textures are set per network in the details panel
   const halfWidth = (line.width || S.DEFAULT_ROAD_WIDTH)/2;
   const texture = line.walkwayTexture || WALKWAY_TEXTURE;
   const dirt = texture === 'dirt';
   const fade = dirt ? pathFadeWidth(halfWidth) : pavingFringeWidth(halfWidth);
   const color = line.walkwayColor!=null ? line.walkwayColor : WALKWAY_COLOR;
-  const strokesAt = radius => unionRoadStrokes(lines.map(l => ({
-    path: App.toClipperPath(tessellateOpenPath(l.nodeIds.map(id => roadNodes[id]).filter(Boolean))),
-    radius,
-  })));
   const { ctDifference } = ClipperLib.ClipType;
-  const outline = strokesAt(dirt ? halfWidth + fade : halfWidth);
   const builder = createMeshBuilder();
   builder.addTops(clipPolygons(ctDifference, outline, claim || [], true), Y_PATH);
   const geo = builder.build();
@@ -381,7 +386,7 @@ function buildWalkwayMesh(lines, networkId, claim) {
     mesh.name = 'Walkway';
     mesh.userData = { networkId, baseColor: color };
   }
-  return { mesh, outline, fringeBand: dirt ? null : clipPolygons(ctDifference, strokesAt(halfWidth + fade), outline) };
+  return { mesh, fringeBand: dirt ? null : clipPolygons(ctDifference, outer, outline) };
 }
 // Lays each paved walkway's dusty fringe (its userData.fringeBand) where it crosses grass or sand — park and beach
 // zones — and nowhere else: past a walkway's edge on a plaza, a lot or bare ground the paving just stops. The fringe
@@ -393,8 +398,9 @@ export function attachWalkwayFringes(force) {
   if (area === fringeArea && !force) return;
   fringeArea = area;
   S.roadMeshGroup.children.forEach(mesh => {
-    if (!mesh.userData.fringeBand) return;
-    mesh.children.slice().forEach(child => { mesh.remove(child); child.geometry.dispose(); });
+    if (!mesh.userData.fringeBand || mesh.userData.fringeArea === area) return; // (a kept walkway's is still right)
+    mesh.userData.fringeArea = area;
+    mesh.children.filter(c => c.name === 'WalkwayFringe').forEach(child => { mesh.remove(child); child.geometry.dispose(); }); // (not a highlight's twin)
     if (!area.length || !mesh.userData.fringeBand.length) return;
     const builder = createMeshBuilder();
     builder.addTops(clipPolygons(ClipperLib.ClipType.ctIntersection, mesh.userData.fringeBand, area, true), Y_PATH);
@@ -447,8 +453,8 @@ function roadLayoutKey() {
   return JSON.stringify([S.DEFAULT_ROAD_WIDTH, S.DEFAULT_SIDEWALK_WIDTH, S.roadLines.map(l => [l.id, l.networkId, l.kind, l.roadType,
     l.width, l.sidewalkWidth, l.radius, !!l.drawing, l.raisedHeight, !!l.raisedTrees, !!l.raisedBenches, l.mall, l.nodeIds.map(id => roadNodes[id])])]);
 }
-// the stencil mask over the whole road footprint (see SKIP_OVER_WATER_AND_ROADS) — kept out of roadMeshGroup, which
-// is exported and recolored for highlights
+// the stencil mask over the whole road footprint (see SKIP_OVER_WATER_AND_ROADS), a mesh per network — kept out of
+// roadMeshGroup, which is exported and recolored for highlights
 let roadMask = null;
 // the stretches of segment p→q (as [t0, t1] ranges) that `ranges` — sorted and merged, as coverage returns them — leave out
 function uncoveredRanges(ranges) {
@@ -458,9 +464,86 @@ function uncoveredRanges(ranges) {
   if (t < 1) out.push([t, 1]);
   return out;
 }
+// Builds network `netId`'s road, kerb and pavement meshes into roadMeshGroup, from its `strokes` and those of everything
+// near it (`nearStrokes`, itself included): the outlines are traced round them all at once, so roads from separate networks
+// that overlap without sharing a junction still merge cleanly; it then takes the part of those layers inside its own
+// `footprint` less what earlier networks `claimed`, so the per-network meshes (own colors, own selection highlight) never
+// overlap. `rects`: the dropped kerbs near it.
+function buildRoadNetwork(netId, strokes, nearStrokes, rects, claimed, footprint) {
+  const { ctDifference, ctIntersection } = ClipperLib.ClipType;
+  const outlineAt = radiusOf => unionRoadStrokes(nearStrokes.map(s => ({ path:s.path, radius:radiusOf(s) })));
+  const roadOutline = outlineAt(s => s.hw);
+  const curbOutline = outlineAt(s => s.hw+s.cw);
+  const sidewalkOutline = outlineAt(s => s.hw+s.cw+s.sw);
+  const cutDrops = band => rects.length ? clipPolygons(ctDifference, band, rects) : band;
+  const curbBand = cutDrops(clipPolygons(ctDifference, curbOutline, roadOutline));
+  const sidewalkBand = cutDrops(clipPolygons(ctDifference, sidewalkOutline, curbOutline));
+  // Curb and sidewalk together are one raised platform: where its edge runs along the road outline it steps
+  // down to the road, and where it runs along the outer outline it drops to the ground. The road itself is sunk
+  // below the ground, so wherever its edge has no platform beside it, a low wall lines the hole it sits in.
+  const platformBand = clipPolygons(ctDifference, sidewalkOutline, roadOutline);
+  const roadEdges = createEdgeIndex(roadOutline), outerEdges = createEdgeIndex(sidewalkOutline), platformEdges = createEdgeIndex(platformBand);
+  const territory = claimed.length ? clipPolygons(ctDifference, footprint, claimed) : footprint;
+  const first = S.roadMeshGroup.children.length;
+  const { line } = strokes[0]; // colors are set per network in the details panel
+  const road = createMeshBuilder(), curb = createMeshBuilder(), sidewalk = createMeshBuilder();
+  const roadSurface = clipPolygons(ctIntersection, roadOutline, territory, true);
+  road.addTops(roadSurface, Y_ROAD);
+  curb.addTops(clipPolygons(ctIntersection, curbBand, territory, true), Y_SIDEWALK);
+  sidewalk.addTops(clipPolygons(ctIntersection, sidewalkBand, territory, true), Y_SIDEWALK);
+  const roadFacing = strokes.some(s => s.cw>0) ? curb : sidewalk; // curbless paths step straight up onto the sidewalk
+  const pointAt = (p, q, t) => ({ X: p.X+(q.X-p.X)*t, Y: p.Y+(q.Y-p.Y)*t });
+  forEachPolyTreeEdge(clipPolygons(ctIntersection, cutDrops(platformBand), territory, true), (p, q, outward) => {
+    roadEdges.coverage(p, q).forEach(([t0, t1]) => roadFacing.addWall(pointAt(p, q, t0), pointAt(p, q, t1), Y_ROAD, Y_SIDEWALK, outward));
+    outerEdges.coverage(p, q).forEach(([t0, t1]) => sidewalk.addWall(pointAt(p, q, t0), pointAt(p, q, t1), 0, Y_SIDEWALK, outward));
+    // the rest of an edge is where this network's share of the platform meets another network's — no step there
+  });
+  const inward = n => ({ x: -n.x, y: 0, z: -n.z });
+  forEachPolyTreeEdge(roadSurface, (p, q, outward) => {
+    const bare = uncoveredRanges(platformEdges.coverage(p, q));
+    // and of those, only the stretches on the road's outline — not where this network's share meets another's
+    bare.forEach(([b0, b1]) => {
+      const a = pointAt(p, q, b0), b = pointAt(p, q, b1);
+      roadEdges.coverage(a, b).forEach(([t0, t1]) => road.addWall(pointAt(a, b, t0), pointAt(a, b, t1), Y_ROAD, 0, inward(outward)));
+    });
+  });
+  addRoadLayerMesh(road.build(), line.color!=null ? line.color : ROAD_COLOR, 0.95, 'Road', netId);
+  addRoadLayerMesh(curb.build(), CURB_COLOR, 0.85, 'Curb', netId);
+  addRoadLayerMesh(sidewalk.build(), line.sidewalkColor!=null ? line.sidewalkColor : SIDEWALK_COLOR, 0.9, 'Sidewalk', netId);
+  const sidewalkMesh = S.roadMeshGroup.children[S.roadMeshGroup.children.length-1];
+  if (sidewalkMesh?.name === 'Sidewalk') applySlabShader(sidewalkMesh.material, pathSegmentsOf(strokes.map(s => s.line)), strokes[0].hw+strokes[0].cw, strokes[0].sw);
+  // its share of the stencil mask over the road footprint, level with the sidewalk top it lines up with
+  const maskBuilder = createMeshBuilder();
+  maskBuilder.addTops(clipPolygons(ctDifference, territory, [], true), Y_SIDEWALK);
+  const maskGeo = maskBuilder.build();
+  return { meshes: S.roadMeshGroup.children.slice(first), territory, mask: maskGeo && makeStencilMask(maskGeo, STENCIL_ROAD, 'RoadMask') };
+}
+// Each sidewalk-road network's meshes, kept across rebuilds (roadNetCache: netId → { key, meshes, territory }) and only
+// redone when it or a network overlapping it changed — so letting go of a dragged node redoes the roads round it, not
+// the city's. Its footprint and road outline are kept too (netShapes: netId → { sig, footprint, roadOutline }).
+const roadNetCache = new Map(), netShapes = new Map();
+const dropEntry = c => { c.meshes.forEach(m => disposeObject(m)); if (c.mask) disposeObject(c.mask); };
+let trainKey = null; // what the train meshes were last built from (see rebuildRoadMeshes)
+// a short hash of string `str` (cyrb53)
+function hashOf(str) {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) { const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+const boxesMeet = (a, b) => a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
+function clipperBox(paths, pad = 0) {
+  const b = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+  paths.forEach(path => path.forEach(p => { b.minX = Math.min(b.minX, p.X); b.maxX = Math.max(b.maxX, p.X); b.minY = Math.min(b.minY, p.Y); b.maxY = Math.max(b.maxY, p.Y); }));
+  b.minX -= pad; b.maxX += pad; b.minY -= pad; b.maxY += pad;
+  return b;
+}
 export function rebuildRoadMeshes() {
+  roadNetCache.forEach(c => { c.meshes.forEach(m => S.roadMeshGroup.remove(m)); if (c.mask) roadMask?.remove(c.mask); }); // (kept: see below)
   scene.remove(S.roadMeshGroup); disposeObject(S.roadMeshGroup);
-  if (roadMask) { scene.remove(roadMask); disposeObject(roadMask); roadMask = null; }
+  if (roadMask) { scene.remove(roadMask); disposeObject(roadMask); }
+  roadMask = new THREE.Group(); roadMask.name = 'RoadMask';
   S.roadMeshGroup = new THREE.Group(); S.roadMeshGroup.name='Roads';
   const networks = new Map(); // networkId -> [{ path, line, hw, cw, sw }]
   S.roadLines.forEach(line => {
@@ -472,66 +555,46 @@ export function rebuildRoadMeshes() {
     networks.get(line.networkId).push({ path, line, ...roadLineWidths(line) });
   });
   const allStrokes = [...networks.values()].flat();
-  const outlineAt = radiusOf => unionRoadStrokes(allStrokes.map(s => ({ path:s.path, radius:radiusOf(s) })));
-  const roadOutline = outlineAt(s => s.hw);
-  const curbOutline = outlineAt(s => s.hw+s.cw);
-  const sidewalkOutline = outlineAt(s => s.hw+s.cw+s.sw);
-  S.roadFootprint = sidewalkOutline;
   const { ctDifference, ctIntersection, ctUnion } = ClipperLib.ClipType;
   // dropped kerbs into car parks: cut from the kerb and pavement, and drawn on their own (see zones/carpark.js)
-  const kerb = kerbDrops(allStrokes), cutDrops = band => kerb.rects.length ? clipPolygons(ctDifference, band, kerb.rects) : band;
+  const kerb = kerbDrops(allStrokes);
   S.kerbDrops = kerb.drops;
+  const kerbBoxes = kerb.rects.map(r => clipperBox([r]));
+  // each network's shapes, and what its meshes depend on: itself, the networks overlapping it (and which come first,
+  // as the first claims where they overlap) and the kerb drops in it
+  const nets = [...networks].map(([netId, strokes], ord) => {
+    const { line } = strokes[0];
+    const sig = hashOf(JSON.stringify([line.color, line.sidewalkColor, strokes.map(s => [s.hw, s.cw, s.sw, s.path])]));
+    let shape = netShapes.get(netId);
+    if (!shape || shape.sig !== sig) {
+      shape = { sig, footprint: unionRoadStrokes(strokes.map(s => ({ path:s.path, radius:s.hw+s.cw+s.sw }))), roadOutline: unionRoadStrokes(strokes.map(s => ({ path:s.path, radius:s.hw }))) };
+      netShapes.set(netId, shape);
+    }
+    const pad = Math.max(...strokes.map(s => s.hw+s.cw+s.sw))*CLIPPER_SCALE + 1;
+    return { netId, strokes, ord, shape, box: clipperBox(strokes.map(s => s.path), pad) };
+  });
+  S.roadFootprint = clipPolygons(ctUnion, nets.flatMap(n => n.shape.footprint), []);
+  const roadOutlineAll = clipPolygons(ctUnion, nets.flatMap(n => n.shape.roadOutline), []);
   // the ground has a hole cut here, for the sunk road surface (see rebuildGround)
-  S.roadSurfaceOutline = kerb.rects.length ? clipPolygons(ctUnion, roadOutline, kerb.rects) : roadOutline;
-  const curbBand = cutDrops(clipPolygons(ctDifference, curbOutline, roadOutline));
-  const sidewalkBand = cutDrops(clipPolygons(ctDifference, sidewalkOutline, curbOutline));
-  // Curb and sidewalk together are one raised platform: where its edge runs along the road outline it steps
-  // down to the road, and where it runs along the outer outline it drops to the ground. The road itself is sunk
-  // below the ground, so wherever its edge has no platform beside it, a low wall lines the hole it sits in.
-  const platformBand = clipPolygons(ctDifference, sidewalkOutline, roadOutline);
-  const roadEdges = createEdgeIndex(roadOutline), outerEdges = createEdgeIndex(sidewalkOutline), platformEdges = createEdgeIndex(platformBand);
-  // The outlines above are traced around every network at once, so roads from separate networks that
-  // overlap without sharing a junction still merge cleanly. Each network then takes the part of those
-  // layers inside its own footprint — minus whatever an earlier network already took — so the per-network
-  // meshes (own colors, own selection highlight) never overlap each other either.
-  let claimed = [];
+  S.roadSurfaceOutline = kerb.rects.length ? clipPolygons(ctUnion, roadOutlineAll, kerb.rects) : roadOutlineAll;
   S.roadBridgeSources = [];
-  networks.forEach((strokes, netId) => {
-    const footprint = unionRoadStrokes(strokes.map(s => ({ path:s.path, radius:s.hw+s.cw+s.sw })));
-    const territory = claimed.length ? clipPolygons(ctDifference, footprint, claimed) : footprint;
-    claimed = claimed.length ? clipPolygons(ctUnion, claimed, footprint) : footprint;
-    S.roadBridgeSources.push({ networkId: netId, territory, strokes });
-    const { line } = strokes[0]; // colors are set per network in the details panel
-    const road = createMeshBuilder(), curb = createMeshBuilder(), sidewalk = createMeshBuilder();
-    const roadSurface = clipPolygons(ctIntersection, roadOutline, territory, true);
-    road.addTops(roadSurface, Y_ROAD);
-    curb.addTops(clipPolygons(ctIntersection, curbBand, territory, true), Y_SIDEWALK);
-    sidewalk.addTops(clipPolygons(ctIntersection, sidewalkBand, territory, true), Y_SIDEWALK);
-    const roadFacing = strokes.some(s => s.cw>0) ? curb : sidewalk; // curbless paths step straight up onto the sidewalk
-    const pointAt = (p, q, t) => ({ X: p.X+(q.X-p.X)*t, Y: p.Y+(q.Y-p.Y)*t });
-    forEachPolyTreeEdge(clipPolygons(ctIntersection, cutDrops(platformBand), territory, true), (p, q, outward) => {
-      roadEdges.coverage(p, q).forEach(([t0, t1]) => roadFacing.addWall(pointAt(p, q, t0), pointAt(p, q, t1), Y_ROAD, Y_SIDEWALK, outward));
-      outerEdges.coverage(p, q).forEach(([t0, t1]) => sidewalk.addWall(pointAt(p, q, t0), pointAt(p, q, t1), 0, Y_SIDEWALK, outward));
-      // the rest of an edge is where this network's share of the platform meets another network's — no step there
-    });
-    const inward = n => ({ x: -n.x, y: 0, z: -n.z });
-    forEachPolyTreeEdge(roadSurface, (p, q, outward) => {
-      const bare = uncoveredRanges(platformEdges.coverage(p, q));
-      // and of those, only the stretches on the road's outline — not where this network's share meets another's
-      bare.forEach(([b0, b1]) => {
-        const a = pointAt(p, q, b0), b = pointAt(p, q, b1);
-        roadEdges.coverage(a, b).forEach(([t0, t1]) => road.addWall(pointAt(a, b, t0), pointAt(a, b, t1), Y_ROAD, 0, inward(outward)));
-      });
-    });
-    addRoadLayerMesh(road.build(), line.color!=null ? line.color : ROAD_COLOR, 0.95, 'Road', netId);
-    addRoadLayerMesh(curb.build(), CURB_COLOR, 0.85, 'Curb', netId);
-    addRoadLayerMesh(sidewalk.build(), line.sidewalkColor!=null ? line.sidewalkColor : SIDEWALK_COLOR, 0.9, 'Sidewalk', netId);
-    const sidewalkMesh = S.roadMeshGroup.children[S.roadMeshGroup.children.length-1];
-    if (sidewalkMesh?.name === 'Sidewalk') applySlabShader(sidewalkMesh.material, pathSegmentsOf(strokes.map(s => s.line)), strokes[0].hw+strokes[0].cw, strokes[0].sw);
+  const kept = new Set();
+  nets.forEach(net => {
+    const { netId, strokes, ord, shape, box } = net;
+    const near = nets.filter(n => boxesMeet(n.box, box));
+    const rects = kerb.rects.filter((r, i) => boxesMeet(kerbBoxes[i], box));
+    const key = JSON.stringify([near.map(n => (n.ord < ord ? 'b' : n.ord > ord ? 'a' : 's') + n.shape.sig), rects]);
+    let entry = roadNetCache.get(netId);
+    if (!entry || entry.key !== key) {
+      if (entry) dropEntry(entry);
+      entry = { key, ...buildRoadNetwork(netId, strokes, near.flatMap(n => n.strokes), rects, near.filter(n => n.ord < ord).flatMap(n => n.shape.footprint), shape.footprint) };
+      roadNetCache.set(netId, entry);
+    } else entry.meshes.forEach(m => S.roadMeshGroup.add(m));
+    if (entry.mask) roadMask.add(entry.mask);
+    kept.add(netId);
+    S.roadBridgeSources.push({ networkId: netId, territory: entry.territory, strokes });
   });
   if (kerb.drops.length) S.roadMeshGroup.add(kerbDropMesh(kerb.drops));
-  const pathStrokes = [];
-  S.pathBridgeSources = [];
   // walkway networks: one mesh each, plus their combined footprint for zones to keep lots and trees off
   const walkwayNetworks = new Map();
   S.roadLines.forEach(line => {
@@ -544,24 +607,43 @@ export function rebuildRoadMeshes() {
   const walkwayIds = new Set(walkwayNetworks.keys());
   S.walkwayOrder = S.walkwayOrder.filter(id => walkwayIds.has(id));
   walkwayIds.forEach(id => { if (!S.walkwayOrder.includes(id)) S.walkwayOrder.push(id); });
-  let claimedWalkway = [];
-  const fringed = [];
-  S.walkwayOrder.forEach(netId => {
+  // as the roads: each network's mesh kept until it, or a walkway overlapping it, changes (or they swap priority)
+  const walks = S.walkwayOrder.map((netId, ord) => {
     const lines = walkwayNetworks.get(netId);
-    const { mesh, outline, fringeBand } = buildWalkwayMesh(lines, netId, claimedWalkway);
-    if (mesh) { S.roadMeshGroup.add(mesh); if (fringeBand) fringed.push([mesh, fringeBand]); }
-    claimedWalkway = claimedWalkway.length ? clipPolygons(ctUnion, claimedWalkway, outline) : outline;
     const strokes = lines.map(line => ({
       path: App.toClipperPath(tessellateOpenPath(line.nodeIds.map(id=>roadNodes[id]).filter(Boolean))),
       radius: (line.width || S.DEFAULT_ROAD_WIDTH)/2,
     }));
-    pathStrokes.push(...strokes);
-    S.pathBridgeSources.push({ networkId: netId, strokes });
+    const l = lines[0];
+    const sig = hashOf(JSON.stringify([l.width, S.DEFAULT_ROAD_WIDTH, l.walkwayTexture, l.walkwayColor, l.walkwayTextureScale, l.walkwayTextureRotation, strokes.map(s => s.path)]));
+    let shape = netShapes.get(netId);
+    if (!shape || shape.sig !== sig) {
+      const { outline, outer } = walkwayOutlines(lines);
+      shape = { sig, outline, outer, footprint: unionRoadStrokes(strokes) };
+      netShapes.set(netId, shape);
+    }
+    return { netId, lines, strokes, ord, shape, box: clipperBox(shape.outer.length ? shape.outer : shape.outline) };
   });
-  // no network's dust on another's paving
-  fringed.forEach(([mesh, band]) => { mesh.userData.fringeBand = clipPolygons(ctDifference, band, claimedWalkway); });
+  S.pathBridgeSources = walks.map(w => ({ networkId: w.netId, strokes: w.strokes }));
+  walks.forEach(w => {
+    const near = walks.filter(n => boxesMeet(n.box, w.box));
+    const key = JSON.stringify(['walk', near.map(n => (n.ord < w.ord ? 'b' : n.ord > w.ord ? 'a' : 's') + n.shape.sig)]);
+    let entry = roadNetCache.get(w.netId);
+    if (!entry || entry.key !== key) {
+      if (entry) dropEntry(entry);
+      const before = near.filter(n => n.ord < w.ord).flatMap(n => n.shape.outline);
+      const { mesh, fringeBand } = buildWalkwayMesh(w.lines, w.netId, before.length ? clipPolygons(ctUnion, before, []) : [], w.shape.outline, w.shape.outer);
+      // no network's dust on another's paving
+      if (mesh && fringeBand) mesh.userData.fringeBand = clipPolygons(ctDifference, fringeBand, near.flatMap(n => n.shape.outline));
+      entry = { key, meshes: mesh ? [mesh] : [] };
+      roadNetCache.set(w.netId, entry);
+    }
+    entry.meshes.forEach(m => S.roadMeshGroup.add(m));
+    kept.add(w.netId);
+  });
   attachWalkwayFringes(true);
-  // raised walkways: built whole, each on its own (they stand over everything else, so nothing's claimed between them)
+  // raised walkways: built whole, each on its own (they stand over everything else, so nothing's claimed between them);
+  // kept until it changes, or the roads or rivers its pillars keep clear of do
   const raisedNetworks = new Map();
   S.roadLines.forEach(line => {
     if (!isRaisedWalkwayLine(line)) return;
@@ -571,18 +653,29 @@ export function rebuildRoadMeshes() {
   const raisedFootprints = [];
   S.raisedNav = [];
   raisedNetworks.forEach((lines, netId) => {
-    const built = buildRaisedWalkway(lines, netId);
-    if (!built) return;
-    built.objects.forEach(o => S.roadMeshGroup.add(o));
-    raisedFootprints.push(...built.footprint);
-    S.raisedNav.push(built.nav);
+    const pts = lines.flatMap(l => l.nodeIds.map(id => roadNodes[id]).filter(Boolean));
+    if (!pts.length) return;
+    const box = clipperBox([pts.map(p => ({ X: p.x*CLIPPER_SCALE, Y: p.z*CLIPPER_SCALE }))], 200*CLIPPER_SCALE); // (ramps reach out past the nodes)
+    const key = JSON.stringify(['raised', S.DEFAULT_ROAD_WIDTH, S.globalTreeTint, S.riverSeq, nets.filter(n => boxesMeet(n.box, box)).map(n => n.shape.sig),
+      lines.map(l => [l.id, l.width, l.raisedHeight, !!l.raisedTrees, !!l.raisedBenches, l.walkwayTexture, l.walkwayColor, l.walkwayTextureScale, l.walkwayTextureRotation, l.nodeIds.map(id => roadNodes[id])])]);
+    let entry = roadNetCache.get(netId);
+    if (!entry || entry.key !== key) {
+      if (entry) dropEntry(entry);
+      const built = buildRaisedWalkway(lines, netId);
+      entry = { key, meshes: built ? built.objects : [], built };
+      roadNetCache.set(netId, entry);
+    }
+    kept.add(netId);
+    if (!entry.built) return;
+    entry.meshes.forEach(o => S.roadMeshGroup.add(o));
+    raisedFootprints.push(...entry.built.footprint);
+    S.raisedNav.push(entry.built.nav);
   });
-  S.pathFootprint = unionRoadStrokes(pathStrokes);
+  roadNetCache.forEach((c, id) => { if (!kept.has(id)) { dropEntry(c); roadNetCache.delete(id); } });
+  [...netShapes.keys()].forEach(id => { if (!networks.has(id) && !walkwayNetworks.has(id)) netShapes.delete(id); });
+  S.pathFootprint = clipPolygons(ctUnion, walks.flatMap(w => w.shape.footprint), []);
   if (raisedFootprints.length) S.pathFootprint = clipPolygons(ctUnion, S.pathFootprint, raisedFootprints);
-  const maskBuilder = createMeshBuilder();
-  maskBuilder.addTops(clipPolygons(ctDifference, sidewalkOutline, [], true), Y_SIDEWALK); // level with the sidewalk top it lines up with
-  const maskGeo = maskBuilder.build();
-  if (maskGeo) { roadMask = makeStencilMask(maskGeo, STENCIL_ROAD, 'RoadMask'); scene.add(roadMask); }
+  scene.add(roadMask);
   App.buildRoadDetails(); // markings, crossings and traffic lights
   // rivers: only their footprint is kept here (rebuildWater draws them) — recomputed only when a river actually changed,
   // so editing an ordinary road doesn't make the water rebuild
@@ -614,7 +707,13 @@ export function rebuildRoadMeshes() {
     S.trafficNavDirty = true;
   }
   scene.add(S.roadMeshGroup);
-  App.rebuildTrainMeshes();
+  // trains: only when they, or the roads and rivers their pillars keep clear of, changed (rebuilding resets the shuttles)
+  const trainLines = S.roadLines.filter(l => App.isTrainLine(l));
+  const trainPts = trainLines.flatMap(l => l.nodeIds.map(id => roadNodes[id]).filter(Boolean));
+  const trainBox = trainPts.length ? clipperBox([trainPts.map(p => ({ X: p.x*CLIPPER_SCALE, Y: p.z*CLIPPER_SCALE }))], 50*CLIPPER_SCALE) : null;
+  const newTrainKey = JSON.stringify([S.TRAIN_DEFAULT_RADIUS, S.TRAIN_COIL_TURNS_PER_10, S.riverSeq, trainLines, trainLines.map(l => l.nodeIds.map(id => roadNodes[id])),
+    trainBox ? nets.filter(n => boxesMeet(n.box, trainBox)).map(n => n.shape.sig) : []]);
+  if (newTrainKey !== trainKey) { trainKey = newTrainKey; App.rebuildTrainMeshes(); }
   App.rebuildRoadMarkers();
   App.rebuildRoadHandles();
   App.refreshHighlights();

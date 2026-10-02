@@ -317,8 +317,10 @@ export function subdivideZonesFrom(zone) {
   subdivideZonesFromIndex(Math.max(0, S.zones.indexOf(zone)));
 }
 export function subdivideZonesFromIndex(index) {
-  S.zones.forEach((z, i) => { if (i >= index || z.zoneType==='water' || z.zoneType==='park' || z.zoneType==='beach' || z.zoneType==='farmland' || z.zoneType==='marina') subdivideZone(z); });
+  S.zones.forEach((z, i) => { if (zoneRedoneBelow(z, i, index)) subdivideZone(z); });
 }
+// whether zone `z` (at `i` in the list) can change when the zone at `index` does
+export const zoneRedoneBelow = (z, i, index) => i >= index || z.zoneType==='water' || z.zoneType==='park' || z.zoneType==='beach' || z.zoneType==='farmland' || z.zoneType==='marina';
 // Moves a zone to just before (or after) another in the zone list. The order is priority — a zone cuts itself out of
 // every zone below it — so every zone is re-subdivided.
 S.draggedZoneId = null;

@@ -523,11 +523,19 @@ export function walkPossessed(p, dt) {
  * @param {number} i - their index in people
  * @returns {void}
  */
+// EYE_RAISE: the view this share of their height above their head's middle. Third person (possession.distance, the
+// wheel's: see possession.js): that far back from their eyes along the view, times their height.
+const EYE_RAISE = 0.04;
+const eye = new THREE.Vector3(), viewDir = new THREE.Vector3();
 export function placePossessedCamera(i) {
-  const p = people[i];
-  if (personModel) camera.position.copy(headOf(i));
-  else camera.position.set(p.x, p.y + personHeight(p)*0.92, p.z);
+  const p = people[i], h = personHeight(p);
+  if (personModel) eye.copy(headOf(i)).y += h*EYE_RAISE;
+  else eye.set(p.x, p.y + h*0.92, p.z);
   camera.rotation.set(possession.pitch, possession.yaw + Math.PI, 0, 'YXZ');
+  camera.position.copy(eye);
+  if (possession.distance > 0) camera.position.addScaledVector(camera.getWorldDirection(viewDir), -possession.distance*h);
+  const near = S.hideOwnHead && !(possession.distance > 0) ? EYE_NEAR_HEADLESS : EYE_NEAR;
+  if (camera.near !== near) { camera.near = near; camera.updateProjectionMatrix(); }
 }
 
 // ---- throwing a punch yourself: possessing someone, a click swings their fist at whoever is in front of them (the click
@@ -685,7 +693,7 @@ function personLooked(p) {
   camera.getWorldDirection(lookDir);
   people.forEach(q => {
     if (q === p || q.mode === 'dead' || isGone(q) || (possessedRoom ? !inRoom(q) || q.inRoom.hidden : inRoom(q))) return;
-    lookAt.set(q.x, q.y + personHeight(q)*0.6, q.z).sub(camera.position);
+    lookAt.set(q.x, q.y + personHeight(q)*0.6, q.z).sub(eye);
     const d = lookAt.length(), angle = d > 1e-3 ? lookAt.angleTo(lookDir) : Math.PI;
     if (angle >= LOOK_ANGLE) return;
     const reach = LOOK_REACH + (REACH_TALK - LOOK_REACH)*angle/LOOK_ANGLE;
@@ -725,8 +733,8 @@ export function updatePossessedTarget() {
   } else if (target?.building) {
     const b = target.building;
     // (on the wall, straight ahead of their eyes: close up, anywhere off the line of sight is well off the middle of the view)
-    const t = Math.hypot(b.at.x - camera.position.x, b.at.z - camera.position.z);
-    showUseLabel({ x: camera.position.x + Math.sin(possession.yaw)*t, y: camera.position.y - 0.05*t, z: camera.position.z + Math.cos(possession.yaw)*t }, `<b>${escapeHtml(b.name)}</b><br>${escapeHtml(b.type)}<br>${key} to enter`);
+    const t = Math.hypot(b.at.x - eye.x, b.at.z - eye.z);
+    showUseLabel({ x: eye.x + Math.sin(possession.yaw)*t, y: eye.y - 0.05*t, z: eye.z + Math.cos(possession.yaw)*t }, `<b>${escapeHtml(b.name)}</b><br>${escapeHtml(b.type)}<br>${key} to enter`);
   } else if (target?.door) showUseLabel({ x: target.door.x, y: target.door.y + 1.6, z: target.door.z }, `${key} to leave`);
   else showUseLabel(null);
 }
