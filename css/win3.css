@@ -507,6 +507,7 @@ html.win3 #quests .w3-dialog-body { overflow:hidden; padding-bottom:12px; }
 .qs-row { display:flex; align-items:center; gap:6px; }
 .qs-row > b { flex:1; }
 .qs-reward { white-space:nowrap; }
+.qs-reward .meter-icon { filter:url(#tint-gold); } /* (svg filter in index.html, as the energy count's) */
 .qs-bar { flex:1; height:8px; border:1px solid var(--w3-frame); background:var(--w3-window); }
 .qs-bar > div { height:100%; background:var(--w3-hl); }
 .qs-time { font-size:11px; min-width:4em; text-align:right; }
