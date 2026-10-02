@@ -62,26 +62,29 @@ export function groundBelow(x, fromY, z, fallback) {
 }
 
 // (a shader's onBeforeCompile source names the look it draws: see project/export-glb.js's exportLookOf)
-const softKinds = new WeakMap();
-const isSoft = material => {
-  let soft = softKinds.get(material);
-  if (soft == null) {
+const kinds = new WeakMap();
+function kindOf(material) {
+  const walk = material.userData.walkUniforms; // (a walkway: its texture can change live, so never cached)
+  if (walk) return walk.uWalkPattern.value ? 'stone' : null;
+  let kind = kinds.get(material);
+  if (kind === undefined) {
     const shader = Object.prototype.hasOwnProperty.call(material, 'onBeforeCompile') ? String(material.onBeforeCompile) : '';
-    soft = /uZoneEdgePoints|uSandTint/.test(shader) || (shader.includes('uPathSegments') && !shader.includes('uPavePattern'));
-    softKinds.set(material, soft);
+    kind = !shader ? null : /uZoneEdgePoints|uSandTint|uPathSegments/.test(shader) ? 'soft' : 'stone';
+    kinds.set(material, kind);
   }
-  return soft;
-};
+  return kind;
+}
 /**
- * Whether the ground straight below (x, fromY, z) is soft — grass, sand or a dirt path — rather than hard (stone, paving, roads).
+ * What the ground straight below (x, fromY, z) sounds like rolled over: 'soft' (grass, sand, a dirt path), 'stone'
+ * (paving), or null (roads, plain walkways and anything else plain).
  * @param {number} x
  * @param {number} fromY
  * @param {number} z
- * @returns {boolean}
+ * @returns {?string}
  */
-export function softGroundBelow(x, fromY, z) {
+export function groundKindBelow(x, fromY, z) {
   const material = hitBelow(x, fromY, z)?.material;
-  return !!material && isSoft(material);
+  return material ? kindOf(material) : null;
 }
 
 function hitBelow(x, fromY, z) {

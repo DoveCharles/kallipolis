@@ -1,4 +1,4 @@
-import { softGroundBelow } from '../core/ground-probe.js';
+import { groundKindBelow } from '../core/ground-probe.js';
 import { listener, outdoorsOf, ear, loopPanning, placePanner, makePanner } from './sfx.js';
 
 // ============================================================ the MedBot's noises
@@ -6,9 +6,10 @@ import { listener, outdoorsOf, ear, loopPanning, placePanner, makePanner } from 
 //  - her conveyor-belt boots: a low whirring motor (a sawtooth and a square a fifth up, through a lowpass) over the hiss
 //    of the belt (noise through a bandpass), rattling with the treads as they go round; rolling about it's MOTOR_HZ,
 //    rushing it's SPEED_PITCH times that and SPEED_LOUDER times as loud. Still, she's quiet.
-//  - under them, the ground she's rolling over (softGroundBelow, checked every PROBE_EVERY s): over grass, sand and dirt a
-//    crunch (noise, its loudness crackling at random); over anything else a skateboard's
-//    roar on pavement, clack-clacking (crack) over the cracks between slabs, CRACKS a second at her rolling speed.
+//  - under them, the ground she's rolling over (groundKindBelow, checked every PROBE_EVERY s): over grass, sand and dirt a
+//    crunch (noise, its loudness crackling at random); over paving a skateboard's
+//    roar, clack-clacking (crack) over the cracks between slabs, CRACKS a second at her rolling speed; over roads and
+//    anything plain, nothing.
 //  - her siren while she rushes to someone hurt: a slow wail, woooo-woooo, rising and falling around SIREN_HZ; heard much
 //    further off than the rest (SIREN_HEAR).
 //  - healing: a soft major-seventh chord swelling in and shimmering, with bubbly notes (each a sine blooping up to pitch)
@@ -110,7 +111,7 @@ function makeVoice() {
   shimmer.connect(healing).connect(sparkle);
 
   started.forEach(o => o.start());
-  return { bot: null, near, far, sparkle, nextTwinkle: 0, motor, saw, square, lowpass, hiss, tread, soft, stone, crackle, onSoft: false, nextProbe: 0, nextCrack: 0, siren, healing, notes: 0, nextRustle: 0 };
+  return { bot: null, near, far, sparkle, nextTwinkle: 0, motor, saw, square, lowpass, hiss, tread, soft, stone, crackle, ground: null, nextProbe: 0, nextCrack: 0, siren, healing, notes: 0, nextRustle: 0 };
 }
 
 // A crack in the pavement rolled over: a hollow knock and a click, front wheels then back.
@@ -237,14 +238,14 @@ export function updateMedBotSounds(bots) {
     const rolling = Math.min(1, b.speed/0.3);
     v.motor.gain.setTargetAtTime(MOTOR_VOLUME*rolling*(fast ? SPEED_LOUDER : 1), now, 0.08);
     // (the ground under her, as loud as her boots are)
-    if (now >= v.nextProbe) { v.onSoft = softGroundBelow(b.x, b.y, b.z); v.nextProbe = now + PROBE_EVERY; }
+    if (now >= v.nextProbe) { v.ground = groundKindBelow(b.x, b.y, b.z); v.nextProbe = now + PROBE_EVERY; }
     const ground = rolling*(fast ? SPEED_LOUDER : 1);
-    v.soft.gain.setTargetAtTime(v.onSoft ? SOFT_VOLUME*ground : 0, now, 0.08);
-    v.stone.gain.setTargetAtTime(v.onSoft ? 0 : STONE_VOLUME*ground, now, 0.08);
-    if (!v.onSoft && rolling > 0.5 && now >= v.nextCrack) {
+    v.soft.gain.setTargetAtTime(v.ground === 'soft' ? SOFT_VOLUME*ground : 0, now, 0.08);
+    v.stone.gain.setTargetAtTime(v.ground === 'stone' ? STONE_VOLUME*ground : 0, now, 0.08);
+    if (v.ground === 'stone' && rolling > 0.5 && now >= v.nextCrack) {
       if (v.nextCrack) crack(v, now, CRACK_VOLUME*ground);
       v.nextCrack = now + (0.6 + Math.random()*0.8)/(CRACKS*Math.max(0.3, b.speed));
-    } else if (v.onSoft || rolling <= 0.5) v.nextCrack = 0;
+    } else if (v.ground !== 'stone' || rolling <= 0.5) v.nextCrack = 0;
     v.crackle.playbackRate.setTargetAtTime(0.0008*Math.max(0.3, b.speed), now, 0.12);
     v.siren.gain.setTargetAtTime(b.rushing ? SIREN_VOLUME : 0, now, b.rushing ? 0.05 : 0.4);
     v.healing.gain.setTargetAtTime(b.healing ? HEAL_VOLUME : 0, now, b.healing ? 0.3 : 0.25);
