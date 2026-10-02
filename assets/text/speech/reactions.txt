@@ -205,6 +205,22 @@ Never leave a man behind. Or a pint. {felt = scavenged, alcoholic = 2}
 It's practically full! {felt = scavenged, alcoholic = 2, thought}
 I'm not proud of this. {felt = scavenged, mood = -1, thought}
 Oooh, nice find! {felt = scavenged}
+A free [felt.item]! {felt = scavenged}
+Don't mind if I have this [felt.item]. {felt = scavenged, thought}
+Oh, someone dropped their [felt.item]. {felt = leftlitter}
+Who leaves a [felt.item] lying about? {felt = leftlitter, patience = -1}
+My [felt.item]! Still good. {felt = reclaimed}
+Come here, [felt.item]. {felt = reclaimed, thought}
+My [felt.item]... ruined. {felt = ruined, mood = -1}
+I'll get another [felt.item]. {felt = ruined, thought}
+Thanks for the [felt.item]! {felt = snatched}
+Oi! That's my [felt.item]! {felt = robbed}
+That [felt.item], give me that! {felt = mugging}
+That [felt.item] looks good, I'm taking it! {felt = mugging}
+Nice [felt.item]. Mine now. {felt = mugging, thought}
+Hand over the [felt.item]! {felt = mugging, aggression = 2}
+I need that [felt.item] more than you. {felt = mugging, stimulants = 2}
+Gimme that [felt.item]! {felt = mugging, alcoholic = 2}
 Who would litter here? {felt = leftlitter}
 Some people. Honestly. {felt = leftlitter, patience = -1}
 Bin's right there. {felt = leftlitter, thought}

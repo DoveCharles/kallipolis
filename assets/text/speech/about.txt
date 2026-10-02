@@ -267,6 +267,8 @@
 #   {felt = reclaimed}        went back for their own snack or drink after it was knocked from their hand, and picked it up
 #   {felt = ruined}           had their snack or drink knocked from their hand, and left it lying there
 #   {felt = snatched}         grabbed someone's knocked-down snack or drink before they could get it back (only the evil)
+#   {felt = mugging}          (evil) about to punch someone for the coffee, pint or food in their hand ([felt.item]),
+#                             to grab it and run ([felt.by] is who)
 #   {felt = robbed}           had their knocked-down snack or drink snatched (may go after the thief: revenge roll)
 #   {felt = carcrash}         was inside when a car smashed through the wall; ran out as the building came down
 #   {felt = healed}          a MedBot just healed them back to full health (see src/life/medbot.js)
@@ -318,6 +320,8 @@
 #
 # NAMES: [me.name] the speaker, [other.name] who they're talking to, [seen.name] who it happened to, [seen.by] who did
 # it, [felt.by] who did it to the speaker (for revenge, who they got back at). A line whose name can't be had isn't said.
+# [felt.item]: the dropped thing a {felt = scavenged/leftlitter/reclaimed/ruined/snatched/robbed/mugging} line is about ("coffee",
+# "pint", "hot dog", "pizza slice", "souvlaki").
 #   Catch you later, [other.name]. {end}
 # STRANGERS' NAMES (automatic — write [seen.name] as usual): [seen.name], [seen.by] and [felt.by] give the person's name
 # only if the speaker's been introduced to them (finished a conversation together); otherwise "that man" or "that

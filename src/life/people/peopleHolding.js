@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene, camera } from '../../core/scene.js';
-import { HEADSHOT_LAYER, PEOPLE_MAX, feel, inRoom, isDrawn, isGone, standingOf, lastPeopleTime, people, peopleRng, personModel } from './people.js';
+import { HEADSHOT_LAYER, PEOPLE_MAX, beginFleeing, feel, inRoom, isDrawn, isGone, standingOf, lastPeopleTime, people, peopleRng, personModel } from './people.js';
 import { possession } from '../possession.js';
-import { avengeTheft } from './peopleActivities.js';
+import { avengeTheft, isFairGame, mug } from './peopleActivities.js';
 import { PERSON_ARM_SPREAD } from './peopleModel.js';
 import { eatingSound } from '../../audio/eating.js';
 import { STATUS_SOURCES, addStatus } from '../statuseffects.js';
@@ -558,7 +558,8 @@ function armShift(out, p, i, hand) {
 // goes back for it (RETURN_SHARE, p.fetch: a goal in people.js; felt 'reclaimed'), else leaves it ('ruined'). Passers-by
 // with free hands may pick it up and carry on with it (scavenge, 'scavenged'): most won't touch it ('leftlitter'), likelier for a coffee the more
 // they crave stimulants, a pint alcohol. While its owner's about, only the evil take it (snatched; the owner 'robbed',
-// and once up, their revenge roll: avengeTheft in peopleActivities.js).
+// and once up, their revenge roll: avengeTheft in peopleActivities.js). The evil may also eye up what someone's holding
+// and punch them for it (muggings: felt 'mugging', mug in peopleActivities.js), then pick it up for sure and run.
 // BODIES: each one's box, half its size in metres (as ITEMS' are) once turned by `turn` from how it's held to how it stands.
 const DROPPED_TIME = 180, DROPPED_MAX = 64, DROP_FROM = [0, 1, -0.25]; // (where it leaves them: metres, their frame)
 const BODIES = {
@@ -571,10 +572,14 @@ const BODIES = {
 };
 const SCAVENGE_EVERY = 0.25, SCAVENGE_REACH = 0.6, SCAVENGE_BASE = 0.02, SCAVENGE_MAX = 0.8; // (s; m at people size 1; chance)
 const RETURN_SHARE = 0.75, RETURN_REACH = 8, FETCH_TIME = 8; // (m at people size 1; s to get there)
+const MUG_NOTICE = 4, MUG_RATE = 0.15, MUG_MAX = 0.6, MUG_TIME = 10; // (m at people size 1; chance per evil × aggression; s to get it)
 const SNATCH_PER_EVIL = 0.8, AVENGE_WITHIN = 10; // (chance per point of evil; s the owner has to get up and go after them)
 // how much likelier each trait point over the usual 1 makes it, by item
 // TODO: food (hotdog, slice, skewer) by hunger, once there is any
 const SCAVENGE_CRAVE = { coffee: ['stimulants', 0.05], beer: ['alcoholic', 0.07] };
+const ITEM_NAMES = { coffee: 'coffee', beer: 'pint', hotdog: 'hot dog', slice: 'pizza slice', skewer: 'souvlaki' }; // (for [felt.item] in speech)
+// feel, with what it was about
+const feelAbout = (p, what, d, by = null) => { feel(p, what, by); p.felt.item = ITEM_NAMES[d.item]; };
 function scavengeChance(p, item) {
   const [trait, per] = SCAVENGE_CRAVE[item] ?? [];
   return Math.min(SCAVENGE_MAX, SCAVENGE_BASE + (trait ? Math.max(0, (p.traits[trait] ?? 1) - 1)*per : 0));
@@ -583,6 +588,7 @@ function scavengeChance(p, item) {
 function unDrop(k) {
   const d = dropped.splice(k, 1)[0];
   if (d.owner?.fetch === d.fetch) d.owner.fetch = null;
+  if (d.mugger?.fetch === d.mugFetch) d.mugger.fetch = null;
 }
 function takeUp(p, k) {
   const d = dropped[k];
@@ -595,6 +601,25 @@ function takeUp(p, k) {
 }
 const free = (p, i) => i !== possession.index && !p.holding?.length && !p.punched && !p.fall && !p.act && !isGone(p) && isDrawn(p);
 const within = (d, p, reach) => (d.pos.x - p.x)**2 + (d.pos.z - p.z)**2 < reach*reach && Math.abs(d.ground - p.y) < 1;
+// the evil eyeing up what's in people's hands: each decides once per snack, by evil × aggression and craving it
+function muggings() {
+  const notice = MUG_NOTICE*S.peopleSize;
+  for (let i = 0; i < people.length; i++) {
+    const p = people[i];
+    if (standingOf(p) === 'innocent' || p.traits.pacifist || !free(p, i) || !isFairGame(p)) continue;
+    for (const q of people) {
+      const s = q.snack;
+      if (q === p || !s || !ITEM_NAMES[s.item] || !(s.mouthfuls > 0) || s.eyed?.has(p) || !(isFairGame(q) || (q.mode === 'possessed' && !q.punched && !q.attack))
+        || Math.abs(q.x - p.x) > notice || Math.abs(q.z - p.z) > notice || Math.hypot(q.x - p.x, q.z - p.z) > notice) continue;
+      (s.eyed ??= new WeakSet()).add(p);
+      const crave = scavengeChance(p, s.item) - SCAVENGE_BASE;
+      if (peopleRng() >= Math.min(MUG_MAX, MUG_RATE*p.traits.evil*p.traits.aggression + crave)) continue;
+      mug(p, q);
+      feel(p, 'mugging', q); p.felt.item = ITEM_NAMES[s.item];
+      return; // (one a check)
+    }
+  }
+}
 let scavengeIn = 0;
 const avengers = []; // {p, thief, by}: robbed while down, waiting to get up
 function scavenge(now) {
@@ -603,21 +628,36 @@ function scavenge(now) {
     if (isGone(a.p) || now > a.by) avengers.splice(k, 1);
     else if (!a.p.punched && !a.p.fall) { avengers.splice(k, 1); avengeTheft(a.p, a.thief); }
   }
+  muggings();
   const reach = SCAVENGE_REACH*S.peopleSize;
   for (let k = dropped.length - 1; k >= 0; k--) {
     const d = dropped[k];
     if (!d.still || d.item === 'cig') continue;
+    const o = d.owner, m = d.mugger;
+    // punched out of their hand for it: the mugger's, once they've done staring (nobody else gets to it first)
+    if (m) {
+      if (isGone(m) || m.punched || now > d.mugBy) { if (m.fetch === d.mugFetch) m.fetch = null; d.mugger = null; }
+      else {
+        if (!m.attack && !m.fetch) m.fetch = d.mugFetch = { x: d.pos.x, y: d.ground, z: d.pos.z };
+        if (!m.attack && !m.holding?.length && within(d, m, reach)) {
+          if (m.fetch === d.mugFetch) m.fetch = null;
+          takeUp(m, k);
+          feelAbout(m, 'snatched', d, o); if (o) feelAbout(o, 'robbed', d, m);
+          beginFleeing(m, o ?? d.pos);
+        }
+        continue;
+      }
+    }
     // its owner's, while they're getting up or going back for it
-    const o = d.owner;
     if (o) {
       const i = people.indexOf(o);
       if (i < 0 || isGone(o) || (d.fetch && (o.fetch !== d.fetch || now > d.fetchBy))) { if (o.fetch === d.fetch) o.fetch = null; d.owner = null; continue; }
       if (!d.fetch && !(o.punched || o.fall || i === possession.index)) { // (up, and not yours: decides)
-        if (o.holding?.length || !within(d, o, RETURN_REACH*S.peopleSize) || peopleRng() >= RETURN_SHARE) { feel(o, 'ruined'); d.owner = null; continue; }
+        if (o.holding?.length || !within(d, o, RETURN_REACH*S.peopleSize) || peopleRng() >= RETURN_SHARE) { feelAbout(o, 'ruined', d); d.owner = null; continue; }
         o.fetch = d.fetch = { x: d.pos.x, y: d.ground, z: d.pos.z }; d.fetchBy = now + FETCH_TIME;
         continue;
       }
-      if (d.fetch && within(d, o, reach) && free(o, i)) { takeUp(o, k); feel(o, 'reclaimed'); continue; }
+      if (d.fetch && within(d, o, reach) && free(o, i)) { takeUp(o, k); feelAbout(o, 'reclaimed', d); continue; }
     }
     for (let i = 0; i < people.length; i++) {
       const p = people[i];
@@ -625,16 +665,16 @@ function scavenge(now) {
       d.passed.add(p); // (each decides once)
       const evil = standingOf(p) !== 'innocent';
       if (o && !evil) continue;
-      if (peopleRng() >= Math.min(SCAVENGE_MAX, scavengeChance(p, d.item) + (o ? SNATCH_PER_EVIL*p.traits.evil : 0))) { if (!o) feel(p, 'leftlitter'); continue; }
+      if (peopleRng() >= Math.min(SCAVENGE_MAX, scavengeChance(p, d.item) + (o ? SNATCH_PER_EVIL*p.traits.evil : 0))) { if (!o) feelAbout(p, 'leftlitter', d); continue; }
       takeUp(p, k);
-      if (o) { feel(p, 'snatched', o); feel(o, 'robbed', p); avengers.push({ p: o, thief: p, by: now + AVENGE_WITHIN }); }
-      else feel(p, 'scavenged');
+      if (o) { feelAbout(p, 'snatched', d, o); feelAbout(o, 'robbed', d, p); avengers.push({ p: o, thief: p, by: now + AVENGE_WITHIN }); }
+      else feelAbout(p, 'scavenged', d);
       break;
     }
   }
 }
 const DROP_GRAVITY = 9.8, BOUNCE = 0.25, GRIP = 0.4, SETTLE = 0.05, DROP_STEPS = 4;
-const dropped = []; // {item, frac, passed, owner, fetch, fetchBy, shape, left, light, until, scale, ground, half, pos, vel, spin, turn, rest: Quaternion}, oldest first
+const dropped = []; // {item, frac, passed, owner, fetch, fetchBy, mugger, mugBy, mugFetch, shape, left, light, until, scale, ground, half, pos, vel, spin, turn, rest: Quaternion}, oldest first
 let droppedAt = null;
 const yAxis = new THREE.Vector3(0, 1, 0), corner = new THREE.Vector3(), arm = new THREE.Vector3(), pointVel = new THREE.Vector3(), push = new THREE.Vector3();
 const spinTurn = new THREE.Quaternion();
@@ -652,6 +692,7 @@ function dropToFloor(p, held, knocked = false) {
   const frac = p.snack?.held === held ? p.snack.mouthfuls/SNACKS[held.item].mouthfuls : 1; // (what's left of it, for scavenge)
   dropped.push({
     item: held.item, frac, passed: new WeakSet(), owner: knocked ? p : null,
+    mugger: knocked && p.punched?.by?.attack?.mug && p.punched.by.attack.target === p ? p.punched.by : null, mugBy: (lastPeopleTime ?? 0) + MUG_TIME,
     shape: item.parts[0].shape === 'beer' && held.stout ? 'stout' : item.parts[0].shape, left, light: inRoom(p) ? 'lit' : 'plain',
     until: (lastPeopleTime ?? 0) + DROPPED_TIME, scale, ground, size: item.parts[0].size,
     half: new THREE.Vector3(...body.half).multiplyScalar(scale).multiply(new THREE.Vector3(1, 1, body.turn ? Math.max(0.2, left) : 1)),

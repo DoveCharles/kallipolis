@@ -38,7 +38,7 @@ let lastReaction = -Infinity;
 export const SEEN_TIME = 60; // seconds someone remembers what they saw or felt, for {seen} and {felt} (p.seen / p.felt: see witness, notice and feel in people/people.js)
 const DEATHS = ['killedbycar', 'beatentodeath', 'smited', 'drowned', 'exploded', 'crashedinto', 'fell', 'punchedfence', 'orbsmited'];
 const SIGHTS = [...DEATHS, 'death', 'punch', 'knockedbycar', 'planecrash', 'beeattack', 'resurrected', 'healed', 'orbhunt', 'waterwalking', 'smelly', 'nude']; // ('death': any of DEATHS)
-const FEELINGS = ['punched', 'hitbycar', 'stung', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes', 'shopped', 'gifted', 'cheered', 'party', 'healed', 'dined', 'carcrash', 'broke', 'leftmoney', 'lootedbody', 'foundmoney', 'scavenged', 'leftlitter', 'reclaimed', 'ruined', 'snatched', 'robbed'];
+const FEELINGS = ['punched', 'hitbycar', 'stung', 'revenge', 'watchedtv', 'fellover', 'gaveup', 'drunk', 'bloodlust', 'bloodsoaked', 'bloodclean', 'haircut', 'newclothes', 'shopped', 'gifted', 'cheered', 'party', 'healed', 'dined', 'carcrash', 'broke', 'leftmoney', 'lootedbody', 'foundmoney', 'scavenged', 'leftlitter', 'reclaimed', 'ruined', 'snatched', 'robbed', 'mugging'];
 const MOOD_SHOWS = 0.3;       // how far their face (p.emotion, -1 to 1) has to be from neutral for is = sad / happy
 const HURT_BELOW = 0.7;       // share of full health under which they're hurt
 const STATES = { // {is = …}: how the speaker (or other.is: who they're talking to) is right now
@@ -653,6 +653,7 @@ function fill(text, person, vars, depth = 0, picks = null, avoid = null) {
     const name = rawName.toLowerCase(), options = rest.join(':').split(',').map(o => o.trim().toLowerCase()).filter(Boolean);
     // ([most: measure#picks, …]: the first option's the ranking, unless it's a call option — [most#4: him] on a held one)
     const rank = RANKED.test(name) && options.length && !CALL_OPTIONS.includes(options[0]) ? options.shift() : null;
+    if (name === 'felt.item') { const said = feltFresh(person)?.item; if (!said) failed = true; return said ?? ''; } // (what they found or lost: see scavenge in people/peopleHolding.js)
     if (NAMED.test(name)) { const said = nameIn(name, person); if (!said) failed = true; return said ?? ''; }
     const hated = options.includes('hated'), article = options.includes('a'), lower = options.includes('lower'), everyWord = options.includes('capitalise');
     const form = options.find(o => !CALL_OPTIONS.includes(o)) || null;
