@@ -252,6 +252,11 @@ html.win3 .pc-health { border-radius:0; border-color:#808080 #fff #fff #808080; 
    The canvas still fills the tab underneath — the frame and the panel sit over its edges, as the panel always did. */
 #app-frame, .w3-dropdown, .w3-modal { display:none; }
   html.win3 { --w3-top:47px; --w3-panel-w:267px; } /* (the frame's 4px, the title bar's 22 and the menu bar's 21) */
+  /* as a Home Screen app the page runs under the status bar: drop the window below it */
+  @media (display-mode: standalone), (display-mode: fullscreen) {
+    html.win3 { --w3-top:calc(47px + env(safe-area-inset-top)); }
+    html.win3 body #app-frame { top:env(safe-area-inset-top); }
+  }
   html.win3 #app-frame {
     display:flex; flex-direction:column; position:fixed; inset:0; z-index:15; pointer-events:none;
     border:4px solid transparent; outline:1px solid var(--w3-frame); outline-offset:-1px; box-shadow:inset 0 0 0 1px var(--w3-frame);

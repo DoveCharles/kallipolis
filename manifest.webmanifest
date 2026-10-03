@@ -1,0 +1,8 @@
+{
+  "name": "Kallipolis",
+  "short_name": "Kallipolis",
+  "start_url": "./",
+  "display": "fullscreen",
+  "background_color": "#000000",
+  "icons": [{ "src": "assets/icons/apple-touch-icon.png", "type": "image/png", "sizes": "180x180" }]
+}

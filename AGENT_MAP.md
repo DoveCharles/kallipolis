@@ -16,6 +16,7 @@ Browser city-blockout tool on three.js (plain ES modules, no build step). Read t
 ## Root
 - `.githooks/pre-commit` Renames the version (tools/version.py) and stages index.html on every commit.
 - `index.html` (22K) Page markup, panel DOM, importmap (three.js from CDN), Clipper from CDN. Links the CSS below.
+- `manifest.webmanifest` Home Screen web-app manifest (no browser UI); icon assets/icons/apple-touch-icon.png (ped-view-on.png scaled up).
 - `css/` Styles, linked in cascade order: `base.css` (core layout, panel, cards), `win3.css` (Windows 3.0 theme, `html.win3`; also `.use-label`, the possessed person's "Press E" label), `touch.css` (touch & small screens), `phone.css` (≤760px: same win3 window, panel and cards docked along the bottom), `ped.css` (possession/driving view).
 - `style.css` Stub; unused (split into `css/`). Safe to delete.
 - `src/ui/meter.css` Reusable meter component. `src/ui/morality.css` superseded, unlinked.
