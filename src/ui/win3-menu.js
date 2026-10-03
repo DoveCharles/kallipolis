@@ -380,3 +380,12 @@ for (const el of [strip, meter]) el.addEventListener('wheel', e => {
   strip.scrollLeft += e.deltaY;
   e.preventDefault();
 }, { passive: false });
+// a finger dragged on the meter scrolls the strip too (scrolled to the end, the meter covers its last stretch)
+let touchX = null;
+meter.addEventListener('touchstart', e => { touchX = e.target.closest('.meter-details') ? null : e.touches[0].clientX; }, { passive: true });
+meter.addEventListener('touchmove', e => {
+  if (touchX == null) return;
+  const x = e.touches[0].clientX;
+  strip.scrollLeft += toUi(touchX - x);
+  touchX = x;
+}, { passive: true });
