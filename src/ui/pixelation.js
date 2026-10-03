@@ -15,9 +15,10 @@ import { S } from '../core/shared.js';
 // look, these are the browser's preferences, kept in localStorage, not the project's.
 const PIXELATION_KEY = 'splinetopia.pixelation', PALETTE_KEY = 'splinetopia.palette16', PALETTE_COLORS_KEY = 'splinetopia.paletteColors';
 const DITHER_KEY = 'splinetopia.dither', GRADE_KEY = 'splinetopia.grade', ASCII_KEY = 'splinetopia.ascii';
-// ASCII: the view redrawn as characters, each cell's colour, the denser the brighter; ASCII_CELL CSS px a cell (or a
-// drawn pixel each, pixelated that coarse)
-const ASCII_CHARS = ' .:-=+*#%@', ASCII_CELL = 8, ASCII_GLYPH = 32;
+// ASCII: the view redrawn as characters, each cell's colour, the denser the brighter (Paul Bourke's ramp); asciiCellSize
+// CSS px a cell (from its slider; or a drawn pixel each, pixelated that coarse)
+const ASCII_CHARS = ' .\'`^",:;Il!i><~+_-?][}{1)(|\\/tjfrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$', ASCII_GLYPH = 32;
+const ASCII_CELL_KEY = 'splinetopia.asciiCell', DEFAULT_ASCII_CELL = 8;
 const MAX_PIXEL_SIZE = 12;
 const SHARP_PIXEL_RATIO = Math.min(window.devicePixelRatio, 2); // (as scene.js sets it up)
 // the sets of colours, in the Palette menu's order — sixteen, or fewer (repeated round to fill the shader's sixteen)
@@ -74,7 +75,9 @@ const paletteToggle = document.getElementById('s-palette16');
 const paletteRow = document.getElementById('palette-row'), paletteMenu = document.getElementById('s-palette');
 const ditherRow = document.getElementById('dither-row'), ditherMenu = document.getElementById('s-dither');
 const gradeToggle = document.getElementById('s-grade'), asciiToggle = document.getElementById('s-ascii');
-let pixelSize = 1, palette16 = false, grade = true, ascii = false;
+const asciiCellRow = document.getElementById('asciicell-row'), asciiCellSlider = document.getElementById('s-asciicell');
+const asciiCellLabel = document.getElementById('dv-asciicell');
+let pixelSize = 1, palette16 = false, grade = true, ascii = false, asciiCellSize = DEFAULT_ASCII_CELL;
 
 // the characters side by side, white on clear
 let glyphTexture = null;
@@ -157,7 +160,7 @@ const copyMaterial = new THREE.ShaderMaterial({
     highlightTint: { value: new THREE.Vector3(1, 1, 1) },
     saturation: { value: 1 },
     useAscii: { value: 0 },
-    asciiCell: { value: ASCII_CELL },
+    asciiCell: { value: DEFAULT_ASCII_CELL },
     glyphs: { value: placeholderNoise },
   },
   vertexShader: `
@@ -406,9 +409,16 @@ function gradeForSky() {
 function setAscii(on, save) {
   ascii = on;
   asciiToggle.classList.toggle('on', on);
+  asciiCellRow.style.display = on ? '' : 'none';
   if (on && !glyphTexture) copyMaterial.uniforms.glyphs.value = glyphTexture = makeGlyphs();
   copyMaterial.uniforms.useAscii.value = on ? 1 : 0;
   if (save) remember(ASCII_KEY, on ? '1' : '0');
+}
+function setAsciiCell(size, save) {
+  asciiCellSize = Math.max(4, Math.min(24, Math.round(size) || DEFAULT_ASCII_CELL));
+  asciiCellSlider.value = asciiCellSize;
+  asciiCellLabel.textContent = asciiCellSize + 'px';
+  if (save) remember(ASCII_CELL_KEY, String(asciiCellSize));
 }
 function setDither(id, save) {
   const index = Math.max(0, DITHER_PATTERNS.findIndex(p => p.id === id));
@@ -428,12 +438,14 @@ setPaletteColors(recall(PALETTE_COLORS_KEY) || DEFAULT_PALETTE, false);
 setDither(recall(DITHER_KEY) || DEFAULT_DITHER, false);
 setGrade(recall(GRADE_KEY) !== '0', false);
 setAscii(recall(ASCII_KEY) === '1', false);
+setAsciiCell(Number(recall(ASCII_CELL_KEY)) || DEFAULT_ASCII_CELL, false);
 slider.addEventListener('input', () => setPixelation(Number(slider.value), true));
 paletteToggle.addEventListener('click', () => setPalette(!palette16, true));
 paletteMenu.addEventListener('change', () => setPaletteColors(paletteMenu.value, true));
 ditherMenu.addEventListener('change', () => setDither(ditherMenu.value, true));
 gradeToggle.addEventListener('click', () => setGrade(!grade, true));
 asciiToggle.addEventListener('click', () => setAscii(!ascii, true));
+asciiCellSlider.addEventListener('input', () => setAsciiCell(Number(asciiCellSlider.value), true));
 
 // Draws the view to the screen — straight there, or through the filters.
 // Holes cut through the view to the page behind it (where the TV in a home shows a YouTube video, as an iframe under the
@@ -488,9 +500,9 @@ export function renderView(scene, camera) {
     width = screenSize.x;
     height = screenSize.y;
   }
-  // (a cell ASCII_CELL CSS px across, in drawn pixels)
-  copyMaterial.uniforms.asciiCell.value = pixelSize > 1 || floyd ? Math.max(1, Math.round(ASCII_CELL/pixelSize))
-                                                               : Math.round(ASCII_CELL*renderer.getPixelRatio());
+  // (a cell asciiCellSize CSS px across, in drawn pixels)
+  copyMaterial.uniforms.asciiCell.value = pixelSize > 1 || floyd ? Math.max(1, Math.round(asciiCellSize/pixelSize))
+                                                               : Math.round(asciiCellSize*renderer.getPixelRatio());
   if (filteredView.width !== width || filteredView.height !== height) filteredView.setSize(width, height);
   copyMaterial.uniforms.viewSize.value.set(width, height);
   copyQuad.scale.set(coverX, coverY, 1);
