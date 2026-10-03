@@ -36,9 +36,11 @@ export function setColorfulIcons(on) {
   redraw();
 }
 
-// Colourful bitmaps are evened out in OKLCH: every coloured pixel gets the same chroma (the Icon saturation slider's),
-// and each icon's colours are shifted together to the same mean lightness, keeping their hues and light/dark contrast.
-const TINT_L = 0.7, TINT_C = 0.13;
+// Colourful bitmaps are evened out in OKLCH: every coloured pixel gets the same share of its hue's most chroma (the
+// Icon saturation slider's), and each icon's colours are shifted together to the same mean lightness — TINT_L, lifted
+// HUE_LIFT of the way to each hue's most colourful lightness (so yellow stays bright) — keeping hues and contrast.
+const TINT_L = 0.65, HUE_LIFT = 0.7, TINT_C = 0.7;
+const FLAT = new Set(['daily-gift-c', 'identify-on']); // each colour at its own target, to match one-colour icons (Ped View, Edit, Favorites)
 let saturation = 1;
 export function setIconSaturation(s) {
   if (s === saturation) return;
@@ -62,12 +64,28 @@ function fromLab(L, a, b) {
   return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
     -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s];
 }
-// the colour at lightness L, hue h, chroma c or as near it as the screen can show
-function lch(L, h, c) {
-  for (let i = 0; i < 12; i++, c *= 0.85) {
-    const rgb = fromLab(L, c * Math.cos(h), c * Math.sin(h));
-    if (rgb.every(v => v >= -1e-4 && v <= 1.0001) || i === 11) return rgb.map(v => Math.round(gam(Math.min(1, Math.max(0, v)))));
+const shows = (L, h, c) => fromLab(L, c * Math.cos(h), c * Math.sin(h)).every(v => v >= -1e-4 && v <= 1.0001);
+// the most chroma the screen can show at lightness L, hue h
+function maxChroma(L, h) {
+  let lo = 0, hi = 0.4;
+  for (let i = 0; i < 16; i++) { const m = (lo + hi) / 2; if (shows(L, h, m)) lo = m; else hi = m; }
+  return lo;
+}
+// hue h's target lightness: TINT_L lifted toward the lightness it's most colourful at
+const targets = new Map();
+function target(h) {
+  const key = Math.round(h * 100);
+  if (!targets.has(key)) {
+    let most = 0, cusp = TINT_L;
+    for (let L = 0.3; L <= 0.98; L += 0.01) { const c = maxChroma(L, h); if (c > most) { most = c; cusp = L; } }
+    targets.set(key, TINT_L + HUE_LIFT * (cusp - TINT_L));
   }
+  return targets.get(key);
+}
+// the colour at lightness L, hue h, at `share` of the most chroma it can have there
+function lch(L, h, share) {
+  const c = Math.min(1, share) * maxChroma(L, h);
+  return fromLab(L, c * Math.cos(h), c * Math.sin(h)).map(v => Math.round(gam(Math.min(1, Math.max(0, v)))));
 }
 const tints = new Map(); // name -> Promise of its evened-out bitmap's data URL
 function tinted(name) {
@@ -85,10 +103,12 @@ function tinted(name) {
       if (d[i + 3] < 128) continue;
       const [L, a, b] = toLab(d[i], d[i + 1], d[i + 2]);
       if (Math.hypot(a, b) < 0.03) continue; // (black, white, greys: left be)
-      coloured.push([i, L, Math.atan2(b, a)]); sum += L;
+      const h = Math.atan2(b, a), t = target(h);
+      coloured.push([i, L, h, t]); sum += t - L;
     }
-    const shift = coloured.length ? TINT_L - sum / coloured.length : 0;
-    for (const [i, L, h] of coloured) d.set(lch(Math.min(0.97, Math.max(0.2, L + shift)), h, TINT_C * saturation), i);
+    const shift = coloured.length ? sum / coloured.length : 0, flat = FLAT.has(name);
+    for (const [i, L, h, t] of coloured)
+      d.set(lch(flat ? t : Math.min(0.97, Math.max(0.2, L + shift)), h, TINT_C * saturation), i);
     ctx.putImageData(all, 0, 0);
     return canvas.toDataURL();
   })());
