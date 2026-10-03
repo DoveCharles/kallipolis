@@ -257,6 +257,12 @@ export function spendMorality(side, k) {
   pts[side] -= k; savePoints(); renderPoints();
   return true;
 }
+/** Give good and evil points (a daily gift's yin-yangs), each up to POINTS_MAX. @param {number} good @param {number} evil @returns {void} */
+export function addMoralityPoints(good, evil) {
+  pts.good = Math.min(POINTS_MAX, pts.good + good);
+  pts.evil = Math.min(POINTS_MAX, pts.evil + evil);
+  savePoints(); renderPoints();
+}
 onProgress('moralityPoints', v => { pts = pointsFrom(v); shownPts = null; renderPoints(); }); // (a project's coming in)
 
 // (50/50 until BAR_DELAY after loading: easing while the load stutters would go unseen)
@@ -474,4 +480,4 @@ fetch(MORALITY_TEXT_URL, { cache: 'no-cache' })
   .catch(err => console.warn('Kallipolis: assets/text/morality.txt failed to load; everything is worth 0 morality', err));
 
 tick();
-Object.assign(App, { recordMoralityEvent, hushMorality, refreshMorality: tick, moralityPoints, spendMorality });
+Object.assign(App, { recordMoralityEvent, hushMorality, refreshMorality: tick, moralityPoints, spendMorality, addMoralityPoints });

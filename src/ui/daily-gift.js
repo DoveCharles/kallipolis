@@ -67,13 +67,24 @@ const RARITIES = {
   epic: { label: 'Epic', count: 2, energy: 50 },
   legendary: { label: 'Legendary', count: 1, energy: 250 },
 };
-// the reel: every reward, in a fixed shuffled order (the same each day)
+// Half of each of Common, Rare and Epic (rounding down) give yin-yangs instead: YINYANG_PER_ENERGY times the energy, each
+// one a good point and an evil point (see addMoralityPoints in morality.js). CRAP and Legendary are always energy.
+const YINYANG_PER_ENERGY = 3, YINYANG_TIERS = ['common', 'rare', 'epic'];
+const KINDS = {
+  energy: { icon: 'assets/icons/energy.png', name: 'energy' },
+  yinyang: { icon: 'assets/icons/status/yinyang.png', name: 'yin-yang' },
+};
+// the reel: every reward ({ rarity, kind, amount }), in a fixed shuffled order (the same each day)
 const REWARDS = (() => {
-  const list = Object.entries(RARITIES).flatMap(([rarity, r]) => Array.from({ length: r.count }, () => rarity));
+  const list = Object.entries(RARITIES).flatMap(([rarity, r]) => Array.from({ length: r.count }, (_, i) =>
+    YINYANG_TIERS.includes(rarity) && i < Math.floor(r.count/2)
+      ? { rarity, kind: 'yinyang', amount: r.energy*YINYANG_PER_ENERGY }
+      : { rarity, kind: 'energy', amount: r.energy }));
   const rng = mulberry32(20260930);
   for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rng()*(i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
   return list;
 })();
+const rewardHTML = ({ kind, amount }) => `<span class="dg-amount">${amount}</span><img class="meter-icon" src="${KINDS[kind].icon}" alt="${KINDS[kind].name}">`;
 const VISIBLE = 9, MIDDLE = 4, ROW_H = 22;
 const SPIN_MS = 6000, SPIN_LOOPS = 3; // how long it spins, and how many times round the reel at least
 const mod = (n, m) => ((n % m) + m) % m;
@@ -160,13 +171,13 @@ export function openDailyGift() {
   function draw(p) {
     const k = Math.floor(p), frac = p - k;
     rows.forEach((row, n) => {
-      const j = n - 1, rarity = REWARDS[mod(j - k, REWARDS.length)], r = RARITIES[rarity];
+      const j = n - 1, at = mod(j - k, REWARDS.length), reward = REWARDS[at], r = RARITIES[reward.rarity];
       row.style.transform = `translateY(${(j + frac)*ROW_H}px)`;
-      if (row.dataset.rarity !== rarity) {
-        row.dataset.rarity = rarity;
-        row.className = 'dg-row dg-' + rarity;
+      if (row.dataset.at !== String(at)) {
+        row.dataset.at = at;
+        row.className = 'dg-row dg-' + reward.rarity;
         row.firstChild.textContent = r.label;
-        row.lastChild.innerHTML = `${r.energy} energy <img class="meter-icon" src="assets/icons/energy.png" alt="">`;
+        row.lastChild.innerHTML = rewardHTML(reward);
       }
       row.classList.toggle('dg-alt', mod(j - k, 2) === 1);
     });
@@ -174,12 +185,16 @@ export function openDailyGift() {
     shownAt = k;
   }
   function land(slot) {
-    const rarity = REWARDS[slot], r = RARITIES[rarity];
+    const reward = REWARDS[slot], r = RARITIES[reward.rarity];
     rows.forEach(row => row.classList.toggle('dg-win', Math.round(parseFloat(row.style.transform.slice(11))/ROW_H) === MIDDLE));
-    result.innerHTML = `<span class="dg-${rarity}-text">${r.label}!</span> ${r.energy} energy`;
+    result.innerHTML = `<span class="dg-${reward.rarity}-text">${r.label}!</span> ${rewardHTML(reward)}`;
     spin.textContent = 'Claim';
     spin.disabled = false;
-    spin.onclick = () => { App.addEnergy?.(r.energy, true); claimDailyGift(); win.close(); };
+    spin.onclick = () => {
+      if (reward.kind === 'yinyang') App.addMoralityPoints?.(reward.amount, reward.amount);
+      else App.addEnergy?.(reward.amount, true);
+      claimDailyGift(); win.close();
+    };
   }
   const done = spunToday();
   if (done) { draw(mod(MIDDLE - done.slot, REWARDS.length)); land(done.slot); return; }

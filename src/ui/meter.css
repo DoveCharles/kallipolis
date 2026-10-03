@@ -75,7 +75,10 @@ html.win3 .dg-reel { border-color:var(--w3-frame); background:var(--w3-window); 
 html.win3 .dg-row { color:var(--w3-text); }
 .dg-row.dg-alt { background:var(--dg-b); }
 .dg-row .dg-label { font-weight:700; color:var(--dg-label); }
-.dg-row .dg-value { display:flex; align-items:center; gap:3px; }
+.dg-row .dg-value { display:flex; align-items:center; gap:4px; }
+.dg-amount { min-width:3ch; text-align:center; font-variant-numeric:tabular-nums; } /* (the icons line up: three digits wide, as 250) */
+.dg-result .dg-amount { min-width:0; margin-right:4px; } /* (the result line isn't a column: just a space before the icon) */
+.dg-result .meter-icon { vertical-align:-3px; }
 .dg-row.dg-win { outline:2px solid var(--dg-bar); outline-offset:-2px; animation:dg-win .5s steps(2, jump-none) 4; }
 @keyframes dg-win { 50% { background:var(--dg-bar); } }
 .dg-crap      { --dg-bar:#8b5a2b; --dg-label:#c49060; --dg-a:#3a2a1c; --dg-b:#35261a; }
