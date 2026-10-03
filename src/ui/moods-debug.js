@@ -1,5 +1,5 @@
 import { openWindow } from './w3-window.js';
-import { people, followed, isDrawn } from '../life/people/people.js';
+import { people, followed, isDrawn, isGone } from '../life/people/people.js';
 import { followPerson } from '../life/people/peopleTracking.js';
 import { moodEntries } from '../life/profiles.js';
 
@@ -63,4 +63,18 @@ export function openMoodsDebug() {
   win.style.transform = 'none';
   win.style.left = (innerWidth - win.offsetWidth - 10) + 'px';
   win.style.top = '60px';
+}
+
+/** View > Find Headphones (debug): follows the next person in the 🎵 mood (headphones on: see people.js), or, with no
+ * one in it, puts the followed (or first drawn) person in it. */
+export function findHeadphones() {
+  const n = people.length, from = followed >= 0 ? followed : -1;
+  for (let k = 1; k <= n; k++) {
+    const i = (from + k + n) % n;
+    if (people[i]?.traits?.singing > 0 && !isGone(people[i])) { followPerson(i); return; }
+  }
+  const i = followed >= 0 && people[followed] ? followed : people.findIndex(isDrawn), entry = moodEntries().find(e => (e.traits ?? []).some(([name]) => name === 'singing'));
+  if (i < 0 || !entry) return;
+  people[i].moodNow = entry.text; people[i].traitsKey = '';
+  if (followed !== i) followPerson(i);
 }

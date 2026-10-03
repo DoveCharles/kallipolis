@@ -16,7 +16,7 @@ import { fpsCounter } from './fps.js';
 import { openHeldDebug } from './held-debug.js';
 import { openChronicle } from '../life/chronicle.js';
 import { goodTreeShown, toggleGoodTree } from './good-tree.js';
-import { openMoodsDebug } from './moods-debug.js';
+import { openMoodsDebug, findHeadphones } from './moods-debug.js';
 import { openRestaurantsDebug } from './restaurants-debug.js';
 import { openSalonBotDebug } from './salonbot-debug.js';
 import { openWaterDebug } from './water-debug.js';
@@ -142,6 +142,7 @@ const MENUS = [
     { label:'FPS (debug)', key:'b', check:fpsCounter.shown, run:fpsCounter.toggle },
     { label:'Held Items (debug)', key:'l', enabled:has('s-people', 'on'), run:openHeldDebug },
     { label:'Moods (debug)', key:'c', enabled:has('s-people', 'on'), run:openMoodsDebug },
+    { label:'Find Headphones (debug)', enabled:has('s-people', 'on'), run:findHeadphones },
     { label:'Salon Bot (debug)', key:'a', enabled:has('s-people', 'on'), run:openSalonBotDebug },
     { label:'Restaurants (debug)', key:'k', run:openRestaurantsDebug },
     { label:'Water (debug)', key:'q', run:openWaterDebug },

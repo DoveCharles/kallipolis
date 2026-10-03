@@ -28,10 +28,10 @@ const FADE = 0.8;
 const context = listener.context;
 
 // ---------------------------------------------------------- the players
-// Loaded once: the songs (each file's bytes, and how long it lasts) and the sound bank. Each player (the room's, and the
-// nearest headphones') its own synth with the bank in it, sequencer, and mix (out → two high-passes → the tone → a
-// panner, to the ear).
-let loading = null, shared = null, player = null, roomLoading = null, phones = null, phonesLoading = null;
+// Loaded once: the songs (each file's bytes, and how long it lasts), the sound bank, and one player — synth with the
+// bank in it, sequencer, and mix (out → two high-passes → the tone → a panner, to the ear) — shared by the room's music
+// and the headphones', the room's first.
+let loading = null, shared = null, player = null, roomLoading = null;
 function loadShared() {
   loading ??= (async () => {
     const [{ WorkletSynthesizer, Sequencer }, { BasicMIDI }] = await Promise.all([import('spessasynth_lib'), import('spessasynth_core')]);
@@ -51,7 +51,7 @@ function loadShared() {
 }
 async function makePlayer({ bank, WorkletSynthesizer, Sequencer }) {
   const synth = new WorkletSynthesizer(context);
-  await synth.soundBankManager.addSoundBank(bank.slice(0), 'main');
+  await synth.soundBankManager.addSoundBank(bank, 'main');
   await synth.isReady;
   const sequencer = new Sequencer(synth, { skipToFirstNoteOn: false, initialPlaybackRate: 1 });
   sequencer.loopCount = 0;
@@ -111,22 +111,25 @@ function hush(pl = player) {
  */
 export function pubMusic(key, at, set = 'pub') {
   if (!load() || context.state !== 'running') return;
-  keepTo(player, key, at, set, TINNY[set] ?? [20, TONE_HZ], VOLUME[set]);
+  keepTo(player, key, at, set, { band: TINNY[set] ?? [20, TONE_HZ], volume: VOLUME[set], ref: REF_DISTANCE, max: MAX_DISTANCE });
 }
 
-/** The music faded out (the view's left the pub, or the last person has); nothing if none's on. */
-export function stopPubMusic() { fadeOut(player); }
+const isPhones = key => !!key?.startsWith('phones ');
 
-/** A player for a frame: faded in on `key`'s songs (from `at`, through [low cut, top end], at `volume`) if it isn't on
- * them, and kept to where they are by the clock. */
-function keepTo(pl, key, at, set, [cut, top], volume) {
+/** The music faded out (the view's left the pub, or the last person has); nothing if none's on. */
+export function stopPubMusic() { if (player?.pub && !isPhones(player.pub)) fadeOut(player); }
+
+/** A player for a frame: faded in on `key`'s songs (from `at`, through [low cut, top end] — the cut twice if `steep` —
+ * at `volume`, fading out from `ref` to `max` metres) if it isn't on them, and kept to where they are by the clock. */
+function keepTo(pl, key, at, set, { band: [cut, top], steep = false, volume, ref, max }) {
   const { sequencer, out, panner } = pl;
   if (pl.pub !== key) {
     clearTimeout(pl.quiet);
     pl.pub = key;
     panner.disconnect();
     panner.connect(heardFrom(at, 'music'));
-    pl.low.frequency.value = cut; pl.tone.frequency.value = top; // (low2: the headphones' own, set once)
+    pl.low.frequency.value = cut; pl.low2.frequency.value = steep ? cut : 20; pl.tone.frequency.value = top;
+    panner.refDistance = ref; panner.maxDistance = max;
     const now = context.currentTime;
     out.gain.cancelScheduledValues(now);
     out.gain.setValueAtTime(out.gain.value, now);
@@ -163,7 +166,7 @@ function fadeOut(pl) {
 // ---------------------------------------------------------- headphones
 // Someone in the 🎵 mood wears headphones (see people.js): the nearest within HEADPHONE_REACH is heard leaking out of
 // them, the pub's songs (each wearer their own order, by the clock) through a steep high-pass (PHONES_HZ, twice) — all
-// tinny treble, no body — from their head, gone by HEADPHONE_REACH. A player of its own, loaded the first time it's wanted.
+// tinny treble, no body — from their head, gone by HEADPHONE_REACH. Only while no room's music is on (one player for both).
 export const HEADPHONE_REACH = 5;
 const PHONES_HZ = [2400, 9000], PHONES_VOLUME = 0.08, PHONES_REF = 0.5;
 
@@ -174,20 +177,15 @@ const PHONES_HZ = [2400, 9000], PHONES_VOLUME = 0.08, PHONES_REF = 0.5;
  * @returns {void}
  */
 export function headphoneMusic(id, at) {
-  if (!loadShared() || context.state !== 'running') return;
-  phonesLoading ??= makePlayer(shared).then(p => {
-    p.low2.frequency.value = PHONES_HZ[0];
-    p.panner.refDistance = PHONES_REF; p.panner.maxDistance = HEADPHONE_REACH;
-    phones = p;
-  }).catch(err => console.warn('pub music: no headphones', err));
-  if (phones) keepTo(phones, 'phones ' + id, at, 'pub', PHONES_HZ, PHONES_VOLUME);
+  if (!load() || context.state !== 'running' || (player.pub && !isPhones(player.pub))) return;
+  keepTo(player, 'phones ' + id, at, 'pub', { band: PHONES_HZ, steep: true, volume: PHONES_VOLUME, ref: PHONES_REF, max: HEADPHONE_REACH });
 }
 
 /** The headphones' music faded out (no one wearing them in reach). */
-export function stopHeadphoneMusic() { fadeOut(phones); }
+export function stopHeadphoneMusic() { if (isPhones(player?.pub)) fadeOut(player); }
 
 /** The name of the song the pub's playing (its file's), or null if there's no music on. */
-export const pubSong = () => player?.pub && !player.sequencer.paused ? player.song?.name ?? null : null;
+export const pubSong = () => player?.pub && !isPhones(player.pub) && !player.sequencer.paused ? player.song?.name ?? null : null;
 
 /** The song this pub's on (or about to be, between songs), by its title — its file's name, without any folder — or null
  * before the songs are loaded. */
