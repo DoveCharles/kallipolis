@@ -161,6 +161,7 @@ function notify(text) {
 // ---- open / close
 const button = document.getElementById('btn-tech');
 function toggle() {
+  if (panel.hidden) App.closeCardTech?.(); // (one at a time: ui/card-tech.js)
   panel.hidden = !panel.hidden;
   S.techOpen = !panel.hidden;
   document.body.classList.toggle('tech-open', S.techOpen);
@@ -168,5 +169,5 @@ function toggle() {
   render();
 }
 button?.addEventListener('click', toggle);
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.techOpen && !e.defaultPrevented) toggle(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden && !e.defaultPrevented) toggle(); });
 export const openTechTree = () => { if (panel.hidden) toggle(); };

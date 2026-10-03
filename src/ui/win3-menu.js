@@ -15,6 +15,7 @@ import { editHints, generalHints } from './view-prefs.js';
 import { fpsCounter } from './fps.js';
 import { openHeldDebug } from './held-debug.js';
 import { openChronicle } from '../life/chronicle.js';
+import { toggleCardTech, cardTechOpen } from './card-tech.js';
 import { goodTreeShown, toggleGoodTree } from './good-tree.js';
 import { openMoodsDebug, findHeadphones } from './moods-debug.js';
 import { openRestaurantsDebug } from './restaurants-debug.js';
@@ -128,6 +129,7 @@ const MENUS = [
     { label:'Toolbar', key:'t', check:toolsShown, run:() => setShown('w3-no-tools', !toolsShown()) },
     { label:'Favorites', key:'f', check:() => !$('favorites-panel').hidden, run:() => { setShown('w3-no-tools', true); $('btn-favorites').click(); } },
     { label:'Daily Chronicle', key:'y', run:openChronicle },
+    { label:'Card Tech', key:'x', check:cardTechOpen, run:toggleCardTech },
     { label:'Good Tree', key:'j', check:goodTreeShown, run:toggleGoodTree },
     '-',
     { label:'Orthographic', key:'h', check:has('btn-projection', 'on'), run:press('btn-projection') },

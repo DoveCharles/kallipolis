@@ -246,6 +246,7 @@ function notify(text) {
 
 // ---- open / close
 function toggle() {
+  if (panel.hidden) App.closeCardTech?.(); // (one at a time: ui/card-tech.js)
   panel.hidden = !panel.hidden;
   S.techOpen = !panel.hidden;
   document.body.classList.toggle('tech-open', S.techOpen);
@@ -256,3 +257,4 @@ panel.querySelector('.tt-close').addEventListener('click', toggle);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden && !e.defaultPrevented) toggle(); });
 export const goodTreeShown = () => !panel.hidden;
 export const toggleGoodTree = toggle;
+App.closeGoodTree = () => { if (!panel.hidden) toggle(); };

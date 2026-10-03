@@ -528,7 +528,7 @@ html.win3 #quests .w3-dialog-body { overflow:hidden; padding-bottom:12px; }
 .qs-refuse { all:unset; cursor:pointer; padding:0 4px; font-weight:bold; }
 
 /* Tech tree (src/ui/tech-tree.js): everything under the toolbar, the rest hidden (body.tech-open) */
-body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, #good-tree, .tt-notice, .w3-dropdown, .w3-modal, script, svg) { visibility:hidden !important; }
+body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, #good-tree, #card-tech, .tt-notice, .w3-dropdown, .w3-modal, script, svg) { visibility:hidden !important; }
 #btn-tech.on { box-shadow:var(--w3-pressed, inset 1px 1px 0 #808080); }
 #tech-tree, #good-tree {
   position:fixed; top:var(--w3-below, 60px); left:4px; right:4px; bottom:4px; z-index:14; display:flex; flex-direction:column;
@@ -565,25 +565,25 @@ body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, #g
 #tech-tree .tt-icon { flex:0 0 52px; display:flex; align-items:center; justify-content:center; border-right:1px solid var(--w3-frame, #000); }
 #tech-tree .tt-icon img { width:32px; height:32px; image-rendering:pixelated; }
 #tech-tree .tt-info { flex:1; padding:6px 8px; display:flex; flex-direction:column; justify-content:center; gap:4px; font-weight:700; }
-:is(#tech-tree, #good-tree) .tt-cost, #tech-tree .tt-side-cost { display:flex; align-items:center; gap:3px; }
+:is(#tech-tree, #good-tree, #card-tech) .tt-cost, :is(#tech-tree, #card-tech) .tt-side-cost { display:flex; align-items:center; gap:3px; }
 :is(#tech-tree, #good-tree) .meter-icon { width:11px; height:11px; image-rendering:pixelated; }
-:is(#tech-tree, #good-tree) .tt-bar { height:4px; background:var(--w3-window, #fff); border-top:1px solid var(--w3-frame, #000); }
-:is(#tech-tree, #good-tree) .tt-bar > div { height:100%; background:#0060ff; }
+:is(#tech-tree, #good-tree, #card-tech) .tt-bar { height:4px; background:var(--w3-window, #fff); border-top:1px solid var(--w3-frame, #000); }
+:is(#tech-tree, #good-tree, #card-tech) .tt-bar > div { height:100%; background:#0060ff; }
 #tech-tree .tt-node.locked { filter:grayscale(1); opacity:0.5; }
 #tech-tree .tt-node.done .tt-time { color:#008000; }
-:is(#tech-tree, #good-tree) .tt-side {
+:is(#tech-tree, #good-tree, #card-tech) .tt-side {
   flex:0 0 240px; display:flex; flex-direction:column; gap:8px; padding:12px; overflow-y:auto;
   background:var(--w3-window, #fff); border-left:2px solid var(--w3-frame, #000); animation:tt-slide .15s ease-out;
 }
-:is(#tech-tree, #good-tree) .tt-side[hidden] { display:none; }
+:is(#tech-tree, #good-tree, #card-tech) .tt-side[hidden] { display:none; }
 @keyframes tt-slide { from { transform:translateX(100%); } }
-:is(#tech-tree, #good-tree) .tt-pic { height:140px; display:flex; align-items:center; justify-content:center; outline:1px solid var(--w3-frame, #000); background:var(--w3-face, #c0c0c0); }
-:is(#tech-tree, #good-tree) .tt-pic img { width:96px; height:96px; image-rendering:pixelated; }
-:is(#tech-tree, #good-tree) .tt-name { font-size:16px; font-weight:700; }
-:is(#tech-tree, #good-tree) .tt-text { margin:0; line-height:1.45; flex:1; }
-:is(#tech-tree, #good-tree) .tt-get { margin:0; padding:6px 12px; font-size:16px; font-weight:700; }
-:is(#tech-tree, #good-tree) .tt-side-time { font-weight:700; }
-:is(#tech-tree, #good-tree) .tt-side .tt-bar { height:8px; outline:1px solid var(--w3-frame, #000); border:none; }
+:is(#tech-tree, #good-tree, #card-tech) .tt-pic { height:140px; display:flex; align-items:center; justify-content:center; outline:1px solid var(--w3-frame, #000); background:var(--w3-face, #c0c0c0); }
+:is(#tech-tree, #good-tree, #card-tech) .tt-pic img { width:96px; height:96px; image-rendering:pixelated; }
+:is(#tech-tree, #good-tree, #card-tech) .tt-name { font-size:16px; font-weight:700; }
+:is(#tech-tree, #good-tree, #card-tech) .tt-text { margin:0; line-height:1.45; flex:1; }
+:is(#tech-tree, #good-tree, #card-tech) .tt-get { margin:0; padding:6px 12px; font-size:16px; font-weight:700; }
+:is(#tech-tree, #good-tree, #card-tech) .tt-side-time { font-weight:700; }
+:is(#tech-tree, #good-tree, #card-tech) .tt-side .tt-bar { height:8px; outline:1px solid var(--w3-frame, #000); border:none; }
 /* Good tree (src/ui/good-tree.js): radial, Plato's ascent */
 #good-tree .tt-tree { background:#000; display:grid; cursor:grab; } /* (grid + auto margins: centred, still scrollable when bigger) */
 /* an anti-black hole: white at the Good, darker per ring out (the bands: good-tree.js shade) */
@@ -649,3 +649,63 @@ body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, #g
 .w3-paper-stop { border:2px solid var(--ink); padding:0 8px 4px; margin-top:10px; }
 .w3-paper-stop .w3-paper-other { margin-top:0; border-top:0; }
 .w3-paper-story.obit { font-weight:400; font-size:13px; border-bottom:0; padding:1px 0; margin:0; }
+
+/* Card Tech (src/ui/card-tech.js): Klondike felt; reuses the tech tree's side panel (.tt-side) and notice */
+#card-tech { position:fixed; top:var(--w3-below, 60px); left:4px; right:4px; bottom:4px; z-index:14; display:flex; background:#008000; color:#fff; font-family:var(--sans); font-size:11px; user-select:none; }
+#card-tech[hidden] { display:none; }
+#card-tech .ct-main { flex:1; overflow-y:auto; padding:16px 20px; min-width:0; }
+#card-tech .ct-top { display:flex; gap:24px; align-items:flex-start; margin-bottom:24px; }
+#card-tech .ct-odds { flex:0 0 220px; display:flex; flex-direction:column; gap:8px; padding:12px 14px; font-size:14px; font-weight:700; background:rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.35); border-radius:5px; }
+#card-tech .ct-odd { display:flex; align-items:center; gap:10px; }
+#card-tech .ct-odd img { width:28px; height:28px; }
+#card-tech .ct-odd span:nth-of-type(1) { width:48px; }
+#card-tech .ct-odd.out { opacity:.45; }
+#card-tech .ct-table { flex:1; display:flex; flex-direction:column; align-items:center; gap:18px; }
+#card-tech .ct-deck, #card-tech .ct-card { width:120px; height:168px; border-radius:5px; box-sizing:border-box; }
+#card-tech .ct-deck {
+  border:1px solid #000; box-shadow:2px 2px 0 #fff, 3px 3px 0 #000, 5px 5px 0 #fff, 6px 6px 0 #000;
+  background:repeating-conic-gradient(#000080 0% 25%, #4040c0 0% 50%) 0 0 / 4px 4px; outline:4px solid #fff; outline-offset:-5px;
+}
+#card-tech .ct-draw { display:flex; flex-direction:column; align-items:center; gap:10px; min-height:168px; }
+#card-tech .ct-slots { display:flex; gap:16px; }
+#card-tech .ct-slot { cursor:pointer; }
+#card-tech .ct-slot:hover .ct-card { translate:0 -4px; }
+#card-tech .btn { color:var(--w3-btn-text, #000); }
+#card-tech .ct-deal { padding:6px 16px; font-size:13px; font-weight:700; margin-top:60px; }
+#card-tech .ct-note { font-weight:700; }
+#card-tech .meter-icon { width:11px; height:11px; image-rendering:pixelated; vertical-align:-1px; }
+#card-tech .ct-grid { display:flex; flex-wrap:wrap; gap:14px; padding:4px; }
+#card-tech .ct-card { position:relative; transform-style:preserve-3d; cursor:pointer; color:#000; transition:translate .1s; }
+#card-tech .ct-card.down { transform:perspective(900px) rotateY(180deg); }
+#card-tech .ct-card.on { outline:2px dashed #fff; outline-offset:3px; }
+#card-tech .ct-flying { position:fixed; z-index:5; pointer-events:none; }
+#card-tech :is(.ct-front, .ct-back) { position:absolute; inset:0; border:1px solid #000; border-radius:5px; overflow:hidden; backface-visibility:hidden; background:var(--suit); }
+#card-tech .ct-back { transform:rotateY(180deg); display:flex; align-items:center; justify-content:center; box-shadow:inset 0 0 0 4px #fff, inset 0 0 0 5px #000; }
+#card-tech .ct-back img { width:64px; height:64px; }
+#card-tech .ct-front { display:flex; flex-direction:column; }
+#card-tech .ct-name { height:24px; display:flex; align-items:center; justify-content:center; font-weight:700; border-bottom:1px solid #000; white-space:nowrap; overflow:hidden; }
+#card-tech .ct-photo { height:72px; background:#fff; border-bottom:1px solid #000; }
+#card-tech .ct-opts { flex:1; display:flex; flex-direction:column; justify-content:center; gap:6px; padding:0 6px; }
+#card-tech .ct-opt { display:flex; align-items:center; gap:5px; font-weight:700; line-height:1.1; }
+#card-tech .ct-box { flex:0 0 11px; height:11px; background:#fff; border:1px solid #000; display:flex; align-items:center; justify-content:center; font-size:10px; line-height:1; }
+#card-tech .ct-bar { height:5px; background:#fff; border-top:1px solid #000; }
+#card-tech .ct-bar > div { height:100%; background:#0060ff; }
+#card-tech .ct-side { flex-basis:280px; color:var(--w3-text, #000); }
+#card-tech .ct-pic { background:#fff; outline:1px solid #000; box-shadow:inset 0 0 0 6px var(--suit), inset 0 0 0 7px #000; }
+#card-tech .ct-suit { display:flex; align-items:center; gap:5px; font-weight:700; }
+#card-tech .ct-suit img, #card-tech .ct-pt img { width:14px; height:14px; }
+#card-tech .ct-choices { display:flex; flex-direction:column; gap:8px; }
+#card-tech .ct-choice { display:flex; flex-direction:column; align-items:flex-start; gap:3px; margin:0; padding:6px 8px; text-align:left; line-height:1.35; color:var(--w3-text, #000); background:var(--w3-window, #fff); border:1px solid #000; border-radius:0; box-shadow:none; }
+#card-tech .ct-choice.on { outline:2px solid var(--w3-title, #000080); outline-offset:-3px; background:color-mix(in srgb, var(--w3-title, #000080) 10%, #fff); }
+#card-tech .ct-choice:disabled { opacity:.5; }
+#card-tech .ct-pts { display:flex; gap:10px; }
+#card-tech .ct-pt { display:flex; align-items:center; gap:3px; }
+#card-tech .ct-burn { margin:8px 0 0; }
+#card-tech .ct-sortbar { display:flex; align-items:center; gap:8px; margin:0 0 10px 4px; font-weight:700; }
+#card-tech .ct-sortbar select { font:inherit; color:#000; }
+#card-tech .ct-sortbar label { display:flex; align-items:center; gap:4px; margin-left:8px; }
+#card-tech .ct-grid.ct-by-suit { flex-direction:column; flex-wrap:nowrap; gap:12px; }
+#card-tech .ct-row-head { display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:14px; font-weight:700; }
+#card-tech .ct-row-head img { width:20px; height:20px; }
+#card-tech .ct-row-cards { display:flex; gap:14px; overflow-x:auto; padding:4px; }
+#card-tech .ct-row-cards > .ct-card { flex:none; }
