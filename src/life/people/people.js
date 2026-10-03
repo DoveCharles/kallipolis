@@ -382,7 +382,7 @@ let peopleFrame = 0;
 // And someone off screen or a speck on it (under LAZY_PIXELS), out of earshot and doing nothing that needs every frame,
 // isn't updated at all but on their fine turn, taking in all the time since (lazyDt); under HALF_LAZY_PIXELS, every other
 // frame. Skipped while in view, they glide on at their last speed (glide).
-const LAZY_PIXELS = 20, HALF_LAZY_PIXELS = 40;
+const LAZY_PIXELS = 30, HALF_LAZY_PIXELS = 60;
 const lazyNow = (p, i, carded) => {
   if ((peopleFrame + i) % FINE_EVERY === 0 || i === followed || i === possession.index
     || p.mode === 'none' || p.mode === 'possessed' || p.jc || p.fall || p.push || p.punched || p.attack || p.swat || inWater(p)
