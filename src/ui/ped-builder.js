@@ -23,7 +23,7 @@ const LOVE_SLOTS = 4;
 const BODY = [['Breast', 0, 0], ['Waist', 0, 1], ['Hips', 0, 2], ['Weight', 0, 3], ['Butt', 1, 0], ['Shoulders', 1, 3]];
 const FACE = [['Chin Width', PERSON_FACE_ROW, 0], ['Chin Height', PERSON_FACE_ROW, 1], ['Eye Top', PERSON_FACE_ROW, 2], ['Eye Bottom', PERSON_FACE_ROW, 3], ['Eye Shape', 1, 2]];
 const COLOURS = ['Skin', 'Eyes', 'Hair', 'Hat', 'Top', 'Pants', 'Shoes', 'Skirt', 'Glasses'];
-const LAYERS = ['Hair / hat', 'Facial hair', 'Glasses', 'Skirt', 'Jeans'];
+const LAYERS = ['Hair / hat', 'Facial hair', 'Glasses', 'Skirt', 'Jeans', 'Headphones'];
 const NUMBERED = [0, 1, 3]; // (worn layers shown by number: hair / hat, facial hair, skirt)
 const BANDS = [['Sleeves', 3], ['Tummy', 2], ['Legs', 2]];
 const OUTFIT_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitRed'), OUTFIT_COL_ROW = 2 + PERSON_TRAIT_COLORS.indexOf('OutfitGreen');

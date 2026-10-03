@@ -59,6 +59,7 @@ export function mirrorCrowd() {
       // (bald and beard traits: as updatePeople grooms them)
       const bald = Math.sign(Math.round(p.traits.bald)), beard = Math.sign(Math.round(p.traits.beard)), groomKey = p.id*9 + (bald + 1)*3 + beard + 1;
       if (p.groomKey !== groomKey) { p.groomKey = groomKey; personModel.groom(i, p.id, bald, beard); }
+      if ((p.traits.singing > 0) !== !!p.headphones) { p.headphones = p.traits.singing > 0; personModel.setHeadphones(i, p.headphones); }
       const ra = inA.get(i), blend = ra != null && A[ra+1] === id, s = blend ? ra : r, from = blend ? A : B; // (new this snapshot: not blended)
       pa.fromArray(from, s + 2); pb.fromArray(B, r + 2);
       qa.fromArray(from, s + 5); qb.fromArray(B, r + 5);

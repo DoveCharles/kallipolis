@@ -48,6 +48,7 @@ const SKIRT_BACK_ROOM = 0.4;
 const JEANS_CHANCE = 0.25;
 // At the salon (see cutHair): the chance a man comes out with his head shaved, with his facial hair changed, and anyone
 // with their hair dyed. And how many more wearers each style's mesh has room for than it started with (see wear).
+const HEADPHONES = 'Headphones', HEADPHONES_ROOM = 96; // (Hair.glb's: worn over the hair by the 🎵 mood, see people.js)
 const BALD_CUT = 0.15, FACIAL_HAIR_CUT = 0.5, HAIR_DYE = 0.3, STYLE_ROOM = 48;
 const CUFF_LIGHTEN_TO = new THREE.Color(0xffffff), CUFF_LIGHTEN = 0.3; // how much lighter than the jeans their cuff is
 const HAT_CHANCE = 0.1;
@@ -1646,17 +1647,18 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   // The biggest part of each (a hat aside) is the hair itself, taking the person's hair color; a hat takes their hat
   // color; anything else (a hair band) keeps its own.
   const hairSlots = ['Hair', 'Hat'], hairPalette = [new THREE.Color(0xffffff), new THREE.Color(0xffffff)];
-  const headStylesFrom = (styleGltf, wearers) => {
+  // (`keep` picks styles by name; `own`: every part keeps its own colour)
+  const headStylesFrom = (styleGltf, wearers, keep = () => true, own = false) => {
     const styles = [];
     if (!styleGltf || headBone == null) return styles;
     styleGltf.scene.updateMatrixWorld(true);
     styleGltf.scene.children.forEach(style => {
       if (style.name.startsWith('ReferenceHead')) return;    // only there to model against (see tools/reference-head.py)
-      if (isUnused(style.name)) return;
+      if (isUnused(style.name) || !keep(style.name)) return;
       const parts = [];
       style.traverse(o => { if (o.isMesh) parts.push(o); });
       if (!parts.length) return;
-      const hairParts = isPresetHair(style.name) ? [] : parts.filter(part => !isHatMaterial(part.material.name)); // (a preset's keeps its own colors)
+      const hairParts = own || isPresetHair(style.name) ? [] : parts.filter(part => !isHatMaterial(part.material.name)); // (a preset's keeps its own colors)
       const hair = hairParts.length ? hairParts.reduce((a, b) => b.geometry.attributes.position.count > a.geometry.attributes.position.count ? b : a) : null;
       const stylePositions = [], styleSlots = [], styleIndices = [];
       parts.forEach(part => {
@@ -1684,7 +1686,6 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
       styleGeometry.computeVertexNormals();
       styles.push({ name: style.name, ...wearers(style.name), hat: parts.some(part => isHatMaterial(part.material.name)), geometry: styleGeometry, mesh: null, anim: null, look: null, members: [] });
     });
-    styleGltf.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
     return styles;
   };
   // Each layer of what's worn: its styles, and for each person which style they wear (-1 for none) and where they are
@@ -1692,12 +1693,13 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   // those who can, whoever they are. `look` is how it's colored: 'hair' as their hair (and hat), 'glasses' and 'skirt' in
   // those colors of theirs, 'jeans' as their trousers. A layer with a `hatChance` gives that many of its wearers one of
   // its hats, and the rest one of its other styles; one `without` another is never worn by that one's wearers.
-  const headLayer = (styles, rng, { chance = null, look = 'hair', hatChance = null, without = null } = {}) => {
+  const headLayer = (styles, rng, { chance = null, look = 'hair', hatChance = null, without = null, room = STYLE_ROOM } = {}) => {
     const who = (sex, hat) => styles.map((style, k) => style[sex] && (hatChance == null || style.hat === hat) ? k : -1).filter(k => k >= 0);
-    return { styles, rng, chance, look, hatChance, without, of: new Int16Array(PEOPLE_MAX).fill(-1), slot: new Int32Array(PEOPLE_MAX),
+    return { styles, rng, chance, look, hatChance, without, room, of: new Int16Array(PEOPLE_MAX).fill(-1), slot: new Int32Array(PEOPLE_MAX),
       girls: who('girls', false), boys: who('boys', false), girlsHats: who('girls', true), boysHats: who('boys', true) };
   };
-  const hairLayer = headLayer(headStylesFrom(hairGltf, hairstyleWearers), mulberry32(31337), { hatChance: HAT_CHANCE, look: 'scalp' });
+  const headphonesLayer = headLayer(headStylesFrom(hairGltf, () => ({ girls: true, boys: true }), name => name === HEADPHONES, true), mulberry32(1983), { chance: 0, look: 'phones', room: HEADPHONES_ROOM });
+  const hairLayer = headLayer(headStylesFrom(hairGltf, hairstyleWearers, name => name !== HEADPHONES), mulberry32(31337), { hatChance: HAT_CHANCE, look: 'scalp' });
   const facialHairLayer = headLayer(headStylesFrom(facialHairGltf, () => ({ girls: false, boys: true })), mulberry32(4711));
   const glassesLayer = headLayer(headStylesFrom(glassesGltf, () => ({ girls: true, boys: true })), mulberry32(2020), { chance: GLASSES_CHANCE, look: 'glasses' });
   // skirts, ridden by the bones and shape keys each vertex was fitted to above; only women wear them
@@ -1728,7 +1730,8 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     return { name: 'Jeans', girls: true, boys: true, hat: false, geometry: jeansGeometry, mesh: null, anim: null, look: null, members: [] };
   })()] : [];
   const jeansLayer = headLayer(jeansStyles, mulberry32(1492), { chance: JEANS_CHANCE, look: 'jeans', without: skirtLayer });
-  const wornLayers = [hairLayer, facialHairLayer, glassesLayer, skirtLayer, jeansLayer];
+  const wornLayers = [hairLayer, facialHairLayer, glassesLayer, skirtLayer, jeansLayer, headphonesLayer];
+  [hairGltf, facialHairGltf, glassesGltf].forEach(g => g?.scene.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }));
   // what a preset (see presets.js) wears in a layer: their hair, their skirt, nothing else
   const presetStyle = (layer, preset) => layer.styles.findIndex(style => style.name === (layer === hairLayer ? preset.hair : layer === skirtLayer ? preset.skirt : null));
 
@@ -1859,7 +1862,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     if (kept) wearLook(i, kept);
   }
   // Which style of each worn layer person `id` wears, by the same chances as the slots' above but from their id.
-  const WORN_SALTS = [6101, 6203, 6301, 6407, 6521]; // (one per wornLayers entry)
+  const WORN_SALTS = [6101, 6203, 6301, 6407, 6521, 6607]; // (one per wornLayers entry)
   function pickWorn(i, id, man) {
     wornLayers.forEach((layer, n) => {
       const rng = mulberry32(WORN_SALTS[n] + id*7919);
@@ -1878,13 +1881,13 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   }
   // ---- a look kept for a hearted person between sessions (see people/peopleKeep.js): by name and value, not by roll, so
   // new styles, outfits or ranges don't change it. A style or outfit gone since leaves what their id rolls.
-  const LAYER_NAMES = ['hair', 'beard', 'glasses', 'skirt', 'jeans']; // (wornLayers' order)
+  const LAYER_NAMES = ['hair', 'beard', 'glasses', 'skirt', 'jeans']; // (wornLayers' order; headphones not kept)
   const KEPT_ROWS = { body: 0, more: 1, face: PERSON_FACE_ROW, clothing: PERSON_CLOTHING_ROW };
   const KEPT_COLORS = PERSON_TRAIT_COLORS.filter(part => part !== 'Blood' && part !== 'OutfitRed' && part !== 'OutfitGreen');
   function lookOf(i) {
     const at = row => (row*PEOPLE_MAX + i)*4, outfit = traits[at(OUTFIT_RED_ROW) + 3];
     return { man: isMan[i] === 1, wardrobe: wardrobe[i],
-      worn: Object.fromEntries(wornLayers.map((layer, n) => [LAYER_NAMES[n], layer.of[i] >= 0 ? layer.styles[layer.of[i]].name : null])),
+      worn: Object.fromEntries(LAYER_NAMES.map((name, n) => [name, wornLayers[n].of[i] >= 0 ? wornLayers[n].styles[wornLayers[n].of[i]].name : null])),
       rows: Object.fromEntries(Object.entries(KEPT_ROWS).map(([name, row]) => [name, Array.from(traits.subarray(at(row), at(row) + 4))])),
       colors: Object.fromEntries(KEPT_COLORS.map(part => [part, Array.from(traits.subarray(at(traitRow(part)), at(traitRow(part)) + 3))])),
       outfit: outfit ? { name: OUTFITS[outfit - 1].name, variant: traits[at(OUTFIT_GREEN_ROW) + 3] - OUTFIT_COLUMNS[outfit - 1] } : null };
@@ -2129,6 +2132,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
     for (const layer of wornLayers) { const k = layer.styles.findIndex(style => style.name === name); if (k >= 0) return { layer, k }; }
     return null;
   };
+  const setHeadphones = (i, on) => { if (headphonesLayer.styles.length) wear(headphonesLayer, i, on ? 0 : -1); };
   const wears = (i, name) => { const found = styleNamed(name); return !!found && found.layer.of[i] === found.k; };
   function putOn(i, name) {
     const found = styleNamed(name);
@@ -2270,12 +2274,12 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   const hairLook = { palette: hairPalette, traitColors: { 0: traitRow('Hair'), 1: traitRow('Hat') }, femaleOnly: [] };
   const scalpLook = { ...hairLook, stripBald: true }; // (the hairstyles and hats themselves: facial hair is hairLook)
   const glassesLook = { palette: hairPalette, traitColors: { 0: traitRow('Glasses') }, femaleOnly: [] };
-  const looks = { hair: hairLook, scalp: scalpLook, glasses: glassesLook, skirt: { palette: [new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Skirt') }, femaleOnly: [], clearThighs: !!thighs, hemmed: true },
+  const looks = { hair: hairLook, scalp: scalpLook, glasses: glassesLook, phones: { palette: hairPalette, traitColors: {}, femaleOnly: [] }, skirt: { palette: [new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Skirt') }, femaleOnly: [], clearThighs: !!thighs, hemmed: true },
     jeans: { palette: [new THREE.Color(0xffffff), new THREE.Color(0xffffff)], traitColors: { 0: traitRow('Pants'), 1: traitRow('Cuff') }, femaleOnly: [] } };
   // (each with room for STYLE_ROOM more wearers than it started with, for haircuts and changes of clothes: see wear)
-  wornLayers.flatMap(layer => layer.styles.map(style => [style, looks[layer.look]])).forEach(([style, look]) => {
+  wornLayers.flatMap(layer => layer.styles.map(style => [style, looks[layer.look], layer.room])).forEach(([style, look, room]) => {
     if (!style.members.length && !style.girls && !style.boys) { style.geometry.dispose(); return; }
-    style.capacity = style.members.length + STYLE_ROOM;
+    style.capacity = style.members.length + room;
     const person = new Float32Array(style.capacity);
     person.set(style.members);
     style.geometry.setAttribute('instancePerson', new THREE.InstancedBufferAttribute(person, 1));
@@ -2328,7 +2332,7 @@ function buildPersonModel(gltf, hairGltf, facialHairGltf, glassesGltf, skirtGltf
   people.forEach((p, i) => assignAppearance(i, p.id));
   const footTravel = footMaxZ > footMinZ ? footMaxZ - footMinZ : (box.max.y - box.min.y)*0.3;
   // the model faces along +Z, as people do
-  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, lookOf, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, spirits, spiritWorn, spiritTalk, updateCopies, copyLook, groom, headOf, time: personCulling.personTime, wears, putOn, takeOff,
+  return { mesh, rebakeClip: name => rebakeClips(c => c.name === name || c.hold?.name === name), hidden: uniforms.personHidden, only: uniforms.personOnly, anim, look, eyes, pupil, hair: wornLayers.flatMap(layer => layer.styles).filter(style => style.mesh), wornLayers, isMan, lookOf, boneData, boneWidth, traitData: traits, traitTexture, palette, assignAppearance, cutHair, changeClothes, setNude, censor, spirits, spiritWorn, spiritTalk, updateCopies, copyLook, groom, headOf, time: personCulling.personTime, wears, putOn, takeOff, setHeadphones,
     headBone: headBone ?? 0, headPivot, face, chestBone, hands, unitsPerMetre, floorY: geometry.boundingBox.min.y, tall: box.max.y - box.min.y, gibs,
     height: box.max.y - box.min.y, minY: box.min.y, clips: Object.fromEntries(clips.map(c => [c.name, c])), stride: footTravel*WALK_CYCLE_LENGTH };
 }

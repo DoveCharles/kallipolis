@@ -16,6 +16,7 @@ import { pickThought, pickReaction } from '../speech-text.js';
 import { babbleLine, hasBubble, ownLine, speechBubble } from '../../ui/speech-bubbles.js';
 import { footstep } from '../../audio/footsteps.js';
 import { ear } from '../../audio/sfx.js';
+import { headphoneMusic, stopHeadphoneMusic, HEADPHONE_REACH } from '../../audio/pub-music.js';
 import { keyClick } from '../../audio/typing.js';
 import { mealCue, snackClip, snackClipName, updateHeld } from './peopleHolding.js';
 import { mirrorCrowd } from './peopleMirror.js';
@@ -1433,6 +1434,7 @@ export function updatePeople(t) {
   sweepPrayers();
   updateMinis(dt, wanted); // (pipers' minis: made, followed, avenged — see peopleMinis.js)
   const frameDt = dt;
+  let phones = null, phonesNear = HEADPHONE_REACH; // (the nearest headphones heard: see pub-music.js)
   people.forEach((p, i) => {
     if (lazyNow(p, i, carded)) { p.lazyDt = (p.lazyDt ?? 0) + frameDt; if (personModel && p.lazyPx > 0 && p.glideVX != null) glide(p, i); return; }
     const dt = frameDt + (p.lazyDt ?? 0);
@@ -1450,6 +1452,8 @@ export function updatePeople(t) {
       if (p.groomKey !== groomKey) { p.groomKey = groomKey; personModel.groom(i, p.id, bald, beard); }
       const head = personModel.headOf(i); p.showsBald = head.bald; p.showsBeard = head.bearded;
     }
+    if (thinks && personModel && (p.traits.singing > 0) !== !!p.headphones) { p.headphones = p.traits.singing > 0; personModel.setHeadphones(i, p.headphones); } // (the 🎵 mood)
+    if (p.headphones && !isGone(p)) { const d = Math.hypot(p.x - ear.x, p.y - ear.y, p.z - ear.z); if (d < phonesNear) { phonesNear = d; phones = p; } }
     if (thinks && personModel && !!p.traits.nude !== !!p.nudeDressed) { p.nudeDressed = !!p.traits.nude; personModel.setNude(i, p.id, p.nudeDressed); } // (see peopleCensor.js)
     if (thinks && personModel && p.headDrawn !== p.traits.headsize) { p.headDrawn = p.traits.headsize; personModel.traitData[(HAIR_ROW*PEOPLE_MAX + i)*4 + 3] = p.headDrawn; personModel.traitTexture.needsUpdate = true; } // (see personLook)
     if (p.traits.nude && (p.mode === 'line' || p.mode === 'wander') && (p.nudeSeenIn = (p.nudeSeenIn ?? 0) - dt) <= 0) { witness(p, 'nude'); p.nudeSeenIn = NUDE_SEEN_EVERY; }
@@ -1961,6 +1965,7 @@ export function updatePeople(t) {
       pedHitboxDebugMesh.setMatrixAt(i, matrix);
     }
   });
+  if (phones) headphoneMusic(phones.id, { x: phones.x, y: phones.y + 1.6*phones.height*S.peopleSize, z: phones.z }); else stopHeadphoneMusic();
 
   if (personModel) {
     [personModel, ...personModel.hair].forEach(part => { part.mesh.instanceMatrix.needsUpdate = true; part.anim.needsUpdate = true; part.look.needsUpdate = true; part.eyes.needsUpdate = true; part.pupil.needsUpdate = true; });
