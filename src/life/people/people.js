@@ -1709,7 +1709,7 @@ export function updatePeople(t) {
       // standing about with nothing to do for a while, now and then a scratch or a think
       if (p.moving) {
         p.stillFor = 0;
-      } else if (!p.act && !p.oneShot && !p.fright && p.pose === 'Idle') {
+      } else if (!p.act && !p.oneShot && !p.fright && !p.pray && p.pose === 'Idle') {
         p.stillFor += dt;
         if (p.traits.fidgety > 0 && p.stillFor > p.fidgetAfter/p.traits.fidgety) { const fidget = pickFrom(FIDGETS); playOnce(p, fidget); p.fidgetThought = THINK_FIDGETS.includes(fidget); p.stillFor = 0; p.fidgetAfter = 3 + peopleRng()*8; }
       }
@@ -1791,7 +1791,7 @@ export function updatePeople(t) {
           p.lookTiltTo = ahead ? 0 : (peopleRng()*2 - 1)*LOOK_MAX_TILT;
         }
         if (!p.lookAt && p.spiritGaze != null) { p.lookTurnTo = p.spiritGaze; p.lookTiltTo = 0; } // (to the spirit talking: see peopleSpiritChat.js)
-        if (toMouth(p)) { p.lookTurnTo = 0; p.lookTiltTo = 0; }
+        if (toMouth(p) || p.pray) { p.lookTurnTo = 0; p.lookTiltTo = 0; } // (praying: straight ahead)
         else if (possessed) { p.lookTurnTo = wrapAngle((p.remote?.yaw ?? possession.yaw) - p.heading); p.lookTiltTo = Math.max(-POSSESSED_MAX_TILT, Math.min(POSSESSED_MAX_TILT, -(p.remote?.pitch ?? possession.pitch))); }
         p.lookTurn += (p.lookTurnTo - p.lookTurn)*Math.min(1, fdt*4);
         p.lookTilt += (p.lookTiltTo - p.lookTilt)*Math.min(1, fdt*4);
@@ -1908,7 +1908,7 @@ export function updatePeople(t) {
         animArray[o+1] = p.clipB === p.clipA ? animArray[o] : p.rowB;
         animArray[o+2] = p.fade;
         // (the drowsy, 😴, hold their eyes that far shut between blinks; a punch that leaves them reeling, Hit, shuts them)
-        animArray[o+3] = Math.max(p.traits.drowsy, p.pray && !p.saying ? 0.85 : 0, p.oneShot?.name === 'Hit' ? 1 : 0, p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0);
+        animArray[o+3] = Math.max(p.traits.drowsy, p.pray ? 1 : 0, p.oneShot?.name === 'Hit' ? 1 : 0, p.blinkAge < BLINK_DURATION ? Math.sin(Math.PI*p.blinkAge/BLINK_DURATION) : 0);
         lookArray[o] = p.lookTurn; lookArray[o+1] = p.lookTilt; lookArray[o+2] = p.talk; lookArray[o+3] = p.emotion;
         if (p.water?.drowned) holdDrowned(o, animArray, lookArray); // (still, face down: see peopleWater.js)
         // (their shoulder spirits' pose: theirs — sitting, falling, lying — but the Idle loop wherever they walk: see peopleSpirits.js)

@@ -67,7 +67,7 @@ export function updatePrayer(p, i, dt, possessed) {
   if (!pray) {
     if (praying.size < MAX_PRAYING && peopleRng() < PRAY_CHANCE*dt && free(p, possessed) && isDrawn(p)) {
       p.pray = { start: now(), until: now() + PRAY_TIME[0] + peopleRng()*(PRAY_TIME[1] - PRAY_TIME[0]), watched: false, said: false, heard: false, glow: makeGlow(), beam: makeBeam() };
-      p.faceTo = null; p.wait = 0;
+      p.faceTo = null; p.wait = 0; p.oneShot = null; p.fidgetThought = false;
       praying.add(p);
     }
     return;
