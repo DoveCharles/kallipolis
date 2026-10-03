@@ -15,7 +15,8 @@ let masks = 0;
 const COLORFUL = { 'grid-toggle': 'grid-toggle-on', favorites: 'favorites-on', 'ped-view': 'ped-view-on', world: 'world-open',
   maps: 'maps-open', edit: 'edit-open', 'ped-builder': 'ped-builder-open', quests: 'quests-open', identify: 'identify-on',
   undo: 'undo-c', redo: 'redo-c', 'sound-on': 'sound-on-c', 'sound-off': 'sound-off-c',
-  'projection-perspective': 'projection-perspective-c', 'projection-orthographic': 'projection-orthographic-c', 'status/gift': 'daily-gift-c' };
+  'projection-perspective': 'projection-perspective-c', 'projection-orthographic': 'projection-orthographic-c', 'status/gift': 'daily-gift-c',
+  'tech-tree': 'tech-tree-c' };
 const TINTED = new Set(Object.values(COLORFUL));
 let colorful = false;
 const colored = name => colorful && COLORFUL[name] || name;
@@ -40,7 +41,7 @@ export function setColorfulIcons(on) {
 // Icon saturation slider's), and each icon's colours are shifted together to the same mean lightness — TINT_L, lifted
 // HUE_LIFT of the way to each hue's most colourful lightness (so yellow stays bright) — keeping hues and contrast.
 const TINT_L = 0.65, HUE_LIFT = 0.7, TINT_C = 0.7;
-const FLAT = new Set(['daily-gift-c', 'identify-on']); // each colour at its own target, to match one-colour icons (Ped View, Edit, Favorites)
+const FLAT = new Set(['daily-gift-c', 'identify-on', 'world-open']); // each colour at its own target, to match one-colour icons (Ped View, Edit, Favorites, Undo, Projection)
 let saturation = 1;
 export function setIconSaturation(s) {
   if (s === saturation) return;
@@ -134,7 +135,7 @@ function nameOf(svg) {
   const byClass = { 'world-open': 'world-open', 'world-shut': 'world', 'node-open': 'edit-open', 'node-shut': 'edit',
     'maps-open': 'maps-open', 'maps-shut': 'maps', 'proj-perspective': 'projection-perspective', 'proj-ortho': 'projection-orthographic' };
   for (const c in byClass) if (cls.contains(c)) return byClass[c];
-  const byId = { 'btn-panel-toggle': 'panel-toggle', 'btn-undo': 'undo', 'btn-redo': 'redo', 'btn-touch-add': 'touch-add' };
+  const byId = { 'btn-panel-toggle': 'panel-toggle', 'btn-undo': 'undo', 'btn-redo': 'redo', 'btn-touch-add': 'touch-add', 'btn-tech': 'tech-tree' };
   if (byId[button?.id]) return byId[button.id];
   if (button?.id === 'btn-sound') return markup.includes('m16 9') ? 'sound-off' : 'sound-on';
   if (button?.classList.contains('card-heart')) return svg.getAttribute('fill') === 'currentColor' ? 'card-heart-on' : 'card-heart';
