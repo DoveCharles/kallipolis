@@ -78,7 +78,7 @@ Format: `file` (size) purpose — key exports.
 - `windows.js` (25K) ---------------------------------------------------------- building windows Windows are drawn by a shader on each building's wall material rather than… — exports: WINDOW_TILE_WORLD_SIZE, createWindowMaterial, createBatchedWindowMaterial, mergeGeometries, mergeGeometryList, extractCapGeometry, buildWallGeometry, buildWedgeCapGeometry
 
 ### src/core/
-- `camera-controls.js` (4K) the closest the camera zooms in, except while it's following someone (see people.js) — exports: CAMERA_MIN_RADIUS, controls
+- `camera-controls.js` (4K) the closest the camera zooms in, except while it's following someone (see people.js) — centreAboveCards: on phones, a view offset puts the view's centre midway above the bottom card (eased; off while possessing) — exports: CAMERA_MIN_RADIUS, controls, centreAboveCards
 - `device.js` (0K) Phones and tablets drive the app by touch: — exports: IS_TOUCH, NARROW_QUERY, isNarrow
 - `entries.js` (11K) The shared reader for lines in the .txt files that describe things (people/*.txt, cars.txt, ...): `card | spoken {traits} <categories>` (traits in {braces}; [ ] only for whole-line section headings). — exports: startingTraits, entryOf, plainEntry, weighted, parseSections, combineTraits, DEFAULT_COUNTS, clash … pickEntry/rankEntries/addEntries pick by rendezvous on a seed (a choiceweight as that many hashed copies, no logs).
 - `ground-probe.js` (4K) Finds the solid ground straight below a point, for anything that falls and lands (gibs, body parts, a bee's flecks, coins); also meshes flagged userData.ground whose picking is off (walkway fringes); and what kind it is (soft, stone, plain) for the MedBot's rolling sounds. — exports: groundBelow, groundKindBelow

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { camera, frustumHalfHeightAt } from './scene.js';
+import { isNarrow } from './device.js';
 
 // ============================================================ camera controls (math only)
 // the closest the camera zooms in, except while it's following someone (see people.js)
@@ -80,3 +81,20 @@ export const controls = {
   }
 };
 controls.update(true);
+
+// On phones a card covers the bottom of the view (css/phone.css), so the view's centre is moved up into what's left
+// above it (a view offset, so picking stays true); eased. Not while possessing (the aim's the screen's middle).
+let viewShift = 0;
+export function centreAboveCards(off) {
+  let cover = 0;
+  if (!off && isNarrow()) for (const el of document.querySelectorAll('.entity-card')) {
+    if (el.hidden || !el.offsetParent) continue;
+    cover = Math.max(cover, window.innerHeight - el.getBoundingClientRect().top);
+  }
+  const goal = Math.max(0, cover) / 2;
+  viewShift = Math.abs(goal - viewShift) < 0.5 ? goal : viewShift + (goal - viewShift) * EASE_PER_FRAME;
+  const W = window.innerWidth, H = window.innerHeight, v = camera.view;
+  if (viewShift === 0) { if (v?.enabled) camera.clearViewOffset(); return; }
+  if (v?.enabled && v.offsetY === viewShift && v.fullWidth === W && v.fullHeight === H) return;
+  camera.setViewOffset(W, H, 0, viewShift, W, H);
+}

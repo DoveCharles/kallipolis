@@ -66,7 +66,8 @@ import './project/export-obj.js';
 import * as THREE from 'three';
 import { S, worldClock } from './core/shared.js';
 import { scene, camera, renderer, skyDome, sun, SKIP_OVER_WATER_AND_ROADS, blinkLights, refreshSceneIndex } from './core/scene.js';
-import { controls } from './core/camera-controls.js';
+import { controls, centreAboveCards } from './core/camera-controls.js';
+import { possession } from './life/possession.js';
 import { mulberry32 } from './core/math.js';
 import { createWindowMaterial } from './buildings/windows.js';
 import { renderMapsList } from './maps/map-images.js';
@@ -171,6 +172,7 @@ let lastFrameT = null;
 function animate() {
   requestAnimationFrame(animate);
   controls.update(false);
+  centreAboveCards(possession.index >= 0);
   skyDome.position.copy(camera.position);
   const t = performance.now()*0.001;
   if (lastFrameT != null && (S.interactionMode !== 'move' || stillLoading() || S.techOpen)) worldClock.paused += t - lastFrameT; // (frozen under the loading screen too)
