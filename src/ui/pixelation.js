@@ -14,7 +14,10 @@ import { S } from '../core/shared.js';
 // edges. So pixelating is cheaper to draw, not dearer, and the palette is one pass over the screen. Like the Windows 3.0
 // look, these are the browser's preferences, kept in localStorage, not the project's.
 const PIXELATION_KEY = 'splinetopia.pixelation', PALETTE_KEY = 'splinetopia.palette16', PALETTE_COLORS_KEY = 'splinetopia.paletteColors';
-const DITHER_KEY = 'splinetopia.dither', GRADE_KEY = 'splinetopia.grade';
+const DITHER_KEY = 'splinetopia.dither', GRADE_KEY = 'splinetopia.grade', ASCII_KEY = 'splinetopia.ascii';
+// ASCII: the view redrawn as characters, each cell's colour, the denser the brighter; ASCII_CELL CSS px a cell (or a
+// drawn pixel each, pixelated that coarse)
+const ASCII_CHARS = ' .:-=+*#%@', ASCII_CELL = 8, ASCII_GLYPH = 32;
 const MAX_PIXEL_SIZE = 12;
 const SHARP_PIXEL_RATIO = Math.min(window.devicePixelRatio, 2); // (as scene.js sets it up)
 // the sets of colours, in the Palette menu's order — sixteen, or fewer (repeated round to fill the shader's sixteen)
@@ -70,8 +73,23 @@ const slider = document.getElementById('s-pixelation'), label = document.getElem
 const paletteToggle = document.getElementById('s-palette16');
 const paletteRow = document.getElementById('palette-row'), paletteMenu = document.getElementById('s-palette');
 const ditherRow = document.getElementById('dither-row'), ditherMenu = document.getElementById('s-dither');
-const gradeToggle = document.getElementById('s-grade');
-let pixelSize = 1, palette16 = false, grade = true;
+const gradeToggle = document.getElementById('s-grade'), asciiToggle = document.getElementById('s-ascii');
+let pixelSize = 1, palette16 = false, grade = true, ascii = false;
+
+// the characters side by side, white on clear
+let glyphTexture = null;
+function makeGlyphs() {
+  const canvas = document.createElement('canvas');
+  canvas.width = ASCII_GLYPH*ASCII_CHARS.length; canvas.height = ASCII_GLYPH;
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#fff'; g.font = `bold ${ASCII_GLYPH*0.9}px monospace`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  [...ASCII_CHARS].forEach((c, i) => g.fillText(c, (i + 0.5)*ASCII_GLYPH, ASCII_GLYPH*0.55));
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.generateMipmaps = false;
+  texture.minFilter = texture.magFilter = THREE.LinearFilter;
+  return texture;
+}
 
 // A tile of blue noise — every cell a different threshold, spread as evenly as can be, so a dither through it has no
 // clumps and no visible grid — by void-and-cluster: from a scattering of points evened out (the most crowded point moved to
@@ -138,6 +156,9 @@ const copyMaterial = new THREE.ShaderMaterial({
     shadowTint: { value: new THREE.Vector3(1, 1, 1) },
     highlightTint: { value: new THREE.Vector3(1, 1, 1) },
     saturation: { value: 1 },
+    useAscii: { value: 0 },
+    asciiCell: { value: ASCII_CELL },
+    glyphs: { value: placeholderNoise },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -158,6 +179,9 @@ const copyMaterial = new THREE.ShaderMaterial({
     uniform vec3 shadowTint;
     uniform vec3 highlightTint;
     uniform float saturation;
+    uniform float useAscii;
+    uniform float asciiCell;
+    uniform sampler2D glyphs;
     varying vec2 vUv;
     // The colour grade: a gentle S-curve of contrast, a touch more (or less) saturation, the shadows and highlights each
     // tinted their own way for the time of day (see gradeForSky), and the corners darkened a little.
@@ -204,7 +228,13 @@ const copyMaterial = new THREE.ShaderMaterial({
       return threshold;
     }
     void main() {
-      vec3 color = texture2D(tView, vUv).rgb;
+      // ASCII: everything below worked out once per cell, from its middle
+      vec2 at = vUv, texel = vUv*viewSize, cell = vec2(0.0);
+      if (useAscii > 0.5) {
+        cell = floor(texel/asciiCell);
+        at = (cell + 0.5)*asciiCell/viewSize;
+      }
+      vec3 color = texture2D(tView, at).rgb;
       if (useGrade > 0.5) {
         color = colorGrade(color);
         // (a speck of noise to break up the banding in smooth gradients like the sky's — the palette dithers its own way)
@@ -212,7 +242,7 @@ const copyMaterial = new THREE.ShaderMaterial({
       }
       if (usePalette > 0.5 && ditherMode == 8) {
         // (Floyd–Steinberg: already worked out, pixel by pixel — see floydSteinberg below)
-        color = palette[int(texelFetch(floydIndices, ivec2(floor(vUv*viewSize)), 0).r*255.0 + 0.5)];
+        color = palette[int(texelFetch(floydIndices, ivec2(floor(at*viewSize)), 0).r*255.0 + 0.5)];
       } else if (usePalette > 0.5) {
         // the nearest of the sixteen, then whichever other one the color lies furthest towards (how far along the line
         // between the two it lies), and the dither pattern deciding, pixel by pixel, which of the two to show
@@ -232,7 +262,15 @@ const copyMaterial = new THREE.ShaderMaterial({
           float d = distance(color, nearest + span*k);
           if (d < otherDistance) { otherDistance = d; other = palette[i]; along = k; }
         }
-        color = along > ditherThreshold(floor(vUv*viewSize)) ? other : nearest;
+        color = along > ditherThreshold(useAscii > 0.5 ? cell : floor(vUv*viewSize)) ? other : nearest;
+      }
+      if (useAscii > 0.5) {
+        float n = ${ASCII_CHARS.length}.0;
+        float index = min(n - 1.0, floor(dot(color, vec3(0.299, 0.587, 0.114))*n));
+        vec2 inCell = fract(texel/asciiCell);
+        float ink = texture2D(glyphs, vec2((index + inCell.x)/n, inCell.y)).a;
+        // (lit to full brightness, so a dim cell's colour still shows in its sparse character)
+        color = color/max(0.25, max(color.r, max(color.g, color.b)))*ink;
       }
       // (premultiplied, as the canvas takes it: see setCutout)
       float alpha = texture2D(tView, vUv).a;
@@ -365,6 +403,13 @@ function gradeForSky() {
   u.shadowTint.value.lerp(ONE, overcast*0.6);
   u.highlightTint.value.lerp(ONE, overcast*0.6);
 }
+function setAscii(on, save) {
+  ascii = on;
+  asciiToggle.classList.toggle('on', on);
+  if (on && !glyphTexture) copyMaterial.uniforms.glyphs.value = glyphTexture = makeGlyphs();
+  copyMaterial.uniforms.useAscii.value = on ? 1 : 0;
+  if (save) remember(ASCII_KEY, on ? '1' : '0');
+}
 function setDither(id, save) {
   const index = Math.max(0, DITHER_PATTERNS.findIndex(p => p.id === id));
   if (DITHER_PATTERNS[index].id === 'blue' && !blueNoiseTexture) {
@@ -382,11 +427,13 @@ setPalette(recall(PALETTE_KEY) === '1', false);
 setPaletteColors(recall(PALETTE_COLORS_KEY) || DEFAULT_PALETTE, false);
 setDither(recall(DITHER_KEY) || DEFAULT_DITHER, false);
 setGrade(recall(GRADE_KEY) !== '0', false);
+setAscii(recall(ASCII_KEY) === '1', false);
 slider.addEventListener('input', () => setPixelation(Number(slider.value), true));
 paletteToggle.addEventListener('click', () => setPalette(!palette16, true));
 paletteMenu.addEventListener('change', () => setPaletteColors(paletteMenu.value, true));
 ditherMenu.addEventListener('change', () => setDither(ditherMenu.value, true));
 gradeToggle.addEventListener('click', () => setGrade(!grade, true));
+asciiToggle.addEventListener('click', () => setAscii(!ascii, true));
 
 // Draws the view to the screen — straight there, or through the filters.
 // Holes cut through the view to the page behind it (where the TV in a home shows a YouTube video, as an iframe under the
@@ -408,9 +455,9 @@ function cutThrough(camera) {
   renderer.autoClear = autoClear;
 }
 export function renderView(scene, camera) {
-  if (pixelSize <= 1 && !palette16 && !grade) { renderer.render(scene, camera); cutThrough(camera); return; }
+  if (pixelSize <= 1 && !palette16 && !grade && !ascii) { renderer.render(scene, camera); cutThrough(camera); return; }
   if (grade) gradeForSky();
-  if (pixelSize <= 1 && !palette16) {
+  if (pixelSize <= 1 && !palette16 && !ascii) {
     // the grade alone: drawn full size, then copied through it
     renderer.getDrawingBufferSize(screenSize);
     if (gradedView.width !== screenSize.x || gradedView.height !== screenSize.y) gradedView.setSize(screenSize.x, screenSize.y);
@@ -441,6 +488,9 @@ export function renderView(scene, camera) {
     width = screenSize.x;
     height = screenSize.y;
   }
+  // (a cell ASCII_CELL CSS px across, in drawn pixels)
+  copyMaterial.uniforms.asciiCell.value = pixelSize > 1 || floyd ? Math.max(1, Math.round(ASCII_CELL/pixelSize))
+                                                               : Math.round(ASCII_CELL*renderer.getPixelRatio());
   if (filteredView.width !== width || filteredView.height !== height) filteredView.setSize(width, height);
   copyMaterial.uniforms.viewSize.value.set(width, height);
   copyQuad.scale.set(coverX, coverY, 1);
