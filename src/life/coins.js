@@ -30,7 +30,7 @@ const HOVER_PX = 44, FLY_TIME = 1.1, SPIN = 14, END_PX = 12, CURVE = 5;
 // resting clear of park grass shells (GRASS_SHELL_HEIGHT 0.03, zones/surface-detail.js)
 const LIFT = 0.04, WOBBLE_TIME = 1.6, FLIP_CHANCE = 0.4, TILT = 0.35, WHIRL = 25;
 const geometry = new THREE.CylinderGeometry(RADIUS, RADIUS, THICK, 20);
-const materials = KINDS.map(k => new THREE.MeshStandardMaterial({ color: k.color, metalness: 0.75, roughness: 0.28,
+const materials = KINDS.map(k => new THREE.MeshStandardMaterial({ color: k.color, metalness: 0.35, roughness: 0.35,
   polygonOffset: true, polygonOffsetFactor: -10, polygonOffsetUnits: -10 })); // (over blood splats -7 and chunks -6: giblets.js)
 
 const coins = [], piles = [];
@@ -63,7 +63,7 @@ export function dropCoins(at, amount) {
       if (coins.length >= MAX_COINS) removeCoin(0, true);
       pile.count++;
       const mesh = new THREE.Mesh(geometry, materials[k].clone());
-      mesh.material.emissive.setHex(KINDS[k].color).lerp(WHITE, 0.5); mesh.material.emissiveIntensity = 0;
+      mesh.material.emissive.setHex(KINDS[k].color).lerp(WHITE, 0.5); mesh.material.emissiveIntensity = 0.25;
       mesh.name = 'Coin'; // (not ground: core/ground-probe.js)
       mesh.position.set(at.x, at.y + 1, at.z);
       scene.add(mesh);
@@ -207,7 +207,7 @@ export function updateCoins(t) {
       // glints as its face turns toward the view (and the sun)
       n.set(0, 1, 0).applyQuaternion(m.quaternion);
       h.copy(camera.position).sub(m.position).normalize().multiplyScalar(2).add(v.copy(sunOffset).normalize()).normalize();
-      m.material.emissiveIntensity = Math.max(0, n.dot(h))**40*1.2;
+      m.material.emissiveIntensity = 0.25 + Math.max(0, n.dot(h))**40*1.2;
       v.copy(m.position).project(camera);
       const seen = v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1;
       // (out of view a while: gone, into the lost change; sooner the further off, almost at once a long way away)
@@ -250,7 +250,7 @@ export function updateCoins(t) {
       spinQ.setFromAxisAngle(Y, c.spin);
       m.quaternion.copy(camera.quaternion).multiply(spinQ).multiply(FLAT_TO_VIEW);
       const glint = Math.abs(Math.cos(c.spin))**24; // (a flash each time the face turns to the view)
-      m.material.emissiveIntensity = glint*1.2;
+      m.material.emissiveIntensity = 0.25 + glint*1.2;
       if (f >= 1 || sy < -30) { addMoney(KINDS[c.kind].value); shakeMoney(); removeCoin(i, false); }
     }
   }

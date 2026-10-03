@@ -26,10 +26,8 @@ const SOUNDS = {
   gib: [
     [.9, .15, 130, 0, .04, .3, 4, 2, -20, , , , , 1.2, , .1, , .5, .05, , -1400],
   ],
-  // a dropped coin picked up (see life/coins.js): a bright two-note ding
-  coin: [
-    [.5, .05, 1675, , .06, .24, 1, 1.82, , , 837, .06],
-  ],
+  // a dropped coin picked up (see life/coins.js): a clink settling onto a pile (coinClink, below)
+  coin: [coinClink],
   // a dropped coin spinning on the ground (see life/coins.js): a faint high tink
   coinspin: [
     [.3, .15, 2400, , .005, .06, 0, 2, , , , , , , , , , .4],
@@ -369,9 +367,28 @@ export const handingOver = (voice, now) => now < (voice.movesAt ?? 0);
 
 // ZzFX's own master volume would scale every sample down: the listener's gain sets the level instead.
 ZZFX.volume = 1;
+// A coin's clink, not ZzFX's: the ringing partials of a recorded coin dropped onto others (Hz, dB, ring s; the two
+// highest turned down and shortened, as they pierced), struck 3 times as it settles, each a little off in pitch.
+const CLINK = [[6980, -11, .06], [7120, -10, .1], [8180, -6, .04], [9700, -7, .035], [12140, -12, .07], [13890, -15, .006]];
+function coinClink(rate) {
+  const out = new Float32Array(Math.round(rate*.9));
+  let start = 0, strength = 1, peak = 0;
+  for (let hit = 0; hit < 3; hit++) {
+    const k = 1 + (Math.random() - .5)*.1;
+    for (const [hz, db, ring] of CLINK) {
+      const w = 2*Math.PI*hz*k*(1 + (Math.random() - .5)*.01)/rate, a = strength*10**(db/20)*(.6 + Math.random()*.4), ph = Math.random()*6.28;
+      const fall = Math.exp(-1/(ring*rate));
+      for (let i = start, g = a; i < out.length; i++, g *= fall) out[i] += g*Math.sin(ph + w*(i - start));
+    }
+    for (let i = 0; i < rate*.006; i++) out[start + i] += strength*.5*(Math.random()*2 - 1)*Math.exp(-i/(rate*.0003)); // the contact
+    start += Math.round(rate*.05*(.6 + Math.random()*.8)); strength *= .15 + Math.random()*.25;
+  }
+  for (const v of out) peak = Math.max(peak, Math.abs(v));
+  return out.map(v => v*.3/peak);
+}
 const buffers = {}; // name -> [variant -> [layer -> AudioBuffer]]
 function variantsOf(name) {
-  if (!buffers[name]) buffers[name] = Array.from({ length: VARIANTS }, () => SOUNDS[name].map(zzfxBuffer));
+  if (!buffers[name]) buffers[name] = Array.from({ length: VARIANTS }, () => SOUNDS[name].map(layer => typeof layer === 'function' ? bufferOf(layer(ZZFX.sampleRate), []) : zzfxBuffer(layer)));
   return buffers[name];
 }
 
@@ -515,7 +532,7 @@ export function prewarm(layers, count) {
   } catch { workerFailed = true; return; }
   for (const layer of layers) for (let k = 0; k < count; k++) { waiting.set(++jobs, layer); worker.postMessage({ id: jobs, layer }); }
 }
-prewarm(Object.values(SOUNDS).flat(), VARIANTS);
+prewarm(Object.values(SOUNDS).flat().filter(Array.isArray), VARIANTS);
 
 let voices = 0;
 const source = new THREE.Vector3();
