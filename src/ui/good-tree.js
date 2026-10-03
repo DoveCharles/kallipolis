@@ -134,15 +134,14 @@ function orbHtml(t) {
   const [x, y] = posOf(t), d = SIZE[t.ring], on = s.running[t.ring] === t.key;
   const cls = ['tt-orb', `ring${t.ring}`, picked === t.key ? 'on' : '', isDone(t) ? 'done' : '', isLocked(t) ? 'locked' : '', on ? 'running' : ''].join(' ');
   return `<div class="${cls}" data-key="${t.key}" style="left:${x - d/2}px;top:${y - d/2}px;width:${d}px;height:${d}px;--p:${fracOf(t)*100}%">
-    <img src="${iconSrc(t)}" alt=""><div class="tt-orb-name">${t.name}<span class="tt-time">${isDone(t) ? '' : on || item(t).paid ? fmt(leftOf(t)) : ''}</span></div></div>`;
+    ${t.ring ? `<img src="${iconSrc(t)}" alt=""><div class="tt-orb-name">${t.name}<span class="tt-time">${isDone(t) ? '' : on || item(t).paid ? fmt(leftOf(t)) : ''}</span></div>` : ''}</div>`; // (the Good: blank)
 }
 function linksSvg() {
-  const rings = RADIUS.slice(1).map(r => `<circle cx="${C}" cy="${C}" r="${r}"/>`).join('');
   const lines = ALL.flatMap(t => t.feeds.map(f => {
     const [x1, y1] = posOf(t), [x2, y2] = posOf(techOf(f));
     return `<line data-a="${t.key}" data-b="${f}" class="r${t.ring}${isDone(t) ? ' done' : ''}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
   })).join('');
-  return `<svg class="tt-links" width="${2*C}" height="${2*C}"><g class="tt-rings">${rings}</g>${lines}</svg>`;
+  return `<svg class="tt-links" width="${2*C}" height="${2*C}">${lines}</svg>`;
 }
 function sideHtml(t) {
   const on = s.running[t.ring] === t.key;
@@ -158,10 +157,22 @@ function sideHtml(t) {
 function render() {
   if (panel.hidden) return;
   radial.innerHTML = linksSvg() + ALL.map(orbHtml).join('');
+  shade();
   const t = techOf(picked);
   side.hidden = !t;
   if (t) side.innerHTML = sideHtml(t);
   light(hovered);
+}
+
+// ---- light: white at the Good, a grey band per ring out; each ring finished lights the band outside it (all done: all
+// white), so climbing in spreads the light out. --inkN: label/line colour readable on band N; --halo: the Good's glow
+const BANDS = [60, 175, 287, 402, 540], GREYS = [255, 204, 153, 102, 51]; // band edges midway between rings (RADIUS)
+function shade() {
+  const share = r => { const l = ALL.filter(t => t.ring === r); return l.filter(isDone).length/l.length; };
+  const g = GREYS.map((v, i) => Math.round(i ? v + (255 - v)*share(i - 1) : v));
+  radial.style.background = `radial-gradient(circle closest-side, ${g.map((v, i) => `rgb(${v},${v},${v}) ${i ? BANDS[i - 1] + 'px ' : ''}${BANDS[i]}px`).join(', ')}, #000 ${BANDS[4]}px)`;
+  g.forEach((v, i) => radial.style.setProperty(`--ink${i}`, v > 140 ? '#000' : '#fff'));
+  radial.style.setProperty('--halo', share(1)*60 + 'px');
 }
 
 // ---- hover: light a node's whole path, inward to the Good and outward to every particular under it
@@ -179,7 +190,27 @@ function light(key) {
 }
 radial.addEventListener('mouseover', e => { const n = e.target.closest('.tt-orb'); if (n && n.dataset.key !== hovered) light(n.dataset.key); });
 radial.addEventListener('mouseleave', () => light(null));
+// ---- the wheel zooms in on the cursor; dragging pans
+let zoom = 1, drag = null, dragged = false;
+function zoomTo(z, x, y) { // (x, y: a client point kept over the same spot)
+  z = Math.min(2.5, Math.max(Math.min(1, Math.min(treeEl.clientWidth, treeEl.clientHeight)/(2*C)), z));
+  const r = radial.getBoundingClientRect(), fx = (x - r.left)/r.width, fy = (y - r.top)/r.height;
+  zoom = z; radial.style.zoom = z;
+  radial.classList.toggle('far', z < 0.7); radial.classList.toggle('mid', z < 0.95); // (zoomed out: only the Forms named)
+  const n = radial.getBoundingClientRect();
+  treeEl.scrollLeft += n.left + fx*n.width - x; treeEl.scrollTop += n.top + fy*n.height - y;
+}
+treeEl.addEventListener('wheel', e => { e.preventDefault(); zoomTo(zoom*Math.exp(-e.deltaY*0.0015), e.clientX, e.clientY); }, { passive: false });
+treeEl.addEventListener('pointerdown', e => { if (!e.button) { drag = { x: e.clientX, y: e.clientY, l: treeEl.scrollLeft, t: treeEl.scrollTop }; dragged = false; } });
+addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (Math.abs(dx) + Math.abs(dy) > 4) dragged = true;
+  if (dragged) { treeEl.scrollLeft = drag.l - dx; treeEl.scrollTop = drag.t - dy; }
+});
+addEventListener('pointerup', () => { drag = null; });
 treeEl.addEventListener('click', e => {
+  if (dragged) { dragged = false; return; } // (a drag's not a click)
   const n = e.target.closest('.tt-orb');
   picked = n ? n.dataset.key : null; render();
 });
@@ -197,7 +228,7 @@ function refresh() {
   Object.values(s.running).forEach(key => {
     const t = techOf(key), left = leftOf(t), pct = fracOf(t)*100 + '%';
     const n = radial.querySelector(`[data-key="${key}"]`);
-    if (n) { n.querySelector('.tt-time').textContent = fmt(left); n.style.setProperty('--p', pct); }
+    if (n) { const tm = n.querySelector('.tt-time'); if (tm) tm.textContent = fmt(left); n.style.setProperty('--p', pct); }
     if (picked === key) { side.querySelector('.tt-side-time').textContent = fmt(left) + ' left'; side.querySelector('.tt-bar > div').style.width = pct; }
   });
 }

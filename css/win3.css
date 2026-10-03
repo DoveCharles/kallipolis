@@ -580,30 +580,38 @@ body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, #g
 :is(#tech-tree, #good-tree) .tt-side-time { font-weight:700; }
 :is(#tech-tree, #good-tree) .tt-side .tt-bar { height:8px; outline:1px solid var(--w3-frame, #000); border:none; }
 /* Good tree (src/ui/good-tree.js): radial, Plato's ascent */
-#good-tree .tt-radial { position:relative; margin:0 auto; }
+#good-tree .tt-tree { background:#000; display:grid; cursor:grab; } /* (grid + auto margins: centred, still scrollable when bigger) */
+/* an anti-black hole: white at the Good, darker per ring out (the bands: good-tree.js shade) */
+#good-tree .tt-radial { position:relative; margin:auto; }
+#good-tree .ring1 .tt-orb-name { color:var(--ink1); } #good-tree .ring2 .tt-orb-name { color:var(--ink2); }
+#good-tree .ring3 .tt-orb-name { color:var(--ink3); } #good-tree .ring4 .tt-orb-name { color:var(--ink4); }
+#good-tree .tt-orb-name { transition:opacity .2s; }
+#good-tree .tt-radial.mid .ring4 .tt-orb-name, #good-tree .tt-radial.far .ring3 .tt-orb-name { opacity:0; }
 #good-tree .tt-links { position:absolute; left:0; top:0; pointer-events:none; }
-#good-tree .tt-rings circle { fill:none; stroke:var(--w3-frame, #000); stroke-opacity:.25; stroke-dasharray:2 6; }
-#good-tree .tt-links line { stroke:var(--w3-frame, #000); stroke-opacity:.35; stroke-dasharray:6 5; }
-#good-tree line.r4 { stroke-width:1; } #good-tree line.r3 { stroke-width:1.5; } #good-tree line.r2 { stroke-width:2; } #good-tree line.r1 { stroke-width:3; }
-#good-tree .tt-links line.done { stroke-opacity:.8; stroke-dasharray:none; }
+#good-tree .tt-links line { stroke:#000; stroke-opacity:.35; stroke-dasharray:6 5; }
+#good-tree line.r4 { stroke-width:1; stroke:var(--ink4); } #good-tree line.r3 { stroke-width:1.5; stroke:var(--ink3); } #good-tree line.r2 { stroke-width:2; stroke:var(--ink2); } #good-tree line.r1 { stroke-width:3; stroke:var(--ink1); }
+#good-tree .tt-links line.done { stroke:#f5c400; stroke-opacity:1; stroke-dasharray:3 9; animation:gt-flow 1.2s linear infinite; } /* light flowing in toward the Good */
+@keyframes gt-flow { to { stroke-dashoffset:-12; } }
 #good-tree .tt-radial.lit line { stroke-opacity:.08; }
-#good-tree .tt-radial.lit line.path { stroke-opacity:1; stroke:var(--w3-title, #000080); }
-#good-tree .tt-radial.lit .tt-orb:not(.path) { opacity:.25; }
+#good-tree .tt-radial.lit line.path { stroke-opacity:1; stroke:#ff9f00; }
+#good-tree .tt-radial.lit .tt-orb:not(.path) :is(img, .tt-orb-name) { opacity:.25; }
 #good-tree .tt-orb {
   position:absolute; box-sizing:border-box; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none;
-  background:conic-gradient(#0060ff var(--p, 0%), var(--w3-window, #fff) 0); outline:1px solid var(--w3-frame, #000); box-shadow:2px 2px 0 var(--w3-frame, #000);
+  background:conic-gradient(#0060ff var(--p, 0%), #fff 0); outline:1px solid var(--w3-frame, #000); box-shadow:2px 2px 0 var(--w3-frame, #000);
 }
-#good-tree .tt-orb::before { content:''; position:absolute; inset:4px; border-radius:50%; background:var(--w3-window, #fff); outline:1px solid var(--w3-frame, #000); }
+#good-tree .tt-orb::before { content:''; position:absolute; inset:4px; border-radius:50%; background:#fff; outline:1px solid var(--w3-frame, #000); }
 #good-tree .tt-orb img { position:relative; width:50%; height:50%; image-rendering:pixelated; }
-#good-tree .tt-orb.ring0::before { background:#ffe680; }
 #good-tree .tt-orb.on::before { background:var(--w3-title, #000080); }
 #good-tree .tt-orb.done { outline-width:2px; }
-#good-tree .tt-orb.locked { filter:grayscale(1); opacity:.5; }
+#good-tree .tt-orb.locked, #good-tree .tt-orb.locked::before { background:#a0a0a0; }
+#good-tree .tt-orb.locked img { filter:grayscale(1); opacity:.4; }
+#good-tree .tt-orb.locked .tt-orb-name { opacity:.5; }
 #good-tree .tt-orb-name { position:absolute; top:calc(100% + 4px); left:50%; transform:translateX(-50%); white-space:nowrap; text-align:center; font-weight:700; }
+#good-tree .tt-orb.ring0 { box-shadow:0 0 var(--halo, 0px) calc(var(--halo, 0px)/2) #fff6c0, 2px 2px 0 var(--w3-frame, #000); }
 #good-tree .tt-orb.ring0 .tt-orb-name, #good-tree .tt-orb.ring1 .tt-orb-name { font-size:13px; }
 #good-tree .tt-time { display:block; font-weight:400; }
 #good-tree .tt-ring { opacity:.7; }
-#good-tree .tt-close { position:absolute; top:8px; left:8px; margin:0; }
+#good-tree .tt-close { position:absolute; top:8px; left:8px; width:auto; margin:0; padding:4px 14px; }
 .tt-notice {
   position:fixed; top:calc(var(--w3-below, 60px) + 12px); left:50%; transform:translateX(-50%); z-index:65; min-width:200px;
   background:var(--w3-window, #fff); outline:1px solid var(--w3-frame, #000); box-shadow:2px 2px 0 var(--w3-frame, #000);
