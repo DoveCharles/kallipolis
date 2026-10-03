@@ -86,14 +86,17 @@ controls.update(true);
 // above it (a view offset, so picking stays true); eased. Not while possessing (the aim's the screen's middle).
 let viewShift = 0;
 export function centreAboveCards(off) {
-  let cover = 0;
+  const H = window.innerHeight;
+  let bottom = H;
   if (!off && isNarrow()) for (const el of document.querySelectorAll('.entity-card')) {
-    if (el.hidden || !el.offsetParent) continue;
-    cover = Math.max(cover, window.innerHeight - el.getBoundingClientRect().top);
+    if (el.hidden || !el.getClientRects().length) continue; // (fixed, so no offsetParent)
+    bottom = Math.min(bottom, el.getBoundingClientRect().top);
   }
-  const goal = Math.max(0, cover) / 2;
+  // midway between the toolbar and the topmost card
+  const top = bottom < H ? Math.max(0, document.getElementById('canvas-tools')?.getBoundingClientRect().bottom ?? 0) : 0;
+  const goal = Math.max(0, H/2 - (top + bottom)/2);
   viewShift = Math.abs(goal - viewShift) < 0.5 ? goal : viewShift + (goal - viewShift) * EASE_PER_FRAME;
-  const W = window.innerWidth, H = window.innerHeight, v = camera.view;
+  const W = window.innerWidth, v = camera.view;
   if (viewShift === 0) { if (v?.enabled) camera.clearViewOffset(); return; }
   if (v?.enabled && v.offsetY === viewShift && v.fullWidth === W && v.fullHeight === H) return;
   camera.setViewOffset(W, H, 0, viewShift, W, H);
