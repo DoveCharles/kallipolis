@@ -1,8 +1,13 @@
 /* ============================================================ the phone layout: the same Windows 3.0 window as wider,
-   the toolbar scrolling sideways (win3-menu.js), the side panel over the view rather than beside it */
+   the toolbar scrolling sideways (win3-menu.js), the side panel docked along the bottom */
 @media (max-width: 760px) {
   html.win3 { --w3-panel-w:min(267px, calc(100vw / var(--ui-scale, 1) - 48px)); }
-  html.win3 #panel { z-index:16; box-shadow:2px 0 0 var(--w3-frame); }
+  /* the panel docked along the bottom, as the cards are; hidden, it slides down */
+  html.win3 #panel {
+    z-index:16; top:auto; left:4px; right:4px; bottom:4px; width:auto; max-height:45vh; max-height:45dvh;
+    border-right:none; border-top:1px solid var(--w3-frame); box-shadow:0 -2px 0 var(--w3-frame);
+  }
+  html.win3 body.w3-no-panel #panel { transform:translateY(calc(100% + 8px)); }
 
   /* the hint runs to a couple of hundred characters — across the bottom */
   #hint {

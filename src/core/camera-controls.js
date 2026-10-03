@@ -82,17 +82,17 @@ export const controls = {
 };
 controls.update(true);
 
-// On phones a card covers the bottom of the view (css/phone.css), so the view's centre is moved up into what's left
+// On phones a card or the panel covers the bottom of the view (css/phone.css), so the view's centre is moved up into what's left
 // above it (a view offset, so picking stays true); eased. Not while possessing (the aim's the screen's middle).
 let viewShift = 0;
 export function centreAboveCards(off) {
   const H = window.innerHeight;
   let bottom = H;
-  if (!off && isNarrow()) for (const el of document.querySelectorAll('.entity-card')) {
+  if (!off && isNarrow()) for (const el of document.querySelectorAll('.entity-card, body:not(.w3-no-panel) #panel')) {
     if (el.hidden || !el.getClientRects().length) continue; // (fixed, so no offsetParent)
     bottom = Math.min(bottom, el.getBoundingClientRect().top);
   }
-  // midway between the toolbar and the topmost card
+  // midway between the toolbar and the topmost card or panel
   const top = bottom < H ? Math.max(0, document.getElementById('canvas-tools')?.getBoundingClientRect().bottom ?? 0) : 0;
   const goal = Math.max(0, H/2 - (top + bottom)/2);
   viewShift = Math.abs(goal - viewShift) < 0.5 ? goal : viewShift + (goal - viewShift) * EASE_PER_FRAME;

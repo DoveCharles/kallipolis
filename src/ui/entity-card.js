@@ -227,6 +227,8 @@ export function makeCard({ id, title, onClose, thumb = {}, kill = null, action =
   function selectTab(key) {
     if (!tabButtons[key] || key === activeTab) return;
     const own = !panes[key];
+    // Pockets keeps the Overview's height
+    if (!panes[activeTab] && panes.pockets) panes.pockets.style.minHeight = (body.getBoundingClientRect().bottom - topSection.getBoundingClientRect().top) + 'px';
     resizeSmoothly(() => {
       topSection.style.display = body.style.display = own ? '' : 'none';
       Object.entries(panes).forEach(([k, pane]) => { pane.hidden = k !== key; });
