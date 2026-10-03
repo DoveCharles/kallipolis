@@ -523,13 +523,13 @@ html.win3 #quests .w3-dialog-body { overflow:hidden; padding-bottom:12px; }
 .qs-refuse { all:unset; cursor:pointer; padding:0 4px; font-weight:bold; }
 
 /* Tech tree (src/ui/tech-tree.js): everything under the toolbar, the rest hidden (body.tech-open) */
-body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, .tt-notice, .w3-dropdown, .w3-modal, script, svg) { visibility:hidden !important; }
+body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, #good-tree, .tt-notice, .w3-dropdown, .w3-modal, script, svg) { visibility:hidden !important; }
 #btn-tech.on { box-shadow:var(--w3-pressed, inset 1px 1px 0 #808080); }
-#tech-tree {
+#tech-tree, #good-tree {
   position:fixed; top:var(--w3-below, 60px); left:4px; right:4px; bottom:4px; z-index:14; display:flex; flex-direction:column;
   color:var(--w3-text, #000); font-family:var(--sans); font-size:11px;
 }
-#tech-tree[hidden] { display:none; }
+#tech-tree[hidden], #good-tree[hidden] { display:none; }
 #tech-tree .tt-tabs { display:flex; padding:6px 8px 0; background:var(--w3-dither, #c0c0c0); border-bottom:1px solid var(--w3-frame, #000); }
 #tech-tree .tt-tab {
   position:relative; height:20px; padding:0 18px; margin:0 0 -1px -6px; border:none; border-radius:0; background:var(--w3-frame, #000);
@@ -543,8 +543,8 @@ body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, .t
 #tech-tree .tt-tab > span { position:relative; }
 #tech-tree .tt-tab.on { z-index:1; font-weight:700; }
 #tech-tree .tt-tab.on::before { bottom:0; background:var(--w3-window, #fff); }
-#tech-tree .tt-body { flex:1; display:flex; min-height:0; }
-#tech-tree .tt-tree {
+:is(#tech-tree, #good-tree) .tt-body { flex:1; display:flex; min-height:0; }
+:is(#tech-tree, #good-tree) .tt-tree {
   flex:1; position:relative; overflow:auto;
   background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='1' height='1' fill='%23d4d4d4'/%3E%3Crect x='2' y='2' width='1' height='1' fill='%23d4d4d4'/%3E%3C/svg%3E") var(--w3-window, #fff);
 }
@@ -560,25 +560,50 @@ body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, .t
 #tech-tree .tt-icon { flex:0 0 52px; display:flex; align-items:center; justify-content:center; border-right:1px solid var(--w3-frame, #000); }
 #tech-tree .tt-icon img { width:32px; height:32px; image-rendering:pixelated; }
 #tech-tree .tt-info { flex:1; padding:6px 8px; display:flex; flex-direction:column; justify-content:center; gap:4px; font-weight:700; }
-#tech-tree .tt-cost, #tech-tree .tt-side-cost { display:flex; align-items:center; gap:3px; }
-#tech-tree .meter-icon { width:11px; height:11px; image-rendering:pixelated; }
-#tech-tree .tt-bar { height:4px; background:var(--w3-window, #fff); border-top:1px solid var(--w3-frame, #000); }
-#tech-tree .tt-bar > div { height:100%; background:#0060ff; }
+:is(#tech-tree, #good-tree) .tt-cost, #tech-tree .tt-side-cost { display:flex; align-items:center; gap:3px; }
+:is(#tech-tree, #good-tree) .meter-icon { width:11px; height:11px; image-rendering:pixelated; }
+:is(#tech-tree, #good-tree) .tt-bar { height:4px; background:var(--w3-window, #fff); border-top:1px solid var(--w3-frame, #000); }
+:is(#tech-tree, #good-tree) .tt-bar > div { height:100%; background:#0060ff; }
 #tech-tree .tt-node.locked { filter:grayscale(1); opacity:0.5; }
 #tech-tree .tt-node.done .tt-time { color:#008000; }
-#tech-tree .tt-side {
+:is(#tech-tree, #good-tree) .tt-side {
   flex:0 0 240px; display:flex; flex-direction:column; gap:8px; padding:12px; overflow-y:auto;
   background:var(--w3-window, #fff); border-left:2px solid var(--w3-frame, #000); animation:tt-slide .15s ease-out;
 }
-#tech-tree .tt-side[hidden] { display:none; }
+:is(#tech-tree, #good-tree) .tt-side[hidden] { display:none; }
 @keyframes tt-slide { from { transform:translateX(100%); } }
-#tech-tree .tt-pic { height:140px; display:flex; align-items:center; justify-content:center; outline:1px solid var(--w3-frame, #000); background:var(--w3-face, #c0c0c0); }
-#tech-tree .tt-pic img { width:96px; height:96px; image-rendering:pixelated; }
-#tech-tree .tt-name { font-size:16px; font-weight:700; }
-#tech-tree .tt-text { margin:0; line-height:1.45; flex:1; }
-#tech-tree .tt-get { margin:0; padding:6px 12px; font-size:16px; font-weight:700; }
-#tech-tree .tt-side-time { font-weight:700; }
-#tech-tree .tt-side .tt-bar { height:8px; outline:1px solid var(--w3-frame, #000); border:none; }
+:is(#tech-tree, #good-tree) .tt-pic { height:140px; display:flex; align-items:center; justify-content:center; outline:1px solid var(--w3-frame, #000); background:var(--w3-face, #c0c0c0); }
+:is(#tech-tree, #good-tree) .tt-pic img { width:96px; height:96px; image-rendering:pixelated; }
+:is(#tech-tree, #good-tree) .tt-name { font-size:16px; font-weight:700; }
+:is(#tech-tree, #good-tree) .tt-text { margin:0; line-height:1.45; flex:1; }
+:is(#tech-tree, #good-tree) .tt-get { margin:0; padding:6px 12px; font-size:16px; font-weight:700; }
+:is(#tech-tree, #good-tree) .tt-side-time { font-weight:700; }
+:is(#tech-tree, #good-tree) .tt-side .tt-bar { height:8px; outline:1px solid var(--w3-frame, #000); border:none; }
+/* Good tree (src/ui/good-tree.js): radial, Plato's ascent */
+#good-tree .tt-radial { position:relative; margin:0 auto; }
+#good-tree .tt-links { position:absolute; left:0; top:0; pointer-events:none; }
+#good-tree .tt-rings circle { fill:none; stroke:var(--w3-frame, #000); stroke-opacity:.25; stroke-dasharray:2 6; }
+#good-tree .tt-links line { stroke:var(--w3-frame, #000); stroke-opacity:.35; stroke-dasharray:6 5; }
+#good-tree line.r4 { stroke-width:1; } #good-tree line.r3 { stroke-width:1.5; } #good-tree line.r2 { stroke-width:2; } #good-tree line.r1 { stroke-width:3; }
+#good-tree .tt-links line.done { stroke-opacity:.8; stroke-dasharray:none; }
+#good-tree .tt-radial.lit line { stroke-opacity:.08; }
+#good-tree .tt-radial.lit line.path { stroke-opacity:1; stroke:var(--w3-title, #000080); }
+#good-tree .tt-radial.lit .tt-orb:not(.path) { opacity:.25; }
+#good-tree .tt-orb {
+  position:absolute; box-sizing:border-box; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none;
+  background:conic-gradient(#0060ff var(--p, 0%), var(--w3-window, #fff) 0); outline:1px solid var(--w3-frame, #000); box-shadow:2px 2px 0 var(--w3-frame, #000);
+}
+#good-tree .tt-orb::before { content:''; position:absolute; inset:4px; border-radius:50%; background:var(--w3-window, #fff); outline:1px solid var(--w3-frame, #000); }
+#good-tree .tt-orb img { position:relative; width:50%; height:50%; image-rendering:pixelated; }
+#good-tree .tt-orb.ring0::before { background:#ffe680; }
+#good-tree .tt-orb.on::before { background:var(--w3-title, #000080); }
+#good-tree .tt-orb.done { outline-width:2px; }
+#good-tree .tt-orb.locked { filter:grayscale(1); opacity:.5; }
+#good-tree .tt-orb-name { position:absolute; top:calc(100% + 4px); left:50%; transform:translateX(-50%); white-space:nowrap; text-align:center; font-weight:700; }
+#good-tree .tt-orb.ring0 .tt-orb-name, #good-tree .tt-orb.ring1 .tt-orb-name { font-size:13px; }
+#good-tree .tt-time { display:block; font-weight:400; }
+#good-tree .tt-ring { opacity:.7; }
+#good-tree .tt-close { position:absolute; top:8px; left:8px; margin:0; }
 .tt-notice {
   position:fixed; top:calc(var(--w3-below, 60px) + 12px); left:50%; transform:translateX(-50%); z-index:65; min-width:200px;
   background:var(--w3-window, #fff); outline:1px solid var(--w3-frame, #000); box-shadow:2px 2px 0 var(--w3-frame, #000);
