@@ -6,6 +6,9 @@ Hear me Lord, I'm not asking for much. Just a little more money. Amen.
 Dear God, why is everything so expensive? Amen.
 Oh God, forgive me for what I said earlier. Amen. {mood = -0.3}
 Hear me Lord, smite my enemies. Amen. {evil}
+Oh Lord, give my son strength and good health. Amen.
+Oh Lord, give my daughter strength and good health. Amen.
+Dear God, cure me of all my ills. Thank you, Amen.
 Dear Lord, deliver me from evil, protect me from the malice and snares of the devil. And 2 more inches. Amen. {man > 0}
 Oh God, please cure my aerosol addiction. Amen.
 Dear God, make me better at the computer. Amen. {age > 60}
