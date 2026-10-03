@@ -111,6 +111,7 @@ import { fadeBuildingsAroundCamera } from './buildings/see-through.js';
 import { updateBuildingBatches } from './buildings/building-batches.js';
 import { updateNodeHighlight } from './editor/node-highlight.js';
 import { renderView } from './ui/pixelation.js';
+import { frameDrawn } from './ui/fps.js';
 import { loadStatueModel, loadBeerStallModel } from './objects/object-types.js';
 import { updateSpeechBubbles } from './ui/speech-bubbles.js';
 import { placeEar } from './audio/sfx.js';
@@ -169,8 +170,14 @@ commitHistory(); // the starting point undo goes back to
 // weather hold still while the city's changed, and pick up where they were (see project/history.js for why). Water,
 // blinking lights and sound keep the real clock (`t`).
 let lastFrameT = null;
-function animate() {
+// No more than SIM_HZ frames a second, on faster screens too: half the work at 120Hz (a little slack for rAF's jitter)
+const SIM_HZ = 60;
+let lastRunT = -Infinity;
+function animate(now) {
   requestAnimationFrame(animate);
+  if (now - lastRunT < 1000/SIM_HZ - 4) return;
+  lastRunT = now;
+  frameDrawn();
   controls.update(false);
   centreAboveCards(possession.index >= 0);
   skyDome.position.copy(camera.position);
@@ -223,7 +230,7 @@ function animate() {
   unshake();
   disposeRetiredMaterials(); // (only now the new ones have taken over their shader programs: see disposeObject)
 }
-animate();
+animate(performance.now());
 
 // A handle on the app's insides, for poking at it from the browser console. `status` is there too, so a status effect can
 // be tried out without waiting for someone to happen to buy a coffee: `kallipolis.status.add('caffeinated')` puts one on

@@ -376,14 +376,32 @@ export const isDrawn = p => !p.vanished && (!isGone(p) && (p.mode === 'possessed
 // FINE_EVERY frames, a share of the crowd each frame, taking in all the time since. How they move, and what they do and
 // say, still goes on every frame.
 const FINE_EVERY = 4;
+// Keeping up with what their traits make of them (skin, hair, nudity, head size) only every THINK_EVERY frames, a share each frame.
+const THINK_EVERY = 6;
 let peopleFrame = 0;
 // And someone off screen or a speck on it (under LAZY_PIXELS), out of earshot and doing nothing that needs every frame,
-// isn't updated at all but on their fine turn, taking in all the time since (lazyDt).
-const LAZY_PIXELS = 20;
-const lazyNow = (p, i, carded) => (peopleFrame + i) % FINE_EVERY !== 0 && i !== followed && i !== possession.index
-  && p.mode !== 'none' && p.mode !== 'possessed' && !p.jc && !p.fall && !p.push && !p.punched && !p.attack && !p.swat && !inWater(p)
-  && !carded.includes(i) && Math.hypot(p.x - ear.x, p.y - ear.y, p.z - ear.z) > hearDistance()
-  && personPixels(p.x, p.y, p.z, 1.7*p.height*S.peopleSize) < LAZY_PIXELS;
+// isn't updated at all but on their fine turn, taking in all the time since (lazyDt); under HALF_LAZY_PIXELS, every other
+// frame. Skipped while in view, they glide on at their last speed (glide).
+const LAZY_PIXELS = 20, HALF_LAZY_PIXELS = 40;
+const lazyNow = (p, i, carded) => {
+  if ((peopleFrame + i) % FINE_EVERY === 0 || i === followed || i === possession.index
+    || p.mode === 'none' || p.mode === 'possessed' || p.jc || p.fall || p.push || p.punched || p.attack || p.swat || inWater(p)
+    || carded.includes(i) || Math.hypot(p.x - ear.x, p.y - ear.y, p.z - ear.z) <= hearDistance()) return false;
+  const px = p.lazyPx = personPixels(p.x, p.y, p.z, 1.7*p.height*S.peopleSize);
+  return px < LAZY_PIXELS || (px < HALF_LAZY_PIXELS && (peopleFrame + i) % 2 !== 0);
+};
+const GLIDE_MAX = 8; // (faster than this, m/s, and it was a jump, not a walk: no glide)
+function glide(p, i) {
+  const dx = p.glideVX*p.lazyDt, dz = p.glideVZ*p.lazyDt, o = i*16;
+  personModel.mesh.instanceMatrix.array[o+12] = p.glideX + dx;
+  personModel.mesh.instanceMatrix.array[o+14] = p.glideZ + dz;
+  for (const layer of personModel.wornLayers) {
+    const style = layer.of[i] >= 0 ? layer.styles[layer.of[i]] : null;
+    if (!style?.mesh) continue;
+    const a = style.mesh.instanceMatrix.array, so = layer.slot[i]*16;
+    a[so+12] = p.glideX + dx; a[so+14] = p.glideZ + dz;
+  }
+}
 const FOOTFALLS = 0.13, STEPS_PER_CYCLE = 4; // how far through the walk cycle a foot first comes down, and how many times
 // one does in a cycle: the Walk clip is two full strides, left, right, left, right, each foot reaching furthest forward there
 // Someone's voice (see audio/voices.js), the same every time for the same person: its pitch, lower for a man than a woman
@@ -1416,22 +1434,24 @@ export function updatePeople(t) {
   updateMinis(dt, wanted); // (pipers' minis: made, followed, avenged — see peopleMinis.js)
   const frameDt = dt;
   people.forEach((p, i) => {
-    if (lazyNow(p, i, carded)) { p.lazyDt = (p.lazyDt ?? 0) + frameDt; return; }
+    if (lazyNow(p, i, carded)) { p.lazyDt = (p.lazyDt ?? 0) + frameDt; if (personModel && p.lazyPx > 0 && p.glideVX != null) glide(p, i); return; }
     const dt = frameDt + (p.lazyDt ?? 0);
     p.lazyDt = 0;
     const wasX = p.x, wasZ = p.z; // (for how fast they were going, should they walk into the water: see updateWater)
     if (p.mode === 'none' && (peopleNav.lines.length || peopleNav.areas.length)) { spawnPerson(p); placeKept(p); }
-    refreshTraits(p, i);
-    if (p.skinKey !== skinKeyOf(p) || p.spectralKey !== spectralOf(p)) tintSkin(p, i); // (a keepsake or status that's just moved the skin's traits: see tintSkin)
+    // (what their traits make of them, checked every THINK_EVERY frames: see THINK_EVERY)
+    const thinks = (peopleFrame + i) % THINK_EVERY === 0 || p.traitsKey == null || p.groomKey == null || i === followed || i === possession.index || carded.includes(i);
+    if (thinks) refreshTraits(p, i);
+    if (thinks && (p.skinKey !== skinKeyOf(p) || p.spectralKey !== spectralOf(p))) tintSkin(p, i); // (a keepsake or status that's just moved the skin's traits: see tintSkin)
     if (p.traits.ghost || p.shyPhase) shyGhost(p, i, p.mode === 'possessed'); // (gone when you come near, the first few times)
     // (the bald and beard traits: their hair and facial hair as they say — see groom in peopleModel.js; and what shows, for speech)
-    if (personModel) {
+    if (thinks && personModel) {
       const bald = Math.sign(Math.round(p.traits.bald)), beard = Math.sign(Math.round(p.traits.beard)), groomKey = p.id*9 + (bald + 1)*3 + beard + 1;
       if (p.groomKey !== groomKey) { p.groomKey = groomKey; personModel.groom(i, p.id, bald, beard); }
       const head = personModel.headOf(i); p.showsBald = head.bald; p.showsBeard = head.bearded;
     }
-    if (personModel && !!p.traits.nude !== !!p.nudeDressed) { p.nudeDressed = !!p.traits.nude; personModel.setNude(i, p.id, p.nudeDressed); } // (see peopleCensor.js)
-    if (personModel && p.headDrawn !== p.traits.headsize) { p.headDrawn = p.traits.headsize; personModel.traitData[(HAIR_ROW*PEOPLE_MAX + i)*4 + 3] = p.headDrawn; personModel.traitTexture.needsUpdate = true; } // (see personLook)
+    if (thinks && personModel && !!p.traits.nude !== !!p.nudeDressed) { p.nudeDressed = !!p.traits.nude; personModel.setNude(i, p.id, p.nudeDressed); } // (see peopleCensor.js)
+    if (thinks && personModel && p.headDrawn !== p.traits.headsize) { p.headDrawn = p.traits.headsize; personModel.traitData[(HAIR_ROW*PEOPLE_MAX + i)*4 + 3] = p.headDrawn; personModel.traitTexture.needsUpdate = true; } // (see personLook)
     if (p.traits.nude && (p.mode === 'line' || p.mode === 'wander') && (p.nudeSeenIn = (p.nudeSeenIn ?? 0) - dt) <= 0) { witness(p, 'nude'); p.nudeSeenIn = NUDE_SEEN_EVERY; }
     if (personModel && p.traits.bodiless) { // (a bodiless head hops while they move: see personBodiless in peopleModel.js)
       const o = (TWIN_LOOK_ROW*PEOPLE_MAX + i)*4 + 2, data = personModel.traitData;
@@ -1439,7 +1459,7 @@ export function updatePeople(t) {
       const hop = p.headHop < 0.02 ? 0 : p.headHop;
       if (Math.abs(data[o] - hop) > 0.02 || (!hop && data[o])) { data[o] = hop; personModel.traitTexture.needsUpdate = true; }
     }
-    if (!p.pocketsStocked) stockPockets(p, i); // (the sunglasses they came in: see life/gifts.js)
+    if (thinks && !p.pocketsStocked) stockPockets(p, i); // (the sunglasses they came in: see life/gifts.js)
     if (p.blood) updateBlood(p, dt, i);
     if (p.traits.erratic > 0 || p.erraticShift) updateErratic(p, dt);
     p.trainCooldown -= dt;
@@ -1740,6 +1760,8 @@ export function updatePeople(t) {
         sway(p, position, rotation);
         matrix.compose(position, rotation, scale.set(s, s, s));
         personModel.mesh.setMatrixAt(i, matrix);
+        const vx = (p.x - wasX)/dt, vz = (p.z - wasZ)/dt, fast = !(dt > 0) || Math.hypot(vx, vz) > GLIDE_MAX*S.peopleSpeed; // (for glide)
+        p.glideX = matrix.elements[12]; p.glideZ = matrix.elements[14]; p.glideVX = fast ? 0 : vx; p.glideVZ = fast ? 0 : vz;
       }
       if (faced) {
         // a blink every few seconds, the eyes closing and opening again over BLINK_DURATION

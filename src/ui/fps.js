@@ -1,5 +1,5 @@
 // View > FPS (debug): a frame-rate readout in the bottom-right corner of the view, updated twice a second from its own
-// requestAnimationFrame loop (which only runs while it's shown). Kept in localStorage.
+// requestAnimationFrame loop (which only runs while it's shown), counting the frames main.js draws (frameDrawn). Kept in localStorage.
 const KEY = 'splinetopia.fps';
 const el = document.createElement('div');
 el.id = 'fps-counter';
@@ -8,7 +8,6 @@ document.body.appendChild(el);
 
 let frames = 0, since = 0, raf = 0;
 function tick(now) {
-  frames++;
   if (now - since >= 500) {
     el.textContent = `${Math.round(frames * 1000 / (now - since))} FPS`;
     frames = 0; since = now;
@@ -24,4 +23,5 @@ function set(on, save) {
 }
 try { set(localStorage.getItem(KEY) === '1', false); } catch (err) { /* storage blocked */ }
 
+export const frameDrawn = () => { frames++; };
 export const fpsCounter = { shown: () => !el.hidden, toggle: () => set(el.hidden, true) };
