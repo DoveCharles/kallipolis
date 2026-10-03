@@ -3,22 +3,13 @@
 # picked at random. {name} is who it happened to, {by} who did it (lines with {by} are only used when someone did),
 # {city} the world's name (World window).
 
-[killedbycar]
-{name} killed by car
-Pedestrian {name} dies in road horror
-{city} roads claim {name}
-
-[crashedinto]
-{name} dies in crash
-Fatal crash: {name} named as victim
-
-[fell]
-{name} dies in fall
-Tragic plunge for {name}
-
-[punchedfence]
-{name} dies fighting a fence
-Fence 1, {name} 0
+# Deaths go in the Obituaries column; only beatentodeath, exploded, smited and orbsmited also make a headline.
+# Three or more road deaths in one edition make a [roads] headline: {n} how many
+[roads]
+{n} killed on {city} roads
+Carnage on {city} streets: {n} dead
+{n} pedestrians mown down as drivers run riot
+Road toll hits {n}; council "looking into it"
 
 [beatentodeath]
 {name} beaten to death
@@ -32,10 +23,6 @@ Act of God: {name} smitten
 [orbsmited]
 {name} judged by the Seraphorb
 Orb strikes again: {name} dead
-
-[drowned]
-{name} drowns
-Body of {name} pulled from {city} waters
 
 [exploded]
 {name} explodes
@@ -52,3 +39,53 @@ Miracle in {city}: {name} rises again
 [healed]
 MedBot saves {name}
 {name} patched up by MedBot
+
+# the front page's lead when nothing happened since the last edition
+[quiet]
+All quiet in {city}
+Nothing happens in {city}, again
+{city} enjoys a peaceful night
+Slow news day in {city}
+
+# relationships (from life/people/peopleRelations.js): {name} and {by} both feel it
+[friends]
+{name} and {by} strike up a friendship
+New friends: {name} and {by}
+
+[bestfriends]
+{name} and {by} now inseparable
+Best friends forever: {name} and {by}
+
+[couple]
+Love is in the air: {name} and {by}
+{name} and {by} an item, sources say
+Romance blossoms for {name} and {by}
+
+[feud]
+{name} and {by} at war
+Bad blood between {name} and {by}
+Feud erupts: {name} vs {by}
+
+# "In other news" on each morning's front page: two picked at random (three on a day with no news). {someone} is a
+# random living resident (clicking the story follows them), {city} the world's name
+[filler]
+Local man insists pigeons "know something"
+{someone} claims to have seen a bee "the size of a dog"
+Council debates whether roads really need to go anywhere
+{city} pigeon population reaches all-time high
+Study finds 9 in 10 residents walk in circles
+{someone} wins {city} Most Ordinary Person award
+Hot dog prices unchanged for record day
+{someone} denies starting rumour about the MedBot
+Scientists baffled as nobody in {city} ever goes home
+{someone} spotted talking to nobody in the park, again
+Residents asked to stop praying in the middle of the road
+{city} named "Most Okay City" for third year running
+Lightning experts warn: don't annoy anyone powerful
+{someone} reports stolen sandwich; pigeons questioned
+Pub stocks running low, landlord blames {someone}
+New survey: most of {city} "fine, thanks"
+{someone} to open shop selling only left shoes
+Mysterious glowing orb seen over {city}; mayor shrugs
+{someone} breaks own record for standing still
+Traffic lights "mostly decorative", admits council

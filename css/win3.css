@@ -589,7 +589,25 @@ body.tech-open > :not(#app-frame, #canvas-tools, #morality-meter, #tech-tree, .t
 /* world name (World window; Save asks for it) */
 #s-worldname, #w3-namebox { flex:1; width:100%; box-sizing:border-box; border:1px solid var(--w3-frame); background:var(--w3-window); color:var(--w3-text); font:inherit; padding:2px 4px; }
 /* the chronicle (View > Chronicle: life/chronicle.js) */
-.w3-chronicle { max-height:320px; overflow-y:auto; }
-.w3-chronicle-item { display:flex; gap:8px; width:100%; text-align:left; background:none; border:0; padding:3px 2px; font:inherit; color:var(--w3-text); cursor:pointer; }
-.w3-chronicle-item:hover { background:var(--w3-hl); color:var(--w3-hl-text); }
-.w3-chronicle-time { font-family:var(--mono); opacity:.7; }
+/* the front page: newsprint whatever the theme (fonts: Fontsource on jsDelivr, as Win3 System above) */
+@font-face { font-family:'Chronicle Mast'; src:url('https://cdn.jsdelivr.net/npm/@fontsource/unifrakturmaguntia/files/unifrakturmaguntia-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family:'Chronicle Serif'; font-weight:400; src:url('https://cdn.jsdelivr.net/npm/@fontsource/old-standard-tt/files/old-standard-tt-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family:'Chronicle Serif'; font-weight:700; src:url('https://cdn.jsdelivr.net/npm/@fontsource/old-standard-tt/files/old-standard-tt-latin-700-normal.woff2') format('woff2'); }
+#front-page .w3-dialog-body { padding:0; }
+.w3-paper { --ink:#1b1a17; background:#f2ead6; color:var(--ink); padding:10px 16px 14px; font-family:'Chronicle Serif', Georgia, 'Times New Roman', serif; max-height:70vh; overflow-y:auto; }
+.w3-paper-strip { display:flex; justify-content:space-between; font-size:10px; letter-spacing:.12em; text-transform:uppercase; border-bottom:1px solid var(--ink); padding-bottom:3px; }
+.w3-paper-mast { font-family:'Chronicle Mast', 'Old English Text MT', Georgia, serif; font-size:40px; line-height:1.1; text-align:center; padding:6px 0 2px; }
+.w3-paper-motto { font-size:10px; font-style:italic; text-align:center; border-top:3px double var(--ink); border-bottom:3px double var(--ink); padding:3px 0; margin-bottom:10px; }
+.w3-paper-lead { font-size:30px; font-weight:700; line-height:1.05; text-align:center; text-transform:uppercase; cursor:pointer; margin-bottom:6px; }
+.w3-paper-tally { font-size:13px; font-style:italic; text-align:center; margin-bottom:10px; }
+.w3-paper-cols { columns:2; column-gap:18px; column-rule:1px solid var(--ink); border-top:1px solid var(--ink); padding-top:8px; }
+.w3-paper-story { display:block; width:100%; break-inside:avoid; text-align:left; background:none; border:0; border-bottom:1px solid rgba(0,0,0,.25); padding:4px 0 6px; margin:0 0 4px; font:700 15px/1.2 'Chronicle Serif', Georgia, serif; color:var(--ink); cursor:pointer; }
+.w3-paper-story:hover { text-decoration:underline; }
+.w3-paper-time { font-weight:400; font-size:11px; font-variant:small-caps; }
+.w3-paper-other { break-after:avoid; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; text-align:center; border-top:2px solid var(--ink); border-bottom:1px solid var(--ink); padding:2px 0; margin:6px 0; }
+.w3-paper-story.filler { font-weight:400; font-style:italic; font-size:13px; }
+.w3-paper-strip button { background:none; border:0; padding:0 6px; font:inherit; font-size:14px; color:var(--ink); cursor:pointer; }
+.w3-paper-strip button:disabled { opacity:.25; cursor:default; }
+.w3-paper-stop { border:2px solid var(--ink); padding:0 8px 4px; margin-top:10px; }
+.w3-paper-stop .w3-paper-other { margin-top:0; border-top:0; }
+.w3-paper-story.obit { font-weight:400; font-size:13px; border-bottom:0; padding:1px 0; margin:0; }

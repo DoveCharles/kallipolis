@@ -1,4 +1,4 @@
-import { S, buildingHolders, worldNow } from '../core/shared.js';
+import { App, S, buildingHolders, worldNow } from '../core/shared.js';
 import { TRAITS } from '../core/traits.js';
 import { entryOf, limitsOf } from '../core/entries.js';
 import { setEntryFiller } from './profiles.js';
@@ -92,7 +92,7 @@ const ageScale = years => Math.max(-1, Math.min(1, (years - (AGE_YOUNG + AGE_OLD
 const AGED = { age: person => person?.age == null ? 0 : ageScale(person.age) };
 const PSEUDO = { ...SEXES, ...AGED };
 const isTrait = name => !!(TRAITS[name] || PSEUDO[name]);
-const NAMED = /^(me|other|seen|felt)\.(name|by)$/; // [me.name], [other.name], [seen.name], [seen.by], [felt.by]
+const NAMED = /^((me|other|seen|felt)\.(name|by)|news\.(headline|paper)|world\.city)$/; // [me.name], [other.name], [seen.name], [seen.by], [felt.by]; [news.headline], [news.paper], [world.city]
 const PERSONAL = /^(me|other)\.(loves|hates)$|^both\.(loves|hates|clash)$/; // [me.loves], [other.hates], [both.loves]...
 const RANKED = /^(most|least)(\d*)$/; // [most: likes#1#2], [least2: evil#all]: a pick ranked by a measure (rankedPick)
 const MODES = ['all', 'any', 'mean']; // how a pick tag combines several picks (pickLevel)
@@ -617,6 +617,7 @@ function pickItem(items, person, { form = null, hated = false, vars = null, plai
 // A person's name for [me.name], [other.name], [seen.name] (who it happened to), [seen.by] (who did it), [felt.by]
 // (who did it to the speaker; for revenge, who they got back at) — null if there's nobody.
 function nameIn(key, person) {
+  if (/^(news|world)\./.test(key)) return App.speechNews?.(key) ?? null; // (the paper: life/chronicle.js)
   const [whose, part] = key.split('.');
   const who = whose === 'me' ? person : whose === 'other' ? speakingTo
     : whose === 'seen' ? (part === 'by' ? seenFresh(person)?.by : seenFresh(person)?.who) : feltFresh(person)?.by;

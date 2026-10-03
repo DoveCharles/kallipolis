@@ -103,9 +103,9 @@ export function newCar() {
     bodyPitch: 0, bodyPitchRate: 0, bodyRoll: 0, bodyRollRate: 0, lastSpeed: 0, accel: 0,
     // how far the steering's held over, -1 (left) to 1 (right), while it's being driven (see driveByHand)
     steerHeld: 0,
-    // the person it's stopped for, if any (see checkYield) — and the last person it rolled PED_YIELD_CHANCE against, so
-    // it doesn't re-roll for them every frame while it's still coming up to them
-    yieldFor: null, yieldChecked: -1, yielded: 0,
+    // the person it's stopped for, if any (see checkYield) — and those it's rolled PED_YIELD_CHANCE against, so it
+    // doesn't re-roll for them every frame while it's still coming up to them
+    yieldFor: null, yieldChecked: new Set(), yielded: 0,
     // seconds it's stood waiting for another car to move, seconds of pushing on left once it gives up (see waitOrGiveUp),
     // and seconds it's waited to turn round at a dead end (see updateTraffic)
     waited: 0, pushing: 0, uTurnWaited: 0,
@@ -404,6 +404,7 @@ export function carsWhere(test) {
   return cars.some(car => car.li >= 0 && test(car.x, car.z, car));
 }
 const YIELD_GIVE_UP = 8; // (seconds)
+const IN_PATH = 2, RECKLESS = 1.5; // (metres either side of a car's line it brakes for anyone; aggression above which it doesn't)
 /**
  * Everyone a car might stop for — mid-road or crossing (see checkYield) — as indices in App.people. updateTraffic
  * gathers them once a frame rather than every car walking the whole crowd.
@@ -411,12 +412,12 @@ const YIELD_GIVE_UP = 8; // (seconds)
  */
 export function roadCrossers() {
   const out = [];
-  App.people.forEach((p, i) => { if ((p.crossStage === 'mid' || isPedInDanger(p)) && !p.traits.ghost) out.push(i); /* (nobody waits for a ghost) */ });
+  App.people.forEach((p, i) => { if ((p.crossStage === 'mid' || isPedInDanger(p) || p.punched) && !p.traits.ghost) out.push(i); /* (nobody waits for a ghost) */ });
   return out;
 }
 /**
  * Whether the car stops for a pedestrian: someone mid-road ahead of it within PED_YIELD_RADIUS is stopped for with chance
- * PED_YIELD_CHANCE, or always on a junction's zebra crossing. A car committed to someone keeps stopping for them with no
+ * PED_YIELD_CHANCE, or always on a junction's zebra crossing or right in its path (IN_PATH) unless it's RECKLESS. A car committed to someone keeps stopping for them with no
  * further rolls, until they are across, gone, or YIELD_GIVE_UP seconds pass — when they are waved on (p.jc.waved) and it
  * drives on. runOverPeople spares anyone mid-road the car has waved over.
  * @param {object} car
@@ -433,19 +434,23 @@ export function checkYield(car, dt, inRoad = roadCrossers()) {
     if (!p || (p.crossStage !== 'mid' && !isPedInDanger(p)) || car.yielded > YIELD_GIVE_UP) { car.yieldFor = null; car.yielded = 0; }
     return car.yieldFor != null;
   }
-  const cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+  const cos = Math.cos(car.heading), sin = Math.sin(car.heading), reckless = (car.traits?.aggression ?? 1) > RECKLESS;
   const list = inRoad.near ? inRoad.list : inRoad, places = inRoad.near ? inRoad.near(car.x, car.z, PED_YIELD_RADIUS) : null;
+  let seen = false;
   for (let n = 0, count = places ? places.length : list.length; n < count; n++) {
     const i = list[places ? places[n] : n], p = App.people[i];
-    if (i === car.yieldChecked) continue;
     const dx = p.x - car.x, dz = p.z - car.z;
     if (Math.hypot(dx, dz) > PED_YIELD_RADIUS) continue;
     const forward = dx*sin + dz*cos;
     if (forward < 0.5 || forward > PED_YIELD_RADIUS) continue; // (only ahead of it, not behind)
-    car.yieldChecked = i;
+    seen = true;
+    // (right in its path: always braked for, unless it's a reckless driver)
+    if (Math.abs(dx*cos - dz*sin) < IN_PATH && !reckless) { car.yieldFor = i; return true; }
+    if (car.yieldChecked.has(i)) continue;
+    car.yieldChecked.add(i);
     // (someone on a junction's zebra crossing always gets let across)
-    if (p.crossStage === 'jcross' || trafficRng() < PED_YIELD_CHANCE/Math.max(0.01, car.traits?.aggression ?? 1)) car.yieldFor = i; // (the more aggressive, the less often)
-    return car.yieldFor === i;
+    if (p.crossStage === 'jcross' || trafficRng() < PED_YIELD_CHANCE/Math.max(0.01, car.traits?.aggression ?? 1)) { car.yieldFor = i; return true; } // (the more aggressive, the less often)
   }
+  if (!seen) car.yieldChecked.clear();
   return false;
 }

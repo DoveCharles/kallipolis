@@ -322,6 +322,8 @@
 #
 # NAMES: [me.name] the speaker, [other.name] who they're talking to, [seen.name] who it happened to, [seen.by] who did
 # it, [felt.by] who did it to the speaker (for revenge, who they got back at). A line whose name can't be had isn't said.
+# [news.headline]: a story from the paper's latest edition or since (life/chronicle.js; the line isn't said if there's
+# none), [news.paper]: the paper ("the River City Chronicle"), [world.city]: the world's name (World window).
 # [felt.item]: the dropped thing a {felt = scavenged/leftlitter/reclaimed/ruined/snatched/robbed/mugging} line is about ("coffee",
 # "pint", "hot dog", "pizza slice", "souvlaki").
 #   Catch you later, [other.name]. {end}
