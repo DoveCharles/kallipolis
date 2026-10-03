@@ -216,7 +216,7 @@ function animate() {
   if (S.interactionMode === 'node') scaleNodeUi(camera);
   updateSpeechBubbles(); // (once the camera's settled for the frame)
   placeEar(); // (likewise: where you hear from, see audio/sfx.js)
-  const unshake = isInsideBuilding() ? () => {} : shakeCamera(camera, t); // (no shaking in a building's room)
+  const unshake = isInsideBuilding() ? () => {} : shakeCamera(camera, w); // (no shaking in a building's room)
   // (under the loading screen, shaders are compiled in the background rather than drawn: see ui/loading.js)
   if (stillLoading()) compileWhileLoading(renderer, scene, camera);
   else { aimPersonCulling(camera, renderer); renderView(scene, camera); }
